@@ -1,5 +1,7 @@
 # cg — Broadcast CG Platform
 
+[![PR](https://github.com/yasermostafaee/cg/actions/workflows/pr.yml/badge.svg)](https://github.com/yasermostafaee/cg/actions/workflows/pr.yml)
+
 Two-product desktop platform for TV networks using CasparCG playout:
 
 - **Designer** — visual editor for broadcast HTML graphics (logo bugs, lower thirds, tickers, breaking news, fullscreen).
