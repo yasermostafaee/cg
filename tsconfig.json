@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "files": [],
+  "references": [
+    { "path": "packages/eslint-config" },
+    { "path": "apps/designer" },
+    { "path": "apps/runtime" }
+  ]
+}

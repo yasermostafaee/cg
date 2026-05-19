@@ -1,0 +1,14 @@
+node_modules
+dist
+build
+out
+release
+coverage
+.turbo
+.claude
+pnpm-lock.yaml
+*.tsbuildinfo
+fixtures/templates/**/template.vcg
+
+# Project blueprint — preserved verbatim; do not format
+README_PROJECT.md

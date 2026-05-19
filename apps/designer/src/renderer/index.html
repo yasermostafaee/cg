@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Placeholder CSP for M0. Permissive enough for Vite dev (unsafe-inline,
+      unsafe-eval, ws://) and adequate for the M0 placeholder UI. Production
+      hardening lands in M9 (Phase 4 §3 spec).
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ws: wss: http: https:; media-src 'self'; base-uri 'none'; form-action 'none'"
+    />
+    <title>cg Designer</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

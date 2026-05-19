@@ -1,0 +1,27 @@
+# Normalize line endings; checkout LF on all platforms
+* text=auto eol=lf
+
+# Binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.mp4 binary
+*.mov binary
+*.zip binary
+*.vcg binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+
+# Generated
+pnpm-lock.yaml linguist-generated=true
+*.tsbuildinfo linguist-generated=true

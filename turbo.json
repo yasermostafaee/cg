@@ -1,0 +1,48 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["tsconfig.base.json", ".npmrc", "pnpm-workspace.yaml"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "build/**", "out/**", "*.tsbuildinfo"],
+      "inputs": ["src/**", "tsconfig.json", "package.json"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "outputs": ["*.tsbuildinfo"],
+      "inputs": ["src/**", "tsconfig.json", "package.json"]
+    },
+    "lint": {
+      "dependsOn": ["@cg/eslint-config#build"],
+      "outputs": [],
+      "inputs": ["src/**", ".eslintrc*", "eslint.config.*", "package.json"]
+    },
+    "test": {
+      "dependsOn": ["^build", "build"],
+      "outputs": ["coverage/**"],
+      "inputs": ["src/**", "tests/**", "scripts/**", "vitest.config.*", "package.json"]
+    },
+    "test:integration": {
+      "dependsOn": ["^build", "@cg/amcp-mock#build"],
+      "outputs": ["coverage/**"],
+      "inputs": ["src/**", "tests/integration/**"]
+    },
+    "test:e2e": {
+      "dependsOn": ["build", "@cg/amcp-mock#build"],
+      "outputs": ["playwright-report/**", "test-results/**"],
+      "inputs": ["src/**", "tests/e2e/**", "playwright.config.*"]
+    },
+    "package": {
+      "dependsOn": ["build"],
+      "outputs": ["release/**"],
+      "inputs": ["dist/**", "electron-builder.yml", "resources/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}
