@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=1920, initial-scale=1" />
+    <title>Persian Reference Render — M1 Spike A</title>
+    <!--
+      Loads Vazirmatn + Noto Sans Arabic from Google Fonts. The reference render
+      should look identical in modern Chrome and in CasparCG's CEF. Differences
+      between the two are exactly what Spike A is measuring.
+
+      If your CasparCG VM has no internet, copy the WOFF2 files locally and
+      replace this <link> with a relative @font-face. The point of the spike is
+      to compare *what CEF does with these specific fonts* against modern
+      Chrome — so the fonts must match in both environments.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&family=Noto+Sans+Arabic:wght@400;500;700&family=Inter:wght@400;500;700&display=block"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --persian-stack:
+          'Vazirmatn', 'Noto Sans Arabic', Tahoma, 'Arabic Typesetting',
+          system-ui, sans-serif;
+        --latin-stack: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #0f172a;
+        color: #e5e7eb;
+        font-family: var(--latin-stack);
+        font-size: 18px;
+        line-height: 1.5;
+      }
+
+      body {
+        width: 1920px;
+        padding: 32px 48px;
+      }
+
+      h1 {
+        font-size: 36px;
+        margin: 0 0 8px;
+        font-weight: 700;
+      }
+
+      h2 {
+        font-size: 22px;
+        margin: 32px 0 8px;
+        font-weight: 600;
+        color: #a5b4fc;
+      }
+
+      .meta {
+        opacity: 0.6;
+        font-size: 14px;
+        margin-bottom: 24px;
+      }
+
+      .note {
+        font-size: 13px;
+        color: #94a3b8;
+        margin: 4px 0 8px;
+        font-style: italic;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px 32px;
+      }
+
+      .case {
+        background: rgba(255, 255, 255, 0.03);
+        border-left: 3px solid #475569;
+        padding: 12px 16px;
+        border-radius: 0 4px 4px 0;
+      }
+
+      .case[dir='rtl'] {
+        border-left: 0;
+        border-right: 3px solid #475569;
+        border-radius: 4px 0 0 4px;
+      }
+
+      .fa {
+        font-family: var(--persian-stack);
+        font-size: 28px;
+      }
+
+      .fa-big {
+        font-family: var(--persian-stack);
+        font-size: 48px;
+        font-weight: 700;
+      }
+
+      .fa-small {
+        font-family: var(--persian-stack);
+        font-size: 18px;
+      }
+
+      .lower-third-mock {
+        margin-top: 16px;
+        background: linear-gradient(90deg, #0ea5e9 0%, transparent 100%);
+        padding: 24px 32px;
+        border-radius: 0 8px 8px 0;
+        max-width: 720px;
+      }
+
+      .lower-third-mock .name {
+        font-family: var(--persian-stack);
+        font-size: 48px;
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+
+      .lower-third-mock .role {
+        font-family: var(--persian-stack);
+        font-size: 28px;
+        opacity: 0.85;
+      }
+
+      .breaking-banner {
+        margin-top: 16px;
+        background: #e11d48;
+        color: #fff;
+        padding: 20px 32px;
+        font-family: var(--persian-stack);
+        font-size: 36px;
+        font-weight: 700;
+        max-width: 1280px;
+      }
+
+      .ticker-line {
+        margin-top: 16px;
+        background: #1e293b;
+        color: #fff;
+        padding: 16px 24px;
+        font-family: var(--persian-stack);
+        font-size: 32px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      body.cg-pending {
+        visibility: hidden;
+      }
+    </style>
+  </head>
+  <body class="cg-pending">
+    <h1>Persian Reference Render — M1 Spike A</h1>
+    <p class="meta">
+      Compare this rendering in modern Chrome and in CasparCG 2.3.x CEF.
+      Any divergence is a Spike A finding.
+    </p>
+
+    <h2>1. Latin baseline (font fallback sanity)</h2>
+    <div class="case">
+      The quick brown fox jumps over the lazy dog. 1234567890.
+      <p class="note">PASS = standard Inter rendering, no synthetic bold or italic.</p>
+    </div>
+
+    <h2>2. Plain Persian sentence (basic shaping)</h2>
+    <div class="case" dir="rtl">
+      <p class="fa">خبر فوری: امروز در تهران اتفاق مهمی افتاد.</p>
+      <p class="note">PASS = letters connect correctly; "خبر" reads as kha-be-re; final ر detached.</p>
+    </div>
+
+    <h2>3. Mixed RTL/LTR (bidi at sentence level)</h2>
+    <div class="case" dir="rtl">
+      <p class="fa">برنامه Cinema Tonight - Episode 12 - شب جمعه ساعت ۹</p>
+      <p class="fa">OpenAI نسخه جدید GPT-5 را منتشر کرد.</p>
+      <p class="note">PASS = Persian flows RTL, Latin words read LTR inside, numbers read LTR.</p>
+    </div>
+
+    <h2>4. Digits — Latin / Persian / Arabic-Indic</h2>
+    <div class="grid">
+      <div class="case">
+        <strong>Latin:</strong><br />
+        <span class="fa">1234567890</span>
+      </div>
+      <div class="case" dir="rtl">
+        <strong>Persian:</strong><br />
+        <span class="fa">۱۲۳۴۵۶۷۸۹۰</span>
+      </div>
+      <div class="case" dir="rtl">
+        <strong>Arabic-Indic:</strong><br />
+        <span class="fa">١٢٣٤٥٦٧٨٩٠</span>
+      </div>
+      <div class="case" dir="rtl">
+        <strong>Mixed in Persian sentence:</strong><br />
+        <span class="fa">قیمت ۱۲۳ تومان</span>
+      </div>
+      <p class="note">
+        PASS = three digit sets render as distinct glyphs. CSS does not
+        auto-convert; the source bytes are preserved verbatim.
+      </p>
+    </div>
+
+    <h2>5. ZWNJ — می‌خواهم vs میخواهم</h2>
+    <div class="grid">
+      <div class="case" dir="rtl">
+        <strong>With ZWNJ (correct):</strong><br />
+        <span class="fa">می‌خواهم بروم خانه</span>
+        <p class="note">می ends in detached form; خواهم starts in initial form.</p>
+      </div>
+      <div class="case" dir="rtl">
+        <strong>Without ZWNJ (wrong):</strong><br />
+        <span class="fa">میخواهم بروم خانه</span>
+        <p class="note">می joins to خواهم with medial form — incorrect for this verb.</p>
+      </div>
+      <div class="case" dir="rtl">
+        <strong>Pair test:</strong><br />
+        <span class="fa">نمی‌توانم</span> &nbsp; vs &nbsp;
+        <span class="fa">نمیتوانم</span>
+      </div>
+      <div class="case" dir="rtl">
+        <strong>Common compounds:</strong><br />
+        <span class="fa">می‌گویند، می‌دانم، می‌بینیم</span>
+      </div>
+      <p class="note">
+        PASS = the with-ZWNJ versions match standard Persian typography
+        references. ZWNJ is U+200C; visible only as a zero-width separator that
+        breaks the joining behavior.
+      </p>
+    </div>
+
+    <h2>6. ZWJ (rare, but specified)</h2>
+    <div class="case" dir="rtl">
+      <p class="fa">می‌رود vs می‍رود</p>
+      <p class="note">
+        ZWJ (U+200D) forces joining where it wouldn't normally apply. Rarely
+        used; included for completeness.
+      </p>
+    </div>
+
+    <h2>7. Persian punctuation</h2>
+    <div class="case" dir="rtl">
+      <p class="fa">
+        او گفت: «این یک نقل قول است.» سپس پرسید: آیا می‌توانم بروم؟
+      </p>
+      <p class="fa">یک، دو، سه؛ شروع کنید!</p>
+      <p class="note">
+        PASS = Persian guillemets «», Persian comma ،, Persian semicolon ؛,
+        and Persian question mark ؟ all render at correct positions in the
+        RTL flow.
+      </p>
+    </div>
+
+    <h2>8. Font weights — 400 / 500 / 700</h2>
+    <div class="case" dir="rtl">
+      <p class="fa" style="font-weight: 400">
+        وزن نازک: این متن باید با وزن ۴۰۰ نمایش داده شود.
+      </p>
+      <p class="fa" style="font-weight: 500">
+        وزن متوسط: این متن باید با وزن ۵۰۰ نمایش داده شود.
+      </p>
+      <p class="fa" style="font-weight: 700">
+        وزن ضخیم: این متن باید با وزن ۷۰۰ نمایش داده شود.
+      </p>
+      <p class="note">
+        PASS = three visibly distinct weights. If they look identical, CEF
+        failed to load the multi-weight Vazirmatn variants.
+      </p>
+    </div>
+
+    <h2>9. Multi-line Persian paragraph (RTL line breaks)</h2>
+    <div class="case" dir="rtl">
+      <p class="fa-small" style="max-width: 600px">
+        این یک پاراگراف طولانی است که در چندین خط شکسته می‌شود. هر خط باید
+        به‌درستی از راست به چپ بخوانده شود و کلمات نباید در محل اشتباه شکسته
+        شوند. علامت‌گذاری نیز باید در محل صحیح قرار گیرد، نه در ابتدای خط
+        بعدی.
+      </p>
+      <p class="note">
+        PASS = paragraph wraps at word boundaries; no word split mid-character;
+        punctuation stays adjacent to its preceding character; reading order
+        top-to-bottom, right-to-left within each line.
+      </p>
+    </div>
+
+    <h2>10. Numbers + units (mixed direction inside a phrase)</h2>
+    <div class="case" dir="rtl">
+      <p class="fa">دما: ۲۵°C — سرعت باد: ۱۲ km/h — رطوبت: ۶۸٪</p>
+      <p class="note">
+        PASS = Persian text RTL, but numeric runs with their units read LTR
+        within the surrounding RTL flow.
+      </p>
+    </div>
+
+    <h2>11. Emoji embedded in Persian text</h2>
+    <div class="case" dir="rtl">
+      <p class="fa">امروز هوا عالی است 🌞 و من خوشحالم 😊</p>
+      <p class="fa">پیش‌بینی: ۲۳°C ☀️ صبح، ۳۰°C 🌡️ ظهر، ۱۸°C 🌙 شب.</p>
+      <p class="note">
+        PASS = color emoji render as glyphs (not boxes). Verify Noto Color
+        Emoji is in the fallback chain. If CEF lacks it, emoji appear as
+        monochrome outline glyphs from Segoe UI Emoji — flag this.
+      </p>
+    </div>
+
+    <h2>12. Long word, kashida-eligible</h2>
+    <div class="case" dir="rtl">
+      <p class="fa">دستورالعمل‌های جدید: مسئولیت‌پذیری در رسانه‌های اجتماعی</p>
+      <p class="note">
+        Compound Persian words with multiple ZWNJs. PASS = each compound
+        connects on its inner segments but breaks at ZWNJs.
+      </p>
+    </div>
+
+    <h2>13. Persian date</h2>
+    <div class="case" dir="rtl">
+      <p class="fa">۱۴۰۲/۰۲/۲۹ — جمعه</p>
+      <p class="fa">۱ مهر ۱۴۰۲</p>
+      <p class="note">
+        PASS = Persian digits render as Persian glyphs; date separators stay
+        at correct positions in the RTL run.
+      </p>
+    </div>
+
+    <h2>14. Lower-third mock</h2>
+    <div class="lower-third-mock" dir="rtl">
+      <div class="name">دکتر سارا نادری</div>
+      <div class="role">کارشناس روابط بین‌الملل</div>
+    </div>
+    <p class="note">
+      Representative of a real broadcast lower-third. PASS = name reads
+      cleanly at 48 px; role reads at 28 px; both fully shaped.
+    </p>
+
+    <h2>15. Breaking news banner mock</h2>
+    <div class="breaking-banner" dir="rtl">خبر فوری: زلزله ۶.۲ ریشتری در غرب کشور</div>
+    <p class="note">
+      White text on red. PASS = high-contrast, fully shaped, no clipped
+      descenders.
+    </p>
+
+    <h2>16. Ticker line (single line, would scroll horizontally)</h2>
+    <div class="ticker-line" dir="rtl">
+      آخرین اخبار: قیمت طلا افزایش یافت • بازارهای جهانی در حال نوسان •
+      پیش‌بینی هوای فردا: آفتابی • OpenAI نسخه جدید را منتشر کرد • Cinema
+      Tonight - Episode 12 - شب جمعه ساعت ۹
+    </div>
+    <p class="note">
+      PASS = continuous RTL flow with embedded LTR brand names; would scroll
+      from right to left in the real ticker (no scrolling here, this is a
+      static reference).
+    </p>
+
+    <h2>17. Bidi corner case — Latin word at line start of an RTL paragraph</h2>
+    <div class="case" dir="rtl">
+      <p class="fa">
+        OpenAI، که در سال ۲۰۱۵ تاسیس شد، اعلام کرد که نسخه GPT-5 منتشر شد.
+      </p>
+      <p class="note">
+        PASS = "OpenAI" appears at the visual right (logical start) of the RTL
+        line, then comma, then Persian flow. Common bug: LTR brand at the
+        wrong visual position.
+      </p>
+    </div>
+
+    <script>
+      // Minimal CasparCG HTML producer adapter — makes this card loadable via
+      // PLAY 1-X [HTML] and revealed only on CG PLAY. When opened directly in
+      // Chrome, the setTimeout below auto-plays after 500 ms.
+      window.cg = {
+        play: () => document.body.classList.remove('cg-pending'),
+        update: () => {},
+        stop: () => document.body.classList.add('cg-pending'),
+        remove: () => document.body.remove(),
+      };
+      window.play = () => window.cg.play();
+      window.update = (s) => window.cg.update(s);
+      window.stop = () => window.cg.stop();
+      window.remove = () => window.cg.remove();
+
+      // Auto-play if loaded in a regular browser (no CasparCG calling play()).
+      setTimeout(() => {
+        if (document.body.classList.contains('cg-pending')) {
+          window.cg.play();
+        }
+      }, 500);
+    </script>
+  </body>
+</html>

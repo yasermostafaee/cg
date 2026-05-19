@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=1920, initial-scale=1" />
+    <title>Frame Counter — M1 Spike C</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #000;
+        color: #fff;
+        font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+      }
+      body {
+        width: 1920px;
+        height: 1080px;
+        padding: 80px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 32px;
+        visibility: hidden;
+      }
+      body.playing {
+        visibility: visible;
+      }
+      #frame {
+        font-size: 220px;
+        font-weight: 700;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+      }
+      #label {
+        font-size: 36px;
+        opacity: 0.6;
+        letter-spacing: 4px;
+      }
+      #stats {
+        font-size: 28px;
+        opacity: 0.85;
+        text-align: center;
+        line-height: 1.4;
+      }
+      #stats span {
+        display: inline-block;
+        min-width: 280px;
+      }
+      .small {
+        font-size: 20px;
+        opacity: 0.5;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="label">FRAME</div>
+    <div id="frame">0</div>
+    <div id="stats">
+      <div>
+        <span>elapsed: <em id="elapsed">0.00s</em></span>
+        <span>avg: <em id="avg">—</em></span>
+      </div>
+      <div>
+        <span>min: <em id="min">—</em></span>
+        <span>max: <em id="max">—</em></span>
+      </div>
+      <div class="small" id="hint">waiting for play()…</div>
+    </div>
+
+    <script>
+      const frameEl = document.getElementById('frame');
+      const elapsedEl = document.getElementById('elapsed');
+      const avgEl = document.getElementById('avg');
+      const minEl = document.getElementById('min');
+      const maxEl = document.getElementById('max');
+      const hintEl = document.getElementById('hint');
+
+      let started = false;
+      let startMs = 0;
+      let lastMs = 0;
+      let frameCount = 0;
+      let minDelta = Infinity;
+      let maxDelta = 0;
+
+      function tick(now) {
+        if (started) {
+          frameCount++;
+          if (frameCount > 1) {
+            const delta = now - lastMs;
+            if (delta < minDelta) minDelta = delta;
+            if (delta > maxDelta) maxDelta = delta;
+          }
+          lastMs = now;
+
+          frameEl.textContent = String(frameCount);
+          const elapsedSec = (now - startMs) / 1000;
+          const avgMs = (elapsedSec * 1000) / frameCount;
+          elapsedEl.textContent = elapsedSec.toFixed(2) + 's';
+          avgEl.textContent = avgMs.toFixed(2) + 'ms (' + (1000 / avgMs).toFixed(2) + 'Hz)';
+          minEl.textContent = isFinite(minDelta) ? minDelta.toFixed(2) + 'ms' : '—';
+          maxEl.textContent = maxDelta ? maxDelta.toFixed(2) + 'ms' : '—';
+        }
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+
+      // CasparCG HTML-producer adapter
+      window.cg = {
+        play() {
+          started = true;
+          startMs = performance.now();
+          lastMs = startMs;
+          frameCount = 0;
+          minDelta = Infinity;
+          maxDelta = 0;
+          document.body.classList.add('playing');
+          hintEl.textContent = 'running';
+        },
+        update() {
+          // intentionally no-op for Spike C
+        },
+        stop() {
+          started = false;
+          document.body.classList.remove('playing');
+          hintEl.textContent = 'stopped';
+        },
+        remove() {
+          document.body.remove();
+        },
+      };
+      window.play = () => window.cg.play();
+      window.update = (s) => window.cg.update(s);
+      window.stop = () => window.cg.stop();
+      window.remove = () => window.cg.remove();
+
+      // Auto-play in a regular browser after 500 ms if nothing else called play().
+      setTimeout(() => {
+        if (!started) window.cg.play();
+      }, 500);
+    </script>
+  </body>
+</html>
