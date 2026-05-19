@@ -28,9 +28,8 @@ jobs:
 
       - name: Set up pnpm
         # Must come before setup-node so setup-node's pnpm cache works.
+        # Version is read from package.json's `packageManager` field.
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Set up Node
         uses: actions/setup-node@v4
