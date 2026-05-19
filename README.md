@@ -11,8 +11,11 @@ Windows-only, Electron, TypeScript, Persian/RTL as a core requirement.
 
 ## Status
 
-Pre-implementation. Architecture is complete (Phases 1–8); see [`docs/`](./docs).
-Current milestone: **M0 — Foundation**.
+Architecture complete (Phases 1–8); see [`docs/`](./docs).
+
+- **M0 — Foundation:** done (tag `m0`).
+- **M1 — De-Risking Spike:** harnesses prepared (tag `m1-prep`); spike execution
+  pending a reachable CasparCG 2.3.x. See [`tools/spikes/`](./tools/spikes).
 
 ## Layout
 
