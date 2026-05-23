@@ -76,6 +76,15 @@ export interface MockHandle {
   readonly host: string;
   /** Send an OSC packet to all observers right now. Test hook. */
   emitOsc(address: string, args: readonly OscArgValue[]): void;
+  /**
+   * Register a UDP destination for the mock's OSC stream — both the
+   * periodic heartbeat tick (if enabled) and ad-hoc `emitOsc()` calls.
+   *
+   * Useful when the runtime's ServerSession binds to an ephemeral port:
+   * call this after `session.osc.port` is known, before triggering OSC
+   * scenarios.
+   */
+  addOscObserver(host: string, port: number): void;
   /** Force-close every connected AMCP client. Test hook for reset/timeout scenarios. */
   closeAllAmcpConnections(): void;
   /** Inject an arbitrary handler for one command verb (overrides defaults). Test hook. */

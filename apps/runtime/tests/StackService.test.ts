@@ -5,6 +5,7 @@ import {
   AmcpTransport,
   CommandQueue,
   LayerManager,
+  OscTransport,
   Reconciler,
   RedundancyAdapter,
   type ServerSession,
@@ -87,9 +88,9 @@ function makeFakeSession(label: 'A' | 'B', queue: CommandQueue): ServerSession {
   Object.defineProperty(e, 'name', { value: label });
   Object.defineProperty(e, 'queue', { value: queue });
   Object.defineProperty(e, 'state', { get: () => 'healthy', configurable: true });
-  // osc is read by StackService at construction time; provide a minimal EventEmitter.
-  const osc = new EventEmitter() as unknown as ServerSession['osc'];
-  Object.defineProperty(e, 'osc', { value: osc });
+  // Real OscTransport (unbound — the StackService just reads .interest +
+  // listens for 'events'). Tests that need OSC ingest emit synthetic events.
+  Object.defineProperty(e, 'osc', { value: new OscTransport() });
   return e;
 }
 
