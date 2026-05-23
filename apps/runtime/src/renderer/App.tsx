@@ -1,64 +1,99 @@
-import { useEffect, useState } from 'react';
-
-interface AppInfo {
-  name: string;
-  version: string;
-  platform: string;
-}
+import { useMemo, useState } from 'react';
+import type { RuntimeBridge } from '../shared/runtime-bridge.js';
+import { StackPanel } from './features/stack/StackPanel.js';
+import { Inspector } from './features/inspector/Inspector.js';
+import { StatusBar } from './features/status/StatusBar.js';
+import { useStack } from './hooks/useStack.js';
+import { colors } from './theme.js';
 
 declare global {
   interface Window {
-    cg: {
-      getAppInfo: () => Promise<AppInfo>;
-    };
+    cg: RuntimeBridge;
   }
 }
 
 const styles = {
   page: {
-    fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
-    color: '#E5E7EB',
-    background: '#0F172A',
+    fontFamily:
+      'Inter, system-ui, -apple-system, "Segoe UI", Vazirmatn, "Noto Sans Arabic", sans-serif',
+    color: colors.text,
+    background: colors.background,
     minHeight: '100vh',
     margin: 0,
-    padding: '2rem',
+    display: 'grid',
+    gridTemplateRows: '1fr auto',
+  },
+  shell: {
+    display: 'grid',
+    gridTemplateColumns: '240px 1fr 320px',
+    gap: '0.75rem',
+    padding: '0.75rem',
+    minHeight: 0,
+  },
+  sidebar: {
+    background: colors.panel,
+    borderRadius: '0.25rem',
+    border: `1px solid ${colors.border}`,
+    padding: '0.75rem',
     display: 'flex',
     flexDirection: 'column' as const,
-    alignItems: 'flex-start',
-    gap: '0.75rem',
+    gap: '0.5rem',
   },
-  heading: { fontSize: '1.5rem', margin: 0, fontWeight: 600 },
-  sub: { margin: 0, opacity: 0.7 },
-  info: {
+  sidebarHeading: {
     fontSize: '0.85rem',
-    opacity: 0.75,
+    fontWeight: 700,
+    color: colors.textMuted,
+    letterSpacing: '0.05em',
     margin: 0,
-    background: 'rgba(255,255,255,0.04)',
-    padding: '0.5rem 0.75rem',
+  },
+  sidebarHint: { fontSize: '0.8rem', color: colors.textMuted, lineHeight: 1.4 },
+  workspace: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.75rem',
+    minHeight: 0,
+  },
+  monitor: {
+    background: colors.panel,
     borderRadius: '0.25rem',
-    fontFamily: 'ui-monospace, "Cascadia Code", Consolas, monospace',
+    border: `1px solid ${colors.border}`,
+    padding: '1rem',
+    color: colors.textMuted,
+    fontSize: '0.9rem',
   },
 } as const;
 
+/** Root Runtime layout — four regions per Phase 6 §2. */
 export function App(): JSX.Element {
-  const [info, setInfo] = useState<AppInfo | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    window.cg
-      .getAppInfo()
-      .then(setInfo)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
-  }, []);
+  const items = useStack();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = useMemo(
+    () => items.find((i) => i.itemId === selectedId) ?? null,
+    [items, selectedId],
+  );
 
   return (
     <main style={styles.page}>
-      <h1 style={styles.heading}>cg Runtime</h1>
-      <p style={styles.sub}>M0 placeholder. The real playout controller lands at M5.</p>
-      {info && <pre style={styles.info}>{JSON.stringify(info, null, 2)}</pre>}
-      {error && (
-        <pre style={{ ...styles.info, color: '#F87171' }}>contextBridge error: {error}</pre>
-      )}
+      <div style={styles.shell}>
+        <nav style={styles.sidebar} aria-label="Library">
+          <h2 style={styles.sidebarHeading}>LIBRARY</h2>
+          <p style={styles.sidebarHint}>
+            Drop a <code>.vcg</code> into the watched folder to register a template.
+          </p>
+          <p style={styles.sidebarHint}>
+            Library browser arrives with M5.4; for now items are pre-loaded via the demo harness
+            (M5.3).
+          </p>
+        </nav>
+        <section style={styles.workspace}>
+          <div style={styles.monitor}>
+            PVW / PGM monitor strip will live here. Full monitor with frame grabs is M9.
+          </div>
+          <StackPanel onSelectionChange={setSelectedId} />
+        </section>
+        <Inspector item={selected} />
+      </div>
+      <StatusBar />
     </main>
   );
 }
