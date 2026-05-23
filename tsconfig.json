@@ -6,6 +6,7 @@
     { "path": "packages/shared-schema" },
     { "path": "packages/shared-ipc" },
     { "path": "packages/text-shaping" },
+    { "path": "packages/vcg-format" },
     { "path": "apps/designer" },
     { "path": "apps/runtime" }
   ]
