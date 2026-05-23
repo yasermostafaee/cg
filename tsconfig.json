@@ -12,6 +12,7 @@
     { "path": "packages/text-shaping" },
     { "path": "packages/vcg-format" },
     { "path": "tools/amcp-mock" },
+    { "path": "tools/soak-runner" },
     { "path": "apps/designer" },
     { "path": "apps/runtime" }
   ]
