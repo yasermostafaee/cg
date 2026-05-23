@@ -1,0 +1,39 @@
+{
+  "name": "@cg/amcp-mock",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Programmable CasparCG 2.3.x stand-in. AMCP/TCP + OSC/UDP. Drives caspar-client integration + e2e tests.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "amcp-mock": "./bin/amcp-mock.mjs"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rimraf dist *.tsbuildinfo",
+    "typecheck": "tsc -b",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run --coverage",
+    "start": "node ./bin/amcp-mock.mjs"
+  },
+  "devDependencies": {
+    "@cg/eslint-config": "workspace:*",
+    "@types/node": "^22.10.0",
+    "@vitest/coverage-v8": "^2.1.8",
+    "eslint": "^9.17.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}
