@@ -45,3 +45,22 @@ export type {
   LayerSlot,
   PinnedSlot,
 } from './layers/layer-manager.js';
+
+export { RedundancyAdapter } from './redundancy/redundancy-adapter.js';
+export type {
+  RedundancyAdapterEvents,
+  RedundancyAdapterOptions,
+  RedundancyStrategy,
+  HealthSnapshot,
+} from './redundancy/redundancy-adapter.js';
+export type {
+  FailoverEvent,
+  FailoverReason,
+  PairedSessions,
+  RedundancySendResult,
+  SendOptions,
+  SendTarget,
+  ServerLabel,
+} from './redundancy/types.js';
+export { InMemoryJournal } from './redundancy/journal.js';
+export type { CommandJournal, JournalEntry, JournalOutcome } from './redundancy/journal.js';
