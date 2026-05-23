@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import type { RuntimeBridge } from '../shared/runtime-bridge.js';
 import { StackPanel } from './features/stack/StackPanel.js';
 import { Inspector } from './features/inspector/Inspector.js';
+import { LockOverlay } from './features/lock/LockOverlay.js';
 import { StatusBar } from './features/status/StatusBar.js';
+import { useLock } from './hooks/useLock.js';
 import { useStack } from './hooks/useStack.js';
 import { colors } from './theme.js';
 
@@ -66,6 +68,7 @@ const styles = {
 /** Root Runtime layout — four regions per Phase 6 §2. */
 export function App(): JSX.Element {
   const items = useStack();
+  const lock = useLock();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = useMemo(
     () => items.find((i) => i.itemId === selectedId) ?? null,
@@ -94,6 +97,7 @@ export function App(): JSX.Element {
         <Inspector item={selected} />
       </div>
       <StatusBar />
+      <LockOverlay engaged={lock.engaged} onRelease={(pin) => window.cg.lock.release({ pin })} />
     </main>
   );
 }

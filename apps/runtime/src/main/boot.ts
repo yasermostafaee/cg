@@ -1,4 +1,7 @@
+import * as path from 'node:path';
+import * as os from 'node:os';
 import type { BrowserWindow, IpcMain } from 'electron';
+import { AuditService } from './services/AuditService.js';
 import { ConnectionService } from './services/ConnectionService.js';
 import { LockService } from './services/LockService.js';
 import { StackService } from './services/StackService.js';
@@ -28,6 +31,7 @@ export interface BootHandle {
   stack: StackService;
   lock: LockService;
   templates: TemplateRegistry;
+  audit: AuditService;
   /** Detach everything wired by boot(). Used in tests and on app quit. */
   shutdown(): Promise<void>;
 }
@@ -38,6 +42,11 @@ export function boot(ctx: BootContext): BootHandle {
   const templates = new TemplateRegistry();
   const stack = new StackService({ connections, templates });
   const lock = new LockService();
+  const audit = new AuditService({
+    filePath: process.env['CG_AUDIT_FILE'] ?? path.join(os.tmpdir(), 'cg-audit', 'runtime.ndjson'),
+    actor: process.env['CG_AUDIT_ACTOR'] ?? 'local',
+  });
+  audit.bindStack(stack);
 
   const unwire = registerIpcHandlers({
     ipcMain: ctx.ipcMain,
@@ -54,8 +63,10 @@ export function boot(ctx: BootContext): BootHandle {
     stack,
     lock,
     templates,
+    audit,
     async shutdown() {
       unwire();
+      await audit.close();
       await connections.stop();
     },
   };
