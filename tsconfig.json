@@ -5,6 +5,7 @@
     { "path": "packages/eslint-config" },
     { "path": "packages/shared-schema" },
     { "path": "packages/text-shaping" },
+    { "path": "packages/vcg-format" },
     { "path": "apps/designer" },
     { "path": "apps/runtime" }
   ]
