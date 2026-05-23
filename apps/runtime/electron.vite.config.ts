@@ -20,14 +20,16 @@ export default defineConfig({
     },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
+    // No externalizeDepsPlugin: sandboxed CJS preloads can't import the ESM
+    // builds of @cg/shared-ipc / zod at runtime. Bundle them in so the
+    // preload is self-contained. Electron is the only true external.
     build: {
       outDir: 'out/preload',
       rollupOptions: {
         input: {
           'runtime.preload': resolve(__dirname, 'src/preload/runtime.preload.ts'),
         },
-        // Sandboxed preloads must be CommonJS.
+        external: ['electron'],
         output: {
           format: 'cjs',
           entryFileNames: '[name].cjs',
