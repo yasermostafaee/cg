@@ -3,6 +3,7 @@
   "files": [],
   "references": [
     { "path": "packages/eslint-config" },
+    { "path": "packages/shared-schema" },
     { "path": "apps/designer" },
     { "path": "apps/runtime" }
   ]
