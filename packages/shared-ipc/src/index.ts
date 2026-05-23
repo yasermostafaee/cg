@@ -9,4 +9,16 @@ export type { IpcInvoker } from './invoke.js';
 export { handle } from './handle.js';
 export type { IpcHandler } from './handle.js';
 
+export { definePublishChannel, publish, subscribe } from './publish.js';
+export type {
+  AnyPublishChannel,
+  IpcPublisher,
+  IpcSubscriber,
+  PublishChannel,
+  PublishPayload,
+} from './publish.js';
+
 export * from './channels/common.js';
+export * from './channels/stack.js';
+export * from './channels/connections.js';
+export * from './channels/lock.js';
