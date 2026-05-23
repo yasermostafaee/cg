@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "build": "node ./build.mjs",
+    "test": "vitest run --coverage",
+    "lint": "eslint . --max-warnings 0",
     "clean": "rimraf ../../fixtures/templates/persian-lower-third ../../fixtures/templates/persian-lower-third.vcg"
   },
   "dependencies": {
@@ -15,7 +17,12 @@
     "@cg/vcg-format": "workspace:*"
   },
   "devDependencies": {
+    "@cg/eslint-config": "workspace:*",
+    "@vitest/coverage-v8": "^2.1.8",
     "esbuild": "^0.24.0",
-    "rimraf": "^6.0.1"
+    "eslint": "^9.17.0",
+    "happy-dom": "^15.11.7",
+    "rimraf": "^6.0.1",
+    "vitest": "^2.1.8"
   }
 }
