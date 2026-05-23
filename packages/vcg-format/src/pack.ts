@@ -7,6 +7,7 @@ import {
 } from '@cg/shared-schema';
 import { writeZip } from './zip.js';
 import { computeIntegrity } from './integrity.js';
+import { signEd25519, type Ed25519KeyInput } from './sign.js';
 
 export interface PackInput {
   /** The Scene to embed as template.json. Validated before packing. */
@@ -30,6 +31,19 @@ export interface PackInput {
   assets?: ReadonlyMap<string, Buffer>;
   fonts?: ReadonlyMap<string, Buffer>;
   thumbnails?: ReadonlyMap<string, Buffer>;
+  /**
+   * Optional Ed25519 signature over `integrity.root`. When present, the
+   * manifest's `signing` block is populated and `verify()` (called with a
+   * matching trusted public key) confirms authorship.
+   *
+   * `publicKeyId` is an opaque identifier the verifier uses to look up the
+   * corresponding public key in its trust store. By convention it can be
+   * a key fingerprint, a station name, or any string the deployment uses.
+   */
+  signing?: {
+    privateKey: Ed25519KeyInput;
+    publicKeyId: string;
+  };
 }
 
 /**
@@ -91,6 +105,14 @@ export async function pack(input: PackInput): Promise<Buffer> {
     authoring: input.manifestExtras.authoring,
     compatibility: input.manifestExtras.compatibility,
   };
+
+  if (input.signing) {
+    manifest.signing = {
+      algorithm: 'ed25519',
+      publicKeyId: input.signing.publicKeyId,
+      signature: signEd25519(integrity.root, input.signing.privateKey),
+    };
+  }
 
   files.set('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'));
 

@@ -1,30 +1,48 @@
 import { computeIntegrityRoot, sha256Hex } from './integrity.js';
 import { unpack } from './unpack.js';
+import { verifyEd25519, type Ed25519KeyInput } from './sign.js';
 
 export interface VerifyResult {
   ok: boolean;
   errors: string[];
-  /** Bypassed = no errors but no signing was requested/found. */
+  /** True iff the manifest carried a signing block. */
   signed: boolean;
+  /**
+   * True iff the signature was checked and passed. False when unsigned or
+   * when no trusted key was provided (signature present but unchecked).
+   * Unsigned + `requireSigned: false` is `ok: true` with `signatureVerified:
+   * false` — the caller can distinguish "trusted" from "valid integrity".
+   */
+  signatureVerified: boolean;
 }
 
 export interface VerifyOptions {
   /**
    * If true, treat an unsigned package as a failure. Defaults false.
-   * Signing is implemented in M3.1b — for now, this option is accepted
-   * and reported, but the underlying signature check is a no-op.
    */
   requireSigned?: boolean;
+  /**
+   * Trusted public keys by `publicKeyId`. When the manifest's signing block
+   * references a known id, the signature is verified against that key. If
+   * the manifest references an *unknown* id, that's an error.
+   *
+   * Keys may be PEM strings (SPKI format) or Node `KeyObject`s.
+   */
+  trustedPublicKeys?: Readonly<Record<string, Ed25519KeyInput>>;
 }
 
 /**
- * Integrity-only verification:
+ * Full verification:
  *   - manifest.json and template.json parse and Zod-validate
  *   - every file listed in manifest.integrity.files is present, hashes
  *     to the declared sha256, and has the declared byte length
  *   - the Merkle root recomputes to the declared root
+ *   - if manifest.signing is present and trustedPublicKeys are provided,
+ *     the Ed25519 signature over `integrity.root` is checked
  *
- * Signing is reported but not verified yet (M3.1b).
+ * Failure modes split between "broken bytes" (any integrity mismatch),
+ * "broken trust" (signed by an unknown key, or signature doesn't verify),
+ * and "policy" (requireSigned with no signing block).
  */
 export async function verify(buf: Buffer, options: VerifyOptions = {}): Promise<VerifyResult> {
   const errors: string[] = [];
@@ -37,6 +55,7 @@ export async function verify(buf: Buffer, options: VerifyOptions = {}): Promise<
       ok: false,
       errors: [`Unpack failed: ${e instanceof Error ? e.message : String(e)}`],
       signed: false,
+      signatureVerified: false,
     };
   }
 
@@ -67,9 +86,28 @@ export async function verify(buf: Buffer, options: VerifyOptions = {}): Promise<
     );
   }
 
+  let signatureVerified = false;
+  if (manifest.signing) {
+    const { algorithm, publicKeyId, signature } = manifest.signing;
+    if (algorithm !== 'ed25519') {
+      errors.push(`Unsupported signing algorithm: ${algorithm}`);
+    } else if (options.trustedPublicKeys) {
+      const trustedKey = options.trustedPublicKeys[publicKeyId];
+      if (!trustedKey) {
+        errors.push(`Signature uses unknown publicKeyId: ${publicKeyId}`);
+      } else if (!verifyEd25519(manifest.integrity.root, signature, trustedKey)) {
+        errors.push(`Ed25519 signature does not verify for publicKeyId: ${publicKeyId}`);
+      } else {
+        signatureVerified = true;
+      }
+    }
+    // No trustedPublicKeys provided → signature is *present but unchecked*.
+    // ok stays true; the result reports `signed: true, signatureVerified: false`.
+  }
+
   if (options.requireSigned && !signed) {
     errors.push('Package is not signed but signing is required by deployment policy');
   }
 
-  return { ok: errors.length === 0, errors, signed };
+  return { ok: errors.length === 0, errors, signed, signatureVerified };
 }
