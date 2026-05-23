@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=1920, initial-scale=1" />
+    <title>Update Probe — M1 Spike D</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=block"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #0f172a;
+        color: #e5e7eb;
+        font-family:
+          'Vazirmatn', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      body {
+        width: 1920px;
+        height: 1080px;
+        padding: 80px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 48px;
+        visibility: hidden;
+      }
+      body.playing {
+        visibility: visible;
+      }
+      #label {
+        font-size: 36px;
+        opacity: 0.5;
+        letter-spacing: 4px;
+        text-transform: uppercase;
+      }
+      #received {
+        font-size: 80px;
+        font-weight: 700;
+        text-align: center;
+        max-width: 1600px;
+        word-break: break-word;
+        line-height: 1.3;
+        min-height: 200px;
+      }
+      #info {
+        font-size: 20px;
+        opacity: 0.6;
+        font-family: ui-monospace, Consolas, monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="label">CG INVOKE update payload</div>
+    <div id="received">…waiting for first update…</div>
+    <div id="info">no updates yet</div>
+
+    <script>
+      const receivedEl = document.getElementById('received');
+      const infoEl = document.getElementById('info');
+      let updateCount = 0;
+
+      function renderUpdate(payload) {
+        updateCount += 1;
+        const t = performance.now();
+
+        // Try to parse JSON; fall back to raw string.
+        let display;
+        try {
+          const parsed = JSON.parse(payload);
+          // Prefer common field names; fall back to JSON pretty-print.
+          display =
+            parsed.anchor ||
+            parsed.headline ||
+            parsed.text ||
+            JSON.stringify(parsed);
+        } catch {
+          display = String(payload);
+        }
+        receivedEl.textContent = display;
+        infoEl.textContent =
+          'update #' + updateCount + '  •  ' + display.length + ' chars  •  t=' + t.toFixed(1) + 'ms';
+      }
+
+      // CasparCG HTML-producer adapter
+      window.cg = {
+        play() {
+          document.body.classList.add('playing');
+        },
+        update(payload) {
+          renderUpdate(payload || '');
+        },
+        stop() {
+          document.body.classList.remove('playing');
+        },
+        remove() {
+          document.body.remove();
+        },
+      };
+      window.play = () => window.cg.play();
+      window.update = (s) => window.cg.update(s);
+      window.stop = () => window.cg.stop();
+      window.remove = () => window.cg.remove();
+
+      // Auto-reveal in a regular browser
+      setTimeout(() => {
+        if (!document.body.classList.contains('playing')) window.cg.play();
+      }, 500);
+    </script>
+  </body>
+</html>

@@ -64,6 +64,8 @@ client.on('error', (err) => {
 
 if (SCRIPT) {
   // Feed commands from file, one per line. Empty lines and # comments ignored.
+  // Special directive: `# sleep <ms>` pauses before the next line (useful
+  // when CEF needs hundreds of ms to load an HTML producer before INVOKE).
   fs.promises.readFile(SCRIPT, 'utf-8').then(
     (text) => {
       const lines = text.split(/\r?\n/);
@@ -75,7 +77,18 @@ if (SCRIPT) {
           return;
         }
         const raw = lines[i++].trim();
-        if (!raw || raw.startsWith('#')) {
+        if (!raw) {
+          next();
+          return;
+        }
+        const sleepMatch = /^#\s*sleep\s+(\d+)\s*$/i.exec(raw);
+        if (sleepMatch) {
+          const ms = parseInt(sleepMatch[1], 10);
+          console.error(`[amcp-poke] sleep ${ms}ms`);
+          setTimeout(next, ms);
+          return;
+        }
+        if (raw.startsWith('#')) {
           next();
           return;
         }
