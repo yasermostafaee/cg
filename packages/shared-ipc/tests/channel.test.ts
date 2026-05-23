@@ -23,11 +23,7 @@ describe('defineChannel', () => {
 
 describe('Channel type inference', () => {
   it('ChannelRequest / ChannelResponse infer correctly', () => {
-    const c = defineChannel(
-      't',
-      z.object({ name: z.string() }),
-      z.object({ count: z.number() }),
-    );
+    const c = defineChannel('t', z.object({ name: z.string() }), z.object({ count: z.number() }));
     // Runtime sanity (also makes `c` non-unused for the linter)
     expect(c.name).toBe('t');
     type ChannelType = typeof c;
