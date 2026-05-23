@@ -5,8 +5,16 @@ import { base, node, renderer } from '@cg/eslint-config';
 
 export default [
   ...base,
-  node({ files: ['src/main/**/*.{ts,mts,cts}', 'src/preload/**/*.{ts,mts,cts}'] }),
+  node({
+    files: ['src/main/**/*.{ts,mts,cts}', 'src/preload/**/*.{ts,mts,cts}', 'tests/**/*.ts'],
+  }),
   renderer({ files: ['src/renderer/**/*.{ts,tsx,mts,cts}'] }),
+  {
+    files: ['tests/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-non-null-assertion': 'off',
+    },
+  },
   {
     // Config files run in Node but live outside the tier dirs above.
     files: ['*.config.{ts,mts,cts,js,mjs,cjs}', 'electron.vite.config.ts'],
