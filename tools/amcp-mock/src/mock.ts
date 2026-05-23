@@ -68,6 +68,9 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     emitOsc(address: string, args: readonly OscArgValue[]): void {
       emitter.sendMessage(address, args);
     },
+    addOscObserver(observerHost: string, observerPort: number): void {
+      emitter.addObserver(observerHost, observerPort);
+    },
     closeAllAmcpConnections(): void {
       server.closeAll();
     },

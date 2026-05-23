@@ -106,6 +106,11 @@ export class StackService extends EventEmitter<StackServiceEvents> {
       intent.itemId,
       toSchemaSlot(slot, this.connections.adapter.currentPrimary),
     );
+    // Tell both sessions' OSC interest filters about the new slot so layer
+    // events for it actually reach the Reconciler (interest defaults to
+    // empty — out-of-interest events are dropped at the OscTransport).
+    this.connections.sessionA.osc.interest.add(slot.channel, slot.layer);
+    this.connections.sessionB.osc.interest.add(slot.channel, slot.layer);
     return true;
   }
 
@@ -169,6 +174,8 @@ export class StackService extends EventEmitter<StackServiceEvents> {
         // Best-effort — even if CLEAR fails we still drop the item locally.
       }
       this.layerManager.deallocate(toClientSlot(state.slot));
+      this.connections.sessionA.osc.interest.remove(state.slot.channel, state.slot.layer);
+      this.connections.sessionB.osc.interest.remove(state.slot.channel, state.slot.layer);
     }
     const seq = this.nextSeq++;
     this.reconciler.applyIntent({ kind: 'remove', itemId }, seq);

@@ -81,9 +81,15 @@ function readConfigFromEnv(): ConstructorParameters<typeof ConnectionService>[0]
   };
 }
 
+/**
+ * Parse a port-ish env var. Returns the parsed value (including `0` for
+ * OSC ephemeral binds) when it's a non-negative finite number; falls
+ * back otherwise. AMCP port `0` is allowed by parse but will fail fast
+ * at connect time — that's fine; misconfiguration should surface noisily.
+ */
 function numberOr(v: string | undefined, fallback: number): number {
   const n = v === undefined ? NaN : Number(v);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
 function parseStrategy(v: string | undefined): 'mirror-sync' | 'mirror-async' | 'journal-replay' {

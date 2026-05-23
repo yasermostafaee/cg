@@ -173,6 +173,18 @@ describe('createMock', () => {
     expect(got).toContain('/channel/1/framerate');
   });
 
+  it('addOscObserver routes emitOsc to a late-bound listener', async () => {
+    mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+    const got: { address: string; args: readonly unknown[] }[] = [];
+    const listenerPort = await openOscListener((msg) => got.push(msg));
+    mock.addOscObserver('127.0.0.1', listenerPort);
+    mock.emitOsc('/channel/1/stage/layer/10/foreground/producer', ['html']);
+    await delay(50);
+    expect(got).toEqual([
+      { address: '/channel/1/stage/layer/10/foreground/producer', args: ['html'] },
+    ]);
+  });
+
   it('closeAllAmcpConnections drops connected clients', async () => {
     mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
     const sock = net.createConnection({ port: mock.amcpPort, host: mock.host });

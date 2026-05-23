@@ -28,7 +28,8 @@ export type ConnectionHealth = z.infer<typeof ConnectionHealthSchema>;
 const ServerEndpointSchema = z.object({
   host: z.string().min(1),
   amcpPort: z.number().int().positive(),
-  oscPort: z.number().int().positive(),
+  // OSC port 0 is a valid ephemeral-bind request — the runtime accepts it.
+  oscPort: z.number().int().nonnegative(),
 });
 
 const ConnectionConfigSchema = z.object({
