@@ -11,3 +11,13 @@ export { OscChangeTracker } from './osc/change-tracker.js';
 export { parsePacket, flatten } from './osc/parser.js';
 export type { OscPacket, OscBundle, OscMessage, OscArgValue } from './osc/parser.js';
 export { messageToEvent } from './osc/event-mapper.js';
+
+export { CommandQueue } from './queue/command-queue.js';
+export type {
+  CommandQueueEvents,
+  CommandQueueOptions,
+  EnqueueOptions,
+  Priority,
+  QueueResult,
+} from './queue/command-queue.js';
+export { AmcpAbortedError, AmcpDisconnectedError, AmcpTimeoutError } from './queue/errors.js';
