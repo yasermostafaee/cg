@@ -1,0 +1,44 @@
+# Spike D — cg.update round-trip with Persian payload.
+# Run with: node amcp-poke.mjs --script spike-d-commands.txt
+#
+# Phase 4 §9 used `CG INVOKE` for updates — observation in earlier
+# Spike D run showed CG INVOKE doesn't pass params to window.update on
+# the HTML producer. Trying `CALL` instead (the HTML-producer-native
+# command for invoking page-side functions).
+
+VERSION
+
+PLAY 1-30 [HTML] "file:///C:/cg-spikes/update-probe/index.html"
+
+# CEF needs ~3 seconds to load the page + fetch fonts + run JS.
+# sleep 3000
+
+# Test 1: simple ASCII to confirm CALL passes parameters at all
+CALL 1-30 "update" "hello"
+
+# sleep 2000
+
+# Test 2: ASCII JSON
+CALL 1-30 "update" "{\"anchor\":\"hello world\"}"
+
+# sleep 2000
+
+# Test 3: Persian breaking-news headline
+CALL 1-30 "update" "{\"anchor\":\"خبر فوری\"}"
+
+# sleep 2000
+
+# Test 4: ZWNJ between می and خواهم
+CALL 1-30 "update" "{\"anchor\":\"می‌خواهم بروم\"}"
+
+# sleep 2000
+
+# Test 5: mixed RTL/LTR
+CALL 1-30 "update" "{\"anchor\":\"OpenAI نسخه جدید\"}"
+
+# sleep 2000
+
+# Test 6: Persian digits
+CALL 1-30 "update" "{\"anchor\":\"دکتر سارا نادری ۱۲۳\"}"
+
+# NO CLEAR — last text stays on screen.
