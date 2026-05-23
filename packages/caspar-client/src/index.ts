@@ -29,3 +29,19 @@ export type {
   ServerSessionState,
 } from './session/server-session.js';
 export { Backoff } from './session/backoff.js';
+export { HeartbeatService } from './session/heartbeat.js';
+export type { HeartbeatEvents, HeartbeatOptions, HeartbeatStatus } from './session/heartbeat.js';
+
+export {
+  LayerManager,
+  DEFAULT_LAYER_POLICY,
+  OutOfLayersError,
+  UnknownTemplateTypeError,
+} from './layers/layer-manager.js';
+export type {
+  LayerManagerEvents,
+  LayerManagerOptions,
+  LayerPolicy,
+  LayerSlot,
+  PinnedSlot,
+} from './layers/layer-manager.js';
