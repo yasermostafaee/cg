@@ -3,6 +3,7 @@
   "files": [],
   "references": [
     { "path": "packages/eslint-config" },
+    { "path": "packages/lottie-bridge" },
     { "path": "packages/shared-schema" },
     { "path": "packages/shared-ipc" },
     { "path": "packages/template-runtime" },

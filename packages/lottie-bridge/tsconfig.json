@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    // lottie-web is CJS but its .d.ts uses ESM `export default` (wrong for
+    // CJS under NodeNext, which expects `export =`). Switching this package
+    // to Bundler resolution + non-strict module syntax so the default-import
+    // pattern resolves to the player object. The package outputs are still
+    // ESM (`module: ESNext`); consumers (template-runtime via esbuild)
+    // bundle this together with their own code.
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "verbatimModuleSyntax": false
+  },
+  "include": ["src/**/*"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [{ "path": "../shared-schema" }]
+}
