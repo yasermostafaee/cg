@@ -74,22 +74,49 @@ describe('AmcpAck', () => {
 });
 
 describe('OscEvent variants', () => {
-  it('layer.foreground', () => {
+  it('framerate', () => {
+    expect(
+      OscEventSchema.parse({ kind: 'osc.framerate', channel: 1, num: 50, den: 1 }),
+    ).toBeTruthy();
+  });
+  it('layer.foreground.producer', () => {
     expect(
       OscEventSchema.parse({
-        kind: 'osc.layer.foreground',
+        kind: 'osc.layer.foreground.producer',
         channel: 1,
         layer: 20,
-        file: 'index.html',
+        producer: 'html',
       }),
     ).toBeTruthy();
   });
-  it('layer.empty', () => {
-    expect(OscEventSchema.parse({ kind: 'osc.layer.empty', channel: 1, layer: 20 })).toBeTruthy();
-  });
-  it('cg.invoked', () => {
+  it('layer.foreground.file', () => {
     expect(
-      OscEventSchema.parse({ kind: 'osc.cg.invoked', channel: 1, layer: 20, method: 'play' }),
+      OscEventSchema.parse({
+        kind: 'osc.layer.foreground.file',
+        channel: 1,
+        layer: 20,
+        path: 'file:///C:/templates/index.html',
+      }),
+    ).toBeTruthy();
+  });
+  it('layer.foreground.paused', () => {
+    expect(
+      OscEventSchema.parse({
+        kind: 'osc.layer.foreground.paused',
+        channel: 1,
+        layer: 20,
+        paused: false,
+      }),
+    ).toBeTruthy();
+  });
+  it('layer.background.producer', () => {
+    expect(
+      OscEventSchema.parse({
+        kind: 'osc.layer.background.producer',
+        channel: 1,
+        layer: 20,
+        producer: 'empty',
+      }),
     ).toBeTruthy();
   });
   it('health', () => {
