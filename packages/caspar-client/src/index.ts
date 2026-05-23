@@ -21,3 +21,11 @@ export type {
   QueueResult,
 } from './queue/command-queue.js';
 export { AmcpAbortedError, AmcpDisconnectedError, AmcpTimeoutError } from './queue/errors.js';
+
+export { ServerSession } from './session/server-session.js';
+export type {
+  ServerSessionEvents,
+  ServerSessionOptions,
+  ServerSessionState,
+} from './session/server-session.js';
+export { Backoff } from './session/backoff.js';
