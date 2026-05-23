@@ -64,3 +64,6 @@ export type {
 } from './redundancy/types.js';
 export { InMemoryJournal } from './redundancy/journal.js';
 export type { CommandJournal, JournalEntry, JournalOutcome } from './redundancy/journal.js';
+
+export { Reconciler } from './reconciler/reconciler.js';
+export type { ReconcilerEvents, ReconcilerOptions } from './reconciler/reconciler.js';
