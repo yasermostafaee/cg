@@ -3,6 +3,7 @@
   "files": [],
   "references": [
     { "path": "packages/eslint-config" },
+    { "path": "packages/audit" },
     { "path": "packages/caspar-client" },
     { "path": "packages/lottie-bridge" },
     { "path": "packages/shared-schema" },

@@ -35,6 +35,15 @@ const styles = {
     color: colors.pending,
     fontWeight: 700,
   },
+  lockButton: {
+    background: 'transparent',
+    color: colors.textMuted,
+    border: `1px solid ${colors.border}`,
+    padding: '0.15rem 0.5rem',
+    borderRadius: '0.25rem',
+    cursor: 'pointer',
+    fontSize: '0.8rem',
+  },
 } as const;
 
 interface SessionLabel {
@@ -87,7 +96,21 @@ export function StatusBar(): JSX.Element {
       </span>
       <span style={styles.pill}>{health.strategy}</span>
       <span style={styles.spacer} />
-      {lock.engaged && <span style={styles.lock}>🔒 LOCKED</span>}
+      {lock.engaged ? (
+        <span style={styles.lock}>🔒 LOCKED</span>
+      ) : (
+        <button
+          style={styles.lockButton}
+          onClick={() => {
+            const pin = window.prompt('Set a lock PIN (4–64 chars):');
+            if (pin !== null && pin.length >= 4) {
+              void window.cg.lock.engage({ pin });
+            }
+          }}
+        >
+          🔒 Lock…
+        </button>
+      )}
     </footer>
   );
 }
