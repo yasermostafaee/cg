@@ -8,7 +8,6 @@ export interface AmcpTransportEvents {
   response: [resp: ParsedAmcpResponse];
   error: [err: Error];
   close: [info: { wasError: boolean }];
-  [event: string]: unknown[];
 }
 
 /**

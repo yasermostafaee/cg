@@ -146,7 +146,6 @@ export interface OscTransportOptions {
 export interface OscTransportEvents {
   events: [events: OscEvent[], meta: { recvAt: number }];
   error: [err: Error];
-  [event: string]: unknown[];
 }
 
 function noop(): void {
