@@ -6,6 +6,10 @@ import {
   ExportPreflightChannel,
   ExportProgressChannel,
   ExportRunChannel,
+  PreviewLoadChannel,
+  PreviewReadyChannel,
+  PreviewReloadChannel,
+  PreviewUpdateChannel,
   ProjectsActiveChangedChannel,
   ProjectsNewChannel,
   ProjectsOpenChannel,
@@ -19,6 +23,7 @@ import {
 import type { AssetService } from '../services/AssetService.js';
 import type { ExportService } from '../services/ExportService.js';
 import type { ProjectService } from '../services/ProjectService.js';
+import type { PreviewService } from '../preview/PreviewService.js';
 
 /**
  * Wires every M6.0 Designer IPC channel.
@@ -34,6 +39,7 @@ export interface DesignerIpcWiring {
   projects: ProjectService;
   assets: AssetService;
   exporter: ExportService;
+  preview: PreviewService;
   /** Optional: shows an open-file dialog when projects.open arrives without a path. */
   showOpenDialog?: () => Promise<string | null>;
   /** Optional: shows a save-file dialog when projects.save arrives without a path. */
@@ -41,7 +47,16 @@ export interface DesignerIpcWiring {
 }
 
 export function registerDesignerIpc(deps: DesignerIpcWiring): () => void {
-  const { ipcMain, webContents, projects, assets, exporter, showOpenDialog, showSaveDialog } = deps;
+  const {
+    ipcMain,
+    webContents,
+    projects,
+    assets,
+    exporter,
+    preview,
+    showOpenDialog,
+    showSaveDialog,
+  } = deps;
 
   // ── projects.* ──────────────────────────────────────────────────────
   handle(ipcMain, ProjectsNewChannel, (req) => {
@@ -85,6 +100,18 @@ export function registerDesignerIpc(deps: DesignerIpcWiring): () => void {
     return result;
   });
 
+  // ── preview.* ───────────────────────────────────────────────────────
+  handle(ipcMain, PreviewLoadChannel, (req) => ({ src: preview.loadScene(req.scene) }));
+  handle(ipcMain, PreviewUpdateChannel, (req) => {
+    preview.pushFieldUpdate(req.fields);
+    return { ok: true };
+  });
+  handle(ipcMain, PreviewReloadChannel, () => {
+    // Reload is purely a renderer-side concern (iframe.src = src) but we
+    // honor the channel so a renderer hook can await the round-trip.
+    return { ok: true };
+  });
+
   // ── pushes ──────────────────────────────────────────────────────────
   const onActive = (info: {
     scene: Parameters<typeof publish<typeof ProjectsActiveChangedChannel>>[2]['scene'];
@@ -98,13 +125,19 @@ export function registerDesignerIpc(deps: DesignerIpcWiring): () => void {
   const onProgress = (info: Parameters<typeof publish<typeof ExportProgressChannel>>[2]): void => {
     publish(webContents, ExportProgressChannel, info);
   };
+  const onPreviewReady = (info: { sceneId: string }): void => {
+    publish(webContents, PreviewReadyChannel, { at: new Date().toISOString() });
+    void info;
+  };
   projects.on('active-changed', onActive);
   assets.on('imported', onImported);
   exporter.on('progress', onProgress);
+  preview.on('ready', onPreviewReady);
 
   return () => {
     projects.off('active-changed', onActive);
     assets.off('imported', onImported);
     exporter.off('progress', onProgress);
+    preview.off('ready', onPreviewReady);
   };
 }

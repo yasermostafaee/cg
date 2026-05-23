@@ -6,6 +6,7 @@ import type { IpcHandler, IpcPublisher } from '@cg/shared-ipc';
 import { AssetService } from '../src/main/services/AssetService.js';
 import { ExportService } from '../src/main/services/ExportService.js';
 import { ProjectService } from '../src/main/services/ProjectService.js';
+import { PreviewService } from '../src/main/preview/PreviewService.js';
 import { registerDesignerIpc } from '../src/main/ipc/register.js';
 
 let tmp: string | undefined;
@@ -50,6 +51,7 @@ async function setup(): Promise<{
   projects: ProjectService;
   assets: AssetService;
   exporter: ExportService;
+  preview: PreviewService;
   tmpDir: string;
   unwire: () => void;
 }> {
@@ -64,6 +66,7 @@ async function setup(): Promise<{
     randomId: () => 'asset-fixed',
   });
   const exporter = new ExportService({ cgJs: CG_JS_STUB, assets });
+  const preview = new PreviewService({ cgJs: CG_JS_STUB, assets });
   const ipcMain = makeFakeIpc();
   const webContents = makeFakePublisher();
   const unwire = registerDesignerIpc({
@@ -72,8 +75,9 @@ async function setup(): Promise<{
     projects,
     assets,
     exporter,
+    preview,
   });
-  return { ipcMain, webContents, projects, assets, exporter, tmpDir: tmp, unwire };
+  return { ipcMain, webContents, projects, assets, exporter, preview, tmpDir: tmp, unwire };
 }
 
 describe('registerDesignerIpc', () => {
