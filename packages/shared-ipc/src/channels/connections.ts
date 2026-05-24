@@ -16,11 +16,33 @@ const ServerHealthSchema = z.object({
   oscFreshAt: z.string().datetime().optional(),
 });
 
+const FailoverReasonSchema = z.enum([
+  'manual',
+  'osc-silence',
+  'amcp-ping-fail',
+  'command-timeouts',
+  '5xx-burst',
+]);
+
+const FailoverInfoSchema = z.object({
+  at: z.string().datetime(),
+  reason: FailoverReasonSchema,
+  from: ServerLabelSchema,
+  to: ServerLabelSchema,
+});
+
+export type FailoverInfo = z.infer<typeof FailoverInfoSchema>;
+
 const ConnectionHealthSchema = z.object({
   primary: ServerHealthSchema,
   backup: ServerHealthSchema,
   currentPrimary: ServerLabelSchema,
   strategy: z.enum(['mirror-sync', 'mirror-async', 'journal-replay']),
+  /**
+   * Most-recent failover event (M9.0). Absent if no failover has happened
+   * since boot. Renderer uses this to drive the failover banner.
+   */
+  lastFailover: FailoverInfoSchema.optional(),
 });
 
 export type ConnectionHealth = z.infer<typeof ConnectionHealthSchema>;

@@ -7,7 +7,7 @@ import {
   type ServerLabel,
   type ServerSessionState,
 } from '@cg/caspar-client';
-import type { ConnectionConfig, ConnectionHealth } from '@cg/shared-ipc';
+import type { ConnectionConfig, ConnectionHealth, FailoverInfo } from '@cg/shared-ipc';
 
 /**
  * ConnectionService — owns the two ServerSession instances and the
@@ -28,6 +28,7 @@ export class ConnectionService extends EventEmitter<ConnectionServiceEvents> {
   readonly sessionB: ServerSession;
   readonly adapter: RedundancyAdapter;
   private config: ConnectionConfig;
+  private lastFailover: FailoverInfo | undefined;
 
   constructor(config: ConnectionConfig) {
     super();
@@ -53,7 +54,15 @@ export class ConnectionService extends EventEmitter<ConnectionServiceEvents> {
     const onStateChange = (): void => this.emitHealth();
     this.sessionA.on('state-change', onStateChange);
     this.sessionB.on('state-change', onStateChange);
-    this.adapter.on('failover-complete', () => this.emitHealth());
+    this.adapter.on('failover-complete', (event) => {
+      this.lastFailover = {
+        at: new Date(event.at).toISOString(),
+        reason: event.reason,
+        from: event.from,
+        to: event.to,
+      };
+      this.emitHealth();
+    });
   }
 
   /** Begin connecting both sessions. Returns immediately; status flows through events. */
@@ -72,7 +81,7 @@ export class ConnectionService extends EventEmitter<ConnectionServiceEvents> {
 
   /** Synchronous snapshot of current health for `connections.health` requests. */
   getHealth(): ConnectionHealth {
-    return {
+    const health: ConnectionHealth = {
       primary: {
         label: this.adapter.currentPrimary,
         state: this.adapter.primarySession.state,
@@ -86,6 +95,8 @@ export class ConnectionService extends EventEmitter<ConnectionServiceEvents> {
       currentPrimary: this.adapter.currentPrimary,
       strategy: this.config.strategy,
     };
+    if (this.lastFailover !== undefined) health.lastFailover = this.lastFailover;
+    return health;
   }
 
   /** Operator-driven failover. */

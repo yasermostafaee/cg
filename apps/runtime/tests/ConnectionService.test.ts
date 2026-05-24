@@ -85,6 +85,20 @@ describe('ConnectionService', () => {
     expect(newPrimary).toBe('B');
   });
 
+  it('records lastFailover on health snapshot after a failover (M9.0)', async () => {
+    const svc = await setup();
+    svc.start();
+    await new Promise<void>((resolve) => svc.sessionA.once('healthy', () => resolve()));
+    expect(svc.getHealth().lastFailover).toBeUndefined();
+    await svc.failover('manual');
+    const info = svc.getHealth().lastFailover;
+    expect(info).toBeDefined();
+    expect(info?.reason).toBe('manual');
+    expect(info?.from).toBe('A');
+    expect(info?.to).toBe('B');
+    expect(typeof info?.at).toBe('string');
+  });
+
   it('setStrategy stores the desired value', async () => {
     const svc = await setup();
     svc.setStrategy('journal-replay');

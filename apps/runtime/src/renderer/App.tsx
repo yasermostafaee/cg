@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
 import type { RuntimeBridge } from '../shared/runtime-bridge.js';
 import { AuditPanel } from './features/audit/AuditPanel.js';
+import { FailoverBanner } from './features/connections/FailoverBanner.js';
 import { StackPanel } from './features/stack/StackPanel.js';
 import { Inspector } from './features/inspector/Inspector.js';
 import { LockOverlay } from './features/lock/LockOverlay.js';
 import { StatusBar } from './features/status/StatusBar.js';
+import { useConnections } from './hooks/useConnections.js';
 import { useLock } from './hooks/useLock.js';
 import { useStack } from './hooks/useStack.js';
 import { colors } from './theme.js';
@@ -70,6 +72,7 @@ const styles = {
 export function App(): JSX.Element {
   const items = useStack();
   const lock = useLock();
+  const health = useConnections();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [auditOpen, setAuditOpen] = useState(false);
   const selected = useMemo(
@@ -79,6 +82,7 @@ export function App(): JSX.Element {
 
   return (
     <main style={styles.page}>
+      <FailoverBanner health={health} />
       <div style={styles.shell}>
         <nav style={styles.sidebar} aria-label="Library">
           <h2 style={styles.sidebarHeading}>LIBRARY</h2>
