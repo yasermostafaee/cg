@@ -216,7 +216,7 @@ describe('M7.4 — every Phase 3 §5 preset combination', () => {
       // Schema-valid → ensures each defaulter is in lockstep with shared-schema.
       expect(() => SceneSchema.parse(scene)).not.toThrow();
 
-      const runtime = createRuntime(scene, { skipFontLoad: true });
+      const runtime = createRuntime(scene, { skipFontLoad: true, skipTickers: true });
       await runtime.play({});
       expect(document.body.classList.contains('cg-pending')).toBe(false);
       expect(document.querySelector('[data-cg-element-id="title"]')).toBeTruthy();
