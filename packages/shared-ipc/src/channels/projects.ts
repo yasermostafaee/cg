@@ -65,3 +65,30 @@ export const ProjectsActiveChangedChannel = definePublishChannel(
   'projects.active-changed',
   z.object({ scene: SceneSchema.nullable(), path: z.string().nullable() }),
 );
+
+/**
+ * Catalog of built-in starter templates (Phase 8 §11 / M8.0).
+ *
+ * Renderer asks Main for the catalog at boot; clicking a starter calls
+ * `projects.starter` which returns a *clone* of the starter's Scene to
+ * become the new active project.
+ */
+const StarterEntrySchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  description: z.string(),
+  templateType: z.string().min(1),
+});
+export type StarterEntry = z.infer<typeof StarterEntrySchema>;
+
+export const ProjectsStartersChannel = defineChannel(
+  'projects.starters',
+  z.void(),
+  z.array(StarterEntrySchema),
+);
+
+export const ProjectsStarterChannel = defineChannel(
+  'projects.starter',
+  z.object({ starterId: z.string().min(1) }),
+  z.object({ scene: SceneSchema, path: z.null() }),
+);

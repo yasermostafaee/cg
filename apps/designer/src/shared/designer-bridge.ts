@@ -22,6 +22,8 @@ import type {
   ProjectsOpenChannel,
   ProjectsRecentChannel,
   ProjectsSaveChannel,
+  ProjectsStarterChannel,
+  ProjectsStartersChannel,
 } from '@cg/shared-ipc';
 import type { Scene } from '@cg/shared-schema';
 
@@ -48,6 +50,10 @@ export interface DesignerBridge {
       req: ChannelRequest<typeof ProjectsSaveChannel>,
     ): Promise<ChannelResponse<typeof ProjectsSaveChannel>>;
     recent(): Promise<ChannelResponse<typeof ProjectsRecentChannel>>;
+    starters(): Promise<ChannelResponse<typeof ProjectsStartersChannel>>;
+    starter(
+      req: ChannelRequest<typeof ProjectsStarterChannel>,
+    ): Promise<ChannelResponse<typeof ProjectsStarterChannel>>;
     onActiveChanged(
       handler: (info: { scene: Scene | null; path: string | null }) => void,
     ): Unsubscribe;

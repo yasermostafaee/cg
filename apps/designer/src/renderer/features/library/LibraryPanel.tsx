@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { TemplateType } from '@cg/shared-schema';
+import type { StarterEntry } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
 
@@ -59,14 +60,16 @@ const styles = {
   },
 } as const;
 
-/** Sidebar — recent projects + a quick "New project" form. */
+/** Sidebar — starter templates + recent projects + a quick "New project" form. */
 export function LibraryPanel(): JSX.Element {
   const [recent, setRecent] = useState<{ path: string; name: string }[]>([]);
+  const [starters, setStarters] = useState<readonly StarterEntry[]>([]);
   const [type, setType] = useState<TemplateType>('lower-third');
   const [name, setName] = useState<string>('Untitled');
 
   useEffect(() => {
     void refresh();
+    void window.cg.projects.starters().then(setStarters);
     const unsubscribe = window.cg.projects.onActiveChanged(() => {
       void refresh();
     });
@@ -88,9 +91,34 @@ export function LibraryPanel(): JSX.Element {
     if (result.scene !== null) designerStore.setScene(result.scene, result.path);
   }
 
+  async function loadStarter(starterId: string): Promise<void> {
+    const result = await window.cg.projects.starter({ starterId });
+    designerStore.setScene(result.scene, result.path);
+  }
+
   return (
     <aside style={styles.panel} aria-label="Library">
-      <h2 style={styles.heading}>NEW PROJECT</h2>
+      {starters.length > 0 && (
+        <>
+          <h2 style={styles.heading}>STARTERS</h2>
+          <div style={styles.list}>
+            {starters.map((s) => (
+              <button
+                key={s.id}
+                style={styles.button}
+                title={s.description}
+                onClick={() => void loadStarter(s.id)}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      <h2 style={{ ...styles.heading, marginTop: starters.length > 0 ? '0.5rem' : 0 }}>
+        NEW PROJECT
+      </h2>
       <input
         style={styles.select}
         value={name}

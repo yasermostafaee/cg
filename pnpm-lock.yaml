@@ -38,6 +38,9 @@ importers:
       '@cg/shared-schema':
         specifier: workspace:*
         version: link:../../packages/shared-schema
+      '@cg/starter-templates':
+        specifier: workspace:*
+        version: link:../../packages/starter-templates
       '@cg/template-runtime':
         specifier: workspace:*
         version: link:../../packages/template-runtime
@@ -321,6 +324,31 @@ importers:
       zod:
         specifier: ^3.23.8
         version: 3.25.76
+    devDependencies:
+      '@cg/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@vitest/coverage-v8':
+        specifier: ^2.1.8
+        version: 2.1.9(vitest@2.1.9(@types/node@22.19.19)(happy-dom@15.11.7))
+      eslint:
+        specifier: ^9.17.0
+        version: 9.39.4
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.3
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.19)(happy-dom@15.11.7)
+
+  packages/starter-templates:
+    dependencies:
+      '@cg/shared-schema':
+        specifier: workspace:*
+        version: link:../shared-schema
     devDependencies:
       '@cg/eslint-config':
         specifier: workspace:*

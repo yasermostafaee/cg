@@ -18,6 +18,7 @@
   "dependencies": {
     "@cg/shared-ipc": "workspace:*",
     "@cg/shared-schema": "workspace:*",
+    "@cg/starter-templates": "workspace:*",
     "@cg/template-runtime": "workspace:*",
     "@cg/text-shaping": "workspace:*",
     "@cg/vcg-format": "workspace:*",
