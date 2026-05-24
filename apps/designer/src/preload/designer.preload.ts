@@ -20,6 +20,8 @@ import {
   ProjectsOpenChannel,
   ProjectsRecentChannel,
   ProjectsSaveChannel,
+  ProjectsStarterChannel,
+  ProjectsStartersChannel,
   invoke,
   subscribe,
   type ChannelRequest,
@@ -45,6 +47,9 @@ const api = {
     save: (req: ChannelRequest<typeof ProjectsSaveChannel>) =>
       invoke(ipcRenderer, ProjectsSaveChannel, req),
     recent: () => invoke(ipcRenderer, ProjectsRecentChannel, undefined),
+    starters: () => invoke(ipcRenderer, ProjectsStartersChannel, undefined),
+    starter: (req: ChannelRequest<typeof ProjectsStarterChannel>) =>
+      invoke(ipcRenderer, ProjectsStarterChannel, req),
     onActiveChanged: (
       handler: (info: { scene: unknown; path: string | null }) => void,
     ): Unsubscribe =>

@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { SceneSchema, type Scene, type TemplateType } from '@cg/shared-schema';
 import type { RecentProject } from '@cg/shared-ipc';
+import { getStarter, STARTER_TEMPLATES, type StarterTemplate } from '@cg/starter-templates';
 
 /**
  * ProjectService — owns the in-memory active scene + on-disk persistence.
@@ -81,6 +82,40 @@ export class ProjectService extends EventEmitter<ProjectServiceEvents> {
     this.active = { scene, path: null };
     this.emit('active-changed', { scene, path: null });
     return { scene, path: null };
+  }
+
+  /** Catalog of built-in starter templates the Designer Library exposes. */
+  starters(): readonly StarterTemplate[] {
+    return STARTER_TEMPLATES;
+  }
+
+  /**
+   * Load a starter template as the active project (Phase 8 §11 / M8.0).
+   *
+   * The returned Scene is a deep clone with a fresh id + name + timestamps —
+   * editing it doesn't mutate the shared starter constant, and saving it
+   * lands in a new file (no collision with an existing on-disk scene).
+   *
+   * Returns null if `starterId` isn't recognized.
+   */
+  loadStarter(starterId: string): { scene: Scene; path: null } | null {
+    const starter = getStarter(starterId);
+    if (starter === null) return null;
+    const nowIso = this.now().toISOString();
+    const cloned: Scene = {
+      ...(JSON.parse(JSON.stringify(starter.scene)) as Scene),
+      id: this.randomId(),
+      name: starter.label,
+      metadata: {
+        ...starter.scene.metadata,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+    };
+    SceneSchema.parse(cloned);
+    this.active = { scene: cloned, path: null };
+    this.emit('active-changed', { scene: cloned, path: null });
+    return { scene: cloned, path: null };
   }
 
   /** Parse + activate the scene at `filePath`. Throws on schema mismatch. */

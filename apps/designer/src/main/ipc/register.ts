@@ -15,6 +15,8 @@ import {
   ProjectsOpenChannel,
   ProjectsRecentChannel,
   ProjectsSaveChannel,
+  ProjectsStarterChannel,
+  ProjectsStartersChannel,
   handle,
   publish,
   type IpcHandler,
@@ -79,6 +81,21 @@ export function registerDesignerIpc(deps: DesignerIpcWiring): () => void {
   });
 
   handle(ipcMain, ProjectsRecentChannel, async () => [...(await projects.recent())]);
+
+  handle(ipcMain, ProjectsStartersChannel, () =>
+    projects.starters().map((s) => ({
+      id: s.id,
+      label: s.label,
+      description: s.description,
+      templateType: s.scene.templateType,
+    })),
+  );
+
+  handle(ipcMain, ProjectsStarterChannel, (req) => {
+    const result = projects.loadStarter(req.starterId);
+    if (result === null) throw new Error(`unknown starter: ${req.starterId}`);
+    return result;
+  });
 
   // ── assets.* ────────────────────────────────────────────────────────
   handle(ipcMain, AssetsImportChannel, async (req) => {
