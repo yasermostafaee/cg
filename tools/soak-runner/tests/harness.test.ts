@@ -84,9 +84,64 @@ describe('runSoak (short scenario)', () => {
       rssDeltaMb: 1,
       errors: ['amcp send timed out'],
       passed: false,
+      failovers: [],
     });
     expect(text).toContain('first error:');
     expect(text).toContain('amcp send timed out');
     expect(text).toContain('FAIL');
+  });
+
+  it('fires a scheduled failover mid-run and records it in the report (M9.4)', async () => {
+    const report = await runSoak({
+      durationMs: 3000,
+      cycleMs: 50,
+      sampleMs: 500,
+      leakBudgetMb: 50,
+      scheduledFailoversAtMs: [1000],
+    });
+    expect(report.failovers).toHaveLength(1);
+    const f = report.failovers[0];
+    expect(f?.from).toBe('A');
+    expect(f?.to).toBe('B');
+    // Failover happened around the 1s mark but on slow CI it can drift —
+    // assert ordering rather than exact timing.
+    expect(f?.atMs).toBeGreaterThan(500);
+    expect(f?.atMs).toBeLessThan(report.durationMs);
+    // No state divergence at hour 24 → for the short variant: cycles
+    // kept running after the failover, errors stayed empty.
+    expect(report.errors).toEqual([]);
+    expect(report.passed).toBe(true);
+    expect(report.cycles).toBeGreaterThan(0);
+  });
+
+  it('ignores scheduled failovers past durationMs', async () => {
+    const report = await runSoak({
+      durationMs: 1000,
+      cycleMs: 50,
+      sampleMs: 500,
+      leakBudgetMb: 50,
+      scheduledFailoversAtMs: [5000, 10_000],
+    });
+    expect(report.failovers).toEqual([]);
+  });
+
+  it('formatReport renders failover lines when failovers occurred', () => {
+    const text = formatReport({
+      durationMs: 2000,
+      cycles: 4,
+      samples: [],
+      heapStartMb: 1,
+      heapEndMb: 2,
+      heapDeltaMb: 1,
+      leakBudgetMb: 50,
+      rssStartMb: 1,
+      rssEndMb: 2,
+      rssDeltaMb: 1,
+      errors: [],
+      passed: true,
+      failovers: [{ atMs: 1234, from: 'A', to: 'B' }],
+    });
+    expect(text).toContain('failovers:     1');
+    expect(text).toContain('A → B');
   });
 });

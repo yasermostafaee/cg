@@ -17,10 +17,14 @@ export function formatReport(r: SoakReport): string {
     `  rss end:       ${r.rssEndMb.toFixed(2)} MB`,
     `  rss delta:     ${signedMb(r.rssDeltaMb)}`,
     `  errors:        ${String(r.errors.length)}`,
-    `  result:        ${r.passed ? 'PASS' : 'FAIL — leak budget exceeded'}`,
+    `  failovers:     ${String(r.failovers.length)}`,
+    `  result:        ${r.passed ? 'PASS' : 'FAIL'}`,
   ];
   if (r.errors.length > 0) {
     lines.push(`  first error:   ${r.errors[0] ?? ''}`);
+  }
+  for (const f of r.failovers) {
+    lines.push(`  failover:      ${(f.atMs / 1000).toFixed(1)}s — ${f.from} → ${f.to}`);
   }
   return lines.join('\n');
 }

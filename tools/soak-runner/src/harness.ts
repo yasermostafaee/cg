@@ -34,6 +34,14 @@ export interface SoakOptions {
   leakBudgetMb: number;
   /** Strategy to use. Default `'mirror-sync'`. */
   strategy?: RedundancyStrategy;
+  /**
+   * M9.4: schedule a manual failover at this many ms after soak start.
+   * Used to validate the Phase 8 §12 exit criterion ("24h scenario
+   * includes one scheduled failover; no state divergence at hour 24").
+   * Multiple values fire multiple failovers; values past `durationMs`
+   * are ignored.
+   */
+  scheduledFailoversAtMs?: readonly number[];
 }
 
 export interface MemorySample {
@@ -42,6 +50,15 @@ export interface MemorySample {
   heapUsedMb: number;
   rssMb: number;
   queueDepth: number;
+}
+
+export interface FailoverRecord {
+  /** Wall-clock ms since soak start at which the failover fired. */
+  atMs: number;
+  /** Server label the soak was on *before* the failover. */
+  from: 'A' | 'B';
+  /** Server label the soak is on *after* the failover. */
+  to: 'A' | 'B';
 }
 
 export interface SoakReport {
@@ -59,6 +76,8 @@ export interface SoakReport {
   passed: boolean;
   /** Any unexpected errors that bubbled up during cycles. */
   errors: readonly string[];
+  /** Failovers that fired during the soak (M9.4). */
+  failovers: readonly FailoverRecord[];
 }
 
 interface Stack {
@@ -145,7 +164,32 @@ export async function runSoak(options: SoakOptions): Promise<SoakReport> {
   const stack = await buildStack(options.strategy ?? 'mirror-sync');
   const errors: string[] = [];
   const samples: MemorySample[] = [];
+  const failovers: FailoverRecord[] = [];
   const start = Date.now();
+
+  // Schedule failovers. Each fires once at its target offset; the
+  // timer is unref'd so the event loop doesn't keep the process alive
+  // past the soak's own deadline. Failovers past `durationMs` are
+  // dropped during scheduling.
+  const failoverTimers: NodeJS.Timeout[] = [];
+  for (const atMs of options.scheduledFailoversAtMs ?? []) {
+    if (atMs >= options.durationMs) continue;
+    const timer = setTimeout(() => {
+      const from = stack.adapter.currentPrimary;
+      stack.adapter
+        .failover('manual')
+        .then(() => {
+          failovers.push({ atMs: Date.now() - start, from, to: stack.adapter.currentPrimary });
+        })
+        .catch((err: unknown) => {
+          errors.push(
+            `failover@${String(atMs)}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
+    }, atMs);
+    timer.unref?.();
+    failoverTimers.push(timer);
+  }
 
   const sample = (): void => {
     const mem = process.memoryUsage();
@@ -178,6 +222,7 @@ export async function runSoak(options: SoakOptions): Promise<SoakReport> {
       await delay(Math.max(0, options.cycleMs));
     }
   } finally {
+    for (const t of failoverTimers) clearTimeout(t);
     clearInterval(samplerHandle);
     sample();
     await stack.dispose();
@@ -200,7 +245,8 @@ export async function runSoak(options: SoakOptions): Promise<SoakReport> {
     rssEndMb,
     rssDeltaMb,
     leakBudgetMb: options.leakBudgetMb,
-    passed: heapDeltaMb <= options.leakBudgetMb,
+    passed: heapDeltaMb <= options.leakBudgetMb && errors.length === 0,
     errors,
+    failovers,
   };
 }
