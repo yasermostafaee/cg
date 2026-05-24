@@ -3,6 +3,7 @@ import { CanvasArea } from './features/canvas/CanvasArea.js';
 import { InspectorPanel } from './features/inspector/InspectorPanel.js';
 import { LibraryPanel } from './features/library/LibraryPanel.js';
 import { StatusBar } from './features/status/StatusBar.js';
+import { TimelineStrip } from './features/timeline/TimelineStrip.js';
 import { ToolRail } from './features/tools/ToolRail.js';
 import { useDesignerStore } from './state/store.js';
 import { colors } from './theme.js';
@@ -22,7 +23,7 @@ const styles = {
     minHeight: '100vh',
     margin: 0,
     display: 'grid',
-    gridTemplateRows: '1fr auto',
+    gridTemplateRows: '1fr auto auto',
   },
   shell: {
     display: 'grid',
@@ -65,6 +66,11 @@ export function App(): JSX.Element {
         </div>
         <InspectorPanel scene={scene} projectPath={projectPath} selection={selection} />
       </div>
+      {scene !== null && (
+        <div style={{ padding: '0 0.75rem 0.5rem' }}>
+          <TimelineStrip scene={scene} selection={selection} />
+        </div>
+      )}
       <StatusBar scene={scene} projectPath={projectPath} />
     </main>
   );
