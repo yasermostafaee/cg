@@ -1,6 +1,8 @@
-import type { Element, Scene } from '@cg/shared-schema';
+import type { Element, FieldBinding, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { designerStore } from '../../state/store.js';
+import { designerStore, useDesignerStore } from '../../state/store.js';
+import { describeBinding } from '../fields/bind-resolver.js';
+import { FieldsPanel } from '../fields/FieldsPanel.js';
 import { AnimationSection } from './AnimationSection.js';
 import { StyleSection } from './StyleSection.js';
 import { TransformSection } from './TransformSection.js';
@@ -60,6 +62,26 @@ const styles = {
     alignSelf: 'flex-start' as const,
     marginTop: '0.3rem',
   },
+  bindList: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.25rem',
+  },
+  bindRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '0.5rem',
+  },
+  bindRemove: {
+    background: 'transparent',
+    color: colors.textMuted,
+    border: `1px solid ${colors.border}`,
+    padding: '0.1rem 0.35rem',
+    borderRadius: '0.2rem',
+    cursor: 'pointer',
+    fontSize: '0.72rem',
+  },
 } as const;
 
 /**
@@ -81,7 +103,7 @@ export function InspectorPanel({ scene, projectPath, selection }: Props): JSX.El
   if (selected === null) {
     return <SceneInspector scene={scene} projectPath={projectPath} />;
   }
-  return <ElementInspector element={selected} />;
+  return <ElementInspector element={selected} scene={scene} />;
 }
 
 function SceneInspector({
@@ -91,6 +113,7 @@ function SceneInspector({
   scene: Scene;
   projectPath: string | null;
 }): JSX.Element {
+  const { bindModeFieldId } = useDesignerStore();
   return (
     <aside style={styles.panel} aria-label="Inspector">
       <h2 style={styles.headingFirst}>SCENE</h2>
@@ -103,11 +126,16 @@ function SceneInspector({
       <Row label="frame rate" value={String(scene.frameRate)} />
       <Row label="layers" value={String(scene.layers.length)} />
       <Row label="path" value={projectPath ?? '(unsaved)'} />
+      <h3 style={styles.heading}>FIELDS</h3>
+      <FieldsPanel scene={scene} bindModeFieldId={bindModeFieldId} />
     </aside>
   );
 }
 
-function ElementInspector({ element }: { element: Element }): JSX.Element {
+function ElementInspector({ element, scene }: { element: Element; scene: Scene }): JSX.Element {
+  const bindings = scene.bindings
+    .map((b, idx) => ({ b, idx }))
+    .filter(({ b }) => bindingTargetsElement(b, element.id));
   return (
     <aside style={styles.panel} aria-label="Inspector">
       <h2 style={styles.headingFirst}>ELEMENT — {element.type.toUpperCase()}</h2>
@@ -119,10 +147,42 @@ function ElementInspector({ element }: { element: Element }): JSX.Element {
       <StyleSection element={element} />
       <h3 style={styles.heading}>ANIMATION</h3>
       <AnimationSection element={element} />
+      <h3 style={styles.heading}>BINDINGS</h3>
+      <ElementBindings bindings={bindings} />
       <button style={styles.removeButton} onClick={() => designerStore.removeElement(element.id)}>
         Remove
       </button>
     </aside>
+  );
+}
+
+function bindingTargetsElement(b: FieldBinding, elementId: string): boolean {
+  const t = b.target;
+  if (t.kind === 'scene-background') return false;
+  return t.elementId === elementId;
+}
+
+function ElementBindings({
+  bindings,
+}: {
+  bindings: readonly { b: FieldBinding; idx: number }[];
+}): JSX.Element {
+  if (bindings.length === 0) {
+    return <p style={styles.empty}>no bindings target this element</p>;
+  }
+  return (
+    <div style={styles.bindList}>
+      {bindings.map(({ b, idx }) => (
+        <div key={idx} style={styles.bindRow}>
+          <span style={{ color: colors.text, fontSize: '0.8rem' }}>
+            <strong>{b.fieldId}</strong> → {describeBinding(b)}
+          </span>
+          <button style={styles.bindRemove} onClick={() => designerStore.removeBindingAt(idx)}>
+            ×
+          </button>
+        </div>
+      ))}
+    </div>
   );
 }
 

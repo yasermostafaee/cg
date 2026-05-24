@@ -49,7 +49,8 @@ const styles = {
  *   └────────────────────────────────────┘
  */
 export function App(): JSX.Element {
-  const { scene, projectPath, tool, selection, editingTextId } = useDesignerStore();
+  const { scene, projectPath, tool, selection, editingTextId, bindModeFieldId } =
+    useDesignerStore();
 
   return (
     <main style={styles.page}>
@@ -62,6 +63,7 @@ export function App(): JSX.Element {
             tool={tool}
             selection={selection}
             editingTextId={editingTextId}
+            bindModeFieldId={bindModeFieldId}
           />
         </div>
         <InspectorPanel scene={scene} projectPath={projectPath} selection={selection} />

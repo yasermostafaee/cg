@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Element, Layer, Scene } from '@cg/shared-schema';
+import type { DynamicField, Element, FieldBinding, Layer, Scene } from '@cg/shared-schema';
 
 /**
  * Designer renderer state — small pub-sub store with a JSON-patch-ish
@@ -20,6 +20,13 @@ export interface DesignerStoreState {
   selection: ReadonlySet<string>;
   /** When set, the canvas shows an inline TextEditor for this element. */
   editingTextId: string | null;
+  /**
+   * When set, the next canvas click binds this field to the clicked
+   * element instead of selecting it. Set by the Fields panel's
+   * "Bind from canvas" button; cleared after the binding is created
+   * or the operator presses Escape.
+   */
+  bindModeFieldId: string | null;
 }
 
 const initialState: DesignerStoreState = {
@@ -28,6 +35,7 @@ const initialState: DesignerStoreState = {
   tool: 'cursor',
   selection: new Set<string>(),
   editingTextId: null,
+  bindModeFieldId: null,
 };
 
 type Listener = (state: DesignerStoreState) => void;
@@ -74,6 +82,53 @@ export const designerStore = {
   /** Enter inline edit mode for a text element. Pass null to exit. */
   setEditingText(elementId: string | null): void {
     set({ editingTextId: elementId });
+  },
+
+  /** Enter bind-from-canvas mode for a field. Pass null to cancel. */
+  setBindMode(fieldId: string | null): void {
+    set({ bindModeFieldId: fieldId });
+  },
+
+  /** Append a dynamic field to scene.fields. */
+  addField(field: DynamicField): void {
+    if (current.scene === null) return;
+    const fields = [...current.scene.fields, field];
+    set({ scene: { ...current.scene, fields } });
+  },
+
+  /** Patch a field's editable properties (label/required/default/etc.). */
+  updateField(fieldId: string, patch: Partial<DynamicField>): void {
+    if (current.scene === null) return;
+    const fields = current.scene.fields.map((f) =>
+      f.id === fieldId ? ({ ...f, ...patch } as DynamicField) : f,
+    );
+    set({ scene: { ...current.scene, fields } });
+  },
+
+  /** Remove a field and any bindings that reference it. */
+  removeField(fieldId: string): void {
+    if (current.scene === null) return;
+    const fields = current.scene.fields.filter((f) => f.id !== fieldId);
+    const bindings = current.scene.bindings.filter((b) => b.fieldId !== fieldId);
+    set({ scene: { ...current.scene, fields, bindings } });
+  },
+
+  /** Append a binding (no dedup — same target appearing twice is allowed). */
+  addBinding(binding: FieldBinding): void {
+    if (current.scene === null) return;
+    const bindings = [...current.scene.bindings, binding];
+    set({ scene: { ...current.scene, bindings } });
+  },
+
+  /**
+   * Remove a binding identified by its array index. Index-based removal
+   * is unambiguous when two bindings share the same field/target.
+   */
+  removeBindingAt(index: number): void {
+    if (current.scene === null) return;
+    if (index < 0 || index >= current.scene.bindings.length) return;
+    const bindings = current.scene.bindings.filter((_, i) => i !== index);
+    set({ scene: { ...current.scene, bindings } });
   },
 
   /** Add one element to the first layer (creates a layer if none exist). */
@@ -168,7 +223,12 @@ export const designerStore = {
 
   /** Reset for tests. */
   _reset(): void {
-    current = { ...initialState, selection: new Set<string>(), editingTextId: null };
+    current = {
+      ...initialState,
+      selection: new Set<string>(),
+      editingTextId: null,
+      bindModeFieldId: null,
+    };
     listeners.clear();
   },
 } as const;

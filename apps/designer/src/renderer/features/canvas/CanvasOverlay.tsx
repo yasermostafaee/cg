@@ -1,8 +1,9 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Element, Scene, TextElement } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore, type DesignerTool } from '../../state/store.js';
 import { defaultShape, defaultText } from '../../state/element-defaults.js';
+import { resolveBinding } from '../fields/bind-resolver.js';
 import { topmostHit } from './hit-test.js';
 import { Gizmo } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
@@ -12,6 +13,7 @@ interface Props {
   tool: DesignerTool;
   selection: ReadonlySet<string>;
   editingTextId: string | null;
+  bindModeFieldId: string | null;
   scale: number;
 }
 
@@ -49,6 +51,7 @@ export function CanvasOverlay({
   tool,
   selection,
   editingTextId,
+  bindModeFieldId,
   scale,
 }: Props): JSX.Element {
   const layerRef = useRef<HTMLDivElement>(null);
@@ -62,6 +65,15 @@ export function CanvasOverlay({
   const editingEl = editingTextId
     ? (allElements.find((e) => e.id === editingTextId) ?? null)
     : null;
+
+  useEffect(() => {
+    if (bindModeFieldId === null) return;
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') designerStore.setBindMode(null);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [bindModeFieldId]);
 
   function viewportToScene(clientX: number, clientY: number): { x: number; y: number } {
     const rect = layerRef.current?.getBoundingClientRect();
@@ -78,6 +90,18 @@ export function CanvasOverlay({
     // selection survive cross-canvas clicks and let the editor blur.
     if (editingEl !== null) return;
     const scenePoint = viewportToScene(e.clientX, e.clientY);
+    if (bindModeFieldId !== null) {
+      const hit = topmostHit(allElements, scenePoint);
+      if (hit !== null) {
+        const field = scene.fields.find((f) => f.id === bindModeFieldId);
+        if (field !== undefined) {
+          const binding = resolveBinding(field, hit);
+          if (binding !== null) designerStore.addBinding(binding);
+        }
+      }
+      designerStore.setBindMode(null);
+      return;
+    }
     if (tool === 'cursor') {
       const hit = topmostHit(allElements, scenePoint);
       if (hit !== null) {
@@ -116,7 +140,10 @@ export function CanvasOverlay({
     }
   }
 
-  const cursorStyle = tool === 'cursor' ? 'default' : 'crosshair';
+  const cursorStyle =
+    bindModeFieldId !== null ? 'crosshair' : tool === 'cursor' ? 'default' : 'crosshair';
+  const hintText =
+    bindModeFieldId !== null ? `BIND → ${bindModeFieldId} (Esc to cancel)` : tool.toUpperCase();
 
   return (
     <div
@@ -125,7 +152,9 @@ export function CanvasOverlay({
       onPointerDown={onPointerDown}
       onDoubleClick={onDoubleClick}
     >
-      {selectedEl !== null && editingEl === null && <Gizmo element={selectedEl} scale={scale} />}
+      {selectedEl !== null && editingEl === null && bindModeFieldId === null && (
+        <Gizmo element={selectedEl} scale={scale} />
+      )}
       {editingEl !== null && editingEl.type === 'text' && (
         <TextEditor
           element={editingEl as TextElement}
@@ -133,7 +162,7 @@ export function CanvasOverlay({
           onCommit={() => designerStore.setEditingText(null)}
         />
       )}
-      <div style={styles.toolHint}>{tool.toUpperCase()}</div>
+      <div style={styles.toolHint}>{hintText}</div>
     </div>
   );
 }
