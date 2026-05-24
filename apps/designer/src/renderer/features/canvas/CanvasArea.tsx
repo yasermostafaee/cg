@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
+import { CanvasOverlay } from './CanvasOverlay.js';
+import { type DesignerTool } from '../../state/store.js';
 
 interface Props {
   scene: Scene | null;
+  tool: DesignerTool;
+  selection: ReadonlySet<string>;
 }
+
+const SCALE = 0.5;
 
 const styles = {
   outer: {
@@ -36,18 +42,20 @@ const styles = {
     width: '100%',
     height: '100%',
     background: 'transparent',
+    pointerEvents: 'none' as const,
   },
 } as const;
 
 /**
- * The Designer's central work area. Shows the cgpreview iframe when a
- * scene is active. Element drawing + the gizmo overlay land with M6.4;
- * for now this just hosts the live preview.
+ * Central work area. Shows the cgpreview iframe with a transparent
+ * overlay on top that owns selection + element creation. The iframe's
+ * `pointer-events: none` ensures the overlay sees all clicks.
  *
- * The iframe loads `cgpreview://<sceneId>/index.html` (resolved by Main
- * via the protocol handler from M6.2).
+ * Scene mutations push a fresh `preview.load` so the iframe re-resolves
+ * `cgpreview://`. M9 swaps this for a postMessage-driven scene-graph
+ * diff once the template-runtime exposes one.
  */
-export function CanvasArea({ scene }: Props): JSX.Element {
+export function CanvasArea({ scene, tool, selection }: Props): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [src, setSrc] = useState<string | null>(null);
 
@@ -58,21 +66,20 @@ export function CanvasArea({ scene }: Props): JSX.Element {
     }
     let cancelled = false;
     void window.cg.preview.load({ scene }).then((res) => {
-      if (!cancelled) setSrc(res.src);
+      if (!cancelled) {
+        // Cache-bust so the iframe actually re-fetches.
+        setSrc(`${res.src}?t=${String(Date.now())}`);
+      }
     });
     return () => {
       cancelled = true;
     };
   }, [scene]);
 
-  // Listen for the iframe's ready ping. Once it lands we know the
-  // template-runtime is booted and `window.update` is callable from
-  // postMessage. The Inspector (M6.5) will use this gate.
   useEffect(() => {
     function onMessage(evt: MessageEvent<unknown>): void {
       const msg = evt.data as { kind?: string; sceneId?: string } | undefined;
       if (msg?.kind === 'cg-preview-ready') {
-        // Surface a console line during dev; M6.5 will route this to the store.
         // eslint-disable-next-line no-console
         console.info('[designer] preview ready for', msg.sceneId);
       }
@@ -93,16 +100,13 @@ export function CanvasArea({ scene }: Props): JSX.Element {
   }
 
   const { width, height } = scene.resolution;
-  // Fit the 1080-line stage at ~50% so a 1920×1080 scene comfortably
-  // shows in a 1280-wide workspace. M9 introduces zoom controls.
-  const scale = 0.5;
   return (
     <div style={styles.outer}>
       <div
         style={{
           ...styles.stage,
-          width: width * scale,
-          height: height * scale,
+          width: width * SCALE,
+          height: height * SCALE,
         }}
       >
         <iframe
@@ -112,6 +116,7 @@ export function CanvasArea({ scene }: Props): JSX.Element {
           style={styles.iframe}
           sandbox="allow-scripts allow-same-origin"
         />
+        <CanvasOverlay scene={scene} tool={tool} selection={selection} scale={SCALE} />
       </div>
     </div>
   );
