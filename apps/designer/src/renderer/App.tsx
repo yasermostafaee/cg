@@ -1,64 +1,66 @@
-import { useEffect, useState } from 'react';
-
-interface AppInfo {
-  name: string;
-  version: string;
-  platform: string;
-}
+import type { DesignerBridge } from '../shared/designer-bridge.js';
+import { CanvasArea } from './features/canvas/CanvasArea.js';
+import { InspectorPanel } from './features/inspector/InspectorPanel.js';
+import { LibraryPanel } from './features/library/LibraryPanel.js';
+import { StatusBar } from './features/status/StatusBar.js';
+import { ToolRail } from './features/tools/ToolRail.js';
+import { useDesignerStore } from './state/store.js';
+import { colors } from './theme.js';
 
 declare global {
   interface Window {
-    cg: {
-      getAppInfo: () => Promise<AppInfo>;
-    };
+    cg: DesignerBridge;
   }
 }
 
 const styles = {
   page: {
-    fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
-    color: '#E5E7EB',
-    background: '#0F172A',
+    fontFamily:
+      'Inter, system-ui, -apple-system, "Segoe UI", Vazirmatn, "Noto Sans Arabic", sans-serif',
+    color: colors.text,
+    background: colors.background,
     minHeight: '100vh',
     margin: 0,
-    padding: '2rem',
+    display: 'grid',
+    gridTemplateRows: '1fr auto',
+  },
+  shell: {
+    display: 'grid',
+    gridTemplateColumns: '240px 56px 1fr 320px',
+    gap: '0.75rem',
+    padding: '0.75rem',
+    minHeight: 0,
+  },
+  canvasWrap: {
     display: 'flex',
     flexDirection: 'column' as const,
-    alignItems: 'flex-start',
-    gap: '0.75rem',
-  },
-  heading: { fontSize: '1.5rem', margin: 0, fontWeight: 600 },
-  sub: { margin: 0, opacity: 0.7 },
-  info: {
-    fontSize: '0.85rem',
-    opacity: 0.75,
-    margin: 0,
-    background: 'rgba(255,255,255,0.04)',
-    padding: '0.5rem 0.75rem',
-    borderRadius: '0.25rem',
-    fontFamily: 'ui-monospace, "Cascadia Code", Consolas, monospace',
+    minHeight: 0,
   },
 } as const;
 
+/**
+ * Designer root layout — four regions per Phase 6 §11:
+ *   ┌────────┬────┬───────────┬──────────┐
+ *   │Library │Tool│  Canvas   │Inspector │
+ *   │ (240)  │(56)│ (flex)    │  (320)   │
+ *   ├────────┴────┴───────────┴──────────┤
+ *   │ Status bar                         │
+ *   └────────────────────────────────────┘
+ */
 export function App(): JSX.Element {
-  const [info, setInfo] = useState<AppInfo | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    window.cg
-      .getAppInfo()
-      .then(setInfo)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
-  }, []);
+  const { scene, projectPath, tool } = useDesignerStore();
 
   return (
     <main style={styles.page}>
-      <h1 style={styles.heading}>cg Designer</h1>
-      <p style={styles.sub}>M0 placeholder. The real editor lands at M6.</p>
-      {info && <pre style={styles.info}>{JSON.stringify(info, null, 2)}</pre>}
-      {error && (
-        <pre style={{ ...styles.info, color: '#F87171' }}>contextBridge error: {error}</pre>
-      )}
+      <div style={styles.shell}>
+        <LibraryPanel />
+        <ToolRail tool={tool} />
+        <div style={styles.canvasWrap}>
+          <CanvasArea scene={scene} />
+        </div>
+        <InspectorPanel scene={scene} projectPath={projectPath} />
+      </div>
+      <StatusBar scene={scene} projectPath={projectPath} />
     </main>
   );
 }
