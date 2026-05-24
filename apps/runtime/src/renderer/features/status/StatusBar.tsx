@@ -2,6 +2,10 @@ import { useConnections } from '../../hooks/useConnections.js';
 import { useLock } from '../../hooks/useLock.js';
 import { colors } from '../../theme.js';
 
+interface Props {
+  onOpenAudit?: () => void;
+}
+
 const styles = {
   bar: {
     display: 'flex',
@@ -69,7 +73,7 @@ function sessionLabel(state: string): SessionLabel {
 }
 
 /** Bottom-of-window status bar (Phase 6 §2). Never hidden, never re-flows. */
-export function StatusBar(): JSX.Element {
+export function StatusBar({ onOpenAudit }: Props = {}): JSX.Element {
   const health = useConnections();
   const lock = useLock();
 
@@ -96,6 +100,11 @@ export function StatusBar(): JSX.Element {
       </span>
       <span style={styles.pill}>{health.strategy}</span>
       <span style={styles.spacer} />
+      {onOpenAudit !== undefined && (
+        <button style={styles.lockButton} onClick={onOpenAudit} aria-label="Open audit log">
+          AUDIT
+        </button>
+      )}
       {lock.engaged ? (
         <span style={styles.lock}>🔒 LOCKED</span>
       ) : (

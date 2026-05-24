@@ -6,6 +6,13 @@ import type { ConnectionService } from '../src/main/services/ConnectionService.j
 import type { StackService } from '../src/main/services/StackService.js';
 import type { LockService } from '../src/main/services/LockService.js';
 import { TemplateRegistry } from '../src/main/services/TemplateRegistry.js';
+import type { AuditService } from '../src/main/services/AuditService.js';
+
+function fakeAuditService(): AuditService {
+  return {
+    filePath: '/tmp/never-written-audit.ndjson',
+  } as unknown as AuditService;
+}
 
 /**
  * Verifies that `registerIpcHandlers` plugs every channel into the
@@ -92,6 +99,7 @@ describe('registerIpcHandlers', () => {
       connections: fakeConnectionService(),
       lock: fakeLockService(),
       templates: new TemplateRegistry(),
+      audit: fakeAuditService(),
     });
 
     const channels = [
@@ -109,6 +117,7 @@ describe('registerIpcHandlers', () => {
       'lock.state',
       'templates.get',
       'templates.list',
+      'audit.recent',
     ];
     for (const c of channels) {
       expect(ipcMain.calls.has(c)).toBe(true);
@@ -126,6 +135,7 @@ describe('registerIpcHandlers', () => {
       connections: fakeConnectionService(),
       lock: fakeLockService(),
       templates: new TemplateRegistry(),
+      audit: fakeAuditService(),
     });
     const handler = ipcMain.calls.get('stack.take');
     const result = await handler!(null, { itemId: 'i1' });
@@ -144,6 +154,7 @@ describe('registerIpcHandlers', () => {
       connections: fakeConnectionService(),
       lock: fakeLockService(),
       templates: new TemplateRegistry(),
+      audit: fakeAuditService(),
     });
     stack.emit('state-changed', []);
     expect(webContents.sent).toEqual([{ channel: 'stack.state-changed', args: [[]] }]);
@@ -160,6 +171,7 @@ describe('registerIpcHandlers', () => {
       connections: fakeConnectionService(),
       lock: fakeLockService(),
       templates: new TemplateRegistry(),
+      audit: fakeAuditService(),
     });
     unwire();
     stack.emit('state-changed', []);
@@ -177,6 +189,7 @@ describe('registerIpcHandlers', () => {
       connections,
       lock: fakeLockService(),
       templates: new TemplateRegistry(),
+      audit: fakeAuditService(),
     });
     const handler = ipcMain.calls.get('connections.failover');
     const result = await handler!(null, { reason: 'manual' });
@@ -195,6 +208,7 @@ describe('registerIpcHandlers', () => {
       connections: fakeConnectionService(),
       lock,
       templates: new TemplateRegistry(),
+      audit: fakeAuditService(),
     });
     const handler = ipcMain.calls.get('lock.engage');
     const result = await handler!(null, { pin: '1234' });

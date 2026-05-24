@@ -28,6 +28,7 @@ import {
   StackUpdateChannel,
   TemplatesGetChannel,
   TemplatesListChannel,
+  AuditRecentChannel,
   invoke,
   subscribe,
   type ChannelRequest,
@@ -96,6 +97,12 @@ const api = {
     get: (req: ChannelRequest<typeof TemplatesGetChannel>) =>
       invoke(ipcRenderer, TemplatesGetChannel, req),
     list: () => invoke(ipcRenderer, TemplatesListChannel, undefined),
+  },
+
+  // ── audit ──────────────────────────────────────────────────────────
+  audit: {
+    recent: (req: ChannelRequest<typeof AuditRecentChannel>) =>
+      invoke(ipcRenderer, AuditRecentChannel, req),
   },
 };
 

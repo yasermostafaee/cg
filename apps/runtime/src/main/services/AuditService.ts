@@ -30,6 +30,8 @@ export interface AuditServiceOptions {
 
 export class AuditService {
   readonly writer: AuditWriter;
+  /** Path to the NDJSON file the writer is appending to (M8.5 reader uses this). */
+  readonly filePath: string;
   private readonly actor: string;
   private boundStack: StackService | null = null;
   private stackListener:
@@ -38,9 +40,17 @@ export class AuditService {
   private prevSnapshot: ReadonlyMap<string, string> = new Map();
   private boundLock: LockService | null = null;
   private lockListener: ((state: LockState) => void) | null = null;
+  /**
+   * Single-writer queue so audit rows land on disk in the order their
+   * triggering events fired. Without this serialization, three rapid
+   * snapshot pushes could complete `writer.append()` out of order on
+   * slow hosts — and the forensic log loses its causal ordering.
+   */
+  private writeChain: Promise<unknown> = Promise.resolve();
 
   constructor(options: AuditServiceOptions) {
     this.actor = options.actor ?? 'local';
+    this.filePath = options.filePath;
     this.writer =
       options.writer ??
       new AuditWriter({
@@ -63,14 +73,21 @@ export class AuditService {
     this.prevSnapshot = snapshotMap(stack.snapshot());
     this.stackListener = (snapshot) => {
       const next = snapshotMap(snapshot);
-      this.diffAndEmit(next).catch((err: unknown) => {
-        // append already emits 'error' on the writer; this catch keeps
-        // the diff loop alive.
-        void err;
-      });
+      const prev = this.prevSnapshot;
       this.prevSnapshot = next;
+      // Capture prev/next on the synchronous tick; chain the disk
+      // writes so concurrent snapshot pushes produce serialized rows.
+      this.enqueue(() => this.diffAndEmit(prev, next));
     };
     stack.on('state-changed', this.stackListener);
+  }
+
+  private enqueue(work: () => Promise<unknown>): void {
+    this.writeChain = this.writeChain.then(work, work).catch((err: unknown) => {
+      // append already emits 'error' on the writer; this catch keeps
+      // the chain alive across failures.
+      void err;
+    });
   }
 
   unbindStack(): void {
@@ -94,9 +111,7 @@ export class AuditService {
       if (state.engaged === prevEngaged) return;
       prevEngaged = state.engaged;
       const action: AuditEntry['action'] = state.engaged ? 'lock-engage' : 'lock-release';
-      this.record({ action, outcome: 'ok' }).catch((err: unknown) => {
-        void err;
-      });
+      this.enqueue(() => this.record({ action, outcome: 'ok' }));
     };
     lock.on('state-changed', this.lockListener);
   }
@@ -119,38 +134,39 @@ export class AuditService {
   async close(): Promise<void> {
     this.unbindStack();
     this.unbindLock();
+    // Drain pending writes before closing the file handle, otherwise
+    // queued appends fire against a closed handle and surface as test
+    // flakes.
+    await this.writeChain.catch(() => undefined);
     await this.writer.close();
   }
 
-  private async diffAndEmit(next: ReadonlyMap<string, string>): Promise<void> {
-    const writes: Promise<unknown>[] = [];
+  private async diffAndEmit(
+    prevSnap: ReadonlyMap<string, string>,
+    next: ReadonlyMap<string, string>,
+  ): Promise<void> {
     for (const [itemId, status] of next) {
-      const prev = this.prevSnapshot.get(itemId);
+      const prev = prevSnap.get(itemId);
       if (prev === status) continue;
       const action = transitionToAction(prev, status);
       if (action === null) continue;
-      writes.push(
-        this.writer.append({
+      await this.writer.append({
+        actor: this.actor,
+        action,
+        itemId,
+        outcome: 'ok',
+      });
+    }
+    for (const itemId of prevSnap.keys()) {
+      if (!next.has(itemId)) {
+        await this.writer.append({
           actor: this.actor,
-          action,
+          action: 'remove',
           itemId,
           outcome: 'ok',
-        }),
-      );
-    }
-    for (const itemId of this.prevSnapshot.keys()) {
-      if (!next.has(itemId)) {
-        writes.push(
-          this.writer.append({
-            actor: this.actor,
-            action: 'remove',
-            itemId,
-            outcome: 'ok',
-          }),
-        );
+        });
       }
     }
-    await Promise.all(writes);
   }
 }
 
