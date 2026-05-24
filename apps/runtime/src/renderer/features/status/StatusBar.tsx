@@ -100,6 +100,14 @@ export function StatusBar({ onOpenAudit }: Props = {}): JSX.Element {
       </span>
       <span style={styles.pill}>{health.strategy}</span>
       <span style={styles.spacer} />
+      <button
+        style={styles.lockButton}
+        onClick={() => void window.cg.connections.failover({ reason: 'manual' })}
+        aria-label="Manual failover"
+        title={`Switch primary to ${health.currentPrimary === 'A' ? 'B' : 'A'}`}
+      >
+        ⇄ FAILOVER
+      </button>
       {onOpenAudit !== undefined && (
         <button style={styles.lockButton} onClick={onOpenAudit} aria-label="Open audit log">
           AUDIT
