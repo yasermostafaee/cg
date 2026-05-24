@@ -58,7 +58,7 @@ export function App(): JSX.Element {
         <div style={styles.canvasWrap}>
           <CanvasArea scene={scene} tool={tool} selection={selection} />
         </div>
-        <InspectorPanel scene={scene} projectPath={projectPath} />
+        <InspectorPanel scene={scene} projectPath={projectPath} selection={selection} />
       </div>
       <StatusBar scene={scene} projectPath={projectPath} />
     </main>
