@@ -10,7 +10,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc -b --noEmit",
-    "test": "vitest run --coverage",
+    "test": "node ../designer/scripts/bundle-runtime.mjs && vitest run --coverage",
     "lint": "eslint . --max-warnings 0",
     "clean": "rimraf out dist .vite coverage *.tsbuildinfo",
     "package": "electron-vite build && electron-builder --win"

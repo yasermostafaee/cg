@@ -22,11 +22,6 @@
       "outputs": ["coverage/**"],
       "inputs": ["src/**", "tests/**", "scripts/**", "vitest.config.*", "package.json"]
     },
-    "@cg/runtime#test": {
-      "dependsOn": ["^build", "build", "@cg/designer#build"],
-      "outputs": ["coverage/**"],
-      "inputs": ["src/**", "tests/**", "scripts/**", "vitest.config.*", "package.json"]
-    },
     "test:integration": {
       "dependsOn": ["^build", "@cg/amcp-mock#build"],
       "outputs": ["coverage/**"],
