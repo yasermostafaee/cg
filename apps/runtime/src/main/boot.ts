@@ -56,6 +56,7 @@ export function boot(ctx: BootContext): BootHandle {
     connections,
     lock,
     templates,
+    audit,
   });
 
   connections.start();

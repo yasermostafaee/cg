@@ -1,4 +1,5 @@
 import {
+  AuditRecentChannel,
   ConnectionsConfigChannel,
   ConnectionsFailoverChannel,
   ConnectionsHealthChangedChannel,
@@ -21,6 +22,8 @@ import {
   type IpcHandler,
   type IpcPublisher,
 } from '@cg/shared-ipc';
+import { readRecentEntries } from '@cg/audit';
+import type { AuditService } from '../services/AuditService.js';
 import type { ConnectionService } from '../services/ConnectionService.js';
 import type { LockService } from '../services/LockService.js';
 import type { StackService } from '../services/StackService.js';
@@ -44,10 +47,11 @@ export interface IpcWiring {
   connections: ConnectionService;
   lock: LockService;
   templates: TemplateRegistry;
+  audit: AuditService;
 }
 
 export function registerIpcHandlers(deps: IpcWiring): () => void {
-  const { ipcMain, webContents, stack, connections, lock, templates } = deps;
+  const { ipcMain, webContents, stack, connections, lock, templates, audit } = deps;
 
   // ── stack.* ─────────────────────────────────────────────────────────
   handle(ipcMain, StackLoadChannel, (req) => {
@@ -93,6 +97,16 @@ export function registerIpcHandlers(deps: IpcWiring): () => void {
       templateType: e.templateType,
       fields: [...e.fields],
     })),
+  );
+
+  // ── audit.* ─────────────────────────────────────────────────────────
+  handle(ipcMain, AuditRecentChannel, (req) =>
+    readRecentEntries({
+      filePath: audit.filePath,
+      ...(req.limit !== undefined ? { limit: req.limit } : {}),
+      ...(req.action !== undefined ? { action: req.action } : {}),
+      ...(req.actor !== undefined ? { actor: req.actor } : {}),
+    }),
   );
 
   // ── pushes ──────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@
  * the contract.
  */
 import type {
+  AuditRecentChannel,
   ChannelRequest,
   ChannelResponse,
   ConnectionConfig,
@@ -83,5 +84,11 @@ export interface RuntimeBridge {
       req: ChannelRequest<typeof TemplatesGetChannel>,
     ): Promise<ChannelResponse<typeof TemplatesGetChannel>>;
     list(): Promise<ChannelResponse<typeof TemplatesListChannel>>;
+  };
+
+  audit: {
+    recent(
+      req: ChannelRequest<typeof AuditRecentChannel>,
+    ): Promise<ChannelResponse<typeof AuditRecentChannel>>;
   };
 }

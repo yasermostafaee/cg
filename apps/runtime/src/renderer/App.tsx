@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { RuntimeBridge } from '../shared/runtime-bridge.js';
+import { AuditPanel } from './features/audit/AuditPanel.js';
 import { StackPanel } from './features/stack/StackPanel.js';
 import { Inspector } from './features/inspector/Inspector.js';
 import { LockOverlay } from './features/lock/LockOverlay.js';
@@ -70,6 +71,7 @@ export function App(): JSX.Element {
   const items = useStack();
   const lock = useLock();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [auditOpen, setAuditOpen] = useState(false);
   const selected = useMemo(
     () => items.find((i) => i.itemId === selectedId) ?? null,
     [items, selectedId],
@@ -96,7 +98,8 @@ export function App(): JSX.Element {
         </section>
         <Inspector item={selected} />
       </div>
-      <StatusBar />
+      <StatusBar onOpenAudit={() => setAuditOpen(true)} />
+      <AuditPanel open={auditOpen} onClose={() => setAuditOpen(false)} />
       <LockOverlay
         engaged={lock.engaged}
         {...(lock.engagedAt !== undefined ? { engagedAt: lock.engagedAt } : {})}

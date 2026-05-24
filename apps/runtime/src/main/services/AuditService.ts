@@ -30,6 +30,8 @@ export interface AuditServiceOptions {
 
 export class AuditService {
   readonly writer: AuditWriter;
+  /** Path to the NDJSON file the writer is appending to (M8.5 reader uses this). */
+  readonly filePath: string;
   private readonly actor: string;
   private boundStack: StackService | null = null;
   private stackListener:
@@ -41,6 +43,7 @@ export class AuditService {
 
   constructor(options: AuditServiceOptions) {
     this.actor = options.actor ?? 'local';
+    this.filePath = options.filePath;
     this.writer =
       options.writer ??
       new AuditWriter({
