@@ -1,15 +1,17 @@
 import { useRef } from 'react';
-import type { Element, Scene } from '@cg/shared-schema';
+import type { Element, Scene, TextElement } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore, type DesignerTool } from '../../state/store.js';
 import { defaultShape, defaultText } from '../../state/element-defaults.js';
 import { topmostHit } from './hit-test.js';
 import { Gizmo } from './Gizmo.js';
+import { TextEditor } from './TextEditor.js';
 
 interface Props {
   scene: Scene;
   tool: DesignerTool;
   selection: ReadonlySet<string>;
+  editingTextId: string | null;
   scale: number;
 }
 
@@ -42,7 +44,13 @@ const styles = {
  * overlay sits above it and steals pointer events. (The iframe still
  * receives `postMessage` field updates from the Inspector.)
  */
-export function CanvasOverlay({ scene, tool, selection, scale }: Props): JSX.Element {
+export function CanvasOverlay({
+  scene,
+  tool,
+  selection,
+  editingTextId,
+  scale,
+}: Props): JSX.Element {
   const layerRef = useRef<HTMLDivElement>(null);
 
   const allElements: Element[] = [];
@@ -51,6 +59,9 @@ export function CanvasOverlay({ scene, tool, selection, scale }: Props): JSX.Ele
   }
   const selectedEl =
     selection.size === 1 ? (allElements.find((e) => selection.has(e.id)) ?? null) : null;
+  const editingEl = editingTextId
+    ? (allElements.find((e) => e.id === editingTextId) ?? null)
+    : null;
 
   function viewportToScene(clientX: number, clientY: number): { x: number; y: number } {
     const rect = layerRef.current?.getBoundingClientRect();
@@ -63,6 +74,9 @@ export function CanvasOverlay({ scene, tool, selection, scale }: Props): JSX.Ele
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>): void {
     if (e.button !== 0) return;
+    // Don't steal pointer events while a text editor is up — let
+    // selection survive cross-canvas clicks and let the editor blur.
+    if (editingEl !== null) return;
     const scenePoint = viewportToScene(e.clientX, e.clientY);
     if (tool === 'cursor') {
       const hit = topmostHit(allElements, scenePoint);
@@ -93,6 +107,15 @@ export function CanvasOverlay({ scene, tool, selection, scale }: Props): JSX.Ele
     }
   }
 
+  function onDoubleClick(e: React.MouseEvent<HTMLDivElement>): void {
+    const scenePoint = viewportToScene(e.clientX, e.clientY);
+    const hit = topmostHit(allElements, scenePoint);
+    if (hit !== null && hit.type === 'text') {
+      designerStore.setSelection([hit.id]);
+      designerStore.setEditingText(hit.id);
+    }
+  }
+
   const cursorStyle = tool === 'cursor' ? 'default' : 'crosshair';
 
   return (
@@ -100,8 +123,16 @@ export function CanvasOverlay({ scene, tool, selection, scale }: Props): JSX.Ele
       ref={layerRef}
       style={{ ...styles.layer, cursor: cursorStyle }}
       onPointerDown={onPointerDown}
+      onDoubleClick={onDoubleClick}
     >
-      {selectedEl !== null && <Gizmo element={selectedEl} scale={scale} />}
+      {selectedEl !== null && editingEl === null && <Gizmo element={selectedEl} scale={scale} />}
+      {editingEl !== null && editingEl.type === 'text' && (
+        <TextEditor
+          element={editingEl as TextElement}
+          scale={scale}
+          onCommit={() => designerStore.setEditingText(null)}
+        />
+      )}
       <div style={styles.toolHint}>{tool.toUpperCase()}</div>
     </div>
   );

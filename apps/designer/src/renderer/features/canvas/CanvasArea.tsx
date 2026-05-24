@@ -8,6 +8,7 @@ interface Props {
   scene: Scene | null;
   tool: DesignerTool;
   selection: ReadonlySet<string>;
+  editingTextId: string | null;
 }
 
 const SCALE = 0.5;
@@ -55,7 +56,7 @@ const styles = {
  * `cgpreview://`. M9 swaps this for a postMessage-driven scene-graph
  * diff once the template-runtime exposes one.
  */
-export function CanvasArea({ scene, tool, selection }: Props): JSX.Element {
+export function CanvasArea({ scene, tool, selection, editingTextId }: Props): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [src, setSrc] = useState<string | null>(null);
 
@@ -116,7 +117,13 @@ export function CanvasArea({ scene, tool, selection }: Props): JSX.Element {
           style={styles.iframe}
           sandbox="allow-scripts allow-same-origin"
         />
-        <CanvasOverlay scene={scene} tool={tool} selection={selection} scale={SCALE} />
+        <CanvasOverlay
+          scene={scene}
+          tool={tool}
+          selection={selection}
+          editingTextId={editingTextId}
+          scale={SCALE}
+        />
       </div>
     </div>
   );

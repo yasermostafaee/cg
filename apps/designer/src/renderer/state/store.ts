@@ -18,6 +18,8 @@ export interface DesignerStoreState {
   tool: DesignerTool;
   /** Element IDs currently selected. */
   selection: ReadonlySet<string>;
+  /** When set, the canvas shows an inline TextEditor for this element. */
+  editingTextId: string | null;
 }
 
 const initialState: DesignerStoreState = {
@@ -25,6 +27,7 @@ const initialState: DesignerStoreState = {
   projectPath: null,
   tool: 'cursor',
   selection: new Set<string>(),
+  editingTextId: null,
 };
 
 type Listener = (state: DesignerStoreState) => void;
@@ -65,7 +68,12 @@ export const designerStore = {
 
   /** Replace selection. Pass `[]` to deselect. */
   setSelection(ids: readonly string[]): void {
-    set({ selection: new Set(ids) });
+    set({ selection: new Set(ids), editingTextId: null });
+  },
+
+  /** Enter inline edit mode for a text element. Pass null to exit. */
+  setEditingText(elementId: string | null): void {
+    set({ editingTextId: elementId });
   },
 
   /** Add one element to the first layer (creates a layer if none exist). */
@@ -160,7 +168,7 @@ export const designerStore = {
 
   /** Reset for tests. */
   _reset(): void {
-    current = { ...initialState, selection: new Set<string>() };
+    current = { ...initialState, selection: new Set<string>(), editingTextId: null };
     listeners.clear();
   },
 } as const;

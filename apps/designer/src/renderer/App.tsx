@@ -48,7 +48,7 @@ const styles = {
  *   └────────────────────────────────────┘
  */
 export function App(): JSX.Element {
-  const { scene, projectPath, tool, selection } = useDesignerStore();
+  const { scene, projectPath, tool, selection, editingTextId } = useDesignerStore();
 
   return (
     <main style={styles.page}>
@@ -56,7 +56,12 @@ export function App(): JSX.Element {
         <LibraryPanel />
         <ToolRail tool={tool} />
         <div style={styles.canvasWrap}>
-          <CanvasArea scene={scene} tool={tool} selection={selection} />
+          <CanvasArea
+            scene={scene}
+            tool={tool}
+            selection={selection}
+            editingTextId={editingTextId}
+          />
         </div>
         <InspectorPanel scene={scene} projectPath={projectPath} selection={selection} />
       </div>

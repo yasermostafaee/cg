@@ -41,6 +41,9 @@ importers:
       '@cg/template-runtime':
         specifier: workspace:*
         version: link:../../packages/template-runtime
+      '@cg/text-shaping':
+        specifier: workspace:*
+        version: link:../../packages/text-shaping
       '@cg/vcg-format':
         specifier: workspace:*
         version: link:../../packages/vcg-format
@@ -114,6 +117,9 @@ importers:
       '@cg/shared-schema':
         specifier: workspace:*
         version: link:../../packages/shared-schema
+      '@cg/vcg-format':
+        specifier: workspace:*
+        version: link:../../packages/vcg-format
       react:
         specifier: ^18.3.1
         version: 18.3.1
