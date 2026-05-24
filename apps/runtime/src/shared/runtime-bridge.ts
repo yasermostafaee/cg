@@ -16,6 +16,7 @@ import type {
   LockEngageChannel,
   LockReleaseChannel,
   LockState,
+  PendingUpdate,
   StackLoadChannel,
   StackOutChannel,
   StackRemoveChannel,
@@ -24,6 +25,9 @@ import type {
   StackUpdateChannel,
   TemplatesGetChannel,
   TemplatesListChannel,
+  UpdateCancelChannel,
+  UpdateRequestChannel,
+  UpdateStateChannel,
 } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 
@@ -90,5 +94,14 @@ export interface RuntimeBridge {
     recent(
       req: ChannelRequest<typeof AuditRecentChannel>,
     ): Promise<ChannelResponse<typeof AuditRecentChannel>>;
+  };
+
+  update: {
+    request(
+      req: ChannelRequest<typeof UpdateRequestChannel>,
+    ): Promise<ChannelResponse<typeof UpdateRequestChannel>>;
+    state(): Promise<ChannelResponse<typeof UpdateStateChannel>>;
+    cancel(): Promise<ChannelResponse<typeof UpdateCancelChannel>>;
+    onStateChanged(handler: (pending: PendingUpdate | null) => void): Unsubscribe;
   };
 }

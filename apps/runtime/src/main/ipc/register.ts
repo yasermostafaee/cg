@@ -17,6 +17,10 @@ import {
   StackUpdateChannel,
   TemplatesGetChannel,
   TemplatesListChannel,
+  UpdateCancelChannel,
+  UpdateRequestChannel,
+  UpdateStateChangedChannel,
+  UpdateStateChannel,
   handle,
   publish,
   type IpcHandler,
@@ -28,6 +32,7 @@ import type { ConnectionService } from '../services/ConnectionService.js';
 import type { LockService } from '../services/LockService.js';
 import type { StackService } from '../services/StackService.js';
 import type { TemplateRegistry } from '../services/TemplateRegistry.js';
+import type { UpdateGate } from '../services/UpdateGate.js';
 
 /**
  * Wires every runtime IPC channel.
@@ -48,10 +53,11 @@ export interface IpcWiring {
   lock: LockService;
   templates: TemplateRegistry;
   audit: AuditService;
+  updateGate: UpdateGate;
 }
 
 export function registerIpcHandlers(deps: IpcWiring): () => void {
-  const { ipcMain, webContents, stack, connections, lock, templates, audit } = deps;
+  const { ipcMain, webContents, stack, connections, lock, templates, audit, updateGate } = deps;
 
   // ── stack.* ─────────────────────────────────────────────────────────
   handle(ipcMain, StackLoadChannel, (req) => {
@@ -109,6 +115,18 @@ export function registerIpcHandlers(deps: IpcWiring): () => void {
     }),
   );
 
+  // ── update.* ────────────────────────────────────────────────────────
+  handle(ipcMain, UpdateRequestChannel, (req) => {
+    const requestOpts: { version: string; notes?: string } = { version: req.version };
+    if (req.notes !== undefined) requestOpts.notes = req.notes;
+    return updateGate.request(requestOpts);
+  });
+  handle(ipcMain, UpdateStateChannel, () => updateGate.getPending());
+  handle(ipcMain, UpdateCancelChannel, () => {
+    updateGate.cancel();
+    return { ok: true };
+  });
+
   // ── pushes ──────────────────────────────────────────────────────────
   const onStackChange = (snapshot: readonly { itemId: string }[]): void => {
     publish(webContents, StackStateChangedChannel, [...snapshot] as Parameters<
@@ -125,13 +143,20 @@ export function registerIpcHandlers(deps: IpcWiring): () => void {
   ): void => {
     publish(webContents, LockStateChangedChannel, state);
   };
+  const onUpdateState = (
+    pending: Parameters<typeof publish<typeof UpdateStateChangedChannel>>[2],
+  ): void => {
+    publish(webContents, UpdateStateChangedChannel, pending);
+  };
   stack.on('state-changed', onStackChange);
   connections.on('health-changed', onHealthChange);
   lock.on('state-changed', onLockChange);
+  updateGate.on('state-changed', onUpdateState);
 
   return () => {
     stack.off('state-changed', onStackChange);
     connections.off('health-changed', onHealthChange);
     lock.off('state-changed', onLockChange);
+    updateGate.off('state-changed', onUpdateState);
   };
 }

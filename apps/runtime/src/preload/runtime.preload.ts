@@ -29,6 +29,10 @@ import {
   TemplatesGetChannel,
   TemplatesListChannel,
   AuditRecentChannel,
+  UpdateCancelChannel,
+  UpdateRequestChannel,
+  UpdateStateChangedChannel,
+  UpdateStateChannel,
   invoke,
   subscribe,
   type ChannelRequest,
@@ -103,6 +107,16 @@ const api = {
   audit: {
     recent: (req: ChannelRequest<typeof AuditRecentChannel>) =>
       invoke(ipcRenderer, AuditRecentChannel, req),
+  },
+
+  // ── update ─────────────────────────────────────────────────────────
+  update: {
+    request: (req: ChannelRequest<typeof UpdateRequestChannel>) =>
+      invoke(ipcRenderer, UpdateRequestChannel, req),
+    state: () => invoke(ipcRenderer, UpdateStateChannel, undefined),
+    cancel: () => invoke(ipcRenderer, UpdateCancelChannel, undefined),
+    onStateChanged: (handler: (pending: unknown) => void): Unsubscribe =>
+      subscribe(ipcRenderer, UpdateStateChangedChannel, handler),
   },
 };
 

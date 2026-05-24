@@ -6,6 +6,7 @@ import { ConnectionService } from './services/ConnectionService.js';
 import { LockService } from './services/LockService.js';
 import { StackService } from './services/StackService.js';
 import { TemplateRegistry } from './services/TemplateRegistry.js';
+import { UpdateGate } from './services/UpdateGate.js';
 import { registerIpcHandlers } from './ipc/register.js';
 
 /**
@@ -32,6 +33,7 @@ export interface BootHandle {
   lock: LockService;
   templates: TemplateRegistry;
   audit: AuditService;
+  updateGate: UpdateGate;
   /** Detach everything wired by boot(). Used in tests and on app quit. */
   shutdown(): Promise<void>;
 }
@@ -48,6 +50,17 @@ export function boot(ctx: BootContext): BootHandle {
   });
   audit.bindStack(stack);
   audit.bindLock(lock);
+  const updateGate = new UpdateGate({ stack });
+
+  // Surface gate transitions into the audit log. The actual update-installed
+  // row fires from the updater's quitAndInstall callback in M11.
+  updateGate.on('state-changed', (pending) => {
+    if (pending !== null) {
+      void audit
+        .record({ action: 'update-deferred', outcome: 'ok' })
+        .catch((err: unknown) => void err);
+    }
+  });
 
   const unwire = registerIpcHandlers({
     ipcMain: ctx.ipcMain,
@@ -57,6 +70,7 @@ export function boot(ctx: BootContext): BootHandle {
     lock,
     templates,
     audit,
+    updateGate,
   });
 
   connections.start();
@@ -67,6 +81,7 @@ export function boot(ctx: BootContext): BootHandle {
     lock,
     templates,
     audit,
+    updateGate,
     async shutdown() {
       unwire();
       await audit.close();
