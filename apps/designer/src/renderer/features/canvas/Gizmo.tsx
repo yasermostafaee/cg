@@ -1,0 +1,194 @@
+import type { Element } from '@cg/shared-schema';
+import { colors } from '../../theme.js';
+import { designerStore } from '../../state/store.js';
+
+interface Props {
+  element: Element;
+  scale: number;
+}
+
+const HANDLE = 10;
+
+const styles = {
+  frame: {
+    position: 'absolute' as const,
+    border: `1px solid ${colors.accent}`,
+    boxSizing: 'border-box' as const,
+    pointerEvents: 'none' as const,
+  },
+  handle: {
+    position: 'absolute' as const,
+    width: HANDLE,
+    height: HANDLE,
+    background: colors.accent,
+    border: '1px solid #FFF',
+    boxSizing: 'border-box' as const,
+    pointerEvents: 'auto' as const,
+    cursor: 'nwse-resize',
+  },
+  rotateHandle: {
+    position: 'absolute' as const,
+    width: HANDLE,
+    height: HANDLE,
+    background: '#FFF',
+    border: `1px solid ${colors.accent}`,
+    borderRadius: '50%',
+    boxSizing: 'border-box' as const,
+    pointerEvents: 'auto' as const,
+    cursor: 'crosshair',
+  },
+  rotateLine: {
+    position: 'absolute' as const,
+    width: 1,
+    height: 16,
+    background: colors.accent,
+    pointerEvents: 'none' as const,
+  },
+} as const;
+
+/**
+ * Selection gizmo overlay. Renders a frame around the selected element
+ * with four corner resize handles + one rotate handle on top.
+ *
+ * Drag interactions:
+ *   - body drag (handled by CanvasOverlay, not here) → move element
+ *   - corner handle drag → resize from that corner (preserves opposite)
+ *   - rotate handle drag → rotate around the element's center
+ *
+ * The handles use viewport (CSS) coordinates — the overlay scales their
+ * positions by the same factor the iframe is at, so they line up.
+ */
+export function Gizmo({ element, scale }: Props): JSX.Element {
+  const { position, size, rotation } = element.transform;
+  const w = size.w * element.transform.scale.x * scale;
+  const h = size.h * element.transform.scale.y * scale;
+  const x = position.x * scale;
+  const y = position.y * scale;
+
+  const frameStyle: React.CSSProperties = {
+    ...styles.frame,
+    left: x,
+    top: y,
+    width: w,
+    height: h,
+    transform: rotation === 0 ? undefined : `rotate(${String(rotation)}deg)`,
+    transformOrigin: '0 0',
+  };
+
+  const corners: { dx: number; dy: number; corner: 'tl' | 'tr' | 'bl' | 'br' }[] = [
+    { dx: 0, dy: 0, corner: 'tl' },
+    { dx: w, dy: 0, corner: 'tr' },
+    { dx: 0, dy: h, corner: 'bl' },
+    { dx: w, dy: h, corner: 'br' },
+  ];
+
+  return (
+    <>
+      <div style={frameStyle} />
+      {corners.map((c) => (
+        <div
+          key={c.corner}
+          style={{
+            ...styles.handle,
+            left: x + c.dx - HANDLE / 2,
+            top: y + c.dy - HANDLE / 2,
+          }}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            beginResize(element, c.corner, scale, e.nativeEvent);
+          }}
+        />
+      ))}
+      <div style={{ ...styles.rotateLine, left: x + w / 2 - 0.5, top: y - 16 }} />
+      <div
+        style={{ ...styles.rotateHandle, left: x + w / 2 - HANDLE / 2, top: y - 22 }}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          beginRotate(element, scale, e.nativeEvent);
+        }}
+      />
+    </>
+  );
+}
+
+function beginResize(
+  element: Element,
+  corner: 'tl' | 'tr' | 'bl' | 'br',
+  scale: number,
+  ev: PointerEvent,
+): void {
+  const startX = ev.clientX;
+  const startY = ev.clientY;
+  const start = {
+    x: element.transform.position.x,
+    y: element.transform.position.y,
+    w: element.transform.size.w,
+    h: element.transform.size.h,
+  };
+
+  const onMove = (e: PointerEvent): void => {
+    const dx = (e.clientX - startX) / scale;
+    const dy = (e.clientY - startY) / scale;
+    let { x, y, w, h } = start;
+    switch (corner) {
+      case 'tl':
+        x += dx;
+        y += dy;
+        w -= dx;
+        h -= dy;
+        break;
+      case 'tr':
+        y += dy;
+        w += dx;
+        h -= dy;
+        break;
+      case 'bl':
+        x += dx;
+        w -= dx;
+        h += dy;
+        break;
+      case 'br':
+        w += dx;
+        h += dy;
+        break;
+    }
+    if (w < 4 || h < 4) return; // minimum size
+    designerStore.updateTransform(element.id, {
+      position: { x, y },
+      size: { w, h },
+    });
+  };
+  const onUp = (): void => {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+  };
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+}
+
+function beginRotate(element: Element, _scale: number, ev: PointerEvent): void {
+  // Center of the element in viewport coordinates — captured by reading
+  // the gizmo's bounding rect via the target's parent.
+  const startAngle = element.transform.rotation;
+  const startX = ev.clientX;
+  const startY = ev.clientY;
+  // Approximate center from the gizmo position (no scale needed — both
+  // sides cancel in the angle calculation).
+  const cx = startX;
+  const cy = startY + 22; // rotate handle is ~22px above the frame top
+
+  const onMove = (e: PointerEvent): void => {
+    const dx = e.clientX - cx;
+    const dy = e.clientY - cy;
+    // atan2 returns radians measured from +X axis, counter-clockwise.
+    // We want clockwise rotation in degrees, with "up" = 0°.
+    const deg = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
+    designerStore.updateTransform(element.id, { rotation: startAngle + deg });
+  };
+  const onUp = (): void => {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+  };
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+}

@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import type { Scene } from '@cg/shared-schema';
+import type { Element, Layer, Scene } from '@cg/shared-schema';
 
 /**
- * Designer renderer state — tiny built-in store (no Zustand yet). The
- * full undo/redo + scene-graph mutation history land in M6.4 alongside
- * element drawing; this just tracks the active scene + the currently
- * selected tool.
+ * Designer renderer state — small pub-sub store with a JSON-patch-ish
+ * scene mutation surface. Full undo/redo arrives in M7 alongside the
+ * timeline; for M6 every mutation is immediate.
+ *
+ * Selection is a `Set<elementId>` — multi-select lands by shift-clicking
+ * (M6.5's Inspector cares; canvas hit-test in M6.4 only sets single).
  */
 
 export type DesignerTool = 'cursor' | 'text' | 'shape' | 'image';
@@ -14,12 +16,15 @@ export interface DesignerStoreState {
   scene: Scene | null;
   projectPath: string | null;
   tool: DesignerTool;
+  /** Element IDs currently selected. */
+  selection: ReadonlySet<string>;
 }
 
 const initialState: DesignerStoreState = {
   scene: null,
   projectPath: null,
   tool: 'cursor',
+  selection: new Set<string>(),
 };
 
 type Listener = (state: DesignerStoreState) => void;
@@ -31,23 +36,131 @@ function set(patch: Partial<DesignerStoreState>): void {
   for (const l of listeners) l(current);
 }
 
+/** Find the layer + index of an element. Used by every mutation. */
+function locate(
+  scene: Scene,
+  elementId: string,
+): { layer: Layer; layerIdx: number; elIdx: number } | null {
+  for (let li = 0; li < scene.layers.length; li++) {
+    const layer = scene.layers[li];
+    if (layer === undefined) continue;
+    const elIdx = layer.children.findIndex((e) => e.id === elementId);
+    if (elIdx !== -1) return { layer, layerIdx: li, elIdx };
+  }
+  return null;
+}
+
 export const designerStore = {
   get(): DesignerStoreState {
     return current;
   },
+
   setScene(scene: Scene | null, projectPath: string | null): void {
-    set({ scene, projectPath });
+    set({ scene, projectPath, selection: new Set<string>() });
   },
+
   setTool(tool: DesignerTool): void {
     set({ tool });
   },
+
+  /** Replace selection. Pass `[]` to deselect. */
+  setSelection(ids: readonly string[]): void {
+    set({ selection: new Set(ids) });
+  },
+
+  /** Add one element to the first layer (creates a layer if none exist). */
+  addElement(element: Element): void {
+    if (current.scene === null) return;
+    let scene = current.scene;
+    if (scene.layers.length === 0) {
+      const layer: Layer = {
+        id: `L${String(Date.now())}`,
+        name: 'Layer 1',
+        visible: true,
+        locked: false,
+        children: [element],
+        blendMode: 'normal',
+      };
+      scene = { ...scene, layers: [layer] };
+    } else {
+      const layers = scene.layers.map((l, i) =>
+        i === 0 ? { ...l, children: [...l.children, element] } : l,
+      );
+      scene = { ...scene, layers };
+    }
+    set({ scene, selection: new Set([element.id]) });
+  },
+
+  /** Apply a shallow patch to an element. */
+  updateElement(elementId: string, patch: Partial<Element>): void {
+    if (current.scene === null) return;
+    const found = locate(current.scene, elementId);
+    if (found === null) return;
+    const { layer, layerIdx, elIdx } = found;
+    const existing = layer.children[elIdx];
+    if (existing === undefined) return;
+    const merged = { ...existing, ...patch } as Element;
+    const nextChildren = [...layer.children];
+    nextChildren[elIdx] = merged;
+    const nextLayer: Layer = { ...layer, children: nextChildren };
+    const nextLayers = [...current.scene.layers];
+    nextLayers[layerIdx] = nextLayer;
+    set({ scene: { ...current.scene, layers: nextLayers } });
+  },
+
+  /** Update an element's transform (preserves the rest of the element). */
+  updateTransform(elementId: string, patch: Partial<Element['transform']>): void {
+    if (current.scene === null) return;
+    const found = locate(current.scene, elementId);
+    if (found === null) return;
+    const { layer, layerIdx, elIdx } = found;
+    const existing = layer.children[elIdx];
+    if (existing === undefined) return;
+    const merged = {
+      ...existing,
+      transform: { ...existing.transform, ...patch },
+    } as Element;
+    const nextChildren = [...layer.children];
+    nextChildren[elIdx] = merged;
+    const nextLayer: Layer = { ...layer, children: nextChildren };
+    const nextLayers = [...current.scene.layers];
+    nextLayers[layerIdx] = nextLayer;
+    set({ scene: { ...current.scene, layers: nextLayers } });
+  },
+
+  /** Remove an element by id. Cleans up the selection set if needed. */
+  removeElement(elementId: string): void {
+    if (current.scene === null) return;
+    const found = locate(current.scene, elementId);
+    if (found === null) return;
+    const { layer, layerIdx, elIdx } = found;
+    const nextChildren = layer.children.filter((_, i) => i !== elIdx);
+    const nextLayer: Layer = { ...layer, children: nextChildren };
+    const nextLayers = [...current.scene.layers];
+    nextLayers[layerIdx] = nextLayer;
+    const nextSelection = new Set(current.selection);
+    nextSelection.delete(elementId);
+    set({ scene: { ...current.scene, layers: nextLayers }, selection: nextSelection });
+  },
+
+  /** All elements across all layers, top-of-stack first (last layer index = topmost). */
+  allElements(): readonly Element[] {
+    if (current.scene === null) return [];
+    const out: Element[] = [];
+    for (const layer of current.scene.layers) {
+      for (const el of layer.children) out.push(el);
+    }
+    return out;
+  },
+
   subscribe(l: Listener): () => void {
     listeners.add(l);
     return () => listeners.delete(l);
   },
+
   /** Reset for tests. */
   _reset(): void {
-    current = initialState;
+    current = { ...initialState, selection: new Set<string>() };
     listeners.clear();
   },
 } as const;
