@@ -1,0 +1,139 @@
+import type { Scene } from '@cg/shared-schema';
+
+/**
+ * Fullscreen starter — a frame-filling title card with primary headline
+ * + supporting subhead. Useful for between-segment transitions or
+ * standalone graphics.
+ */
+export const fullscreenScene: Scene = {
+  schemaVersion: 1,
+  id: 'starter-fullscreen',
+  name: 'Fullscreen Title',
+  templateType: 'fullscreen',
+  resolution: { width: 1920, height: 1080 },
+  frameRate: 50,
+  safeAreas: { title: 10, action: 5 },
+  background: '#0F172A',
+  layers: [
+    {
+      id: 'L1',
+      name: 'Title',
+      visible: true,
+      locked: false,
+      blendMode: 'normal',
+      children: [
+        {
+          id: 'rule',
+          name: 'accent-rule',
+          type: 'shape',
+          transform: {
+            position: { x: 760, y: 460 },
+            size: { w: 400, h: 8 },
+            scale: { x: 1, y: 1 },
+            rotation: 0,
+            anchor: { x: 0, y: 0 },
+          },
+          opacity: 1,
+          visible: true,
+          locked: false,
+          zIndex: 0,
+          shape: 'rect',
+          fill: { kind: 'solid', color: '#E11D48' },
+        },
+        {
+          id: 'title',
+          name: 'main-title',
+          type: 'text',
+          transform: {
+            position: { x: 160, y: 500 },
+            size: { w: 1600, h: 160 },
+            scale: { x: 1, y: 1 },
+            rotation: 0,
+            anchor: { x: 0, y: 0 },
+          },
+          opacity: 1,
+          visible: true,
+          locked: false,
+          zIndex: 1,
+          text: '{{title}}',
+          font: {
+            family: 'Inter',
+            weight: 900,
+            style: 'normal',
+            size: 120,
+            lineHeight: 1.1,
+            letterSpacing: -0.02,
+          },
+          color: '#FFFFFF',
+          align: 'center',
+          direction: 'auto',
+          fitMode: 'autosize',
+          overflow: 'clip',
+        },
+        {
+          id: 'subhead',
+          name: 'subhead',
+          type: 'text',
+          transform: {
+            position: { x: 160, y: 670 },
+            size: { w: 1600, h: 60 },
+            scale: { x: 1, y: 1 },
+            rotation: 0,
+            anchor: { x: 0, y: 0 },
+          },
+          opacity: 0.85,
+          visible: true,
+          locked: false,
+          zIndex: 1,
+          text: '{{subhead}}',
+          font: {
+            family: 'Inter',
+            weight: 400,
+            style: 'normal',
+            size: 36,
+            lineHeight: 1.3,
+            letterSpacing: 0.05,
+          },
+          color: '#E5E7EB',
+          align: 'center',
+          direction: 'auto',
+          fitMode: 'autosize',
+          overflow: 'ellipsis',
+        },
+      ],
+    },
+  ],
+  fields: [
+    {
+      id: 'title',
+      label: 'Main title',
+      required: true,
+      type: 'text',
+      default: 'EVENING REPORT',
+    },
+    {
+      id: 'subhead',
+      label: 'Subhead',
+      required: false,
+      type: 'text',
+      default: 'With our anchor team — live from the newsroom',
+    },
+  ],
+  bindings: [
+    {
+      fieldId: 'title',
+      target: { kind: 'text', elementId: 'title', placeholder: '{{title}}' },
+    },
+    {
+      fieldId: 'subhead',
+      target: { kind: 'text', elementId: 'subhead', placeholder: '{{subhead}}' },
+    },
+  ],
+  fonts: [],
+  metadata: {
+    createdAt: '2026-05-24T00:00:00.000Z',
+    updatedAt: '2026-05-24T00:00:00.000Z',
+    description: 'M8.3 starter — fullscreen title with accent rule.',
+    tags: ['starter', 'fullscreen'],
+  },
+};

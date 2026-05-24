@@ -27,4 +27,19 @@ describe('starter templates', () => {
     if (anchor?.type === 'text') expect(anchor.default).not.toBe('');
     if (role?.type === 'text') expect(role.default).not.toBe('');
   });
+
+  it('covers all 5 Phase 3 §5 template types', () => {
+    const types = new Set(STARTER_TEMPLATES.map((s) => s.scene.templateType));
+    expect(types.has('logo-bug')).toBe(true);
+    expect(types.has('lower-third')).toBe(true);
+    expect(types.has('ticker')).toBe(true);
+    expect(types.has('breaking-news')).toBe(true);
+    expect(types.has('fullscreen')).toBe(true);
+  });
+
+  it('every starter has at least one bound field', () => {
+    for (const s of STARTER_TEMPLATES) {
+      expect(s.scene.bindings.length, `${s.id} has bindings`).toBeGreaterThan(0);
+    }
+  });
 });
