@@ -66,7 +66,13 @@ export function TimelineStrip({ scene, selection }: Props): JSX.Element {
       borderRadius: '0.2rem',
     },
     rowSelected: { background: colors.panelMuted },
-    name: { fontSize: '0.78rem', color: colors.text, overflow: 'hidden' as const, textOverflow: 'ellipsis' as const, whiteSpace: 'nowrap' as const },
+    name: {
+      fontSize: '0.78rem',
+      color: colors.text,
+      overflow: 'hidden' as const,
+      textOverflow: 'ellipsis' as const,
+      whiteSpace: 'nowrap' as const,
+    },
     track: {
       position: 'relative' as const,
       height: ROW_HEIGHT,
