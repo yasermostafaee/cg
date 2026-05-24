@@ -1,6 +1,7 @@
 import type { Element, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
+import { AnimationSection } from './AnimationSection.js';
 import { StyleSection } from './StyleSection.js';
 import { TransformSection } from './TransformSection.js';
 
@@ -116,6 +117,8 @@ function ElementInspector({ element }: { element: Element }): JSX.Element {
       <TransformSection element={element} />
       <h3 style={styles.heading}>STYLE</h3>
       <StyleSection element={element} />
+      <h3 style={styles.heading}>ANIMATION</h3>
+      <AnimationSection element={element} />
       <button style={styles.removeButton} onClick={() => designerStore.removeElement(element.id)}>
         Remove
       </button>
