@@ -26,6 +26,8 @@ import {
   StackStateChangedChannel,
   StackTakeChannel,
   StackUpdateChannel,
+  TemplatesGetChannel,
+  TemplatesListChannel,
   invoke,
   subscribe,
   type ChannelRequest,
@@ -87,6 +89,13 @@ const api = {
     state: (): Promise<LockState> => invoke(ipcRenderer, LockStateChannel, undefined),
     onStateChanged: (handler: (state: LockState) => void): Unsubscribe =>
       subscribe(ipcRenderer, LockStateChangedChannel, handler),
+  },
+
+  // ── templates ──────────────────────────────────────────────────────
+  templates: {
+    get: (req: ChannelRequest<typeof TemplatesGetChannel>) =>
+      invoke(ipcRenderer, TemplatesGetChannel, req),
+    list: () => invoke(ipcRenderer, TemplatesListChannel, undefined),
   },
 };
 

@@ -14,6 +14,8 @@ import {
   StackStateChangedChannel,
   StackTakeChannel,
   StackUpdateChannel,
+  TemplatesGetChannel,
+  TemplatesListChannel,
   handle,
   publish,
   type IpcHandler,
@@ -22,6 +24,7 @@ import {
 import type { ConnectionService } from '../services/ConnectionService.js';
 import type { LockService } from '../services/LockService.js';
 import type { StackService } from '../services/StackService.js';
+import type { TemplateRegistry } from '../services/TemplateRegistry.js';
 
 /**
  * Wires every runtime IPC channel.
@@ -40,10 +43,11 @@ export interface IpcWiring {
   stack: StackService;
   connections: ConnectionService;
   lock: LockService;
+  templates: TemplateRegistry;
 }
 
 export function registerIpcHandlers(deps: IpcWiring): () => void {
-  const { ipcMain, webContents, stack, connections, lock } = deps;
+  const { ipcMain, webContents, stack, connections, lock, templates } = deps;
 
   // ── stack.* ─────────────────────────────────────────────────────────
   handle(ipcMain, StackLoadChannel, (req) => {
@@ -72,6 +76,24 @@ export function registerIpcHandlers(deps: IpcWiring): () => void {
   handle(ipcMain, LockEngageChannel, (req) => lock.engage(req.pin));
   handle(ipcMain, LockReleaseChannel, (req) => lock.release(req.pin));
   handle(ipcMain, LockStateChannel, () => lock.getState());
+
+  // ── templates.* ─────────────────────────────────────────────────────
+  handle(ipcMain, TemplatesGetChannel, (req) => {
+    const entry = templates.get(req.templateId);
+    if (entry === null) return null;
+    return {
+      templateId: entry.templateId,
+      templateType: entry.templateType,
+      fields: [...entry.fields],
+    };
+  });
+  handle(ipcMain, TemplatesListChannel, () =>
+    templates.list().map((e) => ({
+      templateId: e.templateId,
+      templateType: e.templateType,
+      fields: [...e.fields],
+    })),
+  );
 
   // ── pushes ──────────────────────────────────────────────────────────
   const onStackChange = (snapshot: readonly { itemId: string }[]): void => {

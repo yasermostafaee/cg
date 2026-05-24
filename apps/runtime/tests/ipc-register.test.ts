@@ -5,6 +5,7 @@ import { registerIpcHandlers } from '../src/main/ipc/register.js';
 import type { ConnectionService } from '../src/main/services/ConnectionService.js';
 import type { StackService } from '../src/main/services/StackService.js';
 import type { LockService } from '../src/main/services/LockService.js';
+import { TemplateRegistry } from '../src/main/services/TemplateRegistry.js';
 
 /**
  * Verifies that `registerIpcHandlers` plugs every channel into the
@@ -90,6 +91,7 @@ describe('registerIpcHandlers', () => {
       stack: fakeStackService(),
       connections: fakeConnectionService(),
       lock: fakeLockService(),
+      templates: new TemplateRegistry(),
     });
 
     const channels = [
@@ -105,6 +107,8 @@ describe('registerIpcHandlers', () => {
       'lock.engage',
       'lock.release',
       'lock.state',
+      'templates.get',
+      'templates.list',
     ];
     for (const c of channels) {
       expect(ipcMain.calls.has(c)).toBe(true);
@@ -121,6 +125,7 @@ describe('registerIpcHandlers', () => {
       stack,
       connections: fakeConnectionService(),
       lock: fakeLockService(),
+      templates: new TemplateRegistry(),
     });
     const handler = ipcMain.calls.get('stack.take');
     const result = await handler!(null, { itemId: 'i1' });
@@ -138,6 +143,7 @@ describe('registerIpcHandlers', () => {
       stack,
       connections: fakeConnectionService(),
       lock: fakeLockService(),
+      templates: new TemplateRegistry(),
     });
     stack.emit('state-changed', []);
     expect(webContents.sent).toEqual([{ channel: 'stack.state-changed', args: [[]] }]);
@@ -153,6 +159,7 @@ describe('registerIpcHandlers', () => {
       stack,
       connections: fakeConnectionService(),
       lock: fakeLockService(),
+      templates: new TemplateRegistry(),
     });
     unwire();
     stack.emit('state-changed', []);
@@ -169,6 +176,7 @@ describe('registerIpcHandlers', () => {
       stack: fakeStackService(),
       connections,
       lock: fakeLockService(),
+      templates: new TemplateRegistry(),
     });
     const handler = ipcMain.calls.get('connections.failover');
     const result = await handler!(null, { reason: 'manual' });
@@ -186,6 +194,7 @@ describe('registerIpcHandlers', () => {
       stack: fakeStackService(),
       connections: fakeConnectionService(),
       lock,
+      templates: new TemplateRegistry(),
     });
     const handler = ipcMain.calls.get('lock.engage');
     const result = await handler!(null, { pin: '1234' });

@@ -21,6 +21,8 @@ import type {
   StackSnapshotChannel,
   StackTakeChannel,
   StackUpdateChannel,
+  TemplatesGetChannel,
+  TemplatesListChannel,
 } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 
@@ -74,5 +76,12 @@ export interface RuntimeBridge {
     ): Promise<ChannelResponse<typeof LockReleaseChannel>>;
     state(): Promise<LockState>;
     onStateChanged(handler: (state: LockState) => void): Unsubscribe;
+  };
+
+  templates: {
+    get(
+      req: ChannelRequest<typeof TemplatesGetChannel>,
+    ): Promise<ChannelResponse<typeof TemplatesGetChannel>>;
+    list(): Promise<ChannelResponse<typeof TemplatesListChannel>>;
   };
 }

@@ -71,6 +71,7 @@ async function setup(): Promise<{
     templateId: 'lt-1',
     url: 'file:///C:/templates/lt-1.html',
     templateType: 'lower-third',
+    fields: [],
   });
 
   const service = new StackService({
