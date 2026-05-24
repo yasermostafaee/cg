@@ -20,6 +20,8 @@ export const AuditEntrySchema = z.object({
     'export',
     'lock-engage',
     'lock-release',
+    'update-deferred',
+    'update-installed',
   ]),
   itemId: IdSchema.optional(),
   templateId: IdSchema.optional(),

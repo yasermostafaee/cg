@@ -28,3 +28,4 @@ export * from './channels/export.js';
 export * from './channels/preview.js';
 export * from './channels/templates.js';
 export * from './channels/audit.js';
+export * from './channels/updates.js';

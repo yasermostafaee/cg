@@ -7,11 +7,26 @@ import type { StackService } from '../src/main/services/StackService.js';
 import type { LockService } from '../src/main/services/LockService.js';
 import { TemplateRegistry } from '../src/main/services/TemplateRegistry.js';
 import type { AuditService } from '../src/main/services/AuditService.js';
+import type { UpdateGate } from '../src/main/services/UpdateGate.js';
 
 function fakeAuditService(): AuditService {
   return {
     filePath: '/tmp/never-written-audit.ndjson',
   } as unknown as AuditService;
+}
+
+function fakeUpdateGate(): UpdateGate {
+  const e = new EventEmitter() as unknown as UpdateGate;
+  Object.assign(e, {
+    request: vi.fn(() => ({
+      accepted: true,
+      deferred: false,
+      pending: { version: '0.0.0', requestedAt: '2026-05-24T00:00:00.000Z' },
+    })),
+    getPending: vi.fn(() => null),
+    cancel: vi.fn(),
+  });
+  return e;
 }
 
 /**
@@ -100,6 +115,7 @@ describe('registerIpcHandlers', () => {
       lock: fakeLockService(),
       templates: new TemplateRegistry(),
       audit: fakeAuditService(),
+      updateGate: fakeUpdateGate(),
     });
 
     const channels = [
@@ -118,6 +134,9 @@ describe('registerIpcHandlers', () => {
       'templates.get',
       'templates.list',
       'audit.recent',
+      'update.request',
+      'update.state',
+      'update.cancel',
     ];
     for (const c of channels) {
       expect(ipcMain.calls.has(c)).toBe(true);
@@ -136,6 +155,7 @@ describe('registerIpcHandlers', () => {
       lock: fakeLockService(),
       templates: new TemplateRegistry(),
       audit: fakeAuditService(),
+      updateGate: fakeUpdateGate(),
     });
     const handler = ipcMain.calls.get('stack.take');
     const result = await handler!(null, { itemId: 'i1' });
@@ -155,6 +175,7 @@ describe('registerIpcHandlers', () => {
       lock: fakeLockService(),
       templates: new TemplateRegistry(),
       audit: fakeAuditService(),
+      updateGate: fakeUpdateGate(),
     });
     stack.emit('state-changed', []);
     expect(webContents.sent).toEqual([{ channel: 'stack.state-changed', args: [[]] }]);
@@ -172,6 +193,7 @@ describe('registerIpcHandlers', () => {
       lock: fakeLockService(),
       templates: new TemplateRegistry(),
       audit: fakeAuditService(),
+      updateGate: fakeUpdateGate(),
     });
     unwire();
     stack.emit('state-changed', []);
@@ -190,6 +212,7 @@ describe('registerIpcHandlers', () => {
       lock: fakeLockService(),
       templates: new TemplateRegistry(),
       audit: fakeAuditService(),
+      updateGate: fakeUpdateGate(),
     });
     const handler = ipcMain.calls.get('connections.failover');
     const result = await handler!(null, { reason: 'manual' });
@@ -209,6 +232,7 @@ describe('registerIpcHandlers', () => {
       lock,
       templates: new TemplateRegistry(),
       audit: fakeAuditService(),
+      updateGate: fakeUpdateGate(),
     });
     const handler = ipcMain.calls.get('lock.engage');
     const result = await handler!(null, { pin: '1234' });
