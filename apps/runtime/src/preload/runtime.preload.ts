@@ -33,6 +33,9 @@ import {
   UpdateRequestChannel,
   UpdateStateChangedChannel,
   UpdateStateChannel,
+  SettingsChangedChannel,
+  SettingsGetChannel,
+  SettingsSetChannel,
   invoke,
   subscribe,
   type ChannelRequest,
@@ -117,6 +120,15 @@ const api = {
     cancel: () => invoke(ipcRenderer, UpdateCancelChannel, undefined),
     onStateChanged: (handler: (pending: unknown) => void): Unsubscribe =>
       subscribe(ipcRenderer, UpdateStateChangedChannel, handler),
+  },
+
+  // ── settings ───────────────────────────────────────────────────────
+  settings: {
+    get: () => invoke(ipcRenderer, SettingsGetChannel, undefined),
+    set: (req: ChannelRequest<typeof SettingsSetChannel>) =>
+      invoke(ipcRenderer, SettingsSetChannel, req),
+    onChanged: (handler: (next: unknown) => void): Unsubscribe =>
+      subscribe(ipcRenderer, SettingsChangedChannel, handler),
   },
 };
 
