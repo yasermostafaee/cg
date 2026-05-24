@@ -26,6 +26,16 @@ export interface RedundancyAdapterOptions {
   commandTimeoutBudget?: number; // 3
   fiveXxWindowMs?: number; // 30_000
   fiveXxBudget?: number; // 5
+  /**
+   * M9.1 corrective-resend tuning. When the backup ack-code diverges
+   * from the primary more than `divergenceBudget` times within
+   * `divergenceWindowMs`, the adapter replays the last accepted
+   * commands from the journal to the backup queue.
+   */
+  divergenceWindowMs?: number; // 30_000
+  divergenceBudget?: number; // 3
+  /** Disable corrective resend (e.g. when debugging the divergence cause). */
+  correctiveResendEnabled?: boolean; // true
   /** Override for tests. */
   now?: () => number;
 }
@@ -35,6 +45,16 @@ export interface RedundancyAdapterEvents {
   'failover-complete': [event: FailoverEvent];
   'mirror-divergence': [info: { seq: number; primaryCode: number; backupCode: number }];
   'split-brain': [info: { primary: ServerLabel; backup: ServerLabel; slots: number }];
+  /**
+   * M9.1: emitted when divergence crosses the configured budget within
+   * the window. The corrective resend (if enabled) fires immediately
+   * after — `corrective-resend` follows for each replayed entry.
+   */
+  'split-brain-persistent': [
+    info: { primary: ServerLabel; backup: ServerLabel; divergencesInWindow: number },
+  ];
+  /** M9.1: emitted for each journal entry replayed to the backup. */
+  'corrective-resend': [info: { seq: number; line: string; target: ServerLabel }];
   /** Re-emits aggregated health derived from both sessions. */
   health: [info: { primary: HealthSnapshot; backup: HealthSnapshot }];
   error: [err: Error];
@@ -67,10 +87,15 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   private readonly commandTimeoutBudget: number;
   private readonly fiveXxWindowMs: number;
   private readonly fiveXxBudget: number;
+  private readonly divergenceWindowMs: number;
+  private readonly divergenceBudget: number;
+  private readonly correctiveResendEnabled: boolean;
   private readonly now: () => number;
 
   private consecutiveTimeouts = 0;
   private fiveXxTimestamps: number[] = [];
+  private divergenceTimestamps: number[] = [];
+  private correctiveResendInFlight = false;
   private failoverInProgress = false;
 
   constructor(options: RedundancyAdapterOptions) {
@@ -83,6 +108,9 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     this.commandTimeoutBudget = options.commandTimeoutBudget ?? 3;
     this.fiveXxWindowMs = options.fiveXxWindowMs ?? 30_000;
     this.fiveXxBudget = options.fiveXxBudget ?? 5;
+    this.divergenceWindowMs = options.divergenceWindowMs ?? 30_000;
+    this.divergenceBudget = options.divergenceBudget ?? 3;
+    this.correctiveResendEnabled = options.correctiveResendEnabled ?? true;
     this.now = options.now ?? (() => Date.now());
 
     this.wireSessionEvents();
@@ -194,11 +222,7 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     if (pRes.status === 'fulfilled' && bRes.status === 'fulfilled') {
       this.journal.resolve(seq, 'ok', pRes.value.response.code);
       if (pRes.value.response.code !== bRes.value.response.code) {
-        this.emit('mirror-divergence', {
-          seq,
-          primaryCode: pRes.value.response.code,
-          backupCode: bRes.value.response.code,
-        });
+        this.reportDivergence(seq, pRes.value.response.code, bRes.value.response.code);
       }
       this.recordPrimaryResult(pRes.value);
       return { ...pRes.value, winner: this.primary };
@@ -208,11 +232,7 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
       this.recordPrimaryResult(pRes.value);
       // Backup failed — log + degrade backup health. Don't auto-failover
       // just because the backup is gone; primary is still serving.
-      this.emit('mirror-divergence', {
-        seq,
-        primaryCode: pRes.value.response.code,
-        backupCode: -1,
-      });
+      this.reportDivergence(seq, pRes.value.response.code, -1);
       return { ...pRes.value, winner: this.primary };
     }
     if (bRes.status === 'fulfilled') {
@@ -237,19 +257,11 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
       backupQ.enqueue(line, options).then(
         (bRes) => {
           if (bRes.response.code !== result.response.code) {
-            this.emit('mirror-divergence', {
-              seq,
-              primaryCode: result.response.code,
-              backupCode: bRes.response.code,
-            });
+            this.reportDivergence(seq, result.response.code, bRes.response.code);
           }
         },
         () => {
-          this.emit('mirror-divergence', {
-            seq,
-            primaryCode: result.response.code,
-            backupCode: -1,
-          });
+          this.reportDivergence(seq, result.response.code, -1);
         },
       );
       return { ...result, winner: this.primary };
@@ -308,6 +320,60 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   private resetFailoverCounters(): void {
     this.consecutiveTimeouts = 0;
     this.fiveXxTimestamps = [];
+    this.divergenceTimestamps = [];
+  }
+
+  /**
+   * Record + emit a single divergence. If the cumulative count inside
+   * `divergenceWindowMs` crosses `divergenceBudget`, escalate to
+   * 'split-brain-persistent' and trigger a corrective resend (if enabled).
+   */
+  private reportDivergence(seq: number, primaryCode: number, backupCode: number): void {
+    this.emit('mirror-divergence', { seq, primaryCode, backupCode });
+    const now = this.now();
+    this.divergenceTimestamps.push(now);
+    const cutoff = now - this.divergenceWindowMs;
+    this.divergenceTimestamps = this.divergenceTimestamps.filter((t) => t > cutoff);
+    if (this.divergenceTimestamps.length >= this.divergenceBudget) {
+      const backupLabel: ServerLabel = this.primary === 'A' ? 'B' : 'A';
+      this.emit('split-brain-persistent', {
+        primary: this.primary,
+        backup: backupLabel,
+        divergencesInWindow: this.divergenceTimestamps.length,
+      });
+      // Reset the window so we don't fire on every subsequent ack — the
+      // resend itself either converges the two sides or surfaces a new
+      // burst of divergences.
+      this.divergenceTimestamps = [];
+      if (this.correctiveResendEnabled) {
+        void this.triggerCorrectiveResend(backupLabel);
+      }
+    }
+  }
+
+  /**
+   * Replay the journal's recently-accepted commands to the backup
+   * queue. M9.1's first cut: replay every 'ok'-resolved entry. M10
+   * narrows this to the slot the divergence touched once the
+   * Reconciler exposes which slot diverged.
+   */
+  private async triggerCorrectiveResend(target: ServerLabel): Promise<void> {
+    if (this.correctiveResendInFlight) return;
+    this.correctiveResendInFlight = true;
+    try {
+      const queue = this.sessions[target].queue;
+      const entries = this.journal.all().filter((e) => e.outcome === 'ok');
+      for (const entry of entries) {
+        this.emit('corrective-resend', { seq: entry.seq, line: entry.line, target });
+        try {
+          await queue.enqueue(entry.line, { priority: 'urgent' });
+        } catch {
+          // Replay best-effort. The next divergence burst will fire again.
+        }
+      }
+    } finally {
+      this.correctiveResendInFlight = false;
+    }
   }
 
   private async maybeFailover(reason: FailoverReason): Promise<void> {

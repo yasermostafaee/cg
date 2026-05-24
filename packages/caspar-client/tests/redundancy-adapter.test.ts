@@ -248,3 +248,97 @@ describe('RedundancyAdapter — failover', () => {
     expect(events[0]?.slots).toBe(1);
   });
 });
+
+describe('RedundancyAdapter — M9.1 persistent divergence + corrective resend', () => {
+  async function setupWithDivergenceBudget(budget: number): Promise<Setup> {
+    const mockA = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+    const mockB = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+    const transportA = new AmcpTransport();
+    await transportA.connect(mockA.host, mockA.amcpPort);
+    const transportB = new AmcpTransport();
+    await transportB.connect(mockB.host, mockB.amcpPort);
+    const queueA = new CommandQueue(transportA);
+    const queueB = new CommandQueue(transportB);
+    const sessionA = makeFakeSession('A', queueA);
+    const sessionB = makeFakeSession('B', queueB);
+    const adapter = new RedundancyAdapter({
+      strategy: 'mirror-sync',
+      sessions: { A: sessionA, B: sessionB },
+      autoFailoverEnabled: true,
+      divergenceBudget: budget,
+      divergenceWindowMs: 60_000,
+    });
+    active = {
+      mocks: [mockA, mockB],
+      transports: [transportA, transportB],
+      queues: [queueA, queueB],
+      sessions: { A: sessionA, B: sessionB },
+      adapter,
+    };
+    return active;
+  }
+
+  it('does NOT escalate when divergences stay under the budget', async () => {
+    const { adapter, mocks } = await setupWithDivergenceBudget(3);
+    mocks[0].setHandler('PLAY', () => ({ kind: 'ok', code: 202, verb: 'PLAY' }));
+    mocks[1].setHandler('PLAY', () => ({ kind: 'err', code: 404, verb: 'PLAY' }));
+    const persistent: unknown[] = [];
+    adapter.on('split-brain-persistent', (info) => persistent.push(info));
+    await adapter.send('PLAY 1-10 "a" HTML');
+    await adapter.send('PLAY 1-11 "b" HTML');
+    expect(persistent).toHaveLength(0);
+  });
+
+  it('emits split-brain-persistent + corrective-resend when divergences cross budget', async () => {
+    const { adapter, mocks } = await setupWithDivergenceBudget(2);
+    mocks[0].setHandler('PLAY', () => ({ kind: 'ok', code: 202, verb: 'PLAY' }));
+    mocks[1].setHandler('PLAY', () => ({ kind: 'err', code: 404, verb: 'PLAY' }));
+    const persistent: { divergencesInWindow: number }[] = [];
+    const resends: { seq: number; line: string; target: 'A' | 'B' }[] = [];
+    adapter.on('split-brain-persistent', (info) => persistent.push(info));
+    adapter.on('corrective-resend', (info) => resends.push(info));
+    await adapter.send('PLAY 1-10 "a" HTML');
+    await adapter.send('PLAY 1-11 "b" HTML');
+    // Give the async corrective resend a moment to enqueue.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(persistent).toHaveLength(1);
+    expect(persistent[0]?.divergencesInWindow).toBeGreaterThanOrEqual(2);
+    expect(resends.length).toBeGreaterThan(0);
+    expect(resends.every((r) => r.target === 'B')).toBe(true);
+  });
+
+  it('correctiveResendEnabled=false leaves the journal alone', async () => {
+    const mockA = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+    const mockB = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+    const transportA = new AmcpTransport();
+    await transportA.connect(mockA.host, mockA.amcpPort);
+    const transportB = new AmcpTransport();
+    await transportB.connect(mockB.host, mockB.amcpPort);
+    const queueA = new CommandQueue(transportA);
+    const queueB = new CommandQueue(transportB);
+    const adapter = new RedundancyAdapter({
+      strategy: 'mirror-sync',
+      sessions: { A: makeFakeSession('A', queueA), B: makeFakeSession('B', queueB) },
+      autoFailoverEnabled: true,
+      divergenceBudget: 1,
+      correctiveResendEnabled: false,
+    });
+    mockA.setHandler('PLAY', () => ({ kind: 'ok', code: 202, verb: 'PLAY' }));
+    mockB.setHandler('PLAY', () => ({ kind: 'err', code: 404, verb: 'PLAY' }));
+    const persistent: unknown[] = [];
+    const resends: unknown[] = [];
+    adapter.on('split-brain-persistent', (info) => persistent.push(info));
+    adapter.on('corrective-resend', (info) => resends.push(info));
+    await adapter.send('PLAY 1-10 "a" HTML');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(persistent).toHaveLength(1);
+    expect(resends).toHaveLength(0);
+
+    queueA.dispose();
+    queueB.dispose();
+    transportA.destroy();
+    transportB.destroy();
+    await mockA.stop();
+    await mockB.stop();
+  });
+});
