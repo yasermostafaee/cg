@@ -139,7 +139,9 @@ describe('HeartbeatService', () => {
       missBudget: 5,
     });
     heartbeat.start();
-    await delay(300);
+    // Wait for the eventual success rather than a fixed wall-clock budget —
+    // CI hosts vary widely and a fixed `delay(300)` was flaky.
+    await new Promise<void>((resolve) => heartbeat!.once('ping-ok', () => resolve()));
     expect(heartbeat.status.consecutiveMisses).toBe(0);
     expect(heartbeat.status.consecutiveOks).toBeGreaterThan(0);
   });
@@ -166,10 +168,12 @@ describe('HeartbeatService', () => {
     const okSpy = vi.fn();
     heartbeat.on('ping-ok', okSpy);
     heartbeat.start();
-    await delay(50);
+    // Wait for at least one ping-ok rather than a fixed `delay(50)` —
+    // on slow CI hosts the first ping may still be in flight at 50 ms.
+    await new Promise<void>((resolve) => heartbeat!.once('ping-ok', () => resolve()));
     heartbeat.stop();
     const count = okSpy.mock.calls.length;
-    await delay(100);
+    await delay(120);
     expect(okSpy.mock.calls.length).toBe(count);
   });
 
