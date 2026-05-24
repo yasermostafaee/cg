@@ -38,6 +38,9 @@ importers:
       '@cg/shared-schema':
         specifier: workspace:*
         version: link:../../packages/shared-schema
+      '@cg/template-runtime':
+        specifier: workspace:*
+        version: link:../../packages/template-runtime
       '@cg/vcg-format':
         specifier: workspace:*
         version: link:../../packages/vcg-format
@@ -78,6 +81,9 @@ importers:
       electron-vite:
         specifier: ^2.3.0
         version: 2.3.0(vite@5.4.21(@types/node@22.19.19))
+      esbuild:
+        specifier: ^0.24.0
+        version: 0.24.2
       eslint:
         specifier: ^9.17.0
         version: 9.39.4
