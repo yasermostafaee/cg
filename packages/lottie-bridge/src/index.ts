@@ -1,9 +1,11 @@
 // Public surface of @cg/lottie-bridge.
 //
-// M3.3 ships the runtime path only. The import path (validation +
-// feature allowlist) lands in M8 alongside the Designer's asset
-// pipeline. When it does, this entry will split into
-// `./runtime` and `./import` subpath exports.
+// M3.3 shipped the runtime path; M8.2 adds the import-side validator.
+// Both live on the root entry — splitting into subpath exports is
+// reserved for the day tree-shaking matters more than discoverability.
 
 export { createLottiePlayer } from './runtime.js';
 export type { LottieLoopMode, LottiePlayerOptions, LottiePlayerHandle } from './runtime.js';
+
+export { importLottie } from './import.js';
+export type { ImportResult, LottieAnimation, RejectedFeature, RejectionCode } from './import.js';
