@@ -4,6 +4,7 @@ import type { BrowserWindow, IpcMain } from 'electron';
 import { AuditService } from './services/AuditService.js';
 import { ConnectionService } from './services/ConnectionService.js';
 import { LockService } from './services/LockService.js';
+import { SettingsService } from './services/SettingsService.js';
 import { StackService } from './services/StackService.js';
 import { TemplateRegistry } from './services/TemplateRegistry.js';
 import { UpdateGate } from './services/UpdateGate.js';
@@ -34,6 +35,7 @@ export interface BootHandle {
   templates: TemplateRegistry;
   audit: AuditService;
   updateGate: UpdateGate;
+  settings: SettingsService;
   /** Detach everything wired by boot(). Used in tests and on app quit. */
   shutdown(): Promise<void>;
 }
@@ -51,6 +53,10 @@ export function boot(ctx: BootContext): BootHandle {
   audit.bindStack(stack);
   audit.bindLock(lock);
   const updateGate = new UpdateGate({ stack });
+  const settings = new SettingsService({
+    filePath: process.env['CG_SETTINGS_FILE'] ?? path.join(os.tmpdir(), 'cg-settings.json'),
+  });
+  settings.load();
 
   // Surface gate transitions into the audit log. The actual update-installed
   // row fires from the updater's quitAndInstall callback in M11.
@@ -71,6 +77,7 @@ export function boot(ctx: BootContext): BootHandle {
     templates,
     audit,
     updateGate,
+    settings,
   });
 
   connections.start();
@@ -82,6 +89,7 @@ export function boot(ctx: BootContext): BootHandle {
     templates,
     audit,
     updateGate,
+    settings,
     async shutdown() {
       unwire();
       await audit.close();
