@@ -66,4 +66,27 @@ describe('runSoak (short scenario)', () => {
     expect(text).toContain('result:');
     expect(text).toContain('PASS');
   });
+
+  it('formatReport includes the first error line when errors are present', () => {
+    // Construct a synthetic SoakReport with errors so we cover the
+    // r.errors.length > 0 branch in report.ts (otherwise CI's branch
+    // coverage threshold trips on this rarely-hit path).
+    const text = formatReport({
+      durationMs: 1000,
+      cycles: 10,
+      samples: [],
+      heapStartMb: 1,
+      heapEndMb: 2,
+      heapDeltaMb: 1,
+      leakBudgetMb: 50,
+      rssStartMb: 1,
+      rssEndMb: 2,
+      rssDeltaMb: 1,
+      errors: ['amcp send timed out'],
+      passed: false,
+    });
+    expect(text).toContain('first error:');
+    expect(text).toContain('amcp send timed out');
+    expect(text).toContain('FAIL');
+  });
 });
