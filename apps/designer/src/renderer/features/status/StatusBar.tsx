@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
+import type { ExportIssue } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 
 interface Props {
   scene: Scene | null;
   projectPath: string | null;
+  issues: readonly ExportIssue[];
 }
 
 const styles = {
@@ -50,12 +52,15 @@ const styles = {
 } as const;
 
 /** Bottom-of-window status bar — project chrome + Save / Export shortcuts. */
-export function StatusBar({ scene, projectPath }: Props): JSX.Element {
+export function StatusBar({ scene, projectPath, issues }: Props): JSX.Element {
   const [time, setTime] = useState<string>(currentTime());
   useEffect(() => {
     const t = setInterval(() => setTime(currentTime()), 30_000);
     return () => clearInterval(t);
   }, []);
+
+  const errorCount = issues.filter((i) => i.severity === 'error').length;
+  const exportBlocked = scene === null || errorCount > 0;
 
   async function save(): Promise<void> {
     if (scene === null) return;
@@ -66,6 +71,10 @@ export function StatusBar({ scene, projectPath }: Props): JSX.Element {
 
   async function exportVcg(): Promise<void> {
     if (scene === null) return;
+    if (errorCount > 0) {
+      window.alert(`Export blocked: ${String(errorCount)} validation error(s) in Issues panel.`);
+      return;
+    }
     const outputPath = window.prompt('Output .vcg path:');
     if (outputPath === null || outputPath === '') return;
     await window.cg.export.run({ scene, outputPath });
@@ -77,11 +86,25 @@ export function StatusBar({ scene, projectPath }: Props): JSX.Element {
       <span style={styles.pill}>
         {scene === null ? '0×0' : `${scene.resolution.width}×${scene.resolution.height}`}
       </span>
+      {issues.length > 0 && (
+        <span
+          style={{
+            ...styles.pill,
+            borderColor: errorCount > 0 ? '#fda4af' : '#fcd34d',
+            color: errorCount > 0 ? '#fda4af' : '#fcd34d',
+          }}
+        >
+          {errorCount > 0
+            ? `${String(errorCount)} error${errorCount === 1 ? '' : 's'}`
+            : `${String(issues.length)} issue${issues.length === 1 ? '' : 's'}`}
+        </span>
+      )}
       <span style={styles.spacer} />
       <button
         style={styles.exportButton}
-        disabled={scene === null}
+        disabled={exportBlocked}
         onClick={() => void exportVcg()}
+        title={errorCount > 0 ? 'Resolve validation errors first' : 'Export to .vcg'}
       >
         EXPORT
       </button>

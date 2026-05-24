@@ -1,10 +1,12 @@
 import type { DesignerBridge } from '../shared/designer-bridge.js';
 import { CanvasArea } from './features/canvas/CanvasArea.js';
 import { InspectorPanel } from './features/inspector/InspectorPanel.js';
+import { IssuesPanel } from './features/issues/IssuesPanel.js';
 import { LibraryPanel } from './features/library/LibraryPanel.js';
 import { StatusBar } from './features/status/StatusBar.js';
 import { TimelineStrip } from './features/timeline/TimelineStrip.js';
 import { ToolRail } from './features/tools/ToolRail.js';
+import { useIssues } from './hooks/useIssues.js';
 import { useDesignerStore } from './state/store.js';
 import { colors } from './theme.js';
 
@@ -51,6 +53,7 @@ const styles = {
 export function App(): JSX.Element {
   const { scene, projectPath, tool, selection, editingTextId, bindModeFieldId } =
     useDesignerStore();
+  const issues = useIssues(scene);
 
   return (
     <main style={styles.page}>
@@ -69,11 +72,19 @@ export function App(): JSX.Element {
         <InspectorPanel scene={scene} projectPath={projectPath} selection={selection} />
       </div>
       {scene !== null && (
-        <div style={{ padding: '0 0.75rem 0.5rem' }}>
+        <div
+          style={{
+            padding: '0 0.75rem 0.5rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.5rem',
+          }}
+        >
+          <IssuesPanel issues={issues} />
           <TimelineStrip scene={scene} selection={selection} />
         </div>
       )}
-      <StatusBar scene={scene} projectPath={projectPath} />
+      <StatusBar scene={scene} projectPath={projectPath} issues={issues} />
     </main>
   );
 }
