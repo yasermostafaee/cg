@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AuditService } from '../src/main/services/AuditService.js';
+import { LockService } from '../src/main/services/LockService.js';
 import type { StackService } from '../src/main/services/StackService.js';
 
 let tmpDir: string | undefined;
@@ -139,5 +140,36 @@ describe('AuditService', () => {
     ).setSnapshot([{ itemId: 'i1', status: 'loaded' }]);
     await new Promise((r) => setTimeout(r, 30));
     expect(fs.existsSync(filePath)).toBe(false);
+  });
+});
+
+describe('AuditService — bindLock (M8.4)', () => {
+  it('writes lock-engage and lock-release entries on LockService transitions', async () => {
+    const { audit, filePath } = await setup();
+    const lock = new LockService();
+    audit.bindLock(lock);
+    lock.engage('1234');
+    await new Promise((r) => setTimeout(r, 30));
+    lock.release('1234');
+    await new Promise((r) => setTimeout(r, 30));
+    const lines = await readLines(filePath);
+    const actions = lines.map((l) => (JSON.parse(l) as { action: string }).action);
+    expect(actions).toContain('lock-engage');
+    expect(actions).toContain('lock-release');
+  });
+
+  it('does NOT write an entry for a wrong-PIN release attempt', async () => {
+    const { audit, filePath } = await setup();
+    const lock = new LockService();
+    audit.bindLock(lock);
+    lock.engage('1234');
+    await new Promise((r) => setTimeout(r, 30));
+    lock.release('9999'); // mismatch — no state-changed
+    await new Promise((r) => setTimeout(r, 30));
+    const lines = await readLines(filePath);
+    const releases = lines
+      .map((l) => JSON.parse(l) as { action: string })
+      .filter((e) => e.action === 'lock-release');
+    expect(releases).toHaveLength(0);
   });
 });

@@ -14,6 +14,11 @@ const LockStateSchema = z.object({
   engaged: z.boolean(),
   /** Set when the lock was engaged programmatically (e.g., auto-lock idle). */
   reason: z.enum(['operator', 'auto-idle', 'system']).optional(),
+  /**
+   * ISO timestamp the current lock was engaged. The renderer shows
+   * elapsed time on the LockOverlay. Absent when `engaged === false`.
+   */
+  engagedAt: z.string().datetime().optional(),
 });
 
 export type LockState = z.infer<typeof LockStateSchema>;

@@ -47,6 +47,7 @@ export function boot(ctx: BootContext): BootHandle {
     actor: process.env['CG_AUDIT_ACTOR'] ?? 'local',
   });
   audit.bindStack(stack);
+  audit.bindLock(lock);
 
   const unwire = registerIpcHandlers({
     ipcMain: ctx.ipcMain,

@@ -18,6 +18,8 @@ export const AuditEntrySchema = z.object({
     'reconnect',
     'import',
     'export',
+    'lock-engage',
+    'lock-release',
   ]),
   itemId: IdSchema.optional(),
   templateId: IdSchema.optional(),
