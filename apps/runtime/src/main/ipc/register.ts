@@ -21,6 +21,9 @@ import {
   UpdateRequestChannel,
   UpdateStateChangedChannel,
   UpdateStateChannel,
+  SettingsChangedChannel,
+  SettingsGetChannel,
+  SettingsSetChannel,
   handle,
   publish,
   type IpcHandler,
@@ -33,6 +36,7 @@ import type { LockService } from '../services/LockService.js';
 import type { StackService } from '../services/StackService.js';
 import type { TemplateRegistry } from '../services/TemplateRegistry.js';
 import type { UpdateGate } from '../services/UpdateGate.js';
+import type { SettingsService } from '../services/SettingsService.js';
 
 /**
  * Wires every runtime IPC channel.
@@ -54,10 +58,12 @@ export interface IpcWiring {
   templates: TemplateRegistry;
   audit: AuditService;
   updateGate: UpdateGate;
+  settings: SettingsService;
 }
 
 export function registerIpcHandlers(deps: IpcWiring): () => void {
-  const { ipcMain, webContents, stack, connections, lock, templates, audit, updateGate } = deps;
+  const { ipcMain, webContents, stack, connections, lock, templates, audit, updateGate, settings } =
+    deps;
 
   // ── stack.* ─────────────────────────────────────────────────────────
   handle(ipcMain, StackLoadChannel, (req) => {
@@ -127,6 +133,10 @@ export function registerIpcHandlers(deps: IpcWiring): () => void {
     return { ok: true };
   });
 
+  // ── settings.* ──────────────────────────────────────────────────────
+  handle(ipcMain, SettingsGetChannel, () => settings.get());
+  handle(ipcMain, SettingsSetChannel, (req) => settings.set(req));
+
   // ── pushes ──────────────────────────────────────────────────────────
   const onStackChange = (snapshot: readonly { itemId: string }[]): void => {
     publish(webContents, StackStateChangedChannel, [...snapshot] as Parameters<
@@ -148,15 +158,22 @@ export function registerIpcHandlers(deps: IpcWiring): () => void {
   ): void => {
     publish(webContents, UpdateStateChangedChannel, pending);
   };
+  const onSettingsChanged = (
+    next: Parameters<typeof publish<typeof SettingsChangedChannel>>[2],
+  ): void => {
+    publish(webContents, SettingsChangedChannel, next);
+  };
   stack.on('state-changed', onStackChange);
   connections.on('health-changed', onHealthChange);
   lock.on('state-changed', onLockChange);
   updateGate.on('state-changed', onUpdateState);
+  settings.on('settings-changed', onSettingsChanged);
 
   return () => {
     stack.off('state-changed', onStackChange);
     connections.off('health-changed', onHealthChange);
     lock.off('state-changed', onLockChange);
     updateGate.off('state-changed', onUpdateState);
+    settings.off('settings-changed', onSettingsChanged);
   };
 }

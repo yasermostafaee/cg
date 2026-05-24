@@ -55,34 +55,32 @@ async function readLines(filePath: string): Promise<string[]> {
 
 describe('AuditService', () => {
   it('writes a load entry when a new item appears', async () => {
-    const { stack, filePath } = await setup();
+    const { stack, filePath, audit } = await setup();
     (
       stack as unknown as { setSnapshot: (s: { itemId: string; status: string }[]) => void }
     ).setSnapshot([{ itemId: 'i1', status: 'loaded' }]);
-    // give the async append a chance
-    await new Promise((r) => setTimeout(r, 30));
+    await audit.flush();
     const lines = await readLines(filePath);
     expect(lines).toHaveLength(1);
     expect(JSON.parse(lines[0]!)).toMatchObject({ action: 'load', itemId: 'i1', actor: 'test' });
   });
 
   it('writes a take entry on the loaded → playing transition', async () => {
-    const { stack, filePath } = await setup();
+    const { stack, filePath, audit } = await setup();
     const setSnap = (s: { itemId: string; status: string }[]): void =>
       (
         stack as unknown as { setSnapshot: (s: { itemId: string; status: string }[]) => void }
       ).setSnapshot(s);
     setSnap([{ itemId: 'i1', status: 'loaded' }]);
-    await new Promise((r) => setTimeout(r, 30));
     setSnap([{ itemId: 'i1', status: 'playing' }]);
-    await new Promise((r) => setTimeout(r, 30));
+    await audit.flush();
     const lines = await readLines(filePath);
     expect(lines).toHaveLength(2);
     expect(JSON.parse(lines[1]!)).toMatchObject({ action: 'take', itemId: 'i1' });
   });
 
   it('writes an out entry on the playing → exiting transition', async () => {
-    const { stack, filePath } = await setup();
+    const { stack, filePath, audit } = await setup();
     const setSnap = (s: { itemId: string; status: string }[]): void =>
       (
         stack as unknown as { setSnapshot: (s: { itemId: string; status: string }[]) => void }
@@ -90,22 +88,21 @@ describe('AuditService', () => {
     setSnap([{ itemId: 'i1', status: 'loaded' }]);
     setSnap([{ itemId: 'i1', status: 'playing' }]);
     setSnap([{ itemId: 'i1', status: 'exiting' }]);
-    await new Promise((r) => setTimeout(r, 30));
+    await audit.flush();
     const lines = await readLines(filePath);
     const actions = lines.map((l) => (JSON.parse(l) as { action: string }).action);
     expect(actions).toEqual(['load', 'take', 'out']);
   });
 
   it('writes a remove entry when an item disappears from the snapshot', async () => {
-    const { stack, filePath } = await setup();
+    const { stack, filePath, audit } = await setup();
     const setSnap = (s: { itemId: string; status: string }[]): void =>
       (
         stack as unknown as { setSnapshot: (s: { itemId: string; status: string }[]) => void }
       ).setSnapshot(s);
     setSnap([{ itemId: 'i1', status: 'loaded' }]);
-    await new Promise((r) => setTimeout(r, 30));
     setSnap([]);
-    await new Promise((r) => setTimeout(r, 30));
+    await audit.flush();
     const lines = await readLines(filePath);
     const last = JSON.parse(lines[lines.length - 1]!) as { action: string; itemId: string };
     expect(last).toMatchObject({ action: 'remove', itemId: 'i1' });
@@ -120,7 +117,7 @@ describe('AuditService', () => {
   });
 
   it("doesn't emit duplicate audit rows for identical-status pushes", async () => {
-    const { stack, filePath } = await setup();
+    const { stack, filePath, audit } = await setup();
     const setSnap = (s: { itemId: string; status: string }[]): void =>
       (
         stack as unknown as { setSnapshot: (s: { itemId: string; status: string }[]) => void }
@@ -128,7 +125,7 @@ describe('AuditService', () => {
     setSnap([{ itemId: 'i1', status: 'loaded' }]);
     setSnap([{ itemId: 'i1', status: 'loaded' }]);
     setSnap([{ itemId: 'i1', status: 'loaded' }]);
-    await new Promise((r) => setTimeout(r, 30));
+    await audit.flush();
     expect(await readLines(filePath)).toHaveLength(1);
   });
 
@@ -138,7 +135,7 @@ describe('AuditService', () => {
     (
       stack as unknown as { setSnapshot: (s: { itemId: string; status: string }[]) => void }
     ).setSnapshot([{ itemId: 'i1', status: 'loaded' }]);
-    await new Promise((r) => setTimeout(r, 30));
+    await audit.flush();
     expect(fs.existsSync(filePath)).toBe(false);
   });
 });
@@ -149,9 +146,8 @@ describe('AuditService — bindLock (M8.4)', () => {
     const lock = new LockService();
     audit.bindLock(lock);
     lock.engage('1234');
-    await new Promise((r) => setTimeout(r, 30));
     lock.release('1234');
-    await new Promise((r) => setTimeout(r, 30));
+    await audit.flush();
     const lines = await readLines(filePath);
     const actions = lines.map((l) => (JSON.parse(l) as { action: string }).action);
     expect(actions).toContain('lock-engage');
@@ -163,9 +159,8 @@ describe('AuditService — bindLock (M8.4)', () => {
     const lock = new LockService();
     audit.bindLock(lock);
     lock.engage('1234');
-    await new Promise((r) => setTimeout(r, 30));
     lock.release('9999'); // mismatch — no state-changed
-    await new Promise((r) => setTimeout(r, 30));
+    await audit.flush();
     const lines = await readLines(filePath);
     const releases = lines
       .map((l) => JSON.parse(l) as { action: string })

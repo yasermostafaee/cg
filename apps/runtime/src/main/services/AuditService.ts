@@ -137,8 +137,17 @@ export class AuditService {
     // Drain pending writes before closing the file handle, otherwise
     // queued appends fire against a closed handle and surface as test
     // flakes.
-    await this.writeChain.catch(() => undefined);
+    await this.flush();
     await this.writer.close();
+  }
+
+  /**
+   * Wait for any queued audit appends to land on disk. Tests use this
+   * to avoid the `setTimeout(30)` heuristic that flaked on slow CI hosts.
+   * Production code generally doesn't need to call this — `close()` does.
+   */
+  async flush(): Promise<void> {
+    await this.writeChain.catch(() => undefined);
   }
 
   private async diffAndEmit(
