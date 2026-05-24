@@ -6,9 +6,20 @@ import { base, node, renderer } from '@cg/eslint-config';
 export default [
   ...base,
   node({
-    files: ['src/main/**/*.{ts,mts,cts}', 'src/preload/**/*.{ts,mts,cts}', 'tests/**/*.ts'],
+    files: [
+      'src/main/**/*.{ts,mts,cts}',
+      'src/preload/**/*.{ts,mts,cts}',
+      'tests/**/*.ts',
+      'scripts/**/*.{mjs,js}',
+    ],
   }),
   renderer({ files: ['src/renderer/**/*.{ts,tsx,mts,cts}'] }),
+  {
+    files: ['scripts/**/*.{mjs,js}'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
   {
     files: ['tests/**/*.ts'],
     rules: {
@@ -27,6 +38,13 @@ export default [
     },
   },
   {
-    ignores: ['out/**', 'dist/**', '.vite/**', 'release/**', '*.tsbuildinfo'],
+    ignores: [
+      'out/**',
+      'dist/**',
+      '.vite/**',
+      'release/**',
+      'resources/template-runtime/**',
+      '*.tsbuildinfo',
+    ],
   },
 ];

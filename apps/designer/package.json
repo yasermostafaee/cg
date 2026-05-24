@@ -6,18 +6,19 @@
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "dev": "node ./scripts/bundle-runtime.mjs && electron-vite dev",
+    "build": "node ./scripts/bundle-runtime.mjs && electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc -b --noEmit",
-    "test": "vitest run --coverage",
+    "test": "node ./scripts/bundle-runtime.mjs && vitest run --coverage",
     "lint": "eslint . --max-warnings 0",
-    "clean": "rimraf out dist .vite coverage *.tsbuildinfo",
-    "package": "electron-vite build && electron-builder --win"
+    "clean": "rimraf out dist .vite coverage resources/template-runtime *.tsbuildinfo",
+    "package": "node ./scripts/bundle-runtime.mjs && electron-vite build && electron-builder --win"
   },
   "dependencies": {
     "@cg/shared-ipc": "workspace:*",
     "@cg/shared-schema": "workspace:*",
+    "@cg/template-runtime": "workspace:*",
     "@cg/vcg-format": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -30,6 +31,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "@vitest/coverage-v8": "^2.1.8",
+    "esbuild": "^0.24.0",
     "electron": "^32.2.7",
     "electron-builder": "^24.13.3",
     "electron-vite": "^2.3.0",
