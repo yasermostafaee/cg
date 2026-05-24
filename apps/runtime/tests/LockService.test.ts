@@ -8,9 +8,13 @@ describe('LockService', () => {
   });
 
   it('engages with a PIN and reports operator reason by default', () => {
-    const lock = new LockService();
+    const lock = new LockService({ now: () => new Date('2026-05-24T12:00:00.000Z') });
     expect(lock.engage('1234')).toEqual({ ok: true });
-    expect(lock.getState()).toEqual({ engaged: true, reason: 'operator' });
+    expect(lock.getState()).toEqual({
+      engaged: true,
+      reason: 'operator',
+      engagedAt: '2026-05-24T12:00:00.000Z',
+    });
   });
 
   it('engage emits state-changed', () => {
@@ -47,8 +51,12 @@ describe('LockService', () => {
   });
 
   it('records reason when explicitly engaged', () => {
-    const lock = new LockService();
+    const lock = new LockService({ now: () => new Date('2026-05-24T12:00:00.000Z') });
     lock.engage('1234', 'auto-idle');
-    expect(lock.getState()).toEqual({ engaged: true, reason: 'auto-idle' });
+    expect(lock.getState()).toEqual({
+      engaged: true,
+      reason: 'auto-idle',
+      engagedAt: '2026-05-24T12:00:00.000Z',
+    });
   });
 });

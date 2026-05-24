@@ -3,6 +3,10 @@ import { colors } from '../../theme.js';
 
 interface Props {
   engaged: boolean;
+  /** ISO timestamp of when the lock engaged; absent if state pre-dates M8.4 wire format. */
+  engagedAt?: string;
+  /** Reason carried by LockState; surfaced as a chip on the overlay. */
+  reason?: 'operator' | 'auto-idle' | 'system';
   onRelease: (
     pin: string,
   ) => Promise<{ ok: boolean; reason?: 'pin-mismatch' | 'not-engaged' | undefined }>;
@@ -33,6 +37,19 @@ const styles = {
   },
   title: { margin: 0, fontSize: '1.4rem', fontWeight: 700, letterSpacing: '0.05em' },
   sub: { margin: 0, color: colors.textMuted, fontSize: '0.9rem' },
+  metaRow: {
+    display: 'flex',
+    gap: '0.5rem',
+    fontSize: '0.75rem',
+    color: colors.textMuted,
+  },
+  chip: {
+    padding: '0.1rem 0.5rem',
+    borderRadius: '0.7rem',
+    border: `1px solid ${colors.border}`,
+    background: colors.panelMuted,
+    letterSpacing: '0.05em',
+  },
   input: {
     background: colors.panelMuted,
     color: colors.text,
@@ -68,25 +85,45 @@ const styles = {
  * overlay; the stack rows underneath cannot receive clicks. The 🔒
  * chip in the status bar mirrors this state for situational awareness.
  */
-export function LockOverlay({ engaged, onRelease }: Props): JSX.Element | null {
+export function LockOverlay({ engaged, engagedAt, reason, onRelease }: Props): JSX.Element | null {
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [wrongAttempts, setWrongAttempts] = useState(0);
+  const [elapsed, setElapsed] = useState<string>(formatElapsed(engagedAt));
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (engaged) {
       setPin('');
       setError(null);
+      setWrongAttempts(0);
       inputRef.current?.focus();
     }
   }, [engaged]);
+
+  // Refresh the elapsed-time chip every second while engaged.
+  useEffect(() => {
+    if (!engaged) return;
+    setElapsed(formatElapsed(engagedAt));
+    const t = setInterval(() => setElapsed(formatElapsed(engagedAt)), 1000);
+    return () => clearInterval(t);
+  }, [engaged, engagedAt]);
 
   if (!engaged) return null;
 
   const submit = async (): Promise<void> => {
     const result = await onRelease(pin);
     if (!result.ok) {
-      setError(result.reason === 'pin-mismatch' ? 'Incorrect PIN.' : 'Could not release lock.');
+      if (result.reason === 'pin-mismatch') {
+        setWrongAttempts((n) => n + 1);
+        setError(
+          wrongAttempts === 0
+            ? 'Incorrect PIN.'
+            : `Incorrect PIN (${String(wrongAttempts + 1)} attempts).`,
+        );
+      } else {
+        setError('Could not release lock.');
+      }
       setPin('');
       inputRef.current?.focus();
     }
@@ -97,6 +134,14 @@ export function LockOverlay({ engaged, onRelease }: Props): JSX.Element | null {
       <div style={styles.card}>
         <h2 style={styles.title}>RUNTIME LOCKED</h2>
         <p style={styles.sub}>Enter PIN to resume.</p>
+        <div style={styles.metaRow}>
+          {reason !== undefined && <span style={styles.chip}>{reason.toUpperCase()}</span>}
+          {elapsed !== '' && (
+            <span style={styles.chip} aria-label="Locked for">
+              {elapsed}
+            </span>
+          )}
+        </div>
         <input
           ref={inputRef}
           style={styles.input}
@@ -116,4 +161,24 @@ export function LockOverlay({ engaged, onRelease }: Props): JSX.Element | null {
       </div>
     </div>
   );
+}
+
+/**
+ * Render "0:42" / "5:12" / "1:03:04" given an ISO timestamp. Returns
+ * empty string when the timestamp is absent — the chip is hidden in
+ * that case so older state payloads (pre-M8.4) render cleanly.
+ */
+export function formatElapsed(engagedAt: string | undefined, nowMs?: number): string {
+  if (engagedAt === undefined) return '';
+  const start = Date.parse(engagedAt);
+  if (Number.isNaN(start)) return '';
+  const now = nowMs ?? Date.now();
+  const secs = Math.max(0, Math.floor((now - start) / 1000));
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  if (h > 0) {
+    return `${String(h)}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+  return `${String(m)}:${String(s).padStart(2, '0')}`;
 }

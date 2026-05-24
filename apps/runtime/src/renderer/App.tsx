@@ -97,7 +97,12 @@ export function App(): JSX.Element {
         <Inspector item={selected} />
       </div>
       <StatusBar />
-      <LockOverlay engaged={lock.engaged} onRelease={(pin) => window.cg.lock.release({ pin })} />
+      <LockOverlay
+        engaged={lock.engaged}
+        {...(lock.engagedAt !== undefined ? { engagedAt: lock.engagedAt } : {})}
+        {...(lock.reason !== undefined ? { reason: lock.reason } : {})}
+        onRelease={(pin) => window.cg.lock.release({ pin })}
+      />
     </main>
   );
 }

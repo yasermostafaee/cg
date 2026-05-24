@@ -1,5 +1,7 @@
 import { AuditWriter } from '@cg/audit';
 import type { AuditEntry } from '@cg/shared-schema';
+import type { LockState } from '@cg/shared-ipc';
+import type { LockService } from './LockService.js';
 import type { StackService } from './StackService.js';
 
 /**
@@ -34,6 +36,8 @@ export class AuditService {
     | ((snapshot: readonly { itemId: string; status: string }[]) => void)
     | null = null;
   private prevSnapshot: ReadonlyMap<string, string> = new Map();
+  private boundLock: LockService | null = null;
+  private lockListener: ((state: LockState) => void) | null = null;
 
   constructor(options: AuditServiceOptions) {
     this.actor = options.actor ?? 'local';
@@ -76,6 +80,34 @@ export class AuditService {
     this.stackListener = null;
   }
 
+  /**
+   * Subscribe to a `LockService` and emit an audit entry on every
+   * engage/release transition (M8.4). Wrong-PIN attempts don't fire
+   * 'state-changed' so they're not recorded here — by design, since
+   * the lock is for accident-prevention, not auth.
+   */
+  bindLock(lock: LockService): void {
+    if (this.boundLock !== null) return;
+    this.boundLock = lock;
+    let prevEngaged = lock.getState().engaged;
+    this.lockListener = (state) => {
+      if (state.engaged === prevEngaged) return;
+      prevEngaged = state.engaged;
+      const action: AuditEntry['action'] = state.engaged ? 'lock-engage' : 'lock-release';
+      this.record({ action, outcome: 'ok' }).catch((err: unknown) => {
+        void err;
+      });
+    };
+    lock.on('state-changed', this.lockListener);
+  }
+
+  unbindLock(): void {
+    if (this.boundLock === null || this.lockListener === null) return;
+    this.boundLock.off('state-changed', this.lockListener);
+    this.boundLock = null;
+    this.lockListener = null;
+  }
+
   /** Write an arbitrary entry — for failover/reconnect/import/export. */
   async record(entry: Omit<AuditEntry, 'ts' | 'actor'> & { actor?: string }): Promise<void> {
     await this.writer.append({
@@ -86,6 +118,7 @@ export class AuditService {
 
   async close(): Promise<void> {
     this.unbindStack();
+    this.unbindLock();
     await this.writer.close();
   }
 

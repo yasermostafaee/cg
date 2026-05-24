@@ -14,10 +14,22 @@ export interface LockServiceEvents {
   'state-changed': [state: LockState];
 }
 
+export interface LockServiceOptions {
+  /** Override for tests. */
+  now?: () => Date;
+}
+
 export class LockService extends EventEmitter<LockServiceEvents> {
   private engaged = false;
   private reason: LockState['reason'];
   private pinHash: string | null = null;
+  private engagedAt: string | undefined;
+  private readonly now: () => Date;
+
+  constructor(options: LockServiceOptions = {}) {
+    super();
+    this.now = options.now ?? ((): Date => new Date());
+  }
 
   /** Engage with a PIN. The PIN is hashed; the raw value is discarded immediately. */
   engage(pin: string, reason: LockState['reason'] = 'operator'): { ok: boolean } {
@@ -25,6 +37,7 @@ export class LockService extends EventEmitter<LockServiceEvents> {
     this.pinHash = sha256Hex(pin);
     this.engaged = true;
     this.reason = reason;
+    this.engagedAt = this.now().toISOString();
     this.emit('state-changed', this.getState());
     return { ok: true };
   }
@@ -41,15 +54,18 @@ export class LockService extends EventEmitter<LockServiceEvents> {
     this.engaged = false;
     this.pinHash = null;
     this.reason = undefined;
+    this.engagedAt = undefined;
     this.emit('state-changed', this.getState());
     return { ok: true };
   }
 
   /** Synchronous read for `lock.state` requests. */
   getState(): LockState {
-    return this.engaged
-      ? { engaged: true, ...(this.reason !== undefined ? { reason: this.reason } : {}) }
-      : { engaged: false };
+    if (!this.engaged) return { engaged: false };
+    const state: LockState = { engaged: true };
+    if (this.reason !== undefined) state.reason = this.reason;
+    if (this.engagedAt !== undefined) state.engagedAt = this.engagedAt;
+    return state;
   }
 }
 
