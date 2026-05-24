@@ -45,6 +45,216 @@ describe('ExportService — preflight', () => {
     expect(issues.some((i) => i.code === 'empty-scene')).toBe(true);
   });
 
+  it('reports unbound-required-field as ERROR (Phase 8 M7.3 exit criterion)', async () => {
+    const { projects, exporter } = await setup();
+    const { scene } = projects.newScene('LT', 'lower-third');
+    const sceneWithUnboundField = {
+      ...scene,
+      fields: [
+        {
+          id: 'title',
+          label: 'Title',
+          type: 'text' as const,
+          default: '',
+          required: true,
+        },
+      ],
+    };
+    const issues = exporter.preflight(sceneWithUnboundField);
+    const issue = issues.find((i) => i.code === 'unbound-required-field');
+    expect(issue).toBeDefined();
+    expect(issue?.severity).toBe('error');
+  });
+
+  it('passes when the required field has either a default OR a binding', async () => {
+    const { projects, exporter } = await setup();
+    const { scene } = projects.newScene('LT', 'lower-third');
+    const withDefault = {
+      ...scene,
+      fields: [
+        {
+          id: 'title',
+          label: 'Title',
+          type: 'text' as const,
+          default: 'Default Title',
+          required: true,
+        },
+      ],
+    };
+    expect(exporter.preflight(withDefault).some((i) => i.code === 'unbound-required-field')).toBe(
+      false,
+    );
+  });
+
+  it('reports unknown-binding-field when a binding references a missing field id', async () => {
+    const { projects, exporter } = await setup();
+    const { scene } = projects.newScene('LT', 'lower-third');
+    const sceneWithDanglingBinding = {
+      ...scene,
+      bindings: [
+        {
+          fieldId: 'ghost',
+          target: { kind: 'scene-background' as const },
+        },
+      ],
+    };
+    const issues = exporter.preflight(sceneWithDanglingBinding);
+    expect(issues.some((i) => i.severity === 'error' && i.code === 'unknown-binding-field')).toBe(
+      true,
+    );
+  });
+
+  it('reports unknown-binding-element when a binding targets a missing element', async () => {
+    const { projects, exporter } = await setup();
+    const { scene } = projects.newScene('LT', 'lower-third');
+    const sceneWithBadTarget = {
+      ...scene,
+      fields: [
+        {
+          id: 'title',
+          label: 'Title',
+          type: 'text' as const,
+          default: 'x',
+          required: false,
+        },
+      ],
+      bindings: [
+        {
+          fieldId: 'title',
+          target: { kind: 'text' as const, elementId: 'ghost-element' },
+        },
+      ],
+    };
+    const issues = exporter.preflight(sceneWithBadTarget);
+    expect(issues.some((i) => i.severity === 'error' && i.code === 'unknown-binding-element')).toBe(
+      true,
+    );
+  });
+
+  it('reports formatter-mismatch warning when persian-digits is applied to a color field', async () => {
+    const { projects, exporter } = await setup();
+    const { scene } = projects.newScene('LT', 'lower-third');
+    const sceneWithBadFormatter = {
+      ...scene,
+      fields: [
+        {
+          id: 'tint',
+          label: 'Tint',
+          type: 'color' as const,
+          default: '#FFFFFF',
+          required: false,
+        },
+      ],
+      layers: [
+        {
+          id: 'L1',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal' as const,
+          children: [
+            {
+              id: 'shape-1',
+              type: 'shape' as const,
+              name: 'bg',
+              visible: true,
+              locked: false,
+              opacity: 1,
+              zIndex: 0,
+              transform: {
+                position: { x: 0, y: 0 },
+                size: { w: 100, h: 100 },
+                rotation: 0,
+                scale: { x: 1, y: 1 },
+                anchor: { x: 0, y: 0 },
+              },
+              shape: 'rect' as const,
+              fill: { kind: 'solid' as const, color: '#FF0000' },
+            },
+          ],
+        },
+      ],
+      bindings: [
+        {
+          fieldId: 'tint',
+          target: { kind: 'color' as const, elementId: 'shape-1', property: 'fill' as const },
+          transform: 'persian-digits' as const,
+        },
+      ],
+    };
+    const issues = exporter.preflight(sceneWithBadFormatter);
+    const issue = issues.find((i) => i.code === 'formatter-mismatch');
+    expect(issue).toBeDefined();
+    expect(issue?.severity).toBe('warning');
+  });
+
+  it('persian-digits formatter on a number field is allowed (Phase 8 §10 exit criterion)', async () => {
+    const { projects, exporter } = await setup();
+    const { scene } = projects.newScene('LT', 'lower-third');
+    const sceneOk = {
+      ...scene,
+      fields: [
+        {
+          id: 'count',
+          label: 'Count',
+          type: 'number' as const,
+          default: 0,
+          required: false,
+        },
+      ],
+      layers: [
+        {
+          id: 'L1',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal' as const,
+          children: [
+            {
+              id: 'txt-1',
+              type: 'text' as const,
+              name: 'count',
+              visible: true,
+              locked: false,
+              opacity: 1,
+              zIndex: 0,
+              transform: {
+                position: { x: 0, y: 0 },
+                size: { w: 200, h: 60 },
+                rotation: 0,
+                scale: { x: 1, y: 1 },
+                anchor: { x: 0, y: 0 },
+              },
+              text: '0',
+              font: {
+                family: 'Inter',
+                weight: 700,
+                style: 'normal' as const,
+                size: 48,
+                lineHeight: 1.2,
+                letterSpacing: 0,
+              },
+              color: '#FFFFFF',
+              align: 'start' as const,
+              direction: 'auto' as const,
+              fitMode: 'fixed' as const,
+              overflow: 'clip' as const,
+            },
+          ],
+        },
+      ],
+      bindings: [
+        {
+          fieldId: 'count',
+          target: { kind: 'text' as const, elementId: 'txt-1' },
+          transform: 'persian-digits' as const,
+        },
+      ],
+    };
+    const issues = exporter.preflight(sceneOk);
+    expect(issues.some((i) => i.code === 'formatter-mismatch')).toBe(false);
+  });
+
   it('reports missing-asset error when image references an unknown id', async () => {
     const { projects, exporter } = await setup();
     const { scene } = projects.newScene('LT', 'lower-third');

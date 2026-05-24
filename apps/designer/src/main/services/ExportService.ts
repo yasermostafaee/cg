@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { pack } from '@cg/vcg-format';
-import type { AssetEntry, Scene } from '@cg/shared-schema';
+import type { AssetEntry, BindingTransform, DynamicField, Scene } from '@cg/shared-schema';
 import type { ExportIssue, ExportProgress } from '@cg/shared-ipc';
 import type { AssetService } from './AssetService.js';
 
@@ -57,11 +57,14 @@ export class ExportService extends EventEmitter<ExportServiceEvents> {
    * Phase 4 §7 step 1: validate without producing a file. Cheap to call
    * on every Inspector edit (debounced by the renderer).
    *
-   * Issues collected:
-   *   - image element references an unknown assetId → error
-   *   - bundled font reference missing a bundledPath → warning
-   *   - required text field has an empty `default` AND no binding → warning
-   *   - scene has 0 layers → info (would render blank)
+   * Severity policy (Phase 8 M7.3):
+   *   - error    → blocks `run()`. Reserved for outcomes that would
+   *                produce a broken .vcg or surprise the operator on air
+   *                (unknown asset, unbound required field, dangling
+   *                binding).
+   *   - warning  → ships, but should be addressed (formatter applied to
+   *                an inappropriate field type, font missing bundled path).
+   *   - info     → advisory (empty scene).
    */
   preflight(scene: Scene): readonly ExportIssue[] {
     const issues: ExportIssue[] = [];
@@ -75,8 +78,10 @@ export class ExportService extends EventEmitter<ExportServiceEvents> {
     }
 
     const knownAssetIds = new Set(this.assets.list().map((a) => a.assetId));
+    const allElementIds = new Set<string>();
     for (const layer of scene.layers) {
       for (const el of layer.children) {
+        allElementIds.add(el.id);
         if (el.type === 'image') {
           if (!knownAssetIds.has(el.assetId)) {
             issues.push({
@@ -100,14 +105,51 @@ export class ExportService extends EventEmitter<ExportServiceEvents> {
       }
     }
 
+    const fieldsById = new Map(scene.fields.map((f) => [f.id, f]));
+
     for (const field of scene.fields) {
+      if (field.required !== true) continue;
       const hasBinding = scene.bindings.some((b) => b.fieldId === field.id);
-      if (field.type === 'text' && field.required === true && field.default === '' && !hasBinding) {
+      const hasDefault = fieldHasMeaningfulDefault(field);
+      if (!hasDefault && !hasBinding) {
         issues.push({
-          severity: 'warning',
+          severity: 'error',
           code: 'unbound-required-field',
           message: `Required field "${field.label}" has no default value and no binding.`,
           fieldId: field.id,
+        });
+      }
+    }
+
+    for (let i = 0; i < scene.bindings.length; i++) {
+      const b = scene.bindings[i];
+      if (b === undefined) continue;
+      const field = fieldsById.get(b.fieldId);
+      if (field === undefined) {
+        issues.push({
+          severity: 'error',
+          code: 'unknown-binding-field',
+          message: `Binding #${String(i)} references unknown field "${b.fieldId}".`,
+        });
+        continue;
+      }
+      if (b.target.kind !== 'scene-background') {
+        if (!allElementIds.has(b.target.elementId)) {
+          issues.push({
+            severity: 'error',
+            code: 'unknown-binding-element',
+            message: `Binding from "${b.fieldId}" targets unknown element "${b.target.elementId}".`,
+            fieldId: b.fieldId,
+          });
+          continue;
+        }
+      }
+      if (b.transform !== undefined && !isFormatterApplicable(b.transform, field)) {
+        issues.push({
+          severity: 'warning',
+          code: 'formatter-mismatch',
+          message: `Formatter "${b.transform}" doesn't usefully apply to ${field.type} field "${b.fieldId}".`,
+          fieldId: b.fieldId,
         });
       }
     }
@@ -240,6 +282,54 @@ export class ExportService extends EventEmitter<ExportServiceEvents> {
 
 function sha256Hex(bytes: Buffer | Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
+}
+
+/**
+ * A required field is "satisfied" when its default would produce a
+ * non-empty payload at runtime. For most types this means the user set
+ * a non-empty value; image fields are satisfied if `defaultAssetId` is
+ * set (an empty asset id is meaningless to the runtime).
+ */
+function fieldHasMeaningfulDefault(field: DynamicField): boolean {
+  switch (field.type) {
+    case 'text':
+    case 'multiline':
+      return field.default !== '';
+    case 'image':
+      return field.defaultAssetId !== undefined && field.defaultAssetId !== '';
+    case 'color':
+      return field.default !== '';
+    case 'select':
+      return field.default !== '' && field.options.some((o) => o.value === field.default);
+    case 'number':
+    case 'boolean':
+      // Numbers and booleans always carry a defined default.
+      return true;
+  }
+}
+
+/**
+ * Decides whether a `BindingTransform` is "useful" against a given
+ * field type. Identity is always applicable. Digit/date transforms
+ * imply a numeric or text payload — applying them to a `boolean` or
+ * `image` field is almost certainly a mistake.
+ */
+function isFormatterApplicable(transform: BindingTransform, field: DynamicField): boolean {
+  if (transform === 'identity') return true;
+  switch (field.type) {
+    case 'text':
+    case 'multiline':
+    case 'number':
+      return true;
+    case 'select':
+      // select values are usually short codes — uppercase/lowercase is OK,
+      // digit transforms aren't useful but aren't *wrong*.
+      return transform === 'uppercase' || transform === 'lowercase' || transform === 'truncate';
+    case 'color':
+    case 'boolean':
+    case 'image':
+      return false;
+  }
 }
 
 function mimeFor(ext: string): string {
