@@ -96,19 +96,25 @@ describe('WatchedFolderService', () => {
     const vcg = await buildSampleVcg();
     await fs.promises.writeFile(path.join(watchRoot, 'new.vcg'), vcg);
 
+    // Capture svc into a non-null local so the fallback's setTimeout
+    // doesn't dereference the module-level binding after afterEach has
+    // cleared it (which crashed CI as an unhandled error).
+    const captured = svc;
+    let fallbackTimer: NodeJS.Timeout | null = null;
     const info = await Promise.race([
       ingested,
       // fs.watch isn't 100% reliable across all FS types in CI — fall back to a direct
       // ingest after 500ms so the test isn't flaky on slow runners.
       new Promise<{ templateId: string }>((resolve) => {
-        setTimeout(() => {
-          void svc!
+        fallbackTimer = setTimeout(() => {
+          void captured
             .ingest(path.join(watchRoot, 'new.vcg'))
             .then(() => resolve({ templateId: registry.list()[0]?.templateId ?? '' }))
             .catch(() => resolve({ templateId: '' }));
         }, 500);
       }),
     ]);
+    if (fallbackTimer !== null) clearTimeout(fallbackTimer);
     expect(info.templateId).toBe('lt-fixture');
   });
 
