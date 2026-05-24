@@ -1,3 +1,5 @@
+import type { DynamicField } from '@cg/shared-schema';
+
 /**
  * Minimal in-memory templateId → URL resolver. The real registry (with
  * watched-folder ingest, manifest validation, signature verification)
@@ -6,6 +8,10 @@
  *
  * Templates are registered at boot by reading the configured watch
  * folder; the M5.3 end-to-end test pre-populates with hand-built entries.
+ *
+ * M7.2: entries now also carry the template's field schema so the
+ * operator Inspector can render typed editor controls without needing
+ * to re-unpack the .vcg.
  */
 export interface TemplateEntry {
   templateId: string;
@@ -13,6 +19,8 @@ export interface TemplateEntry {
   url: string;
   /** Template type for LayerManager policy (lower-third / ticker / etc.). */
   templateType: string;
+  /** Field schema as declared in scene.fields at export time. */
+  fields: readonly DynamicField[];
 }
 
 export class TemplateRegistry {

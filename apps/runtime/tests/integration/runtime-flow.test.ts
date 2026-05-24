@@ -112,6 +112,7 @@ async function setup(): Promise<{
     templateId: 'lt-smoke',
     url: templateUrl,
     templateType: 'lower-third',
+    fields: [],
   });
 
   // Wait for at least one session to reach healthy.

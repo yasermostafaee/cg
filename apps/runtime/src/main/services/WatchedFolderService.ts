@@ -106,6 +106,7 @@ export class WatchedFolderService extends EventEmitter<WatchedFolderServiceEvent
       templateId,
       url,
       templateType: unpacked.scene.templateType,
+      fields: unpacked.scene.fields,
     });
     this.emit('ingested', { templateId, url, sourcePath });
     return url;
