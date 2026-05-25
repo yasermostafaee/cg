@@ -45,6 +45,7 @@ function sceneWithMedia(): Scene {
     resolution: { width: 1920, height: 1080 },
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
+    frameRange: { in: 0, out: 50 },
     background: 'transparent',
     layers: [
       {
@@ -157,7 +158,7 @@ describe('M10.2 — template-runtime bootstrap budget', () => {
     const scene = sceneWithMedia();
 
     // Warm pass — absorbs happy-dom + JIT setup.
-    const warm = createRuntime(scene, { skipFontLoad: true, skipTickers: true });
+    const warm = createRuntime(scene, { skipFontLoad: true });
     await warm.play({});
     warm.remove();
     document.body.innerHTML = '';
@@ -166,7 +167,7 @@ describe('M10.2 — template-runtime bootstrap budget', () => {
     const samples: number[] = [];
     for (let i = 0; i < WARM_ITERATIONS; i++) {
       const start = performance.now();
-      const runtime = createRuntime(scene, { skipFontLoad: true, skipTickers: true });
+      const runtime = createRuntime(scene, { skipFontLoad: true });
       await runtime.play({});
       samples.push(performance.now() - start);
       runtime.remove();

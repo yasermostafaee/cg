@@ -29,7 +29,15 @@ export function createEditorWindow(): BrowserWindow {
     },
   });
 
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => {
+    win.show();
+    // In dev (`pnpm dev` sets ELECTRON_RENDERER_URL), open DevTools
+    // automatically so the operator can inspect the cgpreview iframe
+    // without remembering the F12 chord.
+    if (process.env['ELECTRON_RENDERER_URL']) {
+      win.webContents.openDevTools({ mode: 'right' });
+    }
+  });
 
   // External links open in the user's browser, never in-window.
   win.webContents.setWindowOpenHandler(({ url }) => {

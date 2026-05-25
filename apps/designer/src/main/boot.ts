@@ -1,6 +1,6 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { BrowserWindow, IpcMain } from 'electron';
+import { dialog, type BrowserWindow, type IpcMain } from 'electron';
 import { AssetService } from './services/AssetService.js';
 import { ExportService } from './services/ExportService.js';
 import { FontService } from './services/FontService.js';
@@ -67,6 +67,22 @@ export function bootDesigner(ctx: DesignerBootContext): DesignerBootHandle {
     assets,
     exporter,
     preview,
+    showOpenDialog: async () => {
+      const result = await dialog.showOpenDialog(ctx.window, {
+        title: 'Open scene',
+        properties: ['openFile'],
+        filters: [{ name: 'Scene', extensions: ['json'] }],
+      });
+      return result.canceled || result.filePaths[0] === undefined ? null : result.filePaths[0];
+    },
+    showSaveDialog: async () => {
+      const result = await dialog.showSaveDialog(ctx.window, {
+        title: 'Save scene as',
+        defaultPath: 'scene.scene.json',
+        filters: [{ name: 'Scene', extensions: ['json'] }],
+      });
+      return result.canceled || result.filePath === undefined ? null : result.filePath;
+    },
   });
 
   return {

@@ -3,7 +3,6 @@ import { colors } from '../../theme.js';
 import { designerStore, useDesignerStore } from '../../state/store.js';
 import { describeBinding } from '../fields/bind-resolver.js';
 import { FieldsPanel } from '../fields/FieldsPanel.js';
-import { AnimationSection } from './AnimationSection.js';
 import { StyleSection } from './StyleSection.js';
 import { TransformSection } from './TransformSection.js';
 
@@ -145,8 +144,6 @@ function ElementInspector({ element, scene }: { element: Element; scene: Scene }
       <TransformSection element={element} />
       <h3 style={styles.heading}>STYLE</h3>
       <StyleSection element={element} />
-      <h3 style={styles.heading}>ANIMATION</h3>
-      <AnimationSection element={element} />
       <h3 style={styles.heading}>BINDINGS</h3>
       <ElementBindings bindings={bindings} />
       <button style={styles.removeButton} onClick={() => designerStore.removeElement(element.id)}>

@@ -13,9 +13,8 @@ export const FIELD_KINDS: readonly FieldKind[] = [
 ] as const;
 
 /**
- * Schema-valid defaults for each field kind. Mirrors the
- * AnimationSection's preset factories — switching kinds drops the
- * old kind's params entirely.
+ * Schema-valid defaults for each field kind. Switching kinds drops
+ * the old kind's params entirely.
  */
 export function defaultField(id: string, kind: FieldKind): DynamicField {
   const base = { id, label: id, required: true } as const;

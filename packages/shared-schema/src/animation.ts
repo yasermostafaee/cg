@@ -1,129 +1,93 @@
 import { z } from 'zod';
-import { DurationFramesSchema } from './primitives.js';
+import { DurationFramesSchema, HexColorSchema } from './primitives.js';
 
-/** GSAP-compatible easing names. v1 set; extensible per Phase 3 §5. */
-export const EasingSchema = z.enum([
-  'linear',
-  'power1.in',
-  'power1.out',
-  'power1.inOut',
-  'power2.in',
-  'power2.out',
-  'power2.inOut',
-  'power3.in',
-  'power3.out',
-  'power3.inOut',
-  'back.in',
-  'back.out',
-  'back.inOut',
-  'expo.in',
-  'expo.out',
-  'expo.inOut',
-  'sine.in',
-  'sine.out',
-  'sine.inOut',
-]);
+/**
+ * Phase 9 / M12 keyframe-based animation model.
+ *
+ * Replaces the v1 preset model (entry/loop/exit kinds). Every animatable
+ * property carries its own ordered list of keyframes; the runtime
+ * interpolates the value between adjacent keyframes at the current
+ * playhead frame.
+ *
+ * Schema invariants enforced via Zod:
+ *   - Track.keyframes is non-empty when the property is keyframed.
+ *   - Frame indices are integers >= 0.
+ *   - Easing is per-keyframe (the value's *outgoing* curve) so adjacent
+ *     keyframes can share or differ.
+ *
+ * The renderer enforces the additional invariant that frames within a
+ * track are strictly ascending; Designer's preflight surfaces this.
+ */
+
+/** Per-keyframe outgoing easing curve. */
+export const EasingSchema = z.enum(['linear', 'step', 'ease-in', 'ease-out', 'ease-in-out']);
 export type Easing = z.infer<typeof EasingSchema>;
 
-const SlideDirectionSchema = z.enum(['left', 'right', 'up', 'down']);
+/**
+ * A single keyframe value. v2.0 keeps the value space narrow:
+ *   - `number` for numeric properties (position, size, rotation, opacity, scale)
+ *   - hex `#RRGGBB[AA]` for colors
+ *
+ * Booleans, image assetIds, and select-string values are intentionally
+ * excluded — they don't interpolate. Toggles are still possible via
+ * step easing on a numeric 0/1 track if the property is exposed that way.
+ */
+export const KeyframeValueSchema = z.union([z.number(), HexColorSchema]);
+export type KeyframeValue = z.infer<typeof KeyframeValueSchema>;
 
-/** Entry animation preset. Frame-locked timing (see Phase 4 §6). */
-export const EntryPresetSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('none') }),
-  z.object({
-    kind: z.literal('fade'),
-    duration: DurationFramesSchema,
-    delay: DurationFramesSchema,
-    easing: EasingSchema,
-  }),
-  z.object({
-    kind: z.literal('slide'),
-    duration: DurationFramesSchema,
-    delay: DurationFramesSchema,
-    easing: EasingSchema,
-    direction: SlideDirectionSchema,
-    distance: z.number(),
-  }),
-  z.object({
-    kind: z.literal('scale'),
-    duration: DurationFramesSchema,
-    delay: DurationFramesSchema,
-    easing: EasingSchema,
-    from: z.number().nonnegative(),
-  }),
-  z.object({
-    kind: z.literal('blur'),
-    duration: DurationFramesSchema,
-    delay: DurationFramesSchema,
-    easing: EasingSchema,
-    from: z.number().nonnegative(),
-  }),
+export const KeyframeSchema = z.object({
+  frame: DurationFramesSchema,
+  value: KeyframeValueSchema,
+  easing: EasingSchema,
+});
+export type Keyframe = z.infer<typeof KeyframeSchema>;
+
+/** One animatable property's keyframe sequence. */
+export const TrackSchema = z.object({
+  keyframes: z.array(KeyframeSchema).min(1),
+});
+export type Track = z.infer<typeof TrackSchema>;
+
+/**
+ * Animatable property paths. Mirrors the structure the runtime walks
+ * to apply interpolated values back to the DOM. Adding a new property
+ * is two steps: add it to this enum, teach the runtime's apply-step to
+ * write it.
+ *
+ * v2.0 set chosen to match the Loopic reference: enough for production
+ * lower-thirds and tickers without overpromising on per-element-type
+ * style fields (text font-size etc. land in v2.1).
+ */
+export const AnimatablePropertySchema = z.enum([
+  'position.x',
+  'position.y',
+  'size.w',
+  'size.h',
+  'scale.x',
+  'scale.y',
+  'rotation',
+  'opacity',
+  'fill.color',
+  'text.color',
 ]);
-export type EntryPreset = z.infer<typeof EntryPresetSchema>;
+export type AnimatableProperty = z.infer<typeof AnimatablePropertySchema>;
 
-/** Exit animation preset. */
-export const ExitPresetSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('none') }),
-  z.object({
-    kind: z.literal('fade-out'),
-    duration: DurationFramesSchema,
-    delay: DurationFramesSchema,
-    easing: EasingSchema,
-  }),
-  z.object({
-    kind: z.literal('slide-out'),
-    duration: DurationFramesSchema,
-    delay: DurationFramesSchema,
-    easing: EasingSchema,
-    direction: SlideDirectionSchema,
-    distance: z.number(),
-  }),
-  z.object({
-    kind: z.literal('scale-down'),
-    duration: DurationFramesSchema,
-    delay: DurationFramesSchema,
-    easing: EasingSchema,
-    to: z.number().nonnegative(),
-  }),
-  z.object({
-    kind: z.literal('blur-out'),
-    duration: DurationFramesSchema,
-    delay: DurationFramesSchema,
-    easing: EasingSchema,
-    to: z.number().nonnegative(),
-  }),
-]);
-export type ExitPreset = z.infer<typeof ExitPresetSchema>;
-
-/** Loop animation preset. Runs after entry, before exit. */
-export const LoopPresetSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('none') }),
-  z.object({
-    kind: z.literal('ticker'),
-    /** px/s at the project's frame rate; executor converts to px/frame. */
-    speed: z.number().positive(),
-    direction: z.enum(['ltr', 'rtl']),
-    pauseOnHover: z.boolean().optional(),
-  }),
-  z.object({
-    kind: z.literal('pulse'),
-    duration: DurationFramesSchema,
-    minOpacity: z.number().min(0).max(1),
-    maxOpacity: z.number().min(0).max(1),
-  }),
-  z.object({
-    kind: z.literal('breathing'),
-    duration: DurationFramesSchema,
-    scaleMin: z.number().nonnegative(),
-    scaleMax: z.number().nonnegative(),
-  }),
-]);
-export type LoopPreset = z.infer<typeof LoopPresetSchema>;
-
-/** All animation phases for an element. */
+/**
+ * Per-element animation: a partial record of property → Track. A property
+ * with no entry means "use the element's static value, no animation."
+ */
 export const ElementAnimationSchema = z.object({
-  entry: EntryPresetSchema.optional(),
-  loop: LoopPresetSchema.optional(),
-  exit: ExitPresetSchema.optional(),
+  tracks: z.record(AnimatablePropertySchema, TrackSchema),
 });
 export type ElementAnimation = z.infer<typeof ElementAnimationSchema>;
+
+/**
+ * Scene-level frame range. The runtime's playhead starts at `in` and
+ * loops back to `in` when it reaches `out`. Designer's timeline dock
+ * uses this to size the frame ruler.
+ */
+export const FrameRangeSchema = z.object({
+  in: DurationFramesSchema,
+  out: DurationFramesSchema,
+});
+export type FrameRange = z.infer<typeof FrameRangeSchema>;

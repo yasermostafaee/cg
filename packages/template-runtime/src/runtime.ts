@@ -4,7 +4,9 @@ import { ensureBaselineCss } from './css.js';
 import { EventBus } from './event-bus.js';
 import { LifecycleStateMachine } from './lifecycle.js';
 import { buildScene } from './scene-builder.js';
-import { installTicker, tickerPresetFor, type TickerHandle } from './ticker.js';
+// Preset-era ticker import removed in M12.0; keyframe-driven animation
+// lands in M12.1. The runtime currently renders static scenes; tracks
+// in scene.layers[*].children[*].animation are ignored until M12.1.
 import type {
   PlayOptions,
   RuntimeBootOptions,
@@ -35,35 +37,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const machine = new LifecycleStateMachine();
   const bus = new EventBus();
   let currentValues: FieldValues = {};
-  let tickers: TickerHandle[] = [];
 
   const ready: Promise<void> = options.skipFontLoad ? Promise.resolve() : waitForFonts(doc);
 
   void ready.then(() => bus.emit('ready'));
-
-  function installTickers(): void {
-    disposeTickers();
-    if (options.skipTickers === true) return;
-    for (const layer of scene.layers) {
-      for (const el of layer.children) {
-        const preset = tickerPresetFor(el);
-        if (preset === null) continue;
-        const host = built.elementMap.get(el.id);
-        if (host === undefined) continue;
-        const tickerOpts: Parameters<typeof installTicker>[1] = {
-          speedPxPerSec: preset.speed,
-          direction: preset.direction,
-        };
-        if (preset.pauseOnHover !== undefined) tickerOpts.pauseOnHover = preset.pauseOnHover;
-        tickers.push(installTicker(host, tickerOpts));
-      }
-    }
-  }
-
-  function disposeTickers(): void {
-    for (const t of tickers) t.dispose();
-    tickers = [];
-  }
 
   const runtime: TemplateRuntime = {
     ready,
@@ -90,7 +67,6 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       bus.emit('play.start');
       doc.body.classList.remove('cg-pending');
       machine.transition('on-air');
-      installTickers();
       bus.emit('play.end');
     },
 
@@ -119,7 +95,6 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       if (machine.state !== 'on-air' && machine.state !== 'playing') return;
       machine.transition('exiting');
       bus.emit('stop.start');
-      disposeTickers();
       doc.body.classList.add('cg-pending');
       machine.transition('stopped');
       bus.emit('stop.end');
@@ -128,7 +103,6 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     remove(): void {
       if (machine.state === 'removed') return;
       machine.forceTransition('removed');
-      disposeTickers();
       bus.clear();
       built.container.remove();
       doc.body.classList.remove('cg-pending');

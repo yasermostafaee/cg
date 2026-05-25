@@ -94,13 +94,6 @@ export interface RuntimeBootOptions {
    * (happy-dom doesn't implement the FontFaceSet API).
    */
   skipFontLoad?: boolean;
-
-  /**
-   * Skip ticker installation during play(). Used by the M7.4 preset
-   * coverage gate, which constructs every preset combo but doesn't want
-   * an rAF loop running for each. Default: false.
-   */
-  skipTickers?: boolean;
 }
 
 export interface BuildSceneResult {
