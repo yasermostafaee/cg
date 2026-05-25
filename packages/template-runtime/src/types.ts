@@ -52,6 +52,14 @@ export interface TemplateRuntime {
   next?(): Promise<void>;
 
   /**
+   * Paint every animated element at the given frame, without starting an
+   * rAF loop. Used by Designer's timeline scrubber (M12.2) to preview a
+   * specific frame; the runtime's on-air play() loop manages its own
+   * playhead via FrameDriver.
+   */
+  tick(frame: number): void;
+
+  /**
    * Hard cleanup. Detaches every DOM node we created and clears
    * `window.cg`. After this, the runtime is unusable.
    */
