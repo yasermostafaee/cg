@@ -182,7 +182,12 @@ export interface ParsedCgPreviewUrl {
  * null for malformed input (wrong scheme, no host, etc.).
  */
 export function parseCgPreviewUrl(url: string): ParsedCgPreviewUrl | null {
-  const match = /^cgpreview:\/\/([^/]+)(?:\/(.*))?$/i.exec(url);
+  // Strip query string + fragment before matching — the CanvasArea
+  // cache-busts the iframe src with `?t=<epoch>` to force a re-fetch,
+  // and that query string used to leak into `rest` and break the
+  // path-equality checks below.
+  const beforeQuery = url.split(/[?#]/, 1)[0] ?? url;
+  const match = /^cgpreview:\/\/([^/]+)(?:\/(.*))?$/i.exec(beforeQuery);
   if (match === null) return null;
   const sceneId = match[1] ?? '';
   if (sceneId === '') return null;

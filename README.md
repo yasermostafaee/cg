@@ -31,11 +31,41 @@ See [`docs/phases/phase-7-folder-structure.md`](./docs/phases/phase-7-folder-str
 
 ## Quick start
 
+One-time setup after a fresh clone or `git pull` on `main`:
+
 ```pwsh
-pnpm install
-pnpm build
+pnpm install   # install / refresh node_modules
+pnpm build     # build all @cg/* workspace packages so the Electron apps can import them
+```
+
+Run an app — each in its own PowerShell window:
+
+```pwsh
+pnpm --filter @cg/designer dev   # visual editor (port 5173)
+pnpm --filter @cg/runtime  dev   # playout controller (port 5174)
+```
+
+Optional — give the Runtime a CasparCG mock so the OFFLINE pills go green:
+
+```pwsh
+pnpm --filter @cg/amcp-mock dev
+```
+
+Test / lint / typecheck the whole monorepo:
+
+```pwsh
 pnpm test
 pnpm lint
+pnpm typecheck
+```
+
+If a window won't close or a dev-server port stays bound, kill any stale
+Electron / node processes belonging to this repo:
+
+```pwsh
+Get-Process -Name electron,node -ErrorAction SilentlyContinue |
+  Where-Object { $_.Path -like '*claude projects\cg*' } |
+  Stop-Process -Force
 ```
 
 ## Documentation

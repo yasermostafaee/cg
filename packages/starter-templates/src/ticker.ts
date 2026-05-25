@@ -13,6 +13,7 @@ export const tickerScene: Scene = {
   resolution: { width: 1920, height: 1080 },
   frameRate: 50,
   safeAreas: { title: 10, action: 5 },
+  frameRange: { in: 0, out: 50 },
   background: 'transparent',
   layers: [
     {
@@ -69,9 +70,9 @@ export const tickerScene: Scene = {
           direction: 'auto',
           fitMode: 'fixed',
           overflow: 'clip',
-          animation: {
-            loop: { kind: 'ticker', speed: 120, direction: 'ltr', pauseOnHover: false },
-          },
+          // Ticker animation will be expressed as position.x keyframes in M12.4.
+          // For now (M12.0) the starter renders statically; M12.1's runtime
+          // will animate it once tracks are populated.
         },
       ],
     },

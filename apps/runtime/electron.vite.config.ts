@@ -40,6 +40,12 @@ export default defineConfig({
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
     plugins: [react()],
+    server: {
+      // Force IPv4 bind. Vite's default `localhost` host binds only to
+      // ::1 on Windows 11, which doesn't accept connections that hit
+      // 127.0.0.1 — Electron's loadURL then falls into chrome-error://.
+      host: '127.0.0.1',
+    },
     build: {
       outDir: resolve(__dirname, 'out/renderer'),
       rollupOptions: {

@@ -4,7 +4,6 @@ import { InspectorPanel } from './features/inspector/InspectorPanel.js';
 import { IssuesPanel } from './features/issues/IssuesPanel.js';
 import { LibraryPanel } from './features/library/LibraryPanel.js';
 import { StatusBar } from './features/status/StatusBar.js';
-import { TimelineStrip } from './features/timeline/TimelineStrip.js';
 import { ToolRail } from './features/tools/ToolRail.js';
 import { useIssues } from './hooks/useIssues.js';
 import { useDesignerStore } from './state/store.js';
@@ -81,7 +80,6 @@ export function App(): JSX.Element {
           }}
         >
           <IssuesPanel issues={issues} />
-          <TimelineStrip scene={scene} selection={selection} />
         </div>
       )}
       <StatusBar scene={scene} projectPath={projectPath} issues={issues} />

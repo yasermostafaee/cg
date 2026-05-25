@@ -9,6 +9,7 @@ import {
 import { ElementSchema } from './elements.js';
 import { DynamicFieldSchema } from './fields.js';
 import { FieldBindingSchema } from './bindings.js';
+import { FrameRangeSchema } from './animation.js';
 
 /** Categories of broadcast template. v1 set; `custom` is the escape hatch. */
 export const TemplateTypeSchema = z.enum([
@@ -64,6 +65,12 @@ export const SceneSchema = z.object({
     title: z.number().min(0).max(50),
     action: z.number().min(0).max(50),
   }),
+  /**
+   * Frame range the playhead scrubs across. The runtime starts at
+   * `frameRange.in` on play() and loops back when it reaches
+   * `frameRange.out`. Defaults to [0, 50] in newScene().
+   */
+  frameRange: FrameRangeSchema,
   background: z.union([z.literal('transparent'), HexColorSchema]),
   layers: z.array(LayerSchema),
   fields: z.array(DynamicFieldSchema),

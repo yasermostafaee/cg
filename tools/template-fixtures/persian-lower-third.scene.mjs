@@ -10,6 +10,7 @@ export const scene = {
   resolution: { width: 1920, height: 1080 },
   frameRate: 50,
   safeAreas: { title: 10, action: 5 },
+  frameRange: { in: 0, out: 50 },
   background: 'transparent',
   layers: [
     {

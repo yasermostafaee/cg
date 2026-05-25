@@ -25,6 +25,7 @@ async function buildSampleVcg(): Promise<Buffer> {
     resolution: { width: 1920, height: 1080 },
     frameRate: 50 as const,
     safeAreas: { title: 10, action: 5 },
+    frameRange: { in: 0, out: 50 },
     background: 'transparent' as const,
     layers: [],
     fields: [],

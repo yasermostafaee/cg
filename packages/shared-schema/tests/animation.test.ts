@@ -1,145 +1,171 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AnimatablePropertySchema,
+  EasingSchema,
   ElementAnimationSchema,
-  EntryPresetSchema,
-  ExitPresetSchema,
-  LoopPresetSchema,
+  FrameRangeSchema,
+  KeyframeSchema,
+  KeyframeValueSchema,
+  TrackSchema,
 } from '../src/animation.js';
 
-describe('EntryPreset variants', () => {
-  it('none', () => {
-    expect(EntryPresetSchema.parse({ kind: 'none' })).toEqual({ kind: 'none' });
-  });
-  it('fade', () => {
-    const p = { kind: 'fade' as const, duration: 10, delay: 0, easing: 'power2.out' as const };
-    expect(EntryPresetSchema.parse(p)).toEqual(p);
-  });
-  it('slide', () => {
-    const p = {
-      kind: 'slide' as const,
-      duration: 12,
-      delay: 0,
-      easing: 'power2.out' as const,
-      direction: 'left' as const,
-      distance: 240,
-    };
-    expect(EntryPresetSchema.parse(p)).toEqual(p);
-  });
-  it('scale from 0', () => {
-    const p = {
-      kind: 'scale' as const,
-      duration: 8,
-      delay: 2,
-      easing: 'back.out' as const,
-      from: 0,
-    };
-    expect(EntryPresetSchema.parse(p)).toEqual(p);
-  });
-  it('blur', () => {
-    const p = {
-      kind: 'blur' as const,
-      duration: 10,
-      delay: 0,
-      easing: 'sine.in' as const,
-      from: 12,
-    };
-    expect(EntryPresetSchema.parse(p)).toEqual(p);
-  });
-  it('rejects unknown kind', () => {
-    expect(() => EntryPresetSchema.parse({ kind: 'flip' })).toThrow();
+/**
+ * Phase 9 / M12.0 — keyframe schema unit tests. Replaces the v1
+ * preset-era animation tests (entry/loop/exit kinds).
+ */
+
+describe('EasingSchema', () => {
+  it.each(['linear', 'step', 'ease-in', 'ease-out', 'ease-in-out'] as const)(
+    'accepts %s',
+    (curve) => {
+      expect(() => EasingSchema.parse(curve)).not.toThrow();
+    },
+  );
+
+  it('rejects an unknown easing name', () => {
+    expect(() => EasingSchema.parse('cubic-bezier')).toThrow();
   });
 });
 
-describe('ExitPreset variants', () => {
-  it('fade-out', () => {
-    const p = {
-      kind: 'fade-out' as const,
-      duration: 8,
-      delay: 0,
-      easing: 'power2.in' as const,
-    };
-    expect(ExitPresetSchema.parse(p)).toEqual(p);
+describe('KeyframeValueSchema', () => {
+  it('accepts numbers', () => {
+    expect(() => KeyframeValueSchema.parse(0)).not.toThrow();
+    expect(() => KeyframeValueSchema.parse(123.45)).not.toThrow();
+    expect(() => KeyframeValueSchema.parse(-50)).not.toThrow();
   });
-  it('slide-out', () => {
-    const p = {
-      kind: 'slide-out' as const,
-      duration: 10,
-      delay: 0,
-      easing: 'power2.in' as const,
-      direction: 'right' as const,
-      distance: 320,
-    };
-    expect(ExitPresetSchema.parse(p)).toEqual(p);
+
+  it('accepts hex color strings', () => {
+    expect(() => KeyframeValueSchema.parse('#FF0000')).not.toThrow();
+    expect(() => KeyframeValueSchema.parse('#0F172A')).not.toThrow();
   });
-  it('scale-down to 0', () => {
-    const p = {
-      kind: 'scale-down' as const,
-      duration: 8,
-      delay: 0,
-      easing: 'power2.in' as const,
-      to: 0,
-    };
-    expect(ExitPresetSchema.parse(p)).toEqual(p);
+
+  it('rejects arbitrary strings', () => {
+    expect(() => KeyframeValueSchema.parse('hello')).toThrow();
   });
-  it('blur-out', () => {
-    const p = {
-      kind: 'blur-out' as const,
-      duration: 10,
-      delay: 0,
-      easing: 'sine.out' as const,
-      to: 8,
-    };
-    expect(ExitPresetSchema.parse(p)).toEqual(p);
+
+  it('rejects booleans + objects + arrays', () => {
+    expect(() => KeyframeValueSchema.parse(true)).toThrow();
+    expect(() => KeyframeValueSchema.parse({ x: 1 })).toThrow();
+    expect(() => KeyframeValueSchema.parse([1])).toThrow();
   });
 });
 
-describe('LoopPreset variants', () => {
-  it('ticker', () => {
-    const p = {
-      kind: 'ticker' as const,
-      speed: 120,
-      direction: 'rtl' as const,
-    };
-    expect(LoopPresetSchema.parse(p)).toEqual(p);
+describe('KeyframeSchema', () => {
+  it('accepts a numeric keyframe', () => {
+    expect(() => KeyframeSchema.parse({ frame: 10, value: 200, easing: 'linear' })).not.toThrow();
   });
-  it('pulse', () => {
-    const p = {
-      kind: 'pulse' as const,
-      duration: 30,
-      minOpacity: 0.5,
-      maxOpacity: 1,
-    };
-    expect(LoopPresetSchema.parse(p)).toEqual(p);
+
+  it('accepts a color keyframe', () => {
+    expect(() =>
+      KeyframeSchema.parse({ frame: 5, value: '#9BCC28', easing: 'ease-in-out' }),
+    ).not.toThrow();
   });
-  it('breathing', () => {
-    const p = {
-      kind: 'breathing' as const,
-      duration: 60,
-      scaleMin: 0.95,
-      scaleMax: 1.05,
-    };
-    expect(LoopPresetSchema.parse(p)).toEqual(p);
+
+  it('rejects negative frame', () => {
+    expect(() => KeyframeSchema.parse({ frame: -1, value: 0, easing: 'linear' })).toThrow();
   });
-  it('rejects ticker with zero speed', () => {
-    expect(() => LoopPresetSchema.parse({ kind: 'ticker', speed: 0, direction: 'rtl' })).toThrow();
+
+  it('rejects non-integer frame', () => {
+    expect(() => KeyframeSchema.parse({ frame: 1.5, value: 0, easing: 'linear' })).toThrow();
   });
 });
 
-describe('ElementAnimation', () => {
-  it('all three phases optional', () => {
-    expect(ElementAnimationSchema.parse({})).toEqual({});
+describe('TrackSchema', () => {
+  it('accepts a track with one keyframe', () => {
+    expect(() =>
+      TrackSchema.parse({ keyframes: [{ frame: 0, value: 0, easing: 'linear' }] }),
+    ).not.toThrow();
   });
-  it('all three phases set', () => {
-    const a = {
-      entry: { kind: 'fade' as const, duration: 10, delay: 0, easing: 'power2.out' as const },
-      loop: { kind: 'none' as const },
-      exit: {
-        kind: 'fade-out' as const,
-        duration: 8,
-        delay: 0,
-        easing: 'power2.in' as const,
-      },
-    };
-    expect(ElementAnimationSchema.parse(a)).toEqual(a);
+
+  it('accepts a track with many keyframes', () => {
+    expect(() =>
+      TrackSchema.parse({
+        keyframes: [
+          { frame: 0, value: 0, easing: 'linear' },
+          { frame: 10, value: 100, easing: 'ease-out' },
+          { frame: 20, value: 200, easing: 'step' },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects an empty keyframes array', () => {
+    expect(() => TrackSchema.parse({ keyframes: [] })).toThrow();
+  });
+});
+
+describe('AnimatablePropertySchema', () => {
+  it.each([
+    'position.x',
+    'position.y',
+    'size.w',
+    'size.h',
+    'scale.x',
+    'scale.y',
+    'rotation',
+    'opacity',
+    'fill.color',
+    'text.color',
+  ] as const)('accepts %s', (prop) => {
+    expect(() => AnimatablePropertySchema.parse(prop)).not.toThrow();
+  });
+
+  it('rejects an unknown property', () => {
+    expect(() => AnimatablePropertySchema.parse('font.size')).toThrow();
+  });
+});
+
+describe('ElementAnimationSchema', () => {
+  it('accepts an empty tracks record', () => {
+    expect(() => ElementAnimationSchema.parse({ tracks: {} })).not.toThrow();
+  });
+
+  it('accepts a single-property animation', () => {
+    expect(() =>
+      ElementAnimationSchema.parse({
+        tracks: {
+          'position.x': {
+            keyframes: [
+              { frame: 0, value: 0, easing: 'linear' },
+              { frame: 25, value: 500, easing: 'linear' },
+            ],
+          },
+        },
+      }),
+    ).not.toThrow();
+  });
+
+  it('accepts multiple keyframed properties on one element', () => {
+    expect(() =>
+      ElementAnimationSchema.parse({
+        tracks: {
+          'position.x': { keyframes: [{ frame: 0, value: 0, easing: 'linear' }] },
+          'fill.color': {
+            keyframes: [{ frame: 0, value: '#9BCC28', easing: 'ease-in-out' }],
+          },
+          opacity: { keyframes: [{ frame: 0, value: 1, easing: 'linear' }] },
+        },
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects unknown track property keys', () => {
+    expect(() =>
+      ElementAnimationSchema.parse({
+        tracks: {
+          'font.size': { keyframes: [{ frame: 0, value: 16, easing: 'linear' }] },
+        },
+      }),
+    ).toThrow();
+  });
+});
+
+describe('FrameRangeSchema', () => {
+  it('accepts a [0, 50] range', () => {
+    expect(() => FrameRangeSchema.parse({ in: 0, out: 50 })).not.toThrow();
+  });
+
+  it('rejects negative bounds', () => {
+    expect(() => FrameRangeSchema.parse({ in: -1, out: 50 })).toThrow();
   });
 });
