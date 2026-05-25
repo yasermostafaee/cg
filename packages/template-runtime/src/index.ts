@@ -14,6 +14,13 @@ export { applyTransform, stringifyValue } from './transforms.js';
 export { LifecycleStateMachine, canTransition } from './lifecycle.js';
 export { ensureBaselineCss, BASELINE_CSS } from './css.js';
 export { EventBus } from './event-bus.js';
+export { FrameDriver, type FrameDriverOptions } from './frame-driver.js';
+export {
+  applyAnimationAtFrame,
+  collectAnimatedElements,
+  type AnimatedElement,
+} from './animation-applier.js';
+export { interpolateAtFrame, applyEasing, lerpHexColor, isColorProperty } from './keyframe-eval.js';
 
 export type {
   TemplateRuntime,

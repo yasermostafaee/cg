@@ -1,12 +1,15 @@
 import type { FieldValues, Scene } from '@cg/shared-schema';
+import {
+  applyAnimationAtFrame,
+  collectAnimatedElements,
+  type AnimatedElement,
+} from './animation-applier.js';
 import { applyFieldValues } from './bindings.js';
 import { ensureBaselineCss } from './css.js';
 import { EventBus } from './event-bus.js';
+import { FrameDriver } from './frame-driver.js';
 import { LifecycleStateMachine } from './lifecycle.js';
 import { buildScene } from './scene-builder.js';
-// Preset-era ticker import removed in M12.0; keyframe-driven animation
-// lands in M12.1. The runtime currently renders static scenes; tracks
-// in scene.layers[*].children[*].animation are ignored until M12.1.
 import type {
   PlayOptions,
   RuntimeBootOptions,
@@ -30,17 +33,38 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const built = buildScene(scene, doc);
   root.appendChild(built.container);
 
-  // Apply field defaults synchronously so the initial paint shows the
-  // declared defaults rather than the raw `{{placeholder}}` text.
   applyFieldValues(scene, {}, built.elementMap, built.textOriginals, built.container);
+
+  const animated: AnimatedElement[] = collectAnimatedElements(
+    scene.layers.map((l) => l.children),
+    built.elementMap,
+  );
 
   const machine = new LifecycleStateMachine();
   const bus = new EventBus();
   let currentValues: FieldValues = {};
 
   const ready: Promise<void> = options.skipFontLoad ? Promise.resolve() : waitForFonts(doc);
-
   void ready.then(() => bus.emit('ready'));
+
+  let driver: FrameDriver | null = null;
+  const startDriver = (): void => {
+    if (animated.length === 0) return;
+    driver = new FrameDriver({
+      frameRate: scene.frameRate,
+      range: scene.frameRange,
+      onFrame: (frame) => {
+        for (const entry of animated) applyAnimationAtFrame(entry, frame);
+      },
+    });
+    driver.start();
+  };
+  const stopDriver = (): void => {
+    if (driver !== null) {
+      driver.stop();
+      driver = null;
+    }
+  };
 
   const runtime: TemplateRuntime = {
     ready,
@@ -58,15 +82,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         built.textOriginals,
         built.container,
       );
-      // pending|stopped|on-air → playing → on-air (instant in M3.2-α)
-      if (machine.state === 'on-air') {
-        machine.transition('playing');
-      } else {
-        machine.transition('playing');
-      }
+      machine.transition('playing');
       bus.emit('play.start');
       doc.body.classList.remove('cg-pending');
       machine.transition('on-air');
+      startDriver();
       bus.emit('play.end');
     },
 
@@ -93,6 +113,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     async stop(_opts?: StopOptions): Promise<void> {
       if (machine.state === 'removed') return;
       if (machine.state !== 'on-air' && machine.state !== 'playing') return;
+      stopDriver();
       machine.transition('exiting');
       bus.emit('stop.start');
       doc.body.classList.add('cg-pending');
@@ -102,11 +123,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     remove(): void {
       if (machine.state === 'removed') return;
+      stopDriver();
       machine.forceTransition('removed');
       bus.clear();
       built.container.remove();
       doc.body.classList.remove('cg-pending');
       doc.body.classList.add('cg-removed');
+    },
+
+    tick(frame: number): void {
+      for (const entry of animated) applyAnimationAtFrame(entry, frame);
     },
 
     on(event, listener) {
@@ -117,11 +143,6 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   return runtime;
 }
 
-/**
- * Wait for the document's font set to load. Tolerates environments that
- * don't implement the FontFaceSet API (happy-dom and older Electron CEF
- * versions both fall into this bucket).
- */
 function waitForFonts(doc: Document): Promise<void> {
   const fonts = (doc as Document & { fonts?: { ready: Promise<unknown> } }).fonts;
   if (!fonts?.ready) return Promise.resolve();
