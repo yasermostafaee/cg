@@ -37,7 +37,13 @@ export async function initWorkspace(): Promise<Workspace> {
     }
   }
 
-  active = isOpfsSupported() ? await openOpfsWorkspace('designer') : new MemoryWorkspace();
+  try {
+    active = isOpfsSupported() ? await openOpfsWorkspace('designer') : new MemoryWorkspace();
+  } catch {
+    // OPFS can throw in insecure contexts or private modes — never let storage
+    // init blank the app; fall back to in-memory (this-session-only) storage.
+    active = new MemoryWorkspace();
+  }
   return active;
 }
 
