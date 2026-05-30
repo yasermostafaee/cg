@@ -1,5 +1,15 @@
 import { useEffect, useState } from 'react';
-import type { DynamicField, Element, FieldBinding, Layer, Scene } from '@cg/shared-schema';
+import type {
+  AnimatableProperty,
+  DynamicField,
+  Element,
+  ElementAnimation,
+  FieldBinding,
+  Keyframe,
+  Layer,
+  Scene,
+  Track,
+} from '@cg/shared-schema';
 
 /**
  * Designer renderer state — small pub-sub store with a JSON-patch-ish
@@ -27,6 +37,10 @@ export interface DesignerStoreState {
    * or the operator presses Escape.
    */
   bindModeFieldId: string | null;
+  /** Current timeline playhead frame. */
+  playhead: number;
+  /** True when the timeline dock is playing via its own rAF loop. */
+  playing: boolean;
 }
 
 const initialState: DesignerStoreState = {
@@ -36,6 +50,8 @@ const initialState: DesignerStoreState = {
   selection: new Set<string>(),
   editingTextId: null,
   bindModeFieldId: null,
+  playhead: 0,
+  playing: false,
 };
 
 type Listener = (state: DesignerStoreState) => void;
@@ -67,7 +83,87 @@ export const designerStore = {
   },
 
   setScene(scene: Scene | null, projectPath: string | null): void {
-    set({ scene, projectPath, selection: new Set<string>() });
+    set({
+      scene,
+      projectPath,
+      selection: new Set<string>(),
+      playhead: scene?.frameRange?.in ?? 0,
+      playing: false,
+    });
+  },
+
+  /** Move the timeline playhead. Clamped to the scene's frameRange. */
+  setPlayhead(frame: number): void {
+    if (current.scene === null) {
+      set({ playhead: 0 });
+      return;
+    }
+    const { in: inF, out } = current.scene.frameRange;
+    const clamped = Math.max(inF, Math.min(out, Math.round(frame)));
+    set({ playhead: clamped });
+  },
+
+  setPlaying(playing: boolean): void {
+    set({ playing });
+  },
+
+  /**
+   * Insert (or overwrite at the same frame) a keyframe on an element's
+   * track. Used by M12.3's "record" button on the Inspector — exposed in
+   * the store so M12.2 timeline tests can exercise it directly.
+   */
+  setKeyframe(elementId: string, property: AnimatableProperty, kf: Keyframe): void {
+    mutateAnimation(elementId, (animation) => {
+      const existing = animation.tracks[property];
+      const kfs = existing === undefined ? [] : [...existing.keyframes];
+      const sameFrame = kfs.findIndex((k) => k.frame === kf.frame);
+      if (sameFrame >= 0) {
+        kfs[sameFrame] = kf;
+      } else {
+        kfs.push(kf);
+        kfs.sort((a, b) => a.frame - b.frame);
+      }
+      const track: Track = { keyframes: kfs };
+      return { tracks: { ...animation.tracks, [property]: track } };
+    });
+  },
+
+  /**
+   * Move a keyframe to a new frame. Used by the timeline dock's drag
+   * gesture. Maintains the track's frame-ascending order.
+   */
+  moveKeyframe(
+    elementId: string,
+    property: AnimatableProperty,
+    kfIndex: number,
+    nextFrame: number,
+  ): void {
+    mutateAnimation(elementId, (animation) => {
+      const existing = animation.tracks[property];
+      if (existing === undefined) return animation;
+      const kfs = [...existing.keyframes];
+      const kf = kfs[kfIndex];
+      if (kf === undefined) return animation;
+      kfs[kfIndex] = { ...kf, frame: Math.max(0, Math.round(nextFrame)) };
+      kfs.sort((a, b) => a.frame - b.frame);
+      const track: Track = { keyframes: kfs };
+      return { tracks: { ...animation.tracks, [property]: track } };
+    });
+  },
+
+  removeKeyframe(elementId: string, property: AnimatableProperty, kfIndex: number): void {
+    mutateAnimation(elementId, (animation) => {
+      const existing = animation.tracks[property];
+      if (existing === undefined) return animation;
+      const kfs = existing.keyframes.filter((_, i) => i !== kfIndex);
+      const tracks = { ...animation.tracks };
+      if (kfs.length === 0) {
+        delete tracks[property];
+      } else {
+        tracks[property] = { keyframes: kfs };
+      }
+      return { tracks };
+    });
   },
 
   setTool(tool: DesignerTool): void {
@@ -228,10 +324,33 @@ export const designerStore = {
       selection: new Set<string>(),
       editingTextId: null,
       bindModeFieldId: null,
+      playhead: 0,
+      playing: false,
     };
     listeners.clear();
   },
 } as const;
+
+function mutateAnimation(
+  elementId: string,
+  fn: (animation: ElementAnimation) => ElementAnimation,
+): void {
+  if (current.scene === null) return;
+  const found = locate(current.scene, elementId);
+  if (found === null) return;
+  const { layer, layerIdx, elIdx } = found;
+  const existing = layer.children[elIdx];
+  if (existing === undefined) return;
+  const animation = existing.animation ?? { tracks: {} };
+  const nextAnimation = fn(animation);
+  const merged = { ...existing, animation: nextAnimation } as Element;
+  const nextChildren = [...layer.children];
+  nextChildren[elIdx] = merged;
+  const nextLayer: Layer = { ...layer, children: nextChildren };
+  const nextLayers = [...current.scene.layers];
+  nextLayers[layerIdx] = nextLayer;
+  set({ scene: { ...current.scene, layers: nextLayers } });
+}
 
 /** React hook for the whole store. Re-renders on any change. */
 export function useDesignerStore(): DesignerStoreState {
