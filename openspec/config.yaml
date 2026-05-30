@@ -1,0 +1,31 @@
+schema: spec-driven
+
+context: |
+  Broadcast CG platform — two browser React SPAs: Designer (visual editor that
+  exports .vcg template packages) and Runtime (CasparCG playout controller).
+  Monorepo: pnpm + Turborepo + strict TypeScript, built with Vite (migrated off
+  Electron). The renderer talks to its backend ONLY through the typed window.cg
+  bridge (DesignerBridge / RuntimeBridge); the in-browser implementation lives in
+  apps/*/src/platform. Shared domain types are Zod schemas in @cg/shared-schema;
+  the broadcast DOM renderer is @cg/template-runtime. Persian/RTL is a core
+  requirement. Conventional commits; tests via vitest; lint via @cg/eslint-config
+  tiers (renderer/browser code must not import Node built-ins or Electron).
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+# Example:
+#   context: |
+#     Tech stack: TypeScript, React, Node.js
+#     We use conventional commits
+#     Domain: e-commerce platform
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
