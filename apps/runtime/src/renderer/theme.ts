@@ -1,5 +1,7 @@
 /**
- * Centralized design tokens for the Runtime renderer. Mirrors Phase 6 §1.
+ * Centralized design tokens for the Runtime renderer. The shared page-chrome
+ * palette comes from `@cg/ui` (kept in lockstep with the Designer, Phase 6
+ * §1); the air-state colors stay here.
  *
  * The **air-state colors are sacred** — they're used in the stack rows + the
  * status bar's on-air indicator, and **nowhere else**. Decorative red is
@@ -7,15 +9,16 @@
  */
 
 import type { StackItemStatus } from '@cg/shared-schema';
+import { chrome } from '@cg/ui';
 
 export const colors = {
-  // Page chrome
-  background: '#0F172A',
-  panel: '#111827',
-  panelMuted: '#1F2937',
-  border: '#374151',
-  text: '#E5E7EB',
-  textMuted: '#9CA3AF',
+  // Page chrome (shared)
+  background: chrome.background,
+  panel: chrome.panel,
+  panelMuted: chrome.panelMuted,
+  border: chrome.border,
+  text: chrome.text,
+  textMuted: chrome.textMuted,
 
   // Air-state contract (Phase 6 §1)
   idle: '#3F3F46',

@@ -11,7 +11,9 @@ import {
   fixtureScene,
 } from './fixtures.js';
 
-async function buildVcg(): Promise<Buffer> {
+const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
+
+async function buildVcg(): Promise<Uint8Array> {
   return pack({
     scene: fixtureScene,
     manifestExtras: fixtureManifestExtras,
@@ -39,7 +41,7 @@ describe('verify', () => {
     const buf = await buildVcg();
     const { files } = await unpack(buf);
     // Tamper with cg.js
-    files.set('cg.js', Buffer.from('// tampered'));
+    files.set('cg.js', enc('// tampered'));
     const tamperedZip = await writeZip(files);
     const result = await verify(tamperedZip);
     expect(result.ok).toBe(false);
@@ -57,7 +59,7 @@ describe('verify', () => {
   });
 
   it('detects a malformed zip', async () => {
-    const result = await verify(Buffer.from('not a zip'));
+    const result = await verify(enc('not a zip'));
     expect(result.ok).toBe(false);
     expect(result.errors[0]).toMatch(/Unpack failed/);
   });

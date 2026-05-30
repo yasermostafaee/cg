@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { DynamicFieldSchema, FieldBindingSchema, SceneSchema } from '@cg/shared-schema';
-import { ProjectService } from '../src/main/services/ProjectService.js';
+import { MemoryKv, MemoryWorkspace } from '@cg/storage';
+import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore } from '../src/renderer/state/store.js';
 import { defaultShape, defaultText, defaultImage } from '../src/renderer/state/element-defaults.js';
 import { defaultField, FIELD_KINDS } from '../src/renderer/features/fields/field-defaults.js';
@@ -11,10 +12,7 @@ afterEach(() => {
 });
 
 function freshScene(): void {
-  const projects = new ProjectService({
-    recentFilePath: '/tmp/recent.json',
-    randomId: () => 'scene-fld',
-  });
+  const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
   const { scene } = projects.newScene('fld', 'lower-third');
   designerStore.setScene(scene, null);
 }

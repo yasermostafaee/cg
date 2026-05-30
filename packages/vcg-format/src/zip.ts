@@ -21,8 +21,11 @@ function shouldStore(path: string): boolean {
  * Write a deterministic zip from a path → content map. Determinism is
  * achieved by sorting paths, pinning each entry's date, and writing as a
  * UNIX-platform archive (avoids any host-OS bit leakage).
+ *
+ * Returns a `Uint8Array` so the same code path works in Node and the
+ * browser. Callers that need a Node `Buffer` can wrap with `Buffer.from`.
  */
-export async function writeZip(files: ReadonlyMap<string, Buffer>): Promise<Buffer> {
+export async function writeZip(files: ReadonlyMap<string, Uint8Array>): Promise<Uint8Array> {
   const zip = new JSZip();
   const sortedPaths = [...files.keys()].sort();
   for (const path of sortedPaths) {
@@ -35,7 +38,7 @@ export async function writeZip(files: ReadonlyMap<string, Buffer>): Promise<Buff
     });
   }
   const out = await zip.generateAsync({
-    type: 'nodebuffer',
+    type: 'uint8array',
     platform: 'UNIX',
     streamFiles: false,
   });
@@ -46,14 +49,14 @@ export async function writeZip(files: ReadonlyMap<string, Buffer>): Promise<Buff
  * Read a zip into a path → content map. Directory entries are skipped.
  * Returned in sorted-path order for predictable iteration on the consumer.
  */
-export async function readZip(buf: Buffer): Promise<Map<string, Buffer>> {
+export async function readZip(buf: Uint8Array): Promise<Map<string, Uint8Array>> {
   const zip = await JSZip.loadAsync(buf);
-  const out = new Map<string, Buffer>();
+  const out = new Map<string, Uint8Array>();
   const paths = Object.keys(zip.files).sort();
   for (const path of paths) {
     const entry = zip.files[path];
     if (!entry || entry.dir) continue;
-    const content = await entry.async('nodebuffer');
+    const content = await entry.async('uint8array');
     out.set(path, content);
   }
   return out;

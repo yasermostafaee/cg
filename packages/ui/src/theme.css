@@ -1,0 +1,87 @@
+/*
+ * Global broadcast theme for the CG platform (Designer + Runtime).
+ * Imported once per app entry point: `import '@cg/ui/theme.css'`.
+ *
+ * Dark, dense, operator-grade chrome. RTL-aware so Persian UIs render with
+ * correct directionality and the bundled Vazirmatn face shapes correctly.
+ */
+
+:root {
+  --cg-bg: #0f172a;
+  --cg-panel: #111827;
+  --cg-panel-muted: #1f2937;
+  --cg-border: #374151;
+  --cg-text: #e5e7eb;
+  --cg-text-muted: #9ca3af;
+  --cg-accent: #38bdf8;
+
+  --cg-radius-sm: 4px;
+  --cg-radius-md: 6px;
+  --cg-radius-lg: 10px;
+
+  --cg-font: Vazirmatn, Inter, system-ui, -apple-system, 'Segoe UI', 'Noto Sans Arabic', Tahoma,
+    sans-serif;
+
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--cg-font);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--cg-text);
+  background: var(--cg-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* RTL content (Persian/Arabic) keeps correct shaping + bidi. Mark a subtree
+   with dir="rtl" or [lang="fa"]; the font stack already prioritizes a
+   shaping-capable face. */
+[dir='rtl'] {
+  text-align: start;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Dark, unobtrusive scrollbars for the operator chrome. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--cg-border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--cg-border);
+  border-radius: var(--cg-radius-full, 9999px);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}

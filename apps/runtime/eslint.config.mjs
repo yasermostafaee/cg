@@ -1,23 +1,24 @@
 // Composes @cg/eslint-config tiers across the app's directory structure.
 // Requires `pnpm --filter @cg/eslint-config build` to have run first
 // (turbo orchestrates this via the `lint` task's dependsOn).
+//
+// Browser SPA: the whole app (renderer UI + the in-process platform bridge)
+// is Renderer-tier. Node-tier rules only apply to tests.
 import { base, node, renderer } from '@cg/eslint-config';
 
 export default [
   ...base,
-  node({
-    files: ['src/main/**/*.{ts,mts,cts}', 'src/preload/**/*.{ts,mts,cts}', 'tests/**/*.ts'],
-  }),
-  renderer({ files: ['src/renderer/**/*.{ts,tsx,mts,cts}'] }),
+  renderer({ files: ['src/**/*.{ts,tsx,mts,cts}'] }),
+  node({ files: ['tests/**/*.{ts,tsx}'] }),
   {
-    files: ['tests/**/*.ts'],
+    files: ['tests/**/*.{ts,tsx}'],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
     },
   },
   {
     // Config files run in Node but live outside the tier dirs above.
-    files: ['*.config.{ts,mts,cts,js,mjs,cjs}', 'electron.vite.config.ts'],
+    files: ['*.config.{ts,mts,cts,js,mjs,cjs}'],
     languageOptions: {
       globals: {
         process: 'readonly',
@@ -27,6 +28,6 @@ export default [
     },
   },
   {
-    ignores: ['out/**', 'dist/**', '.vite/**', 'release/**', '*.tsbuildinfo'],
+    ignores: ['dist/**', '.vite/**', '*.tsbuildinfo'],
   },
 ];

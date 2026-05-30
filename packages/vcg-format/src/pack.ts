@@ -5,6 +5,7 @@ import {
   type Manifest,
   type Scene,
 } from '@cg/shared-schema';
+import { utf8ToBytes } from '@noble/hashes/utils';
 import { writeZip } from './zip.js';
 import { computeIntegrity } from './integrity.js';
 import { signEd25519, type Ed25519KeyInput } from './sign.js';
@@ -28,9 +29,9 @@ export interface PackInput {
   cgJs: string;
   cgCss: string;
   /** Path → bytes. Paths must be relative (e.g. 'assets/img/logo.png'). */
-  assets?: ReadonlyMap<string, Buffer>;
-  fonts?: ReadonlyMap<string, Buffer>;
-  thumbnails?: ReadonlyMap<string, Buffer>;
+  assets?: ReadonlyMap<string, Uint8Array>;
+  fonts?: ReadonlyMap<string, Uint8Array>;
+  thumbnails?: ReadonlyMap<string, Uint8Array>;
   /**
    * Optional Ed25519 signature over `integrity.root`. When present, the
    * manifest's `signing` block is populated and `verify()` (called with a
@@ -60,19 +61,19 @@ export interface PackInput {
  *   5. Write a deterministic zip (sorted paths, fixed dates).
  *
  * Re-packing the same input returns byte-identical bytes — verified by
- * `tests/roundtrip.test.ts`.
+ * `tests/roundtrip.test.ts`. Returns a `Uint8Array` (isomorphic).
  */
-export async function pack(input: PackInput): Promise<Buffer> {
+export async function pack(input: PackInput): Promise<Uint8Array> {
   SceneSchema.parse(input.scene);
 
-  const files = new Map<string, Buffer>();
+  const files = new Map<string, Uint8Array>();
 
   // Core artifacts. JSON is pretty-printed for diff-ability; the zip
   // already compresses it, so the readability cost is essentially free.
-  files.set('template.json', Buffer.from(JSON.stringify(input.scene, null, 2), 'utf-8'));
-  files.set('index.html', Buffer.from(input.indexHtml, 'utf-8'));
-  files.set('cg.js', Buffer.from(input.cgJs, 'utf-8'));
-  files.set('cg.css', Buffer.from(input.cgCss, 'utf-8'));
+  files.set('template.json', utf8ToBytes(JSON.stringify(input.scene, null, 2)));
+  files.set('index.html', utf8ToBytes(input.indexHtml));
+  files.set('cg.js', utf8ToBytes(input.cgJs));
+  files.set('cg.css', utf8ToBytes(input.cgCss));
 
   copyInto(files, input.assets);
   copyInto(files, input.fonts);
@@ -114,14 +115,14 @@ export async function pack(input: PackInput): Promise<Buffer> {
     };
   }
 
-  files.set('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'));
+  files.set('manifest.json', utf8ToBytes(JSON.stringify(manifest, null, 2)));
 
   return writeZip(files);
 }
 
 function copyInto(
-  dest: Map<string, Buffer>,
-  source: ReadonlyMap<string, Buffer> | undefined,
+  dest: Map<string, Uint8Array>,
+  source: ReadonlyMap<string, Uint8Array> | undefined,
 ): void {
   if (!source) return;
   for (const [path, content] of source) {

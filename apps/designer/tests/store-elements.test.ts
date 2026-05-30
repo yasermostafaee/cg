@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { ProjectService } from '../src/main/services/ProjectService.js';
+import { MemoryKv, MemoryWorkspace } from '@cg/storage';
+import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore } from '../src/renderer/state/store.js';
 import { defaultShape, defaultText } from '../src/renderer/state/element-defaults.js';
 
@@ -8,10 +9,7 @@ afterEach(() => {
 });
 
 function freshScene(): void {
-  const projects = new ProjectService({
-    recentFilePath: '/tmp/recent.json',
-    randomId: () => 'scene-fixed',
-  });
+  const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
   const { scene } = projects.newScene('demo', 'lower-third');
   designerStore.setScene(scene, null);
 }
