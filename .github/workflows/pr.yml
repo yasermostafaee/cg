@@ -11,13 +11,14 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Disable Electron's interactive Y/N prompts (CI is non-interactive).
   CI: 'true'
 
 jobs:
   ci:
     name: Lint • Typecheck • Test • Build
-    runs-on: windows-latest
+    # Browser SPAs build + test cross-platform; no Electron means no Windows
+    # requirement, so CI runs on Linux (faster + cheaper).
+    runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
@@ -36,17 +37,6 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
-
-      - name: Cache Electron binary
-        # Electron's postinstall downloads ~100 MB; cache across runs.
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/AppData/Local/electron/Cache
-            ~/AppData/Local/electron-builder/Cache
-          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            electron-${{ runner.os }}-
 
       - name: Cache Turbo
         uses: actions/cache@v4

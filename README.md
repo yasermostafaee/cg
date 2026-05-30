@@ -2,74 +2,77 @@
 
 [![PR](https://github.com/yasermostafaee/cg/actions/workflows/pr.yml/badge.svg)](https://github.com/yasermostafaee/cg/actions/workflows/pr.yml)
 
-Two-product desktop platform for TV networks using CasparCG playout:
+Two-product platform for TV networks using CasparCG playout:
 
-- **Designer** — visual editor for broadcast HTML graphics (logo bugs, lower thirds, tickers, breaking news, fullscreen).
-- **Runtime** — playout controller driving CasparCG via AMCP + OSC, with primary/backup redundancy.
+- **Designer** — visual editor for broadcast HTML graphics (logo bugs, lower thirds, tickers, breaking news, fullscreen). Edits scenes, previews them live, and exports broadcast-safe `.vcg` packages.
+- **Runtime** — playout controller for CasparCG (AMCP + OSC) with primary/backup redundancy.
 
-Windows-only, Electron, TypeScript, Persian/RTL as a core requirement.
+TypeScript, React, Persian/RTL as a core requirement.
+
+> **Now browser-based.** The platform is migrating from Electron to React
+> apps that run in the browser — no desktop install, no backend, file-based
+> storage. See [`docs/adrs/0007-electron-to-browser-migration.md`](./docs/adrs/0007-electron-to-browser-migration.md)
+> and the migration roadmap in [`docs/phases/phase-10-browser-migration.md`](./docs/phases/phase-10-browser-migration.md).
 
 ## Status
 
-Architecture complete (Phases 1–8); see [`docs/`](./docs).
+Architecture complete (Phases 1–8); see [`docs/`](./docs). The Electron
+desktop build (milestones M0–M12) is preserved in git history.
 
-- **M0 — Foundation:** done (tag `m0`).
-- **M1 — De-Risking Spike:** harnesses prepared (tag `m1-prep`); spike execution
-  pending a reachable CasparCG 2.3.x. See [`tools/spikes/`](./tools/spikes).
+- **Designer — browser:** running. Project library, live preview, and `.vcg`
+  export all work in the browser against file-based storage.
+- **Runtime — browser:** shell running against an in-memory mock. The
+  CasparCG control path needs a small local WebSocket↔TCP bridge (browsers
+  can't open raw sockets) — that bridge is the next milestone.
 
 ## Layout
 
 ```
-apps/        # shippable Electron applications (designer, runtime)
+apps/        # browser React SPAs (designer, runtime) — Vite
+  designer/
+    src/renderer/   # React UI (reused from the Electron renderer)
+    src/platform/   # in-process window.cg bridge (browser storage, no Electron)
+  runtime/
+    src/renderer/   # React UI
+    src/platform/   # in-process window.cg bridge (mock playout core)
 packages/    # shared libraries (@cg/*)
-tools/       # internal harnesses (amcp-mock, soak-runner, ...)
+  shared-schema, shared-ipc, vcg-format, template-runtime, lottie-bridge,
+  text-shaping, starter-templates, caspar-client (protocol logic),
+  storage (browser file storage), ui (design tokens + theme), eslint-config
+tools/       # internal harnesses (amcp-mock, soak-runner, template-fixtures)
 fixtures/    # canonical test data (templates, OSC traces, AMCP sessions)
 docs/        # architecture phases + ADRs + user guides
 ```
 
-See [`docs/phases/phase-7-folder-structure.md`](./docs/phases/phase-7-folder-structure.md) for the full breakdown.
-
 ## Quick start
 
-One-time setup after a fresh clone or `git pull` on `main`:
-
-```pwsh
+```bash
 pnpm install   # install / refresh node_modules
-pnpm build     # build all @cg/* workspace packages so the Electron apps can import them
+pnpm build     # build all @cg/* workspace packages so the apps can import them
 ```
 
-Run an app — each in its own PowerShell window:
+Run an app — each is a Vite dev server in the browser:
 
-```pwsh
-pnpm --filter @cg/designer dev   # visual editor (port 5173)
-pnpm --filter @cg/runtime  dev   # playout controller (port 5174)
+```bash
+pnpm --filter @cg/designer dev   # visual editor  → http://127.0.0.1:5173
+pnpm --filter @cg/runtime  dev   # playout controller → http://127.0.0.1:5174
 ```
 
-Optional — give the Runtime a CasparCG mock so the OFFLINE pills go green:
-
-```pwsh
-pnpm --filter @cg/amcp-mock dev
-```
+> The Designer's persistent "open a real folder" mode uses the File System
+> Access API (Chromium: Chrome/Edge/Brave). Other browsers fall back to OPFS
+> (sandboxed real files). See the storage ADR for details.
 
 Test / lint / typecheck the whole monorepo:
 
-```pwsh
+```bash
 pnpm test
 pnpm lint
 pnpm typecheck
 ```
 
-If a window won't close or a dev-server port stays bound, kill any stale
-Electron / node processes belonging to this repo:
-
-```pwsh
-Get-Process -Name electron,node -ErrorAction SilentlyContinue |
-  Where-Object { $_.Path -like '*claude projects\cg*' } |
-  Stop-Process -Force
-```
-
 ## Documentation
 
+- Browser migration — [`docs/adrs/0007-electron-to-browser-migration.md`](./docs/adrs/0007-electron-to-browser-migration.md), [`docs/phases/phase-10-browser-migration.md`](./docs/phases/phase-10-browser-migration.md)
 - Architecture — [`docs/phases/`](./docs/phases)
 - Decisions — [`docs/adrs/`](./docs/adrs)
 - Security — [`SECURITY.md`](./SECURITY.md)
