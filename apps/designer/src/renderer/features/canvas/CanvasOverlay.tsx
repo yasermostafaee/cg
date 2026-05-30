@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { Element, Scene, TextElement } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore, type DesignerTool } from '../../state/store.js';
-import { defaultShape, defaultText } from '../../state/element-defaults.js';
+import { defaultEllipse, defaultShape, defaultText } from '../../state/element-defaults.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
 import { topmostHit } from './hit-test.js';
 import { Gizmo } from './Gizmo.js';
@@ -121,6 +121,12 @@ export function CanvasOverlay({
     if (tool === 'shape') {
       const id = `el-${String(Date.now())}`;
       designerStore.addElement(defaultShape(id, scenePoint.x, scenePoint.y));
+      designerStore.setTool('cursor');
+      return;
+    }
+    if (tool === 'ellipse') {
+      const id = `el-${String(Date.now())}`;
+      designerStore.addElement(defaultEllipse(id, scenePoint.x, scenePoint.y));
       designerStore.setTool('cursor');
       return;
     }

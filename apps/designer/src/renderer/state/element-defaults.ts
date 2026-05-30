@@ -47,7 +47,7 @@ export function defaultText(id: string, x: number, y: number): TextElement {
 export function defaultShape(id: string, x: number, y: number): ShapeElement {
   return {
     id,
-    name: 'Shape',
+    name: 'Rectangle',
     type: 'shape',
     visible: true,
     locked: false,
@@ -56,6 +56,27 @@ export function defaultShape(id: string, x: number, y: number): ShapeElement {
     transform: baseTransform(x, y, 320, 120),
     shape: 'rect',
     fill: { kind: 'solid', color: '#E11D48' },
+  };
+}
+
+/**
+ * Ellipse/circle shape. Defaults to an equal-sided box (a circle) so the
+ * operator starts symmetric and can drag a handle to make any ellipse.
+ * Renders via the runtime's `border-radius: 50%` path — same ShapeElement,
+ * just `shape: 'ellipse'`.
+ */
+export function defaultEllipse(id: string, x: number, y: number): ShapeElement {
+  return {
+    id,
+    name: 'Ellipse',
+    type: 'shape',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    zIndex: 0,
+    transform: baseTransform(x, y, 200, 200),
+    shape: 'ellipse',
+    fill: { kind: 'solid', color: '#38BDF8' },
   };
 }
 

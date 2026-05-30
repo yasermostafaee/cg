@@ -8,7 +8,8 @@ interface Props {
 const tools: { id: DesignerTool; label: string; icon: string }[] = [
   { id: 'cursor', label: 'Select', icon: '↖' },
   { id: 'text', label: 'Text', icon: 'T' },
-  { id: 'shape', label: 'Shape', icon: '▢' },
+  { id: 'shape', label: 'Rectangle', icon: '▭' },
+  { id: 'ellipse', label: 'Ellipse', icon: '○' },
   { id: 'image', label: 'Image', icon: '▦' },
 ];
 

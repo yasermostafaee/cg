@@ -10,7 +10,7 @@ import type { DynamicField, Element, FieldBinding, Layer, Scene } from '@cg/shar
  * (M6.5's Inspector cares; canvas hit-test in M6.4 only sets single).
  */
 
-export type DesignerTool = 'cursor' | 'text' | 'shape' | 'image';
+export type DesignerTool = 'cursor' | 'text' | 'shape' | 'ellipse' | 'image';
 
 export interface DesignerStoreState {
   scene: Scene | null;
