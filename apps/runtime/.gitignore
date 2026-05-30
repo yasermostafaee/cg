@@ -1,5 +1,4 @@
-out/
 dist/
 .vite/
-release/
+coverage/
 *.tsbuildinfo

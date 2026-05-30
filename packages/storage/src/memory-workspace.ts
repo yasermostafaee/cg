@@ -19,12 +19,10 @@ export class MemoryWorkspace implements Workspace {
   readonly label = 'memory';
   readonly #files = new Map<string, Uint8Array>();
 
-  // eslint-disable-next-line @typescript-eslint/require-await
   async readFile(path: string): Promise<Uint8Array | null> {
     return this.#files.get(normalize(path)) ?? null;
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await
   async writeFile(path: string, data: Uint8Array): Promise<void> {
     this.#files.set(normalize(path), data.slice());
   }
@@ -47,17 +45,14 @@ export class MemoryWorkspace implements Workspace {
     await this.writeText(path, JSON.stringify(value, null, 2));
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await
   async delete(path: string): Promise<void> {
     this.#files.delete(normalize(path));
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await
   async exists(path: string): Promise<boolean> {
     return this.#files.has(normalize(path));
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await
   async list(dir = ''): Promise<WorkspaceEntry[]> {
     const prefix = normalize(dir);
     const base = prefix.length > 0 ? `${prefix}/` : '';

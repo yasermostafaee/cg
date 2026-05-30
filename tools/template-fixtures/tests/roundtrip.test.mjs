@@ -61,7 +61,9 @@ describe('persian-lower-third — vcg-format round-trip', () => {
   it('re-packing the same scene is byte-identical', async () => {
     const a = await buildVcg();
     const b = await buildVcg();
-    expect(a.equals(b)).toBe(true);
+    // pack() now returns a Uint8Array (isomorphic); compare via Buffer in this
+    // Node-only fixture builder.
+    expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);
   });
 });
 

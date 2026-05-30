@@ -68,9 +68,9 @@ const cases = [
 
   // node
   {
-    name: 'node: forbids @cg/shared-ui',
+    name: 'node: forbids @cg/ui',
     config: [...base, node()],
-    code: "import { Button } from '@cg/shared-ui';\nconsole.warn(Button);\n",
+    code: "import { Button } from '@cg/ui';\nconsole.warn(Button);\n",
     expectedRuleId: 'no-restricted-imports',
   },
   {

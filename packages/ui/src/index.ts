@@ -9,6 +9,6 @@ export { chrome, spacing, radius, fontSize, fontStack, tokens } from './tokens.j
  * Join truthy class names. Tiny `clsx` stand-in so feature code can compose
  * conditional classes without a dependency.
  */
-export function cn(...parts: Array<string | false | null | undefined>): string {
+export function cn(...parts: (string | false | null | undefined)[]): string {
   return parts.filter((p): p is string => typeof p === 'string' && p.length > 0).join(' ');
 }
