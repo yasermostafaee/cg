@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { computeIntegrity, computeIntegrityRoot, sha256Hex } from '../src/integrity.js';
 
+const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
+
 describe('sha256Hex', () => {
   it('matches a known empty-string digest', () => {
     expect(sha256Hex('')).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
@@ -10,8 +12,8 @@ describe('sha256Hex', () => {
       'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
     );
   });
-  it('accepts a Buffer', () => {
-    expect(sha256Hex(Buffer.from('abc'))).toBe(
+  it('accepts a Uint8Array', () => {
+    expect(sha256Hex(enc('abc'))).toBe(
       'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
     );
   });
@@ -43,10 +45,10 @@ describe('computeIntegrityRoot', () => {
 
 describe('computeIntegrity', () => {
   it('emits sorted, fully-hashed entries', () => {
-    const files = new Map<string, Buffer>([
-      ['z.txt', Buffer.from('zz')],
-      ['a.txt', Buffer.from('aa')],
-      ['m.txt', Buffer.from('mmm')],
+    const files = new Map<string, Uint8Array>([
+      ['z.txt', enc('zz')],
+      ['a.txt', enc('aa')],
+      ['m.txt', enc('mmm')],
     ]);
     const { files: out, root } = computeIntegrity(files);
     expect(out.map((f) => f.path)).toEqual(['a.txt', 'm.txt', 'z.txt']);

@@ -1,8 +1,15 @@
-import { createHash } from 'node:crypto';
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 
-/** sha256 hex digest of a Buffer or string. */
-export function sha256Hex(input: Buffer | string): string {
-  return createHash('sha256').update(input).digest('hex');
+/**
+ * sha256 hex digest of bytes or a UTF-8 string.
+ *
+ * Isomorphic: backed by `@noble/hashes` so the same code runs in Node,
+ * the browser, and inside an exported broadcast template — no `node:crypto`.
+ */
+export function sha256Hex(input: Uint8Array | string): string {
+  const bytes = typeof input === 'string' ? utf8ToBytes(input) : input;
+  return bytesToHex(sha256(bytes));
 }
 
 export interface IntegrityFile {
@@ -24,7 +31,7 @@ export function computeIntegrityRoot(files: readonly IntegrityFile[]): string {
 }
 
 /** Build the full integrity block for a file map. */
-export function computeIntegrity(files: ReadonlyMap<string, Buffer>): {
+export function computeIntegrity(files: ReadonlyMap<string, Uint8Array>): {
   files: IntegrityFile[];
   root: string;
 } {

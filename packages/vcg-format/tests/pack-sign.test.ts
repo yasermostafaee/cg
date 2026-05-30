@@ -11,7 +11,9 @@ import {
   fixtureScene,
 } from './fixtures.js';
 
-async function buildSigned(privateKey: string, publicKeyId = 'station-key-1'): Promise<Buffer> {
+const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
+
+async function buildSigned(privateKey: string, publicKeyId = 'station-key-1'): Promise<Uint8Array> {
   return pack({
     scene: fixtureScene,
     manifestExtras: fixtureManifestExtras,
@@ -30,7 +32,7 @@ describe('pack with signing', () => {
     expect(manifest.signing).toBeDefined();
     expect(manifest.signing?.algorithm).toBe('ed25519');
     expect(manifest.signing?.publicKeyId).toBe('station-key-1');
-    expect(manifest.signing?.signature).toMatch(/^[A-Za-z0-9+/=]+$/);
+    expect(manifest.signing?.signature).toMatch(/^[0-9a-f]+$/);
   });
 
   it('signs the integrity root specifically (not the manifest bytes)', async () => {
@@ -38,8 +40,8 @@ describe('pack with signing', () => {
     const buf = await buildSigned(privateKey);
     const { manifest } = await unpack(buf);
     expect(manifest.integrity.root).toMatch(/^[0-9a-f]{64}$/);
-    // Signature is base64; non-empty
-    expect(manifest.signing?.signature.length ?? 0).toBeGreaterThan(40);
+    // Signature is a hex-encoded 64-byte Ed25519 signature (128 chars).
+    expect(manifest.signing?.signature.length ?? 0).toBe(128);
   });
 });
 
@@ -93,7 +95,7 @@ describe('verify with signing', () => {
     const { privateKey, publicKey } = generateEd25519KeyPair();
     const buf = await buildSigned(privateKey);
     const { files, manifest } = await unpack(buf);
-    files.set('cg.js', Buffer.from('// tampered'));
+    files.set('cg.js', enc('// tampered'));
     // Re-zip without recomputing manifest (simulate attacker)
     const { writeZip } = await import('../src/zip.js');
     const tampered = await writeZip(files);

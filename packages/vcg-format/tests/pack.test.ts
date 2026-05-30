@@ -10,6 +10,9 @@ import {
   fixtureScene,
 } from './fixtures.js';
 
+const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
+const dec = (b: Uint8Array): string => new TextDecoder().decode(b);
+
 describe('pack', () => {
   it('produces a valid zip with the canonical four core files', async () => {
     const buf = await pack({
@@ -40,7 +43,7 @@ describe('pack', () => {
     const files = await readZip(buf);
     const tplBuf = files.get('template.json');
     if (!tplBuf) throw new Error('expected template.json in zip');
-    const sceneJson = JSON.parse(tplBuf.toString('utf-8')) as unknown;
+    const sceneJson = JSON.parse(dec(tplBuf)) as unknown;
     const parsed = SceneSchema.parse(sceneJson);
     expect(parsed.id).toBe('scene-fixture-1');
   });
@@ -56,7 +59,7 @@ describe('pack', () => {
     const files = await readZip(buf);
     const manifestBuf = files.get('manifest.json');
     if (!manifestBuf) throw new Error('expected manifest.json in zip');
-    const manifestJson = JSON.parse(manifestBuf.toString('utf-8')) as unknown;
+    const manifestJson = JSON.parse(dec(manifestBuf)) as unknown;
     const manifest = ManifestSchema.parse(manifestJson);
     expect(manifest.integrity.files.length).toBeGreaterThan(0);
     expect(manifest.integrity.root).toMatch(/^[0-9a-f]{64}$/);
@@ -73,7 +76,7 @@ describe('pack', () => {
         indexHtml: fixtureIndexHtml,
         cgJs: fixtureCgJs,
         cgCss: fixtureCgCss,
-        assets: new Map([['template.json', Buffer.from('not allowed')]]),
+        assets: new Map([['template.json', enc('not allowed')]]),
       }),
     ).rejects.toThrow(/Duplicate path/);
   });

@@ -10,6 +10,8 @@ import {
   fixtureScene,
 } from './fixtures.js';
 
+const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
+
 describe('pack → unpack round-trip', () => {
   it('preserves Scene identity and field values', async () => {
     const buf = await pack({
@@ -47,7 +49,7 @@ describe('pack → unpack round-trip', () => {
     };
     const a = await pack(input);
     const b = await pack(input);
-    expect(a.equals(b)).toBe(true);
+    expect(a).toEqual(b);
   });
 
   it('verify() passes on a freshly-packed archive', async () => {
@@ -69,8 +71,8 @@ describe('pack → unpack round-trip', () => {
       indexHtml: fixtureIndexHtml,
       cgJs: fixtureCgJs,
       cgCss: fixtureCgCss,
-      assets: new Map([['assets/img/logo.png', Buffer.from([0x89, 0x50, 0x4e, 0x47])]]),
-      fonts: new Map([['fonts/Vazirmatn-Variable.woff2', Buffer.from('font-bytes')]]),
+      assets: new Map([['assets/img/logo.png', new Uint8Array([0x89, 0x50, 0x4e, 0x47])]]),
+      fonts: new Map([['fonts/Vazirmatn-Variable.woff2', enc('font-bytes')]]),
     });
     const { files } = await unpack(buf);
     expect(files.has('assets/img/logo.png')).toBe(true);

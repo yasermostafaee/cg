@@ -10,6 +10,8 @@ import {
   fixtureScene,
 } from './fixtures.js';
 
+const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
+
 describe('unpack', () => {
   it('round-trips Scene + Manifest', async () => {
     const buf = await pack({
@@ -28,17 +30,17 @@ describe('unpack', () => {
   });
 
   it('throws when manifest.json is missing', async () => {
-    const buf = await writeZip(new Map([['template.json', Buffer.from('{}')]]));
+    const buf = await writeZip(new Map([['template.json', enc('{}')]]));
     await expect(unpack(buf)).rejects.toThrow(/manifest\.json/);
   });
 
   it('throws when template.json is missing', async () => {
-    const buf = await writeZip(new Map([['manifest.json', Buffer.from('{}')]]));
+    const buf = await writeZip(new Map([['manifest.json', enc('{}')]]));
     // Manifest schema fails before template.json check, which is fine.
     await expect(unpack(buf)).rejects.toThrow();
   });
 
   it('throws on a corrupt zip', async () => {
-    await expect(unpack(Buffer.from('not a zip'))).rejects.toThrow();
+    await expect(unpack(enc('not a zip'))).rejects.toThrow();
   });
 });

@@ -1,11 +1,5 @@
-import {
-  createPrivateKey,
-  createPublicKey,
-  generateKeyPairSync,
-  sign as nodeSign,
-  verify as nodeVerify,
-  type KeyObject,
-} from 'node:crypto';
+import { ed25519 } from '@noble/curves/ed25519';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
 
 /**
  * Ed25519 signing for the .vcg manifest's `integrity.root`.
@@ -15,58 +9,50 @@ import {
  * archive's contents since the root is itself the Merkle root over per-file
  * hashes.
  *
- * Keys are accepted as PEM strings (SPKI for public, PKCS#8 for private)
- * or as Node `KeyObject`s. The signature wire format is base64.
+ * Isomorphic: backed by `@noble/curves` so signing/verification work in
+ * Node and the browser alike. Keys and signatures are exchanged as raw
+ * hex strings (or `Uint8Array`) — no PEM, no `node:crypto`. A private key
+ * is 32 bytes (64 hex chars); a public key is 32 bytes; a signature is
+ * 64 bytes (128 hex chars).
  */
 
-export type Ed25519KeyInput = string | KeyObject;
+export type Ed25519KeyInput = string | Uint8Array;
+
+function asBytes(key: Ed25519KeyInput): Uint8Array {
+  return typeof key === 'string' ? hexToBytes(key) : key;
+}
+
+function asMessage(data: Uint8Array | string): Uint8Array {
+  return typeof data === 'string' ? utf8ToBytes(data) : data;
+}
 
 /**
- * Sign data with an Ed25519 private key. Returns a base64-encoded signature.
+ * Sign data with an Ed25519 private key. Returns a hex-encoded signature.
  */
-export function signEd25519(data: Buffer | string, privateKey: Ed25519KeyInput): string {
-  const key = asPrivateKey(privateKey);
-  if (key.asymmetricKeyType !== 'ed25519') {
-    throw new Error(`Expected ed25519 private key, got ${String(key.asymmetricKeyType)}`);
-  }
-  const buf = typeof data === 'string' ? Buffer.from(data, 'utf-8') : data;
-  // For Ed25519, the algorithm parameter must be null (Node convention).
-  return nodeSign(null, buf, key).toString('base64');
+export function signEd25519(data: Uint8Array | string, privateKey: Ed25519KeyInput): string {
+  const sig = ed25519.sign(asMessage(data), asBytes(privateKey));
+  return bytesToHex(sig);
 }
 
 /**
  * Verify an Ed25519 signature against `data` using the given public key.
- * Returns true iff the signature is valid. Never throws on bad signatures —
+ * Returns true iff the signature is valid. Never throws on bad input —
  * returns false instead.
  */
 export function verifyEd25519(
-  data: Buffer | string,
-  signatureBase64: string,
+  data: Uint8Array | string,
+  signatureHex: string,
   publicKey: Ed25519KeyInput,
 ): boolean {
-  let key: KeyObject;
   try {
-    key = asPublicKey(publicKey);
-  } catch {
-    return false;
-  }
-  if (key.asymmetricKeyType !== 'ed25519') return false;
-  const buf = typeof data === 'string' ? Buffer.from(data, 'utf-8') : data;
-  let sigBytes: Buffer;
-  try {
-    sigBytes = Buffer.from(signatureBase64, 'base64');
-  } catch {
-    return false;
-  }
-  try {
-    return nodeVerify(null, buf, key, sigBytes);
+    return ed25519.verify(hexToBytes(signatureHex), asMessage(data), asBytes(publicKey));
   } catch {
     return false;
   }
 }
 
 /**
- * Generate a fresh Ed25519 key pair. Returns PEM strings — convenient for
+ * Generate a fresh Ed25519 key pair. Returns hex strings — convenient for
  * tests, CLI tooling, and one-time key provisioning. Production keys should
  * be generated out-of-band and stored in a secrets manager.
  */
@@ -74,19 +60,7 @@ export function generateEd25519KeyPair(): {
   privateKey: string;
   publicKey: string;
 } {
-  const { privateKey, publicKey } = generateKeyPairSync('ed25519', {
-    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-    publicKeyEncoding: { type: 'spki', format: 'pem' },
-  });
-  return { privateKey, publicKey };
-}
-
-function asPrivateKey(input: Ed25519KeyInput): KeyObject {
-  if (typeof input === 'string') return createPrivateKey({ key: input, format: 'pem' });
-  return input;
-}
-
-function asPublicKey(input: Ed25519KeyInput): KeyObject {
-  if (typeof input === 'string') return createPublicKey({ key: input, format: 'pem' });
-  return input;
+  const priv = ed25519.utils.randomPrivateKey();
+  const pub = ed25519.getPublicKey(priv);
+  return { privateKey: bytesToHex(priv), publicKey: bytesToHex(pub) };
 }

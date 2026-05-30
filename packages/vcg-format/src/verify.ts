@@ -26,7 +26,7 @@ export interface VerifyOptions {
    * references a known id, the signature is verified against that key. If
    * the manifest references an *unknown* id, that's an error.
    *
-   * Keys may be PEM strings (SPKI format) or Node `KeyObject`s.
+   * Keys are raw Ed25519 public keys as hex strings (or `Uint8Array`).
    */
   trustedPublicKeys?: Readonly<Record<string, Ed25519KeyInput>>;
 }
@@ -44,7 +44,7 @@ export interface VerifyOptions {
  * "broken trust" (signed by an unknown key, or signature doesn't verify),
  * and "policy" (requireSigned with no signing block).
  */
-export async function verify(buf: Buffer, options: VerifyOptions = {}): Promise<VerifyResult> {
+export async function verify(buf: Uint8Array, options: VerifyOptions = {}): Promise<VerifyResult> {
   const errors: string[] = [];
 
   let unpacked;
