@@ -72,6 +72,7 @@ pnpm typecheck
 
 ## Documentation
 
+- Contributing / backlog — [`CLAUDE.md`](./CLAUDE.md), [`docs/prd/`](./docs/prd) (write features/bugs here; Claude turns each into an OpenSpec change)
 - Browser migration — [`docs/adrs/0007-electron-to-browser-migration.md`](./docs/adrs/0007-electron-to-browser-migration.md), [`docs/phases/phase-10-browser-migration.md`](./docs/phases/phase-10-browser-migration.md)
 - Architecture — [`docs/phases/`](./docs/phases)
 - Decisions — [`docs/adrs/`](./docs/adrs)
