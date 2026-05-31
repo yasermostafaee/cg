@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { AnimatableProperty, Element, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
+import { ElementRow, lifespanColorFor } from './ElementRow.js';
 import { FrameRuler } from './FrameRuler.js';
 import { TIMELINE_ROWS, LABEL_COL_PX } from './keyframe-helpers.js';
 import { TrackRow } from './TrackRow.js';
@@ -83,19 +84,59 @@ const styles = {
     fontSize: '0.72rem',
     textAlign: 'center' as const,
   },
+  transformHeader: {
+    display: 'grid',
+    gridTemplateColumns: `${String(LABEL_COL_PX)}px 1fr`,
+    alignItems: 'center',
+    borderBottom: `1px solid ${colors.border}`,
+    height: 18,
+  },
+  transformHeaderLabel: {
+    color: colors.textMuted,
+    fontSize: '0.62rem',
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    padding: '0 0.4rem 0 1.7rem',
+    background: colors.panel,
+    borderRight: `1px solid ${colors.border}`,
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.3rem',
+  },
+  transformHeaderLane: {
+    background: colors.panelMuted,
+    height: '100%',
+  },
+  groupChevron: {
+    background: 'transparent',
+    border: 'none',
+    color: colors.textMuted,
+    cursor: 'pointer',
+    padding: 0,
+    fontSize: '0.6rem',
+    width: 10,
+    textAlign: 'center' as const,
+  },
 } as const;
 
 /**
- * Animation timeline dock (D-006). Layout mirrors the Loopic reference:
+ * Animation timeline dock — Loopic-style element tree (B-001 redesign).
  *
- *   ┌────── header (transport + frame readout) ──────┐
- *   │ ┌── labels ──┐┌── ruler (frame 0 starts HERE)  │
- *   │ ├── Pos X ───┤│   ◆       ◆                    │
- *   │ ├── Pos Y ───┤│      ◆                         │
- *   │ └── ...      ┘└─────────────────────────────────┘
+ *   ┌───── header (transport + frame readout) ─────┐
+ *   │   FRAME │ 0   5   10   15  20  25  30 ...    │ ← ruler aligned with lanes
+ *   ├─────────┴─────────────────────────────────────┤
+ *   │ ▾ loop-element   ◉ 🔒 │ ▆▆▆▆▆▆▆▆▆▆ lifespan │
+ *   │     ▾ TRANSFORM       │ (track rows below)  │
+ *   │       Position X 960 ◆│   ◆        ◆        │
+ *   │       …                                      │
+ *   │ ▸ _lowerThird    ◉ 🔒 │ ▆▆▆▆▆▆▆▆▆▆ lifespan │
+ *   └───────────────────────────────────────────────┘
  *
- * The ruler and every lane share the same horizontal coordinate system —
- * frame N renders at the same x in the ruler and in each TrackRow lane.
+ * Each element row carries a colored lifespan bar so the dock reads as
+ * a multi-track timeline at a glance. The element rows live in component
+ * state for collapse-per-element; the dock auto-expands the selected
+ * element so the operator's last selection is the focused one.
  */
 export function TimelineDock({
   scene,
@@ -105,11 +146,12 @@ export function TimelineDock({
 }: Props): JSX.Element {
   const { in: frameIn, out: frameOut } = scene.frameRange;
   const [playing, setPlaying] = useState(false);
+  const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
   const lastWallRef = useRef<number>(0);
   const accumRef = useRef<number>(0);
 
-  const selected: Element | null =
-    selection.size === 1 ? findSingleSelected(scene, selection) : null;
+  const elements: readonly Element[] = flattenElements(scene);
 
   // Transport loop: advance currentFrame at `scene.frameRate`.
   useEffect(() => {
@@ -149,6 +191,29 @@ export function TimelineDock({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  function isCollapsed(id: string): boolean {
+    return collapsedIds.has(id);
+  }
+  function toggleCollapsed(id: string): void {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function isGroupCollapsed(id: string): boolean {
+    return collapsedGroups.has(id);
+  }
+  function toggleGroupCollapsed(id: string): void {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   return (
     <section style={styles.dock} aria-label="Animation timeline">
@@ -214,51 +279,74 @@ export function TimelineDock({
           onScrub={(f) => designerStore.setCurrentFrame(f)}
         />
       </div>
-      {selected === null ? (
-        <p style={styles.empty}>
-          {selection.size === 0
-            ? 'Select an element to add keyframes.'
-            : 'Select a single element to add keyframes.'}
-        </p>
+      {elements.length === 0 ? (
+        <p style={styles.empty}>No elements yet. Add a shape, text, or image to start.</p>
       ) : (
-        <div role="list" onPointerDown={(e) => deselectOnLaneClick(e, selected.id)}>
-          {TIMELINE_ROWS.map((row) => (
-            <TrackRow
-              key={row.property}
-              row={row}
-              element={selected}
-              frameIn={frameIn}
-              frameOut={frameOut}
-              currentFrame={currentFrame}
-              selectedKeyframe={selectedKeyframe}
-            />
-          ))}
+        <div role="list">
+          {elements.map((el) => {
+            const expanded = !isCollapsed(el.id);
+            const groupKey = `${el.id}::transform`;
+            const groupExpanded = !isGroupCollapsed(groupKey);
+            return (
+              <div key={el.id}>
+                <ElementRow
+                  element={el}
+                  expanded={expanded}
+                  onToggleExpand={() => toggleCollapsed(el.id)}
+                  isSelected={selection.has(el.id)}
+                  frameRange={scene.frameRange}
+                  lifespanColor={lifespanColorFor(el.id)}
+                />
+                {expanded && (
+                  <>
+                    <div style={styles.transformHeader}>
+                      <div style={styles.transformHeaderLabel}>
+                        <button
+                          type="button"
+                          style={styles.groupChevron}
+                          onClick={() => toggleGroupCollapsed(groupKey)}
+                          aria-expanded={groupExpanded}
+                          aria-label="Toggle transform tracks"
+                        >
+                          {groupExpanded ? '▾' : '▸'}
+                        </button>
+                        <span>TRANSFORM</span>
+                      </div>
+                      <div style={styles.transformHeaderLane} />
+                    </div>
+                    {groupExpanded &&
+                      TIMELINE_ROWS.map((row) => (
+                        <TrackRow
+                          key={`${el.id}-${row.property}`}
+                          row={row}
+                          element={el}
+                          frameIn={frameIn}
+                          frameOut={frameOut}
+                          currentFrame={currentFrame}
+                          selectedKeyframe={selectedKeyframe}
+                        />
+                      ))}
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </section>
   );
 }
 
-function findSingleSelected(scene: Scene, selection: ReadonlySet<string>): Element | null {
-  for (const layer of scene.layers) {
-    for (const el of layer.children) {
-      if (selection.has(el.id)) return el;
+function flattenElements(scene: Scene): readonly Element[] {
+  const out: Element[] = [];
+  function walk(children: readonly Element[]): void {
+    for (const el of children) {
+      out.push(el);
+      if (el.type === 'container') walk(el.children);
     }
   }
-  return null;
-}
-
-function deselectOnLaneClick(e: React.PointerEvent<HTMLDivElement>, elementId: string): void {
-  const target = e.target as HTMLElement | null;
-  if (target === null) return;
-  // Clicks on a diamond bubble up but we let TrackRow's own pointerdown call
-  // setSelectedKeyframe first. Here we only clear when the empty lane was hit.
-  if (target.dataset.role === 'lane-empty') {
-    const kf = designerStore.get().selectedKeyframe;
-    if (kf !== null && kf.elementId === elementId) {
-      designerStore.setSelectedKeyframe(null);
-    }
-  }
+  for (const layer of scene.layers) walk(layer.children);
+  return out;
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {

@@ -38,7 +38,7 @@ const styles = {
   },
   label: {
     color: colors.textMuted,
-    padding: '0 0.4rem',
+    padding: '0 0.4rem 0 2rem',
     display: 'grid',
     gridTemplateColumns: '1fr auto auto',
     alignItems: 'center',

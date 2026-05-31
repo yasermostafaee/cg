@@ -122,6 +122,21 @@ on the left, keyframe diamonds along the right.
   reads correctly. Designer-only theme overrides adopt the bluer Loopic
   chrome (`#272b40`/`#24273d`/`#2e3247`) without touching the shared
   `@cg/ui` chrome — Runtime keeps its existing palette.
+- **Loopic-style layout pass (B-001 deeper).** Inspector loses the big
+  `ELEMENT — SHAPE` heading + id/name rows; in their place a single
+  editable `Key | <name>` row matches the reference. The eight
+  animatable rows use single-letter/icon labels (`X` `Y` / `W` `H` /
+  `↔` `↕` / `↻` / `%`) inside chip-style cells, with the shared
+  KeyframeIndicator at the right edge of each row. Sections
+  (`Transform`, `Path style` / `Text style` / `Image`, `Bindings`)
+  become collapsible (`CollapseSection`) with chevrons (`▾` / `▸`).
+  Timeline switches to a per-element **tree**: every element in the
+  scene gets a header row carrying a chevron, name, visibility / lock
+  indicators, and a colored *lifespan bar* (per-id stable color). A
+  nested `▾ TRANSFORM` group expands to the 8 property TrackRows; both
+  the element row and its TRANSFORM group are independently
+  collapsible. Clicking an element header selects it (so the Inspector
+  follows).
 
 ## Risks / Trade-offs
 

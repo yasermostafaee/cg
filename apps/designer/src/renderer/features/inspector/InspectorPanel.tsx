@@ -3,6 +3,7 @@ import { colors } from '../../theme.js';
 import { designerStore, useDesignerStore } from '../../state/store.js';
 import { describeBinding } from '../fields/bind-resolver.js';
 import { FieldsPanel } from '../fields/FieldsPanel.js';
+import { CollapseSection } from './CollapseSection.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
 import { StyleSection } from './StyleSection.js';
 import { TransformSection } from './TransformSection.js';
@@ -89,6 +90,29 @@ const styles = {
     borderRadius: '0.18rem',
     cursor: 'pointer',
     fontSize: '0.68rem',
+  },
+  keyRow: {
+    display: 'grid',
+    gridTemplateColumns: '36px 1fr',
+    gap: '0.4rem',
+    alignItems: 'center',
+    padding: '0.15rem 0 0.35rem',
+  },
+  keyLabel: {
+    color: colors.textMuted,
+    fontSize: '0.66rem',
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+  },
+  keyInput: {
+    background: colors.panelMuted,
+    color: colors.text,
+    border: `1px solid ${colors.border}`,
+    padding: '0.15rem 0.35rem',
+    borderRadius: '0.18rem',
+    fontSize: '0.72rem',
+    width: '100%',
+    boxSizing: 'border-box' as const,
   },
 } as const;
 
@@ -177,24 +201,64 @@ function ElementInspector({
     .filter(({ b }) => bindingTargetsElement(b, element.id));
   return (
     <aside style={styles.panel} aria-label="Inspector">
-      <h2 style={styles.headingFirst}>ELEMENT — {element.type.toUpperCase()}</h2>
-      <Row label="id" value={element.id} />
-      <Row label="name" value={element.name} />
-      <h3 style={styles.heading}>TRANSFORM</h3>
-      <TransformSection
-        element={element}
-        currentFrame={currentFrame}
-        selectedKeyframe={selectedKeyframe}
-      />
-      <h3 style={styles.heading}>STYLE</h3>
-      <StyleSection element={element} />
-      <h3 style={styles.heading}>BINDINGS</h3>
-      <ElementBindings bindings={bindings} />
+      <KeyRow elementId={element.id} name={element.name} />
+      <CollapseSection title="Transform" defaultExpanded>
+        <TransformSection
+          element={element}
+          currentFrame={currentFrame}
+          selectedKeyframe={selectedKeyframe}
+        />
+      </CollapseSection>
+      <CollapseSection title={styleSectionTitle(element)}>
+        <StyleSection element={element} />
+      </CollapseSection>
+      {bindings.length > 0 && (
+        <CollapseSection title="Bindings" defaultExpanded>
+          <ElementBindings bindings={bindings} />
+        </CollapseSection>
+      )}
       <button style={styles.removeButton} onClick={() => designerStore.removeElement(element.id)}>
         Remove
       </button>
     </aside>
   );
+}
+
+function KeyRow({ elementId, name }: { elementId: string; name: string }): JSX.Element {
+  return (
+    <div style={styles.keyRow}>
+      <span style={styles.keyLabel}>Key</span>
+      <input
+        style={styles.keyInput}
+        type="text"
+        defaultValue={name}
+        aria-label="Element key / name"
+        onBlur={(e) => {
+          const next = e.target.value.trim();
+          if (next.length > 0 && next !== name) {
+            designerStore.updateElement(elementId, { name: next } as Partial<Element>);
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+        }}
+        key={`key-${name}`}
+      />
+    </div>
+  );
+}
+
+function styleSectionTitle(element: Element): string {
+  switch (element.type) {
+    case 'shape':
+      return 'Path style';
+    case 'text':
+      return 'Text style';
+    case 'image':
+      return 'Image';
+    default:
+      return 'Style';
+  }
 }
 
 function bindingTargetsElement(b: FieldBinding, elementId: string): boolean {

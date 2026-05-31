@@ -27,29 +27,41 @@ exactly the x-position the ruler labels as N.
 - **THEN** the Designer's current frame updates to the clicked frame and any
   subsequent "add keyframe" actions use that frame as the authoring position
 
-### Requirement: Per-property track rows for the selected element
+### Requirement: Element tree with collapsible per-element track groups
 
-The timeline dock SHALL show one track row per animatable property for the
-selected element. The property set SHALL be the eight M12 numeric properties:
-Position X, Position Y, Scale X, Scale Y, Rotation, Width, Height, Opacity.
-Each row SHALL include an "add keyframe" affordance and SHALL display every
-keyframe currently on that track as a diamond marker positioned by frame.
+The timeline dock SHALL render a tree of every element in the scene.
+Each element SHALL appear as a header row containing a chevron (to
+expand / collapse the element's track group), the element name, small
+visibility / lock indicators, and a colored *lifespan bar* spanning the
+element's active frame range. Below the header — when expanded — the
+dock SHALL show a nested `▾ TRANSFORM` group that, when also expanded,
+renders eight property TrackRows (Position X, Position Y, Scale X,
+Scale Y, Rotation, Width, Height, Opacity). The element row and its
+TRANSFORM group MUST be independently collapsible.
 
-#### Scenario: Operator selects a shape
-- **WHEN** the operator selects a single shape on the canvas
-- **THEN** the timeline dock shows eight track rows (Position X, Position Y,
-  Scale X, Scale Y, Rotation, Width, Height, Opacity) for that shape with an
-  add-keyframe button on each row
+#### Scenario: Each scene element shows in the timeline tree
+- **WHEN** the scene has three elements (a shape, a text, and an image)
+- **THEN** the timeline dock shows three element header rows, in order,
+  each with its own chevron, name, indicators, and lifespan bar
+
+#### Scenario: Expanding an element shows its TRANSFORM group + property tracks
+- **WHEN** the operator clicks the chevron on an element header row that
+  was collapsed
+- **THEN** a `▾ TRANSFORM` group appears below it, and inside that group
+  eight property TrackRows render (Position X, Position Y, Scale X,
+  Scale Y, Rotation, Width, Height, Opacity) — each with the row's
+  current value and a keyframe indicator on the left, and the lane
+  with any existing keyframe diamonds on the right
+
+#### Scenario: Clicking an element header selects it
+- **WHEN** the operator clicks an element row (not its chevron)
+- **THEN** that element becomes the canvas selection and the right
+  Inspector switches to its Element view
 
 #### Scenario: Existing keyframes render on their tracks
-- **WHEN** a selected element already has keyframes on one or more tracks
+- **WHEN** an element has keyframes on one or more tracks
 - **THEN** each keyframe is drawn as a diamond marker on its track row at
   the x-position corresponding to its frame
-
-#### Scenario: Selection is empty or multi
-- **WHEN** the operator has zero or more than one element selected
-- **THEN** the timeline dock shows the ruler and transport but an empty hint
-  in the track area ("Select a single element to add keyframes")
 
 ### Requirement: Add a keyframe at the current frame
 

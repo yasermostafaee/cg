@@ -1,11 +1,11 @@
 import type { AnimatableProperty, Element } from '@cg/shared-schema';
+import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
 import {
   KeyframeIndicator,
   type KeyframeIndicatorVariant,
 } from '../timeline/KeyframeIndicator.js';
 import { TIMELINE_ROWS, hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
-import { NumberField, NumberPairField } from './controls.js';
 
 interface Props {
   element: Element;
@@ -13,112 +13,194 @@ interface Props {
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }
 
+const styles = {
+  row: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr 14px',
+    gap: '0.3rem',
+    alignItems: 'center',
+    padding: '0.1rem 0',
+  },
+  rowSingle: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 14px',
+    gap: '0.3rem',
+    alignItems: 'center',
+    padding: '0.1rem 0',
+  },
+  cell: {
+    display: 'grid',
+    gridTemplateColumns: 'auto 1fr',
+    alignItems: 'center',
+    gap: '0.25rem',
+    background: colors.panelMuted,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '0.18rem',
+    padding: '0.05rem 0.3rem',
+  },
+  icon: {
+    color: colors.textMuted,
+    fontSize: '0.65rem',
+    fontWeight: 600,
+    width: 12,
+    textAlign: 'center' as const,
+  },
+  input: {
+    background: 'transparent',
+    color: colors.text,
+    border: 'none',
+    outline: 'none',
+    padding: '0.1rem 0',
+    fontSize: '0.72rem',
+    width: '100%',
+    boxSizing: 'border-box' as const,
+    fontVariantNumeric: 'tabular-nums' as const,
+  },
+  indicatorCell: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+} as const;
+
 /**
- * Transform inspector. The eight M12 animatable properties (position x/y,
- * scale x/y, rotation, size w/h, opacity) flow through `commitAnimatable`
- * so that an edit at any frame on an animated property lands as a
- * keyframe at the current frame. A small diamond indicator to the right
- * of each row reflects the track / keyframe state for that property and
- * lights yellow when the matching point is selected in the timeline.
- * Non-animatable controls (z-index) keep their plain mutators.
+ * Compact Loopic-style transform inspector. Each row is one or two cells
+ * styled like a chip — single-letter / arrow / glyph "icon" labels (X, Y,
+ * W, H, ↔, ↕, ↻, %) — followed by a small KeyframeIndicator diamond. The
+ * 8 M12 animatable properties commit through `commitAnimatable` so an
+ * edit at any frame on an animated property lands as a keyframe at the
+ * current frame.
  */
 export function TransformSection({ element, currentFrame, selectedKeyframe }: Props): JSX.Element {
   const t = element.transform;
   const id = element.id;
 
-  function indicatorFor(property: AnimatableProperty): JSX.Element {
-    return (
-      <KeyframeIndicator
-        variant={keyframeVariantFor(element, property, currentFrame, selectedKeyframe)}
-        onClick={() => toggleKeyframeForProperty(element, property, currentFrame)}
-        ariaLabel={`Toggle keyframe for ${property} at frame ${String(currentFrame)}`}
-      />
-    );
-  }
-
-  function paired(propX: AnimatableProperty, propY: AnimatableProperty): JSX.Element {
-    const variant = combineVariants(
-      keyframeVariantFor(element, propX, currentFrame, selectedKeyframe),
-      keyframeVariantFor(element, propY, currentFrame, selectedKeyframe),
-    );
+  function indicatorFor(properties: readonly AnimatableProperty[]): JSX.Element {
+    const variant = properties
+      .map((p) => keyframeVariantFor(element, p, currentFrame, selectedKeyframe))
+      .reduce(highestVariant);
     return (
       <KeyframeIndicator
         variant={variant}
-        onClick={() => {
-          toggleKeyframeForProperty(element, propX, currentFrame);
-          toggleKeyframeForProperty(element, propY, currentFrame);
-        }}
-        ariaLabel={`Toggle keyframe for ${propX}/${propY} at frame ${String(currentFrame)}`}
+        onClick={() => properties.forEach((p) => togglePropertyKeyframe(element, p, currentFrame))}
+        ariaLabel={`Toggle keyframe for ${properties.join('/')} at frame ${String(currentFrame)}`}
       />
     );
   }
 
   return (
     <>
-      <NumberPairField
-        label="position"
-        x={t.position.x}
-        y={t.position.y}
-        onCommit={(x, y) => {
-          designerStore.commitAnimatable(id, 'position.x', x);
-          designerStore.commitAnimatable(id, 'position.y', y);
-        }}
-        trailing={paired('position.x', 'position.y')}
-      />
-      <NumberPairField
-        label="size"
-        x={t.size.w}
-        y={t.size.h}
-        onCommit={(w, h) => {
-          designerStore.commitAnimatable(id, 'size.w', w);
-          designerStore.commitAnimatable(id, 'size.h', h);
-        }}
-        trailing={paired('size.w', 'size.h')}
-      />
-      <NumberField
-        label="rotation"
-        value={t.rotation}
-        step={1}
-        onCommit={(rotation) => designerStore.commitAnimatable(id, 'rotation', rotation)}
-        trailing={indicatorFor('rotation')}
-      />
-      <NumberPairField
-        label="scale"
-        x={t.scale.x}
-        y={t.scale.y}
-        step={0.1}
-        onCommit={(x, y) => {
-          designerStore.commitAnimatable(id, 'scale.x', x);
-          designerStore.commitAnimatable(id, 'scale.y', y);
-        }}
-        trailing={paired('scale.x', 'scale.y')}
-      />
-      <NumberField
-        label="opacity"
-        value={element.opacity}
-        step={0.05}
-        min={0}
-        max={1}
-        onCommit={(opacity) => designerStore.commitAnimatable(id, 'opacity', opacity)}
-        trailing={indicatorFor('opacity')}
-      />
-      <NumberField
-        label="z-index"
-        value={element.zIndex}
-        step={1}
-        onCommit={(zIndex) => designerStore.updateElement(id, { zIndex } as Partial<Element>)}
-      />
+      <div style={styles.row}>
+        <Cell
+          icon="X"
+          value={t.position.x}
+          step={1}
+          onCommit={(v) => designerStore.commitAnimatable(id, 'position.x', v)}
+        />
+        <Cell
+          icon="Y"
+          value={t.position.y}
+          step={1}
+          onCommit={(v) => designerStore.commitAnimatable(id, 'position.y', v)}
+        />
+        <span style={styles.indicatorCell}>{indicatorFor(['position.x', 'position.y'])}</span>
+      </div>
+      <div style={styles.row}>
+        <Cell
+          icon="W"
+          value={t.size.w}
+          step={1}
+          onCommit={(v) => designerStore.commitAnimatable(id, 'size.w', v)}
+        />
+        <Cell
+          icon="H"
+          value={t.size.h}
+          step={1}
+          onCommit={(v) => designerStore.commitAnimatable(id, 'size.h', v)}
+        />
+        <span style={styles.indicatorCell}>{indicatorFor(['size.w', 'size.h'])}</span>
+      </div>
+      <div style={styles.row}>
+        <Cell
+          icon="↔"
+          value={percent(t.scale.x)}
+          suffix="%"
+          step={1}
+          onCommit={(v) => designerStore.commitAnimatable(id, 'scale.x', v / 100)}
+        />
+        <Cell
+          icon="↕"
+          value={percent(t.scale.y)}
+          suffix="%"
+          step={1}
+          onCommit={(v) => designerStore.commitAnimatable(id, 'scale.y', v / 100)}
+        />
+        <span style={styles.indicatorCell}>{indicatorFor(['scale.x', 'scale.y'])}</span>
+      </div>
+      <div style={styles.rowSingle}>
+        <Cell
+          icon="↻"
+          value={t.rotation}
+          suffix="°"
+          step={1}
+          onCommit={(v) => designerStore.commitAnimatable(id, 'rotation', v)}
+        />
+        <span style={styles.indicatorCell}>{indicatorFor(['rotation'])}</span>
+      </div>
+      <div style={styles.rowSingle}>
+        <Cell
+          icon="%"
+          value={percent(element.opacity)}
+          suffix="%"
+          step={1}
+          min={0}
+          max={100}
+          onCommit={(v) => designerStore.commitAnimatable(id, 'opacity', clamp01(v / 100))}
+        />
+        <span style={styles.indicatorCell}>{indicatorFor(['opacity'])}</span>
+      </div>
     </>
   );
 }
 
-/**
- * Indicator click toggles a keyframe at the current frame:
- *   - no keyframe here → adds one using the current static / interpolated
- *     value (read from the TIMELINE_ROWS catalogue).
- *   - keyframe here     → removes it (mirrors the Loopic UX).
- */
-function toggleKeyframeForProperty(
+interface CellProps {
+  icon: string;
+  value: number;
+  step?: number;
+  min?: number;
+  max?: number;
+  suffix?: string;
+  onCommit: (n: number) => void;
+}
+
+function Cell({ icon, value, step, min, max, suffix, onCommit }: CellProps): JSX.Element {
+  return (
+    <div style={styles.cell}>
+      <span style={styles.icon} aria-hidden>
+        {icon}
+      </span>
+      <input
+        style={styles.input}
+        type="number"
+        defaultValue={value}
+        step={step}
+        min={min}
+        max={max}
+        aria-label={icon}
+        onBlur={(e) => {
+          const n = Number(e.target.value);
+          if (Number.isFinite(n)) onCommit(n);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+        }}
+        key={`${icon}-${String(value)}${suffix ?? ''}`}
+      />
+    </div>
+  );
+}
+
+function togglePropertyKeyframe(
   element: Element,
   property: AnimatableProperty,
   frame: number,
@@ -129,16 +211,10 @@ function toggleKeyframeForProperty(
   }
   const row = TIMELINE_ROWS.find((r) => r.property === property);
   if (row === undefined) return;
-  const value = row.read(element);
-  designerStore.upsertKeyframe(element.id, property, frame, value);
+  designerStore.upsertKeyframe(element.id, property, frame, row.read(element));
 }
 
-/**
- * For paired rows (X + Y, W + H, scaleX + scaleY) we render one diamond
- * per row whose variant is the "highest priority" of the two axes:
- * selected > at-frame > has-track > empty.
- */
-function combineVariants(
+function highestVariant(
   a: KeyframeIndicatorVariant,
   b: KeyframeIndicatorVariant,
 ): KeyframeIndicatorVariant {
@@ -149,4 +225,12 @@ function combineVariants(
     selected: 3,
   };
   return rank[a] >= rank[b] ? a : b;
+}
+
+function percent(scaleOrOpacity: number): number {
+  return Math.round(scaleOrOpacity * 100);
+}
+
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v));
 }
