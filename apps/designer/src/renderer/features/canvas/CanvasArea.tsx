@@ -135,13 +135,23 @@ export function CanvasArea({
 
   useEffect(() => {
     if (scene === null) {
+      // eslint-disable-next-line no-console
+      console.log('[cg-canvas] scene is null, clearing iframe src');
       setSrc(null);
       return;
     }
     let cancelled = false;
+    // eslint-disable-next-line no-console
+    console.log('[cg-canvas] calling preview.load for scene', scene.id);
     void window.cg.preview.load({ scene }).then((res) => {
       if (!cancelled) {
-        setSrc(`${res.src}?t=${String(Date.now())}`);
+        const newSrc = `${res.src}?t=${String(Date.now())}`;
+        // eslint-disable-next-line no-console
+        console.log('[cg-canvas] preview.load resolved, setting iframe src to', newSrc);
+        setSrc(newSrc);
+      } else {
+        // eslint-disable-next-line no-console
+        console.log('[cg-canvas] preview.load resolved but effect was cancelled');
       }
     });
     return () => {
@@ -275,12 +285,6 @@ export function CanvasArea({
                 title="cgpreview"
                 style={{
                   ...styles.iframe,
-                  // Render the iframe at the scene's intrinsic
-                  // resolution, then visually scale with a CSS
-                  // transform. This keeps the *entire* scene in view
-                  // at any zoom — without scaling, the iframe's body
-                  // overflow:hidden would clip everything outside the
-                  // top-left wrapper-sized region.
                   position: 'absolute',
                   top: 0,
                   left: 0,
@@ -288,8 +292,23 @@ export function CanvasArea({
                   height,
                   transform: `scale(${String(zoom)})`,
                   transformOrigin: 'top left',
+                  // Diagnostic: bright red border on the iframe element
+                  // itself (parent CSS, not iframe-content CSS). Visible
+                  // even if the iframe document fails to load. If you
+                  // do not see a red rectangle on the canvas, the
+                  // iframe element itself is not in the DOM (or has
+                  // zero size).
+                  border: '3px solid red',
                 }}
                 sandbox="allow-scripts allow-same-origin"
+                onLoad={() => {
+                  // eslint-disable-next-line no-console
+                  console.log('[cg-canvas] iframe.onLoad fired (src=', src, ')');
+                }}
+                onError={(e) => {
+                  // eslint-disable-next-line no-console
+                  console.log('[cg-canvas] iframe.onError fired', e);
+                }}
               />
               <CanvasOverlay
                 scene={scene}
