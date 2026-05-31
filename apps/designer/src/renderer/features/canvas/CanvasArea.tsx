@@ -151,12 +151,18 @@ export function CanvasArea({
 
   useEffect(() => {
     function onMessage(evt: MessageEvent<unknown>): void {
-      const msg = evt.data as { kind?: string; sceneId?: string } | undefined;
+      const msg = evt.data as
+        | { kind?: string; sceneId?: string; args?: readonly unknown[] }
+        | undefined;
       if (msg?.kind === 'cg-preview-ready') {
         iframeRef.current?.contentWindow?.postMessage(
           { kind: 'cg-preview', action: 'scrub', frame: currentFrame },
           '*',
         );
+      }
+      if (msg?.kind === 'cg-preview-log' && Array.isArray(msg.args)) {
+        // eslint-disable-next-line no-console
+        console.log('[cg-preview]', ...msg.args);
       }
     }
     window.addEventListener('message', onMessage);
@@ -275,6 +281,9 @@ export function CanvasArea({
                   // at any zoom — without scaling, the iframe's body
                   // overflow:hidden would clip everything outside the
                   // top-left wrapper-sized region.
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
                   width,
                   height,
                   transform: `scale(${String(zoom)})`,
