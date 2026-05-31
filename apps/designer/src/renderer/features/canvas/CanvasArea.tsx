@@ -10,6 +10,7 @@ interface Props {
   selection: ReadonlySet<string>;
   editingTextId: string | null;
   bindModeFieldId: string | null;
+  currentFrame: number;
 }
 
 const SCALE = 0.5;
@@ -66,6 +67,7 @@ export function CanvasArea({
   selection,
   editingTextId,
   bindModeFieldId,
+  currentFrame,
 }: Props): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [src, setSrc] = useState<string | null>(null);
@@ -91,13 +93,28 @@ export function CanvasArea({
     function onMessage(evt: MessageEvent<unknown>): void {
       const msg = evt.data as { kind?: string; sceneId?: string } | undefined;
       if (msg?.kind === 'cg-preview-ready') {
-        // eslint-disable-next-line no-console
-        console.info('[designer] preview ready for', msg.sceneId);
+        // Tell the freshly-loaded iframe to render the current authoring
+        // frame so the canvas matches the Designer's playhead. Without
+        // this the iframe shows frame 0 on first load.
+        iframeRef.current?.contentWindow?.postMessage(
+          { kind: 'cg-preview', action: 'scrub', frame: currentFrame },
+          '*',
+        );
       }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, []);
+  }, [currentFrame]);
+
+  // Every time the Designer's authoring cursor moves, scrub the iframe
+  // to match so the visible shape and the Gizmo line up. Bare `tick(frame)`
+  // is cheap (no autoplay; just one apply pass).
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { kind: 'cg-preview', action: 'scrub', frame: currentFrame },
+      '*',
+    );
+  }, [currentFrame]);
 
   if (scene === null || src === null) {
     return (
@@ -134,6 +151,7 @@ export function CanvasArea({
           editingTextId={editingTextId}
           bindModeFieldId={bindModeFieldId}
           scale={SCALE}
+          currentFrame={currentFrame}
         />
       </div>
     </div>

@@ -70,12 +70,24 @@ export class Preview {
         installCasparGlobals(runtime);
         await runtime.ready;
         document.body.classList.remove('cg-pending');
+        // Apply current field values + render the initial frame without
+        // starting the FrameDriver — the Designer's timeline dock owns
+        // the playhead in authoring mode and scrubs via postMessage.
+        let currentFields = {};
+        let currentFrame = 0;
+        await runtime.update(currentFields);
+        runtime.tick(currentFrame);
         window.addEventListener('message', (evt) => {
           const msg = evt.data;
           if (!msg || typeof msg !== 'object' || msg.kind !== 'cg-preview') return;
           try {
             if (msg.action === 'update' && typeof window.update === 'function') {
-              window.update(JSON.stringify(msg.fields ?? {}));
+              currentFields = msg.fields ?? {};
+              window.update(JSON.stringify(currentFields));
+              runtime.tick(currentFrame);
+            } else if (msg.action === 'scrub' && typeof msg.frame === 'number') {
+              currentFrame = msg.frame;
+              runtime.tick(currentFrame);
             } else if (msg.action === 'play' && typeof window.play === 'function') {
               window.play(JSON.stringify(msg.fields ?? {}));
             } else if (msg.action === 'stop' && typeof window.stop === 'function') {
@@ -88,11 +100,6 @@ export class Preview {
         if (window.parent && window.parent !== window) {
           window.parent.postMessage({ kind: 'cg-preview-ready', sceneId: scene.id }, '*');
         }
-        setTimeout(() => {
-          if (typeof window.play === 'function') {
-            try { window.play(JSON.stringify({})); } catch (e) { /* swallow */ }
-          }
-        }, 100);
       })();
     </script>
   </body>

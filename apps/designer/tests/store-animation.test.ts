@@ -4,6 +4,7 @@ import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore } from '../src/renderer/state/store.js';
 import { defaultShape } from '../src/renderer/state/element-defaults.js';
+import { effectiveTransformAt } from '../src/renderer/features/timeline/keyframe-helpers.js';
 
 function freshSceneWithShape(): ShapeElement {
   const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
@@ -236,6 +237,37 @@ describe('B-002 — every keyframe on a track keeps its own distinct value', () 
       [25, 999],
       [50, 50],
     ]);
+  });
+});
+
+describe('effectiveTransformAt — Gizmo / drag use interpolated values', () => {
+  it('falls back to the static transform when no track exists', () => {
+    const t = effectiveTransformAt(selected(), 10);
+    expect(t.position).toEqual({ x: 50, y: 60 });
+    expect(t.size).toEqual({ w: 320, h: 120 });
+  });
+
+  it('interpolates between two position.x keyframes', () => {
+    designerStore.upsertKeyframe('el-1', 'position.x', 0, 100);
+    designerStore.upsertKeyframe('el-1', 'position.x', 10, 200);
+    const t = effectiveTransformAt(selected(), 5);
+    expect(t.position.x).toBe(150);
+    // Untouched static fields keep their static value
+    expect(t.position.y).toBe(60);
+    expect(t.size.w).toBe(320);
+  });
+
+  it('clamps to first keyframe before its frame', () => {
+    designerStore.upsertKeyframe('el-1', 'position.x', 10, 200);
+    const t = effectiveTransformAt(selected(), 0);
+    expect(t.position.x).toBe(200);
+  });
+
+  it('clamps to last keyframe after its frame', () => {
+    designerStore.upsertKeyframe('el-1', 'position.x', 0, 100);
+    designerStore.upsertKeyframe('el-1', 'position.x', 10, 200);
+    const t = effectiveTransformAt(selected(), 999);
+    expect(t.position.x).toBe(200);
   });
 });
 

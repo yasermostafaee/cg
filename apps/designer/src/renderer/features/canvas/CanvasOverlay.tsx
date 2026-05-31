@@ -4,6 +4,7 @@ import { colors } from '../../theme.js';
 import { designerStore, type DesignerTool } from '../../state/store.js';
 import { defaultEllipse, defaultShape, defaultText } from '../../state/element-defaults.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
+import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
 import { Gizmo } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
@@ -15,6 +16,7 @@ interface Props {
   editingTextId: string | null;
   bindModeFieldId: string | null;
   scale: number;
+  currentFrame: number;
 }
 
 const styles = {
@@ -53,6 +55,7 @@ export function CanvasOverlay({
   editingTextId,
   bindModeFieldId,
   scale,
+  currentFrame,
 }: Props): JSX.Element {
   const layerRef = useRef<HTMLDivElement>(null);
 
@@ -60,6 +63,13 @@ export function CanvasOverlay({
   for (const layer of scene.layers) {
     for (const el of layer.children) allElements.push(el);
   }
+  // For hit-testing: clone each element with its *visually effective*
+  // transform at the current frame, so the bounding boxes the
+  // `topmostHit` function checks are the ones the operator can see.
+  const allElementsAtFrame: Element[] = allElements.map((el) => ({
+    ...el,
+    transform: effectiveTransformAt(el, currentFrame),
+  }));
   const selectedEl =
     selection.size === 1 ? (allElements.find((e) => selection.has(e.id)) ?? null) : null;
   const editingEl = editingTextId
@@ -91,7 +101,7 @@ export function CanvasOverlay({
     if (editingEl !== null) return;
     const scenePoint = viewportToScene(e.clientX, e.clientY);
     if (bindModeFieldId !== null) {
-      const hit = topmostHit(allElements, scenePoint);
+      const hit = topmostHit(allElementsAtFrame, scenePoint);
       if (hit !== null) {
         const field = scene.fields.find((f) => f.id === bindModeFieldId);
         if (field !== undefined) {
@@ -103,10 +113,10 @@ export function CanvasOverlay({
       return;
     }
     if (tool === 'cursor') {
-      const hit = topmostHit(allElements, scenePoint);
+      const hit = topmostHit(allElementsAtFrame, scenePoint);
       if (hit !== null) {
         designerStore.setSelection([hit.id]);
-        beginDrag(hit.id, scale, e.nativeEvent);
+        beginDrag(hit.id, scale, currentFrame, e.nativeEvent);
       } else {
         designerStore.setSelection([]);
       }
@@ -139,7 +149,7 @@ export function CanvasOverlay({
 
   function onDoubleClick(e: React.MouseEvent<HTMLDivElement>): void {
     const scenePoint = viewportToScene(e.clientX, e.clientY);
-    const hit = topmostHit(allElements, scenePoint);
+    const hit = topmostHit(allElementsAtFrame, scenePoint);
     if (hit !== null && hit.type === 'text') {
       designerStore.setSelection([hit.id]);
       designerStore.setEditingText(hit.id);
@@ -159,7 +169,7 @@ export function CanvasOverlay({
       onDoubleClick={onDoubleClick}
     >
       {selectedEl !== null && editingEl === null && bindModeFieldId === null && (
-        <Gizmo element={selectedEl} scale={scale} />
+        <Gizmo element={selectedEl} scale={scale} currentFrame={currentFrame} />
       )}
       {editingEl !== null && editingEl.type === 'text' && (
         <TextEditor
@@ -173,7 +183,12 @@ export function CanvasOverlay({
   );
 }
 
-function beginDrag(elementId: string, scale: number, ev: PointerEvent): void {
+function beginDrag(
+  elementId: string,
+  scale: number,
+  currentFrame: number,
+  ev: PointerEvent,
+): void {
   const state = designerStore.get();
   if (state.scene === null) return;
   let element: Element | null = null;
@@ -188,7 +203,10 @@ function beginDrag(elementId: string, scale: number, ev: PointerEvent): void {
   if (element === null) return;
   const startX = ev.clientX;
   const startY = ev.clientY;
-  const startPos = { x: element.transform.position.x, y: element.transform.position.y };
+  // Drag from the *visually effective* start so the shape stays under
+  // the cursor when the property is animated.
+  const t0 = effectiveTransformAt(element, currentFrame);
+  const startPos = { x: t0.position.x, y: t0.position.y };
   let moved = false;
   const onMove = (e: PointerEvent): void => {
     const dx = (e.clientX - startX) / scale;

@@ -129,6 +129,7 @@ export function App(): JSX.Element {
               selection={selection}
               editingTextId={editingTextId}
               bindModeFieldId={bindModeFieldId}
+              currentFrame={currentFrame}
             />
           </div>
           {scene !== null && issues.length > 0 && (

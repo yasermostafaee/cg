@@ -1,10 +1,12 @@
 import type { Element } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
+import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 
 interface Props {
   element: Element;
   scale: number;
+  currentFrame: number;
 }
 
 const HANDLE = 10;
@@ -58,10 +60,11 @@ const styles = {
  * The handles use viewport (CSS) coordinates — the overlay scales their
  * positions by the same factor the iframe is at, so they line up.
  */
-export function Gizmo({ element, scale }: Props): JSX.Element {
-  const { position, size, rotation } = element.transform;
-  const w = size.w * element.transform.scale.x * scale;
-  const h = size.h * element.transform.scale.y * scale;
+export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
+  const t = effectiveTransformAt(element, currentFrame);
+  const { position, size, rotation } = t;
+  const w = size.w * t.scale.x * scale;
+  const h = size.h * t.scale.y * scale;
   const x = position.x * scale;
   const y = position.y * scale;
 
@@ -95,7 +98,7 @@ export function Gizmo({ element, scale }: Props): JSX.Element {
           }}
           onPointerDown={(e) => {
             e.stopPropagation();
-            beginResize(element, c.corner, scale, e.nativeEvent);
+            beginResize(element, c.corner, scale, currentFrame, e.nativeEvent);
           }}
         />
       ))}
@@ -104,7 +107,7 @@ export function Gizmo({ element, scale }: Props): JSX.Element {
         style={{ ...styles.rotateHandle, left: x + w / 2 - HANDLE / 2, top: y - 22 }}
         onPointerDown={(e) => {
           e.stopPropagation();
-          beginRotate(element, scale, e.nativeEvent);
+          beginRotate(element, currentFrame, e.nativeEvent);
         }}
       />
     </>
@@ -115,15 +118,21 @@ function beginResize(
   element: Element,
   corner: 'tl' | 'tr' | 'bl' | 'br',
   scale: number,
+  currentFrame: number,
   ev: PointerEvent,
 ): void {
   const startX = ev.clientX;
   const startY = ev.clientY;
+  // Read the *visually effective* transform at the current frame so the
+  // resize starts from where the operator can see the shape, not from the
+  // element's static value (which may differ once the property has a
+  // keyframe track).
+  const t0 = effectiveTransformAt(element, currentFrame);
   const start = {
-    x: element.transform.position.x,
-    y: element.transform.position.y,
-    w: element.transform.size.w,
-    h: element.transform.size.h,
+    x: t0.position.x,
+    y: t0.position.y,
+    w: t0.size.w,
+    h: t0.size.h,
   };
 
   const onMove = (e: PointerEvent): void => {
@@ -166,10 +175,10 @@ function beginResize(
   window.addEventListener('pointerup', onUp);
 }
 
-function beginRotate(element: Element, _scale: number, ev: PointerEvent): void {
+function beginRotate(element: Element, currentFrame: number, ev: PointerEvent): void {
   // Center of the element in viewport coordinates — captured by reading
   // the gizmo's bounding rect via the target's parent.
-  const startAngle = element.transform.rotation;
+  const startAngle = effectiveTransformAt(element, currentFrame).rotation;
   const startX = ev.clientX;
   const startY = ev.clientY;
   // Approximate center from the gizmo position (no scale needed — both
