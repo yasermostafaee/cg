@@ -8,33 +8,36 @@ import { colors } from '../../theme.js';
  * downstream effects (iframe reload) are heavier than a re-render.
  */
 
+const TRAIL_PX = 18;
+
 const styles = {
   row: {
     display: 'grid',
-    gridTemplateColumns: '90px 1fr',
-    gap: '0.4rem',
+    gridTemplateColumns: `74px 1fr ${String(TRAIL_PX)}px`,
+    gap: '0.35rem',
     alignItems: 'center',
-    padding: '0.15rem 0',
-    fontSize: '0.82rem',
+    padding: '0.1rem 0',
+    fontSize: '0.74rem',
   },
   rowMulti: {
     display: 'grid',
-    gridTemplateColumns: '90px 1fr 1fr',
-    gap: '0.4rem',
+    gridTemplateColumns: `74px 1fr 1fr ${String(TRAIL_PX)}px`,
+    gap: '0.35rem',
     alignItems: 'center',
-    padding: '0.15rem 0',
-    fontSize: '0.82rem',
+    padding: '0.1rem 0',
+    fontSize: '0.74rem',
   },
-  label: { color: colors.textMuted },
+  label: { color: colors.textMuted, fontSize: '0.7rem', letterSpacing: '0.02em' },
   input: {
     background: colors.panelMuted,
     color: colors.text,
     border: `1px solid ${colors.border}`,
-    padding: '0.2rem 0.4rem',
-    borderRadius: '0.2rem',
-    fontSize: '0.82rem',
+    padding: '0.15rem 0.35rem',
+    borderRadius: '0.18rem',
+    fontSize: '0.74rem',
     width: '100%',
     boxSizing: 'border-box' as const,
+    fontVariantNumeric: 'tabular-nums' as const,
   },
   color: {
     background: 'transparent',
@@ -43,6 +46,11 @@ const styles = {
     height: 22,
     padding: 0,
     cursor: 'pointer',
+  },
+  trailing: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 } as const;
 
@@ -53,6 +61,8 @@ interface NumberFieldProps {
   step?: number;
   min?: number;
   max?: number;
+  /** Optional element rendered in a trailing column (e.g. KeyframeIndicator). */
+  trailing?: JSX.Element;
 }
 
 export function NumberField(props: NumberFieldProps): JSX.Element {
@@ -75,6 +85,7 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
         }}
         key={`${props.label}-${String(props.value)}`}
       />
+      <span style={styles.trailing}>{props.trailing ?? null}</span>
     </div>
   );
 }
@@ -85,6 +96,8 @@ interface NumberPairFieldProps {
   y: number;
   onCommit: (x: number, y: number) => void;
   step?: number;
+  /** Optional element rendered in a trailing column (e.g. KeyframeIndicator). */
+  trailing?: JSX.Element;
 }
 
 export function NumberPairField(props: NumberPairFieldProps): JSX.Element {
@@ -124,6 +137,7 @@ export function NumberPairField(props: NumberPairFieldProps): JSX.Element {
         }}
         key={`${props.label}-y-${String(props.y)}`}
       />
+      <span style={styles.trailing}>{props.trailing ?? null}</span>
     </div>
   );
 }

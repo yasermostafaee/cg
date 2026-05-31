@@ -32,8 +32,18 @@
 
 - [x] 5.1 `apps/designer/tests/store-animation.test.ts` — covers upsert (new + collide), move (regular + collide), remove (last keyframe prunes the track), the track-aware `commitAnimatable` (static off-track, replace on-keyframe, insert on a new frame once a track exists), and the `selectedKeyframe` lifecycle
 
-## 6. Validation
+## 6. B-001 + B-002 follow-ups
 
-- [x] 6.1 `pnpm openspec validate add-animation-timeline-dock --strict` passes
-- [x] 6.2 `pnpm --filter @cg/designer typecheck && lint && test` pass
-- [x] 6.3 `pnpm --filter @cg/designer build` succeeds
+- [x] 6.1 Split selection from "open keyframe inspector" — add `keyframeInspectorOpen` to the store and `openKeyframeInspector` / `closeKeyframeInspector` helpers; InspectorPanel only switches when the flag is on
+- [x] 6.2 New `KeyframeIndicator` component (empty / has-track / at-frame / selected) and a shared `keyframeVariantFor` helper so the inspector indicator and TrackRow label indicator stay in lockstep
+- [x] 6.3 Render the indicator next to each of the eight animatable rows in `TransformSection`; click toggles a keyframe at the current frame; controls grow an optional `trailing` slot
+- [x] 6.4 TrackRow: single-click selects, double-click opens the Keyframe Inspector; row label shows property name + current value + indicator
+- [x] 6.5 KeyframeInspector grows a "← back" button that calls `closeKeyframeInspector` (preserves selection)
+- [x] 6.6 Designer-only theme overrides adopt the Loopic chrome palette (`#272b40`, `#24273d`, `#2e3247`); typography passes drops Inspector + Timeline rows to ~0.72rem with tabular-nums values
+- [x] 6.7 Regression tests in `tests/store-animation.test.ts` — distinct values per keyframe (3 points keep 3 values; commit at frame 25 touches only that one), the `setSelectedKeyframe` → no inspector flip rule, the `openKeyframeInspector` flip, and the close-preserves-selection invariant
+
+## 7. Validation
+
+- [x] 7.1 `pnpm openspec validate add-animation-timeline-dock --strict` passes
+- [x] 7.2 `pnpm --filter @cg/designer typecheck && lint && test` pass
+- [x] 7.3 `pnpm --filter @cg/designer build` succeeds

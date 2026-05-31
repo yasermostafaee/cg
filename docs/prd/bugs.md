@@ -9,15 +9,33 @@ statuses.
 Copy this block per bug (use `B-` IDs):
 
 ```md
-## [ ] B-001 — Short title   ⟨priority: high⟩
+
+## [~] B-001 — panels position and design  ⟨priority: high⟩ — folded into `openspec/changes/add-animation-timeline-dock/`
 **Repro:**
-1. Step …
-2. Step …
-**Expected:** What should happen.
-**Actual:** What happens instead (error text / screenshot path if any).
+1. فونتها و تکستها درشت هستن
+2. بعضی مقادیر و آیکونها در پنل پراپرتی وجود ندارند
+**Expected:** دقیقا مثل تصاویر که در تسک D-006 به آنها اشاره شده کل پنلها و دیزاین پیاده سازی شود
+**Actual:** all pics are related to D-006:  `docs/designer-guide/sample-assets/D-006-pic-*`
 **Env:** Browser + app (e.g. Chrome / Designer dev) — and whether it reproduces
 in the latest `main`.
-**Notes:** Suspected file/area if known.
+**Notes:** check this website https://app.loopic.io/studio and crawl and see all the codes, i have got those screenshots from this website
+
+
+## [~] B-002 — point frames action   ⟨priority: high⟩ — folded into `openspec/changes/add-animation-timeline-dock/`
+**Repro:**
+1. درست کار نکردن پوینتها
+2. عدم نمایش پراپرتی درست مربوط به پوینتها
+**Expected:** 
+وقتی روی یک پوینت کلیک میکنیم باید در قسمت لایه ها هم رنگ آیکون پوینت در لایه مربوطه زرد شود و همچنین در بخش پراپرتی یعنی پنل سمت راست باید آیکون پونت وجود داشته باشه
+دقیقا مثل تصاویر قرار داده شده
+چیزی که الان نمایش داده میشه زمانی که روی پوینتها کلیک میکنیم مناسب زمانیست که دابل کلیک کنیم نه کلیک
+
+برای هر پوینت باید مقدار متفاوت وجود داشته باشه یعنی اگر در لایه positionx 3 تا پوینت داریم هر کدوم باید بتونن مقادیر متفاوت داشته باشن
+**Actual:** What happens instead (error text / screenshot path if any).
+**Env:**  
+**Notes:** تصاویر مربوط به تسک D-006 رو با دقت بسیار بسیار بالا بررسی کن
+
+
 ```
 
 Claude's loop for a bug (per `README.md` processing contract): reproduce →

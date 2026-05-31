@@ -133,32 +133,83 @@ track instead of overwriting a single static value.
   track with the new value, the keyframe at frame 10 is left unchanged,
   and the element's static `transform.position.x` is unchanged
 
-### Requirement: Right Inspector switches to a Keyframe view when a point is selected
+### Requirement: Single-click vs double-click on a keyframe diamond
 
-The Designer's right-side Inspector SHALL replace the Scene / Element view
-with a Keyframe view whenever a keyframe is selected in the timeline. The
-Keyframe view SHALL show the selected point's element, property, frame,
-value, and easing, and the operator MUST be able to edit each. When the
-keyframe selection is cleared (empty-lane click, removal, scene change,
-or selecting a different element), the Inspector SHALL restore the
-previous Element / Scene view.
+A single-click on a keyframe diamond in the timeline lane SHALL select
+the point and scrub the playhead to its frame, but MUST keep the right
+Inspector on the Element view — only the diamond glyph, the matching
+indicator next to the track label, and the matching indicator on the
+right Inspector's row turn yellow. The operator SHALL open the dedicated
+Keyframe Inspector by **double-clicking** the diamond (or by an explicit
+"edit point" action). Closing the Keyframe Inspector SHALL preserve the
+selection so the yellow indicators stay lit.
 
-#### Scenario: Inspector follows a keyframe selection
-- **WHEN** the operator clicks a keyframe diamond on the Position X row
-- **THEN** the right Inspector switches to the Keyframe view for that
-  point, with its element name, property, frame, value, and easing editable
+#### Scenario: Single-click selects without changing the right panel
+- **WHEN** the operator single-clicks a keyframe diamond on the Position
+  X row
+- **THEN** the diamond turns yellow, the matching indicator in the
+  TrackRow label column turns yellow, the matching diamond on the right
+  Inspector's Position row turns yellow, the playhead scrubs to that
+  frame, and the right Inspector keeps showing the Element view (the
+  Keyframe Inspector does not open)
+
+#### Scenario: Double-click opens the dedicated Keyframe Inspector
+- **WHEN** the operator double-clicks a keyframe diamond
+- **THEN** the right Inspector switches to a Keyframe Inspector for that
+  point, showing the element name, property, frame, value, and easing,
+  and exposing a "back" affordance that closes it without dropping the
+  selection
 
 #### Scenario: Editing the keyframe inspector mutates only that keyframe
-- **WHEN** the Keyframe inspector is shown and the operator types a new
+- **WHEN** the Keyframe Inspector is shown and the operator types a new
   value or changes the easing
 - **THEN** only the selected keyframe's `value` / `easing` change; other
   keyframes on the track are left untouched
 
-#### Scenario: Inspector returns to the Element view on deselect
-- **WHEN** a keyframe is selected and the operator deselects it (clicks an
-  empty lane area or removes the keyframe)
-- **THEN** the Inspector falls back to the Element / Scene view that was
-  showing before the keyframe was selected
+#### Scenario: Inspector returns to the Element view on close
+- **WHEN** the Keyframe Inspector is open and the operator clicks its
+  back affordance (or removes the keyframe, or selects a different
+  element)
+- **THEN** the Inspector falls back to the Element / Scene view; the
+  selection is preserved when the operator just clicked "back"
+
+### Requirement: Per-property keyframe indicators in the right Inspector
+
+The Element Inspector SHALL render a small diamond indicator next to
+each of the eight animatable rows (Position, Size, Scale, Rotation,
+Opacity). The indicator SHALL reflect the row's track / keyframe state:
+empty outline (no track), filled accent (track exists, no keyframe at
+the current frame), highlighted accent (keyframe at the current frame),
+or yellow (the keyframe at the current frame is the currently-selected
+point). Clicking the indicator SHALL toggle a keyframe at the current
+frame on that property.
+
+#### Scenario: Indicator state mirrors the track
+- **WHEN** an element has no track on `opacity`
+- **THEN** the opacity row in the Inspector shows an empty/outlined
+  indicator, and the matching TrackRow label indicator shows the same
+  state
+
+#### Scenario: Indicator turns yellow when its keyframe is selected
+- **WHEN** the operator single-clicks a keyframe diamond on the Width
+  track
+- **THEN** the Inspector's Size-row indicator (which covers both Width
+  and Height) renders in the selected-yellow style at the same time as
+  the TrackRow label indicator
+
+#### Scenario: Click the indicator to add a keyframe
+- **WHEN** the operator clicks the indicator next to Rotation in the
+  Inspector while the playhead is at frame N and no keyframe is there
+- **THEN** a keyframe is added on `rotation` at frame N with the
+  element's current rotation value, the indicator becomes selected, and
+  a diamond appears on the timeline's Rotation lane at the matching
+  x-position
+
+#### Scenario: Click the indicator on an existing keyframe to remove it
+- **WHEN** the operator clicks the indicator next to Rotation while a
+  keyframe for `rotation` sits on the current frame
+- **THEN** that keyframe is removed; if it was the last keyframe on the
+  track, the track is pruned
 
 ### Requirement: Transport controls (play, pause, step, stop)
 

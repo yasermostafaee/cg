@@ -60,6 +60,7 @@ export function App(): JSX.Element {
     bindModeFieldId,
     currentFrame,
     selectedKeyframe,
+    keyframeInspectorOpen,
   } = useDesignerStore();
   const issues = useIssues(scene);
 
@@ -82,6 +83,8 @@ export function App(): JSX.Element {
           projectPath={projectPath}
           selection={selection}
           selectedKeyframe={selectedKeyframe}
+          keyframeInspectorOpen={keyframeInspectorOpen}
+          currentFrame={currentFrame}
         />
       </div>
       {scene !== null && (

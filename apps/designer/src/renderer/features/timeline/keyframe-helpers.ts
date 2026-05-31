@@ -42,3 +42,39 @@ export function hasKeyframeAt(el: Element, property: AnimatableProperty, frame: 
   if (track === undefined) return false;
   return track.keyframes.some((k) => k.frame === frame);
 }
+
+import type { KeyframeIndicatorVariant } from './KeyframeIndicator.js';
+
+/**
+ * Compute the diamond indicator's visual state for a single track on a
+ * specific element at the current frame, given the currently-selected
+ * keyframe. Same rule across the Inspector and the timeline label
+ * column, so a single click in the timeline lights both indicators.
+ */
+export function keyframeVariantFor(
+  element: Element,
+  property: AnimatableProperty,
+  currentFrame: number,
+  selectedKeyframe: {
+    elementId: string;
+    property: AnimatableProperty;
+    frame: number;
+  } | null,
+): KeyframeIndicatorVariant {
+  const isThisRowSelected =
+    selectedKeyframe !== null &&
+    selectedKeyframe.elementId === element.id &&
+    selectedKeyframe.property === property;
+  if (isThisRowSelected && selectedKeyframe.frame === currentFrame) return 'selected';
+  const track = trackOf(element, property);
+  if (track === undefined) return 'empty';
+  if (isThisRowSelected) {
+    // The selected keyframe is on this property but the playhead is on a
+    // different frame. Keep the selected-row indicator yellow so the
+    // operator can still see which row holds the selection — this matches
+    // the Loopic reference (yellow lit row indicator).
+    return 'selected';
+  }
+  if (track.keyframes.some((k) => k.frame === currentFrame)) return 'at-frame';
+  return 'has-track';
+}

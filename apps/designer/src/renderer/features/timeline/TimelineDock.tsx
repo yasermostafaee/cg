@@ -21,44 +21,45 @@ const styles = {
     margin: '0 0.75rem 0.5rem',
     display: 'flex',
     flexDirection: 'column' as const,
-    fontSize: '0.8rem',
+    fontSize: '0.72rem',
   },
   header: {
     display: 'flex',
     alignItems: 'center',
-    gap: '0.4rem',
-    padding: '0.35rem 0.5rem',
+    gap: '0.35rem',
+    padding: '0.3rem 0.5rem',
     borderBottom: `1px solid ${colors.border}`,
   },
   title: {
     fontWeight: 700,
     color: colors.textMuted,
-    fontSize: '0.74rem',
+    fontSize: '0.66rem',
     letterSpacing: '0.05em',
-    marginRight: '0.5rem',
+    marginRight: '0.4rem',
   },
   button: {
     background: colors.panelMuted,
     color: colors.text,
     border: `1px solid ${colors.border}`,
-    borderRadius: '0.2rem',
-    fontSize: '0.78rem',
-    padding: '0.15rem 0.45rem',
+    borderRadius: '0.18rem',
+    fontSize: '0.7rem',
+    padding: '0.1rem 0.4rem',
     cursor: 'pointer',
   },
   buttonPrimary: {
     background: colors.accent,
     color: '#000',
     border: `1px solid ${colors.accentMuted}`,
-    borderRadius: '0.2rem',
-    fontSize: '0.78rem',
-    padding: '0.15rem 0.5rem',
+    borderRadius: '0.18rem',
+    fontSize: '0.7rem',
+    padding: '0.1rem 0.45rem',
     fontWeight: 700,
     cursor: 'pointer',
   },
   frameReadout: {
     marginLeft: 'auto',
     color: colors.textMuted,
+    fontSize: '0.7rem',
     fontVariantNumeric: 'tabular-nums' as const,
   },
   rulerRow: {
@@ -70,16 +71,16 @@ const styles = {
     borderRight: `1px solid ${colors.border}`,
     borderBottom: `1px solid ${colors.border}`,
     color: colors.textMuted,
-    fontSize: '0.66rem',
-    letterSpacing: '0.05em',
+    fontSize: '0.6rem',
+    letterSpacing: '0.06em',
     padding: '0 0.5rem',
     display: 'flex',
     alignItems: 'center',
   },
   empty: {
-    padding: '1rem',
+    padding: '0.6rem',
     color: colors.textMuted,
-    fontSize: '0.82rem',
+    fontSize: '0.72rem',
     textAlign: 'center' as const,
   },
 } as const;
@@ -221,23 +222,17 @@ export function TimelineDock({
         </p>
       ) : (
         <div role="list" onPointerDown={(e) => deselectOnLaneClick(e, selected.id)}>
-          {TIMELINE_ROWS.map((row) => {
-            const onThisRow =
-              selectedKeyframe !== null &&
-              selectedKeyframe.elementId === selected.id &&
-              selectedKeyframe.property === row.property;
-            return (
-              <TrackRow
-                key={row.property}
-                row={row}
-                element={selected}
-                frameIn={frameIn}
-                frameOut={frameOut}
-                currentFrame={currentFrame}
-                selectedKeyframeFrame={onThisRow ? selectedKeyframe.frame : null}
-              />
-            );
-          })}
+          {TIMELINE_ROWS.map((row) => (
+            <TrackRow
+              key={row.property}
+              row={row}
+              element={selected}
+              frameIn={frameIn}
+              frameOut={frameOut}
+              currentFrame={currentFrame}
+              selectedKeyframe={selectedKeyframe}
+            />
+          ))}
         </div>
       )}
     </section>

@@ -12,6 +12,8 @@ interface Props {
   projectPath: string | null;
   selection: ReadonlySet<string>;
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
+  keyframeInspectorOpen: boolean;
+  currentFrame: number;
 }
 
 const styles = {
@@ -19,69 +21,74 @@ const styles = {
     background: colors.panel,
     border: `1px solid ${colors.border}`,
     borderRadius: '0.25rem',
-    padding: '0.75rem',
+    padding: '0.6rem',
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.4rem',
+    gap: '0.3rem',
     minHeight: 0,
     overflowY: 'auto' as const,
+    fontSize: '0.74rem',
   },
   heading: {
-    fontSize: '0.78rem',
+    fontSize: '0.66rem',
     fontWeight: 700,
     color: colors.textMuted,
-    letterSpacing: '0.05em',
-    margin: '0.4rem 0 0.2rem',
-    paddingTop: '0.4rem',
+    letterSpacing: '0.06em',
+    margin: '0.35rem 0 0.15rem',
+    paddingTop: '0.35rem',
     borderTop: `1px solid ${colors.border}`,
   },
   headingFirst: {
-    fontSize: '0.78rem',
+    fontSize: '0.7rem',
     fontWeight: 700,
     color: colors.textMuted,
-    letterSpacing: '0.05em',
+    letterSpacing: '0.06em',
     margin: 0,
   },
   row: {
     display: 'grid',
-    gridTemplateColumns: '110px 1fr',
-    gap: '0.5rem',
-    fontSize: '0.82rem',
-    padding: '0.15rem 0',
+    gridTemplateColumns: '90px 1fr',
+    gap: '0.4rem',
+    fontSize: '0.72rem',
+    padding: '0.1rem 0',
   },
-  label: { color: colors.textMuted },
-  value: { color: colors.text, fontWeight: 500 },
-  empty: { color: colors.textMuted, fontSize: '0.85rem' },
+  label: { color: colors.textMuted, fontSize: '0.7rem' },
+  value: {
+    color: colors.text,
+    fontWeight: 500,
+    fontVariantNumeric: 'tabular-nums' as const,
+  },
+  empty: { color: colors.textMuted, fontSize: '0.74rem' },
   removeButton: {
     background: 'transparent',
     color: colors.textMuted,
     border: `1px solid ${colors.border}`,
-    padding: '0.2rem 0.5rem',
-    borderRadius: '0.2rem',
+    padding: '0.15rem 0.5rem',
+    borderRadius: '0.18rem',
     cursor: 'pointer',
-    fontSize: '0.75rem',
+    fontSize: '0.7rem',
     alignSelf: 'flex-start' as const,
-    marginTop: '0.3rem',
+    marginTop: '0.25rem',
   },
   bindList: {
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.25rem',
+    gap: '0.2rem',
   },
   bindRow: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: '0.5rem',
+    gap: '0.4rem',
   },
   bindRemove: {
     background: 'transparent',
     color: colors.textMuted,
     border: `1px solid ${colors.border}`,
-    padding: '0.1rem 0.35rem',
-    borderRadius: '0.2rem',
+    padding: '0.08rem 0.3rem',
+    borderRadius: '0.18rem',
     cursor: 'pointer',
-    fontSize: '0.72rem',
+    fontSize: '0.68rem',
   },
 } as const;
 
@@ -95,6 +102,8 @@ export function InspectorPanel({
   projectPath,
   selection,
   selectedKeyframe,
+  keyframeInspectorOpen,
+  currentFrame,
 }: Props): JSX.Element {
   if (scene === null) {
     return (
@@ -105,7 +114,10 @@ export function InspectorPanel({
     );
   }
 
-  if (selectedKeyframe !== null) {
+  // Single-click on a timeline diamond only lights up the yellow indicators
+  // (selectedKeyframe is set). The dedicated Keyframe Inspector view is
+  // reserved for an explicit double-click on a point.
+  if (selectedKeyframe !== null && keyframeInspectorOpen) {
     return <KeyframeInspector scene={scene} selectedKeyframe={selectedKeyframe} />;
   }
 
@@ -113,7 +125,14 @@ export function InspectorPanel({
   if (selected === null) {
     return <SceneInspector scene={scene} projectPath={projectPath} />;
   }
-  return <ElementInspector element={selected} scene={scene} />;
+  return (
+    <ElementInspector
+      element={selected}
+      scene={scene}
+      currentFrame={currentFrame}
+      selectedKeyframe={selectedKeyframe}
+    />
+  );
 }
 
 function SceneInspector({
@@ -142,7 +161,17 @@ function SceneInspector({
   );
 }
 
-function ElementInspector({ element, scene }: { element: Element; scene: Scene }): JSX.Element {
+function ElementInspector({
+  element,
+  scene,
+  currentFrame,
+  selectedKeyframe,
+}: {
+  element: Element;
+  scene: Scene;
+  currentFrame: number;
+  selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
+}): JSX.Element {
   const bindings = scene.bindings
     .map((b, idx) => ({ b, idx }))
     .filter(({ b }) => bindingTargetsElement(b, element.id));
@@ -152,7 +181,11 @@ function ElementInspector({ element, scene }: { element: Element; scene: Scene }
       <Row label="id" value={element.id} />
       <Row label="name" value={element.name} />
       <h3 style={styles.heading}>TRANSFORM</h3>
-      <TransformSection element={element} />
+      <TransformSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
       <h3 style={styles.heading}>STYLE</h3>
       <StyleSection element={element} />
       <h3 style={styles.heading}>BINDINGS</h3>

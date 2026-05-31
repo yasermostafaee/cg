@@ -209,3 +209,95 @@ describe('designerStore — selectedKeyframe', () => {
     expect(kf).toEqual({ frame: 12, value: 2.5, easing: 'ease-in-out' });
   });
 });
+
+describe('B-002 — every keyframe on a track keeps its own distinct value', () => {
+  it('three position.x keyframes can each hold a different value', () => {
+    designerStore.upsertKeyframe('el-1', 'position.x', 0, 100);
+    designerStore.upsertKeyframe('el-1', 'position.x', 25, 500);
+    designerStore.upsertKeyframe('el-1', 'position.x', 50, 50);
+    const kfs = selected().animation?.tracks['position.x']?.keyframes;
+    expect(kfs?.map((k) => [k.frame, k.value])).toEqual([
+      [0, 100],
+      [25, 500],
+      [50, 50],
+    ]);
+  });
+
+  it('editing one keyframe does not touch the others (track-aware commit)', () => {
+    designerStore.upsertKeyframe('el-1', 'position.x', 0, 100);
+    designerStore.upsertKeyframe('el-1', 'position.x', 25, 500);
+    designerStore.upsertKeyframe('el-1', 'position.x', 50, 50);
+    // Scrub to frame 25 and re-commit a different value.
+    designerStore.setCurrentFrame(25);
+    designerStore.commitAnimatable('el-1', 'position.x', 999);
+    const kfs = selected().animation?.tracks['position.x']?.keyframes;
+    expect(kfs?.map((k) => [k.frame, k.value])).toEqual([
+      [0, 100],
+      [25, 999],
+      [50, 50],
+    ]);
+  });
+});
+
+describe('B-002 — single-click vs double-click on a timeline diamond', () => {
+  it('setSelectedKeyframe alone does NOT open the keyframe inspector', () => {
+    designerStore.upsertKeyframe('el-1', 'opacity', 8, 0.5);
+    designerStore.setSelectedKeyframe({ elementId: 'el-1', property: 'opacity', frame: 8 });
+    expect(designerStore.get().selectedKeyframe).toEqual({
+      elementId: 'el-1',
+      property: 'opacity',
+      frame: 8,
+    });
+    expect(designerStore.get().keyframeInspectorOpen).toBe(false);
+  });
+
+  it('openKeyframeInspector flips the flag (the double-click path)', () => {
+    designerStore.upsertKeyframe('el-1', 'opacity', 8, 0.5);
+    designerStore.openKeyframeInspector({
+      elementId: 'el-1',
+      property: 'opacity',
+      frame: 8,
+    });
+    const s = designerStore.get();
+    expect(s.selectedKeyframe).toEqual({ elementId: 'el-1', property: 'opacity', frame: 8 });
+    expect(s.keyframeInspectorOpen).toBe(true);
+  });
+
+  it('closeKeyframeInspector clears the flag but keeps the selection', () => {
+    designerStore.upsertKeyframe('el-1', 'opacity', 8, 0.5);
+    designerStore.openKeyframeInspector({
+      elementId: 'el-1',
+      property: 'opacity',
+      frame: 8,
+    });
+    designerStore.closeKeyframeInspector();
+    const s = designerStore.get();
+    expect(s.keyframeInspectorOpen).toBe(false);
+    expect(s.selectedKeyframe).toEqual({ elementId: 'el-1', property: 'opacity', frame: 8 });
+  });
+
+  it('single-clicking another keyframe closes the previously-opened inspector', () => {
+    designerStore.upsertKeyframe('el-1', 'opacity', 8, 0.5);
+    designerStore.upsertKeyframe('el-1', 'opacity', 20, 0.9);
+    designerStore.openKeyframeInspector({
+      elementId: 'el-1',
+      property: 'opacity',
+      frame: 8,
+    });
+    // Single-click on a DIFFERENT diamond.
+    designerStore.setSelectedKeyframe({ elementId: 'el-1', property: 'opacity', frame: 20 });
+    expect(designerStore.get().keyframeInspectorOpen).toBe(false);
+    expect(designerStore.get().selectedKeyframe?.frame).toBe(20);
+  });
+
+  it('re-clicking the same diamond keeps the inspector open if it was open', () => {
+    designerStore.upsertKeyframe('el-1', 'opacity', 8, 0.5);
+    designerStore.openKeyframeInspector({
+      elementId: 'el-1',
+      property: 'opacity',
+      frame: 8,
+    });
+    designerStore.setSelectedKeyframe({ elementId: 'el-1', property: 'opacity', frame: 8 });
+    expect(designerStore.get().keyframeInspectorOpen).toBe(true);
+  });
+});

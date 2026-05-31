@@ -46,12 +46,22 @@ export interface DesignerStoreState {
    */
   currentFrame: number;
   /**
-   * When set, the right-side Inspector switches to a Keyframe Inspector
-   * showing this point's frame / value / easing. Selecting a keyframe in
-   * the timeline sets this; clicking an empty lane or the canvas clears
-   * it.
+   * Currently-selected keyframe in the timeline. Drives the yellow
+   * highlight on the diamond glyph (in the timeline lane, the track
+   * row's left label, and the Inspector's per-row indicator). A bare
+   * single-click on a timeline diamond sets only this — the Inspector
+   * stays on the Element view.
    */
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
+  /**
+   * Whether the right-side Inspector is showing the dedicated Keyframe
+   * Inspector (frame / value / easing editor) for `selectedKeyframe`.
+   * Toggled true only by an explicit double-click on a keyframe diamond
+   * (or by the "edit point" action). Single-click leaves it false so
+   * the Inspector keeps showing the Element view with diamond indicators
+   * lit up for the selected point.
+   */
+  keyframeInspectorOpen: boolean;
 }
 
 const initialState: DesignerStoreState = {
@@ -63,6 +73,7 @@ const initialState: DesignerStoreState = {
   bindModeFieldId: null,
   currentFrame: 0,
   selectedKeyframe: null,
+  keyframeInspectorOpen: false,
 };
 
 type Listener = (state: DesignerStoreState) => void;
@@ -132,6 +143,7 @@ export const designerStore = {
       projectPath,
       selection: new Set<string>(),
       selectedKeyframe: null,
+      keyframeInspectorOpen: false,
       currentFrame: 0,
     });
   },
@@ -149,6 +161,7 @@ export const designerStore = {
       selection: nextSel,
       editingTextId: null,
       selectedKeyframe: keepKey ? current.selectedKeyframe : null,
+      keyframeInspectorOpen: keepKey ? current.keyframeInspectorOpen : false,
     });
   },
 
@@ -320,7 +333,7 @@ export const designerStore = {
       current.selectedKeyframe.property === property &&
       current.selectedKeyframe.frame === frame
     ) {
-      set({ selectedKeyframe: null });
+      set({ selectedKeyframe: null, keyframeInspectorOpen: false });
     }
   },
 
@@ -353,11 +366,39 @@ export const designerStore = {
     designerStore.writeStaticAnimatable(elementId, property, value);
   },
 
-  /** Set the keyframe inspected by the right-side panel. Pass null to clear. */
+  /**
+   * Set the keyframe selection (the yellow-diamond highlight). Closes
+   * the dedicated Keyframe Inspector if it was open for a different
+   * point, so that single-clicking a new diamond doesn't keep showing
+   * a stale detail view.
+   */
   setSelectedKeyframe(
     key: { elementId: string; property: AnimatableProperty; frame: number } | null,
   ): void {
-    set({ selectedKeyframe: key });
+    const cur = current.selectedKeyframe;
+    const keepOpen =
+      current.keyframeInspectorOpen &&
+      key !== null &&
+      cur !== null &&
+      cur.elementId === key.elementId &&
+      cur.property === key.property &&
+      cur.frame === key.frame;
+    set({ selectedKeyframe: key, keyframeInspectorOpen: keepOpen });
+  },
+
+  /** Open the right-side Keyframe Inspector for a specific point. */
+  openKeyframeInspector(key: {
+    elementId: string;
+    property: AnimatableProperty;
+    frame: number;
+  }): void {
+    set({ selectedKeyframe: key, keyframeInspectorOpen: true });
+  },
+
+  /** Close the right-side Keyframe Inspector (selection is preserved). */
+  closeKeyframeInspector(): void {
+    if (!current.keyframeInspectorOpen) return;
+    set({ keyframeInspectorOpen: false });
   },
 
   /** Update an existing keyframe's value in place (no frame change). */
@@ -487,6 +528,7 @@ export const designerStore = {
       scene: { ...current.scene, layers: nextLayers },
       selection: nextSelection,
       selectedKeyframe: keepKey ? current.selectedKeyframe : null,
+      keyframeInspectorOpen: keepKey ? current.keyframeInspectorOpen : false,
     });
   },
 
@@ -514,6 +556,7 @@ export const designerStore = {
       bindModeFieldId: null,
       currentFrame: 0,
       selectedKeyframe: null,
+      keyframeInspectorOpen: false,
     };
     listeners.clear();
   },

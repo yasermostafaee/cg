@@ -20,48 +20,64 @@ const styles = {
     background: colors.panel,
     border: `1px solid ${colors.border}`,
     borderRadius: '0.25rem',
-    padding: '0.75rem',
+    padding: '0.6rem',
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.4rem',
+    gap: '0.3rem',
     minHeight: 0,
     overflowY: 'auto' as const,
+    fontSize: '0.74rem',
+  },
+  topRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '0.4rem',
   },
   headingFirst: {
-    fontSize: '0.78rem',
+    fontSize: '0.7rem',
     fontWeight: 700,
     color: colors.textMuted,
-    letterSpacing: '0.05em',
+    letterSpacing: '0.06em',
     margin: 0,
   },
   heading: {
-    fontSize: '0.78rem',
+    fontSize: '0.66rem',
     fontWeight: 700,
     color: colors.textMuted,
-    letterSpacing: '0.05em',
-    margin: '0.4rem 0 0.2rem',
-    paddingTop: '0.4rem',
+    letterSpacing: '0.06em',
+    margin: '0.35rem 0 0.15rem',
+    paddingTop: '0.35rem',
     borderTop: `1px solid ${colors.border}`,
   },
   row: {
     display: 'grid',
-    gridTemplateColumns: '110px 1fr',
-    gap: '0.5rem',
-    fontSize: '0.82rem',
-    padding: '0.15rem 0',
+    gridTemplateColumns: '90px 1fr',
+    gap: '0.4rem',
+    fontSize: '0.72rem',
+    padding: '0.1rem 0',
   },
-  label: { color: colors.textMuted },
+  label: { color: colors.textMuted, fontSize: '0.7rem' },
   value: { color: colors.text, fontWeight: 500 },
   removeButton: {
     background: 'transparent',
     color: '#fda4af',
     border: `1px solid ${colors.border}`,
-    padding: '0.2rem 0.5rem',
-    borderRadius: '0.2rem',
+    padding: '0.15rem 0.4rem',
+    borderRadius: '0.18rem',
     cursor: 'pointer',
-    fontSize: '0.75rem',
+    fontSize: '0.7rem',
     alignSelf: 'flex-start' as const,
     marginTop: '0.3rem',
+  },
+  closeButton: {
+    background: 'transparent',
+    color: colors.textMuted,
+    border: `1px solid ${colors.border}`,
+    padding: '0.1rem 0.35rem',
+    borderRadius: '0.18rem',
+    cursor: 'pointer',
+    fontSize: '0.68rem',
   },
 } as const;
 
@@ -82,8 +98,18 @@ export function KeyframeInspector({ scene, selectedKeyframe }: Props): JSX.Eleme
   if (element === null || keyframe === undefined) {
     return (
       <aside style={styles.panel} aria-label="Inspector">
-        <h2 style={styles.headingFirst}>KEYFRAME</h2>
-        <p style={{ color: colors.textMuted, fontSize: '0.85rem' }}>
+        <div style={styles.topRow}>
+          <h2 style={styles.headingFirst}>KEYFRAME</h2>
+          <button
+            type="button"
+            style={styles.closeButton}
+            onClick={() => designerStore.closeKeyframeInspector()}
+            aria-label="Back to element inspector"
+          >
+            ← back
+          </button>
+        </div>
+        <p style={{ color: colors.textMuted, fontSize: '0.74rem' }}>
           The selected keyframe is no longer available.
         </p>
       </aside>
@@ -92,7 +118,17 @@ export function KeyframeInspector({ scene, selectedKeyframe }: Props): JSX.Eleme
 
   return (
     <aside style={styles.panel} aria-label="Inspector">
-      <h2 style={styles.headingFirst}>KEYFRAME — {rowLabel.toUpperCase()}</h2>
+      <div style={styles.topRow}>
+        <h2 style={styles.headingFirst}>KEYFRAME — {rowLabel.toUpperCase()}</h2>
+        <button
+          type="button"
+          style={styles.closeButton}
+          onClick={() => designerStore.closeKeyframeInspector()}
+          aria-label="Back to element inspector"
+        >
+          ← back
+        </button>
+      </div>
       <StaticRow label="element" value={element.name} />
       <StaticRow label="property" value={property} />
       <h3 style={styles.heading}>POINT</h3>

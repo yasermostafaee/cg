@@ -89,20 +89,39 @@ on the left, keyframe diamonds along the right.
   This is a small, local loop — no coupling to the preview iframe's own
   driver.
 
-- **Right-side Inspector switches between Element and Keyframe modes.** When
-  the operator clicks a keyframe diamond, the same `selectedKeyframe` field
-  on the store both drives the diamond's yellow highlight in the timeline
-  and switches the right Inspector to a new `KeyframeInspector` that edits
-  the point's frame / value / easing. Clicking an empty lane area or
-  removing the keyframe falls back to the element-properties view. This
-  matches the Loopic reference where the right panel shifts content based
-  on what is selected.
+- **Single-click vs double-click on a keyframe diamond.** Single-click is
+  lightweight selection only — `setSelectedKeyframe` lights up three
+  yellow indicators (the lane diamond, the TrackRow label diamond, and
+  the matching diamond on the right Inspector's animatable row) but the
+  right panel keeps showing the Element view. The dedicated
+  `KeyframeInspector` for editing the point's frame / value / easing
+  opens only on an explicit **double-click** (or its "edit" affordance) —
+  it sets a separate `keyframeInspectorOpen: boolean` flag so the
+  selection state and the inspector mode are decoupled. This matches the
+  Loopic reference where single-click is a lightweight gesture and the
+  detail panel needs a deliberate gesture to surface; B-002 specifically
+  called out that the previous always-switch behaviour belonged on
+  double-click.
+- **Per-property indicators in the Element Inspector.** Each of the eight
+  animatable rows in `TransformSection` carries a small diamond glyph
+  that mirrors the matching glyph in the TrackRow label column. The
+  shared `keyframeVariantFor` helper computes the variant (empty,
+  has-track, at-frame, selected) so the two diamonds stay in sync —
+  which is what makes "click a point in the timeline" feel coherent
+  across the two panels. Click the indicator to toggle a keyframe at
+  the current frame.
 - **Ruler is structurally a row that shares the dock's grid.** The dock
   uses a 2-column grid (`[label-col] [lane-col]`) and the ruler row uses
   the same grid — frame 0 sits in the ruler exactly where every track
   row's lane starts, so a keyframe at frame N visually lines up with the
   ruler's "N" tick. The label column carries a "FRAME" caption gutter and
   no ticks.
+- **Density + palette pass (B-001).** Inspector and timeline font sizes
+  drop from `~0.82rem` to `~0.72rem` with tabular-nums for value columns
+  and tighter row padding so the dense data layout in the Loopic reference
+  reads correctly. Designer-only theme overrides adopt the bluer Loopic
+  chrome (`#272b40`/`#24273d`/`#2e3247`) without touching the shared
+  `@cg/ui` chrome — Runtime keeps its existing palette.
 
 ## Risks / Trade-offs
 

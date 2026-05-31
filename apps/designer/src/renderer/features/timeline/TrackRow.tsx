@@ -1,8 +1,15 @@
 import { useRef } from 'react';
-import type { Element, Keyframe } from '@cg/shared-schema';
+import type { AnimatableProperty, Element, Keyframe } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
-import { LABEL_COL_PX, trackOf, type TimelineRow } from './keyframe-helpers.js';
+import { KeyframeIndicator } from './KeyframeIndicator.js';
+import {
+  LABEL_COL_PX,
+  hasKeyframeAt,
+  keyframeVariantFor,
+  trackOf,
+  type TimelineRow,
+} from './keyframe-helpers.js';
 
 interface Props {
   row: TimelineRow;
@@ -10,11 +17,15 @@ interface Props {
   frameIn: number;
   frameOut: number;
   currentFrame: number;
-  /** Frame of the currently-selected keyframe on THIS row, or null. */
-  selectedKeyframeFrame: number | null;
+  /** The full selectedKeyframe pointer from the store (may be on a different row). */
+  selectedKeyframe: {
+    elementId: string;
+    property: AnimatableProperty;
+    frame: number;
+  } | null;
 }
 
-const ROW_HEIGHT = 22;
+const ROW_HEIGHT = 20;
 
 const styles = {
   row: {
@@ -23,28 +34,28 @@ const styles = {
     alignItems: 'stretch',
     borderBottom: `1px solid ${colors.border}`,
     height: ROW_HEIGHT,
-    fontSize: '0.78rem',
+    fontSize: '0.7rem',
   },
   label: {
     color: colors.textMuted,
-    paddingLeft: '0.5rem',
-    display: 'flex',
+    padding: '0 0.4rem',
+    display: 'grid',
+    gridTemplateColumns: '1fr auto auto',
     alignItems: 'center',
-    gap: '0.4rem',
+    gap: '0.35rem',
     borderRight: `1px solid ${colors.border}`,
     background: colors.panel,
   },
-  addButton: {
-    background: 'transparent',
-    color: colors.accent,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '50%',
-    width: 14,
-    height: 14,
-    lineHeight: '12px',
-    fontSize: '0.72rem',
-    padding: 0,
-    cursor: 'pointer',
+  labelName: {
+    color: colors.textMuted,
+    overflow: 'hidden' as const,
+    textOverflow: 'ellipsis' as const,
+    whiteSpace: 'nowrap' as const,
+  },
+  labelValue: {
+    color: colors.text,
+    fontVariantNumeric: 'tabular-nums' as const,
+    fontSize: '0.7rem',
   },
   lane: {
     position: 'relative' as const,
@@ -62,8 +73,8 @@ const styles = {
   keyDiamond: {
     position: 'absolute' as const,
     top: '50%',
-    width: 10,
-    height: 10,
+    width: 9,
+    height: 9,
     transform: 'translate(-50%, -50%) rotate(45deg)',
     background: colors.accent,
     border: `1px solid ${colors.accentMuted}`,
@@ -77,21 +88,32 @@ const styles = {
 } as const;
 
 /**
- * One animatable-property track row: a label + add-keyframe button on the
- * left and a lane on the right with one diamond per keyframe. Diamonds are
- * draggable to move keyframes and selectable for delete; selection lives in
- * the store so the right Inspector can switch to a Keyframe view.
+ * One animatable-property track row. Layout mirrors the Loopic reference:
+ *
+ *   [ label ][ current value ][ ◆ indicator ] │ lane with keyframe diamonds
+ *
+ * The label-column indicator shares its visual state with the matching
+ * indicator in the right Inspector — single-clicking a keyframe on the
+ * lane lights both yellow. Click semantics on a lane diamond:
+ *   - single-click → select the point + scrub the playhead to it
+ *   - double-click → also open the Keyframe Inspector on the right
+ *   - drag         → move the keyframe along the track
+ *   - Delete/Backspace (with the diamond selected) → remove it
  */
 export function TrackRow(props: Props): JSX.Element {
-  const { row, element, frameIn, frameOut, currentFrame, selectedKeyframeFrame } = props;
+  const { row, element, frameIn, frameOut, currentFrame, selectedKeyframe } = props;
   const laneRef = useRef<HTMLDivElement | null>(null);
   const span = Math.max(1, frameOut - frameIn);
   const track = trackOf(element, row.property);
   const keyframes: readonly Keyframe[] = track?.keyframes ?? [];
+  const currentValue = formatValue(row.read(element));
 
-  function addKeyframe(): void {
-    const value = row.read(element);
-    designerStore.upsertKeyframe(element.id, row.property, currentFrame, value);
+  function toggleKeyframeHere(): void {
+    if (hasKeyframeAt(element, row.property, currentFrame)) {
+      designerStore.removeKeyframe(element.id, row.property, currentFrame);
+      return;
+    }
+    designerStore.upsertKeyframe(element.id, row.property, currentFrame, row.read(element));
     designerStore.setSelectedKeyframe({
       elementId: element.id,
       property: row.property,
@@ -108,25 +130,28 @@ export function TrackRow(props: Props): JSX.Element {
     return Math.round(frameIn + ratio * span);
   }
 
+  const variant = keyframeVariantFor(element, row.property, currentFrame, selectedKeyframe);
+
   return (
     <div style={styles.row} data-track-property={row.property}>
       <div style={styles.label}>
-        <button
-          type="button"
-          style={styles.addButton}
-          onClick={addKeyframe}
-          aria-label={`Add keyframe for ${row.label} at frame ${String(currentFrame)}`}
-          title={`Add keyframe at frame ${String(currentFrame)}`}
-        >
-          ◆
-        </button>
-        <span>{row.label}</span>
+        <span style={styles.labelName}>{row.label}</span>
+        <span style={styles.labelValue}>{currentValue}</span>
+        <KeyframeIndicator
+          variant={variant}
+          onClick={toggleKeyframeHere}
+          ariaLabel={`Toggle keyframe for ${row.label} at frame ${String(currentFrame)}`}
+        />
       </div>
       <div ref={laneRef} style={styles.lane} data-role="lane-empty">
         <div style={styles.laneLine} />
         {keyframes.map((k) => {
           const pct = ((k.frame - frameIn) / span) * 100;
-          const isSelected = selectedKeyframeFrame === k.frame;
+          const isSelected =
+            selectedKeyframe !== null &&
+            selectedKeyframe.elementId === element.id &&
+            selectedKeyframe.property === row.property &&
+            selectedKeyframe.frame === k.frame;
           const style = {
             ...styles.keyDiamond,
             ...(isSelected ? styles.keyDiamondSelected : {}),
@@ -139,8 +164,20 @@ export function TrackRow(props: Props): JSX.Element {
               role="button"
               tabIndex={0}
               aria-label={`Keyframe at frame ${String(k.frame)}`}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                designerStore.openKeyframeInspector({
+                  elementId: element.id,
+                  property: row.property,
+                  frame: k.frame,
+                });
+                designerStore.setCurrentFrame(k.frame);
+              }}
               onPointerDown={(e) => {
                 e.stopPropagation();
+                // Single-click: just select (yellow indicators), keep the
+                // Element Inspector visible. Double-click opens the
+                // dedicated Keyframe Inspector — see onDoubleClick above.
                 designerStore.setSelectedKeyframe({
                   elementId: element.id,
                   property: row.property,
@@ -172,4 +209,9 @@ export function TrackRow(props: Props): JSX.Element {
       </div>
     </div>
   );
+}
+
+function formatValue(v: number): string {
+  if (Number.isInteger(v)) return String(v);
+  return v.toFixed(2);
 }
