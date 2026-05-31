@@ -73,9 +73,14 @@ export class Preview {
         // Apply current field values + render the initial frame without
         // starting the FrameDriver — the Designer's timeline dock owns
         // the playhead in authoring mode and scrubs via postMessage.
+        // The runtime hides the stage via body.cg-pending while it boots;
+        // runtime.play() normally clears that class, but we are NOT
+        // calling play() (no autoplay driver), so we clear it ourselves
+        // so static styles (fill, text colour, font) actually paint.
         let currentFields = {};
         let currentFrame = 0;
         await runtime.update(currentFields);
+        document.body.classList.remove('cg-pending');
         runtime.tick(currentFrame);
         window.addEventListener('message', (evt) => {
           const msg = evt.data;
