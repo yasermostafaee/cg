@@ -29,6 +29,8 @@ const styles = {
     minHeight: 0,
     overflowY: 'auto' as const,
     fontSize: '0.74rem',
+    width: '100%',
+    boxSizing: 'border-box' as const,
   },
   heading: {
     fontSize: '0.66rem',

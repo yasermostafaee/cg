@@ -17,12 +17,20 @@ interface Props {
 const styles = {
   dock: {
     background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
-    margin: '0 0.75rem 0.5rem',
+    borderTop: `1px solid ${colors.border}`,
     display: 'flex',
     flexDirection: 'column' as const,
     fontSize: '0.72rem',
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0,
+    width: '100%',
+  },
+  scrollBody: {
+    flex: 1,
+    minHeight: 0,
+    overflowY: 'auto' as const,
+    overflowX: 'hidden' as const,
   },
   header: {
     display: 'flex',
@@ -282,7 +290,7 @@ export function TimelineDock({
       {elements.length === 0 ? (
         <p style={styles.empty}>No elements yet. Add a shape, text, or image to start.</p>
       ) : (
-        <div role="list">
+        <div role="list" style={styles.scrollBody}>
           {elements.map((el) => {
             const expanded = !isCollapsed(el.id);
             const groupKey = `${el.id}::transform`;

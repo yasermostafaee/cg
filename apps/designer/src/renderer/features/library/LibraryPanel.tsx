@@ -24,6 +24,8 @@ const styles = {
     gap: '0.5rem',
     minHeight: 0,
     overflowY: 'auto' as const,
+    width: '100%',
+    boxSizing: 'border-box' as const,
   },
   heading: {
     fontSize: '0.85rem',
