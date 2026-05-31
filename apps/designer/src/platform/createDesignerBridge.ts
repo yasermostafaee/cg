@@ -26,7 +26,13 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
     getAppInfo: () => Promise.resolve(APP_INFO),
 
     projects: {
-      create: (req) => Promise.resolve(projects.newScene(req.name, req.templateType)),
+      create: (req) =>
+        Promise.resolve(
+          projects.newScene(req.name, req.templateType, {
+            ...(req.resolution !== undefined ? { resolution: req.resolution } : {}),
+            ...(req.frameRate !== undefined ? { frameRate: req.frameRate } : {}),
+          }),
+        ),
       open: async (req) => {
         if (req.path !== undefined) return projects.open(req.path);
         const picked = await pickJsonFile();

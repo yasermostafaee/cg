@@ -33,6 +33,17 @@ export const ProjectsNewChannel = defineChannel(
       'fullscreen',
       'custom',
     ]),
+    /**
+     * Optional resolution/frameRate override (D-007 New Project modal).
+     * When omitted the platform falls back to the v1 defaults.
+     */
+    resolution: z
+      .object({
+        width: z.number().int().positive(),
+        height: z.number().int().positive(),
+      })
+      .optional(),
+    frameRate: z.union([z.literal(25), z.literal(29.97), z.literal(50), z.literal(59.94), z.literal(60)]).optional(),
   }),
   z.object({ scene: SceneSchema, path: z.string().nullable() }),
 );

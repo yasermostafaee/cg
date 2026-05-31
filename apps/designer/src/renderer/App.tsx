@@ -3,11 +3,11 @@ import type { DesignerBridge } from '../shared/designer-bridge.js';
 import { CanvasArea } from './features/canvas/CanvasArea.js';
 import { InspectorPanel } from './features/inspector/InspectorPanel.js';
 import { IssuesPanel } from './features/issues/IssuesPanel.js';
-import { LibraryPanel } from './features/library/LibraryPanel.js';
+import { LandingView } from './features/shell/LandingView.js';
 import { Splitter } from './features/shell/Splitter.js';
+import { TopToolbar } from './features/shell/TopToolbar.js';
 import { StatusBar } from './features/status/StatusBar.js';
 import { TimelineDock } from './features/timeline/TimelineDock.js';
-import { ToolRail } from './features/tools/ToolRail.js';
 import { useIssues } from './hooks/useIssues.js';
 import { useDesignerStore } from './state/store.js';
 import { colors } from './theme.js';
@@ -18,9 +18,6 @@ declare global {
   }
 }
 
-const LIBRARY_DEFAULT = 240;
-const LIBRARY_MIN = 180;
-const LIBRARY_MAX = 480;
 const INSPECTOR_DEFAULT = 320;
 const INSPECTOR_MIN = 240;
 const INSPECTOR_MAX = 600;
@@ -40,12 +37,15 @@ const styles = {
     flexDirection: 'column' as const,
     overflow: 'hidden',
   },
+  studioTop: {
+    padding: '0.5rem 0.5rem 0',
+  },
   shell: {
     display: 'flex',
     flex: 1,
     minHeight: 0,
     minWidth: 0,
-    padding: '0.5rem 0.5rem 0',
+    padding: '0.4rem 0.5rem 0',
     gap: 0,
   },
   centerCol: {
@@ -76,22 +76,19 @@ const styles = {
 } as const;
 
 /**
- * Designer root layout (B-001 resize pass) — viewport-locked, internally
- * scrolling, draggable splitters:
- *   ┌──────────┬────┬─────────────────────┬───────────┐
- *   │ Library  │Tool│ Canvas              │ Inspector │
- *   │ (w drag) │ 56 │ (issues panel below)│  (w drag) │
- *   ├──────────┴────┴═════════════════════╧═══════════┤  ← y-splitter
- *   │ Timeline dock (h drag, internal scroll)         │
- *   ├─────────────────────────────────────────────────┤
- *   │ Status bar                                      │
- *   └─────────────────────────────────────────────────┘
+ * Designer root. Two top-level views (D-007):
  *
- * The page itself never scrolls (`height: 100vh; overflow: hidden`); each
- * panel manages its own overflow.
+ *   view === 'landing'  →  full-page LandingView (starters + recent +
+ *                          New project modal)
+ *   view === 'studio'   →  TopToolbar + (Canvas / Inspector) splitter
+ *                          + IssuesPanel + Timeline + StatusBar
+ *
+ * The previous left-side ToolRail + LibraryPanel are gone — tools live
+ * in the top toolbar; project selection lives on the landing page.
  */
 export function App(): JSX.Element {
   const {
+    view,
     scene,
     projectPath,
     tool,
@@ -103,24 +100,23 @@ export function App(): JSX.Element {
     keyframeInspectorOpen,
   } = useDesignerStore();
   const issues = useIssues(scene);
-  const [libraryW, setLibraryW] = useState(LIBRARY_DEFAULT);
   const [inspectorW, setInspectorW] = useState(INSPECTOR_DEFAULT);
   const [timelineH, setTimelineH] = useState(TIMELINE_DEFAULT);
 
+  if (view === 'landing' || scene === null) {
+    return (
+      <main style={styles.page}>
+        <LandingView />
+      </main>
+    );
+  }
+
   return (
     <main style={styles.page}>
+      <div style={styles.studioTop}>
+        <TopToolbar tool={tool} />
+      </div>
       <div style={styles.shell}>
-        <div style={{ width: libraryW, flexShrink: 0, display: 'flex', minHeight: 0 }}>
-          <LibraryPanel />
-        </div>
-        <Splitter
-          axis="x"
-          ariaLabel="Resize library panel"
-          onResize={(dx) =>
-            setLibraryW((w) => Math.max(LIBRARY_MIN, Math.min(LIBRARY_MAX, w + dx)))
-          }
-        />
-        <ToolRail tool={tool} />
         <div style={styles.centerCol}>
           <div style={styles.canvasWrap}>
             <CanvasArea
@@ -132,7 +128,7 @@ export function App(): JSX.Element {
               currentFrame={currentFrame}
             />
           </div>
-          {scene !== null && issues.length > 0 && (
+          {issues.length > 0 && (
             <div style={styles.issuesWrap}>
               <IssuesPanel issues={issues} />
             </div>
@@ -156,25 +152,21 @@ export function App(): JSX.Element {
           />
         </div>
       </div>
-      {scene !== null && (
-        <Splitter
-          axis="y"
-          ariaLabel="Resize timeline panel"
-          onResize={(dy) =>
-            setTimelineH((h) => Math.max(TIMELINE_MIN, Math.min(TIMELINE_MAX, h - dy)))
-          }
+      <Splitter
+        axis="y"
+        ariaLabel="Resize timeline panel"
+        onResize={(dy) =>
+          setTimelineH((h) => Math.max(TIMELINE_MIN, Math.min(TIMELINE_MAX, h - dy)))
+        }
+      />
+      <div style={{ ...styles.timelineWrap, height: timelineH }}>
+        <TimelineDock
+          scene={scene}
+          selection={selection}
+          currentFrame={currentFrame}
+          selectedKeyframe={selectedKeyframe}
         />
-      )}
-      {scene !== null && (
-        <div style={{ ...styles.timelineWrap, height: timelineH }}>
-          <TimelineDock
-            scene={scene}
-            selection={selection}
-            currentFrame={currentFrame}
-            selectedKeyframe={selectedKeyframe}
-          />
-        </div>
-      )}
+      </div>
       <StatusBar scene={scene} projectPath={projectPath} issues={issues} />
     </main>
   );

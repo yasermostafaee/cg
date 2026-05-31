@@ -1,8 +1,19 @@
-import { SceneSchema, type Scene, type TemplateType } from '@cg/shared-schema';
+import {
+  SceneSchema,
+  type FrameRate,
+  type Resolution,
+  type Scene,
+  type TemplateType,
+} from '@cg/shared-schema';
 import type { RecentProject, StarterEntry } from '@cg/shared-ipc';
 import { getStarter, STARTER_TEMPLATES } from '@cg/starter-templates';
 import type { KeyValueStore, Workspace } from '@cg/storage';
 import { Emitter } from './emitter.js';
+
+export interface NewSceneOptions {
+  resolution?: Resolution;
+  frameRate?: FrameRate;
+}
 
 const RECENT_KEY = 'recent';
 const RECENT_CAP = 16;
@@ -43,15 +54,19 @@ export class ProjectStore {
     }));
   }
 
-  newScene(name: string, templateType: TemplateType): { scene: Scene; path: null } {
+  newScene(
+    name: string,
+    templateType: TemplateType,
+    options: NewSceneOptions = {},
+  ): { scene: Scene; path: null } {
     const nowIso = new Date().toISOString();
     const scene: Scene = {
       schemaVersion: 1,
       id: crypto.randomUUID(),
       name,
       templateType,
-      resolution: { width: 1920, height: 1080 },
-      frameRate: 50,
+      resolution: options.resolution ?? { width: 1920, height: 1080 },
+      frameRate: options.frameRate ?? 50,
       safeAreas: { title: 10, action: 5 },
       frameRange: { in: 0, out: 50 },
       background: 'transparent',

@@ -211,6 +211,48 @@ describe('designerStore — selectedKeyframe', () => {
   });
 });
 
+describe('D-007 — top-level view routing + new-scene options', () => {
+  it('store.view defaults to "landing"', () => {
+    expect(designerStore.get().view).toBe('studio'); // after freshSceneWithShape
+    designerStore.setScene(null, null);
+    expect(designerStore.get().view).toBe('landing');
+  });
+
+  it('setScene(scene, path) flips view to "studio"', () => {
+    designerStore.setScene(null, null);
+    expect(designerStore.get().view).toBe('landing');
+    // re-seat a scene via the platform path
+    const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
+    const { scene } = projects.newScene('back', 'custom');
+    designerStore.setScene(scene, null);
+    expect(designerStore.get().view).toBe('studio');
+  });
+
+  it('setView explicitly flips between landing and studio', () => {
+    designerStore.setView('landing');
+    expect(designerStore.get().view).toBe('landing');
+    designerStore.setView('studio');
+    expect(designerStore.get().view).toBe('studio');
+  });
+
+  it('ProjectStore.newScene honors resolution + frameRate overrides', () => {
+    const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
+    const { scene } = projects.newScene('opts', 'custom', {
+      resolution: { width: 1280, height: 720 },
+      frameRate: 25,
+    });
+    expect(scene.resolution).toEqual({ width: 1280, height: 720 });
+    expect(scene.frameRate).toBe(25);
+  });
+
+  it('ProjectStore.newScene without options keeps the v1 defaults', () => {
+    const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
+    const { scene } = projects.newScene('defaults', 'custom');
+    expect(scene.resolution).toEqual({ width: 1920, height: 1080 });
+    expect(scene.frameRate).toBe(50);
+  });
+});
+
 describe('B-002 — every keyframe on a track keeps its own distinct value', () => {
   it('three position.x keyframes can each hold a different value', () => {
     designerStore.upsertKeyframe('el-1', 'position.x', 0, 100);

@@ -20,11 +20,19 @@ import type {
  * (M6.5's Inspector cares; canvas hit-test in M6.4 only sets single).
  */
 
-export type DesignerTool = 'cursor' | 'text' | 'shape' | 'ellipse' | 'image';
+export type DesignerTool = 'cursor' | 'text' | 'shape' | 'ellipse' | 'image' | 'hand';
+
+export type DesignerView = 'landing' | 'studio';
 
 export interface DesignerStoreState {
   scene: Scene | null;
   projectPath: string | null;
+  /**
+   * Top-level routing: the Designer starts at the Landing screen
+   * (starter picker / recent / new) and flips to the Studio whenever
+   * a scene becomes active. Clearing the scene flips it back.
+   */
+  view: DesignerView;
   tool: DesignerTool;
   /** Element IDs currently selected. */
   selection: ReadonlySet<string>;
@@ -67,6 +75,7 @@ export interface DesignerStoreState {
 const initialState: DesignerStoreState = {
   scene: null,
   projectPath: null,
+  view: 'landing',
   tool: 'cursor',
   selection: new Set<string>(),
   editingTextId: null,
@@ -141,11 +150,18 @@ export const designerStore = {
     set({
       scene,
       projectPath,
+      view: scene === null ? 'landing' : 'studio',
       selection: new Set<string>(),
       selectedKeyframe: null,
       keyframeInspectorOpen: false,
       currentFrame: 0,
     });
+  },
+
+  /** Explicitly switch top-level view (used by "back to projects"). */
+  setView(view: DesignerView): void {
+    if (view === current.view) return;
+    set({ view });
   },
 
   setTool(tool: DesignerTool): void {
@@ -557,6 +573,7 @@ export const designerStore = {
       currentFrame: 0,
       selectedKeyframe: null,
       keyframeInspectorOpen: false,
+      view: 'landing',
     };
     listeners.clear();
   },

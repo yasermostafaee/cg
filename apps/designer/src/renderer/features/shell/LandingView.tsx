@@ -1,0 +1,217 @@
+import { useEffect, useState } from 'react';
+import type { StarterEntry } from '@cg/shared-ipc';
+import { colors } from '../../theme.js';
+import { designerStore } from '../../state/store.js';
+import { NewProjectModal } from './NewProjectModal.js';
+
+const styles = {
+  page: {
+    width: '100%',
+    height: '100%',
+    minHeight: 0,
+    overflow: 'auto' as const,
+    background: colors.background,
+    color: colors.text,
+    boxSizing: 'border-box' as const,
+    padding: '2.5rem 3rem',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '1.5rem',
+    fontSize: '0.85rem',
+  },
+  brand: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.6rem',
+    marginBottom: '0.5rem',
+  },
+  brandTitle: {
+    fontSize: '1.6rem',
+    fontWeight: 700,
+    margin: 0,
+    letterSpacing: '0.02em',
+  },
+  brandSub: {
+    fontSize: '0.82rem',
+    color: colors.textMuted,
+    margin: 0,
+  },
+  newButton: {
+    background: colors.accent,
+    color: '#000',
+    border: 'none',
+    padding: '0.6rem 1.1rem',
+    borderRadius: '0.3rem',
+    fontWeight: 700,
+    fontSize: '0.85rem',
+    cursor: 'pointer',
+    alignSelf: 'flex-start' as const,
+  },
+  sectionTitle: {
+    fontSize: '0.7rem',
+    color: colors.textMuted,
+    letterSpacing: '0.08em',
+    fontWeight: 700,
+    margin: '0.8rem 0 0.4rem',
+  },
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+    gap: '0.7rem',
+  },
+  card: {
+    background: colors.panel,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '0.3rem',
+    padding: '0.9rem 1rem',
+    cursor: 'pointer',
+    textAlign: 'left' as const,
+    color: colors.text,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.3rem',
+    fontSize: '0.85rem',
+  },
+  cardLabel: { fontWeight: 700 },
+  cardDesc: { color: colors.textMuted, fontSize: '0.78rem' },
+  recentRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    background: colors.panel,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '0.3rem',
+    padding: '0.6rem 0.9rem',
+    cursor: 'pointer',
+    color: colors.text,
+    fontSize: '0.85rem',
+  },
+  recentMeta: {
+    color: colors.textMuted,
+    fontSize: '0.74rem',
+  },
+  empty: {
+    color: colors.textMuted,
+    fontSize: '0.82rem',
+    padding: '0.5rem 0',
+  },
+} as const;
+
+/**
+ * Full-viewport landing screen — the Designer's entry point per D-007.
+ *
+ *   ┌──────────────────────────────────────────────────────────┐
+ *   │ cg Designer                                              │
+ *   │ HTML CG template builder                                 │
+ *   │ [ + New project ]                                        │
+ *   │                                                          │
+ *   │ START FROM A TEMPLATE                                    │
+ *   │ ┌────────────┐ ┌────────────┐ ┌────────────┐            │
+ *   │ │ lower-third│ │ ticker     │ │ logo-bug   │            │
+ *   │ └────────────┘ └────────────┘ └────────────┘            │
+ *   │                                                          │
+ *   │ RECENT PROJECTS                                          │
+ *   │ ┌──────────────────────────────────────────────────────┐ │
+ *   │ │ My demo                                Today 14:32   │ │
+ *   │ └──────────────────────────────────────────────────────┘ │
+ *   └──────────────────────────────────────────────────────────┘
+ */
+export function LandingView(): JSX.Element {
+  const [recent, setRecent] = useState<
+    { path: string; name: string; templateType: string; lastOpenedAt: string }[]
+  >([]);
+  const [starters, setStarters] = useState<readonly StarterEntry[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  useEffect(() => {
+    void window.cg.projects.recent().then(setRecent);
+    void window.cg.projects.starters().then(setStarters);
+  }, []);
+
+  async function loadStarter(starterId: string): Promise<void> {
+    const result = await window.cg.projects.starter({ starterId });
+    designerStore.setScene(result.scene, result.path);
+  }
+
+  async function openRecent(path: string): Promise<void> {
+    const result = await window.cg.projects.open({ path });
+    if (result.scene !== null) designerStore.setScene(result.scene, result.path);
+  }
+
+  return (
+    <div style={styles.page} aria-label="Designer landing">
+      <div>
+        <div style={styles.brand}>
+          <h1 style={styles.brandTitle}>cg Designer</h1>
+        </div>
+        <p style={styles.brandSub}>Broadcast template builder — pick a demo, open a recent project, or start fresh.</p>
+      </div>
+      <button
+        type="button"
+        style={styles.newButton}
+        onClick={() => setModalOpen(true)}
+        aria-label="New project"
+      >
+        + New project
+      </button>
+
+      <h2 style={styles.sectionTitle}>START FROM A TEMPLATE</h2>
+      {starters.length === 0 ? (
+        <p style={styles.empty}>No starters available.</p>
+      ) : (
+        <div style={styles.grid}>
+          {starters.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              style={styles.card}
+              onClick={() => void loadStarter(s.id)}
+              title={s.description}
+            >
+              <span style={styles.cardLabel}>{s.label}</span>
+              <span style={styles.cardDesc}>{s.description}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <h2 style={styles.sectionTitle}>RECENT PROJECTS</h2>
+      {recent.length === 0 ? (
+        <p style={styles.empty}>No recent projects yet.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+          {recent.slice(0, 12).map((r) => (
+            <button
+              key={r.path}
+              type="button"
+              style={styles.recentRow}
+              onClick={() => void openRecent(r.path)}
+            >
+              <span>
+                <strong>{r.name}</strong>{' '}
+                <span style={styles.recentMeta}>· {r.templateType}</span>
+              </span>
+              <span style={styles.recentMeta}>{formatWhen(r.lastOpenedAt)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {modalOpen && <NewProjectModal onClose={() => setModalOpen(false)} />}
+    </div>
+  );
+}
+
+function formatWhen(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  if (sameDay) return `Today ${hh}:${mm}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${hh}:${mm}`;
+}

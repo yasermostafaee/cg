@@ -143,7 +143,12 @@ export function TrackRow(props: Props): JSX.Element {
           ariaLabel={`Toggle keyframe for ${row.label} at frame ${String(currentFrame)}`}
         />
       </div>
-      <div ref={laneRef} style={styles.lane} data-role="lane-empty">
+      <div
+        ref={laneRef}
+        style={styles.lane}
+        data-role="lane-empty"
+        onContextMenu={(e) => e.preventDefault()}
+      >
         <div style={styles.laneLine} />
         {keyframes.map((k) => {
           const pct = ((k.frame - frameIn) / span) * 100;
@@ -172,6 +177,13 @@ export function TrackRow(props: Props): JSX.Element {
                   frame: k.frame,
                 });
                 designerStore.setCurrentFrame(k.frame);
+              }}
+              onContextMenu={(e) => {
+                // Right-click removes the keyframe (D-007 acceptance:
+                // operator can right-click points to remove them).
+                e.preventDefault();
+                e.stopPropagation();
+                designerStore.removeKeyframe(element.id, row.property, k.frame);
               }}
               onPointerDown={(e) => {
                 e.stopPropagation();

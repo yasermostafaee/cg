@@ -79,3 +79,18 @@ capability (`## MODIFIED Requirements`).
 **Notes:** see these pics: `docs/designer-guide/sample-assets/D-006-pic-*`
 
 see the files inside the: `docs/designer-guide/sample-assets/D-006-old-codes`. these codes had been written by meself for this a few mounths ago but they are uncompele and raw, you can just see them to get an idea and know whay I whant for frame points
+
+
+## [~] D-007 — redesign style and elements   ⟨priority: high) — change: `openspec/changes/redesign-studio-loopic-style/`
+**What:** change the style like a sample website
+**Why:** this website is perfect and finaly we need an app like that with whole the features
+**Acceptance:**
+- At first page we have the same page. user can select a Demo(sample) project or new project.
+- if select a new project show the modal to select size and fps.
+- after that we show the studio page.
+- you must change all the elements, panels and menu like that webapp.
+- we need certeinly the all features like as zoomIn zoomOut the sceen by icons and hold ctrl+mouse scroll also scroll the sceen.
+- move tools bar to top of the sceen like the webapp (cursor, rectangle, text, ellipse, hand, image)
+- add right click for remove the points.
+- and any features you see inside the video.
+**Notes:** see the video: `docs/designer-guide/sample-assets/D-007-video-0`

@@ -17,6 +17,8 @@ interface Props {
   bindModeFieldId: string | null;
   scale: number;
   currentFrame: number;
+  /** Hand-tool drag delta callback (deltaX, deltaY in scene pixels). */
+  onPan?: (dx: number, dy: number) => void;
 }
 
 const styles = {
@@ -56,6 +58,7 @@ export function CanvasOverlay({
   bindModeFieldId,
   scale,
   currentFrame,
+  onPan,
 }: Props): JSX.Element {
   const layerRef = useRef<HTMLDivElement>(null);
 
@@ -122,6 +125,10 @@ export function CanvasOverlay({
       }
       return;
     }
+    if (tool === 'hand') {
+      beginPan(e.nativeEvent, onPan);
+      return;
+    }
     if (tool === 'text') {
       const id = `el-${String(Date.now())}`;
       designerStore.addElement(defaultText(id, scenePoint.x, scenePoint.y));
@@ -157,7 +164,13 @@ export function CanvasOverlay({
   }
 
   const cursorStyle =
-    bindModeFieldId !== null ? 'crosshair' : tool === 'cursor' ? 'default' : 'crosshair';
+    bindModeFieldId !== null
+      ? 'crosshair'
+      : tool === 'cursor'
+        ? 'default'
+        : tool === 'hand'
+          ? 'grab'
+          : 'crosshair';
   const hintText =
     bindModeFieldId !== null ? `BIND → ${bindModeFieldId} (Esc to cancel)` : tool.toUpperCase();
 
@@ -181,6 +194,26 @@ export function CanvasOverlay({
       <div style={styles.toolHint}>{hintText}</div>
     </div>
   );
+}
+
+function beginPan(ev: PointerEvent, onPan?: (dx: number, dy: number) => void): void {
+  if (onPan === undefined) return;
+  let lastX = ev.clientX;
+  let lastY = ev.clientY;
+  const onMove = (e: PointerEvent): void => {
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    if (dx === 0 && dy === 0) return;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    onPan(dx, dy);
+  };
+  const onUp = (): void => {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+  };
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
 }
 
 function beginDrag(
