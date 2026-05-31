@@ -82,10 +82,18 @@ const styles = {
     margin: 'auto',
     position: 'relative' as const,
   },
+  // Stage occupies the scaled footprint (width * zoom × height * zoom)
+  // so layout reserves the right amount of space and the CanvasOverlay
+  // — which uses scale=zoom for hit-test math — sees the matching
+  // bounding-rect dimensions. The iframe inside is sized to the
+  // scene's intrinsic resolution and visually scaled with a CSS
+  // transform so the *entire* scene is in view, never clipped by the
+  // iframe's body overflow.
   stage: {
     position: 'relative' as const,
     background: '#000',
     boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+    overflow: 'hidden' as const,
   },
   empty: {
     color: colors.textMuted,
@@ -259,7 +267,19 @@ export function CanvasArea({
                 ref={iframeRef}
                 src={src}
                 title="cgpreview"
-                style={styles.iframe}
+                style={{
+                  ...styles.iframe,
+                  // Render the iframe at the scene's intrinsic
+                  // resolution, then visually scale with a CSS
+                  // transform. This keeps the *entire* scene in view
+                  // at any zoom — without scaling, the iframe's body
+                  // overflow:hidden would clip everything outside the
+                  // top-left wrapper-sized region.
+                  width,
+                  height,
+                  transform: `scale(${String(zoom)})`,
+                  transformOrigin: 'top left',
+                }}
                 sandbox="allow-scripts allow-same-origin"
               />
               <CanvasOverlay
