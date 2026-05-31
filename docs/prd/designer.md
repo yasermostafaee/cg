@@ -62,3 +62,14 @@ outside the ellipse still selects it.
   not select (selects whatever is actually under the cursor)
 **Notes:** `features/canvas/hit-test.ts`. Modifies the `designer-shapes`
 capability (`## MODIFIED Requirements`).
+
+## [~] D-006 — ⟨priority: high⟩ — change: `openspec/changes/add-animation-timeline-dock/`
+**What:** add layers with framepoint for any shape to make animate
+**Why:** I need to make animate by all shaped and this is the main role of this app.
+**Acceptance:**
+- باید برای هر shape که به صفحه اضافه میکنیم چند لایه از قبیل width, height, positionX, positionY, scaleX, scaleY, rotation, opacity اضافه شود و برای هر لایه بتوانیم روی هر فریم یک پوینت اضافه کنیم و در آن پوینت بشه مقادیر هر لایه را تغییر داد
+برای این کار چند تصویر از یک نرم افزار دیگه قرار میدم که میتونی ایده بگیری ازش
+
+**Notes:** see these pics: `docs/designer-guide/sample-assets/D-006-pic-*`
+
+see the files inside the: `docs/designer-guide/sample-assets/D-006-old-codes`. these codes had been written by meself for this a few mounths ago but they are uncompele and raw, you can just see them to get an idea and know whay I whant for frame points

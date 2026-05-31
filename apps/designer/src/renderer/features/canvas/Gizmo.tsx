@@ -153,10 +153,10 @@ function beginResize(
         break;
     }
     if (w < 4 || h < 4) return; // minimum size
-    designerStore.updateTransform(element.id, {
-      position: { x, y },
-      size: { w, h },
-    });
+    designerStore.commitAnimatable(element.id, 'position.x', x);
+    designerStore.commitAnimatable(element.id, 'position.y', y);
+    designerStore.commitAnimatable(element.id, 'size.w', w);
+    designerStore.commitAnimatable(element.id, 'size.h', h);
   };
   const onUp = (): void => {
     window.removeEventListener('pointermove', onMove);
@@ -183,7 +183,7 @@ function beginRotate(element: Element, _scale: number, ev: PointerEvent): void {
     // atan2 returns radians measured from +X axis, counter-clockwise.
     // We want clockwise rotation in degrees, with "up" = 0°.
     const deg = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
-    designerStore.updateTransform(element.id, { rotation: startAngle + deg });
+    designerStore.commitAnimatable(element.id, 'rotation', startAngle + deg);
   };
   const onUp = (): void => {
     window.removeEventListener('pointermove', onMove);

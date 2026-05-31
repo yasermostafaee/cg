@@ -7,9 +7,11 @@ interface Props {
 }
 
 /**
- * Transform inspector — mutates `element.transform` via the store's
- * `updateTransform` shortcut. Position + size are pixel-precise; the
- * Gizmo (M6.4) provides drag handles for the same data.
+ * Transform inspector. The eight M12 animatable properties (position x/y,
+ * scale x/y, rotation, size w/h, opacity) flow through `commitAnimatable`
+ * so that an edit lands on the keyframe at the current authoring frame when
+ * one exists, instead of clobbering the element's static value. Non-
+ * animatable controls (z-index) keep their plain mutators.
  */
 export function TransformSection({ element }: Props): JSX.Element {
   const t = element.transform;
@@ -20,26 +22,35 @@ export function TransformSection({ element }: Props): JSX.Element {
         label="position"
         x={t.position.x}
         y={t.position.y}
-        onCommit={(x, y) => designerStore.updateTransform(id, { position: { x, y } })}
+        onCommit={(x, y) => {
+          designerStore.commitAnimatable(id, 'position.x', x);
+          designerStore.commitAnimatable(id, 'position.y', y);
+        }}
       />
       <NumberPairField
         label="size"
         x={t.size.w}
         y={t.size.h}
-        onCommit={(w, h) => designerStore.updateTransform(id, { size: { w, h } })}
+        onCommit={(w, h) => {
+          designerStore.commitAnimatable(id, 'size.w', w);
+          designerStore.commitAnimatable(id, 'size.h', h);
+        }}
       />
       <NumberField
         label="rotation"
         value={t.rotation}
         step={1}
-        onCommit={(rotation) => designerStore.updateTransform(id, { rotation })}
+        onCommit={(rotation) => designerStore.commitAnimatable(id, 'rotation', rotation)}
       />
       <NumberPairField
         label="scale"
         x={t.scale.x}
         y={t.scale.y}
         step={0.1}
-        onCommit={(x, y) => designerStore.updateTransform(id, { scale: { x, y } })}
+        onCommit={(x, y) => {
+          designerStore.commitAnimatable(id, 'scale.x', x);
+          designerStore.commitAnimatable(id, 'scale.y', y);
+        }}
       />
       <NumberField
         label="opacity"
@@ -47,7 +58,7 @@ export function TransformSection({ element }: Props): JSX.Element {
         step={0.05}
         min={0}
         max={1}
-        onCommit={(opacity) => designerStore.updateElement(id, { opacity } as Partial<Element>)}
+        onCommit={(opacity) => designerStore.commitAnimatable(id, 'opacity', opacity)}
       />
       <NumberField
         label="z-index"

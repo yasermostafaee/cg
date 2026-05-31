@@ -195,9 +195,8 @@ function beginDrag(elementId: string, scale: number, ev: PointerEvent): void {
     const dy = (e.clientY - startY) / scale;
     if (!moved && Math.abs(dx) + Math.abs(dy) < 2) return; // click vs drag
     moved = true;
-    designerStore.updateTransform(elementId, {
-      position: { x: startPos.x + dx, y: startPos.y + dy },
-    });
+    designerStore.commitAnimatable(elementId, 'position.x', startPos.x + dx);
+    designerStore.commitAnimatable(elementId, 'position.y', startPos.y + dy);
   };
   const onUp = (): void => {
     window.removeEventListener('pointermove', onMove);

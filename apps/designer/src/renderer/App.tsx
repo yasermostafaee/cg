@@ -4,6 +4,7 @@ import { InspectorPanel } from './features/inspector/InspectorPanel.js';
 import { IssuesPanel } from './features/issues/IssuesPanel.js';
 import { LibraryPanel } from './features/library/LibraryPanel.js';
 import { StatusBar } from './features/status/StatusBar.js';
+import { TimelineDock } from './features/timeline/TimelineDock.js';
 import { ToolRail } from './features/tools/ToolRail.js';
 import { useIssues } from './hooks/useIssues.js';
 import { useDesignerStore } from './state/store.js';
@@ -50,7 +51,7 @@ const styles = {
  *   └────────────────────────────────────┘
  */
 export function App(): JSX.Element {
-  const { scene, projectPath, tool, selection, editingTextId, bindModeFieldId } =
+  const { scene, projectPath, tool, selection, editingTextId, bindModeFieldId, currentFrame } =
     useDesignerStore();
   const issues = useIssues(scene);
 
@@ -81,6 +82,9 @@ export function App(): JSX.Element {
         >
           <IssuesPanel issues={issues} />
         </div>
+      )}
+      {scene !== null && (
+        <TimelineDock scene={scene} selection={selection} currentFrame={currentFrame} />
       )}
       <StatusBar scene={scene} projectPath={projectPath} issues={issues} />
     </main>
