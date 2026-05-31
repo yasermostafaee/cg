@@ -60,8 +60,21 @@ export class Preview {
     <meta name="viewport" content="width=${String(scene.resolution.width)}, initial-scale=1" />
     <title>${escapeHtml(scene.name)}</title>
     <style>${this.#cgCss}</style>
+    <!--
+      Authoring override: the broadcast runtime hides the stage while
+      \`body.cg-pending\` is set (.cg-pending{opacity:0} and
+      .cg-pending .cg-stage{visibility:hidden}). In the Designer the
+      operator must see what they're building before play() is ever
+      called, so we lift those rules with !important. The exported
+      .vcg keeps the original CSS — this override lives only in the
+      preview document.
+    -->
+    <style>
+      .cg-pending { opacity: 1 !important; }
+      .cg-pending .cg-stage { visibility: visible !important; }
+    </style>
   </head>
-  <body class="cg-pending">
+  <body>
     <script type="module">
       import { createRuntime, installCasparGlobals } from '${cgJsUrl}';
       (async () => {
