@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Element, Scene } from '@cg/shared-schema';
+import type { AnimatableProperty, Element, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
 import { FrameRuler } from './FrameRuler.js';
-import { TIMELINE_ROWS } from './keyframe-helpers.js';
+import { TIMELINE_ROWS, LABEL_COL_PX } from './keyframe-helpers.js';
 import { TrackRow } from './TrackRow.js';
 
 interface Props {
   scene: Scene;
   selection: ReadonlySet<string>;
   currentFrame: number;
+  selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }
 
 const styles = {
@@ -60,6 +61,21 @@ const styles = {
     color: colors.textMuted,
     fontVariantNumeric: 'tabular-nums' as const,
   },
+  rulerRow: {
+    display: 'grid',
+    gridTemplateColumns: `${String(LABEL_COL_PX)}px 1fr`,
+  },
+  rulerLabelGutter: {
+    background: colors.panel,
+    borderRight: `1px solid ${colors.border}`,
+    borderBottom: `1px solid ${colors.border}`,
+    color: colors.textMuted,
+    fontSize: '0.66rem',
+    letterSpacing: '0.05em',
+    padding: '0 0.5rem',
+    display: 'flex',
+    alignItems: 'center',
+  },
   empty: {
     padding: '1rem',
     color: colors.textMuted,
@@ -69,14 +85,25 @@ const styles = {
 } as const;
 
 /**
- * Animation timeline dock for D-006. Renders a frame ruler + transport at
- * the top and one track row per animatable property of the single selected
- * element. When the selection size ≠ 1, only the ruler/transport show.
+ * Animation timeline dock (D-006). Layout mirrors the Loopic reference:
+ *
+ *   ┌────── header (transport + frame readout) ──────┐
+ *   │ ┌── labels ──┐┌── ruler (frame 0 starts HERE)  │
+ *   │ ├── Pos X ───┤│   ◆       ◆                    │
+ *   │ ├── Pos Y ───┤│      ◆                         │
+ *   │ └── ...      ┘└─────────────────────────────────┘
+ *
+ * The ruler and every lane share the same horizontal coordinate system —
+ * frame N renders at the same x in the ruler and in each TrackRow lane.
  */
-export function TimelineDock({ scene, selection, currentFrame }: Props): JSX.Element {
+export function TimelineDock({
+  scene,
+  selection,
+  currentFrame,
+  selectedKeyframe,
+}: Props): JSX.Element {
   const { in: frameIn, out: frameOut } = scene.frameRange;
   const [playing, setPlaying] = useState(false);
-  const [selectedKey, setSelectedKey] = useState<{ property: string; frame: number } | null>(null);
   const lastWallRef = useRef<number>(0);
   const accumRef = useRef<number>(0);
 
@@ -111,21 +138,16 @@ export function TimelineDock({ scene, selection, currentFrame }: Props): JSX.Ele
 
   // Delete-key removes the selected keyframe.
   useEffect(() => {
-    if (selectedKey === null || selected === null) return;
     function onKey(e: KeyboardEvent): void {
-      if (selected === null || selectedKey === null) return;
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
       if (isEditableTarget(e.target)) return;
-      designerStore.removeKeyframe(
-        selected.id,
-        selectedKey.property as Parameters<typeof designerStore.removeKeyframe>[1],
-        selectedKey.frame,
-      );
-      setSelectedKey(null);
+      const kf = designerStore.get().selectedKeyframe;
+      if (kf === null) return;
+      designerStore.removeKeyframe(kf.elementId, kf.property, kf.frame);
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedKey, selected]);
+  }, []);
 
   return (
     <section style={styles.dock} aria-label="Animation timeline">
@@ -182,12 +204,15 @@ export function TimelineDock({ scene, selection, currentFrame }: Props): JSX.Ele
           frame {currentFrame} / {frameOut}
         </span>
       </div>
-      <FrameRuler
-        frameIn={frameIn}
-        frameOut={frameOut}
-        currentFrame={currentFrame}
-        onScrub={(f) => designerStore.setCurrentFrame(f)}
-      />
+      <div style={styles.rulerRow}>
+        <div style={styles.rulerLabelGutter}>FRAME</div>
+        <FrameRuler
+          frameIn={frameIn}
+          frameOut={frameOut}
+          currentFrame={currentFrame}
+          onScrub={(f) => designerStore.setCurrentFrame(f)}
+        />
+      </div>
       {selected === null ? (
         <p style={styles.empty}>
           {selection.size === 0
@@ -195,19 +220,24 @@ export function TimelineDock({ scene, selection, currentFrame }: Props): JSX.Ele
             : 'Select a single element to add keyframes.'}
         </p>
       ) : (
-        <div role="list">
-          {TIMELINE_ROWS.map((row) => (
-            <TrackRow
-              key={row.property}
-              row={row}
-              element={selected}
-              frameIn={frameIn}
-              frameOut={frameOut}
-              currentFrame={currentFrame}
-              selectedKey={selectedKey}
-              onSelectKey={setSelectedKey}
-            />
-          ))}
+        <div role="list" onPointerDown={(e) => deselectOnLaneClick(e, selected.id)}>
+          {TIMELINE_ROWS.map((row) => {
+            const onThisRow =
+              selectedKeyframe !== null &&
+              selectedKeyframe.elementId === selected.id &&
+              selectedKeyframe.property === row.property;
+            return (
+              <TrackRow
+                key={row.property}
+                row={row}
+                element={selected}
+                frameIn={frameIn}
+                frameOut={frameOut}
+                currentFrame={currentFrame}
+                selectedKeyframeFrame={onThisRow ? selectedKeyframe.frame : null}
+              />
+            );
+          })}
         </div>
       )}
     </section>
@@ -221,6 +251,19 @@ function findSingleSelected(scene: Scene, selection: ReadonlySet<string>): Eleme
     }
   }
   return null;
+}
+
+function deselectOnLaneClick(e: React.PointerEvent<HTMLDivElement>, elementId: string): void {
+  const target = e.target as HTMLElement | null;
+  if (target === null) return;
+  // Clicks on a diamond bubble up but we let TrackRow's own pointerdown call
+  // setSelectedKeyframe first. Here we only clear when the empty lane was hit.
+  if (target.dataset.role === 'lane-empty') {
+    const kf = designerStore.get().selectedKeyframe;
+    if (kf !== null && kf.elementId === elementId) {
+      designerStore.setSelectedKeyframe(null);
+    }
+  }
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {

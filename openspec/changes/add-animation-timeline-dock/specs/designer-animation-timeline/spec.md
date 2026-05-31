@@ -5,13 +5,22 @@
 The Designer SHALL render an animation timeline dock below the canvas
 whenever a scene is open. The dock SHALL show a frame ruler that spans
 `scene.frameRange.in..frameRange.out` and a draggable playhead indicating
-the current frame.
+the current frame. Frame `frameRange.in` (typically frame 0) MUST visually
+align with the left edge of every track row's keyframe lane — never with
+the left edge of the dock — so that a keyframe diamond at frame N sits at
+exactly the x-position the ruler labels as N.
 
 #### Scenario: Dock appears when a scene is open
 - **WHEN** a scene is open
 - **THEN** the timeline dock is visible at the bottom of the Designer shell
   with a frame ruler covering the scene's frame range and the current frame
   shown at the playhead
+
+#### Scenario: Frame 0 lines up with the keyframe lanes
+- **WHEN** the dock is rendered with track rows
+- **THEN** the ruler's `frameRange.in` tick sits at the same x-position as
+  the left edge of every track row's lane (the label column sits to the
+  ruler's left and contains no frame ticks)
 
 #### Scenario: Operator scrubs the playhead
 - **WHEN** the operator drags the playhead (or clicks somewhere on the ruler)
@@ -84,27 +93,72 @@ not persist.
 - **THEN** the keyframe is removed and the property's entry is removed from
   `element.animation.tracks`
 
-### Requirement: Editing the value at a keyframe updates that keyframe
+### Requirement: Track-aware editing builds the animation
 
-The Designer SHALL detect, on every Inspector- or Gizmo-driven value edit,
-whether the current playhead frame coincides with an existing keyframe on the
-edited property of the selected element. When it does, the Designer SHALL
-update that keyframe's value and leave the element's static value unchanged;
-when it does not, the Designer SHALL fall through to the normal static-value
-mutation.
+The Designer SHALL route every value edit on the eight animatable
+properties (made through the Inspector, the canvas Gizmo, or a drag on the
+canvas) based on whether a track already exists for that property on the
+selected element:
 
-#### Scenario: Edit at a keyframe updates the keyframe
-- **WHEN** the playhead is at frame N, the selected element has a keyframe
-  at frame N on `position.x`, and the operator types a new value into the
-  Inspector's Position X field
-- **THEN** that keyframe's `value` is updated to the new number and the
-  element's static `transform.position.x` is unchanged
+- WHEN the property has **no** track yet — the edit SHALL update the
+  element's static value as before; no keyframe is created.
+- WHEN the property already has a track (the operator has added at least
+  one keyframe for it) — the edit SHALL land as a keyframe at the current
+  playhead frame: replacing the keyframe on that frame if one already
+  exists there, or inserting a new keyframe at that frame otherwise. The
+  element's static value SHALL remain unchanged once a track exists.
 
-#### Scenario: Edit off a keyframe still mutates the static value
+This rule is what builds the animation: after the operator authors the
+first keyframe by hand, every subsequent edit at a new frame extends the
+track instead of overwriting a single static value.
+
+#### Scenario: First edit on a never-animated property updates the static value
 - **WHEN** the playhead is at frame N and the selected element has no
-  keyframe on `position.x` at frame N, and the operator edits Position X
+  track for `position.x`, and the operator edits Position X
 - **THEN** the element's static `transform.position.x` is updated as before
   and no keyframe is created
+
+#### Scenario: Edit at an existing keyframe replaces that keyframe's value
+- **WHEN** the playhead is at frame N, the selected element has a keyframe
+  at frame N on `position.x`, and the operator edits Position X
+- **THEN** that keyframe's `value` is updated to the new number, no
+  keyframe is added or moved, and the element's static
+  `transform.position.x` is unchanged
+
+#### Scenario: Edit at a new frame on an animated property auto-adds a keyframe
+- **WHEN** the operator first adds a `position.x` keyframe at frame 10 by
+  clicking the add-keyframe button, then scrubs to frame 30 and drags the
+  shape (or types a new value into Inspector → Position X)
+- **THEN** a new keyframe is inserted at frame 30 on the `position.x`
+  track with the new value, the keyframe at frame 10 is left unchanged,
+  and the element's static `transform.position.x` is unchanged
+
+### Requirement: Right Inspector switches to a Keyframe view when a point is selected
+
+The Designer's right-side Inspector SHALL replace the Scene / Element view
+with a Keyframe view whenever a keyframe is selected in the timeline. The
+Keyframe view SHALL show the selected point's element, property, frame,
+value, and easing, and the operator MUST be able to edit each. When the
+keyframe selection is cleared (empty-lane click, removal, scene change,
+or selecting a different element), the Inspector SHALL restore the
+previous Element / Scene view.
+
+#### Scenario: Inspector follows a keyframe selection
+- **WHEN** the operator clicks a keyframe diamond on the Position X row
+- **THEN** the right Inspector switches to the Keyframe view for that
+  point, with its element name, property, frame, value, and easing editable
+
+#### Scenario: Editing the keyframe inspector mutates only that keyframe
+- **WHEN** the Keyframe inspector is shown and the operator types a new
+  value or changes the easing
+- **THEN** only the selected keyframe's `value` / `easing` change; other
+  keyframes on the track are left untouched
+
+#### Scenario: Inspector returns to the Element view on deselect
+- **WHEN** a keyframe is selected and the operator deselects it (clicks an
+  empty lane area or removes the keyframe)
+- **THEN** the Inspector falls back to the Element / Scene view that was
+  showing before the keyframe was selected
 
 ### Requirement: Transport controls (play, pause, step, stop)
 

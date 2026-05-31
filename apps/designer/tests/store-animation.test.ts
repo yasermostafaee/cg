@@ -118,34 +118,94 @@ describe('designerStore — removeKeyframe', () => {
   });
 });
 
-describe('designerStore — commitAnimatable', () => {
-  it('updates the static value when there is no keyframe at the current frame', () => {
+describe('designerStore — commitAnimatable (track-aware routing)', () => {
+  it('updates the static value when the property has no track yet', () => {
     designerStore.setCurrentFrame(10);
     designerStore.commitAnimatable('el-1', 'position.x', 999);
     expect(selected().transform.position.x).toBe(999);
     expect(selected().animation).toBeUndefined();
   });
 
-  it('updates the keyframe value (not the static) when a keyframe sits on the current frame', () => {
+  it('replaces the keyframe value when a keyframe sits on the current frame', () => {
     designerStore.setCurrentFrame(20);
     designerStore.upsertKeyframe('el-1', 'position.x', 20, 200);
     designerStore.commitAnimatable('el-1', 'position.x', 555);
     const el = selected();
     expect(el.transform.position.x).toBe(50); // unchanged static
-    const kf = el.animation?.tracks['position.x']?.keyframes[0];
-    expect(kf?.value).toBe(555);
-    expect(kf?.frame).toBe(20);
+    const kfs = el.animation?.tracks['position.x']?.keyframes;
+    expect(kfs).toHaveLength(1);
+    expect(kfs?.[0]).toMatchObject({ frame: 20, value: 555 });
   });
 
-  it('updates static opacity off-keyframe and keyframe opacity on-keyframe', () => {
+  it('inserts a new keyframe at the current frame when the track already has one elsewhere', () => {
+    // Author a keyframe at frame 10 first.
+    designerStore.setCurrentFrame(10);
+    designerStore.upsertKeyframe('el-1', 'position.x', 10, 100);
+    // Move the playhead to frame 30 and edit the property as if dragging.
+    designerStore.setCurrentFrame(30);
+    designerStore.commitAnimatable('el-1', 'position.x', 777);
+    const kfs = selected().animation?.tracks['position.x']?.keyframes;
+    expect(kfs?.map((k) => ({ frame: k.frame, value: k.value }))).toEqual([
+      { frame: 10, value: 100 },
+      { frame: 30, value: 777 },
+    ]);
+    // Static must be unchanged once a track exists.
+    expect(selected().transform.position.x).toBe(50);
+  });
+
+  it('updates static opacity off-track and inserts new opacity keyframe once a track exists', () => {
     designerStore.setCurrentFrame(5);
     designerStore.commitAnimatable('el-1', 'opacity', 0.5);
     expect(selected().opacity).toBe(0.5);
 
+    // First keyframe establishes the track.
     designerStore.upsertKeyframe('el-1', 'opacity', 5, 0.5);
+    designerStore.setCurrentFrame(15);
     designerStore.commitAnimatable('el-1', 'opacity', 0.2);
-    const kf = selected().animation?.tracks.opacity?.keyframes[0];
-    expect(kf?.value).toBe(0.2);
+    const kfs = selected().animation?.tracks.opacity?.keyframes;
+    expect(kfs?.map((k) => ({ frame: k.frame, value: k.value }))).toEqual([
+      { frame: 5, value: 0.5 },
+      { frame: 15, value: 0.2 },
+    ]);
     expect(selected().opacity).toBe(0.5); // static unchanged
+  });
+});
+
+describe('designerStore — selectedKeyframe', () => {
+  it('setSelectedKeyframe stores the point reference', () => {
+    designerStore.setSelectedKeyframe({ elementId: 'el-1', property: 'rotation', frame: 7 });
+    expect(designerStore.get().selectedKeyframe).toEqual({
+      elementId: 'el-1',
+      property: 'rotation',
+      frame: 7,
+    });
+    designerStore.setSelectedKeyframe(null);
+    expect(designerStore.get().selectedKeyframe).toBeNull();
+  });
+
+  it('moveKeyframe of the selected point follows the new frame', () => {
+    designerStore.upsertKeyframe('el-1', 'rotation', 10, 0);
+    designerStore.setSelectedKeyframe({ elementId: 'el-1', property: 'rotation', frame: 10 });
+    designerStore.moveKeyframe('el-1', 'rotation', 10, 25);
+    expect(designerStore.get().selectedKeyframe).toEqual({
+      elementId: 'el-1',
+      property: 'rotation',
+      frame: 25,
+    });
+  });
+
+  it('removeKeyframe clears the selection when it referenced the removed point', () => {
+    designerStore.upsertKeyframe('el-1', 'rotation', 10, 0);
+    designerStore.setSelectedKeyframe({ elementId: 'el-1', property: 'rotation', frame: 10 });
+    designerStore.removeKeyframe('el-1', 'rotation', 10);
+    expect(designerStore.get().selectedKeyframe).toBeNull();
+  });
+
+  it('setKeyframeValue / setKeyframeEasing mutate the existing point in place', () => {
+    designerStore.upsertKeyframe('el-1', 'scale.x', 12, 1.0);
+    designerStore.setKeyframeValue('el-1', 'scale.x', 12, 2.5);
+    designerStore.setKeyframeEasing('el-1', 'scale.x', 12, 'ease-in-out');
+    const kf = selected().animation?.tracks['scale.x']?.keyframes[0];
+    expect(kf).toEqual({ frame: 12, value: 2.5, easing: 'ease-in-out' });
   });
 });

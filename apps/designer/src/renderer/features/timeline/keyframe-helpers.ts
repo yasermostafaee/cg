@@ -1,6 +1,13 @@
 import type { AnimatableProperty, Element, Track } from '@cg/shared-schema';
 
 /**
+ * Width of the left label column shared by the ruler row and every track
+ * row. Keeping it in one place ensures Frame 0 in the ruler lines up with
+ * the left edge of every lane.
+ */
+export const LABEL_COL_PX = 140;
+
+/**
  * Catalogue of the eight UI rows the PRD (D-006) calls out, in the order
  * they appear in the dock. Each row knows its display label, the canonical
  * `AnimatableProperty` id in the M12 keyframe schema, and how to read the

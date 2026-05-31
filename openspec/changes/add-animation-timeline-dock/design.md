@@ -23,8 +23,6 @@ on the left, keyframe diamonds along the right.
   saved scene re-shows the same keyframes.
 
 **Non-Goals (deferred):**
-- Per-keyframe easing UI — the schema's `easing` field defaults to `linear`
-  in v1; an easing picker can land later.
 - Color tracks (`fill.color`, `text.color`) — the M12 schema supports them but
   the PRD's eight required tracks are all numeric; the data model is flexible
   enough that we can expose color tracks later without spec churn.
@@ -63,12 +61,18 @@ on the left, keyframe diamonds along the right.
 - **Deleting the last keyframe in a track removes the track entry** so the
   element's `animation.tracks` doesn't accumulate empty arrays (the schema's
   `min(1)` constraint forbids them anyway).
-- **Editing the value at the current frame** (via Inspector) detects whether
-  the playhead sits on an existing keyframe for that property; if it does,
-  the existing keyframe's `value` is updated; otherwise the operator's edit
-  flows through the normal static-transform mutation and the track is
-  untouched. This keeps the "current frame is just a value" mental model from
-  Loopic without forcing every Inspector edit to spawn a keyframe.
+- **Track-aware routing for value edits.** Every Inspector / Gizmo / canvas
+  drag on the eight animatable properties is routed by `commitAnimatable`:
+  if the property has no track yet, it writes the element's static value as
+  before; once a track exists (the operator has authored at least one
+  keyframe), every subsequent edit lands as a keyframe at the current frame
+  — replacing the one at that frame if present, otherwise inserting a new
+  one. This is the rule that lets the operator *build the animation by
+  dragging*: add the first keyframe by hand, scrub to a new frame, drag —
+  and a second keyframe appears with the new value. It matches the PRD's
+  worked example. The previous "edit only updates when exactly on a
+  keyframe" rule was simpler but did not actually let the operator author
+  motion this way.
 - **Decouple Designer playhead from the live-preview iframe.** The Canvas
   iframe already auto-plays the scene end-to-end via the runtime's own
   `FrameDriver`, so the operator sees the keyframes they author the moment
@@ -84,6 +88,21 @@ on the left, keyframe diamonds along the right.
   Stop halts the loop and freezes `currentFrame`. Step buttons move ±1.
   This is a small, local loop — no coupling to the preview iframe's own
   driver.
+
+- **Right-side Inspector switches between Element and Keyframe modes.** When
+  the operator clicks a keyframe diamond, the same `selectedKeyframe` field
+  on the store both drives the diamond's yellow highlight in the timeline
+  and switches the right Inspector to a new `KeyframeInspector` that edits
+  the point's frame / value / easing. Clicking an empty lane area or
+  removing the keyframe falls back to the element-properties view. This
+  matches the Loopic reference where the right panel shifts content based
+  on what is selected.
+- **Ruler is structurally a row that shares the dock's grid.** The dock
+  uses a 2-column grid (`[label-col] [lane-col]`) and the ruler row uses
+  the same grid — frame 0 sits in the ruler exactly where every track
+  row's lane starts, so a keyframe at frame N visually lines up with the
+  ruler's "N" tick. The label column carries a "FRAME" caption gutter and
+  no ticks.
 
 ## Risks / Trade-offs
 

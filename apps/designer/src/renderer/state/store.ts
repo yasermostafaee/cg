@@ -45,6 +45,13 @@ export interface DesignerStoreState {
    * frameRange at write time.
    */
   currentFrame: number;
+  /**
+   * When set, the right-side Inspector switches to a Keyframe Inspector
+   * showing this point's frame / value / easing. Selecting a keyframe in
+   * the timeline sets this; clicking an empty lane or the canvas clears
+   * it.
+   */
+  selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }
 
 const initialState: DesignerStoreState = {
@@ -55,6 +62,7 @@ const initialState: DesignerStoreState = {
   editingTextId: null,
   bindModeFieldId: null,
   currentFrame: 0,
+  selectedKeyframe: null,
 };
 
 type Listener = (state: DesignerStoreState) => void;
@@ -119,7 +127,13 @@ export const designerStore = {
   },
 
   setScene(scene: Scene | null, projectPath: string | null): void {
-    set({ scene, projectPath, selection: new Set<string>() });
+    set({
+      scene,
+      projectPath,
+      selection: new Set<string>(),
+      selectedKeyframe: null,
+      currentFrame: 0,
+    });
   },
 
   setTool(tool: DesignerTool): void {
@@ -128,7 +142,14 @@ export const designerStore = {
 
   /** Replace selection. Pass `[]` to deselect. */
   setSelection(ids: readonly string[]): void {
-    set({ selection: new Set(ids), editingTextId: null });
+    const nextSel = new Set(ids);
+    const keepKey =
+      current.selectedKeyframe !== null && nextSel.has(current.selectedKeyframe.elementId);
+    set({
+      selection: nextSel,
+      editingTextId: null,
+      selectedKeyframe: keepKey ? current.selectedKeyframe : null,
+    });
   },
 
   /** Enter inline edit mode for a text element. Pass null to exit. */
@@ -251,6 +272,7 @@ export const designerStore = {
     toFrame: number,
   ): void {
     if (fromFrame === toFrame) return;
+    let actuallyMoved = false;
     mutateAnimation(elementId, (anim) => {
       const existing = anim.tracks[property];
       if (existing === undefined) return anim;
@@ -259,8 +281,18 @@ export const designerStore = {
       const without = existing.keyframes.filter((k) => k.frame !== fromFrame && k.frame !== toFrame);
       const moved: Keyframe = { ...target, frame: toFrame };
       const next = [...without, moved].sort((a, b) => a.frame - b.frame);
+      actuallyMoved = true;
       return { ...anim, tracks: { ...anim.tracks, [property]: { keyframes: next } } };
     });
+    if (
+      actuallyMoved &&
+      current.selectedKeyframe !== null &&
+      current.selectedKeyframe.elementId === elementId &&
+      current.selectedKeyframe.property === property &&
+      current.selectedKeyframe.frame === fromFrame
+    ) {
+      set({ selectedKeyframe: { elementId, property, frame: toFrame } });
+    }
   },
 
   /**
@@ -282,14 +314,29 @@ export const designerStore = {
       }
       return { ...anim, tracks };
     });
+    if (
+      current.selectedKeyframe !== null &&
+      current.selectedKeyframe.elementId === elementId &&
+      current.selectedKeyframe.property === property &&
+      current.selectedKeyframe.frame === frame
+    ) {
+      set({ selectedKeyframe: null });
+    }
   },
 
   /**
-   * Commit a value for an animatable numeric property. Routes through the
-   * keyframe-at-current-frame branch: if a keyframe exists on `property` at
-   * `currentFrame`, its value is updated; otherwise the static value is
-   * written via the appropriate transform/element field. This is what the
-   * Inspector / Gizmo call for the eight PRD-listed properties.
+   * Commit a value for an animatable numeric property. The "track-aware"
+   * routing rule (D-006):
+   *
+   *   - If a track already exists for this property on this element
+   *     (i.e. the operator has set at least one keyframe for it), the
+   *     edit lands as a keyframe at `currentFrame` — replacing the
+   *     existing keyframe on that frame, or inserting a new one when
+   *     the playhead is off any existing keyframe. This is what builds
+   *     the animation when the operator e.g. drags the shape after
+   *     adding a position.x keyframe.
+   *   - Otherwise the property has never been animated, so the edit
+   *     flows to the element's static value as before.
    */
   commitAnimatable(elementId: string, property: AnimatableProperty, value: number): void {
     if (current.scene === null) return;
@@ -298,13 +345,49 @@ export const designerStore = {
     const el = found.layer.children[found.elIdx];
     if (el === undefined) return;
     const track = el.animation?.tracks[property];
-    const frame = current.currentFrame;
-    const keyframeHere = track?.keyframes.some((k) => k.frame === frame) ?? false;
-    if (keyframeHere) {
-      designerStore.upsertKeyframe(elementId, property, frame, value);
+    const hasTrack = (track?.keyframes.length ?? 0) > 0;
+    if (hasTrack) {
+      designerStore.upsertKeyframe(elementId, property, current.currentFrame, value);
       return;
     }
     designerStore.writeStaticAnimatable(elementId, property, value);
+  },
+
+  /** Set the keyframe inspected by the right-side panel. Pass null to clear. */
+  setSelectedKeyframe(
+    key: { elementId: string; property: AnimatableProperty; frame: number } | null,
+  ): void {
+    set({ selectedKeyframe: key });
+  },
+
+  /** Update an existing keyframe's value in place (no frame change). */
+  setKeyframeValue(
+    elementId: string,
+    property: AnimatableProperty,
+    frame: number,
+    value: number | string,
+  ): void {
+    mutateAnimation(elementId, (anim) => {
+      const existing = anim.tracks[property];
+      if (existing === undefined) return anim;
+      const updated = existing.keyframes.map((k) => (k.frame === frame ? { ...k, value } : k));
+      return { ...anim, tracks: { ...anim.tracks, [property]: { keyframes: updated } } };
+    });
+  },
+
+  /** Update an existing keyframe's easing. */
+  setKeyframeEasing(
+    elementId: string,
+    property: AnimatableProperty,
+    frame: number,
+    easing: Easing,
+  ): void {
+    mutateAnimation(elementId, (anim) => {
+      const existing = anim.tracks[property];
+      if (existing === undefined) return anim;
+      const updated = existing.keyframes.map((k) => (k.frame === frame ? { ...k, easing } : k));
+      return { ...anim, tracks: { ...anim.tracks, [property]: { keyframes: updated } } };
+    });
   },
 
   /**
@@ -398,7 +481,13 @@ export const designerStore = {
     nextLayers[layerIdx] = nextLayer;
     const nextSelection = new Set(current.selection);
     nextSelection.delete(elementId);
-    set({ scene: { ...current.scene, layers: nextLayers }, selection: nextSelection });
+    const keepKey =
+      current.selectedKeyframe !== null && current.selectedKeyframe.elementId !== elementId;
+    set({
+      scene: { ...current.scene, layers: nextLayers },
+      selection: nextSelection,
+      selectedKeyframe: keepKey ? current.selectedKeyframe : null,
+    });
   },
 
   /** All elements across all layers, top-of-stack first (last layer index = topmost). */
@@ -424,6 +513,7 @@ export const designerStore = {
       editingTextId: null,
       bindModeFieldId: null,
       currentFrame: 0,
+      selectedKeyframe: null,
     };
     listeners.clear();
   },

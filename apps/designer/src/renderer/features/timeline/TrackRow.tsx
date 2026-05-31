@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import type { Element, Keyframe } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
-import { trackOf, type TimelineRow } from './keyframe-helpers.js';
+import { LABEL_COL_PX, trackOf, type TimelineRow } from './keyframe-helpers.js';
 
 interface Props {
   row: TimelineRow;
@@ -10,12 +10,11 @@ interface Props {
   frameIn: number;
   frameOut: number;
   currentFrame: number;
-  selectedKey: { property: string; frame: number } | null;
-  onSelectKey: (key: { property: string; frame: number } | null) => void;
+  /** Frame of the currently-selected keyframe on THIS row, or null. */
+  selectedKeyframeFrame: number | null;
 }
 
 const ROW_HEIGHT = 22;
-const LABEL_COL_PX = 130;
 
 const styles = {
   row: {
@@ -58,6 +57,7 @@ const styles = {
     top: '50%',
     height: 0,
     borderTop: `1px dashed ${colors.border}`,
+    pointerEvents: 'none' as const,
   },
   keyDiamond: {
     position: 'absolute' as const,
@@ -79,10 +79,11 @@ const styles = {
 /**
  * One animatable-property track row: a label + add-keyframe button on the
  * left and a lane on the right with one diamond per keyframe. Diamonds are
- * draggable to move keyframes and selectable for delete.
+ * draggable to move keyframes and selectable for delete; selection lives in
+ * the store so the right Inspector can switch to a Keyframe view.
  */
 export function TrackRow(props: Props): JSX.Element {
-  const { row, element, frameIn, frameOut, currentFrame, selectedKey, onSelectKey } = props;
+  const { row, element, frameIn, frameOut, currentFrame, selectedKeyframeFrame } = props;
   const laneRef = useRef<HTMLDivElement | null>(null);
   const span = Math.max(1, frameOut - frameIn);
   const track = trackOf(element, row.property);
@@ -91,6 +92,11 @@ export function TrackRow(props: Props): JSX.Element {
   function addKeyframe(): void {
     const value = row.read(element);
     designerStore.upsertKeyframe(element.id, row.property, currentFrame, value);
+    designerStore.setSelectedKeyframe({
+      elementId: element.id,
+      property: row.property,
+      frame: currentFrame,
+    });
   }
 
   function frameAt(clientX: number): number {
@@ -116,14 +122,11 @@ export function TrackRow(props: Props): JSX.Element {
         </button>
         <span>{row.label}</span>
       </div>
-      <div ref={laneRef} style={styles.lane}>
+      <div ref={laneRef} style={styles.lane} data-role="lane-empty">
         <div style={styles.laneLine} />
         {keyframes.map((k) => {
           const pct = ((k.frame - frameIn) / span) * 100;
-          const isSelected =
-            selectedKey !== null &&
-            selectedKey.property === row.property &&
-            selectedKey.frame === k.frame;
+          const isSelected = selectedKeyframeFrame === k.frame;
           const style = {
             ...styles.keyDiamond,
             ...(isSelected ? styles.keyDiamondSelected : {}),
@@ -138,7 +141,12 @@ export function TrackRow(props: Props): JSX.Element {
               aria-label={`Keyframe at frame ${String(k.frame)}`}
               onPointerDown={(e) => {
                 e.stopPropagation();
-                onSelectKey({ property: row.property, frame: k.frame });
+                designerStore.setSelectedKeyframe({
+                  elementId: element.id,
+                  property: row.property,
+                  frame: k.frame,
+                });
+                designerStore.setCurrentFrame(k.frame);
                 const targetEl = e.currentTarget;
                 targetEl.setPointerCapture(e.pointerId);
                 let lastFrame = k.frame;
@@ -147,9 +155,9 @@ export function TrackRow(props: Props): JSX.Element {
                   const nf = frameAt(mv.clientX);
                   if (nf === lastFrame) return;
                   designerStore.moveKeyframe(element.id, row.property, from, nf);
+                  designerStore.setCurrentFrame(nf);
                   from = nf;
                   lastFrame = nf;
-                  onSelectKey({ property: row.property, frame: nf });
                 };
                 const onUp = (): void => {
                   targetEl.removeEventListener('pointermove', onMove);

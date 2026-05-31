@@ -1,8 +1,9 @@
-import type { Element, FieldBinding, Scene } from '@cg/shared-schema';
+import type { AnimatableProperty, Element, FieldBinding, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore, useDesignerStore } from '../../state/store.js';
 import { describeBinding } from '../fields/bind-resolver.js';
 import { FieldsPanel } from '../fields/FieldsPanel.js';
+import { KeyframeInspector } from './KeyframeInspector.js';
 import { StyleSection } from './StyleSection.js';
 import { TransformSection } from './TransformSection.js';
 
@@ -10,6 +11,7 @@ interface Props {
   scene: Scene | null;
   projectPath: string | null;
   selection: ReadonlySet<string>;
+  selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }
 
 const styles = {
@@ -88,7 +90,12 @@ const styles = {
  * Style sections that mutate the store. When nothing's selected, shows
  * scene metadata.
  */
-export function InspectorPanel({ scene, projectPath, selection }: Props): JSX.Element {
+export function InspectorPanel({
+  scene,
+  projectPath,
+  selection,
+  selectedKeyframe,
+}: Props): JSX.Element {
   if (scene === null) {
     return (
       <aside style={styles.panel} aria-label="Inspector">
@@ -96,6 +103,10 @@ export function InspectorPanel({ scene, projectPath, selection }: Props): JSX.El
         <p style={styles.empty}>No project selected.</p>
       </aside>
     );
+  }
+
+  if (selectedKeyframe !== null) {
+    return <KeyframeInspector scene={scene} selectedKeyframe={selectedKeyframe} />;
   }
 
   const selected = findSelected(scene, selection);

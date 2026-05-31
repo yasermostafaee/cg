@@ -51,8 +51,16 @@ const styles = {
  *   └────────────────────────────────────┘
  */
 export function App(): JSX.Element {
-  const { scene, projectPath, tool, selection, editingTextId, bindModeFieldId, currentFrame } =
-    useDesignerStore();
+  const {
+    scene,
+    projectPath,
+    tool,
+    selection,
+    editingTextId,
+    bindModeFieldId,
+    currentFrame,
+    selectedKeyframe,
+  } = useDesignerStore();
   const issues = useIssues(scene);
 
   return (
@@ -69,7 +77,12 @@ export function App(): JSX.Element {
             bindModeFieldId={bindModeFieldId}
           />
         </div>
-        <InspectorPanel scene={scene} projectPath={projectPath} selection={selection} />
+        <InspectorPanel
+          scene={scene}
+          projectPath={projectPath}
+          selection={selection}
+          selectedKeyframe={selectedKeyframe}
+        />
       </div>
       {scene !== null && (
         <div
@@ -84,7 +97,12 @@ export function App(): JSX.Element {
         </div>
       )}
       {scene !== null && (
-        <TimelineDock scene={scene} selection={selection} currentFrame={currentFrame} />
+        <TimelineDock
+          scene={scene}
+          selection={selection}
+          currentFrame={currentFrame}
+          selectedKeyframe={selectedKeyframe}
+        />
       )}
       <StatusBar scene={scene} projectPath={projectPath} issues={issues} />
     </main>
