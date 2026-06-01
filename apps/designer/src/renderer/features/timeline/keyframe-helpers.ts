@@ -24,7 +24,14 @@ export const LABEL_COL_PX = 140;
 export interface TimelineRow {
   readonly label: string;
   readonly property: AnimatableProperty;
-  readonly read: (el: Element) => number;
+  /**
+   * Current static value for the row, used to:
+   *  - format the value column ("100", "100%", "BEBEBE", …);
+   *  - seed a freshly-added keyframe when the diamond is clicked.
+   * Returns a number for numeric properties and a hex string for
+   * colour properties (D-010).
+   */
+  readonly read: (el: Element) => number | string;
 }
 
 export const TIMELINE_ROWS: readonly TimelineRow[] = [
@@ -67,19 +74,10 @@ const TRANSFORM_GROUP: TimelineGroup = {
   rows: TIMELINE_ROWS.map((row) => ({ kind: 'animatable', row })),
 };
 
-function disp(id: string, label: string, read: (el: Element) => string): TimelineRowEntry {
-  return { kind: 'display', row: { id, label, read } };
-}
-
-function hex(s: string | undefined, fallback = '000000'): string {
-  if (s === undefined) return fallback;
-  return s.startsWith('#') ? s.slice(1).toUpperCase() : s.toUpperCase();
-}
-
 function anim(
   label: string,
   property: AnimatableProperty,
-  read: (el: Element) => number,
+  read: (el: Element) => number | string,
 ): TimelineRowEntry {
   return { kind: 'animatable', row: { label, property, read } };
 }
@@ -99,16 +97,17 @@ const FILTER_ROWS: readonly TimelineRowEntry[] = [
 
 const FILTER_GROUP: TimelineGroup = { title: 'FILTER', rows: FILTER_ROWS };
 
-/** Path-style group for shapes — width & dasharray animatable; colours
- * stay as display rows (no commitAnimatable for hex values yet). */
+/** Path-style group for shapes — width, dash and colours all animatable. */
 function pathStyleGroup(): TimelineGroup {
   return {
     title: 'PATH STYLE',
     rows: [
-      disp('fill', 'Fill', (el) =>
-        el.type === 'shape' && el.fill?.kind === 'solid' ? hex(el.fill.color) : '—',
+      anim('Fill', 'fill.color', (el) =>
+        el.type === 'shape' && el.fill?.kind === 'solid' ? el.fill.color : '#000000',
       ),
-      disp('stroke', 'Stroke', (el) => (el.type === 'shape' ? hex(el.stroke?.color) : '—')),
+      anim('Stroke', 'stroke.color', (el) =>
+        el.type === 'shape' ? (el.stroke?.color ?? '#000000') : '#000000',
+      ),
       anim('Stroke width', 'stroke.width', (el) =>
         el.type === 'shape' ? (el.stroke?.width ?? 0) : 0,
       ),
@@ -154,7 +153,7 @@ function dropShadowGroup(): TimelineGroup {
       anim('Offset X', 'shadow.offsetX', (el) => shadowOf(el)?.offsetX ?? 0),
       anim('Offset Y', 'shadow.offsetY', (el) => shadowOf(el)?.offsetY ?? 0),
       anim('Blur', 'shadow.blur', (el) => shadowOf(el)?.blur ?? 0),
-      disp('shadow.color', 'Color', (el) => hex(shadowOf(el)?.color)),
+      anim('Color', 'shadow.color', (el) => shadowOf(el)?.color ?? '#000000'),
     ],
   };
 }
@@ -166,9 +165,9 @@ function textGroup(): TimelineGroup {
     title: 'TEXT',
     rows: [
       anim('Font size', 'font.size', (el) => (el.type === 'text' ? el.font.size : 0)),
-      disp('text.color', 'Color', (el) => (el.type === 'text' ? hex(el.color) : '—')),
-      disp('text.bg', 'Background color', (el) =>
-        el.type === 'text' ? hex(el.backgroundColor, 'FFFFFF') : '—',
+      anim('Color', 'text.color', (el) => (el.type === 'text' ? el.color : '#000000')),
+      anim('Background color', 'backgroundColor', (el) =>
+        el.type === 'text' ? (el.backgroundColor ?? '#FFFFFF') : '#FFFFFF',
       ),
       anim('Line height', 'font.lineHeight', (el) =>
         el.type === 'text' ? el.font.lineHeight : 0,

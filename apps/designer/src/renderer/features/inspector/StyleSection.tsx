@@ -39,16 +39,16 @@ function pointIcon(label: string): JSX.Element {
 }
 
 /**
- * Real keyframe indicator for a numeric animatable property. Reads
- * variant from keyframeVariantFor; clicking toggles a keyframe at the
- * current frame using the current static value.
+ * Real keyframe indicator for a numeric or colour animatable property.
+ * Reads variant from keyframeVariantFor; clicking toggles a keyframe
+ * at the current frame using the current static value.
  */
 function animPointIcon(
   element: Element,
   property: AnimatableProperty,
   currentFrame: number,
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null,
-  read: (el: Element) => number,
+  read: (el: Element) => number | string,
 ): JSX.Element {
   const variant = keyframeVariantFor(element, property, currentFrame, selectedKeyframe);
   return (
@@ -185,22 +185,26 @@ function ShapeSections({
         <ColorField
           label="fill"
           value={fillColor}
-          onCommit={(color) =>
-            designerStore.updateElement(id, {
-              fill: { kind: 'solid', color },
-            } as Partial<Element>)
-          }
-          trailing={pointIcon('fill')}
+          onCommit={(color) => designerStore.commitAnimatable(id, 'fill.color', color)}
+          trailing={animPointIcon(
+            element,
+            'fill.color',
+            currentFrame,
+            selectedKeyframe,
+            () => fillColor,
+          )}
         />
         <ColorField
           label="stroke"
           value={strokeColor}
-          onCommit={(color) =>
-            designerStore.updateElement(id, {
-              stroke: { ...(element.stroke ?? { width: 0 }), color },
-            } as Partial<Element>)
-          }
-          trailing={pointIcon('stroke')}
+          onCommit={(color) => designerStore.commitAnimatable(id, 'stroke.color', color)}
+          trailing={animPointIcon(
+            element,
+            'stroke.color',
+            currentFrame,
+            selectedKeyframe,
+            () => strokeColor,
+          )}
         />
         <NumberField
           label="stroke width"
@@ -303,15 +307,6 @@ function DropShadowSection({
   const staticShadow: Shadow | undefined =
     element.type === 'shape' ? element.shadow : element.textShadow;
   const s: Shadow = staticShadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
-  function setShadowColor(color: string): void {
-    if (element.type === 'shape') {
-      designerStore.updateElement(id, { shadow: { ...s, color } } as unknown as Partial<Element>);
-    } else {
-      designerStore.updateElement(id, {
-        textShadow: { ...s, color },
-      } as unknown as Partial<Element>);
-    }
-  }
   return (
     <CollapseSection title={title}>
       <NumberField
@@ -339,8 +334,8 @@ function DropShadowSection({
       <ColorField
         label="color"
         value={s.color}
-        onCommit={setShadowColor}
-        trailing={pointIcon('shadow color')}
+        onCommit={(color) => designerStore.commitAnimatable(id, 'shadow.color', color)}
+        trailing={animPointIcon(element, 'shadow.color', currentFrame, selectedKeyframe, () => s.color)}
       />
     </CollapseSection>
   );

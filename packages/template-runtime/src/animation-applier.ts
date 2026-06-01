@@ -71,19 +71,18 @@ export function applyAnimationAtFrame(entry: AnimatedElement, frame: number): vo
     const v = interpolateAtFrame(tracks['text.color'], frame);
     if (typeof v === 'string') entry.node.style.color = v;
   }
+  // D-010 — text background colour.
+  if (tracks['backgroundColor'] !== undefined && entry.source.type === 'text') {
+    const v = interpolateAtFrame(tracks['backgroundColor'], frame);
+    if (typeof v === 'string') entry.node.style.backgroundColor = v;
+  }
 
   // D-010 — direct numeric writes for stand-alone style properties.
   applyNumeric(tracks, 'cornerRadius', frame, (v) => {
     entry.node.style.borderRadius = `${v}px`;
   });
-  applyNumeric(tracks, 'stroke.width', frame, (v) => {
-    if (entry.source.type === 'shape') {
-      const color = entry.source.stroke?.color ?? '#000000';
-      const style =
-        (entry.source.stroke?.dash?.length ?? 0) > 0 ? 'dashed' : 'solid';
-      entry.node.style.border = `${v}px ${style} ${color}`;
-    }
-  });
+  // Stroke width / colour — recompose the border declaration.
+  applyStroke(entry, tracks, frame);
   // Font sub-properties.
   applyNumeric(tracks, 'font.size', frame, (v) => {
     entry.node.style.fontSize = `${v}px`;
@@ -130,6 +129,12 @@ const SHADOW_PROPS = [
   'shadow.offsetX',
   'shadow.offsetY',
   'shadow.blur',
+  'shadow.color',
+] as const satisfies readonly AnimatableProperty[];
+
+const STROKE_PROPS = [
+  'stroke.width',
+  'stroke.color',
 ] as const satisfies readonly AnimatableProperty[];
 
 const FILTER_PROPS = [
@@ -155,6 +160,32 @@ function readNumericTrack(
   return typeof v === 'number' ? v : undefined;
 }
 
+function readStringTrack(
+  tracks: ElementAnimation['tracks'],
+  prop: AnimatableProperty,
+  frame: number,
+): string | undefined {
+  const track = tracks[prop];
+  if (track === undefined) return undefined;
+  const v = interpolateAtFrame(track, frame);
+  return typeof v === 'string' ? v : undefined;
+}
+
+function applyStroke(
+  entry: AnimatedElement,
+  tracks: ElementAnimation['tracks'],
+  frame: number,
+): void {
+  const hasAny = STROKE_PROPS.some((p) => tracks[p] !== undefined);
+  if (!hasAny) return;
+  const src = entry.source;
+  if (src.type !== 'shape') return;
+  const width = readNumericTrack(tracks, 'stroke.width', frame) ?? src.stroke?.width ?? 0;
+  const color = readStringTrack(tracks, 'stroke.color', frame) ?? src.stroke?.color ?? '#000000';
+  const dashStyle = (src.stroke?.dash?.length ?? 0) > 0 ? 'dashed' : 'solid';
+  entry.node.style.border = `${width}px ${dashStyle} ${color}`;
+}
+
 function applyShadow(
   entry: AnimatedElement,
   tracks: ElementAnimation['tracks'],
@@ -168,7 +199,8 @@ function applyShadow(
   const offsetX = readNumericTrack(tracks, 'shadow.offsetX', frame) ?? staticShadow?.offsetX ?? 0;
   const offsetY = readNumericTrack(tracks, 'shadow.offsetY', frame) ?? staticShadow?.offsetY ?? 0;
   const blur = readNumericTrack(tracks, 'shadow.blur', frame) ?? staticShadow?.blur ?? 0;
-  const color = staticShadow?.color ?? '#000000';
+  const color =
+    readStringTrack(tracks, 'shadow.color', frame) ?? staticShadow?.color ?? '#000000';
   const css = `${offsetX}px ${offsetY}px ${blur}px ${color}`;
   if (src.type === 'text') entry.node.style.textShadow = css;
   else entry.node.style.boxShadow = css;

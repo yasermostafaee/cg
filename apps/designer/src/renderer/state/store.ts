@@ -377,7 +377,11 @@ export const designerStore = {
    *   - Otherwise the property has never been animated, so the edit
    *     flows to the element's static value as before.
    */
-  commitAnimatable(elementId: string, property: AnimatableProperty, value: number): void {
+  commitAnimatable(
+    elementId: string,
+    property: AnimatableProperty,
+    value: number | string,
+  ): void {
     if (current.scene === null) return;
     const found = locate(current.scene, elementId);
     if (found === null) return;
@@ -462,52 +466,59 @@ export const designerStore = {
    * keyframe branch. Used by `commitAnimatable` and by tests; the timeline's
    * "read current value" helper also pairs with this.
    */
-  writeStaticAnimatable(elementId: string, property: AnimatableProperty, value: number): void {
+  writeStaticAnimatable(
+    elementId: string,
+    property: AnimatableProperty,
+    value: number | string,
+  ): void {
     if (current.scene === null) return;
     const found = locate(current.scene, elementId);
     if (found === null) return;
     const el = found.layer.children[found.elIdx];
     if (el === undefined) return;
     const tx = el.transform;
+    // The whole transform / numeric branch only handles numbers — the
+    // color cases at the bottom of this switch handle strings.
+    const numeric = typeof value === 'number' ? value : 0;
     switch (property) {
       case 'position.x':
-        designerStore.updateTransform(elementId, { position: { ...tx.position, x: value } });
+        designerStore.updateTransform(elementId, { position: { ...tx.position, x: numeric } });
         return;
       case 'position.y':
-        designerStore.updateTransform(elementId, { position: { ...tx.position, y: value } });
+        designerStore.updateTransform(elementId, { position: { ...tx.position, y: numeric } });
         return;
       case 'size.w':
-        designerStore.updateTransform(elementId, { size: { ...tx.size, w: value } });
+        designerStore.updateTransform(elementId, { size: { ...tx.size, w: numeric } });
         return;
       case 'size.h':
-        designerStore.updateTransform(elementId, { size: { ...tx.size, h: value } });
+        designerStore.updateTransform(elementId, { size: { ...tx.size, h: numeric } });
         return;
       case 'scale.x':
-        designerStore.updateTransform(elementId, { scale: { ...tx.scale, x: value } });
+        designerStore.updateTransform(elementId, { scale: { ...tx.scale, x: numeric } });
         return;
       case 'scale.y':
-        designerStore.updateTransform(elementId, { scale: { ...tx.scale, y: value } });
+        designerStore.updateTransform(elementId, { scale: { ...tx.scale, y: numeric } });
         return;
       case 'rotation':
-        designerStore.updateTransform(elementId, { rotation: value });
+        designerStore.updateTransform(elementId, { rotation: numeric });
         return;
       case 'opacity':
-        designerStore.updateElement(elementId, { opacity: value } as Partial<Element>);
+        designerStore.updateElement(elementId, { opacity: numeric } as Partial<Element>);
         return;
       // D-010 — numeric style properties.
       case 'cornerRadius':
-        designerStore.updateElement(elementId, { cornerRadius: value } as unknown as Partial<Element>);
+        designerStore.updateElement(elementId, { cornerRadius: numeric } as unknown as Partial<Element>);
         return;
       case 'stroke.width': {
         if (el.type !== 'shape') return;
-        const stroke = { ...(el.stroke ?? { color: '#000000', width: 0 }), width: value };
+        const stroke = { ...(el.stroke ?? { color: '#000000', width: 0 }), width: numeric };
         designerStore.updateElement(elementId, { stroke } as unknown as Partial<Element>);
         return;
       }
       case 'stroke.dash': {
         if (el.type !== 'shape') return;
         const base = el.stroke ?? { color: '#000000', width: 0 };
-        const stroke = { ...base, dash: value > 0 ? [value] : [] };
+        const stroke = { ...base, dash: numeric > 0 ? [numeric] : [] };
         designerStore.updateElement(elementId, { stroke } as unknown as Partial<Element>);
         return;
       }
@@ -522,11 +533,11 @@ export const designerStore = {
               : 'blur';
         if (el.type === 'shape') {
           const base = el.shadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
-          const shadow = { ...base, [field]: value };
+          const shadow = { ...base, [field]: numeric };
           designerStore.updateElement(elementId, { shadow } as unknown as Partial<Element>);
         } else if (el.type === 'text') {
           const base = el.textShadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
-          const textShadow = { ...base, [field]: value };
+          const textShadow = { ...base, [field]: numeric };
           designerStore.updateElement(elementId, { textShadow } as unknown as Partial<Element>);
         }
         return;
@@ -542,7 +553,7 @@ export const designerStore = {
       case 'filter.sepia': {
         const key = property.slice('filter.'.length);
         const base = el.filter ?? {};
-        const filter = { ...base, [key]: value };
+        const filter = { ...base, [key]: numeric };
         designerStore.updateElement(elementId, { filter } as unknown as Partial<Element>);
         return;
       }
@@ -551,7 +562,7 @@ export const designerStore = {
       case 'font.letterSpacing': {
         if (el.type !== 'text') return;
         const key = property.slice('font.'.length);
-        const font = { ...el.font, [key]: value };
+        const font = { ...el.font, [key]: numeric };
         designerStore.updateElement(elementId, { font } as unknown as Partial<Element>);
         return;
       }
@@ -562,8 +573,50 @@ export const designerStore = {
         if (el.type !== 'text') return;
         const key = property.slice('padding.'.length);
         const base = el.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
-        const padding = { ...base, [key]: value };
+        const padding = { ...base, [key]: numeric };
         designerStore.updateElement(elementId, { padding } as unknown as Partial<Element>);
+        return;
+      }
+      // D-010 colour properties (value is a hex string).
+      case 'fill.color': {
+        if (el.type !== 'shape' || typeof value !== 'string') return;
+        designerStore.updateElement(elementId, {
+          fill: { kind: 'solid', color: value },
+        } as Partial<Element>);
+        return;
+      }
+      case 'stroke.color': {
+        if (el.type !== 'shape' || typeof value !== 'string') return;
+        const base = el.stroke ?? { width: 0, color: '#000000' };
+        const stroke = { ...base, color: value };
+        designerStore.updateElement(elementId, { stroke } as unknown as Partial<Element>);
+        return;
+      }
+      case 'shadow.color': {
+        if (typeof value !== 'string') return;
+        if (el.type === 'shape') {
+          const base = el.shadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
+          designerStore.updateElement(elementId, {
+            shadow: { ...base, color: value },
+          } as unknown as Partial<Element>);
+        } else if (el.type === 'text') {
+          const base = el.textShadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
+          designerStore.updateElement(elementId, {
+            textShadow: { ...base, color: value },
+          } as unknown as Partial<Element>);
+        }
+        return;
+      }
+      case 'text.color': {
+        if (el.type !== 'text' || typeof value !== 'string') return;
+        designerStore.updateElement(elementId, { color: value } as Partial<Element>);
+        return;
+      }
+      case 'backgroundColor': {
+        if (el.type !== 'text' || typeof value !== 'string') return;
+        designerStore.updateElement(elementId, {
+          backgroundColor: value,
+        } as unknown as Partial<Element>);
         return;
       }
       default:

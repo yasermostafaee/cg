@@ -350,6 +350,36 @@ describe('D-010 — non-Transform properties are animatable', () => {
     const shadow = (selected() as unknown as { shadow?: { offsetY: number } }).shadow;
     expect(shadow?.offsetY).toBe(6);
   });
+
+  it('writeStaticAnimatable for fill.color updates the shape fill', () => {
+    designerStore.writeStaticAnimatable('el-1', 'fill.color', '#FF0000');
+    const fill = (selected() as unknown as { fill?: { color: string } }).fill;
+    expect(fill?.color).toBe('#FF0000');
+  });
+
+  it('writeStaticAnimatable for stroke.color seeds a stroke on a shape', () => {
+    designerStore.writeStaticAnimatable('el-1', 'stroke.color', '#00FF00');
+    const stroke = (selected() as unknown as { stroke?: { color: string } }).stroke;
+    expect(stroke?.color).toBe('#00FF00');
+  });
+
+  it('writeStaticAnimatable for shadow.color updates shadow colour', () => {
+    designerStore.writeStaticAnimatable('el-1', 'shadow.color', '#123456');
+    const shadow = (selected() as unknown as { shadow?: { color: string } }).shadow;
+    expect(shadow?.color).toBe('#123456');
+  });
+
+  it('commitAnimatable accepts a colour string and upserts a keyframe', () => {
+    designerStore.upsertKeyframe('el-1', 'fill.color', 5, '#AAAAAA');
+    // Track now exists, so commit routes to upsert at currentFrame.
+    designerStore.setCurrentFrame(20);
+    designerStore.commitAnimatable('el-1', 'fill.color', '#BBBBBB');
+    const kfs = selected().animation?.tracks['fill.color']?.keyframes;
+    expect(kfs?.map((k) => [k.frame, k.value])).toEqual([
+      [5, '#AAAAAA'],
+      [20, '#BBBBBB'],
+    ]);
+  });
 });
 
 describe('B-003 — keyframeVariantFor collapses to empty / at-frame', () => {

@@ -245,7 +245,7 @@ function animPoint(
   selectedKeyframe:
     | { elementId: string; property: AnimatableProperty; frame: number }
     | null,
-  read: (el: TextElement) => number,
+  read: (el: TextElement) => number | string,
 ): JSX.Element {
   const variant = keyframeVariantFor(element, property, currentFrame, selectedKeyframe);
   return (
@@ -333,8 +333,9 @@ export function TextStyleSection({
           label="Text Color"
           color={element.color}
           transparent={false}
-          onCommit={(color) => designerStore.updateElement(id, { color } as Partial<Element>)}
+          onCommit={(color) => designerStore.commitAnimatable(id, 'text.color', color)}
           ariaLabel="text color"
+          trailing={animPoint(element, 'text.color', currentFrame, selectedKeyframe, (el) => el.color)}
         />
 
         {/* Background */}
@@ -343,11 +344,16 @@ export function TextStyleSection({
           color={element.backgroundColor ?? '#FFFFFF'}
           transparent={element.backgroundColor === undefined}
           onCommit={(backgroundColor) =>
-            designerStore.updateElement(id, {
-              backgroundColor,
-            } as unknown as Partial<Element>)
+            designerStore.commitAnimatable(id, 'backgroundColor', backgroundColor)
           }
           ariaLabel="background color"
+          trailing={animPoint(
+            element,
+            'backgroundColor',
+            currentFrame,
+            selectedKeyframe,
+            (el) => el.backgroundColor ?? '#FFFFFF',
+          )}
         />
 
         {/* Font family dropdown */}
@@ -554,12 +560,14 @@ function ColorChip({
   transparent,
   onCommit,
   ariaLabel,
+  trailing,
 }: {
   label: string;
   color: string;
   transparent: boolean;
   onCommit: (hex: string) => void;
   ariaLabel: string;
+  trailing?: JSX.Element;
 }): JSX.Element {
   const swatchStyle = {
     ...styles.swatch,
@@ -593,7 +601,7 @@ function ColorChip({
           key={`${label}-${color}`}
         />
       </div>
-      {point(ariaLabel)}
+      {trailing ?? point(ariaLabel)}
     </div>
   );
 }

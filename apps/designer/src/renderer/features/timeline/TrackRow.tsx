@@ -389,7 +389,12 @@ export function TrackRow(props: Props): JSX.Element {
   );
 }
 
-function formatValue(v: number): string {
+function formatValue(v: number | string): string {
+  if (typeof v === 'string') {
+    // Hex colour — drop the leading '#' and upper-case for the timeline
+    // label column (matches the D-010 reference).
+    return v.startsWith('#') ? v.slice(1).toUpperCase() : v.toUpperCase();
+  }
   if (Number.isInteger(v)) return String(v);
   return v.toFixed(2);
 }

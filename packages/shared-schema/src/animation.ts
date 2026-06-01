@@ -97,6 +97,10 @@ export const AnimatablePropertySchema = z.enum([
   'padding.right',
   'padding.bottom',
   'padding.left',
+  // D-010 colour properties.
+  'stroke.color',
+  'shadow.color',
+  'backgroundColor',
 ]);
 export type AnimatableProperty = z.infer<typeof AnimatablePropertySchema>;
 
