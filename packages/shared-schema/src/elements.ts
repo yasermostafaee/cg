@@ -66,6 +66,19 @@ export const TextElementSchema = ElementBaseSchema.extend({
   backgroundColor: HexColorSchema.optional(),
   /** D-010 — text-box border-radius (in pixels). */
   cornerRadius: z.number().nonnegative().optional(),
+  /**
+   * D-010-pic-5 — when true, the runtime shrinks the font to fit the
+   * box (CSS-side; analogous to fitMode === 'shrink-to-fit'). Default
+   * false.
+   */
+  autoSqueeze: z.boolean().optional(),
+  /**
+   * D-010-pic-5 — true (default) lets text wrap across lines; false
+   * keeps it on a single line (CSS `white-space: nowrap`).
+   */
+  wrap: z.boolean().optional(),
+  /** D-010-pic-5 — vertical alignment inside the text box. */
+  verticalAlign: z.enum(['top', 'middle', 'bottom']).optional(),
 });
 export type TextElement = z.infer<typeof TextElementSchema>;
 

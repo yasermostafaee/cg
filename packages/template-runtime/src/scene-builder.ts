@@ -175,6 +175,21 @@ function buildText(
   if (element.cornerRadius !== undefined && element.cornerRadius > 0) {
     el.style.borderRadius = `${element.cornerRadius}px`;
   }
+  // D-010-pic-5 — `wrap === false` forces single-line; vertical align
+  // is honoured by turning the text node into a flex container.
+  if (element.wrap === false) {
+    el.style.whiteSpace = 'nowrap';
+  }
+  if (element.verticalAlign !== undefined) {
+    el.style.display = 'flex';
+    el.style.flexDirection = 'column';
+    el.style.justifyContent =
+      element.verticalAlign === 'middle'
+        ? 'center'
+        : element.verticalAlign === 'bottom'
+          ? 'flex-end'
+          : 'flex-start';
+  }
   el.textContent = element.text;
   textOriginals.set(element.id, element.text);
   return el;

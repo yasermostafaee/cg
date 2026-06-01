@@ -10,7 +10,8 @@ import type {
 import { designerStore } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import { CollapseSection } from './CollapseSection.js';
-import { ColorField, NumberField, SelectField, TextField } from './controls.js';
+import { ColorField, NumberField, SelectField } from './controls.js';
+import { TextStyleSection } from './TextStyleSection.js';
 
 interface Props {
   element: Element;
@@ -57,102 +58,10 @@ function TextSections({ element }: { element: TextElement }): JSX.Element {
   const id = element.id;
   return (
     <>
-      <CollapseSection title="Text" defaultExpanded>
-        <TextField
-          label="text"
-          value={element.text}
-          onCommit={(text) => designerStore.updateElement(id, { text } as Partial<Element>)}
-          trailing={pointIcon('text')}
-        />
-        <TextField
-          label="font"
-          value={element.font.family}
-          onCommit={(family) =>
-            designerStore.updateElement(id, {
-              font: { ...element.font, family },
-            } as Partial<Element>)
-          }
-          trailing={pointIcon('font')}
-        />
-        <NumberField
-          label="font size"
-          value={element.font.size}
-          step={1}
-          min={1}
-          onCommit={(size) =>
-            designerStore.updateElement(id, {
-              font: { ...element.font, size },
-            } as Partial<Element>)
-          }
-          trailing={pointIcon('font size')}
-        />
-        <NumberField
-          label="weight"
-          value={element.font.weight}
-          step={100}
-          min={100}
-          max={900}
-          onCommit={(weight) =>
-            designerStore.updateElement(id, {
-              font: { ...element.font, weight },
-            } as Partial<Element>)
-          }
-          trailing={pointIcon('weight')}
-        />
-        <NumberField
-          label="line height"
-          value={element.font.lineHeight}
-          step={0.05}
-          min={0.1}
-          onCommit={(lineHeight) =>
-            designerStore.updateElement(id, {
-              font: { ...element.font, lineHeight },
-            } as Partial<Element>)
-          }
-          trailing={pointIcon('line height')}
-        />
-        <NumberField
-          label="letter spacing"
-          value={element.font.letterSpacing}
-          step={0.01}
-          onCommit={(letterSpacing) =>
-            designerStore.updateElement(id, {
-              font: { ...element.font, letterSpacing },
-            } as Partial<Element>)
-          }
-          trailing={pointIcon('letter spacing')}
-        />
-        <ColorField
-          label="color"
-          value={element.color}
-          onCommit={(color) => designerStore.updateElement(id, { color } as Partial<Element>)}
-          trailing={pointIcon('color')}
-        />
-        <ColorField
-          label="background"
-          value={element.backgroundColor ?? '#FFFFFF'}
-          onCommit={(backgroundColor) =>
-            designerStore.updateElement(id, { backgroundColor } as Partial<Element>)
-          }
-          trailing={pointIcon('background')}
-        />
-        <SelectField
-          label="align"
-          value={element.align}
-          options={['start', 'center', 'end', 'justify'] as const}
-          onCommit={(align) => designerStore.updateElement(id, { align } as Partial<Element>)}
-          trailing={pointIcon('align')}
-        />
-        <SelectField
-          label="direction"
-          value={element.direction}
-          options={['auto', 'ltr', 'rtl'] as const}
-          onCommit={(direction) =>
-            designerStore.updateElement(id, { direction } as Partial<Element>)
-          }
-          trailing={pointIcon('direction')}
-        />
-      </CollapseSection>
+      {/* D-010-pic-5 — custom layout (toggles, swatches, font dropdown,
+          icon chips, alignment button groups). Replaces the generic
+          field stack used by the other element types. */}
+      <TextStyleSection element={element} />
 
       <DropShadowSection
         title="Drop Shadow"
