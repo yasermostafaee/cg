@@ -27,7 +27,7 @@ const styles = {
     alignItems: 'center',
     gap: '0.3rem',
     padding: '0 0.4rem',
-    background: '#1c1f2d',
+    background: colors.panel,
     borderRight: `1px solid ${colors.border}`,
     borderBottom: `1px solid ${colors.border}`,
     color: colors.textMuted,

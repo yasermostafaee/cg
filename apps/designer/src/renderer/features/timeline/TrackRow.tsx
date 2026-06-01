@@ -42,7 +42,7 @@ const styles = {
     gap: '0.35rem',
     borderRight: `1px solid ${colors.border}`,
     borderBottom: `1px solid ${colors.border}`,
-    background: '#1c1f2d',
+    background: colors.panel,
     height: ROW_HEIGHT,
     fontSize: '0.7rem',
     boxSizing: 'border-box' as const,
@@ -156,7 +156,7 @@ const styles = {
   menu: {
     position: 'fixed' as const,
     minWidth: 140,
-    background: '#1c1f2d',
+    background: colors.panel,
     border: `1px solid ${colors.border}`,
     borderRadius: '0.25rem',
     boxShadow: '0 6px 18px rgba(0,0,0,0.45)',

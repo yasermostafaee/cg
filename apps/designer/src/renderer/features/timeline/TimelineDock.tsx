@@ -19,7 +19,7 @@ const TIMELINE_BG = '#1c1f2d';
 
 const styles = {
   dock: {
-    background: TIMELINE_BG,
+    background: colors.panel,
     borderTop: `1px solid ${colors.border}`,
     display: 'flex',
     flexDirection: 'column' as const,
@@ -43,10 +43,10 @@ const styles = {
     flexDirection: 'column' as const,
     overflow: 'hidden' as const,
     borderRight: `1px solid ${colors.border}`,
-    background: TIMELINE_BG,
+    background: colors.panel,
   },
   leftHeader: {
-    background: TIMELINE_BG,
+    background: colors.panel,
     borderBottom: `1px solid ${colors.border}`,
     color: colors.textMuted,
     fontSize: '0.6rem',
@@ -112,7 +112,7 @@ const styles = {
     marginRight: '0.4rem',
   },
   button: {
-    background: TIMELINE_BG,
+    background: colors.panelMuted,
     color: colors.text,
     border: `1px solid ${colors.border}`,
     borderRadius: '0.18rem',
@@ -148,7 +148,7 @@ const styles = {
     fontWeight: 700,
     letterSpacing: '0.06em',
     padding: '0 0.4rem 0 1.7rem',
-    background: TIMELINE_BG,
+    background: colors.panel,
     borderRight: `1px solid ${colors.border}`,
     borderBottom: `1px solid ${colors.border}`,
     height: 18,

@@ -22,7 +22,7 @@ const styles = {
     gap: '0.35rem',
     borderRight: `1px solid ${colors.border}`,
     borderBottom: `1px solid ${colors.border}`,
-    background: '#1c1f2d',
+    background: colors.panel,
     height: ROW_HEIGHT,
     fontSize: '0.7rem',
     boxSizing: 'border-box' as const,
