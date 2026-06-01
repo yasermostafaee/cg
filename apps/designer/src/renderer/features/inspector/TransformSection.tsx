@@ -12,32 +12,32 @@ interface Props {
 }
 
 const styles = {
-  // D-009: per-axis diamonds — each cell gets its own indicator so X
-  // can be yellow (keyframe at current frame) independently of Y.
-  // Layout: [cell] [◆] [cell] [◆].
+  // D-010-pic-5: per-axis diamonds live INSIDE the cell now — each
+  // cell is icon | input | ◆.
   row: {
     display: 'grid',
-    gridTemplateColumns: '1fr 14px 1fr 14px',
-    gap: '0.25rem',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '0.3rem',
     alignItems: 'center',
     padding: '0.1rem 0',
   },
   rowSingle: {
     display: 'grid',
-    gridTemplateColumns: '1fr 14px',
+    gridTemplateColumns: '1fr',
     gap: '0.3rem',
     alignItems: 'center',
     padding: '0.1rem 0',
   },
   cell: {
     display: 'grid',
-    gridTemplateColumns: 'auto 1fr',
+    gridTemplateColumns: 'auto 1fr auto',
     alignItems: 'center',
     gap: '0.25rem',
     background: colors.panelMuted,
     border: `1px solid ${colors.border}`,
     borderRadius: '0.18rem',
     padding: '0.05rem 0.3rem',
+    minWidth: 0,
   },
   icon: {
     color: colors.textMuted,
@@ -54,13 +54,9 @@ const styles = {
     padding: '0.1rem 0',
     fontSize: '0.72rem',
     width: '100%',
+    minWidth: 0,
     boxSizing: 'border-box' as const,
     fontVariantNumeric: 'tabular-nums' as const,
-  },
-  indicatorCell: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 } as const;
 
@@ -95,15 +91,15 @@ export function TransformSection({ element, currentFrame, selectedKeyframe }: Pr
           value={t.position.x}
           step={1}
           onCommit={(v) => designerStore.commitAnimatable(id, 'position.x', v)}
+          trailing={indicatorFor('position.x')}
         />
-        <span style={styles.indicatorCell}>{indicatorFor('position.x')}</span>
         <Cell
           icon="Y"
           value={t.position.y}
           step={1}
           onCommit={(v) => designerStore.commitAnimatable(id, 'position.y', v)}
+          trailing={indicatorFor('position.y')}
         />
-        <span style={styles.indicatorCell}>{indicatorFor('position.y')}</span>
       </div>
       <div style={styles.row}>
         <Cell
@@ -111,15 +107,15 @@ export function TransformSection({ element, currentFrame, selectedKeyframe }: Pr
           value={t.size.w}
           step={1}
           onCommit={(v) => designerStore.commitAnimatable(id, 'size.w', v)}
+          trailing={indicatorFor('size.w')}
         />
-        <span style={styles.indicatorCell}>{indicatorFor('size.w')}</span>
         <Cell
           icon="H"
           value={t.size.h}
           step={1}
           onCommit={(v) => designerStore.commitAnimatable(id, 'size.h', v)}
+          trailing={indicatorFor('size.h')}
         />
-        <span style={styles.indicatorCell}>{indicatorFor('size.h')}</span>
       </div>
       <div style={styles.row}>
         <Cell
@@ -128,16 +124,16 @@ export function TransformSection({ element, currentFrame, selectedKeyframe }: Pr
           suffix="%"
           step={1}
           onCommit={(v) => designerStore.commitAnimatable(id, 'scale.x', v / 100)}
+          trailing={indicatorFor('scale.x')}
         />
-        <span style={styles.indicatorCell}>{indicatorFor('scale.x')}</span>
         <Cell
           icon="↕"
           value={percent(t.scale.y)}
           suffix="%"
           step={1}
           onCommit={(v) => designerStore.commitAnimatable(id, 'scale.y', v / 100)}
+          trailing={indicatorFor('scale.y')}
         />
-        <span style={styles.indicatorCell}>{indicatorFor('scale.y')}</span>
       </div>
       <div style={styles.rowSingle}>
         <Cell
@@ -146,8 +142,8 @@ export function TransformSection({ element, currentFrame, selectedKeyframe }: Pr
           suffix="°"
           step={1}
           onCommit={(v) => designerStore.commitAnimatable(id, 'rotation', v)}
+          trailing={indicatorFor('rotation')}
         />
-        <span style={styles.indicatorCell}>{indicatorFor('rotation')}</span>
       </div>
       <div style={styles.rowSingle}>
         <Cell
@@ -158,8 +154,8 @@ export function TransformSection({ element, currentFrame, selectedKeyframe }: Pr
           min={0}
           max={100}
           onCommit={(v) => designerStore.commitAnimatable(id, 'opacity', clamp01(v / 100))}
+          trailing={indicatorFor('opacity')}
         />
-        <span style={styles.indicatorCell}>{indicatorFor('opacity')}</span>
       </div>
     </>
   );
@@ -173,9 +169,10 @@ interface CellProps {
   max?: number;
   suffix?: string;
   onCommit: (n: number) => void;
+  trailing?: JSX.Element;
 }
 
-function Cell({ icon, value, step, min, max, onCommit }: CellProps): JSX.Element {
+function Cell({ icon, value, step, min, max, onCommit, trailing }: CellProps): JSX.Element {
   return (
     <div style={styles.cell}>
       <span style={styles.icon} aria-hidden>
@@ -190,6 +187,7 @@ function Cell({ icon, value, step, min, max, onCommit }: CellProps): JSX.Element
         style={styles.input}
         ariaLabel={icon}
       />
+      {trailing}
     </div>
   );
 }

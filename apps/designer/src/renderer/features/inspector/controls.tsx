@@ -54,20 +54,49 @@ const styles = {
     boxSizing: 'border-box' as const,
     fontVariantNumeric: 'tabular-nums' as const,
   },
-  colorBox: {
-    display: 'flex',
+  // D-010-pic-5 — colour chip: swatch | hex text | ◇ inside one box.
+  colorChip: {
+    display: 'grid',
+    gridTemplateColumns: 'auto 1fr auto',
     alignItems: 'center',
-    gap: '0.3rem',
+    gap: '0.35rem',
+    background: colors.panelMuted,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '0.18rem',
+    padding: '0.1rem 0.35rem',
     minWidth: 0,
   },
-  color: {
-    background: 'transparent',
+  swatch: {
+    position: 'relative' as const,
+    width: 14,
+    height: 14,
+    borderRadius: '0.15rem',
     border: `1px solid ${colors.border}`,
-    width: 36,
-    height: 22,
-    padding: 0,
+    overflow: 'hidden' as const,
     cursor: 'pointer',
-    flex: 'none' as const,
+  },
+  swatchInput: {
+    position: 'absolute' as const,
+    inset: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0,
+    cursor: 'pointer',
+    border: 'none',
+    padding: 0,
+    background: 'transparent',
+  },
+  hexInput: {
+    background: 'transparent',
+    color: colors.text,
+    border: 'none',
+    outline: 'none',
+    padding: '0.05rem 0',
+    fontSize: '0.74rem',
+    width: '100%',
+    minWidth: 0,
+    boxSizing: 'border-box' as const,
+    fontVariantNumeric: 'tabular-nums' as const,
   },
   trailing: {
     display: 'flex',
@@ -246,15 +275,34 @@ interface ColorFieldProps {
 }
 
 export function ColorField(props: ColorFieldProps): JSX.Element {
+  const hex = props.value.replace(/^#/, '').toUpperCase();
   return (
     <div style={styles.row}>
       <span style={styles.label}>{props.label}</span>
-      <div style={styles.colorBox}>
+      <div style={styles.colorChip}>
+        <span style={{ ...styles.swatch, background: props.value }} title="Pick a colour">
+          <input
+            type="color"
+            value={props.value}
+            onChange={(e) => props.onCommit(e.target.value.toUpperCase())}
+            style={styles.swatchInput}
+            aria-label={`${props.label} colour`}
+          />
+        </span>
         <input
-          style={styles.color}
-          type="color"
-          value={props.value}
-          onChange={(e) => props.onCommit(e.target.value)}
+          style={styles.hexInput}
+          type="text"
+          defaultValue={hex}
+          onBlur={(e) => {
+            const v = e.target.value.trim();
+            const next = v.startsWith('#') ? v : `#${v}`;
+            if (/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(next)) props.onCommit(next.toUpperCase());
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          }}
+          key={`${props.label}-${props.value}`}
+          aria-label={`${props.label} hex value`}
         />
         {props.trailing !== undefined && (
           <span style={styles.trailing}>{props.trailing}</span>
