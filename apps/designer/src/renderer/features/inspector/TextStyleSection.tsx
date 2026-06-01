@@ -86,13 +86,13 @@ const styles = {
   },
   colorRow: {
     display: 'grid',
-    gridTemplateColumns: '90px 1fr 14px',
+    gridTemplateColumns: '90px 1fr',
     alignItems: 'center',
     gap: '0.4rem',
   },
   colorChip: {
     display: 'grid',
-    gridTemplateColumns: 'auto 1fr',
+    gridTemplateColumns: 'auto 1fr auto',
     alignItems: 'center',
     gap: '0.35rem',
     background: colors.panelMuted,
@@ -151,7 +151,7 @@ const styles = {
   },
   numberChip: {
     display: 'grid',
-    gridTemplateColumns: '14px auto 14px',
+    gridTemplateColumns: '14px 1fr 14px',
     gap: '0.35rem',
     alignItems: 'center',
     background: colors.panelMuted,
@@ -178,7 +178,7 @@ const styles = {
   },
   pairRow: {
     display: 'grid',
-    gridTemplateColumns: '1fr 14px 1fr 14px',
+    gridTemplateColumns: '1fr 1fr',
     gap: '0.3rem',
     alignItems: 'center',
   },
@@ -427,8 +427,8 @@ export function TextStyleSection({
               key={`lh-${String(element.font.lineHeight)}`}
               aria-label="Line height"
             />
+            {animPoint(element, 'font.lineHeight', currentFrame, selectedKeyframe, (el) => el.font.lineHeight)}
           </div>
-          {animPoint(element, 'font.lineHeight', currentFrame, selectedKeyframe, (el) => el.font.lineHeight)}
           <div style={styles.numberChip}>
             <span style={styles.chipIcon} aria-hidden title="Letter spacing">
               VA
@@ -450,8 +450,8 @@ export function TextStyleSection({
               key={`ls-${String(element.font.letterSpacing)}`}
               aria-label="Letter spacing"
             />
+            {animPoint(element, 'font.letterSpacing', currentFrame, selectedKeyframe, (el) => el.font.letterSpacing)}
           </div>
-          {animPoint(element, 'font.letterSpacing', currentFrame, selectedKeyframe, (el) => el.font.letterSpacing)}
         </div>
 
         {/* Alignment row */}
@@ -600,8 +600,8 @@ function ColorChip({
           }}
           key={`${label}-${color}`}
         />
+        {trailing ?? point(ariaLabel)}
       </div>
-      {trailing ?? point(ariaLabel)}
     </div>
   );
 }
