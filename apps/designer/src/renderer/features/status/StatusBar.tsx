@@ -5,7 +5,6 @@ import { colors } from '../../theme.js';
 
 interface Props {
   scene: Scene | null;
-  projectPath: string | null;
   issues: readonly ExportIssue[];
 }
 
@@ -30,29 +29,11 @@ const styles = {
     background: colors.panelMuted,
   },
   spacer: { flex: 1 },
-  saveButton: {
-    background: colors.accent,
-    color: '#000',
-    border: 'none',
-    padding: '0.2rem 0.6rem',
-    borderRadius: '0.25rem',
-    fontSize: '0.8rem',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  exportButton: {
-    background: 'transparent',
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    padding: '0.2rem 0.6rem',
-    borderRadius: '0.25rem',
-    fontSize: '0.8rem',
-    cursor: 'pointer',
-  },
 } as const;
 
-/** Bottom-of-window status bar — project chrome + Save / Export shortcuts. */
-export function StatusBar({ scene, projectPath, issues }: Props): JSX.Element {
+/** Bottom-of-window status bar — project chrome + issues badge + clock.
+ *  Save / Export now live in the TopToolbar on the right. */
+export function StatusBar({ scene, issues }: Props): JSX.Element {
   const [time, setTime] = useState<string>(currentTime());
   useEffect(() => {
     const t = setInterval(() => setTime(currentTime()), 30_000);
@@ -60,25 +41,6 @@ export function StatusBar({ scene, projectPath, issues }: Props): JSX.Element {
   }, []);
 
   const errorCount = issues.filter((i) => i.severity === 'error').length;
-  const exportBlocked = scene === null || errorCount > 0;
-
-  async function save(): Promise<void> {
-    if (scene === null) return;
-    const path = projectPath ?? window.prompt('Save scene as (full path, .scene.json):');
-    if (path === null || path === '') return;
-    await window.cg.projects.save({ scene, path });
-  }
-
-  async function exportVcg(): Promise<void> {
-    if (scene === null) return;
-    if (errorCount > 0) {
-      window.alert(`Export blocked: ${String(errorCount)} validation error(s) in Issues panel.`);
-      return;
-    }
-    const outputPath = window.prompt('Output .vcg path:');
-    if (outputPath === null || outputPath === '') return;
-    await window.cg.export.run({ scene, outputPath });
-  }
 
   return (
     <footer style={styles.bar} aria-label="Status bar">
@@ -100,17 +62,6 @@ export function StatusBar({ scene, projectPath, issues }: Props): JSX.Element {
         </span>
       )}
       <span style={styles.spacer} />
-      <button
-        style={styles.exportButton}
-        disabled={exportBlocked}
-        onClick={() => void exportVcg()}
-        title={errorCount > 0 ? 'Resolve validation errors first' : 'Export to .vcg'}
-      >
-        EXPORT
-      </button>
-      <button style={styles.saveButton} disabled={scene === null} onClick={() => void save()}>
-        SAVE
-      </button>
       <span>{time}</span>
     </footer>
   );

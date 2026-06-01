@@ -114,7 +114,7 @@ export function App(): JSX.Element {
   return (
     <main style={styles.page}>
       <div style={styles.studioTop}>
-        <TopToolbar />
+        <TopToolbar scene={scene} projectPath={projectPath} issues={issues} />
       </div>
       <div style={styles.shell}>
         <div style={styles.centerCol}>
@@ -168,7 +168,7 @@ export function App(): JSX.Element {
           selectedKeyframe={selectedKeyframe}
         />
       </div>
-      <StatusBar scene={scene} projectPath={projectPath} issues={issues} />
+      <StatusBar scene={scene} issues={issues} />
     </main>
   );
 }
