@@ -118,12 +118,9 @@ export function FrameRuler({ frameIn, frameOut, currentFrame, onScrub }: Props):
 function tickFrames(lo: number, hi: number): readonly number[] {
   const span = hi - lo;
   if (span <= 0) return [lo];
-  const targetCount = 14;
-  const rawStep = span / targetCount;
-  const niceSteps = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500, 1000];
-  const step = niceSteps.find((s) => s >= rawStep) ?? Math.ceil(rawStep);
+  // Loopic-style: label every frame. Browsers handle overflow by
+  // clipping; the operator zooms in to fit denser ranges.
   const out: number[] = [];
-  const first = Math.ceil(lo / step) * step;
-  for (let f = first; f <= hi; f += step) out.push(f);
+  for (let f = lo; f <= hi; f += 1) out.push(f);
   return out;
 }

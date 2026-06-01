@@ -49,12 +49,13 @@ const styles = {
     background: colors.panel,
     borderBottom: `1px solid ${colors.border}`,
     color: colors.textMuted,
-    fontSize: '0.6rem',
-    letterSpacing: '0.06em',
-    padding: '0 0.5rem',
+    fontSize: '0.85rem',
+    fontVariantNumeric: 'tabular-nums' as const,
+    padding: '0 0.6rem',
     height: 22,
     display: 'flex',
     alignItems: 'center',
+    gap: '0.1rem',
     boxSizing: 'border-box' as const,
   },
   leftBody: {
@@ -376,7 +377,10 @@ export function TimelineDock({
       </div>
       <div style={styles.body}>
         <div style={styles.leftCol}>
-          <div style={styles.leftHeader}>FRAME</div>
+          <div style={styles.leftHeader}>
+            <span style={{ color: colors.text, fontWeight: 700 }}>{currentFrame}</span>
+            <span style={{ color: colors.textMuted }}>/{frameOut}</span>
+          </div>
           <div style={styles.leftBody} ref={leftBodyRef}>
             {elements.length === 0 ? (
               <p style={styles.empty}>No elements yet. Add a shape, text, or image to start.</p>
