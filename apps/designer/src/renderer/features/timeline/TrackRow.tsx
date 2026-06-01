@@ -288,27 +288,45 @@ function TrackRowLane(props: Props): JSX.Element {
           const rightPct = ((next.frame - frameIn) / span) * 100;
           const widthPct = rightPct - leftPct;
           if (widthPct <= 0) return null;
-          const midPct = leftPct + widthPct / 2;
           const isLeftSelected =
             selectedKeyframe !== null &&
             selectedKeyframe.elementId === element.id &&
             selectedKeyframe.property === row.property &&
             selectedKeyframe.frame === k.frame;
           return (
-            <div key={`line-${String(k.frame)}-${String(next.frame)}`}>
+            <div
+              key={`line-${String(k.frame)}-${String(next.frame)}`}
+              style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                left: `${leftPct.toFixed(3)}%`,
+                width: `${widthPct.toFixed(3)}%`,
+                cursor: 'pointer',
+              }}
+              data-keyframe-diamond=""
+              role="button"
+              aria-label={`Segment between frames ${String(k.frame)} and ${String(next.frame)}`}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                designerStore.setSelectedKeyframe({
+                  elementId: element.id,
+                  property: row.property,
+                  frame: k.frame,
+                });
+                designerStore.setCurrentFrame(k.frame);
+              }}
+            >
               <div
                 style={{
                   ...styles.interpLine,
                   ...(isLeftSelected ? styles.interpLineSelected : {}),
-                  left: `${leftPct.toFixed(3)}%`,
-                  width: `${widthPct.toFixed(3)}%`,
+                  left: 0,
+                  width: '100%',
                 }}
               />
               {widthPct > 4 && (
-                <span
-                  style={{ ...styles.interpGlyphWrap, left: `${midPct.toFixed(3)}%` }}
-                  aria-hidden
-                >
+                <span style={{ ...styles.interpGlyphWrap, left: '50%' }} aria-hidden>
                   <svg width="10" height="6" viewBox="0 0 10 6" fill="none">
                     <path
                       d="M0 5 C 2.5 5, 2.5 1, 5 1 C 7.5 1, 7.5 5, 10 5"
