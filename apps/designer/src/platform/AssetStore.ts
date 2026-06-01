@@ -3,8 +3,6 @@ import { sha256Hex } from '@cg/vcg-format';
 import type { Workspace } from '@cg/storage';
 import { Emitter } from './emitter.js';
 
-const INDEX_PATH = 'assets/index.json';
-
 const KIND_BY_EXT: Record<string, AssetMeta['kind']> = {
   png: 'image',
   jpg: 'image',
@@ -29,11 +27,21 @@ function extOf(filename: string): string {
 /**
  * Browser port of the Electron AssetService. Imported files are hashed,
  * deduped by sha256, and written into the Workspace under
- * `assets/<kind>/<sha>.<ext>`. The metadata index is persisted so assets
- * survive reloads. `workingPath` is the workspace-relative path.
+ * `projects/<projectId>/assets/<kind>/<sha>.<ext>`. The metadata index is
+ * persisted so assets survive reloads. `workingPath` is the workspace-
+ * relative path.
+ *
+ * Assets are scoped to the currently-active project — see
+ * [[assets-are-per-project]]. When the active project changes, callers
+ * must invoke `setActiveProject(newId)` and the store flushes its in
+ * -memory index, re-reads from the new project's subtree, and fires the
+ * `cleared` emitter so renderer-side caches can drop stale URLs / font
+ * faces.
  */
 export class AssetStore {
   readonly imported = new Emitter<AssetMeta>();
+  readonly cleared = new Emitter<void>();
+  #projectId: string | null = null;
   #index = new Map<string, AssetMeta>();
   #loaded = false;
   readonly #ws: Workspace;
@@ -42,19 +50,53 @@ export class AssetStore {
     this.#ws = ws;
   }
 
+  /**
+   * Switch the active project the store reads from / writes to. Pass
+   * `null` to detach (boot state, or after closing a project). The
+   * `cleared` event fires whenever the active project actually changes
+   * so subscribers can drop derived state.
+   */
+  setActiveProject(projectId: string | null): void {
+    if (projectId === this.#projectId) return;
+    this.#projectId = projectId;
+    this.#index.clear();
+    this.#loaded = false;
+    this.cleared.emit();
+  }
+
+  #indexPath(): string | null {
+    if (this.#projectId === null) return null;
+    return `projects/${this.#projectId}/assets/index.json`;
+  }
+
+  #bytesPath(kind: AssetMeta['kind'], sha256: string, ext: string): string | null {
+    if (this.#projectId === null) return null;
+    return `projects/${this.#projectId}/assets/${kind}/${sha256}${ext ? `.${ext}` : ''}`;
+  }
+
   async #ensureLoaded(): Promise<void> {
     if (this.#loaded) return;
-    const saved = await this.#ws.readJson<AssetMeta[]>(INDEX_PATH);
+    const path = this.#indexPath();
+    if (path === null) {
+      this.#loaded = true;
+      return;
+    }
+    const saved = await this.#ws.readJson<AssetMeta[]>(path);
     if (saved !== null) for (const m of saved) this.#index.set(m.assetId, m);
     this.#loaded = true;
   }
 
   async #persistIndex(): Promise<void> {
-    await this.#ws.writeJson(INDEX_PATH, [...this.#index.values()]);
+    const path = this.#indexPath();
+    if (path === null) return;
+    await this.#ws.writeJson(path, [...this.#index.values()]);
   }
 
   /** Import a picked File. Dedupes identical bytes by sha256. */
   async importFile(file: File, kindHint?: AssetMeta['kind']): Promise<AssetMeta> {
+    if (this.#projectId === null) {
+      throw new Error('Cannot import an asset before a project is active');
+    }
     await this.#ensureLoaded();
     const bytes = new Uint8Array(await file.arrayBuffer());
     const sha256 = sha256Hex(bytes);
@@ -63,7 +105,10 @@ export class AssetStore {
 
     const ext = extOf(file.name);
     const kind = kindHint ?? KIND_BY_EXT[ext] ?? 'image';
-    const workingPath = `assets/${kind}/${sha256}${ext ? `.${ext}` : ''}`;
+    const workingPath = this.#bytesPath(kind, sha256, ext);
+    if (workingPath === null) {
+      throw new Error('Cannot import an asset before a project is active');
+    }
     await this.#ws.writeFile(workingPath, bytes);
 
     const meta: AssetMeta = {

@@ -23,14 +23,25 @@ export function useAssets(): readonly AssetMeta[] {
 
   useEffect(() => {
     let cancelled = false;
-    void window.cg.assets.list().then(async (initial) => {
+
+    async function refresh(): Promise<void> {
+      const initial = await window.cg.assets.list();
       if (cancelled) return;
       setList(initial);
       for (const a of initial) await prime(a);
-    });
-    const off = window.cg.assets.onImported((asset) => {
+    }
+
+    void refresh();
+    const offImported = window.cg.assets.onImported((asset) => {
       setList((prev) => (prev.some((a) => a.assetId === asset.assetId) ? prev : [...prev, asset]));
       void prime(asset);
+    });
+    // Project switch — the previous list belongs to a different
+    // project; drop it immediately and re-read from the new project's
+    // index. See [[assets-are-per-project]].
+    const offCleared = window.cg.assets.onCleared(() => {
+      setList([]);
+      void refresh();
     });
     const onRemoved: RemovedHandler = (assetId) => {
       setList((prev) => prev.filter((a) => a.assetId !== assetId));
@@ -38,7 +49,8 @@ export function useAssets(): readonly AssetMeta[] {
     removedHandlers.add(onRemoved);
     return () => {
       cancelled = true;
-      off();
+      offImported();
+      offCleared();
       removedHandlers.delete(onRemoved);
     };
   }, []);

@@ -5,7 +5,7 @@ import { colors } from '../../theme.js';
 import { designerStore, useDesignerStore } from '../../state/store.js';
 import { AssetThumb } from './AssetThumb.js';
 import { emitAssetRemoved, useAssets } from './useAssets.js';
-import { revoke as revokeAssetUrl } from './assetUrlCache.js';
+import { clearAll as clearAllAssetUrls, revoke as revokeAssetUrl } from './assetUrlCache.js';
 
 const styles = {
   panel: {
@@ -220,6 +220,21 @@ export function ProjectAssetsPanel(): JSX.Element {
       cancelled = true;
     };
   }, [assets]);
+
+  // Project switch — drop the previous project's font faces from
+  // `document.fonts` and clear the renderer-side blob URL cache so the
+  // canvas / iframe don't accidentally paint stale images. The next
+  // `assets` change (driven by the new project's list) will register
+  // fresh faces and re-prime URLs.
+  useEffect(() => {
+    const off = window.cg.assets.onCleared(() => {
+      const docFonts = (document as Document & { fonts: FontFaceSet }).fonts;
+      for (const face of fontFaces.values()) docFonts.delete(face);
+      fontFaces.clear();
+      clearAllAssetUrls();
+    });
+    return off;
+  }, []);
 
   useEffect(() => {
     if (addMenu === null && ctxMenu === null) return;

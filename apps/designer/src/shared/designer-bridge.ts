@@ -68,6 +68,15 @@ export interface DesignerBridge {
       req: ChannelRequest<typeof AssetsRemoveChannel>,
     ): Promise<ChannelResponse<typeof AssetsRemoveChannel>>;
     onImported(handler: (asset: AssetMeta) => void): Unsubscribe;
+    /**
+     * Fires when the active project changes — the previous project's
+     * assets are no longer accessible and renderer-side caches (blob
+     * URLs, registered font faces) should be dropped. Subscribers
+     * typically re-call `list()` to populate the new project's assets.
+     */
+    onCleared(handler: () => void): Unsubscribe;
+    /** D-011 — resolve an assetId to a cached blob URL for previews. */
+    url(assetId: string): Promise<string | null>;
   };
 
   export: {

@@ -64,3 +64,15 @@ export function revoke(assetId: string): void {
   urls.delete(assetId);
   notify();
 }
+
+/**
+ * Revoke every cached blob URL and drop the cache. Called by the
+ * renderer when the active project changes ([[assets-are-per-project]])
+ * so URLs from the previous project's bytes never leak into the new
+ * project's iframe.
+ */
+export function clearAll(): void {
+  for (const url of urls.values()) URL.revokeObjectURL(url);
+  urls.clear();
+  notify();
+}
