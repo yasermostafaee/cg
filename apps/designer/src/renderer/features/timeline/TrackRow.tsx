@@ -457,23 +457,59 @@ function ValueCell({
       </span>
     );
   }
+  return (
+    <NumberValueCell value={value} ariaLabel={ariaLabel} onCommit={onCommit} />
+  );
+}
+
+/**
+ * Controlled numeric input that commits on every keystroke so the
+ * preview reflects the change in real time. A local buffer keeps the
+ * partial text (e.g. "1." mid-typing) so the input never loses focus
+ * or resets the caret while the operator is typing. External value
+ * changes (scrubbing, undo, sibling edits) sync into the buffer only
+ * when the input isn't focused.
+ */
+function NumberValueCell({
+  value,
+  ariaLabel,
+  onCommit,
+}: {
+  value: number;
+  ariaLabel: string;
+  onCommit: (next: number) => void;
+}): JSX.Element {
   const display = Number.isInteger(value) ? String(value) : value.toFixed(2);
+  const [buf, setBuf] = useState(display);
+  const focused = useRef(false);
+
+  useEffect(() => {
+    if (!focused.current) setBuf(display);
+  }, [display]);
+
   return (
     <input
       type="number"
-      defaultValue={display}
+      value={buf}
       step={0.1}
-      key={display}
       style={styles.valueNumberInput}
       aria-label={ariaLabel}
-      onBlur={(e) => {
+      onFocus={() => {
+        focused.current = true;
+      }}
+      onBlur={() => {
+        focused.current = false;
+        setBuf(display);
+      }}
+      onChange={(e) => {
+        setBuf(e.target.value);
         const n = Number(e.target.value);
         if (Number.isFinite(n) && n !== value) onCommit(n);
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
         if (e.key === 'Escape') {
-          (e.target as HTMLInputElement).value = display;
+          setBuf(display);
           (e.target as HTMLInputElement).blur();
         }
       }}
