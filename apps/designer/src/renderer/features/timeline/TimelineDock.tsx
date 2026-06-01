@@ -106,9 +106,28 @@ const styles = {
   header: {
     display: 'flex',
     alignItems: 'center',
-    gap: '0.35rem',
     padding: '0.3rem 0.5rem',
     borderBottom: `1px solid ${colors.border}`,
+  },
+  headerLeft: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.35rem',
+    minWidth: 0,
+  },
+  headerCenter: {
+    flex: 'none' as const,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.35rem',
+  },
+  headerRight: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end' as const,
+    minWidth: 0,
   },
   title: {
     fontWeight: 700,
@@ -137,7 +156,6 @@ const styles = {
     cursor: 'pointer',
   },
   frameReadout: {
-    marginLeft: 'auto',
     color: colors.textMuted,
     fontSize: '0.7rem',
     fontVariantNumeric: 'tabular-nums' as const,
@@ -341,57 +359,63 @@ export function TimelineDock({
   return (
     <section style={styles.dock} aria-label="Animation timeline">
       <div style={styles.header}>
-        <span style={styles.title}>TIMELINE</span>
-        <button
-          type="button"
-          style={styles.button}
-          onClick={() => designerStore.setCurrentFrame(frameIn)}
-          aria-label="Go to start"
-          title="Go to start"
-        >
-          ⏮
-        </button>
-        <button
-          type="button"
-          style={styles.button}
-          onClick={() => designerStore.setCurrentFrame(currentFrame - 1)}
-          aria-label="Step back"
-          title="Step back one frame"
-        >
-          ◀
-        </button>
-        <button
-          type="button"
-          style={styles.buttonPrimary}
-          onClick={() => setPlaying((p) => !p)}
-          aria-label={playing ? 'Pause' : 'Play'}
-        >
-          {playing ? '❚❚' : '▶'}
-        </button>
-        <button
-          type="button"
-          style={styles.button}
-          onClick={() => {
-            setPlaying(false);
-            designerStore.setCurrentFrame(frameIn);
-          }}
-          aria-label="Stop"
-          title="Stop"
-        >
-          ⏹
-        </button>
-        <button
-          type="button"
-          style={styles.button}
-          onClick={() => designerStore.setCurrentFrame(currentFrame + 1)}
-          aria-label="Step forward"
-          title="Step forward one frame"
-        >
-          ▶
-        </button>
-        <span style={styles.frameReadout} aria-label="Current frame">
-          frame {currentFrame} / {frameOut}
-        </span>
+        <div style={styles.headerLeft}>
+          <span style={styles.title}>TIMELINE</span>
+        </div>
+        <div style={styles.headerCenter}>
+          <button
+            type="button"
+            style={styles.button}
+            onClick={() => designerStore.setCurrentFrame(frameIn)}
+            aria-label="Go to start"
+            title="Go to start"
+          >
+            ⏮
+          </button>
+          <button
+            type="button"
+            style={styles.button}
+            onClick={() => designerStore.setCurrentFrame(currentFrame - 1)}
+            aria-label="Step back"
+            title="Step back one frame"
+          >
+            ◀
+          </button>
+          <button
+            type="button"
+            style={styles.buttonPrimary}
+            onClick={() => setPlaying((p) => !p)}
+            aria-label={playing ? 'Pause' : 'Play'}
+          >
+            {playing ? '❚❚' : '▶'}
+          </button>
+          <button
+            type="button"
+            style={styles.button}
+            onClick={() => {
+              setPlaying(false);
+              designerStore.setCurrentFrame(frameIn);
+            }}
+            aria-label="Stop"
+            title="Stop"
+          >
+            ⏹
+          </button>
+          <button
+            type="button"
+            style={styles.button}
+            onClick={() => designerStore.setCurrentFrame(currentFrame + 1)}
+            aria-label="Step forward"
+            title="Step forward one frame"
+          >
+            ▶
+          </button>
+        </div>
+        <div style={styles.headerRight}>
+          <span style={styles.frameReadout} aria-label="Current frame">
+            frame {currentFrame} / {frameOut}
+          </span>
+        </div>
       </div>
       <div style={styles.body}>
         <div style={styles.leftCol}>
