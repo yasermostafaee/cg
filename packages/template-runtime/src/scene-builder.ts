@@ -227,7 +227,9 @@ function buildShape(element: ShapeElement, doc: Document): HTMLElement {
   }
   if (element.shape === 'ellipse') {
     el.style.borderRadius = '50%';
-  } else if (element.shape === 'rounded-rect' && element.cornerRadius !== undefined) {
+  } else if (element.cornerRadius !== undefined) {
+    // Apply cornerRadius for any rect-ish shape so the static slider
+    // affects plain `rect` as well as `rounded-rect`; ellipse keeps 50%.
     if (typeof element.cornerRadius === 'number') {
       el.style.borderRadius = `${element.cornerRadius}px`;
     } else {

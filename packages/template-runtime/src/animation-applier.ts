@@ -135,6 +135,7 @@ const SHADOW_PROPS = [
 const STROKE_PROPS = [
   'stroke.width',
   'stroke.color',
+  'stroke.dash',
 ] as const satisfies readonly AnimatableProperty[];
 
 const FILTER_PROPS = [
@@ -182,8 +183,10 @@ function applyStroke(
   if (src.type !== 'shape') return;
   const width = readNumericTrack(tracks, 'stroke.width', frame) ?? src.stroke?.width ?? 0;
   const color = readStringTrack(tracks, 'stroke.color', frame) ?? src.stroke?.color ?? '#000000';
-  const dashStyle = (src.stroke?.dash?.length ?? 0) > 0 ? 'dashed' : 'solid';
-  entry.node.style.border = `${width}px ${dashStyle} ${color}`;
+  const staticDash = (src.stroke?.dash?.length ?? 0) > 0;
+  const animatedDash = readNumericTrack(tracks, 'stroke.dash', frame);
+  const dashOn = animatedDash !== undefined ? animatedDash > 0 : staticDash;
+  entry.node.style.border = `${width}px ${dashOn ? 'dashed' : 'solid'} ${color}`;
 }
 
 function applyShadow(

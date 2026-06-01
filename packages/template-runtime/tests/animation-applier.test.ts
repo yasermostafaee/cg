@@ -181,6 +181,54 @@ describe('applyAnimationAtFrame', () => {
     expect(node.style.background).toMatch(/128|#808080/i);
   });
 
+  it('toggles dashed border when stroke.dash is animated past zero', () => {
+    const { source, node } = makeShape();
+    const withStroke: ShapeElement = {
+      ...source,
+      stroke: { color: '#222222', width: 4 },
+    };
+    const entry: AnimatedElement = {
+      id: withStroke.id,
+      node,
+      source: withStroke,
+      animation: {
+        tracks: {
+          'stroke.dash': {
+            keyframes: [
+              { frame: 0, value: 0, easing: 'linear' },
+              { frame: 10, value: 8, easing: 'linear' },
+            ],
+          },
+        },
+      },
+    };
+    applyAnimationAtFrame(entry, 10);
+    expect(node.style.border).toContain('dashed');
+    applyAnimationAtFrame(entry, 0);
+    expect(node.style.border).toContain('solid');
+  });
+
+  it('writes cornerRadius to borderRadius for any shape kind', () => {
+    const { source, node } = makeShape();
+    const entry: AnimatedElement = {
+      id: source.id,
+      node,
+      source,
+      animation: {
+        tracks: {
+          cornerRadius: {
+            keyframes: [
+              { frame: 0, value: 0, easing: 'linear' },
+              { frame: 10, value: 20, easing: 'linear' },
+            ],
+          },
+        },
+      },
+    };
+    applyAnimationAtFrame(entry, 10);
+    expect(node.style.borderRadius).toBe('20px');
+  });
+
   it('writes text.color to color only for text elements', () => {
     const { source, node } = makeText();
     const entry: AnimatedElement = {
