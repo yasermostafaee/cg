@@ -70,6 +70,27 @@ function TextStyle({ element }: { element: TextElement }): JSX.Element {
           } as Partial<Element>)
         }
       />
+      <NumberField
+        label="line height"
+        value={element.font.lineHeight}
+        step={0.05}
+        min={0.1}
+        onCommit={(lineHeight) =>
+          designerStore.updateElement(id, {
+            font: { ...element.font, lineHeight },
+          } as Partial<Element>)
+        }
+      />
+      <NumberField
+        label="letter spacing"
+        value={element.font.letterSpacing}
+        step={0.1}
+        onCommit={(letterSpacing) =>
+          designerStore.updateElement(id, {
+            font: { ...element.font, letterSpacing },
+          } as Partial<Element>)
+        }
+      />
       <ColorField
         label="color"
         value={element.color}
@@ -95,6 +116,14 @@ function ShapeStyle({ element }: { element: ShapeElement }): JSX.Element {
   const id = element.id;
   const fillColor =
     element.fill !== undefined && element.fill.kind === 'solid' ? element.fill.color : '#000000';
+  const strokeColor = element.stroke?.color ?? '#000000';
+  const strokeWidth = element.stroke?.width ?? 0;
+  const cornerRadius =
+    typeof element.cornerRadius === 'number'
+      ? element.cornerRadius
+      : Array.isArray(element.cornerRadius)
+        ? element.cornerRadius[0]
+        : 0;
   return (
     <>
       <SelectField
@@ -112,6 +141,43 @@ function ShapeStyle({ element }: { element: ShapeElement }): JSX.Element {
           designerStore.updateElement(id, {
             fill: { kind: 'solid', color },
           } as Partial<Element>)
+        }
+      />
+      <ColorField
+        label="stroke"
+        value={strokeColor}
+        onCommit={(color) =>
+          designerStore.updateElement(id, {
+            stroke: { ...(element.stroke ?? { width: 0 }), color },
+          } as Partial<Element>)
+        }
+      />
+      <NumberField
+        label="stroke width"
+        value={strokeWidth}
+        step={1}
+        min={0}
+        onCommit={(width) =>
+          designerStore.updateElement(id, {
+            stroke: {
+              ...(element.stroke ?? { color: strokeColor }),
+              width,
+            },
+          } as Partial<Element>)
+        }
+      />
+      <NumberField
+        label="border radius"
+        value={cornerRadius}
+        step={1}
+        min={0}
+        onCommit={(radius) =>
+          designerStore.updateElement(id, {
+            cornerRadius: radius,
+            // When the radius becomes non-zero, also widen the shape
+            // to 'rounded-rect' so the runtime renders the curve.
+            shape: radius > 0 && element.shape === 'rect' ? 'rounded-rect' : element.shape,
+          } as unknown as Partial<Element>)
         }
       />
     </>

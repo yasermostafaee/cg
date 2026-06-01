@@ -1,10 +1,7 @@
 import type { AnimatableProperty, Element } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
-import {
-  KeyframeIndicator,
-  type KeyframeIndicatorVariant,
-} from '../timeline/KeyframeIndicator.js';
+import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import { TIMELINE_ROWS, hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
 
 interface Props {
@@ -14,10 +11,13 @@ interface Props {
 }
 
 const styles = {
+  // D-009: per-axis diamonds — each cell gets its own indicator so X
+  // can be yellow (keyframe at current frame) independently of Y.
+  // Layout: [cell] [◆] [cell] [◆].
   row: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr 14px',
-    gap: '0.3rem',
+    gridTemplateColumns: '1fr 14px 1fr 14px',
+    gap: '0.25rem',
     alignItems: 'center',
     padding: '0.1rem 0',
   },
@@ -75,15 +75,13 @@ export function TransformSection({ element, currentFrame, selectedKeyframe }: Pr
   const t = element.transform;
   const id = element.id;
 
-  function indicatorFor(properties: readonly AnimatableProperty[]): JSX.Element {
-    const variant = properties
-      .map((p) => keyframeVariantFor(element, p, currentFrame, selectedKeyframe))
-      .reduce(highestVariant);
+  function indicatorFor(property: AnimatableProperty): JSX.Element {
+    const variant = keyframeVariantFor(element, property, currentFrame, selectedKeyframe);
     return (
       <KeyframeIndicator
         variant={variant}
-        onClick={() => properties.forEach((p) => togglePropertyKeyframe(element, p, currentFrame))}
-        ariaLabel={`Toggle keyframe for ${properties.join('/')} at frame ${String(currentFrame)}`}
+        onClick={() => togglePropertyKeyframe(element, property, currentFrame)}
+        ariaLabel={`Toggle keyframe for ${property} at frame ${String(currentFrame)}`}
       />
     );
   }
@@ -97,13 +95,14 @@ export function TransformSection({ element, currentFrame, selectedKeyframe }: Pr
           step={1}
           onCommit={(v) => designerStore.commitAnimatable(id, 'position.x', v)}
         />
+        <span style={styles.indicatorCell}>{indicatorFor('position.x')}</span>
         <Cell
           icon="Y"
           value={t.position.y}
           step={1}
           onCommit={(v) => designerStore.commitAnimatable(id, 'position.y', v)}
         />
-        <span style={styles.indicatorCell}>{indicatorFor(['position.x', 'position.y'])}</span>
+        <span style={styles.indicatorCell}>{indicatorFor('position.y')}</span>
       </div>
       <div style={styles.row}>
         <Cell
@@ -112,13 +111,14 @@ export function TransformSection({ element, currentFrame, selectedKeyframe }: Pr
           step={1}
           onCommit={(v) => designerStore.commitAnimatable(id, 'size.w', v)}
         />
+        <span style={styles.indicatorCell}>{indicatorFor('size.w')}</span>
         <Cell
           icon="H"
           value={t.size.h}
           step={1}
           onCommit={(v) => designerStore.commitAnimatable(id, 'size.h', v)}
         />
-        <span style={styles.indicatorCell}>{indicatorFor(['size.w', 'size.h'])}</span>
+        <span style={styles.indicatorCell}>{indicatorFor('size.h')}</span>
       </div>
       <div style={styles.row}>
         <Cell
@@ -128,6 +128,7 @@ export function TransformSection({ element, currentFrame, selectedKeyframe }: Pr
           step={1}
           onCommit={(v) => designerStore.commitAnimatable(id, 'scale.x', v / 100)}
         />
+        <span style={styles.indicatorCell}>{indicatorFor('scale.x')}</span>
         <Cell
           icon="↕"
           value={percent(t.scale.y)}
@@ -135,7 +136,7 @@ export function TransformSection({ element, currentFrame, selectedKeyframe }: Pr
           step={1}
           onCommit={(v) => designerStore.commitAnimatable(id, 'scale.y', v / 100)}
         />
-        <span style={styles.indicatorCell}>{indicatorFor(['scale.x', 'scale.y'])}</span>
+        <span style={styles.indicatorCell}>{indicatorFor('scale.y')}</span>
       </div>
       <div style={styles.rowSingle}>
         <Cell
@@ -145,7 +146,7 @@ export function TransformSection({ element, currentFrame, selectedKeyframe }: Pr
           step={1}
           onCommit={(v) => designerStore.commitAnimatable(id, 'rotation', v)}
         />
-        <span style={styles.indicatorCell}>{indicatorFor(['rotation'])}</span>
+        <span style={styles.indicatorCell}>{indicatorFor('rotation')}</span>
       </div>
       <div style={styles.rowSingle}>
         <Cell
@@ -157,7 +158,7 @@ export function TransformSection({ element, currentFrame, selectedKeyframe }: Pr
           max={100}
           onCommit={(v) => designerStore.commitAnimatable(id, 'opacity', clamp01(v / 100))}
         />
-        <span style={styles.indicatorCell}>{indicatorFor(['opacity'])}</span>
+        <span style={styles.indicatorCell}>{indicatorFor('opacity')}</span>
       </div>
     </>
   );
@@ -212,19 +213,6 @@ function togglePropertyKeyframe(
   const row = TIMELINE_ROWS.find((r) => r.property === property);
   if (row === undefined) return;
   designerStore.upsertKeyframe(element.id, property, frame, row.read(element));
-}
-
-function highestVariant(
-  a: KeyframeIndicatorVariant,
-  b: KeyframeIndicatorVariant,
-): KeyframeIndicatorVariant {
-  const rank: Record<KeyframeIndicatorVariant, number> = {
-    empty: 0,
-    'has-track': 1,
-    'at-frame': 2,
-    selected: 3,
-  };
-  return rank[a] >= rank[b] ? a : b;
 }
 
 function percent(scaleOrOpacity: number): number {

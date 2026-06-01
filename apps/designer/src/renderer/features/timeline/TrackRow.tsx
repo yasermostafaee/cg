@@ -85,6 +85,30 @@ const styles = {
     border: '1px solid #CA8A04',
     boxShadow: '0 0 0 1px #CA8A04',
   },
+  // D-009 — line drawn between two adjacent keyframes on the same
+  // track, showing the interpolation span. The slash glyph in the
+  // middle is a stand-in for the (currently linear) easing curve.
+  interpLine: {
+    position: 'absolute' as const,
+    top: '50%',
+    height: 1,
+    background: colors.textMuted,
+    opacity: 0.55,
+    transform: 'translateY(-0.5px)',
+    pointerEvents: 'none' as const,
+  },
+  interpGlyph: {
+    position: 'absolute' as const,
+    top: '50%',
+    transform: 'translate(-50%, -50%)',
+    fontSize: '0.66rem',
+    color: colors.textMuted,
+    background: colors.panelMuted,
+    padding: '0 2px',
+    lineHeight: 1,
+    fontStyle: 'italic' as const,
+    pointerEvents: 'none' as const,
+  },
   menu: {
     position: 'fixed' as const,
     minWidth: 140,
@@ -207,6 +231,35 @@ export function TrackRow(props: Props): JSX.Element {
         onContextMenu={(e) => e.preventDefault()}
       >
         <div style={styles.laneLine} />
+        {/* Interpolation lines between adjacent keyframes. */}
+        {keyframes.slice(0, -1).map((k, i) => {
+          const next = keyframes[i + 1];
+          if (next === undefined) return null;
+          const leftPct = ((k.frame - frameIn) / span) * 100;
+          const rightPct = ((next.frame - frameIn) / span) * 100;
+          const widthPct = rightPct - leftPct;
+          if (widthPct <= 0) return null;
+          const midPct = leftPct + widthPct / 2;
+          return (
+            <div key={`line-${String(k.frame)}-${String(next.frame)}`}>
+              <div
+                style={{
+                  ...styles.interpLine,
+                  left: `${leftPct.toFixed(3)}%`,
+                  width: `${widthPct.toFixed(3)}%`,
+                }}
+              />
+              {widthPct > 4 && (
+                <span
+                  style={{ ...styles.interpGlyph, left: `${midPct.toFixed(3)}%` }}
+                  aria-hidden
+                >
+                  ƒ
+                </span>
+              )}
+            </div>
+          );
+        })}
         {keyframes.map((k) => {
           const pct = ((k.frame - frameIn) / span) * 100;
           const isSelected =
