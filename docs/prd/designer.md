@@ -103,3 +103,23 @@ see the files inside the: `docs/designer-guide/sample-assets/D-006-old-codes`. t
 - on the top of sceen : put zoomIn, zoomOut, percent, +, - , fit on the right side. and shape tools on the left side. 
 - remove color picker from on top of sceen area. it is also exist in sceen properties area and it's enough
 **Notes:** see the pic: `docs/designer-guide/sample-assets/D-008-pic-0`
+
+## [~] D-009 — redesign and reorder style and elements   (priority: high) — focused fix
+**What:** add other properties for shapes and text
+**Why:** we need more properties for make a usefull animation
+**Acceptance:**
+- see deeply the screenshots and add all new properties and styles.
+- add a line between framepoints like the screenshots.
+- show the empty point icon for any layer.
+- inside the properties area on the right we need separeted point icons for positionX and positionY, width and height, scaleX and scaleY like the screenshots `D-009-pic-2`.
+- 
+**Notes:** see all the pics for D-009: `docs/designer-guide/sample-assets/D-009-pic-*`
+
+## [~] D-010 — add new properties   (priority: high)
+**What:** add other properties for shapes and text
+**Why:** we need more properties for make an usefull animation
+**Acceptance:**
+- see deeply the screenshots and add all new properties and styles.
+  1- add Path style, Border radius and Filter sections for the shapes.
+  2- add Text, Drop Shadow, Text Padding, Border radius and Filter sections for the text.
+**Notes:** see these pics for D-009 again: `docs/designer-guide/sample-assets/` --> D-009-pic-3 and D-009-pic-4

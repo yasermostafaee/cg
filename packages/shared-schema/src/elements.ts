@@ -1,9 +1,11 @@
 import { z } from 'zod';
 import {
   FillSchema,
+  FilterSchema,
   HexColorSchema,
   IdSchema,
   OpacitySchema,
+  PaddingSchema,
   ShadowSchema,
   StrokeSchema,
   TransformSchema,
@@ -24,6 +26,11 @@ export const ElementBaseSchema = z.object({
   locked: z.boolean(),
   zIndex: ZIndexSchema,
   animation: ElementAnimationSchema.optional(),
+  /**
+   * CSS-filter stack (D-010). Optional and applied to every element
+   * type by the runtime when present.
+   */
+  filter: FilterSchema.optional(),
 });
 export type ElementBase = z.infer<typeof ElementBaseSchema>;
 
@@ -53,6 +60,12 @@ export const TextElementSchema = ElementBaseSchema.extend({
   maxLines: z.number().int().positive().optional(),
   fitMode: z.enum(['fixed', 'shrink-to-fit', 'autosize']),
   overflow: z.enum(['clip', 'ellipsis', 'shrink']),
+  /** D-010 — inner padding inside the text box. */
+  padding: PaddingSchema.optional(),
+  /** D-010 — text-box background colour (defaults to transparent). */
+  backgroundColor: HexColorSchema.optional(),
+  /** D-010 — text-box border-radius (in pixels). */
+  cornerRadius: z.number().nonnegative().optional(),
 });
 export type TextElement = z.infer<typeof TextElementSchema>;
 
@@ -77,6 +90,8 @@ export const ShapeElementSchema = ElementBaseSchema.extend({
     .optional(),
   pathData: z.string().optional(),
   polygon: z.array(Vec2Schema).optional(),
+  /** D-010 — drop shadow on the shape (rendered as box-shadow). */
+  shadow: ShadowSchema.optional(),
 });
 export type ShapeElement = z.infer<typeof ShapeElementSchema>;
 

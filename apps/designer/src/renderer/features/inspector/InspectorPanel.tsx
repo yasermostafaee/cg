@@ -213,9 +213,7 @@ function ElementInspector({
           selectedKeyframe={selectedKeyframe}
         />
       </CollapseSection>
-      <CollapseSection title={styleSectionTitle(element)}>
-        <StyleSection element={element} />
-      </CollapseSection>
+      <StyleSection element={element} />
       {bindings.length > 0 && (
         <CollapseSection title="Bindings" defaultExpanded>
           <ElementBindings bindings={bindings} />
@@ -252,18 +250,6 @@ function KeyRow({ elementId, name }: { elementId: string; name: string }): JSX.E
   );
 }
 
-function styleSectionTitle(element: Element): string {
-  switch (element.type) {
-    case 'shape':
-      return 'Path style';
-    case 'text':
-      return 'Text style';
-    case 'image':
-      return 'Image';
-    default:
-      return 'Style';
-  }
-}
 
 function bindingTargetsElement(b: FieldBinding, elementId: string): boolean {
   const t = b.target;

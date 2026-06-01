@@ -115,3 +115,49 @@ export const OpacitySchema = z.number().min(0).max(1);
 
 /** Z-index is a finite integer; negative is allowed (below siblings). */
 export const ZIndexSchema = z.number().int();
+
+/**
+ * CSS-filter stack for D-010. Every field is optional so existing scenes
+ * stay valid; the runtime composes any present field into a single
+ * `filter:` declaration (`blur(Npx) brightness(N%) ...`).
+ *
+ * Conventions:
+ *   blur          — radius in pixels (>= 0)
+ *   brightness    — percent (100 = identity)
+ *   contrast      — percent (100 = identity)
+ *   grayscale     — percent (0 = identity)
+ *   hueRotate     — degrees
+ *   invert        — percent (0 = identity)
+ *   opacity       — percent (100 = identity); this is the CSS filter
+ *                   opacity and multiplies with element.opacity
+ *   saturate      — percent (100 = identity)
+ *   sepia         — percent (0 = identity)
+ */
+export const FilterSchema = z
+  .object({
+    blur: z.number().nonnegative().optional(),
+    brightness: z.number().nonnegative().optional(),
+    contrast: z.number().nonnegative().optional(),
+    grayscale: z.number().min(0).max(100).optional(),
+    hueRotate: z.number().optional(),
+    invert: z.number().min(0).max(100).optional(),
+    opacity: z.number().min(0).max(100).optional(),
+    saturate: z.number().nonnegative().optional(),
+    sepia: z.number().min(0).max(100).optional(),
+  })
+  .strict();
+export type Filter = z.infer<typeof FilterSchema>;
+
+/**
+ * Per-side padding in pixels. Used by text elements for inner padding
+ * around the rendered glyphs (D-010).
+ */
+export const PaddingSchema = z
+  .object({
+    top: z.number().nonnegative(),
+    right: z.number().nonnegative(),
+    bottom: z.number().nonnegative(),
+    left: z.number().nonnegative(),
+  })
+  .strict();
+export type Padding = z.infer<typeof PaddingSchema>;

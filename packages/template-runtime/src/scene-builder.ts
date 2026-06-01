@@ -1,7 +1,9 @@
 import type {
   Element as SceneElement,
+  Filter,
   Layer,
   Scene,
+  Shadow,
   TextElement,
   ImageElement,
   ShapeElement,
@@ -88,6 +90,7 @@ function applyBaseStyles(
   transform: Transform,
   opacity: number,
   visible: boolean,
+  filter?: Filter,
 ): void {
   el.classList.add('cg-element');
   el.style.left = `${transform.position.x}px`;
@@ -98,6 +101,33 @@ function applyBaseStyles(
   el.style.transform = composeTransform(transform);
   el.style.transformOrigin = `${transform.anchor.x * 100}% ${transform.anchor.y * 100}%`;
   if (!visible) el.style.display = 'none';
+  if (filter !== undefined) {
+    const composed = composeFilter(filter);
+    if (composed.length > 0) el.style.filter = composed;
+  }
+}
+
+/**
+ * Compose a Filter object into a single CSS `filter` declaration. Each
+ * field is optional; the runtime emits only the ones the operator set.
+ * D-010.
+ */
+function composeFilter(f: Filter): string {
+  const parts: string[] = [];
+  if (f.blur !== undefined && f.blur > 0) parts.push(`blur(${f.blur}px)`);
+  if (f.brightness !== undefined && f.brightness !== 100) parts.push(`brightness(${f.brightness}%)`);
+  if (f.contrast !== undefined && f.contrast !== 100) parts.push(`contrast(${f.contrast}%)`);
+  if (f.grayscale !== undefined && f.grayscale > 0) parts.push(`grayscale(${f.grayscale}%)`);
+  if (f.hueRotate !== undefined && f.hueRotate !== 0) parts.push(`hue-rotate(${f.hueRotate}deg)`);
+  if (f.invert !== undefined && f.invert > 0) parts.push(`invert(${f.invert}%)`);
+  if (f.opacity !== undefined && f.opacity !== 100) parts.push(`opacity(${f.opacity}%)`);
+  if (f.saturate !== undefined && f.saturate !== 100) parts.push(`saturate(${f.saturate}%)`);
+  if (f.sepia !== undefined && f.sepia > 0) parts.push(`sepia(${f.sepia}%)`);
+  return parts.join(' ');
+}
+
+function composeBoxShadow(s: Shadow): string {
+  return `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.color}`;
 }
 
 function composeTransform(t: Transform): string {
@@ -117,7 +147,7 @@ function buildText(
 ): HTMLElement {
   const el = doc.createElement('div');
   el.dataset['cgElementId'] = element.id;
-  applyBaseStyles(el, element.transform, element.opacity, element.visible);
+  applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
   el.style.fontFamily = element.font.family;
   el.style.fontWeight = String(element.font.weight);
   el.style.fontStyle = element.font.style;
@@ -131,6 +161,20 @@ function buildText(
     const s = element.textShadow;
     el.style.textShadow = `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.color}`;
   }
+  // D-010 — text-box padding, background, border-radius.
+  if (element.padding) {
+    el.style.paddingTop = `${element.padding.top}px`;
+    el.style.paddingRight = `${element.padding.right}px`;
+    el.style.paddingBottom = `${element.padding.bottom}px`;
+    el.style.paddingLeft = `${element.padding.left}px`;
+    el.style.boxSizing = 'border-box';
+  }
+  if (element.backgroundColor) {
+    el.style.backgroundColor = element.backgroundColor;
+  }
+  if (element.cornerRadius !== undefined && element.cornerRadius > 0) {
+    el.style.borderRadius = `${element.cornerRadius}px`;
+  }
   el.textContent = element.text;
   textOriginals.set(element.id, element.text);
   return el;
@@ -139,7 +183,7 @@ function buildText(
 function buildImage(element: ImageElement, doc: Document): HTMLElement {
   const el = doc.createElement('img');
   el.dataset['cgElementId'] = element.id;
-  applyBaseStyles(el, element.transform, element.opacity, element.visible);
+  applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
   el.alt = element.name;
   el.style.objectFit = element.fit;
   el.dataset['cgAssetId'] = element.assetId;
@@ -153,12 +197,18 @@ function buildImage(element: ImageElement, doc: Document): HTMLElement {
 function buildShape(element: ShapeElement, doc: Document): HTMLElement {
   const el = doc.createElement('div');
   el.dataset['cgElementId'] = element.id;
-  applyBaseStyles(el, element.transform, element.opacity, element.visible);
+  applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
   if (element.fill?.kind === 'solid') {
     el.style.background = element.fill.color;
   }
   if (element.stroke) {
-    el.style.border = `${element.stroke.width}px solid ${element.stroke.color}`;
+    // D-010 — `dash` array maps to a dashed/dotted border. SVG-style
+    // dash arrays don't map 1:1 to CSS `border-style`, so a non-empty
+    // dash triggers `dashed`; a more granular SVG renderer is a later
+    // upgrade.
+    const style =
+      element.stroke.dash !== undefined && element.stroke.dash.length > 0 ? 'dashed' : 'solid';
+    el.style.border = `${element.stroke.width}px ${style} ${element.stroke.color}`;
   }
   if (element.shape === 'ellipse') {
     el.style.borderRadius = '50%';
@@ -170,6 +220,10 @@ function buildShape(element: ShapeElement, doc: Document): HTMLElement {
       el.style.borderRadius = `${tl}px ${tr}px ${br}px ${bl}px`;
     }
   }
+  // D-010 — drop shadow rendered as box-shadow.
+  if (element.shadow) {
+    el.style.boxShadow = composeBoxShadow(element.shadow);
+  }
   return el;
 }
 
@@ -177,6 +231,6 @@ function buildPlaceholder(element: SceneElement, doc: Document): HTMLElement {
   const el = doc.createElement('div');
   el.dataset['cgElementId'] = element.id;
   el.dataset['cgPlaceholderFor'] = element.type;
-  applyBaseStyles(el, element.transform, element.opacity, element.visible);
+  applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
   return el;
 }

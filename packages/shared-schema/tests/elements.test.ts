@@ -198,6 +198,87 @@ describe('ContainerElement (recursive)', () => {
   });
 });
 
+describe('D-010 — new optional style fields round-trip', () => {
+  it('accepts a text element with padding, backgroundColor, cornerRadius, filter, textShadow', () => {
+    const t = {
+      ...baseProps,
+      type: 'text' as const,
+      text: 'hi',
+      font: {
+        family: 'Inter',
+        weight: 400,
+        style: 'normal' as const,
+        size: 16,
+        lineHeight: 1.5,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      align: 'start' as const,
+      direction: 'auto' as const,
+      fitMode: 'fixed' as const,
+      overflow: 'clip' as const,
+      padding: { top: 4, right: 8, bottom: 4, left: 8 },
+      backgroundColor: '#000000',
+      cornerRadius: 12,
+      textShadow: { offsetX: 1, offsetY: 1, blur: 2, color: '#000000' },
+      filter: { blur: 1, brightness: 110, contrast: 100, sepia: 25 },
+    };
+    const parsed = TextElementSchema.parse(t);
+    expect(parsed.padding).toEqual({ top: 4, right: 8, bottom: 4, left: 8 });
+    expect(parsed.backgroundColor).toBe('#000000');
+    expect(parsed.cornerRadius).toBe(12);
+    expect(parsed.textShadow?.blur).toBe(2);
+    expect(parsed.filter?.brightness).toBe(110);
+  });
+
+  it('accepts a shape element with shadow + filter + dashed stroke', () => {
+    const s = {
+      ...baseProps,
+      type: 'shape' as const,
+      shape: 'rect' as const,
+      fill: { kind: 'solid' as const, color: '#BEBEBE' },
+      stroke: { width: 2, color: '#000000', dash: [4, 4] },
+      cornerRadius: 8,
+      shadow: { offsetX: 0, offsetY: 4, blur: 12, color: '#000000' },
+      filter: { hueRotate: 90, saturate: 150 },
+    };
+    const parsed = ShapeElementSchema.parse(s);
+    expect(parsed.shadow?.offsetY).toBe(4);
+    expect(parsed.filter?.hueRotate).toBe(90);
+    expect(parsed.stroke?.dash).toEqual([4, 4]);
+  });
+
+  it('all D-010 fields are optional — minimum shape still parses', () => {
+    const minShape = { ...baseProps, type: 'shape' as const, shape: 'rect' as const };
+    const parsed = ShapeElementSchema.parse(minShape);
+    expect(parsed.filter).toBeUndefined();
+    expect(parsed.shadow).toBeUndefined();
+  });
+
+  it('rejects out-of-range filter percentages', () => {
+    const badText = {
+      ...baseProps,
+      type: 'text' as const,
+      text: 'x',
+      font: {
+        family: 'Inter',
+        weight: 400,
+        style: 'normal' as const,
+        size: 16,
+        lineHeight: 1.5,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      align: 'start' as const,
+      direction: 'auto' as const,
+      fitMode: 'fixed' as const,
+      overflow: 'clip' as const,
+      filter: { grayscale: 150 },
+    };
+    expect(() => TextElementSchema.parse(badText)).toThrow();
+  });
+});
+
 describe('Element union dispatch', () => {
   it.each([
     ['text' as const, 'Persian'],
