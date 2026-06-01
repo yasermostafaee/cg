@@ -173,15 +173,6 @@ function ShapeSections({
   return (
     <>
       <CollapseSection title="Path style" defaultExpanded>
-        <SelectField
-          label="shape"
-          value={element.shape}
-          options={['rect', 'rounded-rect', 'ellipse'] as const}
-          onCommit={(shape) =>
-            designerStore.updateElement(id, { shape } as unknown as Partial<Element>)
-          }
-          trailing={pointIcon('shape')}
-        />
         <ColorField
           label="fill"
           value={fillColor}
