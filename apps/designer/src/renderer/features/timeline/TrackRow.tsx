@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AnimatableProperty, Element, Keyframe } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
@@ -85,6 +85,39 @@ const styles = {
     border: '1px solid #CA8A04',
     boxShadow: '0 0 0 1px #CA8A04',
   },
+  menu: {
+    position: 'fixed' as const,
+    minWidth: 140,
+    background: colors.panel,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '0.25rem',
+    boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
+    padding: '0.25rem 0',
+    zIndex: 70,
+    fontSize: '0.74rem',
+  },
+  menuHeader: {
+    padding: '0.2rem 0.6rem 0.3rem',
+    color: colors.textMuted,
+    fontSize: '0.66rem',
+    letterSpacing: '0.05em',
+    borderBottom: `1px solid ${colors.border}`,
+    marginBottom: '0.2rem',
+  },
+  menuItem: {
+    display: 'block',
+    width: '100%',
+    background: 'transparent',
+    color: colors.text,
+    border: 'none',
+    textAlign: 'left' as const,
+    padding: '0.3rem 0.7rem',
+    fontSize: '0.76rem',
+    cursor: 'pointer',
+  },
+  menuItemDanger: {
+    color: '#fda4af',
+  },
 } as const;
 
 /**
@@ -107,6 +140,25 @@ export function TrackRow(props: Props): JSX.Element {
   const track = trackOf(element, row.property);
   const keyframes: readonly Keyframe[] = track?.keyframes ?? [];
   const currentValue = formatValue(row.read(element));
+
+  // Right-click context menu for keyframe diamonds. `null` = closed;
+  // otherwise position (viewport coords) + the keyframe it targets.
+  const [menu, setMenu] = useState<{ x: number; y: number; frame: number } | null>(null);
+  useEffect(() => {
+    if (menu === null) return;
+    function close(): void {
+      setMenu(null);
+    }
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') close();
+    }
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [menu]);
 
   function toggleKeyframeHere(): void {
     if (hasKeyframeAt(element, row.property, currentFrame)) {
@@ -179,11 +231,12 @@ export function TrackRow(props: Props): JSX.Element {
                 designerStore.setCurrentFrame(k.frame);
               }}
               onContextMenu={(e) => {
-                // Right-click removes the keyframe (D-007 acceptance:
-                // operator can right-click points to remove them).
+                // Right-click opens a context menu (not a direct
+                // delete) so the operator confirms the action via
+                // the Delete item.
                 e.preventDefault();
                 e.stopPropagation();
-                designerStore.removeKeyframe(element.id, row.property, k.frame);
+                setMenu({ x: e.clientX, y: e.clientY, frame: k.frame });
               }}
               onPointerDown={(e) => {
                 e.stopPropagation();
@@ -219,6 +272,36 @@ export function TrackRow(props: Props): JSX.Element {
           );
         })}
       </div>
+      {menu !== null && (
+        <div
+          style={{
+            ...styles.menu,
+            // Clamp the menu inside the viewport so it never spawns
+            // off-screen when the diamond is near the right / bottom.
+            left: Math.min(menu.x, window.innerWidth - 160),
+            top: Math.min(menu.y, window.innerHeight - 80),
+          }}
+          role="menu"
+          aria-label="Keyframe actions"
+          onPointerDown={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div style={styles.menuHeader}>
+            {row.label} · frame {menu.frame}
+          </div>
+          <button
+            type="button"
+            role="menuitem"
+            style={{ ...styles.menuItem, ...styles.menuItemDanger }}
+            onClick={() => {
+              designerStore.removeKeyframe(element.id, row.property, menu.frame);
+              setMenu(null);
+            }}
+          >
+            Delete keyframe
+          </button>
+        </div>
+      )}
     </div>
   );
 }
