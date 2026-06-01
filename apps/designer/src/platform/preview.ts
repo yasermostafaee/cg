@@ -77,6 +77,12 @@ export class Preview {
     <style>
       .cg-pending { opacity: 1 !important; }
       .cg-pending .cg-stage { visibility: visible !important; }
+      /* The 'scene-replace' path calls runtime.remove() then
+         createRuntime(newScene). remove() leaves body marked
+         cg-removed, which the baseline CSS turns into
+         display:none on the new stage. Keep the stage visible
+         across that tear-down/rebuild. */
+      .cg-removed .cg-stage { display: block !important; }
     </style>
   </head>
   <body>
@@ -108,45 +114,79 @@ export class Preview {
     <script type="module">
       import { createRuntime, installCasparGlobals } from '${cgJsUrl}';
       (async () => {
-        const scene = ${sceneJson};
-        const runtime = createRuntime(scene);
-        installCasparGlobals(runtime);
-        await runtime.ready;
-        document.body.classList.remove('cg-pending');
-        // Apply current field values + render the initial frame without
-        // starting the FrameDriver — the Designer's timeline dock owns
-        // the playhead in authoring mode and scrubs via postMessage.
-        // The runtime hides the stage via body.cg-pending while it boots;
-        // runtime.play() normally clears that class, but we are NOT
-        // calling play() (no autoplay driver), so we clear it ourselves
-        // so static styles (fill, text colour, font) actually paint.
+        // Mutable bookkeeping — the iframe document stays alive across
+        // edits; only the runtime (its DOM tree) is rebuilt by
+        // applyScene(). This avoids reloading the whole HTML on every
+        // drag tick, which was causing the "screen flashing" the
+        // operator reported.
+        let runtime = null;
         let currentFields = {};
         let currentFrame = 0;
-        await runtime.update(currentFields);
-        document.body.classList.remove('cg-pending');
-        runtime.tick(currentFrame);
+        let busy = false;
+        let pendingScene = null;
+
+        async function applyScene(scene) {
+          if (busy) {
+            // Coalesce: only keep the latest pending scene; drop the
+            // intermediate ones (a 60 Hz drag would otherwise queue
+            // dozens of rebuilds).
+            pendingScene = scene;
+            return;
+          }
+          busy = true;
+          try {
+            if (runtime) runtime.remove();
+            // remove() leaves body.cg-removed / pending state; clear
+            // both so the next createRuntime starts clean.
+            document.body.classList.remove('cg-removed');
+            document.body.classList.remove('cg-pending');
+            runtime = createRuntime(scene);
+            installCasparGlobals(runtime);
+            await runtime.ready;
+            document.body.classList.remove('cg-pending');
+            await runtime.update(currentFields);
+            runtime.tick(currentFrame);
+          } finally {
+            busy = false;
+          }
+          if (pendingScene !== null) {
+            const next = pendingScene;
+            pendingScene = null;
+            await applyScene(next);
+          }
+        }
+
+        await applyScene(${sceneJson});
+
         window.addEventListener('message', (evt) => {
           const msg = evt.data;
           if (!msg || typeof msg !== 'object' || msg.kind !== 'cg-preview') return;
-          try {
-            if (msg.action === 'update' && typeof window.update === 'function') {
-              currentFields = msg.fields ?? {};
-              window.update(JSON.stringify(currentFields));
-              runtime.tick(currentFrame);
-            } else if (msg.action === 'scrub' && typeof msg.frame === 'number') {
-              currentFrame = msg.frame;
-              runtime.tick(currentFrame);
-            } else if (msg.action === 'play' && typeof window.play === 'function') {
-              window.play(JSON.stringify(msg.fields ?? {}));
-            } else if (msg.action === 'stop' && typeof window.stop === 'function') {
-              window.stop();
+          (async () => {
+            try {
+              if (msg.action === 'scene-replace' && msg.scene) {
+                await applyScene(msg.scene);
+              } else if (msg.action === 'update' && typeof window.update === 'function') {
+                currentFields = msg.fields ?? {};
+                window.update(JSON.stringify(currentFields));
+                if (runtime) runtime.tick(currentFrame);
+              } else if (msg.action === 'scrub' && typeof msg.frame === 'number') {
+                currentFrame = msg.frame;
+                if (runtime) runtime.tick(currentFrame);
+              } else if (msg.action === 'play' && typeof window.play === 'function') {
+                window.play(JSON.stringify(msg.fields ?? {}));
+              } else if (msg.action === 'stop' && typeof window.stop === 'function') {
+                window.stop();
+              }
+            } catch (e) {
+              /* swallow preview-side errors */
             }
-          } catch (e) {
-            /* swallow preview-side errors */
-          }
+          })();
         });
         if (window.parent && window.parent !== window) {
-          window.parent.postMessage({ kind: 'cg-preview-ready', sceneId: scene.id }, '*');
+          window.parent.postMessage(
+            { kind: 'cg-preview-ready', sceneId: ${JSON.stringify(scene.id)} },
+            '*',
+          );
         }
       })();
     </script>

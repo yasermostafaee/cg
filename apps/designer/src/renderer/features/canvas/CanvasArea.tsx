@@ -133,18 +133,59 @@ export function CanvasArea({
   const [html, setHtml] = useState<string | null>(null);
   const [zoom, setZoom] = useState<number>(ZOOM_DEFAULT);
 
+  // Only rebuild the iframe document when the *scene id* changes
+  // (e.g. project switch). For mutations within the same scene we
+  // send a 'scene-replace' postMessage so the iframe rebuilds the
+  // runtime in-place without a full document reload — otherwise the
+  // canvas flashes every drag-tick at 60 Hz.
+  //
+  // The latest scene is captured via a ref so the srcDoc effect can
+  // pass it to preview.load() without depending on `scene` (which
+  // changes on every mutation).
+  const latestSceneRef = useRef<Scene | null>(scene);
+  latestSceneRef.current = scene;
+  const sceneId = scene?.id ?? null;
   useEffect(() => {
-    if (scene === null) {
+    const current = latestSceneRef.current;
+    if (current === null) {
       setHtml(null);
       return;
     }
     let cancelled = false;
-    void window.cg.preview.load({ scene }).then((res) => {
+    void window.cg.preview.load({ scene: current }).then((res) => {
       if (cancelled) return;
       setHtml(res.html);
     });
     return () => {
       cancelled = true;
+    };
+  }, [sceneId]);
+
+  // Stream live scene updates to the existing iframe via postMessage,
+  // rAF-throttled so we never queue more than one rebuild per frame.
+  const pendingSceneRef = useRef<Scene | null>(null);
+  const rafRef = useRef<number>(0);
+  useEffect(() => {
+    if (scene === null) return;
+    // The srcDoc effect (above) handles the initial load on
+    // scene-id change; suppress until the iframe is loaded.
+    pendingSceneRef.current = scene;
+    if (rafRef.current !== 0) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0;
+      const sceneToSend = pendingSceneRef.current;
+      pendingSceneRef.current = null;
+      if (sceneToSend === null) return;
+      iframeRef.current?.contentWindow?.postMessage(
+        { kind: 'cg-preview', action: 'scene-replace', scene: sceneToSend },
+        '*',
+      );
+    });
+    return () => {
+      if (rafRef.current !== 0) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+      }
     };
   }, [scene]);
 
