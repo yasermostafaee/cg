@@ -183,8 +183,12 @@ function SceneInspector({
       <Row label="layers" value={String(scene.layers.length)} />
       <Row label="path" value={projectPath ?? '(unsaved)'} />
       <BackgroundControl background={scene.background} variant="full" />
-      <h3 style={styles.heading}>FIELDS</h3>
-      <FieldsPanel scene={scene} bindModeFieldId={bindModeFieldId} />
+      {scene.fields.length > 0 && (
+        <>
+          <h3 style={styles.heading}>FIELDS</h3>
+          <FieldsPanel scene={scene} bindModeFieldId={bindModeFieldId} />
+        </>
+      )}
     </aside>
   );
 }
