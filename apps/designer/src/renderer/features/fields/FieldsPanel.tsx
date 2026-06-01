@@ -1,9 +1,7 @@
-import { useState } from 'react';
 import type { DynamicField, FieldBinding, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
-import { SelectField, TextField } from '../inspector/controls.js';
-import { defaultField, FIELD_KINDS, type FieldKind } from './field-defaults.js';
+import { TextField } from '../inspector/controls.js';
 import { describeBinding } from './bind-resolver.js';
 
 interface Props {
@@ -75,29 +73,6 @@ const styles = {
     color: colors.text,
   },
   bindEmpty: { fontSize: '0.75rem', color: colors.textMuted, fontStyle: 'italic' as const },
-  addRow: {
-    display: 'grid',
-    gridTemplateColumns: '1fr auto',
-    gap: '0.35rem',
-    alignItems: 'center',
-  },
-  addInput: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    padding: '0.2rem 0.4rem',
-    borderRadius: '0.2rem',
-    fontSize: '0.82rem',
-  },
-  addButton: {
-    background: 'rgba(56,189,248,0.2)',
-    color: '#e0f2fe',
-    border: '1px solid rgba(56,189,248,0.6)',
-    padding: '0.2rem 0.6rem',
-    borderRadius: '0.2rem',
-    cursor: 'pointer',
-    fontSize: '0.78rem',
-  },
 } as const;
 
 /**
@@ -116,9 +91,8 @@ const styles = {
 export function FieldsPanel({ scene, bindModeFieldId }: Props): JSX.Element {
   return (
     <div style={styles.block}>
-      <AddFieldRow />
       {scene.fields.length === 0 ? (
-        <p style={styles.empty}>No fields. Add one above to begin.</p>
+        <p style={styles.empty}>No fields.</p>
       ) : (
         <div style={styles.list}>
           {scene.fields.map((f) => (
@@ -131,39 +105,6 @@ export function FieldsPanel({ scene, bindModeFieldId }: Props): JSX.Element {
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function AddFieldRow(): JSX.Element {
-  const [kind, setKind] = useState<FieldKind>('text');
-  const [name, setName] = useState('');
-
-  function commit(): void {
-    const id = name.trim();
-    if (id === '') return;
-    designerStore.addField(defaultField(id, kind));
-    setName('');
-  }
-
-  return (
-    <div style={styles.addRow}>
-      <input
-        style={styles.addInput}
-        type="text"
-        placeholder="field id (e.g. title)"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') commit();
-        }}
-      />
-      <button style={styles.addButton} onClick={commit}>
-        + add
-      </button>
-      <div style={{ gridColumn: '1 / -1' }}>
-        <SelectField label="type" value={kind} options={FIELD_KINDS} onCommit={(k) => setKind(k)} />
-      </div>
     </div>
   );
 }
