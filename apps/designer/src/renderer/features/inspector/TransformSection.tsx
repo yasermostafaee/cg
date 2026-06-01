@@ -3,6 +3,7 @@ import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import { TIMELINE_ROWS, hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
+import { RealtimeNumberInput } from './controls.js';
 
 interface Props {
   element: Element;
@@ -174,28 +175,20 @@ interface CellProps {
   onCommit: (n: number) => void;
 }
 
-function Cell({ icon, value, step, min, max, suffix, onCommit }: CellProps): JSX.Element {
+function Cell({ icon, value, step, min, max, onCommit }: CellProps): JSX.Element {
   return (
     <div style={styles.cell}>
       <span style={styles.icon} aria-hidden>
         {icon}
       </span>
-      <input
-        style={styles.input}
-        type="number"
-        defaultValue={value}
+      <RealtimeNumberInput
+        value={value}
+        onCommit={onCommit}
         step={step}
         min={min}
         max={max}
-        aria-label={icon}
-        onBlur={(e) => {
-          const n = Number(e.target.value);
-          if (Number.isFinite(n)) onCommit(n);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-        }}
-        key={`${icon}-${String(value)}${suffix ?? ''}`}
+        style={styles.input}
+        ariaLabel={icon}
       />
     </div>
   );

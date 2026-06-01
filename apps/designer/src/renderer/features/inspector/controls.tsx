@@ -1,11 +1,14 @@
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { colors } from '../../theme.js';
 
 /**
- * Form-control primitives for the Inspector. All controls are
- * uncontrolled at the React level — they read the canonical value
- * from the store via props and write back via `onCommit` on blur or
- * keypress. This keeps the editor responsive even when the store's
- * downstream effects (iframe reload) are heavier than a re-render.
+ * Form-control primitives for the Inspector. Numeric inputs commit on
+ * every keystroke so the canvas preview tracks the operator's edits in
+ * real time; a local string buffer + focus ref keeps the caret stable
+ * (typing "1." won't snap back to "1") and lets external updates
+ * (scrubbing, undo, sibling edits) only resync when the input isn't
+ * focused. Text / select / colour controls are simpler and commit
+ * onBlur / onChange directly.
  */
 
 const TRAIL_PX = 18;
@@ -69,25 +72,81 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
   return (
     <div style={styles.row}>
       <span style={styles.label}>{props.label}</span>
-      <input
-        style={styles.input}
-        type="number"
-        defaultValue={props.value}
+      <RealtimeNumberInput
+        value={props.value}
+        onCommit={props.onCommit}
         step={props.step}
         min={props.min}
         max={props.max}
-        onBlur={(e) => {
-          const n = Number(e.target.value);
-          if (Number.isFinite(n)) props.onCommit(n);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-        }}
-        key={`${props.label}-${String(props.value)}`}
+        style={styles.input}
+        ariaLabel={props.label}
       />
       <span style={styles.trailing}>{props.trailing ?? null}</span>
     </div>
   );
+}
+
+interface RealtimeNumberInputProps {
+  value: number;
+  onCommit: (n: number) => void;
+  step?: number | undefined;
+  min?: number | undefined;
+  max?: number | undefined;
+  style?: CSSProperties | undefined;
+  ariaLabel?: string | undefined;
+}
+
+/**
+ * Controlled number input that commits on every keystroke and keeps a
+ * local string buffer so typing "1." doesn't get reformatted to "1"
+ * mid-typing. External value changes (scrubbing, undo, edits from
+ * another input bound to the same property) sync into the buffer only
+ * when the input isn't focused.
+ */
+export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Element {
+  const display = formatNumberDisplay(props.value);
+  const [buf, setBuf] = useState(display);
+  const focused = useRef(false);
+
+  useEffect(() => {
+    if (!focused.current) setBuf(display);
+  }, [display]);
+
+  return (
+    <input
+      style={props.style}
+      type="number"
+      value={buf}
+      step={props.step}
+      min={props.min}
+      max={props.max}
+      aria-label={props.ariaLabel}
+      onFocus={() => {
+        focused.current = true;
+      }}
+      onBlur={() => {
+        focused.current = false;
+        setBuf(display);
+      }}
+      onChange={(e) => {
+        setBuf(e.target.value);
+        const n = Number(e.target.value);
+        if (Number.isFinite(n) && n !== props.value) props.onCommit(n);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+        if (e.key === 'Escape') {
+          setBuf(display);
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+    />
+  );
+}
+
+function formatNumberDisplay(v: number): string {
+  if (Number.isInteger(v)) return String(v);
+  return Number(v.toFixed(2)).toString();
 }
 
 interface NumberPairFieldProps {
