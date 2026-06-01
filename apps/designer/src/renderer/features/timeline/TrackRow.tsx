@@ -37,9 +37,10 @@ const styles = {
     color: colors.textMuted,
     padding: '0 0.4rem 0 2rem',
     display: 'grid',
-    gridTemplateColumns: '1fr auto auto',
+    // Fixed value column so numbers and colour chips line up across rows.
+    gridTemplateColumns: '1fr 78px 16px',
     alignItems: 'center',
-    gap: '0.35rem',
+    gap: '0.4rem',
     borderRight: `1px solid ${colors.border}`,
     borderBottom: `1px solid ${colors.border}`,
     background: colors.panel,
@@ -66,7 +67,7 @@ const styles = {
   },
   // Editable numeric value — same look as labelValue but interactive.
   valueNumberInput: {
-    width: 60,
+    width: '100%',
     background: 'transparent',
     color: colors.text,
     border: `1px solid transparent`,
@@ -77,8 +78,16 @@ const styles = {
     textAlign: 'right' as const,
     outline: 'none',
     cursor: 'text',
+    boxSizing: 'border-box' as const,
   },
-  // Editable colour swatch — opens the native colour picker on click.
+  // Colour value: swatch + hex text in one row, right-aligned in the cell.
+  colorValue: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end' as const,
+    gap: '0.35rem',
+    width: '100%',
+  },
   valueSwatchWrap: {
     position: 'relative' as const,
     width: 14,
@@ -87,6 +96,7 @@ const styles = {
     border: `1px solid ${colors.border}`,
     overflow: 'hidden' as const,
     cursor: 'pointer',
+    flex: 'none' as const,
   },
   valueColorInput: {
     position: 'absolute' as const,
@@ -96,6 +106,12 @@ const styles = {
     border: 0,
     padding: 0,
     background: 'transparent',
+  },
+  valueHexText: {
+    color: colors.text,
+    fontSize: '0.7rem',
+    fontVariantNumeric: 'tabular-nums' as const,
+    letterSpacing: '0.02em',
   },
   // B-003: lane diamonds are always yellow. When a diamond is
   // selected, its border turns blue (and the interpolation line that
@@ -466,15 +482,19 @@ function ValueCell({
 }): JSX.Element {
   if (typeof value === 'string') {
     const hex = value.startsWith('#') ? value : `#${value}`;
+    const hexLabel = hex.replace(/^#/, '').toUpperCase();
     return (
-      <span style={{ ...styles.valueSwatchWrap, background: hex }} title={hex.toUpperCase()}>
-        <input
-          type="color"
-          value={hex}
-          onChange={(e) => onCommit(e.target.value.toUpperCase())}
-          style={styles.valueColorInput}
-          aria-label={ariaLabel}
-        />
+      <span style={styles.colorValue}>
+        <span style={{ ...styles.valueSwatchWrap, background: hex }} title={hex.toUpperCase()}>
+          <input
+            type="color"
+            value={hex}
+            onChange={(e) => onCommit(e.target.value.toUpperCase())}
+            style={styles.valueColorInput}
+            aria-label={ariaLabel}
+          />
+        </span>
+        <span style={styles.valueHexText}>{hexLabel}</span>
       </span>
     );
   }
