@@ -1,25 +1,19 @@
 import type { Element } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { KeyframeIndicator } from './KeyframeIndicator.js';
-import { LABEL_COL_PX, type DisplayRow as DisplayRowSpec } from './keyframe-helpers.js';
+import { type DisplayRow as DisplayRowSpec } from './keyframe-helpers.js';
 
 interface Props {
   row: DisplayRowSpec;
   element: Element;
+  part: 'label' | 'lane';
 }
 
-const ROW_HEIGHT = 20;
+export const DISPLAY_ROW_HEIGHT = 20;
+const ROW_HEIGHT = DISPLAY_ROW_HEIGHT;
 
 const styles = {
-  row: {
-    display: 'grid',
-    gridTemplateColumns: `${String(LABEL_COL_PX)}px 1fr`,
-    alignItems: 'stretch',
-    borderBottom: `1px solid ${colors.border}`,
-    height: ROW_HEIGHT,
-    fontSize: '0.7rem',
-  },
-  label: {
+  labelCell: {
     color: colors.textMuted,
     padding: '0 0.4rem 0 2rem',
     display: 'grid',
@@ -27,10 +21,11 @@ const styles = {
     alignItems: 'center',
     gap: '0.35rem',
     borderRight: `1px solid ${colors.border}`,
+    borderBottom: `1px solid ${colors.border}`,
     background: colors.panel,
-    position: 'sticky' as const,
-    left: 0,
-    zIndex: 2,
+    height: ROW_HEIGHT,
+    fontSize: '0.7rem',
+    boxSizing: 'border-box' as const,
   },
   labelName: {
     color: colors.textMuted,
@@ -43,9 +38,12 @@ const styles = {
     fontVariantNumeric: 'tabular-nums' as const,
     fontSize: '0.7rem',
   },
-  lane: {
+  laneCell: {
     position: 'relative' as const,
     background: colors.panelMuted,
+    borderBottom: `1px solid ${colors.border}`,
+    height: ROW_HEIGHT,
+    boxSizing: 'border-box' as const,
   },
   laneLine: {
     position: 'absolute' as const,
@@ -62,13 +60,13 @@ const styles = {
  * D-010 — non-animatable display row in the timeline label column.
  * Renders the property name + current value + an empty indicator and
  * a blank lane (no keyframe diamonds since these properties aren't in
- * the keyframe schema yet). Same shape as TrackRow but inert.
+ * the keyframe schema yet).
  */
-export function DisplayRow({ row, element }: Props): JSX.Element {
-  const value = row.read(element);
-  return (
-    <div style={styles.row} data-display-row={row.id}>
-      <div style={styles.label}>
+export function DisplayRow({ row, element, part }: Props): JSX.Element {
+  if (part === 'label') {
+    const value = row.read(element);
+    return (
+      <div style={styles.labelCell} data-display-row={row.id}>
         <span style={styles.labelName}>{row.label}</span>
         <span style={styles.labelValue}>{value}</span>
         <KeyframeIndicator
@@ -79,9 +77,11 @@ export function DisplayRow({ row, element }: Props): JSX.Element {
           ariaLabel={`${row.label} — animation not yet supported`}
         />
       </div>
-      <div style={styles.lane}>
-        <div style={styles.laneLine} />
-      </div>
+    );
+  }
+  return (
+    <div style={styles.laneCell} data-display-row={row.id}>
+      <div style={styles.laneLine} />
     </div>
   );
 }

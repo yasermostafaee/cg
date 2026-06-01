@@ -1,7 +1,6 @@
 import type { Element, FrameRange } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
-import { LABEL_COL_PX } from './keyframe-helpers.js';
 
 interface Props {
   element: Element;
@@ -11,24 +10,18 @@ interface Props {
   frameRange: FrameRange;
   /** Deterministic per-element bar color so each element has its own color. */
   lifespanColor: string;
+  /** Which half of the row to render. */
+  part: 'label' | 'lane';
 }
 
-const ROW_HEIGHT = 22;
+export const ELEMENT_ROW_HEIGHT = 22;
+const ROW_HEIGHT = ELEMENT_ROW_HEIGHT;
 
 const styles = {
-  row: {
-    display: 'grid',
-    gridTemplateColumns: `${String(LABEL_COL_PX)}px 1fr`,
-    alignItems: 'stretch',
-    borderBottom: `1px solid ${colors.border}`,
-    height: ROW_HEIGHT,
-    fontSize: '0.72rem',
-    cursor: 'pointer',
-  },
   rowSelected: {
     background: 'rgba(56, 189, 248, 0.06)',
   },
-  label: {
+  labelCell: {
     display: 'grid',
     gridTemplateColumns: '14px 1fr auto auto',
     alignItems: 'center',
@@ -36,10 +29,12 @@ const styles = {
     padding: '0 0.4rem',
     background: colors.panel,
     borderRight: `1px solid ${colors.border}`,
+    borderBottom: `1px solid ${colors.border}`,
     color: colors.textMuted,
-    position: 'sticky' as const,
-    left: 0,
-    zIndex: 2,
+    height: ROW_HEIGHT,
+    fontSize: '0.72rem',
+    cursor: 'pointer',
+    boxSizing: 'border-box' as const,
   },
   chevron: {
     background: 'transparent',
@@ -64,9 +59,13 @@ const styles = {
     width: 12,
     textAlign: 'center' as const,
   },
-  lane: {
+  laneCell: {
     position: 'relative' as const,
     background: colors.panelMuted,
+    borderBottom: `1px solid ${colors.border}`,
+    height: ROW_HEIGHT,
+    boxSizing: 'border-box' as const,
+    cursor: 'pointer',
   },
   lifespan: {
     position: 'absolute' as const,
@@ -90,54 +89,61 @@ const styles = {
  * so the right Inspector follows.
  */
 export function ElementRow(props: Props): JSX.Element {
-  const { element, expanded, onToggleExpand, isSelected, frameRange, lifespanColor } = props;
-  const span = Math.max(1, frameRange.out - frameRange.in);
-  // For v1 every element is "active" across the whole scene range; a
-  // proper in/out per element is a future extension.
-  const start = 0;
-  const width = (span / span) * 100;
+  if (props.part === 'label') return <ElementRowLabel {...props} />;
+  return <ElementRowLane {...props} />;
+}
+
+function ElementRowLabel(props: Props): JSX.Element {
+  const { element, expanded, onToggleExpand, isSelected } = props;
   return (
     <div
-      style={{ ...styles.row, ...(isSelected ? styles.rowSelected : {}) }}
+      style={{ ...styles.labelCell, ...(isSelected ? styles.rowSelected : {}) }}
       data-element-id={element.id}
       onClick={(e) => {
-        // Only the lane / name selects — don't fire when chevron handled it.
         if ((e.target as HTMLElement).dataset.role === 'chevron') return;
         designerStore.setSelection([element.id]);
       }}
     >
-      <div style={styles.label}>
-        <button
-          type="button"
-          style={styles.chevron}
-          data-role="chevron"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleExpand();
-          }}
-          aria-expanded={expanded}
-          aria-label={`Toggle ${element.name} tracks`}
-        >
-          {expanded ? '▾' : '▸'}
-        </button>
-        <span style={styles.name}>{element.name}</span>
-        <span style={styles.miniIcon} aria-hidden title={element.visible ? 'Visible' : 'Hidden'}>
-          {element.visible ? '◉' : '○'}
-        </span>
-        <span style={styles.miniIcon} aria-hidden title={element.locked ? 'Locked' : 'Unlocked'}>
-          {element.locked ? '🔒' : ' '}
-        </span>
-      </div>
-      <div style={styles.lane}>
-        <div
-          style={{
-            ...styles.lifespan,
-            left: `${start}%`,
-            width: `${width}%`,
-            background: lifespanColor,
-          }}
-        />
-      </div>
+      <button
+        type="button"
+        style={styles.chevron}
+        data-role="chevron"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleExpand();
+        }}
+        aria-expanded={expanded}
+        aria-label={`Toggle ${element.name} tracks`}
+      >
+        {expanded ? '▾' : '▸'}
+      </button>
+      <span style={styles.name}>{element.name}</span>
+      <span style={styles.miniIcon} aria-hidden title={element.visible ? 'Visible' : 'Hidden'}>
+        {element.visible ? '◉' : '○'}
+      </span>
+      <span style={styles.miniIcon} aria-hidden title={element.locked ? 'Locked' : 'Unlocked'}>
+        {element.locked ? '🔒' : ' '}
+      </span>
+    </div>
+  );
+}
+
+function ElementRowLane(props: Props): JSX.Element {
+  const { element, isSelected, lifespanColor } = props;
+  // For v1 every element is "active" across the whole scene range.
+  return (
+    <div
+      style={{ ...styles.laneCell, ...(isSelected ? styles.rowSelected : {}) }}
+      onClick={() => designerStore.setSelection([element.id])}
+    >
+      <div
+        style={{
+          ...styles.lifespan,
+          left: `0%`,
+          width: `100%`,
+          background: lifespanColor,
+        }}
+      />
     </div>
   );
 }

@@ -5,7 +5,6 @@ import { designerStore } from '../../state/store.js';
 import { RealtimeNumberInput } from '../inspector/controls.js';
 import { KeyframeIndicator } from './KeyframeIndicator.js';
 import {
-  LABEL_COL_PX,
   hasKeyframeAt,
   keyframeVariantFor,
   trackOf,
@@ -18,6 +17,10 @@ interface Props {
   frameIn: number;
   frameOut: number;
   currentFrame: number;
+  /** Which half of the row to render — labels and lanes live in
+   *  separate scroll columns so the lane scrollbar starts at the
+   *  property column's right edge. */
+  part: 'label' | 'lane';
   /** The full selectedKeyframe pointer from the store (may be on a different row). */
   selectedKeyframe: {
     elementId: string;
@@ -26,18 +29,11 @@ interface Props {
   } | null;
 }
 
-const ROW_HEIGHT = 20;
+export const TRACK_ROW_HEIGHT = 20;
+const ROW_HEIGHT = TRACK_ROW_HEIGHT;
 
 const styles = {
-  row: {
-    display: 'grid',
-    gridTemplateColumns: `${String(LABEL_COL_PX)}px 1fr`,
-    alignItems: 'stretch',
-    borderBottom: `1px solid ${colors.border}`,
-    height: ROW_HEIGHT,
-    fontSize: '0.7rem',
-  },
-  label: {
+  labelCell: {
     color: colors.textMuted,
     padding: '0 0.4rem 0 2rem',
     display: 'grid',
@@ -45,11 +41,18 @@ const styles = {
     alignItems: 'center',
     gap: '0.35rem',
     borderRight: `1px solid ${colors.border}`,
+    borderBottom: `1px solid ${colors.border}`,
     background: colors.panel,
-    // Sticky so it stays pinned against the timeline's horizontal scroll.
-    position: 'sticky' as const,
-    left: 0,
-    zIndex: 2,
+    height: ROW_HEIGHT,
+    fontSize: '0.7rem',
+    boxSizing: 'border-box' as const,
+  },
+  laneCell: {
+    position: 'relative' as const,
+    borderBottom: `1px solid ${colors.border}`,
+    background: colors.panelMuted,
+    height: ROW_HEIGHT,
+    boxSizing: 'border-box' as const,
   },
   labelName: {
     color: colors.textMuted,
@@ -94,10 +97,6 @@ const styles = {
     border: 0,
     padding: 0,
     background: 'transparent',
-  },
-  lane: {
-    position: 'relative' as const,
-    background: colors.panelMuted,
   },
   laneLine: {
     position: 'absolute' as const,
@@ -209,14 +208,52 @@ const styles = {
  *   - Delete/Backspace (with the diamond selected) → remove it
  */
 export function TrackRow(props: Props): JSX.Element {
+  if (props.part === 'label') return <TrackRowLabel {...props} />;
+  return <TrackRowLane {...props} />;
+}
+
+function TrackRowLabel(props: Props): JSX.Element {
+  const { row, element, currentFrame, selectedKeyframe } = props;
+
+  function toggleKeyframeHere(): void {
+    if (hasKeyframeAt(element, row.property, currentFrame)) {
+      designerStore.removeKeyframe(element.id, row.property, currentFrame);
+      return;
+    }
+    designerStore.upsertKeyframe(element.id, row.property, currentFrame, row.read(element));
+    designerStore.setSelectedKeyframe({
+      elementId: element.id,
+      property: row.property,
+      frame: currentFrame,
+    });
+  }
+
+  const variant = keyframeVariantFor(element, row.property, currentFrame, selectedKeyframe);
+
+  return (
+    <div style={styles.labelCell} data-track-property={row.property}>
+      <span style={styles.labelName}>{row.label}</span>
+      <ValueCell
+        value={row.read(element)}
+        ariaLabel={`${row.label} value`}
+        onCommit={(v) => designerStore.commitAnimatable(element.id, row.property, v)}
+      />
+      <KeyframeIndicator
+        variant={variant}
+        onClick={toggleKeyframeHere}
+        ariaLabel={`Toggle keyframe for ${row.label} at frame ${String(currentFrame)}`}
+      />
+    </div>
+  );
+}
+
+function TrackRowLane(props: Props): JSX.Element {
   const { row, element, frameIn, frameOut, currentFrame, selectedKeyframe } = props;
   const laneRef = useRef<HTMLDivElement | null>(null);
   const span = Math.max(1, frameOut - frameIn);
   const track = trackOf(element, row.property);
   const keyframes: readonly Keyframe[] = track?.keyframes ?? [];
 
-  // Right-click context menu for keyframe diamonds. `null` = closed;
-  // otherwise position (viewport coords) + the keyframe it targets.
   const [menu, setMenu] = useState<{ x: number; y: number; frame: number } | null>(null);
   useEffect(() => {
     if (menu === null) return;
@@ -234,19 +271,6 @@ export function TrackRow(props: Props): JSX.Element {
     };
   }, [menu]);
 
-  function toggleKeyframeHere(): void {
-    if (hasKeyframeAt(element, row.property, currentFrame)) {
-      designerStore.removeKeyframe(element.id, row.property, currentFrame);
-      return;
-    }
-    designerStore.upsertKeyframe(element.id, row.property, currentFrame, row.read(element));
-    designerStore.setSelectedKeyframe({
-      elementId: element.id,
-      property: row.property,
-      frame: currentFrame,
-    });
-  }
-
   function frameAt(clientX: number): number {
     const el = laneRef.current;
     if (el === null) return currentFrame;
@@ -256,29 +280,14 @@ export function TrackRow(props: Props): JSX.Element {
     return Math.round(frameIn + ratio * span);
   }
 
-  const variant = keyframeVariantFor(element, row.property, currentFrame, selectedKeyframe);
-
   return (
-    <div style={styles.row} data-track-property={row.property}>
-      <div style={styles.label}>
-        <span style={styles.labelName}>{row.label}</span>
-        <ValueCell
-          value={row.read(element)}
-          ariaLabel={`${row.label} value`}
-          onCommit={(v) => designerStore.commitAnimatable(element.id, row.property, v)}
-        />
-        <KeyframeIndicator
-          variant={variant}
-          onClick={toggleKeyframeHere}
-          ariaLabel={`Toggle keyframe for ${row.label} at frame ${String(currentFrame)}`}
-        />
-      </div>
-      <div
-        ref={laneRef}
-        style={styles.lane}
-        data-role="lane-empty"
-        onContextMenu={(e) => e.preventDefault()}
-      >
+    <div
+      ref={laneRef}
+      style={styles.laneCell}
+      data-track-property={row.property}
+      data-role="lane-empty"
+      onContextMenu={(e) => e.preventDefault()}
+    >
         <div style={styles.laneLine} />
         {/* Interpolation lines between adjacent keyframes. The line is
             drawn in accent blue when the keyframe on its LEFT (the
@@ -394,7 +403,6 @@ export function TrackRow(props: Props): JSX.Element {
             />
           );
         })}
-      </div>
       {menu !== null && (
         <div
           style={{

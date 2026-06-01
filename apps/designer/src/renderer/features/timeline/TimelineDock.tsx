@@ -27,11 +27,60 @@ const styles = {
     minWidth: 0,
     width: '100%',
   },
-  // No nested overflow on the body — both axes scroll on the outer
-  // container so `position: sticky` on the left labels (and on the
-  // ruler row's top) is evaluated against a single scroll context.
-  scrollBody: {
+  body: {
+    flex: 1,
+    display: 'flex',
     minHeight: 0,
+    minWidth: 0,
+    overflow: 'hidden' as const,
+  },
+  leftCol: {
+    width: LABEL_COL_PX,
+    flex: '0 0 auto',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    overflow: 'hidden' as const,
+    borderRight: `1px solid ${colors.border}`,
+    background: colors.panel,
+  },
+  leftHeader: {
+    background: colors.panel,
+    borderBottom: `1px solid ${colors.border}`,
+    color: colors.textMuted,
+    fontSize: '0.6rem',
+    letterSpacing: '0.06em',
+    padding: '0 0.5rem',
+    height: 22,
+    display: 'flex',
+    alignItems: 'center',
+    boxSizing: 'border-box' as const,
+  },
+  leftBody: {
+    flex: 1,
+    minHeight: 0,
+    overflow: 'hidden' as const,
+  },
+  rightCol: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    overflow: 'hidden' as const,
+  },
+  topScroll: {
+    overflowX: 'hidden' as const,
+    overflowY: 'hidden' as const,
+    height: 22,
+    borderBottom: `1px solid ${colors.border}`,
+    background: colors.panel,
+  },
+  rightBody: {
+    flex: 1,
+    minHeight: 0,
+    overflow: 'auto' as const,
+  },
+  zoomInner: {
+    minWidth: '100%',
   },
   header: {
     display: 'flex',
@@ -72,53 +121,13 @@ const styles = {
     fontSize: '0.7rem',
     fontVariantNumeric: 'tabular-nums' as const,
   },
-  rulerRow: {
-    display: 'grid',
-    gridTemplateColumns: `${String(LABEL_COL_PX)}px 1fr`,
-    position: 'sticky' as const,
-    top: 0,
-    zIndex: 3,
-    background: colors.panel,
-  },
-  rulerLabelGutter: {
-    background: colors.panel,
-    borderRight: `1px solid ${colors.border}`,
-    borderBottom: `1px solid ${colors.border}`,
-    color: colors.textMuted,
-    fontSize: '0.6rem',
-    letterSpacing: '0.06em',
-    padding: '0 0.5rem',
-    display: 'flex',
-    alignItems: 'center',
-    position: 'sticky' as const,
-    left: 0,
-    zIndex: 4,
-  },
-  hScrollOuter: {
-    flex: 1,
-    minHeight: 0,
-    minWidth: 0,
-    overflow: 'auto' as const,
-    display: 'block',
-  },
-  hScrollInner: {
-    minWidth: '100%',
-    minHeight: '100%',
-  },
   empty: {
     padding: '0.6rem',
     color: colors.textMuted,
     fontSize: '0.72rem',
     textAlign: 'center' as const,
   },
-  transformHeader: {
-    display: 'grid',
-    gridTemplateColumns: `${String(LABEL_COL_PX)}px 1fr`,
-    alignItems: 'center',
-    borderBottom: `1px solid ${colors.border}`,
-    height: 18,
-  },
-  transformHeaderLabel: {
+  groupHeaderLabel: {
     color: colors.textMuted,
     fontSize: '0.62rem',
     fontWeight: 700,
@@ -126,17 +135,18 @@ const styles = {
     padding: '0 0.4rem 0 1.7rem',
     background: colors.panel,
     borderRight: `1px solid ${colors.border}`,
-    height: '100%',
+    borderBottom: `1px solid ${colors.border}`,
+    height: 18,
     display: 'flex',
     alignItems: 'center',
     gap: '0.3rem',
-    position: 'sticky' as const,
-    left: 0,
-    zIndex: 2,
+    boxSizing: 'border-box' as const,
   },
-  transformHeaderLane: {
+  groupHeaderLane: {
     background: colors.panelMuted,
-    height: '100%',
+    borderBottom: `1px solid ${colors.border}`,
+    height: 18,
+    boxSizing: 'border-box' as const,
   },
   groupChevron: {
     background: 'transparent',
@@ -176,22 +186,54 @@ export function TimelineDock({
 }: Props): JSX.Element {
   const { in: frameIn, out: frameOut } = scene.frameRange;
   const { timelineZoom } = useDesignerStore();
-  const hScrollRef = useRef<HTMLDivElement | null>(null);
+  const rightBodyRef = useRef<HTMLDivElement | null>(null);
+  const leftBodyRef = useRef<HTMLDivElement | null>(null);
+  const topScrollRef = useRef<HTMLDivElement | null>(null);
   const zoomRef = useRef(timelineZoom);
   zoomRef.current = timelineZoom;
-  // Ctrl+wheel zooms the timeline; the listener is native (non-passive)
-  // because React's synthetic onWheel can't preventDefault.
+
+  // The right body is the master scroll container; we mirror its scroll
+  // into the left label column (vertical only) and the top ruler strip
+  // (horizontal only) so the three regions stay aligned. The horizontal
+  // scrollbar therefore lives only under the lanes, not under labels.
+  function syncScroll(): void {
+    const rb = rightBodyRef.current;
+    if (rb === null) return;
+    if (leftBodyRef.current !== null) leftBodyRef.current.scrollTop = rb.scrollTop;
+    if (topScrollRef.current !== null) topScrollRef.current.scrollLeft = rb.scrollLeft;
+  }
+
+  // Forward wheel events from non-scrolling regions to the right body.
+  // Ctrl+wheel zooms (native listener so preventDefault works).
   useEffect(() => {
-    const el = hScrollRef.current;
-    if (el === null) return;
+    const rb = rightBodyRef.current;
+    const lb = leftBodyRef.current;
+    const ts = topScrollRef.current;
+    if (rb === null) return;
     function onWheel(e: WheelEvent): void {
-      if (!e.ctrlKey) return;
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -1 : 1;
-      designerStore.setTimelineZoom(zoomRef.current + delta);
+      if (e.ctrlKey) {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -1 : 1;
+        designerStore.setTimelineZoom(zoomRef.current + delta);
+        return;
+      }
     }
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+    function forwardWheel(e: WheelEvent): void {
+      if (e.ctrlKey) return; // let the zoom listener handle it
+      const target = rightBodyRef.current;
+      if (target === null) return;
+      target.scrollTop += e.deltaY;
+      target.scrollLeft += e.deltaX;
+      e.preventDefault();
+    }
+    rb.addEventListener('wheel', onWheel, { passive: false });
+    if (lb !== null) lb.addEventListener('wheel', forwardWheel, { passive: false });
+    if (ts !== null) ts.addEventListener('wheel', forwardWheel, { passive: false });
+    return () => {
+      rb.removeEventListener('wheel', onWheel);
+      if (lb !== null) lb.removeEventListener('wheel', forwardWheel);
+      if (ts !== null) ts.removeEventListener('wheel', forwardWheel);
+    };
   }, []);
   const [playing, setPlaying] = useState(false);
   const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(() => new Set());
@@ -318,82 +360,142 @@ export function TimelineDock({
           frame {currentFrame} / {frameOut}
         </span>
       </div>
-      <div style={styles.hScrollOuter} ref={hScrollRef}>
-        <div style={{ ...styles.hScrollInner, width: `${String(timelineZoom * 100)}%` }}>
-          <div style={styles.rulerRow}>
-            <div style={styles.rulerLabelGutter}>FRAME</div>
-            <FrameRuler
-              frameIn={frameIn}
-              frameOut={frameOut}
-              currentFrame={currentFrame}
-              onScrub={(f) => designerStore.setCurrentFrame(f)}
-            />
-          </div>
-          {elements.length === 0 ? (
-            <p style={styles.empty}>No elements yet. Add a shape, text, or image to start.</p>
-          ) : (
-            <div role="list" style={styles.scrollBody}>
-          {elements.map((el) => {
-            const expanded = !isCollapsed(el.id);
-            return (
-              <div key={el.id}>
-                <ElementRow
-                  element={el}
-                  expanded={expanded}
-                  onToggleExpand={() => toggleCollapsed(el.id)}
-                  isSelected={selection.has(el.id)}
-                  frameRange={scene.frameRange}
-                  lifespanColor={lifespanColorFor(el.id)}
-                />
-                {expanded &&
-                  timelineGroupsFor(el).map((group) => {
-                    const groupKey = `${el.id}::${group.title}`;
-                    const groupExpanded = !isGroupCollapsed(groupKey);
-                    return (
-                      <div key={groupKey}>
-                        <div style={styles.transformHeader}>
-                          <div style={styles.transformHeaderLabel}>
-                            <button
-                              type="button"
-                              style={styles.groupChevron}
-                              onClick={() => toggleGroupCollapsed(groupKey)}
-                              aria-expanded={groupExpanded}
-                              aria-label={`Toggle ${group.title.toLowerCase()} tracks`}
-                            >
-                              {groupExpanded ? '▾' : '▸'}
-                            </button>
-                            <span>{group.title}</span>
+      <div style={styles.body}>
+        <div style={styles.leftCol}>
+          <div style={styles.leftHeader}>FRAME</div>
+          <div style={styles.leftBody} ref={leftBodyRef}>
+            {elements.length === 0 ? (
+              <p style={styles.empty}>No elements yet. Add a shape, text, or image to start.</p>
+            ) : (
+              elements.map((el) => {
+                const expanded = !isCollapsed(el.id);
+                return (
+                  <div key={el.id}>
+                    <ElementRow
+                      element={el}
+                      expanded={expanded}
+                      onToggleExpand={() => toggleCollapsed(el.id)}
+                      isSelected={selection.has(el.id)}
+                      frameRange={scene.frameRange}
+                      lifespanColor={lifespanColorFor(el.id)}
+                      part="label"
+                    />
+                    {expanded &&
+                      timelineGroupsFor(el).map((group) => {
+                        const groupKey = `${el.id}::${group.title}`;
+                        const groupExpanded = !isGroupCollapsed(groupKey);
+                        return (
+                          <div key={groupKey}>
+                            <div style={styles.groupHeaderLabel}>
+                              <button
+                                type="button"
+                                style={styles.groupChevron}
+                                onClick={() => toggleGroupCollapsed(groupKey)}
+                                aria-expanded={groupExpanded}
+                                aria-label={`Toggle ${group.title.toLowerCase()} tracks`}
+                              >
+                                {groupExpanded ? '▾' : '▸'}
+                              </button>
+                              <span>{group.title}</span>
+                            </div>
+                            {groupExpanded &&
+                              group.rows.map((entry) =>
+                                entry.kind === 'animatable' ? (
+                                  <TrackRow
+                                    key={`${el.id}-${entry.row.property}`}
+                                    row={entry.row}
+                                    element={el}
+                                    frameIn={frameIn}
+                                    frameOut={frameOut}
+                                    currentFrame={currentFrame}
+                                    selectedKeyframe={selectedKeyframe}
+                                    part="label"
+                                  />
+                                ) : (
+                                  <DisplayRow
+                                    key={`${el.id}-${entry.row.id}`}
+                                    row={entry.row}
+                                    element={el}
+                                    part="label"
+                                  />
+                                ),
+                              )}
                           </div>
-                          <div style={styles.transformHeaderLane} />
-                        </div>
-                        {groupExpanded &&
-                          group.rows.map((entry) =>
-                            entry.kind === 'animatable' ? (
-                              <TrackRow
-                                key={`${el.id}-${entry.row.property}`}
-                                row={entry.row}
-                                element={el}
-                                frameIn={frameIn}
-                                frameOut={frameOut}
-                                currentFrame={currentFrame}
-                                selectedKeyframe={selectedKeyframe}
-                              />
-                            ) : (
-                              <DisplayRow
-                                key={`${el.id}-${entry.row.id}`}
-                                row={entry.row}
-                                element={el}
-                              />
-                            ),
-                          )}
-                      </div>
-                    );
-                  })}
-              </div>
-            );
-          })}
+                        );
+                      })}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+        <div style={styles.rightCol}>
+          <div style={styles.topScroll} ref={topScrollRef}>
+            <div style={{ ...styles.zoomInner, width: `${String(timelineZoom * 100)}%` }}>
+              <FrameRuler
+                frameIn={frameIn}
+                frameOut={frameOut}
+                currentFrame={currentFrame}
+                onScrub={(f) => designerStore.setCurrentFrame(f)}
+              />
             </div>
-          )}
+          </div>
+          <div style={styles.rightBody} ref={rightBodyRef} onScroll={syncScroll}>
+            <div style={{ ...styles.zoomInner, width: `${String(timelineZoom * 100)}%` }}>
+              {elements.length === 0 ? (
+                <p style={styles.empty}>&nbsp;</p>
+              ) : (
+                elements.map((el) => {
+                  const expanded = !isCollapsed(el.id);
+                  return (
+                    <div key={el.id}>
+                      <ElementRow
+                        element={el}
+                        expanded={expanded}
+                        onToggleExpand={() => toggleCollapsed(el.id)}
+                        isSelected={selection.has(el.id)}
+                        frameRange={scene.frameRange}
+                        lifespanColor={lifespanColorFor(el.id)}
+                        part="lane"
+                      />
+                      {expanded &&
+                        timelineGroupsFor(el).map((group) => {
+                          const groupKey = `${el.id}::${group.title}`;
+                          const groupExpanded = !isGroupCollapsed(groupKey);
+                          return (
+                            <div key={groupKey}>
+                              <div style={styles.groupHeaderLane} />
+                              {groupExpanded &&
+                                group.rows.map((entry) =>
+                                  entry.kind === 'animatable' ? (
+                                    <TrackRow
+                                      key={`${el.id}-${entry.row.property}`}
+                                      row={entry.row}
+                                      element={el}
+                                      frameIn={frameIn}
+                                      frameOut={frameOut}
+                                      currentFrame={currentFrame}
+                                      selectedKeyframe={selectedKeyframe}
+                                      part="lane"
+                                    />
+                                  ) : (
+                                    <DisplayRow
+                                      key={`${el.id}-${entry.row.id}`}
+                                      row={entry.row}
+                                      element={el}
+                                      part="lane"
+                                    />
+                                  ),
+                                )}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </section>
