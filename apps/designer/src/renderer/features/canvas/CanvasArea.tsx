@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { BackgroundControl } from './BackgroundControl.js';
 import { CanvasOverlay } from './CanvasOverlay.js';
+import { CanvasToolbar } from './CanvasToolbar.js';
 import { type DesignerTool } from '../../state/store.js';
 
 interface Props {
@@ -12,6 +12,12 @@ interface Props {
   editingTextId: string | null;
   bindModeFieldId: string | null;
   currentFrame: number;
+  /**
+   * Render the shape tools inline at the left of the canvas header
+   * (D-008). The caller passes `true` from the Studio layout so the
+   * single header row reads:  [tools] ……… [zoom controls].
+   */
+  showToolbar?: boolean;
 }
 
 const ZOOM_MIN = 0.1;
@@ -128,6 +134,7 @@ export function CanvasArea({
   editingTextId,
   bindModeFieldId,
   currentFrame,
+  showToolbar = false,
 }: Props): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
@@ -256,26 +263,19 @@ export function CanvasArea({
 
   return (
     <div style={styles.wrap}>
-      <div style={styles.header} aria-label="Canvas controls">
+      <div style={styles.header} aria-label="Canvas header">
+        {showToolbar && <CanvasToolbar tool={tool} />}
+        <span style={styles.spacer} />
         <button
           type="button"
           style={styles.headerButton}
-          onClick={() => setZoom((z) => clampZoom(z / ZOOM_STEP))}
-          aria-label="Zoom out"
-          title="Zoom out"
+          onClick={() => setZoom(ZOOM_DEFAULT)}
+          aria-label="Fit"
+          title="Fit canvas"
         >
-          −
+          ⛶
         </button>
         <span style={styles.zoomReadout}>{zoomPct}%</span>
-        <button
-          type="button"
-          style={styles.headerButton}
-          onClick={() => setZoom((z) => clampZoom(z * ZOOM_STEP))}
-          aria-label="Zoom in"
-          title="Zoom in"
-        >
-          +
-        </button>
         <button
           type="button"
           style={styles.headerButton}
@@ -288,17 +288,21 @@ export function CanvasArea({
         <button
           type="button"
           style={styles.headerButton}
-          onClick={() => setZoom(ZOOM_DEFAULT)}
-          aria-label="Fit"
-          title="Fit"
+          onClick={() => setZoom((z) => clampZoom(z * ZOOM_STEP))}
+          aria-label="Zoom in"
+          title="Zoom in"
         >
-          ⛶
+          +
         </button>
-        <BackgroundControl background={scene.background} variant="compact" />
-        <span style={styles.spacer} />
-        <span title="Hold Ctrl + wheel to zoom · wheel to scroll · use hand tool to pan">
-          tip: Ctrl+wheel zooms
-        </span>
+        <button
+          type="button"
+          style={styles.headerButton}
+          onClick={() => setZoom((z) => clampZoom(z / ZOOM_STEP))}
+          aria-label="Zoom out"
+          title="Zoom out"
+        >
+          −
+        </button>
       </div>
       <div style={styles.outer} ref={outerRef}>
         {html !== null && (

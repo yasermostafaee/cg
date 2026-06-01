@@ -81,7 +81,7 @@ capability (`## MODIFIED Requirements`).
 see the files inside the: `docs/designer-guide/sample-assets/D-006-old-codes`. these codes had been written by meself for this a few mounths ago but they are uncompele and raw, you can just see them to get an idea and know whay I whant for frame points
 
 
-## [~] D-007 — redesign style and elements   ⟨priority: high) — change: `openspec/changes/redesign-studio-loopic-style/`
+## [~] D-007 — redesign style and elements   (priority: high) — change: `openspec/changes/redesign-studio-loopic-style/`
 **What:** change the style like a sample website
 **Why:** this website is perfect and finaly we need an app like that with whole the features
 **Acceptance:**
@@ -94,3 +94,12 @@ see the files inside the: `docs/designer-guide/sample-assets/D-006-old-codes`. t
 - add right click for remove the points.
 - and any features you see inside the video.
 **Notes:** see the video: `docs/designer-guide/sample-assets/D-007-video-0`
+
+## [~] D-008 — redesign and reorder style and elements   (priority: high) — focused fix, no openspec change
+**What:** change the position of sceen tools
+**Why:** it gets extra space
+**Acceptance:**
+- for top navbar just put this menu: Home(current it shows as projects), File, Edit, View, Help (we use options for these later)
+- on the top of sceen : put zoomIn, zoomOut, percent, +, - , fit on the right side. and shape tools on the left side. 
+- remove color picker from on top of sceen area. it is also exist in sceen properties area and it's enough
+**Notes:** see the pic: `docs/designer-guide/sample-assets/D-008-pic-0`

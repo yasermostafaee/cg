@@ -1,23 +1,18 @@
 import { colors } from '../../theme.js';
-import { designerStore, type DesignerTool } from '../../state/store.js';
+import { designerStore } from '../../state/store.js';
 
-interface Props {
-  tool: DesignerTool;
-}
-
-interface ToolEntry {
-  id: DesignerTool;
+interface MenuEntry {
+  id: 'home' | 'file' | 'edit' | 'view' | 'help';
   label: string;
-  icon: string;
+  onClick?: () => void;
 }
 
-const TOOLS: readonly ToolEntry[] = [
-  { id: 'cursor', label: 'Select', icon: '↖' },
-  { id: 'shape', label: 'Rectangle', icon: '▭' },
-  { id: 'text', label: 'Text', icon: 'T' },
-  { id: 'ellipse', label: 'Ellipse', icon: '○' },
-  { id: 'hand', label: 'Hand (pan)', icon: '✋' },
-  { id: 'image', label: 'Image', icon: '▦' },
+const MENU: readonly MenuEntry[] = [
+  { id: 'home', label: 'Home', onClick: () => designerStore.setScene(null, null) },
+  { id: 'file', label: 'File' },
+  { id: 'edit', label: 'Edit' },
+  { id: 'view', label: 'View' },
+  { id: 'help', label: 'Help' },
 ];
 
 const styles = {
@@ -33,84 +28,49 @@ const styles = {
   group: {
     display: 'flex',
     alignItems: 'center',
-    gap: '0.25rem',
+    gap: '0.2rem',
   },
-  divider: {
-    width: 1,
-    alignSelf: 'stretch' as const,
-    background: colors.border,
-    margin: '0 0.35rem',
-  },
-  button: {
-    width: 30,
-    height: 30,
+  menuItem: {
     background: 'transparent',
     color: colors.textMuted,
-    border: `1px solid transparent`,
+    border: '1px solid transparent',
     borderRadius: '0.22rem',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: '0.18rem 0.55rem',
+    fontSize: '0.74rem',
     cursor: 'pointer',
-    fontSize: '1.05rem',
-    padding: 0,
+    letterSpacing: '0.01em',
   },
-  buttonActive: {
+  menuItemHome: {
     color: colors.text,
-    background: colors.panelMuted,
-    border: `1px solid ${colors.accentMuted}`,
+    fontWeight: 600,
   },
-  back: {
-    background: 'transparent',
-    color: colors.textMuted,
-    border: `1px solid ${colors.border}`,
-    padding: '0.18rem 0.5rem',
-    borderRadius: '0.22rem',
-    fontSize: '0.72rem',
-    cursor: 'pointer',
-  },
-  spacer: { flex: 1 },
 } as const;
 
 /**
- * Horizontal toolbar at the top of the Studio (D-007). Holds the six
- * tool buttons (cursor, rectangle, text, ellipse, hand, image) and a
- * "back to projects" affordance.
+ * D-008 top menu bar — Home / File / Edit / View / Help. Home returns
+ * to the landing/project picker; the other items are placeholders for
+ * future menus. The tool selector now lives in the canvas header.
  */
-export function TopToolbar({ tool }: Props): JSX.Element {
+export function TopToolbar(): JSX.Element {
   return (
-    <nav style={styles.bar} aria-label="Tools">
-      <button
-        type="button"
-        style={styles.back}
-        onClick={() => {
-          designerStore.setScene(null, null);
-        }}
-        aria-label="Back to projects"
-        title="Back to projects (closes the current scene)"
-      >
-        ← projects
-      </button>
-      <span style={styles.divider} />
+    <nav style={styles.bar} aria-label="Application menu">
       <div style={styles.group}>
-        {TOOLS.map((t) => {
-          const active = t.id === tool;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              style={active ? { ...styles.button, ...styles.buttonActive } : styles.button}
-              onClick={() => designerStore.setTool(t.id)}
-              title={t.label}
-              aria-label={t.label}
-              aria-pressed={active}
-            >
-              {t.icon}
-            </button>
-          );
-        })}
+        {MENU.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            style={
+              m.id === 'home' ? { ...styles.menuItem, ...styles.menuItemHome } : styles.menuItem
+            }
+            onClick={() => m.onClick?.()}
+            disabled={m.onClick === undefined}
+            title={m.onClick === undefined ? `${m.label} (coming soon)` : m.label}
+            aria-label={m.label}
+          >
+            {m.label}
+          </button>
+        ))}
       </div>
-      <span style={styles.spacer} />
     </nav>
   );
 }
