@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { AnimatableProperty, Element, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
+import { DisplayRow } from './DisplayRow.js';
 import { ElementRow, lifespanColorFor } from './ElementRow.js';
 import { FrameRuler } from './FrameRuler.js';
-import { TIMELINE_ROWS, LABEL_COL_PX } from './keyframe-helpers.js';
+import { LABEL_COL_PX, timelineGroupsFor } from './keyframe-helpers.js';
 import { TrackRow } from './TrackRow.js';
 
 interface Props {
@@ -293,8 +294,6 @@ export function TimelineDock({
         <div role="list" style={styles.scrollBody}>
           {elements.map((el) => {
             const expanded = !isCollapsed(el.id);
-            const groupKey = `${el.id}::transform`;
-            const groupExpanded = !isGroupCollapsed(groupKey);
             return (
               <div key={el.id}>
                 <ElementRow
@@ -305,37 +304,50 @@ export function TimelineDock({
                   frameRange={scene.frameRange}
                   lifespanColor={lifespanColorFor(el.id)}
                 />
-                {expanded && (
-                  <>
-                    <div style={styles.transformHeader}>
-                      <div style={styles.transformHeaderLabel}>
-                        <button
-                          type="button"
-                          style={styles.groupChevron}
-                          onClick={() => toggleGroupCollapsed(groupKey)}
-                          aria-expanded={groupExpanded}
-                          aria-label="Toggle transform tracks"
-                        >
-                          {groupExpanded ? '▾' : '▸'}
-                        </button>
-                        <span>TRANSFORM</span>
+                {expanded &&
+                  timelineGroupsFor(el).map((group) => {
+                    const groupKey = `${el.id}::${group.title}`;
+                    const groupExpanded = !isGroupCollapsed(groupKey);
+                    return (
+                      <div key={groupKey}>
+                        <div style={styles.transformHeader}>
+                          <div style={styles.transformHeaderLabel}>
+                            <button
+                              type="button"
+                              style={styles.groupChevron}
+                              onClick={() => toggleGroupCollapsed(groupKey)}
+                              aria-expanded={groupExpanded}
+                              aria-label={`Toggle ${group.title.toLowerCase()} tracks`}
+                            >
+                              {groupExpanded ? '▾' : '▸'}
+                            </button>
+                            <span>{group.title}</span>
+                          </div>
+                          <div style={styles.transformHeaderLane} />
+                        </div>
+                        {groupExpanded &&
+                          group.rows.map((entry) =>
+                            entry.kind === 'animatable' ? (
+                              <TrackRow
+                                key={`${el.id}-${entry.row.property}`}
+                                row={entry.row}
+                                element={el}
+                                frameIn={frameIn}
+                                frameOut={frameOut}
+                                currentFrame={currentFrame}
+                                selectedKeyframe={selectedKeyframe}
+                              />
+                            ) : (
+                              <DisplayRow
+                                key={`${el.id}-${entry.row.id}`}
+                                row={entry.row}
+                                element={el}
+                              />
+                            ),
+                          )}
                       </div>
-                      <div style={styles.transformHeaderLane} />
-                    </div>
-                    {groupExpanded &&
-                      TIMELINE_ROWS.map((row) => (
-                        <TrackRow
-                          key={`${el.id}-${row.property}`}
-                          row={row}
-                          element={el}
-                          frameIn={frameIn}
-                          frameOut={frameOut}
-                          currentFrame={currentFrame}
-                          selectedKeyframe={selectedKeyframe}
-                        />
-                      ))}
-                  </>
-                )}
+                    );
+                  })}
               </div>
             );
           })}

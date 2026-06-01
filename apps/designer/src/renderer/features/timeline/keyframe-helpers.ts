@@ -38,6 +38,191 @@ export const TIMELINE_ROWS: readonly TimelineRow[] = [
   { label: 'Opacity', property: 'opacity', read: (el) => el.opacity },
 ];
 
+/**
+ * D-010 — non-animatable display rows for the timeline label column.
+ * The runtime still applies these values as static styles; the
+ * keyframe engine doesn't track them yet, so the indicator stays
+ * empty and the lane is always blank. Visual parity with Loopic.
+ */
+export interface DisplayRow {
+  readonly label: string;
+  /** Stable id (purely for React keys). */
+  readonly id: string;
+  /** Value formatted for the label column (e.g. "100%" or "BEBEBE"). */
+  readonly read: (el: Element) => string;
+}
+
+/** Tagged union of "what kind of row to render in the timeline". */
+export type TimelineRowEntry =
+  | { readonly kind: 'animatable'; readonly row: TimelineRow }
+  | { readonly kind: 'display'; readonly row: DisplayRow };
+
+export interface TimelineGroup {
+  readonly title: string;
+  readonly rows: readonly TimelineRowEntry[];
+}
+
+const TRANSFORM_GROUP: TimelineGroup = {
+  title: 'TRANSFORM',
+  rows: TIMELINE_ROWS.map((row) => ({ kind: 'animatable', row })),
+};
+
+function disp(id: string, label: string, read: (el: Element) => string): TimelineRowEntry {
+  return { kind: 'display', row: { id, label, read } };
+}
+
+function pct(v: number): string {
+  return `${String(Math.round(v))}%`;
+}
+
+function hex(s: string | undefined, fallback = '000000'): string {
+  if (s === undefined) return fallback;
+  return s.startsWith('#') ? s.slice(1).toUpperCase() : s.toUpperCase();
+}
+
+/**
+ * Filter rows (shape + text + image). The display always shows the
+ * value the runtime will apply — i.e. brightness/contrast/saturate
+ * default to 100%, everything else to 0.
+ */
+const FILTER_ROWS: readonly TimelineRowEntry[] = [
+  disp('filter.blur', 'Blur', (el) => String(el.filter?.blur ?? 0)),
+  disp('filter.brightness', 'Brightness', (el) => pct(el.filter?.brightness ?? 100)),
+  disp('filter.contrast', 'Contrast', (el) => pct(el.filter?.contrast ?? 100)),
+  disp('filter.grayscale', 'Grayscale', (el) => pct(el.filter?.grayscale ?? 0)),
+  disp('filter.hueRotate', 'Hue rotate', (el) => String(el.filter?.hueRotate ?? 0)),
+  disp('filter.invert', 'Invert', (el) => pct(el.filter?.invert ?? 0)),
+  disp('filter.opacity', 'Opacity', (el) => pct(el.filter?.opacity ?? 100)),
+  disp('filter.saturate', 'Saturate', (el) => pct(el.filter?.saturate ?? 100)),
+  disp('filter.sepia', 'Sepia', (el) => pct(el.filter?.sepia ?? 0)),
+];
+
+const FILTER_GROUP: TimelineGroup = { title: 'FILTER', rows: FILTER_ROWS };
+
+/** Path-style group for shapes (D-010-pic-0). */
+function pathStyleGroup(): TimelineGroup {
+  return {
+    title: 'PATH STYLE',
+    rows: [
+      disp('fill', 'Fill', (el) =>
+        el.type === 'shape' && el.fill?.kind === 'solid' ? hex(el.fill.color) : '—',
+      ),
+      disp('stroke', 'Stroke', (el) =>
+        el.type === 'shape' ? hex(el.stroke?.color) : '—',
+      ),
+      disp('stroke.width', 'Stroke width', (el) =>
+        el.type === 'shape' ? String(el.stroke?.width ?? 0) : '—',
+      ),
+      disp('stroke.dash', 'Stroke dasharray', (el) =>
+        el.type === 'shape' ? String(el.stroke?.dash?.[0] ?? 0) : '—',
+      ),
+    ],
+  };
+}
+
+/** Border-radius group (single Radius row, both shape & text). */
+function borderRadiusGroup(): TimelineGroup {
+  return {
+    title: 'BORDER RADIUS',
+    rows: [
+      disp('cornerRadius', 'Radius', (el) => {
+        const r =
+          el.type === 'shape'
+            ? typeof el.cornerRadius === 'number'
+              ? el.cornerRadius
+              : Array.isArray(el.cornerRadius)
+                ? el.cornerRadius[0]
+                : 0
+            : el.type === 'text'
+              ? (el.cornerRadius ?? 0)
+              : 0;
+        return String(r);
+      }),
+    ],
+  };
+}
+
+/** Drop-shadow group — shape reads from .shadow, text reads from .textShadow. */
+function dropShadowGroup(): TimelineGroup {
+  function shadowOf(el: Element): { offsetX: number; offsetY: number; blur: number; color: string } | undefined {
+    if (el.type === 'shape') return el.shadow;
+    if (el.type === 'text') return el.textShadow;
+    return undefined;
+  }
+  return {
+    title: 'DROP SHADOW',
+    rows: [
+      disp('shadow.offsetX', 'Offset X', (el) => String(shadowOf(el)?.offsetX ?? 0)),
+      disp('shadow.offsetY', 'Offset Y', (el) => String(shadowOf(el)?.offsetY ?? 0)),
+      disp('shadow.blur', 'Blur', (el) => String(shadowOf(el)?.blur ?? 0)),
+      disp('shadow.color', 'Color', (el) => hex(shadowOf(el)?.color)),
+    ],
+  };
+}
+
+/** Text group (text element only). */
+function textGroup(): TimelineGroup {
+  return {
+    title: 'TEXT',
+    rows: [
+      disp('font.size', 'Font size', (el) => (el.type === 'text' ? String(el.font.size) : '—')),
+      disp('text.color', 'Color', (el) => (el.type === 'text' ? hex(el.color) : '—')),
+      disp('text.bg', 'Background color', (el) =>
+        el.type === 'text' ? hex(el.backgroundColor, 'FFFFFF') : '—',
+      ),
+      disp('font.lineHeight', 'Line height', (el) =>
+        el.type === 'text' ? String(el.font.lineHeight) : '—',
+      ),
+      disp('font.letterSpacing', 'Letter spacing', (el) =>
+        el.type === 'text' ? String(el.font.letterSpacing) : '—',
+      ),
+    ],
+  };
+}
+
+/** Text-padding group (text element only). */
+function textPaddingGroup(): TimelineGroup {
+  return {
+    title: 'TEXT PADDING',
+    rows: [
+      disp('padding.top', 'Padding top', (el) =>
+        el.type === 'text' ? String(el.padding?.top ?? 0) : '—',
+      ),
+      disp('padding.right', 'Padding right', (el) =>
+        el.type === 'text' ? String(el.padding?.right ?? 0) : '—',
+      ),
+      disp('padding.bottom', 'Padding bottom', (el) =>
+        el.type === 'text' ? String(el.padding?.bottom ?? 0) : '—',
+      ),
+      disp('padding.left', 'Padding left', (el) =>
+        el.type === 'text' ? String(el.padding?.left ?? 0) : '—',
+      ),
+    ],
+  };
+}
+
+/**
+ * Per-element-type group list for the timeline label column (D-010).
+ * Order mirrors the D-010 reference pics.
+ */
+export function timelineGroupsFor(el: Element): readonly TimelineGroup[] {
+  if (el.type === 'shape') {
+    return [TRANSFORM_GROUP, pathStyleGroup(), borderRadiusGroup(), dropShadowGroup(), FILTER_GROUP];
+  }
+  if (el.type === 'text') {
+    return [
+      TRANSFORM_GROUP,
+      textGroup(),
+      dropShadowGroup(),
+      textPaddingGroup(),
+      borderRadiusGroup(),
+      FILTER_GROUP,
+    ];
+  }
+  // image / placeholder / container — just Transform + Filter for now.
+  return [TRANSFORM_GROUP, FILTER_GROUP];
+}
+
 /** Look up the track for a property on an element, or undefined. */
 export function trackOf(el: Element, property: AnimatableProperty): Track | undefined {
   return el.animation?.tracks[property];

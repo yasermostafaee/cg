@@ -7,6 +7,7 @@ import { defaultShape } from '../src/renderer/state/element-defaults.js';
 import {
   effectiveTransformAt,
   keyframeVariantFor,
+  timelineGroupsFor,
 } from '../src/renderer/features/timeline/keyframe-helpers.js';
 
 function freshSceneWithShape(): ShapeElement {
@@ -281,6 +282,36 @@ describe('B-002 — every keyframe on a track keeps its own distinct value', () 
       [0, 100],
       [25, 999],
       [50, 50],
+    ]);
+  });
+});
+
+describe('D-010 — timelineGroupsFor returns the right groups per element type', () => {
+  it('a shape returns Transform · Path style · Border radius · Drop Shadow · Filter', () => {
+    const groups = timelineGroupsFor(selected());
+    expect(groups.map((g) => g.title)).toEqual([
+      'TRANSFORM',
+      'PATH STYLE',
+      'BORDER RADIUS',
+      'DROP SHADOW',
+      'FILTER',
+    ]);
+  });
+
+  it('Filter group always has the 9 CSS-filter rows', () => {
+    const groups = timelineGroupsFor(selected());
+    const filter = groups.find((g) => g.title === 'FILTER');
+    expect(filter?.rows).toHaveLength(9);
+  });
+
+  it('Path style rows for a shape read fill / stroke / stroke width / dasharray', () => {
+    const groups = timelineGroupsFor(selected());
+    const path = groups.find((g) => g.title === 'PATH STYLE');
+    expect(path?.rows.map((r) => (r.kind === 'display' ? r.row.label : r.row.label))).toEqual([
+      'Fill',
+      'Stroke',
+      'Stroke width',
+      'Stroke dasharray',
     ]);
   });
 });
