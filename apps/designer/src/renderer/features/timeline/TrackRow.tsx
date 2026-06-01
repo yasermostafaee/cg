@@ -118,6 +118,11 @@ const styles = {
   menuItemDanger: {
     color: '#fda4af',
   },
+  menuSeparator: {
+    height: 1,
+    background: colors.border,
+    margin: '0.25rem 0',
+  },
 } as const;
 
 /**
@@ -289,6 +294,7 @@ export function TrackRow(props: Props): JSX.Element {
           <div style={styles.menuHeader}>
             {row.label} · frame {menu.frame}
           </div>
+          <div style={styles.menuSeparator} role="separator" />
           <button
             type="button"
             role="menuitem"
