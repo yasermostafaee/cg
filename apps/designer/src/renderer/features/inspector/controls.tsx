@@ -146,6 +146,8 @@ interface TextFieldProps {
   label: string;
   value: string;
   onCommit: (s: string) => void;
+  /** Optional element rendered in a trailing column (e.g. KeyframeIndicator). */
+  trailing?: JSX.Element;
 }
 
 export function TextField(props: TextFieldProps): JSX.Element {
@@ -162,6 +164,7 @@ export function TextField(props: TextFieldProps): JSX.Element {
         }}
         key={`${props.label}-${props.value}`}
       />
+      <span style={styles.trailing}>{props.trailing ?? null}</span>
     </div>
   );
 }
@@ -171,6 +174,8 @@ interface SelectFieldProps<T extends string> {
   value: T;
   options: readonly T[];
   onCommit: (v: T) => void;
+  /** Optional element rendered in a trailing column (e.g. KeyframeIndicator). */
+  trailing?: JSX.Element;
 }
 
 export function SelectField<T extends string>(props: SelectFieldProps<T>): JSX.Element {
@@ -188,6 +193,7 @@ export function SelectField<T extends string>(props: SelectFieldProps<T>): JSX.E
           </option>
         ))}
       </select>
+      <span style={styles.trailing}>{props.trailing ?? null}</span>
     </div>
   );
 }
@@ -196,6 +202,8 @@ interface ColorFieldProps {
   label: string;
   value: string;
   onCommit: (hex: string) => void;
+  /** Optional element rendered in a trailing column (e.g. KeyframeIndicator). */
+  trailing?: JSX.Element;
 }
 
 export function ColorField(props: ColorFieldProps): JSX.Element {
@@ -208,6 +216,7 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
         value={props.value}
         onChange={(e) => props.onCommit(e.target.value)}
       />
+      <span style={styles.trailing}>{props.trailing ?? null}</span>
     </div>
   );
 }

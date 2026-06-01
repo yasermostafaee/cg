@@ -8,11 +8,30 @@ import type {
   TextElement,
 } from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
+import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import { CollapseSection } from './CollapseSection.js';
 import { ColorField, NumberField, SelectField, TextField } from './controls.js';
 
 interface Props {
   element: Element;
+}
+
+/**
+ * D-010 — empty point icon next to every property row. Visual parity
+ * with the timeline label column; clicking is a no-op for now because
+ * these properties aren't in AnimatableProperty yet (the existing 8
+ * Transform rows in TransformSection have real, clickable indicators).
+ */
+function pointIcon(label: string): JSX.Element {
+  return (
+    <KeyframeIndicator
+      variant="empty"
+      onClick={() => {
+        /* intentionally no-op — D-010 properties are static-only */
+      }}
+      ariaLabel={`${label} — animation not yet supported`}
+    />
+  );
 }
 
 /**
@@ -43,6 +62,7 @@ function TextSections({ element }: { element: TextElement }): JSX.Element {
           label="text"
           value={element.text}
           onCommit={(text) => designerStore.updateElement(id, { text } as Partial<Element>)}
+          trailing={pointIcon('text')}
         />
         <TextField
           label="font"
@@ -52,6 +72,7 @@ function TextSections({ element }: { element: TextElement }): JSX.Element {
               font: { ...element.font, family },
             } as Partial<Element>)
           }
+          trailing={pointIcon('font')}
         />
         <NumberField
           label="font size"
@@ -63,6 +84,7 @@ function TextSections({ element }: { element: TextElement }): JSX.Element {
               font: { ...element.font, size },
             } as Partial<Element>)
           }
+          trailing={pointIcon('font size')}
         />
         <NumberField
           label="weight"
@@ -75,6 +97,7 @@ function TextSections({ element }: { element: TextElement }): JSX.Element {
               font: { ...element.font, weight },
             } as Partial<Element>)
           }
+          trailing={pointIcon('weight')}
         />
         <NumberField
           label="line height"
@@ -86,6 +109,7 @@ function TextSections({ element }: { element: TextElement }): JSX.Element {
               font: { ...element.font, lineHeight },
             } as Partial<Element>)
           }
+          trailing={pointIcon('line height')}
         />
         <NumberField
           label="letter spacing"
@@ -96,11 +120,13 @@ function TextSections({ element }: { element: TextElement }): JSX.Element {
               font: { ...element.font, letterSpacing },
             } as Partial<Element>)
           }
+          trailing={pointIcon('letter spacing')}
         />
         <ColorField
           label="color"
           value={element.color}
           onCommit={(color) => designerStore.updateElement(id, { color } as Partial<Element>)}
+          trailing={pointIcon('color')}
         />
         <ColorField
           label="background"
@@ -108,12 +134,14 @@ function TextSections({ element }: { element: TextElement }): JSX.Element {
           onCommit={(backgroundColor) =>
             designerStore.updateElement(id, { backgroundColor } as Partial<Element>)
           }
+          trailing={pointIcon('background')}
         />
         <SelectField
           label="align"
           value={element.align}
           options={['start', 'center', 'end', 'justify'] as const}
           onCommit={(align) => designerStore.updateElement(id, { align } as Partial<Element>)}
+          trailing={pointIcon('align')}
         />
         <SelectField
           label="direction"
@@ -122,6 +150,7 @@ function TextSections({ element }: { element: TextElement }): JSX.Element {
           onCommit={(direction) =>
             designerStore.updateElement(id, { direction } as Partial<Element>)
           }
+          trailing={pointIcon('direction')}
         />
       </CollapseSection>
 
@@ -184,6 +213,7 @@ function ShapeSections({ element }: { element: ShapeElement }): JSX.Element {
           onCommit={(shape) =>
             designerStore.updateElement(id, { shape } as unknown as Partial<Element>)
           }
+          trailing={pointIcon('shape')}
         />
         <ColorField
           label="fill"
@@ -193,6 +223,7 @@ function ShapeSections({ element }: { element: ShapeElement }): JSX.Element {
               fill: { kind: 'solid', color },
             } as Partial<Element>)
           }
+          trailing={pointIcon('fill')}
         />
         <ColorField
           label="stroke"
@@ -202,6 +233,7 @@ function ShapeSections({ element }: { element: ShapeElement }): JSX.Element {
               stroke: { ...(element.stroke ?? { width: 0 }), color },
             } as Partial<Element>)
           }
+          trailing={pointIcon('stroke')}
         />
         <NumberField
           label="stroke width"
@@ -213,6 +245,7 @@ function ShapeSections({ element }: { element: ShapeElement }): JSX.Element {
               stroke: { ...(element.stroke ?? { color: strokeColor }), width },
             } as Partial<Element>)
           }
+          trailing={pointIcon('stroke width')}
         />
         <NumberField
           label="dash array"
@@ -227,6 +260,7 @@ function ShapeSections({ element }: { element: ShapeElement }): JSX.Element {
               },
             } as unknown as Partial<Element>)
           }
+          trailing={pointIcon('dash array')}
         />
       </CollapseSection>
 
@@ -272,6 +306,7 @@ function ImageSections({ element }: { element: ImageElement }): JSX.Element {
           value={element.fit}
           options={['contain', 'cover', 'fill', 'none'] as const}
           onCommit={(fit) => designerStore.updateElement(id, { fit } as Partial<Element>)}
+          trailing={pointIcon('fit')}
         />
       </CollapseSection>
       <FilterSection
@@ -305,12 +340,14 @@ function DropShadowSection({
         value={s.offsetX}
         step={1}
         onCommit={(offsetX) => onChange({ ...s, offsetX })}
+        trailing={pointIcon('offset X')}
       />
       <NumberField
         label="offset Y"
         value={s.offsetY}
         step={1}
         onCommit={(offsetY) => onChange({ ...s, offsetY })}
+        trailing={pointIcon('offset Y')}
       />
       <NumberField
         label="blur"
@@ -318,11 +355,13 @@ function DropShadowSection({
         step={1}
         min={0}
         onCommit={(blur) => onChange({ ...s, blur })}
+        trailing={pointIcon('blur')}
       />
       <ColorField
         label="color"
         value={s.color}
         onCommit={(color) => onChange({ ...s, color })}
+        trailing={pointIcon('shadow color')}
       />
     </CollapseSection>
   );
@@ -344,6 +383,7 @@ function TextPaddingSection({
         step={1}
         min={0}
         onCommit={(top) => onChange({ ...p, top })}
+        trailing={pointIcon('padding top')}
       />
       <NumberField
         label="right"
@@ -351,6 +391,7 @@ function TextPaddingSection({
         step={1}
         min={0}
         onCommit={(right) => onChange({ ...p, right })}
+        trailing={pointIcon('padding right')}
       />
       <NumberField
         label="bottom"
@@ -358,6 +399,7 @@ function TextPaddingSection({
         step={1}
         min={0}
         onCommit={(bottom) => onChange({ ...p, bottom })}
+        trailing={pointIcon('padding bottom')}
       />
       <NumberField
         label="left"
@@ -365,6 +407,7 @@ function TextPaddingSection({
         step={1}
         min={0}
         onCommit={(left) => onChange({ ...p, left })}
+        trailing={pointIcon('padding left')}
       />
     </CollapseSection>
   );
@@ -379,7 +422,14 @@ function BorderRadiusSection({
 }): JSX.Element {
   return (
     <CollapseSection title="Border radius">
-      <NumberField label="radius" value={radius} step={1} min={0} onCommit={onChange} />
+      <NumberField
+        label="radius"
+        value={radius}
+        step={1}
+        min={0}
+        onCommit={onChange}
+        trailing={pointIcon('radius')}
+      />
     </CollapseSection>
   );
 }
@@ -403,6 +453,7 @@ function FilterSection({
         step={0.5}
         min={0}
         onCommit={(v) => patch('blur', v)}
+        trailing={pointIcon('blur')}
       />
       <NumberField
         label="brightness %"
@@ -410,6 +461,7 @@ function FilterSection({
         step={1}
         min={0}
         onCommit={(v) => patch('brightness', v)}
+        trailing={pointIcon('brightness')}
       />
       <NumberField
         label="contrast %"
@@ -417,6 +469,7 @@ function FilterSection({
         step={1}
         min={0}
         onCommit={(v) => patch('contrast', v)}
+        trailing={pointIcon('contrast')}
       />
       <NumberField
         label="grayscale %"
@@ -425,12 +478,14 @@ function FilterSection({
         min={0}
         max={100}
         onCommit={(v) => patch('grayscale', v)}
+        trailing={pointIcon('grayscale')}
       />
       <NumberField
         label="hue rotate °"
         value={f.hueRotate ?? 0}
         step={1}
         onCommit={(v) => patch('hueRotate', v)}
+        trailing={pointIcon('hue rotate')}
       />
       <NumberField
         label="invert %"
@@ -439,6 +494,7 @@ function FilterSection({
         min={0}
         max={100}
         onCommit={(v) => patch('invert', v)}
+        trailing={pointIcon('invert')}
       />
       <NumberField
         label="opacity %"
@@ -447,6 +503,7 @@ function FilterSection({
         min={0}
         max={100}
         onCommit={(v) => patch('opacity', v)}
+        trailing={pointIcon('filter opacity')}
       />
       <NumberField
         label="saturate %"
@@ -454,6 +511,7 @@ function FilterSection({
         step={1}
         min={0}
         onCommit={(v) => patch('saturate', v)}
+        trailing={pointIcon('saturate')}
       />
       <NumberField
         label="sepia %"
@@ -462,6 +520,7 @@ function FilterSection({
         min={0}
         max={100}
         onCommit={(v) => patch('sepia', v)}
+        trailing={pointIcon('sepia')}
       />
     </CollapseSection>
   );
