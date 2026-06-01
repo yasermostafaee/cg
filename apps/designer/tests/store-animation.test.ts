@@ -290,23 +290,23 @@ describe('D-010 — timelineGroupsFor returns the right groups per element type'
   it('a shape returns Transform · Path style · Border radius · Drop Shadow · Filter', () => {
     const groups = timelineGroupsFor(selected());
     expect(groups.map((g) => g.title)).toEqual([
-      'TRANSFORM',
-      'PATH STYLE',
-      'BORDER RADIUS',
-      'DROP SHADOW',
-      'FILTER',
+      'Transform',
+      'Path Style',
+      'Border Radius',
+      'Drop Shadow',
+      'Filter',
     ]);
   });
 
   it('Filter group always has the 9 CSS-filter rows', () => {
     const groups = timelineGroupsFor(selected());
-    const filter = groups.find((g) => g.title === 'FILTER');
+    const filter = groups.find((g) => g.title === 'Filter');
     expect(filter?.rows).toHaveLength(9);
   });
 
   it('Path style rows for a shape read fill / stroke / stroke width / dasharray', () => {
     const groups = timelineGroupsFor(selected());
-    const path = groups.find((g) => g.title === 'PATH STYLE');
+    const path = groups.find((g) => g.title === 'Path Style');
     expect(path?.rows.map((r) => (r.kind === 'display' ? r.row.label : r.row.label))).toEqual([
       'Fill',
       'Stroke',

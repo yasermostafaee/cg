@@ -172,7 +172,7 @@ function ShapeSections({
   const strokeDashFirst = element.stroke?.dash?.[0] ?? 0;
   return (
     <>
-      <CollapseSection title="Path style" defaultExpanded>
+      <CollapseSection title="Path Style" defaultExpanded>
         <ColorField
           label="fill"
           value={fillColor}
@@ -400,7 +400,7 @@ function BorderRadiusSection({
           : 0
       : (element.cornerRadius ?? 0);
   return (
-    <CollapseSection title="Border radius">
+    <CollapseSection title="Border Radius">
       <NumberField
         label="radius"
         value={radius}

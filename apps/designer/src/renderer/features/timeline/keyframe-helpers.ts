@@ -70,7 +70,7 @@ export interface TimelineGroup {
 }
 
 const TRANSFORM_GROUP: TimelineGroup = {
-  title: 'TRANSFORM',
+  title: 'Transform',
   rows: TIMELINE_ROWS.map((row) => ({ kind: 'animatable', row })),
 };
 
@@ -95,12 +95,12 @@ const FILTER_ROWS: readonly TimelineRowEntry[] = [
   anim('Sepia', 'filter.sepia', (el) => el.filter?.sepia ?? 0),
 ];
 
-const FILTER_GROUP: TimelineGroup = { title: 'FILTER', rows: FILTER_ROWS };
+const FILTER_GROUP: TimelineGroup = { title: 'Filter', rows: FILTER_ROWS };
 
 /** Path-style group for shapes — width, dash and colours all animatable. */
 function pathStyleGroup(): TimelineGroup {
   return {
-    title: 'PATH STYLE',
+    title: 'Path Style',
     rows: [
       anim('Fill', 'fill.color', (el) =>
         el.type === 'shape' && el.fill?.kind === 'solid' ? el.fill.color : '#000000',
@@ -121,7 +121,7 @@ function pathStyleGroup(): TimelineGroup {
 /** Border-radius group — single Radius row, animatable. */
 function borderRadiusGroup(): TimelineGroup {
   return {
-    title: 'BORDER RADIUS',
+    title: 'Border Radius',
     rows: [
       anim('Radius', 'cornerRadius', (el) => {
         if (el.type === 'shape') {
@@ -148,7 +148,7 @@ function dropShadowGroup(): TimelineGroup {
     return undefined;
   }
   return {
-    title: 'DROP SHADOW',
+    title: 'Drop Shadow',
     rows: [
       anim('Offset X', 'shadow.offsetX', (el) => shadowOf(el)?.offsetX ?? 0),
       anim('Offset Y', 'shadow.offsetY', (el) => shadowOf(el)?.offsetY ?? 0),
@@ -162,7 +162,7 @@ function dropShadowGroup(): TimelineGroup {
  * spacing animatable; colours stay display-only. */
 function textGroup(): TimelineGroup {
   return {
-    title: 'TEXT',
+    title: 'Text',
     rows: [
       anim('Font size', 'font.size', (el) => (el.type === 'text' ? el.font.size : 0)),
       anim('Color', 'text.color', (el) => (el.type === 'text' ? el.color : '#000000')),
@@ -182,7 +182,7 @@ function textGroup(): TimelineGroup {
 /** Text-padding group (text element only) — all 4 sides animatable. */
 function textPaddingGroup(): TimelineGroup {
   return {
-    title: 'TEXT PADDING',
+    title: 'Text Padding',
     rows: [
       anim('Padding top', 'padding.top', (el) => (el.type === 'text' ? el.padding?.top ?? 0 : 0)),
       anim('Padding right', 'padding.right', (el) =>
