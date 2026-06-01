@@ -12,7 +12,7 @@ const styles = {
   outer: {
     position: 'relative' as const,
     height: 26,
-    background: colors.panelMuted,
+    background: '#1c1f2d',
     borderBottom: `1px solid ${colors.border}`,
     userSelect: 'none' as const,
     cursor: 'col-resize',

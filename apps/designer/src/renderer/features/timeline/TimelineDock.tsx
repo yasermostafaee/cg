@@ -15,9 +15,11 @@ interface Props {
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }
 
+const TIMELINE_BG = '#1c1f2d';
+
 const styles = {
   dock: {
-    background: colors.panel,
+    background: TIMELINE_BG,
     borderTop: `1px solid ${colors.border}`,
     display: 'flex',
     flexDirection: 'column' as const,
@@ -41,10 +43,10 @@ const styles = {
     flexDirection: 'column' as const,
     overflow: 'hidden' as const,
     borderRight: `1px solid ${colors.border}`,
-    background: colors.panel,
+    background: TIMELINE_BG,
   },
   leftHeader: {
-    background: colors.panel,
+    background: TIMELINE_BG,
     borderBottom: `1px solid ${colors.border}`,
     color: colors.textMuted,
     fontSize: '0.6rem',
@@ -72,7 +74,7 @@ const styles = {
     overflowY: 'hidden' as const,
     height: 22,
     borderBottom: `1px solid ${colors.border}`,
-    background: colors.panel,
+    background: TIMELINE_BG,
   },
   rightBody: {
     flex: 1,
@@ -110,7 +112,7 @@ const styles = {
     marginRight: '0.4rem',
   },
   button: {
-    background: colors.panelMuted,
+    background: TIMELINE_BG,
     color: colors.text,
     border: `1px solid ${colors.border}`,
     borderRadius: '0.18rem',
@@ -146,7 +148,7 @@ const styles = {
     fontWeight: 700,
     letterSpacing: '0.06em',
     padding: '0 0.4rem 0 1.7rem',
-    background: colors.panel,
+    background: TIMELINE_BG,
     borderRight: `1px solid ${colors.border}`,
     borderBottom: `1px solid ${colors.border}`,
     height: 18,
@@ -156,7 +158,7 @@ const styles = {
     boxSizing: 'border-box' as const,
   },
   groupHeaderLane: {
-    background: colors.panelMuted,
+    background: TIMELINE_BG,
     borderBottom: `1px solid ${colors.border}`,
     height: 18,
     boxSizing: 'border-box' as const,
