@@ -50,7 +50,6 @@ const styles = {
   laneCell: {
     position: 'relative' as const,
     borderBottom: `1px solid ${colors.border}`,
-    background: '#1c1f2d',
     height: ROW_HEIGHT,
     boxSizing: 'border-box' as const,
   },

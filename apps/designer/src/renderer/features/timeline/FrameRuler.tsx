@@ -12,7 +12,7 @@ const styles = {
   outer: {
     position: 'relative' as const,
     height: 26,
-    background: '#1c1f2d',
+    backgroundColor: '#1c1f2d',
     borderBottom: `1px solid ${colors.border}`,
     userSelect: 'none' as const,
     cursor: 'col-resize',
@@ -84,7 +84,10 @@ export function FrameRuler({ frameIn, frameOut, currentFrame, onScrub }: Props):
   return (
     <div
       ref={ref}
-      style={styles.outer}
+      style={{
+        ...styles.outer,
+        backgroundImage: `repeating-linear-gradient(to right, #262a3e 0, #262a3e 1px, transparent 1px, transparent calc(100% / ${String(span)}))`,
+      }}
       role="slider"
       aria-label="Frame ruler"
       aria-valuemin={frameIn}

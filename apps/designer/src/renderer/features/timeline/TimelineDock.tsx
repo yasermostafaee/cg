@@ -158,7 +158,6 @@ const styles = {
     boxSizing: 'border-box' as const,
   },
   groupHeaderLane: {
-    background: TIMELINE_BG,
     borderBottom: `1px solid ${colors.border}`,
     height: 18,
     boxSizing: 'border-box' as const,
@@ -457,7 +456,14 @@ export function TimelineDock({
           </div>
           <div style={styles.rightBody} ref={rightBodyRef} onScroll={syncScroll}>
             <div
-              style={{ ...styles.rightBodyInner, width: `${String(timelineZoom * 100)}%` }}
+              style={{
+                ...styles.rightBodyInner,
+                width: `${String(timelineZoom * 100)}%`,
+                backgroundColor: TIMELINE_BG,
+                // One vertical line per frame, at the same period as the
+                // ruler ticks.
+                backgroundImage: `repeating-linear-gradient(to right, #262a3e 0, #262a3e 1px, transparent 1px, transparent calc(100% / ${String(Math.max(1, frameOut - frameIn))}))`,
+              }}
             >
               <div
                 style={{
