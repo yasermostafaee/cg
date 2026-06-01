@@ -72,14 +72,14 @@ export function KeyframeIndicator({
 function variantStyle(variant: KeyframeIndicatorVariant): React.CSSProperties {
   switch (variant) {
     case 'empty':
-      return { background: 'transparent', border: `1px solid ${colors.border}` };
+      return { background: 'transparent', border: `1px solid ${colors.keyframeBorder}` };
     case 'has-track':
       return {
         background: 'transparent',
-        border: `1.5px solid ${colors.accentMuted}`,
+        border: `1.5px solid ${colors.keyframeBorder}`,
       };
     case 'at-frame':
-      return { background: colors.accent, border: `1px solid ${colors.accentMuted}` };
+      return { background: colors.accent, border: `1px solid ${colors.keyframeBorder}` };
     case 'selected':
       return {
         background: '#FDE047',

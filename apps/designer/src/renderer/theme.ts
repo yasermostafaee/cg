@@ -23,4 +23,6 @@ export const colors = {
   textMuted: _sharedFallback.textMuted,
   accent: '#38BDF8',
   accentMuted: '#0EA5E9',
+  /** Border colour used for unselected keyframe diamonds (D-009). */
+  keyframeBorder: '#676f8f',
 } as const;

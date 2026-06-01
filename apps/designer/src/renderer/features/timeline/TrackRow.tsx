@@ -77,7 +77,7 @@ const styles = {
     height: 9,
     transform: 'translate(-50%, -50%) rotate(45deg)',
     background: colors.accent,
-    border: `1px solid ${colors.accentMuted}`,
+    border: `1px solid ${colors.keyframeBorder}`,
     cursor: 'grab',
   },
   keyDiamondSelected: {
