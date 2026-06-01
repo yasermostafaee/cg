@@ -76,11 +76,16 @@ const styles = {
     height: 22,
     borderBottom: `1px solid ${colors.border}`,
     background: TIMELINE_BG,
+    // Reserve the same gutter as the body so the ruler's inner width
+    // matches the lane body's inner width — keeps per-frame grid lines
+    // aligned across the two regions.
+    scrollbarGutter: 'stable' as const,
   },
   rightBody: {
     flex: 1,
     minHeight: 0,
     overflow: 'auto' as const,
+    scrollbarGutter: 'stable' as const,
   },
   zoomInner: {
     minWidth: '100%',
