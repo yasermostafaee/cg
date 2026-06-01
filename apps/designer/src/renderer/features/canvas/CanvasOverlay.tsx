@@ -171,9 +171,9 @@ export function CanvasOverlay({
         : tool === 'hand'
           ? 'grab'
           : 'crosshair';
-  const hintText =
-    bindModeFieldId !== null ? `BIND → ${bindModeFieldId} (Esc to cancel)` : tool.toUpperCase();
-
+  // Bind-mode shows an actionable hint ("BIND → fieldId, Esc to cancel"),
+  // but the always-on tool name was redundant with the toolbar's
+  // pressed state and clutters the canvas — removed.
   return (
     <div
       ref={layerRef}
@@ -191,7 +191,9 @@ export function CanvasOverlay({
           onCommit={() => designerStore.setEditingText(null)}
         />
       )}
-      <div style={styles.toolHint}>{hintText}</div>
+      {bindModeFieldId !== null && (
+        <div style={styles.toolHint}>BIND → {bindModeFieldId} (Esc to cancel)</div>
+      )}
     </div>
   );
 }
