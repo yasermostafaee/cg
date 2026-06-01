@@ -71,7 +71,7 @@ export function CollapseSection({
         aria-label={`Toggle ${title}`}
       >
         <span style={styles.chevron}>{open ? '▾' : '▸'}</span>
-        <span>{title.toUpperCase()}</span>
+        <span>{title}</span>
         {trailing !== undefined && <span style={styles.trailing}>{trailing}</span>}
       </button>
       {open && <div style={styles.body}>{children}</div>}
