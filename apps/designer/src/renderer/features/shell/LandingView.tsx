@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { StarterEntry } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
-import { designerStore } from '../../state/store.js';
+import { designerStore, useDesignerStore } from '../../state/store.js';
 import { NewProjectModal } from './NewProjectModal.js';
+import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
 
 const styles = {
   page: {
@@ -46,6 +47,33 @@ const styles = {
     fontSize: '0.85rem',
     cursor: 'pointer',
     alignSelf: 'flex-start' as const,
+  },
+  resumeBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '0.8rem',
+    padding: '0.55rem 0.9rem',
+    background: colors.panel,
+    border: `1px solid ${colors.accentMuted}`,
+    borderRadius: '0.3rem',
+    fontSize: '0.82rem',
+    color: colors.text,
+  },
+  resumeMeta: {
+    color: colors.textMuted,
+    fontSize: '0.74rem',
+    marginLeft: '0.4rem',
+  },
+  resumeButton: {
+    background: colors.accent,
+    color: '#000',
+    border: 'none',
+    padding: '0.32rem 0.8rem',
+    borderRadius: '0.25rem',
+    fontWeight: 700,
+    fontSize: '0.78rem',
+    cursor: 'pointer',
   },
   sectionTitle: {
     fontSize: '0.7rem',
@@ -117,16 +145,36 @@ const styles = {
  *   └──────────────────────────────────────────────────────────┘
  */
 export function LandingView(): JSX.Element {
+  const { scene, projectPath } = useDesignerStore();
   const [recent, setRecent] = useState<
     { path: string; name: string; templateType: string; lastOpenedAt: string }[]
   >([]);
   const [starters, setStarters] = useState<readonly StarterEntry[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
+  // When a project is already loaded and the operator picks a
+  // different one, hold the would-be switch in `pendingSwitch` until
+  // the save-or-discard modal resolves.
+  const [pendingSwitch, setPendingSwitch] = useState<{
+    label: string;
+    action: () => Promise<void>;
+  } | null>(null);
 
   useEffect(() => {
     void window.cg.projects.recent().then(setRecent);
     void window.cg.projects.starters().then(setStarters);
   }, []);
+
+  /**
+   * Guarded action — runs `action` immediately if no project is open,
+   * otherwise queues it behind the save-before-switch modal.
+   */
+  function guardedSwitch(label: string, action: () => Promise<void>): void {
+    if (scene === null) {
+      void action();
+      return;
+    }
+    setPendingSwitch({ label, action });
+  }
 
   async function loadStarter(starterId: string): Promise<void> {
     const result = await window.cg.projects.starter({ starterId });
@@ -144,12 +192,32 @@ export function LandingView(): JSX.Element {
         <div style={styles.brand}>
           <h1 style={styles.brandTitle}>cg Designer</h1>
         </div>
-        <p style={styles.brandSub}>Broadcast template builder — pick a demo, open a recent project, or start fresh.</p>
+        <p style={styles.brandSub}>
+          Broadcast template builder — pick a demo, open a recent project, or start fresh.
+        </p>
       </div>
+
+      {scene !== null && (
+        <div style={styles.resumeBanner} aria-label="Resume current project">
+          <span>
+            Currently editing <strong>{scene.name}</strong>
+            <span style={styles.resumeMeta}>· {projectPath ?? '(unsaved)'}</span>
+          </span>
+          <button
+            type="button"
+            style={styles.resumeButton}
+            onClick={() => designerStore.setView('studio')}
+            aria-label={`Resume editing ${scene.name}`}
+          >
+            Resume →
+          </button>
+        </div>
+      )}
+
       <button
         type="button"
         style={styles.newButton}
-        onClick={() => setModalOpen(true)}
+        onClick={() => guardedSwitch('a new project', () => Promise.resolve(setModalOpen(true)))}
         aria-label="New project"
       >
         + New project
@@ -165,7 +233,7 @@ export function LandingView(): JSX.Element {
               key={s.id}
               type="button"
               style={styles.card}
-              onClick={() => void loadStarter(s.id)}
+              onClick={() => guardedSwitch(s.label, () => loadStarter(s.id))}
               title={s.description}
             >
               <span style={styles.cardLabel}>{s.label}</span>
@@ -185,7 +253,7 @@ export function LandingView(): JSX.Element {
               key={r.path}
               type="button"
               style={styles.recentRow}
-              onClick={() => void openRecent(r.path)}
+              onClick={() => guardedSwitch(r.name, () => openRecent(r.path))}
             >
               <span>
                 <strong>{r.name}</strong>{' '}
@@ -198,6 +266,18 @@ export function LandingView(): JSX.Element {
       )}
 
       {modalOpen && <NewProjectModal onClose={() => setModalOpen(false)} />}
+      {pendingSwitch !== null && scene !== null && (
+        <SaveBeforeSwitchModal
+          scene={scene}
+          projectPath={projectPath}
+          onCancel={() => setPendingSwitch(null)}
+          onProceed={async () => {
+            const action = pendingSwitch.action;
+            setPendingSwitch(null);
+            await action();
+          }}
+        />
+      )}
     </div>
   );
 }

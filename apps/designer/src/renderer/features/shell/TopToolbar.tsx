@@ -8,7 +8,11 @@ interface MenuEntry {
 }
 
 const MENU: readonly MenuEntry[] = [
-  { id: 'home', label: 'Home', onClick: () => designerStore.setScene(null, null) },
+  // Home flips back to the landing view but KEEPS the active scene in
+  // memory — the landing screen offers a "Resume" affordance so the
+  // operator can return to it. Opening another project from landing
+  // is gated by SaveBeforeSwitchModal.
+  { id: 'home', label: 'Home', onClick: () => designerStore.setView('landing') },
   { id: 'file', label: 'File' },
   { id: 'edit', label: 'Edit' },
   { id: 'view', label: 'View' },
