@@ -164,6 +164,16 @@ export const designerStore = {
     set({ view });
   },
 
+  /**
+   * Merge a shallow patch onto the active scene (background, name,
+   * frameRange, etc.). The scene reference is replaced so React /
+   * preview subscribers re-render through the existing pipeline.
+   */
+  updateScene(patch: Partial<Scene>): void {
+    if (current.scene === null) return;
+    set({ scene: { ...current.scene, ...patch } });
+  },
+
   setTool(tool: DesignerTool): void {
     set({ tool });
   },

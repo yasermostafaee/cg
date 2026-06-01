@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
+import { BackgroundControl } from './BackgroundControl.js';
 import { CanvasOverlay } from './CanvasOverlay.js';
 import { type DesignerTool } from '../../state/store.js';
 
@@ -293,6 +294,7 @@ export function CanvasArea({
         >
           ⛶
         </button>
+        <BackgroundControl background={scene.background} variant="compact" />
         <span style={styles.spacer} />
         <span title="Hold Ctrl + wheel to zoom · wheel to scroll · use hand tool to pan">
           tip: Ctrl+wheel zooms

@@ -1,6 +1,7 @@
 import type { AnimatableProperty, Element, FieldBinding, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore, useDesignerStore } from '../../state/store.js';
+import { BackgroundControl } from '../canvas/BackgroundControl.js';
 import { describeBinding } from '../fields/bind-resolver.js';
 import { FieldsPanel } from '../fields/FieldsPanel.js';
 import { CollapseSection } from './CollapseSection.js';
@@ -181,6 +182,7 @@ function SceneInspector({
       <Row label="frame rate" value={String(scene.frameRate)} />
       <Row label="layers" value={String(scene.layers.length)} />
       <Row label="path" value={projectPath ?? '(unsaved)'} />
+      <BackgroundControl background={scene.background} variant="full" />
       <h3 style={styles.heading}>FIELDS</h3>
       <FieldsPanel scene={scene} bindModeFieldId={bindModeFieldId} />
     </aside>
