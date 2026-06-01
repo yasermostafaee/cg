@@ -36,7 +36,7 @@ export function defaultText(id: string, x: number, y: number): TextElement {
       lineHeight: 1.15,
       letterSpacing: 0,
     },
-    color: '#FFFFFF',
+    color: '#000000',
     align: 'start',
     direction: 'auto',
     fitMode: 'fixed',
@@ -55,7 +55,7 @@ export function defaultShape(id: string, x: number, y: number): ShapeElement {
     zIndex: 0,
     transform: baseTransform(x, y, 320, 120),
     shape: 'rect',
-    fill: { kind: 'solid', color: '#E11D48' },
+    fill: { kind: 'solid', color: '#BEBEBE' },
   };
 }
 
@@ -76,7 +76,7 @@ export function defaultEllipse(id: string, x: number, y: number): ShapeElement {
     zIndex: 0,
     transform: baseTransform(x, y, 200, 200),
     shape: 'ellipse',
-    fill: { kind: 'solid', color: '#38BDF8' },
+    fill: { kind: 'solid', color: '#BEBEBE' },
   };
 }
 
