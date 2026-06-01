@@ -462,7 +462,7 @@ function ValueCell({
     <RealtimeNumberInput
       value={value}
       onCommit={onCommit}
-      step={0.1}
+      step={1}
       style={styles.valueNumberInput}
       ariaLabel={ariaLabel}
     />
