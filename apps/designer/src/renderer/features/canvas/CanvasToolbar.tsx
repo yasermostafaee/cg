@@ -14,9 +14,15 @@ interface ToolEntry {
 // Order per the D-008 reference pic: cursor, hand, text, rectangle,
 // ellipse, image. (The pic also includes a thin diagonal "line" tool;
 // the underlying schema has no line element yet, so it stays out.)
+// The hand uses U+270B (RAISED HAND) followed by U+FE0E (VARIATION
+// SELECTOR-15). VS15 asks the renderer for the text presentation, so
+// the glyph is monochrome and follows the CSS `color` rule instead of
+// the OS's colour-emoji font — matches the rest of the tool icons.
+const HAND_ICON = '✋︎';
+
 const TOOLS: readonly ToolEntry[] = [
   { id: 'cursor', label: 'Select', icon: '↖' },
-  { id: 'hand', label: 'Hand (pan)', icon: '✋' },
+  { id: 'hand', label: 'Hand (pan)', icon: HAND_ICON },
   { id: 'text', label: 'Text', icon: 'T' },
   { id: 'shape', label: 'Rectangle', icon: '▭' },
   { id: 'ellipse', label: 'Ellipse', icon: '○' },
