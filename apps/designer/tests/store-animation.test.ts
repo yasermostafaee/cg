@@ -4,7 +4,10 @@ import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore } from '../src/renderer/state/store.js';
 import { defaultShape } from '../src/renderer/state/element-defaults.js';
-import { effectiveTransformAt } from '../src/renderer/features/timeline/keyframe-helpers.js';
+import {
+  effectiveTransformAt,
+  keyframeVariantFor,
+} from '../src/renderer/features/timeline/keyframe-helpers.js';
 
 function freshSceneWithShape(): ShapeElement {
   const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
@@ -279,6 +282,32 @@ describe('B-002 — every keyframe on a track keeps its own distinct value', () 
       [25, 999],
       [50, 50],
     ]);
+  });
+});
+
+describe('B-003 — keyframeVariantFor collapses to empty / at-frame', () => {
+  it('returns empty when the property has no track', () => {
+    expect(keyframeVariantFor(selected(), 'position.x', 10, null)).toBe('empty');
+  });
+
+  it('returns empty when the track exists but no keyframe at the current frame', () => {
+    designerStore.upsertKeyframe('el-1', 'position.x', 10, 100);
+    expect(keyframeVariantFor(selected(), 'position.x', 0, null)).toBe('empty');
+  });
+
+  it('returns at-frame when there IS a keyframe at the current frame', () => {
+    designerStore.upsertKeyframe('el-1', 'position.x', 10, 100);
+    expect(keyframeVariantFor(selected(), 'position.x', 10, null)).toBe('at-frame');
+  });
+
+  it('ignores selectedKeyframe — selection state never affects the indicator', () => {
+    designerStore.upsertKeyframe('el-1', 'position.x', 10, 100);
+    const sel = { elementId: 'el-1', property: 'position.x' as const, frame: 10 };
+    // Selected keyframe at the current frame is still just 'at-frame'
+    // (the lane diamond, not the indicator, reflects selection).
+    expect(keyframeVariantFor(selected(), 'position.x', 10, sel)).toBe('at-frame');
+    // Selected keyframe at a different frame leaves the indicator 'empty'.
+    expect(keyframeVariantFor(selected(), 'position.x', 5, sel)).toBe('empty');
   });
 });
 

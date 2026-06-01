@@ -1,6 +1,14 @@
 import { colors } from '../../theme.js';
 
-export type KeyframeIndicatorVariant = 'empty' | 'has-track' | 'at-frame' | 'selected';
+/**
+ * Two states per B-003:
+ *   `empty`    — no keyframe at the current frame on this property
+ *   `at-frame` — there IS a keyframe at the current frame
+ *
+ * Selection state is shown on the lane diamond itself, not on the
+ * property-row / label indicator.
+ */
+export type KeyframeIndicatorVariant = 'empty' | 'at-frame';
 
 interface Props {
   variant: KeyframeIndicatorVariant;
@@ -34,19 +42,12 @@ const diamondBase = {
 } as const;
 
 /**
- * Small diamond glyph reused in two places (a) the right Inspector,
+ * Small diamond glyph reused in two places: (a) the right Inspector,
  * next to each animatable property value and (b) the timeline's left
  * label column, next to each track row's name.
  *
- *   empty       □  outlined gray  →  no track yet
- *   has-track   ◆  dim accent      →  track exists, no keyframe here
- *   at-frame    ◆  bright accent  →  keyframe at the current frame
- *   selected    ◆  bright YELLOW   →  the selected keyframe lives here
- *
- * Both the Inspector indicator and the matching TrackRow indicator for
- * the selected point are rendered in `selected` style at the same time,
- * which is what makes "click a point in the timeline" light the row
- * label AND the right panel together.
+ *   empty     ◇ outlined  → no keyframe at the current frame
+ *   at-frame  ◆ yellow    → keyframe at the current frame
  */
 export function KeyframeIndicator({
   variant,
@@ -73,18 +74,7 @@ function variantStyle(variant: KeyframeIndicatorVariant): React.CSSProperties {
   switch (variant) {
     case 'empty':
       return { background: 'transparent', border: `1px solid ${colors.keyframeBorder}` };
-    case 'has-track':
-      return {
-        background: 'transparent',
-        border: `1.5px solid ${colors.keyframeBorder}`,
-      };
     case 'at-frame':
-      return { background: colors.accent, border: `1px solid ${colors.keyframeBorder}` };
-    case 'selected':
-      return {
-        background: '#FDE047',
-        border: '1px solid #CA8A04',
-        boxShadow: '0 0 0 1px #CA8A04',
-      };
+      return { background: '#FDE047', border: `1px solid ${colors.keyframeBorder}` };
   }
 }

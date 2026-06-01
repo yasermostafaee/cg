@@ -144,34 +144,32 @@ import type { KeyframeIndicatorVariant } from './KeyframeIndicator.js';
 
 /**
  * Compute the diamond indicator's visual state for a single track on a
- * specific element at the current frame, given the currently-selected
- * keyframe. Same rule across the Inspector and the timeline label
- * column, so a single click in the timeline lights both indicators.
+ * specific element at the current frame.
+ *
+ * B-003 simplified the rule to two states only:
+ *   - `empty`    — no keyframe at `currentFrame` on this property
+ *                  (whether or not a track exists elsewhere on the row)
+ *   - `at-frame` — yes, there's a keyframe at `currentFrame` for this
+ *                  property (drawn as a filled yellow diamond)
+ *
+ * Selection state intentionally does NOT change the indicator — it's
+ * reflected on the lane diamond itself, not on the property row.
+ * `selectedKeyframe` is accepted as a parameter for backwards-compat
+ * but ignored.
  */
 export function keyframeVariantFor(
   element: Element,
   property: AnimatableProperty,
   currentFrame: number,
-  selectedKeyframe: {
+  _selectedKeyframe: {
     elementId: string;
     property: AnimatableProperty;
     frame: number;
   } | null,
 ): KeyframeIndicatorVariant {
-  const isThisRowSelected =
-    selectedKeyframe !== null &&
-    selectedKeyframe.elementId === element.id &&
-    selectedKeyframe.property === property;
-  if (isThisRowSelected && selectedKeyframe.frame === currentFrame) return 'selected';
+  void _selectedKeyframe;
   const track = trackOf(element, property);
   if (track === undefined) return 'empty';
-  if (isThisRowSelected) {
-    // The selected keyframe is on this property but the playhead is on a
-    // different frame. Keep the selected-row indicator yellow so the
-    // operator can still see which row holds the selection — this matches
-    // the Loopic reference (yellow lit row indicator).
-    return 'selected';
-  }
   if (track.keyframes.some((k) => k.frame === currentFrame)) return 'at-frame';
-  return 'has-track';
+  return 'empty';
 }

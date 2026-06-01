@@ -70,24 +70,26 @@ const styles = {
     borderTop: `1px dashed ${colors.border}`,
     pointerEvents: 'none' as const,
   },
+  // B-003: lane diamonds are always yellow. When a diamond is
+  // selected, its border turns blue (and the interpolation line that
+  // follows it is rendered in blue too — see interpLineSelected).
   keyDiamond: {
     position: 'absolute' as const,
     top: '50%',
     width: 9,
     height: 9,
     transform: 'translate(-50%, -50%) rotate(45deg)',
-    background: colors.accent,
+    background: '#FDE047',
     border: `1px solid ${colors.keyframeBorder}`,
     cursor: 'grab',
   },
   keyDiamondSelected: {
-    background: '#FDE047',
-    border: '1px solid #CA8A04',
-    boxShadow: '0 0 0 1px #CA8A04',
+    border: `1.5px solid ${colors.accent}`,
+    boxShadow: `0 0 0 1px ${colors.accent}`,
   },
-  // D-009 — line drawn between two adjacent keyframes on the same
-  // track, showing the interpolation span. The slash glyph in the
-  // middle is a stand-in for the (currently linear) easing curve.
+  // D-009 / B-003 — line drawn between two adjacent keyframes on the
+  // same track. Default colour is muted; if the *earlier* keyframe of
+  // the pair is selected, the line is highlighted in accent blue.
   interpLine: {
     position: 'absolute' as const,
     top: '50%',
@@ -97,16 +99,22 @@ const styles = {
     transform: 'translateY(-0.5px)',
     pointerEvents: 'none' as const,
   },
-  interpGlyph: {
+  interpLineSelected: {
+    background: colors.accent,
+    opacity: 1,
+    height: 1.5,
+  },
+  // B-003: replace the "ƒ" letter with a small SVG curve.
+  interpGlyphWrap: {
     position: 'absolute' as const,
     top: '50%',
     transform: 'translate(-50%, -50%)',
-    fontSize: '0.66rem',
-    color: colors.textMuted,
+    width: 14,
+    height: 8,
     background: colors.panelMuted,
-    padding: '0 2px',
-    lineHeight: 1,
-    fontStyle: 'italic' as const,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     pointerEvents: 'none' as const,
   },
   menu: {
@@ -231,7 +239,9 @@ export function TrackRow(props: Props): JSX.Element {
         onContextMenu={(e) => e.preventDefault()}
       >
         <div style={styles.laneLine} />
-        {/* Interpolation lines between adjacent keyframes. */}
+        {/* Interpolation lines between adjacent keyframes. The line is
+            drawn in accent blue when the keyframe on its LEFT (the
+            outgoing side) is the selected one — see B-003. */}
         {keyframes.slice(0, -1).map((k, i) => {
           const next = keyframes[i + 1];
           if (next === undefined) return null;
@@ -240,21 +250,35 @@ export function TrackRow(props: Props): JSX.Element {
           const widthPct = rightPct - leftPct;
           if (widthPct <= 0) return null;
           const midPct = leftPct + widthPct / 2;
+          const isLeftSelected =
+            selectedKeyframe !== null &&
+            selectedKeyframe.elementId === element.id &&
+            selectedKeyframe.property === row.property &&
+            selectedKeyframe.frame === k.frame;
           return (
             <div key={`line-${String(k.frame)}-${String(next.frame)}`}>
               <div
                 style={{
                   ...styles.interpLine,
+                  ...(isLeftSelected ? styles.interpLineSelected : {}),
                   left: `${leftPct.toFixed(3)}%`,
                   width: `${widthPct.toFixed(3)}%`,
                 }}
               />
               {widthPct > 4 && (
                 <span
-                  style={{ ...styles.interpGlyph, left: `${midPct.toFixed(3)}%` }}
+                  style={{ ...styles.interpGlyphWrap, left: `${midPct.toFixed(3)}%` }}
                   aria-hidden
                 >
-                  ƒ
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none">
+                    <path
+                      d="M0 5 C 2.5 5, 2.5 1, 5 1 C 7.5 1, 7.5 5, 10 5"
+                      stroke={isLeftSelected ? colors.accent : colors.textMuted}
+                      strokeWidth="1"
+                      strokeLinecap="round"
+                      fill="none"
+                    />
+                  </svg>
                 </span>
               )}
             </div>

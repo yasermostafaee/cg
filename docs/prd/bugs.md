@@ -36,6 +36,27 @@ in the latest `main`.
 **Notes:** تصاویر مربوط به تسک D-006 رو با دقت بسیار بسیار بالا بررسی کن
 
 
+## [~] B-003 — point frames style   ⟨priority: high⟩ — focused fix
+**Repro:**
+1. framepoint color style is wrong
+
+**Expected:** 
+❯ 
+A- We have 2 states of a framepoint on properties area on right panel and on the left of the timeline area: 
+    1- Empty: if a point exist or not it just shows an empty point.
+    2- Index is exactly on the same frame with a point: point on properties areas must be yellow.
+
+B- We have 2 states of a framepoint on the timeline area:
+    1- all framepoints are yellow.
+    2- A point is selected: use a blue border around the selected point and also the line after that.
+
+just use a curve tiny line on the line between framepoints not a "f" letter.
+
+**Actual:** 
+**Env:**  
+**Notes:** see screenshots in: `docs/designer-guide/sample-assets/B-003-pic-*`
+
+
 ```
 
 Claude's loop for a bug (per `README.md` processing contract): reproduce →
