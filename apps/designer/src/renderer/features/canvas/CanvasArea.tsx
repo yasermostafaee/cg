@@ -300,7 +300,13 @@ export function CanvasArea({
                   // zero size).
                   border: '3px solid red',
                 }}
-                sandbox="allow-scripts allow-same-origin"
+                // sandbox intentionally omitted — the iframe is loaded
+                // from a same-origin blob: URL we just created in this
+                // window. Chrome blocks dynamic module imports from
+                // blob: URLs *inside* sandboxed iframes (even with
+                // allow-scripts + allow-same-origin), which silently
+                // prevented the runtime from ever loading and was the
+                // cause of "shapes / colours don't render".
                 onLoad={() => {
                   // eslint-disable-next-line no-console
                   console.log('[cg-canvas] iframe.onLoad fired (src=', src, ')');

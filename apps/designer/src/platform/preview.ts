@@ -79,16 +79,36 @@ export class Preview {
     </style>
   </head>
   <body>
+    <script>
+      // Surface any error (including ES module import failure on the
+      // module script below) up to the parent so we can see it in
+      // DevTools even if the iframe console is hidden.
+      function _cgReport(label, payload) {
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage(
+              { kind: 'cg-preview-log', args: [label, String(payload)] },
+              '*',
+            );
+          }
+        } catch (e) {}
+        console.log('[cg-preview]', label, payload);
+      }
+      window.addEventListener('error', function (e) {
+        _cgReport('window.error', (e && e.message) + ' @ ' + (e && e.filename) + ':' + (e && e.lineno));
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        _cgReport('unhandledrejection', (e && (e.reason && (e.reason.message || e.reason))) || '?');
+      });
+      _cgReport('html-shell loaded', 'cgJsUrl=${cgJsUrl}');
+    </script>
     <script type="module">
+      _cgReport('module-script: entered (before import)', '');
       import { createRuntime, installCasparGlobals } from '${cgJsUrl}';
+      _cgReport('module-script: import succeeded', '');
       (async () => {
         function report(...args) {
-          try {
-            if (window.parent && window.parent !== window) {
-              window.parent.postMessage({ kind: 'cg-preview-log', args: args.map(String) }, '*');
-            }
-          } catch (e) {}
-          console.log('[cg-preview]', ...args);
+          _cgReport(args.join(' '), '');
         }
         report('boot: script started');
         const scene = ${sceneJson};
