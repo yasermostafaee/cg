@@ -108,8 +108,8 @@ const styles = {
       'linear-gradient(-45deg, #5b6075 25%, transparent 25%),' +
       'linear-gradient(45deg, transparent 75%, #5b6075 75%),' +
       'linear-gradient(-45deg, transparent 75%, #5b6075 75%)',
-    backgroundSize: '20px 20px',
-    backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0',
+    backgroundSize: '32px 32px',
+    backgroundPosition: '0 0, 0 16px, 16px -16px, -16px 0',
     boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
     overflow: 'hidden' as const,
   },
