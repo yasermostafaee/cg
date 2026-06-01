@@ -216,6 +216,34 @@ export const designerStore = {
     set({ scene: { ...current.scene, fields } });
   },
 
+  /**
+   * D-011 — idempotently add a scene-level font (e.g. when a font asset
+   * is imported). No-op if a font with the same `family` already exists
+   * so the panel can call this on every mount without duplicating.
+   */
+  addSceneFont(font: {
+    family: string;
+    displayName?: string;
+    assetId?: string;
+  }): void {
+    if (current.scene === null) return;
+    if (current.scene.fonts.some((f) => f.family === font.family)) return;
+    const next = [
+      ...current.scene.fonts,
+      {
+        family: font.family,
+        weights: [400],
+        styles: ['normal' as const],
+        source: 'bundled' as const,
+        // We reuse `bundledPath` to round-trip the original filename
+        // / display name so the inspector dropdown can show something
+        // friendlier than the family slug.
+        ...(font.displayName !== undefined ? { bundledPath: font.displayName } : {}),
+      },
+    ];
+    set({ scene: { ...current.scene, fonts: next } });
+  },
+
   /** Patch a field's editable properties (label/required/default/etc.). */
   updateField(fieldId: string, patch: Partial<DynamicField>): void {
     if (current.scene === null) return;
@@ -674,6 +702,71 @@ export const designerStore = {
     const nextLayers = [...current.scene.layers];
     nextLayers[layerIdx] = nextLayer;
     set({ scene: { ...current.scene, layers: nextLayers } });
+  },
+
+  /**
+   * Cascade-delete an asset's references from the scene. Used by the
+   * Project Assets right-click → Delete flow:
+   *
+   *   - Text elements whose `font.family === asset-${assetId}` revert to
+   *     the default family (`Inter`), so they keep rendering with a sane
+   *     fallback instead of an unresolved face.
+   *   - Image elements whose `assetId === assetId` are removed entirely
+   *     (selection + selected-keyframe are cleaned up alongside).
+   *   - The matching `FontReference` entry (family `asset-${assetId}`) is
+   *     dropped from `scene.fonts` so the Text inspector dropdown stops
+   *     listing the deleted face.
+   *
+   * Containers are recursed, so a nested image / nested text using the
+   * asset gets cleaned up too.
+   */
+  removeAssetFromScene(assetId: string): void {
+    if (current.scene === null) return;
+    const family = `asset-${assetId}`;
+
+    function visit(children: readonly Element[]): Element[] {
+      const out: Element[] = [];
+      for (const child of children) {
+        if (child.type === 'image' && child.assetId === assetId) continue;
+        if (child.type === 'text' && child.font.family === family) {
+          out.push({ ...child, font: { ...child.font, family: 'Inter' } });
+          continue;
+        }
+        if (child.type === 'container') {
+          out.push({ ...child, children: visit(child.children) });
+          continue;
+        }
+        out.push(child);
+      }
+      return out;
+    }
+
+    const removedImageIds = new Set<string>();
+    function collectRemoved(children: readonly Element[]): void {
+      for (const child of children) {
+        if (child.type === 'image' && child.assetId === assetId) {
+          removedImageIds.add(child.id);
+        } else if (child.type === 'container') {
+          collectRemoved(child.children);
+        }
+      }
+    }
+    for (const layer of current.scene.layers) collectRemoved(layer.children);
+
+    const nextLayers = current.scene.layers.map((l) => ({ ...l, children: visit(l.children) }));
+    const nextFonts = current.scene.fonts.filter((f) => f.family !== family);
+
+    const nextSelection = new Set(current.selection);
+    for (const id of removedImageIds) nextSelection.delete(id);
+    const sk = current.selectedKeyframe;
+    const keepKey = sk !== null && !removedImageIds.has(sk.elementId);
+
+    set({
+      scene: { ...current.scene, layers: nextLayers, fonts: nextFonts },
+      selection: nextSelection,
+      selectedKeyframe: keepKey ? sk : null,
+      keyframeInspectorOpen: keepKey ? current.keyframeInspectorOpen : false,
+    });
   },
 
   /** Remove an element by id. Cleans up the selection set if needed. */
