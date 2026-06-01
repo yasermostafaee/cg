@@ -71,7 +71,7 @@ const styles = {
   spacer: { flex: 1 },
   outer: {
     flex: 1,
-    background: colors.panelMuted,
+    background: '#161927',
     border: `1px solid ${colors.border}`,
     borderRadius: '0.25rem',
     minHeight: 0,
