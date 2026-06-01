@@ -141,7 +141,7 @@ export function TransformSection({ element, currentFrame, selectedKeyframe }: Pr
       <div style={styles.rowSingle}>
         <Cell
           icon="↻"
-          value={t.rotation}
+          value={Math.round(t.rotation * 100) / 100}
           suffix="°"
           step={1}
           onCommit={(v) => designerStore.commitAnimatable(id, 'rotation', v)}
