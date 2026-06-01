@@ -71,35 +71,36 @@ function disp(id: string, label: string, read: (el: Element) => string): Timelin
   return { kind: 'display', row: { id, label, read } };
 }
 
-function pct(v: number): string {
-  return `${String(Math.round(v))}%`;
-}
-
 function hex(s: string | undefined, fallback = '000000'): string {
   if (s === undefined) return fallback;
   return s.startsWith('#') ? s.slice(1).toUpperCase() : s.toUpperCase();
 }
 
-/**
- * Filter rows (shape + text + image). The display always shows the
- * value the runtime will apply — i.e. brightness/contrast/saturate
- * default to 100%, everything else to 0.
- */
+function anim(
+  label: string,
+  property: AnimatableProperty,
+  read: (el: Element) => number,
+): TimelineRowEntry {
+  return { kind: 'animatable', row: { label, property, read } };
+}
+
+/** Filter group — all 9 properties animatable as numbers (D-010). */
 const FILTER_ROWS: readonly TimelineRowEntry[] = [
-  disp('filter.blur', 'Blur', (el) => String(el.filter?.blur ?? 0)),
-  disp('filter.brightness', 'Brightness', (el) => pct(el.filter?.brightness ?? 100)),
-  disp('filter.contrast', 'Contrast', (el) => pct(el.filter?.contrast ?? 100)),
-  disp('filter.grayscale', 'Grayscale', (el) => pct(el.filter?.grayscale ?? 0)),
-  disp('filter.hueRotate', 'Hue rotate', (el) => String(el.filter?.hueRotate ?? 0)),
-  disp('filter.invert', 'Invert', (el) => pct(el.filter?.invert ?? 0)),
-  disp('filter.opacity', 'Opacity', (el) => pct(el.filter?.opacity ?? 100)),
-  disp('filter.saturate', 'Saturate', (el) => pct(el.filter?.saturate ?? 100)),
-  disp('filter.sepia', 'Sepia', (el) => pct(el.filter?.sepia ?? 0)),
+  anim('Blur', 'filter.blur', (el) => el.filter?.blur ?? 0),
+  anim('Brightness', 'filter.brightness', (el) => el.filter?.brightness ?? 100),
+  anim('Contrast', 'filter.contrast', (el) => el.filter?.contrast ?? 100),
+  anim('Grayscale', 'filter.grayscale', (el) => el.filter?.grayscale ?? 0),
+  anim('Hue rotate', 'filter.hueRotate', (el) => el.filter?.hueRotate ?? 0),
+  anim('Invert', 'filter.invert', (el) => el.filter?.invert ?? 0),
+  anim('Opacity', 'filter.opacity', (el) => el.filter?.opacity ?? 100),
+  anim('Saturate', 'filter.saturate', (el) => el.filter?.saturate ?? 100),
+  anim('Sepia', 'filter.sepia', (el) => el.filter?.sepia ?? 0),
 ];
 
 const FILTER_GROUP: TimelineGroup = { title: 'FILTER', rows: FILTER_ROWS };
 
-/** Path-style group for shapes (D-010-pic-0). */
+/** Path-style group for shapes — width & dasharray animatable; colours
+ * stay as display rows (no commitAnimatable for hex values yet). */
 function pathStyleGroup(): TimelineGroup {
   return {
     title: 'PATH STYLE',
@@ -107,44 +108,42 @@ function pathStyleGroup(): TimelineGroup {
       disp('fill', 'Fill', (el) =>
         el.type === 'shape' && el.fill?.kind === 'solid' ? hex(el.fill.color) : '—',
       ),
-      disp('stroke', 'Stroke', (el) =>
-        el.type === 'shape' ? hex(el.stroke?.color) : '—',
+      disp('stroke', 'Stroke', (el) => (el.type === 'shape' ? hex(el.stroke?.color) : '—')),
+      anim('Stroke width', 'stroke.width', (el) =>
+        el.type === 'shape' ? (el.stroke?.width ?? 0) : 0,
       ),
-      disp('stroke.width', 'Stroke width', (el) =>
-        el.type === 'shape' ? String(el.stroke?.width ?? 0) : '—',
-      ),
-      disp('stroke.dash', 'Stroke dasharray', (el) =>
-        el.type === 'shape' ? String(el.stroke?.dash?.[0] ?? 0) : '—',
+      anim('Stroke dasharray', 'stroke.dash', (el) =>
+        el.type === 'shape' ? (el.stroke?.dash?.[0] ?? 0) : 0,
       ),
     ],
   };
 }
 
-/** Border-radius group (single Radius row, both shape & text). */
+/** Border-radius group — single Radius row, animatable. */
 function borderRadiusGroup(): TimelineGroup {
   return {
     title: 'BORDER RADIUS',
     rows: [
-      disp('cornerRadius', 'Radius', (el) => {
-        const r =
-          el.type === 'shape'
-            ? typeof el.cornerRadius === 'number'
-              ? el.cornerRadius
-              : Array.isArray(el.cornerRadius)
-                ? el.cornerRadius[0]
-                : 0
-            : el.type === 'text'
-              ? (el.cornerRadius ?? 0)
+      anim('Radius', 'cornerRadius', (el) => {
+        if (el.type === 'shape') {
+          return typeof el.cornerRadius === 'number'
+            ? el.cornerRadius
+            : Array.isArray(el.cornerRadius)
+              ? el.cornerRadius[0]
               : 0;
-        return String(r);
+        }
+        if (el.type === 'text') return el.cornerRadius ?? 0;
+        return 0;
       }),
     ],
   };
 }
 
-/** Drop-shadow group — shape reads from .shadow, text reads from .textShadow. */
+/** Drop-shadow group — offsets + blur animatable; colour stays display-only. */
 function dropShadowGroup(): TimelineGroup {
-  function shadowOf(el: Element): { offsetX: number; offsetY: number; blur: number; color: string } | undefined {
+  function shadowOf(el: Element):
+    | { offsetX: number; offsetY: number; blur: number; color: string }
+    | undefined {
     if (el.type === 'shape') return el.shadow;
     if (el.type === 'text') return el.textShadow;
     return undefined;
@@ -152,51 +151,48 @@ function dropShadowGroup(): TimelineGroup {
   return {
     title: 'DROP SHADOW',
     rows: [
-      disp('shadow.offsetX', 'Offset X', (el) => String(shadowOf(el)?.offsetX ?? 0)),
-      disp('shadow.offsetY', 'Offset Y', (el) => String(shadowOf(el)?.offsetY ?? 0)),
-      disp('shadow.blur', 'Blur', (el) => String(shadowOf(el)?.blur ?? 0)),
+      anim('Offset X', 'shadow.offsetX', (el) => shadowOf(el)?.offsetX ?? 0),
+      anim('Offset Y', 'shadow.offsetY', (el) => shadowOf(el)?.offsetY ?? 0),
+      anim('Blur', 'shadow.blur', (el) => shadowOf(el)?.blur ?? 0),
       disp('shadow.color', 'Color', (el) => hex(shadowOf(el)?.color)),
     ],
   };
 }
 
-/** Text group (text element only). */
+/** Text group (text element only) — font size / line height / letter
+ * spacing animatable; colours stay display-only. */
 function textGroup(): TimelineGroup {
   return {
     title: 'TEXT',
     rows: [
-      disp('font.size', 'Font size', (el) => (el.type === 'text' ? String(el.font.size) : '—')),
+      anim('Font size', 'font.size', (el) => (el.type === 'text' ? el.font.size : 0)),
       disp('text.color', 'Color', (el) => (el.type === 'text' ? hex(el.color) : '—')),
       disp('text.bg', 'Background color', (el) =>
         el.type === 'text' ? hex(el.backgroundColor, 'FFFFFF') : '—',
       ),
-      disp('font.lineHeight', 'Line height', (el) =>
-        el.type === 'text' ? String(el.font.lineHeight) : '—',
+      anim('Line height', 'font.lineHeight', (el) =>
+        el.type === 'text' ? el.font.lineHeight : 0,
       ),
-      disp('font.letterSpacing', 'Letter spacing', (el) =>
-        el.type === 'text' ? String(el.font.letterSpacing) : '—',
+      anim('Letter spacing', 'font.letterSpacing', (el) =>
+        el.type === 'text' ? el.font.letterSpacing : 0,
       ),
     ],
   };
 }
 
-/** Text-padding group (text element only). */
+/** Text-padding group (text element only) — all 4 sides animatable. */
 function textPaddingGroup(): TimelineGroup {
   return {
     title: 'TEXT PADDING',
     rows: [
-      disp('padding.top', 'Padding top', (el) =>
-        el.type === 'text' ? String(el.padding?.top ?? 0) : '—',
+      anim('Padding top', 'padding.top', (el) => (el.type === 'text' ? el.padding?.top ?? 0 : 0)),
+      anim('Padding right', 'padding.right', (el) =>
+        el.type === 'text' ? el.padding?.right ?? 0 : 0,
       ),
-      disp('padding.right', 'Padding right', (el) =>
-        el.type === 'text' ? String(el.padding?.right ?? 0) : '—',
+      anim('Padding bottom', 'padding.bottom', (el) =>
+        el.type === 'text' ? el.padding?.bottom ?? 0 : 0,
       ),
-      disp('padding.bottom', 'Padding bottom', (el) =>
-        el.type === 'text' ? String(el.padding?.bottom ?? 0) : '—',
-      ),
-      disp('padding.left', 'Padding left', (el) =>
-        el.type === 'text' ? String(el.padding?.left ?? 0) : '—',
-      ),
+      anim('Padding left', 'padding.left', (el) => (el.type === 'text' ? el.padding?.left ?? 0 : 0)),
     ],
   };
 }

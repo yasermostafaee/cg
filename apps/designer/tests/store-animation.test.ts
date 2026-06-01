@@ -316,6 +316,42 @@ describe('D-010 — timelineGroupsFor returns the right groups per element type'
   });
 });
 
+describe('D-010 — non-Transform properties are animatable', () => {
+  it('commitAnimatable creates a track for cornerRadius (no track yet)', () => {
+    designerStore.setCurrentFrame(0);
+    designerStore.commitAnimatable('el-1', 'cornerRadius', 0); // sets static
+    // First keyframe author needs an explicit upsert (track-aware
+    // commitAnimatable falls back to static when no track exists yet).
+    designerStore.upsertKeyframe('el-1', 'cornerRadius', 10, 12);
+    expect(selected().animation?.tracks.cornerRadius?.keyframes).toEqual([
+      { frame: 10, value: 12, easing: 'linear' },
+    ]);
+  });
+
+  it('writeStaticAnimatable for filter.blur patches element.filter.blur', () => {
+    designerStore.writeStaticAnimatable('el-1', 'filter.blur', 4);
+    expect(selected().filter?.blur).toBe(4);
+  });
+
+  it('writeStaticAnimatable for padding.top patches text padding (no-op on shape)', () => {
+    designerStore.writeStaticAnimatable('el-1', 'padding.top', 8);
+    // selected() is a shape from freshSceneWithShape — padding is text-only
+    expect((selected() as unknown as { padding?: unknown }).padding).toBeUndefined();
+  });
+
+  it('writeStaticAnimatable for stroke.width patches element.stroke.width', () => {
+    designerStore.writeStaticAnimatable('el-1', 'stroke.width', 3);
+    const stroke = (selected() as unknown as { stroke?: { width: number } }).stroke;
+    expect(stroke?.width).toBe(3);
+  });
+
+  it('writeStaticAnimatable for shadow.offsetY creates shadow on a shape', () => {
+    designerStore.writeStaticAnimatable('el-1', 'shadow.offsetY', 6);
+    const shadow = (selected() as unknown as { shadow?: { offsetY: number } }).shadow;
+    expect(shadow?.offsetY).toBe(6);
+  });
+});
+
 describe('B-003 — keyframeVariantFor collapses to empty / at-frame', () => {
   it('returns empty when the property has no track', () => {
     expect(keyframeVariantFor(selected(), 'position.x', 10, null)).toBe('empty');

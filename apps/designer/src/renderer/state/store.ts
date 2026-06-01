@@ -494,6 +494,78 @@ export const designerStore = {
       case 'opacity':
         designerStore.updateElement(elementId, { opacity: value } as Partial<Element>);
         return;
+      // D-010 — numeric style properties.
+      case 'cornerRadius':
+        designerStore.updateElement(elementId, { cornerRadius: value } as unknown as Partial<Element>);
+        return;
+      case 'stroke.width': {
+        if (el.type !== 'shape') return;
+        const stroke = { ...(el.stroke ?? { color: '#000000', width: 0 }), width: value };
+        designerStore.updateElement(elementId, { stroke } as unknown as Partial<Element>);
+        return;
+      }
+      case 'stroke.dash': {
+        if (el.type !== 'shape') return;
+        const base = el.stroke ?? { color: '#000000', width: 0 };
+        const stroke = { ...base, dash: value > 0 ? [value] : [] };
+        designerStore.updateElement(elementId, { stroke } as unknown as Partial<Element>);
+        return;
+      }
+      case 'shadow.offsetX':
+      case 'shadow.offsetY':
+      case 'shadow.blur': {
+        const field =
+          property === 'shadow.offsetX'
+            ? 'offsetX'
+            : property === 'shadow.offsetY'
+              ? 'offsetY'
+              : 'blur';
+        if (el.type === 'shape') {
+          const base = el.shadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
+          const shadow = { ...base, [field]: value };
+          designerStore.updateElement(elementId, { shadow } as unknown as Partial<Element>);
+        } else if (el.type === 'text') {
+          const base = el.textShadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
+          const textShadow = { ...base, [field]: value };
+          designerStore.updateElement(elementId, { textShadow } as unknown as Partial<Element>);
+        }
+        return;
+      }
+      case 'filter.blur':
+      case 'filter.brightness':
+      case 'filter.contrast':
+      case 'filter.grayscale':
+      case 'filter.hueRotate':
+      case 'filter.invert':
+      case 'filter.opacity':
+      case 'filter.saturate':
+      case 'filter.sepia': {
+        const key = property.slice('filter.'.length);
+        const base = el.filter ?? {};
+        const filter = { ...base, [key]: value };
+        designerStore.updateElement(elementId, { filter } as unknown as Partial<Element>);
+        return;
+      }
+      case 'font.size':
+      case 'font.lineHeight':
+      case 'font.letterSpacing': {
+        if (el.type !== 'text') return;
+        const key = property.slice('font.'.length);
+        const font = { ...el.font, [key]: value };
+        designerStore.updateElement(elementId, { font } as unknown as Partial<Element>);
+        return;
+      }
+      case 'padding.top':
+      case 'padding.right':
+      case 'padding.bottom':
+      case 'padding.left': {
+        if (el.type !== 'text') return;
+        const key = property.slice('padding.'.length);
+        const base = el.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
+        const padding = { ...base, [key]: value };
+        designerStore.updateElement(elementId, { padding } as unknown as Partial<Element>);
+        return;
+      }
       default:
         return;
     }

@@ -111,7 +111,9 @@ describe('AnimatablePropertySchema', () => {
   });
 
   it('rejects an unknown property', () => {
-    expect(() => AnimatablePropertySchema.parse('font.size')).toThrow();
+    // `font.size` joined the enum with D-010; use a genuinely
+    // unknown path here.
+    expect(() => AnimatablePropertySchema.parse('not.a.property')).toThrow();
   });
 });
 
@@ -150,10 +152,12 @@ describe('ElementAnimationSchema', () => {
   });
 
   it('rejects unknown track property keys', () => {
+    // `font.size` joined the enum with D-010; use a genuinely
+    // unknown path here.
     expect(() =>
       ElementAnimationSchema.parse({
         tracks: {
-          'font.size': { keyframes: [{ frame: 0, value: 16, easing: 'linear' }] },
+          'not.a.property': { keyframes: [{ frame: 0, value: 16, easing: 'linear' }] },
         },
       }),
     ).toThrow();

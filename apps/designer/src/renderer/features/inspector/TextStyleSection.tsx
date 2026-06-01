@@ -1,7 +1,8 @@
-import type { Element, TextElement } from '@cg/shared-schema';
+import type { AnimatableProperty, Element, TextElement } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
+import { hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
 import { CollapseSection } from './CollapseSection.js';
 
 /**
@@ -38,6 +39,10 @@ const FONT_FAMILIES = [
 
 interface Props {
   element: TextElement;
+  currentFrame?: number;
+  selectedKeyframe?:
+    | { elementId: string; property: AnimatableProperty; frame: number }
+    | null;
 }
 
 const styles = {
@@ -226,14 +231,43 @@ function point(label: string): JSX.Element {
     <KeyframeIndicator
       variant="empty"
       onClick={() => {
-        /* D-010 properties not yet animatable */
+        /* colour properties not yet animatable */
       }}
       ariaLabel={`${label} — animation not yet supported`}
     />
   );
 }
 
-export function TextStyleSection({ element }: Props): JSX.Element {
+function animPoint(
+  element: TextElement,
+  property: AnimatableProperty,
+  currentFrame: number,
+  selectedKeyframe:
+    | { elementId: string; property: AnimatableProperty; frame: number }
+    | null,
+  read: (el: TextElement) => number,
+): JSX.Element {
+  const variant = keyframeVariantFor(element, property, currentFrame, selectedKeyframe);
+  return (
+    <KeyframeIndicator
+      variant={variant}
+      onClick={() => {
+        if (hasKeyframeAt(element, property, currentFrame)) {
+          designerStore.removeKeyframe(element.id, property, currentFrame);
+        } else {
+          designerStore.upsertKeyframe(element.id, property, currentFrame, read(element));
+        }
+      }}
+      ariaLabel={`Toggle keyframe for ${property} at frame ${String(currentFrame)}`}
+    />
+  );
+}
+
+export function TextStyleSection({
+  element,
+  currentFrame = 0,
+  selectedKeyframe = null,
+}: Props): JSX.Element {
   const id = element.id;
   const sizingValue = element.fitMode === 'fixed' ? 'fixed' : 'auto';
   const wrapValue = element.wrap === false ? 'no' : 'yes';
@@ -351,9 +385,7 @@ export function TextStyleSection({ element }: Props): JSX.Element {
             onBlur={(e) => {
               const n = Number(e.target.value);
               if (Number.isFinite(n) && n > 0) {
-                designerStore.updateElement(id, {
-                  font: { ...element.font, size: n },
-                } as Partial<Element>)
+                designerStore.commitAnimatable(id, 'font.size', n);
               }
             }}
             onKeyDown={(e) => {
@@ -362,7 +394,7 @@ export function TextStyleSection({ element }: Props): JSX.Element {
             key={`font-size-${String(element.font.size)}`}
             aria-label="Font size"
           />
-          {point('font size')}
+          {animPoint(element, 'font.size', currentFrame, selectedKeyframe, (el) => el.font.size)}
         </div>
 
         {/* Line height + Letter spacing side-by-side */}
@@ -380,9 +412,7 @@ export function TextStyleSection({ element }: Props): JSX.Element {
               onBlur={(e) => {
                 const n = Number(e.target.value);
                 if (Number.isFinite(n) && n > 0) {
-                  designerStore.updateElement(id, {
-                    font: { ...element.font, lineHeight: n },
-                  } as Partial<Element>)
+                  designerStore.commitAnimatable(id, 'font.lineHeight', n);
                 }
               }}
               onKeyDown={(e) => {
@@ -392,7 +422,7 @@ export function TextStyleSection({ element }: Props): JSX.Element {
               aria-label="Line height"
             />
           </div>
-          {point('line height')}
+          {animPoint(element, 'font.lineHeight', currentFrame, selectedKeyframe, (el) => el.font.lineHeight)}
           <div style={styles.numberChip}>
             <span style={styles.chipIcon} aria-hidden title="Letter spacing">
               VA
@@ -405,9 +435,7 @@ export function TextStyleSection({ element }: Props): JSX.Element {
               onBlur={(e) => {
                 const n = Number(e.target.value);
                 if (Number.isFinite(n)) {
-                  designerStore.updateElement(id, {
-                    font: { ...element.font, letterSpacing: n },
-                  } as Partial<Element>)
+                  designerStore.commitAnimatable(id, 'font.letterSpacing', n);
                 }
               }}
               onKeyDown={(e) => {
@@ -417,7 +445,7 @@ export function TextStyleSection({ element }: Props): JSX.Element {
               aria-label="Letter spacing"
             />
           </div>
-          {point('letter spacing')}
+          {animPoint(element, 'font.letterSpacing', currentFrame, selectedKeyframe, (el) => el.font.letterSpacing)}
         </div>
 
         {/* Alignment row */}

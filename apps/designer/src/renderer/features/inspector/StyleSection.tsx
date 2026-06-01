@@ -1,4 +1,5 @@
 import type {
+  AnimatableProperty,
   Element,
   Filter,
   ImageElement,
@@ -9,28 +10,58 @@ import type {
 } from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
+import { hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
 import { CollapseSection } from './CollapseSection.js';
 import { ColorField, NumberField, SelectField } from './controls.js';
 import { TextStyleSection } from './TextStyleSection.js';
 
 interface Props {
   element: Element;
+  currentFrame: number;
+  selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }
 
 /**
- * D-010 — empty point icon next to every property row. Visual parity
- * with the timeline label column; clicking is a no-op for now because
- * these properties aren't in AnimatableProperty yet (the existing 8
- * Transform rows in TransformSection have real, clickable indicators).
+ * D-010 — empty point icon for property rows that aren't yet in
+ * AnimatableProperty (currently colours and the shape "kind" select).
+ * Clicking is a no-op.
  */
 function pointIcon(label: string): JSX.Element {
   return (
     <KeyframeIndicator
       variant="empty"
       onClick={() => {
-        /* intentionally no-op — D-010 properties are static-only */
+        /* intentionally no-op — colour properties not yet animatable */
       }}
       ariaLabel={`${label} — animation not yet supported`}
+    />
+  );
+}
+
+/**
+ * Real keyframe indicator for a numeric animatable property. Reads
+ * variant from keyframeVariantFor; clicking toggles a keyframe at the
+ * current frame using the current static value.
+ */
+function animPointIcon(
+  element: Element,
+  property: AnimatableProperty,
+  currentFrame: number,
+  selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null,
+  read: (el: Element) => number,
+): JSX.Element {
+  const variant = keyframeVariantFor(element, property, currentFrame, selectedKeyframe);
+  return (
+    <KeyframeIndicator
+      variant={variant}
+      onClick={() => {
+        if (hasKeyframeAt(element, property, currentFrame)) {
+          designerStore.removeKeyframe(element.id, property, currentFrame);
+        } else {
+          designerStore.upsertKeyframe(element.id, property, currentFrame, read(element));
+        }
+      }}
+      ariaLabel={`Toggle keyframe for ${property} at frame ${String(currentFrame)}`}
     />
   );
 }
@@ -43,53 +74,82 @@ function pointIcon(label: string): JSX.Element {
  *   Text   → Text · Drop Shadow · Text Padding · Border radius · Filter
  *   Image  → Image · Filter
  */
-export function StyleSection({ element }: Props): JSX.Element {
-  if (element.type === 'text') return <TextSections element={element} />;
-  if (element.type === 'shape') return <ShapeSections element={element} />;
-  if (element.type === 'image') return <ImageSections element={element} />;
+export function StyleSection({ element, currentFrame, selectedKeyframe }: Props): JSX.Element {
+  if (element.type === 'text')
+    return (
+      <TextSections
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    );
+  if (element.type === 'shape')
+    return (
+      <ShapeSections
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    );
+  if (element.type === 'image')
+    return (
+      <ImageSections
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    );
   return <></>;
+}
+
+interface SectionProps<E extends Element> {
+  element: E;
+  currentFrame: number;
+  selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }
 
 // ────────────────────────────────────────────────────────────────────────
 //                              TEXT
 // ────────────────────────────────────────────────────────────────────────
 
-function TextSections({ element }: { element: TextElement }): JSX.Element {
-  const id = element.id;
+function TextSections({
+  element,
+  currentFrame,
+  selectedKeyframe,
+}: SectionProps<TextElement>): JSX.Element {
   return (
     <>
       {/* D-010-pic-5 — custom layout (toggles, swatches, font dropdown,
-          icon chips, alignment button groups). Replaces the generic
-          field stack used by the other element types. */}
-      <TextStyleSection element={element} />
+          icon chips, alignment button groups). */}
+      <TextStyleSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
 
       <DropShadowSection
         title="Drop Shadow"
-        shadow={element.textShadow}
-        onChange={(textShadow) =>
-          designerStore.updateElement(id, { textShadow } as unknown as Partial<Element>)
-        }
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
       />
 
       <TextPaddingSection
-        padding={element.padding}
-        onChange={(padding) =>
-          designerStore.updateElement(id, { padding } as unknown as Partial<Element>)
-        }
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
       />
 
       <BorderRadiusSection
-        radius={element.cornerRadius ?? 0}
-        onChange={(cornerRadius) =>
-          designerStore.updateElement(id, { cornerRadius } as unknown as Partial<Element>)
-        }
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
       />
 
       <FilterSection
-        filter={element.filter}
-        onChange={(filter) =>
-          designerStore.updateElement(id, { filter } as unknown as Partial<Element>)
-        }
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
       />
     </>
   );
@@ -99,19 +159,17 @@ function TextSections({ element }: { element: TextElement }): JSX.Element {
 //                              SHAPE
 // ────────────────────────────────────────────────────────────────────────
 
-function ShapeSections({ element }: { element: ShapeElement }): JSX.Element {
+function ShapeSections({
+  element,
+  currentFrame,
+  selectedKeyframe,
+}: SectionProps<ShapeElement>): JSX.Element {
   const id = element.id;
   const fillColor =
     element.fill !== undefined && element.fill.kind === 'solid' ? element.fill.color : '#000000';
   const strokeColor = element.stroke?.color ?? '#000000';
   const strokeWidth = element.stroke?.width ?? 0;
   const strokeDashFirst = element.stroke?.dash?.[0] ?? 0;
-  const cornerRadius =
-    typeof element.cornerRadius === 'number'
-      ? element.cornerRadius
-      : Array.isArray(element.cornerRadius)
-        ? element.cornerRadius[0]
-        : 0;
   return (
     <>
       <CollapseSection title="Path style" defaultExpanded>
@@ -149,53 +207,48 @@ function ShapeSections({ element }: { element: ShapeElement }): JSX.Element {
           value={strokeWidth}
           step={1}
           min={0}
-          onCommit={(width) =>
-            designerStore.updateElement(id, {
-              stroke: { ...(element.stroke ?? { color: strokeColor }), width },
-            } as Partial<Element>)
-          }
-          trailing={pointIcon('stroke width')}
+          onCommit={(width) => designerStore.commitAnimatable(id, 'stroke.width', width)}
+          trailing={animPointIcon(
+            element,
+            'stroke.width',
+            currentFrame,
+            selectedKeyframe,
+            (el) => (el.type === 'shape' ? (el.stroke?.width ?? 0) : 0),
+          )}
         />
         <NumberField
           label="dash array"
           value={strokeDashFirst}
           step={1}
           min={0}
-          onCommit={(d) =>
-            designerStore.updateElement(id, {
-              stroke: {
-                ...(element.stroke ?? { color: strokeColor, width: strokeWidth }),
-                dash: d > 0 ? [d] : [],
-              },
-            } as unknown as Partial<Element>)
-          }
-          trailing={pointIcon('dash array')}
+          onCommit={(d) => designerStore.commitAnimatable(id, 'stroke.dash', d)}
+          trailing={animPointIcon(
+            element,
+            'stroke.dash',
+            currentFrame,
+            selectedKeyframe,
+            (el) => (el.type === 'shape' ? (el.stroke?.dash?.[0] ?? 0) : 0),
+          )}
         />
       </CollapseSection>
 
       <BorderRadiusSection
-        radius={cornerRadius}
-        onChange={(r) =>
-          designerStore.updateElement(id, {
-            cornerRadius: r,
-            shape: r > 0 && element.shape === 'rect' ? 'rounded-rect' : element.shape,
-          } as unknown as Partial<Element>)
-        }
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
       />
 
       <DropShadowSection
         title="Drop Shadow"
-        shadow={element.shadow}
-        onChange={(shadow) =>
-          designerStore.updateElement(id, { shadow } as unknown as Partial<Element>)
-        }
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
       />
 
       <FilterSection
-        filter={element.filter}
-        onChange={(filter) =>
-          designerStore.updateElement(id, { filter } as unknown as Partial<Element>)
-        }
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
       />
     </>
   );
@@ -205,7 +258,11 @@ function ShapeSections({ element }: { element: ShapeElement }): JSX.Element {
 //                              IMAGE
 // ────────────────────────────────────────────────────────────────────────
 
-function ImageSections({ element }: { element: ImageElement }): JSX.Element {
+function ImageSections({
+  element,
+  currentFrame,
+  selectedKeyframe,
+}: SectionProps<ImageElement>): JSX.Element {
   const id = element.id;
   return (
     <>
@@ -219,10 +276,9 @@ function ImageSections({ element }: { element: ImageElement }): JSX.Element {
         />
       </CollapseSection>
       <FilterSection
-        filter={element.filter}
-        onChange={(filter) =>
-          designerStore.updateElement(id, { filter } as unknown as Partial<Element>)
-        }
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
       />
     </>
   );
@@ -234,42 +290,56 @@ function ImageSections({ element }: { element: ImageElement }): JSX.Element {
 
 function DropShadowSection({
   title,
-  shadow,
-  onChange,
+  element,
+  currentFrame,
+  selectedKeyframe,
 }: {
   title: string;
-  shadow: Shadow | undefined;
-  onChange: (s: Shadow | undefined) => void;
+  element: ShapeElement | TextElement;
+  currentFrame: number;
+  selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }): JSX.Element {
-  const s: Shadow = shadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
+  const id = element.id;
+  const staticShadow: Shadow | undefined =
+    element.type === 'shape' ? element.shadow : element.textShadow;
+  const s: Shadow = staticShadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
+  function setShadowColor(color: string): void {
+    if (element.type === 'shape') {
+      designerStore.updateElement(id, { shadow: { ...s, color } } as unknown as Partial<Element>);
+    } else {
+      designerStore.updateElement(id, {
+        textShadow: { ...s, color },
+      } as unknown as Partial<Element>);
+    }
+  }
   return (
     <CollapseSection title={title}>
       <NumberField
         label="offset X"
         value={s.offsetX}
         step={1}
-        onCommit={(offsetX) => onChange({ ...s, offsetX })}
-        trailing={pointIcon('offset X')}
+        onCommit={(v) => designerStore.commitAnimatable(id, 'shadow.offsetX', v)}
+        trailing={animPointIcon(element, 'shadow.offsetX', currentFrame, selectedKeyframe, () => s.offsetX)}
       />
       <NumberField
         label="offset Y"
         value={s.offsetY}
         step={1}
-        onCommit={(offsetY) => onChange({ ...s, offsetY })}
-        trailing={pointIcon('offset Y')}
+        onCommit={(v) => designerStore.commitAnimatable(id, 'shadow.offsetY', v)}
+        trailing={animPointIcon(element, 'shadow.offsetY', currentFrame, selectedKeyframe, () => s.offsetY)}
       />
       <NumberField
         label="blur"
         value={s.blur}
         step={1}
         min={0}
-        onCommit={(blur) => onChange({ ...s, blur })}
-        trailing={pointIcon('blur')}
+        onCommit={(v) => designerStore.commitAnimatable(id, 'shadow.blur', v)}
+        trailing={animPointIcon(element, 'shadow.blur', currentFrame, selectedKeyframe, () => s.blur)}
       />
       <ColorField
         label="color"
         value={s.color}
-        onCommit={(color) => onChange({ ...s, color })}
+        onCommit={setShadowColor}
         trailing={pointIcon('shadow color')}
       />
     </CollapseSection>
@@ -277,13 +347,16 @@ function DropShadowSection({
 }
 
 function TextPaddingSection({
-  padding,
-  onChange,
+  element,
+  currentFrame,
+  selectedKeyframe,
 }: {
-  padding: Padding | undefined;
-  onChange: (p: Padding) => void;
+  element: TextElement;
+  currentFrame: number;
+  selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }): JSX.Element {
-  const p: Padding = padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  const id = element.id;
+  const p: Padding = element.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
   return (
     <CollapseSection title="Text Padding">
       <NumberField
@@ -291,44 +364,55 @@ function TextPaddingSection({
         value={p.top}
         step={1}
         min={0}
-        onCommit={(top) => onChange({ ...p, top })}
-        trailing={pointIcon('padding top')}
+        onCommit={(v) => designerStore.commitAnimatable(id, 'padding.top', v)}
+        trailing={animPointIcon(element, 'padding.top', currentFrame, selectedKeyframe, () => p.top)}
       />
       <NumberField
         label="right"
         value={p.right}
         step={1}
         min={0}
-        onCommit={(right) => onChange({ ...p, right })}
-        trailing={pointIcon('padding right')}
+        onCommit={(v) => designerStore.commitAnimatable(id, 'padding.right', v)}
+        trailing={animPointIcon(element, 'padding.right', currentFrame, selectedKeyframe, () => p.right)}
       />
       <NumberField
         label="bottom"
         value={p.bottom}
         step={1}
         min={0}
-        onCommit={(bottom) => onChange({ ...p, bottom })}
-        trailing={pointIcon('padding bottom')}
+        onCommit={(v) => designerStore.commitAnimatable(id, 'padding.bottom', v)}
+        trailing={animPointIcon(element, 'padding.bottom', currentFrame, selectedKeyframe, () => p.bottom)}
       />
       <NumberField
         label="left"
         value={p.left}
         step={1}
         min={0}
-        onCommit={(left) => onChange({ ...p, left })}
-        trailing={pointIcon('padding left')}
+        onCommit={(v) => designerStore.commitAnimatable(id, 'padding.left', v)}
+        trailing={animPointIcon(element, 'padding.left', currentFrame, selectedKeyframe, () => p.left)}
       />
     </CollapseSection>
   );
 }
 
 function BorderRadiusSection({
-  radius,
-  onChange,
+  element,
+  currentFrame,
+  selectedKeyframe,
 }: {
-  radius: number;
-  onChange: (r: number) => void;
+  element: ShapeElement | TextElement;
+  currentFrame: number;
+  selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }): JSX.Element {
+  const id = element.id;
+  const radius =
+    element.type === 'shape'
+      ? typeof element.cornerRadius === 'number'
+        ? element.cornerRadius
+        : Array.isArray(element.cornerRadius)
+          ? element.cornerRadius[0]
+          : 0
+      : (element.cornerRadius ?? 0);
   return (
     <CollapseSection title="Border radius">
       <NumberField
@@ -336,101 +420,63 @@ function BorderRadiusSection({
         value={radius}
         step={1}
         min={0}
-        onCommit={onChange}
-        trailing={pointIcon('radius')}
+        onCommit={(v) => designerStore.commitAnimatable(id, 'cornerRadius', v)}
+        trailing={animPointIcon(element, 'cornerRadius', currentFrame, selectedKeyframe, () => radius)}
       />
     </CollapseSection>
   );
 }
 
 function FilterSection({
-  filter,
-  onChange,
+  element,
+  currentFrame,
+  selectedKeyframe,
 }: {
-  filter: Filter | undefined;
-  onChange: (f: Filter | undefined) => void;
+  element: Element;
+  currentFrame: number;
+  selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }): JSX.Element {
-  const f: Filter = filter ?? {};
-  function patch(key: keyof Filter, v: number): void {
-    onChange({ ...f, [key]: v });
+  const id = element.id;
+  const f: Filter = element.filter ?? {};
+  function row(
+    label: string,
+    property: AnimatableProperty,
+    fallback: number,
+    step: number,
+    min: number | undefined,
+    max: number | undefined,
+  ): JSX.Element {
+    const key = property.slice('filter.'.length) as keyof Filter;
+    const value = f[key] ?? fallback;
+    return (
+      <NumberField
+        label={label}
+        value={value}
+        step={step}
+        {...(min !== undefined ? { min } : {})}
+        {...(max !== undefined ? { max } : {})}
+        onCommit={(v) => designerStore.commitAnimatable(id, property, v)}
+        trailing={animPointIcon(
+          element,
+          property,
+          currentFrame,
+          selectedKeyframe,
+          (el) => (el.filter?.[key] ?? fallback) as number,
+        )}
+      />
+    );
   }
   return (
     <CollapseSection title="Filter">
-      <NumberField
-        label="blur"
-        value={f.blur ?? 0}
-        step={0.5}
-        min={0}
-        onCommit={(v) => patch('blur', v)}
-        trailing={pointIcon('blur')}
-      />
-      <NumberField
-        label="brightness %"
-        value={f.brightness ?? 100}
-        step={1}
-        min={0}
-        onCommit={(v) => patch('brightness', v)}
-        trailing={pointIcon('brightness')}
-      />
-      <NumberField
-        label="contrast %"
-        value={f.contrast ?? 100}
-        step={1}
-        min={0}
-        onCommit={(v) => patch('contrast', v)}
-        trailing={pointIcon('contrast')}
-      />
-      <NumberField
-        label="grayscale %"
-        value={f.grayscale ?? 0}
-        step={1}
-        min={0}
-        max={100}
-        onCommit={(v) => patch('grayscale', v)}
-        trailing={pointIcon('grayscale')}
-      />
-      <NumberField
-        label="hue rotate °"
-        value={f.hueRotate ?? 0}
-        step={1}
-        onCommit={(v) => patch('hueRotate', v)}
-        trailing={pointIcon('hue rotate')}
-      />
-      <NumberField
-        label="invert %"
-        value={f.invert ?? 0}
-        step={1}
-        min={0}
-        max={100}
-        onCommit={(v) => patch('invert', v)}
-        trailing={pointIcon('invert')}
-      />
-      <NumberField
-        label="opacity %"
-        value={f.opacity ?? 100}
-        step={1}
-        min={0}
-        max={100}
-        onCommit={(v) => patch('opacity', v)}
-        trailing={pointIcon('filter opacity')}
-      />
-      <NumberField
-        label="saturate %"
-        value={f.saturate ?? 100}
-        step={1}
-        min={0}
-        onCommit={(v) => patch('saturate', v)}
-        trailing={pointIcon('saturate')}
-      />
-      <NumberField
-        label="sepia %"
-        value={f.sepia ?? 0}
-        step={1}
-        min={0}
-        max={100}
-        onCommit={(v) => patch('sepia', v)}
-        trailing={pointIcon('sepia')}
-      />
+      {row('blur', 'filter.blur', 0, 0.5, 0, undefined)}
+      {row('brightness %', 'filter.brightness', 100, 1, 0, undefined)}
+      {row('contrast %', 'filter.contrast', 100, 1, 0, undefined)}
+      {row('grayscale %', 'filter.grayscale', 0, 1, 0, 100)}
+      {row('hue rotate °', 'filter.hueRotate', 0, 1, undefined, undefined)}
+      {row('invert %', 'filter.invert', 0, 1, 0, 100)}
+      {row('opacity %', 'filter.opacity', 100, 1, 0, 100)}
+      {row('saturate %', 'filter.saturate', 100, 1, 0, undefined)}
+      {row('sepia %', 'filter.sepia', 0, 1, 0, 100)}
     </CollapseSection>
   );
 }

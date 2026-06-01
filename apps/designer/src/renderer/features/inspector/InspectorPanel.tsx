@@ -213,7 +213,11 @@ function ElementInspector({
           selectedKeyframe={selectedKeyframe}
         />
       </CollapseSection>
-      <StyleSection element={element} />
+      <StyleSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
       {bindings.length > 0 && (
         <CollapseSection title="Bindings" defaultExpanded>
           <ElementBindings bindings={bindings} />

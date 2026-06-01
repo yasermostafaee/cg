@@ -59,6 +59,7 @@ export type Track = z.infer<typeof TrackSchema>;
  * style fields (text font-size etc. land in v2.1).
  */
 export const AnimatablePropertySchema = z.enum([
+  // Transform / opacity (M12.0).
   'position.x',
   'position.y',
   'size.w',
@@ -67,8 +68,35 @@ export const AnimatablePropertySchema = z.enum([
   'scale.y',
   'rotation',
   'opacity',
+  // Colors (M12.0).
   'fill.color',
   'text.color',
+  // D-010 — numeric style properties. Composite styles (shadow,
+  // filter) are decomposed into their numeric components; the runtime
+  // recomposes the final CSS string each frame from static + animated
+  // values.
+  'stroke.width',
+  'stroke.dash',
+  'cornerRadius',
+  'shadow.offsetX',
+  'shadow.offsetY',
+  'shadow.blur',
+  'filter.blur',
+  'filter.brightness',
+  'filter.contrast',
+  'filter.grayscale',
+  'filter.hueRotate',
+  'filter.invert',
+  'filter.opacity',
+  'filter.saturate',
+  'filter.sepia',
+  'font.size',
+  'font.lineHeight',
+  'font.letterSpacing',
+  'padding.top',
+  'padding.right',
+  'padding.bottom',
+  'padding.left',
 ]);
 export type AnimatableProperty = z.infer<typeof AnimatablePropertySchema>;
 

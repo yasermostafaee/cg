@@ -71,6 +71,139 @@ export function applyAnimationAtFrame(entry: AnimatedElement, frame: number): vo
     const v = interpolateAtFrame(tracks['text.color'], frame);
     if (typeof v === 'string') entry.node.style.color = v;
   }
+
+  // D-010 — direct numeric writes for stand-alone style properties.
+  applyNumeric(tracks, 'cornerRadius', frame, (v) => {
+    entry.node.style.borderRadius = `${v}px`;
+  });
+  applyNumeric(tracks, 'stroke.width', frame, (v) => {
+    if (entry.source.type === 'shape') {
+      const color = entry.source.stroke?.color ?? '#000000';
+      const style =
+        (entry.source.stroke?.dash?.length ?? 0) > 0 ? 'dashed' : 'solid';
+      entry.node.style.border = `${v}px ${style} ${color}`;
+    }
+  });
+  // Font sub-properties.
+  applyNumeric(tracks, 'font.size', frame, (v) => {
+    entry.node.style.fontSize = `${v}px`;
+  });
+  applyNumeric(tracks, 'font.lineHeight', frame, (v) => {
+    entry.node.style.lineHeight = String(v);
+  });
+  applyNumeric(tracks, 'font.letterSpacing', frame, (v) => {
+    entry.node.style.letterSpacing = `${v}em`;
+  });
+  // Padding sub-properties.
+  applyNumeric(tracks, 'padding.top', frame, (v) => {
+    entry.node.style.paddingTop = `${v}px`;
+  });
+  applyNumeric(tracks, 'padding.right', frame, (v) => {
+    entry.node.style.paddingRight = `${v}px`;
+  });
+  applyNumeric(tracks, 'padding.bottom', frame, (v) => {
+    entry.node.style.paddingBottom = `${v}px`;
+  });
+  applyNumeric(tracks, 'padding.left', frame, (v) => {
+    entry.node.style.paddingLeft = `${v}px`;
+  });
+
+  // Composite shadow + filter — recompose the whole CSS declaration
+  // from static + animated components when any track is present.
+  applyShadow(entry, tracks, frame);
+  applyFilter(entry, tracks, frame);
+}
+
+function applyNumeric(
+  tracks: ElementAnimation['tracks'],
+  prop: AnimatableProperty,
+  frame: number,
+  write: (v: number) => void,
+): void {
+  const track = tracks[prop];
+  if (track === undefined) return;
+  const v = interpolateAtFrame(track, frame);
+  if (typeof v === 'number') write(v);
+}
+
+const SHADOW_PROPS = [
+  'shadow.offsetX',
+  'shadow.offsetY',
+  'shadow.blur',
+] as const satisfies readonly AnimatableProperty[];
+
+const FILTER_PROPS = [
+  'filter.blur',
+  'filter.brightness',
+  'filter.contrast',
+  'filter.grayscale',
+  'filter.hueRotate',
+  'filter.invert',
+  'filter.opacity',
+  'filter.saturate',
+  'filter.sepia',
+] as const satisfies readonly AnimatableProperty[];
+
+function readNumericTrack(
+  tracks: ElementAnimation['tracks'],
+  prop: AnimatableProperty,
+  frame: number,
+): number | undefined {
+  const track = tracks[prop];
+  if (track === undefined) return undefined;
+  const v = interpolateAtFrame(track, frame);
+  return typeof v === 'number' ? v : undefined;
+}
+
+function applyShadow(
+  entry: AnimatedElement,
+  tracks: ElementAnimation['tracks'],
+  frame: number,
+): void {
+  const hasAny = SHADOW_PROPS.some((p) => tracks[p] !== undefined);
+  if (!hasAny) return;
+  const src = entry.source;
+  const staticShadow =
+    src.type === 'shape' ? src.shadow : src.type === 'text' ? src.textShadow : undefined;
+  const offsetX = readNumericTrack(tracks, 'shadow.offsetX', frame) ?? staticShadow?.offsetX ?? 0;
+  const offsetY = readNumericTrack(tracks, 'shadow.offsetY', frame) ?? staticShadow?.offsetY ?? 0;
+  const blur = readNumericTrack(tracks, 'shadow.blur', frame) ?? staticShadow?.blur ?? 0;
+  const color = staticShadow?.color ?? '#000000';
+  const css = `${offsetX}px ${offsetY}px ${blur}px ${color}`;
+  if (src.type === 'text') entry.node.style.textShadow = css;
+  else entry.node.style.boxShadow = css;
+}
+
+function applyFilter(
+  entry: AnimatedElement,
+  tracks: ElementAnimation['tracks'],
+  frame: number,
+): void {
+  const hasAny = FILTER_PROPS.some((p) => tracks[p] !== undefined);
+  if (!hasAny) return;
+  const f = entry.source.filter ?? {};
+  const get = (p: AnimatableProperty, fallback: number | undefined): number | undefined =>
+    readNumericTrack(tracks, p, frame) ?? fallback;
+  const blur = get('filter.blur', f.blur);
+  const brightness = get('filter.brightness', f.brightness);
+  const contrast = get('filter.contrast', f.contrast);
+  const grayscale = get('filter.grayscale', f.grayscale);
+  const hueRotate = get('filter.hueRotate', f.hueRotate);
+  const invert = get('filter.invert', f.invert);
+  const opacity = get('filter.opacity', f.opacity);
+  const saturate = get('filter.saturate', f.saturate);
+  const sepia = get('filter.sepia', f.sepia);
+  const parts: string[] = [];
+  if (blur !== undefined && blur > 0) parts.push(`blur(${blur}px)`);
+  if (brightness !== undefined && brightness !== 100) parts.push(`brightness(${brightness}%)`);
+  if (contrast !== undefined && contrast !== 100) parts.push(`contrast(${contrast}%)`);
+  if (grayscale !== undefined && grayscale > 0) parts.push(`grayscale(${grayscale}%)`);
+  if (hueRotate !== undefined && hueRotate !== 0) parts.push(`hue-rotate(${hueRotate}deg)`);
+  if (invert !== undefined && invert > 0) parts.push(`invert(${invert}%)`);
+  if (opacity !== undefined && opacity !== 100) parts.push(`opacity(${opacity}%)`);
+  if (saturate !== undefined && saturate !== 100) parts.push(`saturate(${saturate}%)`);
+  if (sepia !== undefined && sepia > 0) parts.push(`sepia(${sepia}%)`);
+  entry.node.style.filter = parts.join(' ');
 }
 
 interface AnimatedTransformState {
