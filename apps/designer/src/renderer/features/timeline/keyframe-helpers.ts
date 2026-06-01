@@ -12,7 +12,7 @@ import type {
  * row. Keeping it in one place ensures Frame 0 in the ruler lines up with
  * the left edge of every lane.
  */
-export const LABEL_COL_PX = 140;
+export const LABEL_COL_PX = 300;
 
 /**
  * Catalogue of the eight UI rows the PRD (D-006) calls out, in the order

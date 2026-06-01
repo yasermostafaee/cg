@@ -37,6 +37,9 @@ const styles = {
     background: colors.panel,
     borderRight: `1px solid ${colors.border}`,
     color: colors.textMuted,
+    position: 'sticky' as const,
+    left: 0,
+    zIndex: 2,
   },
   chevron: {
     background: 'transparent',

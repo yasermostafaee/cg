@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AnimatableProperty, Element, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { designerStore } from '../../state/store.js';
+import { designerStore, useDesignerStore } from '../../state/store.js';
 import { DisplayRow } from './DisplayRow.js';
 import { ElementRow, lifespanColorFor } from './ElementRow.js';
 import { FrameRuler } from './FrameRuler.js';
@@ -86,6 +86,25 @@ const styles = {
     padding: '0 0.5rem',
     display: 'flex',
     alignItems: 'center',
+    position: 'sticky' as const,
+    left: 0,
+    zIndex: 3,
+  },
+  hScrollOuter: {
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0,
+    overflowX: 'auto' as const,
+    overflowY: 'hidden' as const,
+    display: 'flex',
+    flexDirection: 'column' as const,
+  },
+  hScrollInner: {
+    minWidth: '100%',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    flex: 1,
+    minHeight: 0,
   },
   empty: {
     padding: '0.6rem',
@@ -112,6 +131,9 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '0.3rem',
+    position: 'sticky' as const,
+    left: 0,
+    zIndex: 2,
   },
   transformHeaderLane: {
     background: colors.panelMuted,
@@ -154,6 +176,24 @@ export function TimelineDock({
   selectedKeyframe,
 }: Props): JSX.Element {
   const { in: frameIn, out: frameOut } = scene.frameRange;
+  const { timelineZoom } = useDesignerStore();
+  const hScrollRef = useRef<HTMLDivElement | null>(null);
+  const zoomRef = useRef(timelineZoom);
+  zoomRef.current = timelineZoom;
+  // Ctrl+wheel zooms the timeline; the listener is native (non-passive)
+  // because React's synthetic onWheel can't preventDefault.
+  useEffect(() => {
+    const el = hScrollRef.current;
+    if (el === null) return;
+    function onWheel(e: WheelEvent): void {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -1 : 1;
+      designerStore.setTimelineZoom(zoomRef.current + delta);
+    }
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
   const [playing, setPlaying] = useState(false);
   const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
@@ -279,19 +319,21 @@ export function TimelineDock({
           frame {currentFrame} / {frameOut}
         </span>
       </div>
-      <div style={styles.rulerRow}>
-        <div style={styles.rulerLabelGutter}>FRAME</div>
-        <FrameRuler
-          frameIn={frameIn}
-          frameOut={frameOut}
-          currentFrame={currentFrame}
-          onScrub={(f) => designerStore.setCurrentFrame(f)}
-        />
-      </div>
-      {elements.length === 0 ? (
-        <p style={styles.empty}>No elements yet. Add a shape, text, or image to start.</p>
-      ) : (
-        <div role="list" style={styles.scrollBody}>
+      <div style={styles.hScrollOuter} ref={hScrollRef}>
+        <div style={{ ...styles.hScrollInner, width: `${String(timelineZoom * 100)}%` }}>
+          <div style={styles.rulerRow}>
+            <div style={styles.rulerLabelGutter}>FRAME</div>
+            <FrameRuler
+              frameIn={frameIn}
+              frameOut={frameOut}
+              currentFrame={currentFrame}
+              onScrub={(f) => designerStore.setCurrentFrame(f)}
+            />
+          </div>
+          {elements.length === 0 ? (
+            <p style={styles.empty}>No elements yet. Add a shape, text, or image to start.</p>
+          ) : (
+            <div role="list" style={styles.scrollBody}>
           {elements.map((el) => {
             const expanded = !isCollapsed(el.id);
             return (
@@ -351,8 +393,10 @@ export function TimelineDock({
               </div>
             );
           })}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </section>
   );
 }

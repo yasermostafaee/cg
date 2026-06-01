@@ -46,6 +46,10 @@ const styles = {
     gap: '0.35rem',
     borderRight: `1px solid ${colors.border}`,
     background: colors.panel,
+    // Sticky so it stays pinned against the timeline's horizontal scroll.
+    position: 'sticky' as const,
+    left: 0,
+    zIndex: 2,
   },
   labelName: {
     color: colors.textMuted,

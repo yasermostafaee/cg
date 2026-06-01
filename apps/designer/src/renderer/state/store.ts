@@ -70,6 +70,13 @@ export interface DesignerStoreState {
    * lit up for the selected point.
    */
   keyframeInspectorOpen: boolean;
+  /**
+   * Horizontal zoom of the timeline lane: 1 = full scene span fits, 2 =
+   * see half the frames at twice the width, etc. Controlled by the
+   * status-bar slider; the dock derives a view window from this and the
+   * playhead frame and pans automatically as the operator scrubs.
+   */
+  timelineZoom: number;
 }
 
 const initialState: DesignerStoreState = {
@@ -83,6 +90,7 @@ const initialState: DesignerStoreState = {
   currentFrame: 0,
   selectedKeyframe: null,
   keyframeInspectorOpen: false,
+  timelineZoom: 1,
 };
 
 type Listener = (state: DesignerStoreState) => void;
@@ -264,6 +272,13 @@ export const designerStore = {
       scene = { ...scene, layers };
     }
     set({ scene, selection: new Set([element.id]) });
+  },
+
+  /** Set the timeline horizontal zoom, clamped to [1, 20]. */
+  setTimelineZoom(z: number): void {
+    const clamped = Math.max(1, Math.min(20, z));
+    if (clamped === current.timelineZoom) return;
+    set({ timelineZoom: clamped });
   },
 
   /** Move the authoring cursor frame, clamped to the scene's frame range. */

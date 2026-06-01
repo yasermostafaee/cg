@@ -28,6 +28,9 @@ const styles = {
     gap: '0.35rem',
     borderRight: `1px solid ${colors.border}`,
     background: colors.panel,
+    position: 'sticky' as const,
+    left: 0,
+    zIndex: 2,
   },
   labelName: {
     color: colors.textMuted,
