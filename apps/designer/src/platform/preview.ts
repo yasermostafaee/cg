@@ -77,59 +77,41 @@ export class Preview {
     <style>
       .cg-pending { opacity: 1 !important; }
       .cg-pending .cg-stage { visibility: visible !important; }
-      /* Diagnostic: a 4px magenta border around the body proves the
-         iframe document loaded and CSS applies. If the user sees no
-         magenta border, the iframe isn't loading at all. */
-      body { outline: 4px solid magenta !important; outline-offset: -4px; }
     </style>
   </head>
   <body>
     <script>
-      // Surface any error (including ES module import failure on the
-      // module script below) up to the parent so we can see it in
-      // DevTools even if the iframe console is hidden.
-      function _cgReport(label, payload) {
-        try {
-          if (window.parent && window.parent !== window) {
-            window.parent.postMessage(
-              { kind: 'cg-preview-log', args: [label, String(payload)] },
-              '*',
-            );
-          }
-        } catch (e) {}
-        console.log('[cg-preview]', label, payload);
-      }
-      window.addEventListener('error', function (e) {
-        _cgReport('window.error', (e && e.message) + ' @ ' + (e && e.filename) + ':' + (e && e.lineno));
-      });
-      window.addEventListener('unhandledrejection', function (e) {
-        _cgReport('unhandledrejection', (e && (e.reason && (e.reason.message || e.reason))) || '?');
-      });
-      _cgReport('html-shell loaded', 'cgJsUrl=${cgJsUrl}');
+      // Surface uncaught preview-side errors up to the parent console.
+      // Without this, a throw inside the runtime would only land in the
+      // (invisible) iframe console — exactly the silent failure that
+      // hid the blob-URL module-import bug for the better part of a
+      // session.
+      (function () {
+        function post(label, payload) {
+          try {
+            if (window.parent && window.parent !== window) {
+              window.parent.postMessage(
+                { kind: 'cg-preview-error', label: label, payload: String(payload) },
+                '*',
+              );
+            }
+          } catch (e) {}
+        }
+        window.addEventListener('error', function (e) {
+          post('window.error', (e && e.message) + ' @ ' + (e && e.filename) + ':' + (e && e.lineno));
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          post('unhandledrejection', (e && (e.reason && (e.reason.message || e.reason))) || '?');
+        });
+      })();
     </script>
     <script type="module">
-      _cgReport('module-script: entered (before import)', '');
       import { createRuntime, installCasparGlobals } from '${cgJsUrl}';
-      _cgReport('module-script: import succeeded', '');
       (async () => {
-        function report(...args) {
-          _cgReport(args.join(' '), '');
-        }
-        report('boot: script started');
         const scene = ${sceneJson};
-        report('boot: scene parsed', scene.id, scene.layers.length + ' layers',
-          scene.layers.reduce((n,l) => n + l.children.length, 0) + ' elements');
-        let runtime;
-        try {
-          runtime = createRuntime(scene);
-          report('boot: createRuntime ok');
-        } catch (err) {
-          report('boot: createRuntime THREW', String(err));
-          throw err;
-        }
+        const runtime = createRuntime(scene);
         installCasparGlobals(runtime);
         await runtime.ready;
-        report('boot: runtime ready; body.className=' + document.body.className);
         document.body.classList.remove('cg-pending');
         // Apply current field values + render the initial frame without
         // starting the FrameDriver — the Designer's timeline dock owns

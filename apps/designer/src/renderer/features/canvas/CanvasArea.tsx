@@ -130,35 +130,17 @@ export function CanvasArea({
 }: Props): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
-  const [src, setSrc] = useState<string | null>(null);
   const [html, setHtml] = useState<string | null>(null);
   const [zoom, setZoom] = useState<number>(ZOOM_DEFAULT);
 
   useEffect(() => {
     if (scene === null) {
-      // eslint-disable-next-line no-console
-      console.log('[cg-canvas] scene is null, clearing iframe');
-      setSrc(null);
       setHtml(null);
       return;
     }
     let cancelled = false;
-    // eslint-disable-next-line no-console
-    console.log('[cg-canvas] calling preview.load for scene', scene.id);
     void window.cg.preview.load({ scene }).then((res) => {
-      if (cancelled) {
-        // eslint-disable-next-line no-console
-        console.log('[cg-canvas] preview.load resolved but effect was cancelled');
-        return;
-      }
-      // eslint-disable-next-line no-console
-      console.log(
-        '[cg-canvas] preview.load resolved; html size=',
-        res.html.length,
-        'src=',
-        res.src,
-      );
-      setSrc(res.src);
+      if (cancelled) return;
       setHtml(res.html);
     });
     return () => {
@@ -169,7 +151,7 @@ export function CanvasArea({
   useEffect(() => {
     function onMessage(evt: MessageEvent<unknown>): void {
       const msg = evt.data as
-        | { kind?: string; sceneId?: string; args?: readonly unknown[] }
+        | { kind?: string; sceneId?: string; label?: string; payload?: string }
         | undefined;
       if (msg?.kind === 'cg-preview-ready') {
         iframeRef.current?.contentWindow?.postMessage(
@@ -177,9 +159,8 @@ export function CanvasArea({
           '*',
         );
       }
-      if (msg?.kind === 'cg-preview-log' && Array.isArray(msg.args)) {
-        // eslint-disable-next-line no-console
-        console.log('[cg-preview]', ...msg.args);
+      if (msg?.kind === 'cg-preview-error') {
+        console.error('[cg-preview]', msg.label, msg.payload);
       }
     }
     window.addEventListener('message', onMessage);
@@ -299,33 +280,11 @@ export function CanvasArea({
                   height,
                   transform: `scale(${String(zoom)})`,
                   transformOrigin: 'top left',
-                  // Diagnostic: bright red border on the iframe element
-                  // itself (parent CSS, not iframe-content CSS). Visible
-                  // even if the iframe document fails to load. If you
-                  // do not see a red rectangle on the canvas, the
-                  // iframe element itself is not in the DOM (or has
-                  // zero size).
-                  border: '3px solid red',
                 }}
-                // sandbox intentionally omitted — the iframe is loaded
-                // from a same-origin blob: URL we just created in this
-                // window. Chrome blocks dynamic module imports from
-                // blob: URLs *inside* sandboxed iframes (even with
-                // allow-scripts + allow-same-origin), which silently
-                // prevented the runtime from ever loading and was the
-                // cause of "shapes / colours don't render".
-                onLoad={() => {
-                  // eslint-disable-next-line no-console
-                  console.log(
-                    '[cg-canvas] iframe.onLoad fired (srcDoc-mode, src fallback=',
-                    src,
-                    ')',
-                  );
-                }}
-                onError={(e) => {
-                  // eslint-disable-next-line no-console
-                  console.log('[cg-canvas] iframe.onError fired', e);
-                }}
+                // sandbox intentionally omitted — see Preview class
+                // comment. The combination "iframe srcDoc + ES module
+                // import from a blob URL" only works without sandbox
+                // in current Chromium.
               />
               <CanvasOverlay
                 scene={scene}
