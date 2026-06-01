@@ -27,11 +27,11 @@ const styles = {
     minWidth: 0,
     width: '100%',
   },
+  // No nested overflow on the body — both axes scroll on the outer
+  // container so `position: sticky` on the left labels (and on the
+  // ruler row's top) is evaluated against a single scroll context.
   scrollBody: {
-    flex: 1,
     minHeight: 0,
-    overflowY: 'auto' as const,
-    overflowX: 'hidden' as const,
   },
   header: {
     display: 'flex',
@@ -75,6 +75,10 @@ const styles = {
   rulerRow: {
     display: 'grid',
     gridTemplateColumns: `${String(LABEL_COL_PX)}px 1fr`,
+    position: 'sticky' as const,
+    top: 0,
+    zIndex: 3,
+    background: colors.panel,
   },
   rulerLabelGutter: {
     background: colors.panel,
@@ -88,23 +92,18 @@ const styles = {
     alignItems: 'center',
     position: 'sticky' as const,
     left: 0,
-    zIndex: 3,
+    zIndex: 4,
   },
   hScrollOuter: {
     flex: 1,
     minHeight: 0,
     minWidth: 0,
-    overflowX: 'auto' as const,
-    overflowY: 'hidden' as const,
-    display: 'flex',
-    flexDirection: 'column' as const,
+    overflow: 'auto' as const,
+    display: 'block',
   },
   hScrollInner: {
     minWidth: '100%',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    flex: 1,
-    minHeight: 0,
+    minHeight: '100%',
   },
   empty: {
     padding: '0.6rem',
