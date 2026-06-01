@@ -131,28 +131,35 @@ export function CanvasArea({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
   const [src, setSrc] = useState<string | null>(null);
+  const [html, setHtml] = useState<string | null>(null);
   const [zoom, setZoom] = useState<number>(ZOOM_DEFAULT);
 
   useEffect(() => {
     if (scene === null) {
       // eslint-disable-next-line no-console
-      console.log('[cg-canvas] scene is null, clearing iframe src');
+      console.log('[cg-canvas] scene is null, clearing iframe');
       setSrc(null);
+      setHtml(null);
       return;
     }
     let cancelled = false;
     // eslint-disable-next-line no-console
     console.log('[cg-canvas] calling preview.load for scene', scene.id);
     void window.cg.preview.load({ scene }).then((res) => {
-      if (!cancelled) {
-        const newSrc = `${res.src}?t=${String(Date.now())}`;
-        // eslint-disable-next-line no-console
-        console.log('[cg-canvas] preview.load resolved, setting iframe src to', newSrc);
-        setSrc(newSrc);
-      } else {
+      if (cancelled) {
         // eslint-disable-next-line no-console
         console.log('[cg-canvas] preview.load resolved but effect was cancelled');
+        return;
       }
+      // eslint-disable-next-line no-console
+      console.log(
+        '[cg-canvas] preview.load resolved; html size=',
+        res.html.length,
+        'src=',
+        res.src,
+      );
+      setSrc(res.src);
+      setHtml(res.html);
     });
     return () => {
       cancelled = true;
@@ -270,7 +277,7 @@ export function CanvasArea({
         </span>
       </div>
       <div style={styles.outer} ref={outerRef}>
-        {src !== null && (
+        {html !== null && (
           <div style={styles.centerWrap}>
             <div
               style={{
@@ -281,7 +288,7 @@ export function CanvasArea({
             >
               <iframe
                 ref={iframeRef}
-                src={src}
+                srcDoc={html}
                 title="cgpreview"
                 style={{
                   ...styles.iframe,
@@ -309,7 +316,11 @@ export function CanvasArea({
                 // cause of "shapes / colours don't render".
                 onLoad={() => {
                   // eslint-disable-next-line no-console
-                  console.log('[cg-canvas] iframe.onLoad fired (src=', src, ')');
+                  console.log(
+                    '[cg-canvas] iframe.onLoad fired (srcDoc-mode, src fallback=',
+                    src,
+                    ')',
+                  );
                 }}
                 onError={(e) => {
                   // eslint-disable-next-line no-console

@@ -26,12 +26,17 @@ export class Preview {
     this.#cgJsUrl = URL.createObjectURL(new Blob([options.cgJs], { type: 'text/javascript' }));
   }
 
-  /** Build a fresh preview document for `scene` and return its Blob URL. */
-  load(scene: Scene): { src: string } {
+  /**
+   * Build a fresh preview document for `scene`. Returns BOTH the HTML
+   * (for `iframe srcdoc`, which avoids blob-URL/cross-document quirks)
+   * and a Blob URL fallback (still useful for export paths). Callers
+   * prefer `html` when they can set it on srcdoc.
+   */
+  load(scene: Scene): { src: string; html: string } {
     if (this.#docUrl !== null) URL.revokeObjectURL(this.#docUrl);
     const html = this.#buildHtml(scene);
     this.#docUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-    return { src: this.#docUrl };
+    return { src: this.#docUrl, html };
   }
 
   /** Push a live field update to the preview iframe(s). */

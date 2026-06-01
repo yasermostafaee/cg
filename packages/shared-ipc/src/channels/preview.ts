@@ -14,8 +14,15 @@ export const PreviewLoadChannel = defineChannel(
   'preview.load',
   z.object({ scene: SceneSchema }),
   z.object({
-    /** URL the renderer should set as the iframe's src. Includes cgpreview://. */
+    /** Blob/cgpreview URL — fallback for callers that can't use srcdoc. */
     src: z.string().url(),
+    /**
+     * Self-contained HTML document for the iframe. The Designer renderer
+     * prefers `srcdoc={html}` over `src=blob:URL` because Chrome's
+     * dynamic-ES-module restriction inside blob-loaded iframes silently
+     * blocks the runtime import even when the iframe is unsandboxed.
+     */
+    html: z.string().min(1),
   }),
 );
 
