@@ -57,6 +57,39 @@ const styles = {
     fontVariantNumeric: 'tabular-nums' as const,
     fontSize: '0.7rem',
   },
+  // Editable numeric value — same look as labelValue but interactive.
+  valueNumberInput: {
+    width: 48,
+    background: 'transparent',
+    color: colors.text,
+    border: `1px solid transparent`,
+    borderRadius: '0.18rem',
+    padding: '0 0.15rem',
+    fontSize: '0.7rem',
+    fontVariantNumeric: 'tabular-nums' as const,
+    textAlign: 'right' as const,
+    outline: 'none',
+    cursor: 'text',
+  },
+  // Editable colour swatch — opens the native colour picker on click.
+  valueSwatchWrap: {
+    position: 'relative' as const,
+    width: 14,
+    height: 14,
+    borderRadius: '0.15rem',
+    border: `1px solid ${colors.border}`,
+    overflow: 'hidden' as const,
+    cursor: 'pointer',
+  },
+  valueColorInput: {
+    position: 'absolute' as const,
+    inset: 0,
+    opacity: 0,
+    cursor: 'pointer',
+    border: 0,
+    padding: 0,
+    background: 'transparent',
+  },
   lane: {
     position: 'relative' as const,
     background: colors.panelMuted,
@@ -176,7 +209,6 @@ export function TrackRow(props: Props): JSX.Element {
   const span = Math.max(1, frameOut - frameIn);
   const track = trackOf(element, row.property);
   const keyframes: readonly Keyframe[] = track?.keyframes ?? [];
-  const currentValue = formatValue(row.read(element));
 
   // Right-click context menu for keyframe diamonds. `null` = closed;
   // otherwise position (viewport coords) + the keyframe it targets.
@@ -225,7 +257,11 @@ export function TrackRow(props: Props): JSX.Element {
     <div style={styles.row} data-track-property={row.property}>
       <div style={styles.label}>
         <span style={styles.labelName}>{row.label}</span>
-        <span style={styles.labelValue}>{currentValue}</span>
+        <ValueCell
+          value={row.read(element)}
+          ariaLabel={`${row.label} value`}
+          onCommit={(v) => designerStore.commitAnimatable(element.id, row.property, v)}
+        />
         <KeyframeIndicator
           variant={variant}
           onClick={toggleKeyframeHere}
@@ -389,12 +425,58 @@ export function TrackRow(props: Props): JSX.Element {
   );
 }
 
-function formatValue(v: number | string): string {
-  if (typeof v === 'string') {
-    // Hex colour — drop the leading '#' and upper-case for the timeline
-    // label column (matches the D-010 reference).
-    return v.startsWith('#') ? v.slice(1).toUpperCase() : v.toUpperCase();
+/**
+ * Inline-editable value cell used in the timeline left column. Numeric
+ * properties render as a compact number input (commits on blur / Enter);
+ * colour properties render as a tiny swatch that opens the native
+ * picker. Either way the commit path is `commitAnimatable`, so the cell
+ * behaves identically to its twin in the right Inspector — if a track
+ * already exists it upserts a keyframe at the current frame, otherwise
+ * it writes the static value.
+ */
+function ValueCell({
+  value,
+  ariaLabel,
+  onCommit,
+}: {
+  value: number | string;
+  ariaLabel: string;
+  onCommit: (next: number | string) => void;
+}): JSX.Element {
+  if (typeof value === 'string') {
+    const hex = value.startsWith('#') ? value : `#${value}`;
+    return (
+      <span style={{ ...styles.valueSwatchWrap, background: hex }} title={hex.toUpperCase()}>
+        <input
+          type="color"
+          value={hex}
+          onChange={(e) => onCommit(e.target.value.toUpperCase())}
+          style={styles.valueColorInput}
+          aria-label={ariaLabel}
+        />
+      </span>
+    );
   }
-  if (Number.isInteger(v)) return String(v);
-  return v.toFixed(2);
+  const display = Number.isInteger(value) ? String(value) : value.toFixed(2);
+  return (
+    <input
+      type="number"
+      defaultValue={display}
+      step={0.1}
+      key={display}
+      style={styles.valueNumberInput}
+      aria-label={ariaLabel}
+      onBlur={(e) => {
+        const n = Number(e.target.value);
+        if (Number.isFinite(n) && n !== value) onCommit(n);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+        if (e.key === 'Escape') {
+          (e.target as HTMLInputElement).value = display;
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+    />
+  );
 }
