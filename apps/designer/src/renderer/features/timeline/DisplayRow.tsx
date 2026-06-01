@@ -44,15 +44,6 @@ const styles = {
     height: ROW_HEIGHT,
     boxSizing: 'border-box' as const,
   },
-  laneLine: {
-    position: 'absolute' as const,
-    left: 0,
-    right: 0,
-    top: '50%',
-    height: 0,
-    borderTop: `1px dashed ${colors.border}`,
-    pointerEvents: 'none' as const,
-  },
 } as const;
 
 /**
@@ -79,8 +70,6 @@ export function DisplayRow({ row, element, part }: Props): JSX.Element {
     );
   }
   return (
-    <div style={styles.laneCell} data-display-row={row.id}>
-      <div style={styles.laneLine} />
-    </div>
+    <div style={styles.laneCell} data-display-row={row.id} />
   );
 }

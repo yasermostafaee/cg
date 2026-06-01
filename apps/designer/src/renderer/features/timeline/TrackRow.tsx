@@ -66,7 +66,7 @@ const styles = {
   },
   // Editable numeric value — same look as labelValue but interactive.
   valueNumberInput: {
-    width: 48,
+    width: 60,
     background: 'transparent',
     color: colors.text,
     border: `1px solid transparent`,
@@ -96,15 +96,6 @@ const styles = {
     border: 0,
     padding: 0,
     background: 'transparent',
-  },
-  laneLine: {
-    position: 'absolute' as const,
-    left: 0,
-    right: 0,
-    top: '50%',
-    height: 0,
-    borderTop: `1px dashed ${colors.border}`,
-    pointerEvents: 'none' as const,
   },
   // B-003: lane diamonds are always yellow. When a diamond is
   // selected, its border turns blue (and the interpolation line that
@@ -287,7 +278,6 @@ function TrackRowLane(props: Props): JSX.Element {
       data-role="lane-empty"
       onContextMenu={(e) => e.preventDefault()}
     >
-        <div style={styles.laneLine} />
         {/* Interpolation lines between adjacent keyframes. The line is
             drawn in accent blue when the keyframe on its LEFT (the
             outgoing side) is the selected one — see B-003. */}
@@ -351,6 +341,7 @@ function TrackRowLane(props: Props): JSX.Element {
               style={style}
               role="button"
               tabIndex={0}
+              data-keyframe-diamond=""
               aria-label={`Keyframe at frame ${String(k.frame)}`}
               onDoubleClick={(e) => {
                 e.stopPropagation();

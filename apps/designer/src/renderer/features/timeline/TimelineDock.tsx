@@ -250,6 +250,19 @@ export function TimelineDock({
       if (ts !== null) ts.removeEventListener('wheel', forwardWheel);
     };
   }, []);
+
+  // Clear keyframe selection when the operator clicks anywhere that
+  // isn't a keyframe diamond. The diamond's onPointerDown calls
+  // stopPropagation so its own click survives.
+  useEffect(() => {
+    function onPointerDown(e: PointerEvent): void {
+      const target = e.target as HTMLElement | null;
+      if (target !== null && target.closest('[data-keyframe-diamond]') !== null) return;
+      designerStore.setSelectedKeyframe(null);
+    }
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, []);
   const [playing, setPlaying] = useState(false);
   const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
