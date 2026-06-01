@@ -82,6 +82,19 @@ const styles = {
   zoomInner: {
     minWidth: '100%',
   },
+  rightBodyInner: {
+    position: 'relative' as const,
+    minWidth: '100%',
+  },
+  bodyPlayhead: {
+    position: 'absolute' as const,
+    top: 0,
+    bottom: 0,
+    width: 0,
+    borderLeft: `1.5px solid ${colors.accent}`,
+    pointerEvents: 'none' as const,
+    zIndex: 2,
+  },
   header: {
     display: 'flex',
     alignItems: 'center',
@@ -441,7 +454,15 @@ export function TimelineDock({
             </div>
           </div>
           <div style={styles.rightBody} ref={rightBodyRef} onScroll={syncScroll}>
-            <div style={{ ...styles.zoomInner, width: `${String(timelineZoom * 100)}%` }}>
+            <div
+              style={{ ...styles.rightBodyInner, width: `${String(timelineZoom * 100)}%` }}
+            >
+              <div
+                style={{
+                  ...styles.bodyPlayhead,
+                  left: `${(((currentFrame - frameIn) / Math.max(1, frameOut - frameIn)) * 100).toFixed(3)}%`,
+                }}
+              />
               {elements.length === 0 ? (
                 <p style={styles.empty}>&nbsp;</p>
               ) : (

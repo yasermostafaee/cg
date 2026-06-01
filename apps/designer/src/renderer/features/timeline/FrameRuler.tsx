@@ -30,7 +30,7 @@ const styles = {
   playhead: {
     position: 'absolute' as const,
     top: 0,
-    bottom: -1000, // bleed into track rows below
+    bottom: 0,
     width: 0,
     borderLeft: `1.5px solid ${colors.accent}`,
     pointerEvents: 'none' as const,
