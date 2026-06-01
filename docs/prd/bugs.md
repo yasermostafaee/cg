@@ -56,7 +56,7 @@ just use a curve tiny line on the line between framepoints not a "f" letter.
 **Env:**  
 **Notes:** see screenshots in: `docs/designer-guide/sample-assets/B-003-pic-*`
 
-## [~] B-004 — rotation style   ⟨priority: high⟩ 
+## [x] B-004 — rotation style   ⟨priority: high⟩ 
 **Repro:**
 1. when change the rotaion of a shape or text the transition border and handle wont be changed position.
 

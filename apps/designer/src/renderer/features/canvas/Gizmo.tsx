@@ -68,13 +68,28 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   const x = position.x * scale;
   const y = position.y * scale;
 
+  const rotateTransform =
+    rotation === 0 ? undefined : `rotate(${String(rotation)}deg)`;
   const frameStyle: React.CSSProperties = {
     ...styles.frame,
     left: x,
     top: y,
     width: w,
     height: h,
-    transform: rotation === 0 ? undefined : `rotate(${String(rotation)}deg)`,
+    transform: rotateTransform,
+    transformOrigin: '0 0',
+  };
+  // B-004 — wrap the handles in a same-rotated container so corner +
+  // rotate handles follow the rotated bounding box. Local coords below
+  // are relative to this wrapper's top-left (the unrotated frame origin).
+  const handlesWrapperStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: x,
+    top: y,
+    width: w,
+    height: h,
+    pointerEvents: 'none',
+    transform: rotateTransform,
     transformOrigin: '0 0',
   };
 
@@ -88,28 +103,30 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   return (
     <>
       <div style={frameStyle} />
-      {corners.map((c) => (
+      <div style={handlesWrapperStyle}>
+        {corners.map((c) => (
+          <div
+            key={c.corner}
+            style={{
+              ...styles.handle,
+              left: c.dx - HANDLE / 2,
+              top: c.dy - HANDLE / 2,
+            }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              beginResize(element, c.corner, scale, currentFrame, e.nativeEvent);
+            }}
+          />
+        ))}
+        <div style={{ ...styles.rotateLine, left: w / 2 - 0.5, top: -16 }} />
         <div
-          key={c.corner}
-          style={{
-            ...styles.handle,
-            left: x + c.dx - HANDLE / 2,
-            top: y + c.dy - HANDLE / 2,
-          }}
+          style={{ ...styles.rotateHandle, left: w / 2 - HANDLE / 2, top: -22 }}
           onPointerDown={(e) => {
             e.stopPropagation();
-            beginResize(element, c.corner, scale, currentFrame, e.nativeEvent);
+            beginRotate(element, currentFrame, h, e.nativeEvent);
           }}
         />
-      ))}
-      <div style={{ ...styles.rotateLine, left: x + w / 2 - 0.5, top: y - 16 }} />
-      <div
-        style={{ ...styles.rotateHandle, left: x + w / 2 - HANDLE / 2, top: y - 22 }}
-        onPointerDown={(e) => {
-          e.stopPropagation();
-          beginRotate(element, currentFrame, e.nativeEvent);
-        }}
-      />
+      </div>
     </>
   );
 }
@@ -175,24 +192,48 @@ function beginResize(
   window.addEventListener('pointerup', onUp);
 }
 
-function beginRotate(element: Element, currentFrame: number, ev: PointerEvent): void {
-  // Center of the element in viewport coordinates — captured by reading
-  // the gizmo's bounding rect via the target's parent.
+/**
+ * Compute the element's centre (in viewport coords) given the viewport
+ * position of the rotate handle, the element's visual height and its
+ * current rotation. The handle sits at local (w/2, -22) inside the
+ * rotated frame; the centre is at local (w/2, h/2). So in screen space
+ * the centre is the handle offset by R(θ)·(0, h/2 + 22).
+ *
+ * Exported so the unit test can verify rotated geometry without a DOM.
+ */
+export function rotateHandleCentre(
+  handleX: number,
+  handleY: number,
+  hVisual: number,
+  rotationDeg: number,
+): { cx: number; cy: number } {
+  const localDy = hVisual / 2 + 22;
+  const rad = (rotationDeg * Math.PI) / 180;
+  return {
+    cx: handleX + -localDy * Math.sin(rad),
+    cy: handleY + localDy * Math.cos(rad),
+  };
+}
+
+function beginRotate(
+  element: Element,
+  currentFrame: number,
+  hVisual: number,
+  ev: PointerEvent,
+): void {
   const startAngle = effectiveTransformAt(element, currentFrame).rotation;
   const startX = ev.clientX;
   const startY = ev.clientY;
-  // Approximate center from the gizmo position (no scale needed — both
-  // sides cancel in the angle calculation).
-  const cx = startX;
-  const cy = startY + 22; // rotate handle is ~22px above the frame top
+  const { cx, cy } = rotateHandleCentre(startX, startY, hVisual, startAngle);
+  // Cursor angle at drag start — subtracted below so rotation doesn't
+  // snap by +90° on mousedown.
+  const startCursorAngle =
+    Math.atan2(startY - cy, startX - cx) * (180 / Math.PI) + 90;
 
   const onMove = (e: PointerEvent): void => {
-    const dx = e.clientX - cx;
-    const dy = e.clientY - cy;
-    // atan2 returns radians measured from +X axis, counter-clockwise.
-    // We want clockwise rotation in degrees, with "up" = 0°.
-    const deg = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
-    designerStore.commitAnimatable(element.id, 'rotation', startAngle + deg);
+    const ang = Math.atan2(e.clientY - cy, e.clientX - cx) * (180 / Math.PI) + 90;
+    const delta = ang - startCursorAngle;
+    designerStore.commitAnimatable(element.id, 'rotation', startAngle + delta);
   };
   const onUp = (): void => {
     window.removeEventListener('pointermove', onMove);
