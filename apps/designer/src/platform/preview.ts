@@ -94,8 +94,8 @@ export class Preview {
           linear-gradient(-45deg, #5b6075 25%, transparent 25%),
           linear-gradient(45deg, transparent 75%, #5b6075 75%),
           linear-gradient(-45deg, transparent 75%, #5b6075 75%) !important;
-        background-size: 32px 32px !important;
-        background-position: 0 0, 0 16px, 16px -16px, -16px 0 !important;
+        background-size: 48px 48px !important;
+        background-position: 0 0, 0 24px, 24px -24px, -24px 0 !important;
       }
     </style>
   </head>
