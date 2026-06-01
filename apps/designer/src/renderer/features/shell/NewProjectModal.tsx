@@ -22,14 +22,10 @@ const PRESETS: readonly ResolutionPreset[] = [
 
 const FRAME_RATES: readonly FrameRate[] = [25, 29.97, 50, 59.94, 60];
 
-const TEMPLATE_TYPES: readonly TemplateType[] = [
-  'lower-third',
-  'ticker',
-  'logo-bug',
-  'breaking-news',
-  'fullscreen',
-  'custom',
-];
+// Template choice was removed from the modal — `projects.create` still
+// needs a TemplateType, so every new project ships as 'custom' and the
+// operator picks a starter from the Library panel afterwards if needed.
+const DEFAULT_TEMPLATE_TYPE: TemplateType = 'custom';
 
 const styles = {
   backdrop: {
@@ -117,7 +113,6 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
   const [customW, setCustomW] = useState(1920);
   const [customH, setCustomH] = useState(1080);
   const [frameRate, setFrameRate] = useState<FrameRate>(50);
-  const [templateType, setTemplateType] = useState<TemplateType>('lower-third');
   const isCustom = PRESETS[presetIdx]?.label === 'Custom';
 
   useEffect(() => {
@@ -136,7 +131,7 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
       : { width: preset.width, height: preset.height };
     const result = await window.cg.projects.create({
       name: name.trim().length > 0 ? name.trim() : 'Untitled',
-      templateType,
+      templateType: DEFAULT_TEMPLATE_TYPE,
       resolution,
       frameRate,
     });
@@ -158,22 +153,6 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
             autoFocus
             aria-label="Project name"
           />
-        </div>
-
-        <div style={styles.row}>
-          <span style={styles.label}>Template</span>
-          <select
-            style={styles.input}
-            value={templateType}
-            onChange={(e) => setTemplateType(e.target.value as TemplateType)}
-            aria-label="Template type"
-          >
-            {TEMPLATE_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
         </div>
 
         <div style={styles.row}>
