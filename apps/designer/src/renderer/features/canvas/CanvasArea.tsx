@@ -125,18 +125,7 @@ const styles = {
     display: 'block',
     width: '100%',
     height: '100%',
-    // D-011 — paint the checkerboard on the iframe element itself as
-    // well, so it shows even if the parent stage is occluded. cgCss
-    // gives the iframe body `background:transparent`, so this pattern
-    // is the lowest opaque layer the scene renders against.
-    backgroundColor: '#3d4253',
-    backgroundImage:
-      'linear-gradient(45deg, #5b6075 25%, transparent 25%),' +
-      'linear-gradient(-45deg, #5b6075 25%, transparent 25%),' +
-      'linear-gradient(45deg, transparent 75%, #5b6075 75%),' +
-      'linear-gradient(-45deg, transparent 75%, #5b6075 75%)',
-    backgroundSize: '20px 20px',
-    backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0',
+    background: 'transparent',
     pointerEvents: 'none' as const,
   },
 } as const;

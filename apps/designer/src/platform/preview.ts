@@ -83,6 +83,20 @@ export class Preview {
          display:none on the new stage. Keep the stage visible
          across that tear-down/rebuild. */
       .cg-removed .cg-stage { display: block !important; }
+      /* D-011 — transparency checkerboard inside the preview iframe so
+         the operator can see "transparent" as a pattern, not as a flat
+         colour. Authoring-only: the exported .vcg uses the baseline
+         cgCss (html,body { background: transparent }) without this. */
+      html, body {
+        background-color: #3d4253 !important;
+        background-image:
+          linear-gradient(45deg, #5b6075 25%, transparent 25%),
+          linear-gradient(-45deg, #5b6075 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #5b6075 75%),
+          linear-gradient(-45deg, transparent 75%, #5b6075 75%) !important;
+        background-size: 20px 20px !important;
+        background-position: 0 0, 0 10px, 10px -10px, -10px 0 !important;
+      }
     </style>
   </head>
   <body>
