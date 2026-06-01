@@ -99,10 +99,17 @@ const styles = {
   stage: {
     position: 'relative' as const,
     // D-011 — surface the scene's transparency as a checkerboard so the
-    // operator can tell the default scene is transparent (the iframe body
-    // is already `background:transparent`; this just visualises it).
-    background:
-      'repeating-conic-gradient(#5b6075 0% 25%, #3d4253 0% 50%) 0 0 / 24px 24px',
+    // operator can tell the default scene is transparent. The iframe
+    // body is `background:transparent` (cgCss), so this pattern shows
+    // through anywhere the scene hasn't painted.
+    backgroundColor: '#3d4253',
+    backgroundImage:
+      'linear-gradient(45deg, #5b6075 25%, transparent 25%),' +
+      'linear-gradient(-45deg, #5b6075 25%, transparent 25%),' +
+      'linear-gradient(45deg, transparent 75%, #5b6075 75%),' +
+      'linear-gradient(-45deg, transparent 75%, #5b6075 75%)',
+    backgroundSize: '20px 20px',
+    backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0',
     boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
     overflow: 'hidden' as const,
   },
@@ -118,7 +125,18 @@ const styles = {
     display: 'block',
     width: '100%',
     height: '100%',
-    background: 'transparent',
+    // D-011 — paint the checkerboard on the iframe element itself as
+    // well, so it shows even if the parent stage is occluded. cgCss
+    // gives the iframe body `background:transparent`, so this pattern
+    // is the lowest opaque layer the scene renders against.
+    backgroundColor: '#3d4253',
+    backgroundImage:
+      'linear-gradient(45deg, #5b6075 25%, transparent 25%),' +
+      'linear-gradient(-45deg, #5b6075 25%, transparent 25%),' +
+      'linear-gradient(45deg, transparent 75%, #5b6075 75%),' +
+      'linear-gradient(-45deg, transparent 75%, #5b6075 75%)',
+    backgroundSize: '20px 20px',
+    backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0',
     pointerEvents: 'none' as const,
   },
 } as const;
