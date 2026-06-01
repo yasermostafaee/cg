@@ -98,7 +98,11 @@ const styles = {
   // iframe's body overflow.
   stage: {
     position: 'relative' as const,
-    background: '#000',
+    // D-011 — surface the scene's transparency as a checkerboard so the
+    // operator can tell the default scene is transparent (the iframe body
+    // is already `background:transparent`; this just visualises it).
+    background:
+      'repeating-conic-gradient(#5b6075 0% 25%, #3d4253 0% 50%) 0 0 / 24px 24px',
     boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
     overflow: 'hidden' as const,
   },
