@@ -1,31 +1,14 @@
+import { useEffect, useRef, useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
-
-interface MenuEntry {
-  id: 'home' | 'file' | 'edit' | 'view' | 'help';
-  label: string;
-  onClick?: () => void;
-}
 
 interface Props {
   scene: Scene | null;
   projectPath: string | null;
   issues: readonly ExportIssue[];
 }
-
-const MENU: readonly MenuEntry[] = [
-  // Home flips back to the landing view but KEEPS the active scene in
-  // memory — the landing screen offers a "Resume" affordance so the
-  // operator can return to it. Opening another project from landing
-  // is gated by SaveBeforeSwitchModal.
-  { id: 'home', label: 'Home', onClick: () => designerStore.setView('landing') },
-  { id: 'file', label: 'File' },
-  { id: 'edit', label: 'Edit' },
-  { id: 'view', label: 'View' },
-  { id: 'help', label: 'Help' },
-];
 
 const styles = {
   bar: {
@@ -78,6 +61,43 @@ const styles = {
     cursor: 'pointer',
     letterSpacing: '0.02em',
   },
+  menuItemWrap: {
+    position: 'relative' as const,
+  },
+  dropdown: {
+    position: 'absolute' as const,
+    top: '100%',
+    left: 0,
+    marginTop: 2,
+    minWidth: 160,
+    background: colors.panel,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '0.25rem',
+    boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
+    padding: '0.25rem 0',
+    zIndex: 60,
+  },
+  dropdownItem: {
+    display: 'block',
+    width: '100%',
+    background: 'transparent',
+    color: colors.text,
+    border: 'none',
+    textAlign: 'left' as const,
+    padding: '0.35rem 0.7rem',
+    fontSize: '0.76rem',
+    cursor: 'pointer',
+    letterSpacing: '0.01em',
+  },
+  dropdownItemDisabled: {
+    color: colors.textMuted,
+    cursor: 'default' as const,
+  },
+  dropdownDivider: {
+    height: 1,
+    background: colors.border,
+    margin: '0.2rem 0',
+  },
 } as const;
 
 /**
@@ -89,12 +109,55 @@ const styles = {
 export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
   const errorCount = issues.filter((i) => i.severity === 'error').length;
   const exportBlocked = scene === null || errorCount > 0;
+  const [openMenu, setOpenMenu] = useState<'file' | null>(null);
+  const fileBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // Close the dropdown on outside click / Escape.
+  useEffect(() => {
+    if (openMenu === null) return;
+    function close(): void {
+      setOpenMenu(null);
+    }
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') close();
+    }
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [openMenu]);
 
   async function save(): Promise<void> {
     if (scene === null) return;
     const path = projectPath ?? window.prompt('Save scene as (full path, .scene.json):');
     if (path === null || path === '') return;
     await window.cg.projects.save({ scene, path });
+  }
+
+  async function saveAs(): Promise<void> {
+    if (scene === null) return;
+    const suggested = projectPath ?? `${scene.name}.cg.json`;
+    const path = window.prompt('Save scene as (path):', suggested);
+    if (path === null || path === '') return;
+    await window.cg.projects.save({ scene, path });
+  }
+
+  async function newProject(): Promise<void> {
+    const name = window.prompt('New project name:', 'Untitled')?.trim();
+    if (name === undefined || name === '') return;
+    const result = await window.cg.projects.create({ name, templateType: 'custom' });
+    designerStore.setScene(result.scene, result.path);
+  }
+
+  async function openProject(): Promise<void> {
+    const result = await window.cg.projects.open({});
+    if (result.scene !== null) designerStore.setScene(result.scene, result.path);
+  }
+
+  function closeProject(): void {
+    designerStore.setScene(null, null);
   }
 
   async function exportVcg(): Promise<void> {
@@ -108,22 +171,77 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
     await window.cg.export.run({ scene, outputPath });
   }
 
+  function runFileAction(fn: () => void | Promise<void>): void {
+    setOpenMenu(null);
+    void fn();
+  }
+
   return (
     <nav style={styles.bar} aria-label="Application menu">
       <div style={styles.group}>
-        {MENU.map((m) => (
+        <button
+          type="button"
+          style={{ ...styles.menuItem, ...styles.menuItemHome }}
+          onClick={() => designerStore.setView('landing')}
+          title="Home"
+          aria-label="Home"
+        >
+          Home
+        </button>
+        <div
+          style={styles.menuItemWrap}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
           <button
-            key={m.id}
+            ref={fileBtnRef}
             type="button"
-            style={
-              m.id === 'home' ? { ...styles.menuItem, ...styles.menuItemHome } : styles.menuItem
-            }
-            onClick={() => m.onClick?.()}
-            disabled={m.onClick === undefined}
-            title={m.onClick === undefined ? `${m.label} (coming soon)` : m.label}
-            aria-label={m.label}
+            style={styles.menuItem}
+            onClick={() => setOpenMenu((m) => (m === 'file' ? null : 'file'))}
+            aria-haspopup="menu"
+            aria-expanded={openMenu === 'file'}
           >
-            {m.label}
+            File
+          </button>
+          {openMenu === 'file' && (
+            <div style={styles.dropdown} role="menu">
+              <FileMenuItem label="New" onClick={() => runFileAction(newProject)} />
+              <FileMenuItem label="Open…" onClick={() => runFileAction(openProject)} />
+              <div style={styles.dropdownDivider} aria-hidden />
+              <FileMenuItem
+                label="Save"
+                disabled={scene === null}
+                onClick={() => runFileAction(save)}
+              />
+              <FileMenuItem
+                label="Save As…"
+                disabled={scene === null}
+                onClick={() => runFileAction(saveAs)}
+              />
+              <div style={styles.dropdownDivider} aria-hidden />
+              <FileMenuItem
+                label="Export…"
+                disabled={exportBlocked}
+                onClick={() => runFileAction(exportVcg)}
+              />
+              <div style={styles.dropdownDivider} aria-hidden />
+              <FileMenuItem
+                label="Close project"
+                disabled={scene === null}
+                onClick={() => runFileAction(closeProject)}
+              />
+            </div>
+          )}
+        </div>
+        {(['edit', 'view', 'help'] as const).map((id) => (
+          <button
+            key={id}
+            type="button"
+            style={styles.menuItem}
+            disabled
+            title={`${capitalize(id)} (coming soon)`}
+            aria-label={capitalize(id)}
+          >
+            {capitalize(id)}
           </button>
         ))}
       </div>
@@ -147,4 +265,34 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
       </button>
     </nav>
   );
+}
+
+function FileMenuItem({
+  label,
+  onClick,
+  disabled = false,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      style={{
+        ...styles.dropdownItem,
+        ...(disabled ? styles.dropdownItemDisabled : {}),
+      }}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
+}
+
+function capitalize(s: string): string {
+  const first = s.charAt(0);
+  return first === '' ? s : first.toUpperCase() + s.slice(1);
 }
