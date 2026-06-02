@@ -78,9 +78,12 @@ const styles = {
   lifespan: {
     position: 'absolute' as const,
     top: '50%',
-    height: 10,
+    // ROW_HEIGHT - 2 → bar leaves 1 px above and 1 px below, so two
+    // adjacent rows show roughly a single-pixel separation between
+    // their bars, matching the reference timeline density.
+    height: ROW_HEIGHT - 2,
     transform: 'translateY(-50%)',
-    borderRadius: 3,
+    borderRadius: 2,
     opacity: 0.85,
     cursor: 'grab',
     touchAction: 'none' as const,
