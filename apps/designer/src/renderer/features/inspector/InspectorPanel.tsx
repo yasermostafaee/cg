@@ -173,7 +173,7 @@ function SceneInspector({
   return (
     <aside style={styles.panel} aria-label="Inspector">
       <h2 style={styles.headingFirst}>SCENE</h2>
-      <Row label="name" value={scene.name} />
+      <NameRow name={scene.name} />
       <Row label="type" value={scene.templateType} />
       <Row
         label="resolution"
@@ -286,6 +286,47 @@ function ElementBindings({
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+function NameRow({ name }: { name: string }): JSX.Element {
+  return (
+    <div style={styles.row}>
+      <span style={styles.label}>name</span>
+      <input
+        style={{
+          background: colors.panelMuted,
+          color: colors.text,
+          border: `1px solid ${colors.border}`,
+          borderRadius: '0.18rem',
+          padding: '0.1rem 0.35rem',
+          fontSize: '0.72rem',
+          width: '100%',
+          boxSizing: 'border-box',
+        }}
+        type="text"
+        defaultValue={name}
+        onBlur={(e) => {
+          const next = e.target.value.trim();
+          if (next.length > 0 && next !== name) {
+            designerStore.updateScene({ name: next });
+          } else if (next.length === 0) {
+            // Snap back to the previous value rather than commit an
+            // empty name — the schema requires at least one char.
+            e.target.value = name;
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Escape') {
+            (e.target as HTMLInputElement).value = name;
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        key={`scene-name-${name}`}
+        aria-label="Scene name"
+      />
     </div>
   );
 }
