@@ -77,6 +77,10 @@ export interface DesignerStoreState {
    * playhead frame and pans automatically as the operator scrubs.
    */
   timelineZoom: number;
+  /** Whether the past stack has at least one entry. */
+  canUndo: boolean;
+  /** Whether the future stack has at least one entry. */
+  canRedo: boolean;
 }
 
 const initialState: DesignerStoreState = {
@@ -91,14 +95,50 @@ const initialState: DesignerStoreState = {
   selectedKeyframe: null,
   keyframeInspectorOpen: false,
   timelineZoom: 1,
+  canUndo: false,
+  canRedo: false,
 };
 
 type Listener = (state: DesignerStoreState) => void;
 const listeners = new Set<Listener>();
 let current = initialState;
 
+/**
+ * Basic undo/redo: every time `set` writes a *different* Scene object
+ * we push the prior one onto `past` and drop the redo stack. The
+ * snapshot is the immutable scene reference itself (mutations always
+ * produce a fresh object), so memory cost is one pointer per entry.
+ *
+ * `setScene` (project load / close) resets both stacks so the operator
+ * can't undo across a project switch. Calls coming from `undo` /
+ * `redo` set `suppressHistory` to avoid re-pushing the same value.
+ *
+ * Granularity is per-mutation — a long drag generates many history
+ * entries. Coalescing intermediate frames into a single transaction
+ * is a polish item for later.
+ */
+const MAX_HISTORY = 100;
+let past: Scene[] = [];
+let future: Scene[] = [];
+let suppressHistory = false;
+
 function set(patch: Partial<DesignerStoreState>): void {
-  current = { ...current, ...patch };
+  if (
+    patch.scene !== undefined &&
+    patch.scene !== current.scene &&
+    !suppressHistory &&
+    current.scene !== null
+  ) {
+    past.push(current.scene);
+    if (past.length > MAX_HISTORY) past.shift();
+    future = [];
+  }
+  current = {
+    ...current,
+    ...patch,
+    canUndo: past.length > 0,
+    canRedo: future.length > 0,
+  };
   for (const l of listeners) l(current);
 }
 
@@ -155,15 +195,67 @@ export const designerStore = {
   },
 
   setScene(scene: Scene | null, projectPath: string | null): void {
-    set({
-      scene,
-      projectPath,
-      view: scene === null ? 'landing' : 'studio',
-      selection: new Set<string>(),
-      selectedKeyframe: null,
-      keyframeInspectorOpen: false,
-      currentFrame: 0,
-    });
+    past = [];
+    future = [];
+    suppressHistory = true;
+    try {
+      set({
+        scene,
+        projectPath,
+        view: scene === null ? 'landing' : 'studio',
+        selection: new Set<string>(),
+        selectedKeyframe: null,
+        keyframeInspectorOpen: false,
+        currentFrame: 0,
+      });
+    } finally {
+      suppressHistory = false;
+    }
+  },
+
+  /**
+   * Step backward in the per-scene undo history. No-op when the past
+   * stack is empty. The redo stack receives the *current* scene so
+   * `redo()` returns to it.
+   */
+  undo(): void {
+    const prev = past[past.length - 1];
+    if (prev === undefined) return;
+    past = past.slice(0, -1);
+    if (current.scene !== null) future.push(current.scene);
+    suppressHistory = true;
+    try {
+      set({
+        scene: prev,
+        selection: new Set<string>(),
+        selectedKeyframe: null,
+        keyframeInspectorOpen: false,
+      });
+    } finally {
+      suppressHistory = false;
+    }
+  },
+
+  /**
+   * Step forward through the redo stack. No-op when the future stack
+   * is empty (i.e. there's nothing the operator has undone).
+   */
+  redo(): void {
+    const next = future[future.length - 1];
+    if (next === undefined) return;
+    future = future.slice(0, -1);
+    if (current.scene !== null) past.push(current.scene);
+    suppressHistory = true;
+    try {
+      set({
+        scene: next,
+        selection: new Set<string>(),
+        selectedKeyframe: null,
+        keyframeInspectorOpen: false,
+      });
+    } finally {
+      suppressHistory = false;
+    }
   },
 
   /** Explicitly switch top-level view (used by "back to projects"). */
@@ -827,6 +919,9 @@ export const designerStore = {
 
   /** Reset for tests. */
   _reset(): void {
+    past = [];
+    future = [];
+    suppressHistory = false;
     current = {
       ...initialState,
       selection: new Set<string>(),

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
-import { designerStore } from '../../state/store.js';
+import { designerStore, useDesignerStore } from '../../state/store.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
 
@@ -109,9 +109,10 @@ const styles = {
  * status bar so the operator's primary actions stay in the chrome).
  */
 export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
+  const { canUndo, canRedo } = useDesignerStore();
   const errorCount = issues.filter((i) => i.severity === 'error').length;
   const exportBlocked = scene === null || errorCount > 0;
-  const [openMenu, setOpenMenu] = useState<'file' | null>(null);
+  const [openMenu, setOpenMenu] = useState<'file' | 'edit' | null>(null);
   const [newModalOpen, setNewModalOpen] = useState(false);
   // Queues a switch action (Close / New / Open) when there's already a
   // scene loaded — the SaveBeforeSwitchModal runs first and only then
@@ -199,6 +200,31 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
     guardedSwitch(fn);
   }
 
+  // Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z or Ctrl+Y = redo. Skip when
+  // the operator is typing into an input / textarea / contenteditable
+  // so the browser's per-field history still works.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const target = e.target as HTMLElement | null;
+      if (target !== null) {
+        const tag = target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return;
+      }
+      const key = e.key.toLowerCase();
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        designerStore.undo();
+      } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+        e.preventDefault();
+        designerStore.redo();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   return (
     <nav style={styles.bar} aria-label="Application menu">
       <div style={styles.group}>
@@ -255,7 +281,32 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
             </div>
           )}
         </div>
-        {(['edit', 'view', 'help'] as const).map((id) => (
+        <div style={styles.menuItemWrap} onPointerDown={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            style={styles.menuItem}
+            onClick={() => setOpenMenu((m) => (m === 'edit' ? null : 'edit'))}
+            aria-haspopup="menu"
+            aria-expanded={openMenu === 'edit'}
+          >
+            Edit
+          </button>
+          {openMenu === 'edit' && (
+            <div style={styles.dropdown} role="menu">
+              <FileMenuItem
+                label={isMac() ? 'Undo  ⌘Z' : 'Undo  Ctrl+Z'}
+                disabled={!canUndo}
+                onClick={() => runFileAction(() => designerStore.undo())}
+              />
+              <FileMenuItem
+                label={isMac() ? 'Redo  ⇧⌘Z' : 'Redo  Ctrl+Shift+Z'}
+                disabled={!canRedo}
+                onClick={() => runFileAction(() => designerStore.redo())}
+              />
+            </div>
+          )}
+        </div>
+        {(['view', 'help'] as const).map((id) => (
           <button
             key={id}
             type="button"
@@ -331,4 +382,8 @@ function FileMenuItem({
 function capitalize(s: string): string {
   const first = s.charAt(0);
   return first === '' ? s : first.toUpperCase() + s.slice(1);
+}
+
+function isMac(): boolean {
+  return typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 }
