@@ -8,6 +8,8 @@ interface Props {
   currentFrame: number;
 }
 
+type LoopMode = 'off' | 'loop' | 'bounce';
+
 const styles = {
   bar: {
     display: 'grid',
@@ -28,25 +30,26 @@ const styles = {
     gap: '0.3rem',
     gridColumn: 2,
   },
-  spacer: { flex: 1 },
+  groupDivider: {
+    width: 1,
+    height: 14,
+    background: colors.border,
+    margin: '0 0.25rem',
+  },
   button: {
-    background: colors.panelMuted,
+    background: 'transparent',
     color: colors.text,
     border: `1px solid ${colors.border}`,
     borderRadius: '0.18rem',
     fontSize: '0.78rem',
     padding: '0.12rem 0.55rem',
     cursor: 'pointer',
+    lineHeight: 1.2,
   },
-  buttonPrimary: {
-    background: colors.accent,
-    color: '#000',
-    border: `1px solid ${colors.accentMuted}`,
-    borderRadius: '0.18rem',
-    fontSize: '0.78rem',
-    padding: '0.12rem 0.65rem',
-    fontWeight: 700,
-    cursor: 'pointer',
+  buttonActive: {
+    background: 'transparent',
+    color: colors.accent,
+    border: `1px solid ${colors.accent}`,
   },
   frameReadout: {
     color: colors.textMuted,
@@ -59,24 +62,36 @@ const styles = {
 } as const;
 
 /**
- * Bottom-of-window transport bar — go-to-start / step back / play-pause /
- * stop / step forward, plus a frame readout. Lifted out of the
- * timeline header (D-009) so the playback controls have a dedicated
- * row that the operator can reach without scanning past the
- * timeline's per-element tree.
+ * Bottom-of-canvas-column transport bar — go-to-start / step back /
+ * play-pause / step forward, then a loop toggle and a bounce
+ * (ping-pong) toggle. Frame readout sits on the right. The loop
+ * modes are mutually exclusive; whichever the operator activates,
+ * the other turns off so the playback behaviour is unambiguous.
+ *
+ *   off    → play to frameOut, then stop
+ *   loop   → wrap to frameIn at frameOut
+ *   bounce → reverse direction at every boundary
  */
 export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
   const { in: frameIn, out: frameOut } = scene.frameRange;
   const [playing, setPlaying] = useState(false);
+  const [loopMode, setLoopMode] = useState<LoopMode>('off');
   const lastWallRef = useRef<number>(0);
   const accumRef = useRef<number>(0);
+  const directionRef = useRef<1 | -1>(1);
+  // `loopMode` changes mid-playback need to be visible to the running
+  // rAF tick without restarting it (restart resets the accumulator
+  // and visibly jitters). A ref carries the latest value across renders.
+  const loopModeRef = useRef<LoopMode>(loopMode);
+  loopModeRef.current = loopMode;
 
-  // Advance currentFrame at scene.frameRate while playing. The
-  // tick reads the latest currentFrame from the store rather than
-  // closing over a stale prop, so React re-renders never reset the
-  // playhead mid-loop.
+  // Advance currentFrame at scene.frameRate while playing. The tick
+  // reads the latest currentFrame from the store rather than closing
+  // over a stale prop, so React re-renders never reset the playhead
+  // mid-loop.
   useEffect(() => {
     if (!playing) return;
+    directionRef.current = 1;
     let raf = 0;
     const tick = (now: number): void => {
       const prev = lastWallRef.current === 0 ? now : lastWallRef.current;
@@ -85,11 +100,34 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
       accumRef.current += dt;
       const frameDurMs = 1000 / scene.frameRate;
       let next = designerStore.get().currentFrame;
-      while (accumRef.current >= frameDurMs) {
+      let stop = false;
+      while (accumRef.current >= frameDurMs && !stop) {
         accumRef.current -= frameDurMs;
-        next = next >= frameOut ? frameIn : next + 1;
+        next += directionRef.current;
+        if (next > frameOut) {
+          if (loopModeRef.current === 'loop') {
+            next = frameIn;
+          } else if (loopModeRef.current === 'bounce') {
+            directionRef.current = -1;
+            next = frameOut - 1 < frameIn ? frameIn : frameOut - 1;
+          } else {
+            next = frameOut;
+            stop = true;
+          }
+        } else if (next < frameIn) {
+          if (loopModeRef.current === 'bounce') {
+            directionRef.current = 1;
+            next = frameIn + 1 > frameOut ? frameOut : frameIn + 1;
+          } else {
+            next = frameIn;
+          }
+        }
       }
       designerStore.setCurrentFrame(next);
+      if (stop) {
+        setPlaying(false);
+        return;
+      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -99,6 +137,10 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
       accumRef.current = 0;
     };
   }, [playing, scene.frameRate, frameIn, frameOut]);
+
+  function toggleLoop(mode: 'loop' | 'bounce'): void {
+    setLoopMode((m) => (m === mode ? 'off' : mode));
+  }
 
   return (
     <div style={styles.bar} aria-label="Playback transport">
@@ -123,24 +165,12 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
         </button>
         <button
           type="button"
-          style={styles.buttonPrimary}
+          style={styles.button}
           onClick={() => setPlaying((p) => !p)}
           aria-label={playing ? 'Pause' : 'Play'}
           title={playing ? 'Pause' : 'Play'}
         >
-          {playing ? '❚❚' : '▶'}
-        </button>
-        <button
-          type="button"
-          style={styles.button}
-          onClick={() => {
-            setPlaying(false);
-            designerStore.setCurrentFrame(frameIn);
-          }}
-          aria-label="Stop"
-          title="Stop"
-        >
-          ⏹
+          {playing ? '⏸' : '▶'}
         </button>
         <button
           type="button"
@@ -150,6 +180,27 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
           title="Step forward one frame"
         >
           ▶
+        </button>
+        <span style={styles.groupDivider} aria-hidden />
+        <button
+          type="button"
+          style={loopMode === 'loop' ? { ...styles.button, ...styles.buttonActive } : styles.button}
+          onClick={() => toggleLoop('loop')}
+          aria-pressed={loopMode === 'loop'}
+          aria-label="Loop"
+          title="Loop — wrap to start at the end"
+        >
+          ∞
+        </button>
+        <button
+          type="button"
+          style={loopMode === 'bounce' ? { ...styles.button, ...styles.buttonActive } : styles.button}
+          onClick={() => toggleLoop('bounce')}
+          aria-pressed={loopMode === 'bounce'}
+          aria-label="Ping-pong"
+          title="Ping-pong — reverse direction at each boundary"
+        >
+          ⇄
         </button>
       </div>
       <span style={styles.frameReadout} aria-label="Current frame">
