@@ -199,15 +199,25 @@ export function ProjectAssetsPanel(): JSX.Element {
         const url = await window.cg.assets.url(asset.assetId);
         if (cancelled || url === null) continue;
         try {
-          const face = new FontFace(`asset-${asset.assetId}`, `url(${url})`);
+          // Fetch the bytes ourselves and feed an ArrayBuffer to
+          // FontFace. Going through `url(blob:…)` triggered the
+          // Chromium "Slow network is detected. Fallback font will be
+          // used while loading" intervention even for trivially local
+          // blob URLs — the operator briefly saw the wrong font on
+          // every project open. ArrayBuffer skips the network heuristic
+          // entirely.
+          const buffer = await (await fetch(url)).arrayBuffer();
+          if (cancelled) continue;
+          const family = `asset-${asset.assetId}`;
+          const face = new FontFace(family, buffer);
           await face.load();
-          // `document.fonts` exists on every modern browser.
+          if (cancelled) continue;
           (document as Document & { fonts: FontFaceSet }).fonts.add(face);
           fontFaces.set(asset.assetId, face);
           // Persist the font in `scene.fonts` so the Text inspector
           // dropdown lists it.
           designerStore.addSceneFont({
-            family: `asset-${asset.assetId}`,
+            family,
             displayName: stripExt(asset.filename),
             assetId: asset.assetId,
           });
