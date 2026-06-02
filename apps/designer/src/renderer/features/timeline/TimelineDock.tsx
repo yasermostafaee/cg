@@ -4,7 +4,7 @@ import { colors } from '../../theme.js';
 import { designerStore, useDesignerStore } from '../../state/store.js';
 import { DisplayRow } from './DisplayRow.js';
 import { ElementRow, lifespanColorFor } from './ElementRow.js';
-import { FrameRuler } from './FrameRuler.js';
+import { FrameRuler, pickStride } from './FrameRuler.js';
 import { LABEL_COL_PX, timelineGroupsFor } from './keyframe-helpers.js';
 import { TrackRow } from './TrackRow.js';
 
@@ -224,6 +224,16 @@ export function TimelineDock({
 }: Props): JSX.Element {
   const { in: frameIn, out: frameOut } = scene.frameRange;
   const { timelineZoom } = useDesignerStore();
+  // `visibleFrames = span / zoom` exactly, because the inner wrappers
+  // (ruler's `zoomInner`, body's `rightBodyInner`) are both
+  // `width: zoom × 100%` of the scrolling viewport — so the on-screen
+  // density only depends on those two numbers. One stride for the
+  // ruler labels and the body gridlines keeps the two visually
+  // synchronised.
+  const span = Math.max(1, frameOut - frameIn);
+  const visibleFrames = span / Math.max(1, timelineZoom);
+  const tickStride = pickStride(visibleFrames);
+  const gridPeriodPct = ((tickStride * 100) / span).toFixed(4);
   const rightBodyRef = useRef<HTMLDivElement | null>(null);
   const leftBodyRef = useRef<HTMLDivElement | null>(null);
   const topScrollRef = useRef<HTMLDivElement | null>(null);
@@ -496,6 +506,7 @@ export function TimelineDock({
                 frameIn={frameIn}
                 frameOut={frameOut}
                 currentFrame={currentFrame}
+                stride={tickStride}
                 onScrub={(f) => designerStore.setCurrentFrame(f)}
               />
             </div>
@@ -506,9 +517,11 @@ export function TimelineDock({
                 ...styles.rightBodyInner,
                 width: `${String(timelineZoom * 100)}%`,
                 backgroundColor: TIMELINE_BG,
-                // One vertical line per frame, at the same period as the
-                // ruler ticks.
-                backgroundImage: `repeating-linear-gradient(to right, #262a3e 0, #262a3e 1px, transparent 1px, transparent calc(100% / ${String(Math.max(1, frameOut - frameIn))}))`,
+                // One vertical line per `tickStride` frames, at the same
+                // period the ruler labels use. Without this thinning, a
+                // 1000-frame scene at default zoom paints ~4px-spaced
+                // lines that read as a solid smear.
+                backgroundImage: `repeating-linear-gradient(to right, #262a3e 0, #262a3e 1px, transparent 1px, transparent ${gridPeriodPct}%)`,
               }}
             >
               <div

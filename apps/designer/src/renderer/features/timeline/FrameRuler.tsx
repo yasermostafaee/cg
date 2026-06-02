@@ -1,10 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
 import { colors } from '../../theme.js';
 
 interface Props {
   frameIn: number;
   frameOut: number;
   currentFrame: number;
+  /**
+   * Distance between labelled frames, computed once in TimelineDock
+   * from `visibleFrames = span / timelineZoom` and shared with the
+   * body gridlines so labels and lines stay aligned. See `pickStride`.
+   */
+  stride: number;
   onScrub: (frame: number) => void;
 }
 
@@ -53,50 +59,22 @@ const styles = {
 
 /**
  * Frame ruler with tick labels and a draggable playhead. Click anywhere on
- * the ruler to scrub. The label stride adapts to how many frames are
- * *visible in the viewport* — not how many frames the scene contains.
- * A 1000-frame scene at 12× zoom shows ~80 frames in the viewport at any
- * time, so the ruler labels at the same density as an 80-frame scene at
- * 1× zoom. Mapping (visible frames → stride):
- *
- *      ≤  44 → every frame
- *     45–90 → every 2 (0, 2, 4, …)
- *    91–200 → every 5
- *   201–500 → every 10
- *      >500 → every 25
+ * the ruler to scrub. `stride` is computed by TimelineDock and shared
+ * between the ruler labels and the body vertical gridlines.
  */
-export function FrameRuler({ frameIn, frameOut, currentFrame, onScrub }: Props): JSX.Element {
+export function FrameRuler({
+  frameIn,
+  frameOut,
+  currentFrame,
+  stride,
+  onScrub,
+}: Props): JSX.Element {
   const ref = useRef<HTMLDivElement | null>(null);
   const span = Math.max(1, frameOut - frameIn);
-  const [visibleFrames, setVisibleFrames] = useState<number>(span);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (el === null) return;
-    // viewport = scrolling ancestor (`topScroll` in TimelineDock); the
-    // ruler itself lives inside `zoomInner`, whose width = viewport × zoom,
-    // so visibleFrames = span × (viewport / rulerWidth).
-    function read(): void {
-      const target = ref.current;
-      if (target === null) return;
-      const rulerWidth = target.clientWidth;
-      const viewportWidth = target.parentElement?.parentElement?.clientWidth ?? rulerWidth;
-      if (rulerWidth <= 0) {
-        setVisibleFrames(span);
-        return;
-      }
-      setVisibleFrames((span * viewportWidth) / rulerWidth);
-    }
-    read();
-    const ro = new ResizeObserver(read);
-    ro.observe(el);
-    const viewport = el.parentElement?.parentElement ?? null;
-    if (viewport !== null) ro.observe(viewport);
-    return () => ro.disconnect();
-  }, [span]);
-
-  const stride = pickStride(visibleFrames);
   const ticks = tickFrames(frameIn, frameOut, stride);
+  // Same stride drives the ruler's own background lines so labels sit
+  // directly above their gridline rather than landing between two.
+  const linePeriodPct = ((stride * 100) / span).toFixed(4);
 
   function frameAt(clientX: number): number {
     const el = ref.current;
@@ -123,7 +101,7 @@ export function FrameRuler({ frameIn, frameOut, currentFrame, onScrub }: Props):
       ref={ref}
       style={{
         ...styles.outer,
-        backgroundImage: `repeating-linear-gradient(to right, #262a3e 0, #262a3e 1px, transparent 1px, transparent calc(100% / ${String(span)}))`,
+        backgroundImage: `repeating-linear-gradient(to right, #262a3e 0, #262a3e 1px, transparent 1px, transparent ${linePeriodPct}%)`,
       }}
       role="slider"
       aria-label="Frame ruler"
@@ -156,9 +134,16 @@ export function FrameRuler({ frameIn, frameOut, currentFrame, onScrub }: Props):
  * Choose a tick stride based on how many frames fit in the viewport.
  * The 1/2/5/10/25 ladder reads naturally — the operator's eye groups
  * "every 5" without effort, where strides like 3 or 7 would feel
- * arbitrary.
+ * arbitrary. Exported so the timeline body's gridlines stay in lockstep
+ * with the ruler labels.
+ *
+ *      ≤  44 → every frame
+ *     45–90 → every 2 (0, 2, 4, …)
+ *    91–200 → every 5
+ *   201–500 → every 10
+ *      >500 → every 25
  */
-function pickStride(visibleFrames: number): number {
+export function pickStride(visibleFrames: number): number {
   if (visibleFrames <= 44) return 1;
   if (visibleFrames <= 90) return 2;
   if (visibleFrames <= 200) return 5;
