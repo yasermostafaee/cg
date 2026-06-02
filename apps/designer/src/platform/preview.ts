@@ -143,13 +143,6 @@ export class Preview {
         // for every <img data-cg-asset-id="…">.
         let assetUrls = {};
         let currentScene = null;
-        // Track which custom @font-faces we already registered with the
-        // iframe document.fonts, keyed by family name. The family is
-        // asset-<assetId>; the parent document also registers an
-        // identical face, but iframe documents have their own font
-        // registry, so this redundant registration is what actually
-        // paints the text with the right glyphs.
-        const registeredFonts = new Map();
         let editingTextId = null;
 
         function applyAssetUrls() {
@@ -164,20 +157,34 @@ export class Preview {
           });
         }
 
+        // Custom fonts reach the iframe runtime via one <style> tag
+        // (id="cg-font-faces") that we keep in sync with scene.fonts +
+        // assetUrls. The runtime sets the text element font-family to
+        // "asset-<assetId>", the CSS @font-face rule wires that family
+        // name to the blob URL the parent shipped over, and the
+        // browser handles loading + paint reflow declaratively. The JS
+        // FontFace API was tried first but proved finicky for blob
+        // URLs hosted from the parent document inside srcDoc iframes.
         function applyFontFaces() {
-          if (!currentScene || !currentScene.fonts) return;
-          for (const font of currentScene.fonts) {
-            const m = /^asset-(.+)$/.exec(font.family);
-            if (!m) continue;
-            const url = assetUrls[m[1]];
-            if (!url) continue;
-            if (registeredFonts.has(font.family)) continue;
-            const face = new FontFace(font.family, 'url(' + url + ')');
-            registeredFonts.set(font.family, face);
-            face.load().then((loaded) => {
-              document.fonts.add(loaded);
-            }).catch(() => {});
+          if (!currentScene || !Array.isArray(currentScene.fonts)) return;
+          let style = document.getElementById('cg-font-faces');
+          if (!style) {
+            style = document.createElement('style');
+            style.id = 'cg-font-faces';
+            document.head.appendChild(style);
           }
+          const rules = [];
+          for (const font of currentScene.fonts) {
+            if (typeof font.family !== 'string' || font.family.indexOf('asset-') !== 0) continue;
+            const assetId = font.family.slice('asset-'.length);
+            const url = assetUrls[assetId];
+            if (!url) continue;
+            rules.push(
+              '@font-face { font-family: "' + font.family +
+                '"; src: url("' + url + '"); font-display: swap; }',
+            );
+          }
+          style.textContent = rules.join('\n');
         }
 
         function applyEditingHide() {
