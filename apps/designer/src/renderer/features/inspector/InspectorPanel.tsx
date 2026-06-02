@@ -180,7 +180,7 @@ function SceneInspector({
       />
       <Row label="frame rate" value={String(scene.frameRate)} />
       <DurationRow scene={scene} />
-      <Row label="layers" value={String(scene.layers.length)} />
+      <Row label="elements" value={String(countElements(scene))} />
       <Row label="path" value={projectPath ?? '(unsaved)'} />
       <BackgroundControl background={scene.background} variant="full" />
       {scene.fields.length > 0 && (
@@ -287,6 +287,28 @@ function ElementBindings({
       ))}
     </div>
   );
+}
+
+/**
+ * Total element count across every layer, recursing into containers.
+ * The Scene inspector displays this as "elements" because the operator
+ * thinks in terms of shapes/text on the canvas, not in terms of the
+ * logical layer grouping the schema uses underneath.
+ */
+function countElements(scene: Scene): number {
+  let n = 0;
+  function walk(children: readonly { type: string; children?: readonly { type: string }[] }[]): void {
+    for (const child of children) {
+      n += 1;
+      if (child.type === 'container' && Array.isArray(child.children)) {
+        walk(child.children as readonly { type: string; children?: readonly { type: string }[] }[]);
+      }
+    }
+  }
+  for (const layer of scene.layers) {
+    walk(layer.children as readonly { type: string; children?: readonly { type: string }[] }[]);
+  }
+  return n;
 }
 
 function NameRow({ name }: { name: string }): JSX.Element {
