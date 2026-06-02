@@ -1,18 +1,20 @@
 import type { AssetMeta } from '@cg/shared-ipc';
 
 /**
- * D-011 — module-level cache that resolves image assetIds to blob URLs.
+ * D-011 — module-level cache that resolves image + font assetIds to
+ * blob URLs.
  *
  * The Designer iframe renders ImageElements by setting `<img>.src` to a
- * blob: URL the bridge produced from the workspace bytes. Resolving on
- * demand inside the React tree would race with the scene-replace
- * postMessage, so we maintain a single cache + subscribe model:
+ * blob: URL, and registers custom `@font-face`s by pointing at the same
+ * URL inside its own `document.fonts` registry. Resolving on demand
+ * inside the React tree would race with the scene-replace postMessage,
+ * so we maintain a single cache + subscribe model:
  *
- *   - `prime(asset)` is called for every image asset the renderer learns
- *     about (initial list + every later import).
+ *   - `prime(asset)` is called for every image / font asset the
+ *     renderer learns about (initial list + every later import).
  *   - `getAll()` returns the current snapshot; CanvasArea attaches it
  *     to every scene-replace message so the iframe can fix up image
- *     `src` attributes after each rebuild.
+ *     `src` attributes and `@font-face` URLs after each rebuild.
  *   - `subscribe(handler)` lets CanvasArea re-flush when a new URL
  *     resolves after the initial mount.
  */
@@ -36,9 +38,9 @@ export function subscribe(handler: Handler): () => void {
   return () => handlers.delete(handler);
 }
 
-/** Resolve an image asset's URL and cache it. Idempotent. */
+/** Resolve an image or font asset's URL and cache it. Idempotent. */
 export async function prime(asset: AssetMeta): Promise<void> {
-  if (asset.kind !== 'image') return;
+  if (asset.kind !== 'image' && asset.kind !== 'font') return;
   if (urls.has(asset.assetId)) return;
   const url = await window.cg.assets.url(asset.assetId);
   if (url === null) return;
