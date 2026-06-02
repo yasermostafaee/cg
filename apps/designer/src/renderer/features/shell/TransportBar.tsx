@@ -10,19 +10,23 @@ interface Props {
 
 const styles = {
   bar: {
-    display: 'flex',
+    display: 'grid',
+    gridTemplateColumns: '1fr auto 1fr',
     alignItems: 'center',
     gap: '0.45rem',
-    padding: '0.35rem 0.75rem',
+    padding: '0.3rem 0.75rem',
     background: colors.panel,
-    borderTop: `1px solid ${colors.border}`,
-    borderBottom: `1px solid ${colors.border}`,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '0.22rem',
     fontSize: '0.74rem',
+    flexShrink: 0,
   },
   group: {
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: '0.3rem',
+    gridColumn: 2,
   },
   spacer: { flex: 1 },
   button: {
@@ -48,7 +52,9 @@ const styles = {
     color: colors.textMuted,
     fontSize: '0.72rem',
     fontVariantNumeric: 'tabular-nums' as const,
-    paddingLeft: '0.4rem',
+    paddingLeft: '0.5rem',
+    justifySelf: 'end' as const,
+    gridColumn: 3,
   },
 } as const;
 
@@ -149,7 +155,6 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
       <span style={styles.frameReadout} aria-label="Current frame">
         frame {currentFrame} / {frameOut}
       </span>
-      <span style={styles.spacer} />
     </div>
   );
 }

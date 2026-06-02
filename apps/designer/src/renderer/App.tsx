@@ -145,6 +145,7 @@ export function App(): JSX.Element {
               showToolbar
             />
           </div>
+          <TransportBar scene={scene} currentFrame={currentFrame} />
           {issues.length > 0 && (
             <div style={styles.issuesWrap}>
               <IssuesPanel issues={issues} />
@@ -184,7 +185,6 @@ export function App(): JSX.Element {
           selectedKeyframe={selectedKeyframe}
         />
       </div>
-      <TransportBar scene={scene} currentFrame={currentFrame} />
       <StatusBar scene={scene} issues={issues} />
     </main>
   );
