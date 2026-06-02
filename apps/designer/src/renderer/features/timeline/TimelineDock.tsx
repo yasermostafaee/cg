@@ -337,11 +337,6 @@ export function TimelineDock({
 
   return (
     <section style={styles.dock} aria-label="Animation timeline">
-      <div style={styles.header}>
-        <div style={styles.headerLeft}>
-          <span style={styles.title}>TIMELINE</span>
-        </div>
-      </div>
       <div style={styles.body}>
         <div style={styles.leftCol}>
           <div style={styles.leftHeader}>
