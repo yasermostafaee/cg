@@ -57,14 +57,16 @@ export function TextEditor({ element, scale, onCommit }: Props): JSX.Element {
           : 'right'
         : align;
 
-  // Mount/focus the editor + place the caret at the end.
+  // Mount/focus the editor + select every character so an immediate
+  // keystroke replaces the existing label outright (the operator
+  // usually double-clicks a placeholder to overwrite it, not to
+  // append).
   useEffect(() => {
     const node = ref.current;
     if (node === null) return;
     node.focus();
     const range = document.createRange();
     range.selectNodeContents(node);
-    range.collapse(false);
     const sel = window.getSelection();
     sel?.removeAllRanges();
     sel?.addRange(range);
