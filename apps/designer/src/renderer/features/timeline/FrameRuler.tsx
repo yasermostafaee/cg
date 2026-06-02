@@ -53,28 +53,49 @@ const styles = {
 
 /**
  * Frame ruler with tick labels and a draggable playhead. Click anywhere on
- * the ruler to scrub. The label stride adapts to the rendered width per
- * frame (which already reflects the timeline zoom): cramped rulers label
- * every 5th frame, mid-zoom every 2nd, and only when each frame is wide
- * enough to read does it label every single one.
+ * the ruler to scrub. The label stride adapts to how many frames are
+ * *visible in the viewport* — not how many frames the scene contains.
+ * A 1000-frame scene at 12× zoom shows ~80 frames in the viewport at any
+ * time, so the ruler labels at the same density as an 80-frame scene at
+ * 1× zoom. Mapping (visible frames → stride):
+ *
+ *      ≤  44 → every frame
+ *     45–90 → every 2 (0, 2, 4, …)
+ *    91–200 → every 5
+ *   201–500 → every 10
+ *      >500 → every 25
  */
 export function FrameRuler({ frameIn, frameOut, currentFrame, onScrub }: Props): JSX.Element {
   const ref = useRef<HTMLDivElement | null>(null);
-  const [width, setWidth] = useState<number>(0);
+  const span = Math.max(1, frameOut - frameIn);
+  const [visibleFrames, setVisibleFrames] = useState<number>(span);
 
   useEffect(() => {
     const el = ref.current;
     if (el === null) return;
-    setWidth(el.clientWidth);
-    const ro = new ResizeObserver(() => {
-      setWidth(el.clientWidth);
-    });
+    // viewport = scrolling ancestor (`topScroll` in TimelineDock); the
+    // ruler itself lives inside `zoomInner`, whose width = viewport × zoom,
+    // so visibleFrames = span × (viewport / rulerWidth).
+    function read(): void {
+      const target = ref.current;
+      if (target === null) return;
+      const rulerWidth = target.clientWidth;
+      const viewportWidth = target.parentElement?.parentElement?.clientWidth ?? rulerWidth;
+      if (rulerWidth <= 0) {
+        setVisibleFrames(span);
+        return;
+      }
+      setVisibleFrames((span * viewportWidth) / rulerWidth);
+    }
+    read();
+    const ro = new ResizeObserver(read);
     ro.observe(el);
+    const viewport = el.parentElement?.parentElement ?? null;
+    if (viewport !== null) ro.observe(viewport);
     return () => ro.disconnect();
-  }, []);
+  }, [span]);
 
-  const span = Math.max(1, frameOut - frameIn);
-  const stride = pickStride(span, width);
+  const stride = pickStride(visibleFrames);
   const ticks = tickFrames(frameIn, frameOut, stride);
 
   function frameAt(clientX: number): number {
@@ -132,23 +153,16 @@ export function FrameRuler({ frameIn, frameOut, currentFrame, onScrub }: Props):
 }
 
 /**
- * Choose a tick stride based on how many pixels each frame is allotted
- * in the rendered ruler. The ladder is 1/2/5/10/25 — values the eye
- * groups easily ("every 5") instead of arbitrary numbers like 3 or 7.
- *
- *   >= 22px / frame → every frame      (operator zoomed in close)
- *   >= 10px / frame → every 2 frames   (mid zoom)
- *   >=  5px / frame → every 5 frames   (default for long scenes)
- *   >=  2px / frame → every 10 frames  (very long span)
- *   else           → every 25 frames  (huge spans, label sparsely)
+ * Choose a tick stride based on how many frames fit in the viewport.
+ * The 1/2/5/10/25 ladder reads naturally — the operator's eye groups
+ * "every 5" without effort, where strides like 3 or 7 would feel
+ * arbitrary.
  */
-function pickStride(span: number, widthPx: number): number {
-  if (widthPx <= 0) return 1;
-  const pxPerFrame = widthPx / span;
-  if (pxPerFrame >= 22) return 1;
-  if (pxPerFrame >= 10) return 2;
-  if (pxPerFrame >= 5) return 5;
-  if (pxPerFrame >= 2) return 10;
+function pickStride(visibleFrames: number): number {
+  if (visibleFrames <= 44) return 1;
+  if (visibleFrames <= 90) return 2;
+  if (visibleFrames <= 200) return 5;
+  if (visibleFrames <= 500) return 10;
   return 25;
 }
 
