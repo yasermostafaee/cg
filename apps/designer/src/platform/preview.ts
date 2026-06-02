@@ -184,7 +184,10 @@ export class Preview {
                 '"; src: url("' + url + '"); font-display: swap; }',
             );
           }
-          style.textContent = rules.join('\n');
+          // No separator — every rule already ends with '}', and a real
+          // newline cannot live inside a single-quoted JS string in
+          // this inline iframe script.
+          style.textContent = rules.join('');
         }
 
         function applyEditingHide() {
