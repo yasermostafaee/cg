@@ -2,7 +2,12 @@ import { useEffect, useRef } from 'react';
 import type { Element, Scene, TextElement } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore, type DesignerTool } from '../../state/store.js';
-import { defaultEllipse, defaultShape, defaultText } from '../../state/element-defaults.js';
+import {
+  defaultEllipse,
+  defaultImage,
+  defaultShape,
+  defaultText,
+} from '../../state/element-defaults.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
 import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
@@ -174,16 +179,37 @@ export function CanvasOverlay({
   // Bind-mode shows an actionable hint ("BIND → fieldId, Esc to cancel"),
   // but the always-on tool name was redundant with the toolbar's
   // pressed state and clutters the canvas — removed.
+  function onDragOver(e: React.DragEvent<HTMLDivElement>): void {
+    if (!e.dataTransfer.types.includes('application/x-cg-asset-id')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  }
+
+  function onDrop(e: React.DragEvent<HTMLDivElement>): void {
+    const assetId = e.dataTransfer.getData('application/x-cg-asset-id');
+    if (assetId === '') return;
+    e.preventDefault();
+    const scenePoint = viewportToScene(e.clientX, e.clientY);
+    const id = `el-${String(Date.now())}`;
+    designerStore.addElement(defaultImage(id, scenePoint.x, scenePoint.y, assetId));
+    designerStore.setSelection([id]);
+  }
+
   return (
     <div
       ref={layerRef}
       style={{ ...styles.layer, cursor: cursorStyle }}
       onPointerDown={onPointerDown}
       onDoubleClick={onDoubleClick}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
     >
-      {selectedEl !== null && editingEl === null && bindModeFieldId === null && (
-        <Gizmo element={selectedEl} scale={scale} currentFrame={currentFrame} />
-      )}
+      {selectedEl !== null &&
+        selectedEl.visible &&
+        editingEl === null &&
+        bindModeFieldId === null && (
+          <Gizmo element={selectedEl} scale={scale} currentFrame={currentFrame} />
+        )}
       {editingEl !== null && editingEl.type === 'text' && (
         <TextEditor
           element={editingEl as TextElement}
