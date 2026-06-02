@@ -100,4 +100,27 @@ describe('createRuntime — lifecycle', () => {
     await runtime.play({});
     expect(cb).not.toHaveBeenCalled();
   });
+
+  it('tick() hides elements outside their lifespan and restores them inside', async () => {
+    const scene: typeof lowerThirdScene = {
+      ...lowerThirdScene,
+      layers: lowerThirdScene.layers.map((layer) => ({
+        ...layer,
+        children: layer.children.map((c) =>
+          c.id === 'bg' ? { ...c, lifespan: { in: 10, out: 20 } } : c,
+        ),
+      })),
+    };
+    const runtime = createRuntime(scene, { skipFontLoad: true });
+    await runtime.play({});
+    const node = document.querySelector<HTMLElement>('[data-cg-element-id="bg"]');
+    expect(node).toBeTruthy();
+    if (node === null) return;
+    runtime.tick(5);
+    expect(node.style.display).toBe('none');
+    runtime.tick(15);
+    expect(node.style.display).not.toBe('none');
+    runtime.tick(25);
+    expect(node.style.display).toBe('none');
+  });
 });

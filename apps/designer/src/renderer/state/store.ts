@@ -909,6 +909,43 @@ export const designerStore = {
     });
   },
 
+  /**
+   * Update the per-element lifespan (timeline lane bar). Passing
+   * `null` removes the lifespan so the element reverts to the
+   * scene's frameRange. The store clamps both ends to
+   * `[scene.frameRange.in, scene.frameRange.out]` and rejects
+   * inverted ranges so callers don't need to.
+   */
+  updateElementLifespan(
+    elementId: string,
+    lifespan: { in: number; out: number } | null,
+  ): void {
+    if (current.scene === null) return;
+    const found = locate(current.scene, elementId);
+    if (found === null) return;
+    const { layer, layerIdx, elIdx } = found;
+    const existing = layer.children[elIdx];
+    if (existing === undefined) return;
+    let next: Element;
+    if (lifespan === null) {
+      const { lifespan: _omit, ...rest } = existing;
+      void _omit;
+      next = rest as Element;
+    } else {
+      const { in: sIn, out: sOut } = current.scene.frameRange;
+      const lo = Math.max(sIn, Math.min(sOut, Math.round(lifespan.in)));
+      const hi = Math.max(sIn, Math.min(sOut, Math.round(lifespan.out)));
+      if (hi < lo) return;
+      next = { ...existing, lifespan: { in: lo, out: hi } } as Element;
+    }
+    const nextChildren = [...layer.children];
+    nextChildren[elIdx] = next;
+    const nextLayer: Layer = { ...layer, children: nextChildren };
+    const nextLayers = [...current.scene.layers];
+    nextLayers[layerIdx] = nextLayer;
+    set({ scene: { ...current.scene, layers: nextLayers } });
+  },
+
   /** Remove an element by id. Cleans up the selection set if needed. */
   removeElement(elementId: string): void {
     if (current.scene === null) return;

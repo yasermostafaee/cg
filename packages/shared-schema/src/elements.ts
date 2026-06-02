@@ -12,7 +12,7 @@ import {
   Vec2Schema,
   ZIndexSchema,
 } from './primitives.js';
-import { ElementAnimationSchema } from './animation.js';
+import { ElementAnimationSchema, FrameRangeSchema } from './animation.js';
 
 const TextDirectionSchema = z.enum(['auto', 'ltr', 'rtl']);
 
@@ -31,6 +31,14 @@ export const ElementBaseSchema = z.object({
    * type by the runtime when present.
    */
   filter: FilterSchema.optional(),
+  /**
+   * Optional per-element active range in scene frames. Inclusive on
+   * both ends. When the playhead is outside `[in, out]` the runtime
+   * hides the element (display: none). Absent means the element is
+   * active for the full scene `frameRange` — the operator only sets
+   * this once they want the element to enter / leave mid-scene.
+   */
+  lifespan: FrameRangeSchema.optional(),
 });
 export type ElementBase = z.infer<typeof ElementBaseSchema>;
 

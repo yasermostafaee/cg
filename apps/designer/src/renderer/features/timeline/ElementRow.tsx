@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import type { Element, FrameRange } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
@@ -77,12 +78,20 @@ const styles = {
   lifespan: {
     position: 'absolute' as const,
     top: '50%',
-    left: 0,
-    right: 0,
     height: 10,
     transform: 'translateY(-50%)',
     borderRadius: 3,
     opacity: 0.85,
+    cursor: 'grab',
+    touchAction: 'none' as const,
+  },
+  resizeHandle: {
+    position: 'absolute' as const,
+    top: 0,
+    bottom: 0,
+    width: 6,
+    cursor: 'ew-resize',
+    touchAction: 'none' as const,
   },
 } as const;
 
@@ -245,21 +254,83 @@ function LockOpenIcon(): JSX.Element {
 }
 
 function ElementRowLane(props: Props): JSX.Element {
-  const { element, isSelected, lifespanColor } = props;
-  // For v1 every element is "active" across the whole scene range.
+  const { element, isSelected, frameRange, lifespanColor } = props;
+  const span = Math.max(1, frameRange.out - frameRange.in);
+  const lifespan = element.lifespan ?? frameRange;
+  const leftPct = ((lifespan.in - frameRange.in) / span) * 100;
+  const widthPct = ((lifespan.out - lifespan.in) / span) * 100;
+  const cellRef = useRef<HTMLDivElement>(null);
+
+  // Drag handlers — `mode` is 'move' for the bar body, 'resize-left' /
+  // 'resize-right' for the edge grippers. The whole gesture is
+  // constrained to the row (the bar uses position:absolute inside the
+  // laneCell, so it visually can't leave the lane), and both ends are
+  // clamped to the scene frameRange so the operator can't push the
+  // element off the timeline.
+  function startDrag(mode: 'move' | 'resize-left' | 'resize-right', e: React.PointerEvent): void {
+    e.stopPropagation();
+    const cell = cellRef.current;
+    if (cell === null) return;
+    const rect = cell.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const startX = e.clientX;
+    const startIn = lifespan.in;
+    const startOut = lifespan.out;
+    const pxPerFrame = rect.width / span;
+
+    function onMove(ev: PointerEvent): void {
+      const dxFrames = (ev.clientX - startX) / pxPerFrame;
+      let nextIn = startIn;
+      let nextOut = startOut;
+      if (mode === 'move') {
+        let shift = dxFrames;
+        if (startIn + shift < frameRange.in) shift = frameRange.in - startIn;
+        if (startOut + shift > frameRange.out) shift = frameRange.out - startOut;
+        nextIn = startIn + shift;
+        nextOut = startOut + shift;
+      } else if (mode === 'resize-left') {
+        nextIn = Math.max(frameRange.in, Math.min(startOut - 1, startIn + dxFrames));
+      } else {
+        nextOut = Math.max(startIn + 1, Math.min(frameRange.out, startOut + dxFrames));
+      }
+      designerStore.updateElementLifespan(element.id, { in: nextIn, out: nextOut });
+    }
+    function onUp(): void {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  }
+
   return (
     <div
+      ref={cellRef}
       style={{ ...styles.laneCell, ...(isSelected ? styles.rowSelected : {}) }}
       onClick={() => designerStore.setSelection([element.id])}
     >
       <div
         style={{
           ...styles.lifespan,
-          left: `0%`,
-          width: `100%`,
+          left: `${leftPct.toFixed(3)}%`,
+          width: `${widthPct.toFixed(3)}%`,
           background: lifespanColor,
         }}
-      />
+        onPointerDown={(e) => startDrag('move', e)}
+      >
+        <div
+          style={{ ...styles.resizeHandle, left: 0 }}
+          onPointerDown={(e) => startDrag('resize-left', e)}
+          aria-hidden
+        />
+        <div
+          style={{ ...styles.resizeHandle, right: 0 }}
+          onPointerDown={(e) => startDrag('resize-right', e)}
+          aria-hidden
+        />
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import type { FieldValues, Scene } from '@cg/shared-schema';
+import type { Element, FieldValues, FrameRange, Scene } from '@cg/shared-schema';
 import {
   applyAnimationAtFrame,
   collectAnimatedElements,
@@ -39,6 +39,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     scene.layers.map((l) => l.children),
     built.elementMap,
   );
+
+  // Per-element lifespan gates — only elements with an explicit
+  // `lifespan` are tracked here; the rest stay visible for every
+  // frame (the default behaviour the Designer ships with). We
+  // remember the prior display value so the toggle restores the
+  // element's own visibility instead of forcing `display: block`.
+  const lifespanGates = collectLifespanGates(scene, built.elementMap);
 
   const machine = new LifecycleStateMachine();
   const bus = new EventBus();
@@ -133,6 +140,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     tick(frame: number): void {
       for (const entry of animated) applyAnimationAtFrame(entry, frame);
+      for (const gate of lifespanGates) {
+        const inside = frame >= gate.lifespan.in && frame <= gate.lifespan.out;
+        gate.node.style.display = inside ? gate.naturalDisplay : 'none';
+      }
     },
 
     on(event, listener) {
@@ -141,6 +152,33 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   };
 
   return runtime;
+}
+
+interface LifespanGate {
+  node: HTMLElement;
+  lifespan: FrameRange;
+  /** display value the scene-builder set, restored when entering range. */
+  naturalDisplay: string;
+}
+
+function collectLifespanGates(
+  scene: Scene,
+  elementMap: Map<string, HTMLElement>,
+): LifespanGate[] {
+  const out: LifespanGate[] = [];
+  function walk(children: readonly Element[]): void {
+    for (const el of children) {
+      if (el.lifespan !== undefined) {
+        const node = elementMap.get(el.id);
+        if (node !== undefined) {
+          out.push({ node, lifespan: el.lifespan, naturalDisplay: node.style.display });
+        }
+      }
+      if (el.type === 'container') walk(el.children);
+    }
+  }
+  for (const layer of scene.layers) walk(layer.children);
+  return out;
 }
 
 function waitForFonts(doc: Document): Promise<void> {
