@@ -29,7 +29,6 @@ const styles = {
     padding: '0 0.4rem',
     background: colors.panel,
     borderRight: `1px solid ${colors.border}`,
-    borderBottom: `1px solid ${colors.border}`,
     color: colors.textMuted,
     height: ROW_HEIGHT,
     fontSize: '0.72rem',
@@ -61,7 +60,6 @@ const styles = {
   },
   laneCell: {
     position: 'relative' as const,
-    borderBottom: `1px solid ${colors.border}`,
     height: ROW_HEIGHT,
     boxSizing: 'border-box' as const,
     cursor: 'pointer',

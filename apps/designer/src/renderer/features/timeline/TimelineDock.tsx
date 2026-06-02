@@ -174,7 +174,6 @@ const styles = {
     padding: '0 0.4rem 0 1.7rem',
     background: colors.panel,
     borderRight: `1px solid ${colors.border}`,
-    borderBottom: `1px solid ${colors.border}`,
     height: 18,
     display: 'flex',
     alignItems: 'center',
@@ -182,7 +181,6 @@ const styles = {
     boxSizing: 'border-box' as const,
   },
   groupHeaderLane: {
-    borderBottom: `1px solid ${colors.border}`,
     height: 18,
     boxSizing: 'border-box' as const,
   },
