@@ -103,6 +103,45 @@ const styles = {
     pointerEvents: 'none' as const,
     zIndex: 2,
   },
+  // Top-of-body "Scene" row — single bar covering the active scene
+  // range. No chevron, no eye/lock, no keyframe diamonds; the only
+  // affordance is the right-edge gripper that resizes the scene
+  // duration via the same store action the inspector's duration
+  // field uses.
+  sceneLabel: {
+    height: 22,
+    boxSizing: 'border-box' as const,
+    background: colors.panel,
+  },
+  sceneLane: {
+    position: 'relative' as const,
+    height: 22,
+    boxSizing: 'border-box' as const,
+  },
+  sceneBar: {
+    position: 'absolute' as const,
+    top: '50%',
+    left: 0,
+    right: 0,
+    height: 20,
+    transform: 'translateY(-50%)',
+    background: colors.accent,
+    opacity: 0.45,
+    borderRadius: 2,
+    pointerEvents: 'none' as const,
+  },
+  sceneBarHandle: {
+    position: 'absolute' as const,
+    top: '50%',
+    width: 8,
+    height: 20,
+    transform: 'translateY(-50%)',
+    background: colors.accent,
+    borderRadius: 2,
+    cursor: 'ew-resize',
+    touchAction: 'none' as const,
+    pointerEvents: 'auto' as const,
+  },
   header: {
     display: 'flex',
     alignItems: 'center',
@@ -296,8 +335,38 @@ export function TimelineDock({
   }, []);
   const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const sceneLaneRef = useRef<HTMLDivElement | null>(null);
 
   const elements: readonly Element[] = flattenElements(scene);
+
+  // Drag the Scene row's right-edge gripper to resize scene duration.
+  // pxPerFrame is locked at drag start so the rate of change stays
+  // constant even though the underlying frameRange (and therefore the
+  // ratio) is mutating live in the store.
+  function startSceneResize(e: React.PointerEvent): void {
+    e.stopPropagation();
+    const lane = sceneLaneRef.current;
+    if (lane === null) return;
+    const rect = lane.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const startX = e.clientX;
+    const startIn = scene.frameRange.in;
+    const startOut = scene.frameRange.out;
+    const pxPerFrame = rect.width / Math.max(1, startOut - startIn);
+    function onMove(ev: PointerEvent): void {
+      const dframes = (ev.clientX - startX) / pxPerFrame;
+      const nextOut = Math.max(startIn + 1, Math.round(startOut + dframes));
+      designerStore.setSceneDurationFrames(nextOut - startIn);
+    }
+    function onUp(): void {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  }
 
   // Delete-key removes the selected keyframe.
   useEffect(() => {
@@ -344,6 +413,7 @@ export function TimelineDock({
             <span style={{ color: colors.textMuted }}>/{frameOut}</span>
           </div>
           <div style={styles.leftBody} ref={leftBodyRef}>
+            <div style={styles.sceneLabel} aria-hidden />
             {elements.length === 0 ? (
               <p style={styles.empty}>No elements yet. Add a shape, text, or image to start.</p>
             ) : (
@@ -440,6 +510,17 @@ export function TimelineDock({
                   left: `${(((currentFrame - frameIn) / Math.max(1, frameOut - frameIn)) * 100).toFixed(3)}%`,
                 }}
               />
+              <div style={styles.sceneLane} ref={sceneLaneRef} aria-label="Scene duration">
+                <div style={styles.sceneBar} aria-hidden />
+                <div
+                  style={{ ...styles.sceneBarHandle, right: 0, transform: 'translate(50%, -50%)' }}
+                  onPointerDown={startSceneResize}
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize scene duration"
+                  title="Drag to resize scene duration"
+                />
+              </div>
               {elements.length === 0 ? (
                 <p style={styles.empty}>&nbsp;</p>
               ) : (
