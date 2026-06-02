@@ -7,6 +7,7 @@ import { IssuesPanel } from './features/issues/IssuesPanel.js';
 import { LandingView } from './features/shell/LandingView.js';
 import { Splitter } from './features/shell/Splitter.js';
 import { TopToolbar } from './features/shell/TopToolbar.js';
+import { TransportBar } from './features/shell/TransportBar.js';
 import { StatusBar } from './features/status/StatusBar.js';
 import { TimelineDock } from './features/timeline/TimelineDock.js';
 import { useIssues } from './hooks/useIssues.js';
@@ -183,6 +184,7 @@ export function App(): JSX.Element {
           selectedKeyframe={selectedKeyframe}
         />
       </div>
+      <TransportBar scene={scene} currentFrame={currentFrame} />
       <StatusBar scene={scene} issues={issues} />
     </main>
   );

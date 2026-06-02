@@ -294,39 +294,10 @@ export function TimelineDock({
     window.addEventListener('pointerdown', onPointerDown);
     return () => window.removeEventListener('pointerdown', onPointerDown);
   }, []);
-  const [playing, setPlaying] = useState(false);
   const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
-  const lastWallRef = useRef<number>(0);
-  const accumRef = useRef<number>(0);
 
   const elements: readonly Element[] = flattenElements(scene);
-
-  // Transport loop: advance currentFrame at `scene.frameRate`.
-  useEffect(() => {
-    if (!playing) return;
-    let raf = 0;
-    const tick = (now: number): void => {
-      const prev = lastWallRef.current === 0 ? now : lastWallRef.current;
-      lastWallRef.current = now;
-      const dt = now - prev;
-      accumRef.current += dt;
-      const frameDurMs = 1000 / scene.frameRate;
-      let next = designerStore.get().currentFrame;
-      while (accumRef.current >= frameDurMs) {
-        accumRef.current -= frameDurMs;
-        next = next >= frameOut ? frameIn : next + 1;
-      }
-      designerStore.setCurrentFrame(next);
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(raf);
-      lastWallRef.current = 0;
-      accumRef.current = 0;
-    };
-  }, [playing, scene.frameRate, frameIn, frameOut]);
 
   // Delete-key removes the selected keyframe.
   useEffect(() => {
@@ -369,60 +340,6 @@ export function TimelineDock({
       <div style={styles.header}>
         <div style={styles.headerLeft}>
           <span style={styles.title}>TIMELINE</span>
-        </div>
-        <div style={styles.headerCenter}>
-          <button
-            type="button"
-            style={styles.button}
-            onClick={() => designerStore.setCurrentFrame(frameIn)}
-            aria-label="Go to start"
-            title="Go to start"
-          >
-            ⏮
-          </button>
-          <button
-            type="button"
-            style={styles.button}
-            onClick={() => designerStore.setCurrentFrame(currentFrame - 1)}
-            aria-label="Step back"
-            title="Step back one frame"
-          >
-            ◀
-          </button>
-          <button
-            type="button"
-            style={styles.buttonPrimary}
-            onClick={() => setPlaying((p) => !p)}
-            aria-label={playing ? 'Pause' : 'Play'}
-          >
-            {playing ? '❚❚' : '▶'}
-          </button>
-          <button
-            type="button"
-            style={styles.button}
-            onClick={() => {
-              setPlaying(false);
-              designerStore.setCurrentFrame(frameIn);
-            }}
-            aria-label="Stop"
-            title="Stop"
-          >
-            ⏹
-          </button>
-          <button
-            type="button"
-            style={styles.button}
-            onClick={() => designerStore.setCurrentFrame(currentFrame + 1)}
-            aria-label="Step forward"
-            title="Step forward one frame"
-          >
-            ▶
-          </button>
-        </div>
-        <div style={styles.headerRight}>
-          <span style={styles.frameReadout} aria-label="Current frame">
-            frame {currentFrame} / {frameOut}
-          </span>
         </div>
       </div>
       <div style={styles.body}>
