@@ -52,11 +52,21 @@ const styles = {
     whiteSpace: 'nowrap' as const,
     fontSize: '0.72rem',
   },
-  miniIcon: {
+  toggleButton: {
+    background: 'transparent',
+    border: 'none',
+    padding: 0,
+    width: 16,
+    height: 16,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
     color: colors.textMuted,
-    fontSize: '0.62rem',
-    width: 12,
-    textAlign: 'center' as const,
+    flexShrink: 0,
+  },
+  toggleButtonActive: {
+    color: colors.text,
   },
   laneCell: {
     position: 'relative' as const,
@@ -115,13 +125,122 @@ function ElementRowLabel(props: Props): JSX.Element {
         {expanded ? '▾' : '▸'}
       </button>
       <span style={styles.name}>{element.name}</span>
-      <span style={styles.miniIcon} aria-hidden title={element.visible ? 'Visible' : 'Hidden'}>
-        {element.visible ? '◉' : '○'}
-      </span>
-      <span style={styles.miniIcon} aria-hidden title={element.locked ? 'Locked' : 'Unlocked'}>
-        {element.locked ? '🔒' : ' '}
-      </span>
+      <button
+        type="button"
+        style={{
+          ...styles.toggleButton,
+          ...(element.visible ? styles.toggleButtonActive : {}),
+        }}
+        title={element.visible ? 'Hide element' : 'Show element'}
+        aria-label={element.visible ? 'Hide element' : 'Show element'}
+        aria-pressed={!element.visible}
+        onClick={(e) => {
+          e.stopPropagation();
+          designerStore.updateElement(element.id, {
+            visible: !element.visible,
+          } as Partial<Element>);
+        }}
+      >
+        {element.visible ? <EyeOpenIcon /> : <EyeClosedIcon />}
+      </button>
+      <button
+        type="button"
+        style={{
+          ...styles.toggleButton,
+          ...(element.locked ? styles.toggleButtonActive : {}),
+        }}
+        title={element.locked ? 'Unlock element' : 'Lock element'}
+        aria-label={element.locked ? 'Unlock element' : 'Lock element'}
+        aria-pressed={element.locked}
+        onClick={(e) => {
+          e.stopPropagation();
+          designerStore.updateElement(element.id, {
+            locked: !element.locked,
+          } as Partial<Element>);
+        }}
+      >
+        {element.locked ? <LockClosedIcon /> : <LockOpenIcon />}
+      </button>
     </div>
+  );
+}
+
+function EyeOpenIcon(): JSX.Element {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M1.5 8c2-3 4-5 6.5-5s4.5 2 6.5 5c-2 3-4 5-6.5 5s-4.5-2-6.5-5z" />
+      <circle cx="8" cy="8" r="2" />
+    </svg>
+  );
+}
+
+function EyeClosedIcon(): JSX.Element {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M2.5 4.5c1.5 2 3.4 4 5.5 4s4-2 5.5-4" />
+      <path d="M2 11l1.5-2" />
+      <path d="M14 11l-1.5-2" />
+      <path d="M6 12.5l.7-2" />
+      <path d="M10 12.5l-.7-2" />
+    </svg>
+  );
+}
+
+function LockClosedIcon(): JSX.Element {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="3.5" y="7.5" width="9" height="6.5" rx="1" />
+      <path d="M5.5 7.5V5a2.5 2.5 0 015 0v2.5" />
+    </svg>
+  );
+}
+
+function LockOpenIcon(): JSX.Element {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="3.5" y="7.5" width="9" height="6.5" rx="1" />
+      <path d="M5.5 7.5V5a2.5 2.5 0 014.7-1" />
+    </svg>
   );
 }
 
