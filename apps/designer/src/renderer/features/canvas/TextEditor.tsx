@@ -33,8 +33,29 @@ interface Props {
 export function TextEditor({ element, scale, onCommit }: Props): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const { transform, font, color, align, direction } = element;
+  // Caret direction follows auto-detected RTL content so backspace
+  // deletes the rightmost code point in Persian — but this is *not*
+  // the same as the container direction the on-air runtime uses,
+  // which only flips to RTL when the element explicitly opts in.
   const effectiveDir =
     direction === 'auto' ? (detectDirection(element.text) === 'rtl' ? 'rtl' : 'ltr') : direction;
+  // Alignment must match what the operator sees on the canvas, where
+  // the runtime treats `direction: 'auto'` as LTR for container
+  // purposes. Resolving start/end to explicit left/right against the
+  // runtime's effective direction keeps the editor's layout in sync —
+  // otherwise an end-aligned Persian element appeared right on the
+  // canvas and left in the inline editor.
+  const runtimeDir: 'ltr' | 'rtl' = direction === 'rtl' ? 'rtl' : 'ltr';
+  const resolvedTextAlign: 'left' | 'right' | 'center' | 'justify' =
+    align === 'start'
+      ? runtimeDir === 'rtl'
+        ? 'right'
+        : 'left'
+      : align === 'end'
+        ? runtimeDir === 'rtl'
+          ? 'left'
+          : 'right'
+        : align;
 
   // Mount/focus the editor + place the caret at the end.
   useEffect(() => {
@@ -108,7 +129,7 @@ export function TextEditor({ element, scale, onCommit }: Props): JSX.Element {
         fontSize: font.size * scale,
         lineHeight: font.lineHeight,
         letterSpacing: font.letterSpacing,
-        textAlign: align === 'start' ? 'start' : align,
+        textAlign: resolvedTextAlign,
         cursor: 'text',
         whiteSpace: 'pre-wrap',
         wordWrap: 'break-word',
