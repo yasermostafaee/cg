@@ -49,6 +49,19 @@ export interface DesignerBridge {
     save(
       req: ChannelRequest<typeof ProjectsSaveChannel>,
     ): Promise<ChannelResponse<typeof ProjectsSaveChannel>>;
+    /**
+     * Save the scene to a real file on the operator's disk. When
+     * `askPath` is true (Save As), always opens the native save
+     * dialog. When false (Save), reuses the file handle picked the
+     * last time this scene was saved — falling back to the dialog
+     * if there's no remembered handle. Returns the picked file's
+     * name (no path — browsers don't expose the absolute disk path).
+     * Returns `{ ok: false }` when the operator cancels the dialog.
+     */
+    saveDisk(req: {
+      scene: Scene;
+      askPath: boolean;
+    }): Promise<{ ok: boolean; filename: string | null }>;
     recent(): Promise<ChannelResponse<typeof ProjectsRecentChannel>>;
     starters(): Promise<ChannelResponse<typeof ProjectsStartersChannel>>;
     starter(
@@ -86,6 +99,13 @@ export interface DesignerBridge {
     run(
       req: ChannelRequest<typeof ExportRunChannel>,
     ): Promise<ChannelResponse<typeof ExportRunChannel>>;
+    /**
+     * Run the export pipeline and write the resulting `.vcg` directly
+     * to a file the operator picks via the native save dialog (Windows
+     * Explorer / macOS Finder). Returns `{ ok: false }` when the
+     * operator cancels.
+     */
+    runDisk(req: { scene: Scene }): Promise<{ ok: boolean; filename: string | null }>;
     onProgress(handler: (progress: ExportProgress) => void): Unsubscribe;
   };
 

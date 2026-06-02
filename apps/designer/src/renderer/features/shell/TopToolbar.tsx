@@ -106,7 +106,7 @@ const styles = {
  * future menus. SAVE / EXPORT live on the right side (moved from the
  * status bar so the operator's primary actions stay in the chrome).
  */
-export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
+export function TopToolbar({ scene, issues }: Props): JSX.Element {
   const errorCount = issues.filter((i) => i.severity === 'error').length;
   const exportBlocked = scene === null || errorCount > 0;
   const [openMenu, setOpenMenu] = useState<'file' | null>(null);
@@ -131,17 +131,12 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
 
   async function save(): Promise<void> {
     if (scene === null) return;
-    const path = projectPath ?? window.prompt('Save scene as (full path, .scene.json):');
-    if (path === null || path === '') return;
-    await window.cg.projects.save({ scene, path });
+    await window.cg.projects.saveDisk({ scene, askPath: false });
   }
 
   async function saveAs(): Promise<void> {
     if (scene === null) return;
-    const suggested = projectPath ?? `${scene.name}.cg.json`;
-    const path = window.prompt('Save scene as (path):', suggested);
-    if (path === null || path === '') return;
-    await window.cg.projects.save({ scene, path });
+    await window.cg.projects.saveDisk({ scene, askPath: true });
   }
 
   async function newProject(): Promise<void> {
@@ -166,9 +161,7 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
       window.alert(`Export blocked: ${String(errorCount)} validation error(s) in Issues panel.`);
       return;
     }
-    const outputPath = window.prompt('Output .vcg path:');
-    if (outputPath === null || outputPath === '') return;
-    await window.cg.export.run({ scene, outputPath });
+    await window.cg.export.runDisk({ scene });
   }
 
   function runFileAction(fn: () => void | Promise<void>): void {

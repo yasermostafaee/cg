@@ -118,14 +118,12 @@ export class Exporter {
   }
 
   /**
-   * Run the full pipeline and trigger a browser download of the `.vcg`.
-   * `outputPath`'s basename becomes the download filename. Throws when
-   * preflight surfaces an error-severity issue.
+   * Run validation + pack and return the resulting `.vcg` bytes. Used
+   * by both `run` (browser download) and the bridge's `runDisk`
+   * (native save dialog → file handle write). Throws when preflight
+   * surfaces an error-severity issue.
    */
-  async run(
-    scene: Scene,
-    outputPath: string,
-  ): Promise<{ path: string; sha256: string; bytes: number }> {
+  async produce(scene: Scene): Promise<{ vcg: Uint8Array; sha256: string; defaultFilename: string }> {
     this.progress.emit({ step: 'validate', progress: 0.05 });
     const fatal = (await this.preflight(scene)).filter((i) => i.severity === 'error');
     if (fatal.length > 0) {
@@ -166,12 +164,22 @@ export class Exporter {
     });
 
     this.progress.emit({ step: 'sign', progress: 0.95 });
+    return { vcg, sha256: sha256Hex(vcg), defaultFilename: downloadName('', scene.name) };
+  }
 
+  /**
+   * Run the full pipeline and trigger a browser download of the `.vcg`.
+   * `outputPath`'s basename becomes the download filename.
+   */
+  async run(
+    scene: Scene,
+    outputPath: string,
+  ): Promise<{ path: string; sha256: string; bytes: number }> {
+    const { vcg, sha256 } = await this.produce(scene);
     const filename = downloadName(outputPath, scene.name);
     triggerDownload(vcg, filename);
-
     this.progress.emit({ step: 'done', progress: 1 });
-    return { path: filename, sha256: sha256Hex(vcg), bytes: vcg.byteLength };
+    return { path: filename, sha256, bytes: vcg.byteLength };
   }
 
   async #gatherBinaries(
