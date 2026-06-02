@@ -174,7 +174,6 @@ function SceneInspector({
     <aside style={styles.panel} aria-label="Inspector">
       <h2 style={styles.headingFirst}>SCENE</h2>
       <NameRow name={scene.name} />
-      <Row label="type" value={scene.templateType} />
       <Row
         label="resolution"
         value={`${String(scene.resolution.width)}×${String(scene.resolution.height)}`}
