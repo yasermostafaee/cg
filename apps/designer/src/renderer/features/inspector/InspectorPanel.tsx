@@ -180,6 +180,7 @@ function SceneInspector({
         value={`${String(scene.resolution.width)}×${String(scene.resolution.height)}`}
       />
       <Row label="frame rate" value={String(scene.frameRate)} />
+      <DurationRow scene={scene} />
       <Row label="layers" value={String(scene.layers.length)} />
       <Row label="path" value={projectPath ?? '(unsaved)'} />
       <BackgroundControl background={scene.background} variant="full" />
@@ -285,6 +286,49 @@ function ElementBindings({
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+function DurationRow({ scene }: { scene: Scene }): JSX.Element {
+  const duration = scene.frameRange.out - scene.frameRange.in;
+  const seconds = duration / scene.frameRate;
+  return (
+    <div style={styles.row}>
+      <span style={styles.label}>duration</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+        <input
+          style={{
+            background: colors.panelMuted,
+            color: colors.text,
+            border: `1px solid ${colors.border}`,
+            borderRadius: '0.18rem',
+            padding: '0.1rem 0.35rem',
+            fontSize: '0.72rem',
+            width: 70,
+            fontVariantNumeric: 'tabular-nums',
+            boxSizing: 'border-box',
+          }}
+          type="number"
+          min={1}
+          step={1}
+          defaultValue={duration}
+          onBlur={(e) => {
+            const n = Number(e.target.value);
+            if (Number.isFinite(n) && n >= 1) {
+              designerStore.setSceneDurationFrames(Math.round(n));
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          }}
+          key={`duration-${String(duration)}`}
+          aria-label="Scene duration in frames"
+        />
+        <span style={{ color: colors.textMuted, fontSize: '0.66rem' }}>
+          frames · {seconds.toFixed(2)}s
+        </span>
+      </div>
     </div>
   );
 }

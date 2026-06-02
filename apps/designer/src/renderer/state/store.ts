@@ -182,6 +182,25 @@ export const designerStore = {
     set({ scene: { ...current.scene, ...patch } });
   },
 
+  /**
+   * Set the scene's authoring duration in frames. Updates
+   * `frameRange.out` to `frameRange.in + frames` and clamps the
+   * authoring `currentFrame` so the playhead can't sit past the new
+   * end. Existing keyframes are preserved — widening the duration
+   * again restores their effect.
+   */
+  setSceneDurationFrames(frames: number): void {
+    if (current.scene === null) return;
+    const safe = Math.max(1, Math.floor(frames));
+    const inFrame = current.scene.frameRange.in;
+    const out = inFrame + safe;
+    const nextFrame = Math.min(out, Math.max(inFrame, current.currentFrame));
+    set({
+      scene: { ...current.scene, frameRange: { in: inFrame, out } },
+      currentFrame: nextFrame,
+    });
+  },
+
   setTool(tool: DesignerTool): void {
     set({ tool });
   },
