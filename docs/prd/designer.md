@@ -116,10 +116,22 @@ see the files inside the: `docs/designer-guide/sample-assets/D-006-old-codes`. t
 **Notes:** see all the pics for D-009: `docs/designer-guide/sample-assets/D-009-pic-*`
 
 ## [~] D-010 — add new properties   (priority: high)
-**What:** add other properties for shapes and text
+**What:** add other properties for shapes and text on 2 areas: right area and the area on the left of the timeline.
 **Why:** we need more properties for make an usefull animation
 **Acceptance:**
 - see deeply the screenshots and add all new properties and styles.
-  1- add Path style, Border radius and Filter sections for the shapes.
+  1- add Path style, Border radius, Drop Shadow and Filter sections for the shapes.
   2- add Text, Drop Shadow, Text Padding, Border radius and Filter sections for the text.
-**Notes:** see these pics for D-009 again: `docs/designer-guide/sample-assets/` --> D-009-pic-3 and D-009-pic-4
+**Notes:** see these pics : `docs/designer-guide/sample-assets/D-010-pic-*`
+
+
+## [~] D-011 — project assets   (priority: high)
+**What:** add new panel for project assets
+**Why:** we need this panel to add our resourses like fonts or images for use them inside the project
+**Acceptance:**
+- add the panel to the left of the sceen panel
+- keep the buttons and tools above of the sceen on its panel(sceen panel).
+- we can add fonts and images by click on the add icon
+- we can drag the images on the assets panel to the sceen and they became like a shape and we can add any points for them.
+- if we add any font to assets we can see that font inside the select options font on Text section in properties panel on the right
+**Notes:** see this screenshot : `docs/designer-guide/sample-assets/D-011-pic-0`

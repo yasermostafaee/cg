@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { DesignerBridge } from '../shared/designer-bridge.js';
+import { ProjectAssetsPanel } from './features/assets/ProjectAssetsPanel.js';
 import { CanvasArea } from './features/canvas/CanvasArea.js';
 import { InspectorPanel } from './features/inspector/InspectorPanel.js';
 import { IssuesPanel } from './features/issues/IssuesPanel.js';
@@ -24,6 +25,9 @@ const INSPECTOR_MAX = 600;
 const TIMELINE_DEFAULT = 260;
 const TIMELINE_MIN = 140;
 const TIMELINE_MAX = 600;
+const ASSETS_DEFAULT = 200;
+const ASSETS_MIN = 140;
+const ASSETS_MAX = 360;
 
 const styles = {
   page: {
@@ -102,6 +106,7 @@ export function App(): JSX.Element {
   const issues = useIssues(scene);
   const [inspectorW, setInspectorW] = useState(INSPECTOR_DEFAULT);
   const [timelineH, setTimelineH] = useState(TIMELINE_DEFAULT);
+  const [assetsW, setAssetsW] = useState(ASSETS_DEFAULT);
 
   if (view === 'landing' || scene === null) {
     return (
@@ -117,6 +122,16 @@ export function App(): JSX.Element {
         <TopToolbar scene={scene} projectPath={projectPath} issues={issues} />
       </div>
       <div style={styles.shell}>
+        <div style={{ width: assetsW, flexShrink: 0, display: 'flex', minHeight: 0 }}>
+          <ProjectAssetsPanel />
+        </div>
+        <Splitter
+          axis="x"
+          ariaLabel="Resize project assets panel"
+          onResize={(dx) =>
+            setAssetsW((w) => Math.max(ASSETS_MIN, Math.min(ASSETS_MAX, w + dx)))
+          }
+        />
         <div style={styles.centerCol}>
           <div style={styles.canvasWrap}>
             <CanvasArea

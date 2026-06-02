@@ -1,6 +1,6 @@
 import type { AnimatableProperty, Element, TextElement } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { designerStore } from '../../state/store.js';
+import { designerStore, useDesignerStore } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import { hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
 import { CollapseSection } from './CollapseSection.js';
@@ -269,6 +269,9 @@ export function TextStyleSection({
   selectedKeyframe = null,
 }: Props): JSX.Element {
   const id = element.id;
+  // D-011 — project-asset fonts merged into the dropdown after the built-ins.
+  const { scene } = useDesignerStore();
+  const sceneFonts = scene?.fonts ?? [];
   const sizingValue = element.fitMode === 'fixed' ? 'fixed' : 'auto';
   const wrapValue = element.wrap === false ? 'no' : 'yes';
   const squeezeValue = element.autoSqueeze === true ? 'yes' : 'no';
@@ -367,7 +370,8 @@ export function TextStyleSection({
           }
           aria-label="Font family"
         >
-          {FONT_FAMILIES.includes(element.font.family as (typeof FONT_FAMILIES)[number]) ? null : (
+          {FONT_FAMILIES.includes(element.font.family as (typeof FONT_FAMILIES)[number]) ||
+          sceneFonts.some((f) => f.family === element.font.family) ? null : (
             <option value={element.font.family}>{element.font.family}</option>
           )}
           {FONT_FAMILIES.map((f) => (
@@ -375,6 +379,15 @@ export function TextStyleSection({
               {f}
             </option>
           ))}
+          {sceneFonts.length > 0 && (
+            <optgroup label="Project fonts">
+              {sceneFonts.map((f) => (
+                <option key={f.family} value={f.family}>
+                  {f.bundledPath ?? f.family}
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
 
         {/* Font size (full-width chip with tT icon) */}
