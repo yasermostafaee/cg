@@ -118,9 +118,24 @@ let current = initialState;
  * is a polish item for later.
  */
 const MAX_HISTORY = 100;
+/**
+ * Coalescing window. Mutations that arrive within this many ms of the
+ * last history push do not generate a new entry — they just update the
+ * present. This is what lets a drag (or a live colour picker dragging
+ * across hues) collapse to a single undo step that restores the
+ * pre-burst state, instead of stepping back one ~16 ms tick per Ctrl+Z.
+ * `markHistoryBoundary` lets explicit gestures (pointerup, key release)
+ * close the burst early so the *next* mutation snapshots immediately.
+ */
+const COALESCE_MS = 300;
 let past: Scene[] = [];
 let future: Scene[] = [];
 let suppressHistory = false;
+let lastSnapshotAt = -Infinity;
+
+function now(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
 
 function set(patch: Partial<DesignerStoreState>): void {
   if (
@@ -129,9 +144,13 @@ function set(patch: Partial<DesignerStoreState>): void {
     !suppressHistory &&
     current.scene !== null
   ) {
-    past.push(current.scene);
-    if (past.length > MAX_HISTORY) past.shift();
-    future = [];
+    const t = now();
+    if (t - lastSnapshotAt > COALESCE_MS) {
+      past.push(current.scene);
+      if (past.length > MAX_HISTORY) past.shift();
+      future = [];
+    }
+    lastSnapshotAt = t;
   }
   current = {
     ...current,
@@ -256,6 +275,16 @@ export const designerStore = {
     } finally {
       suppressHistory = false;
     }
+  },
+
+  /**
+   * Force the next scene mutation to start a fresh history entry, even
+   * if it lands within the coalescing window. Call this from gesture
+   * endpoints (e.g. pointerup after a drag) so an immediately-following
+   * unrelated edit doesn't fold into the drag's undo group.
+   */
+  markHistoryBoundary(): void {
+    lastSnapshotAt = -Infinity;
   },
 
   /** Explicitly switch top-level view (used by "back to projects"). */
@@ -922,6 +951,7 @@ export const designerStore = {
     past = [];
     future = [];
     suppressHistory = false;
+    lastSnapshotAt = -Infinity;
     current = {
       ...initialState,
       selection: new Set<string>(),

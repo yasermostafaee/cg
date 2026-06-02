@@ -200,9 +200,12 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
     guardedSwitch(fn);
   }
 
-  // Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z or Ctrl+Y = redo. Skip when
-  // the operator is typing into an input / textarea / contenteditable
-  // so the browser's per-field history still works.
+  // Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z or Ctrl+Y = redo. Capture phase
+  // so we see the event before anything else can call preventDefault.
+  // Skip when the operator is typing into a regular text input so the
+  // browser's per-field history still works for editing scenarios; in
+  // every other context (canvas, timeline, blank focus) the shortcuts
+  // route to the scene-level undo stack.
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       const mod = e.ctrlKey || e.metaKey;
@@ -210,7 +213,14 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
       const target = e.target as HTMLElement | null;
       if (target !== null) {
         const tag = target.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return;
+        const isTextInput =
+          tag === 'TEXTAREA' ||
+          target.isContentEditable ||
+          (tag === 'INPUT' &&
+            ['text', 'search', 'url', 'email', 'tel', 'password'].includes(
+              ((target as HTMLInputElement).type || 'text').toLowerCase(),
+            ));
+        if (isTextInput) return;
       }
       const key = e.key.toLowerCase();
       if (key === 'z' && !e.shiftKey) {
@@ -221,8 +231,17 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
         designerStore.redo();
       }
     }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    // `pointerup` closes the current history-coalescing window so an
+    // immediately-following unrelated edit starts its own undo entry.
+    function onPointerUp(): void {
+      designerStore.markHistoryBoundary();
+    }
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('pointerup', onPointerUp, true);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('pointerup', onPointerUp, true);
+    };
   }, []);
 
   return (
