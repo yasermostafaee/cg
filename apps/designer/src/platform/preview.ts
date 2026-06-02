@@ -144,6 +144,12 @@ export class Preview {
         let assetUrls = {};
         let currentScene = null;
         let editingTextId = null;
+        // Families we've already loaded into this iframe's
+        // document.fonts. Keyed by family name; the value is the
+        // assetUrl we loaded from, so we can re-fetch when a font
+        // asset's URL changes (e.g. project switch revokes the blob).
+        const loadedFonts = new Map();
+        let fontLoadSeq = 0;
 
         function applyAssetUrls() {
           const nodes = document.querySelectorAll('[data-cg-asset-id]');
@@ -157,37 +163,47 @@ export class Preview {
           });
         }
 
-        // Custom fonts reach the iframe runtime via one <style> tag
-        // (id="cg-font-faces") that we keep in sync with scene.fonts +
-        // assetUrls. The runtime sets the text element font-family to
-        // "asset-<assetId>", the CSS @font-face rule wires that family
-        // name to the blob URL the parent shipped over, and the
-        // browser handles loading + paint reflow declaratively. The JS
-        // FontFace API was tried first but proved finicky for blob
-        // URLs hosted from the parent document inside srcDoc iframes.
-        function applyFontFaces() {
+        // Fetch the parent's blob URL, hand the bytes to a FontFace
+        // built inside the iframe document, then add it to that
+        // document.fonts set. Going through ArrayBuffer (instead of
+        // src: url(blob:…) in CSS, or FontFace(url) directly) bypasses
+        // every subtle restriction Chromium applies to cross-document
+        // blob URLs in srcDoc iframes — the parent's URL only has to
+        // survive a fetch, and from then on the font lives inside the
+        // iframe. Each call processes families that don't yet have a
+        // loaded face (or whose URL has changed).
+        async function applyFontFaces() {
           if (!currentScene || !Array.isArray(currentScene.fonts)) return;
-          let style = document.getElementById('cg-font-faces');
-          if (!style) {
-            style = document.createElement('style');
-            style.id = 'cg-font-faces';
-            document.head.appendChild(style);
-          }
-          const rules = [];
+          const mySeq = ++fontLoadSeq;
           for (const font of currentScene.fonts) {
             if (typeof font.family !== 'string' || font.family.indexOf('asset-') !== 0) continue;
             const assetId = font.family.slice('asset-'.length);
             const url = assetUrls[assetId];
             if (!url) continue;
-            rules.push(
-              '@font-face { font-family: "' + font.family +
-                '"; src: url("' + url + '"); font-display: swap; }',
-            );
+            if (loadedFonts.get(font.family) === url) continue;
+            try {
+              const buffer = await (await fetch(url)).arrayBuffer();
+              // Another, newer applyFontFaces call may have superseded
+              // us while we were fetching; bail before adding stale
+              // faces.
+              if (mySeq !== fontLoadSeq) return;
+              const face = new FontFace(font.family, buffer);
+              await face.load();
+              document.fonts.add(face);
+              loadedFonts.set(font.family, url);
+            } catch (err) {
+              if (window.parent && window.parent !== window) {
+                window.parent.postMessage(
+                  {
+                    kind: 'cg-preview-error',
+                    label: 'font.load',
+                    payload: font.family + ': ' + (err && err.message ? err.message : String(err)),
+                  },
+                  '*',
+                );
+              }
+            }
           }
-          // No separator — every rule already ends with '}', and a real
-          // newline cannot live inside a single-quoted JS string in
-          // this inline iframe script.
-          style.textContent = rules.join('');
         }
 
         function applyEditingHide() {
@@ -234,7 +250,7 @@ export class Preview {
             await runtime.update(currentFields);
             runtime.tick(currentFrame);
             applyAssetUrls();
-            applyFontFaces();
+            applyFontFaces().catch(() => {});
             applyEditingHide();
           } finally {
             busy = false;
@@ -264,7 +280,7 @@ export class Preview {
               } else if (msg.action === 'asset-urls' && msg.assetUrls) {
                 assetUrls = msg.assetUrls;
                 applyAssetUrls();
-                applyFontFaces();
+                applyFontFaces().catch(() => {});
               } else if (msg.action === 'editing-text') {
                 editingTextId = typeof msg.elementId === 'string' ? msg.elementId : null;
                 applyEditingHide();
