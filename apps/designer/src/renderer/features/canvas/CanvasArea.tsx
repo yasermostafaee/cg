@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
+import {
+  getAll as assetUrlGetAll,
+  subscribe as assetUrlSubscribe,
+} from '../assets/assetUrlCache.js';
 import { CanvasOverlay } from './CanvasOverlay.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
 import { type DesignerTool } from '../../state/store.js';
@@ -196,7 +200,12 @@ export function CanvasArea({
       pendingSceneRef.current = null;
       if (sceneToSend === null) return;
       iframeRef.current?.contentWindow?.postMessage(
-        { kind: 'cg-preview', action: 'scene-replace', scene: sceneToSend },
+        {
+          kind: 'cg-preview',
+          action: 'scene-replace',
+          scene: sceneToSend,
+          assetUrls: assetUrlGetAll(),
+        },
         '*',
       );
     });
@@ -208,14 +217,37 @@ export function CanvasArea({
     };
   }, [scene]);
 
+  // D-011 — push a fresh asset URL map to the iframe whenever a newly
+  // imported image resolves, so a freshly-dropped picture appears
+  // without waiting for the next scene mutation.
+  useEffect(() => {
+    return assetUrlSubscribe(() => {
+      iframeRef.current?.contentWindow?.postMessage(
+        { kind: 'cg-preview', action: 'asset-urls', assetUrls: assetUrlGetAll() },
+        '*',
+      );
+    });
+  }, []);
+
   useEffect(() => {
     function onMessage(evt: MessageEvent<unknown>): void {
       const msg = evt.data as
         | { kind?: string; sceneId?: string; label?: string; payload?: string }
         | undefined;
       if (msg?.kind === 'cg-preview-ready') {
-        iframeRef.current?.contentWindow?.postMessage(
-          { kind: 'cg-preview', action: 'scrub', frame: currentFrame },
+        const cw = iframeRef.current?.contentWindow;
+        if (cw === undefined || cw === null) return;
+        cw.postMessage({ kind: 'cg-preview', action: 'scrub', frame: currentFrame }, '*');
+        // The iframe's inline `applyScene` initialises with an empty
+        // assetUrls map (the parent has no way to inline blob URLs
+        // into srcDoc). Push the current map as soon as the iframe
+        // confirms readiness — otherwise images decoded by the
+        // asset-URL `notify()` callback are silently dropped when the
+        // iframe's message listener isn't registered yet, leaving the
+        // canvas with broken-image icons until the next scene
+        // mutation. See the project-re-open regression.
+        cw.postMessage(
+          { kind: 'cg-preview', action: 'asset-urls', assetUrls: assetUrlGetAll() },
           '*',
         );
       }
