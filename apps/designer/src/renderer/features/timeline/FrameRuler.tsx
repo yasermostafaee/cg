@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { colors } from '../../theme.js';
 
 interface Props {
@@ -53,13 +53,29 @@ const styles = {
 
 /**
  * Frame ruler with tick labels and a draggable playhead. Click anywhere on
- * the ruler to scrub. Tick density adapts so we always show ~10–20 labels
- * regardless of frame range.
+ * the ruler to scrub. The label stride adapts to the rendered width per
+ * frame (which already reflects the timeline zoom): cramped rulers label
+ * every 5th frame, mid-zoom every 2nd, and only when each frame is wide
+ * enough to read does it label every single one.
  */
 export function FrameRuler({ frameIn, frameOut, currentFrame, onScrub }: Props): JSX.Element {
   const ref = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState<number>(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (el === null) return;
+    setWidth(el.clientWidth);
+    const ro = new ResizeObserver(() => {
+      setWidth(el.clientWidth);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const span = Math.max(1, frameOut - frameIn);
-  const ticks = tickFrames(frameIn, frameOut);
+  const stride = pickStride(span, width);
+  const ticks = tickFrames(frameIn, frameOut, stride);
 
   function frameAt(clientX: number): number {
     const el = ref.current;
@@ -115,12 +131,30 @@ export function FrameRuler({ frameIn, frameOut, currentFrame, onScrub }: Props):
   );
 }
 
-function tickFrames(lo: number, hi: number): readonly number[] {
-  const span = hi - lo;
-  if (span <= 0) return [lo];
-  // Loopic-style: label every frame. Browsers handle overflow by
-  // clipping; the operator zooms in to fit denser ranges.
+/**
+ * Choose a tick stride based on how many pixels each frame is allotted
+ * in the rendered ruler. The ladder is 1/2/5/10/25 — values the eye
+ * groups easily ("every 5") instead of arbitrary numbers like 3 or 7.
+ *
+ *   >= 22px / frame → every frame      (operator zoomed in close)
+ *   >= 10px / frame → every 2 frames   (mid zoom)
+ *   >=  5px / frame → every 5 frames   (default for long scenes)
+ *   >=  2px / frame → every 10 frames  (very long span)
+ *   else           → every 25 frames  (huge spans, label sparsely)
+ */
+function pickStride(span: number, widthPx: number): number {
+  if (widthPx <= 0) return 1;
+  const pxPerFrame = widthPx / span;
+  if (pxPerFrame >= 22) return 1;
+  if (pxPerFrame >= 10) return 2;
+  if (pxPerFrame >= 5) return 5;
+  if (pxPerFrame >= 2) return 10;
+  return 25;
+}
+
+function tickFrames(lo: number, hi: number, stride: number): readonly number[] {
+  if (hi <= lo) return [lo];
   const out: number[] = [];
-  for (let f = lo; f <= hi; f += 1) out.push(f);
+  for (let f = lo; f <= hi; f += stride) out.push(f);
   return out;
 }
