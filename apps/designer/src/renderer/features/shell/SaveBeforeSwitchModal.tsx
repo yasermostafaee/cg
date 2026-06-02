@@ -5,7 +5,11 @@ import { colors } from '../../theme.js';
 interface Props {
   /** The current scene the operator might lose if they switch. */
   scene: Scene;
-  /** Existing save path; if null, the operator must pick one. */
+  /**
+   * Display-only hint for whether the scene has been saved to disk
+   * yet — the picked path lives inside the bridge handle cache, not
+   * here. Used only to phrase the modal copy.
+   */
   projectPath: string | null;
   /**
    * Called after the modal is fully resolved (save succeeded /
@@ -113,9 +117,6 @@ export function SaveBeforeSwitchModal({
   onProceed,
   onCancel,
 }: Props): JSX.Element {
-  const [path, setPath] = useState<string>(
-    projectPath ?? `projects/${slugify(scene.name)}.cg.json`,
-  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -128,15 +129,16 @@ export function SaveBeforeSwitchModal({
   }, [onCancel]);
 
   async function save(): Promise<void> {
-    const trimmed = path.trim();
-    if (trimmed.length === 0) {
-      setError('Pick a save path.');
-      return;
-    }
     setBusy(true);
     setError(null);
     try {
-      await window.cg.projects.save({ scene, path: trimmed });
+      const res = await window.cg.projects.saveDisk({ scene, askPath: false });
+      if (!res.ok) {
+        // Operator cancelled the file picker — keep the modal open so
+        // they can pick again or hit Discard.
+        setBusy(false);
+        return;
+      }
       await onProceed();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -161,19 +163,9 @@ export function SaveBeforeSwitchModal({
         <p style={styles.body}>
           You have <strong>{scene.name}</strong> open
           {projectPath === null
-            ? ' (not saved yet). Save it before opening another project, or discard the work.'
-            : '. Save changes before opening another project, or discard them.'}
+            ? ' (not saved yet). Save it before switching, or discard the work.'
+            : '. Save changes before switching, or discard them.'}
         </p>
-        <div style={styles.pathRow}>
-          <span style={styles.label}>Save as</span>
-          <input
-            style={styles.input}
-            value={path}
-            onChange={(e) => setPath(e.target.value)}
-            aria-label="Save path"
-            disabled={busy}
-          />
-        </div>
         {error !== null && <p style={styles.error}>{error}</p>}
         <div style={styles.buttonRow}>
           <button type="button" style={styles.button} onClick={onCancel} disabled={busy}>
@@ -193,18 +185,10 @@ export function SaveBeforeSwitchModal({
             onClick={() => void save()}
             disabled={busy}
           >
-            Save
+            Save…
           </button>
         </div>
       </div>
     </div>
   );
-}
-
-function slugify(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60) || 'untitled';
 }

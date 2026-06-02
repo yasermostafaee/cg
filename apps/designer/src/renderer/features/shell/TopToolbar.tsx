@@ -3,6 +3,8 @@ import type { Scene } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
+import { NewProjectModal } from './NewProjectModal.js';
+import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
 
 interface Props {
   scene: Scene | null;
@@ -106,10 +108,16 @@ const styles = {
  * future menus. SAVE / EXPORT live on the right side (moved from the
  * status bar so the operator's primary actions stay in the chrome).
  */
-export function TopToolbar({ scene, issues }: Props): JSX.Element {
+export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
   const errorCount = issues.filter((i) => i.severity === 'error').length;
   const exportBlocked = scene === null || errorCount > 0;
   const [openMenu, setOpenMenu] = useState<'file' | null>(null);
+  const [newModalOpen, setNewModalOpen] = useState(false);
+  // Queues a switch action (Close / New / Open) when there's already a
+  // scene loaded — the SaveBeforeSwitchModal runs first and only then
+  // does the action proceed. `() => () => Promise<void>` is React's
+  // "store a function in state" pattern.
+  const [pendingSwitch, setPendingSwitch] = useState<(() => Promise<void>) | null>(null);
   const fileBtnRef = useRef<HTMLButtonElement | null>(null);
 
   // Close the dropdown on outside click / Escape.
@@ -139,11 +147,11 @@ export function TopToolbar({ scene, issues }: Props): JSX.Element {
     await window.cg.projects.saveDisk({ scene, askPath: true });
   }
 
-  async function newProject(): Promise<void> {
-    const name = window.prompt('New project name:', 'Untitled')?.trim();
-    if (name === undefined || name === '') return;
-    const result = await window.cg.projects.create({ name, templateType: 'custom' });
-    designerStore.setScene(result.scene, result.path);
+  function newProject(): void {
+    // Mirrors the LandingView entry point — the New Project modal
+    // collects name, resolution, and frame rate, then calls
+    // projects.create and setScene itself.
+    setNewModalOpen(true);
   }
 
   async function openProject(): Promise<void> {
@@ -153,6 +161,23 @@ export function TopToolbar({ scene, issues }: Props): JSX.Element {
 
   function closeProject(): void {
     designerStore.setScene(null, null);
+  }
+
+  /**
+   * Run `action` immediately when nothing is loaded, otherwise queue
+   * it behind the save-before-switch modal. Matches the LandingView
+   * `guardedSwitch` pattern so the operator has a single, consistent
+   * "you have unsaved work" prompt no matter where the switch is
+   * triggered from.
+   */
+  function guardedSwitch(action: () => void | Promise<void>): void {
+    if (scene === null) {
+      void Promise.resolve(action());
+      return;
+    }
+    setPendingSwitch(() => async () => {
+      await Promise.resolve(action());
+    });
   }
 
   async function exportVcg(): Promise<void> {
@@ -166,7 +191,12 @@ export function TopToolbar({ scene, issues }: Props): JSX.Element {
 
   function runFileAction(fn: () => void | Promise<void>): void {
     setOpenMenu(null);
-    void fn();
+    void Promise.resolve(fn());
+  }
+
+  function runFileSwitch(fn: () => void | Promise<void>): void {
+    setOpenMenu(null);
+    guardedSwitch(fn);
   }
 
   return (
@@ -197,8 +227,8 @@ export function TopToolbar({ scene, issues }: Props): JSX.Element {
           </button>
           {openMenu === 'file' && (
             <div style={styles.dropdown} role="menu">
-              <FileMenuItem label="New" onClick={() => runFileAction(newProject)} />
-              <FileMenuItem label="Open…" onClick={() => runFileAction(openProject)} />
+              <FileMenuItem label="New" onClick={() => runFileSwitch(newProject)} />
+              <FileMenuItem label="Open…" onClick={() => runFileSwitch(openProject)} />
               <div style={styles.dropdownDivider} aria-hidden />
               <FileMenuItem
                 label="Save"
@@ -220,7 +250,7 @@ export function TopToolbar({ scene, issues }: Props): JSX.Element {
               <FileMenuItem
                 label="Close project"
                 disabled={scene === null}
-                onClick={() => runFileAction(closeProject)}
+                onClick={() => runFileSwitch(closeProject)}
               />
             </div>
           )}
@@ -256,6 +286,19 @@ export function TopToolbar({ scene, issues }: Props): JSX.Element {
       >
         SAVE
       </button>
+      {newModalOpen && <NewProjectModal onClose={() => setNewModalOpen(false)} />}
+      {pendingSwitch !== null && scene !== null && (
+        <SaveBeforeSwitchModal
+          scene={scene}
+          projectPath={projectPath}
+          onCancel={() => setPendingSwitch(null)}
+          onProceed={async () => {
+            const action = pendingSwitch;
+            setPendingSwitch(null);
+            await action();
+          }}
+        />
+      )}
     </nav>
   );
 }
