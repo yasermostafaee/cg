@@ -64,6 +64,25 @@ select {
   color: inherit;
 }
 
+/*
+ * Consistent focus ring across every text-style control. Many components
+ * set `outline: 'none'` inline to suppress the browser's default white
+ * outline, so we rely on `box-shadow` (separate property, isn't
+ * overridden by inline `border` / `outline`) to draw a 2px accent halo
+ * around the focused control. This keeps the Scene inspector inputs,
+ * the element-properties inputs, and the timeline TrackRow value
+ * fields visually consistent.
+ */
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--cg-accent);
+}
+
 /* Dark, unobtrusive scrollbars for the operator chrome. */
 * {
   scrollbar-width: thin;
