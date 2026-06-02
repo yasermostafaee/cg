@@ -13,6 +13,12 @@ interface Props {
   scene: Scene | null;
   tool: DesignerTool;
   selection: ReadonlySet<string>;
+  /**
+   * When non-null, the canvas overlays an inline text editor for that
+   * element and the iframe hides the static text node so the operator
+   * doesn't see both at once (previously the iframe rendered the
+   * original text underneath the editor).
+   */
   editingTextId: string | null;
   bindModeFieldId: string | null;
   currentFrame: number;
@@ -229,6 +235,17 @@ export function CanvasArea({
     });
   }, []);
 
+  // Mirror the inline TextEditor's open/close state into the iframe
+  // so the iframe can hide its rendered text node while the operator
+  // is editing — otherwise the runtime's text sits underneath the
+  // editor and the operator sees two overlapping copies.
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { kind: 'cg-preview', action: 'editing-text', elementId: editingTextId },
+      '*',
+    );
+  }, [editingTextId]);
+
   useEffect(() => {
     function onMessage(evt: MessageEvent<unknown>): void {
       const msg = evt.data as
@@ -238,6 +255,10 @@ export function CanvasArea({
         const cw = iframeRef.current?.contentWindow;
         if (cw === undefined || cw === null) return;
         cw.postMessage({ kind: 'cg-preview', action: 'scrub', frame: currentFrame }, '*');
+        cw.postMessage(
+          { kind: 'cg-preview', action: 'editing-text', elementId: editingTextId },
+          '*',
+        );
         // The iframe's inline `applyScene` initialises with an empty
         // assetUrls map (the parent has no way to inline blob URLs
         // into srcDoc). Push the current map as soon as the iframe
@@ -257,7 +278,7 @@ export function CanvasArea({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [currentFrame]);
+  }, [currentFrame, editingTextId]);
 
   useEffect(() => {
     iframeRef.current?.contentWindow?.postMessage(

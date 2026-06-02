@@ -138,6 +138,68 @@ export class Preview {
         let currentFrame = 0;
         let busy = false;
         let pendingScene = null;
+        // D-011 — assetId → blob URL map, posted by the host. After
+        // every scene rebuild we walk the iframe DOM and assign src
+        // for every <img data-cg-asset-id="…">.
+        let assetUrls = {};
+        let currentScene = null;
+        // Track which custom @font-faces we already registered with the
+        // iframe document.fonts, keyed by family name. The family is
+        // asset-<assetId>; the parent document also registers an
+        // identical face, but iframe documents have their own font
+        // registry, so this redundant registration is what actually
+        // paints the text with the right glyphs.
+        const registeredFonts = new Map();
+        let editingTextId = null;
+
+        function applyAssetUrls() {
+          const nodes = document.querySelectorAll('[data-cg-asset-id]');
+          nodes.forEach((node) => {
+            const id = node.dataset && node.dataset.cgAssetId;
+            if (!id) return;
+            const url = assetUrls[id];
+            if (url && node.tagName === 'IMG' && node.src !== url) {
+              node.src = url;
+            }
+          });
+        }
+
+        function applyFontFaces() {
+          if (!currentScene || !currentScene.fonts) return;
+          for (const font of currentScene.fonts) {
+            const m = /^asset-(.+)$/.exec(font.family);
+            if (!m) continue;
+            const url = assetUrls[m[1]];
+            if (!url) continue;
+            if (registeredFonts.has(font.family)) continue;
+            const face = new FontFace(font.family, 'url(' + url + ')');
+            registeredFonts.set(font.family, face);
+            face.load().then((loaded) => {
+              document.fonts.add(loaded);
+            }).catch(() => {});
+          }
+        }
+
+        function applyEditingHide() {
+          // Restore anything we previously hid.
+          document.querySelectorAll('[data-cg-editing-hidden="1"]').forEach((node) => {
+            node.style.visibility = '';
+            delete node.dataset.cgEditingHidden;
+          });
+          if (!editingTextId) return;
+          const target = document.querySelector(
+            '[data-cg-element-id="' + cssEscape(editingTextId) + '"]',
+          );
+          if (target) {
+            target.style.visibility = 'hidden';
+            target.dataset.cgEditingHidden = '1';
+          }
+        }
+
+        function cssEscape(s) {
+          if (window.CSS && CSS.escape) return CSS.escape(s);
+          return String(s).replace(/[^a-zA-Z0-9_-]/g, (c) => '\\\\' + c);
+        }
 
         async function applyScene(scene) {
           if (busy) {
@@ -149,6 +211,7 @@ export class Preview {
           }
           busy = true;
           try {
+            currentScene = scene;
             if (runtime) runtime.remove();
             // remove() leaves body.cg-removed / pending state; clear
             // both so the next createRuntime starts clean.
@@ -160,6 +223,9 @@ export class Preview {
             document.body.classList.remove('cg-pending');
             await runtime.update(currentFields);
             runtime.tick(currentFrame);
+            applyAssetUrls();
+            applyFontFaces();
+            applyEditingHide();
           } finally {
             busy = false;
           }
@@ -178,7 +244,20 @@ export class Preview {
           (async () => {
             try {
               if (msg.action === 'scene-replace' && msg.scene) {
+                if (msg.assetUrls && typeof msg.assetUrls === 'object') {
+                  assetUrls = msg.assetUrls;
+                }
+                if (typeof msg.editingTextId === 'string' || msg.editingTextId === null) {
+                  editingTextId = msg.editingTextId;
+                }
                 await applyScene(msg.scene);
+              } else if (msg.action === 'asset-urls' && msg.assetUrls) {
+                assetUrls = msg.assetUrls;
+                applyAssetUrls();
+                applyFontFaces();
+              } else if (msg.action === 'editing-text') {
+                editingTextId = typeof msg.elementId === 'string' ? msg.elementId : null;
+                applyEditingHide();
               } else if (msg.action === 'update' && typeof window.update === 'function') {
                 currentFields = msg.fields ?? {};
                 window.update(JSON.stringify(currentFields));
