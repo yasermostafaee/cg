@@ -5,6 +5,7 @@ import { designerStore } from '../../state/store.js';
 import { RealtimeNumberInput } from '../inspector/controls.js';
 import { KeyframeIndicator } from './KeyframeIndicator.js';
 import {
+  effectiveRowValue,
   hasKeyframeAt,
   keyframeVariantFor,
   trackOf,
@@ -238,7 +239,7 @@ function TrackRowLabel(props: Props): JSX.Element {
     <div style={styles.labelCell} data-track-property={row.property}>
       <span style={styles.labelName}>{row.label}</span>
       <ValueCell
-        value={row.read(element)}
+        value={effectiveRowValue(element, row, currentFrame)}
         ariaLabel={`${row.label} value`}
         onCommit={(v) => designerStore.commitAnimatable(element.id, row.property, v)}
       />
@@ -337,6 +338,17 @@ function TrackRowLane(props: Props): JSX.Element {
               onPointerDown={(e) => {
                 e.stopPropagation();
                 designerStore.setSelectedKeyframe({
+                  elementId: element.id,
+                  property: row.property,
+                  frame: k.frame,
+                });
+                designerStore.setCurrentFrame(k.frame);
+              }}
+              onDoubleClick={(e) => {
+                // Double-click the segment opens the inspector for its start
+                // point (the left keyframe of the pair).
+                e.stopPropagation();
+                designerStore.openKeyframeInspector({
                   elementId: element.id,
                   property: row.property,
                   frame: k.frame,

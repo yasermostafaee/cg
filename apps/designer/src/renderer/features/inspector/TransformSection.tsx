@@ -2,7 +2,13 @@ import type { AnimatableProperty, Element } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
-import { TIMELINE_ROWS, hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
+import {
+  TIMELINE_ROWS,
+  effectiveOpacityAt,
+  effectiveTransformAt,
+  hasKeyframeAt,
+  keyframeVariantFor,
+} from '../timeline/keyframe-helpers.js';
 import { RealtimeNumberInput } from './controls.js';
 
 interface Props {
@@ -69,7 +75,11 @@ const styles = {
  * current frame.
  */
 export function TransformSection({ element, currentFrame, selectedKeyframe }: Props): JSX.Element {
-  const t = element.transform;
+  // Show the *effective* values at the current frame so editing a keyframe (or
+  // scrubbing) updates these fields in lock-step with the canvas, not the
+  // element's frozen static transform.
+  const t = effectiveTransformAt(element, currentFrame);
+  const opacity = effectiveOpacityAt(element, currentFrame);
   const id = element.id;
 
   function indicatorFor(property: AnimatableProperty): JSX.Element {
@@ -148,7 +158,7 @@ export function TransformSection({ element, currentFrame, selectedKeyframe }: Pr
       <div style={styles.rowSingle}>
         <Cell
           icon="%"
-          value={percent(element.opacity)}
+          value={percent(opacity)}
           suffix="%"
           step={1}
           min={0}

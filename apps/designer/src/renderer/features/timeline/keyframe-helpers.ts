@@ -320,6 +320,26 @@ export function effectiveOpacityAt(el: Element, frame: number): number {
   return v ?? el.opacity;
 }
 
+/**
+ * Value to DISPLAY for a property row: the interpolated value at `frame` when
+ * the property is animated, otherwise the element's static value. Keeps the
+ * timeline value column and the right Inspector in sync with what the canvas
+ * shows — so editing a keyframe's value reflects immediately. (Colour tracks
+ * fall back to the static value; numeric interpolation only.)
+ */
+export function effectiveRowValue(
+  el: Element,
+  row: TimelineRow,
+  frame: number,
+): number | string {
+  const track = el.animation?.tracks[row.property];
+  if (track !== undefined) {
+    const v = interpolateNumericTrack(track, frame);
+    if (v !== null) return v;
+  }
+  return row.read(el);
+}
+
 import type { KeyframeIndicatorVariant } from './KeyframeIndicator.js';
 
 /**
