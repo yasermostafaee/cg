@@ -1,4 +1,11 @@
-import type { AnimatableProperty, Easing, Keyframe, KeyframeValue, Track } from '@cg/shared-schema';
+import {
+  cubicBezierEase,
+  type AnimatableProperty,
+  type Easing,
+  type Keyframe,
+  type KeyframeValue,
+  type Track,
+} from '@cg/shared-schema';
 
 /**
  * Interpolate a Track's value at a given frame.
@@ -37,7 +44,8 @@ export function interpolateAtFrame(track: Track, frame: number): KeyframeValue {
   if (prev.easing === 'step') return prev.value;
   const span = next.frame - prev.frame;
   const t = span === 0 ? 1 : (frame - prev.frame) / span;
-  const eased = applyEasing(prev.easing, t);
+  const eased =
+    prev.bezier !== undefined ? cubicBezierEase(prev.bezier, t) : applyEasing(prev.easing, t);
   return lerpValue(prev.value, next.value, eased);
 }
 

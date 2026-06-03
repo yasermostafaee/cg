@@ -253,6 +253,16 @@ describe('designerStore — selectedKeyframe', () => {
     const kf = selected().animation?.tracks['scale.x']?.keyframes[0];
     expect(kf).toMatchObject({ frame: 12, value: 2.5, easing: 'ease-in-out' });
   });
+
+  it('setKeyframeBezier sets a custom curve (time components clamped) and clears it', () => {
+    designerStore.upsertKeyframe('el-1', 'position.x', 8, 100);
+    designerStore.setKeyframeBezier('el-1', 'position.x', 8, [1.5, 0.2, -0.3, 0.9]);
+    let kf = selected().animation?.tracks['position.x']?.keyframes[0];
+    expect(kf?.bezier).toEqual([1, 0.2, 0, 0.9]); // x's clamped to [0,1]
+    designerStore.setKeyframeBezier('el-1', 'position.x', 8, null);
+    kf = selected().animation?.tracks['position.x']?.keyframes[0];
+    expect(kf?.bezier).toBeUndefined();
+  });
 });
 
 describe('D-007 — top-level view routing + new-scene options', () => {

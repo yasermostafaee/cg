@@ -1,10 +1,11 @@
-import type {
-  AnimatableProperty,
-  Easing,
-  Element,
-  Keyframe,
-  Track,
-  Transform,
+import {
+  cubicBezierEase,
+  type AnimatableProperty,
+  type Easing,
+  type Element,
+  type Keyframe,
+  type Track,
+  type Transform,
 } from '@cg/shared-schema';
 
 /**
@@ -264,7 +265,8 @@ function interpolateNumericTrack(track: Track, frame: number): number | null {
   if (prev.easing === 'step') return prev.value;
   const span = next.frame - prev.frame;
   const t = span === 0 ? 1 : (frame - prev.frame) / span;
-  const eased = applyEasing(prev.easing, t);
+  const eased =
+    prev.bezier !== undefined ? cubicBezierEase(prev.bezier, t) : applyEasing(prev.easing, t);
   return prev.value + (next.value - prev.value) * eased;
 }
 

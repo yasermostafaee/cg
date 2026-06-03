@@ -863,6 +863,37 @@ export const designerStore = {
   },
 
   /**
+   * Set (or clear) an existing keyframe's custom cubic-bézier easing. Passing a
+   * tuple makes the runtime ease through that curve; passing null reverts to
+   * the named `easing`. The two time components are clamped to [0, 1].
+   */
+  setKeyframeBezier(
+    elementId: string,
+    property: AnimatableProperty,
+    frame: number,
+    bezier: readonly [number, number, number, number] | null,
+  ): void {
+    const clamped: [number, number, number, number] | null =
+      bezier === null
+        ? null
+        : [Math.max(0, Math.min(1, bezier[0])), bezier[1], Math.max(0, Math.min(1, bezier[2])), bezier[3]];
+    mutateAnimation(elementId, (anim) => {
+      const existing = anim.tracks[property];
+      if (existing === undefined) return anim;
+      const updated = existing.keyframes.map((k) => {
+        if (k.frame !== frame) return k;
+        if (clamped === null) {
+          const next = { ...k };
+          delete next.bezier;
+          return next;
+        }
+        return { ...k, bezier: clamped };
+      });
+      return { ...anim, tracks: { ...anim.tracks, [property]: { keyframes: updated } } };
+    });
+  },
+
+  /**
    * Write the static value for an animatable property, bypassing the
    * keyframe branch. Used by `commitAnimatable` and by tests; the timeline's
    * "read current value" helper also pairs with this.

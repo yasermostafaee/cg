@@ -230,3 +230,24 @@ precisely; the View menu was a disabled placeholder.
 **Notes:** view prefs live in the store (`rulerVisible`, `snappingEnabled`,
 `snapGuides`, `guides`); no schema change. Smart-guide snapping + guide snap
 targets in `CanvasOverlay` beginDrag; ruler + draggable guides in `CanvasArea`.
+
+## [~] D-016 — Cubic-bézier keyframe easing editor   ⟨priority: high⟩ — change: `openspec/changes/add-bezier-easing/`
+**What:** Replace the keyframe Easing dropdown with a cubic-bézier interpolation
+editor — a Preset dropdown, a draggable curve graph (PROGRESS × TIME) with two
+control handles, and P1/P2 (X,Y) fields. Keeps element/property/frame/value.
+**Why:** Named easings are too coarse; operators need precise per-keyframe
+curves like the reference tool.
+**Acceptance:**
+- WHEN the Keyframe Inspector is open THEN it shows a curve editor with a Preset
+  dropdown (Linear, Ease In/Out/In-Out, Sine, Custom), the bézier curve, two
+  draggable handles, and editable P1/P2 X/Y fields
+- WHEN a preset is chosen THEN the curve + P1/P2 update to that preset
+- WHEN a handle is dragged or a P1/P2 field edited THEN the curve updates and the
+  preset shows "Custom" if it no longer matches a preset
+- WHEN a keyframe has a custom curve THEN the runtime eases its outgoing segment
+  through that cubic-bézier (matching the canvas)
+- WHEN a scene authored before this change is loaded THEN it still validates and
+  plays (named easing used when no bézier is set)
+**Notes:** adds optional `Keyframe.bezier` + a shared `cubicBezierEase` solver and
+`EASING_PRESETS` to `@cg/shared-schema`; runtime + designer interpolation honor
+it; new `EasingEditor.tsx`.

@@ -1,14 +1,16 @@
-import type {
-  AnimatableProperty,
-  Easing,
-  Element as SceneElement,
-  Keyframe,
-  Scene,
+import {
+  EASING_PRESETS,
+  type AnimatableProperty,
+  type BezierEasing,
+  type Element as SceneElement,
+  type Keyframe,
+  type Scene,
 } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
 import { TIMELINE_ROWS } from '../timeline/keyframe-helpers.js';
-import { NumberField, SelectField } from './controls.js';
+import { NumberField } from './controls.js';
+import { EasingEditor } from './EasingEditor.js';
 
 interface Props {
   scene: Scene;
@@ -83,7 +85,14 @@ const styles = {
   },
 } as const;
 
-const EASINGS: readonly Easing[] = ['linear', 'step', 'ease-in', 'ease-out', 'ease-in-out'];
+/**
+ * The bézier to show in the easing editor: the keyframe's custom curve when set,
+ * otherwise the preset matching its named easing (step falls back to linear).
+ */
+function effectiveBezier(keyframe: Keyframe): BezierEasing {
+  if (keyframe.bezier !== undefined) return keyframe.bezier;
+  return EASING_PRESETS[keyframe.easing] ?? EASING_PRESETS.linear ?? [0, 0, 1, 1];
+}
 
 /**
  * Right-side inspector for the selected keyframe. Activates when the
@@ -153,11 +162,9 @@ export function KeyframeInspector({ scene, selectedKeyframe }: Props): JSX.Eleme
         keyframe={keyframe}
         onCommit={(value) => designerStore.setKeyframeValue(elementId, property, frame, value)}
       />
-      <SelectField<Easing>
-        label="easing"
-        value={keyframe.easing}
-        options={EASINGS}
-        onCommit={(e) => designerStore.setKeyframeEasing(elementId, property, frame, e)}
+      <EasingEditor
+        bezier={effectiveBezier(keyframe)}
+        onChange={(b) => designerStore.setKeyframeBezier(elementId, property, frame, b)}
       />
       <button
         type="button"

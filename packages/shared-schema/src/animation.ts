@@ -24,6 +24,63 @@ export const EasingSchema = z.enum(['linear', 'step', 'ease-in', 'ease-out', 'ea
 export type Easing = z.infer<typeof EasingSchema>;
 
 /**
+ * Custom cubic-bézier easing `[x1, y1, x2, y2]` (CSS `cubic-bezier()` form,
+ * control points P1/P2 with P0=(0,0), P3=(1,1)). When a keyframe carries this,
+ * the runtime eases the outgoing segment through this curve instead of the
+ * named `easing`. The two time components (x1, x2) are clamped to [0, 1].
+ */
+export const BezierEasingSchema = z.tuple([z.number(), z.number(), z.number(), z.number()]);
+export type BezierEasing = z.infer<typeof BezierEasingSchema>;
+
+/** Named presets → bézier control points (the curve editor's dropdown). */
+export const EASING_PRESETS: Record<string, BezierEasing> = {
+  linear: [0, 0, 1, 1],
+  'ease-in': [0.42, 0, 1, 1],
+  'ease-out': [0, 0, 0.58, 1],
+  'ease-in-out': [0.42, 0, 0.58, 1],
+  sine: [0.45, 0.05, 0.55, 0.95],
+};
+
+/**
+ * Evaluate a cubic-bézier easing at progress `t ∈ [0,1]`: solve the curve's x
+ * for the parameter, then return its y. Newton-Raphson with a bisection
+ * fallback — the same approach browsers use for CSS `cubic-bezier()`.
+ */
+export function cubicBezierEase(p: BezierEasing, t: number): number {
+  const [x1, y1, x2, y2] = p;
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  const cx = 3 * x1;
+  const bx = 3 * (x2 - x1) - cx;
+  const ax = 1 - cx - bx;
+  const cy = 3 * y1;
+  const by = 3 * (y2 - y1) - cy;
+  const ay = 1 - cy - by;
+  const sampleX = (u: number): number => ((ax * u + bx) * u + cx) * u;
+  const sampleY = (u: number): number => ((ay * u + by) * u + cy) * u;
+  const sampleDX = (u: number): number => (3 * ax * u + 2 * bx) * u + cx;
+  let u = t;
+  for (let i = 0; i < 8; i++) {
+    const x = sampleX(u) - t;
+    if (Math.abs(x) < 1e-6) return sampleY(u);
+    const d = sampleDX(u);
+    if (Math.abs(d) < 1e-6) break;
+    u -= x / d;
+  }
+  let lo = 0;
+  let hi = 1;
+  u = t;
+  for (let i = 0; i < 32 && hi - lo > 1e-7; i++) {
+    const x = sampleX(u);
+    if (Math.abs(x - t) < 1e-6) break;
+    if (t > x) lo = u;
+    else hi = u;
+    u = (lo + hi) / 2;
+  }
+  return sampleY(u);
+}
+
+/**
  * A single keyframe value. v2.0 keeps the value space narrow:
  *   - `number` for numeric properties (position, size, rotation, opacity, scale)
  *   - hex `#RRGGBB[AA]` for colors
@@ -48,6 +105,12 @@ export const KeyframeSchema = z.object({
   frame: DurationFramesSchema,
   value: KeyframeValueSchema,
   easing: EasingSchema,
+  /**
+   * Optional custom cubic-bézier outgoing easing. When present the runtime
+   * eases through this curve and ignores `easing` (except `step`, which always
+   * snaps). Absent ⇒ use the named `easing` — backward compatible.
+   */
+  bezier: BezierEasingSchema.optional(),
 });
 export type Keyframe = z.infer<typeof KeyframeSchema>;
 

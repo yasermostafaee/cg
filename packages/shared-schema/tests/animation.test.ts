@@ -1,13 +1,48 @@
 import { describe, expect, it } from 'vitest';
 import {
   AnimatablePropertySchema,
+  BezierEasingSchema,
+  EASING_PRESETS,
   EasingSchema,
   ElementAnimationSchema,
   FrameRangeSchema,
   KeyframeSchema,
   KeyframeValueSchema,
   TrackSchema,
+  cubicBezierEase,
 } from '../src/animation.js';
+
+describe('cubicBezierEase', () => {
+  it('clamps the endpoints', () => {
+    expect(cubicBezierEase([0.42, 0, 0.58, 1], 0)).toBe(0);
+    expect(cubicBezierEase([0.42, 0, 0.58, 1], 1)).toBe(1);
+  });
+
+  it('linear preset is the identity', () => {
+    for (const t of [0.1, 0.25, 0.5, 0.75, 0.9]) {
+      expect(cubicBezierEase([0, 0, 1, 1], t)).toBeCloseTo(t, 4);
+    }
+  });
+
+  it('is monotonic increasing for ease-in', () => {
+    let prev = -1;
+    for (let i = 0; i <= 10; i++) {
+      const v = cubicBezierEase([0.42, 0, 1, 1], i / 10);
+      expect(v).toBeGreaterThanOrEqual(prev);
+      prev = v;
+    }
+  });
+
+  it('ease-in stays below the linear line mid-curve (slow start)', () => {
+    expect(cubicBezierEase([0.42, 0, 1, 1], 0.5)).toBeLessThan(0.5);
+  });
+
+  it('every preset is a valid bézier tuple', () => {
+    for (const preset of Object.values(EASING_PRESETS)) {
+      expect(BezierEasingSchema.safeParse(preset).success).toBe(true);
+    }
+  });
+});
 
 /**
  * Phase 9 / M12.0 — keyframe schema unit tests. Replaces the v1
