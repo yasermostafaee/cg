@@ -346,13 +346,18 @@ export function TimelineDock({
     };
   }, []);
 
-  // Clear keyframe selection when the operator clicks anywhere that
-  // isn't a keyframe diamond. The diamond's onPointerDown calls
-  // stopPropagation so its own click survives.
+  // Clear keyframe selection when the operator clicks anywhere that isn't a
+  // keyframe diamond or the Keyframe Inspector itself — otherwise clicking the
+  // inspector's own fields would clear the selection and make the form vanish.
   useEffect(() => {
     function onPointerDown(e: PointerEvent): void {
       const target = e.target as HTMLElement | null;
-      if (target !== null && target.closest('[data-keyframe-diamond]') !== null) return;
+      if (
+        target !== null &&
+        target.closest('[data-keyframe-diamond], [data-keyframe-inspector]') !== null
+      ) {
+        return;
+      }
       designerStore.setSelectedKeyframe(null);
     }
     window.addEventListener('pointerdown', onPointerDown);

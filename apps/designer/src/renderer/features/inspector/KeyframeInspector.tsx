@@ -99,7 +99,7 @@ export function KeyframeInspector({ scene, selectedKeyframe }: Props): JSX.Eleme
 
   if (element === null || keyframe === undefined) {
     return (
-      <aside style={styles.panel} aria-label="Inspector">
+      <aside style={styles.panel} aria-label="Inspector" data-keyframe-inspector>
         <div style={styles.topRow}>
           <h2 style={styles.headingFirst}>KEYFRAME</h2>
           <button
@@ -119,7 +119,7 @@ export function KeyframeInspector({ scene, selectedKeyframe }: Props): JSX.Eleme
   }
 
   return (
-    <aside style={styles.panel} aria-label="Inspector">
+    <aside style={styles.panel} aria-label="Inspector" data-keyframe-inspector>
       <div style={styles.topRow}>
         <h2 style={styles.headingFirst}>KEYFRAME — {rowLabel.toUpperCase()}</h2>
         <button
