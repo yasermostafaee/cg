@@ -95,19 +95,23 @@ const styles = {
     height: ROW_HEIGHT - 2,
     transform: 'translateY(-50%)',
     borderRadius: 2,
-    // Dimmed in the normal state so the selected layer's bar (full
-    // brightness, below) clearly stands out among the colored bars.
-    opacity: 0.5,
-    filter: 'brightness(0.8)',
+    // Bars stay fully opaque and vivid in every state — selection is shown
+    // by *adding* emphasis to the selected bar (below), never by fading the
+    // others (which reads as "disabled"). The resting bars are just slightly
+    // toned down in brightness so the selected one has room to pop.
+    opacity: 1,
+    filter: 'brightness(0.92) saturate(0.95)',
     cursor: 'grab',
     touchAction: 'none' as const,
   },
-  // Selected lane bar: full brightness + a brighter tone and an accent
-  // ring so the selected colorful layer reads at a glance.
+  // Selected lane bar: brighter + a crisp white inner edge, an accent ring,
+  // and a soft glow so the selected colorful layer is unmistakable while
+  // staying fully solid.
   lifespanSelected: {
     opacity: 1,
-    filter: 'brightness(1.12)',
-    boxShadow: `0 0 0 1.5px ${colors.accent}, 0 0 6px rgba(56,189,248,0.5)`,
+    filter: 'brightness(1.15) saturate(1.1)',
+    boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.65), 0 0 0 2px ${colors.accent}, 0 0 9px rgba(56,189,248,0.6)`,
+    zIndex: 1,
   },
   resizeHandle: {
     position: 'absolute' as const,
