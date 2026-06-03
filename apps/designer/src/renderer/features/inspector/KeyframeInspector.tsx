@@ -82,6 +82,18 @@ const styles = {
     cursor: 'pointer',
     fontSize: '0.68rem',
   },
+  mixedWarn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.4rem',
+    background: '#F5C84B',
+    color: '#3a2e05',
+    border: '1px solid #d9a92f',
+    borderRadius: '0.25rem',
+    padding: '0.45rem 0.55rem',
+    fontSize: '0.74rem',
+    margin: '0.3rem 0 0.1rem',
+  },
 } as const;
 
 /**
@@ -91,6 +103,10 @@ const styles = {
 function effectiveBezier(keyframe: Keyframe): BezierEasing {
   if (keyframe.bezier !== undefined) return keyframe.bezier;
   return EASING_PRESETS[keyframe.easing] ?? EASING_PRESETS.linear ?? [0, 0, 1, 1];
+}
+
+function bezierApproxEqual(a: BezierEasing, b: BezierEasing): boolean {
+  return a.every((v, i) => Math.abs(v - (b[i] ?? 0)) < 0.005);
 }
 
 function BackButton(): JSX.Element {
@@ -226,10 +242,16 @@ function MultiKeyframeView({
   scene: Scene;
   refs: readonly KeyframeRef[];
 }): JSX.Element {
-  const first = refs[0];
-  const firstKf =
-    first === undefined ? undefined : findKeyframe(scene, first);
-  const bezier = firstKf === undefined ? EASING_PRESETS.linear ?? [0, 0, 1, 1] : effectiveBezier(firstKf);
+  const beziers = refs
+    .map((r) => findKeyframe(scene, r))
+    .filter((k): k is Keyframe => k !== undefined)
+    .map(effectiveBezier);
+  const firstBezier = beziers[0] ?? EASING_PRESETS.linear ?? [0, 0, 1, 1];
+  const mixed = beziers.some((b) => !bezierApproxEqual(b, firstBezier));
+  // When the selected points disagree, show a neutral straight line so the
+  // editor doesn't imply one of them is "the" curve.
+  const NEUTRAL: BezierEasing = [0.25, 0.25, 0.75, 0.75];
+  const bezier = mixed ? NEUTRAL : firstBezier;
 
   return (
     <aside style={styles.panel} aria-label="Inspector" data-keyframe-inspector>
@@ -237,6 +259,12 @@ function MultiKeyframeView({
         <h2 style={styles.headingFirst}>KEYFRAMES — {refs.length} SELECTED</h2>
         <BackButton />
       </div>
+      {mixed && (
+        <div style={styles.mixedWarn} role="status">
+          <span aria-hidden>⚠</span>
+          <span>There are multiple different easings selected</span>
+        </div>
+      )}
       <p style={{ color: colors.textMuted, fontSize: '0.72rem', margin: '0.1rem 0 0' }}>
         Easing applies to all selected points.
       </p>

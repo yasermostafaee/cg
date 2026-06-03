@@ -42,3 +42,9 @@ remove all of them. Pressing Delete SHALL remove every selected point.
 #### Scenario: Delete removes all selected
 - **WHEN** several points are selected and the operator presses Delete
 - **THEN** all of them are removed
+
+#### Scenario: Mixed easings show a warning
+- **WHEN** the selected points do not all share the same easing curve
+- **THEN** the inspector shows a warning ("There are multiple different easings
+  selected") and the curve editor shows a neutral line until the operator picks
+  one, which then applies to all
