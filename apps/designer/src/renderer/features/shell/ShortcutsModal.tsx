@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { Fragment, useEffect } from 'react';
 import { colors } from '../../theme.js';
 
 interface Props {
@@ -72,19 +72,29 @@ const styles = {
     cursor: 'pointer',
     fontSize: '0.78rem',
   },
-  group: {
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse' as const,
+  },
+  groupTh: {
+    textAlign: 'left' as const,
     color: colors.textMuted,
     fontSize: '0.66rem',
     fontWeight: 700,
     letterSpacing: '0.06em',
-    margin: '0.7rem 0 0.25rem',
+    padding: '0.7rem 0 0.3rem',
+    borderBottom: `1px solid ${colors.border}`,
   },
-  row: {
-    display: 'grid',
-    gridTemplateColumns: '1fr auto',
-    alignItems: 'center',
-    gap: '0.6rem',
-    padding: '0.2rem 0',
+  actionTd: {
+    padding: '0.28rem 0.6rem 0.28rem 0',
+    color: colors.text,
+    verticalAlign: 'middle' as const,
+  },
+  keysTd: {
+    padding: '0.28rem 0',
+    textAlign: 'right' as const,
+    whiteSpace: 'nowrap' as const,
+    verticalAlign: 'middle' as const,
   },
   keys: {
     color: colors.text,
@@ -123,17 +133,27 @@ export function ShortcutsModal({ onClose }: Props): JSX.Element {
             Close
           </button>
         </div>
-        {SHORTCUTS.map((section) => (
-          <div key={section.group}>
-            <div style={styles.group}>{section.group.toUpperCase()}</div>
-            {section.items.map((it) => (
-              <div key={it.label} style={styles.row}>
-                <span>{it.label}</span>
-                <span style={styles.keys}>{it.keys}</span>
-              </div>
+        <table style={styles.table}>
+          <tbody>
+            {SHORTCUTS.map((section) => (
+              <Fragment key={section.group}>
+                <tr>
+                  <th colSpan={2} style={styles.groupTh}>
+                    {section.group.toUpperCase()}
+                  </th>
+                </tr>
+                {section.items.map((it) => (
+                  <tr key={it.label}>
+                    <td style={styles.actionTd}>{it.label}</td>
+                    <td style={styles.keysTd}>
+                      <span style={styles.keys}>{it.keys}</span>
+                    </td>
+                  </tr>
+                ))}
+              </Fragment>
             ))}
-          </div>
-        ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
