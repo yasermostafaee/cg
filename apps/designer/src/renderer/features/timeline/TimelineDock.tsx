@@ -14,6 +14,11 @@ interface Props {
   selection: ReadonlySet<string>;
   currentFrame: number;
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
+  selectedKeyframes: readonly {
+    elementId: string;
+    property: AnimatableProperty;
+    frame: number;
+  }[];
 }
 
 const TIMELINE_BG = '#1c1f2d';
@@ -277,6 +282,7 @@ export function TimelineDock({
   selection,
   currentFrame,
   selectedKeyframe,
+  selectedKeyframes,
 }: Props): JSX.Element {
   const { in: frameIn, out: frameOut } = scene.frameRange;
   const { timelineZoom } = useDesignerStore();
@@ -435,14 +441,14 @@ export function TimelineDock({
     window.addEventListener('pointercancel', onUp);
   }
 
-  // Delete-key removes the selected keyframe.
+  // Delete-key removes every selected keyframe.
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
       if (isEditableTarget(e.target)) return;
-      const kf = designerStore.get().selectedKeyframe;
-      if (kf === null) return;
-      designerStore.removeKeyframe(kf.elementId, kf.property, kf.frame);
+      const kfs = designerStore.get().selectedKeyframes;
+      if (kfs.length === 0) return;
+      for (const kf of kfs) designerStore.removeKeyframe(kf.elementId, kf.property, kf.frame);
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -527,6 +533,7 @@ export function TimelineDock({
                                     frameOut={frameOut}
                                     currentFrame={currentFrame}
                                     selectedKeyframe={selectedKeyframe}
+                                    selectedKeyframes={selectedKeyframes}
                                     part="label"
                                   />
                                 ) : (
@@ -637,6 +644,7 @@ export function TimelineDock({
                                       frameOut={frameOut}
                                       currentFrame={currentFrame}
                                       selectedKeyframe={selectedKeyframe}
+                                    selectedKeyframes={selectedKeyframes}
                                       part="lane"
                                     />
                                   ) : (

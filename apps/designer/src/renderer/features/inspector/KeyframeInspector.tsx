@@ -1,20 +1,19 @@
 import {
   EASING_PRESETS,
-  type AnimatableProperty,
   type BezierEasing,
   type Element as SceneElement,
   type Keyframe,
   type Scene,
 } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { designerStore } from '../../state/store.js';
+import { designerStore, type KeyframeRef } from '../../state/store.js';
 import { TIMELINE_ROWS } from '../timeline/keyframe-helpers.js';
 import { NumberField } from './controls.js';
 import { EasingEditor } from './EasingEditor.js';
 
 interface Props {
   scene: Scene;
-  selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number };
+  selectedKeyframes: readonly KeyframeRef[];
 }
 
 const styles = {
@@ -94,12 +93,40 @@ function effectiveBezier(keyframe: Keyframe): BezierEasing {
   return EASING_PRESETS[keyframe.easing] ?? EASING_PRESETS.linear ?? [0, 0, 1, 1];
 }
 
+function BackButton(): JSX.Element {
+  return (
+    <button
+      type="button"
+      style={styles.closeButton}
+      onClick={() => designerStore.closeKeyframeInspector()}
+      aria-label="Back to element inspector"
+    >
+      ← back
+    </button>
+  );
+}
+
 /**
- * Right-side inspector for the selected keyframe. Activates when the
- * operator clicks a diamond in the timeline; shows the keyframe's frame,
- * value, easing, and a Remove button.
+ * Right-side inspector for the selected keyframe(s). One selected point shows
+ * its element / property / frame / value plus the easing editor; several
+ * selected points show only the shared easing editor (batch-applied) and a
+ * "Remove keyframes" button.
  */
-export function KeyframeInspector({ scene, selectedKeyframe }: Props): JSX.Element {
+export function KeyframeInspector({ scene, selectedKeyframes }: Props): JSX.Element {
+  if (selectedKeyframes.length > 1) {
+    return <MultiKeyframeView scene={scene} refs={selectedKeyframes} />;
+  }
+  const selectedKeyframe = selectedKeyframes[0];
+  if (selectedKeyframe === undefined) {
+    return (
+      <aside style={styles.panel} aria-label="Inspector" data-keyframe-inspector>
+        <div style={styles.topRow}>
+          <h2 style={styles.headingFirst}>KEYFRAME</h2>
+          <BackButton />
+        </div>
+      </aside>
+    );
+  }
   const { elementId, property, frame } = selectedKeyframe;
   const element = findElement(scene, elementId);
   const keyframe = element?.animation?.tracks[property]?.keyframes.find((k) => k.frame === frame);
@@ -111,14 +138,7 @@ export function KeyframeInspector({ scene, selectedKeyframe }: Props): JSX.Eleme
       <aside style={styles.panel} aria-label="Inspector" data-keyframe-inspector>
         <div style={styles.topRow}>
           <h2 style={styles.headingFirst}>KEYFRAME</h2>
-          <button
-            type="button"
-            style={styles.closeButton}
-            onClick={() => designerStore.closeKeyframeInspector()}
-            aria-label="Back to element inspector"
-          >
-            ← back
-          </button>
+          <BackButton />
         </div>
         <p style={{ color: colors.textMuted, fontSize: '0.74rem' }}>
           The selected keyframe is no longer available.
@@ -131,14 +151,7 @@ export function KeyframeInspector({ scene, selectedKeyframe }: Props): JSX.Eleme
     <aside style={styles.panel} aria-label="Inspector" data-keyframe-inspector>
       <div style={styles.topRow}>
         <h2 style={styles.headingFirst}>KEYFRAME — {rowLabel.toUpperCase()}</h2>
-        <button
-          type="button"
-          style={styles.closeButton}
-          onClick={() => designerStore.closeKeyframeInspector()}
-          aria-label="Back to element inspector"
-        >
-          ← back
-        </button>
+        <BackButton />
       </div>
       <StaticRow label="element" value={element.name} />
       <StaticRow label="property" value={property} />
@@ -203,6 +216,52 @@ function StaticRow({ label, value }: { label: string; value: string }): JSX.Elem
       <span style={styles.value}>{value}</span>
     </div>
   );
+}
+
+/** Multi-select view: only the shared easing editor + "Remove keyframes". */
+function MultiKeyframeView({
+  scene,
+  refs,
+}: {
+  scene: Scene;
+  refs: readonly KeyframeRef[];
+}): JSX.Element {
+  const first = refs[0];
+  const firstKf =
+    first === undefined ? undefined : findKeyframe(scene, first);
+  const bezier = firstKf === undefined ? EASING_PRESETS.linear ?? [0, 0, 1, 1] : effectiveBezier(firstKf);
+
+  return (
+    <aside style={styles.panel} aria-label="Inspector" data-keyframe-inspector>
+      <div style={styles.topRow}>
+        <h2 style={styles.headingFirst}>KEYFRAMES — {refs.length} SELECTED</h2>
+        <BackButton />
+      </div>
+      <p style={{ color: colors.textMuted, fontSize: '0.72rem', margin: '0.1rem 0 0' }}>
+        Easing applies to all selected points.
+      </p>
+      <EasingEditor
+        bezier={bezier}
+        onChange={(b) => {
+          for (const r of refs) designerStore.setKeyframeBezier(r.elementId, r.property, r.frame, b);
+        }}
+      />
+      <button
+        type="button"
+        style={styles.removeButton}
+        onClick={() => {
+          for (const r of [...refs]) designerStore.removeKeyframe(r.elementId, r.property, r.frame);
+        }}
+      >
+        Remove keyframes
+      </button>
+    </aside>
+  );
+}
+
+function findKeyframe(scene: Scene, ref: KeyframeRef): Keyframe | undefined {
+  const el = findElement(scene, ref.elementId);
+  return el?.animation?.tracks[ref.property]?.keyframes.find((k) => k.frame === ref.frame);
 }
 
 function findElement(scene: Scene, elementId: string): SceneElement | null {

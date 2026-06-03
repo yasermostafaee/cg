@@ -25,6 +25,13 @@ export type DesignerTool = 'cursor' | 'text' | 'shape' | 'ellipse' | 'image' | '
 
 export type DesignerView = 'landing' | 'studio';
 
+/** A reference to one keyframe (by element, property, and frame). */
+export interface KeyframeRef {
+  elementId: string;
+  property: AnimatableProperty;
+  frame: number;
+}
+
 export interface DesignerStoreState {
   scene: Scene | null;
   projectPath: string | null;
@@ -61,7 +68,14 @@ export interface DesignerStoreState {
    * single-click on a timeline diamond sets only this — the Inspector
    * stays on the Element view.
    */
-  selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
+  selectedKeyframe: KeyframeRef | null;
+  /**
+   * Full keyframe selection (supports multi-select for batch easing). Always
+   * mirrors `selectedKeyframe` as its last/primary entry. The timeline
+   * highlights every ref here; the Keyframe Inspector shows the per-point
+   * fields only when exactly one is selected.
+   */
+  selectedKeyframes: readonly KeyframeRef[];
   /**
    * Whether the right-side Inspector is showing the dedicated Keyframe
    * Inspector (frame / value / easing editor) for `selectedKeyframe`.
@@ -109,6 +123,7 @@ const initialState: DesignerStoreState = {
   bindModeFieldId: null,
   currentFrame: 0,
   selectedKeyframe: null,
+  selectedKeyframes: [],
   keyframeInspectorOpen: false,
   timelineZoom: 1,
   rulerVisible: false,
@@ -319,6 +334,28 @@ function insertElementAt(layerIdx: number, pos: number, el: Element, select: boo
   });
 }
 
+function sameKeyframeRef(a: KeyframeRef, b: KeyframeRef): boolean {
+  return a.elementId === b.elementId && a.property === b.property && a.frame === b.frame;
+}
+
+/** After a keyframe moves frame, keep the selection (primary + set) pointing at it. */
+function syncSelectionAfterMove(
+  elementId: string,
+  property: AnimatableProperty,
+  fromFrame: number,
+  toFrame: number,
+): void {
+  const matches = (r: KeyframeRef): boolean =>
+    r.elementId === elementId && r.property === property && r.frame === fromFrame;
+  const sk = current.selectedKeyframe;
+  if (sk === null && current.selectedKeyframes.length === 0) return;
+  const moved: KeyframeRef = { elementId, property, frame: toFrame };
+  set({
+    selectedKeyframe: sk !== null && matches(sk) ? moved : sk,
+    selectedKeyframes: current.selectedKeyframes.map((r) => (matches(r) ? moved : r)),
+  });
+}
+
 export const designerStore = {
   get(): DesignerStoreState {
     return current;
@@ -336,6 +373,7 @@ export const designerStore = {
         view: scene === null ? 'landing' : 'studio',
         selection: new Set<string>(),
         selectedKeyframe: null,
+        selectedKeyframes: [],
         keyframeInspectorOpen: false,
         currentFrame: 0,
         snapGuides: { x: [], y: [] },
@@ -362,6 +400,7 @@ export const designerStore = {
         scene: prev,
         selection: new Set<string>(),
         selectedKeyframe: null,
+        selectedKeyframes: [],
         keyframeInspectorOpen: false,
       });
     } finally {
@@ -384,6 +423,7 @@ export const designerStore = {
         scene: next,
         selection: new Set<string>(),
         selectedKeyframe: null,
+        selectedKeyframes: [],
         keyframeInspectorOpen: false,
       });
     } finally {
@@ -473,6 +513,7 @@ export const designerStore = {
       selection: nextSel,
       editingTextId: null,
       selectedKeyframe: keepKey ? current.selectedKeyframe : null,
+      selectedKeyframes: keepKey ? current.selectedKeyframes : [],
       keyframeInspectorOpen: keepKey ? current.keyframeInspectorOpen : false,
     });
   },
@@ -685,15 +726,7 @@ export const designerStore = {
       actuallyMoved = true;
       return { ...anim, tracks: { ...anim.tracks, [property]: { keyframes: next } } };
     });
-    if (
-      actuallyMoved &&
-      current.selectedKeyframe !== null &&
-      current.selectedKeyframe.elementId === elementId &&
-      current.selectedKeyframe.property === property &&
-      current.selectedKeyframe.frame === fromFrame
-    ) {
-      set({ selectedKeyframe: { elementId, property, frame: toFrame } });
-    }
+    if (actuallyMoved) syncSelectionAfterMove(elementId, property, fromFrame, toFrame);
   },
 
   /**
@@ -724,15 +757,7 @@ export const designerStore = {
       return { ...anim, tracks: { ...anim.tracks, [property]: { keyframes: next } } };
     });
     // Frame-based selection follows the dragged point.
-    if (
-      oldFrame !== null &&
-      current.selectedKeyframe !== null &&
-      current.selectedKeyframe.elementId === elementId &&
-      current.selectedKeyframe.property === property &&
-      current.selectedKeyframe.frame === oldFrame
-    ) {
-      set({ selectedKeyframe: { elementId, property, frame: toFrame } });
-    }
+    if (oldFrame !== null) syncSelectionAfterMove(elementId, property, oldFrame, toFrame);
   },
 
   /**
@@ -754,13 +779,19 @@ export const designerStore = {
       }
       return { ...anim, tracks };
     });
-    if (
-      current.selectedKeyframe !== null &&
-      current.selectedKeyframe.elementId === elementId &&
-      current.selectedKeyframe.property === property &&
-      current.selectedKeyframe.frame === frame
-    ) {
-      set({ selectedKeyframe: null, keyframeInspectorOpen: false });
+    // Drop any selection refs that pointed at the removed keyframe.
+    const removed: KeyframeRef = { elementId, property, frame };
+    const nextList = current.selectedKeyframes.filter((r) => !sameKeyframeRef(r, removed));
+    if (nextList.length !== current.selectedKeyframes.length || current.selectedKeyframe !== null) {
+      const primaryGone =
+        current.selectedKeyframe !== null && sameKeyframeRef(current.selectedKeyframe, removed);
+      set({
+        selectedKeyframes: nextList,
+        selectedKeyframe: primaryGone
+          ? (nextList[nextList.length - 1] ?? null)
+          : current.selectedKeyframe,
+        keyframeInspectorOpen: nextList.length > 0 ? current.keyframeInspectorOpen : false,
+      });
     }
   },
 
@@ -803,27 +834,36 @@ export const designerStore = {
    * point, so that single-clicking a new diamond doesn't keep showing
    * a stale detail view.
    */
-  setSelectedKeyframe(
-    key: { elementId: string; property: AnimatableProperty; frame: number } | null,
-  ): void {
+  setSelectedKeyframe(key: KeyframeRef | null): void {
     const cur = current.selectedKeyframe;
     const keepOpen =
-      current.keyframeInspectorOpen &&
-      key !== null &&
-      cur !== null &&
-      cur.elementId === key.elementId &&
-      cur.property === key.property &&
-      cur.frame === key.frame;
-    set({ selectedKeyframe: key, keyframeInspectorOpen: keepOpen });
+      current.keyframeInspectorOpen && key !== null && cur !== null && sameKeyframeRef(cur, key);
+    set({
+      selectedKeyframe: key,
+      selectedKeyframes: key === null ? [] : [key],
+      keyframeInspectorOpen: keepOpen,
+    });
   },
 
-  /** Open the right-side Keyframe Inspector for a specific point. */
-  openKeyframeInspector(key: {
-    elementId: string;
-    property: AnimatableProperty;
-    frame: number;
-  }): void {
-    set({ selectedKeyframe: key, keyframeInspectorOpen: true });
+  /** Open the right-side Keyframe Inspector for a single point (single-click). */
+  openKeyframeInspector(key: KeyframeRef): void {
+    set({ selectedKeyframe: key, selectedKeyframes: [key], keyframeInspectorOpen: true });
+  },
+
+  /**
+   * Toggle a keyframe in the multi-selection (shift / ctrl-click) and keep the
+   * Keyframe Inspector open. Multiple selected points share batch easing edits.
+   */
+  addKeyframeToSelection(key: KeyframeRef): void {
+    const exists = current.selectedKeyframes.some((r) => sameKeyframeRef(r, key));
+    const nextList = exists
+      ? current.selectedKeyframes.filter((r) => !sameKeyframeRef(r, key))
+      : [...current.selectedKeyframes, key];
+    set({
+      selectedKeyframes: nextList,
+      selectedKeyframe: exists ? (nextList[nextList.length - 1] ?? null) : key,
+      keyframeInspectorOpen: nextList.length > 0,
+    });
   },
 
   /** Close the right-side Keyframe Inspector (selection is preserved). */
@@ -1154,6 +1194,7 @@ export const designerStore = {
       scene: { ...current.scene, layers: nextLayers, fonts: nextFonts },
       selection: nextSelection,
       selectedKeyframe: keepKey ? sk : null,
+      selectedKeyframes: keepKey ? current.selectedKeyframes : [],
       keyframeInspectorOpen: keepKey ? current.keyframeInspectorOpen : false,
     });
   },
@@ -1213,6 +1254,7 @@ export const designerStore = {
       scene: { ...current.scene, layers: nextLayers },
       selection: nextSelection,
       selectedKeyframe: keepKey ? current.selectedKeyframe : null,
+      selectedKeyframes: keepKey ? current.selectedKeyframes : [],
       keyframeInspectorOpen: keepKey ? current.keyframeInspectorOpen : false,
     });
   },
@@ -1318,6 +1360,7 @@ export const designerStore = {
       bindModeFieldId: null,
       currentFrame: 0,
       selectedKeyframe: null,
+      selectedKeyframes: [],
       keyframeInspectorOpen: false,
       view: 'landing',
     };

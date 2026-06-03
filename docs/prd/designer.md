@@ -251,3 +251,22 @@ curves like the reference tool.
 **Notes:** adds optional `Keyframe.bezier` + a shared `cubicBezierEase` solver and
 `EASING_PRESETS` to `@cg/shared-schema`; runtime + designer interpolation honor
 it; new `EasingEditor.tsx`.
+
+## [~] D-017 — Single-click + multi-select keyframes   ⟨priority: high⟩ — change: `openspec/changes/add-multiselect-keyframes/`
+**What:** Clicking a point (or the segment between points) opens the Keyframe
+Inspector — no double-click. Support multi-selecting points (shift/ctrl-click) to
+apply easing to all at once; with >1 selected, hide frame/value/property and show
+only the easing editor + a "Remove keyframes" button.
+**Why:** Faster editing; batch easing across many points.
+**Acceptance:**
+- WHEN the operator clicks a point or a segment THEN the Keyframe Inspector opens
+  for that point (no double-click needed)
+- WHEN the operator shift/ctrl-clicks points THEN they accumulate in the selection
+  and all are highlighted
+- WHEN more than one point is selected THEN the inspector hides frame/value/
+  property and shows only the easing editor (applied to all) plus "Remove keyframes"
+- WHEN the operator changes the easing with several selected THEN every selected
+  point gets that curve
+- WHEN Delete is pressed THEN all selected points are removed
+**Notes:** store gains `selectedKeyframes` (multi) mirroring `selectedKeyframe`
+(primary) + `addKeyframeToSelection`; inspector branches on count.

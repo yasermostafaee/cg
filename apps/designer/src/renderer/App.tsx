@@ -102,6 +102,7 @@ export function App(): JSX.Element {
     bindModeFieldId,
     currentFrame,
     selectedKeyframe,
+    selectedKeyframes,
     keyframeInspectorOpen,
   } = useDesignerStore();
   const issues = useIssues(scene);
@@ -207,6 +208,7 @@ export function App(): JSX.Element {
             projectPath={projectPath}
             selection={selection}
             selectedKeyframe={selectedKeyframe}
+            selectedKeyframes={selectedKeyframes}
             keyframeInspectorOpen={keyframeInspectorOpen}
             currentFrame={currentFrame}
           />
@@ -225,6 +227,7 @@ export function App(): JSX.Element {
           selection={selection}
           currentFrame={currentFrame}
           selectedKeyframe={selectedKeyframe}
+          selectedKeyframes={selectedKeyframes}
         />
       </div>
       <StatusBar scene={scene} issues={issues} />

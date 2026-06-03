@@ -14,6 +14,11 @@ interface Props {
   projectPath: string | null;
   selection: ReadonlySet<string>;
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
+  selectedKeyframes: readonly {
+    elementId: string;
+    property: AnimatableProperty;
+    frame: number;
+  }[];
   keyframeInspectorOpen: boolean;
   currentFrame: number;
 }
@@ -118,6 +123,7 @@ export function InspectorPanel({
   projectPath,
   selection,
   selectedKeyframe,
+  selectedKeyframes,
   keyframeInspectorOpen,
   currentFrame,
 }: Props): JSX.Element {
@@ -130,11 +136,11 @@ export function InspectorPanel({
     );
   }
 
-  // Single-click on a timeline diamond only lights up the yellow indicators
-  // (selectedKeyframe is set). The dedicated Keyframe Inspector view is
-  // reserved for an explicit double-click on a point.
-  if (selectedKeyframe !== null && keyframeInspectorOpen) {
-    return <KeyframeInspector scene={scene} selectedKeyframe={selectedKeyframe} />;
+  // Clicking a timeline point (or segment) opens the Keyframe Inspector for the
+  // selection — one point shows all per-point fields; several show just the
+  // shared easing editor.
+  if (keyframeInspectorOpen && selectedKeyframes.length > 0) {
+    return <KeyframeInspector scene={scene} selectedKeyframes={selectedKeyframes} />;
   }
 
   const selected = findSelected(scene, selection);

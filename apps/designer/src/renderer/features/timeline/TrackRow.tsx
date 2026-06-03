@@ -28,6 +28,12 @@ interface Props {
     property: AnimatableProperty;
     frame: number;
   } | null;
+  /** All selected keyframes (multi-select) — drives the lane highlight. */
+  selectedKeyframes: readonly {
+    elementId: string;
+    property: AnimatableProperty;
+    frame: number;
+  }[];
 }
 
 export const TRACK_ROW_HEIGHT = 20;
@@ -253,7 +259,11 @@ function TrackRowLabel(props: Props): JSX.Element {
 }
 
 function TrackRowLane(props: Props): JSX.Element {
-  const { row, element, frameIn, frameOut, currentFrame, selectedKeyframe } = props;
+  const { row, element, frameIn, frameOut, currentFrame, selectedKeyframes } = props;
+  const isSelectedFrame = (f: number): boolean =>
+    selectedKeyframes.some(
+      (r) => r.elementId === element.id && r.property === row.property && r.frame === f,
+    );
   const laneRef = useRef<HTMLDivElement | null>(null);
   const span = Math.max(1, frameOut - frameIn);
   const track = trackOf(element, row.property);
@@ -316,11 +326,7 @@ function TrackRowLane(props: Props): JSX.Element {
           const rightPct = ((next.frame - frameIn) / span) * 100;
           const widthPct = rightPct - leftPct;
           if (widthPct <= 0) return null;
-          const isLeftSelected =
-            selectedKeyframe !== null &&
-            selectedKeyframe.elementId === element.id &&
-            selectedKeyframe.property === row.property &&
-            selectedKeyframe.frame === k.frame;
+          const isLeftSelected = isSelectedFrame(k.frame);
           return (
             <div
               key={`line-${String(k.frame)}-${String(next.frame)}`}
@@ -336,23 +342,15 @@ function TrackRowLane(props: Props): JSX.Element {
               role="button"
               aria-label={`Segment between frames ${String(k.frame)} and ${String(next.frame)}`}
               onPointerDown={(e) => {
+                // Click the segment selects + opens the inspector for its start
+                // point; shift/ctrl adds it to the multi-selection.
                 e.stopPropagation();
-                designerStore.setSelectedKeyframe({
-                  elementId: element.id,
-                  property: row.property,
-                  frame: k.frame,
-                });
-                designerStore.setCurrentFrame(k.frame);
-              }}
-              onDoubleClick={(e) => {
-                // Double-click the segment opens the inspector for its start
-                // point (the left keyframe of the pair).
-                e.stopPropagation();
-                designerStore.openKeyframeInspector({
-                  elementId: element.id,
-                  property: row.property,
-                  frame: k.frame,
-                });
+                const ref = { elementId: element.id, property: row.property, frame: k.frame };
+                if (e.shiftKey || e.ctrlKey || e.metaKey) {
+                  designerStore.addKeyframeToSelection(ref);
+                } else {
+                  designerStore.openKeyframeInspector(ref);
+                }
                 designerStore.setCurrentFrame(k.frame);
               }}
             >
@@ -382,11 +380,7 @@ function TrackRowLane(props: Props): JSX.Element {
         })}
         {keyframes.map((k, kIdx) => {
           const pct = ((k.frame - frameIn) / span) * 100;
-          const isSelected =
-            selectedKeyframe !== null &&
-            selectedKeyframe.elementId === element.id &&
-            selectedKeyframe.property === row.property &&
-            selectedKeyframe.frame === k.frame;
+          const isSelected = isSelectedFrame(k.frame);
           // Fan stacked points vertically around the row centre.
           const count = stackCount.get(k.frame) ?? 1;
           const idx = (k.id !== undefined ? stackIndex.get(k.id) : undefined) ?? 0;
@@ -406,15 +400,6 @@ function TrackRowLane(props: Props): JSX.Element {
               tabIndex={0}
               data-keyframe-diamond=""
               aria-label={`Keyframe at frame ${String(k.frame)}`}
-              onDoubleClick={(e) => {
-                e.stopPropagation();
-                designerStore.openKeyframeInspector({
-                  elementId: element.id,
-                  property: row.property,
-                  frame: k.frame,
-                });
-                designerStore.setCurrentFrame(k.frame);
-              }}
               onContextMenu={(e) => {
                 // Right-click opens a context menu (not a direct
                 // delete) so the operator confirms the action via
@@ -426,14 +411,15 @@ function TrackRowLane(props: Props): JSX.Element {
               onPointerDown={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
-                // Single-click: just select (yellow indicators), keep the
-                // Element Inspector visible. Double-click opens the
-                // dedicated Keyframe Inspector — see onDoubleClick above.
-                designerStore.setSelectedKeyframe({
-                  elementId: element.id,
-                  property: row.property,
-                  frame: k.frame,
-                });
+                // Click selects the point and opens the Keyframe Inspector;
+                // shift/ctrl-click adds it to the multi-selection (batch
+                // easing). A drag then moves this specific point.
+                const ref = { elementId: element.id, property: row.property, frame: k.frame };
+                if (e.shiftKey || e.ctrlKey || e.metaKey) {
+                  designerStore.addKeyframeToSelection(ref);
+                } else {
+                  designerStore.openKeyframeInspector(ref);
+                }
                 designerStore.setCurrentFrame(k.frame);
                 // Drag to move this specific point (by id) — moving it onto
                 // another keeps both (stacking). The listeners live on
