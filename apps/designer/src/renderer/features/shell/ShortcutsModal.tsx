@@ -1,4 +1,4 @@
-import { Fragment, useEffect } from 'react';
+import { useEffect } from 'react';
 import { colors } from '../../theme.js';
 
 interface Props {
@@ -8,31 +8,21 @@ interface Props {
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 const MOD = isMac ? '⌘' : 'Ctrl';
 
-/** Only shortcuts the app actually implements today. */
-const SHORTCUTS: readonly { group: string; items: readonly { keys: string; label: string }[] }[] = [
-  {
-    group: 'Edit',
-    items: [
-      { keys: `${MOD} Z`, label: 'Undo' },
-      { keys: `${MOD} ⇧ Z  /  ${MOD} Y`, label: 'Redo' },
-    ],
-  },
-  {
-    group: 'Timeline',
-    items: [
-      { keys: 'Del  /  ⌫', label: 'Delete selected keyframe' },
-      { keys: 'Double-click point', label: 'Open keyframe inspector' },
-      { keys: 'Right-click layer', label: 'Layer menu (color, copy, delete…)' },
-    ],
-  },
-  {
-    group: 'Canvas',
-    items: [
-      { keys: `${MOD} Scroll`, label: 'Zoom canvas / timeline' },
-      { keys: 'Drag from ruler', label: 'Add a guide line' },
-      { keys: 'Esc', label: 'Cancel / close menu' },
-    ],
-  },
+/**
+ * Only shortcuts the app actually implements today. Keep this in sync whenever a
+ * shortcut is added/changed (see the keydown handlers in TopToolbar / App /
+ * TimelineDock).
+ */
+const SHORTCUTS: readonly { keys: string; label: string }[] = [
+  { keys: `${MOD} + Z`, label: 'Undo' },
+  { keys: `${MOD} + Shift + Z`, label: 'Redo' },
+  { keys: `${MOD} + Y`, label: 'Redo (alternate)' },
+  { keys: 'Delete / Backspace', label: 'Delete selected keyframe' },
+  { keys: 'Double-click point', label: 'Open keyframe inspector' },
+  { keys: 'Right-click layer', label: 'Layer menu (color, copy, delete…)' },
+  { keys: `${MOD} + Scroll`, label: 'Zoom canvas / timeline' },
+  { keys: 'Drag from ruler', label: 'Add a guide line' },
+  { keys: 'Esc', label: 'Cancel / close menu' },
 ];
 
 const styles = {
@@ -46,13 +36,13 @@ const styles = {
     zIndex: 60,
   },
   modal: {
-    width: 'min(440px, 92vw)',
+    width: 'min(460px, 92vw)',
     maxHeight: '80vh',
     overflowY: 'auto' as const,
     background: colors.panel,
     border: `1px solid ${colors.border}`,
     borderRadius: '0.4rem',
-    padding: '1.1rem',
+    padding: '0.9rem 1rem 1.1rem',
     color: colors.text,
     fontSize: '0.82rem',
   },
@@ -60,51 +50,50 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: '0.6rem',
+    marginBottom: '0.7rem',
   },
-  title: { fontSize: '1rem', fontWeight: 700, margin: 0 },
+  title: { fontSize: '0.95rem', fontWeight: 700, margin: 0, color: colors.accent },
   close: {
     background: 'transparent',
     color: colors.textMuted,
-    border: `1px solid ${colors.border}`,
+    border: 'none',
     borderRadius: '0.2rem',
-    padding: '0.15rem 0.5rem',
+    width: 26,
+    height: 26,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     cursor: 'pointer',
-    fontSize: '0.78rem',
+    fontSize: '1.1rem',
+    lineHeight: 1,
+    padding: 0,
   },
   table: {
     width: '100%',
     borderCollapse: 'collapse' as const,
   },
-  groupTh: {
+  headTh: {
     textAlign: 'left' as const,
-    color: colors.textMuted,
-    fontSize: '0.66rem',
+    color: colors.accent,
+    fontSize: '0.64rem',
     fontWeight: 700,
-    letterSpacing: '0.06em',
-    padding: '0.7rem 0 0.3rem',
+    letterSpacing: '0.07em',
+    padding: '0.35rem 0.6rem',
     borderBottom: `1px solid ${colors.border}`,
   },
-  actionTd: {
-    padding: '0.28rem 0.6rem 0.28rem 0',
-    color: colors.text,
-    verticalAlign: 'middle' as const,
-  },
   keysTd: {
-    padding: '0.28rem 0',
-    textAlign: 'right' as const,
-    whiteSpace: 'nowrap' as const,
-    verticalAlign: 'middle' as const,
-  },
-  keys: {
+    padding: '0.42rem 0.6rem',
     color: colors.text,
     fontVariantNumeric: 'tabular-nums' as const,
-    background: colors.panelMuted,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.2rem',
-    padding: '0.1rem 0.4rem',
-    fontSize: '0.74rem',
     whiteSpace: 'nowrap' as const,
+    width: '45%',
+  },
+  fnTd: {
+    padding: '0.42rem 0.6rem',
+    color: colors.textMuted,
+  },
+  rowAlt: {
+    background: 'rgba(255,255,255,0.035)',
   },
 } as const;
 
@@ -128,29 +117,24 @@ export function ShortcutsModal({ onClose }: Props): JSX.Element {
     >
       <div style={styles.modal} onPointerDown={(e) => e.stopPropagation()}>
         <div style={styles.titleRow}>
-          <h2 style={styles.title}>Keyboard shortcuts</h2>
-          <button type="button" style={styles.close} onClick={onClose} aria-label="Close">
-            Close
+          <h2 style={styles.title}>Keyboard Shortcuts</h2>
+          <button type="button" style={styles.close} onClick={onClose} aria-label="Close" title="Close">
+            ✕
           </button>
         </div>
         <table style={styles.table}>
+          <thead>
+            <tr>
+              <th style={styles.headTh}>KEY COMBINATION</th>
+              <th style={styles.headTh}>FUNCTION</th>
+            </tr>
+          </thead>
           <tbody>
-            {SHORTCUTS.map((section) => (
-              <Fragment key={section.group}>
-                <tr>
-                  <th colSpan={2} style={styles.groupTh}>
-                    {section.group.toUpperCase()}
-                  </th>
-                </tr>
-                {section.items.map((it) => (
-                  <tr key={it.label}>
-                    <td style={styles.actionTd}>{it.label}</td>
-                    <td style={styles.keysTd}>
-                      <span style={styles.keys}>{it.keys}</span>
-                    </td>
-                  </tr>
-                ))}
-              </Fragment>
+            {SHORTCUTS.map((s, i) => (
+              <tr key={s.label} style={i % 2 === 1 ? styles.rowAlt : undefined}>
+                <td style={styles.keysTd}>{s.keys}</td>
+                <td style={styles.fnTd}>{s.label}</td>
+              </tr>
             ))}
           </tbody>
         </table>
