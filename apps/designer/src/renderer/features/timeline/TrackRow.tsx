@@ -258,6 +258,19 @@ function TrackRowLane(props: Props): JSX.Element {
   const track = trackOf(element, row.property);
   const keyframes: readonly Keyframe[] = track?.keyframes ?? [];
 
+  // Points that share a frame are fanned vertically so each stays visible and
+  // grabbable (otherwise the diamonds overlap exactly). `stackCount` is how
+  // many sit on a frame; `stackIndex` is each point's slot within that group.
+  const stackCount = new Map<number, number>();
+  for (const k of keyframes) stackCount.set(k.frame, (stackCount.get(k.frame) ?? 0) + 1);
+  const stackIndex = new Map<string, number>();
+  const stackSeen = new Map<number, number>();
+  for (const k of keyframes) {
+    const i = stackSeen.get(k.frame) ?? 0;
+    if (k.id !== undefined) stackIndex.set(k.id, i);
+    stackSeen.set(k.frame, i + 1);
+  }
+
   const [menu, setMenu] = useState<{ x: number; y: number; frame: number } | null>(null);
   useEffect(() => {
     if (menu === null) return;
@@ -355,21 +368,27 @@ function TrackRowLane(props: Props): JSX.Element {
             </div>
           );
         })}
-        {keyframes.map((k) => {
+        {keyframes.map((k, kIdx) => {
           const pct = ((k.frame - frameIn) / span) * 100;
           const isSelected =
             selectedKeyframe !== null &&
             selectedKeyframe.elementId === element.id &&
             selectedKeyframe.property === row.property &&
             selectedKeyframe.frame === k.frame;
+          // Fan stacked points vertically around the row centre.
+          const count = stackCount.get(k.frame) ?? 1;
+          const idx = (k.id !== undefined ? stackIndex.get(k.id) : undefined) ?? 0;
+          const offsetPx = count > 1 ? (idx - (count - 1) / 2) * 5 : 0;
           const style = {
             ...styles.keyDiamond,
             ...(isSelected ? styles.keyDiamondSelected : {}),
             left: `${pct.toFixed(3)}%`,
+            top: `calc(50% + ${String(offsetPx)}px)`,
           };
+          const kfId = k.id;
           return (
             <div
-              key={`${row.property}-${String(k.frame)}`}
+              key={kfId ?? `${row.property}-f${String(k.frame)}-${String(kIdx)}`}
               style={style}
               role="button"
               tabIndex={0}
@@ -404,17 +423,20 @@ function TrackRowLane(props: Props): JSX.Element {
                   frame: k.frame,
                 });
                 designerStore.setCurrentFrame(k.frame);
-                // Drag to move the keyframe. moveKeyframe re-renders (and
-                // re-keys) this diamond, so the drag listeners live on
-                // `window` — not on the diamond node, which React unmounts
-                // mid-drag (which previously froze the drag after one step).
-                // `from` tracks the keyframe's current frame across moves;
-                // the store keeps the selection following it.
+                // Drag to move this specific point (by id) — moving it onto
+                // another keeps both (stacking). The listeners live on
+                // `window`, not on the diamond, which React unmounts mid-drag
+                // as it re-renders. `from` tracks its current frame so a
+                // legacy keyframe without an id still drags by frame.
                 let from = k.frame;
                 const onMove = (mv: PointerEvent): void => {
                   const nf = frameAt(mv.clientX);
                   if (nf === from) return;
-                  designerStore.moveKeyframe(element.id, row.property, from, nf);
+                  if (kfId !== undefined) {
+                    designerStore.moveKeyframeById(element.id, row.property, kfId, nf);
+                  } else {
+                    designerStore.moveKeyframe(element.id, row.property, from, nf);
+                  }
                   designerStore.setCurrentFrame(nf);
                   from = nf;
                 };

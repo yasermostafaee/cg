@@ -190,3 +190,23 @@ matches the reference tool's layer menu.
 **Notes:** see `c:\Users\yaser\OneDrive\Desktop\tc.png`. Scribbled-out items in
 the screenshot are intentionally excluded. Adds `timelineColor` to the element
 base schema; reuses the existing `removeElement` and clipboard-clone helpers.
+
+## [~] D-014 — Stackable keyframes (drag a point onto another keeps both)   ⟨priority: high⟩ — change: `openspec/changes/add-stacked-keyframes/`
+**What:** Dragging a framepoint onto (or past) another no longer deletes the
+other — both are kept on the same frame, and points can be stacked further.
+Two points on one frame with different values form an instant "step".
+**Why:** Today `moveKeyframe` overwrites the destination (and run-over delete),
+losing data; the operator wants to pile points on a frame and pull them apart
+again.
+**Acceptance:**
+- WHEN a point is dragged onto a frame that already has one THEN both points
+  remain on that frame (neither is deleted)
+- WHEN more points are dragged onto the same frame THEN they all stack
+- WHEN a stacked point is dragged off THEN it leaves and the others stay
+- WHEN a track has two points on the same frame with different values THEN the
+  runtime renders an instant jump at that frame (no crash / no NaN)
+- WHEN a scene authored before this change is loaded THEN it still validates and
+  plays (keyframe ids are assigned on load)
+**Notes:** adds an optional stable `id` to `KeyframeSchema`; timeline drag uses
+a new id-based `moveKeyframeById` (no destination delete); diamonds key + fan by
+id. Selection/edit/delete stay frame-based.

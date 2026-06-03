@@ -56,7 +56,7 @@ describe('designerStore — upsertKeyframe', () => {
     designerStore.setCurrentFrame(10);
     designerStore.upsertKeyframe('el-1', 'position.x', 10, 100);
     const el = selected();
-    expect(el.animation?.tracks['position.x']?.keyframes).toEqual([
+    expect(el.animation?.tracks['position.x']?.keyframes).toMatchObject([
       { frame: 10, value: 100, easing: 'linear' },
     ]);
   });
@@ -95,14 +95,54 @@ describe('designerStore — moveKeyframe', () => {
     designerStore.moveKeyframe('el-1', 'position.x', 5, 25);
     const kfs = selected().animation?.tracks['position.x']?.keyframes;
     expect(kfs).toHaveLength(1);
-    expect(kfs?.[0]).toEqual({ frame: 25, value: 50, easing: 'linear' });
+    expect(kfs?.[0]).toMatchObject({ frame: 25, value: 50, easing: 'linear' });
   });
 
   it('is a no-op when fromFrame has no keyframe', () => {
     designerStore.upsertKeyframe('el-1', 'position.x', 5, 50);
     designerStore.moveKeyframe('el-1', 'position.x', 999, 10);
     const kfs = selected().animation?.tracks['position.x']?.keyframes;
-    expect(kfs).toEqual([{ frame: 5, value: 50, easing: 'linear' }]);
+    expect(kfs).toMatchObject([{ frame: 5, value: 50, easing: 'linear' }]);
+  });
+});
+
+describe('designerStore — moveKeyframeById (stacking)', () => {
+  function ids(): string[] {
+    return (selected().animation?.tracks['position.x']?.keyframes ?? []).map((k) => k.id ?? '');
+  }
+
+  it('upsert assigns a stable id to each keyframe', () => {
+    designerStore.upsertKeyframe('el-1', 'position.x', 5, 50);
+    designerStore.upsertKeyframe('el-1', 'position.x', 25, 250);
+    const list = ids();
+    expect(list).toHaveLength(2);
+    expect(list[0]).toMatch(/^kf-/);
+    expect(list[1]).not.toBe(list[0]);
+  });
+
+  it('moving a point onto another keeps BOTH (stacks on one frame)', () => {
+    designerStore.upsertKeyframe('el-1', 'position.x', 5, 50);
+    designerStore.upsertKeyframe('el-1', 'position.x', 25, 250);
+    const movingId = ids()[0]!; // the one at frame 5
+    designerStore.moveKeyframeById('el-1', 'position.x', movingId, 25);
+    const kfs = selected().animation?.tracks['position.x']?.keyframes ?? [];
+    expect(kfs).toHaveLength(2); // both kept
+    expect(kfs.every((k) => k.frame === 25)).toBe(true);
+    // The two distinct values are preserved (an instant step at frame 25).
+    expect(new Set(kfs.map((k) => k.value))).toEqual(new Set([50, 250]));
+  });
+
+  it('a stacked point can be dragged back off the stack', () => {
+    designerStore.upsertKeyframe('el-1', 'position.x', 25, 250);
+    designerStore.upsertKeyframe('el-1', 'position.x', 5, 50);
+    const movingId = (selected().animation?.tracks['position.x']?.keyframes ?? []).find(
+      (k) => k.frame === 5,
+    )!.id!;
+    designerStore.moveKeyframeById('el-1', 'position.x', movingId, 25); // stack
+    designerStore.moveKeyframeById('el-1', 'position.x', movingId, 40); // unstack
+    const kfs = selected().animation?.tracks['position.x']?.keyframes ?? [];
+    expect(kfs.map((k) => k.frame).sort((a, b) => a - b)).toEqual([25, 40]);
+    expect(kfs.find((k) => k.id === movingId)?.frame).toBe(40);
   });
 });
 
@@ -112,7 +152,7 @@ describe('designerStore — removeKeyframe', () => {
     designerStore.upsertKeyframe('el-1', 'position.x', 25, 250);
     designerStore.removeKeyframe('el-1', 'position.x', 5);
     const kfs = selected().animation?.tracks['position.x']?.keyframes;
-    expect(kfs).toEqual([{ frame: 25, value: 250, easing: 'linear' }]);
+    expect(kfs).toMatchObject([{ frame: 25, value: 250, easing: 'linear' }]);
   });
 
   it('removing the last keyframe prunes the track entry', () => {
@@ -211,7 +251,7 @@ describe('designerStore — selectedKeyframe', () => {
     designerStore.setKeyframeValue('el-1', 'scale.x', 12, 2.5);
     designerStore.setKeyframeEasing('el-1', 'scale.x', 12, 'ease-in-out');
     const kf = selected().animation?.tracks['scale.x']?.keyframes[0];
-    expect(kf).toEqual({ frame: 12, value: 2.5, easing: 'ease-in-out' });
+    expect(kf).toMatchObject({ frame: 12, value: 2.5, easing: 'ease-in-out' });
   });
 });
 
@@ -323,7 +363,7 @@ describe('D-010 — non-Transform properties are animatable', () => {
     // First keyframe author needs an explicit upsert (track-aware
     // commitAnimatable falls back to static when no track exists yet).
     designerStore.upsertKeyframe('el-1', 'cornerRadius', 10, 12);
-    expect(selected().animation?.tracks.cornerRadius?.keyframes).toEqual([
+    expect(selected().animation?.tracks.cornerRadius?.keyframes).toMatchObject([
       { frame: 10, value: 12, easing: 'linear' },
     ]);
   });

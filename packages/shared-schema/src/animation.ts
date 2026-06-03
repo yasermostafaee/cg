@@ -36,6 +36,15 @@ export const KeyframeValueSchema = z.union([z.number(), HexColorSchema]);
 export type KeyframeValue = z.infer<typeof KeyframeValueSchema>;
 
 export const KeyframeSchema = z.object({
+  /**
+   * Stable editor id. Lets the timeline track a point across moves and lets
+   * multiple points share the same frame (an instant "step"): the runtime
+   * sorts by frame with a stable sort and ignores the id, so two keyframes on
+   * one frame produce a jump from the first value to the second. Optional so
+   * scenes authored before this field still validate — the Designer assigns
+   * ids on load and on create.
+   */
+  id: z.string().min(1).optional(),
   frame: DurationFramesSchema,
   value: KeyframeValueSchema,
   easing: EasingSchema,

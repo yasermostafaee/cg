@@ -209,6 +209,42 @@ function locate(
   return null;
 }
 
+/** A stable per-keyframe id (used for React keys, drag tracking, stacking). */
+function freshKeyframeId(): string {
+  return `kf-${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`;
+}
+
+/**
+ * Ensure every keyframe carries an `id`. Scenes authored before the id field
+ * (or starter templates) load without ids; assigning them on load means the
+ * timeline can always track/stack points reliably. The runtime ignores ids.
+ */
+function normalizeKeyframeIds(scene: Scene): Scene {
+  if (!Array.isArray(scene.layers)) return scene;
+  function fixEl(el: Element): Element {
+    let next = el;
+    if (el.animation !== undefined) {
+      const tracks = el.animation.tracks;
+      const nextTracks: ElementAnimation['tracks'] = {};
+      for (const key of Object.keys(tracks) as AnimatableProperty[]) {
+        const track = tracks[key];
+        if (track === undefined) continue;
+        nextTracks[key] = {
+          keyframes: track.keyframes.map((k) =>
+            k.id === undefined ? { ...k, id: freshKeyframeId() } : k,
+          ),
+        };
+      }
+      next = { ...next, animation: { tracks: nextTracks } } as Element;
+    }
+    if (next.type === 'container') {
+      next = { ...next, children: next.children.map(fixEl) } as Element;
+    }
+    return next;
+  }
+  return { ...scene, layers: scene.layers.map((l) => ({ ...l, children: l.children.map(fixEl) })) };
+}
+
 /**
  * In-memory element clipboard for the layer right-click Copy / Cut / Paste
  * actions. Module-level (not part of the scene or undo history) — the menu
@@ -276,7 +312,7 @@ export const designerStore = {
     suppressHistory = true;
     try {
       set({
-        scene,
+        scene: scene === null ? null : normalizeKeyframeIds(scene),
         projectPath,
         view: scene === null ? 'landing' : 'studio',
         selection: new Set<string>(),
@@ -553,7 +589,7 @@ export const designerStore = {
   ): void {
     mutateAnimation(elementId, (anim) => {
       const existing = anim.tracks[property];
-      const next: Keyframe = { frame, value, easing };
+      const next: Keyframe = { id: freshKeyframeId(), frame, value, easing };
       if (existing === undefined) {
         return { ...anim, tracks: { ...anim.tracks, [property]: { keyframes: [next] } } };
       }
@@ -593,6 +629,45 @@ export const designerStore = {
       current.selectedKeyframe.elementId === elementId &&
       current.selectedKeyframe.property === property &&
       current.selectedKeyframe.frame === fromFrame
+    ) {
+      set({ selectedKeyframe: { elementId, property, frame: toFrame } });
+    }
+  },
+
+  /**
+   * Move a specific keyframe (by id) to a new frame WITHOUT displacing any
+   * keyframe already sitting there — so dragging a point onto another keeps
+   * both, and you can stack several on one frame (an instant step). Used by
+   * the timeline drag; the frame-based `moveKeyframe` (overwrite-on-collision)
+   * stays for the Keyframe Inspector's frame field.
+   */
+  moveKeyframeById(
+    elementId: string,
+    property: AnimatableProperty,
+    keyframeId: string,
+    toFrame: number,
+  ): void {
+    let oldFrame: number | null = null;
+    mutateAnimation(elementId, (anim) => {
+      const existing = anim.tracks[property];
+      if (existing === undefined) return anim;
+      const target = existing.keyframes.find((k) => k.id === keyframeId);
+      if (target === undefined || target.frame === toFrame) return anim;
+      oldFrame = target.frame;
+      // Stable sort keeps relative order of same-frame points, so the step
+      // direction stays defined.
+      const next = existing.keyframes
+        .map((k) => (k.id === keyframeId ? { ...k, frame: toFrame } : k))
+        .sort((a, b) => a.frame - b.frame);
+      return { ...anim, tracks: { ...anim.tracks, [property]: { keyframes: next } } };
+    });
+    // Frame-based selection follows the dragged point.
+    if (
+      oldFrame !== null &&
+      current.selectedKeyframe !== null &&
+      current.selectedKeyframe.elementId === elementId &&
+      current.selectedKeyframe.property === property &&
+      current.selectedKeyframe.frame === oldFrame
     ) {
       set({ selectedKeyframe: { elementId, property, frame: toFrame } });
     }
