@@ -404,6 +404,7 @@ export function TimelineDock({
   // pxPerFrame is locked from the lane width over the total span.
   function startSceneResize(e: React.PointerEvent): void {
     e.stopPropagation();
+    e.preventDefault();
     const lane = sceneLaneRef.current;
     if (lane === null) return;
     const rect = lane.getBoundingClientRect();

@@ -424,10 +424,21 @@ function ElementRowLane(props: Props): JSX.Element {
   // element off the timeline.
   function startDrag(mode: 'move' | 'resize-left' | 'resize-right', e: React.PointerEvent): void {
     e.stopPropagation();
+    // Prevent the browser from starting a native text/drag selection — without
+    // this, dragging the bar repeatedly leaves a stuck selection that swallows
+    // the next pointerdown until the operator clicks elsewhere to clear it.
+    e.preventDefault();
     const cell = cellRef.current;
     if (cell === null) return;
     const rect = cell.getBoundingClientRect();
     if (rect.width <= 0) return;
+    const handle = e.currentTarget;
+    const pointerId = e.pointerId;
+    try {
+      handle.setPointerCapture(pointerId);
+    } catch {
+      /* capture is best-effort */
+    }
     const startX = e.clientX;
     const startIn = lifespan.in;
     const startOut = lifespan.out;
@@ -454,6 +465,11 @@ function ElementRowLane(props: Props): JSX.Element {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
+      try {
+        handle.releasePointerCapture(pointerId);
+      } catch {
+        /* already released */
+      }
     }
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
