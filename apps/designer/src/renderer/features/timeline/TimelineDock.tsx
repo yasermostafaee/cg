@@ -369,6 +369,32 @@ export function TimelineDock({
   // lists it as the top row — matching the "top layer = frontmost" convention.
   const elements: readonly Element[] = [...flattenElements(scene)].reverse();
 
+  // Start newly added elements collapsed, so adding a shape doesn't expand its
+  // property-track section. Elements present on scene load keep their default
+  // (expanded); only ids that appear *after* the baseline get auto-collapsed.
+  const sceneId = scene.id;
+  const elementIdsKey = elements.map((el) => el.id).join('|');
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  const seenSceneRef = useRef<string | null>(null);
+  useEffect(() => {
+    const ids = elementIdsKey === '' ? [] : elementIdsKey.split('|');
+    if (seenSceneRef.current !== sceneId) {
+      // New scene (or first mount): adopt its elements as the baseline.
+      seenSceneRef.current = sceneId;
+      seenIdsRef.current = new Set(ids);
+      return;
+    }
+    const added = ids.filter((id) => !seenIdsRef.current.has(id));
+    seenIdsRef.current = new Set(ids);
+    if (added.length > 0) {
+      setCollapsedIds((prev) => {
+        const next = new Set(prev);
+        for (const id of added) next.add(id);
+        return next;
+      });
+    }
+  }, [sceneId, elementIdsKey]);
+
   // Drag the Scene row's right-edge gripper to resize the *active region*
   // (the play / export window) — NOT the scene total. The store clamps the
   // new out-point to `[activeIn + 1, frameRange.out]` and leaves
