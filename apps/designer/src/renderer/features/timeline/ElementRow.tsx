@@ -95,9 +95,19 @@ const styles = {
     height: ROW_HEIGHT - 2,
     transform: 'translateY(-50%)',
     borderRadius: 2,
-    opacity: 0.85,
+    // Dimmed in the normal state so the selected layer's bar (full
+    // brightness, below) clearly stands out among the colored bars.
+    opacity: 0.5,
+    filter: 'brightness(0.8)',
     cursor: 'grab',
     touchAction: 'none' as const,
+  },
+  // Selected lane bar: full brightness + a brighter tone and an accent
+  // ring so the selected colorful layer reads at a glance.
+  lifespanSelected: {
+    opacity: 1,
+    filter: 'brightness(1.12)',
+    boxShadow: `0 0 0 1.5px ${colors.accent}, 0 0 6px rgba(56,189,248,0.5)`,
   },
   resizeHandle: {
     position: 'absolute' as const,
@@ -353,6 +363,7 @@ function ElementRowLane(props: Props): JSX.Element {
       <div
         style={{
           ...styles.lifespan,
+          ...(isSelected ? styles.lifespanSelected : {}),
           left: `${leftPct.toFixed(3)}%`,
           width: `${widthPct.toFixed(3)}%`,
           background: lifespanColor,
