@@ -35,7 +35,7 @@ const styles = {
   },
   labelCell: {
     display: 'grid',
-    gridTemplateColumns: '14px 16px 1fr auto auto',
+    gridTemplateColumns: '16px 16px 1fr auto auto',
     alignItems: 'center',
     gap: '0.3rem',
     padding: '0 0.4rem',
@@ -53,8 +53,9 @@ const styles = {
     color: colors.textMuted,
     cursor: 'pointer',
     padding: 0,
-    fontSize: '0.65rem',
-    width: 12,
+    fontSize: '0.95rem',
+    lineHeight: 1,
+    width: 16,
     textAlign: 'center' as const,
   },
   typeIcon: {

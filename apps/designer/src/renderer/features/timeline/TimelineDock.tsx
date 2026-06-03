@@ -245,8 +245,9 @@ const styles = {
     color: colors.textMuted,
     cursor: 'pointer',
     padding: 0,
-    fontSize: '0.6rem',
-    width: 10,
+    fontSize: '0.82rem',
+    lineHeight: 1,
+    width: 13,
     textAlign: 'center' as const,
   },
 } as const;
