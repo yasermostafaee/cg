@@ -37,6 +37,13 @@ const COLOR_SWATCHES: readonly { label: string; hex: string }[] = [
 
 const MENU_WIDTH = 184;
 const SUBMENU_WIDTH = 188;
+// Approximate rendered heights, used only to clamp the menus inside the
+// viewport. Overestimating slightly is safe — it just nudges the menu up a
+// little earlier; it never clips content (the submenu also caps its own
+// max-height to the viewport and scrolls as a last resort).
+const MENU_HEIGHT = 208; // 7 items + a divider
+const SUBMENU_FULL_HEIGHT = 420; // all color swatches
+const EDGE = 8;
 
 const styles = {
   backdrop: {
@@ -82,7 +89,6 @@ const styles = {
   submenu: {
     position: 'fixed' as const,
     width: SUBMENU_WIDTH,
-    maxHeight: 320,
     overflowY: 'auto' as const,
     background: colors.panel,
     border: `1px solid ${colors.border}`,
@@ -129,9 +135,19 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Clamp the menu inside the viewport.
-  const menuLeft = Math.min(x, window.innerWidth - MENU_WIDTH - 8);
-  const menuTop = Math.min(y, window.innerHeight - 280);
+  // Clamp the menu — and especially the taller color submenu — fully inside
+  // the viewport, flipping left / up when there isn't room on the natural side.
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const menuLeft = Math.max(EDGE, Math.min(x, vw - MENU_WIDTH - EDGE));
+  const menuTop = Math.max(EDGE, Math.min(y, vh - MENU_HEIGHT - EDGE));
+  const submenuMaxH = Math.min(SUBMENU_FULL_HEIGHT, vh - 2 * EDGE);
+  const submenuRight = menuLeft + MENU_WIDTH + 2;
+  const submenuLeft =
+    submenuRight + SUBMENU_WIDTH + EDGE <= vw
+      ? submenuRight
+      : Math.max(EDGE, menuLeft - SUBMENU_WIDTH - 2);
+  const submenuTop = Math.max(EDGE, Math.min(menuTop, vh - submenuMaxH - EDGE));
 
   function run(action: () => void): void {
     action();
@@ -250,8 +266,9 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
         <div
           style={{
             ...styles.submenu,
-            left: Math.min(menuLeft + MENU_WIDTH + 2, window.innerWidth - SUBMENU_WIDTH - 8),
-            top: menuTop,
+            left: submenuLeft,
+            top: submenuTop,
+            maxHeight: submenuMaxH,
           }}
           onPointerDown={(e) => e.stopPropagation()}
           onMouseEnter={() => setColorOpen(true)}
