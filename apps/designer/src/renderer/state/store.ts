@@ -10,6 +10,7 @@ import type {
   Layer,
   Scene,
 } from '@cg/shared-schema';
+import { activeRangeOf } from '@cg/shared-schema';
 
 /**
  * Designer renderer state — small pub-sub store with a JSON-patch-ish
@@ -208,6 +209,61 @@ function locate(
   return null;
 }
 
+/**
+ * In-memory element clipboard for the layer right-click Copy / Cut / Paste
+ * actions. Module-level (not part of the scene or undo history) — the menu
+ * reads `hasClipboardElement()` when it opens to enable/disable Paste.
+ */
+let clipboardElement: Element | null = null;
+
+/** A short unique element id in the `el-…` convention used across the app. */
+function freshElementId(): string {
+  return `el-${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`;
+}
+
+/**
+ * Deep-clone an element, assigning a fresh id to it and (recursively) to
+ * every nested container child, so a pasted / duplicated subtree never
+ * collides with the original ids. The element's name gets a " copy" suffix.
+ */
+function cloneElementWithNewIds(el: Element): Element {
+  const base = structuredClone(el) as Element;
+  base.id = freshElementId();
+  base.name = `${el.name} copy`;
+  if (base.type === 'container') {
+    base.children = base.children.map(reassignIdsDeep);
+  }
+  return base;
+}
+
+/** Like cloneElementWithNewIds but keeps the name (for nested children). */
+function reassignIdsDeep(el: Element): Element {
+  const next = { ...el, id: freshElementId() } as Element;
+  if (next.type === 'container') {
+    next.children = next.children.map(reassignIdsDeep);
+  }
+  return next;
+}
+
+/**
+ * Insert `el` into `layerIdx` at array position `pos`, optionally making it
+ * the sole selection. No-op when the scene or target layer is missing.
+ */
+function insertElementAt(layerIdx: number, pos: number, el: Element, select: boolean): void {
+  if (current.scene === null) return;
+  const layer = current.scene.layers[layerIdx];
+  if (layer === undefined) return;
+  const nextChildren = [...layer.children];
+  nextChildren.splice(Math.max(0, Math.min(nextChildren.length, pos)), 0, el);
+  const nextLayer: Layer = { ...layer, children: nextChildren };
+  const nextLayers = [...current.scene.layers];
+  nextLayers[layerIdx] = nextLayer;
+  set({
+    scene: { ...current.scene, layers: nextLayers },
+    ...(select ? { selection: new Set([el.id]) } : {}),
+  });
+}
+
 export const designerStore = {
   get(): DesignerStoreState {
     return current;
@@ -216,6 +272,7 @@ export const designerStore = {
   setScene(scene: Scene | null, projectPath: string | null): void {
     past = [];
     future = [];
+    clipboardElement = null;
     suppressHistory = true;
     try {
       set({
@@ -992,6 +1049,78 @@ export const designerStore = {
     });
   },
 
+  /**
+   * Set the timeline lifespan-bar colour for an element (layer right-click →
+   * Color). The colour persists on the element as `timelineColor`.
+   */
+  setElementTimelineColor(elementId: string, color: string): void {
+    designerStore.updateElement(elementId, { timelineColor: color } as Partial<Element>);
+  },
+
+  /**
+   * "Fit workspace" — set the element's lifespan to span the scene's active
+   * region (the resized play window), so the layer bar fills the played area.
+   */
+  fitElementLifespanToActiveRange(elementId: string): void {
+    if (current.scene === null) return;
+    const r = activeRangeOf(current.scene);
+    designerStore.updateElementLifespan(elementId, { in: r.in, out: r.out });
+  },
+
+  /** Copy an element into the in-memory clipboard (for Paste). */
+  copyElement(elementId: string): void {
+    if (current.scene === null) return;
+    const found = locate(current.scene, elementId);
+    if (found === null) return;
+    const el = found.layer.children[found.elIdx];
+    if (el === undefined) return;
+    clipboardElement = structuredClone(el);
+  },
+
+  /** Copy an element to the clipboard, then remove it from the scene. */
+  cutElement(elementId: string): void {
+    designerStore.copyElement(elementId);
+    designerStore.removeElement(elementId);
+  },
+
+  /** True when there is a clipboard element available to paste. */
+  hasClipboardElement(): boolean {
+    return clipboardElement !== null;
+  },
+
+  /**
+   * Duplicate an element in place — a deep clone with fresh ids inserted
+   * directly after the original in the same layer, then selected.
+   */
+  duplicateElement(elementId: string): void {
+    if (current.scene === null) return;
+    const found = locate(current.scene, elementId);
+    if (found === null) return;
+    const el = found.layer.children[found.elIdx];
+    if (el === undefined) return;
+    insertElementAt(found.layerIdx, found.elIdx + 1, cloneElementWithNewIds(el), true);
+  },
+
+  /**
+   * Paste the clipboard element as a fresh clone. It lands just after the
+   * currently selected element (same layer) when there is a selection,
+   * otherwise it is appended to the first layer. No-op with an empty clipboard.
+   */
+  pasteElement(): void {
+    if (current.scene === null || clipboardElement === null) return;
+    const clone = cloneElementWithNewIds(clipboardElement);
+    if (current.scene.layers.length === 0) {
+      designerStore.addElement(clone);
+      return;
+    }
+    const selId = [...current.selection][0];
+    const sel = selId === undefined ? null : locate(current.scene, selId);
+    const layerIdx = sel?.layerIdx ?? 0;
+    const layer = current.scene.layers[layerIdx];
+    const pos = sel !== null ? sel.elIdx + 1 : (layer?.children.length ?? 0);
+    insertElementAt(layerIdx, pos, clone, true);
+  },
+
   /** All elements across all layers, top-of-stack first (last layer index = topmost). */
   allElements(): readonly Element[] {
     if (current.scene === null) return [];
@@ -1011,6 +1140,7 @@ export const designerStore = {
   _reset(): void {
     past = [];
     future = [];
+    clipboardElement = null;
     suppressHistory = false;
     lastSnapshotAt = -Infinity;
     current = {

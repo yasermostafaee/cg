@@ -5,6 +5,7 @@ import { designerStore, useDesignerStore } from '../../state/store.js';
 import { DisplayRow } from './DisplayRow.js';
 import { ElementRow, lifespanColorFor } from './ElementRow.js';
 import { FrameRuler, pickStride } from './FrameRuler.js';
+import { LayerContextMenu } from './LayerContextMenu.js';
 import { LABEL_COL_PX, timelineGroupsFor } from './keyframe-helpers.js';
 import { TrackRow } from './TrackRow.js';
 
@@ -356,6 +357,11 @@ export function TimelineDock({
   }, []);
   const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const [layerMenu, setLayerMenu] = useState<{ elementId: string; x: number; y: number } | null>(
+    null,
+  );
+  const openLayerMenu = (elementId: string, x: number, y: number): void =>
+    setLayerMenu({ elementId, x, y });
   const sceneLaneRef = useRef<HTMLDivElement | null>(null);
 
   const elements: readonly Element[] = flattenElements(scene);
@@ -450,7 +456,8 @@ export function TimelineDock({
                       onToggleExpand={() => toggleCollapsed(el.id)}
                       isSelected={selection.has(el.id)}
                       frameRange={scene.frameRange}
-                      lifespanColor={lifespanColorFor(el.id)}
+                      lifespanColor={el.timelineColor ?? lifespanColorFor(el.id)}
+                      onContextMenu={openLayerMenu}
                       part="label"
                     />
                     {expanded &&
@@ -570,7 +577,8 @@ export function TimelineDock({
                         onToggleExpand={() => toggleCollapsed(el.id)}
                         isSelected={selection.has(el.id)}
                         frameRange={scene.frameRange}
-                        lifespanColor={lifespanColorFor(el.id)}
+                        lifespanColor={el.timelineColor ?? lifespanColorFor(el.id)}
+                      onContextMenu={openLayerMenu}
                         part="lane"
                       />
                       {expanded &&
@@ -613,6 +621,14 @@ export function TimelineDock({
           </div>
         </div>
       </div>
+      {layerMenu !== null && (
+        <LayerContextMenu
+          elementId={layerMenu.elementId}
+          x={layerMenu.x}
+          y={layerMenu.y}
+          onClose={() => setLayerMenu(null)}
+        />
+      )}
     </section>
   );
 }

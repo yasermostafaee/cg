@@ -165,3 +165,28 @@ total fixed while editing and only narrows the played/exported window.
 `setSceneDurationFrames`) + the single `scene.frameRange` doing double duty.
 Add `scene.activeRange` to `@cg/shared-schema`; repoint runtime/export/preview
 play range (`template-runtime/src/runtime.ts:62`) to the active region.
+
+## [~] D-013 — Layer right-click context menu   ⟨priority: high⟩ — change: `openspec/changes/add-layer-context-menu/`
+**What:** Right-clicking a layer (element row) in the timeline opens a context
+menu with: **Color** (palette submenu), **Fit workspace**, **Copy**, **Cut**,
+**Paste**, **Duplicate**, **Delete**. ("Move to nested composition" is deferred
+until nested compositions exist.)
+**Why:** Operators need quick per-layer actions without hunting through panels;
+matches the reference tool's layer menu.
+**Acceptance:**
+- WHEN the operator right-clicks a layer row THEN a context menu opens at the
+  cursor with Color ▶, Fit workspace, Copy, Cut, Paste, Duplicate, Delete
+- WHEN the operator hovers Color and picks a swatch THEN that layer's timeline
+  lifespan bar takes the chosen color (persisted on the element)
+- WHEN the operator clicks Fit workspace THEN the layer's lifespan is set to span
+  the scene's active region
+- WHEN the operator clicks Copy/Cut then Paste THEN a fresh clone (new ids) is
+  inserted into the timeline; Cut also removes the original; Paste is disabled
+  with an empty clipboard
+- WHEN the operator clicks Duplicate THEN a clone is inserted right after the
+  original in the same layer and selected
+- WHEN the operator clicks Delete THEN the layer is removed
+- WHEN the operator clicks outside the menu or presses Escape THEN it closes
+**Notes:** see `c:\Users\yaser\OneDrive\Desktop\tc.png`. Scribbled-out items in
+the screenshot are intentionally excluded. Adds `timelineColor` to the element
+base schema; reuses the existing `removeElement` and clipboard-clone helpers.

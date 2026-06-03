@@ -13,6 +13,8 @@ interface Props {
   lifespanColor: string;
   /** Which half of the row to render. */
   part: 'label' | 'lane';
+  /** Open the layer right-click menu for this element at the given point. */
+  onContextMenu?: (elementId: string, x: number, y: number) => void;
 }
 
 export const ELEMENT_ROW_HEIGHT = 22;
@@ -113,7 +115,7 @@ export function ElementRow(props: Props): JSX.Element {
 }
 
 function ElementRowLabel(props: Props): JSX.Element {
-  const { element, expanded, onToggleExpand, isSelected } = props;
+  const { element, expanded, onToggleExpand, isSelected, onContextMenu } = props;
   return (
     <div
       style={{ ...styles.labelCell, ...(isSelected ? styles.rowSelected : {}) }}
@@ -122,6 +124,16 @@ function ElementRowLabel(props: Props): JSX.Element {
         if ((e.target as HTMLElement).dataset.role === 'chevron') return;
         designerStore.setSelection([element.id]);
       }}
+      onContextMenu={
+        onContextMenu === undefined
+          ? undefined
+          : (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              designerStore.setSelection([element.id]);
+              onContextMenu(element.id, e.clientX, e.clientY);
+            }
+      }
     >
       <button
         type="button"
@@ -257,7 +269,7 @@ function LockOpenIcon(): JSX.Element {
 }
 
 function ElementRowLane(props: Props): JSX.Element {
-  const { element, isSelected, frameRange, lifespanColor } = props;
+  const { element, isSelected, frameRange, lifespanColor, onContextMenu } = props;
   const span = Math.max(1, frameRange.out - frameRange.in);
   const lifespan = element.lifespan ?? frameRange;
   const leftPct = ((lifespan.in - frameRange.in) / span) * 100;
@@ -313,6 +325,16 @@ function ElementRowLane(props: Props): JSX.Element {
       ref={cellRef}
       style={{ ...styles.laneCell, ...(isSelected ? styles.rowSelected : {}) }}
       onClick={() => designerStore.setSelection([element.id])}
+      onContextMenu={
+        onContextMenu === undefined
+          ? undefined
+          : (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              designerStore.setSelection([element.id]);
+              onContextMenu(element.id, e.clientX, e.clientY);
+            }
+      }
     >
       <div
         style={{

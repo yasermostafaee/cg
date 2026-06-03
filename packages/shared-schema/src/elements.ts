@@ -39,6 +39,12 @@ export const ElementBaseSchema = z.object({
    * this once they want the element to enter / leave mid-scene.
    */
   lifespan: FrameRangeSchema.optional(),
+  /**
+   * Operator-chosen colour for this element's timeline lifespan bar
+   * (set via the layer right-click → Color menu). Absent means the
+   * timeline falls back to its deterministic per-id colour.
+   */
+  timelineColor: HexColorSchema.optional(),
 });
 export type ElementBase = z.infer<typeof ElementBaseSchema>;
 
