@@ -12,7 +12,7 @@ import { designerStore } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import { hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
 import { CollapseSection } from './CollapseSection.js';
-import { ColorField, NumberField, SelectField } from './controls.js';
+import { ColorField, NumberField, SelectField, VectorField } from './controls.js';
 import { TextStyleSection } from './TextStyleSection.js';
 
 interface Props {
@@ -300,25 +300,47 @@ function DropShadowSection({
   const s: Shadow = staticShadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
   return (
     <CollapseSection title={title}>
-      <NumberField
-        label="offset X"
-        value={s.offsetX}
-        step={1}
-        onCommit={(v) => designerStore.commitAnimatable(id, 'shadow.offsetX', v)}
-        trailing={animPointIcon(element, 'shadow.offsetX', currentFrame, selectedKeyframe, () => s.offsetX)}
-      />
-      <NumberField
-        label="offset Y"
-        value={s.offsetY}
-        step={1}
-        onCommit={(v) => designerStore.commitAnimatable(id, 'shadow.offsetY', v)}
-        trailing={animPointIcon(element, 'shadow.offsetY', currentFrame, selectedKeyframe, () => s.offsetY)}
+      <VectorField
+        label="offset"
+        axes={[
+          {
+            icon: 'X',
+            ariaLabel: 'offset X',
+            value: s.offsetX,
+            step: 1,
+            suffix: 'px',
+            onCommit: (v) => designerStore.commitAnimatable(id, 'shadow.offsetX', v),
+            point: animPointIcon(
+              element,
+              'shadow.offsetX',
+              currentFrame,
+              selectedKeyframe,
+              () => s.offsetX,
+            ),
+          },
+          {
+            icon: 'Y',
+            ariaLabel: 'offset Y',
+            value: s.offsetY,
+            step: 1,
+            suffix: 'px',
+            onCommit: (v) => designerStore.commitAnimatable(id, 'shadow.offsetY', v),
+            point: animPointIcon(
+              element,
+              'shadow.offsetY',
+              currentFrame,
+              selectedKeyframe,
+              () => s.offsetY,
+            ),
+          },
+        ]}
       />
       <NumberField
         label="blur"
         value={s.blur}
         step={1}
         min={0}
+        suffix="px"
         onCommit={(v) => designerStore.commitAnimatable(id, 'shadow.blur', v)}
         trailing={animPointIcon(element, 'shadow.blur', currentFrame, selectedKeyframe, () => s.blur)}
       />
@@ -431,6 +453,7 @@ function FilterSection({
     step: number,
     min: number | undefined,
     max: number | undefined,
+    suffix: string | undefined,
   ): JSX.Element {
     const key = property.slice('filter.'.length) as keyof Filter;
     const value = f[key] ?? fallback;
@@ -441,6 +464,7 @@ function FilterSection({
         step={step}
         {...(min !== undefined ? { min } : {})}
         {...(max !== undefined ? { max } : {})}
+        {...(suffix !== undefined ? { suffix } : {})}
         onCommit={(v) => designerStore.commitAnimatable(id, property, v)}
         trailing={animPointIcon(
           element,
@@ -454,15 +478,15 @@ function FilterSection({
   }
   return (
     <CollapseSection title="Filter">
-      {row('blur', 'filter.blur', 0, 0.5, 0, undefined)}
-      {row('brightness %', 'filter.brightness', 100, 1, 0, undefined)}
-      {row('contrast %', 'filter.contrast', 100, 1, 0, undefined)}
-      {row('grayscale %', 'filter.grayscale', 0, 1, 0, 100)}
-      {row('hue rotate °', 'filter.hueRotate', 0, 1, undefined, undefined)}
-      {row('invert %', 'filter.invert', 0, 1, 0, 100)}
-      {row('opacity %', 'filter.opacity', 100, 1, 0, 100)}
-      {row('saturate %', 'filter.saturate', 100, 1, 0, undefined)}
-      {row('sepia %', 'filter.sepia', 0, 1, 0, 100)}
+      {row('blur', 'filter.blur', 0, 0.5, 0, undefined, 'px')}
+      {row('brightness', 'filter.brightness', 100, 1, 0, undefined, '%')}
+      {row('contrast', 'filter.contrast', 100, 1, 0, undefined, '%')}
+      {row('grayscale', 'filter.grayscale', 0, 1, 0, 100, '%')}
+      {row('hue rotate', 'filter.hueRotate', 0, 1, undefined, undefined, '°')}
+      {row('invert', 'filter.invert', 0, 1, 0, 100, '%')}
+      {row('opacity', 'filter.opacity', 100, 1, 0, 100, '%')}
+      {row('saturate', 'filter.saturate', 100, 1, 0, undefined, '%')}
+      {row('sepia', 'filter.sepia', 0, 1, 0, 100, '%')}
     </CollapseSection>
   );
 }

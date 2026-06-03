@@ -47,6 +47,44 @@ const styles = {
     boxSizing: 'border-box' as const,
     fontVariantNumeric: 'tabular-nums' as const,
   },
+  // Content-sized variant (see .cg-num-unit) so the value and its unit
+  // cluster on the left, leaving the diamond free to sit at the right edge.
+  inputInnerAuto: {
+    background: 'transparent',
+    color: colors.text,
+    border: 'none',
+    outline: 'none',
+    padding: 0,
+    fontSize: '0.74rem',
+    flex: '0 0 auto',
+    width: 'auto',
+    minWidth: 0,
+    maxWidth: '5rem',
+    boxSizing: 'border-box' as const,
+    fontVariantNumeric: 'tabular-nums' as const,
+  },
+  // Single-letter / glyph axis label inside a combined vector segment.
+  segIcon: {
+    color: colors.textMuted,
+    fontSize: '0.65rem',
+    fontWeight: 600,
+    width: 12,
+    flexShrink: 0,
+    textAlign: 'center' as const,
+  },
+  // Pushes the keyframe diamond to the field's right edge.
+  point: {
+    marginLeft: 'auto',
+    display: 'inline-flex',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  // The whole field/segment is a drag-to-scrub + click-to-edit surface.
+  scrubSurface: {
+    cursor: 'ew-resize',
+    touchAction: 'none' as const,
+    userSelect: 'none' as const,
+  },
   swatch: {
     position: 'relative' as const,
     width: 14,
@@ -224,35 +262,111 @@ interface NumberFieldProps {
 }
 
 export function NumberField(props: NumberFieldProps): JSX.Element {
-  const scrub = scrubHandle({
+  const opts = {
     value: props.value,
     onCommit: props.onCommit,
     step: props.step,
     min: props.min,
     max: props.max,
-  });
+  };
+  const labelScrub = scrubHandle(opts);
+  const field = fieldScrub(opts);
+  const hasUnit = props.suffix !== undefined;
   return (
     <div style={styles.row}>
       <span
-        style={{ ...styles.label, ...scrub.style }}
-        onPointerDown={scrub.onPointerDown}
+        style={{ ...styles.label, ...labelScrub.style }}
+        onPointerDown={labelScrub.onPointerDown}
         title="Drag to adjust"
       >
         {props.label}
       </span>
-      <div className="cg-field">
+      {/* The whole field scrubs the value (Loopic); click focuses to type.
+          With a unit the input sizes to its content so the value+unit cluster
+          on the left, and the diamond is pushed to the right edge. */}
+      <div className="cg-field" style={styles.scrubSurface} onPointerDown={field.onPointerDown}>
         <RealtimeNumberInput
           value={props.value}
           onCommit={props.onCommit}
           step={props.step}
           min={props.min}
           max={props.max}
-          style={styles.inputInner}
+          scrub={false}
+          style={hasUnit ? styles.inputInnerAuto : styles.inputInner}
+          className={hasUnit ? 'cg-num-unit' : undefined}
           ariaLabel={props.label}
         />
-        {props.suffix !== undefined && <span className="cg-unit">{props.suffix}</span>}
-        {props.trailing}
+        {hasUnit && <span className="cg-unit">{props.suffix}</span>}
+        {props.trailing !== undefined && <span style={styles.point}>{props.trailing}</span>}
       </div>
+    </div>
+  );
+}
+
+interface VectorAxisProps {
+  icon: string;
+  ariaLabel: string;
+  value: number;
+  onCommit: (n: number) => void;
+  step?: number;
+  min?: number;
+  max?: number;
+  suffix?: string;
+  /** Keyframe diamond for this axis. */
+  point?: JSX.Element;
+}
+
+interface VectorFieldProps {
+  label: string;
+  axes: VectorAxisProps[];
+}
+
+/**
+ * A labelled row of axes sharing one bordered box (the Loopic pattern for
+ * Position X/Y, Drop-Shadow offset X/Y, …). Each segment is independently
+ * editable and is itself a drag-to-scrub / click-to-edit surface, with its
+ * keyframe diamond at the segment's right edge.
+ */
+export function VectorField(props: VectorFieldProps): JSX.Element {
+  return (
+    <div style={styles.row}>
+      <span style={styles.label}>{props.label}</span>
+      <div className="cg-input-group">
+        {props.axes.map((a) => (
+          <VectorSeg key={a.ariaLabel} {...a} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function VectorSeg(props: VectorAxisProps): JSX.Element {
+  const scrub = fieldScrub({
+    value: props.value,
+    onCommit: props.onCommit,
+    step: props.step,
+    min: props.min,
+    max: props.max,
+  });
+  const hasUnit = props.suffix !== undefined;
+  return (
+    <div className="cg-seg" style={styles.scrubSurface} onPointerDown={scrub.onPointerDown}>
+      <span style={styles.segIcon} aria-hidden>
+        {props.icon}
+      </span>
+      <RealtimeNumberInput
+        value={props.value}
+        onCommit={props.onCommit}
+        step={props.step}
+        min={props.min}
+        max={props.max}
+        scrub={false}
+        style={hasUnit ? styles.inputInnerAuto : styles.inputInner}
+        className={hasUnit ? 'cg-num-unit' : undefined}
+        ariaLabel={props.ariaLabel}
+      />
+      {hasUnit && <span className="cg-unit">{props.suffix}</span>}
+      {props.point !== undefined && <span style={styles.point}>{props.point}</span>}
     </div>
   );
 }
