@@ -27,7 +27,7 @@ const SHORTCUTS: readonly { keys: string; label: string }[] = [
   { keys: 'Right-click layer', label: 'Layer menu (color, copy, delete…)' },
   { keys: `${MOD} + Scroll`, label: 'Zoom canvas / timeline' },
   { keys: 'Drag from ruler', label: 'Add a guide line' },
-  { keys: 'Esc', label: 'Cancel / close menu' },
+  { keys: 'Esc', label: 'Deselect · cancel · close menu' },
 ];
 
 const styles = {

@@ -94,6 +94,23 @@ export function CanvasOverlay({
     return () => window.removeEventListener('keydown', onKey);
   }, [bindModeFieldId]);
 
+  // Esc deselects the selected shape — unless something else owns Esc (bind
+  // mode, inline text editing) or the operator is typing in a field.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if (e.key !== 'Escape') return;
+      if (bindModeFieldId !== null || editingTextId !== null) return;
+      const t = e.target;
+      if (t instanceof HTMLElement) {
+        const tag = t.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable) return;
+      }
+      if (selection.size > 0) designerStore.setSelection([]);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [bindModeFieldId, editingTextId, selection]);
+
   function viewportToScene(clientX: number, clientY: number): { x: number; y: number } {
     const rect = layerRef.current?.getBoundingClientRect();
     if (rect === undefined) return { x: 0, y: 0 };
