@@ -35,7 +35,7 @@ const styles = {
   },
   labelCell: {
     display: 'grid',
-    gridTemplateColumns: '14px 1fr auto auto',
+    gridTemplateColumns: '14px 16px 1fr auto auto',
     alignItems: 'center',
     gap: '0.3rem',
     padding: '0 0.4rem',
@@ -56,6 +56,13 @@ const styles = {
     fontSize: '0.65rem',
     width: 12,
     textAlign: 'center' as const,
+  },
+  typeIcon: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 16,
+    height: 16,
   },
   name: {
     color: colors.text,
@@ -180,6 +187,9 @@ function ElementRowLabel(props: Props): JSX.Element {
       >
         {expanded ? '▾' : '▸'}
       </button>
+      <span style={styles.typeIcon}>
+        <LayerTypeIcon element={element} color={element.timelineColor ?? lifespanColorFor(element)} />
+      </span>
       <span style={{ ...styles.name, ...(isSelected ? styles.nameSelected : {}) }}>
         {element.name}
       </span>
@@ -221,6 +231,101 @@ function ElementRowLabel(props: Props): JSX.Element {
       </button>
     </div>
   );
+}
+
+/**
+ * Tiny per-kind glyph shown before the layer name, tinted with the layer's
+ * timeline color: a square for rectangles, a circle for ellipses, an "A" for
+ * text, a picture for images, a play triangle for video/lottie, etc.
+ */
+function LayerTypeIcon({ element, color }: { element: Element; color: string }): JSX.Element {
+  const svg = {
+    width: 12,
+    height: 12,
+    viewBox: '0 0 16 16',
+    style: { color, display: 'block' } as React.CSSProperties,
+    'aria-hidden': true,
+  };
+  const stroke = {
+    stroke: 'currentColor',
+    strokeWidth: 1.6,
+    fill: 'none',
+    strokeLinejoin: 'round' as const,
+    strokeLinecap: 'round' as const,
+  };
+  if (element.type === 'text') {
+    return (
+      <svg {...svg}>
+        <text
+          x="8"
+          y="13"
+          textAnchor="middle"
+          fontSize="14"
+          fontWeight={700}
+          fontFamily="sans-serif"
+          fill="currentColor"
+        >
+          A
+        </text>
+      </svg>
+    );
+  }
+  if (element.type === 'image') {
+    return (
+      <svg {...svg}>
+        <rect x="2.5" y="3.5" width="11" height="9" rx="1.5" {...stroke} />
+        <circle cx="6" cy="6.5" r="1.1" fill="currentColor" stroke="none" />
+        <path d="M3 12 l3.5-3 2.2 1.8 2.3-2.6 2.5 2.8" {...stroke} />
+      </svg>
+    );
+  }
+  if (element.type === 'lottie' || element.type === 'video-placeholder') {
+    return (
+      <svg {...svg}>
+        <polygon points="5,3.5 13,8 5,12.5" {...stroke} />
+      </svg>
+    );
+  }
+  if (element.type === 'container') {
+    return (
+      <svg {...svg}>
+        <path d="M2.5 5 h3.4 l1.2 1.4 h6.4 v6 h-11 z" {...stroke} />
+      </svg>
+    );
+  }
+  // shape kinds
+  switch (element.shape) {
+    case 'ellipse':
+      return (
+        <svg {...svg}>
+          <circle cx="8" cy="8" r="5.2" {...stroke} />
+        </svg>
+      );
+    case 'polygon':
+      return (
+        <svg {...svg}>
+          <polygon points="8,3 13,13 3,13" {...stroke} />
+        </svg>
+      );
+    case 'path':
+      return (
+        <svg {...svg}>
+          <path d="M3 11 C 6 3.5, 10 12.5, 13 5" {...stroke} />
+        </svg>
+      );
+    case 'rounded-rect':
+      return (
+        <svg {...svg}>
+          <rect x="3" y="4" width="10" height="8" rx="3" {...stroke} />
+        </svg>
+      );
+    default:
+      return (
+        <svg {...svg}>
+          <rect x="3" y="4" width="10" height="8" rx="1" {...stroke} />
+        </svg>
+      );
+  }
 }
 
 function EyeOpenIcon(): JSX.Element {
