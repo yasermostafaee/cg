@@ -124,7 +124,9 @@ export function CanvasOverlay({
       const hit = topmostHit(allElementsAtFrame, scenePoint);
       if (hit !== null) {
         designerStore.setSelection([hit.id]);
-        beginDrag(hit.id, scale, currentFrame, e.nativeEvent);
+        // A locked element can be selected (to recolor / unlock it) but not
+        // moved — and its resize/rotate gizmo is hidden (see render below).
+        if (!hit.locked) beginDrag(hit.id, scale, currentFrame, e.nativeEvent);
       } else {
         designerStore.setSelection([]);
       }
@@ -206,6 +208,7 @@ export function CanvasOverlay({
     >
       {selectedEl !== null &&
         selectedEl.visible &&
+        !selectedEl.locked &&
         editingEl === null &&
         bindModeFieldId === null && (
           <Gizmo element={selectedEl} scale={scale} currentFrame={currentFrame} />
