@@ -16,3 +16,79 @@ input[type='number'] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/*
+ * Inspector field chrome (the Loopic pattern). Bordered input boxes whose
+ * border turns accent on focus-within (expressible only in CSS, not inline
+ * styles). Colours mirror Loopic's tokens: --input-background #24273d,
+ * --input-border #363a54, hover #4e5473, --accent-background #3990d2.
+ *
+ * Keyframe diamonds for *single* fields are rendered OUTSIDE .cg-field, so
+ * the focus ring wraps only the input. Paired/vector fields use
+ * .cg-input-group, whose diamonds live INSIDE each .cg-seg segment.
+ */
+.cg-field,
+.cg-input-group {
+  background: #24273d;
+  border: 1px solid #363a54;
+  border-radius: 0.2rem;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.cg-field {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.4rem;
+}
+
+.cg-field:hover,
+.cg-input-group:hover {
+  border-color: #4e5473;
+}
+
+.cg-field:focus-within,
+.cg-input-group:focus-within {
+  border-color: #3990d2;
+  box-shadow: 0 0 0 1px #3990d2;
+}
+
+/* Combined vector field — segments share one border, divided by a hairline. */
+.cg-input-group {
+  display: flex;
+  align-items: stretch;
+}
+
+.cg-seg {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.1rem 0.4rem;
+}
+
+.cg-input-group > .cg-seg + .cg-seg {
+  border-left: 1px solid #363a54;
+}
+
+/* A single bordered field plus its keyframe diamond, which sits outside. */
+.cg-field-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.cg-field-row > .cg-field {
+  flex: 1 1 0;
+}
+
+/* Dim unit suffix (°, %) trailing a value. */
+.cg-unit {
+  color: #bcc2e0;
+  opacity: 0.65;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}

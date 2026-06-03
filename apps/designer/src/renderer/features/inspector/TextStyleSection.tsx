@@ -150,20 +150,11 @@ const styles = {
     width: '100%',
     boxSizing: 'border-box' as const,
   },
-  numberChip: {
-    display: 'grid',
-    gridTemplateColumns: '14px 1fr 14px',
-    gap: '0.35rem',
-    alignItems: 'center',
-    background: colors.panelMuted,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.22rem',
-    padding: '0.1rem 0.4rem',
-  },
   chipIcon: {
     color: colors.textMuted,
     fontSize: '0.7rem',
     fontWeight: 600,
+    flexShrink: 0,
     textAlign: 'center' as const,
   },
   chipInput: {
@@ -173,7 +164,8 @@ const styles = {
     outline: 'none',
     padding: '0.05rem 0',
     fontSize: '0.72rem',
-    width: '100%',
+    flex: '1 1 0',
+    minWidth: 0,
     boxSizing: 'border-box' as const,
     fontVariantNumeric: 'tabular-nums' as const,
   },
@@ -391,53 +383,59 @@ export function TextStyleSection({
           )}
         </select>
 
-        {/* Font size (full-width chip with tT icon) */}
-        <div style={{ ...styles.numberChip, gridTemplateColumns: '18px 1fr 14px' }}>
-          <span style={styles.chipIcon} aria-hidden>
-            tT
-          </span>
-          <RealtimeNumberInput
-            style={styles.chipInput}
-            value={element.font.size}
-            step={1}
-            min={1}
-            onCommit={(n) => {
-              if (n > 0) designerStore.commitAnimatable(id, 'font.size', n);
-            }}
-            ariaLabel="Font size"
-          />
+        {/* Font size (full-width chip with tT icon) — diamond outside the box */}
+        <div className="cg-field-row">
+          <div className="cg-field">
+            <span style={styles.chipIcon} aria-hidden>
+              tT
+            </span>
+            <RealtimeNumberInput
+              style={styles.chipInput}
+              value={element.font.size}
+              step={1}
+              min={1}
+              onCommit={(n) => {
+                if (n > 0) designerStore.commitAnimatable(id, 'font.size', n);
+              }}
+              ariaLabel="Font size"
+            />
+          </div>
           {animPoint(element, 'font.size', currentFrame, selectedKeyframe, (el) => el.font.size)}
         </div>
 
         {/* Line height + Letter spacing side-by-side */}
         <div style={styles.pairRow}>
-          <div style={styles.numberChip}>
-            <span style={styles.chipIcon} aria-hidden title="Line height">
-              ↕
-            </span>
-            <RealtimeNumberInput
-              style={styles.chipInput}
-              value={element.font.lineHeight}
-              step={0.05}
-              min={0.1}
-              onCommit={(n) => {
-                if (n > 0) designerStore.commitAnimatable(id, 'font.lineHeight', n);
-              }}
-              ariaLabel="Line height"
-            />
+          <div className="cg-field-row">
+            <div className="cg-field">
+              <span style={styles.chipIcon} aria-hidden title="Line height">
+                ↕
+              </span>
+              <RealtimeNumberInput
+                style={styles.chipInput}
+                value={element.font.lineHeight}
+                step={0.05}
+                min={0.1}
+                onCommit={(n) => {
+                  if (n > 0) designerStore.commitAnimatable(id, 'font.lineHeight', n);
+                }}
+                ariaLabel="Line height"
+              />
+            </div>
             {animPoint(element, 'font.lineHeight', currentFrame, selectedKeyframe, (el) => el.font.lineHeight)}
           </div>
-          <div style={styles.numberChip}>
-            <span style={styles.chipIcon} aria-hidden title="Letter spacing">
-              VA
-            </span>
-            <RealtimeNumberInput
-              style={styles.chipInput}
-              value={element.font.letterSpacing}
-              step={0.01}
-              onCommit={(n) => designerStore.commitAnimatable(id, 'font.letterSpacing', n)}
-              ariaLabel="Letter spacing"
-            />
+          <div className="cg-field-row">
+            <div className="cg-field">
+              <span style={styles.chipIcon} aria-hidden title="Letter spacing">
+                VA
+              </span>
+              <RealtimeNumberInput
+                style={styles.chipInput}
+                value={element.font.letterSpacing}
+                step={0.01}
+                onCommit={(n) => designerStore.commitAnimatable(id, 'font.letterSpacing', n)}
+                ariaLabel="Letter spacing"
+              />
+            </div>
             {animPoint(element, 'font.letterSpacing', currentFrame, selectedKeyframe, (el) => el.font.letterSpacing)}
           </div>
         </div>
