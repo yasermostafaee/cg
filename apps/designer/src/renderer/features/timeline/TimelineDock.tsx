@@ -364,7 +364,10 @@ export function TimelineDock({
     setLayerMenu({ elementId, x, y });
   const sceneLaneRef = useRef<HTMLDivElement | null>(null);
 
-  const elements: readonly Element[] = flattenElements(scene);
+  // Newest-first in the timeline: a freshly added shape is appended last in
+  // the scene graph (and so paints on top of the canvas), so reversing here
+  // lists it as the top row — matching the "top layer = frontmost" convention.
+  const elements: readonly Element[] = [...flattenElements(scene)].reverse();
 
   // Drag the Scene row's right-edge gripper to resize the *active region*
   // (the play / export window) — NOT the scene total. The store clamps the
