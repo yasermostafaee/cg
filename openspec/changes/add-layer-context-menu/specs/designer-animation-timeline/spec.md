@@ -26,18 +26,19 @@ not offered until nested compositions exist.)
 The context menu's Color item SHALL open a submenu of named color swatches.
 Choosing a swatch SHALL set that element's `timelineColor`, and the element's
 timeline lifespan bar SHALL render in the chosen color. When an element has no
-`timelineColor`, the lifespan bar SHALL fall back to its deterministic per-id
-color.
+`timelineColor`, the lifespan bar SHALL fall back to a default color chosen by
+the element's kind (e.g. green for rectangles, blue for ellipses, amber for
+text), so each kind reads consistently across the timeline.
 
 #### Scenario: Choosing a swatch recolors the lifespan bar
 - **WHEN** the operator opens Color and clicks a swatch
 - **THEN** the element's `timelineColor` is set to that swatch's color and its
   lifespan bar renders in that color
 
-#### Scenario: Unset color falls back to the per-id color
+#### Scenario: Unset color falls back to a per-kind default
 - **WHEN** an element has no `timelineColor`
-- **THEN** its lifespan bar uses the deterministic per-id color, unchanged from
-  before this feature
+- **THEN** its lifespan bar uses the default color for its kind (e.g. a
+  rectangle's bar is green, an ellipse's blue)
 
 ### Requirement: Fit workspace sets the lifespan to the active region
 

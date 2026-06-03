@@ -456,7 +456,7 @@ export function TimelineDock({
                       onToggleExpand={() => toggleCollapsed(el.id)}
                       isSelected={selection.has(el.id)}
                       frameRange={scene.frameRange}
-                      lifespanColor={el.timelineColor ?? lifespanColorFor(el.id)}
+                      lifespanColor={el.timelineColor ?? lifespanColorFor(el)}
                       onContextMenu={openLayerMenu}
                       part="label"
                     />
@@ -577,7 +577,7 @@ export function TimelineDock({
                         onToggleExpand={() => toggleCollapsed(el.id)}
                         isSelected={selection.has(el.id)}
                         frameRange={scene.frameRange}
-                        lifespanColor={el.timelineColor ?? lifespanColorFor(el.id)}
+                        lifespanColor={el.timelineColor ?? lifespanColorFor(el)}
                       onContextMenu={openLayerMenu}
                         part="lane"
                       />

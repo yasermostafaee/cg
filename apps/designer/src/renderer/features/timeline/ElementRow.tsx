@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import type { Element, FrameRange } from '@cg/shared-schema';
+import type { Element, FrameRange, ShapeElement } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
 
@@ -390,21 +390,29 @@ function ElementRowLane(props: Props): JSX.Element {
 }
 
 /**
- * Stable per-id color in the Loopic vibe (green / red / blue / amber /
- * etc.) so each element gets its own lifespan stripe.
+ * Default lifespan-bar color by element kind — rectangles green, ellipses
+ * blue, text amber, etc. — so every kind reads consistently in the timeline.
+ * Overridden per element by `timelineColor` (the layer Color menu).
  */
-const PALETTE = [
-  '#84CC16', // lime
-  '#EF4444', // red
-  '#38BDF8', // sky
-  '#F59E0B', // amber
-  '#A78BFA', // violet
-  '#34D399', // emerald
-  '#F472B6', // pink
-] as const;
+const SHAPE_COLORS: Record<ShapeElement['shape'], string> = {
+  rect: '#22C55E', // green — rectangle
+  'rounded-rect': '#22C55E',
+  ellipse: '#3B82F6', // blue — ellipse
+  polygon: '#A855F7', // purple
+  path: '#14B8A6', // teal
+};
 
-export function lifespanColorFor(elementId: string): string {
-  let h = 0;
-  for (let i = 0; i < elementId.length; i++) h = (h * 31 + elementId.charCodeAt(i)) >>> 0;
-  return PALETTE[h % PALETTE.length] ?? PALETTE[0];
+const TYPE_COLORS: Record<Exclude<Element['type'], 'shape'>, string> = {
+  text: '#F59E0B', // amber
+  image: '#EC4899', // pink
+  lottie: '#A78BFA', // violet
+  'video-placeholder': '#EF4444', // red
+  container: '#F97316', // orange
+};
+
+const FALLBACK_COLOR = '#38BDF8';
+
+export function lifespanColorFor(element: Element): string {
+  if (element.type === 'shape') return SHAPE_COLORS[element.shape] ?? FALLBACK_COLOR;
+  return TYPE_COLORS[element.type] ?? FALLBACK_COLOR;
 }
