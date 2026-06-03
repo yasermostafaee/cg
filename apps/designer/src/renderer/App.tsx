@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { DesignerBridge } from '../shared/designer-bridge.js';
 import { ProjectAssetsPanel } from './features/assets/ProjectAssetsPanel.js';
 import { CanvasArea } from './features/canvas/CanvasArea.js';
@@ -108,6 +108,18 @@ export function App(): JSX.Element {
   const [inspectorW, setInspectorW] = useState(INSPECTOR_DEFAULT);
   const [timelineH, setTimelineH] = useState(TIMELINE_DEFAULT);
   const [assetsW, setAssetsW] = useState(ASSETS_DEFAULT);
+
+  // Suppress the native browser context menu app-wide. Our own menus
+  // (timeline layer, project assets, keyframe) open from their React
+  // onContextMenu handlers, which set state and call preventDefault
+  // themselves, so they are unaffected by this global default-suppression.
+  useEffect(() => {
+    function suppressNativeMenu(e: MouseEvent): void {
+      e.preventDefault();
+    }
+    window.addEventListener('contextmenu', suppressNativeMenu);
+    return () => window.removeEventListener('contextmenu', suppressNativeMenu);
+  }, []);
 
   if (view === 'landing' || scene === null) {
     return (
