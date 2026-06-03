@@ -120,14 +120,67 @@ interface ScrubOpts {
   max?: number | undefined;
 }
 
+// Distance the pointer must travel before a press becomes a scrub rather
+// than a click — small enough to feel immediate, large enough that a
+// click meant to focus-and-type doesn't nudge the value.
+const SCRUB_DEADZONE_PX = 3;
+
+/**
+ * Runs a horizontal value-scrub gesture from a pointerdown until the next
+ * pointerup, via window listeners. Drag right increases / left decreases;
+ * 1px ≈ one `stepSize`, hold Shift for fine 0.1× steps. `onEnd(moved)`
+ * fires when the gesture ends — `moved` is false for a click that never
+ * left the dead-zone, which callers use to fall back to focus-and-type.
+ * Commits flow through `onCommit` exactly like typing, so the canvas
+ * previews live and the per-gesture history coalescing wired up for
+ * canvas drags applies unchanged.
+ */
+function runScrubGesture(p: {
+  startX: number;
+  startVal: number;
+  stepSize: number;
+  min?: number | undefined;
+  max?: number | undefined;
+  onCommit: (n: number) => void;
+  onEnd?: ((moved: boolean) => void) | undefined;
+}): void {
+  let last = p.startVal;
+  let moved = false;
+  function apply(ev: PointerEvent): void {
+    const dx = ev.clientX - p.startX;
+    if (!moved && Math.abs(dx) < SCRUB_DEADZONE_PX) return;
+    moved = true;
+    const inc = p.stepSize * (ev.shiftKey ? 0.1 : 1);
+    let next = p.startVal + Math.round(dx) * inc;
+    next = Number(next.toFixed(4));
+    if (p.min !== undefined) next = Math.max(p.min, next);
+    if (p.max !== undefined) next = Math.min(p.max, next);
+    if (next !== last) {
+      last = next;
+      p.onCommit(next);
+    }
+  }
+  function onUp(): void {
+    window.removeEventListener('pointermove', apply);
+    window.removeEventListener('pointerup', onUp);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    p.onEnd?.(moved);
+  }
+  // Hold the resize cursor (and suppress text selection) for the whole
+  // gesture, even once the pointer slides off the field.
+  document.body.style.cursor = 'ew-resize';
+  document.body.style.userSelect = 'none';
+  window.addEventListener('pointermove', apply);
+  window.addEventListener('pointerup', onUp);
+}
+
 /**
  * Turns a field label/icon into a horizontal "scrubber" (the Loopic
  * pattern — the label carries an `ew-resize` cursor and dragging it
- * adjusts the value). Drag right to increase / left to decrease; 1px ≈
- * one `step`, hold Shift for fine 0.1× steps. Commits flow through
- * `onCommit` exactly like typing, so the canvas preview updates live and
- * the per-pointer-gesture history coalescing already wired up for canvas
- * drags applies unchanged.
+ * adjusts the value). The number input itself is independently
+ * scrubbable (see {@link RealtimeNumberInput}); this just makes the
+ * label a second, larger grab target.
  *
  * Returns props to spread onto the handle element. Not a hook — it holds
  * no React state; the drag lives in window listeners for its duration.
@@ -136,36 +189,19 @@ export function scrubHandle(opts: ScrubOpts): {
   style: CSSProperties;
   onPointerDown: (e: ReactPointerEvent) => void;
 } {
-  const stepSize = opts.step ?? 1;
   return {
     style: { cursor: 'ew-resize', touchAction: 'none', userSelect: 'none' },
     onPointerDown: (e) => {
       if (e.button !== 0) return;
       e.preventDefault();
-      const startX = e.clientX;
-      const startVal = opts.value;
-      let last = startVal;
-      function apply(ev: PointerEvent): void {
-        const inc = stepSize * (ev.shiftKey ? 0.1 : 1);
-        let next = startVal + Math.round(ev.clientX - startX) * inc;
-        next = Number(next.toFixed(4));
-        if (opts.min !== undefined) next = Math.max(opts.min, next);
-        if (opts.max !== undefined) next = Math.min(opts.max, next);
-        if (next !== last) {
-          last = next;
-          opts.onCommit(next);
-        }
-      }
-      function onUp(): void {
-        window.removeEventListener('pointermove', apply);
-        window.removeEventListener('pointerup', onUp);
-        document.body.style.cursor = '';
-      }
-      // Hold the resize cursor for the whole gesture, even once the
-      // pointer slides off the narrow label.
-      document.body.style.cursor = 'ew-resize';
-      window.addEventListener('pointermove', apply);
-      window.addEventListener('pointerup', onUp);
+      runScrubGesture({
+        startX: e.clientX,
+        startVal: opts.value,
+        stepSize: opts.step ?? 1,
+        min: opts.min,
+        max: opts.max,
+        onCommit: opts.onCommit,
+      });
     },
   };
 }
@@ -232,11 +268,19 @@ interface RealtimeNumberInputProps {
  * mid-typing. External value changes (scrubbing, undo, edits from
  * another input bound to the same property) sync into the buffer only
  * when the input isn't focused.
+ *
+ * The input is also a horizontal scrubber (the Loopic pattern): dragging
+ * anywhere on it adjusts the value (1px ≈ one step, Shift = fine 0.1×),
+ * while a plain click still focuses it for typing. The native up/down
+ * spinners are hidden globally in `index.css`, so the whole field reads
+ * as a draggable number with an `ew-resize` cursor.
  */
 export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Element {
   const display = formatNumberDisplay(props.value);
   const [buf, setBuf] = useState(display);
+  const [editing, setEditing] = useState(false);
   const focused = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!focused.current) setBuf(display);
@@ -244,18 +288,42 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
 
   return (
     <input
-      style={props.style}
+      ref={inputRef}
+      style={{ ...props.style, cursor: editing ? 'text' : 'ew-resize', touchAction: 'none' }}
       type="number"
       value={buf}
       step={props.step}
       min={props.min}
       max={props.max}
       aria-label={props.ariaLabel}
-      onFocus={() => {
+      onPointerDown={(e) => {
+        // While editing, let the pointer place the caret / select text
+        // as usual. Otherwise this press is either a click (focus to
+        // type) or the start of a scrub — decided by whether it moves.
+        if (e.button !== 0 || focused.current) return;
+        e.preventDefault();
+        runScrubGesture({
+          startX: e.clientX,
+          startVal: props.value,
+          stepSize: props.step ?? 1,
+          min: props.min,
+          max: props.max,
+          onCommit: props.onCommit,
+          onEnd: (moved) => {
+            // A click that never left the dead-zone focuses for typing;
+            // onFocus selects the whole value so a keystroke replaces it.
+            if (!moved) inputRef.current?.focus();
+          },
+        });
+      }}
+      onFocus={(e) => {
         focused.current = true;
+        setEditing(true);
+        e.currentTarget.select();
       }}
       onBlur={() => {
         focused.current = false;
+        setEditing(false);
         setBuf(display);
       }}
       onChange={(e) => {
@@ -264,10 +332,28 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
         if (Number.isFinite(n) && n !== props.value) props.onCommit(n);
       }}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+        if (e.key === 'Enter') {
+          (e.target as HTMLInputElement).blur();
+          return;
+        }
         if (e.key === 'Escape') {
           setBuf(display);
           (e.target as HTMLInputElement).blur();
+          return;
+        }
+        // Arrow up/down step the value by `step` (×10 with Shift), the
+        // standard keyboard nudge. Handled explicitly so it clamps to
+        // min/max and keeps the buffer in sync while focused.
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          const inc = (props.step ?? 1) * (e.shiftKey ? 10 : 1);
+          let next = Number((props.value + (e.key === 'ArrowUp' ? inc : -inc)).toFixed(4));
+          if (props.min !== undefined) next = Math.max(props.min, next);
+          if (props.max !== undefined) next = Math.min(props.max, next);
+          if (next !== props.value) {
+            props.onCommit(next);
+            setBuf(formatNumberDisplay(next));
+          }
         }
       }}
     />
@@ -296,6 +382,7 @@ export function TextField(props: TextFieldProps): JSX.Element {
           style={styles.inputInner}
           type="text"
           defaultValue={props.value}
+          onFocus={(e) => e.currentTarget.select()}
           onBlur={(e) => props.onCommit(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
@@ -370,6 +457,7 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
           style={styles.hexInput}
           type="text"
           defaultValue={hex}
+          onFocus={(e) => e.currentTarget.select()}
           onBlur={(e) => {
             const v = e.target.value.trim();
             const next = v.startsWith('#') ? v : `#${v}`;

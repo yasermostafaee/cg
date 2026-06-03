@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { EASING_PRESETS, type BezierEasing } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
+import { RealtimeNumberInput } from './controls.js';
 
 interface Props {
   bezier: BezierEasing;
@@ -265,16 +266,12 @@ function AxisInput({
       <span style={styles.axisLetter} aria-hidden>
         {letter}
       </span>
-      <input
+      <RealtimeNumberInput
         style={styles.numInput}
-        type="number"
         step={0.01}
-        value={Number(value.toFixed(2))}
-        aria-label={`${letter} ${String(value)}`}
-        onChange={(e) => {
-          const n = Number(e.target.value);
-          if (Number.isFinite(n)) onCommit(n);
-        }}
+        value={value}
+        onCommit={onCommit}
+        ariaLabel={letter}
       />
     </div>
   );

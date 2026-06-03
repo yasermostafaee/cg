@@ -4,6 +4,7 @@ import { designerStore, useDesignerStore } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import { hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
 import { CollapseSection } from './CollapseSection.js';
+import { RealtimeNumberInput } from './controls.js';
 
 /**
  * D-010-pic-5 — the Text section in the right Inspector. Custom layout
@@ -395,23 +396,15 @@ export function TextStyleSection({
           <span style={styles.chipIcon} aria-hidden>
             tT
           </span>
-          <input
+          <RealtimeNumberInput
             style={styles.chipInput}
-            type="number"
-            defaultValue={element.font.size}
+            value={element.font.size}
             step={1}
             min={1}
-            onBlur={(e) => {
-              const n = Number(e.target.value);
-              if (Number.isFinite(n) && n > 0) {
-                designerStore.commitAnimatable(id, 'font.size', n);
-              }
+            onCommit={(n) => {
+              if (n > 0) designerStore.commitAnimatable(id, 'font.size', n);
             }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-            }}
-            key={`font-size-${String(element.font.size)}`}
-            aria-label="Font size"
+            ariaLabel="Font size"
           />
           {animPoint(element, 'font.size', currentFrame, selectedKeyframe, (el) => el.font.size)}
         </div>
@@ -422,23 +415,15 @@ export function TextStyleSection({
             <span style={styles.chipIcon} aria-hidden title="Line height">
               ↕
             </span>
-            <input
+            <RealtimeNumberInput
               style={styles.chipInput}
-              type="number"
-              defaultValue={element.font.lineHeight}
+              value={element.font.lineHeight}
               step={0.05}
               min={0.1}
-              onBlur={(e) => {
-                const n = Number(e.target.value);
-                if (Number.isFinite(n) && n > 0) {
-                  designerStore.commitAnimatable(id, 'font.lineHeight', n);
-                }
+              onCommit={(n) => {
+                if (n > 0) designerStore.commitAnimatable(id, 'font.lineHeight', n);
               }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-              }}
-              key={`lh-${String(element.font.lineHeight)}`}
-              aria-label="Line height"
+              ariaLabel="Line height"
             />
             {animPoint(element, 'font.lineHeight', currentFrame, selectedKeyframe, (el) => el.font.lineHeight)}
           </div>
@@ -446,22 +431,12 @@ export function TextStyleSection({
             <span style={styles.chipIcon} aria-hidden title="Letter spacing">
               VA
             </span>
-            <input
+            <RealtimeNumberInput
               style={styles.chipInput}
-              type="number"
-              defaultValue={element.font.letterSpacing}
+              value={element.font.letterSpacing}
               step={0.01}
-              onBlur={(e) => {
-                const n = Number(e.target.value);
-                if (Number.isFinite(n)) {
-                  designerStore.commitAnimatable(id, 'font.letterSpacing', n);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-              }}
-              key={`ls-${String(element.font.letterSpacing)}`}
-              aria-label="Letter spacing"
+              onCommit={(n) => designerStore.commitAnimatable(id, 'font.letterSpacing', n)}
+              ariaLabel="Letter spacing"
             />
             {animPoint(element, 'font.letterSpacing', currentFrame, selectedKeyframe, (el) => el.font.letterSpacing)}
           </div>
