@@ -80,6 +80,12 @@ const styles = {
   toggleButtonActive: {
     color: colors.text,
   },
+  // Locked state — red icon on a faint red chip so a locked layer is obvious.
+  lockLocked: {
+    color: colors.danger,
+    background: 'rgba(248,113,113,0.16)',
+    borderRadius: 3,
+  },
   laneCell: {
     position: 'relative' as const,
     height: ROW_HEIGHT,
@@ -199,7 +205,7 @@ function ElementRowLabel(props: Props): JSX.Element {
         type="button"
         style={{
           ...styles.toggleButton,
-          ...(element.locked ? styles.toggleButtonActive : {}),
+          ...(element.locked ? styles.lockLocked : {}),
         }}
         title={element.locked ? 'Unlock element' : 'Lock element'}
         aria-label={element.locked ? 'Unlock element' : 'Lock element'}
@@ -266,12 +272,12 @@ function LockClosedIcon(): JSX.Element {
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.3"
+      strokeWidth="1.7"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
     >
-      <rect x="3.5" y="7.5" width="9" height="6.5" rx="1" />
+      <rect x="3.5" y="7.5" width="9" height="6.5" rx="1" fill="currentColor" stroke="none" />
       <path d="M5.5 7.5V5a2.5 2.5 0 015 0v2.5" />
     </svg>
   );
