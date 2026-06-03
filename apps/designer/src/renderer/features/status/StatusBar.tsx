@@ -54,10 +54,11 @@ const styles = {
     color: colors.textMuted,
     border: `1px solid ${colors.border}`,
     borderRadius: '0.2rem',
-    padding: '0 0.4rem',
-    fontSize: '0.72rem',
+    padding: '0 0.5rem',
+    fontSize: '1rem',
     cursor: 'pointer',
-    lineHeight: 1.6,
+    lineHeight: 1.5,
+    minWidth: 24,
   },
 } as const;
 
