@@ -31,11 +31,12 @@ const styles = {
     width: '100%',
   },
   chevron: {
-    width: 10,
+    width: 16,
     display: 'inline-block',
     color: colors.textMuted,
-    fontSize: '0.6rem',
+    fontSize: '0.95rem',
     lineHeight: 1,
+    textAlign: 'center' as const,
   },
   trailing: {
     marginLeft: 'auto',
