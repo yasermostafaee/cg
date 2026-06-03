@@ -121,6 +121,36 @@ export function App(): JSX.Element {
     return () => window.removeEventListener('contextmenu', suppressNativeMenu);
   }, []);
 
+  // Disable browser defaults that fight the editor: page zoom (Ctrl/Cmd
+  // +/-/0 and Ctrl+wheel), accidental text selection (except in real inputs),
+  // and the disruptive Save/Print shortcuts. Reload, dev-tools, and clipboard
+  // shortcuts are intentionally left alone.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent): void {
+      if (!e.ctrlKey && !e.metaKey) return;
+      const k = e.key.toLowerCase();
+      if (['+', '-', '=', '0', 's', 'p'].includes(k)) {
+        e.preventDefault();
+      }
+    }
+    function onWheel(e: WheelEvent): void {
+      if (e.ctrlKey) e.preventDefault(); // block ctrl/pinch page zoom
+    }
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('wheel', onWheel, { passive: false });
+    // App-wide no-select, but keep text editable fields selectable.
+    const style = document.createElement('style');
+    style.textContent =
+      'body{user-select:none;-webkit-user-select:none;}' +
+      'input,textarea,[contenteditable]{user-select:text;-webkit-user-select:text;}';
+    document.head.appendChild(style);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('wheel', onWheel);
+      style.remove();
+    };
+  }, []);
+
   if (view === 'landing' || scene === null) {
     return (
       <main style={styles.page}>
