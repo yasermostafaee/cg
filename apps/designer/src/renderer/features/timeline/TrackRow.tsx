@@ -36,7 +36,7 @@ interface Props {
   }[];
 }
 
-export const TRACK_ROW_HEIGHT = 20;
+export const TRACK_ROW_HEIGHT = 24;
 const ROW_HEIGHT = TRACK_ROW_HEIGHT;
 
 const styles = {
@@ -85,13 +85,53 @@ const styles = {
     cursor: 'text',
     boxSizing: 'border-box' as const,
   },
-  // Colour value: swatch + hex text in one row, right-aligned in the cell.
+  // Value + dim unit, centred in the cell (e.g. "85 %").
+  valueUnitWrap: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center' as const,
+    gap: '1px',
+    width: '100%',
+  },
+  // Content-sized variant used when a unit follows the value.
+  valueNumberInputAuto: {
+    flex: '0 0 auto',
+    width: 'auto',
+    minWidth: 0,
+    maxWidth: '3rem',
+    background: 'transparent',
+    color: colors.text,
+    border: `1px solid transparent`,
+    borderRadius: '0.18rem',
+    padding: '0 0.1rem',
+    fontSize: '0.7rem',
+    fontVariantNumeric: 'tabular-nums' as const,
+    textAlign: 'center' as const,
+    outline: 'none',
+    boxSizing: 'border-box' as const,
+  },
+  // Colour value: swatch + editable hex in one row, centred in the cell.
   colorValue: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'flex-end' as const,
-    gap: '0.35rem',
+    justifyContent: 'center' as const,
+    gap: '0.3rem',
     width: '100%',
+  },
+  valueHexInput: {
+    flex: '1 1 0',
+    minWidth: 0,
+    background: 'transparent',
+    color: colors.text,
+    border: `1px solid transparent`,
+    borderRadius: '0.18rem',
+    padding: '0 0.15rem',
+    fontSize: '0.7rem',
+    fontVariantNumeric: 'tabular-nums' as const,
+    letterSpacing: '0.02em',
+    textAlign: 'center' as const,
+    outline: 'none',
+    boxSizing: 'border-box' as const,
   },
   valueSwatchWrap: {
     position: 'relative' as const,
@@ -245,9 +285,16 @@ function TrackRowLabel(props: Props): JSX.Element {
     <div style={styles.labelCell} data-track-property={row.property}>
       <span style={styles.labelName}>{row.label}</span>
       <ValueCell
-        value={effectiveRowValue(element, row, currentFrame)}
-        ariaLabel={`${row.label} value`}
-        onCommit={(v) => designerStore.commitAnimatable(element.id, row.property, v)}
+        value={toDisplay(effectiveRowValue(element, row, currentFrame), row.factor)}
+        unit={row.unit}
+        ariaLabel={row.label}
+        onCommit={(v) =>
+          designerStore.commitAnimatable(
+            element.id,
+            row.property,
+            typeof v === 'number' ? fromDisplay(v, row.factor) : v,
+          )
+        }
       />
       <KeyframeIndicator
         variant={variant}
@@ -496,10 +543,12 @@ function TrackRowLane(props: Props): JSX.Element {
  */
 function ValueCell({
   value,
+  unit,
   ariaLabel,
   onCommit,
 }: {
   value: number | string;
+  unit?: string | undefined;
   ariaLabel: string;
   onCommit: (next: number | string) => void;
 }): JSX.Element {
@@ -514,10 +563,36 @@ function ValueCell({
             value={hex}
             onChange={(e) => onCommit(e.target.value.toUpperCase())}
             style={styles.valueColorInput}
-            aria-label={ariaLabel}
+            aria-label={`${ariaLabel} colour`}
           />
         </span>
-        <span style={styles.valueHexText}>{hexLabel}</span>
+        <input
+          type="text"
+          defaultValue={hexLabel}
+          key={hexLabel}
+          className="cg-timeline-num"
+          style={styles.valueHexInput}
+          aria-label={ariaLabel}
+          onBlur={(e) => commitHex(e.target.value, onCommit)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          }}
+        />
+      </span>
+    );
+  }
+  if (unit !== undefined) {
+    return (
+      <span style={styles.valueUnitWrap}>
+        <RealtimeNumberInput
+          value={value}
+          onCommit={onCommit}
+          step={1}
+          style={styles.valueNumberInputAuto}
+          className="cg-timeline-num cg-num-unit"
+          ariaLabel={ariaLabel}
+        />
+        <span className="cg-unit">{unit}</span>
       </span>
     );
   }
@@ -531,4 +606,18 @@ function ValueCell({
       ariaLabel={ariaLabel}
     />
   );
+}
+
+/** Display = stored × factor (so scale / opacity store 0–1, show 0–100). */
+function toDisplay(v: number | string, factor: number | undefined): number | string {
+  return typeof v === 'number' ? Number((v * (factor ?? 1)).toFixed(4)) : v;
+}
+function fromDisplay(v: number, factor: number | undefined): number {
+  return Number((v / (factor ?? 1)).toFixed(6));
+}
+
+function commitHex(raw: string, onCommit: (next: string) => void): void {
+  const v = raw.trim();
+  const next = v.startsWith('#') ? v : `#${v}`;
+  if (/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(next)) onCommit(next.toUpperCase());
 }
