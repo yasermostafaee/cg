@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { colors } from '../../theme.js';
 
 /**
@@ -106,6 +112,64 @@ const styles = {
   },
 } as const;
 
+interface ScrubOpts {
+  value: number;
+  onCommit: (n: number) => void;
+  step?: number | undefined;
+  min?: number | undefined;
+  max?: number | undefined;
+}
+
+/**
+ * Turns a field label/icon into a horizontal "scrubber" (the Loopic
+ * pattern — the label carries an `ew-resize` cursor and dragging it
+ * adjusts the value). Drag right to increase / left to decrease; 1px ≈
+ * one `step`, hold Shift for fine 0.1× steps. Commits flow through
+ * `onCommit` exactly like typing, so the canvas preview updates live and
+ * the per-pointer-gesture history coalescing already wired up for canvas
+ * drags applies unchanged.
+ *
+ * Returns props to spread onto the handle element. Not a hook — it holds
+ * no React state; the drag lives in window listeners for its duration.
+ */
+export function scrubHandle(opts: ScrubOpts): {
+  style: CSSProperties;
+  onPointerDown: (e: ReactPointerEvent) => void;
+} {
+  const stepSize = opts.step ?? 1;
+  return {
+    style: { cursor: 'ew-resize', touchAction: 'none', userSelect: 'none' },
+    onPointerDown: (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const startX = e.clientX;
+      const startVal = opts.value;
+      let last = startVal;
+      function apply(ev: PointerEvent): void {
+        const inc = stepSize * (ev.shiftKey ? 0.1 : 1);
+        let next = startVal + Math.round(ev.clientX - startX) * inc;
+        next = Number(next.toFixed(4));
+        if (opts.min !== undefined) next = Math.max(opts.min, next);
+        if (opts.max !== undefined) next = Math.min(opts.max, next);
+        if (next !== last) {
+          last = next;
+          opts.onCommit(next);
+        }
+      }
+      function onUp(): void {
+        window.removeEventListener('pointermove', apply);
+        window.removeEventListener('pointerup', onUp);
+        document.body.style.cursor = '';
+      }
+      // Hold the resize cursor for the whole gesture, even once the
+      // pointer slides off the narrow label.
+      document.body.style.cursor = 'ew-resize';
+      window.addEventListener('pointermove', apply);
+      window.addEventListener('pointerup', onUp);
+    },
+  };
+}
+
 interface NumberFieldProps {
   label: string;
   value: number;
@@ -118,9 +182,22 @@ interface NumberFieldProps {
 }
 
 export function NumberField(props: NumberFieldProps): JSX.Element {
+  const scrub = scrubHandle({
+    value: props.value,
+    onCommit: props.onCommit,
+    step: props.step,
+    min: props.min,
+    max: props.max,
+  });
   return (
     <div style={styles.row}>
-      <span style={styles.label}>{props.label}</span>
+      <span
+        style={{ ...styles.label, ...scrub.style }}
+        onPointerDown={scrub.onPointerDown}
+        title="Drag to adjust"
+      >
+        {props.label}
+      </span>
       <div style={styles.inputBox}>
         <RealtimeNumberInput
           value={props.value}

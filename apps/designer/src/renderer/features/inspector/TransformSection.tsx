@@ -9,7 +9,7 @@ import {
   hasKeyframeAt,
   keyframeVariantFor,
 } from '../timeline/keyframe-helpers.js';
-import { RealtimeNumberInput } from './controls.js';
+import { RealtimeNumberInput, scrubHandle } from './controls.js';
 
 interface Props {
   element: Element;
@@ -183,9 +183,15 @@ interface CellProps {
 }
 
 function Cell({ icon, value, step, min, max, onCommit, trailing }: CellProps): JSX.Element {
+  const scrub = scrubHandle({ value, onCommit, step, min, max });
   return (
     <div style={styles.cell}>
-      <span style={styles.icon} aria-hidden>
+      <span
+        style={{ ...styles.icon, ...scrub.style }}
+        onPointerDown={scrub.onPointerDown}
+        title="Drag to adjust"
+        aria-hidden
+      >
         {icon}
       </span>
       <RealtimeNumberInput
