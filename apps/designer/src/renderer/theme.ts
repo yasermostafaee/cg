@@ -23,6 +23,8 @@ export const colors = {
   textMuted: _sharedFallback.textMuted,
   accent: '#38BDF8',
   accentMuted: '#0EA5E9',
+  /** Solid hover/active fill for menu rows (matches the Loopic reference). */
+  menuHover: '#2e3346',
   /** Warning/locked accent — a soft red that reads on the dark chrome. */
   danger: '#F87171',
   /** Border colour used for unselected keyframe diamonds (D-009). */

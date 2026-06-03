@@ -38,19 +38,14 @@ const styles = {
     cursor: 'pointer',
     letterSpacing: '0.01em',
   },
-  menuItemHome: {
-    color: colors.text,
-    fontWeight: 600,
-  },
   // Hover / open feedback for the top-level menu buttons and dropdown
-  // rows — same accent tint the layer context menu uses so the chrome
-  // reads consistently.
+  // rows — a solid slate fill, matching the Loopic reference's menu bar.
   menuItemActive: {
-    background: 'rgba(56,189,248,0.12)',
+    background: colors.menuHover,
     color: colors.text,
   },
   dropdownItemActive: {
-    background: 'rgba(56,189,248,0.16)',
+    background: colors.menuHover,
   },
   spacer: { flex: 1 },
   saveButton: {
@@ -215,11 +210,10 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
 
   // Top-level menu button style — tinted when its dropdown is open or
   // the pointer is over it.
-  function navStyle(key: string, extra?: React.CSSProperties): React.CSSProperties {
+  function navStyle(key: string): React.CSSProperties {
     const active = openMenu === key || hoverNav === key;
     return {
       ...styles.menuItem,
-      ...extra,
       ...(active ? styles.menuItemActive : {}),
     };
   }
@@ -273,7 +267,7 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
       <div style={styles.group}>
         <button
           type="button"
-          style={navStyle('home', styles.menuItemHome)}
+          style={navStyle('home')}
           onClick={() => designerStore.setView('landing')}
           onMouseEnter={() => setHoverNav('home')}
           onMouseLeave={() => setHoverNav(null)}
