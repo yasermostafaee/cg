@@ -323,6 +323,9 @@ function beginDrag(
       yTargets.push(t.position.y, t.position.y + eh / 2, t.position.y + eh);
     }
   }
+  // Ruler guides are snap targets too.
+  for (const gx of state.guides.x) xTargets.push(gx);
+  for (const gy of state.guides.y) yTargets.push(gy);
 
   // Snap one axis: try the dragged box's near/centre/far anchors against every
   // target; pick the closest within threshold. Returns the adjusted origin and

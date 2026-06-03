@@ -7,7 +7,7 @@ import {
 } from '../assets/assetUrlCache.js';
 import { CanvasOverlay } from './CanvasOverlay.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
-import { useDesignerStore, type DesignerTool } from '../../state/store.js';
+import { designerStore, useDesignerStore, type DesignerTool } from '../../state/store.js';
 
 interface Props {
   scene: Scene | null;
@@ -163,9 +163,10 @@ export function CanvasArea({
   const stageRef = useRef<HTMLDivElement>(null);
   const [html, setHtml] = useState<string | null>(null);
   const [zoom, setZoom] = useState<number>(ZOOM_DEFAULT);
-  const { rulerVisible } = useDesignerStore();
+  const { rulerVisible, guides } = useDesignerStore();
   // Screen offset (within the scroll viewport) of the scene's (0,0), so the
-  // pinned rulers stay aligned with the canvas as it zooms / scrolls / resizes.
+  // pinned rulers and the guide lines stay aligned with the canvas as it
+  // zooms / scrolls / resizes.
   const [rulerOrigin, setRulerOrigin] = useState<{ x: number; y: number } | null>(null);
 
   // Only rebuild the iframe document when the *scene id* changes
@@ -316,12 +317,10 @@ export function CanvasArea({
     el.scrollTop -= dy;
   }
 
-  // Keep the ruler origin in sync with the stage as it zooms / scrolls / resizes.
+  // Keep the ruler/guide origin in sync with the stage as it zooms / scrolls /
+  // resizes. Measured whenever a scene is open (guides render even when the
+  // ruler bars are hidden).
   useEffect(() => {
-    if (!rulerVisible) {
-      setRulerOrigin(null);
-      return;
-    }
     const outer = outerRef.current;
     if (outer === null) return;
     function measure(): void {
@@ -346,7 +345,7 @@ export function CanvasArea({
       outer.removeEventListener('scroll', measure);
       window.removeEventListener('resize', measure);
     };
-  }, [rulerVisible, zoom, sceneId, html]);
+  }, [zoom, sceneId, html]);
 
   if (scene === null) {
     return (
@@ -362,6 +361,47 @@ export function CanvasArea({
 
   const { width, height } = scene.resolution;
   const zoomPct = Math.round(zoom * 100);
+
+  // Scene coordinates under a viewport point, via the live stage rect.
+  function sceneFromClient(clientX: number, clientY: number): { x: number; y: number } {
+    const s = stageRef.current;
+    if (s === null) return { x: 0, y: 0 };
+    const r = s.getBoundingClientRect();
+    return { x: (clientX - r.left) / zoom, y: (clientY - r.top) / zoom };
+  }
+
+  // Drag a guide (existing or freshly created). Releasing with the guide pulled
+  // outside the canvas removes it (drop back onto the ruler / off-canvas).
+  function dragGuide(axis: 'x' | 'y', index: number, ev: PointerEvent): void {
+    ev.preventDefault();
+    const dim = axis === 'x' ? width : height;
+    const posOf = (e: PointerEvent): number => {
+      const sc = sceneFromClient(e.clientX, e.clientY);
+      return axis === 'x' ? sc.x : sc.y;
+    };
+    const onMove = (e: PointerEvent): void => {
+      designerStore.setGuidePos(axis, index, Math.max(0, Math.min(dim, posOf(e))));
+    };
+    const onUp = (e: PointerEvent): void => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      const p = posOf(e);
+      if (p < 0 || p > dim) designerStore.removeGuide(axis, index);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }
+
+  // Pull a new guide out of a ruler: top ruler → horizontal ('y'), left → 'x'.
+  function createGuideFromRuler(axis: 'x' | 'y', e: React.PointerEvent): void {
+    e.preventDefault();
+    e.stopPropagation();
+    const sc = sceneFromClient(e.clientX, e.clientY);
+    const dim = axis === 'x' ? width : height;
+    const pos = Math.max(0, Math.min(dim, axis === 'x' ? sc.x : sc.y));
+    const index = designerStore.addGuide(axis, pos);
+    dragGuide(axis, index, e.nativeEvent);
+  }
 
   return (
     <div style={styles.wrap}>
@@ -456,7 +496,50 @@ export function CanvasArea({
             zoom={zoom}
             width={width}
             height={height}
+            onCreateGuide={createGuideFromRuler}
           />
+        )}
+        {rulerOrigin !== null && (guides.x.length > 0 || guides.y.length > 0) && (
+          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }} aria-hidden>
+            {guides.x.map((gx, i) => (
+              <div
+                key={`gx-${String(i)}`}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  bottom: 0,
+                  left: rulerOrigin.x + gx * zoom - 3,
+                  width: 7,
+                  cursor: 'ew-resize',
+                  pointerEvents: 'auto',
+                }}
+                title="Drag to move · double-click to remove"
+                onPointerDown={(e) => dragGuide('x', i, e.nativeEvent)}
+                onDoubleClick={() => designerStore.removeGuide('x', i)}
+              >
+                <div style={{ position: 'absolute', left: 3, top: 0, bottom: 0, width: 1, background: '#22D3EE' }} />
+              </div>
+            ))}
+            {guides.y.map((gy, i) => (
+              <div
+                key={`gy-${String(i)}`}
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  top: rulerOrigin.y + gy * zoom - 3,
+                  height: 7,
+                  cursor: 'ns-resize',
+                  pointerEvents: 'auto',
+                }}
+                title="Drag to move · double-click to remove"
+                onPointerDown={(e) => dragGuide('y', i, e.nativeEvent)}
+                onDoubleClick={() => designerStore.removeGuide('y', i)}
+              >
+                <div style={{ position: 'absolute', top: 3, left: 0, right: 0, height: 1, background: '#22D3EE' }} />
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -475,12 +558,14 @@ function CanvasRuler({
   zoom,
   width,
   height,
+  onCreateGuide,
 }: {
   originX: number;
   originY: number;
   zoom: number;
   width: number;
   height: number;
+  onCreateGuide: (axis: 'x' | 'y', e: React.PointerEvent) => void;
 }): JSX.Element {
   const STEPS = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
   const step = STEPS.find((s) => s * zoom >= 64) ?? 5000;
@@ -501,8 +586,18 @@ function CanvasRuler({
   return (
     <>
       <div
-        style={{ ...bar, top: 0, left: 0, right: 0, height: RULER, borderBottom: `1px solid ${colors.border}` }}
-        aria-hidden
+        style={{
+          ...bar,
+          top: 0,
+          left: 0,
+          right: 0,
+          height: RULER,
+          borderBottom: `1px solid ${colors.border}`,
+          pointerEvents: 'auto',
+          cursor: 'ns-resize',
+        }}
+        title="Drag down for a horizontal guide"
+        onPointerDown={(e) => onCreateGuide('y', e)}
       >
         {xticks.map((x) => (
           <div key={x} style={{ position: 'absolute', left: originX + x * zoom, top: 0, bottom: 0 }}>
@@ -512,8 +607,18 @@ function CanvasRuler({
         ))}
       </div>
       <div
-        style={{ ...bar, top: 0, left: 0, bottom: 0, width: RULER, borderRight: `1px solid ${colors.border}` }}
-        aria-hidden
+        style={{
+          ...bar,
+          top: 0,
+          left: 0,
+          bottom: 0,
+          width: RULER,
+          borderRight: `1px solid ${colors.border}`,
+          pointerEvents: 'auto',
+          cursor: 'ew-resize',
+        }}
+        title="Drag right for a vertical guide"
+        onPointerDown={(e) => onCreateGuide('x', e)}
       >
         {yticks.map((y) => (
           <div key={y} style={{ position: 'absolute', top: originY + y * zoom, left: 0, right: 0 }}>

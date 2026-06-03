@@ -26,7 +26,15 @@
 - [x] 4.2 `CanvasRuler` — top + left ticks/labels, zoom-adaptive step, scene
   `(0,0)` at the origin; rendered only when the ruler is on
 
-## 5. Tests + gate
+## 5. Ruler guides
+
+- [x] 5.0 Store `guides` state + `addGuide` / `setGuidePos` / `removeGuide`
+  (reset on scene change); elements snap to guides in `beginDrag`
+- [x] 5.0a Drag from the top/left ruler to create a guide; guide lines render
+  aligned to the canvas, are draggable to reposition, and removable by dropping
+  off-canvas or double-click
+
+## 6. Tests + gate
 
 - [x] 5.1 `apps/designer/tests/store-view-prefs.test.ts` — defaults, toggles,
   guide set/clear

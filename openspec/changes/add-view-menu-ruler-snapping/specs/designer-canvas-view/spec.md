@@ -56,3 +56,31 @@ freely with no snapping and no guides.
 #### Scenario: Snapping off drags freely
 - **WHEN** snapping is off and the operator drags an element
 - **THEN** the element follows the cursor with no snapping and no guide lines
+
+### Requirement: Ruler guides
+
+The operator SHALL be able to pull guide lines from the rulers: dragging from
+the top ruler SHALL create a horizontal guide and dragging from the left ruler
+SHALL create a vertical guide, positioned under the cursor in scene coordinates.
+A placed guide SHALL be draggable to reposition it and SHALL be removable by
+dragging it off the canvas or double-clicking it. Guides SHALL render aligned to
+the canvas across zoom/scroll, and when snapping is on, dragged elements SHALL
+snap to them. Guides are editor aids and need not persist into the saved scene.
+
+#### Scenario: Pull a horizontal guide from the top ruler
+- **WHEN** the operator presses on the top ruler and drags down onto the canvas
+- **THEN** a horizontal guide is created and follows the cursor, remaining where
+  it is released
+
+#### Scenario: Pull a vertical guide from the left ruler
+- **WHEN** the operator presses on the left ruler and drags right onto the canvas
+- **THEN** a vertical guide is created at the cursor's scene-x
+
+#### Scenario: Reposition and remove a guide
+- **WHEN** the operator drags an existing guide
+- **THEN** it moves with the cursor; releasing it off the canvas (or
+  double-clicking it) removes it
+
+#### Scenario: Elements snap to guides
+- **WHEN** snapping is on and an element is dragged near a guide
+- **THEN** the element's matching edge/center aligns to the guide

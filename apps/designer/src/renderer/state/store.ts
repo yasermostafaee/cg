@@ -87,6 +87,12 @@ export interface DesignerStoreState {
    * snapped — `x` are vertical lines, `y` are horizontal. Empty when idle.
    */
   snapGuides: { x: readonly number[]; y: readonly number[] };
+  /**
+   * Persistent ruler guide lines the operator pulls from the rulers (scene
+   * coordinates). `x` are vertical guides (a scene-x each), `y` horizontal.
+   * Editor aids — session-only, not saved into the scene.
+   */
+  guides: { x: readonly number[]; y: readonly number[] };
   /** Whether the past stack has at least one entry. */
   canUndo: boolean;
   /** Whether the future stack has at least one entry. */
@@ -108,6 +114,7 @@ const initialState: DesignerStoreState = {
   rulerVisible: false,
   snappingEnabled: true,
   snapGuides: { x: [], y: [] },
+  guides: { x: [], y: [] },
   canUndo: false,
   canRedo: false,
 };
@@ -331,6 +338,8 @@ export const designerStore = {
         selectedKeyframe: null,
         keyframeInspectorOpen: false,
         currentFrame: 0,
+        snapGuides: { x: [], y: [] },
+        guides: { x: [], y: [] },
       });
     } finally {
       suppressHistory = false;
@@ -595,6 +604,28 @@ export const designerStore = {
       return;
     }
     set({ snapGuides: guides });
+  },
+
+  /** Add a ruler guide (vertical for axis 'x', horizontal for 'y'). Returns its index. */
+  addGuide(axis: 'x' | 'y', pos: number): number {
+    const next = [...current.guides[axis], pos];
+    set({ guides: { ...current.guides, [axis]: next } });
+    return next.length - 1;
+  },
+
+  /** Reposition the guide at `index` on `axis`. */
+  setGuidePos(axis: 'x' | 'y', index: number, pos: number): void {
+    const arr = current.guides[axis];
+    if (index < 0 || index >= arr.length) return;
+    const next = arr.map((p, i) => (i === index ? pos : p));
+    set({ guides: { ...current.guides, [axis]: next } });
+  },
+
+  /** Remove the guide at `index` on `axis` (e.g. dropped back on the ruler). */
+  removeGuide(axis: 'x' | 'y', index: number): void {
+    const arr = current.guides[axis];
+    if (index < 0 || index >= arr.length) return;
+    set({ guides: { ...current.guides, [axis]: arr.filter((_, i) => i !== index) } });
   },
 
   /** Move the authoring cursor frame, clamped to the scene's frame range. */

@@ -224,6 +224,9 @@ precisely; the View menu was a disabled placeholder.
 - WHEN Snapping is on and an element is dragged THEN its edges/center snap to the
   canvas edges/center and to other elements' edges/centers, with guide lines
 - WHEN Snapping is off THEN dragging moves freely with no snap or guides
+- WHEN the operator drags from the top ruler THEN a horizontal guide is created;
+  dragging from the left ruler creates a vertical guide; guides can be moved and
+  removed (drop off-canvas / double-click) and elements snap to them
 **Notes:** view prefs live in the store (`rulerVisible`, `snappingEnabled`,
-`snapGuides`); no schema change. Smart-guide snapping in `CanvasOverlay`
-beginDrag; ruler overlay in `CanvasArea`.
+`snapGuides`, `guides`); no schema change. Smart-guide snapping + guide snap
+targets in `CanvasOverlay` beginDrag; ruler + draggable guides in `CanvasArea`.

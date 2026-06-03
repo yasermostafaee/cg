@@ -35,3 +35,29 @@ describe('designerStore — View prefs (ruler + snapping)', () => {
     expect(designerStore.get().snapGuides).toEqual({ x: [], y: [] });
   });
 });
+
+describe('designerStore — ruler guides', () => {
+  it('addGuide appends and returns the index; setGuidePos moves it', () => {
+    expect(designerStore.addGuide('x', 100)).toBe(0);
+    expect(designerStore.addGuide('x', 300)).toBe(1);
+    expect(designerStore.addGuide('y', 540)).toBe(0);
+    expect(designerStore.get().guides).toEqual({ x: [100, 300], y: [540] });
+    designerStore.setGuidePos('x', 1, 320);
+    expect(designerStore.get().guides.x).toEqual([100, 320]);
+  });
+
+  it('removeGuide drops the guide at the index', () => {
+    designerStore.addGuide('y', 10);
+    designerStore.addGuide('y', 20);
+    designerStore.addGuide('y', 30);
+    designerStore.removeGuide('y', 1);
+    expect(designerStore.get().guides.y).toEqual([10, 30]);
+  });
+
+  it('out-of-range guide ops are no-ops', () => {
+    designerStore.addGuide('x', 5);
+    designerStore.setGuidePos('x', 9, 99);
+    designerStore.removeGuide('x', 9);
+    expect(designerStore.get().guides.x).toEqual([5]);
+  });
+});
