@@ -210,3 +210,20 @@ again.
 **Notes:** adds an optional stable `id` to `KeyframeSchema`; timeline drag uses
 a new id-based `moveKeyframeById` (no destination delete); diamonds key + fan by
 id. Selection/edit/delete stay frame-based.
+## [~] D-015 — View menu: ruler + snapping toggles   ⟨priority: medium⟩ — change: `openspec/changes/add-view-menu-ruler-snapping/`
+**What:** Add two toggles to the top **View** menu: **Ruler** (show/hide canvas
+pixel rulers) and **Snapping** (enable/disable snap-to-edges/centers while
+dragging elements on the canvas).
+**Why:** Operators need rulers to read positions and snapping to align elements
+precisely; the View menu was a disabled placeholder.
+**Acceptance:**
+- WHEN the operator opens View THEN it shows Ruler and Snapping items, each with
+  a checkmark reflecting its current on/off state
+- WHEN Ruler is on THEN top + left pixel rulers overlay the canvas, aligned to
+  the scene and scaling with zoom / scroll
+- WHEN Snapping is on and an element is dragged THEN its edges/center snap to the
+  canvas edges/center and to other elements' edges/centers, with guide lines
+- WHEN Snapping is off THEN dragging moves freely with no snap or guides
+**Notes:** view prefs live in the store (`rulerVisible`, `snappingEnabled`,
+`snapGuides`); no schema change. Smart-guide snapping in `CanvasOverlay`
+beginDrag; ruler overlay in `CanvasArea`.

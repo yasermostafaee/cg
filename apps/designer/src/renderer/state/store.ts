@@ -78,6 +78,15 @@ export interface DesignerStoreState {
    * playhead frame and pans automatically as the operator scrubs.
    */
   timelineZoom: number;
+  /** View menu — show the canvas pixel rulers (top + left). */
+  rulerVisible: boolean;
+  /** View menu — snap element edges/centers while dragging on the canvas. */
+  snappingEnabled: boolean;
+  /**
+   * Active snap guide lines (scene coordinates) to draw while a drag is
+   * snapped — `x` are vertical lines, `y` are horizontal. Empty when idle.
+   */
+  snapGuides: { x: readonly number[]; y: readonly number[] };
   /** Whether the past stack has at least one entry. */
   canUndo: boolean;
   /** Whether the future stack has at least one entry. */
@@ -96,6 +105,9 @@ const initialState: DesignerStoreState = {
   selectedKeyframe: null,
   keyframeInspectorOpen: false,
   timelineZoom: 1,
+  rulerVisible: false,
+  snappingEnabled: true,
+  snapGuides: { x: [], y: [] },
   canUndo: false,
   canRedo: false,
 };
@@ -564,6 +576,25 @@ export const designerStore = {
     const clamped = Math.max(1, Math.min(20, z));
     if (clamped === current.timelineZoom) return;
     set({ timelineZoom: clamped });
+  },
+
+  /** View menu — toggle the canvas pixel rulers. */
+  toggleRuler(): void {
+    set({ rulerVisible: !current.rulerVisible });
+  },
+
+  /** View menu — enable/disable canvas snapping. Clears any live guides. */
+  toggleSnapping(): void {
+    set({ snappingEnabled: !current.snappingEnabled, snapGuides: { x: [], y: [] } });
+  },
+
+  /** Set the live snap guide lines (scene coords) shown during a snapped drag. */
+  setSnapGuides(guides: { x: readonly number[]; y: readonly number[] }): void {
+    const cur = current.snapGuides;
+    if (cur.x.length === 0 && cur.y.length === 0 && guides.x.length === 0 && guides.y.length === 0) {
+      return;
+    }
+    set({ snapGuides: guides });
   },
 
   /** Move the authoring cursor frame, clamped to the scene's frame range. */

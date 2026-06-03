@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Element, Scene, TextElement } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { designerStore, type DesignerTool } from '../../state/store.js';
+import { designerStore, useDesignerStore, type DesignerTool } from '../../state/store.js';
 import {
   defaultEllipse,
   defaultImage,
@@ -66,6 +66,7 @@ export function CanvasOverlay({
   onPan,
 }: Props): JSX.Element {
   const layerRef = useRef<HTMLDivElement>(null);
+  const { snapGuides } = useDesignerStore();
 
   const allElements: Element[] = [];
   for (const layer of scene.layers) {
@@ -223,6 +224,38 @@ export function CanvasOverlay({
       {bindModeFieldId !== null && (
         <div style={styles.toolHint}>BIND → {bindModeFieldId} (Esc to cancel)</div>
       )}
+      {snapGuides.x.map((gx) => (
+        <div
+          key={`gx-${String(gx)}`}
+          style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            left: gx * scale,
+            width: 1,
+            background: '#FF3DAE',
+            pointerEvents: 'none',
+            zIndex: 5,
+          }}
+          aria-hidden
+        />
+      ))}
+      {snapGuides.y.map((gy) => (
+        <div
+          key={`gy-${String(gy)}`}
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: gy * scale,
+            height: 1,
+            background: '#FF3DAE',
+            pointerEvents: 'none',
+            zIndex: 5,
+          }}
+          aria-hidden
+        />
+      ))}
     </div>
   );
 }
@@ -271,18 +304,78 @@ function beginDrag(
   // the cursor when the property is animated.
   const t0 = effectiveTransformAt(element, currentFrame);
   const startPos = { x: t0.position.x, y: t0.position.y };
+  const w = t0.size.w * t0.scale.x;
+  const h = t0.size.h * t0.scale.y;
+
+  // Snap targets in scene coords, computed once: the canvas edges + centre,
+  // and every other element's edges + centre. The dragged element is excluded.
+  const W = state.scene.resolution.width;
+  const H = state.scene.resolution.height;
+  const xTargets: number[] = [0, W / 2, W];
+  const yTargets: number[] = [0, H / 2, H];
+  for (const layer of state.scene.layers) {
+    for (const el of layer.children) {
+      if (el.id === elementId) continue;
+      const t = effectiveTransformAt(el, currentFrame);
+      const ew = t.size.w * t.scale.x;
+      const eh = t.size.h * t.scale.y;
+      xTargets.push(t.position.x, t.position.x + ew / 2, t.position.x + ew);
+      yTargets.push(t.position.y, t.position.y + eh / 2, t.position.y + eh);
+    }
+  }
+
+  // Snap one axis: try the dragged box's near/centre/far anchors against every
+  // target; pick the closest within threshold. Returns the adjusted origin and
+  // the guide line (scene coord) to draw, or null.
+  function snapAxis(
+    origin: number,
+    size: number,
+    targets: readonly number[],
+    threshold: number,
+  ): { value: number; guide: number } | null {
+    const anchors = [origin, origin + size / 2, origin + size];
+    let best: { adj: number; guide: number } | null = null;
+    for (const a of anchors) {
+      for (const tg of targets) {
+        const d = tg - a;
+        if (Math.abs(d) <= threshold && (best === null || Math.abs(d) < Math.abs(best.adj))) {
+          best = { adj: d, guide: tg };
+        }
+      }
+    }
+    return best === null ? null : { value: origin + best.adj, guide: best.guide };
+  }
+
   let moved = false;
   const onMove = (e: PointerEvent): void => {
     const dx = (e.clientX - startX) / scale;
     const dy = (e.clientY - startY) / scale;
     if (!moved && Math.abs(dx) + Math.abs(dy) < 2) return; // click vs drag
     moved = true;
-    designerStore.commitAnimatable(elementId, 'position.x', startPos.x + dx);
-    designerStore.commitAnimatable(elementId, 'position.y', startPos.y + dy);
+    let nx = startPos.x + dx;
+    let ny = startPos.y + dy;
+    const guides: { x: number[]; y: number[] } = { x: [], y: [] };
+    if (designerStore.get().snappingEnabled) {
+      const threshold = 6 / scale; // ~6 screen px regardless of zoom
+      const sx = snapAxis(nx, w, xTargets, threshold);
+      if (sx !== null) {
+        nx = sx.value;
+        guides.x.push(sx.guide);
+      }
+      const sy = snapAxis(ny, h, yTargets, threshold);
+      if (sy !== null) {
+        ny = sy.value;
+        guides.y.push(sy.guide);
+      }
+    }
+    designerStore.commitAnimatable(elementId, 'position.x', nx);
+    designerStore.commitAnimatable(elementId, 'position.y', ny);
+    designerStore.setSnapGuides(guides);
   };
   const onUp = (): void => {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
+    designerStore.setSnapGuides({ x: [], y: [] });
   };
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);

@@ -109,10 +109,10 @@ const styles = {
  * status bar so the operator's primary actions stay in the chrome).
  */
 export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
-  const { canUndo, canRedo } = useDesignerStore();
+  const { canUndo, canRedo, rulerVisible, snappingEnabled } = useDesignerStore();
   const errorCount = issues.filter((i) => i.severity === 'error').length;
   const exportBlocked = scene === null || errorCount > 0;
-  const [openMenu, setOpenMenu] = useState<'file' | 'edit' | null>(null);
+  const [openMenu, setOpenMenu] = useState<'file' | 'edit' | 'view' | null>(null);
   const [newModalOpen, setNewModalOpen] = useState(false);
   // Queues a switch action (Close / New / Open) when there's already a
   // scene loaded — the SaveBeforeSwitchModal runs first and only then
@@ -325,18 +325,46 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
             </div>
           )}
         </div>
-        {(['view', 'help'] as const).map((id) => (
+        <div style={styles.menuItemWrap} onPointerDown={(e) => e.stopPropagation()}>
           <button
-            key={id}
             type="button"
             style={styles.menuItem}
-            disabled
-            title={`${capitalize(id)} (coming soon)`}
-            aria-label={capitalize(id)}
+            onClick={() => setOpenMenu((m) => (m === 'view' ? null : 'view'))}
+            aria-haspopup="menu"
+            aria-expanded={openMenu === 'view'}
           >
-            {capitalize(id)}
+            View
           </button>
-        ))}
+          {openMenu === 'view' && (
+            <div style={styles.dropdown} role="menu">
+              <ToggleMenuItem
+                label="Ruler"
+                checked={rulerVisible}
+                onClick={() => {
+                  setOpenMenu(null);
+                  designerStore.toggleRuler();
+                }}
+              />
+              <ToggleMenuItem
+                label="Snapping"
+                checked={snappingEnabled}
+                onClick={() => {
+                  setOpenMenu(null);
+                  designerStore.toggleSnapping();
+                }}
+              />
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          style={styles.menuItem}
+          disabled
+          title="Help (coming soon)"
+          aria-label="Help"
+        >
+          Help
+        </button>
       </div>
       <span style={styles.spacer} />
       <button
@@ -398,9 +426,30 @@ function FileMenuItem({
   );
 }
 
-function capitalize(s: string): string {
-  const first = s.charAt(0);
-  return first === '' ? s : first.toUpperCase() + s.slice(1);
+/** Dropdown item with a leading checkmark for on/off View options. */
+function ToggleMenuItem({
+  label,
+  checked,
+  onClick,
+}: {
+  label: string;
+  checked: boolean;
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      role="menuitemcheckbox"
+      aria-checked={checked}
+      style={styles.dropdownItem}
+      onClick={onClick}
+    >
+      <span style={{ display: 'inline-block', width: 14 }} aria-hidden>
+        {checked ? '✓' : ''}
+      </span>
+      {label}
+    </button>
+  );
 }
 
 function isMac(): boolean {

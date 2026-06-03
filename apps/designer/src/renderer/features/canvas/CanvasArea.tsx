@@ -7,7 +7,7 @@ import {
 } from '../assets/assetUrlCache.js';
 import { CanvasOverlay } from './CanvasOverlay.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
-import { type DesignerTool } from '../../state/store.js';
+import { useDesignerStore, type DesignerTool } from '../../state/store.js';
 
 interface Props {
   scene: Scene | null;
@@ -160,8 +160,13 @@ export function CanvasArea({
 }: Props): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const [html, setHtml] = useState<string | null>(null);
   const [zoom, setZoom] = useState<number>(ZOOM_DEFAULT);
+  const { rulerVisible } = useDesignerStore();
+  // Screen offset (within the scroll viewport) of the scene's (0,0), so the
+  // pinned rulers stay aligned with the canvas as it zooms / scrolls / resizes.
+  const [rulerOrigin, setRulerOrigin] = useState<{ x: number; y: number } | null>(null);
 
   // Only rebuild the iframe document when the *scene id* changes
   // (e.g. project switch). For mutations within the same scene we
@@ -311,6 +316,38 @@ export function CanvasArea({
     el.scrollTop -= dy;
   }
 
+  // Keep the ruler origin in sync with the stage as it zooms / scrolls / resizes.
+  useEffect(() => {
+    if (!rulerVisible) {
+      setRulerOrigin(null);
+      return;
+    }
+    const outer = outerRef.current;
+    if (outer === null) return;
+    function measure(): void {
+      const o = outerRef.current;
+      const s = stageRef.current;
+      if (o === null || s === null) return;
+      const orect = o.getBoundingClientRect();
+      const srect = s.getBoundingClientRect();
+      setRulerOrigin({
+        x: srect.left - orect.left - o.clientLeft,
+        y: srect.top - orect.top - o.clientTop,
+      });
+    }
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(outer);
+    if (stageRef.current !== null) ro.observe(stageRef.current);
+    outer.addEventListener('scroll', measure);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro.disconnect();
+      outer.removeEventListener('scroll', measure);
+      window.removeEventListener('resize', measure);
+    };
+  }, [rulerVisible, zoom, sceneId, html]);
+
   if (scene === null) {
     return (
       <div style={styles.wrap}>
@@ -373,6 +410,7 @@ export function CanvasArea({
         {html !== null && (
           <div style={styles.centerWrap}>
             <div
+              ref={stageRef}
               style={{
                 ...styles.stage,
                 width: width * zoom,
@@ -411,8 +449,99 @@ export function CanvasArea({
             </div>
           </div>
         )}
+        {rulerVisible && rulerOrigin !== null && html !== null && (
+          <CanvasRuler
+            originX={rulerOrigin.x}
+            originY={rulerOrigin.y}
+            zoom={zoom}
+            width={width}
+            height={height}
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+const RULER = 16;
+
+/**
+ * Pinned canvas rulers (top + left) showing scene-pixel coordinates. The tick
+ * step adapts to zoom so labels stay ~64px apart; `originX/Y` place scene (0,0).
+ */
+function CanvasRuler({
+  originX,
+  originY,
+  zoom,
+  width,
+  height,
+}: {
+  originX: number;
+  originY: number;
+  zoom: number;
+  width: number;
+  height: number;
+}): JSX.Element {
+  const STEPS = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
+  const step = STEPS.find((s) => s * zoom >= 64) ?? 5000;
+  const xticks: number[] = [];
+  for (let x = 0; x <= width + 0.5; x += step) xticks.push(x);
+  const yticks: number[] = [];
+  for (let y = 0; y <= height + 0.5; y += step) yticks.push(y);
+  const bar = {
+    position: 'absolute' as const,
+    background: '#13151f',
+    zIndex: 6,
+    pointerEvents: 'none' as const,
+    overflow: 'hidden' as const,
+    color: colors.textMuted,
+    fontSize: 9,
+    fontVariantNumeric: 'tabular-nums' as const,
+  };
+  return (
+    <>
+      <div
+        style={{ ...bar, top: 0, left: 0, right: 0, height: RULER, borderBottom: `1px solid ${colors.border}` }}
+        aria-hidden
+      >
+        {xticks.map((x) => (
+          <div key={x} style={{ position: 'absolute', left: originX + x * zoom, top: 0, bottom: 0 }}>
+            <div style={{ position: 'absolute', left: 0, bottom: 0, width: 1, height: 5, background: colors.border }} />
+            <span style={{ position: 'absolute', left: 2, top: 1, whiteSpace: 'nowrap' }}>{x}</span>
+          </div>
+        ))}
+      </div>
+      <div
+        style={{ ...bar, top: 0, left: 0, bottom: 0, width: RULER, borderRight: `1px solid ${colors.border}` }}
+        aria-hidden
+      >
+        {yticks.map((y) => (
+          <div key={y} style={{ position: 'absolute', top: originY + y * zoom, left: 0, right: 0 }}>
+            <div style={{ position: 'absolute', top: 0, right: 0, height: 1, width: 5, background: colors.border }} />
+            <span
+              style={{ position: 'absolute', left: 1, top: 2, writingMode: 'vertical-rl' as const, fontSize: 8 }}
+            >
+              {y}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: RULER,
+          height: RULER,
+          background: '#13151f',
+          borderRight: `1px solid ${colors.border}`,
+          borderBottom: `1px solid ${colors.border}`,
+          zIndex: 7,
+          pointerEvents: 'none',
+        }}
+        aria-hidden
+      />
+    </>
   );
 }
 
