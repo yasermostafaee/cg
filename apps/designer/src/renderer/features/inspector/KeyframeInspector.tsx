@@ -178,7 +178,7 @@ function KeyframeValueField({
   onCommit: (value: number) => void;
 }): JSX.Element {
   if (typeof keyframe.value === 'number') {
-    return <NumberField label="value" value={keyframe.value} step={0.1} onCommit={onCommit} />;
+    return <NumberField label="value" value={keyframe.value} step={1} onCommit={onCommit} />;
   }
   // Color keyframes — not exposed in the v1 dock but render read-only.
   return (
