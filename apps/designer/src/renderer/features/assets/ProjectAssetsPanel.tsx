@@ -73,8 +73,11 @@ const styles = {
     alignContent: 'start',
   },
   empty: {
+    // Span every grid column so the hint uses the full panel width instead of
+    // being squeezed into one 70px cell (which wrapped it to ~6 lines).
+    gridColumn: '1 / -1',
     margin: 'auto',
-    padding: '1rem',
+    padding: '1rem 0.5rem',
     color: colors.textMuted,
     fontSize: '0.72rem',
     textAlign: 'center' as const,
