@@ -252,21 +252,23 @@ curves like the reference tool.
 `EASING_PRESETS` to `@cg/shared-schema`; runtime + designer interpolation honor
 it; new `EasingEditor.tsx`.
 
-## [~] D-017 — Single-click + multi-select keyframes   ⟨priority: high⟩ — change: `openspec/changes/add-multiselect-keyframes/`
-**What:** Clicking a point (or the segment between points) opens the Keyframe
-Inspector — no double-click. Support multi-selecting points (shift/ctrl-click) to
-apply easing to all at once; with >1 selected, hide frame/value/property and show
-only the easing editor + a "Remove keyframes" button.
-**Why:** Faster editing; batch easing across many points.
+## [~] D-017 — Click-to-open + multi-select keyframes   ⟨priority: high⟩ — change: `openspec/changes/multi-select-keyframes/`
+**What:** A single click on a keyframe point (or the segment between two) opens
+the Keyframe Inspector (no double-click). Shift/Ctrl-click adds points to a
+multi-selection so easing can be applied to all at once. With >1 selected, the
+inspector hides frame/value/property and shows only the easing editor + a
+"Remove keyframes" button.
+**Why:** Faster editing; batch-easing multiple points together.
 **Acceptance:**
-- WHEN the operator clicks a point or a segment THEN the Keyframe Inspector opens
-  for that point (no double-click needed)
-- WHEN the operator shift/ctrl-clicks points THEN they accumulate in the selection
-  and all are highlighted
+- WHEN the operator clicks a point or the segment between two THEN the Keyframe
+  Inspector opens for it (single click, no double-click needed)
+- WHEN the operator Shift/Ctrl-clicks points THEN they accumulate in the
+  selection and all are highlighted
 - WHEN more than one point is selected THEN the inspector hides frame/value/
-  property and shows only the easing editor (applied to all) plus "Remove keyframes"
-- WHEN the operator changes the easing with several selected THEN every selected
+  property and shows only the easing editor (applied to all) and a button
+  labelled "Remove keyframes"
+- WHEN the operator changes easing with multiple selected THEN every selected
   point gets that curve
 - WHEN Delete is pressed THEN all selected points are removed
-**Notes:** store gains `selectedKeyframes` (multi) mirroring `selectedKeyframe`
-(primary) + `addKeyframeToSelection`; inspector branches on count.
+**Notes:** store gains `selectedKeyframes` (multi) + `addKeyframeToSelection`;
+supersedes the old single/double-click split from `add-animation-timeline-dock`.
