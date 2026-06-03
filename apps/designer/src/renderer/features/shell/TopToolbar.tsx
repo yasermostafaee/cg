@@ -5,6 +5,7 @@ import { colors } from '../../theme.js';
 import { designerStore, useDesignerStore } from '../../state/store.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
+import { ShortcutsModal } from './ShortcutsModal.js';
 
 interface Props {
   scene: Scene | null;
@@ -112,7 +113,8 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
   const { canUndo, canRedo, rulerVisible, snappingEnabled } = useDesignerStore();
   const errorCount = issues.filter((i) => i.severity === 'error').length;
   const exportBlocked = scene === null || errorCount > 0;
-  const [openMenu, setOpenMenu] = useState<'file' | 'edit' | 'view' | null>(null);
+  const [openMenu, setOpenMenu] = useState<'file' | 'edit' | 'view' | 'help' | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [newModalOpen, setNewModalOpen] = useState(false);
   // Queues a switch action (Close / New / Open) when there's already a
   // scene loaded — the SaveBeforeSwitchModal runs first and only then
@@ -356,15 +358,32 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
             </div>
           )}
         </div>
-        <button
-          type="button"
-          style={styles.menuItem}
-          disabled
-          title="Help (coming soon)"
-          aria-label="Help"
-        >
-          Help
-        </button>
+        <div style={styles.menuItemWrap} onPointerDown={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            style={styles.menuItem}
+            onClick={() => setOpenMenu((m) => (m === 'help' ? null : 'help'))}
+            aria-haspopup="menu"
+            aria-expanded={openMenu === 'help'}
+          >
+            Help
+          </button>
+          {openMenu === 'help' && (
+            <div style={styles.dropdown} role="menu">
+              <FileMenuItem label="Start Tutorial" disabled onClick={() => undefined} />
+              <FileMenuItem
+                label="Keyboard Shortcuts"
+                onClick={() => {
+                  setOpenMenu(null);
+                  setShortcutsOpen(true);
+                }}
+              />
+              <FileMenuItem label="Documentation" disabled onClick={() => undefined} />
+              <FileMenuItem label="About" disabled onClick={() => undefined} />
+              <FileMenuItem label="Changelog" disabled onClick={() => undefined} />
+            </div>
+          )}
+        </div>
       </div>
       <span style={styles.spacer} />
       <button
@@ -384,6 +403,7 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
       >
         SAVE
       </button>
+      {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
       {newModalOpen && <NewProjectModal onClose={() => setNewModalOpen(false)} />}
       {pendingSwitch !== null && scene !== null && (
         <SaveBeforeSwitchModal
