@@ -370,7 +370,10 @@ export function TimelineDock({
     return () => window.removeEventListener('pointerdown', onPointerDown);
   }, []);
   const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(() => new Set());
-  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
+  // Second-level groups (TRANSFORM, Path Style, …) start collapsed, so first
+  // expanding a layer reveals collapsed group headers. We track the *expanded*
+  // ones; absent ⇒ collapsed.
+  const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(() => new Set());
   const [layerMenu, setLayerMenu] = useState<{ elementId: string; x: number; y: number } | null>(
     null,
   );
@@ -465,11 +468,11 @@ export function TimelineDock({
       return next;
     });
   }
-  function isGroupCollapsed(id: string): boolean {
-    return collapsedGroups.has(id);
+  function isGroupExpanded(id: string): boolean {
+    return expandedGroups.has(id);
   }
-  function toggleGroupCollapsed(id: string): void {
-    setCollapsedGroups((prev) => {
+  function toggleGroupExpanded(id: string): void {
+    setExpandedGroups((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -507,14 +510,14 @@ export function TimelineDock({
                     {expanded &&
                       timelineGroupsFor(el).map((group) => {
                         const groupKey = `${el.id}::${group.title}`;
-                        const groupExpanded = !isGroupCollapsed(groupKey);
+                        const groupExpanded = isGroupExpanded(groupKey);
                         return (
                           <div key={groupKey}>
                             <div style={styles.groupHeaderLabel}>
                               <button
                                 type="button"
                                 style={styles.groupChevron}
-                                onClick={() => toggleGroupCollapsed(groupKey)}
+                                onClick={() => toggleGroupExpanded(groupKey)}
                                 aria-expanded={groupExpanded}
                                 aria-label={`Toggle ${group.title.toLowerCase()} tracks`}
                               >
@@ -629,7 +632,7 @@ export function TimelineDock({
                       {expanded &&
                         timelineGroupsFor(el).map((group) => {
                           const groupKey = `${el.id}::${group.title}`;
-                          const groupExpanded = !isGroupCollapsed(groupKey);
+                          const groupExpanded = isGroupExpanded(groupKey);
                           return (
                             <div key={groupKey}>
                               <div style={styles.groupHeaderLane} />
