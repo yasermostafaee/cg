@@ -1,4 +1,4 @@
-import type { Element, FieldValues, FrameRange, Scene } from '@cg/shared-schema';
+import { activeRangeOf, type Element, type FieldValues, type FrameRange, type Scene } from '@cg/shared-schema';
 import {
   applyAnimationAtFrame,
   collectAnimatedElements,
@@ -59,7 +59,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     if (animated.length === 0) return;
     driver = new FrameDriver({
       frameRate: scene.frameRate,
-      range: scene.frameRange,
+      // The active region (resized scene bar) is the play / export window;
+      // it falls back to the full frameRange when unset.
+      range: activeRangeOf(scene),
       onFrame: (frame) => {
         for (const entry of animated) applyAnimationAtFrame(entry, frame);
       },

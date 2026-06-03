@@ -66,11 +66,22 @@ export const SceneSchema = z.object({
     action: z.number().min(0).max(50),
   }),
   /**
-   * Frame range the playhead scrubs across. The runtime starts at
-   * `frameRange.in` on play() and loops back when it reaches
-   * `frameRange.out`. Defaults to [0, 50] in newScene().
+   * The scene's **total** frame count — the full extent the timeline
+   * ruler, gridlines, and playhead scrub across. Defaults to [0, 50] in
+   * newScene().
    */
   frameRange: FrameRangeSchema,
+  /**
+   * The **active region** — the play / export / preview window, drawn as
+   * the resizable scene (main-layer) bar at the top of the timeline. When
+   * absent the active region is the full `frameRange`, so scenes authored
+   * before this field validate and play unchanged. Resizing the scene bar
+   * narrows this without touching `frameRange`, so the ruler keeps the
+   * full frame count and the trailing frames stay visible but inactive.
+   * Invariant: `frameRange.in ≤ activeRange.in ≤ activeRange.out ≤
+   * frameRange.out` and `activeRange.out > activeRange.in`.
+   */
+  activeRange: FrameRangeSchema.optional(),
   background: z.union([z.literal('transparent'), HexColorSchema]),
   layers: z.array(LayerSchema),
   fields: z.array(DynamicFieldSchema),
@@ -79,3 +90,16 @@ export const SceneSchema = z.object({
   metadata: SceneMetadataSchema,
 });
 export type Scene = z.infer<typeof SceneSchema>;
+
+/**
+ * The effective active region (play / export / preview window) of a scene:
+ * its explicit `activeRange` when set, otherwise the full `frameRange`. This
+ * is the single place renderer and runtime resolve the window so an absent
+ * `activeRange` always behaves exactly as the full scene.
+ */
+export function activeRangeOf(scene: Pick<Scene, 'frameRange' | 'activeRange'>): {
+  in: number;
+  out: number;
+} {
+  return scene.activeRange ?? scene.frameRange;
+}

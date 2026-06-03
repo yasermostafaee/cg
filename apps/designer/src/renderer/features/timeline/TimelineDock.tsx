@@ -141,6 +141,21 @@ const styles = {
     cursor: 'ew-resize',
     touchAction: 'none' as const,
     pointerEvents: 'auto' as const,
+    zIndex: 3,
+  },
+  // Dimmed overlay over the trailing frames [activeOut .. total]. The scene
+  // total (ruler) is unchanged — these frames stay visible but are outside
+  // the play / export window. pointerEvents none so the ruler/lanes beneath
+  // stay scrubbable/inspectable.
+  inactiveTail: {
+    position: 'absolute' as const,
+    top: 0,
+    bottom: 0,
+    right: 0,
+    background: 'rgba(12, 14, 22, 0.55)',
+    borderLeft: `1px dashed ${colors.accentMuted}`,
+    pointerEvents: 'none' as const,
+    zIndex: 1,
   },
   header: {
     display: 'flex',
@@ -268,6 +283,12 @@ export function TimelineDock({
   // ruler labels and the body gridlines keeps the two visually
   // synchronised.
   const span = Math.max(1, frameOut - frameIn);
+  // The active region (resized scene bar) within the full total span. The
+  // ruler/grid stay on the total `span`; only the scene bar and the dimmed
+  // trailing overlay are driven by the active out-point.
+  const active = scene.activeRange ?? scene.frameRange;
+  const activePct = Math.max(0, Math.min(100, ((active.out - frameIn) / span) * 100));
+  const hasInactiveTail = active.out < frameOut;
   const visibleFrames = span / Math.max(1, timelineZoom);
   const tickStride = pickStride(visibleFrames);
   const gridPeriodPct = ((tickStride * 100) / span).toFixed(4);
@@ -339,10 +360,12 @@ export function TimelineDock({
 
   const elements: readonly Element[] = flattenElements(scene);
 
-  // Drag the Scene row's right-edge gripper to resize scene duration.
-  // pxPerFrame is locked at drag start so the rate of change stays
-  // constant even though the underlying frameRange (and therefore the
-  // ratio) is mutating live in the store.
+  // Drag the Scene row's right-edge gripper to resize the *active region*
+  // (the play / export window) — NOT the scene total. The store clamps the
+  // new out-point to `[activeIn + 1, frameRange.out]` and leaves
+  // `frameRange` untouched, so the ruler keeps its full frame count and the
+  // trailing frames stay visible. The lane spans the full total, so
+  // pxPerFrame is locked from the lane width over the total span.
   function startSceneResize(e: React.PointerEvent): void {
     e.stopPropagation();
     const lane = sceneLaneRef.current;
@@ -350,13 +373,13 @@ export function TimelineDock({
     const rect = lane.getBoundingClientRect();
     if (rect.width <= 0) return;
     const startX = e.clientX;
-    const startIn = scene.frameRange.in;
-    const startOut = scene.frameRange.out;
-    const pxPerFrame = rect.width / Math.max(1, startOut - startIn);
+    const active = scene.activeRange ?? scene.frameRange;
+    const startOut = active.out;
+    const totalSpan = Math.max(1, scene.frameRange.out - scene.frameRange.in);
+    const pxPerFrame = rect.width / totalSpan;
     function onMove(ev: PointerEvent): void {
       const dframes = (ev.clientX - startX) / pxPerFrame;
-      const nextOut = Math.max(startIn + 1, Math.round(startOut + dframes));
-      designerStore.setSceneDurationFrames(nextOut - startIn);
+      designerStore.setSceneActiveOut(startOut + dframes);
     }
     function onUp(): void {
       window.removeEventListener('pointermove', onMove);
@@ -510,15 +533,28 @@ export function TimelineDock({
                   left: `${(((currentFrame - frameIn) / Math.max(1, frameOut - frameIn)) * 100).toFixed(3)}%`,
                 }}
               />
-              <div style={styles.sceneLane} ref={sceneLaneRef} aria-label="Scene duration">
-                <div style={styles.sceneBar} aria-hidden />
+              {hasInactiveTail && (
                 <div
-                  style={{ ...styles.sceneBarHandle, right: 0, transform: 'translate(50%, -50%)' }}
+                  style={{ ...styles.inactiveTail, left: `${activePct.toFixed(3)}%` }}
+                  aria-hidden
+                />
+              )}
+              <div style={styles.sceneLane} ref={sceneLaneRef} aria-label="Scene active region">
+                <div
+                  style={{ ...styles.sceneBar, right: 'auto', width: `${activePct.toFixed(3)}%` }}
+                  aria-hidden
+                />
+                <div
+                  style={{
+                    ...styles.sceneBarHandle,
+                    left: `${activePct.toFixed(3)}%`,
+                    transform: 'translate(-50%, -50%)',
+                  }}
                   onPointerDown={startSceneResize}
                   role="separator"
                   aria-orientation="vertical"
-                  aria-label="Resize scene duration"
-                  title="Drag to resize scene duration"
+                  aria-label="Resize active region"
+                  title="Drag to resize the active region (play / export window) — the scene total stays"
                 />
               </div>
               {elements.length === 0 ? (

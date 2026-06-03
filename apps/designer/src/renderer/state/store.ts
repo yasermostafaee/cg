@@ -304,11 +304,12 @@ export const designerStore = {
   },
 
   /**
-   * Set the scene's authoring duration in frames. Updates
-   * `frameRange.out` to `frameRange.in + frames` and clamps the
-   * authoring `currentFrame` so the playhead can't sit past the new
-   * end. Existing keyframes are preserved — widening the duration
-   * again restores their effect.
+   * Set the scene's **total** duration in frames. Updates `frameRange.out`
+   * to `frameRange.in + frames` and clamps the authoring `currentFrame` so
+   * the playhead can't sit past the new end. When an `activeRange` exists it
+   * is clamped to stay within the new total (a shorter total pulls the active
+   * out-point in; a longer total leaves the active region untouched).
+   * Existing keyframes are preserved — widening again restores their effect.
    */
   setSceneDurationFrames(frames: number): void {
     if (current.scene === null) return;
@@ -316,10 +317,33 @@ export const designerStore = {
     const inFrame = current.scene.frameRange.in;
     const out = inFrame + safe;
     const nextFrame = Math.min(out, Math.max(inFrame, current.currentFrame));
+    const prevActive = current.scene.activeRange;
+    let activeRange = prevActive;
+    if (prevActive !== undefined) {
+      const aOut = Math.min(prevActive.out, out);
+      const aIn = Math.max(inFrame, Math.min(prevActive.in, aOut - 1));
+      activeRange = { in: aIn, out: aOut };
+    }
     set({
-      scene: { ...current.scene, frameRange: { in: inFrame, out } },
+      scene: { ...current.scene, frameRange: { in: inFrame, out }, activeRange },
       currentFrame: nextFrame,
     });
+  },
+
+  /**
+   * Resize the **active region** (the scene / main-layer bar) by setting its
+   * out-point, clamped to `[activeRange.in + 1, frameRange.out]`. This never
+   * touches `frameRange`, so the total frame count — and therefore the ruler
+   * and the trailing frames — stay put. Playback and export use this window.
+   */
+  setSceneActiveOut(outFrames: number): void {
+    if (current.scene === null) return;
+    const { in: total0, out: total1 } = current.scene.frameRange;
+    const inFrame = current.scene.activeRange?.in ?? total0;
+    const out = Math.max(inFrame + 1, Math.min(total1, Math.round(outFrames)));
+    const prev = current.scene.activeRange;
+    if (prev !== undefined && prev.in === inFrame && prev.out === out) return;
+    set({ scene: { ...current.scene, activeRange: { in: inFrame, out } } });
   },
 
   setTool(tool: DesignerTool): void {

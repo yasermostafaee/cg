@@ -135,3 +135,33 @@ see the files inside the: `docs/designer-guide/sample-assets/D-006-old-codes`. t
 - we can drag the images on the assets panel to the sceen and they became like a shape and we can add any points for them.
 - if we add any font to assets we can see that font inside the select options font on Text section in properties panel on the right
 **Notes:** see this screenshot : `docs/designer-guide/sample-assets/D-011-pic-0`
+
+## [~] D-012 — Scene active region (resizable play window, total stays)   ⟨priority: high⟩ — change: `openspec/changes/add-scene-active-region/`
+**What:** Dragging the timeline scene bar's right gripper resizes a separate
+**active region** (the play / export / preview window) instead of the scene's
+total frame count. The ruler keeps its full frame count and the trailing
+"remaining" frames stay visible but inactive.
+**Why:** Today the scene bar's gripper rewrites `scene.frameRange.out`, which
+also drives the ruler/grid/playhead — so resizing instantly shrinks the whole
+timeline and the remaining frames vanish. Loopic (reference video) keeps the
+total fixed while editing and only narrows the played/exported window.
+**Acceptance:**
+- WHEN the operator drags the scene bar's right gripper to a shorter frame THEN
+  the active region's out-point shrinks but the ruler keeps the full total
+  frame count and the trailing frames stay visible (dimmed / inactive)
+- WHEN the operator is dragging the gripper THEN the scene's total frame count
+  (`frameRange.out`) is not mutated
+- WHEN the operator plays or steps THEN the playhead loops within the active
+  region, not the full total
+- WHEN the scene is exported or previewed THEN only the active-region frames are
+  produced
+- WHEN the active region is shorter than the total THEN keyframes that sit
+  beyond the active out-point stay visible on their tracks but are ignored by
+  play / export / preview (kept-but-inactive)
+- WHEN the operator changes the Inspector Duration field THEN the total frame
+  count changes and the active region is clamped to stay within the new total
+**Notes:** reference video `c:\Users\yaser\OneDrive\Desktop\timeline.mp4`
+(Loopic). Root cause in `TimelineDock.tsx` (`startSceneResize` →
+`setSceneDurationFrames`) + the single `scene.frameRange` doing double duty.
+Add `scene.activeRange` to `@cg/shared-schema`; repoint runtime/export/preview
+play range (`template-runtime/src/runtime.ts:62`) to the active region.

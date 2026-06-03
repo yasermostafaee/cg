@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Scene } from '@cg/shared-schema';
+import { activeRangeOf, type Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
 
@@ -73,7 +73,11 @@ const styles = {
  *   bounce → reverse direction at every boundary
  */
 export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
-  const { in: frameIn, out: frameOut } = scene.frameRange;
+  // Playback is bounded by the active region (the resized scene bar), while
+  // the readout keeps showing the scene's full total so the operator still
+  // sees the kept frame count.
+  const { in: frameIn, out: frameOut } = activeRangeOf(scene);
+  const totalOut = scene.frameRange.out;
   const [playing, setPlaying] = useState(false);
   const [loopMode, setLoopMode] = useState<LoopMode>('off');
   const lastWallRef = useRef<number>(0);
@@ -204,7 +208,7 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
         </button>
       </div>
       <span style={styles.frameReadout} aria-label="Current frame">
-        frame {currentFrame} / {frameOut}
+        frame {currentFrame} / {totalOut}
       </span>
     </div>
   );
