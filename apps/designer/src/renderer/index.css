@@ -53,6 +53,19 @@ input[type='number'] {
   border-color: #3990d2;
 }
 
+/*
+ * The shared @cg/ui theme draws a 2px box-shadow halo on ANY focused
+ * input/select. Inside our field chrome the wrapper already shows the
+ * accent border on :focus-within, so suppress that inner halo — otherwise
+ * a focused field reads as two borders.
+ */
+.cg-field :focus,
+.cg-field :focus-visible,
+.cg-input-group :focus,
+.cg-input-group :focus-visible {
+  box-shadow: none;
+}
+
 /* Combined vector field — segments share one border, divided by a hairline. */
 .cg-input-group {
   display: flex;
