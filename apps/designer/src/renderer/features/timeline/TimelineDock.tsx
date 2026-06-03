@@ -102,7 +102,7 @@ const styles = {
     width: 0,
     borderLeft: `1.5px solid ${colors.accent}`,
     pointerEvents: 'none' as const,
-    zIndex: 2,
+    zIndex: 3,
   },
   // Top-of-body "Scene" row — single bar covering the active scene
   // range. No chevron, no eye/lock, no keyframe diamonds; the only
@@ -142,7 +142,7 @@ const styles = {
     cursor: 'ew-resize',
     touchAction: 'none' as const,
     pointerEvents: 'auto' as const,
-    zIndex: 3,
+    zIndex: 4,
   },
   // Dimmed overlay over the trailing frames [activeOut .. total]. The scene
   // total (ruler) is unchanged — these frames stay visible but are outside
@@ -156,7 +156,9 @@ const styles = {
     background: 'rgba(12, 14, 22, 0.55)',
     borderLeft: `1px dashed ${colors.accentMuted}`,
     pointerEvents: 'none' as const,
-    zIndex: 1,
+    // Above the lifespan bars (incl. a selected bar's zIndex:1) so the inactive
+    // region dims the selected layer too, but below the playhead/handle.
+    zIndex: 2,
   },
   header: {
     display: 'flex',
