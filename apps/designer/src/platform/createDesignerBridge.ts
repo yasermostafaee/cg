@@ -51,6 +51,7 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
           projects.newScene(req.name, req.templateType, {
             ...(req.resolution !== undefined ? { resolution: req.resolution } : {}),
             ...(req.frameRate !== undefined ? { frameRate: req.frameRate } : {}),
+            ...(req.durationFrames !== undefined ? { durationFrames: req.durationFrames } : {}),
           }),
         ),
       open: async (req) => {

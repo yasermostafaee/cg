@@ -113,6 +113,7 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
   const [customW, setCustomW] = useState(1920);
   const [customH, setCustomH] = useState(1080);
   const [frameRate, setFrameRate] = useState<FrameRate>(50);
+  const [durationFrames, setDurationFrames] = useState(50);
   const isCustom = PRESETS[presetIdx]?.label === 'Custom';
 
   useEffect(() => {
@@ -134,6 +135,7 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
       templateType: DEFAULT_TEMPLATE_TYPE,
       resolution,
       frameRate,
+      durationFrames: Math.max(1, Math.round(durationFrames)),
     });
     designerStore.setScene(result.scene, result.path);
     onClose();
@@ -210,6 +212,24 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
               </option>
             ))}
           </select>
+        </div>
+
+        <div style={styles.row}>
+          <span style={styles.label}>Total frames</span>
+          <div style={styles.inlinePair}>
+            <input
+              style={styles.input}
+              type="number"
+              min={1}
+              value={durationFrames}
+              onChange={(e) => setDurationFrames(Number(e.target.value))}
+              aria-label="Total frames"
+            />
+            <span />
+            <span style={{ color: colors.textMuted, fontSize: '0.74rem' }}>
+              ≈ {(Math.max(1, Math.round(durationFrames)) / frameRate).toFixed(1)} s
+            </span>
+          </div>
         </div>
 
         <div style={styles.buttonRow}>

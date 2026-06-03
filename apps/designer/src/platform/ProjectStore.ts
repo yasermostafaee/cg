@@ -13,6 +13,8 @@ import { Emitter } from './emitter.js';
 export interface NewSceneOptions {
   resolution?: Resolution;
   frameRate?: FrameRate;
+  /** Total scene duration in frames (timeline length). Defaults to 50. */
+  durationFrames?: number;
 }
 
 const RECENT_KEY = 'recent';
@@ -68,7 +70,7 @@ export class ProjectStore {
       resolution: options.resolution ?? { width: 1920, height: 1080 },
       frameRate: options.frameRate ?? 50,
       safeAreas: { title: 10, action: 5 },
-      frameRange: { in: 0, out: 50 },
+      frameRange: { in: 0, out: Math.max(1, Math.round(options.durationFrames ?? 50)) },
       background: 'transparent',
       layers: [],
       fields: [],
