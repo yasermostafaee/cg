@@ -198,12 +198,15 @@ function togglePropertyKeyframe(
   frame: number,
 ): void {
   if (hasKeyframeAt(element, property, frame)) {
-    designerStore.removeKeyframe(element.id, property, frame);
+    // Don't remove on a stray click when a point is already here — select it.
+    // Deletion stays on the timeline right-click → Delete and the Delete key.
+    designerStore.setSelectedKeyframe({ elementId: element.id, property, frame });
     return;
   }
   const row = TIMELINE_ROWS.find((r) => r.property === property);
   if (row === undefined) return;
   designerStore.upsertKeyframe(element.id, property, frame, row.read(element));
+  designerStore.setSelectedKeyframe({ elementId: element.id, property, frame });
 }
 
 function percent(scaleOrOpacity: number): number {
