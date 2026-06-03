@@ -87,6 +87,11 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
   const lastWallRef = useRef<number>(0);
   const accumRef = useRef<number>(0);
   const directionRef = useRef<1 | -1>(1);
+  // Direction the current play was started in (L = forward, J = backward), so
+  // the rAF loop doesn't always reset to forward.
+  const playDirRef = useRef<1 | -1>(1);
+  // True while K is held — turns L/J into single-frame steps (J/K/L editing).
+  const kHeldRef = useRef(false);
   // `loopMode` changes mid-playback need to be visible to the running
   // rAF tick without restarting it (restart resets the accumulator
   // and visibly jitters). A ref carries the latest value across renders.
@@ -99,7 +104,7 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
   // mid-loop.
   useEffect(() => {
     if (!playing) return;
-    directionRef.current = 1;
+    directionRef.current = playDirRef.current;
     let raf = 0;
     const tick = (now: number): void => {
       const prev = lastWallRef.current === 0 ? now : lastWallRef.current;
@@ -123,11 +128,14 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
             stop = true;
           }
         } else if (next < frameIn) {
-          if (loopModeRef.current === 'bounce') {
+          if (loopModeRef.current === 'loop') {
+            next = frameOut;
+          } else if (loopModeRef.current === 'bounce') {
             directionRef.current = 1;
             next = frameIn + 1 > frameOut ? frameOut : frameIn + 1;
           } else {
             next = frameIn;
+            stop = true;
           }
         }
       }
@@ -149,6 +157,59 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
   function toggleLoop(mode: 'loop' | 'bounce'): void {
     setLoopMode((m) => (m === mode ? 'off' : mode));
   }
+
+  function playDir(dir: 1 | -1): void {
+    playDirRef.current = dir;
+    setPlaying(true);
+  }
+
+  // J / K / L transport (video-editor convention): L = play forward, J = play
+  // backward, K = stop. Holding K turns L/J into single-frame steps
+  // (K+L = next frame, K+J = previous frame). Ignored while typing.
+  useEffect(() => {
+    function isEditable(t: EventTarget | null): boolean {
+      if (!(t instanceof HTMLElement)) return false;
+      const tag = t.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable;
+    }
+    function onKeyDown(e: KeyboardEvent): void {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (isEditable(e.target)) return;
+      const k = e.key.toLowerCase();
+      if (k === 'k') {
+        kHeldRef.current = true;
+        setPlaying(false);
+      } else if (k === 'l') {
+        if (kHeldRef.current) {
+          setPlaying(false);
+          designerStore.setCurrentFrame(designerStore.get().currentFrame + 1);
+        } else {
+          playDirRef.current = 1;
+          setPlaying(true);
+        }
+      } else if (k === 'j') {
+        if (kHeldRef.current) {
+          setPlaying(false);
+          designerStore.setCurrentFrame(designerStore.get().currentFrame - 1);
+        } else {
+          playDirRef.current = -1;
+          setPlaying(true);
+        }
+      } else {
+        return;
+      }
+      e.preventDefault();
+    }
+    function onKeyUp(e: KeyboardEvent): void {
+      if (e.key.toLowerCase() === 'k') kHeldRef.current = false;
+    }
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
 
   function btnStyle(id: string, active = false): React.CSSProperties {
     return {
@@ -194,7 +255,10 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
           type="button"
           style={btnStyle('play')}
           {...hoverProps('play')}
-          onClick={() => setPlaying((p) => !p)}
+          onClick={() => {
+            if (playing) setPlaying(false);
+            else playDir(1);
+          }}
           aria-label={playing ? 'Pause' : 'Play'}
           title={playing ? 'Pause' : 'Play'}
         >
