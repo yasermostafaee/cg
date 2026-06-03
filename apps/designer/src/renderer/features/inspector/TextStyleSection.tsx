@@ -252,13 +252,10 @@ function animPoint(
     <KeyframeIndicator
       variant={variant}
       onClick={() => {
-        // Add a point if none is here; otherwise select it (never remove on a
-        // stray click — deletion is via right-click → Delete or the Delete key).
         if (hasKeyframeAt(element, property, currentFrame)) {
-          designerStore.setSelectedKeyframe({ elementId: element.id, property, frame: currentFrame });
+          designerStore.removeKeyframe(element.id, property, currentFrame);
         } else {
           designerStore.upsertKeyframe(element.id, property, currentFrame, read(element));
-          designerStore.setSelectedKeyframe({ elementId: element.id, property, frame: currentFrame });
         }
       }}
       ariaLabel={`Toggle keyframe for ${property} at frame ${String(currentFrame)}`}

@@ -221,14 +221,7 @@ function TrackRowLabel(props: Props): JSX.Element {
 
   function toggleKeyframeHere(): void {
     if (hasKeyframeAt(element, row.property, currentFrame)) {
-      // A point already sits on this frame — select it (so it can be moved
-      // or deleted deliberately) instead of removing it on a stray click.
-      // Removal stays on the lane's right-click → Delete and the Delete key.
-      designerStore.setSelectedKeyframe({
-        elementId: element.id,
-        property: row.property,
-        frame: currentFrame,
-      });
+      designerStore.removeKeyframe(element.id, row.property, currentFrame);
       return;
     }
     designerStore.upsertKeyframe(element.id, row.property, currentFrame, row.read(element));
