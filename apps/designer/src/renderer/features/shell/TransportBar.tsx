@@ -46,10 +46,13 @@ const styles = {
     cursor: 'pointer',
     lineHeight: 1.2,
   },
+  // Hover and selected use a brighter background instead of a border accent.
+  buttonHover: {
+    background: 'rgba(255, 255, 255, 0.10)',
+  },
   buttonActive: {
-    background: 'transparent',
+    background: 'rgba(255, 255, 255, 0.18)',
     color: colors.accent,
-    border: `1px solid ${colors.accent}`,
   },
   frameReadout: {
     color: colors.textMuted,
@@ -80,6 +83,7 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
   const totalOut = scene.frameRange.out;
   const [playing, setPlaying] = useState(false);
   const [loopMode, setLoopMode] = useState<LoopMode>('off');
+  const [hovered, setHovered] = useState<string | null>(null);
   const lastWallRef = useRef<number>(0);
   const accumRef = useRef<number>(0);
   const directionRef = useRef<1 | -1>(1);
@@ -146,12 +150,30 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
     setLoopMode((m) => (m === mode ? 'off' : mode));
   }
 
+  function btnStyle(id: string, active = false): React.CSSProperties {
+    return {
+      ...styles.button,
+      ...(hovered === id && !active ? styles.buttonHover : {}),
+      ...(active ? styles.buttonActive : {}),
+    };
+  }
+  function hoverProps(id: string): {
+    onMouseEnter: () => void;
+    onMouseLeave: () => void;
+  } {
+    return {
+      onMouseEnter: () => setHovered(id),
+      onMouseLeave: () => setHovered((h) => (h === id ? null : h)),
+    };
+  }
+
   return (
     <div style={styles.bar} aria-label="Playback transport">
       <div style={styles.group}>
         <button
           type="button"
-          style={styles.button}
+          style={btnStyle('start')}
+          {...hoverProps('start')}
           onClick={() => designerStore.setCurrentFrame(frameIn)}
           aria-label="Go to start"
           title="Go to start"
@@ -160,7 +182,8 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
         </button>
         <button
           type="button"
-          style={styles.button}
+          style={btnStyle('back')}
+          {...hoverProps('back')}
           onClick={() => designerStore.setCurrentFrame(currentFrame - 1)}
           aria-label="Step back"
           title="Step back one frame"
@@ -169,7 +192,8 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
         </button>
         <button
           type="button"
-          style={styles.button}
+          style={btnStyle('play')}
+          {...hoverProps('play')}
           onClick={() => setPlaying((p) => !p)}
           aria-label={playing ? 'Pause' : 'Play'}
           title={playing ? 'Pause' : 'Play'}
@@ -178,7 +202,8 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
         </button>
         <button
           type="button"
-          style={styles.button}
+          style={btnStyle('fwd')}
+          {...hoverProps('fwd')}
           onClick={() => designerStore.setCurrentFrame(currentFrame + 1)}
           aria-label="Step forward"
           title="Step forward one frame"
@@ -188,7 +213,8 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
         <span style={styles.groupDivider} aria-hidden />
         <button
           type="button"
-          style={loopMode === 'loop' ? { ...styles.button, ...styles.buttonActive } : styles.button}
+          style={btnStyle('loop', loopMode === 'loop')}
+          {...hoverProps('loop')}
           onClick={() => toggleLoop('loop')}
           aria-pressed={loopMode === 'loop'}
           aria-label="Loop"
@@ -198,7 +224,8 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
         </button>
         <button
           type="button"
-          style={loopMode === 'bounce' ? { ...styles.button, ...styles.buttonActive } : styles.button}
+          style={btnStyle('bounce', loopMode === 'bounce')}
+          {...hoverProps('bounce')}
           onClick={() => toggleLoop('bounce')}
           aria-pressed={loopMode === 'bounce'}
           aria-label="Ping-pong"

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { colors } from '../../theme.js';
 import { designerStore, type DesignerTool } from '../../state/store.js';
 
@@ -40,7 +41,7 @@ const styles = {
     height: 26,
     background: 'transparent',
     color: colors.textMuted,
-    border: '1px solid transparent',
+    border: 'none',
     borderRadius: '0.22rem',
     display: 'flex',
     alignItems: 'center',
@@ -49,10 +50,14 @@ const styles = {
     fontSize: '0.95rem',
     padding: 0,
   },
+  // Hover and selected both use a brighter background (no border); selected
+  // is a touch brighter and brightens the icon so it still reads as active.
+  buttonHover: {
+    background: 'rgba(255, 255, 255, 0.10)',
+  },
   buttonActive: {
     color: colors.text,
-    background: colors.panelMuted,
-    border: `1px solid ${colors.accentMuted}`,
+    background: 'rgba(255, 255, 255, 0.18)',
   },
 } as const;
 
@@ -62,6 +67,7 @@ const styles = {
  *   cursor | hand | text | rectangle | ellipse | image
  */
 export function CanvasToolbar({ tool }: Props): JSX.Element {
+  const [hovered, setHovered] = useState<DesignerTool | null>(null);
   return (
     <div style={styles.group} role="toolbar" aria-label="Canvas tools">
       {TOOLS.map((t) => {
@@ -70,8 +76,14 @@ export function CanvasToolbar({ tool }: Props): JSX.Element {
           <button
             key={t.id}
             type="button"
-            style={active ? { ...styles.button, ...styles.buttonActive } : styles.button}
+            style={{
+              ...styles.button,
+              ...(hovered === t.id && !active ? styles.buttonHover : {}),
+              ...(active ? styles.buttonActive : {}),
+            }}
             onClick={() => designerStore.setTool(t.id)}
+            onMouseEnter={() => setHovered(t.id)}
+            onMouseLeave={() => setHovered((h) => (h === t.id ? null : h))}
             title={t.label}
             aria-label={t.label}
             aria-pressed={active}
