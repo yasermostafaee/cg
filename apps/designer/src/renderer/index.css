@@ -40,7 +40,7 @@ input[type='number'] {
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.1rem 0.4rem;
+  padding: 0.4rem 0.6rem;
 }
 
 .cg-field:hover,
@@ -78,23 +78,11 @@ input[type='number'] {
   gap: 0.25rem;
   flex: 1 1 0;
   min-width: 0;
-  padding: 0.1rem 0.4rem;
+  padding: 0.4rem 0.6rem;
 }
 
 .cg-input-group > .cg-seg + .cg-seg {
   border-left: 1px solid #363a54;
-}
-
-/* A single bordered field plus its keyframe diamond, which sits outside. */
-.cg-field-row {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-.cg-field-row > .cg-field {
-  flex: 1 1 0;
 }
 
 /* Dim unit suffix (°, %) trailing a value. */
@@ -103,4 +91,78 @@ input[type='number'] {
   opacity: 0.65;
   font-size: 0.7rem;
   flex-shrink: 0;
+}
+
+/*
+ * Number fields that carry a unit size to their content so the unit hugs
+ * the value on the left (Chromium `field-sizing`; degrades to the inline
+ * min/max-width elsewhere).
+ */
+.cg-num-unit {
+  field-sizing: content;
+}
+
+/*
+ * Timeline left-panel property values: no border at rest (just the number),
+ * compact, with the accent border appearing only on focus. Overrides the
+ * global input chrome above.
+ */
+.cg-timeline-num {
+  border-color: transparent !important;
+  background: transparent !important;
+  padding: 0 0.15rem !important;
+}
+
+/* No hover border in the timeline — only show the accent border on focus. */
+.cg-timeline-num:focus,
+.cg-timeline-num:focus-visible {
+  border-color: #3990d2 !important;
+  background: #24273d !important;
+}
+
+/*
+ * Unify EVERY standalone textual input/select/textarea with the inspector
+ * number-field look — identical border, hover and focus. Components in this
+ * codebase set borders inline, which beat normal CSS, so `!important` is
+ * required to win. The type selectors use :where() to keep specificity low
+ * so the .cg-field / .cg-input-group opt-out below can override them.
+ *
+ * Inputs INSIDE a field wrapper are kept bare: the wrapper draws the border,
+ * hover and focus, so the inner control must stay transparent/borderless.
+ */
+input:where(:not([type='range'], [type='checkbox'], [type='radio'], [type='color'])),
+select,
+textarea {
+  background: #24273d !important;
+  border: 1px solid #363a54 !important;
+  border-radius: 0.2rem !important;
+  padding: 0.35rem 0.55rem !important;
+  box-sizing: border-box;
+}
+
+input:where(:not([type='range'], [type='checkbox'], [type='radio'], [type='color'])):hover,
+select:hover,
+textarea:hover {
+  border-color: #4e5473 !important;
+}
+
+input:where(:not([type='range'], [type='checkbox'], [type='radio'], [type='color'])):focus,
+input:where(:not([type='range'], [type='checkbox'], [type='radio'], [type='color'])):focus-visible,
+select:focus,
+select:focus-visible,
+textarea:focus,
+textarea:focus-visible {
+  border-color: #3990d2 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* Wrapped fields own the border on the wrapper — keep inner controls bare. */
+.cg-field :where(input, select, textarea),
+.cg-input-group :where(input, select, textarea) {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  box-shadow: none !important;
 }

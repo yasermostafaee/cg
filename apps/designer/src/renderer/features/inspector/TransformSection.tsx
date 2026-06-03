@@ -9,7 +9,7 @@ import {
   hasKeyframeAt,
   keyframeVariantFor,
 } from '../timeline/keyframe-helpers.js';
-import { RealtimeNumberInput, scrubHandle } from './controls.js';
+import { RealtimeNumberInput, fieldScrub } from './controls.js';
 
 interface Props {
   element: Element;
@@ -43,6 +43,35 @@ const styles = {
     minWidth: 0,
     boxSizing: 'border-box' as const,
     fontVariantNumeric: 'tabular-nums' as const,
+  },
+  // Unit fields size to their content (see .cg-num-unit) so the value and
+  // its unit cluster on the left next to the icon, not at the far edge.
+  inputUnit: {
+    background: 'transparent',
+    color: colors.text,
+    border: 'none',
+    outline: 'none',
+    padding: '0.1rem 0',
+    fontSize: '0.72rem',
+    flex: '0 0 auto',
+    width: 'auto',
+    minWidth: 0,
+    maxWidth: '5rem',
+    boxSizing: 'border-box' as const,
+    fontVariantNumeric: 'tabular-nums' as const,
+  },
+  // Pushes the keyframe diamond to the field's right edge.
+  point: {
+    marginLeft: 'auto',
+    display: 'inline-flex',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  // The whole field/segment is a drag-to-scrub + click-to-edit surface.
+  scrubSurface: {
+    cursor: 'ew-resize',
+    touchAction: 'none' as const,
+    userSelect: 'none' as const,
   },
 } as const;
 
@@ -173,23 +202,17 @@ interface FieldProps {
   point: JSX.Element;
 }
 
-/** Icon + scrubbable number + optional unit. Shared by Seg and SingleField. */
+/**
+ * Icon + scrubbable number + optional unit. When a unit is present the
+ * input sizes to its content (.cg-num-unit → field-sizing: content) so the
+ * unit hugs the value on the LEFT, next to the icon, rather than drifting
+ * to the far edge of a full-width input.
+ */
 function FieldBody(props: FieldProps): JSX.Element {
-  const scrub = scrubHandle({
-    value: props.value,
-    onCommit: props.onCommit,
-    step: props.step,
-    min: props.min,
-    max: props.max,
-  });
+  const hasUnit = props.suffix !== undefined;
   return (
     <>
-      <span
-        style={{ ...styles.icon, ...scrub.style }}
-        onPointerDown={scrub.onPointerDown}
-        title="Drag to adjust"
-        aria-hidden
-      >
+      <span style={styles.icon} aria-hidden>
         {props.icon}
       </span>
       <RealtimeNumberInput
@@ -198,32 +221,36 @@ function FieldBody(props: FieldProps): JSX.Element {
         step={props.step}
         min={props.min}
         max={props.max}
-        style={styles.input}
+        scrub={false}
+        style={hasUnit ? styles.inputUnit : styles.input}
+        className={hasUnit ? 'cg-num-unit' : undefined}
         ariaLabel={props.ariaLabel}
       />
-      {props.suffix !== undefined && <span className="cg-unit">{props.suffix}</span>}
+      {hasUnit && <span className="cg-unit">{props.suffix}</span>}
     </>
   );
 }
 
-/** One axis of a combined vector field — diamond sits INSIDE the segment. */
+/** One axis of a combined vector field — the whole segment scrubs the value;
+ *  diamond at the segment's right edge. */
 function Seg(props: FieldProps): JSX.Element {
+  const scrub = fieldScrub(props);
   return (
-    <div className="cg-seg">
+    <div className="cg-seg" style={styles.scrubSurface} onPointerDown={scrub.onPointerDown}>
       <FieldBody {...props} />
-      {props.point}
+      <span style={styles.point}>{props.point}</span>
     </div>
   );
 }
 
-/** Standalone field — diamond sits OUTSIDE the bordered box. */
+/** Standalone field — icon, value+unit on the left, diamond at the right,
+ *  all inside one bordered box; the whole box scrubs the value. */
 function SingleField(props: FieldProps): JSX.Element {
+  const scrub = fieldScrub(props);
   return (
-    <div className="cg-field-row">
-      <div className="cg-field">
-        <FieldBody {...props} />
-      </div>
-      {props.point}
+    <div className="cg-field" style={styles.scrubSurface} onPointerDown={scrub.onPointerDown}>
+      <FieldBody {...props} />
+      <span style={styles.point}>{props.point}</span>
     </div>
   );
 }

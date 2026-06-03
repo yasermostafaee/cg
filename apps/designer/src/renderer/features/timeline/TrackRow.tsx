@@ -45,7 +45,7 @@ const styles = {
     padding: '0 0.4rem 0 2rem',
     display: 'grid',
     // Fixed value column so numbers and colour chips line up across rows.
-    gridTemplateColumns: '1fr 78px 16px',
+    gridTemplateColumns: '1fr 58px 16px',
     alignItems: 'center',
     gap: '0.4rem',
     borderRight: `1px solid ${colors.border}`,
@@ -80,7 +80,7 @@ const styles = {
     padding: '0 0.15rem',
     fontSize: '0.7rem',
     fontVariantNumeric: 'tabular-nums' as const,
-    textAlign: 'right' as const,
+    textAlign: 'center' as const,
     outline: 'none',
     cursor: 'text',
     boxSizing: 'border-box' as const,
@@ -527,6 +527,7 @@ function ValueCell({
       onCommit={onCommit}
       step={1}
       style={styles.valueNumberInput}
+      className="cg-timeline-num"
       ariaLabel={ariaLabel}
     />
   );

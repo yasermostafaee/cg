@@ -175,6 +175,41 @@ export function scrubHandle(opts: ScrubOpts): {
   };
 }
 
+/**
+ * Makes a whole field container (icon + value + unit + any slack) a single
+ * scrub / click-to-edit surface, so the entire box behaves like the value —
+ * dragging anywhere changes it, a click focuses the inner input for typing.
+ * The keyframe diamond (a <button>) is left alone, and clicks while already
+ * editing fall through so the caret can be placed normally.
+ *
+ * Pair with `<RealtimeNumberInput scrub={false} … />` so the input doesn't
+ * also start its own gesture.
+ */
+export function fieldScrub(opts: ScrubOpts): {
+  onPointerDown: (e: ReactPointerEvent<HTMLElement>) => void;
+} {
+  return {
+    onPointerDown: (e) => {
+      if (e.button !== 0) return;
+      if ((e.target as Element).closest('button') !== null) return; // diamond
+      const input = e.currentTarget.querySelector('input');
+      if (input !== null && document.activeElement === input) return; // editing
+      e.preventDefault();
+      runScrubGesture({
+        startX: e.clientX,
+        startVal: opts.value,
+        stepSize: opts.step ?? 1,
+        min: opts.min,
+        max: opts.max,
+        onCommit: opts.onCommit,
+        onEnd: (moved) => {
+          if (!moved && input !== null) input.focus();
+        },
+      });
+    },
+  };
+}
+
 interface NumberFieldProps {
   label: string;
   value: number;
@@ -205,19 +240,17 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
       >
         {props.label}
       </span>
-      <div className="cg-field-row">
-        <div className="cg-field">
-          <RealtimeNumberInput
-            value={props.value}
-            onCommit={props.onCommit}
-            step={props.step}
-            min={props.min}
-            max={props.max}
-            style={styles.inputInner}
-            ariaLabel={props.label}
-          />
-          {props.suffix !== undefined && <span className="cg-unit">{props.suffix}</span>}
-        </div>
+      <div className="cg-field">
+        <RealtimeNumberInput
+          value={props.value}
+          onCommit={props.onCommit}
+          step={props.step}
+          min={props.min}
+          max={props.max}
+          style={styles.inputInner}
+          ariaLabel={props.label}
+        />
+        {props.suffix !== undefined && <span className="cg-unit">{props.suffix}</span>}
         {props.trailing}
       </div>
     </div>
@@ -231,7 +264,14 @@ interface RealtimeNumberInputProps {
   min?: number | undefined;
   max?: number | undefined;
   style?: CSSProperties | undefined;
+  className?: string | undefined;
   ariaLabel?: string | undefined;
+  /**
+   * Whether the input starts its own scrub gesture on pointerdown. Set to
+   * false when an ancestor (see {@link fieldScrub}) owns the whole-field
+   * gesture, so the two don't both fire.
+   */
+  scrub?: boolean | undefined;
 }
 
 /**
@@ -261,6 +301,7 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
   return (
     <input
       ref={inputRef}
+      className={props.className}
       style={{ ...props.style, cursor: editing ? 'text' : 'ew-resize', touchAction: 'none' }}
       type="number"
       value={buf}
@@ -269,6 +310,8 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
       max={props.max}
       aria-label={props.ariaLabel}
       onPointerDown={(e) => {
+        // When an ancestor owns the gesture, do nothing here.
+        if (props.scrub === false) return;
         // While editing, let the pointer place the caret / select text
         // as usual. Otherwise this press is either a click (focus to
         // type) or the start of a scrub — decided by whether it moves.
@@ -349,20 +392,18 @@ export function TextField(props: TextFieldProps): JSX.Element {
   return (
     <div style={styles.row}>
       <span style={styles.label}>{props.label}</span>
-      <div className="cg-field-row">
-        <div className="cg-field">
-          <input
-            style={styles.inputInner}
-            type="text"
-            defaultValue={props.value}
-            onFocus={(e) => e.currentTarget.select()}
-            onBlur={(e) => props.onCommit(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-            }}
-            key={`${props.label}-${props.value}`}
-          />
-        </div>
+      <div className="cg-field">
+        <input
+          style={styles.inputInner}
+          type="text"
+          defaultValue={props.value}
+          onFocus={(e) => e.currentTarget.select()}
+          onBlur={(e) => props.onCommit(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          }}
+          key={`${props.label}-${props.value}`}
+        />
         {props.trailing}
       </div>
     </div>
@@ -382,20 +423,18 @@ export function SelectField<T extends string>(props: SelectFieldProps<T>): JSX.E
   return (
     <div style={styles.row}>
       <span style={styles.label}>{props.label}</span>
-      <div className="cg-field-row">
-        <div className="cg-field">
-          <select
-            style={styles.inputInner}
-            value={props.value}
-            onChange={(e) => props.onCommit(e.target.value as T)}
-          >
-            {props.options.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div className="cg-field">
+        <select
+          style={styles.inputInner}
+          value={props.value}
+          onChange={(e) => props.onCommit(e.target.value as T)}
+        >
+          {props.options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
         {props.trailing}
       </div>
     </div>
@@ -415,34 +454,32 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
   return (
     <div style={styles.row}>
       <span style={styles.label}>{props.label}</span>
-      <div className="cg-field-row">
-        <div className="cg-field">
-          <span style={{ ...styles.swatch, background: props.value }} title="Pick a colour">
-            <input
-              type="color"
-              value={props.value}
-              onChange={(e) => props.onCommit(e.target.value.toUpperCase())}
-              style={styles.swatchInput}
-              aria-label={`${props.label} colour`}
-            />
-          </span>
+      <div className="cg-field">
+        <span style={{ ...styles.swatch, background: props.value }} title="Pick a colour">
           <input
-            style={styles.hexInput}
-            type="text"
-            defaultValue={hex}
-            onFocus={(e) => e.currentTarget.select()}
-            onBlur={(e) => {
-              const v = e.target.value.trim();
-              const next = v.startsWith('#') ? v : `#${v}`;
-              if (/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(next)) props.onCommit(next.toUpperCase());
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-            }}
-            key={`${props.label}-${props.value}`}
-            aria-label={`${props.label} hex value`}
+            type="color"
+            value={props.value}
+            onChange={(e) => props.onCommit(e.target.value.toUpperCase())}
+            style={styles.swatchInput}
+            aria-label={`${props.label} colour`}
           />
-        </div>
+        </span>
+        <input
+          style={styles.hexInput}
+          type="text"
+          defaultValue={hex}
+          onFocus={(e) => e.currentTarget.select()}
+          onBlur={(e) => {
+            const v = e.target.value.trim();
+            const next = v.startsWith('#') ? v : `#${v}`;
+            if (/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(next)) props.onCommit(next.toUpperCase());
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          }}
+          key={`${props.label}-${props.value}`}
+          aria-label={`${props.label} hex value`}
+        />
         {props.trailing}
       </div>
     </div>

@@ -383,59 +383,53 @@ export function TextStyleSection({
           )}
         </select>
 
-        {/* Font size (full-width chip with tT icon) — diamond outside the box */}
-        <div className="cg-field-row">
-          <div className="cg-field">
-            <span style={styles.chipIcon} aria-hidden>
-              tT
-            </span>
-            <RealtimeNumberInput
-              style={styles.chipInput}
-              value={element.font.size}
-              step={1}
-              min={1}
-              onCommit={(n) => {
-                if (n > 0) designerStore.commitAnimatable(id, 'font.size', n);
-              }}
-              ariaLabel="Font size"
-            />
-          </div>
+        {/* Font size (full-width chip with tT icon) */}
+        <div className="cg-field">
+          <span style={styles.chipIcon} aria-hidden>
+            tT
+          </span>
+          <RealtimeNumberInput
+            style={styles.chipInput}
+            value={element.font.size}
+            step={1}
+            min={1}
+            onCommit={(n) => {
+              if (n > 0) designerStore.commitAnimatable(id, 'font.size', n);
+            }}
+            ariaLabel="Font size"
+          />
           {animPoint(element, 'font.size', currentFrame, selectedKeyframe, (el) => el.font.size)}
         </div>
 
         {/* Line height + Letter spacing side-by-side */}
         <div style={styles.pairRow}>
-          <div className="cg-field-row">
-            <div className="cg-field">
-              <span style={styles.chipIcon} aria-hidden title="Line height">
-                ↕
-              </span>
-              <RealtimeNumberInput
-                style={styles.chipInput}
-                value={element.font.lineHeight}
-                step={0.05}
-                min={0.1}
-                onCommit={(n) => {
-                  if (n > 0) designerStore.commitAnimatable(id, 'font.lineHeight', n);
-                }}
-                ariaLabel="Line height"
-              />
-            </div>
+          <div className="cg-field">
+            <span style={styles.chipIcon} aria-hidden title="Line height">
+              ↕
+            </span>
+            <RealtimeNumberInput
+              style={styles.chipInput}
+              value={element.font.lineHeight}
+              step={0.05}
+              min={0.1}
+              onCommit={(n) => {
+                if (n > 0) designerStore.commitAnimatable(id, 'font.lineHeight', n);
+              }}
+              ariaLabel="Line height"
+            />
             {animPoint(element, 'font.lineHeight', currentFrame, selectedKeyframe, (el) => el.font.lineHeight)}
           </div>
-          <div className="cg-field-row">
-            <div className="cg-field">
-              <span style={styles.chipIcon} aria-hidden title="Letter spacing">
-                VA
-              </span>
-              <RealtimeNumberInput
-                style={styles.chipInput}
-                value={element.font.letterSpacing}
-                step={0.01}
-                onCommit={(n) => designerStore.commitAnimatable(id, 'font.letterSpacing', n)}
-                ariaLabel="Letter spacing"
-              />
-            </div>
+          <div className="cg-field">
+            <span style={styles.chipIcon} aria-hidden title="Letter spacing">
+              VA
+            </span>
+            <RealtimeNumberInput
+              style={styles.chipInput}
+              value={element.font.letterSpacing}
+              step={0.01}
+              onCommit={(n) => designerStore.commitAnimatable(id, 'font.letterSpacing', n)}
+              ariaLabel="Letter spacing"
+            />
             {animPoint(element, 'font.letterSpacing', currentFrame, selectedKeyframe, (el) => el.font.letterSpacing)}
           </div>
         </div>
