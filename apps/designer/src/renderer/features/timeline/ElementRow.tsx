@@ -22,7 +22,16 @@ const ROW_HEIGHT = ELEMENT_ROW_HEIGHT;
 
 const styles = {
   rowSelected: {
-    background: 'rgba(56, 189, 248, 0.06)',
+    background: 'rgba(56, 189, 248, 0.22)',
+  },
+  // Label half of a selected row gets an accent left-bar on top of the
+  // stronger background so the selected layer reads at a glance.
+  labelSelectedAccent: {
+    boxShadow: `inset 3px 0 0 ${colors.accent}`,
+  },
+  nameSelected: {
+    color: colors.accent,
+    fontWeight: 700,
   },
   labelCell: {
     display: 'grid',
@@ -118,7 +127,10 @@ function ElementRowLabel(props: Props): JSX.Element {
   const { element, expanded, onToggleExpand, isSelected, onContextMenu } = props;
   return (
     <div
-      style={{ ...styles.labelCell, ...(isSelected ? styles.rowSelected : {}) }}
+      style={{
+        ...styles.labelCell,
+        ...(isSelected ? { ...styles.rowSelected, ...styles.labelSelectedAccent } : {}),
+      }}
       data-element-id={element.id}
       onClick={(e) => {
         if ((e.target as HTMLElement).dataset.role === 'chevron') return;
@@ -148,7 +160,9 @@ function ElementRowLabel(props: Props): JSX.Element {
       >
         {expanded ? '▾' : '▸'}
       </button>
-      <span style={styles.name}>{element.name}</span>
+      <span style={{ ...styles.name, ...(isSelected ? styles.nameSelected : {}) }}>
+        {element.name}
+      </span>
       <button
         type="button"
         style={{
