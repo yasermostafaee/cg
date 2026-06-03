@@ -394,6 +394,7 @@ function TrackRowLane(props: Props): JSX.Element {
               }}
               onPointerDown={(e) => {
                 e.stopPropagation();
+                e.preventDefault();
                 // Single-click: just select (yellow indicators), keep the
                 // Element Inspector visible. Double-click opens the
                 // dedicated Keyframe Inspector — see onDoubleClick above.
@@ -403,24 +404,28 @@ function TrackRowLane(props: Props): JSX.Element {
                   frame: k.frame,
                 });
                 designerStore.setCurrentFrame(k.frame);
-                const targetEl = e.currentTarget;
-                targetEl.setPointerCapture(e.pointerId);
-                let lastFrame = k.frame;
+                // Drag to move the keyframe. moveKeyframe re-renders (and
+                // re-keys) this diamond, so the drag listeners live on
+                // `window` — not on the diamond node, which React unmounts
+                // mid-drag (which previously froze the drag after one step).
+                // `from` tracks the keyframe's current frame across moves;
+                // the store keeps the selection following it.
                 let from = k.frame;
                 const onMove = (mv: PointerEvent): void => {
                   const nf = frameAt(mv.clientX);
-                  if (nf === lastFrame) return;
+                  if (nf === from) return;
                   designerStore.moveKeyframe(element.id, row.property, from, nf);
                   designerStore.setCurrentFrame(nf);
                   from = nf;
-                  lastFrame = nf;
                 };
                 const onUp = (): void => {
-                  targetEl.removeEventListener('pointermove', onMove);
-                  targetEl.removeEventListener('pointerup', onUp);
+                  window.removeEventListener('pointermove', onMove);
+                  window.removeEventListener('pointerup', onUp);
+                  window.removeEventListener('pointercancel', onUp);
                 };
-                targetEl.addEventListener('pointermove', onMove);
-                targetEl.addEventListener('pointerup', onUp);
+                window.addEventListener('pointermove', onMove);
+                window.addEventListener('pointerup', onUp);
+                window.addEventListener('pointercancel', onUp);
               }}
             />
           );
