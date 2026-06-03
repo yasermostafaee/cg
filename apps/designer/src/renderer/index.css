@@ -51,7 +51,6 @@ input[type='number'] {
 .cg-field:focus-within,
 .cg-input-group:focus-within {
   border-color: #3990d2;
-  box-shadow: 0 0 0 1px #3990d2;
 }
 
 /* Combined vector field — segments share one border, divided by a hairline. */
