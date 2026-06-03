@@ -136,7 +136,7 @@ see the files inside the: `docs/designer-guide/sample-assets/D-006-old-codes`. t
 - if we add any font to assets we can see that font inside the select options font on Text section in properties panel on the right
 **Notes:** see this screenshot : `docs/designer-guide/sample-assets/D-011-pic-0`
 
-## [~] D-012 — Scene active region (resizable play window, total stays)   ⟨priority: high⟩ — change: `openspec/changes/add-scene-active-region/`
+## [x] D-012 — Scene active region (resizable play window, total stays)   ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-06-03-add-scene-active-region/`
 **What:** Dragging the timeline scene bar's right gripper resizes a separate
 **active region** (the play / export / preview window) instead of the scene's
 total frame count. The ruler keeps its full frame count and the trailing
@@ -166,7 +166,7 @@ total fixed while editing and only narrows the played/exported window.
 Add `scene.activeRange` to `@cg/shared-schema`; repoint runtime/export/preview
 play range (`template-runtime/src/runtime.ts:62`) to the active region.
 
-## [~] D-013 — Layer right-click context menu   ⟨priority: high⟩ — change: `openspec/changes/add-layer-context-menu/`
+## [x] D-013 — Layer right-click context menu   ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-06-03-add-layer-context-menu/`
 **What:** Right-clicking a layer (element row) in the timeline opens a context
 menu with: **Color** (palette submenu), **Fit workspace**, **Copy**, **Cut**,
 **Paste**, **Duplicate**, **Delete**. ("Move to nested composition" is deferred
@@ -191,7 +191,7 @@ matches the reference tool's layer menu.
 the screenshot are intentionally excluded. Adds `timelineColor` to the element
 base schema; reuses the existing `removeElement` and clipboard-clone helpers.
 
-## [~] D-014 — Stackable keyframes (drag a point onto another keeps both)   ⟨priority: high⟩ — change: `openspec/changes/add-stacked-keyframes/`
+## [x] D-014 — Stackable keyframes (drag a point onto another keeps both)   ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-06-03-add-stacked-keyframes/`
 **What:** Dragging a framepoint onto (or past) another no longer deletes the
 other — both are kept on the same frame, and points can be stacked further.
 Two points on one frame with different values form an instant "step".
