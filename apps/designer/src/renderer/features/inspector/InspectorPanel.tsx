@@ -63,17 +63,6 @@ const styles = {
     fontVariantNumeric: 'tabular-nums' as const,
   },
   empty: { color: colors.textMuted, fontSize: '0.74rem' },
-  removeButton: {
-    background: 'transparent',
-    color: colors.textMuted,
-    border: `1px solid ${colors.border}`,
-    padding: '0.15rem 0.5rem',
-    borderRadius: '0.18rem',
-    cursor: 'pointer',
-    fontSize: '0.7rem',
-    alignSelf: 'flex-start' as const,
-    marginTop: '0.25rem',
-  },
   bindList: {
     display: 'flex',
     flexDirection: 'column' as const,
@@ -227,9 +216,6 @@ function ElementInspector({
           <ElementBindings bindings={bindings} />
         </CollapseSection>
       )}
-      <button style={styles.removeButton} onClick={() => designerStore.removeElement(element.id)}>
-        Remove
-      </button>
     </aside>
   );
 }
