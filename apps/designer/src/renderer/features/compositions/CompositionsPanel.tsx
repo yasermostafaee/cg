@@ -199,6 +199,7 @@ export function CompositionsPanel(): JSX.Element {
             return (
               <div
                 key={comp.id}
+                className="cg-comp-row"
                 style={{ ...styles.row, ...(isActive ? styles.rowActive : {}) }}
                 draggable={renaming !== comp.id}
                 onDragStart={(e) => {

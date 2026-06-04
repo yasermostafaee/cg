@@ -136,6 +136,16 @@ input[type='number'] {
 }
 
 /*
+ * Compositions panel rows — subtle hover fill. The open (active) row carries
+ * an inline #333642 background, which beats this rule (no !important), so it
+ * keeps its solid fill on hover; inactive rows have no inline background and
+ * pick up the hover.
+ */
+.cg-comp-row:hover {
+  background: #2e3346;
+}
+
+/*
  * Unify EVERY standalone textual input/select/textarea with the inspector
  * number-field look — identical border, hover and focus. Components in this
  * codebase set borders inline, which beat normal CSS, so `!important` is
