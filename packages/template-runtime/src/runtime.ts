@@ -41,10 +41,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
   applyFieldValues(scene, {}, built.elementMap, built.textOriginals, built.container);
 
-  const animated: AnimatedElement[] = collectAnimatedElements(
-    scene.layers.map((l) => l.children),
-    built.elementMap,
-  );
+  const animated: AnimatedElement[] = [
+    ...collectAnimatedElements(
+      scene.layers.map((l) => l.children),
+      built.elementMap,
+    ),
+    // Elements inside nested composition instances — already paired with their
+    // concrete nodes during the build, so their own animation plays along the
+    // parent timeline.
+    ...built.nestedAnimated,
+  ];
 
   // Per-element lifespan gates — only elements with an explicit
   // `lifespan` are tracked here; the rest stay visible for every

@@ -1,4 +1,5 @@
 import type {
+  CompositionElement,
   Element as SceneElement,
   Fill,
   Filter,
@@ -10,7 +11,7 @@ import type {
   ShapeElement,
   Transform,
 } from '@cg/shared-schema';
-import type { BuildSceneResult } from './types.js';
+import type { BuildSceneResult, NestedAnimatedEntry } from './types.js';
 
 /**
  * Build a DOM tree from a Scene. Returns the container element (caller
@@ -20,6 +21,24 @@ import type { BuildSceneResult } from './types.js';
  * M3.2-α: Text + Image + Shape supported. Container / Lottie /
  * VideoPlaceholder are recognized and skipped with a warning.
  */
+/**
+ * Threaded build context. `depth`/`visited` bound nested-composition recursion
+ * (cycle + runaway guard); `nestedAnimated` collects animated elements found
+ * inside instances so the runtime can play their animation; `scene` carries the
+ * composition registry so `composition` elements resolve.
+ */
+interface BuildCtx {
+  doc: Document;
+  scene: Scene;
+  elementMap: Map<string, HTMLElement>;
+  textOriginals: Map<string, string>;
+  nestedAnimated: NestedAnimatedEntry[];
+  depth: number;
+  visited: ReadonlySet<string>;
+}
+
+const MAX_COMPOSITION_DEPTH = 8;
+
 export function buildScene(scene: Scene, doc: Document = document): BuildSceneResult {
   const container = doc.createElement('div');
   container.className = 'cg-stage';
@@ -29,24 +48,30 @@ export function buildScene(scene: Scene, doc: Document = document): BuildSceneRe
     container.style.background = scene.background;
   }
 
-  const elementMap = new Map<string, HTMLElement>();
-  const textOriginals = new Map<string, string>();
+  const ctx: BuildCtx = {
+    doc,
+    scene,
+    elementMap: new Map<string, HTMLElement>(),
+    textOriginals: new Map<string, string>(),
+    nestedAnimated: [],
+    depth: 0,
+    visited: new Set<string>(),
+  };
 
   for (const layer of scene.layers) {
-    const layerNode = buildLayer(layer, doc, elementMap, textOriginals);
-    container.appendChild(layerNode);
+    container.appendChild(buildLayer(layer, ctx));
   }
 
-  return { container, elementMap, textOriginals };
+  return {
+    container,
+    elementMap: ctx.elementMap,
+    textOriginals: ctx.textOriginals,
+    nestedAnimated: ctx.nestedAnimated,
+  };
 }
 
-function buildLayer(
-  layer: Layer,
-  doc: Document,
-  elementMap: Map<string, HTMLElement>,
-  textOriginals: Map<string, string>,
-): HTMLElement {
-  const node = doc.createElement('div');
+function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
+  const node = ctx.doc.createElement('div');
   node.className = 'cg-layer';
   node.dataset['cgLayerId'] = layer.id;
   if (!layer.visible) node.style.display = 'none';
@@ -54,27 +79,36 @@ function buildLayer(
   // Sort by zIndex so DOM order matches z-stack semantics.
   const sorted = [...layer.children].sort((a, b) => a.zIndex - b.zIndex);
   for (const element of sorted) {
-    const elementNode = buildElement(element, doc, textOriginals);
-    if (elementNode) {
-      node.appendChild(elementNode);
-      elementMap.set(element.id, elementNode);
+    const elementNode = buildElement(element, ctx);
+    if (elementNode === null) continue;
+    node.appendChild(elementNode);
+    if (ctx.depth === 0) {
+      // Only top-level ids drive field binding + the top-level animation pass.
+      ctx.elementMap.set(element.id, elementNode);
+    } else if (element.animation !== undefined) {
+      // Inside an instance: collect so the runtime animates it directly
+      // (it isn't reachable through the parent scene's layer tree).
+      ctx.nestedAnimated.push({
+        id: element.id,
+        node: elementNode,
+        source: element,
+        animation: element.animation,
+      });
     }
   }
   return node;
 }
 
-function buildElement(
-  element: SceneElement,
-  doc: Document,
-  textOriginals: Map<string, string>,
-): HTMLElement | null {
+function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null {
   switch (element.type) {
     case 'text':
-      return buildText(element, doc, textOriginals);
+      return buildText(element, ctx.doc, ctx.textOriginals);
     case 'image':
-      return buildImage(element, doc);
+      return buildImage(element, ctx.doc);
     case 'shape':
-      return buildShape(element, doc);
+      return buildShape(element, ctx.doc);
+    case 'composition':
+      return buildComposition(element, ctx);
     case 'container':
     case 'lottie':
     case 'video-placeholder':
@@ -82,8 +116,56 @@ function buildElement(
       // doesn't shift and the element id can still be bound. Animation
       // (M3.2-β), Lottie (M3.3), and video routing (post-v1) will
       // replace these.
-      return buildPlaceholder(element, doc);
+      return buildPlaceholder(element, ctx.doc);
   }
+}
+
+/**
+ * Render a composition instance: a clipped box (sized to the element) whose
+ * inner stage is the referenced composition's content, scaled to fill the box.
+ * Recursion is bounded by depth + a visited-set so a cyclic graph can't loop
+ * forever (cycles are also blocked at author time). A missing/over-deep
+ * reference renders as the empty box.
+ */
+function buildComposition(element: CompositionElement, ctx: BuildCtx): HTMLElement {
+  const el = ctx.doc.createElement('div');
+  el.dataset['cgElementId'] = element.id;
+  el.dataset['cgCompositionId'] = element.compositionId;
+  applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
+  el.style.overflow = 'hidden';
+
+  const comp = ctx.scene.compositions?.find((c) => c.id === element.compositionId);
+  if (
+    comp === undefined ||
+    ctx.depth >= MAX_COMPOSITION_DEPTH ||
+    ctx.visited.has(element.compositionId)
+  ) {
+    return el;
+  }
+
+  const inner = ctx.doc.createElement('div');
+  inner.className = 'cg-comp-inner';
+  inner.style.position = 'absolute';
+  inner.style.left = '0';
+  inner.style.top = '0';
+  inner.style.width = `${comp.resolution.width}px`;
+  inner.style.height = `${comp.resolution.height}px`;
+  inner.style.transformOrigin = '0 0';
+  const sx = comp.resolution.width === 0 ? 1 : element.transform.size.w / comp.resolution.width;
+  const sy = comp.resolution.height === 0 ? 1 : element.transform.size.h / comp.resolution.height;
+  inner.style.transform = `scale(${String(sx)}, ${String(sy)})`;
+  if (comp.background !== 'transparent') inner.style.background = comp.background;
+
+  const childCtx: BuildCtx = {
+    ...ctx,
+    depth: ctx.depth + 1,
+    visited: new Set([...ctx.visited, element.compositionId]),
+  };
+  for (const layer of comp.layers) {
+    inner.appendChild(buildLayer(layer, childCtx));
+  }
+  el.appendChild(inner);
+  return el;
 }
 
 function applyBaseStyles(

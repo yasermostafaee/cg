@@ -1,4 +1,4 @@
-import type { FieldValues, Scene } from '@cg/shared-schema';
+import type { Element, ElementAnimation, FieldValues, Scene } from '@cg/shared-schema';
 
 /**
  * Lifecycle events emitted by the runtime. Subscribers attach via
@@ -105,12 +105,28 @@ export interface RuntimeBootOptions {
 }
 
 export interface BuildSceneResult {
-  /** Map of `Element.id` → the HTMLElement we created for it. */
+  /** Map of top-level `Element.id` → the HTMLElement we created for it. */
   elementMap: Map<string, HTMLElement>;
   /** Original text per text element, before any binding substitutions. */
   textOriginals: Map<string, string>;
   /** Root container we added to `root`. */
   container: HTMLElement;
+  /**
+   * Animated elements discovered *inside* nested composition instances
+   * (already paired with their concrete DOM nodes). Top-level animated
+   * elements are collected separately from `elementMap`; the runtime applies
+   * both lists each frame so a pre-comp's own animation plays along the parent
+   * timeline.
+   */
+  nestedAnimated: NestedAnimatedEntry[];
+}
+
+/** A nested element + its node + animation, collected during comp expansion. */
+export interface NestedAnimatedEntry {
+  id: string;
+  node: HTMLElement;
+  source: Element;
+  animation: ElementAnimation;
 }
 
 /** Hook the lifecycle state machine emits for the runtime to react to. */

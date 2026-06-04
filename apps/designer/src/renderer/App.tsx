@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DesignerBridge } from '../shared/designer-bridge.js';
 import { ProjectAssetsPanel } from './features/assets/ProjectAssetsPanel.js';
+import { CompositionsPanel } from './features/compositions/CompositionsPanel.js';
 import { CanvasArea } from './features/canvas/CanvasArea.js';
 import { InspectorPanel } from './features/inspector/InspectorPanel.js';
 import { IssuesPanel } from './features/issues/IssuesPanel.js';
@@ -12,7 +13,7 @@ import { TransportBar } from './features/shell/TransportBar.js';
 import { StatusBar } from './features/status/StatusBar.js';
 import { TimelineDock } from './features/timeline/TimelineDock.js';
 import { useIssues } from './hooks/useIssues.js';
-import { useDesignerStore } from './state/store.js';
+import { designerStore, editSceneOf, useDesignerStore } from './state/store.js';
 import { colors } from './theme.js';
 
 declare global {
@@ -79,7 +80,142 @@ const styles = {
     minWidth: 0,
     overflow: 'hidden',
   },
+  rail: {
+    width: 40,
+    flexShrink: 0,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    gap: '0.3rem',
+    padding: '0.2rem 0',
+    marginRight: '0.4rem',
+  },
+  railBtn: {
+    width: 30,
+    height: 30,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'transparent',
+    color: colors.textMuted,
+    border: '1px solid transparent',
+    borderRadius: '0.3rem',
+    cursor: 'pointer',
+    padding: 0,
+  },
+  railBtnActive: {
+    // Active = a solid slate fill only (no border — the bordered box read as a
+    // stray "white border" against the dark chrome).
+    background: '#2e3346',
+    color: colors.text,
+  },
+  emptyStage: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '1.1rem',
+    color: colors.textMuted,
+  },
+  emptyTitle: {
+    fontSize: '1.5rem',
+    fontWeight: 700,
+    color: colors.textMuted,
+    letterSpacing: '0.01em',
+  },
+  emptyButton: {
+    background: 'transparent',
+    color: colors.text,
+    border: `1px solid ${colors.accentMuted}`,
+    borderRadius: '0.35rem',
+    padding: '0.7rem 1.4rem',
+    fontSize: '0.92rem',
+    cursor: 'pointer',
+  },
 } as const;
+
+/** Centre placeholder shown when no composition is open. */
+function EmptyStage(): JSX.Element {
+  return (
+    <div style={styles.emptyStage} aria-label="No active composition">
+      <svg width="92" height="92" viewBox="0 0 16 16" fill="none" aria-hidden>
+        <rect x="1.5" y="5" width="8.5" height="8" rx="1.4" fill="#38BDF8" opacity="0.55" />
+        <rect x="5.5" y="2" width="8.5" height="8" rx="1.4" fill="#38BDF8" />
+      </svg>
+      <div style={styles.emptyTitle}>No Active Compositions</div>
+      <button
+        type="button"
+        style={styles.emptyButton}
+        onClick={() => designerStore.addComposition()}
+      >
+        Create New Composition
+      </button>
+    </div>
+  );
+}
+
+/** Narrow left icon-rail that switches the adjacent panel (Compositions ↔ Assets). */
+function LeftRail({
+  panel,
+  onSelect,
+}: {
+  panel: 'compositions' | 'assets';
+  onSelect: (p: 'compositions' | 'assets') => void;
+}): JSX.Element {
+  return (
+    <div style={styles.rail} aria-label="Panel switcher">
+      <button
+        type="button"
+        title="Compositions"
+        aria-label="Compositions"
+        aria-pressed={panel === 'compositions'}
+        style={{ ...styles.railBtn, ...(panel === 'compositions' ? styles.railBtnActive : {}) }}
+        onClick={() => onSelect('compositions')}
+      >
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="none" aria-hidden>
+          <rect
+            x="1.5"
+            y="4.5"
+            width="8.5"
+            height="7.5"
+            rx="1.3"
+            stroke="currentColor"
+            strokeWidth="1.4"
+          />
+          <rect
+            x="5.5"
+            y="2"
+            width="8.5"
+            height="7.5"
+            rx="1.3"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            fill={colors.background}
+          />
+        </svg>
+      </button>
+      <button
+        type="button"
+        title="Project assets"
+        aria-label="Project assets"
+        aria-pressed={panel === 'assets'}
+        style={{ ...styles.railBtn, ...(panel === 'assets' ? styles.railBtnActive : {}) }}
+        onClick={() => onSelect('assets')}
+      >
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="none" aria-hidden>
+          <path
+            d="M1.8 4.2h4l1.2 1.4h7.2v6.6a.8.8 0 0 1-.8.8H2.6a.8.8 0 0 1-.8-.8z"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+    </div>
+  );
+}
 
 /**
  * Designer root. Two top-level views (D-007):
@@ -96,6 +232,7 @@ export function App(): JSX.Element {
   const {
     view,
     scene,
+    activeCompositionId,
     projectPath,
     tool,
     selection,
@@ -106,10 +243,16 @@ export function App(): JSX.Element {
     selectedKeyframes,
     keyframeInspectorOpen,
   } = useDesignerStore();
-  const issues = useIssues(scene);
+  // The editing surface is the open composition (its own size / duration /
+  // layers); null when nothing is open (→ empty state). Issues validate the
+  // open composition, not the now-layerless project root.
+  const editScene = scene === null ? null : editSceneOf(scene, activeCompositionId);
+  const issues = useIssues(editScene);
   const [inspectorW, setInspectorW] = useState(INSPECTOR_DEFAULT);
   const [timelineH, setTimelineH] = useState(TIMELINE_DEFAULT);
   const [assetsW, setAssetsW] = useState(ASSETS_DEFAULT);
+  // Which panel the left icon-rail shows.
+  const [leftPanel, setLeftPanel] = useState<'compositions' | 'assets'>('compositions');
 
   // Suppress the native browser context menu app-wide. Our own menus
   // (timeline layer, project assets, keyframe) open from their React
@@ -188,69 +331,80 @@ export function App(): JSX.Element {
         <TopToolbar scene={scene} projectPath={projectPath} issues={issues} />
       </div>
       <div style={styles.shell}>
+        <LeftRail panel={leftPanel} onSelect={setLeftPanel} />
         <div style={{ width: assetsW, flexShrink: 0, display: 'flex', minHeight: 0 }}>
-          <ProjectAssetsPanel />
+          {leftPanel === 'compositions' ? <CompositionsPanel /> : <ProjectAssetsPanel />}
         </div>
         <Splitter
           axis="x"
-          ariaLabel="Resize project assets panel"
+          ariaLabel="Resize left panel"
           onResize={(dx) => setAssetsW((w) => Math.max(ASSETS_MIN, Math.min(ASSETS_MAX, w + dx)))}
         />
-        <div style={styles.centerCol}>
-          <div style={styles.canvasWrap}>
-            <CanvasArea
-              scene={scene}
-              tool={tool}
+        {editScene === null ? (
+          <EmptyStage />
+        ) : (
+          <>
+            <div style={styles.centerCol}>
+              <div style={styles.canvasWrap}>
+                <CanvasArea
+                  scene={editScene}
+                  tool={tool}
+                  selection={selection}
+                  editingTextId={editingTextId}
+                  bindModeFieldId={bindModeFieldId}
+                  currentFrame={currentFrame}
+                  showToolbar
+                />
+              </div>
+              <TransportBar scene={editScene} currentFrame={currentFrame} />
+              {issues.length > 0 && (
+                <div style={styles.issuesWrap}>
+                  <IssuesPanel issues={issues} />
+                </div>
+              )}
+            </div>
+            <Splitter
+              axis="x"
+              ariaLabel="Resize inspector panel"
+              onResize={(dx) =>
+                setInspectorW((w) => Math.max(INSPECTOR_MIN, Math.min(INSPECTOR_MAX, w - dx)))
+              }
+            />
+            <div style={{ width: inspectorW, flexShrink: 0, display: 'flex', minHeight: 0 }}>
+              <InspectorPanel
+                scene={editScene}
+                projectPath={projectPath}
+                selection={selection}
+                selectedKeyframe={selectedKeyframe}
+                selectedKeyframes={selectedKeyframes}
+                keyframeInspectorOpen={keyframeInspectorOpen}
+                currentFrame={currentFrame}
+              />
+            </div>
+          </>
+        )}
+      </div>
+      {editScene !== null && (
+        <>
+          <Splitter
+            axis="y"
+            ariaLabel="Resize timeline panel"
+            onResize={(dy) =>
+              setTimelineH((h) => Math.max(TIMELINE_MIN, Math.min(TIMELINE_MAX, h - dy)))
+            }
+          />
+          <div style={{ ...styles.timelineWrap, height: timelineH }}>
+            <TimelineDock
+              scene={editScene}
               selection={selection}
-              editingTextId={editingTextId}
-              bindModeFieldId={bindModeFieldId}
               currentFrame={currentFrame}
-              showToolbar
+              selectedKeyframe={selectedKeyframe}
+              selectedKeyframes={selectedKeyframes}
             />
           </div>
-          <TransportBar scene={scene} currentFrame={currentFrame} />
-          {issues.length > 0 && (
-            <div style={styles.issuesWrap}>
-              <IssuesPanel issues={issues} />
-            </div>
-          )}
-        </div>
-        <Splitter
-          axis="x"
-          ariaLabel="Resize inspector panel"
-          onResize={(dx) =>
-            setInspectorW((w) => Math.max(INSPECTOR_MIN, Math.min(INSPECTOR_MAX, w - dx)))
-          }
-        />
-        <div style={{ width: inspectorW, flexShrink: 0, display: 'flex', minHeight: 0 }}>
-          <InspectorPanel
-            scene={scene}
-            projectPath={projectPath}
-            selection={selection}
-            selectedKeyframe={selectedKeyframe}
-            selectedKeyframes={selectedKeyframes}
-            keyframeInspectorOpen={keyframeInspectorOpen}
-            currentFrame={currentFrame}
-          />
-        </div>
-      </div>
-      <Splitter
-        axis="y"
-        ariaLabel="Resize timeline panel"
-        onResize={(dy) =>
-          setTimelineH((h) => Math.max(TIMELINE_MIN, Math.min(TIMELINE_MAX, h - dy)))
-        }
-      />
-      <div style={{ ...styles.timelineWrap, height: timelineH }}>
-        <TimelineDock
-          scene={scene}
-          selection={selection}
-          currentFrame={currentFrame}
-          selectedKeyframe={selectedKeyframe}
-          selectedKeyframes={selectedKeyframes}
-        />
-      </div>
-      <StatusBar scene={scene} issues={issues} />
+        </>
+      )}
+      <StatusBar scene={editScene ?? scene} issues={issues} />
       <InputTooltip />
     </main>
   );

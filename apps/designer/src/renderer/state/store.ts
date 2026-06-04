@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import type {
   AnimatableProperty,
+  Composition,
   DynamicField,
   Easing,
   Element,
   ElementAnimation,
   FieldBinding,
+  FrameRange,
   Keyframe,
   Layer,
+  Resolution,
   Scene,
 } from '@cg/shared-schema';
 import { activeRangeOf } from '@cg/shared-schema';
@@ -35,6 +38,14 @@ export interface KeyframeRef {
 export interface DesignerStoreState {
   scene: Scene | null;
   projectPath: string | null;
+  /**
+   * Which composition is currently being edited. `null` = the main scene
+   * (the `Scene` itself); otherwise the id of an entry in
+   * `scene.compositions`. The canvas, timeline, transport and every layer
+   * mutation operate on this "active document" — its own size, duration and
+   * layers. Switching is done from the Compositions panel (double-click).
+   */
+  activeCompositionId: string | null;
   /**
    * Top-level routing: the Designer starts at the Landing screen
    * (starter picker / recent / new) and flips to the Studio whenever
@@ -116,6 +127,7 @@ export interface DesignerStoreState {
 const initialState: DesignerStoreState = {
   scene: null,
   projectPath: null,
+  activeCompositionId: null,
   view: 'landing',
   tool: 'cursor',
   selection: new Set<string>(),
@@ -197,6 +209,167 @@ function set(patch: Partial<DesignerStoreState>): void {
 }
 
 /**
+ * The "active document" is whatever the editor is currently editing: the main
+ * scene (`activeCompositionId === null`) or one of `scene.compositions`. These
+ * helpers read and write its layers and its doc-level fields (size / duration /
+ * background) so every mutation below stays agnostic of which one is active.
+ */
+interface EditDocFields {
+  resolution: Resolution;
+  frameRate: Scene['frameRate'];
+  frameRange: FrameRange;
+  activeRange?: FrameRange | undefined;
+  background: Scene['background'];
+}
+
+function activeCompId(): string | null {
+  return current.activeCompositionId;
+}
+
+function activeLayersOf(scene: Scene): readonly Layer[] {
+  const id = activeCompId();
+  if (id !== null) {
+    const c = scene.compositions?.find((x) => x.id === id);
+    if (c !== undefined) return c.layers;
+  }
+  return scene.layers;
+}
+
+function withActiveLayers(scene: Scene, layers: Layer[]): Scene {
+  const id = activeCompId();
+  if (id !== null && scene.compositions?.some((x) => x.id === id) === true) {
+    return {
+      ...scene,
+      compositions: scene.compositions.map((c) => (c.id === id ? { ...c, layers } : c)),
+    };
+  }
+  return { ...scene, layers };
+}
+
+function activeDocOf(scene: Scene): EditDocFields {
+  const id = activeCompId();
+  if (id !== null) {
+    const c = scene.compositions?.find((x) => x.id === id);
+    if (c !== undefined) return c;
+  }
+  return scene;
+}
+
+function withActiveDoc(scene: Scene, patch: Partial<EditDocFields>): Scene {
+  const id = activeCompId();
+  if (id !== null && scene.compositions?.some((x) => x.id === id) === true) {
+    return {
+      ...scene,
+      compositions: scene.compositions.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+    };
+  }
+  return { ...scene, ...patch };
+}
+
+/**
+ * Project the active document onto a `Scene` shape for the canvas / timeline /
+ * inspector / transport, which all read `scene.resolution`, `scene.layers`,
+ * `scene.frameRange`, etc. When a composition is active those fields are
+ * swapped for the composition's; `compositions`, `fonts`, `fields` and
+ * `bindings` are kept from the project so nested instances still resolve and
+ * text fonts still load. Returns the scene unchanged when the main scene is
+ * active or the id is stale.
+ */
+export function editSceneOf(scene: Scene | null, id: string | null): Scene | null {
+  // No "main scene": editing always targets a composition. When none is open
+  // (or the id is stale) there is no editable surface — the UI shows the
+  // "No Active Compositions" empty state.
+  if (scene === null || id === null) return null;
+  const c = scene.compositions?.find((x) => x.id === id);
+  if (c === undefined) return null;
+  return {
+    ...scene,
+    name: c.name,
+    resolution: c.resolution,
+    frameRate: c.frameRate,
+    frameRange: c.frameRange,
+    activeRange: c.activeRange,
+    background: c.background,
+    layers: c.layers,
+  };
+}
+
+function freshCompositionId(): string {
+  return `comp-${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`;
+}
+
+/**
+ * Normalise a loaded project to the composition model (no "main scene"). If it
+ * already has compositions, open the first. Otherwise, if the legacy root has
+ * any layers, migrate them into one composition and open it. A genuinely empty
+ * project gets no compositions and opens to the empty state. Returns the
+ * (possibly rewritten) scene and the composition to open.
+ */
+function ensureCompositions(scene: Scene): { scene: Scene; activeId: string | null } {
+  const comps = scene.compositions ?? [];
+  if (comps.length > 0) {
+    return { scene: { ...scene, layers: [] }, activeId: comps[0]?.id ?? null };
+  }
+  const rootLayers = Array.isArray(scene.layers) ? scene.layers : [];
+  if (rootLayers.length > 0) {
+    const comp: Composition = {
+      id: freshCompositionId(),
+      name: scene.name === '' ? 'comp1' : scene.name,
+      resolution: scene.resolution,
+      frameRate: scene.frameRate,
+      frameRange: scene.frameRange,
+      ...(scene.activeRange !== undefined ? { activeRange: scene.activeRange } : {}),
+      background: scene.background,
+      layers: rootLayers,
+    };
+    return { scene: { ...scene, compositions: [comp], layers: [] }, activeId: comp.id };
+  }
+  return { scene: { ...scene, compositions: [], layers: [] }, activeId: null };
+}
+
+/** Collect the composition ids referenced by `composition` elements in a layer tree. */
+function collectCompRefs(children: readonly Element[], out: Set<string>): void {
+  for (const el of children) {
+    if (el.type === 'composition') out.add(el.compositionId);
+    else if (el.type === 'container') collectCompRefs(el.children, out);
+  }
+}
+
+/** Direct composition references made by a given composition id (or the main scene when null). */
+function directRefsOf(scene: Scene, compId: string | null): Set<string> {
+  const out = new Set<string>();
+  const layers =
+    compId === null
+      ? scene.layers
+      : (scene.compositions?.find((c) => c.id === compId)?.layers ?? []);
+  for (const layer of layers) collectCompRefs(layer.children, out);
+  return out;
+}
+
+/**
+ * Whether placing an instance of `childId` inside `parentId` (null = main
+ * scene) is allowed — i.e. it would NOT create a cycle. A cycle exists if the
+ * child is the parent itself, or the child can already reach the parent through
+ * the composition-reference graph. (Loopic permits this and loops forever; we
+ * forbid it.)
+ */
+function canNestComposition(scene: Scene, parentId: string | null, childId: string): boolean {
+  if (childId === parentId) return false;
+  if (parentId === null) return true; // the main scene is never referenced by anyone
+  // BFS from the child following its references; reaching the parent = cycle.
+  const seen = new Set<string>();
+  const queue = [childId];
+  while (queue.length > 0) {
+    const cur = queue.shift();
+    if (cur === undefined || seen.has(cur)) continue;
+    seen.add(cur);
+    if (cur === parentId) return false;
+    for (const ref of directRefsOf(scene, cur)) queue.push(ref);
+  }
+  return true;
+}
+
+/**
  * Apply an immutable transform to the located element's `animation` field.
  * If the result has zero tracks, the field is removed entirely so that the
  * scene-graph doesn't carry empty `animation: { tracks: {} }` shells.
@@ -224,9 +397,9 @@ function mutateAnimation(
   const nextChildren = [...layer.children];
   nextChildren[elIdx] = merged;
   const nextLayer: Layer = { ...layer, children: nextChildren };
-  const nextLayers = [...current.scene.layers];
+  const nextLayers = [...activeLayersOf(current.scene)];
   nextLayers[layerIdx] = nextLayer;
-  set({ scene: { ...current.scene, layers: nextLayers } });
+  set({ scene: withActiveLayers(current.scene, nextLayers) });
 }
 
 /** Find the layer + index of an element. Used by every mutation. */
@@ -234,8 +407,9 @@ function locate(
   scene: Scene,
   elementId: string,
 ): { layer: Layer; layerIdx: number; elIdx: number } | null {
-  for (let li = 0; li < scene.layers.length; li++) {
-    const layer = scene.layers[li];
+  const layers = activeLayersOf(scene);
+  for (let li = 0; li < layers.length; li++) {
+    const layer = layers[li];
     if (layer === undefined) continue;
     const elIdx = layer.children.findIndex((e) => e.id === elementId);
     if (elIdx !== -1) return { layer, layerIdx: li, elIdx };
@@ -321,15 +495,16 @@ function reassignIdsDeep(el: Element): Element {
  */
 function insertElementAt(layerIdx: number, pos: number, el: Element, select: boolean): void {
   if (current.scene === null) return;
-  const layer = current.scene.layers[layerIdx];
+  const layers = activeLayersOf(current.scene);
+  const layer = layers[layerIdx];
   if (layer === undefined) return;
   const nextChildren = [...layer.children];
   nextChildren.splice(Math.max(0, Math.min(nextChildren.length, pos)), 0, el);
   const nextLayer: Layer = { ...layer, children: nextChildren };
-  const nextLayers = [...current.scene.layers];
+  const nextLayers = [...layers];
   nextLayers[layerIdx] = nextLayer;
   set({
-    scene: { ...current.scene, layers: nextLayers },
+    scene: withActiveLayers(current.scene, nextLayers),
     ...(select ? { selection: new Set([el.id]) } : {}),
   });
 }
@@ -366,10 +541,20 @@ export const designerStore = {
     future = [];
     clipboardElement = null;
     suppressHistory = true;
+    // Normalise to the composition model (migrate legacy root layers → a comp)
+    // and open the first composition, if any.
+    let activeId: string | null = null;
+    let normalized: Scene | null = null;
+    if (scene !== null) {
+      const ensured = ensureCompositions(normalizeKeyframeIds(scene));
+      normalized = ensured.scene;
+      activeId = ensured.activeId;
+    }
     try {
       set({
-        scene: scene === null ? null : normalizeKeyframeIds(scene),
+        scene: normalized,
         projectPath,
+        activeCompositionId: activeId,
         view: scene === null ? 'landing' : 'studio',
         selection: new Set<string>(),
         selectedKeyframe: null,
@@ -447,6 +632,169 @@ export const designerStore = {
     set({ view });
   },
 
+  // ── Compositions ────────────────────────────────────────────────────────
+
+  /**
+   * Open a composition for editing (null = the main scene). The canvas,
+   * timeline and transport follow the active document; selection + keyframe
+   * selection are cleared and the playhead resets to the doc's start.
+   */
+  setActiveComposition(id: string | null): void {
+    if (current.scene === null) return;
+    if (id === current.activeCompositionId) return;
+    if (id !== null && current.scene.compositions?.some((c) => c.id === id) !== true) return;
+    const doc = id === null ? current.scene : current.scene.compositions?.find((c) => c.id === id);
+    set({
+      activeCompositionId: id,
+      selection: new Set<string>(),
+      selectedKeyframe: null,
+      selectedKeyframes: [],
+      keyframeInspectorOpen: false,
+      currentFrame: doc?.frameRange.in ?? 0,
+    });
+  },
+
+  /**
+   * Create a new empty composition (inheriting the main scene's size /
+   * frame-rate / duration) and open it. Returns the new composition id.
+   */
+  addComposition(): string | null {
+    if (current.scene === null) return null;
+    const existing = current.scene.compositions ?? [];
+    const id = freshCompositionId();
+    const n = existing.length + 1;
+    const span = current.scene.frameRange.out - current.scene.frameRange.in;
+    const comp: Composition = {
+      id,
+      name: `comp${String(n)}`,
+      resolution: { ...current.scene.resolution },
+      frameRate: current.scene.frameRate,
+      frameRange: { in: 0, out: Math.max(1, span) },
+      background: 'transparent',
+      layers: [],
+    };
+    set({ scene: { ...current.scene, compositions: [...existing, comp] } });
+    designerStore.setActiveComposition(id);
+    return id;
+  },
+
+  /** Rename a composition. No-op for an unknown id. */
+  renameComposition(id: string, name: string): void {
+    if (current.scene === null) return;
+    const comps = current.scene.compositions ?? [];
+    if (!comps.some((c) => c.id === id)) return;
+    set({
+      scene: {
+        ...current.scene,
+        compositions: comps.map((c) => (c.id === id ? { ...c, name } : c)),
+      },
+    });
+  },
+
+  /**
+   * Duplicate a composition (deep clone with fresh composition + element ids).
+   * The copy is appended to the registry but not opened.
+   */
+  duplicateComposition(id: string): string | null {
+    if (current.scene === null) return null;
+    const comps = current.scene.compositions ?? [];
+    const src = comps.find((c) => c.id === id);
+    if (src === undefined) return null;
+    const newId = freshCompositionId();
+    const clone: Composition = {
+      ...structuredClone(src),
+      id: newId,
+      name: `${src.name} copy`,
+      layers: src.layers.map((l) => ({
+        ...structuredClone(l),
+        id: `L${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`,
+        children: l.children.map(reassignIdsDeep),
+      })),
+    };
+    set({ scene: { ...current.scene, compositions: [...comps, clone] } });
+    return newId;
+  },
+
+  /**
+   * Delete a composition and strip any `composition` elements that referenced
+   * it (across the main scene and every other composition). If the deleted
+   * composition was open, fall back to the main scene.
+   */
+  deleteComposition(id: string): void {
+    if (current.scene === null) return;
+    const comps = current.scene.compositions ?? [];
+    if (!comps.some((c) => c.id === id)) return;
+    const stripRefs = (children: readonly Element[]): Element[] => {
+      const out: Element[] = [];
+      for (const el of children) {
+        if (el.type === 'composition' && el.compositionId === id) continue;
+        if (el.type === 'container') out.push({ ...el, children: stripRefs(el.children) });
+        else out.push(el);
+      }
+      return out;
+    };
+    const cleanLayers = (layers: readonly Layer[]): Layer[] =>
+      layers.map((l) => ({ ...l, children: stripRefs(l.children) }));
+    const nextComps = comps
+      .filter((c) => c.id !== id)
+      .map((c) => ({ ...c, layers: cleanLayers(c.layers) }));
+    const goMain = current.activeCompositionId === id;
+    set({
+      scene: {
+        ...current.scene,
+        layers: cleanLayers(current.scene.layers),
+        compositions: nextComps,
+      },
+      ...(goMain
+        ? {
+            activeCompositionId: null,
+            selection: new Set<string>(),
+            selectedKeyframe: null,
+            selectedKeyframes: [],
+            keyframeInspectorOpen: false,
+          }
+        : {}),
+    });
+  },
+
+  /** Whether an instance of `childId` may be placed in the active document. */
+  canNestCompositionInActive(childId: string): boolean {
+    if (current.scene === null) return false;
+    return canNestComposition(current.scene, current.activeCompositionId, childId);
+  },
+
+  /**
+   * Place an instance of composition `childId` into the active document as a
+   * new layer element (a reference — the child's own layers are NOT copied).
+   * Refuses (returns false) if it would create a cycle. `at` is the optional
+   * scene-space drop point for the instance's top-left.
+   */
+  addCompositionInstance(childId: string, at?: { x: number; y: number }): boolean {
+    if (current.scene === null) return false;
+    const child = current.scene.compositions?.find((c) => c.id === childId);
+    if (child === undefined) return false;
+    if (!canNestComposition(current.scene, current.activeCompositionId, childId)) return false;
+    const el: Element = {
+      id: freshElementId(),
+      name: child.name,
+      type: 'composition',
+      compositionId: childId,
+      transform: {
+        position: { x: at?.x ?? 0, y: at?.y ?? 0 },
+        size: { w: child.resolution.width, h: child.resolution.height },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0, y: 0 },
+      },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 0,
+    };
+    designerStore.addElement(el);
+    return true;
+  },
+
   /**
    * Merge a shallow patch onto the active scene (background, name,
    * frameRange, etc.). The scene reference is replaced so React /
@@ -454,7 +802,39 @@ export const designerStore = {
    */
   updateScene(patch: Partial<Scene>): void {
     if (current.scene === null) return;
-    set({ scene: { ...current.scene, ...patch } });
+    // When the main scene is active, a plain shallow merge. When a composition
+    // is active, doc-level keys (size / duration / background / name / layers)
+    // target the composition; project-level keys (fields, bindings, fonts,
+    // compositions, metadata) stay on the scene root.
+    if (activeCompId() === null) {
+      set({ scene: { ...current.scene, ...patch } });
+      return;
+    }
+    const docKeys = new Set([
+      'resolution',
+      'frameRate',
+      'frameRange',
+      'activeRange',
+      'background',
+      'name',
+      'layers',
+    ]);
+    const docPatch: Record<string, unknown> = {};
+    const rootPatch: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(patch)) {
+      (docKeys.has(k) ? docPatch : rootPatch)[k] = v;
+    }
+    let scene = current.scene;
+    if (Object.keys(docPatch).length > 0) {
+      scene = {
+        ...scene,
+        compositions: (scene.compositions ?? []).map((c) =>
+          c.id === current.activeCompositionId ? { ...c, ...docPatch } : c,
+        ),
+      };
+    }
+    if (Object.keys(rootPatch).length > 0) scene = { ...scene, ...rootPatch };
+    set({ scene });
   },
 
   /**
@@ -467,11 +847,12 @@ export const designerStore = {
    */
   setSceneDurationFrames(frames: number): void {
     if (current.scene === null) return;
+    const doc = activeDocOf(current.scene);
     const safe = Math.max(1, Math.floor(frames));
-    const inFrame = current.scene.frameRange.in;
+    const inFrame = doc.frameRange.in;
     const out = inFrame + safe;
     const nextFrame = Math.min(out, Math.max(inFrame, current.currentFrame));
-    const prevActive = current.scene.activeRange;
+    const prevActive = doc.activeRange;
     let activeRange = prevActive;
     if (prevActive !== undefined) {
       const aOut = Math.min(prevActive.out, out);
@@ -479,7 +860,7 @@ export const designerStore = {
       activeRange = { in: aIn, out: aOut };
     }
     set({
-      scene: { ...current.scene, frameRange: { in: inFrame, out }, activeRange },
+      scene: withActiveDoc(current.scene, { frameRange: { in: inFrame, out }, activeRange }),
       currentFrame: nextFrame,
     });
   },
@@ -492,12 +873,13 @@ export const designerStore = {
    */
   setSceneActiveOut(outFrames: number): void {
     if (current.scene === null) return;
-    const { in: total0, out: total1 } = current.scene.frameRange;
-    const inFrame = current.scene.activeRange?.in ?? total0;
+    const doc = activeDocOf(current.scene);
+    const { in: total0, out: total1 } = doc.frameRange;
+    const inFrame = doc.activeRange?.in ?? total0;
     const out = Math.max(inFrame + 1, Math.min(total1, Math.round(outFrames)));
-    const prev = current.scene.activeRange;
+    const prev = doc.activeRange;
     if (prev !== undefined && prev.in === inFrame && prev.out === out) return;
-    set({ scene: { ...current.scene, activeRange: { in: inFrame, out } } });
+    set({ scene: withActiveDoc(current.scene, { activeRange: { in: inFrame, out } }) });
   },
 
   setTool(tool: DesignerTool): void {
@@ -597,24 +979,25 @@ export const designerStore = {
   /** Add one element to the first layer (creates a layer if none exist). */
   addElement(element: Element): void {
     if (current.scene === null) return;
-    let scene = current.scene;
-    if (scene.layers.length === 0) {
-      const layer: Layer = {
-        id: `L${String(Date.now())}`,
-        name: 'Layer 1',
-        visible: true,
-        locked: false,
-        children: [element],
-        blendMode: 'normal',
-      };
-      scene = { ...scene, layers: [layer] };
+    const layers = activeLayersOf(current.scene);
+    let nextLayers: Layer[];
+    if (layers.length === 0) {
+      nextLayers = [
+        {
+          id: `L${String(Date.now())}`,
+          name: 'Layer 1',
+          visible: true,
+          locked: false,
+          children: [element],
+          blendMode: 'normal',
+        },
+      ];
     } else {
-      const layers = scene.layers.map((l, i) =>
+      nextLayers = layers.map((l, i) =>
         i === 0 ? { ...l, children: [...l.children, element] } : l,
       );
-      scene = { ...scene, layers };
     }
-    set({ scene, selection: new Set([element.id]) });
+    set({ scene: withActiveLayers(current.scene, nextLayers), selection: new Set([element.id]) });
   },
 
   /** Set the timeline horizontal zoom, clamped to [1, 20]. */
@@ -673,7 +1056,7 @@ export const designerStore = {
   /** Move the authoring cursor frame, clamped to the scene's frame range. */
   setCurrentFrame(frame: number): void {
     if (current.scene === null) return;
-    const { in: lo, out: hi } = current.scene.frameRange;
+    const { in: lo, out: hi } = activeDocOf(current.scene).frameRange;
     const clamped = Math.max(lo, Math.min(hi, Math.round(frame)));
     if (clamped === current.currentFrame) return;
     set({ currentFrame: clamped });
@@ -1114,9 +1497,9 @@ export const designerStore = {
     const nextChildren = [...layer.children];
     nextChildren[elIdx] = merged;
     const nextLayer: Layer = { ...layer, children: nextChildren };
-    const nextLayers = [...current.scene.layers];
+    const nextLayers = [...activeLayersOf(current.scene)];
     nextLayers[layerIdx] = nextLayer;
-    set({ scene: { ...current.scene, layers: nextLayers } });
+    set({ scene: withActiveLayers(current.scene, nextLayers) });
   },
 
   /** Update an element's transform (preserves the rest of the element). */
@@ -1134,9 +1517,9 @@ export const designerStore = {
     const nextChildren = [...layer.children];
     nextChildren[elIdx] = merged;
     const nextLayer: Layer = { ...layer, children: nextChildren };
-    const nextLayers = [...current.scene.layers];
+    const nextLayers = [...activeLayersOf(current.scene)];
     nextLayers[layerIdx] = nextLayer;
-    set({ scene: { ...current.scene, layers: nextLayers } });
+    set({ scene: withActiveLayers(current.scene, nextLayers) });
   },
 
   /**
@@ -1186,9 +1569,18 @@ export const designerStore = {
         }
       }
     }
+    const cleanLayers = (layers: readonly Layer[]): Layer[] =>
+      layers.map((l) => ({ ...l, children: visit(l.children) }));
     for (const layer of current.scene.layers) collectRemoved(layer.children);
+    for (const comp of current.scene.compositions ?? []) {
+      for (const layer of comp.layers) collectRemoved(layer.children);
+    }
 
-    const nextLayers = current.scene.layers.map((l) => ({ ...l, children: visit(l.children) }));
+    const nextLayers = cleanLayers(current.scene.layers);
+    const nextComps = current.scene.compositions?.map((c) => ({
+      ...c,
+      layers: cleanLayers(c.layers),
+    }));
     const nextFonts = current.scene.fonts.filter((f) => f.family !== family);
 
     const nextSelection = new Set(current.selection);
@@ -1197,7 +1589,12 @@ export const designerStore = {
     const keepKey = sk !== null && !removedImageIds.has(sk.elementId);
 
     set({
-      scene: { ...current.scene, layers: nextLayers, fonts: nextFonts },
+      scene: {
+        ...current.scene,
+        layers: nextLayers,
+        fonts: nextFonts,
+        ...(nextComps !== undefined ? { compositions: nextComps } : {}),
+      },
       selection: nextSelection,
       selectedKeyframe: keepKey ? sk : null,
       selectedKeyframes: keepKey ? current.selectedKeyframes : [],
@@ -1225,7 +1622,7 @@ export const designerStore = {
       void _omit;
       next = rest as Element;
     } else {
-      const { in: sIn, out: sOut } = current.scene.frameRange;
+      const { in: sIn, out: sOut } = activeDocOf(current.scene).frameRange;
       const lo = Math.max(sIn, Math.min(sOut, Math.round(lifespan.in)));
       const hi = Math.max(sIn, Math.min(sOut, Math.round(lifespan.out)));
       if (hi < lo) return;
@@ -1234,9 +1631,9 @@ export const designerStore = {
     const nextChildren = [...layer.children];
     nextChildren[elIdx] = next;
     const nextLayer: Layer = { ...layer, children: nextChildren };
-    const nextLayers = [...current.scene.layers];
+    const nextLayers = [...activeLayersOf(current.scene)];
     nextLayers[layerIdx] = nextLayer;
-    set({ scene: { ...current.scene, layers: nextLayers } });
+    set({ scene: withActiveLayers(current.scene, nextLayers) });
   },
 
   /** Remove an element by id. Cleans up the selection set if needed. */
@@ -1247,14 +1644,14 @@ export const designerStore = {
     const { layer, layerIdx, elIdx } = found;
     const nextChildren = layer.children.filter((_, i) => i !== elIdx);
     const nextLayer: Layer = { ...layer, children: nextChildren };
-    const nextLayers = [...current.scene.layers];
+    const nextLayers = [...activeLayersOf(current.scene)];
     nextLayers[layerIdx] = nextLayer;
     const nextSelection = new Set(current.selection);
     nextSelection.delete(elementId);
     const keepKey =
       current.selectedKeyframe !== null && current.selectedKeyframe.elementId !== elementId;
     set({
-      scene: { ...current.scene, layers: nextLayers },
+      scene: withActiveLayers(current.scene, nextLayers),
       selection: nextSelection,
       selectedKeyframe: keepKey ? current.selectedKeyframe : null,
       selectedKeyframes: keepKey ? current.selectedKeyframes : [],
@@ -1276,7 +1673,7 @@ export const designerStore = {
    */
   fitElementLifespanToActiveRange(elementId: string): void {
     if (current.scene === null) return;
-    const r = activeRangeOf(current.scene);
+    const r = activeRangeOf(activeDocOf(current.scene));
     designerStore.updateElementLifespan(elementId, { in: r.in, out: r.out });
   },
 
@@ -1322,14 +1719,15 @@ export const designerStore = {
   pasteElement(): void {
     if (current.scene === null || clipboardElement === null) return;
     const clone = cloneElementWithNewIds(clipboardElement);
-    if (current.scene.layers.length === 0) {
+    const layers = activeLayersOf(current.scene);
+    if (layers.length === 0) {
       designerStore.addElement(clone);
       return;
     }
     const selId = [...current.selection][0];
     const sel = selId === undefined ? null : locate(current.scene, selId);
     const layerIdx = sel?.layerIdx ?? 0;
-    const layer = current.scene.layers[layerIdx];
+    const layer = layers[layerIdx];
     const pos = sel !== null ? sel.elIdx + 1 : (layer?.children.length ?? 0);
     insertElementAt(layerIdx, pos, clone, true);
   },
@@ -1338,7 +1736,7 @@ export const designerStore = {
   allElements(): readonly Element[] {
     if (current.scene === null) return [];
     const out: Element[] = [];
-    for (const layer of current.scene.layers) {
+    for (const layer of activeLayersOf(current.scene)) {
       for (const el of layer.children) out.push(el);
     }
     return out;

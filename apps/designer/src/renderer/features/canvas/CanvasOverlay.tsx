@@ -8,6 +8,7 @@ import {
   defaultShape,
   defaultText,
 } from '../../state/element-defaults.js';
+import { COMPOSITION_DND_TYPE } from '../compositions/CompositionsPanel.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
 import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
@@ -201,12 +202,23 @@ export function CanvasOverlay({
   // but the always-on tool name was redundant with the toolbar's
   // pressed state and clutters the canvas — removed.
   function onDragOver(e: React.DragEvent<HTMLDivElement>): void {
-    if (!e.dataTransfer.types.includes('application/x-cg-asset-id')) return;
+    const t = e.dataTransfer.types;
+    if (!t.includes('application/x-cg-asset-id') && !t.includes(COMPOSITION_DND_TYPE)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
   }
 
   function onDrop(e: React.DragEvent<HTMLDivElement>): void {
+    // A composition dragged from the Compositions panel → place an instance
+    // as a new layer (the child's own layers are not copied). Refused when it
+    // would create a cycle.
+    const compId = e.dataTransfer.getData(COMPOSITION_DND_TYPE);
+    if (compId !== '') {
+      e.preventDefault();
+      const p = viewportToScene(e.clientX, e.clientY);
+      designerStore.addCompositionInstance(compId, { x: Math.round(p.x), y: Math.round(p.y) });
+      return;
+    }
     const assetId = e.dataTransfer.getData('application/x-cg-asset-id');
     if (assetId === '') return;
     e.preventDefault();
