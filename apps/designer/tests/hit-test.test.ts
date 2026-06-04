@@ -3,7 +3,15 @@ import type { Element } from '@cg/shared-schema';
 import { hitsElement, topmostHit } from '../src/renderer/features/canvas/hit-test.js';
 import { defaultText } from '../src/renderer/state/element-defaults.js';
 
-function el(id: string, x: number, y: number, w: number, h: number, rotation = 0): Element {
+function el(
+  id: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  rotation = 0,
+  anchor?: { x: number; y: number },
+): Element {
   const base = defaultText(id, x, y);
   return {
     ...base,
@@ -11,6 +19,7 @@ function el(id: string, x: number, y: number, w: number, h: number, rotation = 0
       ...base.transform,
       size: { w, h },
       rotation,
+      ...(anchor !== undefined ? { anchor } : {}),
     },
   };
 }
@@ -26,13 +35,33 @@ describe('hitsElement', () => {
     expect(hitsElement(el('a', 0, 0, 100, 100), { x: 100, y: 100 })).toBe(true);
   });
 
-  it('honors rotation when checking the bounds', () => {
-    // 100×40 rect at origin rotated 90° — its bbox becomes 40×100 around center.
-    const rotated = el('a', 0, 0, 100, 40, 90);
-    // Point (50, 20) is the center, which is always inside.
+  it('rotates about a centred anchor', () => {
+    // 100×40 rect at origin rotated 90° about its centre {0.5,0.5} (pivot 50,20).
+    const rotated = el('a', 0, 0, 100, 40, 90, { x: 0.5, y: 0.5 });
+    // The pivot/centre is always inside.
     expect(hitsElement(rotated, { x: 50, y: 20 })).toBe(true);
-    // Point (5, 5) is inside the unrotated bbox but outside the rotated one.
+    // Inside the unrotated bbox but outside the rotated one.
     expect(hitsElement(rotated, { x: 5, y: 5 })).toBe(false);
+  });
+
+  it('rotates about the default top-left anchor, matching the renderer', () => {
+    // 100×40 rect at origin rotated 90° about {0,0} swings to x∈[-40,0], y∈[0,100].
+    const rotated = el('a', 0, 0, 100, 40, 90, { x: 0, y: 0 });
+    // The shape's NEW location is hit…
+    expect(hitsElement(rotated, { x: -20, y: 50 })).toBe(true);
+    // …while the pre-rotation centre is no longer under the shape.
+    expect(hitsElement(rotated, { x: 50, y: 20 })).toBe(false);
+  });
+
+  it('honours a scaled element about its anchor', () => {
+    // 100×100 rect scaled 2× about top-left {0,0} covers [0,200]×[0,200].
+    const base = el('a', 0, 0, 100, 100, 0, { x: 0, y: 0 });
+    const scaled: Element = {
+      ...base,
+      transform: { ...base.transform, scale: { x: 2, y: 2 } },
+    };
+    expect(hitsElement(scaled, { x: 180, y: 180 })).toBe(true);
+    expect(hitsElement(scaled, { x: 220, y: 180 })).toBe(false);
   });
 });
 
