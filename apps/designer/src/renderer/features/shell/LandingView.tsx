@@ -260,7 +260,6 @@ export function LandingView(): JSX.Element {
               type="button"
               style={styles.card}
               onClick={() => guardedSwitch(s.label, () => loadStarter(s.id))}
-              title={s.description}
             >
               {s.previewUrl !== undefined ? (
                 <img src={s.previewUrl} alt={`${s.label} preview`} style={styles.cardThumb} />
