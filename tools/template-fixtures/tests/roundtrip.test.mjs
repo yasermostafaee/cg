@@ -11,6 +11,7 @@
 //   - The bundled template-runtime can render the unpacked Scene
 //   - Field defaults render in Persian without a CG INVOKE/CALL
 
+import { Buffer } from 'node:buffer';
 import { describe, expect, it } from 'vitest';
 import { pack, unpack, verify } from '@cg/vcg-format';
 import { createRuntime } from '@cg/template-runtime';

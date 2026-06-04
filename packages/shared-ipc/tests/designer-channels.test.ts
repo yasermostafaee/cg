@@ -130,7 +130,10 @@ describe('preview.* channel schemas', () => {
   it('preview.load accepts a scene and returns a cgpreview:// URL', () => {
     expect(PreviewLoadChannel.request.parse({ scene: sampleScene })).toBeTruthy();
     expect(
-      PreviewLoadChannel.response.parse({ src: 'cgpreview://scene-1/index.html' }),
+      PreviewLoadChannel.response.parse({
+        src: 'cgpreview://scene-1/index.html',
+        html: '<!doctype html><div class="cg-stage"></div>',
+      }),
     ).toBeTruthy();
   });
 
