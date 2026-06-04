@@ -1374,3 +1374,11 @@ export function useDesignerStore(): DesignerStoreState {
   useEffect(() => designerStore.subscribe(setState), []);
   return state;
 }
+
+// Dev-only: expose the store on the global object for tooling (the starter
+// preview-capture script and future end-to-end harnesses drive the editor
+// through it). Guarded by Vite's DEV flag so it is never present in a
+// production build.
+if (import.meta.env.DEV) {
+  (globalThis as { __cgDesignerStore?: typeof designerStore }).__cgDesignerStore = designerStore;
+}
