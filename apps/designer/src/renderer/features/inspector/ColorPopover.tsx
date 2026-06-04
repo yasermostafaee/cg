@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { colors } from '../../theme.js';
 
@@ -91,6 +91,27 @@ function Popover({
   const [hsva, setHsva] = useState(initial);
   // Track the gesture so external value syncs don't fight an in-progress drag.
   const dragging = useRef(false);
+  // Resolved on-screen position. Computed after layout so we can flip the
+  // popover above the swatch when it would overflow the viewport bottom.
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    const rect = anchor?.getBoundingClientRect();
+    if (el === null || rect === undefined) return;
+    const h = el.offsetHeight;
+    const w = el.offsetWidth;
+    const margin = 8;
+    // Prefer below the swatch; flip above if it would run off the bottom and
+    // there's more room above.
+    const belowTop = rect.bottom + 6;
+    const fitsBelow = belowTop + h <= window.innerHeight - margin;
+    const top = fitsBelow
+      ? belowTop
+      : Math.max(margin, rect.top - 6 - h);
+    const left = Math.max(margin, Math.min(rect.left, window.innerWidth - w - margin));
+    setPos({ top, left });
+  }, [anchor]);
 
   // Re-sync when the bound value changes externally and we're not dragging.
   useEffect(() => {
@@ -121,11 +142,6 @@ function Popover({
     onChange(hsvaToHex(next));
   }
 
-  const rect = anchor?.getBoundingClientRect();
-  const top = rect ? rect.bottom + 6 : 80;
-  // Keep the 200px popover on-screen.
-  const left = rect ? Math.min(rect.left, window.innerWidth - 212) : 80;
-
   const { r, g, b } = hsvToRgb(hsva.h, hsva.s, hsva.v);
   const pureHue = hsvToRgb(hsva.h, 1, 1);
   const hexLabel = hsvaToHex(hsva).replace(/^#/, '').toUpperCase();
@@ -137,8 +153,11 @@ function Popover({
       aria-label="Colour picker"
       style={{
         position: 'fixed',
-        top,
-        left,
+        // Hidden off-screen for the first paint until useLayoutEffect measures
+        // the box and resolves a position that stays within the viewport.
+        top: pos?.top ?? -9999,
+        left: pos?.left ?? -9999,
+        visibility: pos === null ? 'hidden' : 'visible',
         width: 200,
         background: '#1c1f2d',
         border: `1px solid ${colors.border}`,
