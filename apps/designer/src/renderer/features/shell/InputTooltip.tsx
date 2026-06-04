@@ -93,7 +93,9 @@ export function InputTooltip(): JSX.Element | null {
       role="tooltip"
       style={{
         position: 'fixed',
-        left: tip.x,
+        // Clamp to the viewport so a tooltip near the right/left edge isn't
+        // clipped; the bubble stays centred on its target otherwise.
+        left: Math.max(8, Math.min(tip.x, window.innerWidth - 8)),
         top: tip.y - 8,
         transform: 'translate(-50%, -100%)',
         maxWidth: 260,
@@ -104,7 +106,11 @@ export function InputTooltip(): JSX.Element | null {
         padding: '0.25rem 0.5rem',
         fontSize: '0.7rem',
         lineHeight: 1.3,
-        whiteSpace: 'nowrap',
+        // Wrap long labels inside the bubble instead of overflowing past its
+        // edge; a single very long token still breaks rather than spilling.
+        whiteSpace: 'normal',
+        overflowWrap: 'break-word',
+        wordBreak: 'break-word',
         pointerEvents: 'none',
         boxShadow: '0 4px 14px rgba(0, 0, 0, 0.45)',
         zIndex: 3000,
