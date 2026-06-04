@@ -3,7 +3,7 @@
 The Designer timeline has a **scene-duration row** with a right-edge gripper
 that resizes the scene. Today that gripper calls
 `designerStore.setSceneDurationFrames`, which rewrites `scene.frameRange.out`.
-But `frameRange` does **double duty**: it is both the scene's *total* frame
+But `frameRange` does **double duty**: it is both the scene's _total_ frame
 count (it drives the ruler labels, the gridlines, and the playhead's px↔frame
 scaling in `TimelineDock`) **and** the playback / export window (the runtime
 loops `frameRange.in..out`). So dragging the gripper instantly shrinks the
@@ -30,7 +30,7 @@ concepts apart.
   window.
 - **Store:** the timeline gripper now calls a new `setActiveOutFrames(out)`
   that moves `activeRange.out` only (clamped to `[activeRange.in + 1,
-  frameRange.out]`) and leaves `frameRange` untouched. The Inspector's Duration
+frameRange.out]`) and leaves `frameRange` untouched. The Inspector's Duration
   field keeps setting the total via `setSceneDurationFrames`, which now also
   clamps `activeRange` into the new total. Playback (play/step loop) and the
   authoring clamps use the active region.
@@ -47,9 +47,11 @@ concepts apart.
 ## Capabilities
 
 ### New Capabilities
+
 <!-- None. -->
 
 ### Modified Capabilities
+
 - `designer-animation-timeline`: adds the **scene active region** — a resizable
   play/export/preview window distinct from the scene's total frame count, so
   resizing the scene bar narrows playback/output while the ruler keeps the full

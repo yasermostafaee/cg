@@ -1,19 +1,15 @@
 import type { Scene } from '@cg/shared-schema';
+import { anim, EASE, kf, track } from './anim.js';
 
 /**
- * Persian Reference Render — the QA template for Phase 8 §11 ("M8.0").
+ * Persian Reference Render — the QA template (Phase 8 §11 / M8.0), now
+ * animated. Right-anchored RTL lower third in Vazirmatn with a gradient
+ * plate that wipes open toward the left, a vertical accent that grows,
+ * and name/role that slide in. Persian copy + `direction: 'rtl'` on every
+ * text element keep bidi mirroring deterministic across font fallbacks.
  *
- * Ported from the M3.5 fixture (`tools/template-fixtures/persian-lower-third.scene.mjs`)
- * with two refinements:
- *
- *   - Field defaults now include broadcast-realistic Persian copy
- *     ("سارا نادری" / "کارشناس روابط بین‌الملل") so the operator
- *     sees a usable scene on first open, not placeholder text.
- *   - The `direction: 'rtl'` is set explicitly on every text element so
- *     bidi mirroring is deterministic across font fallbacks.
- *
- * Schema validation runs in the package's tests so any drift between
- * this constant and the canonical `SceneSchema` surfaces at build time.
+ * The package's tests parse this against `SceneSchema` and assert the
+ * `anchor` + `role` text fields stay non-empty Persian copy.
  */
 export const persianReferenceScene: Scene = {
   schemaVersion: 1,
@@ -23,7 +19,7 @@ export const persianReferenceScene: Scene = {
   resolution: { width: 1920, height: 1080 },
   frameRate: 50,
   safeAreas: { title: 10, action: 5 },
-  frameRange: { in: 0, out: 50 },
+  frameRange: { in: 0, out: 90 },
   background: 'transparent',
   layers: [
     {
@@ -35,33 +31,45 @@ export const persianReferenceScene: Scene = {
       children: [
         {
           id: 'bg',
-          name: 'background-bar',
+          name: 'background-plate',
           type: 'shape',
           transform: {
-            position: { x: 100, y: 850 },
-            size: { w: 1200, h: 160 },
+            position: { x: 620, y: 815 },
+            size: { w: 1180, h: 156 },
             scale: { x: 1, y: 1 },
             rotation: 0,
-            anchor: { x: 0, y: 0 },
+            anchor: { x: 1, y: 0.5 },
           },
-          opacity: 0.95,
+          opacity: 1,
           visible: true,
           locked: false,
           zIndex: 0,
           shape: 'rounded-rect',
-          cornerRadius: 12,
-          fill: { kind: 'solid', color: '#0F172A' },
+          cornerRadius: 16,
+          fill: {
+            kind: 'linear',
+            angle: 255,
+            stops: [
+              { at: 0, color: '#0B1224' },
+              { at: 1, color: '#23123A' },
+            ],
+          },
+          shadow: { offsetX: 0, offsetY: 20, blur: 48, color: '#00000099' },
+          animation: anim({
+            'scale.x': track(kf(0, 0, EASE.outExpo), kf(16, 1, EASE.outExpo)),
+            opacity: track(kf(0, 0, EASE.outCubic), kf(8, 1, EASE.outCubic)),
+          }),
         },
         {
           id: 'accent',
           name: 'accent-bar',
           type: 'shape',
           transform: {
-            position: { x: 100, y: 850 },
-            size: { w: 12, h: 160 },
+            position: { x: 1792, y: 815 },
+            size: { w: 8, h: 156 },
             scale: { x: 1, y: 1 },
             rotation: 0,
-            anchor: { x: 0, y: 0 },
+            anchor: { x: 0.5, y: 1 },
           },
           opacity: 1,
           visible: true,
@@ -69,14 +77,17 @@ export const persianReferenceScene: Scene = {
           zIndex: 1,
           shape: 'rect',
           fill: { kind: 'solid', color: '#E11D48' },
+          animation: anim({
+            'scale.y': track(kf(6, 0, EASE.outBack), kf(24, 1, EASE.outBack)),
+          }),
         },
         {
           id: 'name',
           name: 'anchor-name',
           type: 'text',
           transform: {
-            position: { x: 140, y: 870 },
-            size: { w: 1140, h: 70 },
+            position: { x: 700, y: 855 },
+            size: { w: 1060, h: 70 },
             scale: { x: 1, y: 1 },
             rotation: 0,
             anchor: { x: 0, y: 0 },
@@ -99,14 +110,18 @@ export const persianReferenceScene: Scene = {
           direction: 'rtl',
           fitMode: 'autosize',
           overflow: 'ellipsis',
+          animation: anim({
+            opacity: track(kf(12, 0), kf(28, 1)),
+            'position.y': track(kf(12, 877, EASE.outExpo), kf(30, 855, EASE.outExpo)),
+          }),
         },
         {
           id: 'role',
           name: 'role-subtitle',
           type: 'text',
           transform: {
-            position: { x: 140, y: 950 },
-            size: { w: 1140, h: 50 },
+            position: { x: 700, y: 930 },
+            size: { w: 1060, h: 50 },
             scale: { x: 1, y: 1 },
             rotation: 0,
             anchor: { x: 0, y: 0 },
@@ -129,6 +144,10 @@ export const persianReferenceScene: Scene = {
           direction: 'rtl',
           fitMode: 'autosize',
           overflow: 'ellipsis',
+          animation: anim({
+            opacity: track(kf(18, 0), kf(34, 0.85)),
+            'position.y': track(kf(18, 948, EASE.outExpo), kf(36, 930, EASE.outExpo)),
+          }),
         },
       ],
     },
@@ -159,31 +178,15 @@ export const persianReferenceScene: Scene = {
     },
   ],
   bindings: [
-    {
-      fieldId: 'anchor',
-      target: { kind: 'text', elementId: 'name', placeholder: '{{anchor}}' },
-    },
-    {
-      fieldId: 'role',
-      target: { kind: 'text', elementId: 'role', placeholder: '{{role}}' },
-    },
-    {
-      fieldId: 'themeColor',
-      target: { kind: 'color', elementId: 'accent', property: 'fill' },
-    },
+    { fieldId: 'anchor', target: { kind: 'text', elementId: 'name', placeholder: '{{anchor}}' } },
+    { fieldId: 'role', target: { kind: 'text', elementId: 'role', placeholder: '{{role}}' } },
+    { fieldId: 'themeColor', target: { kind: 'color', elementId: 'accent', property: 'fill' } },
   ],
-  fonts: [
-    {
-      family: 'Vazirmatn',
-      weights: [400, 700],
-      styles: ['normal'],
-      source: 'system',
-    },
-  ],
+  fonts: [{ family: 'Vazirmatn', weights: [400, 700], styles: ['normal'], source: 'system' }],
   metadata: {
-    createdAt: '2026-05-24T00:00:00.000Z',
-    updatedAt: '2026-05-24T00:00:00.000Z',
-    description: 'Phase 8 §11 (M8.0) starter — the Persian QA reference.',
-    tags: ['starter', 'persian', 'lower-third', 'qa'],
+    createdAt: '2026-06-04T00:00:00.000Z',
+    updatedAt: '2026-06-04T00:00:00.000Z',
+    description: 'Animated Persian RTL QA reference — Vazirmatn, gradient plate, accent wipe.',
+    tags: ['starter', 'persian', 'lower-third', 'qa', 'animated'],
   },
 };

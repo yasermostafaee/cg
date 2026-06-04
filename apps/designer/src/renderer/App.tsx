@@ -194,9 +194,7 @@ export function App(): JSX.Element {
         <Splitter
           axis="x"
           ariaLabel="Resize project assets panel"
-          onResize={(dx) =>
-            setAssetsW((w) => Math.max(ASSETS_MIN, Math.min(ASSETS_MAX, w + dx)))
-          }
+          onResize={(dx) => setAssetsW((w) => Math.max(ASSETS_MIN, Math.min(ASSETS_MAX, w + dx)))}
         />
         <div style={styles.centerCol}>
           <div style={styles.canvasWrap}>

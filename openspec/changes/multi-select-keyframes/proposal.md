@@ -20,9 +20,11 @@ the ability to select several points to ease them together.
 ## Capabilities
 
 ### New Capabilities
+
 <!-- None. -->
 
 ### Modified Capabilities
+
 - `designer-animation-timeline`: keyframe selection becomes click-to-open and
   multi-select, with the inspector showing shared easing for a multi-selection.
 

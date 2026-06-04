@@ -563,8 +563,7 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
           onBlur={(e) => {
             const v = e.target.value.trim();
             const next = v.startsWith('#') ? v : `#${v}`;
-            if (/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(next))
-              props.onCommit(next.toUpperCase());
+            if (/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(next)) props.onCommit(next.toUpperCase());
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();

@@ -62,14 +62,19 @@ const styles = {
  */
 export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   const t = effectiveTransformAt(element, currentFrame);
-  const { position, size, rotation } = t;
+  const { position, size, rotation, anchor } = t;
   const w = size.w * t.scale.x * scale;
   const h = size.h * t.scale.y * scale;
   const x = position.x * scale;
   const y = position.y * scale;
 
-  const rotateTransform =
-    rotation === 0 ? undefined : `rotate(${String(rotation)}deg)`;
+  // The renderer rotates each element about its `anchor` (CSS transform-origin,
+  // a 0..1 fraction of the box — see template-runtime/scene-builder). Match it
+  // here so the selection frame tracks a rotated element whose anchor isn't the
+  // default top-left (e.g. a centre-anchored ring). For anchor {0,0} this is
+  // exactly the previous `0 0` behaviour.
+  const rotateOrigin = `${String(anchor.x * 100)}% ${String(anchor.y * 100)}%`;
+  const rotateTransform = rotation === 0 ? undefined : `rotate(${String(rotation)}deg)`;
   const frameStyle: React.CSSProperties = {
     ...styles.frame,
     left: x,
@@ -77,7 +82,7 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
     width: w,
     height: h,
     transform: rotateTransform,
-    transformOrigin: '0 0',
+    transformOrigin: rotateOrigin,
   };
   // B-004 — wrap the handles in a same-rotated container so corner +
   // rotate handles follow the rotated bounding box. Local coords below
@@ -90,7 +95,7 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
     height: h,
     pointerEvents: 'none',
     transform: rotateTransform,
-    transformOrigin: '0 0',
+    transformOrigin: rotateOrigin,
   };
 
   const corners: { dx: number; dy: number; corner: 'tl' | 'tr' | 'bl' | 'br' }[] = [
@@ -227,8 +232,7 @@ function beginRotate(
   const { cx, cy } = rotateHandleCentre(startX, startY, hVisual, startAngle);
   // Cursor angle at drag start — subtracted below so rotation doesn't
   // snap by +90° on mousedown.
-  const startCursorAngle =
-    Math.atan2(startY - cy, startX - cx) * (180 / Math.PI) + 90;
+  const startCursorAngle = Math.atan2(startY - cy, startX - cx) * (180 / Math.PI) + 90;
 
   const onMove = (e: PointerEvent): void => {
     const ang = Math.atan2(e.clientY - cy, e.clientX - cx) * (180 / Math.PI) + 90;

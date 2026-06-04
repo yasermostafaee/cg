@@ -191,7 +191,10 @@ function ElementRowLabel(props: Props): JSX.Element {
         {expanded ? '▾' : '▸'}
       </button>
       <span style={styles.typeIcon}>
-        <LayerTypeIcon element={element} color={element.timelineColor ?? lifespanColorFor(element)} />
+        <LayerTypeIcon
+          element={element}
+          color={element.timelineColor ?? lifespanColorFor(element)}
+        />
       </span>
       <span style={{ ...styles.name, ...(isSelected ? styles.nameSelected : {}) }}>
         {element.name}

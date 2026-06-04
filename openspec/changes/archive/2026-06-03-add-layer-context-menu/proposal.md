@@ -29,9 +29,11 @@ right-click menu on the layer; D-013 brings that to the Designer timeline.
 ## Capabilities
 
 ### New Capabilities
+
 <!-- None. -->
 
 ### Modified Capabilities
+
 - `designer-animation-timeline`: adds a **layer right-click context menu** with
   Color / Fit-workspace / Copy / Cut / Paste / Duplicate / Delete, plus a
   persistent per-element `timelineColor` for the lifespan bar.

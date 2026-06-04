@@ -345,140 +345,140 @@ function TrackRowLane(props: Props): JSX.Element {
       data-role="lane-empty"
       onContextMenu={(e) => e.preventDefault()}
     >
-        {/* Interpolation lines between adjacent keyframes. The line is
+      {/* Interpolation lines between adjacent keyframes. The line is
             drawn in accent blue when the keyframe on its LEFT (the
             outgoing side) is the selected one — see B-003. */}
-        {keyframes.slice(0, -1).map((k, i) => {
-          const next = keyframes[i + 1];
-          if (next === undefined) return null;
-          const leftPct = ((k.frame - frameIn) / span) * 100;
-          const rightPct = ((next.frame - frameIn) / span) * 100;
-          const widthPct = rightPct - leftPct;
-          if (widthPct <= 0) return null;
-          const isLeftSelected = isSelectedFrame(k.frame);
-          return (
+      {keyframes.slice(0, -1).map((k, i) => {
+        const next = keyframes[i + 1];
+        if (next === undefined) return null;
+        const leftPct = ((k.frame - frameIn) / span) * 100;
+        const rightPct = ((next.frame - frameIn) / span) * 100;
+        const widthPct = rightPct - leftPct;
+        if (widthPct <= 0) return null;
+        const isLeftSelected = isSelectedFrame(k.frame);
+        return (
+          <div
+            key={`line-${String(k.frame)}-${String(next.frame)}`}
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: `${leftPct.toFixed(3)}%`,
+              width: `${widthPct.toFixed(3)}%`,
+              cursor: 'pointer',
+            }}
+            data-keyframe-diamond=""
+            role="button"
+            aria-label={`Segment between frames ${String(k.frame)} and ${String(next.frame)}`}
+            onPointerDown={(e) => {
+              // Click the segment selects + opens the inspector for its start
+              // point; shift/ctrl adds it to the multi-selection.
+              e.stopPropagation();
+              const ref = { elementId: element.id, property: row.property, frame: k.frame };
+              if (e.shiftKey || e.ctrlKey || e.metaKey) {
+                designerStore.addKeyframeToSelection(ref);
+              } else {
+                designerStore.openKeyframeInspector(ref);
+              }
+              designerStore.setCurrentFrame(k.frame);
+            }}
+          >
             <div
-              key={`line-${String(k.frame)}-${String(next.frame)}`}
               style={{
-                position: 'absolute',
-                top: 0,
-                bottom: 0,
-                left: `${leftPct.toFixed(3)}%`,
-                width: `${widthPct.toFixed(3)}%`,
-                cursor: 'pointer',
-              }}
-              data-keyframe-diamond=""
-              role="button"
-              aria-label={`Segment between frames ${String(k.frame)} and ${String(next.frame)}`}
-              onPointerDown={(e) => {
-                // Click the segment selects + opens the inspector for its start
-                // point; shift/ctrl adds it to the multi-selection.
-                e.stopPropagation();
-                const ref = { elementId: element.id, property: row.property, frame: k.frame };
-                if (e.shiftKey || e.ctrlKey || e.metaKey) {
-                  designerStore.addKeyframeToSelection(ref);
-                } else {
-                  designerStore.openKeyframeInspector(ref);
-                }
-                designerStore.setCurrentFrame(k.frame);
-              }}
-            >
-              <div
-                style={{
-                  ...styles.interpLine,
-                  ...(isLeftSelected ? styles.interpLineSelected : {}),
-                  left: 0,
-                  width: '100%',
-                }}
-              />
-              {widthPct > 4 && (
-                <span style={{ ...styles.interpGlyphWrap, left: '50%' }} aria-hidden>
-                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none">
-                    <path
-                      d="M0 5 C 2.5 5, 2.5 1, 5 1 C 7.5 1, 7.5 5, 10 5"
-                      stroke={isLeftSelected ? colors.accent : colors.textMuted}
-                      strokeWidth="1"
-                      strokeLinecap="round"
-                      fill="none"
-                    />
-                  </svg>
-                </span>
-              )}
-            </div>
-          );
-        })}
-        {keyframes.map((k, kIdx) => {
-          const pct = ((k.frame - frameIn) / span) * 100;
-          const isSelected = isSelectedFrame(k.frame);
-          // Fan stacked points vertically around the row centre.
-          const count = stackCount.get(k.frame) ?? 1;
-          const idx = (k.id !== undefined ? stackIndex.get(k.id) : undefined) ?? 0;
-          const offsetPx = count > 1 ? (idx - (count - 1) / 2) * 5 : 0;
-          const style = {
-            ...styles.keyDiamond,
-            ...(isSelected ? styles.keyDiamondSelected : {}),
-            left: `${pct.toFixed(3)}%`,
-            top: `calc(50% + ${String(offsetPx)}px)`,
-          };
-          const kfId = k.id;
-          return (
-            <div
-              key={kfId ?? `${row.property}-f${String(k.frame)}-${String(kIdx)}`}
-              style={style}
-              role="button"
-              tabIndex={0}
-              data-keyframe-diamond=""
-              aria-label={`Keyframe at frame ${String(k.frame)}`}
-              onContextMenu={(e) => {
-                // Right-click opens a context menu (not a direct
-                // delete) so the operator confirms the action via
-                // the Delete item.
-                e.preventDefault();
-                e.stopPropagation();
-                setMenu({ x: e.clientX, y: e.clientY, frame: k.frame });
-              }}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                // Click selects the point and opens the Keyframe Inspector;
-                // shift/ctrl-click adds it to the multi-selection (batch
-                // easing). A drag then moves this specific point.
-                const ref = { elementId: element.id, property: row.property, frame: k.frame };
-                if (e.shiftKey || e.ctrlKey || e.metaKey) {
-                  designerStore.addKeyframeToSelection(ref);
-                } else {
-                  designerStore.openKeyframeInspector(ref);
-                }
-                designerStore.setCurrentFrame(k.frame);
-                // Drag to move this specific point (by id) — moving it onto
-                // another keeps both (stacking). The listeners live on
-                // `window`, not on the diamond, which React unmounts mid-drag
-                // as it re-renders. `from` tracks its current frame so a
-                // legacy keyframe without an id still drags by frame.
-                let from = k.frame;
-                const onMove = (mv: PointerEvent): void => {
-                  const nf = frameAt(mv.clientX);
-                  if (nf === from) return;
-                  if (kfId !== undefined) {
-                    designerStore.moveKeyframeById(element.id, row.property, kfId, nf);
-                  } else {
-                    designerStore.moveKeyframe(element.id, row.property, from, nf);
-                  }
-                  designerStore.setCurrentFrame(nf);
-                  from = nf;
-                };
-                const onUp = (): void => {
-                  window.removeEventListener('pointermove', onMove);
-                  window.removeEventListener('pointerup', onUp);
-                  window.removeEventListener('pointercancel', onUp);
-                };
-                window.addEventListener('pointermove', onMove);
-                window.addEventListener('pointerup', onUp);
-                window.addEventListener('pointercancel', onUp);
+                ...styles.interpLine,
+                ...(isLeftSelected ? styles.interpLineSelected : {}),
+                left: 0,
+                width: '100%',
               }}
             />
-          );
-        })}
+            {widthPct > 4 && (
+              <span style={{ ...styles.interpGlyphWrap, left: '50%' }} aria-hidden>
+                <svg width="10" height="6" viewBox="0 0 10 6" fill="none">
+                  <path
+                    d="M0 5 C 2.5 5, 2.5 1, 5 1 C 7.5 1, 7.5 5, 10 5"
+                    stroke={isLeftSelected ? colors.accent : colors.textMuted}
+                    strokeWidth="1"
+                    strokeLinecap="round"
+                    fill="none"
+                  />
+                </svg>
+              </span>
+            )}
+          </div>
+        );
+      })}
+      {keyframes.map((k, kIdx) => {
+        const pct = ((k.frame - frameIn) / span) * 100;
+        const isSelected = isSelectedFrame(k.frame);
+        // Fan stacked points vertically around the row centre.
+        const count = stackCount.get(k.frame) ?? 1;
+        const idx = (k.id !== undefined ? stackIndex.get(k.id) : undefined) ?? 0;
+        const offsetPx = count > 1 ? (idx - (count - 1) / 2) * 5 : 0;
+        const style = {
+          ...styles.keyDiamond,
+          ...(isSelected ? styles.keyDiamondSelected : {}),
+          left: `${pct.toFixed(3)}%`,
+          top: `calc(50% + ${String(offsetPx)}px)`,
+        };
+        const kfId = k.id;
+        return (
+          <div
+            key={kfId ?? `${row.property}-f${String(k.frame)}-${String(kIdx)}`}
+            style={style}
+            role="button"
+            tabIndex={0}
+            data-keyframe-diamond=""
+            aria-label={`Keyframe at frame ${String(k.frame)}`}
+            onContextMenu={(e) => {
+              // Right-click opens a context menu (not a direct
+              // delete) so the operator confirms the action via
+              // the Delete item.
+              e.preventDefault();
+              e.stopPropagation();
+              setMenu({ x: e.clientX, y: e.clientY, frame: k.frame });
+            }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              // Click selects the point and opens the Keyframe Inspector;
+              // shift/ctrl-click adds it to the multi-selection (batch
+              // easing). A drag then moves this specific point.
+              const ref = { elementId: element.id, property: row.property, frame: k.frame };
+              if (e.shiftKey || e.ctrlKey || e.metaKey) {
+                designerStore.addKeyframeToSelection(ref);
+              } else {
+                designerStore.openKeyframeInspector(ref);
+              }
+              designerStore.setCurrentFrame(k.frame);
+              // Drag to move this specific point (by id) — moving it onto
+              // another keeps both (stacking). The listeners live on
+              // `window`, not on the diamond, which React unmounts mid-drag
+              // as it re-renders. `from` tracks its current frame so a
+              // legacy keyframe without an id still drags by frame.
+              let from = k.frame;
+              const onMove = (mv: PointerEvent): void => {
+                const nf = frameAt(mv.clientX);
+                if (nf === from) return;
+                if (kfId !== undefined) {
+                  designerStore.moveKeyframeById(element.id, row.property, kfId, nf);
+                } else {
+                  designerStore.moveKeyframe(element.id, row.property, from, nf);
+                }
+                designerStore.setCurrentFrame(nf);
+                from = nf;
+              };
+              const onUp = (): void => {
+                window.removeEventListener('pointermove', onMove);
+                window.removeEventListener('pointerup', onUp);
+                window.removeEventListener('pointercancel', onUp);
+              };
+              window.addEventListener('pointermove', onMove);
+              window.addEventListener('pointerup', onUp);
+              window.addEventListener('pointercancel', onUp);
+            }}
+          />
+        );
+      })}
       {menu !== null && (
         <div
           style={{

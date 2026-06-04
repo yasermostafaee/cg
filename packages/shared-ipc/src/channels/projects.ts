@@ -43,7 +43,9 @@ export const ProjectsNewChannel = defineChannel(
         height: z.number().int().positive(),
       })
       .optional(),
-    frameRate: z.union([z.literal(25), z.literal(29.97), z.literal(50), z.literal(59.94), z.literal(60)]).optional(),
+    frameRate: z
+      .union([z.literal(25), z.literal(29.97), z.literal(50), z.literal(59.94), z.literal(60)])
+      .optional(),
     /**
      * Optional total scene duration in frames (New Project modal). When
      * omitted the platform falls back to the v1 default of 50.
@@ -94,6 +96,8 @@ const StarterEntrySchema = z.object({
   label: z.string().min(1),
   description: z.string(),
   templateType: z.string().min(1),
+  /** Root-relative poster image URL for the landing card (optional). */
+  previewUrl: z.string().optional(),
 });
 export type StarterEntry = z.infer<typeof StarterEntrySchema>;
 

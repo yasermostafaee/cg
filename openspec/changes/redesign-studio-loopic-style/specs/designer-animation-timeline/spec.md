@@ -8,6 +8,7 @@ from the track immediately and the browser's default context menu
 MUST NOT open over the diamond.
 
 #### Scenario: Right-click on an existing keyframe removes it
+
 - **WHEN** the operator right-clicks a keyframe diamond at frame N
   on the Position X row
 - **THEN** the keyframe at frame N is removed from
@@ -15,6 +16,7 @@ MUST NOT open over the diamond.
   from the lane, and the browser context menu does not open
 
 #### Scenario: Right-click on an empty lane is a no-op
+
 - **WHEN** the operator right-clicks an empty lane area on a track
   row
 - **THEN** no keyframe is removed and the browser context menu does

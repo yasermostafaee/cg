@@ -42,9 +42,7 @@ const FONT_FAMILIES = [
 interface Props {
   element: TextElement;
   currentFrame?: number;
-  selectedKeyframe?:
-    | { elementId: string; property: AnimatableProperty; frame: number }
-    | null;
+  selectedKeyframe?: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }
 
 const styles = {
@@ -208,9 +206,7 @@ function animPoint(
   element: TextElement,
   property: AnimatableProperty,
   currentFrame: number,
-  selectedKeyframe:
-    | { elementId: string; property: AnimatableProperty; frame: number }
-    | null,
+  selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null,
   read: (el: TextElement) => number | string,
 ): JSX.Element {
   const variant = keyframeVariantFor(element, property, currentFrame, selectedKeyframe);
@@ -304,7 +300,13 @@ export function TextStyleSection({
           transparent={false}
           onCommit={(color) => designerStore.commitAnimatable(id, 'text.color', color)}
           ariaLabel="text color"
-          trailing={animPoint(element, 'text.color', currentFrame, selectedKeyframe, (el) => el.color)}
+          trailing={animPoint(
+            element,
+            'text.color',
+            currentFrame,
+            selectedKeyframe,
+            (el) => el.color,
+          )}
         />
 
         {/* Background */}
@@ -390,7 +392,13 @@ export function TextStyleSection({
               }}
               ariaLabel="Line height"
             />
-            {animPoint(element, 'font.lineHeight', currentFrame, selectedKeyframe, (el) => el.font.lineHeight)}
+            {animPoint(
+              element,
+              'font.lineHeight',
+              currentFrame,
+              selectedKeyframe,
+              (el) => el.font.lineHeight,
+            )}
           </div>
           <div className="cg-field">
             <span style={styles.chipIcon} aria-hidden title="Letter spacing">
@@ -403,7 +411,13 @@ export function TextStyleSection({
               onCommit={(n) => designerStore.commitAnimatable(id, 'font.letterSpacing', n)}
               ariaLabel="Letter spacing"
             />
-            {animPoint(element, 'font.letterSpacing', currentFrame, selectedKeyframe, (el) => el.font.letterSpacing)}
+            {animPoint(
+              element,
+              'font.letterSpacing',
+              currentFrame,
+              selectedKeyframe,
+              (el) => el.font.letterSpacing,
+            )}
           </div>
         </div>
 
@@ -422,7 +436,9 @@ export function TextStyleSection({
                       ? { ...styles.alignButton, ...styles.alignButtonActive }
                       : styles.alignButton
                   }
-                  onClick={() => designerStore.updateElement(id, { align: opt } as Partial<Element>)}
+                  onClick={() =>
+                    designerStore.updateElement(id, { align: opt } as Partial<Element>)
+                  }
                   aria-label={`Align ${opt}`}
                   aria-pressed={active}
                   title={`Align ${opt}`}
@@ -495,7 +511,11 @@ function TogglePair<T extends string>({
           <button
             key={opt.value}
             type="button"
-            style={active ? { ...styles.toggleOption, ...styles.toggleOptionActive } : styles.toggleOption}
+            style={
+              active
+                ? { ...styles.toggleOption, ...styles.toggleOptionActive }
+                : styles.toggleOption
+            }
             onClick={() => onChange(opt.value)}
             aria-pressed={active}
           >

@@ -33,14 +33,14 @@ renderer already talked to the backend only through the typed
 `DesignerBridge` / `RuntimeBridge` interfaces (`src/shared/*-bridge.ts`).
 We keep those contracts and swap the implementation:
 
-| Concern | Electron (before) | Browser (after) |
-| --- | --- | --- |
-| Bridge | preload `contextBridge` → IPC → main services | `src/platform/` builds `window.cg` in-process |
-| Project/asset storage | `fs` in a working dir; SQLite recents | `@cg/storage` Workspace (File System Access / OPFS / memory) + `localStorage` |
-| `.vcg` export | `fs.writeFile` | `@cg/vcg-format` (isomorphic) → `Blob` download |
-| Live preview | `cgpreview://` Electron protocol | Blob-URL document importing the bundled runtime, scene inlined |
-| Crypto (hash/sign) | `node:crypto` | `@noble/hashes` + `@noble/curves` (WebCrypto-class, sync) |
-| CasparCG transport | `net`/`dgram` sockets in main | **deferred** — see below |
+| Concern               | Electron (before)                             | Browser (after)                                                               |
+| --------------------- | --------------------------------------------- | ----------------------------------------------------------------------------- |
+| Bridge                | preload `contextBridge` → IPC → main services | `src/platform/` builds `window.cg` in-process                                 |
+| Project/asset storage | `fs` in a working dir; SQLite recents         | `@cg/storage` Workspace (File System Access / OPFS / memory) + `localStorage` |
+| `.vcg` export         | `fs.writeFile`                                | `@cg/vcg-format` (isomorphic) → `Blob` download                               |
+| Live preview          | `cgpreview://` Electron protocol              | Blob-URL document importing the bundled runtime, scene inlined                |
+| Crypto (hash/sign)    | `node:crypto`                                 | `@noble/hashes` + `@noble/curves` (WebCrypto-class, sync)                     |
+| CasparCG transport    | `net`/`dgram` sockets in main                 | **deferred** — see below                                                      |
 
 No backend, no API contract: storage is file-based (real folders via the
 File System Access API on Chromium, OPFS elsewhere), behind one `Workspace`

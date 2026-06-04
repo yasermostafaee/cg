@@ -16,6 +16,7 @@ write its picks without touching the schema.
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Landing screen at app start: Demo (starter templates) + Recent
   projects + a big "New project" button.
 - New Project modal: name + resolution preset (or custom) + frame
@@ -31,6 +32,7 @@ write its picks without touching the schema.
 - Right-click on a keyframe diamond removes that keyframe.
 
 **Non-Goals (deferred):**
+
 - Real "Home / File / Edit / View / Import / Help" menu bar — keep
   the existing minimal chrome for v1; the studio's StatusBar still
   handles Save / Export.
@@ -67,7 +69,7 @@ write its picks without touching the schema.
   step). Otherwise the default browser scroll runs (we keep
   `overflow: auto` on the outer).
 - **Right-click on a keyframe**: `onContextMenu={e =>
-  { e.preventDefault(); removeKeyframe(...); }}` on the diamond
+{ e.preventDefault(); removeKeyframe(...); }}` on the diamond
   div. No custom menu; the gesture is one-step like Loopic.
 - **TopToolbar layout**: a single row of six icon buttons + the
   zoom controls on the far right of the canvas region (small icons

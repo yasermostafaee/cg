@@ -23,10 +23,12 @@ snapping to align elements precisely against the canvas and each other.
 ## Capabilities
 
 ### New Capabilities
+
 - `designer-canvas-view`: View-menu canvas preferences — pixel rulers and
   drag snapping with smart guides.
 
 ### Modified Capabilities
+
 <!-- None. -->
 
 ## Impact

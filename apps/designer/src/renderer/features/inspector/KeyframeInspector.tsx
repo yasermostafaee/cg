@@ -271,7 +271,8 @@ function MultiKeyframeView({
       <EasingEditor
         bezier={bezier}
         onChange={(b) => {
-          for (const r of refs) designerStore.setKeyframeBezier(r.elementId, r.property, r.frame, b);
+          for (const r of refs)
+            designerStore.setKeyframeBezier(r.elementId, r.property, r.frame, b);
         }}
       />
       <button

@@ -13,14 +13,16 @@ exactly as the full `frameRange`, so scenes authored before this change behave
 unchanged.
 
 #### Scenario: Absent active region means the full scene
+
 - **WHEN** a scene has no `activeRange`
 - **THEN** playback, export, and preview use the full `frameRange`, identical to
   the behavior before this change
 
 #### Scenario: Active region is bounded by the total
+
 - **WHEN** a scene defines an `activeRange`
 - **THEN** `activeRange` lies within `frameRange` (`frameRange.in ≤
-  activeRange.in ≤ activeRange.out ≤ frameRange.out`) and spans at least one
+activeRange.in ≤ activeRange.out ≤ frameRange.out`) and spans at least one
   frame (`activeRange.out > activeRange.in`)
 
 ### Requirement: Resizing the scene bar narrows the active region, not the total
@@ -33,17 +35,20 @@ gripper is dragged, so the total frame count and the trailing frames stay
 visible.
 
 #### Scenario: Dragging the gripper shortens the active region
+
 - **WHEN** the operator drags the scene bar's right gripper from the scene end
   to an earlier frame N
 - **THEN** `activeRange.out` becomes N and the scene bar visually ends at N
 
 #### Scenario: The total frame count is preserved while resizing
+
 - **WHEN** the operator drags the gripper to shorten the active region
 - **THEN** `scene.frameRange.out` is unchanged, the ruler still shows the full
   frame count, and the frames between `activeRange.out` and `frameRange.out`
   remain visible
 
 #### Scenario: The gripper cannot exceed the total
+
 - **WHEN** the operator drags the gripper past the scene's last frame
 - **THEN** `activeRange.out` is clamped to `frameRange.out` (growing the total
   is done through the Inspector Duration field, not the gripper)
@@ -59,17 +64,20 @@ scrubbing of the playhead SHALL remain free across the full `frameRange` so the
 operator can still inspect the trailing frames.
 
 #### Scenario: Play loops within the active region
+
 - **WHEN** the active region is `[0, 30]` of a total `[0, 50]` scene and the
   operator clicks Play
 - **THEN** the current frame advances and loops back to frame 0 when it reaches
   frame 30, never advancing past 30 during playback
 
 #### Scenario: Export covers only the active region
+
 - **WHEN** the active region is `[0, 30]` of a total `[0, 50]` scene and the
   scene is exported or previewed
 - **THEN** only frames within `[0, 30]` are produced
 
 #### Scenario: Scrubbing still reaches the trailing frames
+
 - **WHEN** the active region is `[0, 30]` of a total `[0, 50]` scene and the
   operator drags the playhead onto frame 42
 - **THEN** the playhead moves to frame 42 and the canvas shows that frame (the
@@ -85,11 +93,13 @@ outside the played/exported window and have no effect on output until the
 active region is widened again.
 
 #### Scenario: Trailing region is dimmed and inactive
+
 - **WHEN** the active region is shorter than the total
 - **THEN** the timeline shows the `[activeRange.out, frameRange.out]` region in a
   dimmed/inactive style distinct from the active scene bar
 
 #### Scenario: Keyframes beyond the active out-point are kept
+
 - **WHEN** a track has a keyframe at frame 45 and the operator resizes the active
   region to `[0, 30]`
 - **THEN** the keyframe at frame 45 still appears on its lane, is excluded from
@@ -104,11 +114,13 @@ The Inspector's scene Duration field SHALL set the scene's **total** frame count
 to stay within `[frameRange.in, frameRange.out]`.
 
 #### Scenario: Shrinking the total clamps the active out-point
+
 - **WHEN** the active region is `[0, 40]` and the operator sets the Duration
   field so the total becomes `[0, 30]`
 - **THEN** `frameRange.out` becomes 30 and `activeRange.out` is clamped to 30
 
 #### Scenario: Growing the total leaves the active region intact
+
 - **WHEN** the active region is `[0, 30]` of a total `[0, 50]` scene and the
   operator increases the Duration so the total becomes `[0, 80]`
 - **THEN** `frameRange.out` becomes 80 and `activeRange` stays `[0, 30]`

@@ -276,10 +276,7 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
         >
           Home
         </button>
-        <div
-          style={styles.menuItemWrap}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
+        <div style={styles.menuItemWrap} onPointerDown={(e) => e.stopPropagation()}>
           <button
             ref={fileBtnRef}
             type="button"

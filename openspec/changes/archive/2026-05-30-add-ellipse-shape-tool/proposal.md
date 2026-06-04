@@ -25,10 +25,12 @@ plates and dots, and today they can't create one directly.
 ## Capabilities
 
 ### New Capabilities
+
 - `designer-shapes`: authoring vector shapes (rectangle, ellipse) on the
   Designer canvas — adding them via tools, and moving/resizing them.
 
 ### Modified Capabilities
+
 <!-- None — no existing spec captures shape authoring yet, and neither the
      schema nor the runtime behavior changes. -->
 

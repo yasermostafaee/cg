@@ -13,6 +13,7 @@ on the left, keyframe diamonds along the right.
 ## Goals / Non-Goals
 
 **Goals:**
+
 - One-click "add keyframe" per animatable property at the current frame.
 - Drag-to-move a keyframe along its track.
 - Delete the selected keyframe.
@@ -23,6 +24,7 @@ on the left, keyframe diamonds along the right.
   saved scene re-shows the same keyframes.
 
 **Non-Goals (deferred):**
+
 - Color tracks (`fill.color`, `text.color`) — the M12 schema supports them but
   the PRD's eight required tracks are all numeric; the data model is flexible
   enough that we can expose color tracks later without spec churn.
@@ -67,8 +69,8 @@ on the left, keyframe diamonds along the right.
   before; once a track exists (the operator has authored at least one
   keyframe), every subsequent edit lands as a keyframe at the current frame
   — replacing the one at that frame if present, otherwise inserting a new
-  one. This is the rule that lets the operator *build the animation by
-  dragging*: add the first keyframe by hand, scrub to a new frame, drag —
+  one. This is the rule that lets the operator _build the animation by
+  dragging_: add the first keyframe by hand, scrub to a new frame, drag —
   and a second keyframe appears with the new value. It matches the PRD's
   worked example. The previous "edit only updates when exactly on a
   keyframe" rule was simpler but did not actually let the operator author
@@ -132,7 +134,7 @@ on the left, keyframe diamonds along the right.
   become collapsible (`CollapseSection`) with chevrons (`▾` / `▸`).
   Timeline switches to a per-element **tree**: every element in the
   scene gets a header row carrying a chevron, name, visibility / lock
-  indicators, and a colored *lifespan bar* (per-id stable color). A
+  indicators, and a colored _lifespan bar_ (per-id stable color). A
   nested `▾ TRANSFORM` group expands to the 8 property TrackRows; both
   the element row and its TRANSFORM group are independently
   collapsible. Clicking an element header selects it (so the Inspector

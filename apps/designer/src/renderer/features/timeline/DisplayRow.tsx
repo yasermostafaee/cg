@@ -68,7 +68,5 @@ export function DisplayRow({ row, element, part }: Props): JSX.Element {
       </div>
     );
   }
-  return (
-    <div style={styles.laneCell} data-display-row={row.id} />
-  );
+  return <div style={styles.laneCell} data-display-row={row.id} />;
 }

@@ -24,16 +24,16 @@ Persian / RTL is a core requirement.
 
 ## Where features go
 
-| Feature kind | Location |
-| --- | --- |
-| UI control / panel / tool (existing data) | `apps/<app>/src/renderer/features/<feature>/` (+ `state/`, `hooks/`) |
-| New backend capability (no schema change) | method in `src/shared/*-bridge.ts` → impl in `src/platform/` → call from renderer (+ optional channel in `@cg/shared-ipc`) |
-| Data-model change (element/field/shape kind) | `@cg/shared-schema` → renderer UI → `@cg/template-runtime` render |
-| How a scene renders (animation, element visual) | `@cg/template-runtime` |
-| `.vcg` package format / manifest / signing | `@cg/shared-schema` (manifest) + `@cg/vcg-format` |
-| Runtime/playout (intents, connections) | `@cg/shared-ipc` channel + `apps/runtime/src/platform/MockRuntime.ts` + renderer (real logic → `@cg/caspar-client`) |
-| Shared tokens / theme | `@cg/ui` |
-| Storage backend | `@cg/storage` |
+| Feature kind                                    | Location                                                                                                                   |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| UI control / panel / tool (existing data)       | `apps/<app>/src/renderer/features/<feature>/` (+ `state/`, `hooks/`)                                                       |
+| New backend capability (no schema change)       | method in `src/shared/*-bridge.ts` → impl in `src/platform/` → call from renderer (+ optional channel in `@cg/shared-ipc`) |
+| Data-model change (element/field/shape kind)    | `@cg/shared-schema` → renderer UI → `@cg/template-runtime` render                                                          |
+| How a scene renders (animation, element visual) | `@cg/template-runtime`                                                                                                     |
+| `.vcg` package format / manifest / signing      | `@cg/shared-schema` (manifest) + `@cg/vcg-format`                                                                          |
+| Runtime/playout (intents, connections)          | `@cg/shared-ipc` channel + `apps/runtime/src/platform/MockRuntime.ts` + renderer (real logic → `@cg/caspar-client`)        |
+| Shared tokens / theme                           | `@cg/ui`                                                                                                                   |
+| Storage backend                                 | `@cg/storage`                                                                                                              |
 
 ## Commands
 

@@ -38,12 +38,14 @@ operator scrubs frames and adds/edits keyframes on the selected element.
 ## Capabilities
 
 ### New Capabilities
+
 - `designer-animation-timeline`: authoring per-element keyframes for the
   M12 animatable properties via a docked timeline below the canvas (frame
   ruler, transport, playhead, per-property track rows, add/move/delete
   keyframes, edit value-at-playhead through the Inspector).
 
 ### Modified Capabilities
+
 <!-- None. designer-shapes is untouched: timeline applies to every element kind
      (shape, text, image), not only shapes. The M12 schema and runtime
      applier already support the interpolation. -->

@@ -626,7 +626,7 @@ export function TimelineDock({
                         isSelected={selection.has(el.id)}
                         frameRange={scene.frameRange}
                         lifespanColor={el.timelineColor ?? lifespanColorFor(el)}
-                      onContextMenu={openLayerMenu}
+                        onContextMenu={openLayerMenu}
                         part="lane"
                       />
                       {expanded &&
@@ -647,7 +647,7 @@ export function TimelineDock({
                                       frameOut={frameOut}
                                       currentFrame={currentFrame}
                                       selectedKeyframe={selectedKeyframe}
-                                    selectedKeyframes={selectedKeyframes}
+                                      selectedKeyframes={selectedKeyframes}
                                       part="lane"
                                     />
                                   ) : (

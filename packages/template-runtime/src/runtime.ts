@@ -1,4 +1,10 @@
-import { activeRangeOf, type Element, type FieldValues, type FrameRange, type Scene } from '@cg/shared-schema';
+import {
+  activeRangeOf,
+  type Element,
+  type FieldValues,
+  type FrameRange,
+  type Scene,
+} from '@cg/shared-schema';
 import {
   applyAnimationAtFrame,
   collectAnimatedElements,
@@ -163,10 +169,7 @@ interface LifespanGate {
   naturalDisplay: string;
 }
 
-function collectLifespanGates(
-  scene: Scene,
-  elementMap: Map<string, HTMLElement>,
-): LifespanGate[] {
+function collectLifespanGates(scene: Scene, elementMap: Map<string, HTMLElement>): LifespanGate[] {
   const out: LifespanGate[] = [];
   function walk(children: readonly Element[]): void {
     for (const el of children) {

@@ -500,7 +500,10 @@ export function CanvasArea({
           />
         )}
         {rulerOrigin !== null && (guides.x.length > 0 || guides.y.length > 0) && (
-          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }} aria-hidden>
+          <div
+            style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }}
+            aria-hidden
+          >
             {guides.x.map((gx, i) => (
               <div
                 key={`gx-${String(i)}`}
@@ -517,7 +520,16 @@ export function CanvasArea({
                 onPointerDown={(e) => dragGuide('x', i, e.nativeEvent)}
                 onDoubleClick={() => designerStore.removeGuide('x', i)}
               >
-                <div style={{ position: 'absolute', left: 3, top: 0, bottom: 0, width: 1, background: '#22D3EE' }} />
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: 3,
+                    top: 0,
+                    bottom: 0,
+                    width: 1,
+                    background: '#22D3EE',
+                  }}
+                />
               </div>
             ))}
             {guides.y.map((gy, i) => (
@@ -536,7 +548,16 @@ export function CanvasArea({
                 onPointerDown={(e) => dragGuide('y', i, e.nativeEvent)}
                 onDoubleClick={() => designerStore.removeGuide('y', i)}
               >
-                <div style={{ position: 'absolute', top: 3, left: 0, right: 0, height: 1, background: '#22D3EE' }} />
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 3,
+                    left: 0,
+                    right: 0,
+                    height: 1,
+                    background: '#22D3EE',
+                  }}
+                />
               </div>
             ))}
           </div>
@@ -600,8 +621,20 @@ function CanvasRuler({
         onPointerDown={(e) => onCreateGuide('y', e)}
       >
         {xticks.map((x) => (
-          <div key={x} style={{ position: 'absolute', left: originX + x * zoom, top: 0, bottom: 0 }}>
-            <div style={{ position: 'absolute', left: 0, bottom: 0, width: 1, height: 5, background: colors.border }} />
+          <div
+            key={x}
+            style={{ position: 'absolute', left: originX + x * zoom, top: 0, bottom: 0 }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                left: 0,
+                bottom: 0,
+                width: 1,
+                height: 5,
+                background: colors.border,
+              }}
+            />
             <span style={{ position: 'absolute', left: 2, top: 1, whiteSpace: 'nowrap' }}>{x}</span>
           </div>
         ))}
@@ -622,9 +655,24 @@ function CanvasRuler({
       >
         {yticks.map((y) => (
           <div key={y} style={{ position: 'absolute', top: originY + y * zoom, left: 0, right: 0 }}>
-            <div style={{ position: 'absolute', top: 0, right: 0, height: 1, width: 5, background: colors.border }} />
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                right: 0,
+                height: 1,
+                width: 5,
+                background: colors.border,
+              }}
+            />
             <span
-              style={{ position: 'absolute', left: 1, top: 2, writingMode: 'vertical-rl' as const, fontSize: 8 }}
+              style={{
+                position: 'absolute',
+                left: 1,
+                top: 2,
+                writingMode: 'vertical-rl' as const,
+                fontSize: 8,
+              }}
             >
               {y}
             </span>

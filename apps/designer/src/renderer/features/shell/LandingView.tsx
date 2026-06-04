@@ -84,24 +84,50 @@ const styles = {
   },
   grid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-    gap: '0.7rem',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+    gap: '0.9rem',
   },
   card: {
     background: colors.panel,
     border: `1px solid ${colors.border}`,
-    borderRadius: '0.3rem',
-    padding: '0.9rem 1rem',
+    borderRadius: '0.5rem',
+    padding: 0,
     cursor: 'pointer',
     textAlign: 'left' as const,
     color: colors.text,
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.3rem',
     fontSize: '0.85rem',
+    overflow: 'hidden' as const,
+  },
+  cardThumb: {
+    width: '100%',
+    aspectRatio: '16 / 9',
+    objectFit: 'cover' as const,
+    display: 'block',
+    background: '#0b0e16',
+    borderBottom: `1px solid ${colors.border}`,
+  },
+  cardThumbFallback: {
+    width: '100%',
+    aspectRatio: '16 / 9',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'linear-gradient(135deg, #1b2740, #0b1120)',
+    color: colors.textMuted,
+    fontSize: '0.72rem',
+    letterSpacing: '0.1em',
+    borderBottom: `1px solid ${colors.border}`,
+  },
+  cardBody: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.25rem',
+    padding: '0.7rem 0.85rem 0.85rem',
   },
   cardLabel: { fontWeight: 700 },
-  cardDesc: { color: colors.textMuted, fontSize: '0.78rem' },
+  cardDesc: { color: colors.textMuted, fontSize: '0.76rem', lineHeight: 1.35 },
   recentRow: {
     display: 'flex',
     alignItems: 'center',
@@ -234,10 +260,16 @@ export function LandingView(): JSX.Element {
               type="button"
               style={styles.card}
               onClick={() => guardedSwitch(s.label, () => loadStarter(s.id))}
-              title={s.description}
             >
-              <span style={styles.cardLabel}>{s.label}</span>
-              <span style={styles.cardDesc}>{s.description}</span>
+              {s.previewUrl !== undefined ? (
+                <img src={s.previewUrl} alt={`${s.label} preview`} style={styles.cardThumb} />
+              ) : (
+                <span style={styles.cardThumbFallback}>PREVIEW</span>
+              )}
+              <span style={styles.cardBody}>
+                <span style={styles.cardLabel}>{s.label}</span>
+                <span style={styles.cardDesc}>{s.description}</span>
+              </span>
             </button>
           ))}
         </div>
@@ -256,8 +288,7 @@ export function LandingView(): JSX.Element {
               onClick={() => guardedSwitch(r.name, () => openRecent(r.path))}
             >
               <span>
-                <strong>{r.name}</strong>{' '}
-                <span style={styles.recentMeta}>· {r.templateType}</span>
+                <strong>{r.name}</strong> <span style={styles.recentMeta}>· {r.templateType}</span>
               </span>
               <span style={styles.recentMeta}>{formatWhen(r.lastOpenedAt)}</span>
             </button>

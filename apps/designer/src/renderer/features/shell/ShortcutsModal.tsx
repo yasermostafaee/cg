@@ -123,7 +123,13 @@ export function ShortcutsModal({ onClose }: Props): JSX.Element {
       <div style={styles.modal} onPointerDown={(e) => e.stopPropagation()}>
         <div style={styles.titleRow}>
           <h2 style={styles.title}>Keyboard Shortcuts</h2>
-          <button type="button" style={styles.close} onClick={onClose} aria-label="Close" title="Close">
+          <button
+            type="button"
+            style={styles.close}
+            onClick={onClose}
+            aria-label="Close"
+            title="Close"
+          >
             ✕
           </button>
         </div>

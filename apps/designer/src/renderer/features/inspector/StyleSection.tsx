@@ -203,12 +203,8 @@ function ShapeSections({
           step={1}
           min={0}
           onCommit={(width) => designerStore.commitAnimatable(id, 'stroke.width', width)}
-          trailing={animPointIcon(
-            element,
-            'stroke.width',
-            currentFrame,
-            selectedKeyframe,
-            (el) => (el.type === 'shape' ? (el.stroke?.width ?? 0) : 0),
+          trailing={animPointIcon(element, 'stroke.width', currentFrame, selectedKeyframe, (el) =>
+            el.type === 'shape' ? (el.stroke?.width ?? 0) : 0,
           )}
         />
         <NumberField
@@ -217,12 +213,8 @@ function ShapeSections({
           step={1}
           min={0}
           onCommit={(d) => designerStore.commitAnimatable(id, 'stroke.dash', d)}
-          trailing={animPointIcon(
-            element,
-            'stroke.dash',
-            currentFrame,
-            selectedKeyframe,
-            (el) => (el.type === 'shape' ? (el.stroke?.dash?.[0] ?? 0) : 0),
+          trailing={animPointIcon(element, 'stroke.dash', currentFrame, selectedKeyframe, (el) =>
+            el.type === 'shape' ? (el.stroke?.dash?.[0] ?? 0) : 0,
           )}
         />
       </CollapseSection>
@@ -342,13 +334,25 @@ function DropShadowSection({
         min={0}
         suffix="px"
         onCommit={(v) => designerStore.commitAnimatable(id, 'shadow.blur', v)}
-        trailing={animPointIcon(element, 'shadow.blur', currentFrame, selectedKeyframe, () => s.blur)}
+        trailing={animPointIcon(
+          element,
+          'shadow.blur',
+          currentFrame,
+          selectedKeyframe,
+          () => s.blur,
+        )}
       />
       <ColorField
         label="color"
         value={s.color}
         onCommit={(color) => designerStore.commitAnimatable(id, 'shadow.color', color)}
-        trailing={animPointIcon(element, 'shadow.color', currentFrame, selectedKeyframe, () => s.color)}
+        trailing={animPointIcon(
+          element,
+          'shadow.color',
+          currentFrame,
+          selectedKeyframe,
+          () => s.color,
+        )}
       />
     </CollapseSection>
   );
@@ -373,7 +377,13 @@ function TextPaddingSection({
         step={1}
         min={0}
         onCommit={(v) => designerStore.commitAnimatable(id, 'padding.top', v)}
-        trailing={animPointIcon(element, 'padding.top', currentFrame, selectedKeyframe, () => p.top)}
+        trailing={animPointIcon(
+          element,
+          'padding.top',
+          currentFrame,
+          selectedKeyframe,
+          () => p.top,
+        )}
       />
       <NumberField
         label="right"
@@ -381,7 +391,13 @@ function TextPaddingSection({
         step={1}
         min={0}
         onCommit={(v) => designerStore.commitAnimatable(id, 'padding.right', v)}
-        trailing={animPointIcon(element, 'padding.right', currentFrame, selectedKeyframe, () => p.right)}
+        trailing={animPointIcon(
+          element,
+          'padding.right',
+          currentFrame,
+          selectedKeyframe,
+          () => p.right,
+        )}
       />
       <NumberField
         label="bottom"
@@ -389,7 +405,13 @@ function TextPaddingSection({
         step={1}
         min={0}
         onCommit={(v) => designerStore.commitAnimatable(id, 'padding.bottom', v)}
-        trailing={animPointIcon(element, 'padding.bottom', currentFrame, selectedKeyframe, () => p.bottom)}
+        trailing={animPointIcon(
+          element,
+          'padding.bottom',
+          currentFrame,
+          selectedKeyframe,
+          () => p.bottom,
+        )}
       />
       <NumberField
         label="left"
@@ -397,7 +419,13 @@ function TextPaddingSection({
         step={1}
         min={0}
         onCommit={(v) => designerStore.commitAnimatable(id, 'padding.left', v)}
-        trailing={animPointIcon(element, 'padding.left', currentFrame, selectedKeyframe, () => p.left)}
+        trailing={animPointIcon(
+          element,
+          'padding.left',
+          currentFrame,
+          selectedKeyframe,
+          () => p.left,
+        )}
       />
     </CollapseSection>
   );
@@ -429,7 +457,13 @@ function BorderRadiusSection({
         step={1}
         min={0}
         onCommit={(v) => designerStore.commitAnimatable(id, 'cornerRadius', v)}
-        trailing={animPointIcon(element, 'cornerRadius', currentFrame, selectedKeyframe, () => radius)}
+        trailing={animPointIcon(
+          element,
+          'cornerRadius',
+          currentFrame,
+          selectedKeyframe,
+          () => radius,
+        )}
       />
     </CollapseSection>
   );

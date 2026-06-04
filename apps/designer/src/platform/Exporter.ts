@@ -123,7 +123,9 @@ export class Exporter {
    * (native save dialog → file handle write). Throws when preflight
    * surfaces an error-severity issue.
    */
-  async produce(scene: Scene): Promise<{ vcg: Uint8Array; sha256: string; defaultFilename: string }> {
+  async produce(
+    scene: Scene,
+  ): Promise<{ vcg: Uint8Array; sha256: string; defaultFilename: string }> {
     this.progress.emit({ step: 'validate', progress: 0.05 });
     const fatal = (await this.preflight(scene)).filter((i) => i.severity === 'error');
     if (fatal.length > 0) {
