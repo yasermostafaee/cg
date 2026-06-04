@@ -26,7 +26,9 @@ describe('buildScene', () => {
     const { elementMap } = buildScene(lowerThirdScene);
     const text = elementMap.get('name');
     expect(text?.style.direction).toBe('rtl');
-    expect(text?.style.fontFamily).toBe('Vazirmatn');
+    // The authored family leads a fallback stack (clean sans + Persian shaping).
+    expect(text?.style.fontFamily.startsWith('Vazirmatn,')).toBe(true);
+    expect(text?.style.fontFamily).toMatch(/sans-serif$/);
     expect(text?.style.fontWeight).toBe('700');
   });
 
@@ -64,5 +66,42 @@ describe('buildScene', () => {
     sceneCopy.background = '#000000';
     const { container } = buildScene(sceneCopy);
     expect(container.style.background).toMatch(/#000000/i);
+  });
+
+  it('renders a ShapeElement linear-gradient fill', () => {
+    const sceneCopy = structuredClone(lowerThirdScene);
+    const bg = sceneCopy.layers[0]?.children[0];
+    if (bg === undefined || bg.type !== 'shape') throw new Error('fixture changed');
+    bg.fill = {
+      kind: 'linear',
+      angle: 90,
+      stops: [
+        { at: 0, color: '#000000' },
+        { at: 1, color: '#FFFFFF' },
+      ],
+    };
+    const { elementMap } = buildScene(sceneCopy);
+    const css = elementMap.get('bg')?.style.background ?? '';
+    expect(css).toMatch(/linear-gradient\(90deg/i);
+    expect(css).toMatch(/0%/);
+    expect(css).toMatch(/100%/);
+  });
+
+  it('renders a ShapeElement radial-gradient fill', () => {
+    const sceneCopy = structuredClone(lowerThirdScene);
+    const bg = sceneCopy.layers[0]?.children[0];
+    if (bg === undefined || bg.type !== 'shape') throw new Error('fixture changed');
+    bg.fill = {
+      kind: 'radial',
+      center: { x: 0.5, y: 0.25 },
+      radius: 400,
+      stops: [
+        { at: 0, color: '#112233' },
+        { at: 1, color: '#000000' },
+      ],
+    };
+    const { elementMap } = buildScene(sceneCopy);
+    const css = elementMap.get('bg')?.style.background ?? '';
+    expect(css).toMatch(/radial-gradient\(circle 400px at 50% 25%/i);
   });
 });

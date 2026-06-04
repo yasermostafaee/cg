@@ -1,5 +1,6 @@
 import type {
   Element as SceneElement,
+  Fill,
   Filter,
   Layer,
   Scene,
@@ -130,6 +131,22 @@ function composeBoxShadow(s: Shadow): string {
   return `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.color}`;
 }
 
+/**
+ * Render a {@link Fill} to a CSS `background` value. Solid is the colour
+ * itself; linear/radial map to CSS gradients. Gradient stops carry a 0..1
+ * position (→ percent); the radial `center` is a 0..1 fraction of the box
+ * and `radius` is in scene pixels.
+ */
+function fillToCss(fill: Fill): string {
+  if (fill.kind === 'solid') return fill.color;
+  const pct = (n: number): string => `${String(Number((n * 100).toFixed(2)))}%`;
+  const stops = fill.stops.map((s) => `${s.color} ${pct(s.at)}`).join(', ');
+  if (fill.kind === 'linear') {
+    return `linear-gradient(${String(fill.angle)}deg, ${stops})`;
+  }
+  return `radial-gradient(circle ${String(fill.radius)}px at ${pct(fill.center.x)} ${pct(fill.center.y)}, ${stops})`;
+}
+
 function composeTransform(t: Transform): string {
   const parts: string[] = [];
   if (t.scale.x !== 1 || t.scale.y !== 1) parts.push(`scale(${t.scale.x}, ${t.scale.y})`);
@@ -148,7 +165,10 @@ function buildText(
   const el = doc.createElement('div');
   el.dataset['cgElementId'] = element.id;
   applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
-  el.style.fontFamily = element.font.family;
+  // Append a fallback stack so a family that isn't installed degrades to a
+  // clean shaping-capable sans (keeping Persian/Arabic coverage) rather than
+  // the browser's default serif. The authored family always wins when present.
+  el.style.fontFamily = `${element.font.family}, "Segoe UI", system-ui, -apple-system, Vazirmatn, "Noto Sans Arabic", "Noto Sans", sans-serif`;
   el.style.fontWeight = String(element.font.weight);
   el.style.fontStyle = element.font.style;
   el.style.fontSize = `${element.font.size}px`;
@@ -213,8 +233,8 @@ function buildShape(element: ShapeElement, doc: Document): HTMLElement {
   const el = doc.createElement('div');
   el.dataset['cgElementId'] = element.id;
   applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
-  if (element.fill?.kind === 'solid') {
-    el.style.background = element.fill.color;
+  if (element.fill !== undefined) {
+    el.style.background = fillToCss(element.fill);
   }
   if (element.stroke) {
     // D-010 — `dash` array maps to a dashed/dotted border. SVG-style
