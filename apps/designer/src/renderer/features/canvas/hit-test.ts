@@ -2,33 +2,43 @@ import type { Element } from '@cg/shared-schema';
 
 /**
  * Click-position hit-test against an element's transform. Works in
- * SCENE coordinates (pre-scale). The canvas overlay converts a viewport
+ * SCENE coordinates (pre-zoom). The canvas overlay converts a viewport
  * (mouse) coordinate via the active zoom factor before calling in.
  *
- * Rotation is honored — point is mapped back through the element's
- * inverse rotation around its center, then bounds-tested.
+ * The renderer transforms each element with `scale(...) rotate(...)` about
+ * its `anchor` (CSS `transform-origin`, a 0..1 fraction of the unscaled box;
+ * see template-runtime/scene-builder). So a non-centre anchor — new elements
+ * default to top-left `{0,0}` — swings the box around that corner. We invert
+ * the *same* transform here: the forward map is `Scale·Rotate`, so we undo
+ * scale then rotation about the anchor pivot, then bounds-test the resulting
+ * point against the element's unscaled local box. (Skew is not hit-tested.)
  */
 export function hitsElement(element: Element, scenePoint: { x: number; y: number }): boolean {
   const { transform } = element;
-  const { position, size, rotation } = transform;
-  const w = size.w * transform.scale.x;
-  const h = size.h * transform.scale.y;
-  const cx = position.x + w / 2;
-  const cy = position.y + h / 2;
-  if (rotation === 0) {
-    return (
-      scenePoint.x >= position.x &&
-      scenePoint.x <= position.x + w &&
-      scenePoint.y >= position.y &&
-      scenePoint.y <= position.y + h
-    );
+  const { position, size, rotation, anchor, scale } = transform;
+  if (scale.x === 0 || scale.y === 0) return false;
+
+  // Pivot in scene coords — the anchor point of the unscaled box at `position`.
+  const pivotX = position.x + anchor.x * size.w;
+  const pivotY = position.y + anchor.y * size.h;
+
+  // Offset from the pivot, then invert Scale, then invert Rotate.
+  let dx = (scenePoint.x - pivotX) / scale.x;
+  let dy = (scenePoint.y - pivotY) / scale.y;
+  if (rotation !== 0) {
+    const rad = (-rotation * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const rx = dx * cos - dy * sin;
+    const ry = dx * sin + dy * cos;
+    dx = rx;
+    dy = ry;
   }
-  const rad = (-rotation * Math.PI) / 180;
-  const dx = scenePoint.x - cx;
-  const dy = scenePoint.y - cy;
-  const rx = dx * Math.cos(rad) - dy * Math.sin(rad);
-  const ry = dx * Math.sin(rad) + dy * Math.cos(rad);
-  return Math.abs(rx) <= w / 2 && Math.abs(ry) <= h / 2;
+
+  // Back to a point in the unscaled local box (relative to `position`).
+  const localX = anchor.x * size.w + dx;
+  const localY = anchor.y * size.h + dy;
+  return localX >= 0 && localX <= size.w && localY >= 0 && localY <= size.h;
 }
 
 /**

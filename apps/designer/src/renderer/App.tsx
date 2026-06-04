@@ -4,6 +4,7 @@ import { ProjectAssetsPanel } from './features/assets/ProjectAssetsPanel.js';
 import { CanvasArea } from './features/canvas/CanvasArea.js';
 import { InspectorPanel } from './features/inspector/InspectorPanel.js';
 import { IssuesPanel } from './features/issues/IssuesPanel.js';
+import { InputTooltip } from './features/shell/InputTooltip.js';
 import { LandingView } from './features/shell/LandingView.js';
 import { Splitter } from './features/shell/Splitter.js';
 import { TopToolbar } from './features/shell/TopToolbar.js';
@@ -122,6 +123,26 @@ export function App(): JSX.Element {
     return () => window.removeEventListener('contextmenu', suppressNativeMenu);
   }, []);
 
+  // Select the whole value when a text field is first clicked, so a
+  // keystroke replaces it — matching the number inputs (which focus-and-
+  // select via their scrub gesture). preventDefault stops the click from
+  // collapsing the selection to a caret; a second click (already focused)
+  // falls through so the caret can be placed normally.
+  useEffect(() => {
+    function onPointerDown(e: PointerEvent): void {
+      const el = e.target;
+      if (!(el instanceof HTMLInputElement)) return;
+      const type = (el.type || 'text').toLowerCase();
+      if (!['text', 'search', 'url', 'email', 'tel'].includes(type)) return;
+      if (el.readOnly || el.disabled || document.activeElement === el) return;
+      e.preventDefault();
+      el.focus();
+      el.select();
+    }
+    window.addEventListener('pointerdown', onPointerDown, true);
+    return () => window.removeEventListener('pointerdown', onPointerDown, true);
+  }, []);
+
   // Disable browser defaults that fight the editor: page zoom (Ctrl/Cmd
   // +/-/0 and Ctrl+wheel), accidental text selection (except in real inputs),
   // and the disruptive Save/Print shortcuts. Reload, dev-tools, and clipboard
@@ -156,6 +177,7 @@ export function App(): JSX.Element {
     return (
       <main style={styles.page}>
         <LandingView />
+        <InputTooltip />
       </main>
     );
   }
@@ -231,6 +253,7 @@ export function App(): JSX.Element {
         />
       </div>
       <StatusBar scene={scene} issues={issues} />
+      <InputTooltip />
     </main>
   );
 }

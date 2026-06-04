@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { FrameRate, Resolution, TemplateType } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
+import { RealtimeNumberInput } from '../inspector/controls.js';
 
 interface Props {
   onClose: () => void;
@@ -177,22 +178,22 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
           <div style={styles.row}>
             <span style={styles.label}>Custom W × H</span>
             <div style={styles.inlinePair}>
-              <input
+              <RealtimeNumberInput
                 style={styles.input}
-                type="number"
                 min={1}
+                step={1}
                 value={customW}
-                onChange={(e) => setCustomW(Number(e.target.value))}
-                aria-label="Width"
+                onCommit={setCustomW}
+                ariaLabel="Width"
               />
               <span style={{ color: colors.textMuted }}>×</span>
-              <input
+              <RealtimeNumberInput
                 style={styles.input}
-                type="number"
                 min={1}
+                step={1}
                 value={customH}
-                onChange={(e) => setCustomH(Number(e.target.value))}
-                aria-label="Height"
+                onCommit={setCustomH}
+                ariaLabel="Height"
               />
             </div>
           </div>
@@ -217,13 +218,13 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
         <div style={styles.row}>
           <span style={styles.label}>Total frames</span>
           <div style={styles.inlinePair}>
-            <input
+            <RealtimeNumberInput
               style={styles.input}
-              type="number"
               min={1}
+              step={1}
               value={durationFrames}
-              onChange={(e) => setDurationFrames(Number(e.target.value))}
-              aria-label="Total frames"
+              onCommit={setDurationFrames}
+              ariaLabel="Total frames"
             />
             <span />
             <span style={{ color: colors.textMuted, fontSize: '0.74rem' }}>

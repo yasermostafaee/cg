@@ -33,17 +33,25 @@ export interface TimelineRow {
    * colour properties (D-010).
    */
   readonly read: (el: Element) => number | string;
+  /** Dim unit shown after the value in the timeline / inspector (e.g. "%", "°"). */
+  readonly unit?: string;
+  /**
+   * Multiplier between the STORED value and the DISPLAYED value — display =
+   * stored × factor (and the edit path divides back). Lets scale / opacity
+   * store 0–1 but show 0–100. Defaults to 1.
+   */
+  readonly factor?: number;
 }
 
 export const TIMELINE_ROWS: readonly TimelineRow[] = [
   { label: 'Position X', property: 'position.x', read: (el) => el.transform.position.x },
   { label: 'Position Y', property: 'position.y', read: (el) => el.transform.position.y },
-  { label: 'Scale X', property: 'scale.x', read: (el) => el.transform.scale.x },
-  { label: 'Scale Y', property: 'scale.y', read: (el) => el.transform.scale.y },
-  { label: 'Rotation', property: 'rotation', read: (el) => el.transform.rotation },
+  { label: 'Scale X', property: 'scale.x', read: (el) => el.transform.scale.x, unit: '%', factor: 100 },
+  { label: 'Scale Y', property: 'scale.y', read: (el) => el.transform.scale.y, unit: '%', factor: 100 },
+  { label: 'Rotation', property: 'rotation', read: (el) => el.transform.rotation, unit: '°' },
   { label: 'Width', property: 'size.w', read: (el) => el.transform.size.w },
   { label: 'Height', property: 'size.h', read: (el) => el.transform.size.h },
-  { label: 'Opacity', property: 'opacity', read: (el) => el.opacity },
+  { label: 'Opacity', property: 'opacity', read: (el) => el.opacity, unit: '%', factor: 100 },
 ];
 
 /**
@@ -79,21 +87,22 @@ function anim(
   label: string,
   property: AnimatableProperty,
   read: (el: Element) => number | string,
+  unit?: string,
 ): TimelineRowEntry {
-  return { kind: 'animatable', row: { label, property, read } };
+  return { kind: 'animatable', row: { label, property, read, ...(unit !== undefined ? { unit } : {}) } };
 }
 
 /** Filter group — all 9 properties animatable as numbers (D-010). */
 const FILTER_ROWS: readonly TimelineRowEntry[] = [
-  anim('Blur', 'filter.blur', (el) => el.filter?.blur ?? 0),
-  anim('Brightness', 'filter.brightness', (el) => el.filter?.brightness ?? 100),
-  anim('Contrast', 'filter.contrast', (el) => el.filter?.contrast ?? 100),
-  anim('Grayscale', 'filter.grayscale', (el) => el.filter?.grayscale ?? 0),
-  anim('Hue rotate', 'filter.hueRotate', (el) => el.filter?.hueRotate ?? 0),
-  anim('Invert', 'filter.invert', (el) => el.filter?.invert ?? 0),
-  anim('Opacity', 'filter.opacity', (el) => el.filter?.opacity ?? 100),
-  anim('Saturate', 'filter.saturate', (el) => el.filter?.saturate ?? 100),
-  anim('Sepia', 'filter.sepia', (el) => el.filter?.sepia ?? 0),
+  anim('Blur', 'filter.blur', (el) => el.filter?.blur ?? 0, 'px'),
+  anim('Brightness', 'filter.brightness', (el) => el.filter?.brightness ?? 100, '%'),
+  anim('Contrast', 'filter.contrast', (el) => el.filter?.contrast ?? 100, '%'),
+  anim('Grayscale', 'filter.grayscale', (el) => el.filter?.grayscale ?? 0, '%'),
+  anim('Hue rotate', 'filter.hueRotate', (el) => el.filter?.hueRotate ?? 0, '°'),
+  anim('Invert', 'filter.invert', (el) => el.filter?.invert ?? 0, '%'),
+  anim('Opacity', 'filter.opacity', (el) => el.filter?.opacity ?? 100, '%'),
+  anim('Saturate', 'filter.saturate', (el) => el.filter?.saturate ?? 100, '%'),
+  anim('Sepia', 'filter.sepia', (el) => el.filter?.sepia ?? 0, '%'),
 ];
 
 const FILTER_GROUP: TimelineGroup = { title: 'Filter', rows: FILTER_ROWS };
@@ -151,9 +160,9 @@ function dropShadowGroup(): TimelineGroup {
   return {
     title: 'Drop Shadow',
     rows: [
-      anim('Offset X', 'shadow.offsetX', (el) => shadowOf(el)?.offsetX ?? 0),
-      anim('Offset Y', 'shadow.offsetY', (el) => shadowOf(el)?.offsetY ?? 0),
-      anim('Blur', 'shadow.blur', (el) => shadowOf(el)?.blur ?? 0),
+      anim('Offset X', 'shadow.offsetX', (el) => shadowOf(el)?.offsetX ?? 0, 'px'),
+      anim('Offset Y', 'shadow.offsetY', (el) => shadowOf(el)?.offsetY ?? 0, 'px'),
+      anim('Blur', 'shadow.blur', (el) => shadowOf(el)?.blur ?? 0, 'px'),
       anim('Color', 'shadow.color', (el) => shadowOf(el)?.color ?? '#000000'),
     ],
   };

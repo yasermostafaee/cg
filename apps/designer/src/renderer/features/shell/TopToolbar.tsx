@@ -38,9 +38,14 @@ const styles = {
     cursor: 'pointer',
     letterSpacing: '0.01em',
   },
-  menuItemHome: {
+  // Hover / open feedback for the top-level menu buttons and dropdown
+  // rows — a solid slate fill, matching the Loopic reference's menu bar.
+  menuItemActive: {
+    background: colors.menuHover,
     color: colors.text,
-    fontWeight: 600,
+  },
+  dropdownItemActive: {
+    background: colors.menuHover,
   },
   spacer: { flex: 1 },
   saveButton: {
@@ -114,6 +119,7 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
   const errorCount = issues.filter((i) => i.severity === 'error').length;
   const exportBlocked = scene === null || errorCount > 0;
   const [openMenu, setOpenMenu] = useState<'file' | 'edit' | 'view' | 'help' | null>(null);
+  const [hoverNav, setHoverNav] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [newModalOpen, setNewModalOpen] = useState(false);
   // Queues a switch action (Close / New / Open) when there's already a
@@ -202,6 +208,16 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
     guardedSwitch(fn);
   }
 
+  // Top-level menu button style — tinted when its dropdown is open or
+  // the pointer is over it.
+  function navStyle(key: string): React.CSSProperties {
+    const active = openMenu === key || hoverNav === key;
+    return {
+      ...styles.menuItem,
+      ...(active ? styles.menuItemActive : {}),
+    };
+  }
+
   // Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z or Ctrl+Y = redo. Capture phase
   // so we see the event before anything else can call preventDefault.
   // Skip when the operator is typing into a regular text input so the
@@ -251,8 +267,10 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
       <div style={styles.group}>
         <button
           type="button"
-          style={{ ...styles.menuItem, ...styles.menuItemHome }}
+          style={navStyle('home')}
           onClick={() => designerStore.setView('landing')}
+          onMouseEnter={() => setHoverNav('home')}
+          onMouseLeave={() => setHoverNav(null)}
           title="Home"
           aria-label="Home"
         >
@@ -265,8 +283,10 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
           <button
             ref={fileBtnRef}
             type="button"
-            style={styles.menuItem}
+            style={navStyle('file')}
             onClick={() => setOpenMenu((m) => (m === 'file' ? null : 'file'))}
+            onMouseEnter={() => setHoverNav('file')}
+            onMouseLeave={() => setHoverNav(null)}
             aria-haspopup="menu"
             aria-expanded={openMenu === 'file'}
           >
@@ -305,8 +325,10 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
         <div style={styles.menuItemWrap} onPointerDown={(e) => e.stopPropagation()}>
           <button
             type="button"
-            style={styles.menuItem}
+            style={navStyle('edit')}
             onClick={() => setOpenMenu((m) => (m === 'edit' ? null : 'edit'))}
+            onMouseEnter={() => setHoverNav('edit')}
+            onMouseLeave={() => setHoverNav(null)}
             aria-haspopup="menu"
             aria-expanded={openMenu === 'edit'}
           >
@@ -330,8 +352,10 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
         <div style={styles.menuItemWrap} onPointerDown={(e) => e.stopPropagation()}>
           <button
             type="button"
-            style={styles.menuItem}
+            style={navStyle('view')}
             onClick={() => setOpenMenu((m) => (m === 'view' ? null : 'view'))}
+            onMouseEnter={() => setHoverNav('view')}
+            onMouseLeave={() => setHoverNav(null)}
             aria-haspopup="menu"
             aria-expanded={openMenu === 'view'}
           >
@@ -361,8 +385,10 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
         <div style={styles.menuItemWrap} onPointerDown={(e) => e.stopPropagation()}>
           <button
             type="button"
-            style={styles.menuItem}
+            style={navStyle('help')}
             onClick={() => setOpenMenu((m) => (m === 'help' ? null : 'help'))}
+            onMouseEnter={() => setHoverNav('help')}
+            onMouseLeave={() => setHoverNav(null)}
             aria-haspopup="menu"
             aria-expanded={openMenu === 'help'}
           >
@@ -430,6 +456,7 @@ function FileMenuItem({
   onClick: () => void;
   disabled?: boolean;
 }): JSX.Element {
+  const [hover, setHover] = useState(false);
   return (
     <button
       type="button"
@@ -437,8 +464,11 @@ function FileMenuItem({
       style={{
         ...styles.dropdownItem,
         ...(disabled ? styles.dropdownItemDisabled : {}),
+        ...(hover && !disabled ? styles.dropdownItemActive : {}),
       }}
       disabled={disabled}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       onClick={onClick}
     >
       {label}
@@ -456,12 +486,15 @@ function ToggleMenuItem({
   checked: boolean;
   onClick: () => void;
 }): JSX.Element {
+  const [hover, setHover] = useState(false);
   return (
     <button
       type="button"
       role="menuitemcheckbox"
       aria-checked={checked}
-      style={styles.dropdownItem}
+      style={{ ...styles.dropdownItem, ...(hover ? styles.dropdownItemActive : {}) }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       onClick={onClick}
     >
       <span style={{ display: 'inline-block', width: 14 }} aria-hidden>

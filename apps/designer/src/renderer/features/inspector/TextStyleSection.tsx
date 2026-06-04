@@ -4,6 +4,8 @@ import { designerStore, useDesignerStore } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import { hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
 import { CollapseSection } from './CollapseSection.js';
+import { ColorPicker } from './ColorPopover.js';
+import { RealtimeNumberInput } from './controls.js';
 
 /**
  * D-010-pic-5 — the Text section in the right Inspector. Custom layout
@@ -100,23 +102,6 @@ const styles = {
     borderRadius: '0.22rem',
     padding: '0.1rem 0.35rem',
   },
-  swatch: {
-    width: 14,
-    height: 14,
-    borderRadius: '0.18rem',
-    border: `1px solid ${colors.border}`,
-    cursor: 'pointer',
-    position: 'relative' as const,
-    overflow: 'hidden' as const,
-  },
-  swatchTransparent: {
-    backgroundImage:
-      'linear-gradient(45deg, #888 25%, transparent 25%, transparent 75%, #888 75%, #888),' +
-      'linear-gradient(45deg, #888 25%, transparent 25%, transparent 75%, #888 75%, #888)',
-    backgroundSize: '6px 6px',
-    backgroundPosition: '0 0, 3px 3px',
-    backgroundColor: '#fff',
-  },
   hexInput: {
     background: 'transparent',
     color: colors.text,
@@ -128,17 +113,6 @@ const styles = {
     width: '100%',
     boxSizing: 'border-box' as const,
   },
-  colorInputHidden: {
-    position: 'absolute' as const,
-    inset: 0,
-    width: '100%',
-    height: '100%',
-    opacity: 0,
-    cursor: 'pointer',
-    border: 'none',
-    padding: 0,
-    background: 'transparent',
-  },
   fontSelect: {
     background: colors.panelMuted,
     color: colors.text,
@@ -149,20 +123,11 @@ const styles = {
     width: '100%',
     boxSizing: 'border-box' as const,
   },
-  numberChip: {
-    display: 'grid',
-    gridTemplateColumns: '14px 1fr 14px',
-    gap: '0.35rem',
-    alignItems: 'center',
-    background: colors.panelMuted,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.22rem',
-    padding: '0.1rem 0.4rem',
-  },
   chipIcon: {
     color: colors.textMuted,
     fontSize: '0.7rem',
     fontWeight: 600,
+    flexShrink: 0,
     textAlign: 'center' as const,
   },
   chipInput: {
@@ -172,7 +137,8 @@ const styles = {
     outline: 'none',
     padding: '0.05rem 0',
     fontSize: '0.72rem',
-    width: '100%',
+    flex: '1 1 0',
+    minWidth: 0,
     boxSizing: 'border-box' as const,
     fontVariantNumeric: 'tabular-nums' as const,
   },
@@ -391,77 +357,51 @@ export function TextStyleSection({
         </select>
 
         {/* Font size (full-width chip with tT icon) */}
-        <div style={{ ...styles.numberChip, gridTemplateColumns: '18px 1fr 14px' }}>
+        <div className="cg-field">
           <span style={styles.chipIcon} aria-hidden>
             tT
           </span>
-          <input
+          <RealtimeNumberInput
             style={styles.chipInput}
-            type="number"
-            defaultValue={element.font.size}
+            value={element.font.size}
             step={1}
             min={1}
-            onBlur={(e) => {
-              const n = Number(e.target.value);
-              if (Number.isFinite(n) && n > 0) {
-                designerStore.commitAnimatable(id, 'font.size', n);
-              }
+            onCommit={(n) => {
+              if (n > 0) designerStore.commitAnimatable(id, 'font.size', n);
             }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-            }}
-            key={`font-size-${String(element.font.size)}`}
-            aria-label="Font size"
+            ariaLabel="Font size"
           />
           {animPoint(element, 'font.size', currentFrame, selectedKeyframe, (el) => el.font.size)}
         </div>
 
         {/* Line height + Letter spacing side-by-side */}
         <div style={styles.pairRow}>
-          <div style={styles.numberChip}>
+          <div className="cg-field">
             <span style={styles.chipIcon} aria-hidden title="Line height">
               ↕
             </span>
-            <input
+            <RealtimeNumberInput
               style={styles.chipInput}
-              type="number"
-              defaultValue={element.font.lineHeight}
+              value={element.font.lineHeight}
               step={0.05}
               min={0.1}
-              onBlur={(e) => {
-                const n = Number(e.target.value);
-                if (Number.isFinite(n) && n > 0) {
-                  designerStore.commitAnimatable(id, 'font.lineHeight', n);
-                }
+              onCommit={(n) => {
+                if (n > 0) designerStore.commitAnimatable(id, 'font.lineHeight', n);
               }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-              }}
-              key={`lh-${String(element.font.lineHeight)}`}
-              aria-label="Line height"
+              ariaLabel="Line height"
             />
             {animPoint(element, 'font.lineHeight', currentFrame, selectedKeyframe, (el) => el.font.lineHeight)}
           </div>
-          <div style={styles.numberChip}>
+          <div className="cg-field">
             <span style={styles.chipIcon} aria-hidden title="Letter spacing">
               VA
             </span>
-            <input
+            <RealtimeNumberInput
               style={styles.chipInput}
-              type="number"
-              defaultValue={element.font.letterSpacing}
+              value={element.font.letterSpacing}
               step={0.01}
-              onBlur={(e) => {
-                const n = Number(e.target.value);
-                if (Number.isFinite(n)) {
-                  designerStore.commitAnimatable(id, 'font.letterSpacing', n);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-              }}
-              key={`ls-${String(element.font.letterSpacing)}`}
-              aria-label="Letter spacing"
+              onCommit={(n) => designerStore.commitAnimatable(id, 'font.letterSpacing', n)}
+              ariaLabel="Letter spacing"
             />
             {animPoint(element, 'font.letterSpacing', currentFrame, selectedKeyframe, (el) => el.font.letterSpacing)}
           </div>
@@ -582,27 +522,21 @@ function ColorChip({
   ariaLabel: string;
   trailing?: JSX.Element;
 }): JSX.Element {
-  const swatchStyle = {
-    ...styles.swatch,
-    ...(transparent ? styles.swatchTransparent : { background: color }),
-  };
   return (
     <div style={styles.colorRow}>
       <span style={styles.label}>{label}</span>
       <div style={styles.colorChip}>
-        <span style={swatchStyle} title="Pick a colour">
-          <input
-            type="color"
-            value={color}
-            onChange={(e) => onCommit(e.target.value.toUpperCase())}
-            style={styles.colorInputHidden}
-            aria-label={ariaLabel}
-          />
-        </span>
+        <ColorPicker
+          value={color}
+          onChange={(hex) => onCommit(hex)}
+          ariaLabel={ariaLabel}
+          transparent={transparent}
+        />
         <input
           style={styles.hexInput}
           type="text"
           defaultValue={color.replace(/^#/, '').toUpperCase()}
+          onFocus={(e) => e.currentTarget.select()}
           onBlur={(e) => {
             const v = e.target.value.trim();
             const hex = v.startsWith('#') ? v : `#${v}`;

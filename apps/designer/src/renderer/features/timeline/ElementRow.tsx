@@ -17,12 +17,13 @@ interface Props {
   onContextMenu?: (elementId: string, x: number, y: number) => void;
 }
 
-export const ELEMENT_ROW_HEIGHT = 22;
+export const ELEMENT_ROW_HEIGHT = 24;
 const ROW_HEIGHT = ELEMENT_ROW_HEIGHT;
 
 const styles = {
+  // Loopic selects a layer row with a solid slate fill (#333642), not a tint.
   rowSelected: {
-    background: 'rgba(56, 189, 248, 0.22)',
+    background: '#333642',
   },
   // Label half of a selected row gets an accent left-bar on top of the
   // stronger background so the selected layer reads at a glance.
@@ -66,11 +67,11 @@ const styles = {
     height: 16,
   },
   name: {
-    color: colors.text,
+    color: '#bcc2e0',
     overflow: 'hidden' as const,
     textOverflow: 'ellipsis' as const,
     whiteSpace: 'nowrap' as const,
-    fontSize: '0.72rem',
+    fontSize: '0.75rem',
   },
   toggleButton: {
     background: 'transparent',
@@ -155,6 +156,7 @@ function ElementRowLabel(props: Props): JSX.Element {
   const { element, expanded, onToggleExpand, isSelected, onContextMenu } = props;
   return (
     <div
+      className={isSelected ? 'cg-tl-row cg-tl-selected' : 'cg-tl-row'}
       style={{
         ...styles.labelCell,
         ...(isSelected ? { ...styles.rowSelected, ...styles.labelSelectedAccent } : {}),
@@ -196,6 +198,7 @@ function ElementRowLabel(props: Props): JSX.Element {
       </span>
       <button
         type="button"
+        className="cg-tl-toggle"
         style={{
           ...styles.toggleButton,
           ...(element.visible ? styles.toggleButtonActive : {}),
@@ -214,6 +217,7 @@ function ElementRowLabel(props: Props): JSX.Element {
       </button>
       <button
         type="button"
+        className="cg-tl-toggle"
         style={{
           ...styles.toggleButton,
           ...(element.locked ? styles.lockLocked : {}),

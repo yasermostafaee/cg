@@ -5,6 +5,7 @@ import { BackgroundControl } from '../canvas/BackgroundControl.js';
 import { describeBinding } from '../fields/bind-resolver.js';
 import { FieldsPanel } from '../fields/FieldsPanel.js';
 import { CollapseSection } from './CollapseSection.js';
+import { RealtimeNumberInput } from './controls.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
 import { StyleSection } from './StyleSection.js';
 import { TransformSection } from './TransformSection.js';
@@ -351,7 +352,7 @@ function DurationRow({ scene }: { scene: Scene }): JSX.Element {
     <div style={styles.row}>
       <span style={styles.label}>duration</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-        <input
+        <RealtimeNumberInput
           style={{
             background: colors.panelMuted,
             color: colors.text,
@@ -363,21 +364,13 @@ function DurationRow({ scene }: { scene: Scene }): JSX.Element {
             fontVariantNumeric: 'tabular-nums',
             boxSizing: 'border-box',
           }}
-          type="number"
           min={1}
           step={1}
-          defaultValue={duration}
-          onBlur={(e) => {
-            const n = Number(e.target.value);
-            if (Number.isFinite(n) && n >= 1) {
-              designerStore.setSceneDurationFrames(Math.round(n));
-            }
+          value={duration}
+          onCommit={(n) => {
+            if (n >= 1) designerStore.setSceneDurationFrames(Math.round(n));
           }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-          }}
-          key={`duration-${String(duration)}`}
-          aria-label="Scene duration in frames"
+          ariaLabel="Scene duration in frames"
         />
         <span style={{ color: colors.textMuted, fontSize: '0.66rem' }}>
           frames · {seconds.toFixed(2)}s

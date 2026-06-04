@@ -1,0 +1,183 @@
+/*
+ * Designer-renderer global tweaks layered on top of @cg/ui's theme.css.
+ *
+ * Number inputs are adjusted by dragging (see RealtimeNumberInput), so the
+ * native up/down spinner buttons are redundant and visually noisy — hide
+ * them everywhere. The field keeps an ew-resize cursor to advertise the
+ * drag affordance, set inline by the component.
+ */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/*
+ * Inspector field chrome (the Loopic pattern). Bordered input boxes whose
+ * border turns accent on focus-within (expressible only in CSS, not inline
+ * styles). Colours mirror Loopic's tokens: --input-background #24273d,
+ * --input-border #363a54, hover #4e5473, --accent-background #3990d2.
+ *
+ * Keyframe diamonds for *single* fields are rendered OUTSIDE .cg-field, so
+ * the focus ring wraps only the input. Paired/vector fields use
+ * .cg-input-group, whose diamonds live INSIDE each .cg-seg segment.
+ */
+.cg-field,
+.cg-input-group {
+  background: #24273d;
+  border: 1px solid #363a54;
+  border-radius: 0.2rem;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.cg-field {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.4rem 0.6rem;
+}
+
+.cg-field:hover,
+.cg-input-group:hover {
+  border-color: #4e5473;
+}
+
+.cg-field:focus-within,
+.cg-input-group:focus-within {
+  border-color: #3990d2;
+}
+
+/*
+ * The shared @cg/ui theme draws a 2px box-shadow halo on ANY focused
+ * input/select. Inside our field chrome the wrapper already shows the
+ * accent border on :focus-within, so suppress that inner halo — otherwise
+ * a focused field reads as two borders.
+ */
+.cg-field :focus,
+.cg-field :focus-visible,
+.cg-input-group :focus,
+.cg-input-group :focus-visible {
+  box-shadow: none;
+}
+
+/* Combined vector field — segments share one border, divided by a hairline. */
+.cg-input-group {
+  display: flex;
+  align-items: stretch;
+}
+
+.cg-seg {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.4rem 0.6rem;
+}
+
+.cg-input-group > .cg-seg + .cg-seg {
+  border-left: 1px solid #363a54;
+}
+
+/* Dim unit suffix (°, %) trailing a value. */
+.cg-unit {
+  color: #bcc2e0;
+  opacity: 0.65;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+
+/*
+ * Number fields that carry a unit size to their content so the unit hugs
+ * the value on the left (Chromium `field-sizing`; degrades to the inline
+ * min/max-width elsewhere).
+ */
+.cg-num-unit {
+  field-sizing: content;
+}
+
+/*
+ * Timeline left-panel property values: no border at rest (just the number),
+ * compact, with the accent border appearing only on focus. Overrides the
+ * global input chrome above.
+ */
+.cg-timeline-num {
+  border-color: transparent !important;
+  background: transparent !important;
+  padding: 0 0.15rem !important;
+}
+
+/* No hover border in the timeline — only show the accent border on focus. */
+.cg-timeline-num:focus,
+.cg-timeline-num:focus-visible {
+  border-color: #3990d2 !important;
+  background: #24273d !important;
+}
+
+/*
+ * Timeline left-panel tree (the Loopic layer/group/property "menu"). Rows get
+ * a subtle hover fill — except the selected layer row, which keeps its solid
+ * #333642. The eye/lock toggles get their own darker hover chip (#24273d).
+ * Hover is expressible only in CSS, so the row components carry these classes
+ * while keeping their resting background inline.
+ */
+.cg-tl-row:not(.cg-tl-selected):hover {
+  background: #2e3346 !important;
+}
+.cg-tl-toggle:hover {
+  background: #24273d !important;
+  border-radius: 0.2rem;
+}
+
+/*
+ * Unify EVERY standalone textual input/select/textarea with the inspector
+ * number-field look — identical border, hover and focus. Components in this
+ * codebase set borders inline, which beat normal CSS, so `!important` is
+ * required to win. The type selectors use :where() to keep specificity low
+ * so the .cg-field / .cg-input-group opt-out below can override them.
+ *
+ * Inputs INSIDE a field wrapper are kept bare: the wrapper draws the border,
+ * hover and focus, so the inner control must stay transparent/borderless.
+ */
+input:where(:not([type='range'], [type='checkbox'], [type='radio'], [type='color'])),
+select,
+textarea {
+  background: #24273d !important;
+  border: 1px solid #363a54 !important;
+  border-radius: 0.2rem !important;
+  padding: 0.35rem 0.55rem !important;
+  box-sizing: border-box;
+}
+
+input:where(:not([type='range'], [type='checkbox'], [type='radio'], [type='color'])):hover,
+select:hover,
+textarea:hover {
+  border-color: #4e5473 !important;
+}
+
+input:where(:not([type='range'], [type='checkbox'], [type='radio'], [type='color'])):focus,
+input:where(:not([type='range'], [type='checkbox'], [type='radio'], [type='color'])):focus-visible,
+select:focus,
+select:focus-visible,
+textarea:focus,
+textarea:focus-visible {
+  border-color: #3990d2 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* Wrapped fields own the border on the wrapper — keep inner controls bare. */
+.cg-field :where(input, select, textarea),
+.cg-input-group :where(input, select, textarea) {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
