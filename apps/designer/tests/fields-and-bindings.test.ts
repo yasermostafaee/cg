@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { DynamicFieldSchema, FieldBindingSchema, SceneSchema } from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
-import { designerStore } from '../src/renderer/state/store.js';
+import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 import { defaultShape, defaultText, defaultImage } from '../src/renderer/state/element-defaults.js';
 import { defaultField, FIELD_KINDS } from '../src/renderer/features/fields/field-defaults.js';
 import { resolveBinding } from '../src/renderer/features/fields/bind-resolver.js';
@@ -15,6 +15,12 @@ function freshScene(): void {
   const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
   const { scene } = projects.newScene('fld', 'lower-third');
   designerStore.setScene(scene, null);
+}
+
+/** Layers of the open composition (mutations target the active document). */
+function layers() {
+  const st = designerStore.get();
+  return editSceneOf(st.scene, st.activeCompositionId)!.layers;
 }
 
 describe('field-defaults — schema-valid factories', () => {
@@ -50,7 +56,7 @@ describe('designerStore — fields + bindings', () => {
     designerStore.addField(defaultField('title', 'text'));
     designerStore.addElement(defaultText('el-1', 0, 0));
     const field = designerStore.get().scene!.fields[0]!;
-    const element = designerStore.get().scene!.layers[0]!.children[0]!;
+    const element = layers()[0]!.children[0]!;
     const binding = resolveBinding(field, element);
     designerStore.addBinding(binding!);
     expect(designerStore.get().scene!.bindings).toHaveLength(1);
@@ -65,7 +71,7 @@ describe('designerStore — fields + bindings', () => {
     designerStore.addElement(defaultText('el-1', 0, 0));
     designerStore.addElement(defaultText('el-2', 0, 0));
     const field = designerStore.get().scene!.fields[0]!;
-    const els = designerStore.get().scene!.layers[0]!.children;
+    const els = layers()[0]!.children;
     designerStore.addBinding(resolveBinding(field, els[0]!)!);
     designerStore.addBinding(resolveBinding(field, els[1]!)!);
     expect(designerStore.get().scene!.bindings).toHaveLength(2);

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Element } from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
-import { designerStore } from '../src/renderer/state/store.js';
+import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 import { defaultShape } from '../src/renderer/state/element-defaults.js';
 
 function freshSceneWithShape(): void {
@@ -13,7 +13,8 @@ function freshSceneWithShape(): void {
 }
 
 function children(): readonly Element[] {
-  return designerStore.get().scene!.layers[0]!.children;
+  const st = designerStore.get();
+  return editSceneOf(st.scene, st.activeCompositionId)!.layers[0]!.children;
 }
 function first(): Element {
   return children()[0]!;

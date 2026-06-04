@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { activeRangeOf } from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
-import { designerStore } from '../src/renderer/state/store.js';
+import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 
 function freshScene(): void {
   const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
@@ -10,10 +10,12 @@ function freshScene(): void {
   designerStore.setScene(scene, null);
 }
 
+// The editing surface is the open composition (size / duration / layers).
 function scene() {
-  const s = designerStore.get().scene;
-  if (s === null) throw new Error('no scene');
-  return s;
+  const st = designerStore.get();
+  const doc = editSceneOf(st.scene, st.activeCompositionId);
+  if (doc === null) throw new Error('no active composition');
+  return doc;
 }
 
 beforeEach(() => {

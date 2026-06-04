@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
-import { designerStore } from '../src/renderer/state/store.js';
+import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 import { defaultShape, defaultText } from '../src/renderer/state/element-defaults.js';
 
 afterEach(() => {
@@ -14,14 +14,20 @@ function freshScene(): void {
   designerStore.setScene(scene, null);
 }
 
+/** Layers of the open composition (mutations target the active document). */
+function layers() {
+  const st = designerStore.get();
+  return editSceneOf(st.scene, st.activeCompositionId)!.layers;
+}
+
 describe('designerStore — element mutations', () => {
   it('addElement creates a layer if none exists and selects the element', () => {
     freshScene();
     const t = defaultText('el-1', 10, 20);
     designerStore.addElement(t);
     const state = designerStore.get();
-    expect(state.scene!.layers).toHaveLength(1);
-    expect(state.scene!.layers[0]!.children).toHaveLength(1);
+    expect(layers()).toHaveLength(1);
+    expect(layers()[0]!.children).toHaveLength(1);
     expect(state.selection.has('el-1')).toBe(true);
   });
 
@@ -29,7 +35,7 @@ describe('designerStore — element mutations', () => {
     freshScene();
     designerStore.addElement(defaultText('el-1', 0, 0));
     designerStore.addElement(defaultShape('el-2', 0, 0));
-    expect(designerStore.get().scene!.layers[0]!.children).toHaveLength(2);
+    expect(layers()[0]!.children).toHaveLength(2);
     expect(designerStore.get().selection.has('el-2')).toBe(true);
   });
 
@@ -38,14 +44,14 @@ describe('designerStore — element mutations', () => {
     const original = defaultText('el-1', 0, 0);
     designerStore.addElement(original);
     designerStore.updateElement('el-1', { name: 'Renamed' });
-    expect(designerStore.get().scene!.layers[0]!.children[0]!.name).toBe('Renamed');
+    expect(layers()[0]!.children[0]!.name).toBe('Renamed');
   });
 
   it('updateTransform mutates only the transform sub-tree', () => {
     freshScene();
     designerStore.addElement(defaultText('el-1', 10, 20));
     designerStore.updateTransform('el-1', { position: { x: 100, y: 100 } });
-    const el = designerStore.get().scene!.layers[0]!.children[0]!;
+    const el = layers()[0]!.children[0]!;
     expect(el.transform.position).toEqual({ x: 100, y: 100 });
     expect(el.transform.size).toEqual({ w: 480, h: 80 });
   });
@@ -54,7 +60,7 @@ describe('designerStore — element mutations', () => {
     freshScene();
     designerStore.addElement(defaultText('el-1', 0, 0));
     designerStore.removeElement('el-1');
-    expect(designerStore.get().scene!.layers[0]!.children).toHaveLength(0);
+    expect(layers()[0]!.children).toHaveLength(0);
     expect(designerStore.get().selection.has('el-1')).toBe(false);
   });
 
@@ -80,7 +86,7 @@ describe('designerStore — element mutations', () => {
     designerStore.updateElement('ghost', { name: 'X' });
     designerStore.updateTransform('ghost', { rotation: 90 });
     designerStore.removeElement('ghost');
-    expect(designerStore.get().scene!.layers).toEqual([]);
+    expect(layers()).toEqual([]);
   });
 
   it('mutations with no active scene are no-ops', () => {
