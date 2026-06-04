@@ -121,6 +121,21 @@ input[type='number'] {
 }
 
 /*
+ * Timeline left-panel tree (the Loopic layer/group/property "menu"). Rows get
+ * a subtle hover fill — except the selected layer row, which keeps its solid
+ * #333642. The eye/lock toggles get their own darker hover chip (#24273d).
+ * Hover is expressible only in CSS, so the row components carry these classes
+ * while keeping their resting background inline.
+ */
+.cg-tl-row:not(.cg-tl-selected):hover {
+  background: #2e3346 !important;
+}
+.cg-tl-toggle:hover {
+  background: #24273d !important;
+  border-radius: 0.2rem;
+}
+
+/*
  * Unify EVERY standalone textual input/select/textarea with the inspector
  * number-field look — identical border, hover and focus. Components in this
  * codebase set borders inline, which beat normal CSS, so `!important` is

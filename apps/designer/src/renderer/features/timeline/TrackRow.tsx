@@ -37,22 +37,22 @@ interface Props {
   }[];
 }
 
-export const TRACK_ROW_HEIGHT = 24;
+export const TRACK_ROW_HEIGHT = 22;
 const ROW_HEIGHT = TRACK_ROW_HEIGHT;
 
 const styles = {
   labelCell: {
     color: colors.textMuted,
-    padding: '0 0.4rem 0 2rem',
+    padding: '0 0.6rem 0 2rem',
     display: 'grid',
     // Fixed value column so numbers and colour chips line up across rows.
-    gridTemplateColumns: '1fr 58px 16px',
+    gridTemplateColumns: '1fr 64px 16px',
     alignItems: 'center',
     gap: '0.4rem',
     borderRight: `1px solid ${colors.border}`,
     background: colors.panel,
     height: ROW_HEIGHT,
-    fontSize: '0.7rem',
+    fontSize: '0.75rem',
     boxSizing: 'border-box' as const,
   },
   laneCell: {
@@ -61,7 +61,7 @@ const styles = {
     boxSizing: 'border-box' as const,
   },
   labelName: {
-    color: colors.textMuted,
+    color: '#a9afca',
     overflow: 'hidden' as const,
     textOverflow: 'ellipsis' as const,
     whiteSpace: 'nowrap' as const,
@@ -69,7 +69,7 @@ const styles = {
   labelValue: {
     color: colors.text,
     fontVariantNumeric: 'tabular-nums' as const,
-    fontSize: '0.7rem',
+    fontSize: '0.75rem',
   },
   // Editable numeric value — same look as labelValue but interactive.
   valueNumberInput: {
@@ -264,7 +264,7 @@ function TrackRowLabel(props: Props): JSX.Element {
   const variant = keyframeVariantFor(element, row.property, currentFrame, selectedKeyframe);
 
   return (
-    <div style={styles.labelCell} data-track-property={row.property}>
+    <div className="cg-tl-row" style={styles.labelCell} data-track-property={row.property}>
       <span style={styles.labelName}>{row.label}</span>
       <ValueCell
         value={toDisplay(effectiveRowValue(element, row, currentFrame), row.factor)}

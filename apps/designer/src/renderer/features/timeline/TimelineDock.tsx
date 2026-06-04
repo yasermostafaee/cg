@@ -229,21 +229,21 @@ const styles = {
     textAlign: 'center' as const,
   },
   groupHeaderLabel: {
-    color: colors.textMuted,
-    fontSize: '0.62rem',
-    fontWeight: 700,
-    letterSpacing: '0.06em',
-    padding: '0 0.4rem 0 1.7rem',
+    color: '#bcc2e0',
+    fontSize: '0.7rem',
+    fontWeight: 600,
+    letterSpacing: '0.04em',
+    padding: '0 0.6rem 0 1.4rem',
     background: colors.panel,
     borderRight: `1px solid ${colors.border}`,
-    height: 18,
+    height: 22,
     display: 'flex',
     alignItems: 'center',
     gap: '0.3rem',
     boxSizing: 'border-box' as const,
   },
   groupHeaderLane: {
-    height: 18,
+    height: 22,
     boxSizing: 'border-box' as const,
   },
   groupChevron: {
@@ -513,7 +513,7 @@ export function TimelineDock({
                         const groupExpanded = isGroupExpanded(groupKey);
                         return (
                           <div key={groupKey}>
-                            <div style={styles.groupHeaderLabel}>
+                            <div className="cg-tl-row" style={styles.groupHeaderLabel}>
                               <button
                                 type="button"
                                 style={styles.groupChevron}

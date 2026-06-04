@@ -9,25 +9,25 @@ interface Props {
   part: 'label' | 'lane';
 }
 
-export const DISPLAY_ROW_HEIGHT = 20;
+export const DISPLAY_ROW_HEIGHT = 22;
 const ROW_HEIGHT = DISPLAY_ROW_HEIGHT;
 
 const styles = {
   labelCell: {
     color: colors.textMuted,
-    padding: '0 0.4rem 0 2rem',
+    padding: '0 0.6rem 0 2rem',
     display: 'grid',
-    gridTemplateColumns: '1fr 78px 16px',
+    gridTemplateColumns: '1fr 64px 16px',
     alignItems: 'center',
     gap: '0.4rem',
     borderRight: `1px solid ${colors.border}`,
     background: colors.panel,
     height: ROW_HEIGHT,
-    fontSize: '0.7rem',
+    fontSize: '0.75rem',
     boxSizing: 'border-box' as const,
   },
   labelName: {
-    color: colors.textMuted,
+    color: '#a9afca',
     overflow: 'hidden' as const,
     textOverflow: 'ellipsis' as const,
     whiteSpace: 'nowrap' as const,
@@ -35,8 +35,8 @@ const styles = {
   labelValue: {
     color: colors.text,
     fontVariantNumeric: 'tabular-nums' as const,
-    fontSize: '0.7rem',
-    textAlign: 'right' as const,
+    fontSize: '0.75rem',
+    textAlign: 'center' as const,
   },
   laneCell: {
     position: 'relative' as const,
@@ -55,7 +55,7 @@ export function DisplayRow({ row, element, part }: Props): JSX.Element {
   if (part === 'label') {
     const value = row.read(element);
     return (
-      <div style={styles.labelCell} data-display-row={row.id}>
+      <div className="cg-tl-row" style={styles.labelCell} data-display-row={row.id}>
         <span style={styles.labelName}>{row.label}</span>
         <span style={styles.labelValue}>{value}</span>
         <KeyframeIndicator
