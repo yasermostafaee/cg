@@ -305,8 +305,14 @@ export const scoreboardScene: Scene = {
   bindings: [
     { fieldId: 'home', target: { kind: 'text', elementId: 'home', placeholder: '{{home}}' } },
     { fieldId: 'away', target: { kind: 'text', elementId: 'away', placeholder: '{{away}}' } },
-    { fieldId: 'homeScore', target: { kind: 'text', elementId: 'homescore', placeholder: '{{homeScore}}' } },
-    { fieldId: 'awayScore', target: { kind: 'text', elementId: 'awayscore', placeholder: '{{awayScore}}' } },
+    {
+      fieldId: 'homeScore',
+      target: { kind: 'text', elementId: 'homescore', placeholder: '{{homeScore}}' },
+    },
+    {
+      fieldId: 'awayScore',
+      target: { kind: 'text', elementId: 'awayscore', placeholder: '{{awayScore}}' },
+    },
     { fieldId: 'homeColor', target: { kind: 'color', elementId: 'homechip', property: 'fill' } },
     { fieldId: 'awayColor', target: { kind: 'color', elementId: 'awaychip', property: 'fill' } },
   ],

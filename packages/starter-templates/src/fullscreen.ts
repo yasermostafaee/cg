@@ -251,7 +251,10 @@ export const fullscreenScene: Scene = {
   bindings: [
     { fieldId: 'kicker', target: { kind: 'text', elementId: 'kicker', placeholder: '{{kicker}}' } },
     { fieldId: 'title', target: { kind: 'text', elementId: 'title', placeholder: '{{title}}' } },
-    { fieldId: 'subtitle', target: { kind: 'text', elementId: 'subtitle', placeholder: '{{subtitle}}' } },
+    {
+      fieldId: 'subtitle',
+      target: { kind: 'text', elementId: 'subtitle', placeholder: '{{subtitle}}' },
+    },
   ],
   fonts: [{ family: 'Inter', weights: [500, 700, 800], styles: ['normal'], source: 'system' }],
   metadata: {

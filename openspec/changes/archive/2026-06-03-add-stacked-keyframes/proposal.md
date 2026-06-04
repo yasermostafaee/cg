@@ -3,7 +3,7 @@
 Dragging a framepoint onto (or past) another point on the same track used to be
 **destructive**: `moveKeyframe` filtered out the destination frame, so the
 overlapped point was deleted, and because the drag moves frame-by-frame, dragging
-*past* a point silently removed it too. The operator wants the opposite — drag a
+_past_ a point silently removed it too. The operator wants the opposite — drag a
 point onto another and **keep both** on the same frame, and stack more. Two
 points on one frame with different values is also how you author an instant
 **step** (jump) in a value.
@@ -39,9 +39,11 @@ until pulled apart again — an accepted limitation for this pass.
 ## Capabilities
 
 ### New Capabilities
+
 <!-- None. -->
 
 ### Modified Capabilities
+
 - `designer-animation-timeline`: keyframes carry a stable id; dragging a point
   onto another keeps both (stacking) instead of overwriting, and stacked points
   fan vertically in the lane.

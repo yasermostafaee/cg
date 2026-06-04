@@ -103,7 +103,8 @@ export function CanvasOverlay({
       const t = e.target;
       if (t instanceof HTMLElement) {
         const tag = t.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable) return;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable)
+          return;
       }
       if (selection.size > 0) designerStore.setSelection([]);
     }
@@ -297,12 +298,7 @@ function beginPan(ev: PointerEvent, onPan?: (dx: number, dy: number) => void): v
   window.addEventListener('pointerup', onUp);
 }
 
-function beginDrag(
-  elementId: string,
-  scale: number,
-  currentFrame: number,
-  ev: PointerEvent,
-): void {
+function beginDrag(elementId: string, scale: number, currentFrame: number, ev: PointerEvent): void {
   const state = designerStore.get();
   if (state.scene === null) return;
   let element: Element | null = null;

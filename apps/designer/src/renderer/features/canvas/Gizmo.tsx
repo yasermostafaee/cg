@@ -74,8 +74,7 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   // default top-left (e.g. a centre-anchored ring). For anchor {0,0} this is
   // exactly the previous `0 0` behaviour.
   const rotateOrigin = `${String(anchor.x * 100)}% ${String(anchor.y * 100)}%`;
-  const rotateTransform =
-    rotation === 0 ? undefined : `rotate(${String(rotation)}deg)`;
+  const rotateTransform = rotation === 0 ? undefined : `rotate(${String(rotation)}deg)`;
   const frameStyle: React.CSSProperties = {
     ...styles.frame,
     left: x,
@@ -233,8 +232,7 @@ function beginRotate(
   const { cx, cy } = rotateHandleCentre(startX, startY, hVisual, startAngle);
   // Cursor angle at drag start — subtracted below so rotation doesn't
   // snap by +90° on mousedown.
-  const startCursorAngle =
-    Math.atan2(startY - cy, startX - cx) * (180 / Math.PI) + 90;
+  const startCursorAngle = Math.atan2(startY - cy, startX - cx) * (180 / Math.PI) + 90;
 
   const onMove = (e: PointerEvent): void => {
     const ang = Math.atan2(e.clientY - cy, e.clientX - cx) * (180 / Math.PI) + 90;

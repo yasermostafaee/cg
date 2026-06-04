@@ -106,9 +106,7 @@ function Popover({
     // there's more room above.
     const belowTop = rect.bottom + 6;
     const fitsBelow = belowTop + h <= window.innerHeight - margin;
-    const top = fitsBelow
-      ? belowTop
-      : Math.max(margin, rect.top - 6 - h);
+    const top = fitsBelow ? belowTop : Math.max(margin, rect.top - 6 - h);
     const left = Math.max(margin, Math.min(rect.left, window.innerWidth - w - margin));
     setPos({ top, left });
   }, [anchor]);
@@ -205,7 +203,11 @@ function Popover({
         onDragEnd={() => (dragging.current = false)}
         onMove={(x) => commit({ ...hsva, h: x * 360 })}
       >
-        <Knob xPct={hsva.h / 360} yPct={0.5} color={`rgb(${pureHue.r},${pureHue.g},${pureHue.b})`} />
+        <Knob
+          xPct={hsva.h / 360}
+          yPct={0.5}
+          color={`rgb(${pureHue.r},${pureHue.g},${pureHue.b})`}
+        />
       </DragArea>
 
       {/* Alpha slider */}

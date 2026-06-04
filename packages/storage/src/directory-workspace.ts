@@ -26,7 +26,10 @@ export class DirectoryWorkspace implements Workspace {
     this.label = label ?? root.name;
   }
 
-  async #resolveDir(segments: string[], create: boolean): Promise<FileSystemDirectoryHandle | null> {
+  async #resolveDir(
+    segments: string[],
+    create: boolean,
+  ): Promise<FileSystemDirectoryHandle | null> {
     let dir = this.#root;
     for (const segment of segments) {
       try {

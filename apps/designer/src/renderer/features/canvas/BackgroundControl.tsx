@@ -111,11 +111,7 @@ export function BackgroundControl({ background, variant = 'compact' }: Props): J
     <>
       <button
         type="button"
-        style={
-          isTransparent
-            ? { ...styles.toggle, ...styles.toggleActive }
-            : styles.toggle
-        }
+        style={isTransparent ? { ...styles.toggle, ...styles.toggleActive } : styles.toggle}
         onClick={() => setTransparent()}
         title="Set the scene background to transparent"
         aria-pressed={isTransparent}

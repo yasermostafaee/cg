@@ -8,7 +8,14 @@
 interface DirectoryPickerOptions {
   id?: string;
   mode?: 'read' | 'readwrite';
-  startIn?: FileSystemHandle | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos';
+  startIn?:
+    | FileSystemHandle
+    | 'desktop'
+    | 'documents'
+    | 'downloads'
+    | 'music'
+    | 'pictures'
+    | 'videos';
 }
 
 interface Window {
@@ -20,9 +27,7 @@ interface FileSystemHandlePermissionDescriptor {
 }
 
 interface FileSystemHandle {
-  queryPermission?: (
-    descriptor?: FileSystemHandlePermissionDescriptor,
-  ) => Promise<PermissionState>;
+  queryPermission?: (descriptor?: FileSystemHandlePermissionDescriptor) => Promise<PermissionState>;
   requestPermission?: (
     descriptor?: FileSystemHandlePermissionDescriptor,
   ) => Promise<PermissionState>;

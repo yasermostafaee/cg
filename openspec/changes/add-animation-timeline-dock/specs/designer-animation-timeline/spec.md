@@ -11,18 +11,21 @@ the left edge of the dock — so that a keyframe diamond at frame N sits at
 exactly the x-position the ruler labels as N.
 
 #### Scenario: Dock appears when a scene is open
+
 - **WHEN** a scene is open
 - **THEN** the timeline dock is visible at the bottom of the Designer shell
   with a frame ruler covering the scene's frame range and the current frame
   shown at the playhead
 
 #### Scenario: Frame 0 lines up with the keyframe lanes
+
 - **WHEN** the dock is rendered with track rows
 - **THEN** the ruler's `frameRange.in` tick sits at the same x-position as
   the left edge of every track row's lane (the label column sits to the
   ruler's left and contains no frame ticks)
 
 #### Scenario: Operator scrubs the playhead
+
 - **WHEN** the operator drags the playhead (or clicks somewhere on the ruler)
 - **THEN** the Designer's current frame updates to the clicked frame and any
   subsequent "add keyframe" actions use that frame as the authoring position
@@ -32,7 +35,7 @@ exactly the x-position the ruler labels as N.
 The timeline dock SHALL render a tree of every element in the scene.
 Each element SHALL appear as a header row containing a chevron (to
 expand / collapse the element's track group), the element name, small
-visibility / lock indicators, and a colored *lifespan bar* spanning the
+visibility / lock indicators, and a colored _lifespan bar_ spanning the
 element's active frame range. Below the header — when expanded — the
 dock SHALL show a nested `▾ TRANSFORM` group that, when also expanded,
 renders eight property TrackRows (Position X, Position Y, Scale X,
@@ -40,11 +43,13 @@ Scale Y, Rotation, Width, Height, Opacity). The element row and its
 TRANSFORM group MUST be independently collapsible.
 
 #### Scenario: Each scene element shows in the timeline tree
+
 - **WHEN** the scene has three elements (a shape, a text, and an image)
 - **THEN** the timeline dock shows three element header rows, in order,
   each with its own chevron, name, indicators, and lifespan bar
 
 #### Scenario: Expanding an element shows its TRANSFORM group + property tracks
+
 - **WHEN** the operator clicks the chevron on an element header row that
   was collapsed
 - **THEN** a `▾ TRANSFORM` group appears below it, and inside that group
@@ -54,11 +59,13 @@ TRANSFORM group MUST be independently collapsible.
   with any existing keyframe diamonds on the right
 
 #### Scenario: Clicking an element header selects it
+
 - **WHEN** the operator clicks an element row (not its chevron)
 - **THEN** that element becomes the canvas selection and the right
   Inspector switches to its Element view
 
 #### Scenario: Existing keyframes render on their tracks
+
 - **WHEN** an element has keyframes on one or more tracks
 - **THEN** each keyframe is drawn as a diamond marker on its track row at
   the x-position corresponding to its frame
@@ -74,6 +81,7 @@ the same track, the existing keyframe's value SHALL be overwritten with the
 current value (no duplicate keyframes).
 
 #### Scenario: Operator adds a keyframe on a new track
+
 - **WHEN** the operator selects a shape, moves the playhead to frame N, and
   clicks the add-keyframe button on the Position X row
 - **THEN** the element's `animation.tracks['position.x']` is created with a
@@ -81,6 +89,7 @@ current value (no duplicate keyframes).
   `transform.position.x`
 
 #### Scenario: Operator adds a keyframe at a frame that already has one
+
 - **WHEN** a track for the property already has a keyframe at the current
   frame and the operator clicks the add-keyframe button again
 - **THEN** the existing keyframe's value is replaced by the element's current
@@ -95,11 +104,13 @@ remove the track entry from `element.animation.tracks` so empty arrays do
 not persist.
 
 #### Scenario: Operator drags a keyframe to a new frame
+
 - **WHEN** the operator drags a keyframe diamond from frame N to frame M
 - **THEN** the keyframe's `frame` field becomes M and the track's keyframes
   are kept sorted by ascending `frame`
 
 #### Scenario: Operator deletes the only keyframe on a track
+
 - **WHEN** the operator selects the only keyframe on a track and presses
   `Delete`
 - **THEN** the keyframe is removed and the property's entry is removed from
@@ -125,12 +136,14 @@ first keyframe by hand, every subsequent edit at a new frame extends the
 track instead of overwriting a single static value.
 
 #### Scenario: First edit on a never-animated property updates the static value
+
 - **WHEN** the playhead is at frame N and the selected element has no
   track for `position.x`, and the operator edits Position X
 - **THEN** the element's static `transform.position.x` is updated as before
   and no keyframe is created
 
 #### Scenario: Edit at an existing keyframe replaces that keyframe's value
+
 - **WHEN** the playhead is at frame N, the selected element has a keyframe
   at frame N on `position.x`, and the operator edits Position X
 - **THEN** that keyframe's `value` is updated to the new number, no
@@ -138,6 +151,7 @@ track instead of overwriting a single static value.
   `transform.position.x` is unchanged
 
 #### Scenario: Edit at a new frame on an animated property auto-adds a keyframe
+
 - **WHEN** the operator first adds a `position.x` keyframe at frame 10 by
   clicking the add-keyframe button, then scrubs to frame 30 and drags the
   shape (or types a new value into Inspector → Position X)
@@ -157,6 +171,7 @@ Keyframe Inspector by **double-clicking** the diamond (or by an explicit
 selection so the yellow indicators stay lit.
 
 #### Scenario: Single-click selects without changing the right panel
+
 - **WHEN** the operator single-clicks a keyframe diamond on the Position
   X row
 - **THEN** the diamond turns yellow, the matching indicator in the
@@ -166,6 +181,7 @@ selection so the yellow indicators stay lit.
   Keyframe Inspector does not open)
 
 #### Scenario: Double-click opens the dedicated Keyframe Inspector
+
 - **WHEN** the operator double-clicks a keyframe diamond
 - **THEN** the right Inspector switches to a Keyframe Inspector for that
   point, showing the element name, property, frame, value, and easing,
@@ -173,12 +189,14 @@ selection so the yellow indicators stay lit.
   selection
 
 #### Scenario: Editing the keyframe inspector mutates only that keyframe
+
 - **WHEN** the Keyframe Inspector is shown and the operator types a new
   value or changes the easing
 - **THEN** only the selected keyframe's `value` / `easing` change; other
   keyframes on the track are left untouched
 
 #### Scenario: Inspector returns to the Element view on close
+
 - **WHEN** the Keyframe Inspector is open and the operator clicks its
   back affordance (or removes the keyframe, or selects a different
   element)
@@ -197,12 +215,14 @@ point). Clicking the indicator SHALL toggle a keyframe at the current
 frame on that property.
 
 #### Scenario: Indicator state mirrors the track
+
 - **WHEN** an element has no track on `opacity`
 - **THEN** the opacity row in the Inspector shows an empty/outlined
   indicator, and the matching TrackRow label indicator shows the same
   state
 
 #### Scenario: Indicator turns yellow when its keyframe is selected
+
 - **WHEN** the operator single-clicks a keyframe diamond on the Width
   track
 - **THEN** the Inspector's Size-row indicator (which covers both Width
@@ -210,6 +230,7 @@ frame on that property.
   the TrackRow label indicator
 
 #### Scenario: Click the indicator to add a keyframe
+
 - **WHEN** the operator clicks the indicator next to Rotation in the
   Inspector while the playhead is at frame N and no keyframe is there
 - **THEN** a keyframe is added on `rotation` at frame N with the
@@ -218,6 +239,7 @@ frame on that property.
   x-position
 
 #### Scenario: Click the indicator on an existing keyframe to remove it
+
 - **WHEN** the operator clicks the indicator next to Rotation while a
   keyframe for `rotation` sits on the current frame
 - **THEN** that keyframe is removed; if it was the last keyframe on the
@@ -232,17 +254,20 @@ back to `frameRange.in` when it reaches `frameRange.out`; Stop SHALL halt
 playback at the current frame.
 
 #### Scenario: Operator plays the animation
+
 - **WHEN** the operator clicks Play
 - **THEN** the Designer's current frame advances at the scene's frame rate,
   looping at `frameRange.out` back to `frameRange.in`, and the timeline's
   playhead visibly moves with it
 
 #### Scenario: Operator steps frame-by-frame
+
 - **WHEN** the operator clicks Step Forward
 - **THEN** the current frame advances by exactly 1 (clamped to
   `frameRange.out`); Step Back decrements by 1 (clamped to `frameRange.in`)
 
 #### Scenario: Operator stops playback
+
 - **WHEN** playback is running and the operator clicks Stop
 - **THEN** the current frame stops advancing and remains at the last value
   reached

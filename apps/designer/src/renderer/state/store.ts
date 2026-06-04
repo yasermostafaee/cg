@@ -540,11 +540,7 @@ export const designerStore = {
    * is imported). No-op if a font with the same `family` already exists
    * so the panel can call this on every mount without duplicating.
    */
-  addSceneFont(font: {
-    family: string;
-    displayName?: string;
-    assetId?: string;
-  }): void {
+  addSceneFont(font: { family: string; displayName?: string; assetId?: string }): void {
     if (current.scene === null) return;
     if (current.scene.fonts.some((f) => f.family === font.family)) return;
     const next = [
@@ -641,7 +637,12 @@ export const designerStore = {
   /** Set the live snap guide lines (scene coords) shown during a snapped drag. */
   setSnapGuides(guides: { x: readonly number[]; y: readonly number[] }): void {
     const cur = current.snapGuides;
-    if (cur.x.length === 0 && cur.y.length === 0 && guides.x.length === 0 && guides.y.length === 0) {
+    if (
+      cur.x.length === 0 &&
+      cur.y.length === 0 &&
+      guides.x.length === 0 &&
+      guides.y.length === 0
+    ) {
       return;
     }
     set({ snapGuides: guides });
@@ -720,7 +721,9 @@ export const designerStore = {
       if (existing === undefined) return anim;
       const target = existing.keyframes.find((k) => k.frame === fromFrame);
       if (target === undefined) return anim;
-      const without = existing.keyframes.filter((k) => k.frame !== fromFrame && k.frame !== toFrame);
+      const without = existing.keyframes.filter(
+        (k) => k.frame !== fromFrame && k.frame !== toFrame,
+      );
       const moved: Keyframe = { ...target, frame: toFrame };
       const next = [...without, moved].sort((a, b) => a.frame - b.frame);
       actuallyMoved = true;
@@ -809,11 +812,7 @@ export const designerStore = {
    *   - Otherwise the property has never been animated, so the edit
    *     flows to the element's static value as before.
    */
-  commitAnimatable(
-    elementId: string,
-    property: AnimatableProperty,
-    value: number | string,
-  ): void {
+  commitAnimatable(elementId: string, property: AnimatableProperty, value: number | string): void {
     if (current.scene === null) return;
     const found = locate(current.scene, elementId);
     if (found === null) return;
@@ -916,7 +915,12 @@ export const designerStore = {
     const clamped: [number, number, number, number] | null =
       bezier === null
         ? null
-        : [Math.max(0, Math.min(1, bezier[0])), bezier[1], Math.max(0, Math.min(1, bezier[2])), bezier[3]];
+        : [
+            Math.max(0, Math.min(1, bezier[0])),
+            bezier[1],
+            Math.max(0, Math.min(1, bezier[2])),
+            bezier[3],
+          ];
     mutateAnimation(elementId, (anim) => {
       const existing = anim.tracks[property];
       if (existing === undefined) return anim;
@@ -979,7 +983,9 @@ export const designerStore = {
         return;
       // D-010 — numeric style properties.
       case 'cornerRadius':
-        designerStore.updateElement(elementId, { cornerRadius: numeric } as unknown as Partial<Element>);
+        designerStore.updateElement(elementId, {
+          cornerRadius: numeric,
+        } as unknown as Partial<Element>);
         return;
       case 'stroke.width': {
         if (el.type !== 'shape') return;
@@ -1206,10 +1212,7 @@ export const designerStore = {
    * `[scene.frameRange.in, scene.frameRange.out]` and rejects
    * inverted ranges so callers don't need to.
    */
-  updateElementLifespan(
-    elementId: string,
-    lifespan: { in: number; out: number } | null,
-  ): void {
+  updateElementLifespan(elementId: string, lifespan: { in: number; out: number } | null): void {
     if (current.scene === null) return;
     const found = locate(current.scene, elementId);
     if (found === null) return;

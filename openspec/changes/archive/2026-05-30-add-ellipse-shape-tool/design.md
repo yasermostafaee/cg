@@ -9,11 +9,13 @@ This is a renderer-only change in `apps/designer`.
 ## Goals / Non-Goals
 
 **Goals:**
+
 - One-click way to add an ellipse to the canvas.
 - The ellipse moves/resizes like any other element (existing gizmo).
 - Default to a circle so the operator starts symmetric.
 
 **Non-Goals:**
+
 - No `@cg/shared-schema` or `@cg/template-runtime` changes (ellipse already works).
 - No new shape kinds (polygon/path stay out of the UI for now).
 - No pixel-precise elliptical hit-testing — bounding-box selection is fine.
@@ -25,7 +27,7 @@ This is a renderer-only change in `apps/designer`.
   second tool is the most discoverable one-click "add a circle" affordance and
   matches the existing per-tool model (text/shape/image). Alternative — a
   single "shape" tool plus an inspector kind switch — already exists for
-  *converting* a shape, but it's not discoverable for *creating* one.
+  _converting_ a shape, but it's not discoverable for _creating_ one.
 - **Default size 200×200 (a circle).** Symmetric start; the operator resizes
   into an ellipse. Reuses `defaultShape`'s structure via a new `defaultEllipse`
   factory.

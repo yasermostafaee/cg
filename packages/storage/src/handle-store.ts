@@ -17,7 +17,10 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+function tx<T>(
+  mode: IDBTransactionMode,
+  run: (store: IDBObjectStore) => IDBRequest<T>,
+): Promise<T> {
   return openDb().then(
     (db) =>
       new Promise<T>((resolve, reject) => {
@@ -36,9 +39,7 @@ export async function saveDirectoryHandle(
   await tx('readwrite', (store) => store.put(handle, id));
 }
 
-export async function loadDirectoryHandle(
-  id: string,
-): Promise<FileSystemDirectoryHandle | null> {
+export async function loadDirectoryHandle(id: string): Promise<FileSystemDirectoryHandle | null> {
   const result = await tx<unknown>('readonly', (store) => store.get(id));
   return (result as FileSystemDirectoryHandle | undefined) ?? null;
 }
@@ -52,9 +53,7 @@ export async function forgetDirectoryHandle(id: string): Promise<void> {
  * drop the permission grant between sessions; this re-prompts (or silently
  * succeeds if already granted). Returns true when usable.
  */
-export async function ensureHandlePermission(
-  handle: FileSystemDirectoryHandle,
-): Promise<boolean> {
+export async function ensureHandlePermission(handle: FileSystemDirectoryHandle): Promise<boolean> {
   const opts: FileSystemHandlePermissionDescriptor = { mode: 'readwrite' };
   // OPFS handles have no permission gate; treat the absence of the methods
   // as "already usable".

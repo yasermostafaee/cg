@@ -20,13 +20,15 @@ docs/prd/
 Copy this block for each item. Keep it short — Claude expands it into the change.
 
 ```md
-## [ ] D-001 — Short title   ⟨priority: high⟩
+## [ ] D-001 — Short title ⟨priority: high⟩
+
 **What:** One or two sentences on the desired behavior.
 **Why:** The problem / motivation.
 **Acceptance:**
+
 - WHEN <action/condition> THEN <observable outcome>
 - WHEN <…> THEN <…>
-**Notes:** Optional — links, constraints, files you already know are involved.
+  **Notes:** Optional — links, constraints, files you already know are involved.
 ```
 
 ### Rules
@@ -47,8 +49,8 @@ Copy this block for each item. Keep it short — Claude expands it into the chan
 
 ## Processing contract (what Claude does)
 
-When the user says e.g. *"implement D-001"*, *"do the next high-priority
-designer item"*, or *"work through the high items in caspar.md"*, Claude MUST,
+When the user says e.g. _"implement D-001"_, _"do the next high-priority
+designer item"_, or _"work through the high items in caspar.md"_, Claude MUST,
 for each chosen item:
 
 1. **Locate** the item and set it to `[~]`.
@@ -71,7 +73,7 @@ for each chosen item:
 7. **Commit** (conventional, e.g. `feat(designer): …`) and **push**.
 8. **Update the PRD item**: set `[~]` and note the change dir
    (`openspec/changes/<name>/`).
-9. **Archive** only when the user confirms (or if they said *"and archive"*):
+9. **Archive** only when the user confirms (or if they said _"and archive"_):
    `pnpm openspec archive <name> -y` → folds the spec into `openspec/specs/`,
    then set the item to `[x]` with a link to
    `openspec/changes/archive/<date>-<name>/`.

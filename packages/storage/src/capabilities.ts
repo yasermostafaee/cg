@@ -12,10 +12,7 @@ export function isFileSystemAccessSupported(): boolean {
 
 /** True iff the Origin Private File System (OPFS) is available. */
 export function isOpfsSupported(): boolean {
-  return (
-    typeof navigator !== 'undefined' &&
-    typeof navigator.storage?.getDirectory === 'function'
-  );
+  return typeof navigator !== 'undefined' && typeof navigator.storage?.getDirectory === 'function';
 }
 
 /**

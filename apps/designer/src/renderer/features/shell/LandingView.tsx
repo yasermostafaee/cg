@@ -288,8 +288,7 @@ export function LandingView(): JSX.Element {
               onClick={() => guardedSwitch(r.name, () => openRecent(r.path))}
             >
               <span>
-                <strong>{r.name}</strong>{' '}
-                <span style={styles.recentMeta}>· {r.templateType}</span>
+                <strong>{r.name}</strong> <span style={styles.recentMeta}>· {r.templateType}</span>
               </span>
               <span style={styles.recentMeta}>{formatWhen(r.lastOpenedAt)}</span>
             </button>

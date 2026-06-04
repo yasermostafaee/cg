@@ -66,12 +66,20 @@ export class MockRuntime {
     return { accepted: true };
   }
 
-  update(itemId: string, fields: FieldValues, mergeMode: 'merge' | 'replace'): { accepted: boolean } {
+  update(
+    itemId: string,
+    fields: FieldValues,
+    mergeMode: 'merge' | 'replace',
+  ): { accepted: boolean } {
     const item = this.#find(itemId);
     if (item === null) return { accepted: false };
     const merged = mergeMode === 'merge' ? { ...item.fields, ...fields } : fields;
     const wasOnAir = item.status === 'on-air' || item.status === 'playing';
-    this.#patch(itemId, { fields: merged, status: wasOnAir ? 'updating' : item.status, pending: wasOnAir });
+    this.#patch(itemId, {
+      fields: merged,
+      status: wasOnAir ? 'updating' : item.status,
+      pending: wasOnAir,
+    });
     this.#audit.unshift(auditEntry('update', { itemId, templateId: item.templateId }));
     if (wasOnAir) this.#settle(itemId, 'on-air');
     else this.#emitStack();
@@ -90,7 +98,8 @@ export class MockRuntime {
   remove(itemId: string): { accepted: boolean } {
     const item = this.#find(itemId);
     this.#stack = this.#stack.filter((i) => i.itemId !== itemId);
-    if (item !== null) this.#audit.unshift(auditEntry('remove', { itemId, templateId: item.templateId }));
+    if (item !== null)
+      this.#audit.unshift(auditEntry('remove', { itemId, templateId: item.templateId }));
     this.#emitStack();
     return { accepted: true };
   }
@@ -115,7 +124,9 @@ export class MockRuntime {
         to: newPrimary,
       },
     };
-    this.#audit.unshift(auditEntry('failover', { server: newPrimary === 'A' ? 'primary' : 'backup' }));
+    this.#audit.unshift(
+      auditEntry('failover', { server: newPrimary === 'A' ? 'primary' : 'backup' }),
+    );
     this.healthChanged.emit(this.#health);
     return { ok: true, newPrimary };
   }
@@ -183,7 +194,10 @@ export class MockRuntime {
   }
 
   // ── update gate ─────────────────────────────────────────────────────
-  updateRequest(version: string, notes?: string): {
+  updateRequest(
+    version: string,
+    notes?: string,
+  ): {
     accepted: true;
     deferred: boolean;
     pending: PendingUpdate;
@@ -237,9 +251,6 @@ export class MockRuntime {
   }
 }
 
-function auditEntry(
-  action: AuditEntry['action'],
-  extra: Partial<AuditEntry>,
-): AuditEntry {
+function auditEntry(action: AuditEntry['action'], extra: Partial<AuditEntry>): AuditEntry {
   return { ts: new Date().toISOString(), actor: 'operator', action, outcome: 'ok', ...extra };
 }

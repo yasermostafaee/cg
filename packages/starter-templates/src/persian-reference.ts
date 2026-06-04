@@ -169,7 +169,13 @@ export const persianReferenceScene: Scene = {
       default: 'کارشناس روابط بین‌الملل',
       direction: 'rtl',
     },
-    { id: 'themeColor', label: 'Accent bar color', required: false, type: 'color', default: '#E11D48' },
+    {
+      id: 'themeColor',
+      label: 'Accent bar color',
+      required: false,
+      type: 'color',
+      default: '#E11D48',
+    },
   ],
   bindings: [
     { fieldId: 'anchor', target: { kind: 'text', elementId: 'name', placeholder: '{{anchor}}' } },

@@ -274,8 +274,14 @@ export const breakingNewsScene: Scene = {
   ],
   bindings: [
     { fieldId: 'kicker', target: { kind: 'text', elementId: 'kicker', placeholder: '{{kicker}}' } },
-    { fieldId: 'headline', target: { kind: 'text', elementId: 'headline', placeholder: '{{headline}}' } },
-    { fieldId: 'strap', target: { kind: 'text', elementId: 'timestamp', placeholder: '{{strap}}' } },
+    {
+      fieldId: 'headline',
+      target: { kind: 'text', elementId: 'headline', placeholder: '{{headline}}' },
+    },
+    {
+      fieldId: 'strap',
+      target: { kind: 'text', elementId: 'timestamp', placeholder: '{{strap}}' },
+    },
   ],
   fonts: [{ family: 'Inter', weights: [500, 800], styles: ['normal'], source: 'system' }],
   metadata: {

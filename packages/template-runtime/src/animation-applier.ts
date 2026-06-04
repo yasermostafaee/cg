@@ -202,8 +202,7 @@ function applyShadow(
   const offsetX = readNumericTrack(tracks, 'shadow.offsetX', frame) ?? staticShadow?.offsetX ?? 0;
   const offsetY = readNumericTrack(tracks, 'shadow.offsetY', frame) ?? staticShadow?.offsetY ?? 0;
   const blur = readNumericTrack(tracks, 'shadow.blur', frame) ?? staticShadow?.blur ?? 0;
-  const color =
-    readStringTrack(tracks, 'shadow.color', frame) ?? staticShadow?.color ?? '#000000';
+  const color = readStringTrack(tracks, 'shadow.color', frame) ?? staticShadow?.color ?? '#000000';
   const css = `${offsetX}px ${offsetY}px ${blur}px ${color}`;
   if (src.type === 'text') entry.node.style.textShadow = css;
   else entry.node.style.boxShadow = css;

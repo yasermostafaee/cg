@@ -182,7 +182,10 @@ export const tickerScene: Scene = {
     },
   ],
   bindings: [
-    { fieldId: 'headlines', target: { kind: 'text', elementId: 'headline', placeholder: '{{headlines}}' } },
+    {
+      fieldId: 'headlines',
+      target: { kind: 'text', elementId: 'headline', placeholder: '{{headlines}}' },
+    },
   ],
   fonts: [{ family: 'Inter', weights: [600, 800], styles: ['normal'], source: 'system' }],
   metadata: {

@@ -46,8 +46,20 @@ export interface TimelineRow {
 export const TIMELINE_ROWS: readonly TimelineRow[] = [
   { label: 'Position X', property: 'position.x', read: (el) => el.transform.position.x },
   { label: 'Position Y', property: 'position.y', read: (el) => el.transform.position.y },
-  { label: 'Scale X', property: 'scale.x', read: (el) => el.transform.scale.x, unit: '%', factor: 100 },
-  { label: 'Scale Y', property: 'scale.y', read: (el) => el.transform.scale.y, unit: '%', factor: 100 },
+  {
+    label: 'Scale X',
+    property: 'scale.x',
+    read: (el) => el.transform.scale.x,
+    unit: '%',
+    factor: 100,
+  },
+  {
+    label: 'Scale Y',
+    property: 'scale.y',
+    read: (el) => el.transform.scale.y,
+    unit: '%',
+    factor: 100,
+  },
   { label: 'Rotation', property: 'rotation', read: (el) => el.transform.rotation, unit: '°' },
   { label: 'Width', property: 'size.w', read: (el) => el.transform.size.w },
   { label: 'Height', property: 'size.h', read: (el) => el.transform.size.h },
@@ -89,7 +101,10 @@ function anim(
   read: (el: Element) => number | string,
   unit?: string,
 ): TimelineRowEntry {
-  return { kind: 'animatable', row: { label, property, read, ...(unit !== undefined ? { unit } : {}) } };
+  return {
+    kind: 'animatable',
+    row: { label, property, read, ...(unit !== undefined ? { unit } : {}) },
+  };
 }
 
 /** Filter group — all 9 properties animatable as numbers (D-010). */
@@ -150,9 +165,9 @@ function borderRadiusGroup(): TimelineGroup {
 
 /** Drop-shadow group — offsets + blur animatable; colour stays display-only. */
 function dropShadowGroup(): TimelineGroup {
-  function shadowOf(el: Element):
-    | { offsetX: number; offsetY: number; blur: number; color: string }
-    | undefined {
+  function shadowOf(
+    el: Element,
+  ): { offsetX: number; offsetY: number; blur: number; color: string } | undefined {
     if (el.type === 'shape') return el.shadow;
     if (el.type === 'text') return el.textShadow;
     return undefined;
@@ -179,9 +194,7 @@ function textGroup(): TimelineGroup {
       anim('Background color', 'backgroundColor', (el) =>
         el.type === 'text' ? (el.backgroundColor ?? '#FFFFFF') : '#FFFFFF',
       ),
-      anim('Line height', 'font.lineHeight', (el) =>
-        el.type === 'text' ? el.font.lineHeight : 0,
-      ),
+      anim('Line height', 'font.lineHeight', (el) => (el.type === 'text' ? el.font.lineHeight : 0)),
       anim('Letter spacing', 'font.letterSpacing', (el) =>
         el.type === 'text' ? el.font.letterSpacing : 0,
       ),
@@ -194,14 +207,16 @@ function textPaddingGroup(): TimelineGroup {
   return {
     title: 'Text Padding',
     rows: [
-      anim('Padding top', 'padding.top', (el) => (el.type === 'text' ? el.padding?.top ?? 0 : 0)),
+      anim('Padding top', 'padding.top', (el) => (el.type === 'text' ? (el.padding?.top ?? 0) : 0)),
       anim('Padding right', 'padding.right', (el) =>
-        el.type === 'text' ? el.padding?.right ?? 0 : 0,
+        el.type === 'text' ? (el.padding?.right ?? 0) : 0,
       ),
       anim('Padding bottom', 'padding.bottom', (el) =>
-        el.type === 'text' ? el.padding?.bottom ?? 0 : 0,
+        el.type === 'text' ? (el.padding?.bottom ?? 0) : 0,
       ),
-      anim('Padding left', 'padding.left', (el) => (el.type === 'text' ? el.padding?.left ?? 0 : 0)),
+      anim('Padding left', 'padding.left', (el) =>
+        el.type === 'text' ? (el.padding?.left ?? 0) : 0,
+      ),
     ],
   };
 }
@@ -212,7 +227,13 @@ function textPaddingGroup(): TimelineGroup {
  */
 export function timelineGroupsFor(el: Element): readonly TimelineGroup[] {
   if (el.type === 'shape') {
-    return [TRANSFORM_GROUP, pathStyleGroup(), borderRadiusGroup(), dropShadowGroup(), FILTER_GROUP];
+    return [
+      TRANSFORM_GROUP,
+      pathStyleGroup(),
+      borderRadiusGroup(),
+      dropShadowGroup(),
+      FILTER_GROUP,
+    ];
   }
   if (el.type === 'text') {
     return [
@@ -338,11 +359,7 @@ export function effectiveOpacityAt(el: Element, frame: number): number {
  * shows — so editing a keyframe's value reflects immediately. (Colour tracks
  * fall back to the static value; numeric interpolation only.)
  */
-export function effectiveRowValue(
-  el: Element,
-  row: TimelineRow,
-  frame: number,
-): number | string {
+export function effectiveRowValue(el: Element, row: TimelineRow, frame: number): number | string {
   const track = el.animation?.tracks[row.property];
   if (track !== undefined) {
     const v = interpolateNumericTrack(track, frame);

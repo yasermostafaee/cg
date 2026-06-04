@@ -28,7 +28,11 @@ export const EASE = {
 } as const;
 
 /** A single keyframe; defaults to a smooth ease-out, optional bézier override. */
-export function kf(frame: number, value: number | string, bezier: BezierEasing = EASE.outCubic): Keyframe {
+export function kf(
+  frame: number,
+  value: number | string,
+  bezier: BezierEasing = EASE.outCubic,
+): Keyframe {
   return { frame, value, easing: 'ease-out', bezier };
 }
 

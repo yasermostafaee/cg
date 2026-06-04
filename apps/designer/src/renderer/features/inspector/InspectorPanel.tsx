@@ -251,7 +251,6 @@ function KeyRow({ elementId, name }: { elementId: string; name: string }): JSX.E
   );
 }
 
-
 function bindingTargetsElement(b: FieldBinding, elementId: string): boolean {
   const t = b.target;
   if (t.kind === 'scene-background') return false;
@@ -290,7 +289,9 @@ function ElementBindings({
  */
 function countElements(scene: Scene): number {
   let n = 0;
-  function walk(children: readonly { type: string; children?: readonly { type: string }[] }[]): void {
+  function walk(
+    children: readonly { type: string; children?: readonly { type: string }[] }[],
+  ): void {
     for (const child of children) {
       n += 1;
       if (child.type === 'container' && Array.isArray(child.children)) {

@@ -27,9 +27,11 @@ the runtime to ease through a custom curve.
 ## Capabilities
 
 ### New Capabilities
+
 <!-- None. -->
 
 ### Modified Capabilities
+
 - `designer-animation-timeline`: per-keyframe easing becomes a custom
   cubic-bézier curve edited via a graphical editor; the runtime eases through it.
 
@@ -48,5 +50,5 @@ the runtime to ease through a custom curve.
   named-easing data.
 - **Tests:** `shared-schema/tests/animation.test.ts` (solver: endpoints, linear
   identity, monotonic ease-in, presets valid); `apps/designer/tests/
-  store-animation.test.ts` (`setKeyframeBezier` clamps + clears).
+store-animation.test.ts` (`setKeyframeBezier` clamps + clears).
 - **Dependencies:** none.

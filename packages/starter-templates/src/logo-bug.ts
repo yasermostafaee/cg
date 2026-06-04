@@ -176,9 +176,14 @@ export const logoBugScene: Scene = {
       ],
     },
   ],
-  fields: [{ id: 'channel', label: 'Channel name', required: true, type: 'text', default: 'CG NEWS' }],
+  fields: [
+    { id: 'channel', label: 'Channel name', required: true, type: 'text', default: 'CG NEWS' },
+  ],
   bindings: [
-    { fieldId: 'channel', target: { kind: 'text', elementId: 'channel', placeholder: '{{channel}}' } },
+    {
+      fieldId: 'channel',
+      target: { kind: 'text', elementId: 'channel', placeholder: '{{channel}}' },
+    },
   ],
   fonts: [{ family: 'Inter', weights: [600, 800], styles: ['normal'], source: 'system' }],
   metadata: {

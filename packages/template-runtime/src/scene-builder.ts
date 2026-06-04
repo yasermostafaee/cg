@@ -116,7 +116,8 @@ function applyBaseStyles(
 function composeFilter(f: Filter): string {
   const parts: string[] = [];
   if (f.blur !== undefined && f.blur > 0) parts.push(`blur(${f.blur}px)`);
-  if (f.brightness !== undefined && f.brightness !== 100) parts.push(`brightness(${f.brightness}%)`);
+  if (f.brightness !== undefined && f.brightness !== 100)
+    parts.push(`brightness(${f.brightness}%)`);
   if (f.contrast !== undefined && f.contrast !== 100) parts.push(`contrast(${f.contrast}%)`);
   if (f.grayscale !== undefined && f.grayscale > 0) parts.push(`grayscale(${f.grayscale}%)`);
   if (f.hueRotate !== undefined && f.hueRotate !== 0) parts.push(`hue-rotate(${f.hueRotate}deg)`);

@@ -191,14 +191,48 @@ export function EasingEditor({ bezier, onChange }: Props): JSX.Element {
             strokeWidth={1}
           />
           {gridLines.map((g) => (
-            <line key={`v${String(g)}`} x1={sx(g)} y1={PAD} x2={sx(g)} y2={PAD + PLOT} stroke={colors.border} strokeWidth={0.5} opacity={0.6} />
+            <line
+              key={`v${String(g)}`}
+              x1={sx(g)}
+              y1={PAD}
+              x2={sx(g)}
+              y2={PAD + PLOT}
+              stroke={colors.border}
+              strokeWidth={0.5}
+              opacity={0.6}
+            />
           ))}
           {gridLines.map((g) => (
-            <line key={`h${String(g)}`} x1={PAD} y1={sy(g)} x2={PAD + PLOT} y2={sy(g)} stroke={colors.border} strokeWidth={0.5} opacity={0.6} />
+            <line
+              key={`h${String(g)}`}
+              x1={PAD}
+              y1={sy(g)}
+              x2={PAD + PLOT}
+              y2={sy(g)}
+              stroke={colors.border}
+              strokeWidth={0.5}
+              opacity={0.6}
+            />
           ))}
           {/* handle connector lines */}
-          <line x1={sx(0)} y1={sy(0)} x2={sx(x1)} y2={sy(y1)} stroke={colors.textMuted} strokeWidth={1} opacity={0.6} />
-          <line x1={sx(1)} y1={sy(1)} x2={sx(x2)} y2={sy(y2)} stroke={colors.textMuted} strokeWidth={1} opacity={0.6} />
+          <line
+            x1={sx(0)}
+            y1={sy(0)}
+            x2={sx(x1)}
+            y2={sy(y1)}
+            stroke={colors.textMuted}
+            strokeWidth={1}
+            opacity={0.6}
+          />
+          <line
+            x1={sx(1)}
+            y1={sy(1)}
+            x2={sx(x2)}
+            y2={sy(y2)}
+            stroke={colors.textMuted}
+            strokeWidth={1}
+            opacity={0.6}
+          />
           {/* the curve */}
           <path
             d={`M ${String(sx(0))} ${String(sy(0))} C ${String(sx(x1))} ${String(sy(y1))} ${String(sx(x2))} ${String(sy(y2))} ${String(sx(1))} ${String(sy(1))}`}

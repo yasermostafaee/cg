@@ -17,7 +17,7 @@ and **commits** to one project at a time.
   When no scene is open the shell renders a `LandingView` (Demo
   starters + Recent + a big "New project" button); when a scene is
   open the shell renders the studio (the existing Inspector + Canvas
-  + Timeline layout).
+  - Timeline layout).
 - Add a `NewProjectModal` reached by the landing's "New project"
   button. The modal collects a name, resolution (1920×1080, 1280×720,
   1080×1920, custom W×H) and frame rate (25, 29.97, 50, 59.94, 60).
@@ -41,6 +41,7 @@ and **commits** to one project at a time.
 ## Capabilities
 
 ### New Capabilities
+
 - `designer-shell`: landing / studio view routing, New Project modal,
   top toolbar.
 - `designer-canvas-viewport`: canvas zoom (icons + Ctrl-wheel +
@@ -48,6 +49,7 @@ and **commits** to one project at a time.
   scrolling.
 
 ### Modified Capabilities
+
 - `designer-animation-timeline`: right-click on a keyframe diamond
   removes the keyframe.
 
