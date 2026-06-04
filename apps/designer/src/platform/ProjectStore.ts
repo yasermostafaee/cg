@@ -63,20 +63,37 @@ export class ProjectStore {
     options: NewSceneOptions = {},
   ): { scene: Scene; path: null } {
     const nowIso = new Date().toISOString();
+    const resolution = options.resolution ?? { width: 1920, height: 1080 };
+    const frameRate = options.frameRate ?? 50;
+    const frameRange = { in: 0, out: Math.max(1, Math.round(options.durationFrames ?? 50)) };
     const scene: Scene = {
       schemaVersion: 1,
       id: crypto.randomUUID(),
       name,
       templateType,
-      resolution: options.resolution ?? { width: 1920, height: 1080 },
-      frameRate: options.frameRate ?? 50,
+      resolution,
+      frameRate,
       safeAreas: { title: 10, action: 5 },
-      frameRange: { in: 0, out: Math.max(1, Math.round(options.durationFrames ?? 50)) },
+      frameRange,
       background: 'transparent',
       layers: [],
       fields: [],
       bindings: [],
       fonts: [],
+      // Seed a new project with one ready-to-edit composition so the operator
+      // lands in the editor, not the empty "No Active Compositions" state
+      // (which is reserved for a project whose compositions were all deleted).
+      compositions: [
+        {
+          id: crypto.randomUUID(),
+          name: 'comp1',
+          resolution,
+          frameRate,
+          frameRange,
+          background: 'transparent',
+          layers: [],
+        },
+      ],
       metadata: { createdAt: nowIso, updatedAt: nowIso },
     };
     this.#setActive(scene, null);
