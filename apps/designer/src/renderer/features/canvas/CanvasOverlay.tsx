@@ -1,7 +1,12 @@
 import { useEffect, useRef } from 'react';
 import type { Element, Scene, TextElement } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { designerStore, useDesignerStore, type DesignerTool } from '../../state/store.js';
+import {
+  designerStore,
+  editSceneOf,
+  useDesignerStore,
+  type DesignerTool,
+} from '../../state/store.js';
 import {
   defaultEllipse,
   defaultImage,
@@ -313,8 +318,12 @@ function beginPan(ev: PointerEvent, onPan?: (dx: number, dy: number) => void): v
 function beginDrag(elementId: string, scale: number, currentFrame: number, ev: PointerEvent): void {
   const state = designerStore.get();
   if (state.scene === null) return;
+  // Look up the element in the *active composition* — the project root's
+  // `layers` is empty under the composition model.
+  const doc = editSceneOf(state.scene, state.activeCompositionId);
+  if (doc === null) return;
   let element: Element | null = null;
-  for (const layer of state.scene.layers) {
+  for (const layer of doc.layers) {
     for (const el of layer.children) {
       if (el.id === elementId) {
         element = el;
@@ -334,11 +343,11 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
 
   // Snap targets in scene coords, computed once: the canvas edges + centre,
   // and every other element's edges + centre. The dragged element is excluded.
-  const W = state.scene.resolution.width;
-  const H = state.scene.resolution.height;
+  const W = doc.resolution.width;
+  const H = doc.resolution.height;
   const xTargets: number[] = [0, W / 2, W];
   const yTargets: number[] = [0, H / 2, H];
-  for (const layer of state.scene.layers) {
+  for (const layer of doc.layers) {
     for (const el of layer.children) {
       if (el.id === elementId) continue;
       const t = effectiveTransformAt(el, currentFrame);
