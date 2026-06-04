@@ -63,11 +63,10 @@ const styles = {
     color: colors.text,
     fontSize: '0.78rem',
     userSelect: 'none' as const,
-    border: '1px solid transparent',
   },
   rowActive: {
+    // Active = a solid slate fill only, no border (matches the icon-rail).
     background: '#333642',
-    borderColor: colors.accentMuted,
   },
   dot: {
     width: 9,
