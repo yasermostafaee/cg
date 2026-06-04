@@ -3,6 +3,7 @@ import type { AnimatableProperty, Element, Keyframe } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
 import { RealtimeNumberInput } from '../inspector/controls.js';
+import { ColorPicker } from '../inspector/ColorPopover.js';
 import { KeyframeIndicator } from './KeyframeIndicator.js';
 import {
   effectiveRowValue,
@@ -132,25 +133,6 @@ const styles = {
     textAlign: 'center' as const,
     outline: 'none',
     boxSizing: 'border-box' as const,
-  },
-  valueSwatchWrap: {
-    position: 'relative' as const,
-    width: 14,
-    height: 14,
-    borderRadius: '0.15rem',
-    border: `1px solid ${colors.border}`,
-    overflow: 'hidden' as const,
-    cursor: 'pointer',
-    flex: 'none' as const,
-  },
-  valueColorInput: {
-    position: 'absolute' as const,
-    inset: 0,
-    opacity: 0,
-    cursor: 'pointer',
-    border: 0,
-    padding: 0,
-    background: 'transparent',
   },
   valueHexText: {
     color: colors.text,
@@ -557,15 +539,7 @@ function ValueCell({
     const hexLabel = hex.replace(/^#/, '').toUpperCase();
     return (
       <span style={styles.colorValue}>
-        <span style={{ ...styles.valueSwatchWrap, background: hex }} title={hex.toUpperCase()}>
-          <input
-            type="color"
-            value={hex}
-            onChange={(e) => onCommit(e.target.value.toUpperCase())}
-            style={styles.valueColorInput}
-            aria-label={`${ariaLabel} colour`}
-          />
-        </span>
+        <ColorPicker value={hex} onChange={(next) => onCommit(next)} ariaLabel={ariaLabel} />
         <input
           type="text"
           defaultValue={hexLabel}

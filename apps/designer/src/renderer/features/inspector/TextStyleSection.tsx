@@ -4,6 +4,7 @@ import { designerStore, useDesignerStore } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import { hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
 import { CollapseSection } from './CollapseSection.js';
+import { ColorPicker } from './ColorPopover.js';
 import { RealtimeNumberInput } from './controls.js';
 
 /**
@@ -101,23 +102,6 @@ const styles = {
     borderRadius: '0.22rem',
     padding: '0.1rem 0.35rem',
   },
-  swatch: {
-    width: 14,
-    height: 14,
-    borderRadius: '0.18rem',
-    border: `1px solid ${colors.border}`,
-    cursor: 'pointer',
-    position: 'relative' as const,
-    overflow: 'hidden' as const,
-  },
-  swatchTransparent: {
-    backgroundImage:
-      'linear-gradient(45deg, #888 25%, transparent 25%, transparent 75%, #888 75%, #888),' +
-      'linear-gradient(45deg, #888 25%, transparent 25%, transparent 75%, #888 75%, #888)',
-    backgroundSize: '6px 6px',
-    backgroundPosition: '0 0, 3px 3px',
-    backgroundColor: '#fff',
-  },
   hexInput: {
     background: 'transparent',
     color: colors.text,
@@ -128,17 +112,6 @@ const styles = {
     fontVariantNumeric: 'tabular-nums' as const,
     width: '100%',
     boxSizing: 'border-box' as const,
-  },
-  colorInputHidden: {
-    position: 'absolute' as const,
-    inset: 0,
-    width: '100%',
-    height: '100%',
-    opacity: 0,
-    cursor: 'pointer',
-    border: 'none',
-    padding: 0,
-    background: 'transparent',
   },
   fontSelect: {
     background: colors.panelMuted,
@@ -549,27 +522,21 @@ function ColorChip({
   ariaLabel: string;
   trailing?: JSX.Element;
 }): JSX.Element {
-  const swatchStyle = {
-    ...styles.swatch,
-    ...(transparent ? styles.swatchTransparent : { background: color }),
-  };
   return (
     <div style={styles.colorRow}>
       <span style={styles.label}>{label}</span>
       <div style={styles.colorChip}>
-        <span style={swatchStyle} title="Pick a colour">
-          <input
-            type="color"
-            value={color}
-            onChange={(e) => onCommit(e.target.value.toUpperCase())}
-            style={styles.colorInputHidden}
-            aria-label={ariaLabel}
-          />
-        </span>
+        <ColorPicker
+          value={color}
+          onChange={(hex) => onCommit(hex)}
+          ariaLabel={ariaLabel}
+          transparent={transparent}
+        />
         <input
           style={styles.hexInput}
           type="text"
           defaultValue={color.replace(/^#/, '').toUpperCase()}
+          onFocus={(e) => e.currentTarget.select()}
           onBlur={(e) => {
             const v = e.target.value.trim();
             const hex = v.startsWith('#') ? v : `#${v}`;

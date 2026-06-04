@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { colors } from '../../theme.js';
+import { ColorPicker } from './ColorPopover.js';
 
 /**
  * Form-control primitives for the Inspector. Numeric inputs commit on
@@ -84,26 +85,6 @@ const styles = {
     cursor: 'ew-resize',
     touchAction: 'none' as const,
     userSelect: 'none' as const,
-  },
-  swatch: {
-    position: 'relative' as const,
-    width: 14,
-    height: 14,
-    borderRadius: '0.15rem',
-    border: `1px solid ${colors.border}`,
-    overflow: 'hidden' as const,
-    cursor: 'pointer',
-  },
-  swatchInput: {
-    position: 'absolute' as const,
-    inset: 0,
-    width: '100%',
-    height: '100%',
-    opacity: 0,
-    cursor: 'pointer',
-    border: 'none',
-    padding: 0,
-    background: 'transparent',
   },
   hexInput: {
     background: 'transparent',
@@ -569,15 +550,11 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
     <div style={styles.row}>
       <span style={styles.label}>{props.label}</span>
       <div className="cg-field">
-        <span style={{ ...styles.swatch, background: props.value }} title="Pick a colour">
-          <input
-            type="color"
-            value={props.value}
-            onChange={(e) => props.onCommit(e.target.value.toUpperCase())}
-            style={styles.swatchInput}
-            aria-label={`${props.label} colour`}
-          />
-        </span>
+        <ColorPicker
+          value={props.value}
+          onChange={props.onCommit}
+          ariaLabel={`${props.label} colour`}
+        />
         <input
           style={styles.hexInput}
           type="text"
@@ -586,7 +563,8 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
           onBlur={(e) => {
             const v = e.target.value.trim();
             const next = v.startsWith('#') ? v : `#${v}`;
-            if (/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(next)) props.onCommit(next.toUpperCase());
+            if (/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(next))
+              props.onCommit(next.toUpperCase());
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
@@ -594,7 +572,7 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
           key={`${props.label}-${props.value}`}
           aria-label={`${props.label} hex value`}
         />
-        {props.trailing}
+        {props.trailing !== undefined && <span style={styles.point}>{props.trailing}</span>}
       </div>
     </div>
   );
