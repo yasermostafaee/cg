@@ -136,6 +136,58 @@ const styles = {
   },
 } as const;
 
+/** Transient bottom-centre toast for user-facing notices (auto-dismiss + close). */
+function Toast({ message }: { message: string }): JSX.Element {
+  return (
+    <div
+      role="status"
+      style={{
+        position: 'fixed',
+        left: '50%',
+        bottom: 28,
+        transform: 'translateX(-50%)',
+        maxWidth: 460,
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '0.6rem',
+        background: '#1c1f2d',
+        color: '#e5e7f3',
+        border: '1px solid #f87171',
+        borderRadius: '0.4rem',
+        padding: '0.6rem 0.7rem 0.6rem 0.9rem',
+        fontSize: '0.78rem',
+        lineHeight: 1.4,
+        boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+        zIndex: 5000,
+      }}
+    >
+      <span>{message}</span>
+      <button
+        type="button"
+        aria-label="Dismiss"
+        title="Dismiss"
+        onClick={() => designerStore.dismissNotice()}
+        style={{
+          flexShrink: 0,
+          width: 18,
+          height: 18,
+          lineHeight: '16px',
+          textAlign: 'center',
+          background: 'transparent',
+          color: '#fca5a5',
+          border: 'none',
+          borderRadius: '0.2rem',
+          fontSize: '0.95rem',
+          cursor: 'pointer',
+          padding: 0,
+        }}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 /** Centre placeholder shown when no composition is open. */
 function EmptyStage(): JSX.Element {
   return (
@@ -233,6 +285,7 @@ export function App(): JSX.Element {
     view,
     scene,
     activeCompositionId,
+    notice,
     projectPath,
     tool,
     selection,
@@ -405,6 +458,7 @@ export function App(): JSX.Element {
         </>
       )}
       <StatusBar scene={editScene ?? scene} issues={issues} />
+      {notice !== null && <Toast message={notice} />}
       <InputTooltip />
     </main>
   );

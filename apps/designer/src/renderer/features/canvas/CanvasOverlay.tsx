@@ -221,7 +221,15 @@ export function CanvasOverlay({
     if (compId !== '') {
       e.preventDefault();
       const p = viewportToScene(e.clientX, e.clientY);
-      designerStore.addCompositionInstance(compId, { x: Math.round(p.x), y: Math.round(p.y) });
+      const ok = designerStore.addCompositionInstance(compId, {
+        x: Math.round(p.x),
+        y: Math.round(p.y),
+      });
+      if (!ok) {
+        designerStore.showNotice(
+          'Can’t place this composition here — it already contains the open composition, so nesting it would loop forever.',
+        );
+      }
       return;
     }
     const assetId = e.dataTransfer.getData('application/x-cg-asset-id');

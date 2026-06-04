@@ -8,8 +8,6 @@ export const COMPOSITION_DND_TYPE = 'application/x-cg-composition';
 const styles = {
   panel: {
     background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
     display: 'flex',
     flexDirection: 'column' as const,
     minHeight: 0,
@@ -166,7 +164,9 @@ export function CompositionsPanel(): JSX.Element {
   const comps = scene.compositions ?? [];
 
   const canNest = (id: string): boolean =>
-    id !== activeCompositionId && designerStore.canNestCompositionInActive(id);
+    activeCompositionId !== null &&
+    id !== activeCompositionId &&
+    designerStore.canNestCompositionInActive(id);
 
   return (
     <aside style={styles.panel} aria-label="Compositions">
@@ -258,15 +258,20 @@ export function CompositionsPanel(): JSX.Element {
         >
           <MenuButton
             label="Add to composition"
-            disabled={!canNest(menu.id)}
-            title={
-              canNest(menu.id)
-                ? 'Add an instance to the open composition'
-                : 'Would create a circular reference'
-            }
+            title="Add an instance to the open composition"
             onClick={() => {
-              designerStore.addCompositionInstance(menu.id);
+              const mid = menu.id;
               setMenu(null);
+              if (canNest(mid)) {
+                designerStore.addCompositionInstance(mid);
+              } else {
+                const name = comps.find((c) => c.id === mid)?.name ?? 'This composition';
+                designerStore.showNotice(
+                  activeCompositionId === null
+                    ? 'Open a composition first, then add this one into it.'
+                    : `Can’t add “${name}” here — it already contains the open composition, so nesting it would loop forever.`,
+                );
+              }
             }}
           />
           <MenuButton

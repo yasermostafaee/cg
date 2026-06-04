@@ -47,6 +47,11 @@ export interface DesignerStoreState {
    */
   activeCompositionId: string | null;
   /**
+   * A transient, user-facing notice (e.g. why an action was refused). Shown as
+   * a small toast and auto-cleared; `null` when nothing to show.
+   */
+  notice: string | null;
+  /**
    * Top-level routing: the Designer starts at the Landing screen
    * (starter picker / recent / new) and flips to the Studio whenever
    * a scene becomes active. Clearing the scene flips it back.
@@ -128,6 +133,7 @@ const initialState: DesignerStoreState = {
   scene: null,
   projectPath: null,
   activeCompositionId: null,
+  notice: null,
   view: 'landing',
   tool: 'cursor',
   selection: new Set<string>(),
@@ -460,6 +466,9 @@ function normalizeKeyframeIds(scene: Scene): Scene {
  */
 let clipboardElement: Element | null = null;
 
+/** Timer handle for the auto-dismissing toast notice. */
+let noticeTimer: number | null = null;
+
 /** A short unique element id in the `el-…` convention used across the app. */
 function freshElementId(): string {
   return `el-${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`;
@@ -630,6 +639,25 @@ export const designerStore = {
   setView(view: DesignerView): void {
     if (view === current.view) return;
     set({ view });
+  },
+
+  /** Show a transient toast notice (auto-clears). Replaces any current one. */
+  showNotice(message: string): void {
+    if (noticeTimer !== null) clearTimeout(noticeTimer);
+    set({ notice: message });
+    noticeTimer = setTimeout(() => {
+      noticeTimer = null;
+      set({ notice: null });
+    }, 5000) as unknown as number;
+  },
+
+  /** Dismiss the current toast notice immediately. */
+  dismissNotice(): void {
+    if (noticeTimer !== null) {
+      clearTimeout(noticeTimer);
+      noticeTimer = null;
+    }
+    if (current.notice !== null) set({ notice: null });
   },
 
   // ── Compositions ────────────────────────────────────────────────────────
@@ -1752,6 +1780,10 @@ export const designerStore = {
     past = [];
     future = [];
     clipboardElement = null;
+    if (noticeTimer !== null) {
+      clearTimeout(noticeTimer);
+      noticeTimer = null;
+    }
     suppressHistory = false;
     lastSnapshotAt = -Infinity;
     current = {
