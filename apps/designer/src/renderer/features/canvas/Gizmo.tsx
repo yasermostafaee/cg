@@ -14,7 +14,7 @@ const HANDLE = 8;
 /** Invisible corner *resize* hover/hit area, larger than the visible square. */
 const CORNER_HIT = 16;
 /** Rotation hover area around each corner (screen px) — outside the resize hit. */
-const ROT_ZONE = 28;
+const ROT_ZONE = 14;
 /** Edge resize strips this thick (screen px). */
 const EDGE = 7;
 const MIN_SIZE = 4;
