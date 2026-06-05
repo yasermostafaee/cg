@@ -426,9 +426,14 @@ function MiniNumber({
       }}
     >
       <span style={{ color: colors.textMuted, fontSize: '0.68rem' }}>{label}</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        {/* Drag horizontally to scrub (like the property inputs); every change
-            commits immediately so the shape updates in real time. */}
+      {/* Bordered field with the unit (% / ° / px) INSIDE it, right after the
+          value, so the units line up across rows. `.cg-field` strips the
+          inner input's own border/background (see index.css); drag the field to
+          scrub (like the property inputs) — every change commits in real time. */}
+      <span
+        className="cg-field"
+        style={{ width: 72, padding: '0.15rem 0.4rem', gap: 2, justifyContent: 'flex-end' }}
+      >
         <RealtimeNumberInput
           value={value}
           step={1}
@@ -437,21 +442,15 @@ function MiniNumber({
           onCommit={onCommit}
           ariaLabel={label}
           style={{
-            width: 54,
-            background: '#24273d',
+            flex: '1 1 0',
+            minWidth: 0,
             color: colors.text,
-            border: `1px solid ${colors.border}`,
-            borderRadius: '0.2rem',
-            padding: '0.2rem 0.35rem',
             fontSize: '0.7rem',
             textAlign: 'right',
             fontVariantNumeric: 'tabular-nums',
-            boxSizing: 'border-box',
           }}
         />
-        {suffix !== undefined && (
-          <span style={{ color: colors.textMuted, fontSize: '0.66rem' }}>{suffix}</span>
-        )}
+        {suffix !== undefined && <span className="cg-unit">{suffix}</span>}
       </span>
     </div>
   );
