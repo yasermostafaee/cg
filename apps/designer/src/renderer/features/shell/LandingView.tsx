@@ -188,7 +188,7 @@ const styles = {
  *   └──────────────────────────────────────────────────────────┘
  */
 export function LandingView(): JSX.Element {
-  const { scene, projectPath } = useDesignerStore();
+  const { scene, projectPath, dirty } = useDesignerStore();
   const [recent, setRecent] = useState<
     { path: string; name: string; templateType: string; lastOpenedAt: string }[]
   >([]);
@@ -245,7 +245,11 @@ export function LandingView(): JSX.Element {
         <div style={styles.resumeBanner} aria-label="Resume current project">
           <span>
             Currently editing <strong>{scene.name}</strong>
-            <span style={styles.resumeMeta}>· {projectPath ?? '(unsaved)'}</span>
+            <span style={styles.resumeMeta}>
+              {' · '}
+              {projectPath ?? 'new project'}
+              {dirty ? ' · unsaved changes' : projectPath !== null ? ' · saved' : ''}
+            </span>
           </span>
           <button
             type="button"
