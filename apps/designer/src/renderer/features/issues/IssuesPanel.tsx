@@ -4,6 +4,8 @@ import { designerStore } from '../../state/store.js';
 
 interface Props {
   issues: readonly ExportIssue[];
+  /** Called after an issue row is activated (e.g. to close a host modal). */
+  onPick?: () => void;
 }
 
 const severityColor: Record<ExportIssue['severity'], string> = {
@@ -64,7 +66,7 @@ const styles = {
  * issue at `severity: error`, which `ExportService.preflight` does as
  * of M7.3.
  */
-export function IssuesPanel({ issues }: Props): JSX.Element | null {
+export function IssuesPanel({ issues, onPick }: Props): JSX.Element | null {
   if (issues.length === 0) return null;
   const errorCount = issues.filter((i) => i.severity === 'error').length;
   const warningCount = issues.filter((i) => i.severity === 'warning').length;
@@ -87,18 +89,25 @@ export function IssuesPanel({ issues }: Props): JSX.Element | null {
         <span style={styles.badge(summaryColor)}>{summary}</span>
       </h3>
       {issues.map((issue, idx) => (
-        <IssueRow key={idx} issue={issue} />
+        <IssueRow key={idx} issue={issue} onPick={onPick} />
       ))}
     </section>
   );
 }
 
-function IssueRow({ issue }: { issue: ExportIssue }): JSX.Element {
+function IssueRow({
+  issue,
+  onPick,
+}: {
+  issue: ExportIssue;
+  onPick?: (() => void) | undefined;
+}): JSX.Element {
   const color = severityColor[issue.severity];
   function onClick(): void {
     if (issue.elementId !== undefined) {
       designerStore.setSelection([issue.elementId]);
     }
+    onPick?.();
   }
   return (
     <div style={styles.row} onClick={onClick} role="button" tabIndex={0}>

@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Scene } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { designerStore, useDesignerStore } from '../../state/store.js';
+import { IssuesPanel } from '../issues/IssuesPanel.js';
 
 interface Props {
   scene: Scene | null;
@@ -60,6 +63,43 @@ const styles = {
     lineHeight: 1.5,
     minWidth: 24,
   },
+  overlay: {
+    position: 'fixed' as const,
+    inset: 0,
+    background: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5000,
+    padding: '1rem',
+  },
+  modal: {
+    width: 'min(560px, 92vw)',
+    maxHeight: '72vh',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.6rem',
+    background: '#1c1f2d',
+    border: `1px solid ${colors.border}`,
+    borderRadius: '0.5rem',
+    padding: '0.8rem',
+    boxShadow: '0 16px 48px rgba(0,0,0,0.55)',
+  },
+  modalScroll: {
+    minHeight: 0,
+    overflowY: 'auto' as const,
+  },
+  modalClose: {
+    alignSelf: 'flex-end' as const,
+    background: colors.accent,
+    color: '#06121F',
+    border: 'none',
+    borderRadius: '0.25rem',
+    padding: '0.4rem 1rem',
+    fontWeight: 700,
+    fontSize: '0.8rem',
+    cursor: 'pointer',
+  },
 } as const;
 
 /** Bottom-of-window status bar — project chrome + issues badge + a
@@ -68,6 +108,21 @@ const styles = {
 export function StatusBar({ scene, issues }: Props): JSX.Element {
   const { timelineZoom } = useDesignerStore();
   const errorCount = issues.filter((i) => i.severity === 'error').length;
+  const [issuesOpen, setIssuesOpen] = useState(false);
+
+  // Nothing to show once the issues clear — auto-close the modal.
+  useEffect(() => {
+    if (issues.length === 0) setIssuesOpen(false);
+  }, [issues.length]);
+
+  useEffect(() => {
+    if (!issuesOpen) return;
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') setIssuesOpen(false);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [issuesOpen]);
 
   return (
     <footer style={styles.bar} aria-label="Status bar">
@@ -76,9 +131,14 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
         {scene === null ? '0×0' : `${scene.resolution.width}×${scene.resolution.height}`}
       </span>
       {issues.length > 0 && (
-        <span
+        <button
+          type="button"
+          onClick={() => setIssuesOpen(true)}
+          aria-label="Show issues"
+          title="Show issues"
           style={{
             ...styles.pill,
+            cursor: 'pointer',
             borderColor: errorCount > 0 ? '#fda4af' : '#fcd34d',
             color: errorCount > 0 ? '#fda4af' : '#fcd34d',
           }}
@@ -86,7 +146,7 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
           {errorCount > 0
             ? `${String(errorCount)} error${errorCount === 1 ? '' : 's'}`
             : `${String(issues.length)} issue${issues.length === 1 ? '' : 's'}`}
-        </span>
+        </button>
       )}
       <span style={styles.spacer} />
       <div style={styles.zoomWrap} aria-label="Timeline zoom">
@@ -123,6 +183,25 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
         </button>
         <span style={styles.zoomReadout}>{timelineZoom}×</span>
       </div>
+      {issuesOpen &&
+        createPortal(
+          <div
+            style={styles.overlay}
+            onPointerDown={(e) => {
+              if (e.target === e.currentTarget) setIssuesOpen(false);
+            }}
+          >
+            <div style={styles.modal} role="dialog" aria-modal="true" aria-label="Issues">
+              <div style={styles.modalScroll}>
+                <IssuesPanel issues={issues} onPick={() => setIssuesOpen(false)} />
+              </div>
+              <button type="button" style={styles.modalClose} onClick={() => setIssuesOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>,
+          document.body,
+        )}
     </footer>
   );
 }

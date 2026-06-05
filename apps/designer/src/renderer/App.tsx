@@ -4,7 +4,6 @@ import { ProjectAssetsPanel } from './features/assets/ProjectAssetsPanel.js';
 import { CompositionsPanel } from './features/compositions/CompositionsPanel.js';
 import { CanvasArea } from './features/canvas/CanvasArea.js';
 import { InspectorPanel } from './features/inspector/InspectorPanel.js';
-import { IssuesPanel } from './features/issues/IssuesPanel.js';
 import { InputTooltip } from './features/shell/InputTooltip.js';
 import { LandingView } from './features/shell/LandingView.js';
 import { Splitter } from './features/shell/Splitter.js';
@@ -71,9 +70,6 @@ const styles = {
     flex: 1,
     minHeight: 0,
     minWidth: 0,
-  },
-  issuesWrap: {
-    flexShrink: 0,
   },
   timelineWrap: {
     flexShrink: 0,
@@ -276,7 +272,7 @@ function LeftRail({
  *   view === 'landing'  →  full-page LandingView (starters + recent +
  *                          New project modal)
  *   view === 'studio'   →  TopToolbar + (Canvas / Inspector) splitter
- *                          + IssuesPanel + Timeline + StatusBar
+ *                          + Timeline + StatusBar (issues open from the bar)
  *
  * The previous left-side ToolRail + LibraryPanel are gone — tools live
  * in the top toolbar; project selection lives on the landing page.
@@ -420,11 +416,6 @@ export function App(): JSX.Element {
                 />
               </div>
               <TransportBar scene={editScene} currentFrame={currentFrame} />
-              {issues.length > 0 && (
-                <div style={styles.issuesWrap}>
-                  <IssuesPanel issues={issues} />
-                </div>
-              )}
             </div>
             <Splitter
               axis="x"
