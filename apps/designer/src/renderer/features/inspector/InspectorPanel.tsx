@@ -203,7 +203,7 @@ function ElementInspector({
   return (
     <aside style={styles.panel} aria-label="Inspector">
       <KeyRow elementId={element.id} name={element.name} />
-      <CollapseSection title="Transform" defaultExpanded>
+      <CollapseSection title="Transform" pinned>
         <TransformSection
           element={element}
           currentFrame={currentFrame}

@@ -173,7 +173,7 @@ function ShapeSections({
   const strokeDashFirst = element.stroke?.dash?.[0] ?? 0;
   return (
     <>
-      <CollapseSection title="Path Style" defaultExpanded>
+      <CollapseSection title="Path Style" pinned>
         <FillField
           label="fill"
           value={element.fill}

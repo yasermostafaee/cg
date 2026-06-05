@@ -6,6 +6,11 @@ interface Props {
   defaultExpanded?: boolean;
   /** Optional trailing element shown right of the chevron (e.g. a star). */
   trailing?: ReactNode;
+  /**
+   * Always open and not collapsible — renders a plain header with no chevron /
+   * toggle. For sections that should never be hidden (Transform, Path Style).
+   */
+  pinned?: boolean;
   children: ReactNode;
 }
 
@@ -59,23 +64,32 @@ export function CollapseSection({
   title,
   defaultExpanded = false,
   trailing,
+  pinned = false,
   children,
 }: Props): JSX.Element {
   const [open, setOpen] = useState(defaultExpanded);
+  const expanded = pinned || open;
   return (
     <div style={styles.section}>
-      <button
-        type="button"
-        style={styles.header}
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-label={`Toggle ${title}`}
-      >
-        <span style={styles.chevron}>{open ? '▾' : '▸'}</span>
-        <span>{title}</span>
-        {trailing !== undefined && <span style={styles.trailing}>{trailing}</span>}
-      </button>
-      {open && <div style={styles.body}>{children}</div>}
+      {pinned ? (
+        <div style={{ ...styles.header, cursor: 'default' }}>
+          <span>{title}</span>
+          {trailing !== undefined && <span style={styles.trailing}>{trailing}</span>}
+        </div>
+      ) : (
+        <button
+          type="button"
+          style={styles.header}
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label={`Toggle ${title}`}
+        >
+          <span style={styles.chevron}>{open ? '▾' : '▸'}</span>
+          <span>{title}</span>
+          {trailing !== undefined && <span style={styles.trailing}>{trailing}</span>}
+        </button>
+      )}
+      {expanded && <div style={styles.body}>{children}</div>}
     </div>
   );
 }
