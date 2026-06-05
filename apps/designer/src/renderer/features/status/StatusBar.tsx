@@ -19,10 +19,10 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '1.25rem',
-    padding: '0.4rem 0.75rem',
+    padding: '0.18rem 0.75rem',
     background: colors.panel,
     borderTop: `1px solid ${colors.border}`,
-    fontSize: '0.8rem',
+    fontSize: '0.78rem',
     color: colors.textMuted,
   },
   pill: {
@@ -57,11 +57,11 @@ const styles = {
     color: colors.textMuted,
     border: `1px solid ${colors.border}`,
     borderRadius: '0.2rem',
-    padding: '0 0.5rem',
-    fontSize: '1rem',
+    padding: '0 0.45rem',
+    fontSize: '0.9rem',
     cursor: 'pointer',
-    lineHeight: 1.5,
-    minWidth: 24,
+    lineHeight: 1.25,
+    minWidth: 22,
   },
 } as const;
 
