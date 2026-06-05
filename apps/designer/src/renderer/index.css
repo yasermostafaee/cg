@@ -146,6 +146,19 @@ input[type='number'] {
 }
 
 /*
+ * Selection-gizmo corner: a light rounded highlight when the pointer is over
+ * the corner's (larger) resize hit area — the Loopic hover affordance. The
+ * white square handle sits on top (pointer-events: none) and stays visible.
+ */
+.cg-gizmo-corner {
+  border-radius: 6px;
+  transition: background 90ms ease;
+}
+.cg-gizmo-corner:hover {
+  background: rgba(56, 189, 248, 0.55);
+}
+
+/*
  * Unify EVERY standalone textual input/select/textarea with the inspector
  * number-field look — identical border, hover and focus. Components in this
  * codebase set borders inline, which beat normal CSS, so `!important` is

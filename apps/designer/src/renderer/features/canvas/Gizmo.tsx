@@ -11,10 +11,11 @@ interface Props {
 
 /** Visible corner square (screen px). */
 const HANDLE = 8;
-/** Invisible corner *resize* hover/hit area, larger than the visible square. */
-const CORNER_HIT = 16;
+/** Corner *resize* hover/hit area (also the visible hover highlight), larger
+ *  than the white square. */
+const CORNER_HIT = 22;
 /** Rotation hover area around each corner (screen px) — outside the resize hit. */
-const ROT_ZONE = 14;
+const ROT_ZONE = 18;
 /** Edge resize strips this thick (screen px). */
 const EDGE = 7;
 const MIN_SIZE = 4;
@@ -116,7 +117,8 @@ const styles = {
     width: CORNER_HIT,
     height: CORNER_HIT,
     pointerEvents: 'auto' as const,
-    background: 'transparent',
+    // No inline `background` — the .cg-gizmo-corner:hover rule paints the
+    // highlight, and an inline value would beat it.
   },
   rotZone: {
     position: 'absolute' as const,
@@ -256,10 +258,12 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
           }}
           onPointerDown={down('r', 'resize')}
         />
-        {/* Corner resize hover areas (larger than the visible square). */}
+        {/* Corner resize hover areas (larger than the visible square). A light
+            rounded highlight appears on hover (see .cg-gizmo-corner in CSS). */}
         {corners.map(({ c, cx, cy }) => (
           <div
             key={`hit-${c}`}
+            className="cg-gizmo-corner"
             style={{
               ...styles.cornerHit,
               left: cx - CORNER_HIT / 2,
