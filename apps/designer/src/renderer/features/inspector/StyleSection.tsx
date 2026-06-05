@@ -13,6 +13,7 @@ import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import { hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
 import { CollapseSection } from './CollapseSection.js';
 import { ColorField, NumberField, SelectField, VectorField } from './controls.js';
+import { FillField } from './FillPopover.js';
 import { TextStyleSection } from './TextStyleSection.js';
 
 interface Props {
@@ -173,17 +174,33 @@ function ShapeSections({
   return (
     <>
       <CollapseSection title="Path Style" defaultExpanded>
-        <ColorField
+        <FillField
           label="fill"
-          value={fillColor}
-          onCommit={(color) => designerStore.commitAnimatable(id, 'fill.color', color)}
-          trailing={animPointIcon(
-            element,
-            'fill.color',
-            currentFrame,
-            selectedKeyframe,
-            () => fillColor,
-          )}
+          value={element.fill}
+          onChange={(f) => {
+            // A plain solid edit on an already-solid fill keeps the
+            // keyframe-aware routing (so fill.color can still animate);
+            // switching to / editing a gradient writes the whole Fill.
+            if (
+              f.kind === 'solid' &&
+              (element.fill === undefined || element.fill.kind === 'solid')
+            ) {
+              designerStore.commitAnimatable(id, 'fill.color', f.color);
+            } else {
+              designerStore.updateElement(id, { fill: f } as Partial<Element>);
+            }
+          }}
+          trailing={
+            element.fill === undefined || element.fill.kind === 'solid'
+              ? animPointIcon(
+                  element,
+                  'fill.color',
+                  currentFrame,
+                  selectedKeyframe,
+                  () => fillColor,
+                )
+              : pointIcon('fill')
+          }
         />
         <ColorField
           label="stroke"

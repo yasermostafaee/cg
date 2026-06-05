@@ -87,10 +87,6 @@ function Popover({
   onClose: () => void;
 }): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null);
-  const initial = hexToHsva(value);
-  const [hsva, setHsva] = useState(initial);
-  // Track the gesture so external value syncs don't fight an in-progress drag.
-  const dragging = useRef(false);
   // Resolved on-screen position. Computed after layout so we can flip the
   // popover above the swatch when it would overflow the viewport bottom.
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -111,12 +107,7 @@ function Popover({
     setPos({ top, left });
   }, [anchor]);
 
-  // Re-sync when the bound value changes externally and we're not dragging.
-  useEffect(() => {
-    if (!dragging.current) setHsva(hexToHsva(value));
-  }, [value]);
-
-  // Close on outside click / Escape / scroll.
+  // Close on outside click / Escape.
   useEffect(() => {
     function onDown(e: PointerEvent): void {
       const t = e.target as Node | null;
@@ -134,15 +125,6 @@ function Popover({
       window.removeEventListener('keydown', onKey, true);
     };
   }, [anchor, onClose]);
-
-  function commit(next: Hsva): void {
-    setHsva(next);
-    onChange(hsvaToHex(next));
-  }
-
-  const { r, g, b } = hsvToRgb(hsva.h, hsva.s, hsva.v);
-  const pureHue = hsvToRgb(hsva.h, 1, 1);
-  const hexLabel = hsvaToHex(hsva).replace(/^#/, '').toUpperCase();
 
   const popover = (
     <div
@@ -167,6 +149,46 @@ function Popover({
         touchAction: 'none',
       }}
     >
+      <ColorEditor value={value} onChange={onChange} />
+    </div>
+  );
+
+  return createPortal(popover, document.body);
+}
+
+/**
+ * The reusable colour-editing surface: a saturation/value square, a hue
+ * slider, an alpha slider and a hex field. Self-contained — it owns its HSVA
+ * state, re-syncing from `value` whenever it changes externally and a drag
+ * isn't in progress. Used by the solid {@link ColorPicker} popover and by the
+ * gradient-stop editor in FillPopover, so both share identical colour maths.
+ */
+export function ColorEditor({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (hex: string) => void;
+}): JSX.Element {
+  const [hsva, setHsva] = useState(() => hexToHsva(value));
+  // Track the gesture so external value syncs don't fight an in-progress drag.
+  const dragging = useRef(false);
+
+  useEffect(() => {
+    if (!dragging.current) setHsva(hexToHsva(value));
+  }, [value]);
+
+  function commit(next: Hsva): void {
+    setHsva(next);
+    onChange(hsvaToHex(next));
+  }
+
+  const { r, g, b } = hsvToRgb(hsva.h, hsva.s, hsva.v);
+  const pureHue = hsvToRgb(hsva.h, 1, 1);
+  const hexLabel = hsvaToHex(hsva).replace(/^#/, '').toUpperCase();
+
+  return (
+    <>
       {/* Saturation / Value square */}
       <DragArea
         style={{
@@ -263,10 +285,8 @@ function Popover({
           boxSizing: 'border-box',
         }}
       />
-    </div>
+    </>
   );
-
-  return createPortal(popover, document.body);
 }
 
 /**
