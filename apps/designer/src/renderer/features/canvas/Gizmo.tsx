@@ -10,6 +10,21 @@ interface Props {
 }
 
 const HANDLE = 10;
+/** How far a rotation hit-zone extends around each corner (screen px). */
+const ROT_ZONE = 24;
+/** Edge resize strips this thick (screen px). */
+const EDGE = 9;
+const MIN_SIZE = 4;
+
+/** A rotate cursor (circular arrow) so corner rotation reads clearly. */
+const ROT_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">' +
+  '<g fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M16 6a7 7 0 1 0 1.5 4"/><path d="M17 3v4h-4"/></g></svg>';
+const ROTATE_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(ROT_SVG)}") 11 11, grab`;
+
+type Corner = 'tl' | 'tr' | 'bl' | 'br';
+type Handle = Corner | 't' | 'b' | 'l' | 'r';
 
 const styles = {
   frame: {
@@ -18,47 +33,58 @@ const styles = {
     boxSizing: 'border-box' as const,
     pointerEvents: 'none' as const,
   },
+  // Loopic-style corner handle: white fill, accent outline.
   handle: {
-    position: 'absolute' as const,
-    width: HANDLE,
-    height: HANDLE,
-    background: colors.accent,
-    border: '1px solid #FFF',
-    boxSizing: 'border-box' as const,
-    pointerEvents: 'auto' as const,
-    cursor: 'nwse-resize',
-  },
-  rotateHandle: {
     position: 'absolute' as const,
     width: HANDLE,
     height: HANDLE,
     background: '#FFF',
     border: `1px solid ${colors.accent}`,
-    borderRadius: '50%',
     boxSizing: 'border-box' as const,
     pointerEvents: 'auto' as const,
-    cursor: 'crosshair',
   },
-  rotateLine: {
+  rotZone: {
     position: 'absolute' as const,
-    width: 1,
-    height: 16,
-    background: colors.accent,
+    width: ROT_ZONE,
+    height: ROT_ZONE,
+    pointerEvents: 'auto' as const,
+    cursor: ROTATE_CURSOR,
+    background: 'transparent',
+  },
+  edge: {
+    position: 'absolute' as const,
+    pointerEvents: 'auto' as const,
+    background: 'transparent',
+  },
+  // Centre pivot indicator (visual only).
+  pivot: {
+    position: 'absolute' as const,
+    width: 7,
+    height: 7,
+    borderRadius: '50%',
+    border: `1px solid ${colors.accent}`,
+    background: '#FFF',
+    boxSizing: 'border-box' as const,
     pointerEvents: 'none' as const,
   },
 } as const;
 
+const CORNER_CURSOR: Record<Corner, string> = {
+  tl: 'nwse-resize',
+  br: 'nwse-resize',
+  tr: 'nesw-resize',
+  bl: 'nesw-resize',
+};
+
 /**
- * Selection gizmo overlay. Renders a frame around the selected element
- * with four corner resize handles + one rotate handle on top.
- *
- * Drag interactions:
- *   - body drag (handled by CanvasOverlay, not here) → move element
- *   - corner handle drag → resize from that corner (preserves opposite)
- *   - rotate handle drag → rotate around the element's center
- *
- * The handles use viewport (CSS) coordinates — the overlay scales their
- * positions by the same factor the iframe is at, so they line up.
+ * Selection gizmo (the Loopic pattern). A thin accent frame with four
+ * outlined corner handles, four edge strips, and a centre pivot dot — all
+ * rotated with the element. Interactions:
+ *   - body drag (handled by CanvasOverlay) → move
+ *   - corner handle → resize both axes (opposite corner fixed)
+ *   - edge strip → resize one axis (opposite edge fixed)
+ *   - just outside a corner → rotate about the element's anchor
+ * Resize works in the element's local (rotated) frame.
  */
 export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   const t = effectiveTransformAt(element, currentFrame);
@@ -68,180 +94,278 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   const x = position.x * scale;
   const y = position.y * scale;
 
-  // The renderer rotates each element about its `anchor` (CSS transform-origin,
-  // a 0..1 fraction of the box — see template-runtime/scene-builder). Match it
-  // here so the selection frame tracks a rotated element whose anchor isn't the
-  // default top-left (e.g. a centre-anchored ring). For anchor {0,0} this is
-  // exactly the previous `0 0` behaviour.
+  // The renderer rotates each element about its `anchor` (CSS transform-origin);
+  // match it so the frame + handles track a rotated element.
   const rotateOrigin = `${String(anchor.x * 100)}% ${String(anchor.y * 100)}%`;
   const rotateTransform = rotation === 0 ? undefined : `rotate(${String(rotation)}deg)`;
-  const frameStyle: React.CSSProperties = {
-    ...styles.frame,
-    left: x,
-    top: y,
-    width: w,
-    height: h,
-    transform: rotateTransform,
-    transformOrigin: rotateOrigin,
-  };
-  // B-004 — wrap the handles in a same-rotated container so corner +
-  // rotate handles follow the rotated bounding box. Local coords below
-  // are relative to this wrapper's top-left (the unrotated frame origin).
-  const handlesWrapperStyle: React.CSSProperties = {
+
+  const box = (extra: React.CSSProperties): React.CSSProperties => ({
     position: 'absolute',
     left: x,
     top: y,
     width: w,
     height: h,
-    pointerEvents: 'none',
     transform: rotateTransform,
     transformOrigin: rotateOrigin,
-  };
+    ...extra,
+  });
 
-  const corners: { dx: number; dy: number; corner: 'tl' | 'tr' | 'bl' | 'br' }[] = [
-    { dx: 0, dy: 0, corner: 'tl' },
-    { dx: w, dy: 0, corner: 'tr' },
-    { dx: 0, dy: h, corner: 'bl' },
-    { dx: w, dy: h, corner: 'br' },
+  const corners: { c: Corner; cx: number; cy: number }[] = [
+    { c: 'tl', cx: 0, cy: 0 },
+    { c: 'tr', cx: w, cy: 0 },
+    { c: 'bl', cx: 0, cy: h },
+    { c: 'br', cx: w, cy: h },
   ];
+
+  const down =
+    (handle: Handle, kind: 'resize' | 'rotate') => (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      if (kind === 'rotate')
+        beginRotate(element, handle as Corner, scale, currentFrame, e.nativeEvent);
+      else beginResize(element, handle, scale, currentFrame, e.nativeEvent);
+    };
 
   return (
     <>
-      <div style={frameStyle} />
-      <div style={handlesWrapperStyle}>
-        {corners.map((c) => (
+      <div style={{ ...styles.frame, ...box({}) }} />
+      <div style={box({ pointerEvents: 'none' })}>
+        {/* Rotation zones first (lowest) so the resize squares sit on top. */}
+        {corners.map(({ c, cx, cy }) => (
           <div
-            key={c.corner}
-            style={{
-              ...styles.handle,
-              left: c.dx - HANDLE / 2,
-              top: c.dy - HANDLE / 2,
-            }}
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              beginResize(element, c.corner, scale, currentFrame, e.nativeEvent);
-            }}
+            key={`rot-${c}`}
+            style={{ ...styles.rotZone, left: cx - ROT_ZONE / 2, top: cy - ROT_ZONE / 2 }}
+            onPointerDown={down(c, 'rotate')}
           />
         ))}
-        <div style={{ ...styles.rotateLine, left: w / 2 - 0.5, top: -16 }} />
+        {/* Edge strips (single-axis resize), inset from the corners. */}
         <div
-          style={{ ...styles.rotateHandle, left: w / 2 - HANDLE / 2, top: -22 }}
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            beginRotate(element, currentFrame, h, e.nativeEvent);
+          style={{
+            ...styles.edge,
+            left: HANDLE,
+            top: -EDGE / 2,
+            width: w - 2 * HANDLE,
+            height: EDGE,
+            cursor: 'ns-resize',
           }}
+          onPointerDown={down('t', 'resize')}
         />
+        <div
+          style={{
+            ...styles.edge,
+            left: HANDLE,
+            top: h - EDGE / 2,
+            width: w - 2 * HANDLE,
+            height: EDGE,
+            cursor: 'ns-resize',
+          }}
+          onPointerDown={down('b', 'resize')}
+        />
+        <div
+          style={{
+            ...styles.edge,
+            left: -EDGE / 2,
+            top: HANDLE,
+            width: EDGE,
+            height: h - 2 * HANDLE,
+            cursor: 'ew-resize',
+          }}
+          onPointerDown={down('l', 'resize')}
+        />
+        <div
+          style={{
+            ...styles.edge,
+            left: w - EDGE / 2,
+            top: HANDLE,
+            width: EDGE,
+            height: h - 2 * HANDLE,
+            cursor: 'ew-resize',
+          }}
+          onPointerDown={down('r', 'resize')}
+        />
+        {/* Corner resize squares (on top of the rotation zones). */}
+        {corners.map(({ c, cx, cy }) => (
+          <div
+            key={`rs-${c}`}
+            style={{
+              ...styles.handle,
+              left: cx - HANDLE / 2,
+              top: cy - HANDLE / 2,
+              cursor: CORNER_CURSOR[c],
+            }}
+            onPointerDown={down(c, 'resize')}
+          />
+        ))}
+        <div style={{ ...styles.pivot, left: w / 2 - 3.5, top: h / 2 - 3.5 }} />
       </div>
     </>
   );
 }
 
+// ── geometry ────────────────────────────────────────────────────────────────
+
+function rot(vx: number, vy: number, cos: number, sin: number): { x: number; y: number } {
+  return { x: vx * cos - vy * sin, y: vx * sin + vy * cos };
+}
+
+/** Local coords (relative to the box top-left) of a named corner for size w×h. */
+function cornerLocal(c: Corner, w: number, h: number): { x: number; y: number } {
+  switch (c) {
+    case 'tl':
+      return { x: 0, y: 0 };
+    case 'tr':
+      return { x: w, y: 0 };
+    case 'bl':
+      return { x: 0, y: h };
+    case 'br':
+      return { x: w, y: h };
+  }
+}
+
+/** Which corner stays put + which axes a handle frees. */
+const RESIZE_CFG: Record<Handle, { fixed: Corner; freeW: boolean; freeH: boolean }> = {
+  br: { fixed: 'tl', freeW: true, freeH: true },
+  tl: { fixed: 'br', freeW: true, freeH: true },
+  tr: { fixed: 'bl', freeW: true, freeH: true },
+  bl: { fixed: 'tr', freeW: true, freeH: true },
+  r: { fixed: 'tl', freeW: true, freeH: false },
+  l: { fixed: 'tr', freeW: true, freeH: false },
+  b: { fixed: 'tl', freeW: false, freeH: true },
+  t: { fixed: 'bl', freeW: false, freeH: true },
+};
+
+/** Local grab point (box-relative) for each handle, used as the drag origin. */
+function handleLocal(handle: Handle, w: number, h: number): { x: number; y: number } {
+  switch (handle) {
+    case 'r':
+      return { x: w, y: h / 2 };
+    case 'l':
+      return { x: 0, y: h / 2 };
+    case 't':
+      return { x: w / 2, y: 0 };
+    case 'b':
+      return { x: w / 2, y: h };
+    default:
+      return cornerLocal(handle, w, h);
+  }
+}
+
 function beginResize(
   element: Element,
-  corner: 'tl' | 'tr' | 'bl' | 'br',
+  handle: Handle,
   scale: number,
   currentFrame: number,
   ev: PointerEvent,
 ): void {
+  const t0 = effectiveTransformAt(element, currentFrame);
+  const w0 = t0.size.w;
+  const h0 = t0.size.h;
+  const { x: px, y: py } = t0.position;
+  const a = t0.anchor;
+  const rad = (t0.rotation * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  // Pivot in scene coords (anchor point of the unscaled box).
+  const pivot = { x: px + a.x * w0, y: py + a.y * h0 };
+  const sceneOf = (lx: number, ly: number): { x: number; y: number } => {
+    const o = rot(lx - a.x * w0, ly - a.y * h0, cos, sin);
+    return { x: pivot.x + o.x, y: pivot.y + o.y };
+  };
+  const cfg = RESIZE_CFG[handle];
+  const fixedScene = sceneOf(...cornerToArgs(cfg.fixed, w0, h0));
+  const grab = handleLocal(handle, w0, h0);
+  const grabScene = sceneOf(grab.x, grab.y);
+  // Local unit axes (scene space).
+  const ux = { x: cos, y: sin };
+  const uy = { x: -sin, y: cos };
   const startX = ev.clientX;
   const startY = ev.clientY;
-  // Read the *visually effective* transform at the current frame so the
-  // resize starts from where the operator can see the shape, not from the
-  // element's static value (which may differ once the property has a
-  // keyframe track).
-  const t0 = effectiveTransformAt(element, currentFrame);
-  const start = {
-    x: t0.position.x,
-    y: t0.position.y,
-    w: t0.size.w,
-    h: t0.size.h,
-  };
 
   const onMove = (e: PointerEvent): void => {
-    const dx = (e.clientX - startX) / scale;
-    const dy = (e.clientY - startY) / scale;
-    let { x, y, w, h } = start;
-    switch (corner) {
-      case 'tl':
-        x += dx;
-        y += dy;
-        w -= dx;
-        h -= dy;
-        break;
-      case 'tr':
-        y += dy;
-        w += dx;
-        h -= dy;
-        break;
-      case 'bl':
-        x += dx;
-        w -= dx;
-        h += dy;
-        break;
-      case 'br':
-        w += dx;
-        h += dy;
-        break;
-    }
-    if (w < 4 || h < 4) return; // minimum size
-    designerStore.commitAnimatable(element.id, 'position.x', x);
-    designerStore.commitAnimatable(element.id, 'position.y', y);
-    designerStore.commitAnimatable(element.id, 'size.w', w);
-    designerStore.commitAnimatable(element.id, 'size.h', h);
+    const pScene = {
+      x: grabScene.x + (e.clientX - startX) / scale,
+      y: grabScene.y + (e.clientY - startY) / scale,
+    };
+    const vx = pScene.x - fixedScene.x;
+    const vy = pScene.y - fixedScene.y;
+    const wNew = cfg.freeW ? Math.max(MIN_SIZE, Math.abs(vx * ux.x + vy * ux.y)) : w0;
+    const hNew = cfg.freeH ? Math.max(MIN_SIZE, Math.abs(vx * uy.x + vy * uy.y)) : h0;
+    // Recompute the top-left so the fixed corner stays put with the new size.
+    const qf = cornerLocal(cfg.fixed, wNew, hNew);
+    const pvx = a.x * wNew;
+    const pvy = a.y * hNew;
+    const ro = rot(qf.x - pvx, qf.y - pvy, cos, sin);
+    const Px = fixedScene.x - pvx - ro.x;
+    const Py = fixedScene.y - pvy - ro.y;
+    designerStore.commitAnimatable(element.id, 'position.x', Px);
+    designerStore.commitAnimatable(element.id, 'position.y', Py);
+    designerStore.commitAnimatable(element.id, 'size.w', wNew);
+    designerStore.commitAnimatable(element.id, 'size.h', hNew);
   };
   const onUp = (): void => {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
+    designerStore.markHistoryBoundary();
   };
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);
 }
 
+function cornerToArgs(c: Corner, w: number, h: number): [number, number] {
+  const p = cornerLocal(c, w, h);
+  return [p.x, p.y];
+}
+
 /**
- * Compute the element's centre (in viewport coords) given the viewport
- * position of the rotate handle, the element's visual height and its
- * current rotation. The handle sits at local (w/2, -22) inside the
- * rotated frame; the centre is at local (w/2, h/2). So in screen space
- * the centre is the handle offset by R(θ)·(0, h/2 + 22).
- *
- * Exported so the unit test can verify rotated geometry without a DOM.
+ * Recover the rotation pivot's client position from the grabbed handle's client
+ * position and the handle's local offset from the pivot (in element-local px,
+ * pre-zoom). Pure + exported for unit testing.
  */
-export function rotateHandleCentre(
-  handleX: number,
-  handleY: number,
-  hVisual: number,
+export function pivotClientFromGrab(
+  grabX: number,
+  grabY: number,
+  offLocalX: number,
+  offLocalY: number,
   rotationDeg: number,
-): { cx: number; cy: number } {
-  const localDy = hVisual / 2 + 22;
+  scale: number,
+): { x: number; y: number } {
   const rad = (rotationDeg * Math.PI) / 180;
-  return {
-    cx: handleX + -localDy * Math.sin(rad),
-    cy: handleY + localDy * Math.cos(rad),
-  };
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const o = rot(offLocalX, offLocalY, cos, sin);
+  return { x: grabX - scale * o.x, y: grabY - scale * o.y };
 }
 
 function beginRotate(
   element: Element,
+  corner: Corner,
+  scale: number,
   currentFrame: number,
-  hVisual: number,
   ev: PointerEvent,
 ): void {
-  const startAngle = effectiveTransformAt(element, currentFrame).rotation;
-  const startX = ev.clientX;
-  const startY = ev.clientY;
-  const { cx, cy } = rotateHandleCentre(startX, startY, hVisual, startAngle);
-  // Cursor angle at drag start — subtracted below so rotation doesn't
-  // snap by +90° on mousedown.
-  const startCursorAngle = Math.atan2(startY - cy, startX - cx) * (180 / Math.PI) + 90;
+  const t0 = effectiveTransformAt(element, currentFrame);
+  const startAngle = t0.rotation;
+  const cl = cornerLocal(corner, t0.size.w, t0.size.h);
+  const pivot = pivotClientFromGrab(
+    ev.clientX,
+    ev.clientY,
+    cl.x - t0.anchor.x * t0.size.w,
+    cl.y - t0.anchor.y * t0.size.h,
+    startAngle,
+    scale,
+  );
+  const startCursor = Math.atan2(ev.clientY - pivot.y, ev.clientX - pivot.x) * (180 / Math.PI);
 
   const onMove = (e: PointerEvent): void => {
-    const ang = Math.atan2(e.clientY - cy, e.clientX - cx) * (180 / Math.PI) + 90;
-    const delta = ang - startCursorAngle;
-    designerStore.commitAnimatable(element.id, 'rotation', startAngle + delta);
+    const ang = Math.atan2(e.clientY - pivot.y, e.clientX - pivot.x) * (180 / Math.PI);
+    let next = startAngle + (ang - startCursor);
+    if (e.shiftKey) next = Math.round(next / 15) * 15; // Shift = snap to 15°
+    designerStore.commitAnimatable(element.id, 'rotation', Number(next.toFixed(2)));
   };
   const onUp = (): void => {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
+    designerStore.markHistoryBoundary();
   };
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);

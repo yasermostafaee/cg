@@ -1,37 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import { rotateHandleCentre } from '../src/renderer/features/canvas/Gizmo.js';
+import { pivotClientFromGrab } from '../src/renderer/features/canvas/Gizmo.js';
 
 /**
- * B-004 regression — when the element is rotated, the gizmo handles are
- * rendered inside a same-rotated wrapper, so the rotate-drag handler has
- * to recover the element centre from the handle position + current angle
- * (R(θ)·(0, h/2 + 22)). Before the fix, beginRotate assumed unrotated
- * geometry (`cy = handleY + 22`) and the centre drifted as soon as the
- * element was rotated.
+ * Corner rotation recovers the pivot's client position from the grabbed
+ * corner's client position and that corner's local offset from the pivot
+ * (rotated by the element's angle and scaled by the zoom). For a centre
+ * anchor the bottom-right corner sits at local offset (w/2, h/2) from the
+ * pivot; the pivot is therefore that offset (rotated/scaled) back from the
+ * grab point.
  */
-describe('rotateHandleCentre', () => {
-  it('places the centre directly below the handle at rotation 0', () => {
-    const { cx, cy } = rotateHandleCentre(100, 0, 80, 0);
-    expect(cx).toBeCloseTo(100);
-    expect(cy).toBeCloseTo(0 + 80 / 2 + 22);
+describe('pivotClientFromGrab', () => {
+  it('subtracts the (scaled) offset at rotation 0', () => {
+    // grab at (150, 120), corner is +40,+30 from the pivot, zoom 1.
+    const p = pivotClientFromGrab(150, 120, 40, 30, 0, 1);
+    expect(p.x).toBeCloseTo(110);
+    expect(p.y).toBeCloseTo(90);
   });
 
-  it('places the centre to the left of the handle at rotation 90', () => {
-    // At 90° the local +y axis (handle → centre) points to viewport −x.
-    const { cx, cy } = rotateHandleCentre(100, 0, 80, 90);
-    expect(cx).toBeCloseTo(100 - (80 / 2 + 22));
-    expect(cy).toBeCloseTo(0);
+  it('applies the zoom factor to the offset', () => {
+    const p = pivotClientFromGrab(150, 120, 40, 30, 0, 0.5);
+    expect(p.x).toBeCloseTo(150 - 20);
+    expect(p.y).toBeCloseTo(120 - 15);
   });
 
-  it('places the centre above the handle at rotation 180', () => {
-    const { cx, cy } = rotateHandleCentre(100, 0, 80, 180);
-    expect(cx).toBeCloseTo(100);
-    expect(cy).toBeCloseTo(0 - (80 / 2 + 22));
+  it('rotates the offset by the element angle (90°)', () => {
+    // At 90° clockwise, local (dx,dy) maps to world (-dy, dx).
+    const p = pivotClientFromGrab(100, 100, 10, 0, 90, 1);
+    expect(p.x).toBeCloseTo(100 - 0);
+    expect(p.y).toBeCloseTo(100 - 10);
   });
 
-  it('places the centre to the right of the handle at rotation 270', () => {
-    const { cx, cy } = rotateHandleCentre(100, 0, 80, 270);
-    expect(cx).toBeCloseTo(100 + (80 / 2 + 22));
-    expect(cy).toBeCloseTo(0);
+  it('rotates the offset by the element angle (180°)', () => {
+    const p = pivotClientFromGrab(100, 100, 10, 6, 180, 1);
+    expect(p.x).toBeCloseTo(100 + 10);
+    expect(p.y).toBeCloseTo(100 + 6);
   });
 });
