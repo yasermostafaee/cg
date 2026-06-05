@@ -310,6 +310,27 @@ export function CanvasArea({
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
+  // Fit the whole scene inside the scroll viewport so it's fully visible
+  // without scrolling — the same zoom the ⛶ button applies.
+  function fitToViewport(): void {
+    const el = outerRef.current;
+    const s = latestSceneRef.current;
+    if (el === null || s === null) return;
+    const margin = 48;
+    const z = Math.min(
+      (el.clientWidth - margin) / s.resolution.width,
+      (el.clientHeight - margin) / s.resolution.height,
+    );
+    if (Number.isFinite(z) && z > 0) setZoom(clampZoom(z));
+  }
+
+  // Auto-fit on load / project (or composition size) switch, after layout.
+  useEffect(() => {
+    if (sceneId === null) return;
+    const raf = requestAnimationFrame(fitToViewport);
+    return () => cancelAnimationFrame(raf);
+  }, [sceneId, scene?.resolution.width, scene?.resolution.height]);
+
   function applyPan(dx: number, dy: number): void {
     const el = outerRef.current;
     if (el === null) return;
@@ -411,7 +432,7 @@ export function CanvasArea({
         <button
           type="button"
           style={styles.headerButton}
-          onClick={() => setZoom(ZOOM_DEFAULT)}
+          onClick={fitToViewport}
           aria-label="Fit"
           title="Fit canvas"
         >
