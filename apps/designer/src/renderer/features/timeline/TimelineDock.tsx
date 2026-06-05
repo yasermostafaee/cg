@@ -360,11 +360,13 @@ export function TimelineDock({
       if (e.ctrlKey) {
         e.preventDefault();
         // Anchor the next zoom to the point under the mouse.
-        const cw = rb.clientWidth;
-        const vx = e.clientX - rb.getBoundingClientRect().left;
-        const denom = cw * zoomRef.current;
-        const frac = denom === 0 ? 0 : (vx + rb.scrollLeft) / denom;
-        wheelAnchorRef.current = { frac: Math.max(0, Math.min(1, frac)), vx };
+        const el = rightBodyRef.current;
+        if (el !== null) {
+          const vx = e.clientX - el.getBoundingClientRect().left;
+          const denom = el.clientWidth * zoomRef.current;
+          const frac = denom === 0 ? 0 : (vx + el.scrollLeft) / denom;
+          wheelAnchorRef.current = { frac: Math.max(0, Math.min(1, frac)), vx };
+        }
         const delta = e.deltaY > 0 ? -1 : 1;
         designerStore.setTimelineZoom(zoomRef.current + delta);
         return;
