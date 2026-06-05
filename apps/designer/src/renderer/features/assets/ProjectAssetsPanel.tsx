@@ -73,6 +73,15 @@ const styles = {
     gap: '0.6rem 0.4rem',
     alignContent: 'start',
   },
+  list: {
+    flex: 1,
+    minHeight: 0,
+    overflowY: 'auto' as const,
+    padding: '0.35rem 0.3rem',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.05rem',
+  },
   empty: {
     // Span every grid column so the hint uses the full panel width instead of
     // being squeezed into one 70px cell (which wrapped it to ~6 lines).
@@ -125,6 +134,33 @@ const styles = {
  */
 const fontFaces = new Map<string, FontFace>();
 
+/** Persisted grid/list preference for the assets panel. */
+const ASSET_VIEW_KEY = 'cg.designer.assetsView';
+
+function GridIcon(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden>
+      <rect x="0" y="0" width="6" height="6" rx="1" />
+      <rect x="8" y="0" width="6" height="6" rx="1" />
+      <rect x="0" y="8" width="6" height="6" rx="1" />
+      <rect x="8" y="8" width="6" height="6" rx="1" />
+    </svg>
+  );
+}
+
+function ListIcon(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden>
+      <rect x="0" y="1" width="3" height="3" rx="0.7" />
+      <rect x="5" y="1.75" width="9" height="1.5" rx="0.75" />
+      <rect x="0" y="5.5" width="3" height="3" rx="0.7" />
+      <rect x="5" y="6.25" width="9" height="1.5" rx="0.75" />
+      <rect x="0" y="10" width="3" height="3" rx="0.7" />
+      <rect x="5" y="10.75" width="9" height="1.5" rx="0.75" />
+    </svg>
+  );
+}
+
 /**
  * D-011 — left-side Project Assets panel. Title + add menu (image / font)
  * on top, a search box, and a grid of asset thumbnails below. Image
@@ -146,6 +182,19 @@ export function ProjectAssetsPanel(): JSX.Element {
     imageUses: number;
   } | null>(null);
   const addBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [assetView, setAssetView] = useState<'grid' | 'list'>(() =>
+    typeof localStorage !== 'undefined' && localStorage.getItem(ASSET_VIEW_KEY) === 'list'
+      ? 'list'
+      : 'grid',
+  );
+  function changeAssetView(next: 'grid' | 'list'): void {
+    setAssetView(next);
+    try {
+      localStorage.setItem(ASSET_VIEW_KEY, next);
+    } catch {
+      /* storage unavailable (private mode) — keep the choice in memory only */
+    }
+  }
 
   // Register `@font-face` for every imported font so the thumbnail
   // sample text — and the iframe preview, and the Text inspector — can
@@ -278,6 +327,17 @@ export function ProjectAssetsPanel(): JSX.Element {
       <div style={styles.header}>
         <span style={styles.title}>Project Assets</span>
         <button
+          type="button"
+          style={styles.iconButton}
+          aria-label={assetView === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
+          title={assetView === 'grid' ? 'List view' : 'Grid view'}
+          aria-pressed={assetView === 'list'}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => changeAssetView(assetView === 'grid' ? 'list' : 'grid')}
+        >
+          {assetView === 'grid' ? <ListIcon /> : <GridIcon />}
+        </button>
+        <button
           ref={addBtnRef}
           type="button"
           style={styles.iconButton}
@@ -302,7 +362,7 @@ export function ProjectAssetsPanel(): JSX.Element {
           aria-label="Search assets"
         />
       </div>
-      <div style={styles.grid} data-role="assets-grid">
+      <div style={assetView === 'list' ? styles.list : styles.grid} data-role="assets-grid">
         {visible.length === 0 ? (
           <p style={styles.empty}>
             No assets yet.
@@ -311,7 +371,12 @@ export function ProjectAssetsPanel(): JSX.Element {
           </p>
         ) : (
           visible.map((a) => (
-            <AssetThumb key={a.assetId} asset={a} onContextMenu={openContextMenu} />
+            <AssetThumb
+              key={a.assetId}
+              asset={a}
+              layout={assetView}
+              onContextMenu={openContextMenu}
+            />
           ))
         )}
       </div>

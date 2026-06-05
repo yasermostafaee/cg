@@ -155,6 +155,11 @@ input[type='number'] {
   background: #2e3346;
 }
 
+/* Assets list-view row — subtle hover so the compact rows feel clickable. */
+.cg-asset-row:hover {
+  background: #2e3346;
+}
+
 /*
  * Selection-gizmo corner: a light rounded highlight when the pointer is over
  * the corner's (larger) resize hit area — the Loopic hover affordance. The
