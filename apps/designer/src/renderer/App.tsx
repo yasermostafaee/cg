@@ -22,15 +22,12 @@ declare global {
   }
 }
 
+// The side panels are fixed-width (only the canvas↔timeline split is
+// resizable). Left panel is a hard 244px; the inspector uses this width.
 const INSPECTOR_DEFAULT = 320;
-const INSPECTOR_MIN = 240;
-const INSPECTOR_MAX = 600;
 const TIMELINE_DEFAULT = 260;
 const TIMELINE_MIN = 140;
 const TIMELINE_MAX = 600;
-const ASSETS_DEFAULT = 200;
-const ASSETS_MIN = 140;
-const ASSETS_MAX = 360;
 
 const styles = {
   page: {
@@ -298,9 +295,7 @@ export function App(): JSX.Element {
   // open composition, not the now-layerless project root.
   const editScene = scene === null ? null : editSceneOf(scene, activeCompositionId);
   const issues = useIssues(editScene);
-  const [inspectorW, setInspectorW] = useState(INSPECTOR_DEFAULT);
   const [timelineH, setTimelineH] = useState(TIMELINE_DEFAULT);
-  const [assetsW, setAssetsW] = useState(ASSETS_DEFAULT);
   // Which panel the left icon-rail shows.
   const [leftPanel, setLeftPanel] = useState<'compositions' | 'assets'>('compositions');
 
@@ -391,14 +386,9 @@ export function App(): JSX.Element {
       </div>
       <div style={styles.shell}>
         <LeftRail panel={leftPanel} onSelect={setLeftPanel} />
-        <div style={{ width: assetsW, flexShrink: 0, display: 'flex', minHeight: 0 }}>
+        <div style={{ width: 244, flexShrink: 0, display: 'flex', minHeight: 0 }}>
           {leftPanel === 'compositions' ? <CompositionsPanel /> : <ProjectAssetsPanel />}
         </div>
-        <Splitter
-          axis="x"
-          ariaLabel="Resize left panel"
-          onResize={(dx) => setAssetsW((w) => Math.max(ASSETS_MIN, Math.min(ASSETS_MAX, w + dx)))}
-        />
         {editScene === null ? (
           <EmptyStage />
         ) : (
@@ -417,14 +407,7 @@ export function App(): JSX.Element {
               </div>
               <TransportBar scene={editScene} currentFrame={currentFrame} />
             </div>
-            <Splitter
-              axis="x"
-              ariaLabel="Resize inspector panel"
-              onResize={(dx) =>
-                setInspectorW((w) => Math.max(INSPECTOR_MIN, Math.min(INSPECTOR_MAX, w - dx)))
-              }
-            />
-            <div style={{ width: inspectorW, flexShrink: 0, display: 'flex', minHeight: 0 }}>
+            <div style={{ width: INSPECTOR_DEFAULT, flexShrink: 0, display: 'flex', minHeight: 0 }}>
               <InspectorPanel
                 scene={editScene}
                 projectPath={projectPath}
