@@ -138,7 +138,9 @@ function txt(o: TextOpts): Element {
       letterSpacing: 0,
     },
     color: o.color,
-    align: o.align ?? 'end',
+    // RTL Persian: 'start' resolves to the RIGHT edge (right-aligned), which is
+    // what we want for every plate/label here.
+    align: o.align ?? 'start',
     direction: o.ltr === true ? 'ltr' : 'rtl',
     fitMode: 'fixed',
     overflow: 'clip',
@@ -516,9 +518,11 @@ const master: Element[] = [
     color: WHITE,
     align: 'start',
     wrap: false,
+    // Persian news crawler: the line travels left → right (x increases),
+    // entering off the left edge and sweeping toward the breaking tag.
     animation: anim({
       opacity: track(kf(48, 0), kf(58, 1)),
-      'position.x': track(kfLinear(54, 1520), kfLinear(OUT, -3400)),
+      'position.x': track(kfLinear(54, -5200), kfLinear(OUT, 1520)),
     }),
   }),
   shape({
