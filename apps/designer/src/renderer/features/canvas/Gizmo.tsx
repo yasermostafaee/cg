@@ -1,6 +1,6 @@
 import type { Element } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { designerStore } from '../../state/store.js';
+import { designerStore, editSceneOf } from '../../state/store.js';
 import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 
 interface Props {
@@ -18,6 +18,9 @@ const ROT_ZONE = 28;
 /** Edge resize strips this thick (screen px). */
 const EDGE = 7;
 const MIN_SIZE = 4;
+/** Resize snap threshold (screen px) and rotation snap threshold (degrees). */
+const SNAP_PX = 7;
+const SNAP_DEG = 6;
 
 /**
  * Custom cursors matching the reference recording: a black double-headed
@@ -194,14 +197,15 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
     <>
       <div style={{ ...styles.frame, ...box({}) }} />
       <div style={box({ pointerEvents: 'none' })}>
-        {/* Rotation zones first (lowest) so the resize squares sit on top. */}
+        {/* Rotation zones — placed in each corner's OUTER quadrant only, so
+            rotation is offered just outside the shape, never inside it. */}
         {corners.map(({ c, cx, cy }) => (
           <div
             key={`rot-${c}`}
             style={{
               ...styles.rotZone,
-              left: cx - ROT_ZONE / 2,
-              top: cy - ROT_ZONE / 2,
+              left: c === 'tl' || c === 'bl' ? cx - ROT_ZONE : cx,
+              top: c === 'tl' || c === 'tr' ? cy - ROT_ZONE : cy,
               cursor: rotateCursor(ROTATE_ANGLE[c] + rotation + 90),
             }}
             onPointerDown={down(c, 'rotate')}
@@ -326,6 +330,44 @@ function handleLocal(handle: Handle, w: number, h: number): { x: number; y: numb
   }
 }
 
+/**
+ * Snap targets in the active document: canvas edges + centre, every *other*
+ * element's edges + centre, and the operator's ruler guides.
+ */
+function buildSnapTargets(excludeId: string, currentFrame: number): { xs: number[]; ys: number[] } {
+  const st = designerStore.get();
+  const doc = editSceneOf(st.scene, st.activeCompositionId);
+  const xs: number[] = [];
+  const ys: number[] = [];
+  if (doc !== null) {
+    xs.push(0, doc.resolution.width / 2, doc.resolution.width);
+    ys.push(0, doc.resolution.height / 2, doc.resolution.height);
+    for (const layer of doc.layers) {
+      for (const el of layer.children) {
+        if (el.id === excludeId) continue;
+        const tr = effectiveTransformAt(el, currentFrame);
+        const ew = tr.size.w * tr.scale.x;
+        const eh = tr.size.h * tr.scale.y;
+        xs.push(tr.position.x, tr.position.x + ew / 2, tr.position.x + ew);
+        ys.push(tr.position.y, tr.position.y + eh / 2, tr.position.y + eh);
+      }
+    }
+  }
+  for (const gx of st.guides.x) xs.push(gx);
+  for (const gy of st.guides.y) ys.push(gy);
+  return { xs, ys };
+}
+
+/** Nearest target to `v` within `thr`, or null. */
+function snapValue(v: number, targets: readonly number[], thr: number): number | null {
+  let best: { t: number; d: number } | null = null;
+  for (const t of targets) {
+    const d = Math.abs(t - v);
+    if (d <= thr && (best === null || d < best.d)) best = { t, d };
+  }
+  return best === null ? null : best.t;
+}
+
 function beginResize(
   element: Element,
   handle: Handle,
@@ -358,12 +400,35 @@ function beginResize(
   const startY = ev.clientY;
   // Hold this handle's cursor for the whole gesture (don't flip over others).
   const unlock = lockCursor(resizeCursor(RESIZE_ANGLE[handle] + t0.rotation));
+  // Snap the moving edge to other elements / canvas / guides — only when the
+  // element is axis-aligned (snapping to H/V lines is undefined when rotated).
+  const snapping = designerStore.get().snappingEnabled && t0.rotation === 0;
+  const targets = snapping ? buildSnapTargets(element.id, currentFrame) : { xs: [], ys: [] };
+  const thr = SNAP_PX / scale;
 
   const onMove = (e: PointerEvent): void => {
     const pScene = {
       x: grabScene.x + (e.clientX - startX) / scale,
       y: grabScene.y + (e.clientY - startY) / scale,
     };
+    let guideX: number | null = null;
+    let guideY: number | null = null;
+    if (snapping && e.shiftKey !== true) {
+      if (cfg.freeW) {
+        const s = snapValue(pScene.x, targets.xs, thr);
+        if (s !== null) {
+          pScene.x = s;
+          guideX = s;
+        }
+      }
+      if (cfg.freeH) {
+        const s = snapValue(pScene.y, targets.ys, thr);
+        if (s !== null) {
+          pScene.y = s;
+          guideY = s;
+        }
+      }
+    }
     const vx = pScene.x - fixedScene.x;
     const vy = pScene.y - fixedScene.y;
     const wNew = cfg.freeW ? Math.max(MIN_SIZE, Math.abs(vx * ux.x + vy * ux.y)) : w0;
@@ -379,11 +444,18 @@ function beginResize(
     designerStore.commitAnimatable(element.id, 'position.y', Py);
     designerStore.commitAnimatable(element.id, 'size.w', wNew);
     designerStore.commitAnimatable(element.id, 'size.h', hNew);
+    if (snapping) {
+      designerStore.setSnapGuides({
+        x: guideX === null ? [] : [guideX],
+        y: guideY === null ? [] : [guideY],
+      });
+    }
   };
   const onUp = (): void => {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
     unlock();
+    designerStore.setSnapGuides({ x: [], y: [] });
     designerStore.markHistoryBoundary();
   };
   window.addEventListener('pointermove', onMove);
@@ -435,11 +507,16 @@ function beginRotate(
   );
   const startCursor = Math.atan2(ev.clientY - pivot.y, ev.clientX - pivot.x) * (180 / Math.PI);
   const unlock = lockCursor(rotateCursor(ROTATE_ANGLE[corner] + startAngle + 90));
+  const snapping = designerStore.get().snappingEnabled;
 
   const onMove = (e: PointerEvent): void => {
     const ang = Math.atan2(e.clientY - pivot.y, e.clientX - pivot.x) * (180 / Math.PI);
     let next = startAngle + (ang - startCursor);
-    if (e.shiftKey) next = Math.round(next / 15) * 15; // Shift = snap to 15°
+    // Snap to the nearest 15° when close (hold Shift to rotate freely).
+    if (snapping && e.shiftKey !== true) {
+      const nearest = Math.round(next / 15) * 15;
+      if (Math.abs(next - nearest) <= SNAP_DEG) next = nearest;
+    }
     designerStore.commitAnimatable(element.id, 'rotation', Number(next.toFixed(2)));
   };
   const onUp = (): void => {
