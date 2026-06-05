@@ -53,6 +53,18 @@ export function InputTooltip(): JSX.Element | null {
         const al = field.getAttribute('aria-label')?.trim();
         if (al !== undefined && al !== '') return { el: field, text: al };
       }
+      // Hovering the non-input parts of a field box — its unit suffix (% / px),
+      // padding, or the gap between segments — should still show the tooltip.
+      // Resolve to the control inside the nearest field wrapper (a vector
+      // segment first, otherwise the single-field box).
+      const box = target.closest('.cg-seg, .cg-field');
+      if (box !== null) {
+        const inner = box.querySelector('input, select, textarea');
+        if (inner instanceof HTMLElement && !isHidden(inner)) {
+          const al = inner.getAttribute('aria-label')?.trim();
+          if (al !== undefined && al !== '') return { el: inner, text: al };
+        }
+      }
       return null;
     }
     function onOver(e: PointerEvent): void {
