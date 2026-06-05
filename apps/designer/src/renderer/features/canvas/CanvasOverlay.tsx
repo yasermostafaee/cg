@@ -20,6 +20,17 @@ import { topmostHit } from './hit-test.js';
 import { Gizmo } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
 
+/**
+ * The default canvas pointer — a bold black arrow with a white outline, a bit
+ * larger than the OS default (the Loopic look). OS-drawn from an inline SVG;
+ * hotspot at the arrow tip.
+ */
+const ARROW_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">' +
+  '<path d="M6 3.5L6 24.5L11.4 19.4L15 27L18.6 25.4L15 17.9L22.5 17.9Z" ' +
+  'fill="#0B0E16" stroke="#fff" stroke-width="1" stroke-linejoin="round"/></svg>';
+const ARROW_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(ARROW_SVG)}") 6 4, default`;
+
 interface Props {
   scene: Scene;
   tool: DesignerTool;
@@ -199,7 +210,7 @@ export function CanvasOverlay({
     bindModeFieldId !== null
       ? 'crosshair'
       : tool === 'cursor'
-        ? 'default'
+        ? ARROW_CURSOR
         : tool === 'hand'
           ? 'grab'
           : 'crosshair';
