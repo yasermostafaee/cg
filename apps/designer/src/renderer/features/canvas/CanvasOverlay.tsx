@@ -26,10 +26,10 @@ import { TextEditor } from './TextEditor.js';
  * hotspot at the arrow tip.
  */
 const ARROW_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">' +
-  '<path d="M6 3.5L6 24.5L11.4 19.4L15 27L18.6 25.4L15 17.9L22.5 17.9Z" ' +
+  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">' +
+  '<path d="M5 3L5 18.5L9 14.8L14.6 14.8Z" ' +
   'fill="#0B0E16" stroke="#fff" stroke-width="1" stroke-linejoin="round"/></svg>';
-const ARROW_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(ARROW_SVG)}") 6 4, default`;
+const ARROW_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(ARROW_SVG)}") 5 3, default`;
 
 interface Props {
   scene: Scene;

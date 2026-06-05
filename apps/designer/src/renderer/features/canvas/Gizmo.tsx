@@ -9,11 +9,14 @@ interface Props {
   currentFrame: number;
 }
 
-const HANDLE = 10;
-/** How far a rotation hit-zone extends around each corner (screen px). */
-const ROT_ZONE = 24;
+/** Visible corner square (screen px). */
+const HANDLE = 8;
+/** Invisible corner *resize* hover/hit area, larger than the visible square. */
+const CORNER_HIT = 16;
+/** Rotation hover area around each corner (screen px) — outside the resize hit. */
+const ROT_ZONE = 28;
 /** Edge resize strips this thick (screen px). */
-const EDGE = 9;
+const EDGE = 7;
 const MIN_SIZE = 4;
 
 /**
@@ -94,7 +97,8 @@ const styles = {
     boxSizing: 'border-box' as const,
     pointerEvents: 'none' as const,
   },
-  // Loopic-style corner handle: white fill, accent outline.
+  // Loopic-style corner handle: white fill, accent outline. Visual only — the
+  // (larger) cornerHit area below owns the resize gesture.
   handle: {
     position: 'absolute' as const,
     width: HANDLE,
@@ -102,7 +106,14 @@ const styles = {
     background: '#FFF',
     border: `1px solid ${colors.accent}`,
     boxSizing: 'border-box' as const,
+    pointerEvents: 'none' as const,
+  },
+  cornerHit: {
+    position: 'absolute' as const,
+    width: CORNER_HIT,
+    height: CORNER_HIT,
     pointerEvents: 'auto' as const,
+    background: 'transparent',
   },
   rotZone: {
     position: 'absolute' as const,
@@ -196,13 +207,13 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
             onPointerDown={down(c, 'rotate')}
           />
         ))}
-        {/* Edge strips (single-axis resize), inset from the corners. */}
+        {/* Edge strips (single-axis resize), inset past the corner hit areas. */}
         <div
           style={{
             ...styles.edge,
-            left: HANDLE,
+            left: CORNER_HIT / 2,
             top: -EDGE / 2,
-            width: w - 2 * HANDLE,
+            width: w - CORNER_HIT,
             height: EDGE,
             cursor: resizeCursor(RESIZE_ANGLE.t + rotation),
           }}
@@ -211,9 +222,9 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
         <div
           style={{
             ...styles.edge,
-            left: HANDLE,
+            left: CORNER_HIT / 2,
             top: h - EDGE / 2,
-            width: w - 2 * HANDLE,
+            width: w - CORNER_HIT,
             height: EDGE,
             cursor: resizeCursor(RESIZE_ANGLE.b + rotation),
           }}
@@ -223,9 +234,9 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
           style={{
             ...styles.edge,
             left: -EDGE / 2,
-            top: HANDLE,
+            top: CORNER_HIT / 2,
             width: EDGE,
-            height: h - 2 * HANDLE,
+            height: h - CORNER_HIT,
             cursor: resizeCursor(RESIZE_ANGLE.l + rotation),
           }}
           onPointerDown={down('l', 'resize')}
@@ -234,24 +245,31 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
           style={{
             ...styles.edge,
             left: w - EDGE / 2,
-            top: HANDLE,
+            top: CORNER_HIT / 2,
             width: EDGE,
-            height: h - 2 * HANDLE,
+            height: h - CORNER_HIT,
             cursor: resizeCursor(RESIZE_ANGLE.r + rotation),
           }}
           onPointerDown={down('r', 'resize')}
         />
-        {/* Corner resize squares (on top of the rotation zones). */}
+        {/* Corner resize hover areas (larger than the visible square). */}
         {corners.map(({ c, cx, cy }) => (
           <div
-            key={`rs-${c}`}
+            key={`hit-${c}`}
             style={{
-              ...styles.handle,
-              left: cx - HANDLE / 2,
-              top: cy - HANDLE / 2,
+              ...styles.cornerHit,
+              left: cx - CORNER_HIT / 2,
+              top: cy - CORNER_HIT / 2,
               cursor: resizeCursor(RESIZE_ANGLE[c] + rotation),
             }}
             onPointerDown={down(c, 'resize')}
+          />
+        ))}
+        {/* Visible corner squares (decoration only). */}
+        {corners.map(({ c, cx, cy }) => (
+          <div
+            key={`rs-${c}`}
+            style={{ ...styles.handle, left: cx - HANDLE / 2, top: cy - HANDLE / 2 }}
           />
         ))}
         <div style={{ ...styles.pivot, left: w / 2 - 3.5, top: h / 2 - 3.5 }} />
