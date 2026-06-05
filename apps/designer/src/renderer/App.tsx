@@ -349,8 +349,19 @@ export function App(): JSX.Element {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
       if (!e.ctrlKey && !e.metaKey) return;
-      const k = e.key.toLowerCase();
-      if (['+', '-', '=', '0', 's', 'p'].includes(k)) {
+      // Use the physical key (layout-independent) so Ctrl+S/P/0/± are caught on
+      // non-English keyboards too.
+      const blocked = new Set([
+        'KeyS',
+        'KeyP',
+        'Digit0',
+        'Numpad0',
+        'Equal',
+        'Minus',
+        'NumpadAdd',
+        'NumpadSubtract',
+      ]);
+      if (blocked.has(e.code)) {
         e.preventDefault();
       }
     }
@@ -387,7 +398,8 @@ export function App(): JSX.Element {
       ) {
         return;
       }
-      if (e.key === 'r' || e.key === 'R') {
+      // Physical key, so it also fires on non-English layouts.
+      if (e.code === 'KeyR') {
         e.preventDefault();
         designerStore.toggleRuler();
       }

@@ -242,11 +242,12 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
     function onKeyDown(e: KeyboardEvent): void {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (isEditable(e.target)) return;
-      const k = e.key.toLowerCase();
-      if (k === 'k') {
+      // Match the physical key (e.code) so J/K/L work on non-English layouts.
+      const k = e.code;
+      if (k === 'KeyK') {
         kHeldRef.current = true;
         setPlaying(false);
-      } else if (k === 'l') {
+      } else if (k === 'KeyL') {
         if (kHeldRef.current) {
           setPlaying(false);
           designerStore.setCurrentFrame(designerStore.get().currentFrame + 1);
@@ -254,7 +255,7 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
           playDirRef.current = 1;
           setPlaying(true);
         }
-      } else if (k === 'j') {
+      } else if (k === 'KeyJ') {
         if (kHeldRef.current) {
           setPlaying(false);
           designerStore.setCurrentFrame(designerStore.get().currentFrame - 1);
@@ -268,7 +269,7 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
       e.preventDefault();
     }
     function onKeyUp(e: KeyboardEvent): void {
-      if (e.key.toLowerCase() === 'k') kHeldRef.current = false;
+      if (e.code === 'KeyK') kHeldRef.current = false;
     }
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);

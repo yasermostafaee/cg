@@ -243,11 +243,12 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
             ));
         if (isTextInput) return;
       }
-      const key = e.key.toLowerCase();
-      if (key === 'z' && !e.shiftKey) {
+      // Match the physical key (e.code), so the shortcuts work on non-English
+      // layouts (Persian, etc.) where e.key is a different character.
+      if (e.code === 'KeyZ' && !e.shiftKey) {
         e.preventDefault();
         designerStore.undo();
-      } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+      } else if ((e.code === 'KeyZ' && e.shiftKey) || e.code === 'KeyY') {
         e.preventDefault();
         designerStore.redo();
       }
