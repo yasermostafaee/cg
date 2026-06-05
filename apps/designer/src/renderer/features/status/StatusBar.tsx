@@ -78,9 +78,26 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
     if (issues.length === 0) setIssuesOpen(false);
   }, [issues.length]);
 
+  // Replace the (now-unused) template-type chip with the frame rate + total
+  // duration of the active document.
+  const totalFrames = scene === null ? 0 : scene.frameRange.out - scene.frameRange.in;
+  const durationSecs =
+    scene === null || scene.frameRate <= 0 ? '0' : (totalFrames / scene.frameRate).toFixed(1);
+
   return (
     <footer style={styles.bar} aria-label="Status bar">
-      <span style={styles.pill}>{scene === null ? 'no project' : scene.templateType}</span>
+      {scene === null ? (
+        <span style={styles.pill}>no project</span>
+      ) : (
+        <>
+          <span style={styles.pill} title="Frame rate">
+            {scene.frameRate} fps
+          </span>
+          <span style={styles.pill} title="Duration">
+            {totalFrames}f · {durationSecs}s
+          </span>
+        </>
+      )}
       <span style={styles.pill}>
         {scene === null ? '0×0' : `${scene.resolution.width}×${scene.resolution.height}`}
       </span>
