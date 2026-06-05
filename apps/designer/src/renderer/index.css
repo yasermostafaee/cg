@@ -150,12 +150,14 @@ input[type='number'] {
  * the corner's (larger) resize hit area — the Loopic hover affordance. The
  * white square handle sits on top (pointer-events: none) and stays visible.
  */
-.cg-gizmo-corner {
-  border-radius: 6px;
+.cg-gizmo-corner,
+.cg-gizmo-edge {
+  border-radius: 5px;
   transition: background 90ms ease;
 }
-.cg-gizmo-corner:hover {
-  background: rgba(56, 189, 248, 0.55);
+.cg-gizmo-corner:hover,
+.cg-gizmo-edge:hover {
+  background: rgba(56, 189, 248, 0.3);
 }
 
 /*

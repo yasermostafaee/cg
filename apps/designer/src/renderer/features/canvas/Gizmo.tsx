@@ -13,11 +13,11 @@ interface Props {
 const HANDLE = 8;
 /** Corner *resize* hover/hit area (also the visible hover highlight), larger
  *  than the white square. */
-const CORNER_HIT = 22;
+const CORNER_HIT = 18;
 /** Rotation hover area around each corner (screen px) — outside the resize hit. */
 const ROT_ZONE = 18;
-/** Edge resize strips this thick (screen px). */
-const EDGE = 7;
+/** Edge resize strips this thick (screen px) — also their hover highlight. */
+const EDGE = 9;
 const MIN_SIZE = 4;
 /** Resize snap threshold (screen px) and rotation snap threshold (degrees). */
 const SNAP_PX = 7;
@@ -130,7 +130,7 @@ const styles = {
   edge: {
     position: 'absolute' as const,
     pointerEvents: 'auto' as const,
-    background: 'transparent',
+    // No inline `background` — .cg-gizmo-edge:hover paints the highlight.
   },
   // Centre pivot indicator (visual only).
   pivot: {
@@ -213,8 +213,10 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
             onPointerDown={down(c, 'rotate')}
           />
         ))}
-        {/* Edge strips (single-axis resize), inset past the corner hit areas. */}
+        {/* Edge strips (single-axis width/height resize), inset past the corner
+            hit areas. A light highlight appears on hover (.cg-gizmo-edge). */}
         <div
+          className="cg-gizmo-edge"
           style={{
             ...styles.edge,
             left: CORNER_HIT / 2,
@@ -226,6 +228,7 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
           onPointerDown={down('t', 'resize')}
         />
         <div
+          className="cg-gizmo-edge"
           style={{
             ...styles.edge,
             left: CORNER_HIT / 2,
@@ -237,6 +240,7 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
           onPointerDown={down('b', 'resize')}
         />
         <div
+          className="cg-gizmo-edge"
           style={{
             ...styles.edge,
             left: -EDGE / 2,
@@ -248,6 +252,7 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
           onPointerDown={down('l', 'resize')}
         />
         <div
+          className="cg-gizmo-edge"
           style={{
             ...styles.edge,
             left: w - EDGE / 2,
