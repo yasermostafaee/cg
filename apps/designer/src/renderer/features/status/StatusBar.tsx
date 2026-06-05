@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import type { Scene } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { designerStore, useDesignerStore } from '../../state/store.js';
 import { IssuesPanel } from '../issues/IssuesPanel.js';
+import { Modal, ModalButton } from '../shell/Modal.js';
 
 interface Props {
   scene: Scene | null;
@@ -63,43 +63,6 @@ const styles = {
     lineHeight: 1.5,
     minWidth: 24,
   },
-  overlay: {
-    position: 'fixed' as const,
-    inset: 0,
-    background: 'rgba(0,0,0,0.5)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 5000,
-    padding: '1rem',
-  },
-  modal: {
-    width: 'min(560px, 92vw)',
-    maxHeight: '72vh',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.6rem',
-    background: '#1c1f2d',
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.5rem',
-    padding: '0.8rem',
-    boxShadow: '0 16px 48px rgba(0,0,0,0.55)',
-  },
-  modalScroll: {
-    minHeight: 0,
-    overflowY: 'auto' as const,
-  },
-  modalClose: {
-    alignSelf: 'flex-end' as const,
-    background: colors.accent,
-    color: '#06121F',
-    border: 'none',
-    borderRadius: '0.25rem',
-    padding: '0.4rem 1rem',
-    fontWeight: 700,
-    fontSize: '0.8rem',
-    cursor: 'pointer',
-  },
 } as const;
 
 /** Bottom-of-window status bar — project chrome + issues badge + a
@@ -114,15 +77,6 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
   useEffect(() => {
     if (issues.length === 0) setIssuesOpen(false);
   }, [issues.length]);
-
-  useEffect(() => {
-    if (!issuesOpen) return;
-    function onKey(e: KeyboardEvent): void {
-      if (e.key === 'Escape') setIssuesOpen(false);
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [issuesOpen]);
 
   return (
     <footer style={styles.bar} aria-label="Status bar">
@@ -183,25 +137,17 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
         </button>
         <span style={styles.zoomReadout}>{timelineZoom}×</span>
       </div>
-      {issuesOpen &&
-        createPortal(
-          <div
-            style={styles.overlay}
-            onPointerDown={(e) => {
-              if (e.target === e.currentTarget) setIssuesOpen(false);
-            }}
-          >
-            <div style={styles.modal} role="dialog" aria-modal="true" aria-label="Issues">
-              <div style={styles.modalScroll}>
-                <IssuesPanel issues={issues} onPick={() => setIssuesOpen(false)} />
-              </div>
-              <button type="button" style={styles.modalClose} onClick={() => setIssuesOpen(false)}>
-                Close
-              </button>
-            </div>
-          </div>,
-          document.body,
-        )}
+      {issuesOpen && (
+        <Modal
+          title="Issues"
+          onClose={() => setIssuesOpen(false)}
+          width="min(560px, 92vw)"
+          minBodyHeight={220}
+          footer={<ModalButton onClick={() => setIssuesOpen(false)}>Close</ModalButton>}
+        >
+          <IssuesPanel issues={issues} embedded onPick={() => setIssuesOpen(false)} />
+        </Modal>
+      )}
     </footer>
   );
 }
