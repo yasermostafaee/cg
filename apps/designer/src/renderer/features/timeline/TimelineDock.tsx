@@ -34,6 +34,8 @@ const styles = {
     minHeight: 0,
     minWidth: 0,
     width: '100%',
+    paddingTop: 16,
+    boxSizing: 'border-box' as const,
   },
   body: {
     flex: 1,
@@ -322,20 +324,28 @@ export function TimelineDock({
     if (topScrollRef.current !== null) topScrollRef.current.scrollLeft = rb.scrollLeft;
   }
 
-  // Zoom toward the playhead: when the timeline zoom changes, adjust the
-  // horizontal scroll so the index bar (playhead) stays at the same on-screen
-  // position instead of the view anchoring to the left edge. Runs before paint
-  // so the lane width (zoom × 100%) is already applied.
+  // Zoom anchoring: when the timeline zoom changes, adjust the horizontal
+  // scroll so a focal point keeps its on-screen position instead of the view
+  // jumping to the left edge. Ctrl+wheel anchors to the mouse (set in the wheel
+  // handler); the slider / buttons anchor to the playhead. Runs before paint so
+  // the lane width (zoom × 100%) is already applied.
   const prevZoomRef = useRef(timelineZoom);
+  const wheelAnchorRef = useRef<{ frac: number; vx: number } | null>(null);
   useLayoutEffect(() => {
     const rb = rightBodyRef.current;
     const old = prevZoomRef.current;
     prevZoomRef.current = timelineZoom;
     if (rb === null || old === timelineZoom) return;
     const cw = rb.clientWidth;
-    const frac = Math.max(0, Math.min(1, (currentFrame - frameIn) / span));
-    const viewportX = frac * cw * old - rb.scrollLeft; // playhead x within the viewport
-    rb.scrollLeft = frac * cw * timelineZoom - viewportX; // keep it fixed after the zoom
+    const wheel = wheelAnchorRef.current;
+    if (wheel !== null) {
+      wheelAnchorRef.current = null;
+      rb.scrollLeft = wheel.frac * cw * timelineZoom - wheel.vx; // keep the point under the mouse
+    } else {
+      const frac = Math.max(0, Math.min(1, (currentFrame - frameIn) / span));
+      const viewportX = frac * cw * old - rb.scrollLeft; // playhead x within the viewport
+      rb.scrollLeft = frac * cw * timelineZoom - viewportX; // keep the playhead fixed
+    }
     syncScroll();
   }, [timelineZoom, currentFrame, frameIn, span]);
 
@@ -349,6 +359,12 @@ export function TimelineDock({
     function onWheel(e: WheelEvent): void {
       if (e.ctrlKey) {
         e.preventDefault();
+        // Anchor the next zoom to the point under the mouse.
+        const cw = rb.clientWidth;
+        const vx = e.clientX - rb.getBoundingClientRect().left;
+        const denom = cw * zoomRef.current;
+        const frac = denom === 0 ? 0 : (vx + rb.scrollLeft) / denom;
+        wheelAnchorRef.current = { frac: Math.max(0, Math.min(1, frac)), vx };
         const delta = e.deltaY > 0 ? -1 : 1;
         designerStore.setTimelineZoom(zoomRef.current + delta);
         return;

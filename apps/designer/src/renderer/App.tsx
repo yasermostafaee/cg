@@ -73,8 +73,6 @@ const styles = {
     display: 'flex',
     minWidth: 0,
     overflow: 'hidden',
-    paddingTop: 4,
-    boxSizing: 'border-box' as const,
   },
   rail: {
     width: 40,
