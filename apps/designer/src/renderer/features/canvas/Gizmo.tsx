@@ -16,15 +16,64 @@ const ROT_ZONE = 24;
 const EDGE = 9;
 const MIN_SIZE = 4;
 
-/** A rotate cursor (circular arrow) so corner rotation reads clearly. */
-const ROT_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">' +
-  '<g fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
-  '<path d="M16 6a7 7 0 1 0 1.5 4"/><path d="M17 3v4h-4"/></g></svg>';
-const ROTATE_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(ROT_SVG)}") 11 11, grab`;
+/**
+ * Custom cursors matching the reference recording: a black double-headed
+ * arrow (white outline) for resize, and a curved double arrow for rotate.
+ * Both are rendered at the handle's *screen* angle (base direction + the
+ * element's rotation) so they line up with a rotated element. Cursors are
+ * OS-drawn from these inline-SVG data URIs.
+ */
+function cursorDataUrl(inner: string, size: number, hot: number): string {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${String(size)}" height="${String(size)}" ` +
+    `viewBox="0 0 ${String(size)} ${String(size)}">${inner}</svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${String(hot)} ${String(hot)}, auto`;
+}
+
+/** Straight double-headed resize arrow, rotated `deg` (0 = horizontal ↔). */
+function resizeCursor(deg: number): string {
+  const arrow =
+    '<path d="M2 14L8 8.5V11.5H20V8.5L26 14L20 19.5V16.5H8V19.5Z" ' +
+    'fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>';
+  return cursorDataUrl(
+    `<g transform="rotate(${String(Math.round(deg))} 14 14)">${arrow}</g>`,
+    28,
+    14,
+  );
+}
+
+/** Curved double-arrow rotate cursor, rotated `deg`. */
+function rotateCursor(deg: number): string {
+  const glyph =
+    '<path d="M6 16.5A8 8 0 1 1 20 16.5" fill="none"/>' +
+    '<path d="M6 16.5L2.7 13.6L7.8 12.8Z"/>' +
+    '<path d="M20 16.5L18.2 12.8L23.3 13.6Z"/>';
+  const halo = `<g fill="#fff" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">${glyph}</g>`;
+  const ink = `<g fill="#111" stroke="#111" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${glyph}</g>`;
+  return cursorDataUrl(
+    `<g transform="rotate(${String(Math.round(deg))} 13 13)">${halo}${ink}</g>`,
+    26,
+    13,
+  );
+}
 
 type Corner = 'tl' | 'tr' | 'bl' | 'br';
 type Handle = Corner | 't' | 'b' | 'l' | 'r';
+
+/** Base screen angle of each resize handle's arrow (before element rotation). */
+const RESIZE_ANGLE: Record<Handle, number> = {
+  r: 0,
+  l: 0,
+  t: 90,
+  b: 90,
+  br: 45,
+  tl: 45,
+  tr: 135,
+  bl: 135,
+};
+
+/** Base angle of each corner's rotate cursor (faces outward), before rotation. */
+const ROTATE_ANGLE: Record<Corner, number> = { br: 45, bl: 135, tl: 225, tr: 315 };
 
 const styles = {
   frame: {
@@ -48,7 +97,6 @@ const styles = {
     width: ROT_ZONE,
     height: ROT_ZONE,
     pointerEvents: 'auto' as const,
-    cursor: ROTATE_CURSOR,
     background: 'transparent',
   },
   edge: {
@@ -68,13 +116,6 @@ const styles = {
     pointerEvents: 'none' as const,
   },
 } as const;
-
-const CORNER_CURSOR: Record<Corner, string> = {
-  tl: 'nwse-resize',
-  br: 'nwse-resize',
-  tr: 'nesw-resize',
-  bl: 'nesw-resize',
-};
 
 /**
  * Selection gizmo (the Loopic pattern). A thin accent frame with four
@@ -134,7 +175,12 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
         {corners.map(({ c, cx, cy }) => (
           <div
             key={`rot-${c}`}
-            style={{ ...styles.rotZone, left: cx - ROT_ZONE / 2, top: cy - ROT_ZONE / 2 }}
+            style={{
+              ...styles.rotZone,
+              left: cx - ROT_ZONE / 2,
+              top: cy - ROT_ZONE / 2,
+              cursor: rotateCursor(ROTATE_ANGLE[c] + rotation),
+            }}
             onPointerDown={down(c, 'rotate')}
           />
         ))}
@@ -146,7 +192,7 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
             top: -EDGE / 2,
             width: w - 2 * HANDLE,
             height: EDGE,
-            cursor: 'ns-resize',
+            cursor: resizeCursor(RESIZE_ANGLE.t + rotation),
           }}
           onPointerDown={down('t', 'resize')}
         />
@@ -157,7 +203,7 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
             top: h - EDGE / 2,
             width: w - 2 * HANDLE,
             height: EDGE,
-            cursor: 'ns-resize',
+            cursor: resizeCursor(RESIZE_ANGLE.b + rotation),
           }}
           onPointerDown={down('b', 'resize')}
         />
@@ -168,7 +214,7 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
             top: HANDLE,
             width: EDGE,
             height: h - 2 * HANDLE,
-            cursor: 'ew-resize',
+            cursor: resizeCursor(RESIZE_ANGLE.l + rotation),
           }}
           onPointerDown={down('l', 'resize')}
         />
@@ -179,7 +225,7 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
             top: HANDLE,
             width: EDGE,
             height: h - 2 * HANDLE,
-            cursor: 'ew-resize',
+            cursor: resizeCursor(RESIZE_ANGLE.r + rotation),
           }}
           onPointerDown={down('r', 'resize')}
         />
@@ -191,7 +237,7 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
               ...styles.handle,
               left: cx - HANDLE / 2,
               top: cy - HANDLE / 2,
-              cursor: CORNER_CURSOR[c],
+              cursor: resizeCursor(RESIZE_ANGLE[c] + rotation),
             }}
             onPointerDown={down(c, 'resize')}
           />
