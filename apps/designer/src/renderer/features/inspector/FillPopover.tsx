@@ -76,12 +76,13 @@ interface FillFieldProps {
   value: Fill | undefined;
   onChange: (fill: Fill) => void;
   trailing?: JSX.Element;
+  /** Label column width in px (default 74 — matches the shape Path Style rows). */
+  labelWidth?: number;
 }
 
 const rowStyles = {
   row: {
     display: 'grid',
-    gridTemplateColumns: `74px 1fr`,
     gap: '0.35rem',
     alignItems: 'center',
     padding: '0.1rem 0',
@@ -113,7 +114,9 @@ export function FillField(props: FillFieldProps): JSX.Element {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   return (
-    <div style={rowStyles.row}>
+    <div
+      style={{ ...rowStyles.row, gridTemplateColumns: `${String(props.labelWidth ?? 74)}px 1fr` }}
+    >
       <span style={rowStyles.label}>{props.label}</span>
       <div className="cg-field" style={rowStyles.field}>
         <button

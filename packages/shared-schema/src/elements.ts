@@ -68,6 +68,14 @@ export const TextElementSchema = ElementBaseSchema.extend({
     letterSpacing: z.number(),
   }),
   color: HexColorSchema,
+  /**
+   * Optional gradient (or solid) text fill. When present it overrides `color`
+   * at render time: a gradient is painted through `background-clip: text`
+   * (which consumes the element's `background`, so it supersedes
+   * `backgroundFill` on the same element); a solid behaves like `color`. Absent
+   * ⇒ use the plain `color` (backward compatible).
+   */
+  colorFill: FillSchema.optional(),
   align: z.enum(['start', 'end', 'center', 'justify']),
   direction: TextDirectionSchema,
   textShadow: ShadowSchema.optional(),
@@ -78,6 +86,12 @@ export const TextElementSchema = ElementBaseSchema.extend({
   padding: PaddingSchema.optional(),
   /** D-010 — text-box background colour (defaults to transparent). */
   backgroundColor: HexColorSchema.optional(),
+  /**
+   * Optional gradient (or solid) text-box background. When present it
+   * overrides `backgroundColor` at render time (a normal CSS `background`, so
+   * linear/radial both render). Absent ⇒ use `backgroundColor`.
+   */
+  backgroundFill: FillSchema.optional(),
   /** D-010 — text-box border-radius (in pixels). */
   cornerRadius: z.number().nonnegative().optional(),
   /**

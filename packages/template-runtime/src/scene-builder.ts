@@ -275,6 +275,25 @@ function buildText(
   if (element.backgroundColor) {
     el.style.backgroundColor = element.backgroundColor;
   }
+  // Gradient (or solid) text-box background — a normal CSS background, so
+  // linear/radial both render. Overrides the solid backgroundColor above.
+  if (element.backgroundFill !== undefined) {
+    el.style.background = fillToCss(element.backgroundFill);
+  }
+  // Gradient (or solid) text fill. A gradient paints through
+  // `background-clip: text`, which consumes the element's `background` (so it
+  // supersedes a gradient text-background on the same element); a solid just
+  // sets the colour.
+  if (element.colorFill !== undefined) {
+    if (element.colorFill.kind === 'solid') {
+      el.style.color = element.colorFill.color;
+    } else {
+      el.style.background = fillToCss(element.colorFill);
+      el.style.setProperty('-webkit-background-clip', 'text');
+      el.style.setProperty('background-clip', 'text');
+      el.style.color = 'transparent';
+    }
+  }
   if (element.cornerRadius !== undefined && element.cornerRadius > 0) {
     el.style.borderRadius = `${element.cornerRadius}px`;
   }
