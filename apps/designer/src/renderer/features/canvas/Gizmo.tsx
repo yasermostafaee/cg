@@ -39,7 +39,7 @@ function cursorDataUrl(inner: string, viewBox: number, renderPx: number, hotVb: 
 }
 
 /** Rendered size (px) of the resize/rotate cursors — smaller than the default pointer. */
-const CURSOR_PX = 19;
+const CURSOR_PX = 23;
 
 /** Straight double-headed resize arrow, rotated `deg` (0 = horizontal ↔). */
 function resizeCursor(deg: number): string {
