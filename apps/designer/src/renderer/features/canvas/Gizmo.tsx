@@ -48,8 +48,8 @@ function rotateCursor(deg: number): string {
     '<path d="M6 16.5A8 8 0 1 1 20 16.5" fill="none"/>' +
     '<path d="M6 16.5L2.7 13.6L7.8 12.8Z"/>' +
     '<path d="M20 16.5L18.2 12.8L23.3 13.6Z"/>';
-  const halo = `<g fill="#fff" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">${glyph}</g>`;
-  const ink = `<g fill="#111" stroke="#111" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${glyph}</g>`;
+  const halo = `<g fill="#fff" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round">${glyph}</g>`;
+  const ink = `<g fill="#111" stroke="#111" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round">${glyph}</g>`;
   return cursorDataUrl(
     `<g transform="rotate(${String(Math.round(deg))} 13 13)">${halo}${ink}</g>`,
     26,
