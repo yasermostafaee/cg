@@ -3,6 +3,7 @@ import { breakingNewsScene } from './breaking-news.js';
 import { fullscreenScene } from './fullscreen.js';
 import { logoBugScene } from './logo-bug.js';
 import { lowerThirdScene } from './lower-third.js';
+import { newsPackageScene } from './news.js';
 import { persianReferenceScene } from './persian-reference.js';
 import { quoteCardScene } from './quote-card.js';
 import { scoreboardScene } from './scoreboard.js';
@@ -94,6 +95,29 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     scene: showcaseScene,
   },
   {
+    id: 'news-package',
+    label: 'پکیج خبری فارسی — Persian News',
+    description:
+      'Full Persian (RTL) news package: logo, digital clock, two-tier lower third, headline strap, “آخرین اخبار” panel, live badge, and a scrolling breaking ticker.',
+    preview: '/starters/news-package.png',
+    isNew: true,
+    assets: [
+      {
+        key: 'news-vazir',
+        kind: 'font',
+        filename: 'Vazirmatn.woff2',
+        url: '/fonts/vazirmatn/vazirmatn-arabic-500-normal.woff2',
+      },
+      {
+        key: 'news-emblem',
+        kind: 'image',
+        filename: 'news-mark.svg',
+        url: '/starters/irinn/news-mark.svg',
+      },
+    ],
+    scene: newsPackageScene,
+  },
+  {
     id: 'lower-third',
     label: 'Aurora Lower Third',
     description: 'Glassy gradient plate with an accent wipe and slide-in name & title.',
@@ -161,6 +185,7 @@ export {
   fullscreenScene,
   logoBugScene,
   lowerThirdScene,
+  newsPackageScene,
   persianReferenceScene,
   quoteCardScene,
   scoreboardScene,
