@@ -157,7 +157,7 @@ input[type='number'] {
 }
 .cg-gizmo-corner:hover,
 .cg-gizmo-edge:hover {
-  background: rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.45);
 }
 
 /*
