@@ -99,6 +99,9 @@ const styles = {
   rightBodyInner: {
     position: 'relative' as const,
     minWidth: '100%',
+    // Fill the whole body height even with no layers, so the frame grid and the
+    // playhead run to the bottom of the timeline (not just behind the rows).
+    minHeight: '100%',
   },
   bodyPlayhead: {
     position: 'absolute' as const,
