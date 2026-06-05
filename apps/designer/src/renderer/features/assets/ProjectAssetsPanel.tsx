@@ -93,6 +93,15 @@ const styles = {
     textAlign: 'center' as const,
     lineHeight: 1.5,
   },
+  // List mode is a plain flex column, so `margin: auto` would shove the hint to
+  // the vertical center. Keep it near the top instead.
+  emptyList: {
+    padding: '0.9rem 0.5rem',
+    color: colors.textMuted,
+    fontSize: '0.72rem',
+    textAlign: 'center' as const,
+    lineHeight: 1.5,
+  },
   menu: {
     position: 'fixed' as const,
     background: colors.panel,
@@ -364,7 +373,7 @@ export function ProjectAssetsPanel(): JSX.Element {
       </div>
       <div style={assetView === 'list' ? styles.list : styles.grid} data-role="assets-grid">
         {visible.length === 0 ? (
-          <p style={styles.empty}>
+          <p style={assetView === 'list' ? styles.emptyList : styles.empty}>
             No assets yet.
             <br />
             Click + to add an image or font.
