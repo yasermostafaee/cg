@@ -522,12 +522,10 @@ export function TimelineDock({
       <div style={styles.body}>
         <div style={styles.leftCol}>
           <div style={styles.leftHeader}>
-            <span
-              style={{ color: colors.text, fontWeight: 700, fontSize: '1.7rem', lineHeight: 1 }}
-            >
+            <span style={{ color: 'rgb(188, 194, 224)', fontSize: '32px', lineHeight: 1 }}>
               {currentFrame}
             </span>
-            <span style={{ color: colors.textMuted, fontSize: '0.85rem' }}>/{frameOut}</span>
+            <span style={{ color: '#858cac' }}>/{frameOut}</span>
           </div>
           <div style={styles.leftBody} ref={leftBodyRef}>
             <div style={styles.sceneLabel} aria-hidden />
