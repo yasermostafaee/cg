@@ -91,7 +91,7 @@ const styles = {
     display: 'flex',
     alignItems: 'flex-start',
     justifyContent: 'flex-start',
-    padding: '1rem',
+    padding: '0.5rem',
     width: '100%',
     boxSizing: 'border-box' as const,
     position: 'relative' as const,
@@ -168,6 +168,9 @@ export function CanvasArea({
   // pinned rulers and the guide lines stay aligned with the canvas as it
   // zooms / scrolls / resizes.
   const [rulerOrigin, setRulerOrigin] = useState<{ x: number; y: number } | null>(null);
+  // Visible viewport size, so the rulers can tick across the whole dark area
+  // (including negative scene coords and past the canvas edges), not just 0..w.
+  const [viewport, setViewport] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
   // Only rebuild the iframe document when the *scene id* changes
   // (e.g. project switch). For mutations within the same scene we
@@ -316,7 +319,7 @@ export function CanvasArea({
     const el = outerRef.current;
     const s = latestSceneRef.current;
     if (el === null || s === null) return;
-    const margin = 48;
+    const margin = 16;
     const z = Math.min(
       (el.clientWidth - margin) / s.resolution.width,
       (el.clientHeight - margin) / s.resolution.height,
@@ -354,6 +357,7 @@ export function CanvasArea({
         x: srect.left - orect.left - o.clientLeft,
         y: srect.top - orect.top - o.clientTop,
       });
+      setViewport({ w: o.clientWidth, h: o.clientHeight });
     }
     measure();
     const ro = new ResizeObserver(measure);
@@ -515,8 +519,8 @@ export function CanvasArea({
             originX={rulerOrigin.x}
             originY={rulerOrigin.y}
             zoom={zoom}
-            width={width}
-            height={height}
+            viewW={viewport.w}
+            viewH={viewport.h}
             onCreateGuide={createGuideFromRuler}
           />
         )}
@@ -598,23 +602,31 @@ function CanvasRuler({
   originX,
   originY,
   zoom,
-  width,
-  height,
+  viewW,
+  viewH,
   onCreateGuide,
 }: {
   originX: number;
   originY: number;
   zoom: number;
-  width: number;
-  height: number;
+  /** Visible viewport size in px — the rulers tick across this whole range. */
+  viewW: number;
+  viewH: number;
   onCreateGuide: (axis: 'x' | 'y', e: React.PointerEvent) => void;
 }): JSX.Element {
   const STEPS = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
   const step = STEPS.find((s) => s * zoom >= 64) ?? 5000;
+  // Tick across the whole visible viewport (the dark area), including negative
+  // scene coordinates to the left/top of the canvas and past its right/bottom.
+  const sceneAt = (screenPx: number, origin: number): number => (screenPx - origin) / zoom;
   const xticks: number[] = [];
-  for (let x = 0; x <= width + 0.5; x += step) xticks.push(x);
+  const x0 = sceneAt(0, originX);
+  const x1 = sceneAt(viewW, originX);
+  for (let x = Math.ceil(x0 / step) * step; x <= x1; x += step) xticks.push(x);
   const yticks: number[] = [];
-  for (let y = 0; y <= height + 0.5; y += step) yticks.push(y);
+  const y0 = sceneAt(0, originY);
+  const y1 = sceneAt(viewH, originY);
+  for (let y = Math.ceil(y0 / step) * step; y <= y1; y += step) yticks.push(y);
   const bar = {
     position: 'absolute' as const,
     background: '#13151f',
