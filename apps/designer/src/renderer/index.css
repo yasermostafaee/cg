@@ -1,4 +1,14 @@
 /*
+ * App UI font (Exo 2, loaded from fontsource in index.html). Set on body so
+ * portaled modals / tooltips / popovers inherit it too; Vazirmatn stays in the
+ * stack for Persian glyph coverage.
+ */
+body {
+  font-family:
+    'Exo 2', Inter, system-ui, -apple-system, 'Segoe UI', Vazirmatn, 'Noto Sans Arabic', sans-serif;
+}
+
+/*
  * Designer-renderer global tweaks layered on top of @cg/ui's theme.css.
  *
  * Number inputs are adjusted by dragging (see RealtimeNumberInput), so the

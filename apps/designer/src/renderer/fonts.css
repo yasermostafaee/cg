@@ -1,0 +1,95 @@
+/*
+ * Self-hosted app fonts (fully offline — no CDN). Files live in
+ * apps/designer/public/fonts and are served at /fonts/…
+ *
+ *   Exo 2     — the app UI font (Latin).
+ *   Vazirmatn — Persian / Arabic coverage; Latin faces declared first and the
+ *               Arabic faces last (with a unicode-range) so Arabic codepoints
+ *               pull from the Arabic subset while Latin uses the Latin subset.
+ */
+
+/* ── Exo 2 ─────────────────────────────────────────────────────────────── */
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/exo2/exo-2-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/exo2/exo-2-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/exo2/exo-2-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/exo2/exo-2-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('/fonts/exo2/exo-2-latin-800-normal.woff2') format('woff2');
+}
+
+/* ── Vazirmatn (Latin) ─────────────────────────────────────────────────── */
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/vazirmatn/vazirmatn-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/vazirmatn/vazirmatn-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/vazirmatn/vazirmatn-latin-700-normal.woff2') format('woff2');
+}
+
+/* ── Vazirmatn (Arabic / Persian) ──────────────────────────────────────── */
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+200C-200D, U+FB50-FDFF, U+FE70-FEFF;
+  src: url('/fonts/vazirmatn/vazirmatn-arabic-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+200C-200D, U+FB50-FDFF, U+FE70-FEFF;
+  src: url('/fonts/vazirmatn/vazirmatn-arabic-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+200C-200D, U+FB50-FDFF, U+FE70-FEFF;
+  src: url('/fonts/vazirmatn/vazirmatn-arabic-700-normal.woff2') format('woff2');
+}

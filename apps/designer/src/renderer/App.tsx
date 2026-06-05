@@ -32,7 +32,7 @@ const TIMELINE_MAX = 600;
 const styles = {
   page: {
     fontFamily:
-      'Inter, system-ui, -apple-system, "Segoe UI", Vazirmatn, "Noto Sans Arabic", sans-serif',
+      '"Exo 2", Inter, system-ui, -apple-system, "Segoe UI", Vazirmatn, "Noto Sans Arabic", sans-serif',
     color: colors.text,
     background: colors.background,
     height: '100vh',
