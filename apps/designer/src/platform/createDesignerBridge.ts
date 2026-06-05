@@ -1,4 +1,5 @@
-import { SceneSchema, type Scene } from '@cg/shared-schema';
+import { SceneSchema, type Element, type Scene } from '@cg/shared-schema';
+import { getStarter } from '@cg/starter-templates';
 import type { AppInfo, DesignerBridge } from '../shared/designer-bridge.js';
 import { cgCss, cgJs } from './cg-runtime.js';
 import { initWorkspace, prefs } from './workspace.js';
@@ -41,6 +42,64 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
     for (const url of assetUrlCache.values()) URL.revokeObjectURL(url);
     assetUrlCache.clear();
   });
+
+  /**
+   * Import a starter's bundled assets into the (now active) project and rewrite
+   * the cloned scene's placeholder references to the real assetIds. Image
+   * elements reference an asset by its `key`; fonts by the family `asset-<key>`.
+   * Each placeholder is rewritten to the imported `assetId` (`asset-<id>` for
+   * fonts). Failures (a missing seed file) are skipped so the template still
+   * loads — just without that asset.
+   */
+  async function seedStarterAssets(starterId: string, scene: Scene): Promise<void> {
+    const starter = getStarter(starterId);
+    const manifest = starter?.assets ?? [];
+    if (manifest.length === 0) return;
+    const imageRemap = new Map<string, string>();
+    const fontRemap = new Map<string, string>();
+    for (const a of manifest) {
+      try {
+        const res = await fetch(a.url);
+        if (!res.ok) continue;
+        const blob = await res.blob();
+        const meta = await assets.importFile(
+          new File([blob], a.filename, { type: blob.type }),
+          a.kind,
+        );
+        if (a.kind === 'font') fontRemap.set(`asset-${a.key}`, `asset-${meta.assetId}`);
+        else imageRemap.set(a.key, meta.assetId);
+      } catch {
+        /* seed file unreachable — load the template without this asset */
+      }
+    }
+    rewriteAssetRefs(scene, imageRemap, fontRemap);
+  }
+
+  function rewriteAssetRefs(
+    scene: Scene,
+    imageRemap: ReadonlyMap<string, string>,
+    fontRemap: ReadonlyMap<string, string>,
+  ): void {
+    const fixEl = (el: Element): void => {
+      if (el.type === 'image') {
+        const next = imageRemap.get(el.assetId);
+        if (next !== undefined) el.assetId = next;
+      } else if (el.type === 'text') {
+        const next = fontRemap.get(el.font.family);
+        if (next !== undefined) el.font.family = next;
+      } else if (el.type === 'container') {
+        el.children.forEach(fixEl);
+      }
+    };
+    for (const layer of scene.layers) layer.children.forEach(fixEl);
+    for (const comp of scene.compositions ?? []) {
+      for (const layer of comp.layers) layer.children.forEach(fixEl);
+    }
+    scene.fonts = scene.fonts.map((f) => {
+      const next = fontRemap.get(f.family);
+      return next === undefined ? f : { ...f, family: next };
+    });
+  }
 
   return {
     getAppInfo: () => Promise.resolve(APP_INFO),
@@ -102,10 +161,15 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
       },
       recent: () => Promise.resolve(projects.recent()),
       starters: () => Promise.resolve(projects.starters()),
-      starter: (req) => {
+      starter: async (req) => {
         const result = projects.loadStarter(req.starterId);
-        if (result === null) return Promise.reject(new Error(`Unknown starter: ${req.starterId}`));
-        return Promise.resolve(result);
+        if (result === null) throw new Error(`Unknown starter: ${req.starterId}`);
+        // loadStarter has already activated the project, so the AssetStore is
+        // now scoped to it. Seed any bundled font/image assets into that
+        // project (they appear in the Assets panel) and rewrite the scene's
+        // placeholder references in place to the freshly-minted assetIds.
+        await seedStarterAssets(req.starterId, result.scene);
+        return result;
       },
       onActiveChanged: (handler) => projects.activeChanged.subscribe(handler),
     },

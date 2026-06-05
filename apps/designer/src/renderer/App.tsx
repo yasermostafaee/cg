@@ -12,6 +12,7 @@ import { TopToolbar } from './features/shell/TopToolbar.js';
 import { TransportBar } from './features/shell/TransportBar.js';
 import { StatusBar } from './features/status/StatusBar.js';
 import { TimelineDock } from './features/timeline/TimelineDock.js';
+import { primeAll as primeAllAssets } from './features/assets/assetUrlCache.js';
 import { useIssues } from './hooks/useIssues.js';
 import { designerStore, editSceneOf, useDesignerStore } from './state/store.js';
 import { colors } from './theme.js';
@@ -306,6 +307,15 @@ export function App(): JSX.Element {
   const [assetsW, setAssetsW] = useState(ASSETS_DEFAULT);
   // Which panel the left icon-rail shows.
   const [leftPanel, setLeftPanel] = useState<'compositions' | 'assets'>('compositions');
+
+  // Resolve image/font asset URLs into the shared cache as soon as a project
+  // becomes active, so the canvas renders imported / starter-seeded assets even
+  // before the operator opens the Assets panel (which otherwise owns priming).
+  const activeSceneId = scene?.id ?? null;
+  useEffect(() => {
+    if (activeSceneId === null) return;
+    void primeAllAssets();
+  }, [activeSceneId]);
 
   // Suppress the native browser context menu app-wide. Our own menus
   // (timeline layer, project assets, keyframe) open from their React

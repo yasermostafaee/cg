@@ -88,6 +88,7 @@ const styles = {
     gap: '0.9rem',
   },
   card: {
+    position: 'relative' as const,
     background: colors.panel,
     border: `1px solid ${colors.border}`,
     borderRadius: '0.5rem',
@@ -99,6 +100,22 @@ const styles = {
     flexDirection: 'column' as const,
     fontSize: '0.85rem',
     overflow: 'hidden' as const,
+  },
+  newBadge: {
+    position: 'absolute' as const,
+    top: '0.55rem',
+    right: '0.55rem',
+    zIndex: 2,
+    padding: '0.12rem 0.5rem',
+    borderRadius: '999px',
+    background: 'linear-gradient(105deg, #38BDF8, #8B5CF6)',
+    color: '#06121F',
+    fontSize: '0.62rem',
+    fontWeight: 800,
+    letterSpacing: '0.12em',
+    textTransform: 'uppercase' as const,
+    boxShadow: '0 2px 10px rgba(56,189,248,0.45)',
+    pointerEvents: 'none' as const,
   },
   cardThumb: {
     width: '100%',
@@ -261,6 +278,7 @@ export function LandingView(): JSX.Element {
               style={styles.card}
               onClick={() => guardedSwitch(s.label, () => loadStarter(s.id))}
             >
+              {s.isNew === true && <span style={styles.newBadge}>New</span>}
               {s.previewUrl !== undefined ? (
                 <img src={s.previewUrl} alt={`${s.label} preview`} style={styles.cardThumb} />
               ) : (
