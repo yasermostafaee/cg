@@ -5,7 +5,7 @@ import {
   getAll as assetUrlGetAll,
   subscribe as assetUrlSubscribe,
 } from '../assets/assetUrlCache.js';
-import { CanvasOverlay } from './CanvasOverlay.js';
+import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
 import { designerStore, useDesignerStore, type DesignerTool } from '../../state/store.js';
 
@@ -387,6 +387,16 @@ export function CanvasArea({
 
   const { width, height } = scene.resolution;
   const zoomPct = Math.round(zoom * 100);
+  // Use the active tool's cursor across the whole scroll area, not just over
+  // the canvas, so the dark margin around the scene shows the same cursor.
+  const outerCursor =
+    bindModeFieldId !== null
+      ? 'crosshair'
+      : tool === 'cursor'
+        ? ARROW_CURSOR
+        : tool === 'hand'
+          ? 'grab'
+          : 'crosshair';
 
   // Scene coordinates under a viewport point, via the live stage rect.
   function sceneFromClient(clientX: number, clientY: number): { x: number; y: number } {
@@ -396,23 +406,21 @@ export function CanvasArea({
     return { x: (clientX - r.left) / zoom, y: (clientY - r.top) / zoom };
   }
 
-  // Drag a guide (existing or freshly created). Releasing with the guide pulled
-  // outside the canvas removes it (drop back onto the ruler / off-canvas).
+  // Drag a guide (existing or freshly created). Guides can sit anywhere in the
+  // dark area outside the canvas too (negative coords / past the edges), so the
+  // position isn't clamped to the canvas; double-click removes a guide.
   function dragGuide(axis: 'x' | 'y', index: number, ev: PointerEvent): void {
     ev.preventDefault();
-    const dim = axis === 'x' ? width : height;
     const posOf = (e: PointerEvent): number => {
       const sc = sceneFromClient(e.clientX, e.clientY);
-      return axis === 'x' ? sc.x : sc.y;
+      return Math.round(axis === 'x' ? sc.x : sc.y);
     };
     const onMove = (e: PointerEvent): void => {
-      designerStore.setGuidePos(axis, index, Math.max(0, Math.min(dim, posOf(e))));
+      designerStore.setGuidePos(axis, index, posOf(e));
     };
-    const onUp = (e: PointerEvent): void => {
+    const onUp = (): void => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
-      const p = posOf(e);
-      if (p < 0 || p > dim) designerStore.removeGuide(axis, index);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -423,8 +431,7 @@ export function CanvasArea({
     e.preventDefault();
     e.stopPropagation();
     const sc = sceneFromClient(e.clientX, e.clientY);
-    const dim = axis === 'x' ? width : height;
-    const pos = Math.max(0, Math.min(dim, axis === 'x' ? sc.x : sc.y));
+    const pos = Math.round(axis === 'x' ? sc.x : sc.y);
     const index = designerStore.addGuide(axis, pos);
     dragGuide(axis, index, e.nativeEvent);
   }
@@ -472,7 +479,7 @@ export function CanvasArea({
           −
         </button>
       </div>
-      <div style={styles.outer} ref={outerRef}>
+      <div style={{ ...styles.outer, cursor: outerCursor }} ref={outerRef}>
         {html !== null && (
           <div style={styles.centerWrap}>
             <div
@@ -553,7 +560,7 @@ export function CanvasArea({
                     top: 0,
                     bottom: 0,
                     width: 1,
-                    background: '#22D3EE',
+                    background: '#F472B6',
                   }}
                 />
               </div>
@@ -581,7 +588,7 @@ export function CanvasArea({
                     left: 0,
                     right: 0,
                     height: 1,
-                    background: '#22D3EE',
+                    background: '#F472B6',
                   }}
                 />
               </div>

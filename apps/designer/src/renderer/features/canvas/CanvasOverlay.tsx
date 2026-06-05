@@ -32,7 +32,7 @@ const ARROW_SVG =
   '</filter></defs>' +
   '<path d="M5 3L5 18.5L9 14.8L14.6 14.8Z" filter="url(#cgsh)" ' +
   'fill="#0B0E16" stroke="#fff" stroke-width="0.9" stroke-linejoin="round"/></svg>';
-const ARROW_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(ARROW_SVG)}") 7 4, default`;
+export const ARROW_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(ARROW_SVG)}") 7 4, default`;
 
 interface Props {
   scene: Scene;
