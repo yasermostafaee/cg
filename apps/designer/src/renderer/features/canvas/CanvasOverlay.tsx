@@ -17,7 +17,7 @@ import { COMPOSITION_DND_TYPE } from '../compositions/CompositionsPanel.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
 import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
-import { Gizmo } from './Gizmo.js';
+import { Gizmo, lockCursor } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
 
 /**
@@ -351,6 +351,9 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
     }
   }
   if (element === null) return;
+  // Hold the move (arrow) cursor for the whole drag so it doesn't flip when the
+  // pointer passes over the gizmo's resize/rotate handles.
+  const unlockCursor = lockCursor(ARROW_CURSOR);
   const startX = ev.clientX;
   const startY = ev.clientY;
   // Drag from the *visually effective* start so the shape stays under
@@ -431,6 +434,7 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
   const onUp = (): void => {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
+    unlockCursor();
     designerStore.setSnapGuides({ x: [], y: [] });
   };
   window.addEventListener('pointermove', onMove);

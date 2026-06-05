@@ -57,6 +57,18 @@ function rotateCursor(deg: number): string {
   );
 }
 
+/**
+ * Force one cursor everywhere for the duration of a drag gesture so passing
+ * over other handles doesn't flip the icon. Returns a cleanup to call on
+ * pointer-up.
+ */
+export function lockCursor(cursor: string): () => void {
+  const style = document.createElement('style');
+  style.textContent = `* { cursor: ${cursor} !important; }`;
+  document.head.appendChild(style);
+  return () => style.remove();
+}
+
 type Corner = 'tl' | 'tr' | 'bl' | 'br';
 type Handle = Corner | 't' | 'b' | 'l' | 'r';
 
@@ -326,6 +338,8 @@ function beginResize(
   const uy = { x: -sin, y: cos };
   const startX = ev.clientX;
   const startY = ev.clientY;
+  // Hold this handle's cursor for the whole gesture (don't flip over others).
+  const unlock = lockCursor(resizeCursor(RESIZE_ANGLE[handle] + t0.rotation));
 
   const onMove = (e: PointerEvent): void => {
     const pScene = {
@@ -351,6 +365,7 @@ function beginResize(
   const onUp = (): void => {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
+    unlock();
     designerStore.markHistoryBoundary();
   };
   window.addEventListener('pointermove', onMove);
@@ -401,6 +416,7 @@ function beginRotate(
     scale,
   );
   const startCursor = Math.atan2(ev.clientY - pivot.y, ev.clientX - pivot.x) * (180 / Math.PI);
+  const unlock = lockCursor(rotateCursor(ROTATE_ANGLE[corner] + startAngle + 90));
 
   const onMove = (e: PointerEvent): void => {
     const ang = Math.atan2(e.clientY - pivot.y, e.clientX - pivot.x) * (180 / Math.PI);
@@ -411,6 +427,7 @@ function beginRotate(
   const onUp = (): void => {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
+    unlock();
     designerStore.markHistoryBoundary();
   };
   window.addEventListener('pointermove', onMove);
