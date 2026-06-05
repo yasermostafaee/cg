@@ -17,7 +17,7 @@ const CORNER_HIT = 18;
 /** Rotation hover area around each corner (screen px) — outside the resize hit. */
 const ROT_ZONE = 18;
 /** Edge resize strips this thick (screen px) — also their hover highlight. */
-const EDGE = 9;
+const EDGE = 6;
 const MIN_SIZE = 4;
 /** Resize snap threshold (screen px) and rotation snap threshold (degrees). */
 const SNAP_PX = 7;
