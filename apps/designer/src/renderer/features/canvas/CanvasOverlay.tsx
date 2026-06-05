@@ -27,7 +27,10 @@ import { TextEditor } from './TextEditor.js';
  */
 const ARROW_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">' +
-  '<path d="M5 3L5 18.5L9 14.8L14.6 14.8Z" ' +
+  '<defs><filter id="cgsh" x="-50%" y="-50%" width="200%" height="200%">' +
+  '<feDropShadow dx="0" dy="0.7" stdDeviation="0.6" flood-color="#000" flood-opacity="0.4"/>' +
+  '</filter></defs>' +
+  '<path d="M5 3L5 18.5L9 14.8L14.6 14.8Z" filter="url(#cgsh)" ' +
   'fill="#0B0E16" stroke="#fff" stroke-width="0.9" stroke-linejoin="round"/></svg>';
 const ARROW_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(ARROW_SVG)}") 7 4, default`;
 

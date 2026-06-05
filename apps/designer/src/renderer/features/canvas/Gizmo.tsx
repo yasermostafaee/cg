@@ -41,13 +41,27 @@ function cursorDataUrl(inner: string, viewBox: number, renderPx: number, hotVb: 
 /** Rendered size (px) of the resize/rotate cursors — smaller than the default pointer. */
 const CURSOR_PX = 23;
 
+/**
+ * Faint drop shadow giving the cursor a touch of lift off the canvas so it
+ * reads clearly over any fill colour. Wrapped AROUND the rotation transform
+ * (via {@link withShadow}) so the shadow always falls the same way instead of
+ * spinning with the glyph. The generous filter region keeps the blur from
+ * being clipped at the SVG edge.
+ */
+const SHADOW_FILTER =
+  '<filter id="cgsh" x="-50%" y="-50%" width="200%" height="200%">' +
+  '<feDropShadow dx="0" dy="0.7" stdDeviation="0.6" flood-color="#000" flood-opacity="0.4"/>' +
+  '</filter>';
+const withShadow = (content: string): string =>
+  `<defs>${SHADOW_FILTER}</defs><g filter="url(#cgsh)">${content}</g>`;
+
 /** Straight double-headed resize arrow, rotated `deg` (0 = horizontal ↔). */
 function resizeCursor(deg: number): string {
   const arrow =
     '<path d="M2 14L8 8.5V11.5H20V8.5L26 14L20 19.5V16.5H8V19.5Z" ' +
     'fill="#111" stroke="#fff" stroke-width="1" stroke-linejoin="round"/>';
   return cursorDataUrl(
-    `<g transform="rotate(${String(Math.round(deg))} 14 14)">${arrow}</g>`,
+    withShadow(`<g transform="rotate(${String(Math.round(deg))} 14 14)">${arrow}</g>`),
     28,
     CURSOR_PX,
     14,
@@ -63,7 +77,7 @@ function rotateCursor(deg: number): string {
   const halo = `<g fill="#fff" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">${glyph}</g>`;
   const ink = `<g fill="#111" stroke="#111" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round">${glyph}</g>`;
   return cursorDataUrl(
-    `<g transform="rotate(${String(Math.round(deg))} 13 13)">${halo}${ink}</g>`,
+    withShadow(`<g transform="rotate(${String(Math.round(deg))} 13 13)">${halo}${ink}</g>`),
     26,
     CURSOR_PX,
     13,
