@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import {
@@ -327,11 +327,12 @@ export function CanvasArea({
     if (Number.isFinite(z) && z > 0) setZoom(clampZoom(z));
   }
 
-  // Auto-fit on load / project (or composition size) switch, after layout.
-  useEffect(() => {
+  // Auto-fit on load / project (or composition size) switch. Runs in a layout
+  // effect (before paint) so the very first frame is already at the fit zoom —
+  // no flash from the initial state value.
+  useLayoutEffect(() => {
     if (sceneId === null) return;
-    const raf = requestAnimationFrame(fitToViewport);
-    return () => cancelAnimationFrame(raf);
+    fitToViewport();
   }, [sceneId, scene?.resolution.width, scene?.resolution.height]);
 
   function applyPan(dx: number, dy: number): void {
