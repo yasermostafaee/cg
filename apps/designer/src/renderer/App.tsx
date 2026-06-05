@@ -13,7 +13,7 @@ import { StatusBar } from './features/status/StatusBar.js';
 import { TimelineDock } from './features/timeline/TimelineDock.js';
 import { primeAll as primeAllAssets } from './features/assets/assetUrlCache.js';
 import { useIssues } from './hooks/useIssues.js';
-import { designerStore, editSceneOf, useDesignerStore } from './state/store.js';
+import { designerStore, editSceneOf, shallowEqual, useDesignerSelector } from './state/store.js';
 import { colors } from './theme.js';
 
 declare global {
@@ -278,6 +278,10 @@ function LeftRail({
  * in the top toolbar; project selection lives on the landing page.
  */
 export function App(): JSX.Element {
+  // Deliberately excludes `currentFrame`: the playhead tick fires every frame
+  // during playback, and the frame-dependent surfaces (canvas, transport,
+  // inspector, timeline) now read it themselves. Keeping App off `currentFrame`
+  // stops the whole tree from re-rendering on every frame.
   const {
     view,
     scene,
@@ -288,11 +292,26 @@ export function App(): JSX.Element {
     selection,
     editingTextId,
     bindModeFieldId,
-    currentFrame,
     selectedKeyframe,
     selectedKeyframes,
     keyframeInspectorOpen,
-  } = useDesignerStore();
+  } = useDesignerSelector(
+    (s) => ({
+      view: s.view,
+      scene: s.scene,
+      activeCompositionId: s.activeCompositionId,
+      notice: s.notice,
+      projectPath: s.projectPath,
+      tool: s.tool,
+      selection: s.selection,
+      editingTextId: s.editingTextId,
+      bindModeFieldId: s.bindModeFieldId,
+      selectedKeyframe: s.selectedKeyframe,
+      selectedKeyframes: s.selectedKeyframes,
+      keyframeInspectorOpen: s.keyframeInspectorOpen,
+    }),
+    shallowEqual,
+  );
   // The editing surface is the open composition (its own size / duration /
   // layers); null when nothing is open (→ empty state). Issues validate the
   // open composition, not the now-layerless project root.
@@ -440,11 +459,10 @@ export function App(): JSX.Element {
                   selection={selection}
                   editingTextId={editingTextId}
                   bindModeFieldId={bindModeFieldId}
-                  currentFrame={currentFrame}
                   showToolbar
                 />
               </div>
-              <TransportBar scene={editScene} currentFrame={currentFrame} />
+              <TransportBar scene={editScene} />
             </div>
             <div style={{ width: INSPECTOR_DEFAULT, flexShrink: 0, display: 'flex', minHeight: 0 }}>
               <InspectorPanel
@@ -454,7 +472,6 @@ export function App(): JSX.Element {
                 selectedKeyframe={selectedKeyframe}
                 selectedKeyframes={selectedKeyframes}
                 keyframeInspectorOpen={keyframeInspectorOpen}
-                currentFrame={currentFrame}
               />
             </div>
           </>
@@ -473,7 +490,6 @@ export function App(): JSX.Element {
             <TimelineDock
               scene={editScene}
               selection={selection}
-              currentFrame={currentFrame}
               selectedKeyframe={selectedKeyframe}
               selectedKeyframes={selectedKeyframes}
             />

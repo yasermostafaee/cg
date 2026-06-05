@@ -1,6 +1,6 @@
 import type { AnimatableProperty, Element, TextElement } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { designerStore, useDesignerStore } from '../../state/store.js';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import { hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
 import { CollapseSection } from './CollapseSection.js';
@@ -232,7 +232,7 @@ export function TextStyleSection({
 }: Props): JSX.Element {
   const id = element.id;
   // D-011 — project-asset fonts merged into the dropdown after the built-ins.
-  const { scene } = useDesignerStore();
+  const scene = useDesignerSelector((s) => s.scene);
   const sceneFonts = scene?.fonts ?? [];
   const sizingValue = element.fitMode === 'fixed' ? 'fixed' : 'auto';
   const wrapValue = element.wrap === false ? 'no' : 'yes';

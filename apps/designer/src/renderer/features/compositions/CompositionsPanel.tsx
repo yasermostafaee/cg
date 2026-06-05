@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { colors } from '../../theme.js';
-import { designerStore, useDesignerStore } from '../../state/store.js';
+import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
 
 /** MIME-ish key used when dragging a composition onto the canvas. */
 export const COMPOSITION_DND_TYPE = 'application/x-cg-composition';
@@ -138,7 +138,10 @@ const styles = {
  * instance.
  */
 export function CompositionsPanel(): JSX.Element {
-  const { scene, activeCompositionId } = useDesignerStore();
+  const { scene, activeCompositionId } = useDesignerSelector(
+    (s) => ({ scene: s.scene, activeCompositionId: s.activeCompositionId }),
+    shallowEqual,
+  );
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
 

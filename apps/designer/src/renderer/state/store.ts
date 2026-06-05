@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type {
   AnimatableProperty,
   Composition,
@@ -1828,11 +1828,55 @@ export const designerStore = {
   },
 } as const;
 
-/** React hook for the whole store. Re-renders on any change. */
+/**
+ * React hook for the whole store. Re-renders on ANY change — including the
+ * per-frame `currentFrame` tick during playback. Prefer `useDesignerSelector`
+ * so a component only re-renders when the slice it reads actually changes;
+ * this whole-store hook is kept for the few places that genuinely need it.
+ */
 export function useDesignerStore(): DesignerStoreState {
   const [state, setState] = useState(current);
   useEffect(() => designerStore.subscribe(setState), []);
   return state;
+}
+
+/**
+ * Selector-based subscription. A component re-renders only when its selected
+ * slice changes (per `isEqual`, default `Object.is`). This is what keeps
+ * playback cheap: panels that don't read `currentFrame` (compositions list,
+ * toolbar, status bar, …) stay still while the playhead advances, instead of
+ * the whole tree re-rendering on every `set()`.
+ *
+ * The selected value is cached so `getSnapshot` returns a stable reference
+ * when the slice is unchanged — required by `useSyncExternalStore`, and what
+ * lets a selector return a fresh object literal (paired with `shallowEqual`)
+ * without looping.
+ */
+export function useDesignerSelector<T>(
+  selector: (s: DesignerStoreState) => T,
+  isEqual: (a: T, b: T) => boolean = Object.is,
+): T {
+  const cache = useRef<{ value: T } | null>(null);
+  const getSnapshot = (): T => {
+    const next = selector(current);
+    const prev = cache.current;
+    if (prev !== null && isEqual(prev.value, next)) return prev.value;
+    cache.current = { value: next };
+    return next;
+  };
+  return useSyncExternalStore(designerStore.subscribe, getSnapshot, getSnapshot);
+}
+
+/** Shallow object equality — compares own enumerable keys with `Object.is`. */
+export function shallowEqual<T extends object>(a: T, b: T): boolean {
+  if (Object.is(a, b)) return true;
+  const ka = Object.keys(a) as (keyof T)[];
+  const kb = Object.keys(b) as (keyof T)[];
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) {
+    if (!Object.is(a[k], b[k])) return false;
+  }
+  return true;
 }
 
 // Dev-only: expose the store on the global object for tooling (the starter

@@ -7,7 +7,12 @@ import {
 } from '../assets/assetUrlCache.js';
 import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
-import { designerStore, useDesignerStore, type DesignerTool } from '../../state/store.js';
+import {
+  designerStore,
+  shallowEqual,
+  useDesignerSelector,
+  type DesignerTool,
+} from '../../state/store.js';
 
 interface Props {
   scene: Scene | null;
@@ -21,7 +26,6 @@ interface Props {
    */
   editingTextId: string | null;
   bindModeFieldId: string | null;
-  currentFrame: number;
   /**
    * Render the shape tools inline at the left of the canvas header
    * (D-008). The caller passes `true` from the Studio layout so the
@@ -155,7 +159,6 @@ export function CanvasArea({
   selection,
   editingTextId,
   bindModeFieldId,
-  currentFrame,
   showToolbar = false,
 }: Props): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -163,7 +166,10 @@ export function CanvasArea({
   const stageRef = useRef<HTMLDivElement>(null);
   const [html, setHtml] = useState<string | null>(null);
   const [zoom, setZoom] = useState<number>(ZOOM_DEFAULT);
-  const { rulerVisible, guides } = useDesignerStore();
+  const { rulerVisible, guides, currentFrame } = useDesignerSelector(
+    (s) => ({ rulerVisible: s.rulerVisible, guides: s.guides, currentFrame: s.currentFrame }),
+    shallowEqual,
+  );
   // Screen offset (within the scroll viewport) of the scene's (0,0), so the
   // pinned rulers and the guide lines stay aligned with the canvas as it
   // zooms / scrolls / resizes.

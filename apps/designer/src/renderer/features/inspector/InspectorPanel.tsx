@@ -1,6 +1,6 @@
 import type { AnimatableProperty, Element, FieldBinding, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { designerStore, useDesignerStore } from '../../state/store.js';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { BackgroundControl } from '../canvas/BackgroundControl.js';
 import { describeBinding } from '../fields/bind-resolver.js';
 import { FieldsPanel } from '../fields/FieldsPanel.js';
@@ -21,7 +21,6 @@ interface Props {
     frame: number;
   }[];
   keyframeInspectorOpen: boolean;
-  currentFrame: number;
 }
 
 const styles = {
@@ -126,7 +125,6 @@ export function InspectorPanel({
   selectedKeyframe,
   selectedKeyframes,
   keyframeInspectorOpen,
-  currentFrame,
 }: Props): JSX.Element {
   if (scene === null) {
     return (
@@ -148,14 +146,7 @@ export function InspectorPanel({
   if (selected === null) {
     return <SceneInspector scene={scene} projectPath={projectPath} />;
   }
-  return (
-    <ElementInspector
-      element={selected}
-      scene={scene}
-      currentFrame={currentFrame}
-      selectedKeyframe={selectedKeyframe}
-    />
-  );
+  return <ElementInspector element={selected} scene={scene} selectedKeyframe={selectedKeyframe} />;
 }
 
 function SceneInspector({
@@ -165,7 +156,7 @@ function SceneInspector({
   scene: Scene;
   projectPath: string | null;
 }): JSX.Element {
-  const { bindModeFieldId } = useDesignerStore();
+  const bindModeFieldId = useDesignerSelector((s) => s.bindModeFieldId);
   return (
     <aside style={styles.panel} aria-label="Inspector">
       <h2 style={styles.headingFirst}>COMPOSITION</h2>
@@ -189,14 +180,15 @@ function SceneInspector({
 function ElementInspector({
   element,
   scene,
-  currentFrame,
   selectedKeyframe,
 }: {
   element: Element;
   scene: Scene;
-  currentFrame: number;
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }): JSX.Element {
+  // Live transform/style values are sampled at the playhead, so this subtree
+  // (only mounted when an element is selected) subscribes to the frame tick.
+  const currentFrame = useDesignerSelector((s) => s.currentFrame);
   const bindings = scene.bindings
     .map((b, idx) => ({ b, idx }))
     .filter(({ b }) => bindingTargetsElement(b, element.id));

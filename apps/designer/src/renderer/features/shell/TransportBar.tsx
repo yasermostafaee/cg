@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { activeRangeOf, type Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { designerStore } from '../../state/store.js';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
 
 interface Props {
   scene: Scene;
-  currentFrame: number;
 }
 
 type LoopMode = 'off' | 'loop' | 'bounce';
@@ -142,7 +141,8 @@ const IconBounce = ic(
  *   loop   → wrap to frameIn at frameOut
  *   bounce → reverse direction at every boundary
  */
-export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
+export function TransportBar({ scene }: Props): JSX.Element {
+  const currentFrame = useDesignerSelector((s) => s.currentFrame);
   // Playback is bounded by the active region (the resized scene bar), while
   // the readout keeps showing the scene's full total so the operator still
   // sees the kept frame count.

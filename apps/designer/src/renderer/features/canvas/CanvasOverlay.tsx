@@ -4,7 +4,7 @@ import { colors } from '../../theme.js';
 import {
   designerStore,
   editSceneOf,
-  useDesignerStore,
+  useDesignerSelector,
   type DesignerTool,
 } from '../../state/store.js';
 import {
@@ -86,7 +86,7 @@ export function CanvasOverlay({
   onPan,
 }: Props): JSX.Element {
   const layerRef = useRef<HTMLDivElement>(null);
-  const { snapGuides } = useDesignerStore();
+  const snapGuides = useDesignerSelector((s) => s.snapGuides);
 
   const allElements: Element[] = [];
   for (const layer of scene.layers) {

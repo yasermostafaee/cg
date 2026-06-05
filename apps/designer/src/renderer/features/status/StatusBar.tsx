@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
-import { designerStore, useDesignerStore } from '../../state/store.js';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { IssuesPanel } from '../issues/IssuesPanel.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
 
@@ -69,7 +69,7 @@ const styles = {
  *  slider that horizontally zooms the timeline. Save / Export live in
  *  the TopToolbar on the right. */
 export function StatusBar({ scene, issues }: Props): JSX.Element {
-  const { timelineZoom } = useDesignerStore();
+  const timelineZoom = useDesignerSelector((s) => s.timelineZoom);
   const errorCount = issues.filter((i) => i.severity === 'error').length;
   const [issuesOpen, setIssuesOpen] = useState(false);
 

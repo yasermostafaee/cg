@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
-import { designerStore, useDesignerStore } from '../../state/store.js';
+import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
 import { ShortcutsModal } from './ShortcutsModal.js';
@@ -115,7 +115,15 @@ const styles = {
  * status bar so the operator's primary actions stay in the chrome).
  */
 export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
-  const { canUndo, canRedo, rulerVisible, snappingEnabled } = useDesignerStore();
+  const { canUndo, canRedo, rulerVisible, snappingEnabled } = useDesignerSelector(
+    (s) => ({
+      canUndo: s.canUndo,
+      canRedo: s.canRedo,
+      rulerVisible: s.rulerVisible,
+      snappingEnabled: s.snappingEnabled,
+    }),
+    shallowEqual,
+  );
   const errorCount = issues.filter((i) => i.severity === 'error').length;
   const exportBlocked = scene === null || errorCount > 0;
   const [openMenu, setOpenMenu] = useState<'file' | 'edit' | 'view' | 'help' | null>(null);

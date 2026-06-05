@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AnimatableProperty, Element, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { designerStore, useDesignerStore } from '../../state/store.js';
+import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
 import { DisplayRow } from './DisplayRow.js';
 import { ElementRow, lifespanColorFor } from './ElementRow.js';
 import { FrameRuler, pickStride } from './FrameRuler.js';
@@ -12,7 +12,6 @@ import { TrackRow } from './TrackRow.js';
 interface Props {
   scene: Scene;
   selection: ReadonlySet<string>;
-  currentFrame: number;
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
   selectedKeyframes: readonly {
     elementId: string;
@@ -284,12 +283,14 @@ const styles = {
 export function TimelineDock({
   scene,
   selection,
-  currentFrame,
   selectedKeyframe,
   selectedKeyframes,
 }: Props): JSX.Element {
   const { in: frameIn, out: frameOut } = scene.frameRange;
-  const { timelineZoom } = useDesignerStore();
+  const { timelineZoom, currentFrame } = useDesignerSelector(
+    (s) => ({ timelineZoom: s.timelineZoom, currentFrame: s.currentFrame }),
+    shallowEqual,
+  );
   // `visibleFrames = span / zoom` exactly, because the inner wrappers
   // (ruler's `zoomInner`, body's `rightBodyInner`) are both
   // `width: zoom × 100%` of the scrolling viewport — so the on-screen

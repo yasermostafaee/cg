@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { StarterEntry } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
-import { designerStore, useDesignerStore } from '../../state/store.js';
+import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
 
@@ -161,7 +161,10 @@ const styles = {
  *   └──────────────────────────────────────────────────────────┘
  */
 export function LandingView(): JSX.Element {
-  const { scene, projectPath } = useDesignerStore();
+  const { scene, projectPath } = useDesignerSelector(
+    (s) => ({ scene: s.scene, projectPath: s.projectPath }),
+    shallowEqual,
+  );
   const [recent, setRecent] = useState<
     { path: string; name: string; templateType: string; lastOpenedAt: string }[]
   >([]);
