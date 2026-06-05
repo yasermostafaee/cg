@@ -212,7 +212,8 @@ export function LandingView(): JSX.Element {
    * otherwise queues it behind the save-before-switch modal.
    */
   function guardedSwitch(label: string, action: () => Promise<void>): void {
-    if (scene === null) {
+    // Only prompt to save when the project actually has unsaved changes.
+    if (scene === null || !designerStore.get().dirty) {
       void action();
       return;
     }

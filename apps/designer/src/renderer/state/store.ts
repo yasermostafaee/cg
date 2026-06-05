@@ -127,6 +127,12 @@ export interface DesignerStoreState {
   canUndo: boolean;
   /** Whether the future stack has at least one entry. */
   canRedo: boolean;
+  /**
+   * Whether the active project has unsaved changes — the current scene differs
+   * from the one last loaded or saved. Drives the "save before switching"
+   * prompt so it only appears when there's actually something to lose.
+   */
+  dirty: boolean;
 }
 
 const initialState: DesignerStoreState = {
@@ -150,6 +156,7 @@ const initialState: DesignerStoreState = {
   guides: { x: [], y: [] },
   canUndo: false,
   canRedo: false,
+  dirty: false,
 };
 
 type Listener = (state: DesignerStoreState) => void;
@@ -185,6 +192,12 @@ let past: Scene[] = [];
 let future: Scene[] = [];
 let suppressHistory = false;
 let lastSnapshotAt = -Infinity;
+/**
+ * The scene object as it was at the last load or save. `dirty` is simply
+ * `current.scene !== savedScene` — every mutation produces a fresh scene
+ * object, so an identity check is enough.
+ */
+let savedScene: Scene | null = null;
 
 function now(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -205,11 +218,13 @@ function set(patch: Partial<DesignerStoreState>): void {
     }
     lastSnapshotAt = t;
   }
+  const nextScene = patch.scene !== undefined ? patch.scene : current.scene;
   current = {
     ...current,
     ...patch,
     canUndo: past.length > 0,
     canRedo: future.length > 0,
+    dirty: nextScene !== null && nextScene !== savedScene,
   };
   for (const l of listeners) l(current);
 }
@@ -559,6 +574,8 @@ export const designerStore = {
       normalized = ensured.scene;
       activeId = ensured.activeId;
     }
+    // A freshly loaded/closed project starts clean — nothing to save yet.
+    savedScene = normalized;
     try {
       set({
         scene: normalized,
@@ -633,6 +650,16 @@ export const designerStore = {
    */
   markHistoryBoundary(): void {
     lastSnapshotAt = -Infinity;
+  },
+
+  /**
+   * Mark the current scene as saved — clears the `dirty` flag. Call after a
+   * successful save so the "unsaved changes" prompt won't fire until the next
+   * edit.
+   */
+  markSaved(): void {
+    savedScene = current.scene;
+    set({});
   },
 
   /** Explicitly switch top-level view (used by "back to projects"). */
