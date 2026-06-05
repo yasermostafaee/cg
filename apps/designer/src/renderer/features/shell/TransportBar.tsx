@@ -249,7 +249,7 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
           aria-label="Step back"
           title="Step back one frame"
         >
-          ◀
+          ⏪
         </button>
         <button
           type="button"
@@ -272,7 +272,7 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
           aria-label="Step forward"
           title="Step forward one frame"
         >
-          ▶
+          ⏩
         </button>
         <span style={styles.groupDivider} aria-hidden />
         <button
