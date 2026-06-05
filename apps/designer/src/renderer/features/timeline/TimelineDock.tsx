@@ -481,6 +481,18 @@ export function TimelineDock({
     window.addEventListener('pointercancel', onUp);
   }
 
+  // Clicking empty timeline space or the (non-selectable) Scene row clears the
+  // layer selection — mirrors the canvas, where clicking the dark area
+  // deselects. `clearSelectionOnEmpty` guards on target===currentTarget for the
+  // scroll containers so a click that bubbled up from a real row (which already
+  // set the selection) doesn't immediately undo it.
+  function clearSelection(): void {
+    designerStore.setSelection([]);
+  }
+  function clearSelectionOnEmpty(e: React.MouseEvent): void {
+    if (e.target === e.currentTarget) clearSelection();
+  }
+
   // Delete-key removes every selected keyframe.
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
@@ -527,8 +539,8 @@ export function TimelineDock({
             </span>
             <span style={{ color: '#858cac' }}>/{frameOut}</span>
           </div>
-          <div style={styles.leftBody} ref={leftBodyRef}>
-            <div style={styles.sceneLabel} aria-hidden />
+          <div style={styles.leftBody} ref={leftBodyRef} onClick={clearSelectionOnEmpty}>
+            <div style={styles.sceneLabel} aria-hidden onClick={clearSelection} />
             {elements.length === 0 ? (
               <p style={styles.empty}>No elements yet. Add a shape, text, or image to start.</p>
             ) : (
@@ -610,6 +622,7 @@ export function TimelineDock({
           </div>
           <div style={styles.rightBody} ref={rightBodyRef} onScroll={syncScroll}>
             <div
+              onClick={clearSelectionOnEmpty}
               style={{
                 ...styles.rightBodyInner,
                 width: `${String(timelineZoom * 100)}%`,
@@ -618,7 +631,7 @@ export function TimelineDock({
                 // period the ruler labels use. Without this thinning, a
                 // 1000-frame scene at default zoom paints ~4px-spaced
                 // lines that read as a solid smear.
-                backgroundImage: `repeating-linear-gradient(to right, #262a3e 0, #262a3e 1px, transparent 1px, transparent ${gridPeriodPct}%)`,
+                backgroundImage: `repeating-linear-gradient(to right, #2e3247 0, #2e3247 1px, transparent 1px, transparent ${gridPeriodPct}%)`,
               }}
             >
               <div
@@ -633,7 +646,12 @@ export function TimelineDock({
                   aria-hidden
                 />
               )}
-              <div style={styles.sceneLane} ref={sceneLaneRef} aria-label="Scene active region">
+              <div
+                style={styles.sceneLane}
+                ref={sceneLaneRef}
+                aria-label="Scene active region"
+                onClick={clearSelection}
+              >
                 <div
                   style={{ ...styles.sceneBar, right: 'auto', width: `${activePct.toFixed(3)}%` }}
                   aria-hidden
