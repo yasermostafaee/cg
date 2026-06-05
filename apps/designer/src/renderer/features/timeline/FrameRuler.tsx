@@ -54,6 +54,8 @@ const styles = {
     borderRadius: 3,
     lineHeight: '16px',
     pointerEvents: 'none' as const,
+    // Sit above the playhead line so the frame number isn't crossed by it.
+    zIndex: 3,
   },
 } as const;
 

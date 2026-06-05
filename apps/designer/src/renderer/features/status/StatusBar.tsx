@@ -18,7 +18,7 @@ const styles = {
   bar: {
     display: 'flex',
     alignItems: 'center',
-    gap: '1.25rem',
+    gap: '0.45rem',
     padding: '0.18rem 0.75rem',
     background: colors.panel,
     borderTop: `1px solid ${colors.border}`,
@@ -98,7 +98,7 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
           </span>
         </>
       )}
-      <span style={styles.pill}>
+      <span style={styles.pill} title="Resolution">
         {scene === null ? '0×0' : `${scene.resolution.width}×${scene.resolution.height}`}
       </span>
       {issues.length > 0 && (
