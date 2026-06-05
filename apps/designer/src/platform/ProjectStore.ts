@@ -54,6 +54,7 @@ export class ProjectStore {
       description: s.description,
       templateType: s.scene.templateType,
       ...(s.preview !== undefined ? { previewUrl: s.preview } : {}),
+      ...(s.isNew === true ? { isNew: true } : {}),
     }));
   }
 

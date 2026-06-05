@@ -6,6 +6,7 @@ import { designerStore, useDesignerStore } from '../../state/store.js';
 import { AssetThumb } from './AssetThumb.js';
 import { emitAssetRemoved, useAssets } from './useAssets.js';
 import { clearAll as clearAllAssetUrls, revoke as revokeAssetUrl } from './assetUrlCache.js';
+import { Modal, ModalButton } from '../shell/Modal.js';
 
 const styles = {
   panel: {
@@ -108,55 +109,11 @@ const styles = {
   menuItemDanger: {
     color: '#f87171',
   },
-  modalBackdrop: {
-    position: 'fixed' as const,
-    inset: 0,
-    background: 'rgba(0,0,0,0.55)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 70,
-  },
-  modal: {
-    minWidth: 320,
-    maxWidth: 420,
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.35rem',
-    padding: '1rem 1.1rem',
-    color: colors.text,
-    boxShadow: '0 10px 30px rgba(0,0,0,0.55)',
-  },
-  modalTitle: {
-    fontSize: '0.9rem',
-    fontWeight: 700,
-    marginBottom: '0.55rem',
-  },
   modalBody: {
     fontSize: '0.78rem',
     color: colors.textMuted,
     lineHeight: 1.5,
-    marginBottom: '0.9rem',
     whiteSpace: 'pre-wrap' as const,
-  },
-  modalActions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '0.4rem',
-  },
-  modalButton: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.22rem',
-    padding: '0.35rem 0.85rem',
-    fontSize: '0.78rem',
-    cursor: 'pointer',
-  },
-  modalButtonDanger: {
-    background: '#b91c1c',
-    color: '#fff',
-    border: `1px solid #991b1b`,
   },
 } as const;
 
@@ -458,24 +415,22 @@ function DeleteConfirmDialog({
   const displayName = stripExt(asset.filename);
   const message = buildWarningMessage(asset, fontUses, imageUses);
   return (
-    <div style={styles.modalBackdrop} role="dialog" aria-modal="true" onPointerDown={onCancel}>
-      <div style={styles.modal} onPointerDown={(e) => e.stopPropagation()}>
-        <div style={styles.modalTitle}>Delete “{displayName}”?</div>
-        <div style={styles.modalBody}>{message}</div>
-        <div style={styles.modalActions}>
-          <button type="button" style={styles.modalButton} onClick={onCancel} autoFocus>
+    <Modal
+      title={`Delete “${displayName}”?`}
+      onClose={onCancel}
+      footer={
+        <>
+          <ModalButton onClick={onCancel} autoFocus>
             Cancel
-          </button>
-          <button
-            type="button"
-            style={{ ...styles.modalButton, ...styles.modalButtonDanger }}
-            onClick={onConfirm}
-          >
+          </ModalButton>
+          <ModalButton variant="danger" onClick={onConfirm}>
             Delete
-          </button>
-        </div>
-      </div>
-    </div>
+          </ModalButton>
+        </>
+      }
+    >
+      <div style={styles.modalBody}>{message}</div>
+    </Modal>
   );
 }
 

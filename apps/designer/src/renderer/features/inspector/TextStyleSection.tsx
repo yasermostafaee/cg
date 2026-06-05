@@ -4,7 +4,7 @@ import { designerStore, useDesignerStore } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import { hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
 import { CollapseSection } from './CollapseSection.js';
-import { ColorPicker } from './ColorPopover.js';
+import { FillField } from './FillPopover.js';
 import { RealtimeNumberInput } from './controls.js';
 
 /**
@@ -293,38 +293,59 @@ export function TextStyleSection({
           />
         </div>
 
-        {/* Text Color */}
-        <ColorChip
+        {/* Text Color — solid or gradient (gradient renders via background-clip). */}
+        <FillField
           label="Text Color"
-          color={element.color}
-          transparent={false}
-          onCommit={(color) => designerStore.commitAnimatable(id, 'text.color', color)}
-          ariaLabel="text color"
-          trailing={animPoint(
-            element,
-            'text.color',
-            currentFrame,
-            selectedKeyframe,
-            (el) => el.color,
-          )}
+          labelWidth={90}
+          value={element.colorFill ?? { kind: 'solid', color: element.color }}
+          onChange={(f) => {
+            if (f.kind === 'solid') {
+              designerStore.updateElement(id, {
+                colorFill: undefined,
+              } as unknown as Partial<Element>);
+              designerStore.commitAnimatable(id, 'text.color', f.color);
+            } else {
+              designerStore.updateElement(id, { colorFill: f } as unknown as Partial<Element>);
+            }
+          }}
+          trailing={
+            element.colorFill === undefined || element.colorFill.kind === 'solid'
+              ? animPoint(element, 'text.color', currentFrame, selectedKeyframe, (el) => el.color)
+              : point('text color')
+          }
         />
 
-        {/* Background */}
-        <ColorChip
+        {/* Background — solid or gradient text-box background. */}
+        <FillField
           label="Background"
-          color={element.backgroundColor ?? '#FFFFFF'}
-          transparent={element.backgroundColor === undefined}
-          onCommit={(backgroundColor) =>
-            designerStore.commitAnimatable(id, 'backgroundColor', backgroundColor)
+          labelWidth={90}
+          value={
+            element.backgroundFill ??
+            (element.backgroundColor !== undefined
+              ? { kind: 'solid', color: element.backgroundColor }
+              : { kind: 'solid', color: '#FFFFFF00' })
           }
-          ariaLabel="background color"
-          trailing={animPoint(
-            element,
-            'backgroundColor',
-            currentFrame,
-            selectedKeyframe,
-            (el) => el.backgroundColor ?? '#FFFFFF',
-          )}
+          onChange={(f) => {
+            if (f.kind === 'solid') {
+              designerStore.updateElement(id, {
+                backgroundFill: undefined,
+              } as unknown as Partial<Element>);
+              designerStore.commitAnimatable(id, 'backgroundColor', f.color);
+            } else {
+              designerStore.updateElement(id, { backgroundFill: f } as unknown as Partial<Element>);
+            }
+          }}
+          trailing={
+            element.backgroundFill === undefined
+              ? animPoint(
+                  element,
+                  'backgroundColor',
+                  currentFrame,
+                  selectedKeyframe,
+                  (el) => el.backgroundColor ?? '#FFFFFF',
+                )
+              : point('background')
+          }
         />
 
         {/* Font family dropdown */}
@@ -523,52 +544,6 @@ function TogglePair<T extends string>({
           </button>
         );
       })}
-    </div>
-  );
-}
-
-function ColorChip({
-  label,
-  color,
-  transparent,
-  onCommit,
-  ariaLabel,
-  trailing,
-}: {
-  label: string;
-  color: string;
-  transparent: boolean;
-  onCommit: (hex: string) => void;
-  ariaLabel: string;
-  trailing?: JSX.Element;
-}): JSX.Element {
-  return (
-    <div style={styles.colorRow}>
-      <span style={styles.label}>{label}</span>
-      <div style={styles.colorChip}>
-        <ColorPicker
-          value={color}
-          onChange={(hex) => onCommit(hex)}
-          ariaLabel={ariaLabel}
-          transparent={transparent}
-        />
-        <input
-          style={styles.hexInput}
-          type="text"
-          defaultValue={color.replace(/^#/, '').toUpperCase()}
-          onFocus={(e) => e.currentTarget.select()}
-          onBlur={(e) => {
-            const v = e.target.value.trim();
-            const hex = v.startsWith('#') ? v : `#${v}`;
-            if (/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(hex)) onCommit(hex.toUpperCase());
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-          }}
-          key={`${label}-${color}`}
-        />
-        {trailing ?? point(ariaLabel)}
-      </div>
     </div>
   );
 }

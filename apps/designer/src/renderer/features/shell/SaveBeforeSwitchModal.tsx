@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
+import { Modal, ModalButton } from './Modal.js';
 
 interface Props {
   /** The current scene the operator might lose if they switch. */
@@ -22,79 +23,11 @@ interface Props {
 }
 
 const styles = {
-  backdrop: {
-    position: 'fixed' as const,
-    inset: 0,
-    background: 'rgba(0, 0, 0, 0.55)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 60,
-  },
-  modal: {
-    width: 'min(420px, 92vw)',
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.4rem',
-    padding: '1.1rem',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.7rem',
-    color: colors.text,
-    fontSize: '0.84rem',
-  },
-  title: {
-    fontSize: '1rem',
-    fontWeight: 700,
-    margin: 0,
-  },
   body: {
     color: colors.textMuted,
     fontSize: '0.8rem',
     lineHeight: 1.5,
     margin: 0,
-  },
-  pathRow: {
-    display: 'grid',
-    gridTemplateColumns: '70px 1fr',
-    alignItems: 'center',
-    gap: '0.5rem',
-  },
-  label: { color: colors.textMuted, fontSize: '0.74rem' },
-  input: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.2rem',
-    padding: '0.25rem 0.4rem',
-    fontSize: '0.82rem',
-    width: '100%',
-    boxSizing: 'border-box' as const,
-  },
-  buttonRow: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '0.4rem',
-    marginTop: '0.4rem',
-  },
-  button: {
-    background: 'transparent',
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    padding: '0.3rem 0.7rem',
-    borderRadius: '0.2rem',
-    fontSize: '0.82rem',
-    cursor: 'pointer',
-  },
-  buttonPrimary: {
-    background: colors.accent,
-    color: '#000',
-    border: `1px solid ${colors.accentMuted}`,
-    fontWeight: 700,
-  },
-  buttonDanger: {
-    color: '#fda4af',
-    border: `1px solid ${colors.border}`,
   },
   error: {
     color: '#fda4af',
@@ -119,14 +52,6 @@ export function SaveBeforeSwitchModal({
 }: Props): JSX.Element {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent): void {
-      if (e.key === 'Escape') onCancel();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onCancel]);
 
   async function save(): Promise<void> {
     setBusy(true);
@@ -157,38 +82,31 @@ export function SaveBeforeSwitchModal({
   }
 
   return (
-    <div style={styles.backdrop} role="dialog" aria-modal="true" aria-label="Save before switch">
-      <div style={styles.modal}>
-        <h2 style={styles.title}>Save current project?</h2>
-        <p style={styles.body}>
-          You have <strong>{scene.name}</strong> open
-          {projectPath === null
-            ? ' (not saved yet). Save it before switching, or discard the work.'
-            : '. Save changes before switching, or discard them.'}
-        </p>
-        {error !== null && <p style={styles.error}>{error}</p>}
-        <div style={styles.buttonRow}>
-          <button type="button" style={styles.button} onClick={onCancel} disabled={busy}>
+    <Modal
+      title="Save current project?"
+      onClose={onCancel}
+      ariaLabel="Save before switch"
+      footer={
+        <>
+          <ModalButton onClick={onCancel} disabled={busy}>
             Cancel
-          </button>
-          <button
-            type="button"
-            style={{ ...styles.button, ...styles.buttonDanger }}
-            onClick={() => void discard()}
-            disabled={busy}
-          >
+          </ModalButton>
+          <ModalButton variant="danger" onClick={() => void discard()} disabled={busy}>
             Discard
-          </button>
-          <button
-            type="button"
-            style={{ ...styles.button, ...styles.buttonPrimary }}
-            onClick={() => void save()}
-            disabled={busy}
-          >
+          </ModalButton>
+          <ModalButton variant="primary" onClick={() => void save()} disabled={busy}>
             Save…
-          </button>
-        </div>
-      </div>
-    </div>
+          </ModalButton>
+        </>
+      }
+    >
+      <p style={styles.body}>
+        You have <strong>{scene.name}</strong> open
+        {projectPath === null
+          ? ' (not saved yet). Save it before switching, or discard the work.'
+          : '. Save changes before switching, or discard them.'}
+      </p>
+      {error !== null && <p style={styles.error}>{error}</p>}
+    </Modal>
   );
 }

@@ -48,33 +48,6 @@ const styles = {
     cursor: 'pointer',
     alignSelf: 'flex-start' as const,
   },
-  resumeBanner: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '0.8rem',
-    padding: '0.55rem 0.9rem',
-    background: colors.panel,
-    border: `1px solid ${colors.accentMuted}`,
-    borderRadius: '0.3rem',
-    fontSize: '0.82rem',
-    color: colors.text,
-  },
-  resumeMeta: {
-    color: colors.textMuted,
-    fontSize: '0.74rem',
-    marginLeft: '0.4rem',
-  },
-  resumeButton: {
-    background: colors.accent,
-    color: '#000',
-    border: 'none',
-    padding: '0.32rem 0.8rem',
-    borderRadius: '0.25rem',
-    fontWeight: 700,
-    fontSize: '0.78rem',
-    cursor: 'pointer',
-  },
   sectionTitle: {
     fontSize: '0.7rem',
     color: colors.textMuted,
@@ -88,6 +61,7 @@ const styles = {
     gap: '0.9rem',
   },
   card: {
+    position: 'relative' as const,
     background: colors.panel,
     border: `1px solid ${colors.border}`,
     borderRadius: '0.5rem',
@@ -99,6 +73,22 @@ const styles = {
     flexDirection: 'column' as const,
     fontSize: '0.85rem',
     overflow: 'hidden' as const,
+  },
+  newBadge: {
+    position: 'absolute' as const,
+    top: '0.55rem',
+    right: '0.55rem',
+    zIndex: 2,
+    padding: '0.12rem 0.5rem',
+    borderRadius: '999px',
+    background: 'linear-gradient(105deg, #38BDF8, #8B5CF6)',
+    color: '#06121F',
+    fontSize: '0.62rem',
+    fontWeight: 800,
+    letterSpacing: '0.12em',
+    textTransform: 'uppercase' as const,
+    boxShadow: '0 2px 10px rgba(56,189,248,0.45)',
+    pointerEvents: 'none' as const,
   },
   cardThumb: {
     width: '100%',
@@ -195,7 +185,8 @@ export function LandingView(): JSX.Element {
    * otherwise queues it behind the save-before-switch modal.
    */
   function guardedSwitch(label: string, action: () => Promise<void>): void {
-    if (scene === null) {
+    // Only prompt to save when the project actually has unsaved changes.
+    if (scene === null || !designerStore.get().dirty) {
       void action();
       return;
     }
@@ -223,23 +214,6 @@ export function LandingView(): JSX.Element {
         </p>
       </div>
 
-      {scene !== null && (
-        <div style={styles.resumeBanner} aria-label="Resume current project">
-          <span>
-            Currently editing <strong>{scene.name}</strong>
-            <span style={styles.resumeMeta}>· {projectPath ?? '(unsaved)'}</span>
-          </span>
-          <button
-            type="button"
-            style={styles.resumeButton}
-            onClick={() => designerStore.setView('studio')}
-            aria-label={`Resume editing ${scene.name}`}
-          >
-            Resume →
-          </button>
-        </div>
-      )}
-
       <button
         type="button"
         style={styles.newButton}
@@ -261,6 +235,7 @@ export function LandingView(): JSX.Element {
               style={styles.card}
               onClick={() => guardedSwitch(s.label, () => loadStarter(s.id))}
             >
+              {s.isNew === true && <span style={styles.newBadge}>New</span>}
               {s.previewUrl !== undefined ? (
                 <img src={s.previewUrl} alt={`${s.label} preview`} style={styles.cardThumb} />
               ) : (

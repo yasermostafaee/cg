@@ -68,6 +68,43 @@ describe('buildScene', () => {
     expect(container.style.background).toMatch(/#000000/i);
   });
 
+  it('renders a gradient text fill via background-clip', () => {
+    const scene = structuredClone(lowerThirdScene);
+    const txt = scene.layers[0]?.children.find((e) => e.id === 'name');
+    if (txt === undefined || txt.type !== 'text') throw new Error('fixture changed');
+    txt.colorFill = {
+      kind: 'linear',
+      angle: 90,
+      stops: [
+        { at: 0, color: '#FF0000' },
+        { at: 1, color: '#0000FF' },
+      ],
+    };
+    const el = buildScene(scene).elementMap.get('name');
+    expect(el?.style.background).toMatch(/linear-gradient/);
+    expect(el?.style.color).toBe('transparent');
+    expect(el?.style.getPropertyValue('background-clip')).toBe('text');
+  });
+
+  it('renders a solid colorFill as the text colour and a gradient text background', () => {
+    const scene = structuredClone(lowerThirdScene);
+    const txt = scene.layers[0]?.children.find((e) => e.id === 'name');
+    if (txt === undefined || txt.type !== 'text') throw new Error('fixture changed');
+    txt.colorFill = { kind: 'solid', color: '#00FF00' };
+    txt.backgroundFill = {
+      kind: 'radial',
+      center: { x: 0.5, y: 0.5 },
+      radius: 100,
+      stops: [
+        { at: 0, color: '#111111' },
+        { at: 1, color: '#222222' },
+      ],
+    };
+    const el = buildScene(scene).elementMap.get('name');
+    expect(el?.style.color).toMatch(/#00FF00/i);
+    expect(el?.style.background).toMatch(/radial-gradient/);
+  });
+
   it('renders a ShapeElement linear-gradient fill', () => {
     const sceneCopy = structuredClone(lowerThirdScene);
     const bg = sceneCopy.layers[0]?.children[0];

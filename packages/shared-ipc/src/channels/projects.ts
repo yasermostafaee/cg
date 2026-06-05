@@ -98,6 +98,8 @@ const StarterEntrySchema = z.object({
   templateType: z.string().min(1),
   /** Root-relative poster image URL for the landing card (optional). */
   previewUrl: z.string().optional(),
+  /** When true, the landing card shows a "New" badge. */
+  isNew: z.boolean().optional(),
 });
 export type StarterEntry = z.infer<typeof StarterEntrySchema>;
 

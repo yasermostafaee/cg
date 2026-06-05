@@ -161,6 +161,52 @@ input[type='number'] {
 }
 
 /*
+ * Shared modal action buttons (see Modal.tsx / ModalButton). The resting look
+ * is a flat outlined chip; styling lives here as a class so :hover can paint
+ * over it (inline styles would beat a hover rule). Variants: secondary (the
+ * Cancel/Close default), primary (accent), danger (rose, for destructive).
+ */
+.cg-modal-btn {
+  border: 1px solid #2e3247;
+  background: transparent;
+  padding: 0.35rem 0.8rem;
+  border-radius: 0.25rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition:
+    background 90ms ease,
+    border-color 90ms ease,
+    filter 90ms ease;
+}
+.cg-modal-btn:hover {
+  background: #2e3346;
+  border-color: #3a3f59;
+}
+.cg-modal-btn-primary {
+  background: #38bdf8;
+  border-color: #0ea5e9;
+  font-weight: 700;
+}
+.cg-modal-btn-primary:hover {
+  background: #38bdf8;
+  border-color: #0ea5e9;
+  filter: brightness(1.08);
+}
+.cg-modal-btn-danger:hover {
+  background: rgba(248, 113, 113, 0.14);
+  border-color: #3a3f59;
+}
+.cg-modal-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: none;
+  background: transparent;
+}
+.cg-modal-btn-primary:disabled {
+  background: #38bdf8;
+}
+
+/*
  * Unify EVERY standalone textual input/select/textarea with the inspector
  * number-field look — identical border, hover and focus. Components in this
  * codebase set borders inline, which beat normal CSS, so `!important` is

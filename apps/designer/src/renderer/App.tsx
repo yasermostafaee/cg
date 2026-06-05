@@ -4,7 +4,6 @@ import { ProjectAssetsPanel } from './features/assets/ProjectAssetsPanel.js';
 import { CompositionsPanel } from './features/compositions/CompositionsPanel.js';
 import { CanvasArea } from './features/canvas/CanvasArea.js';
 import { InspectorPanel } from './features/inspector/InspectorPanel.js';
-import { IssuesPanel } from './features/issues/IssuesPanel.js';
 import { InputTooltip } from './features/shell/InputTooltip.js';
 import { LandingView } from './features/shell/LandingView.js';
 import { Splitter } from './features/shell/Splitter.js';
@@ -12,6 +11,7 @@ import { TopToolbar } from './features/shell/TopToolbar.js';
 import { TransportBar } from './features/shell/TransportBar.js';
 import { StatusBar } from './features/status/StatusBar.js';
 import { TimelineDock } from './features/timeline/TimelineDock.js';
+import { primeAll as primeAllAssets } from './features/assets/assetUrlCache.js';
 import { useIssues } from './hooks/useIssues.js';
 import { designerStore, editSceneOf, useDesignerStore } from './state/store.js';
 import { colors } from './theme.js';
@@ -70,9 +70,6 @@ const styles = {
     flex: 1,
     minHeight: 0,
     minWidth: 0,
-  },
-  issuesWrap: {
-    flexShrink: 0,
   },
   timelineWrap: {
     flexShrink: 0,
@@ -275,7 +272,7 @@ function LeftRail({
  *   view === 'landing'  →  full-page LandingView (starters + recent +
  *                          New project modal)
  *   view === 'studio'   →  TopToolbar + (Canvas / Inspector) splitter
- *                          + IssuesPanel + Timeline + StatusBar
+ *                          + Timeline + StatusBar (issues open from the bar)
  *
  * The previous left-side ToolRail + LibraryPanel are gone — tools live
  * in the top toolbar; project selection lives on the landing page.
@@ -306,6 +303,15 @@ export function App(): JSX.Element {
   const [assetsW, setAssetsW] = useState(ASSETS_DEFAULT);
   // Which panel the left icon-rail shows.
   const [leftPanel, setLeftPanel] = useState<'compositions' | 'assets'>('compositions');
+
+  // Resolve image/font asset URLs into the shared cache as soon as a project
+  // becomes active, so the canvas renders imported / starter-seeded assets even
+  // before the operator opens the Assets panel (which otherwise owns priming).
+  const activeSceneId = scene?.id ?? null;
+  useEffect(() => {
+    if (activeSceneId === null) return;
+    void primeAllAssets();
+  }, [activeSceneId]);
 
   // Suppress the native browser context menu app-wide. Our own menus
   // (timeline layer, project assets, keyframe) open from their React
@@ -410,11 +416,6 @@ export function App(): JSX.Element {
                 />
               </div>
               <TransportBar scene={editScene} currentFrame={currentFrame} />
-              {issues.length > 0 && (
-                <div style={styles.issuesWrap}>
-                  <IssuesPanel issues={issues} />
-                </div>
-              )}
             </div>
             <Splitter
               axis="x"

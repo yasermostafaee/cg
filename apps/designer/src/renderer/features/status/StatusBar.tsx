@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { designerStore, useDesignerStore } from '../../state/store.js';
+import { IssuesPanel } from '../issues/IssuesPanel.js';
+import { Modal, ModalButton } from '../shell/Modal.js';
 
 interface Props {
   scene: Scene | null;
@@ -68,6 +71,12 @@ const styles = {
 export function StatusBar({ scene, issues }: Props): JSX.Element {
   const { timelineZoom } = useDesignerStore();
   const errorCount = issues.filter((i) => i.severity === 'error').length;
+  const [issuesOpen, setIssuesOpen] = useState(false);
+
+  // Nothing to show once the issues clear — auto-close the modal.
+  useEffect(() => {
+    if (issues.length === 0) setIssuesOpen(false);
+  }, [issues.length]);
 
   return (
     <footer style={styles.bar} aria-label="Status bar">
@@ -76,9 +85,14 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
         {scene === null ? '0×0' : `${scene.resolution.width}×${scene.resolution.height}`}
       </span>
       {issues.length > 0 && (
-        <span
+        <button
+          type="button"
+          onClick={() => setIssuesOpen(true)}
+          aria-label="Show issues"
+          title="Show issues"
           style={{
             ...styles.pill,
+            cursor: 'pointer',
             borderColor: errorCount > 0 ? '#fda4af' : '#fcd34d',
             color: errorCount > 0 ? '#fda4af' : '#fcd34d',
           }}
@@ -86,7 +100,7 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
           {errorCount > 0
             ? `${String(errorCount)} error${errorCount === 1 ? '' : 's'}`
             : `${String(issues.length)} issue${issues.length === 1 ? '' : 's'}`}
-        </span>
+        </button>
       )}
       <span style={styles.spacer} />
       <div style={styles.zoomWrap} aria-label="Timeline zoom">
@@ -123,6 +137,17 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
         </button>
         <span style={styles.zoomReadout}>{timelineZoom}×</span>
       </div>
+      {issuesOpen && (
+        <Modal
+          title="Issues"
+          onClose={() => setIssuesOpen(false)}
+          width="min(560px, 92vw)"
+          minBodyHeight={220}
+          footer={<ModalButton onClick={() => setIssuesOpen(false)}>Close</ModalButton>}
+        >
+          <IssuesPanel issues={issues} embedded onPick={() => setIssuesOpen(false)} />
+        </Modal>
+      )}
     </footer>
   );
 }

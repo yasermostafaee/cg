@@ -148,12 +148,14 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
 
   async function save(): Promise<void> {
     if (scene === null) return;
-    await window.cg.projects.saveDisk({ scene, askPath: false });
+    const res = await window.cg.projects.saveDisk({ scene, askPath: false });
+    if (res.ok) designerStore.markSaved();
   }
 
   async function saveAs(): Promise<void> {
     if (scene === null) return;
-    await window.cg.projects.saveDisk({ scene, askPath: true });
+    const res = await window.cg.projects.saveDisk({ scene, askPath: true });
+    if (res.ok) designerStore.markSaved();
   }
 
   function newProject(): void {
@@ -180,7 +182,8 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
    * triggered from.
    */
   function guardedSwitch(action: () => void | Promise<void>): void {
-    if (scene === null) {
+    // Only prompt when there's unsaved work; otherwise switch straight through.
+    if (scene === null || !designerStore.get().dirty) {
       void Promise.resolve(action());
       return;
     }
@@ -268,7 +271,7 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
         <button
           type="button"
           style={navStyle('home')}
-          onClick={() => designerStore.setView('landing')}
+          onClick={() => guardedSwitch(() => designerStore.setView('landing'))}
           onMouseEnter={() => setHoverNav('home')}
           onMouseLeave={() => setHoverNav(null)}
           title="Home"

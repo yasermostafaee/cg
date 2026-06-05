@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { FrameRate, Resolution, TemplateType } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
 import { RealtimeNumberInput } from '../inspector/controls.js';
+import { Modal, ModalButton } from './Modal.js';
 
 interface Props {
   onClose: () => void;
@@ -29,33 +30,6 @@ const FRAME_RATES: readonly FrameRate[] = [25, 29.97, 50, 59.94, 60];
 const DEFAULT_TEMPLATE_TYPE: TemplateType = 'custom';
 
 const styles = {
-  backdrop: {
-    position: 'fixed' as const,
-    inset: 0,
-    background: 'rgba(0, 0, 0, 0.55)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 50,
-  },
-  modal: {
-    width: 'min(440px, 92vw)',
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.4rem',
-    padding: '1.1rem',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.6rem',
-    color: colors.text,
-    fontSize: '0.84rem',
-  },
-  title: {
-    fontSize: '1rem',
-    fontWeight: 700,
-    margin: 0,
-    marginBottom: '0.2rem',
-  },
   row: {
     display: 'grid',
     gridTemplateColumns: '120px 1fr',
@@ -79,27 +53,6 @@ const styles = {
     gap: '0.3rem',
     alignItems: 'center',
   },
-  buttonRow: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '0.4rem',
-    marginTop: '0.5rem',
-  },
-  button: {
-    background: 'transparent',
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    padding: '0.3rem 0.7rem',
-    borderRadius: '0.2rem',
-    fontSize: '0.82rem',
-    cursor: 'pointer',
-  },
-  primary: {
-    background: colors.accent,
-    color: '#000',
-    border: `1px solid ${colors.accentMuted}`,
-    fontWeight: 700,
-  },
 } as const;
 
 /**
@@ -116,14 +69,6 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
   const [frameRate, setFrameRate] = useState<FrameRate>(50);
   const [durationFrames, setDurationFrames] = useState(50);
   const isCustom = PRESETS[presetIdx]?.label === 'Custom';
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent): void {
-      if (e.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   async function confirm(): Promise<void> {
     const preset = PRESETS[presetIdx];
@@ -143,109 +88,103 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
   }
 
   return (
-    <div style={styles.backdrop} role="dialog" aria-modal="true" aria-label="New project">
-      <div style={styles.modal}>
-        <h2 style={styles.title}>New project</h2>
+    <Modal
+      title="New project"
+      onClose={onClose}
+      footer={
+        <>
+          <ModalButton onClick={onClose}>Cancel</ModalButton>
+          <ModalButton variant="primary" onClick={() => void confirm()}>
+            Create
+          </ModalButton>
+        </>
+      }
+    >
+      <div style={styles.row}>
+        <span style={styles.label}>Name</span>
+        <input
+          style={styles.input}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          autoFocus
+          aria-label="Project name"
+        />
+      </div>
 
+      <div style={styles.row}>
+        <span style={styles.label}>Resolution</span>
+        <select
+          style={styles.input}
+          value={presetIdx}
+          onChange={(e) => setPresetIdx(Number(e.target.value))}
+          aria-label="Resolution preset"
+        >
+          {PRESETS.map((p, i) => (
+            <option key={p.label} value={i}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {isCustom && (
         <div style={styles.row}>
-          <span style={styles.label}>Name</span>
-          <input
-            style={styles.input}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            autoFocus
-            aria-label="Project name"
-          />
-        </div>
-
-        <div style={styles.row}>
-          <span style={styles.label}>Resolution</span>
-          <select
-            style={styles.input}
-            value={presetIdx}
-            onChange={(e) => setPresetIdx(Number(e.target.value))}
-            aria-label="Resolution preset"
-          >
-            {PRESETS.map((p, i) => (
-              <option key={p.label} value={i}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {isCustom && (
-          <div style={styles.row}>
-            <span style={styles.label}>Custom W × H</span>
-            <div style={styles.inlinePair}>
-              <RealtimeNumberInput
-                style={styles.input}
-                min={1}
-                step={1}
-                value={customW}
-                onCommit={setCustomW}
-                ariaLabel="Width"
-              />
-              <span style={{ color: colors.textMuted }}>×</span>
-              <RealtimeNumberInput
-                style={styles.input}
-                min={1}
-                step={1}
-                value={customH}
-                onCommit={setCustomH}
-                ariaLabel="Height"
-              />
-            </div>
-          </div>
-        )}
-
-        <div style={styles.row}>
-          <span style={styles.label}>Frame rate</span>
-          <select
-            style={styles.input}
-            value={String(frameRate)}
-            onChange={(e) => setFrameRate(Number(e.target.value) as FrameRate)}
-            aria-label="Frame rate"
-          >
-            {FRAME_RATES.map((f) => (
-              <option key={f} value={String(f)}>
-                {f} fps
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div style={styles.row}>
-          <span style={styles.label}>Total frames</span>
+          <span style={styles.label}>Custom W × H</span>
           <div style={styles.inlinePair}>
             <RealtimeNumberInput
               style={styles.input}
               min={1}
               step={1}
-              value={durationFrames}
-              onCommit={setDurationFrames}
-              ariaLabel="Total frames"
+              value={customW}
+              onCommit={setCustomW}
+              ariaLabel="Width"
             />
-            <span />
-            <span style={{ color: colors.textMuted, fontSize: '0.74rem' }}>
-              ≈ {(Math.max(1, Math.round(durationFrames)) / frameRate).toFixed(1)} s
-            </span>
+            <span style={{ color: colors.textMuted }}>×</span>
+            <RealtimeNumberInput
+              style={styles.input}
+              min={1}
+              step={1}
+              value={customH}
+              onCommit={setCustomH}
+              ariaLabel="Height"
+            />
           </div>
         </div>
+      )}
 
-        <div style={styles.buttonRow}>
-          <button type="button" style={styles.button} onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            style={{ ...styles.button, ...styles.primary }}
-            onClick={() => void confirm()}
-          >
-            Create
-          </button>
+      <div style={styles.row}>
+        <span style={styles.label}>Frame rate</span>
+        <select
+          style={styles.input}
+          value={String(frameRate)}
+          onChange={(e) => setFrameRate(Number(e.target.value) as FrameRate)}
+          aria-label="Frame rate"
+        >
+          {FRAME_RATES.map((f) => (
+            <option key={f} value={String(f)}>
+              {f} fps
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div style={styles.row}>
+        <span style={styles.label}>Total frames</span>
+        <div style={styles.inlinePair}>
+          <RealtimeNumberInput
+            style={styles.input}
+            min={1}
+            step={1}
+            value={durationFrames}
+            onCommit={setDurationFrames}
+            ariaLabel="Total frames"
+          />
+          <span />
+          <span style={{ color: colors.textMuted, fontSize: '0.74rem' }}>
+            ≈ {(Math.max(1, Math.round(durationFrames)) / frameRate).toFixed(1)} s
+          </span>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

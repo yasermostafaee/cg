@@ -1,5 +1,5 @@
 import { pack, sha256Hex } from '@cg/vcg-format';
-import type { AssetEntry, BindingTransform, DynamicField, Scene } from '@cg/shared-schema';
+import type { AssetEntry, BindingTransform, DynamicField, Element, Scene } from '@cg/shared-schema';
 import type { ExportIssue, ExportProgress } from '@cg/shared-ipc';
 import type { AssetStore } from './AssetStore.js';
 import { Emitter } from './emitter.js';
@@ -43,18 +43,30 @@ export class Exporter {
     }
 
     const knownAssetIds = new Set((await this.#assets.list()).map((a) => a.assetId));
-    const allElementIds = new Set<string>();
-    for (const layer of scene.layers) {
-      for (const el of layer.children) {
-        allElementIds.add(el.id);
-        if (el.type === 'image' && !knownAssetIds.has(el.assetId)) {
-          issues.push({
-            severity: 'error',
-            code: 'missing-asset',
-            message: `Image element references unknown asset ${el.assetId}.`,
-            elementId: el.id,
-          });
-        }
+    // Collect every element across the whole project — the main scene AND every
+    // composition, recursing into containers — so binding targets resolve no
+    // matter which composition is currently open (bindings are scene-level but
+    // their target elements may live in another comp). Deduped by id.
+    const elementsById = new Map<string, Element>();
+    const walk = (children: readonly Element[]): void => {
+      for (const el of children) {
+        if (!elementsById.has(el.id)) elementsById.set(el.id, el);
+        if (el.type === 'container') walk(el.children);
+      }
+    };
+    for (const layer of scene.layers) walk(layer.children);
+    for (const comp of scene.compositions ?? []) {
+      for (const layer of comp.layers) walk(layer.children);
+    }
+    const allElementIds = new Set(elementsById.keys());
+    for (const el of elementsById.values()) {
+      if (el.type === 'image' && !knownAssetIds.has(el.assetId)) {
+        issues.push({
+          severity: 'error',
+          code: 'missing-asset',
+          message: `Image element references unknown asset ${el.assetId}.`,
+          elementId: el.id,
+        });
       }
     }
 
