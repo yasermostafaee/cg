@@ -30,12 +30,16 @@ const SNAP_DEG = 6;
  * element's rotation) so they line up with a rotated element. Cursors are
  * OS-drawn from these inline-SVG data URIs.
  */
-function cursorDataUrl(inner: string, size: number, hot: number): string {
+function cursorDataUrl(inner: string, viewBox: number, renderPx: number, hotVb: number): string {
   const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${String(size)}" height="${String(size)}" ` +
-    `viewBox="0 0 ${String(size)} ${String(size)}">${inner}</svg>`;
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${String(renderPx)}" height="${String(renderPx)}" ` +
+    `viewBox="0 0 ${String(viewBox)} ${String(viewBox)}">${inner}</svg>`;
+  const hot = Math.round((hotVb * renderPx) / viewBox);
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${String(hot)} ${String(hot)}, auto`;
 }
+
+/** Rendered size (px) of the resize/rotate cursors — smaller than the default pointer. */
+const CURSOR_PX = 19;
 
 /** Straight double-headed resize arrow, rotated `deg` (0 = horizontal ↔). */
 function resizeCursor(deg: number): string {
@@ -45,6 +49,7 @@ function resizeCursor(deg: number): string {
   return cursorDataUrl(
     `<g transform="rotate(${String(Math.round(deg))} 14 14)">${arrow}</g>`,
     28,
+    CURSOR_PX,
     14,
   );
 }
@@ -60,6 +65,7 @@ function rotateCursor(deg: number): string {
   return cursorDataUrl(
     `<g transform="rotate(${String(Math.round(deg))} 13 13)">${halo}${ink}</g>`,
     26,
+    CURSOR_PX,
     13,
   );
 }
