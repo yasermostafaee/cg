@@ -168,14 +168,11 @@ function SceneInspector({
   const { bindModeFieldId } = useDesignerStore();
   return (
     <aside style={styles.panel} aria-label="Inspector">
-      <h2 style={styles.headingFirst}>SCENE</h2>
+      <h2 style={styles.headingFirst}>COMPOSITION</h2>
       <NameRow name={scene.name} />
-      <Row
-        label="resolution"
-        value={`${String(scene.resolution.width)}×${String(scene.resolution.height)}`}
-      />
-      <Row label="frame rate" value={String(scene.frameRate)} />
+      <SizeRow scene={scene} />
       <DurationRow scene={scene} />
+      <FrameRateRow scene={scene} />
       <Row label="elements" value={String(countElements(scene))} />
       <Row label="path" value={projectPath ?? '(unsaved)'} />
       <BackgroundControl background={scene.background} variant="full" />
@@ -377,6 +374,82 @@ function DurationRow({ scene }: { scene: Scene }): JSX.Element {
           frames · {seconds.toFixed(2)}s
         </span>
       </div>
+    </div>
+  );
+}
+
+const DOC_NUM_STYLE = {
+  background: colors.panelMuted,
+  color: colors.text,
+  border: `1px solid ${colors.border}`,
+  borderRadius: '0.18rem',
+  padding: '0.1rem 0.35rem',
+  fontSize: '0.72rem',
+  width: 64,
+  fontVariantNumeric: 'tabular-nums' as const,
+  boxSizing: 'border-box' as const,
+};
+
+/** Editable composition size (width × height). Routes to the active document. */
+function SizeRow({ scene }: { scene: Scene }): JSX.Element {
+  return (
+    <div style={styles.row}>
+      <span style={styles.label}>size</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+        <span style={{ color: colors.textMuted, fontSize: '0.66rem' }}>W</span>
+        <RealtimeNumberInput
+          style={DOC_NUM_STYLE}
+          min={1}
+          step={1}
+          value={scene.resolution.width}
+          onCommit={(n) => {
+            if (n >= 1)
+              designerStore.updateScene({
+                resolution: { width: Math.round(n), height: scene.resolution.height },
+              });
+          }}
+          ariaLabel="Composition width"
+        />
+        <span style={{ color: colors.textMuted, fontSize: '0.66rem' }}>H</span>
+        <RealtimeNumberInput
+          style={DOC_NUM_STYLE}
+          min={1}
+          step={1}
+          value={scene.resolution.height}
+          onCommit={(n) => {
+            if (n >= 1)
+              designerStore.updateScene({
+                resolution: { width: scene.resolution.width, height: Math.round(n) },
+              });
+          }}
+          ariaLabel="Composition height"
+        />
+      </div>
+    </div>
+  );
+}
+
+const FRAME_RATES = [25, 29.97, 50, 59.94, 60] as const;
+
+/** Editable frame rate (snapped to the supported set). Routes to the active document. */
+function FrameRateRow({ scene }: { scene: Scene }): JSX.Element {
+  return (
+    <div style={styles.row}>
+      <span style={styles.label}>frame rate</span>
+      <select
+        style={{ ...DOC_NUM_STYLE, width: 'auto' }}
+        value={String(scene.frameRate)}
+        onChange={(e) =>
+          designerStore.updateScene({ frameRate: Number(e.target.value) as Scene['frameRate'] })
+        }
+        aria-label="Composition frame rate"
+      >
+        {FRAME_RATES.map((r) => (
+          <option key={r} value={r}>
+            {r}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

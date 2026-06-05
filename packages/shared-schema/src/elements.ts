@@ -147,6 +147,19 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
 export type VideoPlaceholderElement = z.infer<typeof VideoPlaceholderElementSchema>;
 
 /**
+ * Composition instance — a reference to another composition (by id) placed as
+ * a layer. The referenced composition's own layers are NOT copied in; the
+ * runtime resolves and renders them nested at playout (a pre-comp instance).
+ * Cycles are prevented at author time (you can't place a composition inside one
+ * of its own descendants).
+ */
+export const CompositionElementSchema = ElementBaseSchema.extend({
+  type: z.literal('composition'),
+  compositionId: IdSchema,
+});
+export type CompositionElement = z.infer<typeof CompositionElementSchema>;
+
+/**
  * Element discriminated union. `ContainerElement.children` is recursive, so
  * it's defined via `z.lazy` referencing `ElementSchema` below.
  */
@@ -156,6 +169,7 @@ export type Element =
   | ShapeElement
   | LottieElement
   | VideoPlaceholderElement
+  | CompositionElement
   | ContainerElement;
 
 export interface ContainerElement extends ElementBase {
@@ -185,6 +199,7 @@ export const ElementSchema: z.ZodType<Element> = z.lazy(() =>
     ShapeElementSchema,
     LottieElementSchema,
     VideoPlaceholderElementSchema,
+    CompositionElementSchema,
     ContainerElementSchema,
   ]),
 );

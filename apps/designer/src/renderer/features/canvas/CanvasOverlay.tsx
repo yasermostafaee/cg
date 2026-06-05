@@ -1,18 +1,38 @@
 import { useEffect, useRef } from 'react';
 import type { Element, Scene, TextElement } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { designerStore, useDesignerStore, type DesignerTool } from '../../state/store.js';
+import {
+  designerStore,
+  editSceneOf,
+  useDesignerStore,
+  type DesignerTool,
+} from '../../state/store.js';
 import {
   defaultEllipse,
   defaultImage,
   defaultShape,
   defaultText,
 } from '../../state/element-defaults.js';
+import { COMPOSITION_DND_TYPE } from '../compositions/CompositionsPanel.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
 import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
-import { Gizmo } from './Gizmo.js';
+import { Gizmo, lockCursor } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
+
+/**
+ * The default canvas pointer — a bold black arrow with a white outline, a bit
+ * larger than the OS default (the Loopic look). OS-drawn from an inline SVG;
+ * hotspot at the arrow tip.
+ */
+const ARROW_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">' +
+  '<defs><filter id="cgsh" x="-50%" y="-50%" width="200%" height="200%">' +
+  '<feDropShadow dx="0" dy="0.7" stdDeviation="0.6" flood-color="#000" flood-opacity="0.4"/>' +
+  '</filter></defs>' +
+  '<path d="M5 3L5 18.5L9 14.8L14.6 14.8Z" filter="url(#cgsh)" ' +
+  'fill="#0B0E16" stroke="#fff" stroke-width="0.9" stroke-linejoin="round"/></svg>';
+const ARROW_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(ARROW_SVG)}") 7 4, default`;
 
 interface Props {
   scene: Scene;
@@ -193,7 +213,7 @@ export function CanvasOverlay({
     bindModeFieldId !== null
       ? 'crosshair'
       : tool === 'cursor'
-        ? 'default'
+        ? ARROW_CURSOR
         : tool === 'hand'
           ? 'grab'
           : 'crosshair';
@@ -201,12 +221,31 @@ export function CanvasOverlay({
   // but the always-on tool name was redundant with the toolbar's
   // pressed state and clutters the canvas — removed.
   function onDragOver(e: React.DragEvent<HTMLDivElement>): void {
-    if (!e.dataTransfer.types.includes('application/x-cg-asset-id')) return;
+    const t = e.dataTransfer.types;
+    if (!t.includes('application/x-cg-asset-id') && !t.includes(COMPOSITION_DND_TYPE)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
   }
 
   function onDrop(e: React.DragEvent<HTMLDivElement>): void {
+    // A composition dragged from the Compositions panel → place an instance
+    // as a new layer (the child's own layers are not copied). Refused when it
+    // would create a cycle.
+    const compId = e.dataTransfer.getData(COMPOSITION_DND_TYPE);
+    if (compId !== '') {
+      e.preventDefault();
+      const p = viewportToScene(e.clientX, e.clientY);
+      const ok = designerStore.addCompositionInstance(compId, {
+        x: Math.round(p.x),
+        y: Math.round(p.y),
+      });
+      if (!ok) {
+        designerStore.showNotice(
+          'Can’t place this composition here — it already contains the open composition, so nesting it would loop forever.',
+        );
+      }
+      return;
+    }
     const assetId = e.dataTransfer.getData('application/x-cg-asset-id');
     if (assetId === '') return;
     e.preventDefault();
@@ -301,8 +340,12 @@ function beginPan(ev: PointerEvent, onPan?: (dx: number, dy: number) => void): v
 function beginDrag(elementId: string, scale: number, currentFrame: number, ev: PointerEvent): void {
   const state = designerStore.get();
   if (state.scene === null) return;
+  // Look up the element in the *active composition* — the project root's
+  // `layers` is empty under the composition model.
+  const doc = editSceneOf(state.scene, state.activeCompositionId);
+  if (doc === null) return;
   let element: Element | null = null;
-  for (const layer of state.scene.layers) {
+  for (const layer of doc.layers) {
     for (const el of layer.children) {
       if (el.id === elementId) {
         element = el;
@@ -311,6 +354,9 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
     }
   }
   if (element === null) return;
+  // Hold the move (arrow) cursor for the whole drag so it doesn't flip when the
+  // pointer passes over the gizmo's resize/rotate handles.
+  const unlockCursor = lockCursor(ARROW_CURSOR);
   const startX = ev.clientX;
   const startY = ev.clientY;
   // Drag from the *visually effective* start so the shape stays under
@@ -322,11 +368,11 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
 
   // Snap targets in scene coords, computed once: the canvas edges + centre,
   // and every other element's edges + centre. The dragged element is excluded.
-  const W = state.scene.resolution.width;
-  const H = state.scene.resolution.height;
+  const W = doc.resolution.width;
+  const H = doc.resolution.height;
   const xTargets: number[] = [0, W / 2, W];
   const yTargets: number[] = [0, H / 2, H];
-  for (const layer of state.scene.layers) {
+  for (const layer of doc.layers) {
     for (const el of layer.children) {
       if (el.id === elementId) continue;
       const t = effectiveTransformAt(el, currentFrame);
@@ -391,6 +437,7 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
   const onUp = (): void => {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
+    unlockCursor();
     designerStore.setSnapGuides({ x: [], y: [] });
   };
   window.addEventListener('pointermove', onMove);

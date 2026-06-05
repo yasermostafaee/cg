@@ -33,6 +33,24 @@ export const LayerSchema = z.object({
 });
 export type Layer = z.infer<typeof LayerSchema>;
 
+/**
+ * A reusable composition (After-Effects-style pre-comp). Each carries its own
+ * size + duration + layers and can be opened and edited like the main scene,
+ * or placed inside another composition as a `composition` element. The project
+ * keeps these in `Scene.compositions`; the main scene is the `Scene` itself.
+ */
+export const CompositionSchema = z.object({
+  id: IdSchema,
+  name: z.string(),
+  resolution: ResolutionSchema,
+  frameRate: FrameRateSchema,
+  frameRange: FrameRangeSchema,
+  activeRange: FrameRangeSchema.optional(),
+  background: z.union([z.literal('transparent'), HexColorSchema]),
+  layers: z.array(LayerSchema),
+});
+export type Composition = z.infer<typeof CompositionSchema>;
+
 const FontReferenceSchema = z.object({
   family: z.string().min(1),
   weights: z.array(z.number().int().positive()).min(1),
@@ -87,6 +105,13 @@ export const SceneSchema = z.object({
   fields: z.array(DynamicFieldSchema),
   bindings: z.array(FieldBindingSchema),
   fonts: z.array(FontReferenceSchema),
+  /**
+   * Reusable sub-compositions (pre-comps). The main scene is the `Scene`
+   * itself; these are the extra comps shown in the Compositions panel and
+   * resolved when a `composition` element references one by id. Optional so
+   * scenes authored before the feature validate unchanged.
+   */
+  compositions: z.array(CompositionSchema).optional(),
   metadata: SceneMetadataSchema,
 });
 export type Scene = z.infer<typeof SceneSchema>;

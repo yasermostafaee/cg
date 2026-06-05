@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { SceneSchema, ShapeElementSchema } from '@cg/shared-schema';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
-import { designerStore } from '../src/renderer/state/store.js';
+import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 import { defaultEllipse, defaultShape } from '../src/renderer/state/element-defaults.js';
 
 afterEach(() => {
@@ -48,7 +48,9 @@ describe('adding an ellipse via the store', () => {
     expect(state.selection.has('el-ellipse')).toBe(true);
     // The whole scene (with the new ellipse) still validates.
     expect(() => SceneSchema.parse(state.scene)).not.toThrow();
-    const added = state.scene?.layers.flatMap((l) => l.children).find((e) => e.id === 'el-ellipse');
+    const added = editSceneOf(state.scene, state.activeCompositionId)
+      ?.layers.flatMap((l) => l.children)
+      .find((e) => e.id === 'el-ellipse');
     expect(added?.type === 'shape' && added.shape === 'ellipse').toBe(true);
   });
 });

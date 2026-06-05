@@ -13,7 +13,10 @@ function baseTransform(x: number, y: number, w: number, h: number): Transform {
     size: { w, h },
     rotation: 0,
     scale: { x: 1, y: 1 },
-    anchor: { x: 0, y: 0 },
+    // Centre anchor: rotation and scale pivot about the element's middle (the
+    // intuitive default, matching the starter templates). `position` is still
+    // the top-left, so the element doesn't shift at rest — only its pivot.
+    anchor: { x: 0.5, y: 0.5 },
   };
 }
 

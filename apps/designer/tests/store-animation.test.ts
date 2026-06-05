@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Element, ShapeElement } from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
-import { designerStore } from '../src/renderer/state/store.js';
+import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 import { defaultShape } from '../src/renderer/state/element-defaults.js';
 import {
   effectiveTransformAt,
@@ -21,7 +21,7 @@ function freshSceneWithShape(): ShapeElement {
 
 function selected(): Element {
   const state = designerStore.get();
-  const el = state.scene!.layers[0]!.children[0]!;
+  const el = editSceneOf(state.scene, state.activeCompositionId)!.layers[0]!.children[0]!;
   return el;
 }
 

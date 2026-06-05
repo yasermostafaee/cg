@@ -301,6 +301,15 @@ function LayerTypeIcon({ element, color }: { element: Element; color: string }):
       </svg>
     );
   }
+  if (element.type === 'composition') {
+    // Stacked frames — a nested-composition instance.
+    return (
+      <svg {...svg}>
+        <rect x="2" y="4.5" width="8" height="7" rx="1" {...stroke} />
+        <rect x="6" y="2.5" width="8" height="7" rx="1" {...stroke} />
+      </svg>
+    );
+  }
   // shape kinds
   switch (element.shape) {
     case 'ellipse':
@@ -543,6 +552,7 @@ const TYPE_COLORS: Record<Exclude<Element['type'], 'shape'>, string> = {
   lottie: '#A78BFA', // violet
   'video-placeholder': '#EF4444', // red
   container: '#F97316', // orange
+  composition: '#6366F1', // indigo — composition instance
 };
 
 const FALLBACK_COLOR = '#38BDF8';

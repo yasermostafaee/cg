@@ -136,6 +136,31 @@ input[type='number'] {
 }
 
 /*
+ * Compositions panel rows — subtle hover fill. The open (active) row carries
+ * an inline #333642 background, which beats this rule (no !important), so it
+ * keeps its solid fill on hover; inactive rows have no inline background and
+ * pick up the hover.
+ */
+.cg-comp-row:hover {
+  background: #2e3346;
+}
+
+/*
+ * Selection-gizmo corner: a light rounded highlight when the pointer is over
+ * the corner's (larger) resize hit area — the Loopic hover affordance. The
+ * white square handle sits on top (pointer-events: none) and stays visible.
+ */
+.cg-gizmo-corner,
+.cg-gizmo-edge {
+  border-radius: 5px;
+  transition: background 90ms ease;
+}
+.cg-gizmo-corner:hover,
+.cg-gizmo-edge:hover {
+  background: rgba(56, 189, 248, 0.45);
+}
+
+/*
  * Unify EVERY standalone textual input/select/textarea with the inspector
  * number-field look — identical border, hover and focus. Components in this
  * codebase set borders inline, which beat normal CSS, so `!important` is
