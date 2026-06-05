@@ -54,7 +54,7 @@ const styles = {
     background: colors.panel,
   },
   leftHeader: {
-    background: colors.panel,
+    background: '#32364b',
     borderBottom: `1px solid ${colors.border}`,
     color: colors.textMuted,
     fontSize: '0.85rem',
@@ -83,7 +83,7 @@ const styles = {
     overflowY: 'hidden' as const,
     height: 22,
     borderBottom: `1px solid ${colors.border}`,
-    background: TIMELINE_BG,
+    background: '#32364b',
     // Reserve the same gutter as the body so the ruler's inner width
     // matches the lane body's inner width — keeps per-frame grid lines
     // aligned across the two regions.

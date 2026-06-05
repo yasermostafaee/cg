@@ -18,10 +18,10 @@ const styles = {
   outer: {
     position: 'relative' as const,
     height: 26,
-    backgroundColor: '#1c1f2d',
+    backgroundColor: '#32364b',
     borderBottom: `1px solid ${colors.border}`,
     userSelect: 'none' as const,
-    cursor: 'col-resize',
+    cursor: 'default',
   },
   tick: {
     position: 'absolute' as const,
