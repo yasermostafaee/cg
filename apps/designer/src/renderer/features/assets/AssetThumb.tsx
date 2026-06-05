@@ -78,6 +78,21 @@ const styles = {
     fontSize: '0.72rem',
     textAlign: 'left' as const,
   },
+  metaType: {
+    flex: 'none' as const,
+    fontSize: '0.68rem',
+    color: colors.textMuted,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.03em',
+  },
+  metaSize: {
+    flex: 'none' as const,
+    fontSize: '0.68rem',
+    color: colors.textMuted,
+    fontVariantNumeric: 'tabular-nums' as const,
+    minWidth: 52,
+    textAlign: 'right' as const,
+  },
 } as const;
 
 /**
@@ -138,6 +153,12 @@ export function AssetThumb({ asset, layout = 'grid', onDragStart, onContextMenu 
         {!isImage && !isFont && asset.kind.toUpperCase().slice(0, 3)}
       </div>
       <span style={isList ? styles.captionList : styles.caption}>{displayName}</span>
+      {isList && (
+        <>
+          <span style={styles.metaType}>{fileExt(asset.filename) || asset.kind}</span>
+          <span style={styles.metaSize}>{formatBytes(asset.byteSize)}</span>
+        </>
+      )}
     </div>
   );
 }
@@ -145,4 +166,22 @@ export function AssetThumb({ asset, layout = 'grid', onDragStart, onContextMenu 
 function stripExt(filename: string): string {
   const dot = filename.lastIndexOf('.');
   return dot === -1 ? filename : filename.slice(0, dot);
+}
+
+function fileExt(filename: string): string {
+  const dot = filename.lastIndexOf('.');
+  return dot === -1 ? '' : filename.slice(dot + 1).toLowerCase();
+}
+
+/** Human-readable byte size, e.g. 2.1 KB / 80.2 KB / 1.4 MB. */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${String(bytes)} B`;
+  const units = ['KB', 'MB', 'GB'];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(1)} ${units[unit] ?? 'KB'}`;
 }
