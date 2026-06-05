@@ -42,9 +42,12 @@ const styles = {
     border: `1px solid ${colors.border}`,
     borderRadius: '0.18rem',
     fontSize: '0.78rem',
-    padding: '0.12rem 0.55rem',
+    padding: '0.2rem 0.5rem',
     cursor: 'pointer',
-    lineHeight: 1.2,
+    lineHeight: 1,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   // Hover and selected use a brighter background instead of a border accent.
   buttonHover: {
@@ -63,6 +66,68 @@ const styles = {
     gridColumn: 3,
   },
 } as const;
+
+/**
+ * One consistent, monochrome transport icon set drawn inline as SVG so they all
+ * share a single style and inherit the button colour via `currentColor` (no
+ * font-emoji glyphs, which render coloured / mismatched). 24×24 viewBox.
+ */
+function ic(children: JSX.Element): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="13"
+      height="13"
+      aria-hidden
+      focusable="false"
+      style={{ display: 'block' }}
+    >
+      {children}
+    </svg>
+  );
+}
+const IconStart = ic(
+  <>
+    <rect x="4" y="5" width="2.4" height="14" rx="0.6" fill="currentColor" />
+    <path d="M14 5v14l-7-7z" fill="currentColor" />
+    <path d="M21 5v14l-7-7z" fill="currentColor" />
+  </>,
+);
+const IconStepBack = ic(
+  <>
+    <rect x="5" y="5" width="2.6" height="14" rx="0.6" fill="currentColor" />
+    <path d="M20 5v14l-10.5-7z" fill="currentColor" />
+  </>,
+);
+const IconPlay = ic(<path d="M8 5v14l11-7z" fill="currentColor" />);
+const IconPause = ic(
+  <>
+    <rect x="7" y="5" width="3.4" height="14" rx="1" fill="currentColor" />
+    <rect x="13.6" y="5" width="3.4" height="14" rx="1" fill="currentColor" />
+  </>,
+);
+const IconStepFwd = ic(
+  <>
+    <path d="M5 5v14l10-7z" fill="currentColor" />
+    <rect x="16.4" y="5" width="2.6" height="14" rx="0.6" fill="currentColor" />
+  </>,
+);
+const IconLoop = ic(
+  <path
+    d="M7 8a4 4 0 1 0 0 8c2 0 3-1.5 5-4s3-4 5-4a4 4 0 1 1 0 8c-2 0-3-1.5-5-4s-3-4-5-4z"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  />,
+);
+const IconBounce = ic(
+  <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 9h14M15 6l3 3-3 3" />
+    <path d="M20 15H6M9 12l-3 3 3 3" />
+  </g>,
+);
 
 /**
  * Bottom-of-canvas-column transport bar — go-to-start / step back /
@@ -239,7 +304,7 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
           aria-label="Go to start"
           title="Go to start"
         >
-          ⏮
+          {IconStart}
         </button>
         <button
           type="button"
@@ -249,7 +314,7 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
           aria-label="Step back"
           title="Step back one frame"
         >
-          ⏪
+          {IconStepBack}
         </button>
         <button
           type="button"
@@ -262,7 +327,7 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
           aria-label={playing ? 'Pause' : 'Play'}
           title={playing ? 'Pause' : 'Play'}
         >
-          {playing ? '⏸' : '▶'}
+          {playing ? IconPause : IconPlay}
         </button>
         <button
           type="button"
@@ -272,7 +337,7 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
           aria-label="Step forward"
           title="Step forward one frame"
         >
-          ⏩
+          {IconStepFwd}
         </button>
         <span style={styles.groupDivider} aria-hidden />
         <button
@@ -284,7 +349,7 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
           aria-label="Loop"
           title="Loop — wrap to start at the end"
         >
-          ∞
+          {IconLoop}
         </button>
         <button
           type="button"
@@ -295,7 +360,7 @@ export function TransportBar({ scene, currentFrame }: Props): JSX.Element {
           aria-label="Ping-pong"
           title="Ping-pong — reverse direction at each boundary"
         >
-          ⇄
+          {IconBounce}
         </button>
       </div>
       <span style={styles.frameReadout} aria-label="Current frame">
