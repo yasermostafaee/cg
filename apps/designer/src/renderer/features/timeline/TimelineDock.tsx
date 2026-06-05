@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AnimatableProperty, Element, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore, useDesignerStore } from '../../state/store.js';
@@ -321,6 +321,23 @@ export function TimelineDock({
     if (leftBodyRef.current !== null) leftBodyRef.current.scrollTop = rb.scrollTop;
     if (topScrollRef.current !== null) topScrollRef.current.scrollLeft = rb.scrollLeft;
   }
+
+  // Zoom toward the playhead: when the timeline zoom changes, adjust the
+  // horizontal scroll so the index bar (playhead) stays at the same on-screen
+  // position instead of the view anchoring to the left edge. Runs before paint
+  // so the lane width (zoom × 100%) is already applied.
+  const prevZoomRef = useRef(timelineZoom);
+  useLayoutEffect(() => {
+    const rb = rightBodyRef.current;
+    const old = prevZoomRef.current;
+    prevZoomRef.current = timelineZoom;
+    if (rb === null || old === timelineZoom) return;
+    const cw = rb.clientWidth;
+    const frac = Math.max(0, Math.min(1, (currentFrame - frameIn) / span));
+    const viewportX = frac * cw * old - rb.scrollLeft; // playhead x within the viewport
+    rb.scrollLeft = frac * cw * timelineZoom - viewportX; // keep it fixed after the zoom
+    syncScroll();
+  }, [timelineZoom, currentFrame, frameIn, span]);
 
   // Forward wheel events from non-scrolling regions to the right body.
   // Ctrl+wheel zooms (native listener so preventDefault works).
