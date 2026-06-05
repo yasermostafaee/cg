@@ -271,7 +271,7 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
         <button
           type="button"
           style={navStyle('home')}
-          onClick={() => designerStore.setView('landing')}
+          onClick={() => guardedSwitch(() => designerStore.setView('landing'))}
           onMouseEnter={() => setHoverNav('home')}
           onMouseLeave={() => setHoverNav(null)}
           title="Home"

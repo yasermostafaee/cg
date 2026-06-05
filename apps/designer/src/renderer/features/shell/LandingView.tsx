@@ -48,33 +48,6 @@ const styles = {
     cursor: 'pointer',
     alignSelf: 'flex-start' as const,
   },
-  resumeBanner: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '0.8rem',
-    padding: '0.55rem 0.9rem',
-    background: colors.panel,
-    border: `1px solid ${colors.accentMuted}`,
-    borderRadius: '0.3rem',
-    fontSize: '0.82rem',
-    color: colors.text,
-  },
-  resumeMeta: {
-    color: colors.textMuted,
-    fontSize: '0.74rem',
-    marginLeft: '0.4rem',
-  },
-  resumeButton: {
-    background: colors.accent,
-    color: '#000',
-    border: 'none',
-    padding: '0.32rem 0.8rem',
-    borderRadius: '0.25rem',
-    fontWeight: 700,
-    fontSize: '0.78rem',
-    cursor: 'pointer',
-  },
   sectionTitle: {
     fontSize: '0.7rem',
     color: colors.textMuted,
@@ -188,7 +161,7 @@ const styles = {
  *   └──────────────────────────────────────────────────────────┘
  */
 export function LandingView(): JSX.Element {
-  const { scene, projectPath, dirty } = useDesignerStore();
+  const { scene, projectPath } = useDesignerStore();
   const [recent, setRecent] = useState<
     { path: string; name: string; templateType: string; lastOpenedAt: string }[]
   >([]);
@@ -240,27 +213,6 @@ export function LandingView(): JSX.Element {
           Broadcast template builder — pick a demo, open a recent project, or start fresh.
         </p>
       </div>
-
-      {scene !== null && (
-        <div style={styles.resumeBanner} aria-label="Resume current project">
-          <span>
-            Currently editing <strong>{scene.name}</strong>
-            <span style={styles.resumeMeta}>
-              {' · '}
-              {projectPath ?? 'new project'}
-              {dirty ? ' · unsaved changes' : projectPath !== null ? ' · saved' : ''}
-            </span>
-          </span>
-          <button
-            type="button"
-            style={styles.resumeButton}
-            onClick={() => designerStore.setView('studio')}
-            aria-label={`Resume editing ${scene.name}`}
-          >
-            Resume →
-          </button>
-        </div>
-      )}
 
       <button
         type="button"
