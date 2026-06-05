@@ -213,15 +213,16 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
             onPointerDown={down(c, 'rotate')}
           />
         ))}
-        {/* Edge strips (single-axis width/height resize), inset past the corner
-            hit areas. A light highlight appears on hover (.cg-gizmo-edge). */}
+        {/* Edge strips (single-axis width/height resize) span the full side so
+            the hover highlight (.cg-gizmo-edge) covers it end to end; the corner
+            hit areas sit on top, so grabbing near a corner still resizes both. */}
         <div
           className="cg-gizmo-edge"
           style={{
             ...styles.edge,
-            left: CORNER_HIT / 2,
+            left: 0,
             top: -EDGE / 2,
-            width: w - CORNER_HIT,
+            width: w,
             height: EDGE,
             cursor: resizeCursor(RESIZE_ANGLE.t + rotation),
           }}
@@ -231,9 +232,9 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
           className="cg-gizmo-edge"
           style={{
             ...styles.edge,
-            left: CORNER_HIT / 2,
+            left: 0,
             top: h - EDGE / 2,
-            width: w - CORNER_HIT,
+            width: w,
             height: EDGE,
             cursor: resizeCursor(RESIZE_ANGLE.b + rotation),
           }}
@@ -244,9 +245,9 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
           style={{
             ...styles.edge,
             left: -EDGE / 2,
-            top: CORNER_HIT / 2,
+            top: 0,
             width: EDGE,
-            height: h - CORNER_HIT,
+            height: h,
             cursor: resizeCursor(RESIZE_ANGLE.l + rotation),
           }}
           onPointerDown={down('l', 'resize')}
@@ -256,9 +257,9 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
           style={{
             ...styles.edge,
             left: w - EDGE / 2,
-            top: CORNER_HIT / 2,
+            top: 0,
             width: EDGE,
-            height: h - CORNER_HIT,
+            height: h,
             cursor: resizeCursor(RESIZE_ANGLE.r + rotation),
           }}
           onPointerDown={down('r', 'resize')}
