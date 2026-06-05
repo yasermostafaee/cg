@@ -82,7 +82,10 @@ const styles = {
     alignItems: 'center',
     gap: '0.3rem',
     padding: '0.2rem 0',
-    marginRight: '0.4rem',
+    // Same surface as the adjacent panels — just divided by a border, not a
+    // darker strip.
+    background: colors.panel,
+    borderRight: `1px solid ${colors.border}`,
   },
   railBtn: {
     width: 30,

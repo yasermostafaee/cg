@@ -27,7 +27,8 @@ const TOOLS: readonly ToolEntry[] = [
   { id: 'text', label: 'Text', icon: 'T' },
   { id: 'shape', label: 'Rectangle', icon: '▭' },
   { id: 'ellipse', label: 'Ellipse', icon: '○' },
-  { id: 'image', label: 'Image', icon: '▦' },
+  // Image tool hidden for now — placement/upload flow needs rework before it
+  // ships. Re-add `{ id: 'image', label: 'Image', icon: '▦' }` when fixed.
 ];
 
 const styles = {

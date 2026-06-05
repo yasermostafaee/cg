@@ -27,10 +27,9 @@ const styles = {
     position: 'absolute' as const,
     top: 0,
     bottom: 0,
-    borderLeft: `1px solid ${colors.border}`,
     color: colors.textMuted,
     fontSize: '0.66rem',
-    paddingLeft: 3,
+    paddingLeft: 4,
     lineHeight: '34px',
   },
   playhead: {
@@ -103,7 +102,7 @@ export function FrameRuler({
       ref={ref}
       style={{
         ...styles.outer,
-        backgroundImage: `repeating-linear-gradient(to right, #262a3e 0, #262a3e 1px, transparent 1px, transparent ${linePeriodPct}%)`,
+        backgroundImage: `repeating-linear-gradient(to right, rgb(72, 74, 88) 0, rgb(72, 74, 88) 1px, transparent 1px, transparent ${linePeriodPct}%)`,
       }}
       role="slider"
       aria-label="Frame ruler"
