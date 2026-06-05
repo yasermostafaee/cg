@@ -72,12 +72,12 @@ const styles = {
  * share a single style and inherit the button colour via `currentColor` (no
  * font-emoji glyphs, which render coloured / mismatched). 24×24 viewBox.
  */
-function ic(children: JSX.Element): JSX.Element {
+function ic(children: JSX.Element, size = 17): JSX.Element {
   return (
     <svg
       viewBox="0 0 24 24"
-      width="17"
-      height="17"
+      width={size}
+      height={size}
       aria-hidden
       focusable="false"
       style={{ display: 'block' }}
@@ -99,12 +99,14 @@ const IconStepBack = ic(
     <path d="M20 5v14l-10.5-7z" fill="currentColor" />
   </>,
 );
-const IconPlay = ic(<path d="M8 5v14l11-7z" fill="currentColor" />);
+// Play / pause render a touch larger so the primary control stands out.
+const IconPlay = ic(<path d="M8 5v14l11-7z" fill="currentColor" />, 22);
 const IconPause = ic(
   <>
     <rect x="7" y="5" width="3.4" height="14" rx="1" fill="currentColor" />
     <rect x="13.6" y="5" width="3.4" height="14" rx="1" fill="currentColor" />
   </>,
+  22,
 );
 const IconStepFwd = ic(
   <>
