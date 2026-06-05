@@ -73,6 +73,8 @@ const styles = {
     display: 'flex',
     minWidth: 0,
     overflow: 'hidden',
+    paddingTop: 4,
+    boxSizing: 'border-box' as const,
   },
   rail: {
     width: 40,
@@ -368,6 +370,30 @@ export function App(): JSX.Element {
       window.removeEventListener('wheel', onWheel);
       style.remove();
     };
+  }, []);
+
+  // "R" toggles the canvas rulers (no modifier). Ignored while typing in a
+  // field so it doesn't fight text entry.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target;
+      if (
+        t instanceof HTMLElement &&
+        (t.tagName === 'INPUT' ||
+          t.tagName === 'TEXTAREA' ||
+          t.tagName === 'SELECT' ||
+          t.isContentEditable)
+      ) {
+        return;
+      }
+      if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        designerStore.toggleRuler();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   if (view === 'landing' || scene === null) {

@@ -364,7 +364,7 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
           {openMenu === 'view' && (
             <div style={styles.dropdown} role="menu">
               <ToggleMenuItem
-                label="Ruler"
+                label="Ruler (R)"
                 checked={rulerVisible}
                 onClick={() => {
                   setOpenMenu(null);

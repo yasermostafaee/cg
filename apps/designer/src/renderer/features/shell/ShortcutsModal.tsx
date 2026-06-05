@@ -26,6 +26,7 @@ const SHORTCUTS: readonly { keys: string; label: string }[] = [
   { keys: 'Double-click point', label: 'Open keyframe inspector' },
   { keys: 'Right-click layer', label: 'Layer menu (color, copy, delete…)' },
   { keys: `${MOD} + Scroll`, label: 'Zoom canvas / timeline' },
+  { keys: 'R', label: 'Toggle canvas rulers' },
   { keys: 'Drag from ruler', label: 'Add a guide line' },
   { keys: 'Esc', label: 'Deselect · cancel · close menu' },
 ];
