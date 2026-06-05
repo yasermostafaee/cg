@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { Fill } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { ColorEditor } from './ColorPopover.js';
+import { RealtimeNumberInput } from './controls.js';
 
 /**
  * Fill control for shapes — extends the colour picker with Solid / Linear /
@@ -426,20 +427,15 @@ function MiniNumber({
     >
       <span style={{ color: colors.textMuted, fontSize: '0.68rem' }}>{label}</span>
       <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        <input
-          type="number"
-          defaultValue={value}
-          key={`${label}-${String(value)}`}
+        {/* Drag horizontally to scrub (like the property inputs); every change
+            commits immediately so the shape updates in real time. */}
+        <RealtimeNumberInput
+          value={value}
+          step={1}
           {...(min !== undefined ? { min } : {})}
           {...(max !== undefined ? { max } : {})}
-          onFocus={(e) => e.currentTarget.select()}
-          onBlur={(e) => {
-            const n = Number(e.target.value);
-            if (Number.isFinite(n)) onCommit(n);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-          }}
+          onCommit={onCommit}
+          ariaLabel={label}
           style={{
             width: 54,
             background: '#24273d',
