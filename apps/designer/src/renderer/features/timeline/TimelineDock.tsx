@@ -54,16 +54,15 @@ const styles = {
     background: colors.panel,
   },
   leftHeader: {
-    background: '#32364b',
+    background: 'transparent',
     borderBottom: `1px solid ${colors.border}`,
     color: colors.textMuted,
-    fontSize: '0.85rem',
     fontVariantNumeric: 'tabular-nums' as const,
     padding: '0 0.6rem',
-    height: 22,
+    height: 34,
     display: 'flex',
-    alignItems: 'center',
-    gap: '0.1rem',
+    alignItems: 'baseline',
+    gap: '0.15rem',
     boxSizing: 'border-box' as const,
   },
   leftBody: {
@@ -81,7 +80,7 @@ const styles = {
   topScroll: {
     overflowX: 'hidden' as const,
     overflowY: 'hidden' as const,
-    height: 22,
+    height: 34,
     borderBottom: `1px solid ${colors.border}`,
     background: '#32364b',
     // Reserve the same gutter as the body so the ruler's inner width
@@ -523,8 +522,12 @@ export function TimelineDock({
       <div style={styles.body}>
         <div style={styles.leftCol}>
           <div style={styles.leftHeader}>
-            <span style={{ color: colors.text, fontWeight: 700 }}>{currentFrame}</span>
-            <span style={{ color: colors.textMuted }}>/{frameOut}</span>
+            <span
+              style={{ color: colors.text, fontWeight: 700, fontSize: '1.7rem', lineHeight: 1 }}
+            >
+              {currentFrame}
+            </span>
+            <span style={{ color: colors.textMuted, fontSize: '0.85rem' }}>/{frameOut}</span>
           </div>
           <div style={styles.leftBody} ref={leftBodyRef}>
             <div style={styles.sceneLabel} aria-hidden />

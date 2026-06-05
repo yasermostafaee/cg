@@ -17,7 +17,7 @@ interface Props {
 const styles = {
   outer: {
     position: 'relative' as const,
-    height: 26,
+    height: 34,
     backgroundColor: '#32364b',
     borderBottom: `1px solid ${colors.border}`,
     userSelect: 'none' as const,
@@ -31,7 +31,7 @@ const styles = {
     color: colors.textMuted,
     fontSize: '0.66rem',
     paddingLeft: 3,
-    lineHeight: '26px',
+    lineHeight: '34px',
   },
   playhead: {
     position: 'absolute' as const,
