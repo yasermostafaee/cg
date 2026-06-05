@@ -76,8 +76,8 @@ function ic(children: JSX.Element): JSX.Element {
   return (
     <svg
       viewBox="0 0 24 24"
-      width="13"
-      height="13"
+      width="17"
+      height="17"
       aria-hidden
       focusable="false"
       style={{ display: 'block' }}
