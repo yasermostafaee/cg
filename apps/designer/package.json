@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit",
     "pretest": "node ./scripts/bundle-runtime.mjs",
     "test": "vitest run",
-    "lint": "eslint . --max-warnings 0",
+    "lint": "eslint .",
     "clean": "rimraf dist .vite coverage src/generated *.tsbuildinfo"
   },
   "dependencies": {

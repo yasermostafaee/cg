@@ -14,6 +14,7 @@ import {
   node,
   renderer,
   broadcast,
+  jsxA11y,
 } from '../dist/index.js';
 
 /**
@@ -197,6 +198,41 @@ for (const c of cases) {
     passed += 1;
   } else {
     console.error('  FAIL  renderer({files}) leaked into main scope');
+    failed += 1;
+  }
+}
+
+// jsx-a11y: fires at `warn` severity on bad JSX, and `ignores` excludes
+// the canvas/Konva editor + template-output paths.
+{
+  const cfg = [
+    ...base,
+    renderer(),
+    jsxA11y({ files: ['src/**/*.tsx'], ignores: ['src/renderer/features/canvas/**'] }),
+  ];
+  const eslint = new ESLint({ baseConfig: cfg, overrideConfigFile: true });
+  const badJsx = 'export const X = () => <img src="a.png" />;\n';
+
+  const linted = await eslint.lintText(badJsx, { filePath: 'src/renderer/Foo.tsx' });
+  const altText = (linted[0]?.messages ?? []).find((m) => m.ruleId === 'jsx-a11y/alt-text');
+  if (altText && altText.severity === 1) {
+    console.log('  PASS  jsx-a11y: reports alt-text at warn');
+    passed += 1;
+  } else {
+    console.error('  FAIL  jsx-a11y: expected alt-text at warn (severity 1)');
+    console.error(`        got: ${altText ? `severity ${altText.severity}` : '(no alt-text message)'}`);
+    failed += 1;
+  }
+
+  const excluded = await eslint.lintText(badJsx, {
+    filePath: 'src/renderer/features/canvas/Gizmo.tsx',
+  });
+  const leaked = (excluded[0]?.messages ?? []).find((m) => m.ruleId === 'jsx-a11y/alt-text');
+  if (!leaked) {
+    console.log('  PASS  jsx-a11y: ignores excludes canvas editor paths');
+    passed += 1;
+  } else {
+    console.error('  FAIL  jsx-a11y: fired on an excluded canvas path');
     failed += 1;
   }
 }
