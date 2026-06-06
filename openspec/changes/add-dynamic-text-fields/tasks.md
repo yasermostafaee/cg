@@ -51,6 +51,6 @@
       removes field+binding; duplicate key rejected (+ `setElementFieldMeta`
       variant switch)
 - [~] 6.4 Green gate: typecheck + lint + test + build — **done for
-      `@cg/shared-schema` + `@cg/designer`** (Feature 1); `@cg/template-runtime`
-      pending Feature 2
+  `@cg/shared-schema` + `@cg/designer`** (Feature 1); `@cg/template-runtime`
+  pending Feature 2
 - [x] 6.5 `pnpm openspec validate add-dynamic-text-fields --strict`
