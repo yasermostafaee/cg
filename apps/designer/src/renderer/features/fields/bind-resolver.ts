@@ -1,4 +1,4 @@
-import type { DynamicField, Element, FieldBinding } from '@cg/shared-schema';
+import type { DynamicField, Element, FieldBinding, Scene } from '@cg/shared-schema';
 
 /**
  * Best-effort default binding for a (field, element) pair.
@@ -60,23 +60,45 @@ export function resolveBinding(field: DynamicField, element: Element): FieldBind
   return null;
 }
 
-/** Human-readable summary for the FieldsPanel's binding list. */
-export function describeBinding(binding: FieldBinding): string {
+/**
+ * Build an `elementId → display name` resolver from a scene's layers (recursing
+ * into containers). Used to show friendly element names in binding summaries
+ * instead of raw ids like `el-1780763992325`.
+ */
+export function elementNameResolver(scene: Scene): (id: string) => string {
+  const names = new Map<string, string>();
+  function walk(children: readonly Element[]): void {
+    for (const el of children) {
+      names.set(el.id, el.name);
+      const kids = (el as { children?: readonly Element[] }).children;
+      if (kids !== undefined) walk(kids);
+    }
+  }
+  for (const layer of scene.layers) walk(layer.children);
+  return (id) => names.get(id) ?? id;
+}
+
+/**
+ * Human-readable summary for a binding's target. Pass `nameOf` (see
+ * {@link elementNameResolver}) to print the element's name rather than its id.
+ */
+export function describeBinding(binding: FieldBinding, nameOf?: (id: string) => string): string {
   const t = binding.target;
+  const on = (id: string): string => `on ${nameOf?.(id) ?? id}`;
   switch (t.kind) {
     case 'text':
-      return `text on ${t.elementId}`;
+      return `text ${on(t.elementId)}`;
     case 'image':
-      return `image on ${t.elementId}`;
+      return `image ${on(t.elementId)}`;
     case 'color':
-      return `color.${t.property} on ${t.elementId}`;
+      return `color.${t.property} ${on(t.elementId)}`;
     case 'visible':
-      return `visible on ${t.elementId}`;
+      return `visible ${on(t.elementId)}`;
     case 'transform':
-      return `transform.${t.property} on ${t.elementId}`;
+      return `transform.${t.property} ${on(t.elementId)}`;
     case 'scene-background':
       return 'scene background';
     case 'lottie-override':
-      return `lottie ${t.layer}.${t.prop} on ${t.elementId}`;
+      return `lottie ${t.layer}.${t.prop} ${on(t.elementId)}`;
   }
 }

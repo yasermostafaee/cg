@@ -438,6 +438,110 @@ function locate(
   return null;
 }
 
+/**
+ * D-018 — high-level patch for the field backing a text element's Data key.
+ * The store maps it onto the discriminated `DynamicField` union (handling the
+ * text ↔ multiline ↔ number variant switch) so the inspector stays declarative.
+ */
+export interface ElementFieldMetaPatch {
+  title?: string;
+  description?: string;
+  required?: boolean;
+  fieldType?: 'text' | 'number';
+  multiline?: boolean;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  default?: string | number;
+}
+
+/**
+ * Default `maxLength` for a field created via the Data-key convenience layer —
+ * a sensible cap for broadcast text that also engages the element's auto-size /
+ * auto-squeeze when an operator sends an over-long value. Editable per field in
+ * the inspector (set 0 to clear).
+ */
+const DEFAULT_DATA_FIELD_MAX_LENGTH = 100;
+
+/** Coerce any field `default` to a string (for the text/multiline variants). */
+function defaultAsString(field: DynamicField): string {
+  if (field.type === 'image') return '';
+  return typeof field.default === 'string' ? field.default : String(field.default);
+}
+
+/**
+ * Rebuild the dynamic field backing a Data key from a high-level meta patch,
+ * producing a valid variant for the selected `fieldType`/`multiline` and
+ * coercing `default` to that variant. Length/pattern constraints carry forward
+ * where the target variant supports them; a 0 / empty value clears them.
+ */
+function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): DynamicField {
+  const label = patch.title ?? field.label;
+  const required = patch.required ?? field.required;
+  const description = patch.description ?? field.description;
+  const base = {
+    id: field.id,
+    label,
+    required,
+    ...(field.group !== undefined ? { group: field.group } : {}),
+    ...(description !== undefined && description !== '' ? { description } : {}),
+  };
+
+  const fieldType = patch.fieldType ?? (field.type === 'number' ? 'number' : 'text');
+  const multiline = patch.multiline ?? field.type === 'multiline';
+
+  if (fieldType === 'number') {
+    const cur = field.type === 'number' ? field.default : Number(defaultAsString(field));
+    const raw = patch.default !== undefined ? Number(patch.default) : cur;
+    const next = Number.isFinite(raw) ? raw : 0;
+    return {
+      ...base,
+      type: 'number',
+      default: next,
+      ...(field.type === 'number' && field.min !== undefined ? { min: field.min } : {}),
+      ...(field.type === 'number' && field.max !== undefined ? { max: field.max } : {}),
+      ...(field.type === 'number' && field.step !== undefined ? { step: field.step } : {}),
+      ...(field.type === 'number' && field.unit !== undefined ? { unit: field.unit } : {}),
+    };
+  }
+
+  const def = patch.default !== undefined ? String(patch.default) : defaultAsString(field);
+  const curMin = field.type === 'text' || field.type === 'multiline' ? field.minLength : undefined;
+  const curPattern =
+    field.type === 'text' || field.type === 'multiline' ? field.pattern : undefined;
+  const curMax = field.type === 'text' ? field.maxLength : undefined;
+  const rawMin = patch.minLength ?? curMin;
+  const minLength = rawMin !== undefined && rawMin > 0 ? Math.floor(rawMin) : undefined;
+  const rawMax = patch.maxLength ?? curMax;
+  const maxLength = rawMax !== undefined && rawMax > 0 ? Math.floor(rawMax) : undefined;
+  const rawPattern = patch.pattern ?? curPattern;
+  const pattern = rawPattern !== undefined && rawPattern.trim() !== '' ? rawPattern : undefined;
+
+  if (multiline) {
+    return {
+      ...base,
+      type: 'multiline',
+      default: def,
+      ...(field.type === 'multiline' && field.maxLines !== undefined
+        ? { maxLines: field.maxLines }
+        : {}),
+      ...(minLength !== undefined ? { minLength } : {}),
+      ...(pattern !== undefined ? { pattern } : {}),
+    };
+  }
+  return {
+    ...base,
+    type: 'text',
+    default: def,
+    ...(minLength !== undefined ? { minLength } : {}),
+    ...(maxLength !== undefined ? { maxLength } : {}),
+    ...(pattern !== undefined ? { pattern } : {}),
+    ...(field.type === 'text' && field.direction !== undefined
+      ? { direction: field.direction }
+      : {}),
+  };
+}
+
 /** A stable per-keyframe id (used for React keys, drag tracking, stacking). */
 function freshKeyframeId(): string {
   return `kf-${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`;
@@ -1029,6 +1133,144 @@ export const designerStore = {
     if (index < 0 || index >= current.scene.bindings.length) return;
     const bindings = current.scene.bindings.filter((_, i) => i !== index);
     set({ scene: { ...current.scene, bindings } });
+  },
+
+  /**
+   * D-018 convenience layer — make a text element dynamic by giving it a **Data
+   * key**. The key auto-syncs a scene-level field (`id = key`) and a full-text
+   * `text` binding, so `fields[]`/`bindings[]` remain the single source of truth
+   * (fields are project-global — see `editSceneOf`). Setting it the first time
+   * creates the field+binding (seeding the field default from the element's
+   * current text); changing it renames the field id and every binding that
+   * referenced it; clearing it removes the field and its bindings.
+   *
+   * Returns `false` (and changes nothing) only when `key` is already *owned by
+   * another element* via a full-text binding (a real conflict). A field that
+   * exists but is **orphaned** — e.g. its binding was removed via the Bindings
+   * `×`, leaving the field behind — is **re-adopted** rather than rejected, so
+   * re-typing the same key reconnects it. Only the convenience binding
+   * (full-text, no placeholder) is touched; `{{placeholder}}` bindings are left
+   * alone. The inspector warns live with the same ownership rule.
+   */
+  setElementDataKey(elementId: string, key: string): boolean {
+    if (current.scene === null) return false;
+    const trimmed = key.trim();
+    const bindings = current.scene.bindings;
+    const convIdx = bindings.findIndex(
+      (b) =>
+        b.target.kind === 'text' &&
+        b.target.elementId === elementId &&
+        b.target.placeholder === undefined,
+    );
+    const currentKey = convIdx === -1 ? null : (bindings[convIdx]?.fieldId ?? null);
+
+    // Cleared → element becomes static again.
+    if (trimmed === '') {
+      if (currentKey !== null) designerStore.removeField(currentKey);
+      return true;
+    }
+    if (trimmed === currentKey) return true; // unchanged
+
+    // Reject only when *another* element already owns this key via a full-text
+    // binding. An existing-but-orphaned field (no such binding) is re-adopted.
+    const ownedElsewhere = bindings.some(
+      (b) =>
+        b.fieldId === trimmed &&
+        b.target.kind === 'text' &&
+        b.target.placeholder === undefined &&
+        b.target.elementId !== elementId,
+    );
+    if (ownedElsewhere) return false;
+
+    const existing = current.scene.fields.find((f) => f.id === trimmed);
+
+    if (currentKey === null) {
+      const binding: FieldBinding = { fieldId: trimmed, target: { kind: 'text', elementId } };
+      // Re-adopt an orphaned field (keep its config); otherwise create a fresh
+      // one seeded from the element's current text.
+      if (existing !== undefined) {
+        set({ scene: { ...current.scene, bindings: [...bindings, binding] } });
+        return true;
+      }
+      const found = locate(current.scene, elementId);
+      const el = found === null ? undefined : found.layer.children[found.elIdx];
+      const seed = el !== undefined && el.type === 'text' ? el.text : '';
+      const field: DynamicField = {
+        id: trimmed,
+        type: 'text',
+        label: trimmed,
+        required: false,
+        default: seed,
+        maxLength: DEFAULT_DATA_FIELD_MAX_LENGTH,
+      };
+      set({
+        scene: {
+          ...current.scene,
+          fields: [...current.scene.fields, field],
+          bindings: [...bindings, binding],
+        },
+      });
+      return true;
+    }
+
+    // Rename. If an (orphaned) field already owns the new id, don't fork the id
+    // space — reject and let the operator clear then re-set.
+    if (existing !== undefined) return false;
+    const fields = current.scene.fields.map((f) =>
+      f.id === currentKey ? ({ ...f, id: trimmed } as DynamicField) : f,
+    );
+    const nextBindings = bindings.map((b) =>
+      b.fieldId === currentKey ? { ...b, fieldId: trimmed } : b,
+    );
+    set({ scene: { ...current.scene, fields, bindings: nextBindings } });
+    return true;
+  },
+
+  /**
+   * D-018 — patch the field backing a text element's Data key (title,
+   * description, required, field type, multiline, min/max length, pattern,
+   * default). No-op when the element has no Data key yet. Variant switches
+   * (text ↔ multiline ↔ number) are handled in `rebuildField`.
+   */
+  setElementFieldMeta(elementId: string, patch: ElementFieldMetaPatch): void {
+    if (current.scene === null) return;
+    const conv = current.scene.bindings.find(
+      (b) =>
+        b.target.kind === 'text' &&
+        b.target.elementId === elementId &&
+        b.target.placeholder === undefined,
+    );
+    if (conv === undefined) return;
+    const oldField = current.scene.fields.find((f) => f.id === conv.fieldId);
+    if (oldField === undefined) return;
+    const newField = rebuildField(oldField, patch);
+    const fields = current.scene.fields.map((f) => (f.id === conv.fieldId ? newField : f));
+    set({ scene: { ...current.scene, fields } });
+
+    // Keep the element's authoring text in lockstep with the field default
+    // whenever the default changed (editing "Default" here, or a field-type
+    // switch that coerced it), so the inline editor opens with the same value
+    // the canvas shows rather than a stale one.
+    const newDefault = 'default' in newField ? String(newField.default) : undefined;
+    if (newDefault !== undefined) {
+      const found = locate(current.scene, elementId);
+      const el = found === null ? undefined : found.layer.children[found.elIdx];
+      if (el !== undefined && el.type === 'text' && el.text !== newDefault) {
+        designerStore.updateElement(elementId, { text: newDefault } as Partial<Element>);
+      }
+    }
+  },
+
+  /**
+   * D-018 — commit a text element's content (the on-canvas inline editor).
+   * Updates `element.text` and, when the element has a Data key, keeps the
+   * backing field's `default` in sync. The authoring canvas renders the field
+   * default until a live value arrives, so without this sync an edit to a bound
+   * element would snap back to the old default and appear not to change.
+   */
+  setElementText(elementId: string, text: string): void {
+    designerStore.updateElement(elementId, { text } as Partial<Element>);
+    designerStore.setElementFieldMeta(elementId, { default: text }); // no-op if no Data key
   },
 
   /** Add one element to the first layer (creates a layer if none exist). */
@@ -1705,8 +1947,27 @@ export const designerStore = {
     nextSelection.delete(elementId);
     const keepKey =
       current.selectedKeyframe !== null && current.selectedKeyframe.elementId !== elementId;
+
+    // Cascade-clean the dynamic-field wiring: drop every binding that targets the
+    // deleted element (otherwise it dangles at a non-existent id), then drop any
+    // field that was bound to this element and is now referenced by no binding —
+    // i.e. a field created for this element. Fields still used elsewhere stay.
+    const boundToEl = new Set(
+      current.scene.bindings
+        .filter((b) => b.target.kind !== 'scene-background' && b.target.elementId === elementId)
+        .map((b) => b.fieldId),
+    );
+    const nextBindings = current.scene.bindings.filter(
+      (b) => b.target.kind === 'scene-background' || b.target.elementId !== elementId,
+    );
+    const stillBound = new Set(nextBindings.map((b) => b.fieldId));
+    const nextFields = current.scene.fields.filter(
+      (f) => !(boundToEl.has(f.id) && !stillBound.has(f.id)),
+    );
+
+    const withLayers = withActiveLayers(current.scene, nextLayers);
     set({
-      scene: withActiveLayers(current.scene, nextLayers),
+      scene: { ...withLayers, fields: nextFields, bindings: nextBindings },
       selection: nextSelection,
       selectedKeyframe: keepKey ? current.selectedKeyframe : null,
       selectedKeyframes: keepKey ? current.selectedKeyframes : [],

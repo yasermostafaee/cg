@@ -75,9 +75,9 @@ export function TextEditor({ element, scale, onCommit }: Props): JSX.Element {
   function commitText(): void {
     const next = ref.current?.innerText ?? '';
     if (next !== element.text) {
-      designerStore.updateElement(element.id, {
-        text: next,
-      } as Partial<TextElement>);
+      // setElementText also syncs a Data-key field's default so a bound
+      // element's edit shows on the canvas instead of snapping back.
+      designerStore.setElementText(element.id, next);
     }
     onCommit();
   }
