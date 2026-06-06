@@ -69,6 +69,11 @@ const styles = {
     minHeight: 0,
     overflow: 'hidden' as const,
   },
+  // Scrolled by translateY (mirroring the lane body's scrollTop), not by its
+  // own scrollbar — see syncScroll for why a transform beats scrollTop here.
+  leftBodyInner: {
+    willChange: 'transform' as const,
+  },
   rightCol: {
     flex: 1,
     minWidth: 0,
@@ -309,7 +314,10 @@ export function TimelineDock({
   const tickStride = pickStride(visibleFrames);
   const gridPeriodPct = ((tickStride * 100) / span).toFixed(4);
   const rightBodyRef = useRef<HTMLDivElement | null>(null);
+  // Outer label viewport (overflow:hidden) — used to forward wheel events to
+  // the lane body. Its content is offset by `leftBodyInnerRef`'s transform.
   const leftBodyRef = useRef<HTMLDivElement | null>(null);
+  const leftBodyInnerRef = useRef<HTMLDivElement | null>(null);
   const topScrollRef = useRef<HTMLDivElement | null>(null);
   const zoomRef = useRef(timelineZoom);
   zoomRef.current = timelineZoom;
@@ -318,10 +326,18 @@ export function TimelineDock({
   // into the left label column (vertical only) and the top ruler strip
   // (horizontal only) so the three regions stay aligned. The horizontal
   // scrollbar therefore lives only under the lanes, not under labels.
+  //
+  // The label column is driven by a CSS transform rather than its own
+  // scrollTop: when the lanes show a horizontal scrollbar, the right body's
+  // client height shrinks by the scrollbar thickness, so its max scrollTop
+  // exceeds an overflow:hidden label column's max scrollTop. Mirroring
+  // scrollTop then *clamps* near the bottom and the labels drift above their
+  // lanes. translateY isn't clamped, so the two stay locked at every offset.
   function syncScroll(): void {
     const rb = rightBodyRef.current;
     if (rb === null) return;
-    if (leftBodyRef.current !== null) leftBodyRef.current.scrollTop = rb.scrollTop;
+    if (leftBodyInnerRef.current !== null)
+      leftBodyInnerRef.current.style.transform = `translateY(${String(-rb.scrollTop)}px)`;
     if (topScrollRef.current !== null) topScrollRef.current.scrollLeft = rb.scrollLeft;
   }
 
@@ -428,9 +444,10 @@ export function TimelineDock({
   // lists it as the top row — matching the "top layer = frontmost" convention.
   const elements: readonly Element[] = [...flattenElements(scene)].reverse();
 
-  // Start newly added elements collapsed, so adding a shape doesn't expand its
-  // property-track section. Elements present on scene load keep their default
-  // (expanded); only ids that appear *after* the baseline get auto-collapsed.
+  // Layers start collapsed: opening a template with many layers shows a tidy
+  // list of names, not every layer's property-track section expanded at once.
+  // On scene load we collapse all current elements; newly added shapes are
+  // also collapsed so adding one doesn't expand its tracks.
   const sceneId = scene.id;
   const elementIdsKey = elements.map((el) => el.id).join('|');
   const seenIdsRef = useRef<Set<string>>(new Set());
@@ -438,9 +455,11 @@ export function TimelineDock({
   useEffect(() => {
     const ids = elementIdsKey === '' ? [] : elementIdsKey.split('|');
     if (seenSceneRef.current !== sceneId) {
-      // New scene (or first mount): adopt its elements as the baseline.
+      // New scene (or first mount): adopt its elements as the baseline and
+      // collapse them all.
       seenSceneRef.current = sceneId;
       seenIdsRef.current = new Set(ids);
+      setCollapsedIds(new Set(ids));
       return;
     }
     const added = ids.filter((id) => !seenIdsRef.current.has(id));
@@ -542,6 +561,7 @@ export function TimelineDock({
             <FrameReadout frameOut={frameOut} />
           </div>
           <div style={styles.leftBody} ref={leftBodyRef} onClick={clearSelectionOnEmpty}>
+            <div style={styles.leftBodyInner} ref={leftBodyInnerRef}>
             <div style={styles.sceneLabel} aria-hidden onClick={clearSelection} />
             {elements.length === 0 ? (
               <p style={styles.empty}>No elements yet. Add a shape, text, or image to start.</p>
@@ -607,6 +627,7 @@ export function TimelineDock({
                 );
               })
             )}
+            </div>
           </div>
         </div>
         <div style={styles.rightCol}>
