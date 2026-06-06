@@ -9,6 +9,7 @@ import { RealtimeNumberInput } from './controls.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
 import { StyleSection } from './StyleSection.js';
 import { TransformSection } from './TransformSection.js';
+import * as s from './InspectorPanel.css.js';
 
 interface Props {
   scene: Scene | null;
@@ -22,96 +23,6 @@ interface Props {
   }[];
   keyframeInspectorOpen: boolean;
 }
-
-const styles = {
-  panel: {
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
-    padding: '0.6rem',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.3rem',
-    minHeight: 0,
-    overflowY: 'auto' as const,
-    fontSize: '0.74rem',
-    width: '100%',
-    boxSizing: 'border-box' as const,
-  },
-  heading: {
-    fontSize: '0.66rem',
-    fontWeight: 700,
-    color: colors.textMuted,
-    letterSpacing: '0.06em',
-    margin: '0.35rem 0 0.15rem',
-    paddingTop: '0.35rem',
-    borderTop: `1px solid ${colors.border}`,
-  },
-  headingFirst: {
-    fontSize: '0.7rem',
-    fontWeight: 700,
-    color: colors.textMuted,
-    letterSpacing: '0.06em',
-    margin: 0,
-  },
-  row: {
-    display: 'grid',
-    gridTemplateColumns: '90px 1fr',
-    gap: '0.4rem',
-    fontSize: '0.72rem',
-    padding: '0.1rem 0',
-  },
-  label: { color: colors.textMuted, fontSize: '0.7rem' },
-  value: {
-    color: colors.text,
-    fontWeight: 500,
-    fontVariantNumeric: 'tabular-nums' as const,
-  },
-  empty: { color: colors.textMuted, fontSize: '0.74rem' },
-  bindList: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.2rem',
-  },
-  bindRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '0.4rem',
-  },
-  bindRemove: {
-    background: 'transparent',
-    color: colors.textMuted,
-    border: `1px solid ${colors.border}`,
-    padding: '0.08rem 0.3rem',
-    borderRadius: '0.18rem',
-    cursor: 'pointer',
-    fontSize: '0.68rem',
-  },
-  keyRow: {
-    display: 'grid',
-    gridTemplateColumns: '36px 1fr',
-    gap: '0.4rem',
-    alignItems: 'center',
-    padding: '0.15rem 0 0.35rem',
-  },
-  keyLabel: {
-    color: colors.textMuted,
-    fontSize: '0.66rem',
-    fontWeight: 700,
-    letterSpacing: '0.06em',
-  },
-  keyInput: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    padding: '0.15rem 0.35rem',
-    borderRadius: '0.18rem',
-    fontSize: '0.72rem',
-    width: '100%',
-    boxSizing: 'border-box' as const,
-  },
-} as const;
 
 /**
  * Right-pane Inspector. When an element is selected, shows Transform +
@@ -128,9 +39,9 @@ export function InspectorPanel({
 }: Props): JSX.Element {
   if (scene === null) {
     return (
-      <aside style={styles.panel} aria-label="Inspector">
-        <h2 style={styles.headingFirst}>INSPECTOR</h2>
-        <p style={styles.empty}>No project selected.</p>
+      <aside className={s.panel} aria-label="Inspector">
+        <h2 className={s.headingFirst}>INSPECTOR</h2>
+        <p className={s.empty}>No project selected.</p>
       </aside>
     );
   }
@@ -158,8 +69,8 @@ function SceneInspector({
 }): JSX.Element {
   const bindModeFieldId = useDesignerSelector((s) => s.bindModeFieldId);
   return (
-    <aside style={styles.panel} aria-label="Inspector">
-      <h2 style={styles.headingFirst}>COMPOSITION</h2>
+    <aside className={s.panel} aria-label="Inspector">
+      <h2 className={s.headingFirst}>COMPOSITION</h2>
       <NameRow name={scene.name} />
       <SizeRow scene={scene} />
       <DurationRow scene={scene} />
@@ -169,7 +80,7 @@ function SceneInspector({
       <BackgroundControl background={scene.background} variant="full" />
       {scene.fields.length > 0 && (
         <>
-          <h3 style={styles.heading}>FIELDS</h3>
+          <h3 className={s.heading}>FIELDS</h3>
           <FieldsPanel scene={scene} bindModeFieldId={bindModeFieldId} />
         </>
       )}
@@ -194,7 +105,7 @@ function ElementInspector({
     .map((b, idx) => ({ b, idx }))
     .filter(({ b }) => bindingTargetsElement(b, element.id));
   return (
-    <aside style={styles.panel} aria-label="Inspector">
+    <aside className={s.panel} aria-label="Inspector">
       <KeyRow elementId={element.id} name={element.name} />
       <CollapseSection title="Transform" pinned>
         <TransformSection element={element} selectedKeyframe={selectedKeyframe} />
@@ -211,10 +122,10 @@ function ElementInspector({
 
 function KeyRow({ elementId, name }: { elementId: string; name: string }): JSX.Element {
   return (
-    <div style={styles.keyRow}>
-      <span style={styles.keyLabel}>Key</span>
+    <div className={s.keyRow}>
+      <span className={s.keyLabel}>Key</span>
       <input
-        style={styles.keyInput}
+        className={s.keyInput}
         type="text"
         defaultValue={name}
         aria-label="Element key / name"
@@ -245,16 +156,16 @@ function ElementBindings({
   bindings: readonly { b: FieldBinding; idx: number }[];
 }): JSX.Element {
   if (bindings.length === 0) {
-    return <p style={styles.empty}>no bindings target this element</p>;
+    return <p className={s.empty}>no bindings target this element</p>;
   }
   return (
-    <div style={styles.bindList}>
+    <div className={s.bindList}>
       {bindings.map(({ b, idx }) => (
-        <div key={idx} style={styles.bindRow}>
+        <div key={idx} className={s.bindRow}>
           <span style={{ color: colors.text, fontSize: '0.8rem' }}>
             <strong>{b.fieldId}</strong> → {describeBinding(b)}
           </span>
-          <button style={styles.bindRemove} onClick={() => designerStore.removeBindingAt(idx)}>
+          <button className={s.bindRemove} onClick={() => designerStore.removeBindingAt(idx)}>
             ×
           </button>
         </div>
@@ -289,8 +200,8 @@ function countElements(scene: Scene): number {
 
 function NameRow({ name }: { name: string }): JSX.Element {
   return (
-    <div style={styles.row}>
-      <span style={styles.label}>name</span>
+    <div className={s.row}>
+      <span className={s.label}>name</span>
       <input
         style={{
           background: colors.panelMuted,
@@ -332,8 +243,8 @@ function DurationRow({ scene }: { scene: Scene }): JSX.Element {
   const duration = scene.frameRange.out - scene.frameRange.in;
   const seconds = duration / scene.frameRate;
   return (
-    <div style={styles.row}>
-      <span style={styles.label}>duration</span>
+    <div className={s.row}>
+      <span className={s.label}>duration</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
         <RealtimeNumberInput
           style={{
@@ -363,27 +274,15 @@ function DurationRow({ scene }: { scene: Scene }): JSX.Element {
   );
 }
 
-const DOC_NUM_STYLE = {
-  background: colors.panelMuted,
-  color: colors.text,
-  border: `1px solid ${colors.border}`,
-  borderRadius: '0.18rem',
-  padding: '0.1rem 0.35rem',
-  fontSize: '0.72rem',
-  width: 64,
-  fontVariantNumeric: 'tabular-nums' as const,
-  boxSizing: 'border-box' as const,
-};
-
 /** Editable composition size (width × height). Routes to the active document. */
 function SizeRow({ scene }: { scene: Scene }): JSX.Element {
   return (
-    <div style={styles.row}>
-      <span style={styles.label}>size</span>
+    <div className={s.row}>
+      <span className={s.label}>size</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
         <span style={{ color: colors.textMuted, fontSize: '0.66rem' }}>W</span>
         <RealtimeNumberInput
-          style={DOC_NUM_STYLE}
+          className={s.docNum}
           min={1}
           step={1}
           value={scene.resolution.width}
@@ -397,7 +296,7 @@ function SizeRow({ scene }: { scene: Scene }): JSX.Element {
         />
         <span style={{ color: colors.textMuted, fontSize: '0.66rem' }}>H</span>
         <RealtimeNumberInput
-          style={DOC_NUM_STYLE}
+          className={s.docNum}
           min={1}
           step={1}
           value={scene.resolution.height}
@@ -419,10 +318,11 @@ const FRAME_RATES = [25, 29.97, 50, 59.94, 60] as const;
 /** Editable frame rate (snapped to the supported set). Routes to the active document. */
 function FrameRateRow({ scene }: { scene: Scene }): JSX.Element {
   return (
-    <div style={styles.row}>
-      <span style={styles.label}>frame rate</span>
+    <div className={s.row}>
+      <span className={s.label}>frame rate</span>
       <select
-        style={{ ...DOC_NUM_STYLE, width: 'auto' }}
+        className={s.docNum}
+        style={{ width: 'auto' }}
         value={String(scene.frameRate)}
         onChange={(e) =>
           designerStore.updateScene({ frameRate: Number(e.target.value) as Scene['frameRate'] })
@@ -441,9 +341,9 @@ function FrameRateRow({ scene }: { scene: Scene }): JSX.Element {
 
 function Row({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div style={styles.row}>
-      <span style={styles.label}>{label}</span>
-      <span style={styles.value}>{value}</span>
+    <div className={s.row}>
+      <span className={s.label}>{label}</span>
+      <span className={s.value}>{value}</span>
     </div>
   );
 }

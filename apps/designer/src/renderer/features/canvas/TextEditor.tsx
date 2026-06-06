@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { TextElement } from '@cg/shared-schema';
 import { detectDirection, ZWNJ } from '@cg/text-shaping';
-import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
+import * as s from './TextEditor.css.js';
 
 interface Props {
   element: TextElement;
@@ -112,19 +112,13 @@ export function TextEditor({ element, scale, onCommit }: Props): JSX.Element {
       onBlur={commitText}
       onKeyDown={onKeyDown}
       dir={effectiveDir}
+      className={s.editor}
       style={{
-        position: 'absolute',
         left: x,
         top: y,
         width: w,
         height: h,
         color,
-        background: 'rgba(56, 189, 248, 0.08)',
-        outline: `2px solid ${colors.accent}`,
-        outlineOffset: 0,
-        padding: 0,
-        margin: 0,
-        boxSizing: 'border-box',
         fontFamily: font.family,
         fontWeight: font.weight,
         fontStyle: font.style,
@@ -132,12 +126,8 @@ export function TextEditor({ element, scale, onCommit }: Props): JSX.Element {
         lineHeight: font.lineHeight,
         letterSpacing: font.letterSpacing,
         textAlign: resolvedTextAlign,
-        cursor: 'text',
-        whiteSpace: 'pre-wrap',
-        wordWrap: 'break-word',
         transform:
           transform.rotation === 0 ? undefined : `rotate(${String(transform.rotation)}deg)`,
-        transformOrigin: '0 0',
       }}
     >
       {element.text}

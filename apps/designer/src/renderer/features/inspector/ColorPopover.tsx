@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { colors } from '../../theme.js';
+import { cx } from '../../cx.js';
+import * as s from './ColorPopover.css.js';
 
 /**
  * A small RGBA colour picker (the Loopic / common-app pattern): a swatch
@@ -23,17 +24,6 @@ interface ColorPickerProps {
   transparent?: boolean;
 }
 
-const CHECKER: CSSProperties = {
-  backgroundColor: '#fff',
-  backgroundImage:
-    'linear-gradient(45deg, #999 25%, transparent 25%), ' +
-    'linear-gradient(-45deg, #999 25%, transparent 25%), ' +
-    'linear-gradient(45deg, transparent 75%, #999 75%), ' +
-    'linear-gradient(-45deg, transparent 75%, #999 75%)',
-  backgroundSize: '8px 8px',
-  backgroundPosition: '0 0, 0 4px, 4px -4px, -4px 0',
-};
-
 export function ColorPicker(props: ColorPickerProps): JSX.Element {
   const size = props.size ?? 14;
   const [open, setOpen] = useState(false);
@@ -46,21 +36,11 @@ export function ColorPicker(props: ColorPickerProps): JSX.Element {
         title="Pick a colour"
         aria-label={props.ariaLabel}
         onClick={() => setOpen((o) => !o)}
-        style={{
-          position: 'relative',
-          width: size,
-          height: size,
-          borderRadius: '0.15rem',
-          border: `1px solid ${colors.border}`,
-          padding: 0,
-          cursor: 'pointer',
-          overflow: 'hidden',
-          flexShrink: 0,
-          ...CHECKER,
-        }}
+        className={cx(s.swatchButton, s.checker)}
+        style={{ width: size, height: size }}
       >
         {props.transparent !== true && (
-          <span style={{ position: 'absolute', inset: 0, background: props.value }} />
+          <span className={s.swatchFill} style={{ background: props.value }} />
         )}
       </button>
       {open && (
@@ -131,22 +111,13 @@ function Popover({
       ref={rootRef}
       role="dialog"
       aria-label="Colour picker"
+      className={s.popover}
       style={{
-        position: 'fixed',
         // Hidden off-screen for the first paint until useLayoutEffect measures
         // the box and resolves a position that stays within the viewport.
         top: pos?.top ?? -9999,
         left: pos?.left ?? -9999,
         visibility: pos === null ? 'hidden' : 'visible',
-        width: 200,
-        background: '#1c1f2d',
-        border: `1px solid ${colors.border}`,
-        borderRadius: '0.4rem',
-        padding: '0.6rem',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-        zIndex: 4000,
-        userSelect: 'none',
-        touchAction: 'none',
       }}
     >
       <ColorEditor value={value} onChange={onChange} />
@@ -233,7 +204,10 @@ export function ColorEditor({
       </DragArea>
 
       {/* Alpha slider */}
-      <div style={{ position: 'relative', marginTop: '0.5rem', borderRadius: '999px', ...CHECKER }}>
+      <div
+        className={s.checker}
+        style={{ position: 'relative', marginTop: '0.5rem', borderRadius: '999px' }}
+      >
         <DragArea
           style={{
             position: 'relative',
@@ -270,20 +244,7 @@ export function ColorEditor({
         onKeyDown={(e) => {
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
         }}
-        style={{
-          marginTop: '0.55rem',
-          width: '100%',
-          background: '#24273d',
-          color: colors.text,
-          border: `1px solid ${colors.border}`,
-          borderRadius: '0.2rem',
-          padding: '0.3rem 0.45rem',
-          fontSize: '0.72rem',
-          letterSpacing: '0.06em',
-          textAlign: 'center',
-          fontVariantNumeric: 'tabular-nums',
-          boxSizing: 'border-box',
-        }}
+        className={s.hexInput}
       />
     </>
   );
@@ -337,18 +298,11 @@ function DragArea(props: {
 function Knob({ xPct, yPct, color }: { xPct: number; yPct: number; color: string }): JSX.Element {
   return (
     <span
+      className={s.knob}
       style={{
-        position: 'absolute',
         left: `${xPct * 100}%`,
         top: `${yPct * 100}%`,
-        width: 12,
-        height: 12,
-        transform: 'translate(-50%, -50%)',
-        borderRadius: '50%',
-        border: '2px solid #fff',
-        boxShadow: '0 0 0 1px rgba(0,0,0,0.5)',
         background: color,
-        pointerEvents: 'none',
       }}
     />
   );

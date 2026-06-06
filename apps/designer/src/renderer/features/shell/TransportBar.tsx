@@ -1,70 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { activeRangeOf, type Scene } from '@cg/shared-schema';
-import { colors } from '../../theme.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
+import { cx } from '../../cx.js';
+import * as s from './TransportBar.css.js';
 
 interface Props {
   scene: Scene;
 }
 
 type LoopMode = 'off' | 'loop' | 'bounce';
-
-const styles = {
-  bar: {
-    display: 'grid',
-    gridTemplateColumns: '1fr auto 1fr',
-    alignItems: 'center',
-    gap: '0.45rem',
-    padding: '0.3rem 0.75rem',
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.22rem',
-    fontSize: '0.74rem',
-    flexShrink: 0,
-  },
-  group: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '0.3rem',
-    gridColumn: 2,
-  },
-  groupDivider: {
-    width: 1,
-    height: 14,
-    background: colors.border,
-    margin: '0 0.25rem',
-  },
-  button: {
-    background: 'transparent',
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.18rem',
-    fontSize: '0.78rem',
-    padding: '0.2rem 0.5rem',
-    cursor: 'pointer',
-    lineHeight: 1,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // Hover and selected use a brighter background instead of a border accent.
-  buttonHover: {
-    background: 'rgba(255, 255, 255, 0.10)',
-  },
-  buttonActive: {
-    background: 'rgba(255, 255, 255, 0.18)',
-    color: colors.accent,
-  },
-  frameReadout: {
-    color: colors.textMuted,
-    fontSize: '0.72rem',
-    fontVariantNumeric: 'tabular-nums' as const,
-    paddingLeft: '0.5rem',
-    justifySelf: 'end' as const,
-    gridColumn: 3,
-  },
-} as const;
 
 /**
  * One consistent, monochrome transport icon set drawn inline as SVG so they all
@@ -79,7 +23,7 @@ function ic(children: JSX.Element, size = 17): JSX.Element {
       height={size}
       aria-hidden
       focusable="false"
-      style={{ display: 'block' }}
+      className={s.icon}
     >
       {children}
     </svg>
@@ -279,12 +223,8 @@ export function TransportBar({ scene }: Props): JSX.Element {
     };
   }, []);
 
-  function btnStyle(id: string, active = false): React.CSSProperties {
-    return {
-      ...styles.button,
-      ...(hovered === id && !active ? styles.buttonHover : {}),
-      ...(active ? styles.buttonActive : {}),
-    };
+  function btnClass(id: string, active = false): string {
+    return cx(s.button, hovered === id && !active && s.buttonHover, active && s.buttonActive);
   }
   function hoverProps(id: string): {
     onMouseEnter: () => void;
@@ -297,11 +237,11 @@ export function TransportBar({ scene }: Props): JSX.Element {
   }
 
   return (
-    <div style={styles.bar} aria-label="Playback transport">
-      <div style={styles.group}>
+    <div className={s.bar} aria-label="Playback transport">
+      <div className={s.group}>
         <button
           type="button"
-          style={btnStyle('start')}
+          className={btnClass('start')}
           {...hoverProps('start')}
           onClick={() => designerStore.setCurrentFrame(frameIn)}
           aria-label="Go to start"
@@ -311,7 +251,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
         </button>
         <button
           type="button"
-          style={btnStyle('back')}
+          className={btnClass('back')}
           {...hoverProps('back')}
           onClick={() => designerStore.setCurrentFrame(currentFrame - 1)}
           aria-label="Step back"
@@ -321,7 +261,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
         </button>
         <button
           type="button"
-          style={btnStyle('play')}
+          className={btnClass('play')}
           {...hoverProps('play')}
           onClick={() => {
             if (playing) setPlaying(false);
@@ -334,7 +274,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
         </button>
         <button
           type="button"
-          style={btnStyle('fwd')}
+          className={btnClass('fwd')}
           {...hoverProps('fwd')}
           onClick={() => designerStore.setCurrentFrame(currentFrame + 1)}
           aria-label="Step forward"
@@ -342,10 +282,10 @@ export function TransportBar({ scene }: Props): JSX.Element {
         >
           {IconStepFwd}
         </button>
-        <span style={styles.groupDivider} aria-hidden />
+        <span className={s.groupDivider} aria-hidden />
         <button
           type="button"
-          style={btnStyle('loop', loopMode === 'loop')}
+          className={btnClass('loop', loopMode === 'loop')}
           {...hoverProps('loop')}
           onClick={() => toggleLoop('loop')}
           aria-pressed={loopMode === 'loop'}
@@ -356,7 +296,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
         </button>
         <button
           type="button"
-          style={btnStyle('bounce', loopMode === 'bounce')}
+          className={btnClass('bounce', loopMode === 'bounce')}
           {...hoverProps('bounce')}
           onClick={() => toggleLoop('bounce')}
           aria-pressed={loopMode === 'bounce'}
@@ -366,7 +306,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
           {IconBounce}
         </button>
       </div>
-      <span style={styles.frameReadout} aria-label="Current frame">
+      <span className={s.frameReadout} aria-label="Current frame">
         frame {currentFrame} / {totalOut}
       </span>
     </div>

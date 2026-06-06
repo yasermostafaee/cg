@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
-import { colors } from '../../theme.js';
 import { Modal, ModalButton } from './Modal.js';
+import * as s from './SaveBeforeSwitchModal.css.js';
 
 interface Props {
   /** The current scene the operator might lose if they switch. */
@@ -21,20 +21,6 @@ interface Props {
   /** Close without proceeding. */
   onCancel: () => void;
 }
-
-const styles = {
-  body: {
-    color: colors.textMuted,
-    fontSize: '0.8rem',
-    lineHeight: 1.5,
-    margin: 0,
-  },
-  error: {
-    color: '#fda4af',
-    fontSize: '0.76rem',
-    margin: 0,
-  },
-} as const;
 
 /**
  * Asks the operator what to do with the currently-loaded project
@@ -100,13 +86,13 @@ export function SaveBeforeSwitchModal({
         </>
       }
     >
-      <p style={styles.body}>
+      <p className={s.body}>
         You have <strong>{scene.name}</strong> open
         {projectPath === null
           ? ' (not saved yet). Save it before switching, or discard the work.'
           : '. Save changes before switching, or discard them.'}
       </p>
-      {error !== null && <p style={styles.error}>{error}</p>}
+      {error !== null && <p className={s.error}>{error}</p>}
     </Modal>
   );
 }

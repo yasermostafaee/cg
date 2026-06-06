@@ -1,133 +1,11 @@
 import { useEffect, useState } from 'react';
 import { colors } from '../../theme.js';
 import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
+import { cx } from '../../cx.js';
+import * as s from './CompositionsPanel.css.js';
 
 /** MIME-ish key used when dragging a composition onto the canvas. */
 export const COMPOSITION_DND_TYPE = 'application/x-cg-composition';
-
-const styles = {
-  panel: {
-    background: colors.panel,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    minHeight: 0,
-    height: '100%',
-    width: '100%',
-    boxSizing: 'border-box' as const,
-    overflow: 'hidden' as const,
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    padding: '0.45rem 0.55rem',
-    borderBottom: `1px solid ${colors.border}`,
-  },
-  title: {
-    flex: 1,
-    fontSize: '0.78rem',
-    fontWeight: 700,
-    color: colors.text,
-    letterSpacing: '0.02em',
-  },
-  iconButton: {
-    width: 22,
-    height: 22,
-    background: 'transparent',
-    color: colors.textMuted,
-    border: `1px solid transparent`,
-    borderRadius: '0.22rem',
-    cursor: 'pointer',
-    fontSize: '0.95rem',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 0,
-  },
-  list: {
-    flex: 1,
-    minHeight: 0,
-    overflowY: 'auto' as const,
-    padding: '0.3rem 0.3rem',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.1rem',
-  },
-  row: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.45rem',
-    padding: '0.35rem 0.5rem',
-    borderRadius: '0.25rem',
-    cursor: 'pointer',
-    color: colors.text,
-    fontSize: '0.78rem',
-    userSelect: 'none' as const,
-  },
-  rowActive: {
-    // Active = a solid slate fill only, no border (matches the icon-rail).
-    background: '#333642',
-  },
-  dot: {
-    width: 9,
-    height: 9,
-    borderRadius: '50%',
-    flexShrink: 0,
-    boxSizing: 'border-box' as const,
-  },
-  name: {
-    flex: 1,
-    overflow: 'hidden' as const,
-    textOverflow: 'ellipsis' as const,
-    whiteSpace: 'nowrap' as const,
-  },
-  nameInput: {
-    flex: 1,
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.accent}`,
-    borderRadius: '0.2rem',
-    padding: '0.05rem 0.3rem',
-    fontSize: '0.78rem',
-    outline: 'none',
-    minWidth: 0,
-  },
-  menu: {
-    position: 'fixed' as const,
-    background: '#1c1f2d',
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
-    boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
-    minWidth: 180,
-    padding: '0.25rem 0',
-    zIndex: 3000,
-    fontSize: '0.76rem',
-  },
-  menuItem: {
-    display: 'block',
-    width: '100%',
-    background: 'transparent',
-    color: colors.text,
-    border: 'none',
-    textAlign: 'left' as const,
-    padding: '0.4rem 0.7rem',
-    fontSize: '0.78rem',
-    cursor: 'pointer',
-  },
-  menuItemDisabled: {
-    color: colors.textMuted,
-    cursor: 'not-allowed',
-    opacity: 0.6,
-  },
-  menuItemDanger: { color: '#f87171' },
-  empty: {
-    color: colors.textMuted,
-    fontSize: '0.72rem',
-    textAlign: 'center' as const,
-    padding: '0.6rem 0.5rem',
-    lineHeight: 1.5,
-  },
-} as const;
 
 /**
  * Compositions panel (Loopic-style). Lists every composition — there is no
@@ -161,7 +39,7 @@ export function CompositionsPanel(): JSX.Element {
     };
   }, [menu]);
 
-  if (scene === null) return <aside style={styles.panel} aria-label="Compositions" />;
+  if (scene === null) return <aside className={s.panel} aria-label="Compositions" />;
 
   const comps = scene.compositions ?? [];
 
@@ -171,12 +49,12 @@ export function CompositionsPanel(): JSX.Element {
     designerStore.canNestCompositionInActive(id);
 
   return (
-    <aside style={styles.panel} aria-label="Compositions">
-      <div style={styles.header}>
-        <span style={styles.title}>Compositions</span>
+    <aside className={s.panel} aria-label="Compositions">
+      <div className={s.header}>
+        <span className={s.title}>Compositions</span>
         <button
           type="button"
-          style={styles.iconButton}
+          className={s.iconButton}
           aria-label="New composition"
           title="New composition"
           onPointerDown={(e) => e.stopPropagation()}
@@ -188,9 +66,9 @@ export function CompositionsPanel(): JSX.Element {
           +
         </button>
       </div>
-      <div style={styles.list}>
+      <div className={s.list}>
         {comps.length === 0 ? (
-          <p style={styles.empty}>
+          <p className={s.empty}>
             No compositions yet.
             <br />
             Click + to create one.
@@ -201,8 +79,7 @@ export function CompositionsPanel(): JSX.Element {
             return (
               <div
                 key={comp.id}
-                className="cg-comp-row"
-                style={{ ...styles.row, ...(isActive ? styles.rowActive : {}) }}
+                className={cx('cg-comp-row', s.row, isActive && s.rowActive)}
                 draggable={renaming !== comp.id}
                 onDragStart={(e) => {
                   e.dataTransfer.setData(COMPOSITION_DND_TYPE, comp.id);
@@ -222,14 +99,12 @@ export function CompositionsPanel(): JSX.Element {
               >
                 {/* A filled dot marks the open composition; inactive rows have none. */}
                 <span
-                  style={{
-                    ...styles.dot,
-                    background: isActive ? colors.accent : 'transparent',
-                  }}
+                  className={s.dot}
+                  style={{ background: isActive ? colors.accent : 'transparent' }}
                 />
                 {renaming === comp.id ? (
                   <input
-                    style={styles.nameInput}
+                    className={s.nameInput}
                     defaultValue={comp.name}
                     autoFocus
                     onPointerDown={(e) => e.stopPropagation()}
@@ -245,7 +120,7 @@ export function CompositionsPanel(): JSX.Element {
                     }}
                   />
                 ) : (
-                  <span style={styles.name}>{comp.name}</span>
+                  <span className={s.name}>{comp.name}</span>
                 )}
               </div>
             );
@@ -254,7 +129,8 @@ export function CompositionsPanel(): JSX.Element {
       </div>
       {menu !== null && (
         <div
-          style={{ ...styles.menu, left: menu.x, top: menu.y }}
+          className={s.menu}
+          style={{ left: menu.x, top: menu.y }}
           role="menu"
           onPointerDown={(e) => e.stopPropagation()}
         >
@@ -317,11 +193,11 @@ function MenuButton(props: {
       role="menuitem"
       title={props.title}
       disabled={props.disabled === true}
-      style={{
-        ...styles.menuItem,
-        ...(props.danger === true ? styles.menuItemDanger : {}),
-        ...(props.disabled === true ? styles.menuItemDisabled : {}),
-      }}
+      className={cx(
+        s.menuItem,
+        props.danger === true && s.menuItemDanger,
+        props.disabled === true && s.menuItemDisabled,
+      )}
       onClick={props.disabled === true ? undefined : props.onClick}
     >
       {props.label}

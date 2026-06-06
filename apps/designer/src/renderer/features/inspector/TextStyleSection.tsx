@@ -1,11 +1,12 @@
 import type { AnimatableProperty, Element, TextElement } from '@cg/shared-schema';
-import { colors } from '../../theme.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import { hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
 import { CollapseSection } from './CollapseSection.js';
 import { FillField } from './FillPopover.js';
 import { RealtimeNumberInput } from './controls.js';
+import { cx } from '../../cx.js';
+import * as s from './TextStyleSection.css.js';
 
 /**
  * D-010-pic-5 — the Text section in the right Inspector. Custom layout
@@ -44,151 +45,6 @@ interface Props {
   currentFrame?: number;
   selectedKeyframe?: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }
-
-const styles = {
-  body: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.4rem',
-    padding: '0.1rem 0',
-  },
-  labeledRow: {
-    display: 'grid',
-    gridTemplateColumns: '90px 1fr',
-    alignItems: 'center',
-    gap: '0.4rem',
-  },
-  label: {
-    color: colors.textMuted,
-    fontSize: '0.7rem',
-  },
-  toggle: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    background: colors.panelMuted,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.22rem',
-    overflow: 'hidden' as const,
-  },
-  toggleOption: {
-    padding: '0.2rem 0',
-    background: 'transparent',
-    color: colors.textMuted,
-    border: 'none',
-    fontSize: '0.72rem',
-    cursor: 'pointer',
-    textAlign: 'center' as const,
-  },
-  toggleOptionActive: {
-    background: colors.accent,
-    color: '#000',
-    fontWeight: 700,
-  },
-  colorRow: {
-    display: 'grid',
-    gridTemplateColumns: '90px 1fr',
-    alignItems: 'center',
-    gap: '0.4rem',
-  },
-  colorChip: {
-    display: 'grid',
-    gridTemplateColumns: 'auto 1fr auto',
-    alignItems: 'center',
-    gap: '0.35rem',
-    background: colors.panelMuted,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.22rem',
-    padding: '0.1rem 0.35rem',
-  },
-  hexInput: {
-    background: 'transparent',
-    color: colors.text,
-    border: 'none',
-    outline: 'none',
-    padding: '0.05rem 0',
-    fontSize: '0.72rem',
-    fontVariantNumeric: 'tabular-nums' as const,
-    width: '100%',
-    boxSizing: 'border-box' as const,
-  },
-  fontSelect: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.22rem',
-    padding: '0.25rem 0.5rem',
-    fontSize: '0.78rem',
-    width: '100%',
-    boxSizing: 'border-box' as const,
-  },
-  chipIcon: {
-    color: colors.textMuted,
-    fontSize: '0.7rem',
-    fontWeight: 600,
-    flexShrink: 0,
-    textAlign: 'center' as const,
-  },
-  chipInput: {
-    background: 'transparent',
-    color: colors.text,
-    border: 'none',
-    outline: 'none',
-    padding: '0.05rem 0',
-    fontSize: '0.72rem',
-    flex: '1 1 0',
-    minWidth: 0,
-    boxSizing: 'border-box' as const,
-    fontVariantNumeric: 'tabular-nums' as const,
-  },
-  pairRow: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '0.3rem',
-    alignItems: 'center',
-  },
-  alignmentRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.4rem',
-    paddingTop: '0.15rem',
-  },
-  alignGroup: {
-    display: 'flex',
-    background: colors.panelMuted,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.22rem',
-    overflow: 'hidden' as const,
-  },
-  alignButton: {
-    width: 24,
-    height: 22,
-    background: 'transparent',
-    color: colors.textMuted,
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: '0.7rem',
-    padding: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  alignButtonActive: {
-    background: colors.accent,
-    color: '#000',
-  },
-  alignSpacer: { flex: 1 },
-  gearButton: {
-    width: 22,
-    height: 22,
-    background: 'transparent',
-    color: colors.textMuted,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.22rem',
-    cursor: 'pointer',
-    fontSize: '0.75rem',
-    padding: 0,
-  },
-} as const;
 
 function point(label: string): JSX.Element {
   return (
@@ -241,10 +97,10 @@ export function TextStyleSection({
 
   return (
     <CollapseSection title="Text" defaultExpanded>
-      <div style={styles.body}>
+      <div className={s.body}>
         {/* Sizing */}
-        <div style={styles.labeledRow}>
-          <span style={styles.label}>Sizing</span>
+        <div className={s.labeledRow}>
+          <span className={s.label}>Sizing</span>
           <TogglePair
             value={sizingValue}
             options={[
@@ -260,8 +116,8 @@ export function TextStyleSection({
         </div>
 
         {/* Auto Squeeze */}
-        <div style={styles.labeledRow}>
-          <span style={styles.label}>Auto Squeeze</span>
+        <div className={s.labeledRow}>
+          <span className={s.label}>Auto Squeeze</span>
           <TogglePair
             value={squeezeValue}
             options={[
@@ -277,8 +133,8 @@ export function TextStyleSection({
         </div>
 
         {/* Text Wrap */}
-        <div style={styles.labeledRow}>
-          <span style={styles.label}>Text Wrap</span>
+        <div className={s.labeledRow}>
+          <span className={s.label}>Text Wrap</span>
           <TogglePair
             value={wrapValue}
             options={[
@@ -350,7 +206,7 @@ export function TextStyleSection({
 
         {/* Font family dropdown */}
         <select
-          style={styles.fontSelect}
+          className={s.fontSelect}
           value={element.font.family}
           onChange={(e) =>
             designerStore.updateElement(id, {
@@ -381,11 +237,11 @@ export function TextStyleSection({
 
         {/* Font size (full-width chip with tT icon) */}
         <div className="cg-field">
-          <span style={styles.chipIcon} aria-hidden>
+          <span className={s.chipIcon} aria-hidden>
             tT
           </span>
           <RealtimeNumberInput
-            style={styles.chipInput}
+            className={s.chipInput}
             value={element.font.size}
             step={1}
             min={1}
@@ -398,13 +254,13 @@ export function TextStyleSection({
         </div>
 
         {/* Line height + Letter spacing side-by-side */}
-        <div style={styles.pairRow}>
+        <div className={s.pairRow}>
           <div className="cg-field">
-            <span style={styles.chipIcon} aria-hidden title="Line height">
+            <span className={s.chipIcon} aria-hidden title="Line height">
               ↕
             </span>
             <RealtimeNumberInput
-              style={styles.chipInput}
+              className={s.chipInput}
               value={element.font.lineHeight}
               step={0.05}
               min={0.1}
@@ -422,11 +278,11 @@ export function TextStyleSection({
             )}
           </div>
           <div className="cg-field">
-            <span style={styles.chipIcon} aria-hidden title="Letter spacing">
+            <span className={s.chipIcon} aria-hidden title="Letter spacing">
               VA
             </span>
             <RealtimeNumberInput
-              style={styles.chipInput}
+              className={s.chipInput}
               value={element.font.letterSpacing}
               step={0.01}
               onCommit={(n) => designerStore.commitAnimatable(id, 'font.letterSpacing', n)}
@@ -443,20 +299,16 @@ export function TextStyleSection({
         </div>
 
         {/* Alignment row */}
-        <div style={styles.alignmentRow}>
+        <div className={s.alignmentRow}>
           {/* Horizontal align (uses existing `align` field) */}
-          <div style={styles.alignGroup} role="group" aria-label="Horizontal alignment">
+          <div className={s.alignGroup} role="group" aria-label="Horizontal alignment">
             {(['start', 'center', 'end'] as const).map((opt) => {
               const active = element.align === opt;
               return (
                 <button
                   key={opt}
                   type="button"
-                  style={
-                    active
-                      ? { ...styles.alignButton, ...styles.alignButtonActive }
-                      : styles.alignButton
-                  }
+                  className={cx(s.alignButton, active && s.alignButtonActive)}
                   onClick={() =>
                     designerStore.updateElement(id, { align: opt } as Partial<Element>)
                   }
@@ -470,18 +322,14 @@ export function TextStyleSection({
             })}
           </div>
           {/* Vertical align */}
-          <div style={styles.alignGroup} role="group" aria-label="Vertical alignment">
+          <div className={s.alignGroup} role="group" aria-label="Vertical alignment">
             {(['top', 'middle', 'bottom'] as const).map((opt) => {
               const active = verticalAlign === opt;
               return (
                 <button
                   key={opt}
                   type="button"
-                  style={
-                    active
-                      ? { ...styles.alignButton, ...styles.alignButtonActive }
-                      : styles.alignButton
-                  }
+                  className={cx(s.alignButton, active && s.alignButtonActive)}
                   onClick={() =>
                     designerStore.updateElement(id, {
                       verticalAlign: opt,
@@ -496,10 +344,10 @@ export function TextStyleSection({
               );
             })}
           </div>
-          <span style={styles.alignSpacer} />
+          <span className={s.alignSpacer} />
           <button
             type="button"
-            style={styles.gearButton}
+            className={s.gearButton}
             aria-label="More text options"
             title="More text options"
           >
@@ -525,18 +373,14 @@ function TogglePair<T extends string>({
   onChange: (v: T) => void;
 }): JSX.Element {
   return (
-    <div style={styles.toggle} role="group">
+    <div className={s.toggle} role="group">
       {options.map((opt) => {
         const active = opt.value === value;
         return (
           <button
             key={opt.value}
             type="button"
-            style={
-              active
-                ? { ...styles.toggleOption, ...styles.toggleOptionActive }
-                : styles.toggleOption
-            }
+            className={cx(s.toggleOption, active && s.toggleOptionActive)}
             onClick={() => onChange(opt.value)}
             aria-pressed={active}
           >

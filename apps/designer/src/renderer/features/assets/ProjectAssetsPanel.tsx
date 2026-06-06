@@ -1,136 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AssetMeta } from '@cg/shared-ipc';
 import type { Element } from '@cg/shared-schema';
-import { colors } from '../../theme.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { AssetThumb } from './AssetThumb.js';
 import { emitAssetRemoved, useAssets } from './useAssets.js';
 import { clearAll as clearAllAssetUrls, revoke as revokeAssetUrl } from './assetUrlCache.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
-
-const styles = {
-  panel: {
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    minHeight: 0,
-    height: '100%',
-    width: '100%',
-    boxSizing: 'border-box' as const,
-    overflow: 'hidden' as const,
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    padding: '0.45rem 0.55rem',
-    borderBottom: `1px solid ${colors.border}`,
-  },
-  title: {
-    flex: 1,
-    fontSize: '0.78rem',
-    fontWeight: 700,
-    color: colors.text,
-    letterSpacing: '0.02em',
-  },
-  iconButton: {
-    width: 22,
-    height: 22,
-    background: 'transparent',
-    color: colors.textMuted,
-    border: `1px solid transparent`,
-    borderRadius: '0.22rem',
-    cursor: 'pointer',
-    fontSize: '0.85rem',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 0,
-  },
-  searchWrap: {
-    padding: '0.4rem 0.55rem',
-  },
-  search: {
-    width: '100%',
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
-    padding: '0.25rem 0.45rem',
-    fontSize: '0.74rem',
-    boxSizing: 'border-box' as const,
-    outline: 'none',
-  },
-  grid: {
-    flex: 1,
-    minHeight: 0,
-    overflowY: 'auto' as const,
-    padding: '0.5rem 0.4rem',
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))',
-    gap: '0.6rem 0.4rem',
-    alignContent: 'start',
-  },
-  list: {
-    flex: 1,
-    minHeight: 0,
-    overflowY: 'auto' as const,
-    padding: '0.35rem 0.3rem',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.05rem',
-  },
-  // Empty-state wrapper, used for BOTH grid and list view so the hint sits at
-  // exactly the same offset regardless of the active view (the grid/list
-  // containers have different paddings + flow, which previously shifted it).
-  emptyWrap: {
-    flex: 1,
-    minHeight: 0,
-    overflowY: 'auto' as const,
-    padding: '0.5rem 0.4rem',
-  },
-  empty: {
-    margin: 0,
-    padding: '1rem 0.5rem',
-    color: colors.textMuted,
-    fontSize: '0.72rem',
-    textAlign: 'center' as const,
-    lineHeight: 1.5,
-  },
-  menu: {
-    position: 'fixed' as const,
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
-    boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
-    minWidth: 140,
-    padding: '0.25rem 0',
-    zIndex: 60,
-    fontSize: '0.74rem',
-  },
-  menuItem: {
-    display: 'block',
-    width: '100%',
-    background: 'transparent',
-    color: colors.text,
-    border: 'none',
-    textAlign: 'left' as const,
-    padding: '0.4rem 0.7rem',
-    fontSize: '0.78rem',
-    cursor: 'pointer',
-  },
-  menuItemDanger: {
-    color: '#f87171',
-  },
-  modalBody: {
-    fontSize: '0.78rem',
-    color: colors.textMuted,
-    lineHeight: 1.5,
-    whiteSpace: 'pre-wrap' as const,
-  },
-} as const;
+import { cx } from '../../cx.js';
+import * as s from './ProjectAssetsPanel.css.js';
 
 /**
  * Module-level FontFace registry. The assets panel registers a
@@ -329,12 +206,12 @@ export function ProjectAssetsPanel(): JSX.Element {
   }
 
   return (
-    <aside style={styles.panel} aria-label="Project assets">
-      <div style={styles.header}>
-        <span style={styles.title}>Project Assets</span>
+    <aside className={s.panel} aria-label="Project assets">
+      <div className={s.header}>
+        <span className={s.title}>Project Assets</span>
         <button
           type="button"
-          style={styles.iconButton}
+          className={s.iconButton}
           aria-label={assetView === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
           title={assetView === 'grid' ? 'List view' : 'Grid view'}
           aria-pressed={assetView === 'list'}
@@ -346,7 +223,7 @@ export function ProjectAssetsPanel(): JSX.Element {
         <button
           ref={addBtnRef}
           type="button"
-          style={styles.iconButton}
+          className={s.iconButton}
           aria-label="Add asset"
           title="Add asset"
           onPointerDown={(e) => {
@@ -358,9 +235,9 @@ export function ProjectAssetsPanel(): JSX.Element {
           +
         </button>
       </div>
-      <div style={styles.searchWrap}>
+      <div className={s.searchWrap}>
         <input
-          style={styles.search}
+          className={s.search}
           type="search"
           placeholder="Search…"
           value={query}
@@ -369,15 +246,15 @@ export function ProjectAssetsPanel(): JSX.Element {
         />
       </div>
       {visible.length === 0 ? (
-        <div style={styles.emptyWrap} data-role="assets-grid">
-          <p style={styles.empty}>
+        <div className={s.emptyWrap} data-role="assets-grid">
+          <p className={s.empty}>
             No assets yet.
             <br />
             Click + to add an image or font.
           </p>
         </div>
       ) : (
-        <div style={assetView === 'list' ? styles.list : styles.grid} data-role="assets-grid">
+        <div className={assetView === 'list' ? s.list : s.grid} data-role="assets-grid">
           {visible.map((a) => (
             <AssetThumb
               key={a.assetId}
@@ -390,14 +267,15 @@ export function ProjectAssetsPanel(): JSX.Element {
       )}
       {addMenu !== null && (
         <div
-          style={{ ...styles.menu, left: addMenu.x, top: addMenu.y }}
+          className={s.menu}
+          style={{ left: addMenu.x, top: addMenu.y }}
           role="menu"
           onPointerDown={(e) => e.stopPropagation()}
         >
           <button
             type="button"
             role="menuitem"
-            style={styles.menuItem}
+            className={s.menuItem}
             onClick={() => void importKind('image')}
           >
             Image…
@@ -405,7 +283,7 @@ export function ProjectAssetsPanel(): JSX.Element {
           <button
             type="button"
             role="menuitem"
-            style={styles.menuItem}
+            className={s.menuItem}
             onClick={() => void importKind('font')}
           >
             Font…
@@ -414,14 +292,15 @@ export function ProjectAssetsPanel(): JSX.Element {
       )}
       {ctxMenu !== null && (
         <div
-          style={{ ...styles.menu, left: ctxMenu.x, top: ctxMenu.y }}
+          className={s.menu}
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
           role="menu"
           onPointerDown={(e) => e.stopPropagation()}
         >
           <button
             type="button"
             role="menuitem"
-            style={{ ...styles.menuItem, ...styles.menuItemDanger }}
+            className={cx(s.menuItem, s.menuItemDanger)}
             onClick={() => openDeleteConfirm(ctxMenu.asset)}
           >
             Delete asset
@@ -502,7 +381,7 @@ function DeleteConfirmDialog({
         </>
       }
     >
-      <div style={styles.modalBody}>{message}</div>
+      <div className={s.modalBody}>{message}</div>
     </Modal>
   );
 }

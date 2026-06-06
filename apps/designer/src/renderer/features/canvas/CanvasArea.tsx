@@ -7,6 +7,7 @@ import {
 } from '../assets/assetUrlCache.js';
 import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
+import * as s from './CanvasArea.css.js';
 import {
   designerStore,
   shallowEqual,
@@ -38,112 +39,6 @@ const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 4;
 const ZOOM_STEP = 1.1; // multiplicative step per click / wheel notch
 const ZOOM_DEFAULT = 0.5;
-
-const styles = {
-  wrap: {
-    flex: 1,
-    minHeight: 0,
-    minWidth: 0,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    width: '100%',
-    boxSizing: 'border-box' as const,
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.3rem',
-    padding: '0.25rem 0.4rem',
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.22rem',
-    marginBottom: '0.3rem',
-    fontSize: '0.74rem',
-    color: colors.textMuted,
-  },
-  headerButton: {
-    width: 22,
-    height: 22,
-    background: 'transparent',
-    color: colors.textMuted,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.2rem',
-    fontSize: '0.78rem',
-    lineHeight: 1,
-    cursor: 'pointer',
-    padding: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  zoomReadout: {
-    minWidth: 40,
-    textAlign: 'center' as const,
-    fontSize: '0.7rem',
-    fontVariantNumeric: 'tabular-nums' as const,
-    color: colors.text,
-  },
-  spacer: { flex: 1 },
-  outer: {
-    flex: 1,
-    background: '#161927',
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
-    minHeight: 0,
-    minWidth: 0,
-    overflow: 'auto' as const,
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'flex-start',
-    padding: '0.5rem',
-    width: '100%',
-    boxSizing: 'border-box' as const,
-    position: 'relative' as const,
-  },
-  centerWrap: {
-    margin: 'auto',
-    position: 'relative' as const,
-  },
-  // Stage occupies the scaled footprint (width * zoom × height * zoom)
-  // so layout reserves the right amount of space and the CanvasOverlay
-  // — which uses scale=zoom for hit-test math — sees the matching
-  // bounding-rect dimensions. The iframe inside is sized to the
-  // scene's intrinsic resolution and visually scaled with a CSS
-  // transform so the *entire* scene is in view, never clipped by the
-  // iframe's body overflow.
-  stage: {
-    position: 'relative' as const,
-    // D-011 — surface the scene's transparency as a checkerboard so the
-    // operator can tell the default scene is transparent. The iframe
-    // body is `background:transparent` (cgCss), so this pattern shows
-    // through anywhere the scene hasn't painted.
-    backgroundColor: '#3d4253',
-    backgroundImage:
-      'linear-gradient(45deg, #5b6075 25%, transparent 25%),' +
-      'linear-gradient(-45deg, #5b6075 25%, transparent 25%),' +
-      'linear-gradient(45deg, transparent 75%, #5b6075 75%),' +
-      'linear-gradient(-45deg, transparent 75%, #5b6075 75%)',
-    backgroundSize: '48px 48px',
-    backgroundPosition: '0 0, 0 24px, 24px -24px, -24px 0',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-    overflow: 'hidden' as const,
-  },
-  empty: {
-    color: colors.textMuted,
-    fontSize: '0.9rem',
-    textAlign: 'center' as const,
-    lineHeight: 1.6,
-    margin: 'auto',
-  },
-  iframe: {
-    border: 0,
-    display: 'block',
-    width: '100%',
-    height: '100%',
-    background: 'transparent',
-    pointerEvents: 'none' as const,
-  },
-} as const;
 
 /**
  * Canvas work area with the cgpreview iframe + transparent input
@@ -381,9 +276,9 @@ export function CanvasArea({
 
   if (scene === null) {
     return (
-      <div style={styles.wrap}>
-        <div style={styles.outer} ref={outerRef}>
-          <div style={styles.empty}>
+      <div className={s.wrap}>
+        <div className={s.outer} ref={outerRef}>
+          <div className={s.empty}>
             <p>No active project.</p>
           </div>
         </div>
@@ -443,23 +338,23 @@ export function CanvasArea({
   }
 
   return (
-    <div style={styles.wrap}>
-      <div style={styles.header} aria-label="Canvas header">
+    <div className={s.wrap}>
+      <div className={s.header} aria-label="Canvas header">
         {showToolbar && <CanvasToolbar tool={tool} />}
-        <span style={styles.spacer} />
+        <span className={s.spacer} />
         <button
           type="button"
-          style={styles.headerButton}
+          className={s.headerButton}
           onClick={fitToViewport}
           aria-label="Fit"
           title="Fit canvas"
         >
           ⛶
         </button>
-        <span style={styles.zoomReadout}>{zoomPct}%</span>
+        <span className={s.zoomReadout}>{zoomPct}%</span>
         <button
           type="button"
-          style={styles.headerButton}
+          className={s.headerButton}
           onClick={() => setZoom(1)}
           aria-label="Reset zoom to 100%"
           title="Reset to 100%"
@@ -468,7 +363,7 @@ export function CanvasArea({
         </button>
         <button
           type="button"
-          style={styles.headerButton}
+          className={s.headerButton}
           onClick={() => setZoom((z) => clampZoom(z * ZOOM_STEP))}
           aria-label="Zoom in"
           title="Zoom in"
@@ -477,7 +372,7 @@ export function CanvasArea({
         </button>
         <button
           type="button"
-          style={styles.headerButton}
+          className={s.headerButton}
           onClick={() => setZoom((z) => clampZoom(z / ZOOM_STEP))}
           aria-label="Zoom out"
           title="Zoom out"
@@ -485,13 +380,13 @@ export function CanvasArea({
           −
         </button>
       </div>
-      <div style={{ ...styles.outer, cursor: outerCursor }} ref={outerRef}>
+      <div className={s.outer} style={{ cursor: outerCursor }} ref={outerRef}>
         {html !== null && (
-          <div style={styles.centerWrap}>
+          <div className={s.centerWrap}>
             <div
               ref={stageRef}
+              className={s.stage}
               style={{
-                ...styles.stage,
                 width: width * zoom,
                 height: height * zoom,
               }}
@@ -500,8 +395,8 @@ export function CanvasArea({
                 ref={iframeRef}
                 srcDoc={html}
                 title="cgpreview"
+                className={s.iframe}
                 style={{
-                  ...styles.iframe,
                   position: 'absolute',
                   top: 0,
                   left: 0,

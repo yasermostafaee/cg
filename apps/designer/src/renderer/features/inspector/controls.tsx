@@ -5,8 +5,9 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { colors } from '../../theme.js';
 import { ColorPicker } from './ColorPopover.js';
+import { cx } from '../../cx.js';
+import * as s from './controls.css.js';
 
 /**
  * Form-control primitives for the Inspector. Numeric inputs commit on
@@ -17,88 +18,6 @@ import { ColorPicker } from './ColorPopover.js';
  * focused. Text / select / colour controls are simpler and commit
  * onBlur / onChange directly.
  */
-
-const styles = {
-  row: {
-    display: 'grid',
-    gridTemplateColumns: `74px 1fr`,
-    gap: '0.35rem',
-    alignItems: 'center',
-    padding: '0.1rem 0',
-    fontSize: '0.74rem',
-  },
-  rowMulti: {
-    display: 'grid',
-    gridTemplateColumns: `74px 1fr 1fr`,
-    gap: '0.35rem',
-    alignItems: 'center',
-    padding: '0.1rem 0',
-    fontSize: '0.74rem',
-  },
-  label: { color: colors.textMuted, fontSize: '0.7rem', letterSpacing: '0.02em' },
-  inputInner: {
-    background: 'transparent',
-    color: colors.text,
-    border: 'none',
-    outline: 'none',
-    padding: 0,
-    fontSize: '0.74rem',
-    width: '100%',
-    minWidth: 0,
-    boxSizing: 'border-box' as const,
-    fontVariantNumeric: 'tabular-nums' as const,
-  },
-  // Content-sized variant (see .cg-num-unit) so the value and its unit
-  // cluster on the left, leaving the diamond free to sit at the right edge.
-  inputInnerAuto: {
-    background: 'transparent',
-    color: colors.text,
-    border: 'none',
-    outline: 'none',
-    padding: 0,
-    fontSize: '0.74rem',
-    flex: '0 0 auto',
-    width: 'auto',
-    minWidth: 0,
-    maxWidth: '5rem',
-    boxSizing: 'border-box' as const,
-    fontVariantNumeric: 'tabular-nums' as const,
-  },
-  // Single-letter / glyph axis label inside a combined vector segment.
-  segIcon: {
-    color: colors.textMuted,
-    fontSize: '0.65rem',
-    fontWeight: 600,
-    width: 12,
-    flexShrink: 0,
-    textAlign: 'center' as const,
-  },
-  // Pushes the keyframe diamond to the field's right edge.
-  point: {
-    marginLeft: 'auto',
-    display: 'inline-flex',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  // The whole field/segment is a drag-to-scrub + click-to-edit surface.
-  scrubSurface: {
-    cursor: 'ew-resize',
-    touchAction: 'none' as const,
-    userSelect: 'none' as const,
-  },
-  hexInput: {
-    background: 'transparent',
-    color: colors.text,
-    border: 'none',
-    outline: 'none',
-    padding: '0.05rem 0',
-    fontSize: '0.74rem',
-    width: '100%',
-    minWidth: 0,
-    boxSizing: 'border-box' as const,
-    fontVariantNumeric: 'tabular-nums' as const,
-  },
-} as const;
 
 interface ScrubOpts {
   value: number;
@@ -254,9 +173,10 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
   const field = fieldScrub(opts);
   const hasUnit = props.suffix !== undefined;
   return (
-    <div style={styles.row}>
+    <div className={s.row}>
       <span
-        style={{ ...styles.label, ...labelScrub.style }}
+        className={s.label}
+        style={labelScrub.style}
         onPointerDown={labelScrub.onPointerDown}
         title="Drag to adjust"
       >
@@ -265,7 +185,7 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
       {/* The whole field scrubs the value (Loopic); click focuses to type.
           With a unit the input sizes to its content so the value+unit cluster
           on the left, and the diamond is pushed to the right edge. */}
-      <div className="cg-field" style={styles.scrubSurface} onPointerDown={field.onPointerDown}>
+      <div className={cx('cg-field', s.scrubSurface)} onPointerDown={field.onPointerDown}>
         <RealtimeNumberInput
           value={props.value}
           onCommit={props.onCommit}
@@ -273,12 +193,11 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
           min={props.min}
           max={props.max}
           scrub={false}
-          style={hasUnit ? styles.inputInnerAuto : styles.inputInner}
-          className={hasUnit ? 'cg-num-unit' : undefined}
+          className={cx(hasUnit ? s.inputInnerAuto : s.inputInner, hasUnit && 'cg-num-unit')}
           ariaLabel={props.label}
         />
         {hasUnit && <span className="cg-unit">{props.suffix}</span>}
-        {props.trailing !== undefined && <span style={styles.point}>{props.trailing}</span>}
+        {props.trailing !== undefined && <span className={s.point}>{props.trailing}</span>}
       </div>
     </div>
   );
@@ -310,8 +229,8 @@ interface VectorFieldProps {
  */
 export function VectorField(props: VectorFieldProps): JSX.Element {
   return (
-    <div style={styles.row}>
-      <span style={styles.label}>{props.label}</span>
+    <div className={s.row}>
+      <span className={s.label}>{props.label}</span>
       <div className="cg-input-group">
         {props.axes.map((a) => (
           <VectorSeg key={a.ariaLabel} {...a} />
@@ -331,8 +250,8 @@ function VectorSeg(props: VectorAxisProps): JSX.Element {
   });
   const hasUnit = props.suffix !== undefined;
   return (
-    <div className="cg-seg" style={styles.scrubSurface} onPointerDown={scrub.onPointerDown}>
-      <span style={styles.segIcon} aria-hidden>
+    <div className={cx('cg-seg', s.scrubSurface)} onPointerDown={scrub.onPointerDown}>
+      <span className={s.segIcon} aria-hidden>
         {props.icon}
       </span>
       <RealtimeNumberInput
@@ -342,12 +261,11 @@ function VectorSeg(props: VectorAxisProps): JSX.Element {
         min={props.min}
         max={props.max}
         scrub={false}
-        style={hasUnit ? styles.inputInnerAuto : styles.inputInner}
-        className={hasUnit ? 'cg-num-unit' : undefined}
+        className={cx(hasUnit ? s.inputInnerAuto : s.inputInner, hasUnit && 'cg-num-unit')}
         ariaLabel={props.ariaLabel}
       />
       {hasUnit && <span className="cg-unit">{props.suffix}</span>}
-      {props.point !== undefined && <span style={styles.point}>{props.point}</span>}
+      {props.point !== undefined && <span className={s.point}>{props.point}</span>}
     </div>
   );
 }
@@ -485,11 +403,11 @@ interface TextFieldProps {
 
 export function TextField(props: TextFieldProps): JSX.Element {
   return (
-    <div style={styles.row}>
-      <span style={styles.label}>{props.label}</span>
+    <div className={s.row}>
+      <span className={s.label}>{props.label}</span>
       <div className="cg-field">
         <input
-          style={styles.inputInner}
+          className={s.inputInner}
           type="text"
           defaultValue={props.value}
           onFocus={(e) => e.currentTarget.select()}
@@ -516,11 +434,11 @@ interface SelectFieldProps<T extends string> {
 
 export function SelectField<T extends string>(props: SelectFieldProps<T>): JSX.Element {
   return (
-    <div style={styles.row}>
-      <span style={styles.label}>{props.label}</span>
+    <div className={s.row}>
+      <span className={s.label}>{props.label}</span>
       <div className="cg-field">
         <select
-          style={styles.inputInner}
+          className={s.inputInner}
           value={props.value}
           onChange={(e) => props.onCommit(e.target.value as T)}
         >
@@ -547,8 +465,8 @@ interface ColorFieldProps {
 export function ColorField(props: ColorFieldProps): JSX.Element {
   const hex = props.value.replace(/^#/, '').toUpperCase();
   return (
-    <div style={styles.row}>
-      <span style={styles.label}>{props.label}</span>
+    <div className={s.row}>
+      <span className={s.label}>{props.label}</span>
       <div className="cg-field">
         <ColorPicker
           value={props.value}
@@ -556,7 +474,7 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
           ariaLabel={`${props.label} colour`}
         />
         <input
-          style={styles.hexInput}
+          className={s.hexInput}
           type="text"
           defaultValue={hex}
           onFocus={(e) => e.currentTarget.select()}
@@ -571,7 +489,7 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
           key={`${props.label}-${props.value}`}
           aria-label={`${props.label} hex value`}
         />
-        {props.trailing !== undefined && <span style={styles.point}>{props.trailing}</span>}
+        {props.trailing !== undefined && <span className={s.point}>{props.trailing}</span>}
       </div>
     </div>
   );

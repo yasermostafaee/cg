@@ -1,5 +1,4 @@
 import type { AnimatableProperty, Element } from '@cg/shared-schema';
-import { colors } from '../../theme.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import {
@@ -10,69 +9,13 @@ import {
   keyframeVariantFor,
 } from '../timeline/keyframe-helpers.js';
 import { RealtimeNumberInput, fieldScrub } from './controls.js';
+import { cx } from '../../cx.js';
+import * as s from './TransformSection.css.js';
 
 interface Props {
   element: Element;
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }
-
-const styles = {
-  col: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.35rem',
-    padding: '0.1rem 0',
-  },
-  icon: {
-    color: colors.textMuted,
-    fontSize: '0.65rem',
-    fontWeight: 600,
-    width: 12,
-    flexShrink: 0,
-    textAlign: 'center' as const,
-  },
-  input: {
-    background: 'transparent',
-    color: colors.text,
-    border: 'none',
-    outline: 'none',
-    padding: '0.1rem 0',
-    fontSize: '0.72rem',
-    flex: '1 1 0',
-    minWidth: 0,
-    boxSizing: 'border-box' as const,
-    fontVariantNumeric: 'tabular-nums' as const,
-  },
-  // Unit fields size to their content (see .cg-num-unit) so the value and
-  // its unit cluster on the left next to the icon, not at the far edge.
-  inputUnit: {
-    background: 'transparent',
-    color: colors.text,
-    border: 'none',
-    outline: 'none',
-    padding: '0.1rem 0',
-    fontSize: '0.72rem',
-    flex: '0 0 auto',
-    width: 'auto',
-    minWidth: 0,
-    maxWidth: '5rem',
-    boxSizing: 'border-box' as const,
-    fontVariantNumeric: 'tabular-nums' as const,
-  },
-  // Pushes the keyframe diamond to the field's right edge.
-  point: {
-    marginLeft: 'auto',
-    display: 'inline-flex',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  // The whole field/segment is a drag-to-scrub + click-to-edit surface.
-  scrubSurface: {
-    cursor: 'ew-resize',
-    touchAction: 'none' as const,
-    userSelect: 'none' as const,
-  },
-} as const;
 
 /**
  * Compact Loopic-style transform inspector. Each row is one or two cells
@@ -105,7 +48,7 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
   }
 
   return (
-    <div style={styles.col}>
+    <div className={s.col}>
       {/* Position X/Y — one combined field, each axis editable separately. */}
       <div className="cg-input-group">
         <Seg
@@ -214,7 +157,7 @@ function FieldBody(props: FieldProps): JSX.Element {
   const hasUnit = props.suffix !== undefined;
   return (
     <>
-      <span style={styles.icon} aria-hidden>
+      <span className={s.icon} aria-hidden>
         {props.icon}
       </span>
       <RealtimeNumberInput
@@ -224,8 +167,7 @@ function FieldBody(props: FieldProps): JSX.Element {
         min={props.min}
         max={props.max}
         scrub={false}
-        style={hasUnit ? styles.inputUnit : styles.input}
-        className={hasUnit ? 'cg-num-unit' : undefined}
+        className={cx(hasUnit ? s.inputUnit : s.input, hasUnit && 'cg-num-unit')}
         ariaLabel={props.ariaLabel}
       />
       {hasUnit && <span className="cg-unit">{props.suffix}</span>}
@@ -238,9 +180,9 @@ function FieldBody(props: FieldProps): JSX.Element {
 function Seg(props: FieldProps): JSX.Element {
   const scrub = fieldScrub(props);
   return (
-    <div className="cg-seg" style={styles.scrubSurface} onPointerDown={scrub.onPointerDown}>
+    <div className={cx('cg-seg', s.scrubSurface)} onPointerDown={scrub.onPointerDown}>
       <FieldBody {...props} />
-      <span style={styles.point}>{props.point}</span>
+      <span className={s.point}>{props.point}</span>
     </div>
   );
 }
@@ -250,9 +192,9 @@ function Seg(props: FieldProps): JSX.Element {
 function SingleField(props: FieldProps): JSX.Element {
   const scrub = fieldScrub(props);
   return (
-    <div className="cg-field" style={styles.scrubSurface} onPointerDown={scrub.onPointerDown}>
+    <div className={cx('cg-field', s.scrubSurface)} onPointerDown={scrub.onPointerDown}>
       <FieldBody {...props} />
-      <span style={styles.point}>{props.point}</span>
+      <span className={s.point}>{props.point}</span>
     </div>
   );
 }
