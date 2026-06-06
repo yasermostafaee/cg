@@ -4,11 +4,18 @@
 //
 // Browser SPA: the whole app (renderer UI + the in-process platform bridge)
 // is Renderer-tier. Node-tier rules only apply to build scripts + tests.
-import { base, node, renderer } from '@cg/eslint-config';
+import { base, jsxA11y, node, renderer } from '@cg/eslint-config';
 
 export default [
   ...base,
   renderer({ files: ['src/**/*.{ts,tsx,mts,cts}'] }),
+  // Accessibility rules (warn-level) for the React UI. The canvas/Konva
+  // editor is pointer/gizmo-driven rather than DOM-control-driven, and the
+  // generated template-runtime bundle is build output — both are excluded.
+  jsxA11y({
+    files: ['src/**/*.tsx'],
+    ignores: ['src/renderer/features/canvas/**', 'src/generated/**'],
+  }),
   node({ files: ['scripts/**/*.{mjs,js}', 'tests/**/*.{ts,tsx}'] }),
   {
     files: ['scripts/**/*.{mjs,js}'],

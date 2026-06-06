@@ -15,4 +15,12 @@ export default [
       'no-console': 'off',
     },
   },
+  {
+    // Ambient `declare module` shims for untyped deps must stay non-module
+    // files, so they reference types via inline `import()` annotations.
+    files: ['src/types/**/*.d.ts'],
+    rules: {
+      '@typescript-eslint/consistent-type-imports': 'off',
+    },
+  },
 ];

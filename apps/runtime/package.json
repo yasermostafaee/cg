@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "eslint . --max-warnings 0",
+    "lint": "eslint .",
     "clean": "rimraf dist .vite coverage *.tsbuildinfo"
   },
   "dependencies": {

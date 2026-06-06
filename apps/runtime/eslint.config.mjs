@@ -4,11 +4,14 @@
 //
 // Browser SPA: the whole app (renderer UI + the in-process platform bridge)
 // is Renderer-tier. Node-tier rules only apply to tests.
-import { base, node, renderer } from '@cg/eslint-config';
+import { base, jsxA11y, node, renderer } from '@cg/eslint-config';
 
 export default [
   ...base,
   renderer({ files: ['src/**/*.{ts,tsx,mts,cts}'] }),
+  // Accessibility rules (warn-level) for the React UI. This app has no
+  // canvas/Konva editor or template-output JSX, so nothing is excluded.
+  jsxA11y({ files: ['src/**/*.tsx'] }),
   node({ files: ['tests/**/*.{ts,tsx}'] }),
   {
     files: ['tests/**/*.{ts,tsx}'],
