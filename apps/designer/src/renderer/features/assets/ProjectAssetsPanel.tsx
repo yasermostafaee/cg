@@ -82,21 +82,18 @@ const styles = {
     flexDirection: 'column' as const,
     gap: '0.05rem',
   },
-  empty: {
-    // Span every grid column so the hint uses the full panel width instead of
-    // being squeezed into one 70px cell (which wrapped it to ~6 lines).
-    gridColumn: '1 / -1',
-    margin: 'auto',
-    padding: '1rem 0.5rem',
-    color: colors.textMuted,
-    fontSize: '0.72rem',
-    textAlign: 'center' as const,
-    lineHeight: 1.5,
+  // Empty-state wrapper, used for BOTH grid and list view so the hint sits at
+  // exactly the same offset regardless of the active view (the grid/list
+  // containers have different paddings + flow, which previously shifted it).
+  emptyWrap: {
+    flex: 1,
+    minHeight: 0,
+    overflowY: 'auto' as const,
+    padding: '0.5rem 0.4rem',
   },
-  // List mode is a plain flex column, so `margin: auto` would shove the hint to
-  // the vertical center. Keep it near the top instead.
-  emptyList: {
-    padding: '0.9rem 0.5rem',
+  empty: {
+    margin: 0,
+    padding: '1rem 0.5rem',
     color: colors.textMuted,
     fontSize: '0.72rem',
     textAlign: 'center' as const,
@@ -371,24 +368,26 @@ export function ProjectAssetsPanel(): JSX.Element {
           aria-label="Search assets"
         />
       </div>
-      <div style={assetView === 'list' ? styles.list : styles.grid} data-role="assets-grid">
-        {visible.length === 0 ? (
-          <p style={assetView === 'list' ? styles.emptyList : styles.empty}>
+      {visible.length === 0 ? (
+        <div style={styles.emptyWrap} data-role="assets-grid">
+          <p style={styles.empty}>
             No assets yet.
             <br />
             Click + to add an image or font.
           </p>
-        ) : (
-          visible.map((a) => (
+        </div>
+      ) : (
+        <div style={assetView === 'list' ? styles.list : styles.grid} data-role="assets-grid">
+          {visible.map((a) => (
             <AssetThumb
               key={a.assetId}
               asset={a}
               layout={assetView}
               onContextMenu={openContextMenu}
             />
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
       {addMenu !== null && (
         <div
           style={{ ...styles.menu, left: addMenu.x, top: addMenu.y }}
