@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { colors } from '../../theme.js';
 import { designerStore, type DesignerTool } from '../../state/store.js';
+import { cx } from '../../cx.js';
+import * as s from './CanvasToolbar.css.js';
 
 interface Props {
   tool: DesignerTool;
@@ -31,37 +32,6 @@ const TOOLS: readonly ToolEntry[] = [
   // ships. Re-add `{ id: 'image', label: 'Image', icon: '▦' }` when fixed.
 ];
 
-const styles = {
-  group: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.2rem',
-  },
-  button: {
-    width: 26,
-    height: 26,
-    background: 'transparent',
-    color: colors.textMuted,
-    border: 'none',
-    borderRadius: '0.22rem',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    fontSize: '0.95rem',
-    padding: 0,
-  },
-  // Hover and selected both use a brighter background (no border); selected
-  // is a touch brighter and brightens the icon so it still reads as active.
-  buttonHover: {
-    background: 'rgba(255, 255, 255, 0.10)',
-  },
-  buttonActive: {
-    color: colors.text,
-    background: 'rgba(255, 255, 255, 0.18)',
-  },
-} as const;
-
 /**
  * D-008 — shape tools, rendered on the LEFT side of the canvas header.
  * Six tools matching the reference pic in this order:
@@ -70,18 +40,18 @@ const styles = {
 export function CanvasToolbar({ tool }: Props): JSX.Element {
   const [hovered, setHovered] = useState<DesignerTool | null>(null);
   return (
-    <div style={styles.group} role="toolbar" aria-label="Canvas tools">
+    <div className={s.group} role="toolbar" aria-label="Canvas tools">
       {TOOLS.map((t) => {
         const active = t.id === tool;
         return (
           <button
             key={t.id}
             type="button"
-            style={{
-              ...styles.button,
-              ...(hovered === t.id && !active ? styles.buttonHover : {}),
-              ...(active ? styles.buttonActive : {}),
-            }}
+            className={cx(
+              s.button,
+              hovered === t.id && !active && s.buttonHover,
+              active && s.buttonActive,
+            )}
             onClick={() => designerStore.setTool(t.id)}
             onMouseEnter={() => setHovered(t.id)}
             onMouseLeave={() => setHovered((h) => (h === t.id ? null : h))}

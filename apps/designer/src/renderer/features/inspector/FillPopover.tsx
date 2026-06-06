@@ -1,9 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Fill } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { ColorEditor } from './ColorPopover.js';
 import { RealtimeNumberInput } from './controls.js';
+import { cx } from '../../cx.js';
+import * as s from './FillPopover.css.js';
 
 /**
  * Fill control for shapes — extends the colour picker with Solid / Linear /
@@ -17,17 +19,6 @@ interface Stop {
   at: number;
   color: string;
 }
-
-const CHECKER: CSSProperties = {
-  backgroundColor: '#fff',
-  backgroundImage:
-    'linear-gradient(45deg, #999 25%, transparent 25%), ' +
-    'linear-gradient(-45deg, #999 25%, transparent 25%), ' +
-    'linear-gradient(45deg, transparent 75%, #999 75%), ' +
-    'linear-gradient(-45deg, transparent 75%, #999 75%)',
-  backgroundSize: '8px 8px',
-  backgroundPosition: '0 0, 0 4px, 4px -4px, -4px 0',
-};
 
 const DEFAULT_FILL: Fill = { kind: 'solid', color: '#000000' };
 
@@ -81,29 +72,6 @@ interface FillFieldProps {
   labelWidth?: number;
 }
 
-const rowStyles = {
-  row: {
-    display: 'grid',
-    gap: '0.35rem',
-    alignItems: 'center',
-    padding: '0.1rem 0',
-    fontSize: '0.74rem',
-  },
-  label: { color: colors.textMuted, fontSize: '0.7rem', letterSpacing: '0.02em' },
-  field: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.4rem',
-  },
-  kindLabel: {
-    flex: 1,
-    color: colors.text,
-    fontSize: '0.72rem',
-    textTransform: 'capitalize' as const,
-  },
-  point: { display: 'flex', alignItems: 'center' },
-} as const;
-
 const KIND_NAME: Record<Fill['kind'], string> = {
   solid: 'Solid',
   linear: 'Linear',
@@ -116,33 +84,23 @@ export function FillField(props: FillFieldProps): JSX.Element {
   const btnRef = useRef<HTMLButtonElement>(null);
   return (
     <div
-      style={{ ...rowStyles.row, gridTemplateColumns: `${String(props.labelWidth ?? 74)}px 1fr` }}
+      className={s.row}
+      style={{ gridTemplateColumns: `${String(props.labelWidth ?? 74)}px 1fr` }}
     >
-      <span style={rowStyles.label}>{props.label}</span>
-      <div className="cg-field" style={rowStyles.field}>
+      <span className={s.label}>{props.label}</span>
+      <div className={cx('cg-field', s.field)}>
         <button
           ref={btnRef}
           type="button"
           aria-label={`${props.label} fill`}
           title="Edit fill"
           onClick={() => setOpen((o) => !o)}
-          style={{
-            position: 'relative',
-            width: 14,
-            height: 14,
-            borderRadius: '0.15rem',
-            border: `1px solid ${colors.border}`,
-            padding: 0,
-            cursor: 'pointer',
-            overflow: 'hidden',
-            flexShrink: 0,
-            ...CHECKER,
-          }}
+          className={cx(s.swatchButton, s.checker)}
         >
-          <span style={{ position: 'absolute', inset: 0, background: previewCss(fill) }} />
+          <span className={s.swatchFill} style={{ background: previewCss(fill) }} />
         </button>
-        <span style={rowStyles.kindLabel}>{KIND_NAME[fill.kind]}</span>
-        {props.trailing !== undefined && <span style={rowStyles.point}>{props.trailing}</span>}
+        <span className={s.kindLabel}>{KIND_NAME[fill.kind]}</span>
+        {props.trailing !== undefined && <span className={s.point}>{props.trailing}</span>}
       </div>
       {open && (
         <FillPopover
@@ -245,24 +203,15 @@ function FillPopover({
       ref={rootRef}
       role="dialog"
       aria-label="Fill editor"
+      className={s.popover}
       style={{
-        position: 'fixed',
         top: pos?.top ?? -9999,
         left: pos?.left ?? -9999,
         visibility: pos === null ? 'hidden' : 'visible',
-        width: 210,
-        background: '#1c1f2d',
-        border: `1px solid ${colors.border}`,
-        borderRadius: '0.4rem',
-        padding: '0.6rem',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-        zIndex: 4000,
-        userSelect: 'none',
-        touchAction: 'none',
       }}
     >
       {/* Mode switch */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: '0.55rem' }}>
+      <div className={s.modeSwitch}>
         {(['solid', 'linear', 'radial'] as const).map((k) => {
           const active = value.kind === k;
           return (
@@ -273,13 +222,8 @@ function FillPopover({
                 setSelected(0);
                 onChange(toKind(value, k));
               }}
+              className={s.modeButton}
               style={{
-                flex: 1,
-                padding: '0.28rem 0',
-                fontSize: '0.68rem',
-                textTransform: 'capitalize',
-                cursor: 'pointer',
-                borderRadius: '0.2rem',
                 border: `1px solid ${active ? colors.accent : colors.border}`,
                 background: active ? colors.accent : 'transparent',
                 color: active ? '#06121F' : colors.textMuted,
@@ -296,35 +240,21 @@ function FillPopover({
         <>
           {/* Gradient preview bar */}
           <div
-            style={{
-              height: 16,
-              borderRadius: '0.2rem',
-              marginBottom: '0.45rem',
-              background: `linear-gradient(to right, ${stopString(stops)})`,
-              border: `1px solid ${colors.border}`,
-            }}
+            className={s.gradientBar}
+            style={{ background: `linear-gradient(to right, ${stopString(stops)})` }}
           />
           {/* Stop swatches */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: '0.45rem' }}>
-            {stops.map((s, i) => (
+          <div className={s.stopRow}>
+            {stops.map((stop, i) => (
               <button
                 key={i}
                 type="button"
                 aria-label={`Stop ${String(i + 1)}`}
                 onClick={() => setSelected(i)}
-                style={{
-                  position: 'relative',
-                  width: 18,
-                  height: 18,
-                  borderRadius: '0.15rem',
-                  border: `2px solid ${i === sel ? colors.accent : colors.border}`,
-                  padding: 0,
-                  cursor: 'pointer',
-                  overflow: 'hidden',
-                  ...CHECKER,
-                }}
+                className={cx(s.stopButton, s.checker)}
+                style={{ border: `2px solid ${i === sel ? colors.accent : colors.border}` }}
               >
-                <span style={{ position: 'absolute', inset: 0, background: s.color }} />
+                <span className={s.swatchFill} style={{ background: stop.color }} />
               </button>
             ))}
             <button
@@ -332,7 +262,7 @@ function FillPopover({
               aria-label="Add stop"
               title="Add stop"
               onClick={addStop}
-              style={miniBtn}
+              className={s.miniBtn}
             >
               +
             </button>
@@ -342,7 +272,8 @@ function FillPopover({
               title="Remove stop"
               onClick={removeStop}
               disabled={stops.length <= 2}
-              style={{ ...miniBtn, opacity: stops.length <= 2 ? 0.4 : 1 }}
+              className={s.miniBtn}
+              style={{ opacity: stops.length <= 2 ? 0.4 : 1 }}
             >
               −
             </button>
@@ -384,22 +315,6 @@ function FillPopover({
   return createPortal(popover, document.body);
 }
 
-const miniBtn: CSSProperties = {
-  width: 18,
-  height: 18,
-  borderRadius: '0.15rem',
-  border: `1px solid ${colors.border}`,
-  background: 'transparent',
-  color: colors.text,
-  cursor: 'pointer',
-  fontSize: '0.85rem',
-  lineHeight: 1,
-  padding: 0,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-};
-
 function MiniNumber({
   label,
   value,
@@ -416,24 +331,13 @@ function MiniNumber({
   onCommit: (v: number) => void;
 }): JSX.Element {
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '0.4rem',
-        marginBottom: '0.4rem',
-      }}
-    >
-      <span style={{ color: colors.textMuted, fontSize: '0.68rem' }}>{label}</span>
+    <div className={s.miniNumberRow}>
+      <span className={s.miniNumberLabel}>{label}</span>
       {/* Bordered field with the unit (% / ° / px) INSIDE it, right after the
           value, so the units line up across rows. `.cg-field` strips the
           inner input's own border/background (see index.css); drag the field to
           scrub (like the property inputs) — every change commits in real time. */}
-      <span
-        className="cg-field"
-        style={{ width: 72, padding: '0.15rem 0.4rem', gap: 2, justifyContent: 'flex-end' }}
-      >
+      <span className={cx('cg-field', s.miniNumberField)}>
         <RealtimeNumberInput
           value={value}
           step={1}
@@ -441,14 +345,7 @@ function MiniNumber({
           {...(max !== undefined ? { max } : {})}
           onCommit={onCommit}
           ariaLabel={label}
-          style={{
-            flex: '1 1 0',
-            minWidth: 0,
-            color: colors.text,
-            fontSize: '0.7rem',
-            textAlign: 'right',
-            fontVariantNumeric: 'tabular-nums',
-          }}
+          className={s.miniNumberInput}
         />
         {suffix !== undefined && <span className="cg-unit">{suffix}</span>}
       </span>

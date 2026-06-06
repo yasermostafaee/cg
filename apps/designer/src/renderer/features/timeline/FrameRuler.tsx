@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { colors } from '../../theme.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
+import * as s from './FrameRuler.css.js';
 
 interface Props {
   frameIn: number;
@@ -13,50 +13,6 @@ interface Props {
   stride: number;
   onScrub: (frame: number) => void;
 }
-
-const styles = {
-  outer: {
-    position: 'relative' as const,
-    height: 34,
-    backgroundColor: '#32364b',
-    borderBottom: `1px solid ${colors.border}`,
-    userSelect: 'none' as const,
-    cursor: 'default',
-  },
-  tick: {
-    position: 'absolute' as const,
-    top: 0,
-    bottom: 0,
-    color: colors.textMuted,
-    fontSize: '0.66rem',
-    paddingLeft: 4,
-    lineHeight: '34px',
-  },
-  playhead: {
-    position: 'absolute' as const,
-    top: 0,
-    bottom: 0,
-    width: 0,
-    borderLeft: `1.5px solid ${colors.accent}`,
-    pointerEvents: 'none' as const,
-    zIndex: 2,
-  },
-  playheadCap: {
-    position: 'absolute' as const,
-    top: 2,
-    transform: 'translateX(-50%)',
-    background: colors.accent,
-    color: '#000',
-    fontSize: '0.66rem',
-    fontWeight: 700,
-    padding: '0 4px',
-    borderRadius: 3,
-    lineHeight: '16px',
-    pointerEvents: 'none' as const,
-    // Sit above the playhead line so the frame number isn't crossed by it.
-    zIndex: 3,
-  },
-} as const;
 
 /**
  * Frame ruler with tick labels and a draggable playhead. Click anywhere on
@@ -92,8 +48,8 @@ export function FrameRuler({ frameIn, frameOut, stride, onScrub }: Props): JSX.E
   return (
     <div
       ref={ref}
+      className={s.outer}
       style={{
-        ...styles.outer,
         backgroundImage: `repeating-linear-gradient(to right, rgb(72, 74, 88) 0, rgb(72, 74, 88) 1px, transparent 1px, transparent ${linePeriodPct}%)`,
       }}
       role="slider"
@@ -106,10 +62,8 @@ export function FrameRuler({ frameIn, frameOut, stride, onScrub }: Props): JSX.E
       {ticks.map((f) => (
         <span
           key={f}
-          style={{
-            ...styles.tick,
-            left: `${(((f - frameIn) / span) * 100).toFixed(3)}%`,
-          }}
+          className={s.tick}
+          style={{ left: `${(((f - frameIn) / span) * 100).toFixed(3)}%` }}
         >
           {f}
         </span>
@@ -142,8 +96,10 @@ function RulerPlayhead({
   }, [currentFrame, sliderRef]);
   return (
     <>
-      <div style={{ ...styles.playhead, left: `${pct}%` }} />
-      <div style={{ ...styles.playheadCap, left: `${pct}%` }}>{currentFrame}</div>
+      <div className={s.playhead} style={{ left: `${pct}%` }} />
+      <div className={s.playheadCap} style={{ left: `${pct}%` }}>
+        {currentFrame}
+      </div>
     </>
   );
 }

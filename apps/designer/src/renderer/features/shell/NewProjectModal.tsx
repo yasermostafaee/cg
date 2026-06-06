@@ -4,6 +4,7 @@ import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
 import { RealtimeNumberInput } from '../inspector/controls.js';
 import { Modal, ModalButton } from './Modal.js';
+import * as s from './NewProjectModal.css.js';
 
 interface Props {
   onClose: () => void;
@@ -28,32 +29,6 @@ const FRAME_RATES: readonly FrameRate[] = [25, 29.97, 50, 59.94, 60];
 // needs a TemplateType, so every new project ships as 'custom' and the
 // operator picks a starter from the Library panel afterwards if needed.
 const DEFAULT_TEMPLATE_TYPE: TemplateType = 'custom';
-
-const styles = {
-  row: {
-    display: 'grid',
-    gridTemplateColumns: '120px 1fr',
-    alignItems: 'center',
-    gap: '0.5rem',
-  },
-  label: { color: colors.textMuted, fontSize: '0.78rem' },
-  input: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.2rem',
-    padding: '0.25rem 0.4rem',
-    fontSize: '0.82rem',
-    width: '100%',
-    boxSizing: 'border-box' as const,
-  },
-  inlinePair: {
-    display: 'grid',
-    gridTemplateColumns: '1fr auto 1fr',
-    gap: '0.3rem',
-    alignItems: 'center',
-  },
-} as const;
 
 /**
  * Modal dialog for the "New project" landing action (D-007). Collects
@@ -100,10 +75,10 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
         </>
       }
     >
-      <div style={styles.row}>
-        <span style={styles.label}>Name</span>
+      <div className={s.row}>
+        <span className={s.label}>Name</span>
         <input
-          style={styles.input}
+          className={s.input}
           value={name}
           onChange={(e) => setName(e.target.value)}
           autoFocus
@@ -111,10 +86,10 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
         />
       </div>
 
-      <div style={styles.row}>
-        <span style={styles.label}>Resolution</span>
+      <div className={s.row}>
+        <span className={s.label}>Resolution</span>
         <select
-          style={styles.input}
+          className={s.input}
           value={presetIdx}
           onChange={(e) => setPresetIdx(Number(e.target.value))}
           aria-label="Resolution preset"
@@ -128,11 +103,11 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
       </div>
 
       {isCustom && (
-        <div style={styles.row}>
-          <span style={styles.label}>Custom W × H</span>
-          <div style={styles.inlinePair}>
+        <div className={s.row}>
+          <span className={s.label}>Custom W × H</span>
+          <div className={s.inlinePair}>
             <RealtimeNumberInput
-              style={styles.input}
+              className={s.input}
               min={1}
               step={1}
               value={customW}
@@ -141,7 +116,7 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
             />
             <span style={{ color: colors.textMuted }}>×</span>
             <RealtimeNumberInput
-              style={styles.input}
+              className={s.input}
               min={1}
               step={1}
               value={customH}
@@ -152,10 +127,10 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
         </div>
       )}
 
-      <div style={styles.row}>
-        <span style={styles.label}>Frame rate</span>
+      <div className={s.row}>
+        <span className={s.label}>Frame rate</span>
         <select
-          style={styles.input}
+          className={s.input}
           value={String(frameRate)}
           onChange={(e) => setFrameRate(Number(e.target.value) as FrameRate)}
           aria-label="Frame rate"
@@ -168,11 +143,11 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
         </select>
       </div>
 
-      <div style={styles.row}>
-        <span style={styles.label}>Total frames</span>
-        <div style={styles.inlinePair}>
+      <div className={s.row}>
+        <span className={s.label}>Total frames</span>
+        <div className={s.inlinePair}>
           <RealtimeNumberInput
-            style={styles.input}
+            className={s.input}
             min={1}
             step={1}
             value={durationFrames}

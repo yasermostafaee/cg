@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AnimatableProperty, Element, Scene } from '@cg/shared-schema';
-import { colors } from '../../theme.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
+import * as s from './TimelineDock.css.js';
 import { DisplayRow } from './DisplayRow.js';
 import { ElementRow, lifespanColorFor } from './ElementRow.js';
 import { FrameRuler, pickStride } from './FrameRuler.js';
@@ -21,246 +21,6 @@ interface Props {
 }
 
 const TIMELINE_BG = '#1c1f2d';
-
-const styles = {
-  dock: {
-    background: colors.panel,
-    borderTop: `1px solid ${colors.border}`,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    fontSize: '0.72rem',
-    flex: 1,
-    minHeight: 0,
-    minWidth: 0,
-    width: '100%',
-    paddingTop: 16,
-    boxSizing: 'border-box' as const,
-  },
-  body: {
-    flex: 1,
-    display: 'flex',
-    minHeight: 0,
-    minWidth: 0,
-    overflow: 'hidden' as const,
-  },
-  leftCol: {
-    width: LABEL_COL_PX,
-    flex: '0 0 auto',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    overflow: 'hidden' as const,
-    borderRight: `1px solid ${colors.border}`,
-    background: colors.panel,
-  },
-  leftHeader: {
-    background: 'transparent',
-    borderBottom: `1px solid ${colors.border}`,
-    color: colors.textMuted,
-    fontVariantNumeric: 'tabular-nums' as const,
-    padding: '0 0.6rem',
-    height: 34,
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: '0.15rem',
-    boxSizing: 'border-box' as const,
-  },
-  leftBody: {
-    flex: 1,
-    minHeight: 0,
-    overflow: 'hidden' as const,
-  },
-  rightCol: {
-    flex: 1,
-    minWidth: 0,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    overflow: 'hidden' as const,
-  },
-  topScroll: {
-    overflowX: 'hidden' as const,
-    overflowY: 'hidden' as const,
-    height: 34,
-    borderBottom: `1px solid ${colors.border}`,
-    background: '#32364b',
-    // Reserve the same gutter as the body so the ruler's inner width
-    // matches the lane body's inner width — keeps per-frame grid lines
-    // aligned across the two regions.
-    scrollbarGutter: 'stable' as const,
-  },
-  rightBody: {
-    flex: 1,
-    minHeight: 0,
-    overflow: 'auto' as const,
-    scrollbarGutter: 'stable' as const,
-  },
-  zoomInner: {
-    minWidth: '100%',
-  },
-  rightBodyInner: {
-    position: 'relative' as const,
-    minWidth: '100%',
-    // Fill the whole body height even with no layers, so the frame grid and the
-    // playhead run to the bottom of the timeline (not just behind the rows).
-    minHeight: '100%',
-  },
-  bodyPlayhead: {
-    position: 'absolute' as const,
-    top: 0,
-    bottom: 0,
-    width: 0,
-    borderLeft: `1.5px solid ${colors.accent}`,
-    pointerEvents: 'none' as const,
-    zIndex: 3,
-  },
-  // Top-of-body "Scene" row — single bar covering the active scene
-  // range. No chevron, no eye/lock, no keyframe diamonds; the only
-  // affordance is the right-edge gripper that resizes the scene
-  // duration via the same store action the inspector's duration
-  // field uses.
-  sceneLabel: {
-    height: 22,
-    boxSizing: 'border-box' as const,
-    background: colors.panel,
-  },
-  sceneLane: {
-    position: 'relative' as const,
-    height: 22,
-    boxSizing: 'border-box' as const,
-  },
-  sceneBar: {
-    position: 'absolute' as const,
-    top: '50%',
-    left: 0,
-    right: 0,
-    height: 20,
-    transform: 'translateY(-50%)',
-    background: colors.accent,
-    opacity: 0.45,
-    borderRadius: 2,
-    pointerEvents: 'none' as const,
-  },
-  sceneBarHandle: {
-    position: 'absolute' as const,
-    top: '50%',
-    width: 8,
-    height: 20,
-    transform: 'translateY(-50%)',
-    background: colors.accent,
-    borderRadius: 2,
-    cursor: 'ew-resize',
-    touchAction: 'none' as const,
-    pointerEvents: 'auto' as const,
-    zIndex: 4,
-  },
-  // Dimmed overlay over the trailing frames [activeOut .. total]. The scene
-  // total (ruler) is unchanged — these frames stay visible but are outside
-  // the play / export window. pointerEvents none so the ruler/lanes beneath
-  // stay scrubbable/inspectable.
-  inactiveTail: {
-    position: 'absolute' as const,
-    top: 0,
-    bottom: 0,
-    right: 0,
-    background: 'rgba(12, 14, 22, 0.55)',
-    borderLeft: `1px dashed ${colors.accentMuted}`,
-    pointerEvents: 'none' as const,
-    // Above the lifespan bars (incl. a selected bar's zIndex:1) so the inactive
-    // region dims the selected layer too, but below the playhead/handle.
-    zIndex: 2,
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '0.3rem 0.5rem',
-    borderBottom: `1px solid ${colors.border}`,
-  },
-  headerLeft: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.35rem',
-    minWidth: 0,
-  },
-  headerCenter: {
-    flex: 'none' as const,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.35rem',
-  },
-  headerRight: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'flex-end' as const,
-    minWidth: 0,
-  },
-  title: {
-    fontWeight: 700,
-    color: colors.textMuted,
-    fontSize: '0.66rem',
-    letterSpacing: '0.05em',
-    marginRight: '0.4rem',
-  },
-  button: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.18rem',
-    fontSize: '0.7rem',
-    padding: '0.1rem 0.4rem',
-    cursor: 'pointer',
-  },
-  buttonPrimary: {
-    background: colors.accent,
-    color: '#000',
-    border: `1px solid ${colors.accentMuted}`,
-    borderRadius: '0.18rem',
-    fontSize: '0.7rem',
-    padding: '0.1rem 0.45rem',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  frameReadout: {
-    color: colors.textMuted,
-    fontSize: '0.7rem',
-    fontVariantNumeric: 'tabular-nums' as const,
-  },
-  empty: {
-    padding: '0.6rem',
-    color: colors.textMuted,
-    fontSize: '0.72rem',
-    textAlign: 'center' as const,
-  },
-  groupHeaderLabel: {
-    color: '#bcc2e0',
-    fontSize: '0.7rem',
-    fontWeight: 600,
-    letterSpacing: '0.04em',
-    padding: '0 0.6rem 0 1.4rem',
-    background: colors.panel,
-    borderRight: `1px solid ${colors.border}`,
-    height: 22,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.3rem',
-    boxSizing: 'border-box' as const,
-  },
-  groupHeaderLane: {
-    height: 22,
-    boxSizing: 'border-box' as const,
-  },
-  groupChevron: {
-    background: 'transparent',
-    border: 'none',
-    color: colors.textMuted,
-    cursor: 'pointer',
-    padding: 0,
-    fontSize: '1rem',
-    lineHeight: 1,
-    width: 16,
-    textAlign: 'center' as const,
-  },
-} as const;
 
 /**
  * Animation timeline dock — Loopic-style element tree (B-001 redesign).
@@ -309,7 +69,10 @@ export function TimelineDock({
   const tickStride = pickStride(visibleFrames);
   const gridPeriodPct = ((tickStride * 100) / span).toFixed(4);
   const rightBodyRef = useRef<HTMLDivElement | null>(null);
+  // Outer label viewport (overflow:hidden) — used to forward wheel events to
+  // the lane body. Its content is offset by `leftBodyInnerRef`'s transform.
   const leftBodyRef = useRef<HTMLDivElement | null>(null);
+  const leftBodyInnerRef = useRef<HTMLDivElement | null>(null);
   const topScrollRef = useRef<HTMLDivElement | null>(null);
   const zoomRef = useRef(timelineZoom);
   zoomRef.current = timelineZoom;
@@ -318,10 +81,18 @@ export function TimelineDock({
   // into the left label column (vertical only) and the top ruler strip
   // (horizontal only) so the three regions stay aligned. The horizontal
   // scrollbar therefore lives only under the lanes, not under labels.
+  //
+  // The label column is driven by a CSS transform rather than its own
+  // scrollTop: when the lanes show a horizontal scrollbar, the right body's
+  // client height shrinks by the scrollbar thickness, so its max scrollTop
+  // exceeds an overflow:hidden label column's max scrollTop. Mirroring
+  // scrollTop then *clamps* near the bottom and the labels drift above their
+  // lanes. translateY isn't clamped, so the two stay locked at every offset.
   function syncScroll(): void {
     const rb = rightBodyRef.current;
     if (rb === null) return;
-    if (leftBodyRef.current !== null) leftBodyRef.current.scrollTop = rb.scrollTop;
+    if (leftBodyInnerRef.current !== null)
+      leftBodyInnerRef.current.style.transform = `translateY(${String(-rb.scrollTop)}px)`;
     if (topScrollRef.current !== null) topScrollRef.current.scrollLeft = rb.scrollLeft;
   }
 
@@ -428,9 +199,10 @@ export function TimelineDock({
   // lists it as the top row — matching the "top layer = frontmost" convention.
   const elements: readonly Element[] = [...flattenElements(scene)].reverse();
 
-  // Start newly added elements collapsed, so adding a shape doesn't expand its
-  // property-track section. Elements present on scene load keep their default
-  // (expanded); only ids that appear *after* the baseline get auto-collapsed.
+  // Layers start collapsed: opening a template with many layers shows a tidy
+  // list of names, not every layer's property-track section expanded at once.
+  // On scene load we collapse all current elements; newly added shapes are
+  // also collapsed so adding one doesn't expand its tracks.
   const sceneId = scene.id;
   const elementIdsKey = elements.map((el) => el.id).join('|');
   const seenIdsRef = useRef<Set<string>>(new Set());
@@ -438,9 +210,11 @@ export function TimelineDock({
   useEffect(() => {
     const ids = elementIdsKey === '' ? [] : elementIdsKey.split('|');
     if (seenSceneRef.current !== sceneId) {
-      // New scene (or first mount): adopt its elements as the baseline.
+      // New scene (or first mount): adopt its elements as the baseline and
+      // collapse them all.
       seenSceneRef.current = sceneId;
       seenIdsRef.current = new Set(ids);
+      setCollapsedIds(new Set(ids));
       return;
     }
     const added = ids.filter((id) => !seenIdsRef.current.has(id));
@@ -535,83 +309,85 @@ export function TimelineDock({
   }
 
   return (
-    <section style={styles.dock} aria-label="Animation timeline">
-      <div style={styles.body}>
-        <div style={styles.leftCol}>
-          <div style={styles.leftHeader}>
+    <section className={s.dock} aria-label="Animation timeline">
+      <div className={s.body}>
+        <div className={s.leftCol} style={{ width: LABEL_COL_PX }}>
+          <div className={s.leftHeader}>
             <FrameReadout frameOut={frameOut} />
           </div>
-          <div style={styles.leftBody} ref={leftBodyRef} onClick={clearSelectionOnEmpty}>
-            <div style={styles.sceneLabel} aria-hidden onClick={clearSelection} />
-            {elements.length === 0 ? (
-              <p style={styles.empty}>No elements yet. Add a shape, text, or image to start.</p>
-            ) : (
-              elements.map((el) => {
-                const expanded = !isCollapsed(el.id);
-                return (
-                  <div key={el.id}>
-                    <ElementRow
-                      element={el}
-                      expanded={expanded}
-                      onToggleExpand={() => toggleCollapsed(el.id)}
-                      isSelected={selection.has(el.id)}
-                      frameRange={scene.frameRange}
-                      lifespanColor={el.timelineColor ?? lifespanColorFor(el)}
-                      onContextMenu={openLayerMenu}
-                      part="label"
-                    />
-                    {expanded &&
-                      timelineGroupsFor(el).map((group) => {
-                        const groupKey = `${el.id}::${group.title}`;
-                        const groupExpanded = isGroupExpanded(groupKey);
-                        return (
-                          <div key={groupKey}>
-                            <div className="cg-tl-row" style={styles.groupHeaderLabel}>
-                              <button
-                                type="button"
-                                style={styles.groupChevron}
-                                onClick={() => toggleGroupExpanded(groupKey)}
-                                aria-expanded={groupExpanded}
-                                aria-label={`Toggle ${group.title.toLowerCase()} tracks`}
-                              >
-                                {groupExpanded ? '▾' : '▸'}
-                              </button>
-                              <span>{group.title}</span>
+          <div className={s.leftBody} ref={leftBodyRef} onClick={clearSelectionOnEmpty}>
+            <div className={s.leftBodyInner} ref={leftBodyInnerRef}>
+              <div className={s.sceneLabel} aria-hidden onClick={clearSelection} />
+              {elements.length === 0 ? (
+                <p className={s.empty}>No elements yet. Add a shape, text, or image to start.</p>
+              ) : (
+                elements.map((el) => {
+                  const expanded = !isCollapsed(el.id);
+                  return (
+                    <div key={el.id}>
+                      <ElementRow
+                        element={el}
+                        expanded={expanded}
+                        onToggleExpand={() => toggleCollapsed(el.id)}
+                        isSelected={selection.has(el.id)}
+                        frameRange={scene.frameRange}
+                        lifespanColor={el.timelineColor ?? lifespanColorFor(el)}
+                        onContextMenu={openLayerMenu}
+                        part="label"
+                      />
+                      {expanded &&
+                        timelineGroupsFor(el).map((group) => {
+                          const groupKey = `${el.id}::${group.title}`;
+                          const groupExpanded = isGroupExpanded(groupKey);
+                          return (
+                            <div key={groupKey}>
+                              <div className={`cg-tl-row ${s.groupHeaderLabel}`}>
+                                <button
+                                  type="button"
+                                  className={s.groupChevron}
+                                  onClick={() => toggleGroupExpanded(groupKey)}
+                                  aria-expanded={groupExpanded}
+                                  aria-label={`Toggle ${group.title.toLowerCase()} tracks`}
+                                >
+                                  {groupExpanded ? '▾' : '▸'}
+                                </button>
+                                <span>{group.title}</span>
+                              </div>
+                              {groupExpanded &&
+                                group.rows.map((entry) =>
+                                  entry.kind === 'animatable' ? (
+                                    <TrackRow
+                                      key={`${el.id}-${entry.row.property}`}
+                                      row={entry.row}
+                                      element={el}
+                                      frameIn={frameIn}
+                                      frameOut={frameOut}
+                                      selectedKeyframe={selectedKeyframe}
+                                      selectedKeyframes={selectedKeyframes}
+                                      part="label"
+                                    />
+                                  ) : (
+                                    <DisplayRow
+                                      key={`${el.id}-${entry.row.id}`}
+                                      row={entry.row}
+                                      element={el}
+                                      part="label"
+                                    />
+                                  ),
+                                )}
                             </div>
-                            {groupExpanded &&
-                              group.rows.map((entry) =>
-                                entry.kind === 'animatable' ? (
-                                  <TrackRow
-                                    key={`${el.id}-${entry.row.property}`}
-                                    row={entry.row}
-                                    element={el}
-                                    frameIn={frameIn}
-                                    frameOut={frameOut}
-                                    selectedKeyframe={selectedKeyframe}
-                                    selectedKeyframes={selectedKeyframes}
-                                    part="label"
-                                  />
-                                ) : (
-                                  <DisplayRow
-                                    key={`${el.id}-${entry.row.id}`}
-                                    row={entry.row}
-                                    element={el}
-                                    part="label"
-                                  />
-                                ),
-                              )}
-                          </div>
-                        );
-                      })}
-                  </div>
-                );
-              })
-            )}
+                          );
+                        })}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
-        <div style={styles.rightCol}>
-          <div style={styles.topScroll} ref={topScrollRef}>
-            <div style={{ ...styles.zoomInner, width: `${String(timelineZoom * 100)}%` }}>
+        <div className={s.rightCol}>
+          <div className={s.topScroll} ref={topScrollRef}>
+            <div className={s.zoomInner} style={{ width: `${String(timelineZoom * 100)}%` }}>
               <FrameRuler
                 frameIn={frameIn}
                 frameOut={frameOut}
@@ -620,11 +396,11 @@ export function TimelineDock({
               />
             </div>
           </div>
-          <div style={styles.rightBody} ref={rightBodyRef} onScroll={syncScroll}>
+          <div className={s.rightBody} ref={rightBodyRef} onScroll={syncScroll}>
             <div
               onClick={clearSelectionOnEmpty}
+              className={s.rightBodyInner}
               style={{
-                ...styles.rightBodyInner,
                 width: `${String(timelineZoom * 100)}%`,
                 backgroundColor: TIMELINE_BG,
                 // One vertical line per `tickStride` frames, at the same
@@ -637,23 +413,25 @@ export function TimelineDock({
               <BodyPlayhead frameIn={frameIn} frameOut={frameOut} />
               {hasInactiveTail && (
                 <div
-                  style={{ ...styles.inactiveTail, left: `${activePct.toFixed(3)}%` }}
+                  className={s.inactiveTail}
+                  style={{ left: `${activePct.toFixed(3)}%` }}
                   aria-hidden
                 />
               )}
               <div
-                style={styles.sceneLane}
+                className={s.sceneLane}
                 ref={sceneLaneRef}
                 aria-label="Scene active region"
                 onClick={clearSelection}
               >
                 <div
-                  style={{ ...styles.sceneBar, right: 'auto', width: `${activePct.toFixed(3)}%` }}
+                  className={s.sceneBar}
+                  style={{ right: 'auto', width: `${activePct.toFixed(3)}%` }}
                   aria-hidden
                 />
                 <div
+                  className={s.sceneBarHandle}
                   style={{
-                    ...styles.sceneBarHandle,
                     left: `${activePct.toFixed(3)}%`,
                     transform: 'translate(-50%, -50%)',
                   }}
@@ -665,7 +443,7 @@ export function TimelineDock({
                 />
               </div>
               {elements.length === 0 ? (
-                <p style={styles.empty}>&nbsp;</p>
+                <p className={s.empty}>&nbsp;</p>
               ) : (
                 elements.map((el) => {
                   const expanded = !isCollapsed(el.id);
@@ -687,7 +465,7 @@ export function TimelineDock({
                           const groupExpanded = isGroupExpanded(groupKey);
                           return (
                             <div key={groupKey}>
-                              <div style={styles.groupHeaderLane} />
+                              <div className={s.groupHeaderLane} />
                               {groupExpanded &&
                                 group.rows.map((entry) =>
                                   entry.kind === 'animatable' ? (
@@ -756,7 +534,7 @@ function FrameReadout({ frameOut }: { frameOut: number }): JSX.Element {
 function BodyPlayhead({ frameIn, frameOut }: { frameIn: number; frameOut: number }): JSX.Element {
   const currentFrame = useDesignerSelector((s) => s.currentFrame);
   const pct = (((currentFrame - frameIn) / Math.max(1, frameOut - frameIn)) * 100).toFixed(3);
-  return <div style={{ ...styles.bodyPlayhead, left: `${pct}%` }} />;
+  return <div className={s.bodyPlayhead} style={{ left: `${pct}%` }} />;
 }
 
 function flattenElements(scene: Scene): readonly Element[] {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { colors } from '../../theme.js';
+import * as s from './Splitter.css.js';
 
 interface Props {
   axis: 'x' | 'y';
@@ -59,22 +60,15 @@ export function Splitter({ axis, onResize, ariaLabel }: Props): JSX.Element {
       onPointerDown={onPointerDown}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
-      style={{
-        position: 'relative',
-        flex: '0 0 auto',
-        alignSelf: 'stretch',
-        background: 'transparent',
-        ...(vertical
-          ? { width: HIT, cursor: 'col-resize' }
-          : { height: HIT, cursor: 'row-resize' }),
-      }}
+      className={s.handle}
+      style={
+        vertical ? { width: HIT, cursor: 'col-resize' } : { height: HIT, cursor: 'row-resize' }
+      }
     >
       <div
+        className={s.line}
         style={{
-          position: 'absolute',
           background: active ? colors.accent : colors.border,
-          borderRadius: 2,
-          transition: 'background 90ms ease, height 90ms ease, width 90ms ease',
           ...(vertical
             ? { top: 0, bottom: 0, left: (HIT - thickness) / 2, width: thickness }
             : { left: 0, right: 0, top: (HIT - thickness) / 2, height: thickness }),

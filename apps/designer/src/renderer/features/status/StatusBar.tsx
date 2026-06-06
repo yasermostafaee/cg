@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
-import { colors } from '../../theme.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
+import * as s from './StatusBar.css.js';
 import { IssuesPanel } from '../issues/IssuesPanel.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
 
@@ -13,57 +13,6 @@ interface Props {
 
 const ZOOM_MIN = 1;
 const ZOOM_MAX = 20;
-
-const styles = {
-  bar: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.45rem',
-    padding: '0.18rem 0.75rem',
-    background: colors.panel,
-    borderTop: `1px solid ${colors.border}`,
-    fontSize: '0.78rem',
-    color: colors.textMuted,
-  },
-  pill: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '0.4rem',
-    padding: '0.1rem 0.5rem',
-    borderRadius: '0.25rem',
-    border: `1px solid ${colors.border}`,
-    background: colors.panelMuted,
-  },
-  spacer: { flex: 1 },
-  zoomWrap: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.45rem',
-    fontSize: '0.7rem',
-    color: colors.textMuted,
-  },
-  zoomSlider: {
-    width: 140,
-    accentColor: colors.accent,
-    cursor: 'pointer',
-  },
-  zoomReadout: {
-    minWidth: 36,
-    textAlign: 'right' as const,
-    fontVariantNumeric: 'tabular-nums' as const,
-  },
-  zoomButton: {
-    background: colors.panelMuted,
-    color: colors.textMuted,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.2rem',
-    padding: '0 0.45rem',
-    fontSize: '0.9rem',
-    cursor: 'pointer',
-    lineHeight: 1.25,
-    minWidth: 22,
-  },
-} as const;
 
 /** Bottom-of-window status bar — project chrome + issues badge + a
  *  slider that horizontally zooms the timeline. Save / Export live in
@@ -85,20 +34,20 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
     scene === null || scene.frameRate <= 0 ? '0' : (totalFrames / scene.frameRate).toFixed(1);
 
   return (
-    <footer style={styles.bar} aria-label="Status bar">
+    <footer className={s.bar} aria-label="Status bar">
       {scene === null ? (
-        <span style={styles.pill}>no project</span>
+        <span className={s.pill}>no project</span>
       ) : (
         <>
-          <span style={styles.pill} title="Frame rate">
+          <span className={s.pill} title="Frame rate">
             {scene.frameRate} fps
           </span>
-          <span style={styles.pill} title="Duration">
+          <span className={s.pill} title="Duration">
             {totalFrames}f · {durationSecs}s
           </span>
         </>
       )}
-      <span style={styles.pill} title="Resolution">
+      <span className={s.pill} title="Resolution">
         {scene === null ? '0×0' : `${scene.resolution.width}×${scene.resolution.height}`}
       </span>
       {issues.length > 0 && (
@@ -107,8 +56,8 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
           onClick={() => setIssuesOpen(true)}
           aria-label="Show issues"
           title="Show issues"
+          className={s.pill}
           style={{
-            ...styles.pill,
             cursor: 'pointer',
             borderColor: errorCount > 0 ? '#fda4af' : '#fcd34d',
             color: errorCount > 0 ? '#fda4af' : '#fcd34d',
@@ -119,11 +68,11 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
             : `${String(issues.length)} issue${issues.length === 1 ? '' : 's'}`}
         </button>
       )}
-      <span style={styles.spacer} />
-      <div style={styles.zoomWrap} aria-label="Timeline zoom">
+      <span className={s.spacer} />
+      <div className={s.zoomWrap} aria-label="Timeline zoom">
         <button
           type="button"
-          style={styles.zoomButton}
+          className={s.zoomButton}
           onClick={() => designerStore.setTimelineZoom(timelineZoom - 1)}
           disabled={timelineZoom <= ZOOM_MIN}
           aria-label="Zoom out timeline"
@@ -138,13 +87,13 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
           step={1}
           value={timelineZoom}
           onChange={(e) => designerStore.setTimelineZoom(Number(e.target.value))}
-          style={styles.zoomSlider}
+          className={s.zoomSlider}
           aria-label="Timeline zoom"
           title={`Timeline zoom ${String(timelineZoom)}×`}
         />
         <button
           type="button"
-          style={styles.zoomButton}
+          className={s.zoomButton}
           onClick={() => designerStore.setTimelineZoom(timelineZoom + 1)}
           disabled={timelineZoom >= ZOOM_MAX}
           aria-label="Zoom in timeline"
@@ -152,7 +101,7 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
         >
           +
         </button>
-        <span style={styles.zoomReadout}>{timelineZoom}×</span>
+        <span className={s.zoomReadout}>{timelineZoom}×</span>
       </div>
       {issuesOpen && (
         <Modal

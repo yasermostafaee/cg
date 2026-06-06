@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import type { Element, Scene, TextElement } from '@cg/shared-schema';
-import { colors } from '../../theme.js';
 import {
   designerStore,
   editSceneOf,
@@ -19,6 +18,7 @@ import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
 import { Gizmo, lockCursor } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
+import * as s from './CanvasOverlay.css.js';
 
 /**
  * The default canvas pointer — a bold black arrow with a white outline, a bit
@@ -45,26 +45,6 @@ interface Props {
   /** Hand-tool drag delta callback (deltaX, deltaY in scene pixels). */
   onPan?: (dx: number, dy: number) => void;
 }
-
-const styles = {
-  layer: {
-    position: 'absolute' as const,
-    inset: 0,
-    pointerEvents: 'auto' as const,
-  },
-  toolHint: {
-    position: 'absolute' as const,
-    top: 8,
-    right: 8,
-    padding: '0.2rem 0.5rem',
-    background: 'rgba(0, 0, 0, 0.6)',
-    color: colors.textMuted,
-    fontSize: '0.75rem',
-    borderRadius: '0.25rem',
-    pointerEvents: 'none' as const,
-    letterSpacing: '0.05em',
-  },
-} as const;
 
 /**
  * Transparent overlay on top of the cgpreview iframe. Captures clicks,
@@ -258,7 +238,8 @@ export function CanvasOverlay({
   return (
     <div
       ref={layerRef}
-      style={{ ...styles.layer, cursor: cursorStyle }}
+      className={s.layer}
+      style={{ cursor: cursorStyle }}
       onPointerDown={onPointerDown}
       onDoubleClick={onDoubleClick}
       onDragOver={onDragOver}
@@ -279,37 +260,21 @@ export function CanvasOverlay({
         />
       )}
       {bindModeFieldId !== null && (
-        <div style={styles.toolHint}>BIND → {bindModeFieldId} (Esc to cancel)</div>
+        <div className={s.toolHint}>BIND → {bindModeFieldId} (Esc to cancel)</div>
       )}
       {snapGuides.x.map((gx) => (
         <div
           key={`gx-${String(gx)}`}
-          style={{
-            position: 'absolute',
-            top: 0,
-            bottom: 0,
-            left: gx * scale,
-            width: 1,
-            background: '#FF3DAE',
-            pointerEvents: 'none',
-            zIndex: 5,
-          }}
+          className={s.snapGuide}
+          style={{ top: 0, bottom: 0, left: gx * scale, width: 1 }}
           aria-hidden
         />
       ))}
       {snapGuides.y.map((gy) => (
         <div
           key={`gy-${String(gy)}`}
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: gy * scale,
-            height: 1,
-            background: '#FF3DAE',
-            pointerEvents: 'none',
-            zIndex: 5,
-          }}
+          className={s.snapGuide}
+          style={{ left: 0, right: 0, top: gy * scale, height: 1 }}
           aria-hidden
         />
       ))}

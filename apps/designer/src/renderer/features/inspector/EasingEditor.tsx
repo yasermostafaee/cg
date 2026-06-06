@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { EASING_PRESETS, type BezierEasing } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { RealtimeNumberInput } from './controls.js';
+import * as s from './EasingEditor.css.js';
 
 interface Props {
   bezier: BezierEasing;
@@ -33,71 +34,6 @@ function presetKeyFor(b: BezierEasing): string {
   }
   return 'custom';
 }
-
-const styles = {
-  heading: {
-    color: colors.accent,
-    fontSize: '0.7rem',
-    fontWeight: 700,
-    letterSpacing: '0.05em',
-    margin: '0.4rem 0 0.3rem',
-    paddingTop: '0.35rem',
-    borderTop: `1px solid ${colors.border}`,
-  },
-  presetRow: {
-    display: 'grid',
-    gridTemplateColumns: '64px 1fr',
-    alignItems: 'center',
-    gap: '0.4rem',
-    marginBottom: '0.45rem',
-  },
-  label: { color: colors.textMuted, fontSize: '0.7rem' },
-  select: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.2rem',
-    padding: '0.2rem 0.35rem',
-    fontSize: '0.78rem',
-    width: '100%',
-  },
-  graphWrap: {
-    background: colors.panelMuted,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.3rem',
-    padding: '0.3rem',
-    display: 'flex',
-    justifyContent: 'center',
-  },
-  ptRow: {
-    display: 'grid',
-    gridTemplateColumns: '40px 1fr 1fr',
-    alignItems: 'center',
-    gap: '0.4rem',
-    marginTop: '0.4rem',
-  },
-  axisInput: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.3rem',
-    background: colors.panelMuted,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.18rem',
-    padding: '0.1rem 0.4rem',
-  },
-  axisLetter: { color: colors.textMuted, fontSize: '0.68rem' },
-  numInput: {
-    background: 'transparent',
-    color: colors.text,
-    border: 'none',
-    outline: 'none',
-    padding: 0,
-    fontSize: '0.74rem',
-    width: '100%',
-    minWidth: 0,
-    fontVariantNumeric: 'tabular-nums' as const,
-  },
-} as const;
 
 /** Screen X for a curve x ∈ [0,1]. */
 function sx(x: number): number {
@@ -151,11 +87,11 @@ export function EasingEditor({ bezier, onChange }: Props): JSX.Element {
 
   return (
     <div>
-      <h3 style={styles.heading}>KEYFRAME INTERPOLATION</h3>
-      <div style={styles.presetRow}>
-        <span style={styles.label}>Preset</span>
+      <h3 className={s.heading}>KEYFRAME INTERPOLATION</h3>
+      <div className={s.presetRow}>
+        <span className={s.label}>Preset</span>
         <select
-          style={styles.select}
+          className={s.select}
           value={presetKey}
           onChange={(e) => {
             const preset = EASING_PRESETS[e.target.value];
@@ -171,7 +107,7 @@ export function EasingEditor({ bezier, onChange }: Props): JSX.Element {
         </select>
       </div>
 
-      <div style={styles.graphWrap}>
+      <div className={s.graphWrap}>
         <svg
           ref={svgRef}
           width={SIZE}
@@ -268,13 +204,13 @@ export function EasingEditor({ bezier, onChange }: Props): JSX.Element {
         </svg>
       </div>
 
-      <div style={styles.ptRow}>
-        <span style={styles.label}>P1</span>
+      <div className={s.ptRow}>
+        <span className={s.label}>P1</span>
         <AxisInput letter="X" value={x1} onCommit={(v) => setComponent(0, clamp01(v))} />
         <AxisInput letter="Y" value={y1} onCommit={(v) => setComponent(1, v)} />
       </div>
-      <div style={styles.ptRow}>
-        <span style={styles.label}>P2</span>
+      <div className={s.ptRow}>
+        <span className={s.label}>P2</span>
         <AxisInput letter="X" value={x2} onCommit={(v) => setComponent(2, clamp01(v))} />
         <AxisInput letter="Y" value={y2} onCommit={(v) => setComponent(3, v)} />
       </div>
@@ -296,12 +232,12 @@ function AxisInput({
   onCommit: (v: number) => void;
 }): JSX.Element {
   return (
-    <div style={styles.axisInput}>
-      <span style={styles.axisLetter} aria-hidden>
+    <div className={s.axisInput}>
+      <span className={s.axisLetter} aria-hidden>
         {letter}
       </span>
       <RealtimeNumberInput
-        style={styles.numInput}
+        className={s.numInput}
         step={0.01}
         value={value}
         onCommit={onCommit}

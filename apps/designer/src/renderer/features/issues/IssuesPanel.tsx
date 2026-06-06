@@ -1,6 +1,6 @@
 import type { ExportIssue } from '@cg/shared-ipc';
-import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
+import * as s from './IssuesPanel.css.js';
 
 interface Props {
   issues: readonly ExportIssue[];
@@ -20,47 +20,18 @@ const severityColor: Record<ExportIssue['severity'], string> = {
   info: '#93c5fd',
 };
 
-const styles = {
-  panel: {
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
-    padding: '0.5rem 0.6rem',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.3rem',
-  },
-  heading: {
-    fontSize: '0.78rem',
-    fontWeight: 700,
-    color: colors.textMuted,
-    letterSpacing: '0.05em',
-    margin: 0,
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  badge: (color: string): React.CSSProperties => ({
-    fontSize: '0.7rem',
-    padding: '0.05rem 0.4rem',
-    borderRadius: '0.7rem',
-    border: `1px solid ${color}`,
-    color,
-    fontWeight: 700,
-  }),
-  row: {
-    display: 'grid',
-    gridTemplateColumns: 'auto 1fr',
-    gap: '0.4rem',
-    alignItems: 'baseline',
-    fontSize: '0.78rem',
-    cursor: 'pointer',
-    padding: '0.15rem 0.2rem',
-    borderRadius: '0.2rem',
-  },
-  rowText: { color: colors.text },
-  meta: { fontSize: '0.7rem', color: colors.textMuted, marginLeft: '0.3rem' },
-} as const;
+/**
+ * The badge colour is per-severity (dynamic), so it stays an inline style
+ * builder rather than a static vanilla-extract class.
+ */
+const badge = (color: string): React.CSSProperties => ({
+  fontSize: '0.7rem',
+  padding: '0.05rem 0.4rem',
+  borderRadius: '0.7rem',
+  border: `1px solid ${color}`,
+  color,
+  fontWeight: 700,
+});
 
 /**
  * Issues panel — shows the live `export.preflight` output. Clicking an
@@ -98,10 +69,10 @@ export function IssuesPanel({ issues, onPick, embedded = false }: Props): JSX.El
         ? severityColor.warning
         : severityColor.info;
   return (
-    <section style={styles.panel} aria-label="Issues">
-      <h3 style={styles.heading}>
+    <section className={s.panel} aria-label="Issues">
+      <h3 className={s.heading}>
         <span>ISSUES</span>
-        <span style={styles.badge(summaryColor)}>{summary}</span>
+        <span style={badge(summaryColor)}>{summary}</span>
       </h3>
       {issues.map((issue, idx) => (
         <IssueRow key={idx} issue={issue} onPick={onPick} />
@@ -125,14 +96,14 @@ function IssueRow({
     onPick?.();
   }
   return (
-    <div style={styles.row} onClick={onClick} role="button" tabIndex={0}>
-      <span style={styles.badge(color)}>{issue.severity}</span>
-      <span style={styles.rowText}>
+    <div className={s.row} onClick={onClick} role="button" tabIndex={0}>
+      <span style={badge(color)}>{issue.severity}</span>
+      <span className={s.rowText}>
         {issue.message}
         {issue.elementId !== undefined && (
-          <span style={styles.meta}>· element {issue.elementId}</span>
+          <span className={s.meta}>· element {issue.elementId}</span>
         )}
-        {issue.fieldId !== undefined && <span style={styles.meta}>· field {issue.fieldId}</span>}
+        {issue.fieldId !== undefined && <span className={s.meta}>· field {issue.fieldId}</span>}
       </span>
     </div>
   );

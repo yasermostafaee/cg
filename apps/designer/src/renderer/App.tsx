@@ -15,6 +15,8 @@ import { primeAll as primeAllAssets } from './features/assets/assetUrlCache.js';
 import { useIssues } from './hooks/useIssues.js';
 import { designerStore, editSceneOf, shallowEqual, useDesignerSelector } from './state/store.js';
 import { colors } from './theme.js';
+import { cx } from './cx.js';
+import * as s from './App.css.js';
 
 declare global {
   interface Window {
@@ -29,155 +31,17 @@ const TIMELINE_DEFAULT = 260;
 const TIMELINE_MIN = 140;
 const TIMELINE_MAX = 600;
 
-const styles = {
-  page: {
-    fontFamily:
-      '"Exo 2", Inter, system-ui, -apple-system, "Segoe UI", Vazirmatn, "Noto Sans Arabic", sans-serif',
-    color: colors.text,
-    background: colors.background,
-    height: '100vh',
-    margin: 0,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    overflow: 'hidden',
-  },
-  studioTop: {
-    padding: '0.5rem 0.5rem 0',
-  },
-  shell: {
-    display: 'flex',
-    flex: 1,
-    minHeight: 0,
-    minWidth: 0,
-    padding: '0.4rem 0.5rem 0',
-    gap: 0,
-  },
-  centerCol: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    flex: 1,
-    minWidth: 0,
-    minHeight: 0,
-    gap: '0.4rem',
-    padding: '0 0.4rem',
-  },
-  canvasWrap: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    flex: 1,
-    minHeight: 0,
-    minWidth: 0,
-  },
-  timelineWrap: {
-    flexShrink: 0,
-    display: 'flex',
-    minWidth: 0,
-    overflow: 'hidden',
-  },
-  rail: {
-    width: 40,
-    flexShrink: 0,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    gap: '0.3rem',
-    padding: '0.2rem 0',
-    // Same surface as the adjacent panels — just divided by a border, not a
-    // darker strip.
-    background: colors.panel,
-    borderRight: `1px solid ${colors.border}`,
-  },
-  railBtn: {
-    width: 30,
-    height: 30,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'transparent',
-    color: colors.textMuted,
-    border: '1px solid transparent',
-    borderRadius: '0.3rem',
-    cursor: 'pointer',
-    padding: 0,
-  },
-  railBtnActive: {
-    // Active = a solid slate fill only (no border — the bordered box read as a
-    // stray "white border" against the dark chrome).
-    background: '#2e3346',
-    color: colors.text,
-  },
-  emptyStage: {
-    flex: 1,
-    minWidth: 0,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '1.1rem',
-    color: colors.textMuted,
-  },
-  emptyTitle: {
-    fontSize: '1.5rem',
-    fontWeight: 700,
-    color: colors.textMuted,
-    letterSpacing: '0.01em',
-  },
-  emptyButton: {
-    background: 'transparent',
-    color: colors.text,
-    border: `1px solid ${colors.accentMuted}`,
-    borderRadius: '0.35rem',
-    padding: '0.7rem 1.4rem',
-    fontSize: '0.92rem',
-    cursor: 'pointer',
-  },
-} as const;
-
 /** Transient bottom-centre toast for user-facing notices (auto-dismiss + close). */
 function Toast({ message }: { message: string }): JSX.Element {
   return (
-    <div
-      role="status"
-      style={{
-        position: 'fixed',
-        left: '50%',
-        bottom: 28,
-        transform: 'translateX(-50%)',
-        maxWidth: 460,
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: '0.6rem',
-        background: '#1c1f2d',
-        color: '#e5e7f3',
-        border: '1px solid #f87171',
-        borderRadius: '0.4rem',
-        padding: '0.6rem 0.7rem 0.6rem 0.9rem',
-        fontSize: '0.78rem',
-        lineHeight: 1.4,
-        boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-        zIndex: 5000,
-      }}
-    >
+    <div role="status" className={s.toast}>
       <span>{message}</span>
       <button
         type="button"
         aria-label="Dismiss"
         title="Dismiss"
         onClick={() => designerStore.dismissNotice()}
-        style={{
-          flexShrink: 0,
-          width: 18,
-          height: 18,
-          lineHeight: '16px',
-          textAlign: 'center',
-          background: 'transparent',
-          color: '#fca5a5',
-          border: 'none',
-          borderRadius: '0.2rem',
-          fontSize: '0.95rem',
-          cursor: 'pointer',
-          padding: 0,
-        }}
+        className={s.toastClose}
       >
         ✕
       </button>
@@ -188,15 +52,15 @@ function Toast({ message }: { message: string }): JSX.Element {
 /** Centre placeholder shown when no composition is open. */
 function EmptyStage(): JSX.Element {
   return (
-    <div style={styles.emptyStage} aria-label="No active composition">
+    <div className={s.emptyStage} aria-label="No active composition">
       <svg width="92" height="92" viewBox="0 0 16 16" fill="none" aria-hidden>
         <rect x="1.5" y="5" width="8.5" height="8" rx="1.4" fill="#38BDF8" opacity="0.55" />
         <rect x="5.5" y="2" width="8.5" height="8" rx="1.4" fill="#38BDF8" />
       </svg>
-      <div style={styles.emptyTitle}>No Active Compositions</div>
+      <div className={s.emptyTitle}>No Active Compositions</div>
       <button
         type="button"
-        style={styles.emptyButton}
+        className={s.emptyButton}
         onClick={() => designerStore.addComposition()}
       >
         Create New Composition
@@ -214,13 +78,13 @@ function LeftRail({
   onSelect: (p: 'compositions' | 'assets') => void;
 }): JSX.Element {
   return (
-    <div style={styles.rail} aria-label="Panel switcher">
+    <div className={s.rail} aria-label="Panel switcher">
       <button
         type="button"
         title="Compositions"
         aria-label="Compositions"
         aria-pressed={panel === 'compositions'}
-        style={{ ...styles.railBtn, ...(panel === 'compositions' ? styles.railBtnActive : {}) }}
+        className={cx(s.railBtn, panel === 'compositions' && s.railBtnActive)}
         onClick={() => onSelect('compositions')}
       >
         <svg width="17" height="17" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -250,7 +114,7 @@ function LeftRail({
         title="Project assets"
         aria-label="Project assets"
         aria-pressed={panel === 'assets'}
-        style={{ ...styles.railBtn, ...(panel === 'assets' ? styles.railBtnActive : {}) }}
+        className={cx(s.railBtn, panel === 'assets' && s.railBtnActive)}
         onClick={() => onSelect('assets')}
       >
         <svg width="17" height="17" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -440,7 +304,7 @@ export function App(): JSX.Element {
 
   if (view === 'landing' || scene === null) {
     return (
-      <main style={styles.page}>
+      <main className={s.page}>
         <LandingView />
         <InputTooltip />
       </main>
@@ -448,21 +312,21 @@ export function App(): JSX.Element {
   }
 
   return (
-    <main style={styles.page}>
-      <div style={styles.studioTop}>
+    <main className={s.page}>
+      <div className={s.studioTop}>
         <TopToolbar scene={scene} projectPath={projectPath} issues={issues} />
       </div>
-      <div style={styles.shell}>
+      <div className={s.shell}>
         <LeftRail panel={leftPanel} onSelect={setLeftPanel} />
-        <div style={{ width: 244, flexShrink: 0, display: 'flex', minHeight: 0 }}>
+        <div className={s.sidePanel} style={{ width: 244 }}>
           {leftPanel === 'compositions' ? <CompositionsPanel /> : <ProjectAssetsPanel />}
         </div>
         {editScene === null ? (
           <EmptyStage />
         ) : (
           <>
-            <div style={styles.centerCol}>
-              <div style={styles.canvasWrap}>
+            <div className={s.centerCol}>
+              <div className={s.canvasWrap}>
                 <CanvasArea
                   scene={editScene}
                   tool={tool}
@@ -474,7 +338,7 @@ export function App(): JSX.Element {
               </div>
               <TransportBar scene={editScene} />
             </div>
-            <div style={{ width: INSPECTOR_DEFAULT, flexShrink: 0, display: 'flex', minHeight: 0 }}>
+            <div className={s.sidePanel} style={{ width: INSPECTOR_DEFAULT }}>
               <InspectorPanel
                 scene={editScene}
                 projectPath={projectPath}
@@ -496,7 +360,7 @@ export function App(): JSX.Element {
               setTimelineH((h) => Math.max(TIMELINE_MIN, Math.min(TIMELINE_MAX, h - dy)))
             }
           />
-          <div style={{ ...styles.timelineWrap, height: timelineH }}>
+          <div className={s.timelineWrap} style={{ height: timelineH }}>
             <TimelineDock
               scene={editScene}
               selection={selection}

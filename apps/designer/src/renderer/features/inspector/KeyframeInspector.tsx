@@ -10,91 +10,12 @@ import { designerStore, type KeyframeRef } from '../../state/store.js';
 import { TIMELINE_ROWS } from '../timeline/keyframe-helpers.js';
 import { NumberField } from './controls.js';
 import { EasingEditor } from './EasingEditor.js';
+import * as s from './KeyframeInspector.css.js';
 
 interface Props {
   scene: Scene;
   selectedKeyframes: readonly KeyframeRef[];
 }
-
-const styles = {
-  panel: {
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
-    padding: '0.6rem',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.3rem',
-    minHeight: 0,
-    overflowY: 'auto' as const,
-    fontSize: '0.74rem',
-    width: '100%',
-    boxSizing: 'border-box' as const,
-  },
-  topRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '0.4rem',
-  },
-  headingFirst: {
-    fontSize: '0.7rem',
-    fontWeight: 700,
-    color: colors.textMuted,
-    letterSpacing: '0.06em',
-    margin: 0,
-  },
-  heading: {
-    fontSize: '0.66rem',
-    fontWeight: 700,
-    color: colors.textMuted,
-    letterSpacing: '0.06em',
-    margin: '0.35rem 0 0.15rem',
-    paddingTop: '0.35rem',
-    borderTop: `1px solid ${colors.border}`,
-  },
-  row: {
-    display: 'grid',
-    gridTemplateColumns: '90px 1fr',
-    gap: '0.4rem',
-    fontSize: '0.72rem',
-    padding: '0.1rem 0',
-  },
-  label: { color: colors.textMuted, fontSize: '0.7rem' },
-  value: { color: colors.text, fontWeight: 500 },
-  removeButton: {
-    background: 'transparent',
-    color: '#fda4af',
-    border: `1px solid ${colors.border}`,
-    padding: '0.15rem 0.4rem',
-    borderRadius: '0.18rem',
-    cursor: 'pointer',
-    fontSize: '0.7rem',
-    alignSelf: 'flex-start' as const,
-    marginTop: '0.3rem',
-  },
-  closeButton: {
-    background: 'transparent',
-    color: colors.textMuted,
-    border: `1px solid ${colors.border}`,
-    padding: '0.1rem 0.35rem',
-    borderRadius: '0.18rem',
-    cursor: 'pointer',
-    fontSize: '0.68rem',
-  },
-  mixedWarn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.4rem',
-    background: '#F5C84B',
-    color: '#3a2e05',
-    border: '1px solid #d9a92f',
-    borderRadius: '0.25rem',
-    padding: '0.45rem 0.55rem',
-    fontSize: '0.74rem',
-    margin: '0.3rem 0 0.1rem',
-  },
-} as const;
 
 /**
  * The bézier to show in the easing editor: the keyframe's custom curve when set,
@@ -113,7 +34,7 @@ function BackButton(): JSX.Element {
   return (
     <button
       type="button"
-      style={styles.closeButton}
+      className={s.closeButton}
       onClick={() => designerStore.closeKeyframeInspector()}
       aria-label="Back to element inspector"
     >
@@ -135,9 +56,9 @@ export function KeyframeInspector({ scene, selectedKeyframes }: Props): JSX.Elem
   const selectedKeyframe = selectedKeyframes[0];
   if (selectedKeyframe === undefined) {
     return (
-      <aside style={styles.panel} aria-label="Inspector" data-keyframe-inspector>
-        <div style={styles.topRow}>
-          <h2 style={styles.headingFirst}>KEYFRAME</h2>
+      <aside className={s.panel} aria-label="Inspector" data-keyframe-inspector>
+        <div className={s.topRow}>
+          <h2 className={s.headingFirst}>KEYFRAME</h2>
           <BackButton />
         </div>
       </aside>
@@ -151,9 +72,9 @@ export function KeyframeInspector({ scene, selectedKeyframes }: Props): JSX.Elem
 
   if (element === null || keyframe === undefined) {
     return (
-      <aside style={styles.panel} aria-label="Inspector" data-keyframe-inspector>
-        <div style={styles.topRow}>
-          <h2 style={styles.headingFirst}>KEYFRAME</h2>
+      <aside className={s.panel} aria-label="Inspector" data-keyframe-inspector>
+        <div className={s.topRow}>
+          <h2 className={s.headingFirst}>KEYFRAME</h2>
           <BackButton />
         </div>
         <p style={{ color: colors.textMuted, fontSize: '0.74rem' }}>
@@ -164,14 +85,14 @@ export function KeyframeInspector({ scene, selectedKeyframes }: Props): JSX.Elem
   }
 
   return (
-    <aside style={styles.panel} aria-label="Inspector" data-keyframe-inspector>
-      <div style={styles.topRow}>
-        <h2 style={styles.headingFirst}>KEYFRAME — {rowLabel.toUpperCase()}</h2>
+    <aside className={s.panel} aria-label="Inspector" data-keyframe-inspector>
+      <div className={s.topRow}>
+        <h2 className={s.headingFirst}>KEYFRAME — {rowLabel.toUpperCase()}</h2>
         <BackButton />
       </div>
       <StaticRow label="element" value={element.name} />
       <StaticRow label="property" value={property} />
-      <h3 style={styles.heading}>POINT</h3>
+      <h3 className={s.heading}>POINT</h3>
       <NumberField
         label="frame"
         value={keyframe.frame}
@@ -197,7 +118,7 @@ export function KeyframeInspector({ scene, selectedKeyframes }: Props): JSX.Elem
       />
       <button
         type="button"
-        style={styles.removeButton}
+        className={s.removeButton}
         onClick={() => designerStore.removeKeyframe(elementId, property, frame)}
       >
         Remove keyframe
@@ -218,18 +139,18 @@ function KeyframeValueField({
   }
   // Color keyframes — not exposed in the v1 dock but render read-only.
   return (
-    <div style={styles.row}>
-      <span style={styles.label}>value</span>
-      <span style={styles.value}>{keyframe.value}</span>
+    <div className={s.row}>
+      <span className={s.label}>value</span>
+      <span className={s.value}>{keyframe.value}</span>
     </div>
   );
 }
 
 function StaticRow({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div style={styles.row}>
-      <span style={styles.label}>{label}</span>
-      <span style={styles.value}>{value}</span>
+    <div className={s.row}>
+      <span className={s.label}>{label}</span>
+      <span className={s.value}>{value}</span>
     </div>
   );
 }
@@ -254,13 +175,13 @@ function MultiKeyframeView({
   const bezier = mixed ? NEUTRAL : firstBezier;
 
   return (
-    <aside style={styles.panel} aria-label="Inspector" data-keyframe-inspector>
-      <div style={styles.topRow}>
-        <h2 style={styles.headingFirst}>KEYFRAMES — {refs.length} SELECTED</h2>
+    <aside className={s.panel} aria-label="Inspector" data-keyframe-inspector>
+      <div className={s.topRow}>
+        <h2 className={s.headingFirst}>KEYFRAMES — {refs.length} SELECTED</h2>
         <BackButton />
       </div>
       {mixed && (
-        <div style={styles.mixedWarn} role="status">
+        <div className={s.mixedWarn} role="status">
           <span aria-hidden>⚠</span>
           <span>There are multiple different easings selected</span>
         </div>
@@ -277,7 +198,7 @@ function MultiKeyframeView({
       />
       <button
         type="button"
-        style={styles.removeButton}
+        className={s.removeButton}
         onClick={() => {
           for (const r of [...refs]) designerStore.removeKeyframe(r.elementId, r.property, r.frame);
         }}

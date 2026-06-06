@@ -1,7 +1,8 @@
 import type { Element } from '@cg/shared-schema';
-import { colors } from '../../theme.js';
 import { designerStore, editSceneOf } from '../../state/store.js';
 import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
+import { cx } from '../../cx.js';
+import * as s from './Gizmo.css.js';
 
 interface Props {
   element: Element;
@@ -114,57 +115,6 @@ const RESIZE_ANGLE: Record<Handle, number> = {
 /** Base angle of each corner's rotate cursor (faces outward), before rotation. */
 const ROTATE_ANGLE: Record<Corner, number> = { br: 45, bl: 135, tl: 225, tr: 315 };
 
-const styles = {
-  frame: {
-    position: 'absolute' as const,
-    border: `1px solid ${colors.accent}`,
-    boxSizing: 'border-box' as const,
-    pointerEvents: 'none' as const,
-  },
-  // Loopic-style corner handle: white fill, accent outline. Visual only — the
-  // (larger) cornerHit area below owns the resize gesture.
-  handle: {
-    position: 'absolute' as const,
-    width: HANDLE,
-    height: HANDLE,
-    background: '#FFF',
-    border: `1px solid ${colors.accent}`,
-    boxSizing: 'border-box' as const,
-    pointerEvents: 'none' as const,
-  },
-  cornerHit: {
-    position: 'absolute' as const,
-    width: CORNER_HIT,
-    height: CORNER_HIT,
-    pointerEvents: 'auto' as const,
-    // No inline `background` — the .cg-gizmo-corner:hover rule paints the
-    // highlight, and an inline value would beat it.
-  },
-  rotZone: {
-    position: 'absolute' as const,
-    width: ROT_ZONE,
-    height: ROT_ZONE,
-    pointerEvents: 'auto' as const,
-    background: 'transparent',
-  },
-  edge: {
-    position: 'absolute' as const,
-    pointerEvents: 'auto' as const,
-    // No inline `background` — .cg-gizmo-edge:hover paints the highlight.
-  },
-  // Centre pivot indicator (visual only).
-  pivot: {
-    position: 'absolute' as const,
-    width: 7,
-    height: 7,
-    borderRadius: '50%',
-    border: `1px solid ${colors.accent}`,
-    background: '#FFF',
-    boxSizing: 'border-box' as const,
-    pointerEvents: 'none' as const,
-  },
-} as const;
-
 /**
  * Selection gizmo (the Loopic pattern). A thin accent frame with four
  * outlined corner handles, four edge strips, and a centre pivot dot — all
@@ -217,15 +167,15 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
 
   return (
     <>
-      <div style={{ ...styles.frame, ...box({}) }} />
+      <div className={s.frame} style={box({})} />
       <div style={box({ pointerEvents: 'none' })}>
         {/* Rotation zones — placed in each corner's OUTER quadrant only, so
             rotation is offered just outside the shape, never inside it. */}
         {corners.map(({ c, cx, cy }) => (
           <div
             key={`rot-${c}`}
+            className={s.rotZone}
             style={{
-              ...styles.rotZone,
               left: c === 'tl' || c === 'bl' ? cx - ROT_ZONE : cx,
               top: c === 'tl' || c === 'tr' ? cy - ROT_ZONE : cy,
               cursor: rotateCursor(ROTATE_ANGLE[c] + rotation + 90),
@@ -237,9 +187,8 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
             the hover highlight (.cg-gizmo-edge) covers it end to end; the corner
             hit areas sit on top, so grabbing near a corner still resizes both. */}
         <div
-          className="cg-gizmo-edge"
+          className={cx('cg-gizmo-edge', s.edge)}
           style={{
-            ...styles.edge,
             left: 0,
             top: -EDGE / 2,
             width: w,
@@ -249,9 +198,8 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
           onPointerDown={down('t', 'resize')}
         />
         <div
-          className="cg-gizmo-edge"
+          className={cx('cg-gizmo-edge', s.edge)}
           style={{
-            ...styles.edge,
             left: 0,
             top: h - EDGE / 2,
             width: w,
@@ -261,9 +209,8 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
           onPointerDown={down('b', 'resize')}
         />
         <div
-          className="cg-gizmo-edge"
+          className={cx('cg-gizmo-edge', s.edge)}
           style={{
-            ...styles.edge,
             left: -EDGE / 2,
             top: 0,
             width: EDGE,
@@ -273,9 +220,8 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
           onPointerDown={down('l', 'resize')}
         />
         <div
-          className="cg-gizmo-edge"
+          className={cx('cg-gizmo-edge', s.edge)}
           style={{
-            ...styles.edge,
             left: w - EDGE / 2,
             top: 0,
             width: EDGE,
@@ -289,9 +235,8 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
         {corners.map(({ c, cx, cy }) => (
           <div
             key={`hit-${c}`}
-            className="cg-gizmo-corner"
+            className={`cg-gizmo-corner ${s.cornerHit}`}
             style={{
-              ...styles.cornerHit,
               left: cx - CORNER_HIT / 2,
               top: cy - CORNER_HIT / 2,
               cursor: resizeCursor(RESIZE_ANGLE[c] + rotation),
@@ -303,10 +248,11 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
         {corners.map(({ c, cx, cy }) => (
           <div
             key={`rs-${c}`}
-            style={{ ...styles.handle, left: cx - HANDLE / 2, top: cy - HANDLE / 2 }}
+            className={s.handle}
+            style={{ left: cx - HANDLE / 2, top: cy - HANDLE / 2 }}
           />
         ))}
-        <div style={{ ...styles.pivot, left: w / 2 - 3.5, top: h / 2 - 3.5 }} />
+        <div className={s.pivot} style={{ left: w / 2 - 3.5, top: h / 2 - 3.5 }} />
       </div>
     </>
   );

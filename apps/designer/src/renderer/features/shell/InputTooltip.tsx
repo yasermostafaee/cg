@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 /**
  * Global dark tooltip (the Loopic pattern). Mounted once at the app root;
@@ -10,13 +10,23 @@ import { useEffect, useRef, useState } from 'react';
  * Fixed positioning (rather than a CSS `::after`) keeps the tooltip from
  * being clipped by the scrolling inspector panel. The trailing word
  * "value" is dropped — "Width", not "Width value".
+ *
+ * Placement is measured, not transform-based: we read the rendered bubble's
+ * real size and clamp its actual edges inside the viewport on all four sides,
+ * so a bubble near any screen edge (the top toolbar, the compositions / project
+ * assets side panels, …) is nudged fully on-screen instead of spilling off it.
  */
 const DELAY_MS = 450;
+// Gap between the bubble and the target / viewport edge, in px.
+const MARGIN = 8;
 
 interface Tip {
   text: string;
-  x: number;
-  y: number;
+  // The target's bounding box in viewport coords. The bubble centres on cx and
+  // sits above `top` by default, flipping below `bottom` when it won't fit.
+  cx: number;
+  top: number;
+  bottom: number;
 }
 
 export function InputTooltip(): JSX.Element | null {
@@ -83,7 +93,7 @@ export function InputTooltip(): JSX.Element | null {
       const text = clean(found.text);
       cancel();
       timer.current = window.setTimeout(() => {
-        setTip({ text, x: rect.left + rect.width / 2, y: rect.top });
+        setTip({ text, cx: rect.left + rect.width / 2, top: rect.top, bottom: rect.bottom });
       }, DELAY_MS);
     }
     window.addEventListener('pointerover', onOver, true);
@@ -100,16 +110,47 @@ export function InputTooltip(): JSX.Element | null {
   }, []);
 
   if (tip === null) return null;
+  return <Bubble tip={tip} />;
+}
+
+/**
+ * Renders the bubble, then on layout measures its real size and clamps its
+ * actual edges inside the viewport: centred on the target horizontally (nudged
+ * in from either side edge) and above the target vertically (flipped below when
+ * there isn't room above, then clamped against the bottom edge).
+ */
+function Bubble({ tip }: { tip: Tip }): JSX.Element {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el === null) return;
+    const b = el.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    // Horizontal: centre on the target, then pull both edges inside the viewport.
+    const left = clamp(tip.cx - b.width / 2, MARGIN, vw - b.width - MARGIN);
+    // Vertical: prefer above; flip below if it would clip the top; then clamp.
+    const above = tip.top - MARGIN - b.height;
+    const top = clamp(
+      above >= MARGIN ? above : tip.bottom + MARGIN,
+      MARGIN,
+      vh - b.height - MARGIN,
+    );
+    setPos({ left, top });
+  }, [tip]);
+
   return (
     <div
+      ref={ref}
       role="tooltip"
       style={{
         position: 'fixed',
-        // Clamp to the viewport so a tooltip near the right/left edge isn't
-        // clipped; the bubble stays centred on its target otherwise.
-        left: Math.max(8, Math.min(tip.x, window.innerWidth - 8)),
-        top: tip.y - 8,
-        transform: 'translate(-50%, -100%)',
+        left: pos?.left ?? 0,
+        top: pos?.top ?? 0,
+        // Hidden for the first measuring pass so it never flashes at 0,0.
+        visibility: pos === null ? 'hidden' : 'visible',
         maxWidth: 260,
         background: '#1c1f2d',
         color: '#e5e7f3',
@@ -131,6 +172,12 @@ export function InputTooltip(): JSX.Element | null {
       {tip.text}
     </div>
   );
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  // hi can fall below lo when the bubble is wider/taller than the viewport;
+  // pin to lo so the top-left stays visible rather than going negative.
+  return Math.max(lo, Math.min(v, Math.max(lo, hi)));
 }
 
 /** Drop a trailing " value" — "Width value" → "Width". */

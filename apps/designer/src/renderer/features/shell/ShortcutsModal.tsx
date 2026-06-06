@@ -1,5 +1,5 @@
-import { colors } from '../../theme.js';
 import { Modal } from './Modal.js';
+import * as s from './ShortcutsModal.css.js';
 
 interface Props {
   onClose: () => void;
@@ -31,52 +31,22 @@ const SHORTCUTS: readonly { keys: string; label: string }[] = [
   { keys: 'Esc', label: 'Deselect · cancel · close menu' },
 ];
 
-const styles = {
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse' as const,
-  },
-  headTh: {
-    textAlign: 'left' as const,
-    color: colors.accent,
-    fontSize: '0.64rem',
-    fontWeight: 700,
-    letterSpacing: '0.07em',
-    padding: '0.35rem 0.6rem',
-    borderBottom: `1px solid ${colors.border}`,
-  },
-  keysTd: {
-    padding: '0.42rem 0.6rem',
-    color: colors.text,
-    fontVariantNumeric: 'tabular-nums' as const,
-    whiteSpace: 'nowrap' as const,
-    width: '45%',
-  },
-  fnTd: {
-    padding: '0.42rem 0.6rem',
-    color: colors.textMuted,
-  },
-  rowAlt: {
-    background: 'rgba(255,255,255,0.035)',
-  },
-} as const;
-
 /** Help → Keyboard Shortcuts. Lists the shortcuts the app implements. */
 export function ShortcutsModal({ onClose }: Props): JSX.Element {
   return (
     <Modal title="Keyboard Shortcuts" onClose={onClose} width="min(460px, 92vw)">
-      <table style={styles.table}>
+      <table className={s.table}>
         <thead>
           <tr>
-            <th style={styles.headTh}>KEY COMBINATION</th>
-            <th style={styles.headTh}>FUNCTION</th>
+            <th className={s.headTh}>KEY COMBINATION</th>
+            <th className={s.headTh}>FUNCTION</th>
           </tr>
         </thead>
         <tbody>
-          {SHORTCUTS.map((s, i) => (
-            <tr key={s.label} style={i % 2 === 1 ? styles.rowAlt : undefined}>
-              <td style={styles.keysTd}>{s.keys}</td>
-              <td style={styles.fnTd}>{s.label}</td>
+          {SHORTCUTS.map((sc, i) => (
+            <tr key={sc.label} className={i % 2 === 1 ? s.rowAlt : undefined}>
+              <td className={s.keysTd}>{sc.keys}</td>
+              <td className={s.fnTd}>{sc.label}</td>
             </tr>
           ))}
         </tbody>

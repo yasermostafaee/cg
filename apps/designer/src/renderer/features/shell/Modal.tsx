@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { colors } from '../../theme.js';
+import * as s from './Modal.css.js';
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -12,71 +13,6 @@ const FOCUSABLE =
  * (built with {@link ModalButton}). Closes on Escape, backdrop click, and the
  * ✕ icon. Rendered through a portal so it escapes any stacking context.
  */
-
-const styles = {
-  backdrop: {
-    position: 'fixed' as const,
-    inset: 0,
-    background: 'rgba(0, 0, 0, 0.55)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 5000,
-    padding: '1rem',
-  },
-  modal: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    minHeight: 0,
-    maxHeight: '82vh',
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.5rem',
-    boxShadow: '0 16px 48px rgba(0,0,0,0.55)',
-    color: colors.text,
-    fontSize: '0.84rem',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '0.75rem',
-    padding: '0.7rem 0.9rem',
-    borderBottom: `1px solid ${colors.border}`,
-  },
-  title: { fontSize: '0.95rem', fontWeight: 700, margin: 0 },
-  close: {
-    background: 'transparent',
-    color: colors.textMuted,
-    border: 'none',
-    borderRadius: '0.2rem',
-    width: 26,
-    height: 26,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    fontSize: '1.05rem',
-    lineHeight: 1,
-    padding: 0,
-    flexShrink: 0,
-  },
-  body: {
-    minHeight: 0,
-    overflowY: 'auto' as const,
-    padding: '0.9rem',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.6rem',
-  },
-  footer: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '0.4rem',
-    padding: '0.7rem 0.9rem',
-    borderTop: `1px solid ${colors.border}`,
-  },
-} as const;
 
 interface ModalProps {
   title: string;
@@ -156,7 +92,7 @@ export function Modal({
 
   return createPortal(
     <div
-      style={styles.backdrop}
+      className={s.backdrop}
       onPointerDown={(e) => {
         if (closeOnBackdrop && e.target === e.currentTarget) onClose();
       }}
@@ -164,16 +100,17 @@ export function Modal({
       <div
         ref={boxRef}
         tabIndex={-1}
-        style={{ ...styles.modal, width, outline: 'none' }}
+        className={s.modal}
+        style={{ width, outline: 'none' }}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel ?? title}
       >
-        <div style={styles.header}>
-          <h2 style={styles.title}>{title}</h2>
+        <div className={s.header}>
+          <h2 className={s.title}>{title}</h2>
           <button
             type="button"
-            style={styles.close}
+            className={s.close}
             onClick={onClose}
             aria-label="Close"
             title="Close"
@@ -182,14 +119,12 @@ export function Modal({
           </button>
         </div>
         <div
-          style={{
-            ...styles.body,
-            ...(minBodyHeight !== undefined ? { minHeight: minBodyHeight } : {}),
-          }}
+          className={s.body}
+          style={minBodyHeight !== undefined ? { minHeight: minBodyHeight } : undefined}
         >
           {children}
         </div>
-        {footer !== undefined && <div style={styles.footer}>{footer}</div>}
+        {footer !== undefined && <div className={s.footer}>{footer}</div>}
       </div>
     </div>,
     document.body,

@@ -5,6 +5,8 @@ import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { RealtimeNumberInput } from '../inspector/controls.js';
 import { ColorPicker } from '../inspector/ColorPopover.js';
 import { KeyframeIndicator } from './KeyframeIndicator.js';
+import { cx } from '../../cx.js';
+import * as s from './TrackRow.css.js';
 import {
   effectiveRowValue,
   hasKeyframeAt,
@@ -12,6 +14,8 @@ import {
   trackOf,
   type TimelineRow,
 } from './keyframe-helpers.js';
+
+export { TRACK_ROW_HEIGHT } from './metrics.js';
 
 interface Props {
   row: TimelineRow;
@@ -35,196 +39,6 @@ interface Props {
     frame: number;
   }[];
 }
-
-export const TRACK_ROW_HEIGHT = 22;
-const ROW_HEIGHT = TRACK_ROW_HEIGHT;
-
-const styles = {
-  labelCell: {
-    color: colors.textMuted,
-    padding: '0 0.6rem 0 2rem',
-    display: 'grid',
-    // Fixed value column so numbers and colour chips line up across rows.
-    gridTemplateColumns: '1fr 64px 16px',
-    alignItems: 'center',
-    gap: '0.4rem',
-    borderRight: `1px solid ${colors.border}`,
-    background: colors.panel,
-    height: ROW_HEIGHT,
-    fontSize: '0.75rem',
-    boxSizing: 'border-box' as const,
-  },
-  laneCell: {
-    position: 'relative' as const,
-    height: ROW_HEIGHT,
-    boxSizing: 'border-box' as const,
-  },
-  labelName: {
-    color: '#a9afca',
-    overflow: 'hidden' as const,
-    textOverflow: 'ellipsis' as const,
-    whiteSpace: 'nowrap' as const,
-  },
-  labelValue: {
-    color: colors.text,
-    fontVariantNumeric: 'tabular-nums' as const,
-    fontSize: '0.75rem',
-  },
-  // Editable numeric value — same look as labelValue but interactive.
-  valueNumberInput: {
-    width: '100%',
-    background: 'transparent',
-    color: colors.text,
-    border: `1px solid transparent`,
-    borderRadius: '0.18rem',
-    padding: '0 0.15rem',
-    fontSize: '0.7rem',
-    fontVariantNumeric: 'tabular-nums' as const,
-    textAlign: 'center' as const,
-    outline: 'none',
-    cursor: 'text',
-    boxSizing: 'border-box' as const,
-  },
-  // Value + dim unit, centred in the cell (e.g. "85 %").
-  valueUnitWrap: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center' as const,
-    gap: '1px',
-    width: '100%',
-  },
-  // Content-sized variant used when a unit follows the value.
-  valueNumberInputAuto: {
-    flex: '0 0 auto',
-    width: 'auto',
-    minWidth: 0,
-    maxWidth: '3rem',
-    background: 'transparent',
-    color: colors.text,
-    border: `1px solid transparent`,
-    borderRadius: '0.18rem',
-    padding: '0 0.1rem',
-    fontSize: '0.7rem',
-    fontVariantNumeric: 'tabular-nums' as const,
-    textAlign: 'center' as const,
-    outline: 'none',
-    boxSizing: 'border-box' as const,
-  },
-  // Colour value: swatch + editable hex in one row, centred in the cell.
-  colorValue: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center' as const,
-    gap: '0.3rem',
-    width: '100%',
-  },
-  valueHexInput: {
-    flex: '1 1 0',
-    minWidth: 0,
-    background: 'transparent',
-    color: colors.text,
-    border: `1px solid transparent`,
-    borderRadius: '0.18rem',
-    padding: '0 0.15rem',
-    fontSize: '0.7rem',
-    fontVariantNumeric: 'tabular-nums' as const,
-    letterSpacing: '0.02em',
-    textAlign: 'center' as const,
-    outline: 'none',
-    boxSizing: 'border-box' as const,
-  },
-  valueHexText: {
-    color: colors.text,
-    fontSize: '0.7rem',
-    fontVariantNumeric: 'tabular-nums' as const,
-    letterSpacing: '0.02em',
-  },
-  // B-003: lane diamonds are always yellow. When a diamond is
-  // selected, its border turns blue (and the interpolation line that
-  // follows it is rendered in blue too — see interpLineSelected).
-  keyDiamond: {
-    position: 'absolute' as const,
-    top: '50%',
-    width: 9,
-    height: 9,
-    transform: 'translate(-50%, -50%) rotate(45deg)',
-    background: '#FDE047',
-    border: `1px solid ${colors.keyframeBorder}`,
-    cursor: 'grab',
-  },
-  keyDiamondSelected: {
-    border: `1.5px solid ${colors.accent}`,
-    boxShadow: `0 0 0 1px ${colors.accent}`,
-  },
-  // D-009 / B-003 — line drawn between two adjacent keyframes on the
-  // same track. Default colour is muted; if the *earlier* keyframe of
-  // the pair is selected, the line is highlighted in accent blue.
-  interpLine: {
-    position: 'absolute' as const,
-    top: '50%',
-    height: 1,
-    background: colors.textMuted,
-    opacity: 0.55,
-    transform: 'translateY(-0.5px)',
-    pointerEvents: 'none' as const,
-  },
-  interpLineSelected: {
-    background: colors.accent,
-    opacity: 1,
-    height: 1.5,
-  },
-  // B-003: replace the "ƒ" letter with a small SVG curve.
-  interpGlyphWrap: {
-    position: 'absolute' as const,
-    top: '50%',
-    transform: 'translate(-50%, -50%)',
-    width: 14,
-    height: 8,
-    background: '#1c1f2d',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    pointerEvents: 'none' as const,
-  },
-  menu: {
-    position: 'fixed' as const,
-    minWidth: 140,
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
-    boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
-    padding: '0.25rem 0',
-    zIndex: 70,
-    fontSize: '0.74rem',
-  },
-  menuHeader: {
-    padding: '0.2rem 0.6rem 0.3rem',
-    color: colors.textMuted,
-    fontSize: '0.66rem',
-    letterSpacing: '0.05em',
-    borderBottom: `1px solid ${colors.border}`,
-    marginBottom: '0.2rem',
-  },
-  menuItem: {
-    display: 'block',
-    width: '100%',
-    background: 'transparent',
-    color: colors.text,
-    border: 'none',
-    textAlign: 'left' as const,
-    padding: '0.3rem 0.7rem',
-    fontSize: '0.76rem',
-    cursor: 'pointer',
-  },
-  menuItemDanger: {
-    color: '#fda4af',
-  },
-  menuSeparator: {
-    height: 1,
-    background: colors.border,
-    margin: '0.25rem 0',
-  },
-} as const;
 
 /**
  * One animatable-property track row. Layout mirrors the Loopic reference:
@@ -267,8 +81,8 @@ function TrackRowLabel(props: Props): JSX.Element {
   const variant = keyframeVariantFor(element, row.property, currentFrame, selectedKeyframe);
 
   return (
-    <div className="cg-tl-row" style={styles.labelCell} data-track-property={row.property}>
-      <span style={styles.labelName}>{row.label}</span>
+    <div className={`cg-tl-row ${s.labelCell}`} data-track-property={row.property}>
+      <span className={s.labelName}>{row.label}</span>
       <ValueCell
         value={toDisplay(effectiveRowValue(element, row, currentFrame), row.factor)}
         unit={row.unit}
@@ -343,7 +157,7 @@ function TrackRowLane(props: Props): JSX.Element {
   return (
     <div
       ref={laneRef}
-      style={styles.laneCell}
+      className={s.laneCell}
       data-track-property={row.property}
       data-role="lane-empty"
       onContextMenu={(e) => e.preventDefault()}
@@ -387,15 +201,11 @@ function TrackRowLane(props: Props): JSX.Element {
             }}
           >
             <div
-              style={{
-                ...styles.interpLine,
-                ...(isLeftSelected ? styles.interpLineSelected : {}),
-                left: 0,
-                width: '100%',
-              }}
+              className={cx(s.interpLine, isLeftSelected && s.interpLineSelected)}
+              style={{ left: 0, width: '100%' }}
             />
             {widthPct > 4 && (
-              <span style={{ ...styles.interpGlyphWrap, left: '50%' }} aria-hidden>
+              <span className={s.interpGlyphWrap} style={{ left: '50%' }} aria-hidden>
                 <svg width="10" height="6" viewBox="0 0 10 6" fill="none">
                   <path
                     d="M0 5 C 2.5 5, 2.5 1, 5 1 C 7.5 1, 7.5 5, 10 5"
@@ -417,17 +227,12 @@ function TrackRowLane(props: Props): JSX.Element {
         const count = stackCount.get(k.frame) ?? 1;
         const idx = (k.id !== undefined ? stackIndex.get(k.id) : undefined) ?? 0;
         const offsetPx = count > 1 ? (idx - (count - 1) / 2) * 5 : 0;
-        const style = {
-          ...styles.keyDiamond,
-          ...(isSelected ? styles.keyDiamondSelected : {}),
-          left: `${pct.toFixed(3)}%`,
-          top: `calc(50% + ${String(offsetPx)}px)`,
-        };
         const kfId = k.id;
         return (
           <div
             key={kfId ?? `${row.property}-f${String(k.frame)}-${String(kIdx)}`}
-            style={style}
+            className={cx(s.keyDiamond, isSelected && s.keyDiamondSelected)}
+            style={{ left: `${pct.toFixed(3)}%`, top: `calc(50% + ${String(offsetPx)}px)` }}
             role="button"
             tabIndex={0}
             data-keyframe-diamond=""
@@ -484,10 +289,10 @@ function TrackRowLane(props: Props): JSX.Element {
       })}
       {menu !== null && (
         <div
+          className={s.menu}
+          // Clamp the menu inside the viewport so it never spawns off-screen
+          // when the diamond is near the right / bottom edge.
           style={{
-            ...styles.menu,
-            // Clamp the menu inside the viewport so it never spawns
-            // off-screen when the diamond is near the right / bottom.
             left: Math.min(menu.x, window.innerWidth - 160),
             top: Math.min(menu.y, window.innerHeight - 80),
           }}
@@ -496,14 +301,14 @@ function TrackRowLane(props: Props): JSX.Element {
           onPointerDown={(e) => e.stopPropagation()}
           onContextMenu={(e) => e.preventDefault()}
         >
-          <div style={styles.menuHeader}>
+          <div className={s.menuHeader}>
             {row.label} · frame {menu.frame}
           </div>
-          <div style={styles.menuSeparator} role="separator" />
+          <div className={s.menuSeparator} role="separator" />
           <button
             type="button"
             role="menuitem"
-            style={{ ...styles.menuItem, ...styles.menuItemDanger }}
+            className={cx(s.menuItem, s.menuItemDanger)}
             onClick={() => {
               designerStore.removeKeyframe(element.id, row.property, menu.frame);
               setMenu(null);
@@ -541,14 +346,13 @@ function ValueCell({
     const hex = value.startsWith('#') ? value : `#${value}`;
     const hexLabel = hex.replace(/^#/, '').toUpperCase();
     return (
-      <span style={styles.colorValue}>
+      <span className={s.colorValue}>
         <ColorPicker value={hex} onChange={(next) => onCommit(next)} ariaLabel={ariaLabel} />
         <input
           type="text"
           defaultValue={hexLabel}
           key={hexLabel}
-          className="cg-timeline-num"
-          style={styles.valueHexInput}
+          className={cx('cg-timeline-num', s.valueHexInput)}
           aria-label={ariaLabel}
           onBlur={(e) => commitHex(e.target.value, onCommit)}
           onKeyDown={(e) => {
@@ -560,13 +364,12 @@ function ValueCell({
   }
   if (unit !== undefined) {
     return (
-      <span style={styles.valueUnitWrap}>
+      <span className={s.valueUnitWrap}>
         <RealtimeNumberInput
           value={value}
           onCommit={onCommit}
           step={1}
-          style={styles.valueNumberInputAuto}
-          className="cg-timeline-num cg-num-unit"
+          className={cx('cg-timeline-num', 'cg-num-unit', s.valueNumberInputAuto)}
           ariaLabel={ariaLabel}
         />
         <span className="cg-unit">{unit}</span>
@@ -578,8 +381,7 @@ function ValueCell({
       value={value}
       onCommit={onCommit}
       step={1}
-      style={styles.valueNumberInput}
-      className="cg-timeline-num"
+      className={cx('cg-timeline-num', s.valueNumberInput)}
       ariaLabel={ariaLabel}
     />
   );
