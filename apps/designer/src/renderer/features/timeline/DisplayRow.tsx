@@ -1,49 +1,15 @@
 import type { Element } from '@cg/shared-schema';
-import { colors } from '../../theme.js';
 import { KeyframeIndicator } from './KeyframeIndicator.js';
 import { type DisplayRow as DisplayRowSpec } from './keyframe-helpers.js';
+import * as s from './DisplayRow.css.js';
+
+export { DISPLAY_ROW_HEIGHT } from './metrics.js';
 
 interface Props {
   row: DisplayRowSpec;
   element: Element;
   part: 'label' | 'lane';
 }
-
-export const DISPLAY_ROW_HEIGHT = 22;
-const ROW_HEIGHT = DISPLAY_ROW_HEIGHT;
-
-const styles = {
-  labelCell: {
-    color: colors.textMuted,
-    padding: '0 0.6rem 0 2rem',
-    display: 'grid',
-    gridTemplateColumns: '1fr 64px 16px',
-    alignItems: 'center',
-    gap: '0.4rem',
-    borderRight: `1px solid ${colors.border}`,
-    background: colors.panel,
-    height: ROW_HEIGHT,
-    fontSize: '0.75rem',
-    boxSizing: 'border-box' as const,
-  },
-  labelName: {
-    color: '#a9afca',
-    overflow: 'hidden' as const,
-    textOverflow: 'ellipsis' as const,
-    whiteSpace: 'nowrap' as const,
-  },
-  labelValue: {
-    color: colors.text,
-    fontVariantNumeric: 'tabular-nums' as const,
-    fontSize: '0.75rem',
-    textAlign: 'center' as const,
-  },
-  laneCell: {
-    position: 'relative' as const,
-    height: ROW_HEIGHT,
-    boxSizing: 'border-box' as const,
-  },
-} as const;
 
 /**
  * D-010 — non-animatable display row in the timeline label column.
@@ -55,9 +21,9 @@ export function DisplayRow({ row, element, part }: Props): JSX.Element {
   if (part === 'label') {
     const value = row.read(element);
     return (
-      <div className="cg-tl-row" style={styles.labelCell} data-display-row={row.id}>
-        <span style={styles.labelName}>{row.label}</span>
-        <span style={styles.labelValue}>{value}</span>
+      <div className={`cg-tl-row ${s.labelCell}`} data-display-row={row.id}>
+        <span className={s.labelName}>{row.label}</span>
+        <span className={s.labelValue}>{value}</span>
         <KeyframeIndicator
           variant="empty"
           onClick={() => {
@@ -68,5 +34,5 @@ export function DisplayRow({ row, element, part }: Props): JSX.Element {
       </div>
     );
   }
-  return <div style={styles.laneCell} data-display-row={row.id} />;
+  return <div className={s.laneCell} data-display-row={row.id} />;
 }

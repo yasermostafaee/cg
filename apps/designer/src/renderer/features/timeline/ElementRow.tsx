@@ -1,7 +1,10 @@
 import { useRef } from 'react';
 import type { Element, FrameRange, ShapeElement } from '@cg/shared-schema';
-import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
+import { cx } from '../../cx.js';
+import * as s from './ElementRow.css.js';
+
+export { ELEMENT_ROW_HEIGHT } from './metrics.js';
 
 interface Props {
   element: Element;
@@ -16,127 +19,6 @@ interface Props {
   /** Open the layer right-click menu for this element at the given point. */
   onContextMenu?: (elementId: string, x: number, y: number) => void;
 }
-
-export const ELEMENT_ROW_HEIGHT = 24;
-const ROW_HEIGHT = ELEMENT_ROW_HEIGHT;
-
-const styles = {
-  // Loopic selects a layer row with a solid slate fill (#333642), not a tint.
-  rowSelected: {
-    background: '#333642',
-  },
-  // Label half of a selected row gets an accent left-bar on top of the
-  // stronger background so the selected layer reads at a glance.
-  labelSelectedAccent: {
-    boxShadow: `inset 3px 0 0 ${colors.accent}`,
-  },
-  nameSelected: {
-    color: colors.accent,
-    fontWeight: 700,
-  },
-  labelCell: {
-    display: 'grid',
-    gridTemplateColumns: '18px 16px 1fr auto auto',
-    alignItems: 'center',
-    gap: '0.3rem',
-    padding: '0 0.4rem',
-    background: colors.panel,
-    borderRight: `1px solid ${colors.border}`,
-    color: colors.textMuted,
-    height: ROW_HEIGHT,
-    fontSize: '0.72rem',
-    cursor: 'pointer',
-    boxSizing: 'border-box' as const,
-  },
-  chevron: {
-    background: 'transparent',
-    border: 'none',
-    color: colors.textMuted,
-    cursor: 'pointer',
-    padding: 0,
-    fontSize: '1.15rem',
-    lineHeight: 1,
-    width: 18,
-    textAlign: 'center' as const,
-  },
-  typeIcon: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 16,
-    height: 16,
-  },
-  name: {
-    color: '#bcc2e0',
-    overflow: 'hidden' as const,
-    textOverflow: 'ellipsis' as const,
-    whiteSpace: 'nowrap' as const,
-    fontSize: '0.75rem',
-  },
-  toggleButton: {
-    background: 'transparent',
-    border: 'none',
-    padding: 0,
-    width: 16,
-    height: 16,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    color: colors.textMuted,
-    flexShrink: 0,
-  },
-  toggleButtonActive: {
-    color: colors.text,
-  },
-  // Locked state — red icon on a faint red chip so a locked layer is obvious.
-  lockLocked: {
-    color: colors.danger,
-    background: 'rgba(248,113,113,0.16)',
-    borderRadius: 3,
-  },
-  laneCell: {
-    position: 'relative' as const,
-    height: ROW_HEIGHT,
-    boxSizing: 'border-box' as const,
-    cursor: 'pointer',
-  },
-  lifespan: {
-    position: 'absolute' as const,
-    top: '50%',
-    // ROW_HEIGHT - 2 → bar leaves 1 px above and 1 px below, so two
-    // adjacent rows show roughly a single-pixel separation between
-    // their bars, matching the reference timeline density.
-    height: ROW_HEIGHT - 2,
-    transform: 'translateY(-50%)',
-    borderRadius: 2,
-    // Bars stay fully opaque and vivid in every state — selection is shown
-    // by *adding* emphasis to the selected bar (below), never by fading the
-    // others (which reads as "disabled"). The resting bars are just slightly
-    // toned down in brightness so the selected one has room to pop.
-    opacity: 1,
-    filter: 'brightness(0.92) saturate(0.95)',
-    cursor: 'grab',
-    touchAction: 'none' as const,
-  },
-  // Selected lane bar: brighter + a crisp white inner edge, an accent ring,
-  // and a soft glow so the selected colorful layer is unmistakable while
-  // staying fully solid.
-  lifespanSelected: {
-    opacity: 1,
-    filter: 'brightness(1.15) saturate(1.1)',
-    boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.65), 0 0 0 2px ${colors.accent}, 0 0 9px rgba(56,189,248,0.6)`,
-    zIndex: 1,
-  },
-  resizeHandle: {
-    position: 'absolute' as const,
-    top: 0,
-    bottom: 0,
-    width: 6,
-    cursor: 'ew-resize',
-    touchAction: 'none' as const,
-  },
-} as const;
 
 /**
  * Per-element header row in the timeline tree:
@@ -156,11 +38,13 @@ function ElementRowLabel(props: Props): JSX.Element {
   const { element, expanded, onToggleExpand, isSelected, onContextMenu } = props;
   return (
     <div
-      className={isSelected ? 'cg-tl-row cg-tl-selected' : 'cg-tl-row'}
-      style={{
-        ...styles.labelCell,
-        ...(isSelected ? { ...styles.rowSelected, ...styles.labelSelectedAccent } : {}),
-      }}
+      className={cx(
+        'cg-tl-row',
+        isSelected && 'cg-tl-selected',
+        s.labelCell,
+        isSelected && s.rowSelected,
+        isSelected && s.labelSelectedAccent,
+      )}
       data-element-id={element.id}
       onClick={(e) => {
         if ((e.target as HTMLElement).dataset.role === 'chevron') return;
@@ -179,7 +63,7 @@ function ElementRowLabel(props: Props): JSX.Element {
     >
       <button
         type="button"
-        style={styles.chevron}
+        className={s.chevron}
         data-role="chevron"
         onClick={(e) => {
           e.stopPropagation();
@@ -190,22 +74,16 @@ function ElementRowLabel(props: Props): JSX.Element {
       >
         {expanded ? '▾' : '▸'}
       </button>
-      <span style={styles.typeIcon}>
+      <span className={s.typeIcon}>
         <LayerTypeIcon
           element={element}
           color={element.timelineColor ?? lifespanColorFor(element)}
         />
       </span>
-      <span style={{ ...styles.name, ...(isSelected ? styles.nameSelected : {}) }}>
-        {element.name}
-      </span>
+      <span className={cx(s.name, isSelected && s.nameSelected)}>{element.name}</span>
       <button
         type="button"
-        className="cg-tl-toggle"
-        style={{
-          ...styles.toggleButton,
-          ...(element.visible ? styles.toggleButtonActive : {}),
-        }}
+        className={cx('cg-tl-toggle', s.toggleButton, element.visible && s.toggleButtonActive)}
         title={element.visible ? 'Hide element' : 'Show element'}
         aria-label={element.visible ? 'Hide element' : 'Show element'}
         aria-pressed={!element.visible}
@@ -220,11 +98,7 @@ function ElementRowLabel(props: Props): JSX.Element {
       </button>
       <button
         type="button"
-        className="cg-tl-toggle"
-        style={{
-          ...styles.toggleButton,
-          ...(element.locked ? styles.lockLocked : {}),
-        }}
+        className={cx('cg-tl-toggle', s.toggleButton, element.locked && s.lockLocked)}
         title={element.locked ? 'Unlock element' : 'Lock element'}
         aria-label={element.locked ? 'Unlock element' : 'Lock element'}
         aria-pressed={element.locked}
@@ -495,7 +369,7 @@ function ElementRowLane(props: Props): JSX.Element {
   return (
     <div
       ref={cellRef}
-      style={{ ...styles.laneCell, ...(isSelected ? styles.rowSelected : {}) }}
+      className={cx(s.laneCell, isSelected && s.rowSelected)}
       onClick={() => designerStore.setSelection([element.id])}
       onContextMenu={
         onContextMenu === undefined
@@ -509,9 +383,8 @@ function ElementRowLane(props: Props): JSX.Element {
       }
     >
       <div
+        className={cx(s.lifespan, isSelected && s.lifespanSelected)}
         style={{
-          ...styles.lifespan,
-          ...(isSelected ? styles.lifespanSelected : {}),
           left: `${leftPct.toFixed(3)}%`,
           width: `${widthPct.toFixed(3)}%`,
           background: lifespanColor,
@@ -519,12 +392,14 @@ function ElementRowLane(props: Props): JSX.Element {
         onPointerDown={(e) => startDrag('move', e)}
       >
         <div
-          style={{ ...styles.resizeHandle, left: 0 }}
+          className={s.resizeHandle}
+          style={{ left: 0 }}
           onPointerDown={(e) => startDrag('resize-left', e)}
           aria-hidden
         />
         <div
-          style={{ ...styles.resizeHandle, right: 0 }}
+          className={s.resizeHandle}
+          style={{ right: 0 }}
           onPointerDown={(e) => startDrag('resize-right', e)}
           aria-hidden
         />
