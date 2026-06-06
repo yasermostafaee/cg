@@ -58,7 +58,11 @@ function EmptyStage(): JSX.Element {
         <rect x="5.5" y="2" width="8.5" height="8" rx="1.4" fill="#38BDF8" />
       </svg>
       <div className={s.emptyTitle}>No Active Compositions</div>
-      <button type="button" className={s.emptyButton} onClick={() => designerStore.addComposition()}>
+      <button
+        type="button"
+        className={s.emptyButton}
+        onClick={() => designerStore.addComposition()}
+      >
         Create New Composition
       </button>
     </div>

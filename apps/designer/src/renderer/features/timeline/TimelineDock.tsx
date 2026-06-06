@@ -317,71 +317,71 @@ export function TimelineDock({
           </div>
           <div className={s.leftBody} ref={leftBodyRef} onClick={clearSelectionOnEmpty}>
             <div className={s.leftBodyInner} ref={leftBodyInnerRef}>
-            <div className={s.sceneLabel} aria-hidden onClick={clearSelection} />
-            {elements.length === 0 ? (
-              <p className={s.empty}>No elements yet. Add a shape, text, or image to start.</p>
-            ) : (
-              elements.map((el) => {
-                const expanded = !isCollapsed(el.id);
-                return (
-                  <div key={el.id}>
-                    <ElementRow
-                      element={el}
-                      expanded={expanded}
-                      onToggleExpand={() => toggleCollapsed(el.id)}
-                      isSelected={selection.has(el.id)}
-                      frameRange={scene.frameRange}
-                      lifespanColor={el.timelineColor ?? lifespanColorFor(el)}
-                      onContextMenu={openLayerMenu}
-                      part="label"
-                    />
-                    {expanded &&
-                      timelineGroupsFor(el).map((group) => {
-                        const groupKey = `${el.id}::${group.title}`;
-                        const groupExpanded = isGroupExpanded(groupKey);
-                        return (
-                          <div key={groupKey}>
-                            <div className={`cg-tl-row ${s.groupHeaderLabel}`}>
-                              <button
-                                type="button"
-                                className={s.groupChevron}
-                                onClick={() => toggleGroupExpanded(groupKey)}
-                                aria-expanded={groupExpanded}
-                                aria-label={`Toggle ${group.title.toLowerCase()} tracks`}
-                              >
-                                {groupExpanded ? '▾' : '▸'}
-                              </button>
-                              <span>{group.title}</span>
+              <div className={s.sceneLabel} aria-hidden onClick={clearSelection} />
+              {elements.length === 0 ? (
+                <p className={s.empty}>No elements yet. Add a shape, text, or image to start.</p>
+              ) : (
+                elements.map((el) => {
+                  const expanded = !isCollapsed(el.id);
+                  return (
+                    <div key={el.id}>
+                      <ElementRow
+                        element={el}
+                        expanded={expanded}
+                        onToggleExpand={() => toggleCollapsed(el.id)}
+                        isSelected={selection.has(el.id)}
+                        frameRange={scene.frameRange}
+                        lifespanColor={el.timelineColor ?? lifespanColorFor(el)}
+                        onContextMenu={openLayerMenu}
+                        part="label"
+                      />
+                      {expanded &&
+                        timelineGroupsFor(el).map((group) => {
+                          const groupKey = `${el.id}::${group.title}`;
+                          const groupExpanded = isGroupExpanded(groupKey);
+                          return (
+                            <div key={groupKey}>
+                              <div className={`cg-tl-row ${s.groupHeaderLabel}`}>
+                                <button
+                                  type="button"
+                                  className={s.groupChevron}
+                                  onClick={() => toggleGroupExpanded(groupKey)}
+                                  aria-expanded={groupExpanded}
+                                  aria-label={`Toggle ${group.title.toLowerCase()} tracks`}
+                                >
+                                  {groupExpanded ? '▾' : '▸'}
+                                </button>
+                                <span>{group.title}</span>
+                              </div>
+                              {groupExpanded &&
+                                group.rows.map((entry) =>
+                                  entry.kind === 'animatable' ? (
+                                    <TrackRow
+                                      key={`${el.id}-${entry.row.property}`}
+                                      row={entry.row}
+                                      element={el}
+                                      frameIn={frameIn}
+                                      frameOut={frameOut}
+                                      selectedKeyframe={selectedKeyframe}
+                                      selectedKeyframes={selectedKeyframes}
+                                      part="label"
+                                    />
+                                  ) : (
+                                    <DisplayRow
+                                      key={`${el.id}-${entry.row.id}`}
+                                      row={entry.row}
+                                      element={el}
+                                      part="label"
+                                    />
+                                  ),
+                                )}
                             </div>
-                            {groupExpanded &&
-                              group.rows.map((entry) =>
-                                entry.kind === 'animatable' ? (
-                                  <TrackRow
-                                    key={`${el.id}-${entry.row.property}`}
-                                    row={entry.row}
-                                    element={el}
-                                    frameIn={frameIn}
-                                    frameOut={frameOut}
-                                    selectedKeyframe={selectedKeyframe}
-                                    selectedKeyframes={selectedKeyframes}
-                                    part="label"
-                                  />
-                                ) : (
-                                  <DisplayRow
-                                    key={`${el.id}-${entry.row.id}`}
-                                    row={entry.row}
-                                    element={el}
-                                    part="label"
-                                  />
-                                ),
-                              )}
-                          </div>
-                        );
-                      })}
-                  </div>
-                );
-              })
-            )}
+                          );
+                        })}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>

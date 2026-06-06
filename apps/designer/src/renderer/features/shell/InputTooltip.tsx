@@ -133,7 +133,11 @@ function Bubble({ tip }: { tip: Tip }): JSX.Element {
     const left = clamp(tip.cx - b.width / 2, MARGIN, vw - b.width - MARGIN);
     // Vertical: prefer above; flip below if it would clip the top; then clamp.
     const above = tip.top - MARGIN - b.height;
-    const top = clamp(above >= MARGIN ? above : tip.bottom + MARGIN, MARGIN, vh - b.height - MARGIN);
+    const top = clamp(
+      above >= MARGIN ? above : tip.bottom + MARGIN,
+      MARGIN,
+      vh - b.height - MARGIN,
+    );
     setPos({ left, top });
   }, [tip]);
 
