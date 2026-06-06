@@ -2,6 +2,10 @@ import { SceneSchema, type Element, type Scene } from '@cg/shared-schema';
 import { getStarter } from '@cg/starter-templates';
 import type { AppInfo, DesignerBridge } from '../shared/designer-bridge.js';
 import { cgCss, cgJs } from './cg-runtime.js';
+// The app's bundled @font-face rules (Vazirmatn / Exo 2) as a raw CSS string,
+// injected into the preview iframe so built-in fonts render on the canvas — the
+// iframe is srcdoc (same origin), so its `/fonts/…` URLs resolve like the host.
+import appFontsCss from '../renderer/fonts.css?inline';
 import { initWorkspace, prefs } from './workspace.js';
 import { ProjectStore } from './ProjectStore.js';
 import { AssetStore } from './AssetStore.js';
@@ -21,7 +25,7 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
   const projects = new ProjectStore(ws, prefs);
   const assets = new AssetStore(ws);
   const exporter = new Exporter({ assets, cgJs, cgCss });
-  const preview = new Preview({ cgJs, cgCss });
+  const preview = new Preview({ cgJs, cgCss, fontsCss: appFontsCss });
   const assetUrlCache = new Map<string, string>();
   // Per-scene cache of the native file handle picked the last time the
   // operator hit Save / Save As (for .cg.json) or Export (for .vcg).
