@@ -75,9 +75,9 @@ export function TextEditor({ element, scale, onCommit }: Props): JSX.Element {
   function commitText(): void {
     const next = ref.current?.innerText ?? '';
     if (next !== element.text) {
-      designerStore.updateElement(element.id, {
-        text: next,
-      } as Partial<TextElement>);
+      // setElementText also syncs a Data-key field's default so a bound
+      // element's edit shows on the canvas instead of snapping back.
+      designerStore.setElementText(element.id, next);
     }
     onCommit();
   }
@@ -119,7 +119,12 @@ export function TextEditor({ element, scale, onCommit }: Props): JSX.Element {
         width: w,
         height: h,
         color,
-        fontFamily: font.family,
+        // Mirror @cg/template-runtime scene-builder's fallback stack so editing
+        // matches the canvas — Persian/Arabic in a Latin-only family (Verdana,
+        // Georgia, Inter, …) falls back to the bundled Vazirmatn, not a system
+        // face. (Kept as a literal, not imported from the runtime package, to
+        // avoid its `window.cg` global-augmentation clash with the bridge.)
+        fontFamily: `${font.family}, Vazirmatn, "Noto Sans Arabic", "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif`,
         fontWeight: font.weight,
         fontStyle: font.style,
         fontSize: font.size * scale,

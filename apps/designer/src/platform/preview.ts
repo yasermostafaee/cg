@@ -3,6 +3,13 @@ import type { Scene } from '@cg/shared-schema';
 export interface PreviewOptions {
   cgJs: string;
   cgCss: string;
+  /**
+   * The app's bundled @font-face CSS (Vazirmatn / Exo 2). Injected into the
+   * preview document so built-in fonts render on the canvas — without it the
+   * iframe only has the operator-imported (`asset-*`) faces and built-in fonts
+   * fall back to a system face. Optional so existing callers/tests still build.
+   */
+  fontsCss?: string;
 }
 
 /**
@@ -17,11 +24,13 @@ export interface PreviewOptions {
  */
 export class Preview {
   readonly #cgCss: string;
+  readonly #fontsCss: string;
   #cgJsUrl: string | null = null;
   #docUrl: string | null = null;
 
   constructor(options: PreviewOptions) {
     this.#cgCss = options.cgCss;
+    this.#fontsCss = options.fontsCss ?? '';
     // The runtime bundle never changes during a session — make one Blob URL.
     this.#cgJsUrl = URL.createObjectURL(new Blob([options.cgJs], { type: 'text/javascript' }));
   }
@@ -64,6 +73,10 @@ export class Preview {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=${String(scene.resolution.width)}, initial-scale=1" />
     <title>${escapeHtml(scene.name)}</title>
+    <!-- App-bundled fonts (Vazirmatn / Exo 2). The srcdoc iframe is same-origin
+         as the host, so these /fonts/… URLs resolve exactly as they do in the
+         editor; without this, built-in fonts fall back to a system face. -->
+    <style>${this.#fontsCss}</style>
     <style>${this.#cgCss}</style>
     <!--
       Authoring override: the broadcast runtime hides the stage while

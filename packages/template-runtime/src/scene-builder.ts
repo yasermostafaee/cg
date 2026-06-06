@@ -248,10 +248,12 @@ function buildText(
   const el = doc.createElement('div');
   el.dataset['cgElementId'] = element.id;
   applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
-  // Append a fallback stack so a family that isn't installed degrades to a
-  // clean shaping-capable sans (keeping Persian/Arabic coverage) rather than
-  // the browser's default serif. The authored family always wins when present.
-  el.style.fontFamily = `${element.font.family}, "Segoe UI", system-ui, -apple-system, Vazirmatn, "Noto Sans Arabic", "Noto Sans", sans-serif`;
+  // Append a fallback stack for glyphs the authored family lacks. The bundled,
+  // shaping-capable Vazirmatn (+ Noto Sans Arabic) come *before* the system UI
+  // fonts, so Persian/Arabic text in a Latin-only family (Verdana, Georgia,
+  // Inter, …) falls back to Vazirmatn rather than an unpredictable system face.
+  // The authored family still wins for the glyphs it covers.
+  el.style.fontFamily = `${element.font.family}, Vazirmatn, "Noto Sans Arabic", "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif`;
   el.style.fontWeight = String(element.font.weight);
   el.style.fontStyle = element.font.style;
   el.style.fontSize = `${element.font.size}px`;

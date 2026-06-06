@@ -57,6 +57,37 @@ describe('DynamicField variants', () => {
     };
     expect(DynamicFieldSchema.parse(f)).toEqual(f);
   });
+  it('text accepts minLength / maxLength / pattern (D-018)', () => {
+    const f = {
+      ...baseField,
+      type: 'text' as const,
+      default: 'Breaking',
+      minLength: 2,
+      maxLength: 40,
+      pattern: '^[A-Z].*$',
+    };
+    expect(DynamicFieldSchema.parse(f)).toEqual(f);
+  });
+  it('multiline accepts minLength / pattern (D-018)', () => {
+    const f = {
+      ...baseField,
+      type: 'multiline' as const,
+      default: 'a\nb',
+      minLength: 0,
+      pattern: '\\S',
+    };
+    expect(DynamicFieldSchema.parse(f)).toEqual(f);
+  });
+  it('text rejects an invalid regex pattern', () => {
+    expect(() =>
+      DynamicFieldSchema.parse({ ...baseField, type: 'text', default: 'x', pattern: '([' }),
+    ).toThrow();
+  });
+  it('text rejects a negative minLength', () => {
+    expect(() =>
+      DynamicFieldSchema.parse({ ...baseField, type: 'text', default: 'x', minLength: -1 }),
+    ).toThrow();
+  });
   it('image rejects empty accept list', () => {
     expect(() => DynamicFieldSchema.parse({ ...baseField, type: 'image', accept: [] })).toThrow();
   });

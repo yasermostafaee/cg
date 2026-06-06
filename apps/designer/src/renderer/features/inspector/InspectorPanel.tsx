@@ -2,10 +2,11 @@ import type { AnimatableProperty, Element, FieldBinding, Scene } from '@cg/share
 import { colors } from '../../theme.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { BackgroundControl } from '../canvas/BackgroundControl.js';
-import { describeBinding } from '../fields/bind-resolver.js';
+import { describeBinding, elementNameResolver } from '../fields/bind-resolver.js';
 import { FieldsPanel } from '../fields/FieldsPanel.js';
 import { CollapseSection } from './CollapseSection.js';
 import { RealtimeNumberInput } from './controls.js';
+import { DynamicDataSection } from './DynamicDataSection.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
 import { StyleSection } from './StyleSection.js';
 import { TransformSection } from './TransformSection.js';
@@ -106,29 +107,35 @@ function ElementInspector({
     .filter(({ b }) => bindingTargetsElement(b, element.id));
   return (
     <aside className={s.panel} aria-label="Inspector">
-      <KeyRow elementId={element.id} name={element.name} />
+      <ElementNameRow elementId={element.id} name={element.name} />
       <CollapseSection title="Transform" pinned>
         <TransformSection element={element} selectedKeyframe={selectedKeyframe} />
       </CollapseSection>
       <StyleSection element={element} selectedKeyframe={selectedKeyframe} />
+      {element.type === 'text' && <DynamicDataSection element={element} scene={scene} />}
       {bindings.length > 0 && (
         <CollapseSection title="Bindings" defaultExpanded>
-          <ElementBindings bindings={bindings} />
+          <ElementBindings bindings={bindings} nameOf={elementNameResolver(scene)} />
         </CollapseSection>
       )}
     </aside>
   );
 }
 
-function KeyRow({ elementId, name }: { elementId: string; name: string }): JSX.Element {
+/**
+ * The element's display name — the same label shown in the timeline layer list
+ * (`element.name`). Renamed from "Key" to "Name" so it isn't confused with the
+ * Dynamic / Data section's "Data key" (which drives the text from field data).
+ */
+function ElementNameRow({ elementId, name }: { elementId: string; name: string }): JSX.Element {
   return (
     <div className={s.keyRow}>
-      <span className={s.keyLabel}>Key</span>
+      <span className={s.keyLabel}>Name</span>
       <input
         className={s.keyInput}
         type="text"
         defaultValue={name}
-        aria-label="Element key / name"
+        aria-label="Element name"
         onBlur={(e) => {
           const next = e.target.value.trim();
           if (next.length > 0 && next !== name) {
@@ -152,8 +159,10 @@ function bindingTargetsElement(b: FieldBinding, elementId: string): boolean {
 
 function ElementBindings({
   bindings,
+  nameOf,
 }: {
   bindings: readonly { b: FieldBinding; idx: number }[];
+  nameOf: (id: string) => string;
 }): JSX.Element {
   if (bindings.length === 0) {
     return <p className={s.empty}>no bindings target this element</p>;
@@ -163,9 +172,14 @@ function ElementBindings({
       {bindings.map(({ b, idx }) => (
         <div key={idx} className={s.bindRow}>
           <span style={{ color: colors.text, fontSize: '0.8rem' }}>
-            <strong>{b.fieldId}</strong> → {describeBinding(b)}
+            <strong>{b.fieldId}</strong> → {describeBinding(b, nameOf)}
           </span>
-          <button className={s.bindRemove} onClick={() => designerStore.removeBindingAt(idx)}>
+          <button
+            className={s.bindRemove}
+            title="Unbind (keeps the field)"
+            aria-label="Unbind"
+            onClick={() => designerStore.removeBindingAt(idx)}
+          >
             ×
           </button>
         </div>

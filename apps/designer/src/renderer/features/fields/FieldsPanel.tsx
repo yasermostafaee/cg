@@ -3,7 +3,7 @@ import { designerStore } from '../../state/store.js';
 import { cx } from '../../cx.js';
 import * as s from './FieldsPanel.css.js';
 import { TextField } from '../inspector/controls.js';
-import { describeBinding } from './bind-resolver.js';
+import { describeBinding, elementNameResolver } from './bind-resolver.js';
 
 interface Props {
   scene: Scene;
@@ -24,6 +24,7 @@ interface Props {
  * Escape clears bind mode globally (handled in CanvasArea).
  */
 export function FieldsPanel({ scene, bindModeFieldId }: Props): JSX.Element {
+  const nameOf = elementNameResolver(scene);
   return (
     <div className={s.block}>
       {scene.fields.length === 0 ? (
@@ -36,6 +37,7 @@ export function FieldsPanel({ scene, bindModeFieldId }: Props): JSX.Element {
               field={f}
               bindings={scene.bindings}
               bindModeFieldId={bindModeFieldId}
+              nameOf={nameOf}
             />
           ))}
         </div>
@@ -48,10 +50,12 @@ function FieldCard({
   field,
   bindings,
   bindModeFieldId,
+  nameOf,
 }: {
   field: DynamicField;
   bindings: readonly FieldBinding[];
   bindModeFieldId: string | null;
+  nameOf: (id: string) => string;
 }): JSX.Element {
   const ownBindings = bindings
     .map((b, idx) => ({ b, idx }))
@@ -77,19 +81,25 @@ function FieldCard({
         >
           {bindActive ? 'Click a canvas element…' : 'Bind from canvas'}
         </button>
-        <button className={s.smallButton} onClick={() => designerStore.removeField(field.id)}>
-          remove
+        <button
+          className={s.smallButton}
+          title="Delete this field and all its bindings"
+          onClick={() => designerStore.removeField(field.id)}
+        >
+          delete field
         </button>
       </div>
-      <BindingList bindings={ownBindings} />
+      <BindingList bindings={ownBindings} nameOf={nameOf} />
     </div>
   );
 }
 
 function BindingList({
   bindings,
+  nameOf,
 }: {
   bindings: readonly { b: FieldBinding; idx: number }[];
+  nameOf: (id: string) => string;
 }): JSX.Element {
   if (bindings.length === 0) {
     return <p className={s.bindEmpty}>no bindings yet</p>;
@@ -98,8 +108,13 @@ function BindingList({
     <div className={s.bindList}>
       {bindings.map(({ b, idx }) => (
         <div key={idx} className={s.bindRow}>
-          <span>→ {describeBinding(b)}</span>
-          <button className={s.smallButton} onClick={() => designerStore.removeBindingAt(idx)}>
+          <span>→ {describeBinding(b, nameOf)}</span>
+          <button
+            className={s.smallButton}
+            title="Unbind (keeps the field)"
+            aria-label="Unbind"
+            onClick={() => designerStore.removeBindingAt(idx)}
+          >
             ×
           </button>
         </div>

@@ -126,6 +126,17 @@ export function CanvasOverlay({
     // Don't steal pointer events while a text editor is up — let
     // selection survive cross-canvas clicks and let the editor blur.
     if (editingEl !== null) return;
+    // Commit a focused inspector field (e.g. the Dynamic/Data "Value") before
+    // this click changes the selection. React flushes the selection update
+    // synchronously and unmounts the field, so its own commit-on-blur would
+    // otherwise fire after the input is already gone and be lost.
+    const active = document.activeElement;
+    if (
+      active instanceof HTMLElement &&
+      (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')
+    ) {
+      active.blur();
+    }
     const scenePoint = viewportToScene(e.clientX, e.clientY);
     if (bindModeFieldId !== null) {
       const hit = topmostHit(allElementsAtFrame, scenePoint);

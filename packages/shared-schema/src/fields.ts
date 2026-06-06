@@ -9,16 +9,37 @@ const DynamicFieldBaseSchema = z.object({
   description: z.string().optional(),
 });
 
+/**
+ * A regular-expression *source* string (no slashes/flags), validated to compile.
+ * Used for the optional `pattern` constraint on text fields (D-018). A bad
+ * pattern is rejected at the schema boundary rather than throwing at render time.
+ */
+const RegexSourceSchema = z.string().refine(
+  (p) => {
+    try {
+      new RegExp(p);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  { message: 'pattern must be a valid regular expression' },
+);
+
 const TextFieldSchema = DynamicFieldBaseSchema.extend({
   type: z.literal('text'),
   default: z.string(),
+  minLength: z.number().int().nonnegative().optional(),
   maxLength: z.number().int().positive().optional(),
+  pattern: RegexSourceSchema.optional(),
   direction: z.enum(['auto', 'ltr', 'rtl']).optional(),
 });
 
 const MultilineFieldSchema = DynamicFieldBaseSchema.extend({
   type: z.literal('multiline'),
   default: z.string(),
+  minLength: z.number().int().nonnegative().optional(),
+  pattern: RegexSourceSchema.optional(),
   maxLines: z.number().int().positive().optional(),
 });
 
