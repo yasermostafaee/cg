@@ -1,6 +1,6 @@
 import type { AnimatableProperty, Element } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { designerStore } from '../../state/store.js';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import {
   TIMELINE_ROWS,
@@ -13,7 +13,6 @@ import { RealtimeNumberInput, fieldScrub } from './controls.js';
 
 interface Props {
   element: Element;
-  currentFrame: number;
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }
 
@@ -83,7 +82,10 @@ const styles = {
  * edit at any frame on an animated property lands as a keyframe at the
  * current frame.
  */
-export function TransformSection({ element, currentFrame, selectedKeyframe }: Props): JSX.Element {
+export function TransformSection({ element, selectedKeyframe }: Props): JSX.Element {
+  // Self-subscribe to the frame so only this value-bearing section re-renders
+  // during playback, not the whole inspector.
+  const currentFrame = useDesignerSelector((s) => s.currentFrame);
   // Show the *effective* values at the current frame so editing a keyframe (or
   // scrubbing) updates these fields in lock-step with the canvas, not the
   // element's frozen static transform.

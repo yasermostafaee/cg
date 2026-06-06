@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AnimatableProperty, Element, Keyframe } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { designerStore } from '../../state/store.js';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { RealtimeNumberInput } from '../inspector/controls.js';
 import { ColorPicker } from '../inspector/ColorPopover.js';
 import { KeyframeIndicator } from './KeyframeIndicator.js';
@@ -18,7 +18,6 @@ interface Props {
   element: Element;
   frameIn: number;
   frameOut: number;
-  currentFrame: number;
   /** Which half of the row to render — labels and lanes live in
    *  separate scroll columns so the lane scrollbar starts at the
    *  property column's right edge. */
@@ -246,7 +245,11 @@ export function TrackRow(props: Props): JSX.Element {
 }
 
 function TrackRowLabel(props: Props): JSX.Element {
-  const { row, element, currentFrame, selectedKeyframe } = props;
+  const { row, element, selectedKeyframe } = props;
+  // Only the live value readout + the keyframe-at-playhead highlight depend on
+  // the frame, so this is the one piece of a track row that ticks during
+  // playback — the lane (diamonds) and the rest of the dock stay put.
+  const currentFrame = useDesignerSelector((s) => s.currentFrame);
 
   function toggleKeyframeHere(): void {
     if (hasKeyframeAt(element, row.property, currentFrame)) {
@@ -288,7 +291,7 @@ function TrackRowLabel(props: Props): JSX.Element {
 }
 
 function TrackRowLane(props: Props): JSX.Element {
-  const { row, element, frameIn, frameOut, currentFrame, selectedKeyframes } = props;
+  const { row, element, frameIn, frameOut, selectedKeyframes } = props;
   const isSelectedFrame = (f: number): boolean =>
     selectedKeyframes.some(
       (r) => r.elementId === element.id && r.property === row.property && r.frame === f,
@@ -330,7 +333,7 @@ function TrackRowLane(props: Props): JSX.Element {
 
   function frameAt(clientX: number): number {
     const el = laneRef.current;
-    if (el === null) return currentFrame;
+    if (el === null) return designerStore.get().currentFrame;
     const rect = el.getBoundingClientRect();
     const x = clientX - rect.left;
     const ratio = Math.max(0, Math.min(1, x / rect.width));

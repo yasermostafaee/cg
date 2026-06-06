@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AnimatableProperty, Element, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { DisplayRow } from './DisplayRow.js';
 import { ElementRow, lifespanColorFor } from './ElementRow.js';
 import { FrameRuler, pickStride } from './FrameRuler.js';
@@ -287,10 +287,11 @@ export function TimelineDock({
   selectedKeyframes,
 }: Props): JSX.Element {
   const { in: frameIn, out: frameOut } = scene.frameRange;
-  const { timelineZoom, currentFrame } = useDesignerSelector(
-    (s) => ({ timelineZoom: s.timelineZoom, currentFrame: s.currentFrame }),
-    shallowEqual,
-  );
+  // Deliberately NOT subscribing to currentFrame here: the playhead, the
+  // header readout, and the per-row live values are self-subscribing leaves
+  // (FrameReadout / BodyPlayhead / RulerPlayhead / TrackRowLabel), so the dock
+  // chrome, lanes, and ruler ticks don't re-render on every playback frame.
+  const timelineZoom = useDesignerSelector((s) => s.timelineZoom);
   // `visibleFrames = span / zoom` exactly, because the inner wrappers
   // (ruler's `zoomInner`, body's `rightBodyInner`) are both
   // `width: zoom × 100%` of the scrolling viewport — so the on-screen
@@ -342,12 +343,15 @@ export function TimelineDock({
       wheelAnchorRef.current = null;
       rb.scrollLeft = wheel.frac * cw * timelineZoom - wheel.vx; // keep the point under the mouse
     } else {
-      const frac = Math.max(0, Math.min(1, (currentFrame - frameIn) / span));
+      // Read the frame lazily (not a reactive dep) — this effect only fires on
+      // zoom change, and the dock no longer subscribes to currentFrame.
+      const cf = designerStore.get().currentFrame;
+      const frac = Math.max(0, Math.min(1, (cf - frameIn) / span));
       const viewportX = frac * cw * old - rb.scrollLeft; // playhead x within the viewport
       rb.scrollLeft = frac * cw * timelineZoom - viewportX; // keep the playhead fixed
     }
     syncScroll();
-  }, [timelineZoom, currentFrame, frameIn, span]);
+  }, [timelineZoom, frameIn, span]);
 
   // Forward wheel events from non-scrolling regions to the right body.
   // Ctrl+wheel zooms (native listener so preventDefault works).
@@ -535,10 +539,7 @@ export function TimelineDock({
       <div style={styles.body}>
         <div style={styles.leftCol}>
           <div style={styles.leftHeader}>
-            <span style={{ color: 'rgb(188, 194, 224)', fontSize: '32px', lineHeight: 1 }}>
-              {currentFrame}
-            </span>
-            <span style={{ color: '#858cac' }}>/{frameOut}</span>
+            <FrameReadout frameOut={frameOut} />
           </div>
           <div style={styles.leftBody} ref={leftBodyRef} onClick={clearSelectionOnEmpty}>
             <div style={styles.sceneLabel} aria-hidden onClick={clearSelection} />
@@ -586,7 +587,6 @@ export function TimelineDock({
                                     element={el}
                                     frameIn={frameIn}
                                     frameOut={frameOut}
-                                    currentFrame={currentFrame}
                                     selectedKeyframe={selectedKeyframe}
                                     selectedKeyframes={selectedKeyframes}
                                     part="label"
@@ -615,7 +615,6 @@ export function TimelineDock({
               <FrameRuler
                 frameIn={frameIn}
                 frameOut={frameOut}
-                currentFrame={currentFrame}
                 stride={tickStride}
                 onScrub={(f) => designerStore.setCurrentFrame(f)}
               />
@@ -635,12 +634,7 @@ export function TimelineDock({
                 backgroundImage: `repeating-linear-gradient(to right, #2e3247 0, #2e3247 1px, transparent 1px, transparent ${gridPeriodPct}%)`,
               }}
             >
-              <div
-                style={{
-                  ...styles.bodyPlayhead,
-                  left: `${(((currentFrame - frameIn) / Math.max(1, frameOut - frameIn)) * 100).toFixed(3)}%`,
-                }}
-              />
+              <BodyPlayhead frameIn={frameIn} frameOut={frameOut} />
               {hasInactiveTail && (
                 <div
                   style={{ ...styles.inactiveTail, left: `${activePct.toFixed(3)}%` }}
@@ -703,7 +697,6 @@ export function TimelineDock({
                                       element={el}
                                       frameIn={frameIn}
                                       frameOut={frameOut}
-                                      currentFrame={currentFrame}
                                       selectedKeyframe={selectedKeyframe}
                                       selectedKeyframes={selectedKeyframes}
                                       part="lane"
@@ -738,6 +731,32 @@ export function TimelineDock({
       )}
     </section>
   );
+}
+
+/**
+ * Big "frame / total" readout in the dock's top-left. Self-subscribing so the
+ * frame tick re-renders only this number, not the whole dock.
+ */
+function FrameReadout({ frameOut }: { frameOut: number }): JSX.Element {
+  const currentFrame = useDesignerSelector((s) => s.currentFrame);
+  return (
+    <>
+      <span style={{ color: 'rgb(188, 194, 224)', fontSize: '32px', lineHeight: 1 }}>
+        {currentFrame}
+      </span>
+      <span style={{ color: '#858cac' }}>/{frameOut}</span>
+    </>
+  );
+}
+
+/**
+ * Vertical playhead line over the lane body. Self-subscribing for the same
+ * reason as {@link FrameReadout} — only the moving line re-renders per frame.
+ */
+function BodyPlayhead({ frameIn, frameOut }: { frameIn: number; frameOut: number }): JSX.Element {
+  const currentFrame = useDesignerSelector((s) => s.currentFrame);
+  const pct = (((currentFrame - frameIn) / Math.max(1, frameOut - frameIn)) * 100).toFixed(3);
+  return <div style={{ ...styles.bodyPlayhead, left: `${pct}%` }} />;
 }
 
 function flattenElements(scene: Scene): readonly Element[] {

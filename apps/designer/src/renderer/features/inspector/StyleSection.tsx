@@ -8,7 +8,7 @@ import type {
   ShapeElement,
   TextElement,
 } from '@cg/shared-schema';
-import { designerStore } from '../../state/store.js';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import { hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
 import { CollapseSection } from './CollapseSection.js';
@@ -18,7 +18,6 @@ import { TextStyleSection } from './TextStyleSection.js';
 
 interface Props {
   element: Element;
-  currentFrame: number;
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }
 
@@ -75,7 +74,10 @@ function animPointIcon(
  *   Text   → Text · Drop Shadow · Text Padding · Border radius · Filter
  *   Image  → Image · Filter
  */
-export function StyleSection({ element, currentFrame, selectedKeyframe }: Props): JSX.Element {
+export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element {
+  // Self-subscribe so only this section re-renders during playback (the inner
+  // type-specific sub-sections re-render with it via the currentFrame prop).
+  const currentFrame = useDesignerSelector((s) => s.currentFrame);
   if (element.type === 'text')
     return (
       <TextSections

@@ -1,10 +1,10 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { colors } from '../../theme.js';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
 
 interface Props {
   frameIn: number;
   frameOut: number;
-  currentFrame: number;
   /**
    * Distance between labelled frames, computed once in TimelineDock
    * from `visibleFrames = span / timelineZoom` and shared with the
@@ -63,13 +63,7 @@ const styles = {
  * the ruler to scrub. `stride` is computed by TimelineDock and shared
  * between the ruler labels and the body vertical gridlines.
  */
-export function FrameRuler({
-  frameIn,
-  frameOut,
-  currentFrame,
-  stride,
-  onScrub,
-}: Props): JSX.Element {
+export function FrameRuler({ frameIn, frameOut, stride, onScrub }: Props): JSX.Element {
   const ref = useRef<HTMLDivElement | null>(null);
   const span = Math.max(1, frameOut - frameIn);
   const ticks = tickFrames(frameIn, frameOut, stride);
@@ -79,7 +73,7 @@ export function FrameRuler({
 
   function frameAt(clientX: number): number {
     const el = ref.current;
-    if (el === null) return currentFrame;
+    if (el === null) return designerStore.get().currentFrame;
     const rect = el.getBoundingClientRect();
     const x = clientX - rect.left;
     const ratio = Math.max(0, Math.min(1, x / rect.width));
@@ -95,8 +89,6 @@ export function FrameRuler({
     onScrub(frameAt(e.clientX));
   }
 
-  const playheadPct = ((currentFrame - frameIn) / span) * 100;
-
   return (
     <div
       ref={ref}
@@ -108,7 +100,6 @@ export function FrameRuler({
       aria-label="Frame ruler"
       aria-valuemin={frameIn}
       aria-valuemax={frameOut}
-      aria-valuenow={currentFrame}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
     >
@@ -123,11 +114,37 @@ export function FrameRuler({
           {f}
         </span>
       ))}
-      <div style={{ ...styles.playhead, left: `${playheadPct.toFixed(3)}%` }} />
-      <div style={{ ...styles.playheadCap, left: `${playheadPct.toFixed(3)}%` }}>
-        {currentFrame}
-      </div>
+      <RulerPlayhead frameIn={frameIn} frameOut={frameOut} sliderRef={ref} />
     </div>
+  );
+}
+
+/**
+ * The ruler's playhead line + frame-number cap. Split out as its own
+ * subscriber so the frame tick during playback re-renders just this moving
+ * marker, not the whole ruler (its tick labels are frame-independent).
+ */
+function RulerPlayhead({
+  frameIn,
+  frameOut,
+  sliderRef,
+}: {
+  frameIn: number;
+  frameOut: number;
+  sliderRef: React.RefObject<HTMLDivElement | null>;
+}): JSX.Element {
+  const currentFrame = useDesignerSelector((s) => s.currentFrame);
+  const span = Math.max(1, frameOut - frameIn);
+  const pct = (((currentFrame - frameIn) / span) * 100).toFixed(3);
+  // Keep the slider's a11y value live without re-rendering the ruler itself.
+  useEffect(() => {
+    sliderRef.current?.setAttribute('aria-valuenow', String(currentFrame));
+  }, [currentFrame, sliderRef]);
+  return (
+    <>
+      <div style={{ ...styles.playhead, left: `${pct}%` }} />
+      <div style={{ ...styles.playheadCap, left: `${pct}%` }}>{currentFrame}</div>
+    </>
   );
 }
 

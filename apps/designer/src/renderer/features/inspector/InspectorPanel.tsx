@@ -186,9 +186,10 @@ function ElementInspector({
   scene: Scene;
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }): JSX.Element {
-  // Live transform/style values are sampled at the playhead, so this subtree
-  // (only mounted when an element is selected) subscribes to the frame tick.
-  const currentFrame = useDesignerSelector((s) => s.currentFrame);
+  // Live transform/style values are sampled at the playhead, but only the
+  // value-bearing sections (TransformSection / StyleSection) subscribe to the
+  // frame tick themselves — so the inspector chrome (KeyRow, section wrappers,
+  // bindings) doesn't re-render on every playback frame.
   const bindings = scene.bindings
     .map((b, idx) => ({ b, idx }))
     .filter(({ b }) => bindingTargetsElement(b, element.id));
@@ -196,17 +197,9 @@ function ElementInspector({
     <aside style={styles.panel} aria-label="Inspector">
       <KeyRow elementId={element.id} name={element.name} />
       <CollapseSection title="Transform" pinned>
-        <TransformSection
-          element={element}
-          currentFrame={currentFrame}
-          selectedKeyframe={selectedKeyframe}
-        />
+        <TransformSection element={element} selectedKeyframe={selectedKeyframe} />
       </CollapseSection>
-      <StyleSection
-        element={element}
-        currentFrame={currentFrame}
-        selectedKeyframe={selectedKeyframe}
-      />
+      <StyleSection element={element} selectedKeyframe={selectedKeyframe} />
       {bindings.length > 0 && (
         <CollapseSection title="Bindings" defaultExpanded>
           <ElementBindings bindings={bindings} />
