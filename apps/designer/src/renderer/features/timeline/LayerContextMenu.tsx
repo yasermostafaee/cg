@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
-import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
+import { cx } from '../../cx.js';
+import * as s from './LayerContextMenu.css.js';
+
+// JS-state hover highlight (these menus track hover in React state, not :hover).
+const HOVER_BG: React.CSSProperties = { background: 'rgba(56,189,248,0.16)' };
 
 interface Props {
   elementId: string;
@@ -45,74 +49,6 @@ const MENU_HEIGHT = 208; // 7 items + a divider
 const SUBMENU_FULL_HEIGHT = 420; // all color swatches
 const EDGE = 8;
 
-const styles = {
-  backdrop: {
-    position: 'fixed' as const,
-    inset: 0,
-    zIndex: 1000,
-  },
-  menu: {
-    position: 'fixed' as const,
-    minWidth: MENU_WIDTH,
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.3rem',
-    padding: '0.25rem',
-    boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
-    fontSize: '0.74rem',
-    color: colors.text,
-    userSelect: 'none' as const,
-  },
-  item: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '0.5rem',
-    padding: '0.3rem 0.5rem',
-    borderRadius: '0.2rem',
-    cursor: 'pointer',
-    whiteSpace: 'nowrap' as const,
-  },
-  itemDisabled: {
-    opacity: 0.4,
-    cursor: 'default' as const,
-  },
-  divider: {
-    height: 1,
-    background: colors.border,
-    margin: '0.25rem 0.2rem',
-  },
-  chevron: {
-    color: colors.textMuted,
-    fontSize: '0.7rem',
-  },
-  submenu: {
-    position: 'fixed' as const,
-    width: SUBMENU_WIDTH,
-    overflowY: 'auto' as const,
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.3rem',
-    padding: '0.25rem',
-    boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
-  },
-  swatchRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    padding: '0.22rem 0.45rem',
-    borderRadius: '0.2rem',
-    cursor: 'pointer',
-  },
-  swatch: {
-    width: 13,
-    height: 13,
-    borderRadius: 3,
-    flexShrink: 0,
-    border: '1px solid rgba(255,255,255,0.18)',
-  },
-} as const;
-
 /**
  * Right-click menu for a timeline layer (element). Actions mirror the
  * reference (tc.png): Color ▶, Fit workspace, Copy / Cut / Paste,
@@ -154,24 +90,23 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
     onClose();
   }
 
-  function rowStyle(key: string, disabled = false): React.CSSProperties {
-    return {
-      ...styles.item,
-      ...(disabled ? styles.itemDisabled : {}),
-      ...(hover === key && !disabled ? { background: 'rgba(56,189,248,0.16)' } : {}),
-    };
-  }
+  // The row's static look is a class; only the JS-state hover highlight is inline.
+  const rowClass = (disabled = false): string => cx(s.item, disabled && s.itemDisabled);
+  const hoverStyle = (key: string, disabled = false): React.CSSProperties | undefined =>
+    hover === key && !disabled ? HOVER_BG : undefined;
 
   return (
-    <div style={styles.backdrop} onPointerDown={onClose} onContextMenu={(e) => e.preventDefault()}>
+    <div className={s.backdrop} onPointerDown={onClose} onContextMenu={(e) => e.preventDefault()}>
       <div
-        style={{ ...styles.menu, left: menuLeft, top: menuTop }}
+        className={s.menu}
+        style={{ minWidth: MENU_WIDTH, left: menuLeft, top: menuTop }}
         onPointerDown={(e) => e.stopPropagation()}
         role="menu"
         aria-label="Layer actions"
       >
         <div
-          style={rowStyle('color')}
+          className={rowClass()}
+          style={hoverStyle('color')}
           role="menuitem"
           onMouseEnter={() => {
             setHover('color');
@@ -180,10 +115,11 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
           onMouseLeave={() => setHover(null)}
         >
           <span>Color</span>
-          <span style={styles.chevron}>▶</span>
+          <span className={s.chevron}>▶</span>
         </div>
         <div
-          style={rowStyle('fit')}
+          className={rowClass()}
+          style={hoverStyle('fit')}
           role="menuitem"
           onMouseEnter={() => {
             setHover('fit');
@@ -195,10 +131,11 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
           <span>Fit workspace</span>
         </div>
 
-        <div style={styles.divider} aria-hidden />
+        <div className={s.divider} aria-hidden />
 
         <div
-          style={rowStyle('copy')}
+          className={rowClass()}
+          style={hoverStyle('copy')}
           role="menuitem"
           onMouseEnter={() => {
             setHover('copy');
@@ -210,7 +147,8 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
           <span>Copy</span>
         </div>
         <div
-          style={rowStyle('cut')}
+          className={rowClass()}
+          style={hoverStyle('cut')}
           role="menuitem"
           onMouseEnter={() => {
             setHover('cut');
@@ -222,7 +160,8 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
           <span>Cut</span>
         </div>
         <div
-          style={rowStyle('paste', !canPaste)}
+          className={rowClass(!canPaste)}
+          style={hoverStyle('paste', !canPaste)}
           role="menuitem"
           aria-disabled={!canPaste}
           onMouseEnter={() => {
@@ -237,7 +176,8 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
           <span>Paste</span>
         </div>
         <div
-          style={rowStyle('duplicate')}
+          className={rowClass()}
+          style={hoverStyle('duplicate')}
           role="menuitem"
           onMouseEnter={() => {
             setHover('duplicate');
@@ -249,7 +189,8 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
           <span>Duplicate</span>
         </div>
         <div
-          style={rowStyle('delete')}
+          className={rowClass()}
+          style={hoverStyle('delete')}
           role="menuitem"
           onMouseEnter={() => {
             setHover('delete');
@@ -264,8 +205,9 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
 
       {colorOpen && (
         <div
+          className={s.submenu}
           style={{
-            ...styles.submenu,
+            width: SUBMENU_WIDTH,
             left: submenuLeft,
             top: submenuTop,
             maxHeight: submenuMaxH,
@@ -278,17 +220,15 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
           {COLOR_SWATCHES.map((c) => (
             <div
               key={c.hex}
-              style={{
-                ...styles.swatchRow,
-                ...(hover === c.hex ? { background: 'rgba(56,189,248,0.16)' } : {}),
-              }}
+              className={s.swatchRow}
+              style={hover === c.hex ? HOVER_BG : undefined}
               role="menuitemradio"
               aria-checked={false}
               onMouseEnter={() => setHover(c.hex)}
               onMouseLeave={() => setHover(null)}
               onClick={() => run(() => designerStore.setElementTimelineColor(elementId, c.hex))}
             >
-              <span style={{ ...styles.swatch, background: c.hex }} aria-hidden />
+              <span className={s.swatch} style={{ background: c.hex }} aria-hidden />
               <span>{c.label}</span>
             </div>
           ))}
