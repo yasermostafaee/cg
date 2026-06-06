@@ -103,7 +103,12 @@ const styles = {
  * with the imported font face so the operator can preview it. Drag-and
  * -drop is wired here so the canvas drop target sees the assetId.
  */
-export function AssetThumb({ asset, layout = 'grid', onDragStart, onContextMenu }: Props): JSX.Element {
+export function AssetThumb({
+  asset,
+  layout = 'grid',
+  onDragStart,
+  onContextMenu,
+}: Props): JSX.Element {
   const url = useAssetUrl(asset.assetId);
   const displayName = stripExt(asset.filename);
   const isImage = asset.kind === 'image';
