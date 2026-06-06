@@ -15,11 +15,14 @@ export default defineConfig({
     target: 'es2022',
   },
   server: {
-    host: '127.0.0.1',
-    port: 5173,
+    // Defaults to loopback. Set HOST=0.0.0.0 (or `true`) to expose the dev
+    // server on the LAN — e.g. to open the Designer from another device.
+    // Override the port with PORT (e.g. PORT=80 for a bare http://<ip>/ URL).
+    host: process.env.HOST ?? '127.0.0.1',
+    port: process.env.PORT !== undefined ? Number(process.env.PORT) : 5173,
   },
   preview: {
-    host: '127.0.0.1',
-    port: 4173,
+    host: process.env.HOST ?? '127.0.0.1',
+    port: process.env.PORT !== undefined ? Number(process.env.PORT) : 4173,
   },
 });
