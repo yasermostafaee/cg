@@ -2,6 +2,7 @@ import type { AssetMeta } from '@cg/shared-ipc';
 import { sha256Hex } from '@cg/vcg-format';
 import type { Workspace } from '@cg/storage';
 import { Emitter } from './emitter.js';
+import { uuid } from './uuid.js';
 
 const KIND_BY_EXT: Record<string, AssetMeta['kind']> = {
   png: 'image',
@@ -112,7 +113,7 @@ export class AssetStore {
     await this.#ws.writeFile(workingPath, bytes);
 
     const meta: AssetMeta = {
-      assetId: crypto.randomUUID(),
+      assetId: uuid(),
       kind,
       filename: file.name,
       sha256,

@@ -9,6 +9,7 @@ import type { RecentProject, StarterEntry } from '@cg/shared-ipc';
 import { getStarter, STARTER_TEMPLATES } from '@cg/starter-templates';
 import type { KeyValueStore, Workspace } from '@cg/storage';
 import { Emitter } from './emitter.js';
+import { uuid } from './uuid.js';
 
 export interface NewSceneOptions {
   resolution?: Resolution;
@@ -69,7 +70,7 @@ export class ProjectStore {
     const frameRange = { in: 0, out: Math.max(1, Math.round(options.durationFrames ?? 50)) };
     const scene: Scene = {
       schemaVersion: 1,
-      id: crypto.randomUUID(),
+      id: uuid(),
       name,
       templateType,
       resolution,
@@ -86,7 +87,7 @@ export class ProjectStore {
       // (which is reserved for a project whose compositions were all deleted).
       compositions: [
         {
-          id: crypto.randomUUID(),
+          id: uuid(),
           name: 'comp1',
           resolution,
           frameRate,
@@ -107,7 +108,7 @@ export class ProjectStore {
     const nowIso = new Date().toISOString();
     const cloned: Scene = {
       ...structuredClone(starter.scene),
-      id: crypto.randomUUID(),
+      id: uuid(),
       name: starter.label,
       metadata: { ...starter.scene.metadata, createdAt: nowIso, updatedAt: nowIso },
     };
