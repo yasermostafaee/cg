@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { DesignerBridge } from '../shared/designer-bridge.js';
 import { ProjectAssetsPanel } from './features/assets/ProjectAssetsPanel.js';
 import { CompositionsPanel } from './features/compositions/CompositionsPanel.js';
@@ -315,7 +315,17 @@ export function App(): JSX.Element {
   // The editing surface is the open composition (its own size / duration /
   // layers); null when nothing is open (→ empty state). Issues validate the
   // open composition, not the now-layerless project root.
-  const editScene = scene === null ? null : editSceneOf(scene, activeCompositionId);
+  //
+  // Memoised on its inputs: editSceneOf() spreads into a *new* object every
+  // call, so deriving it inline gave a fresh reference each render. That fed
+  // useIssues (effect dep `scene`), whose debounced preflight setIssues(...)
+  // re-rendered App, which re-derived editScene, which re-ran the effect — a
+  // ~200ms re-render loop of the whole tree even while idle. Pinning the
+  // reference to [scene, activeCompositionId] breaks that loop.
+  const editScene = useMemo(
+    () => (scene === null ? null : editSceneOf(scene, activeCompositionId)),
+    [scene, activeCompositionId],
+  );
   const issues = useIssues(editScene);
   const [timelineH, setTimelineH] = useState(TIMELINE_DEFAULT);
   // Which panel the left icon-rail shows.
