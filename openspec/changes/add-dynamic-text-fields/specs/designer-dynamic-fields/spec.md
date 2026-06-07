@@ -78,3 +78,12 @@ auto-squeeze behavior applies).
 - **WHEN** a field with `maxLength = 5` receives the value "Hello World"
 - **THEN** the element's text is set to "Hello" and its auto-size / auto-squeeze
   behavior applies
+
+
+  #### Scenario: Preview opens in a modal and tears down on close
+
+- **WHEN** the operator clicks the Preview button
+- **THEN** a modal opens showing the composition's simulated output at its own
+  resolution (scaled to fit) with a live field form and Play/Stop/Next/Reset
+- **WHEN** the modal is closed
+- **THEN** the preview instance is torn down so its timers and animation loops stop

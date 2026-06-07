@@ -348,7 +348,7 @@ broadcast CG template.
   (`apps/designer/src/platform/preview.ts`, `bridge.preview.update`).
   Change: `openspec/changes/add-dynamic-text-fields/`.
 
-## [ ] D-019 — Single-file CasparCG HTML export (+ embedded GDD) ⟨priority: high⟩
+## [~] D-019 — Single-file CasparCG HTML export (+ embedded GDD) ⟨priority: high⟩
 
 **What:** A "Download HTML" action that exports the current composition as **one
 self-contained, `file://`-safe `.html`** to drop into CasparCG's `templates/`:

@@ -1,27 +1,41 @@
 import { style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
 
-// Clips the native-resolution iframe down to its scaled footprint and centres it.
-export const stageWrap = style({
+// Fills a tall modal body: the preview stage on the left, the data form sidebar
+// on the right.
+export const layout = style({
+  display: 'flex',
+  gap: '0.7rem',
+  flex: 1,
+  minHeight: 0,
+});
+
+// The preview area. Letterbox is dark; the composition's own transparency
+// checkerboard comes from inside the (scaled) iframe.
+export const stage = style({
   position: 'relative',
-  margin: '0 auto 0.7rem',
+  flex: 1,
+  minWidth: 0,
   overflow: 'hidden',
   borderRadius: '0.3rem',
   border: `1px solid ${colors.border}`,
-  // Fallback checkerboard behind the (transparent-bodied) iframe.
-  backgroundColor: '#3d4253',
-  backgroundImage:
-    'linear-gradient(45deg, #5b6075 25%, transparent 25%),' +
-    'linear-gradient(-45deg, #5b6075 25%, transparent 25%),' +
-    'linear-gradient(45deg, transparent 75%, #5b6075 75%),' +
-    'linear-gradient(-45deg, transparent 75%, #5b6075 75%)',
-  backgroundSize: '24px 24px',
-  backgroundPosition: '0 0, 0 12px, 12px -12px, -12px 0',
+  background: colors.background,
 });
 
+// Native-resolution iframe, centred and scaled to fit the stage.
 export const stageFrame = style({
+  position: 'absolute',
+  top: '50%',
+  left: '50%',
   border: 0,
   display: 'block',
-  transformOrigin: '0 0',
   background: 'transparent',
+  transformOrigin: 'center',
+});
+
+export const sidebar = style({
+  width: '320px',
+  flexShrink: 0,
+  overflowY: 'auto',
+  minHeight: 0,
 });

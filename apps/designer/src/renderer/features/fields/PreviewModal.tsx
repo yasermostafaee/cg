@@ -4,16 +4,14 @@ import { Modal } from '../shell/Modal.js';
 import { PreviewFieldForm, seedDefaults, type PreviewDispatch } from './PreviewFieldForm.js';
 import * as s from './PreviewModal.css.js';
 
-const PREVIEW_WIDTH = 600;
-
 /**
- * D-018 — the preview as a modal opened from the toolbar's "Preview" button. It
- * owns a *dedicated* preview iframe (the same `platform/preview.ts` harness used
- * for the canvas and shared with the single-file HTML export), shown on a
- * checkerboard at the composition resolution scaled to fit, plus the
- * `PreviewFieldForm` and its Play / Stop / Next / Reset controls. The iframe is
- * built + seeded on open and torn down on close (the form drives it directly, so
- * it never touches the canvas's own preview iframe).
+ * D-018 — the preview as a large modal opened from the toolbar's "PREVIEW"
+ * button. It owns a *dedicated* preview iframe (the same `platform/preview.ts`
+ * harness used by the canvas and shared with the single-file HTML export),
+ * rendered at the composition's native resolution and scaled to fill the stage,
+ * with the `PreviewFieldForm` and its Play / Stop / Next / Reset controls as a
+ * sidebar. Built + seeded on open, stopped on close (the iframe unmounts with
+ * the modal); the form drives it directly, never touching the canvas preview.
  */
 export function PreviewModal({
   scene,
@@ -23,7 +21,11 @@ export function PreviewModal({
   onClose: () => void;
 }): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
   const [html, setHtml] = useState<string | null>(null);
+  // Measured stage size, so the composition scales to fit whatever the (large)
+  // modal gives us rather than a fixed thumbnail.
+  const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
 
   // Build a fresh, dedicated preview document on open.
   useEffect(() => {
@@ -35,6 +37,17 @@ export function PreviewModal({
       alive = false;
     };
   }, [scene]);
+
+  useEffect(() => {
+    const el = stageRef.current;
+    if (el === null) return;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0]?.contentRect;
+      if (r !== undefined) setStageSize({ w: r.width, h: r.height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const post = useCallback((message: Record<string, unknown>): void => {
     iframeRef.current?.contentWindow?.postMessage({ kind: 'cg-preview', ...message }, '*');
@@ -68,30 +81,37 @@ export function PreviewModal({
   useEffect(() => () => post({ action: 'stop' }), [post]);
 
   const { width: resW, height: resH } = scene.resolution;
-  const scale = PREVIEW_WIDTH / resW;
+  const scale =
+    stageSize.w > 0 && stageSize.h > 0 ? Math.min(stageSize.w / resW, stageSize.h / resH) : 0;
 
   return (
     <Modal
-      title="Preview"
+      title={`Preview · ${String(resW)}×${String(resH)}`}
       onClose={onClose}
-      width="min(680px, 94vw)"
+      width="min(1500px, 96vw)"
+      minBodyHeight="74vh"
       ariaLabel="Composition preview"
     >
-      <div
-        className={s.stageWrap}
-        style={{ width: PREVIEW_WIDTH, height: Math.round(resH * scale) }}
-      >
-        {html !== null && (
-          <iframe
-            ref={iframeRef}
-            title="cgpreview-modal"
-            srcDoc={html}
-            className={s.stageFrame}
-            style={{ width: resW, height: resH, transform: `scale(${String(scale)})` }}
-          />
-        )}
+      <div className={s.layout}>
+        <div ref={stageRef} className={s.stage}>
+          {html !== null && (
+            <iframe
+              ref={iframeRef}
+              title="cgpreview-modal"
+              srcDoc={html}
+              className={s.stageFrame}
+              style={{
+                width: resW,
+                height: resH,
+                transform: `translate(-50%, -50%) scale(${String(scale)})`,
+              }}
+            />
+          )}
+        </div>
+        <div className={s.sidebar}>
+          <PreviewFieldForm scene={scene} dispatch={dispatch} />
+        </div>
       </div>
-      <PreviewFieldForm scene={scene} dispatch={dispatch} />
     </Modal>
   );
 }
