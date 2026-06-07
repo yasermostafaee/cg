@@ -1,7 +1,7 @@
 import { SceneSchema, type Element, type Scene } from '@cg/shared-schema';
 import { getStarter } from '@cg/starter-templates';
 import type { AppInfo, DesignerBridge } from '../shared/designer-bridge.js';
-import { cgCss, cgJs } from './cg-runtime.js';
+import { cgCss, cgJs, cgJsIife } from './cg-runtime.js';
 // The app's bundled @font-face rules (Vazirmatn / Exo 2) as a raw CSS string,
 // injected into the preview iframe so built-in fonts render on the canvas — the
 // iframe is srcdoc (same origin), so its `/fonts/…` URLs resolve like the host.
@@ -10,6 +10,7 @@ import { initWorkspace, prefs } from './workspace.js';
 import { ProjectStore } from './ProjectStore.js';
 import { AssetStore } from './AssetStore.js';
 import { Exporter } from './Exporter.js';
+import { ExporterSingleFile } from './ExporterSingleFile.js';
 import { Preview } from './preview.js';
 
 const APP_INFO: AppInfo = { name: 'cg Designer', version: '0.0.0', platform: 'browser' };
@@ -25,6 +26,7 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
   const projects = new ProjectStore(ws, prefs);
   const assets = new AssetStore(ws);
   const exporter = new Exporter({ assets, cgJs, cgCss });
+  const singleFile = new ExporterSingleFile({ cgJsIife, cgCss, fontsCss: appFontsCss, assets });
   const preview = new Preview({ cgJs, cgCss, fontsCss: appFontsCss });
   const assetUrlCache = new Map<string, string>();
   // Per-scene cache of the native file handle picked the last time the
@@ -245,6 +247,14 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
         await writable.close();
         exporter.progress.emit({ step: 'done', progress: 1 });
         return { ok: true, filename: handle.name };
+      },
+      runSingleFileHtml: async (req) => {
+        const result = await singleFile.run(req.scene);
+        return {
+          filename: result.filename,
+          bytes: result.bytes,
+          warnings: result.issues.map((i) => i.message),
+        };
       },
       onProgress: (handler) => exporter.progress.subscribe(handler),
     },

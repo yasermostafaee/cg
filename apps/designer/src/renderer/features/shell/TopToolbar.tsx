@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
-import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
+import {
+  designerStore,
+  editSceneOf,
+  shallowEqual,
+  useDesignerSelector,
+} from '../../state/store.js';
 import { cx } from '../../cx.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
@@ -113,6 +118,20 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
       return;
     }
     await window.cg.export.runDisk({ scene });
+  }
+
+  /** D-019 — download a single self-contained CasparCG `.html` for the active comp. */
+  async function exportHtml(): Promise<void> {
+    const st = designerStore.get();
+    // Export the open composition (what's on the canvas), not the layerless root.
+    const target = editSceneOf(st.scene, st.activeCompositionId) ?? scene;
+    if (target === null) return;
+    if (errorCount > 0) {
+      window.alert(`Export blocked: ${String(errorCount)} validation error(s) in Issues panel.`);
+      return;
+    }
+    const { warnings } = await window.cg.export.runSingleFileHtml({ scene: target });
+    if (warnings.length > 0) designerStore.showNotice(warnings.join('\n'));
   }
 
   function runFileAction(fn: () => void | Promise<void>): void {
@@ -332,6 +351,19 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
         title={errorCount > 0 ? 'Resolve validation errors first' : 'Export to .vcg'}
       >
         EXPORT
+      </button>
+      <button
+        type="button"
+        className={s.exportButton}
+        disabled={exportBlocked}
+        onClick={() => void exportHtml()}
+        title={
+          errorCount > 0
+            ? 'Resolve validation errors first'
+            : 'Download a single self-contained CasparCG .html (with embedded GDD)'
+        }
+      >
+        HTML
       </button>
       <button
         type="button"

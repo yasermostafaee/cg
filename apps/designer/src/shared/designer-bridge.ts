@@ -106,6 +106,14 @@ export interface DesignerBridge {
      * operator cancels.
      */
     runDisk(req: { scene: Scene }): Promise<{ ok: boolean; filename: string | null }>;
+    /**
+     * D-019 — produce a single self-contained, `file://`-safe CasparCG `.html`
+     * (scene/CSS/fonts/runtime inlined + an embedded GDD) and download it.
+     * Returns the filename, byte size, and any non-blocking preflight warnings.
+     */
+    runSingleFileHtml(req: {
+      scene: Scene;
+    }): Promise<{ filename: string; bytes: number; warnings: string[] }>;
     onProgress(handler: (progress: ExportProgress) => void): Unsubscribe;
   };
 

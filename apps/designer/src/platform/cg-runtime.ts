@@ -9,8 +9,15 @@
 // broadcast frame) doesn't collide with the Designer's own `window.cg`
 // bridge typing.
 import cgRuntimeSource from '../generated/cg-runtime.js?raw';
+// Classic IIFE build of the same runtime (exposes `window.CG`), for the
+// file://-safe single-file CasparCG export (D-019). ESM can't load over
+// file:// in CEF, so the export inlines this instead of `cgJs`.
+import cgRuntimeIifeSource from '../generated/cg-runtime.iife.js?raw';
 
 export const cgJs: string = cgRuntimeSource;
+
+/** IIFE runtime bundle (`var CG = …`) for the single-file export. */
+export const cgJsIife: string = cgRuntimeIifeSource;
 
 export const cgCss = `*{box-sizing:border-box;margin:0;padding:0}
 html,body{width:100%;height:100%;background:transparent;overflow:hidden;color:#FFF;font-family:Inter,Vazirmatn,"Noto Sans Arabic",system-ui,sans-serif}
