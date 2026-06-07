@@ -4,6 +4,7 @@ import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { BackgroundControl } from '../canvas/BackgroundControl.js';
 import { describeBinding, elementNameResolver } from '../fields/bind-resolver.js';
 import { FieldsPanel } from '../fields/FieldsPanel.js';
+import { PreviewFieldForm } from '../fields/PreviewFieldForm.js';
 import { CollapseSection } from './CollapseSection.js';
 import { RealtimeNumberInput } from './controls.js';
 import { DynamicDataSection } from './DynamicDataSection.js';
@@ -85,6 +86,7 @@ function SceneInspector({
           <FieldsPanel scene={scene} bindModeFieldId={bindModeFieldId} />
         </>
       )}
+      <PreviewFieldForm scene={scene} />
     </aside>
   );
 }

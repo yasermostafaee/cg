@@ -35,12 +35,15 @@
 
 ## 5. Preview form
 
-- [ ] 5.1 `features/fields/PreviewFieldForm.tsx` — inputs generated from
-      `scene.fields`; validate `pattern`/`minLength`/`maxLength`; seed from defaults
-- [ ] 5.2 On change call `bridge.preview.update(values)`; add **Play / Stop /
-      Next / Reset** controls
-- [ ] 5.3 `platform/preview.ts` — handle `action: 'next'` (→ `window.next()`) and
-      `action: 'reset'` (re-seed defaults + `update`)
+- [x] 5.1 `features/fields/PreviewFieldForm.tsx` — inputs generated from
+      `scene.fields` (text/multiline/number/color/boolean/select/image); validate
+      `pattern`/`minLength`/`maxLength`; seed from defaults. Mounted in the scene
+      inspector; the canvas iframe (D-011 checkerboard, stage scaled to the
+      composition resolution) is the preview surface.
+- [x] 5.2 On change call `window.cg.preview.update(values)`; **Play / Stop /
+      Next / Reset** controls via new `preview.play/stop/next/reset` bridge methods
+- [x] 5.3 `platform/preview.ts` — handle `action: 'next'` (→ `window.next()`) and
+      `action: 'reset'` (replace-mode update → re-seeds every field to its default)
 
 ## 6. Tests + gate
 

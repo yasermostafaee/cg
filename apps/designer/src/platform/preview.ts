@@ -50,10 +50,35 @@ export class Preview {
 
   /** Push a live field update to the preview iframe(s). */
   update(fields: Readonly<Record<string, unknown>>): { ok: boolean } {
+    return this.#post({ action: 'update', fields });
+  }
+
+  /** Play the preview graphic (CasparCG `play`), optionally seeding field data. */
+  play(fields: Readonly<Record<string, unknown>> = {}): { ok: boolean } {
+    return this.#post({ action: 'play', fields });
+  }
+
+  /** Stop / take the preview graphic off air (CasparCG `stop`). */
+  stop(): { ok: boolean } {
+    return this.#post({ action: 'stop' });
+  }
+
+  /** Advance one step (CasparCG `next`) — a no-op for single-step templates. */
+  next(): { ok: boolean } {
+    return this.#post({ action: 'next' });
+  }
+
+  /** Reset every field back to its declared default. */
+  reset(): { ok: boolean } {
+    return this.#post({ action: 'reset' });
+  }
+
+  /** Post a `cg-preview` message to every live preview iframe. */
+  #post(message: Record<string, unknown>): { ok: boolean } {
     const frames = document.querySelectorAll<HTMLIFrameElement>('iframe[title="cgpreview"]');
     let delivered = false;
     frames.forEach((frame) => {
-      frame.contentWindow?.postMessage({ kind: 'cg-preview', action: 'update', fields }, '*');
+      frame.contentWindow?.postMessage({ kind: 'cg-preview', ...message }, '*');
       delivered = true;
     });
     return { ok: delivered };
@@ -305,9 +330,21 @@ export class Preview {
                 currentFrame = msg.frame;
                 if (runtime) runtime.tick(currentFrame);
               } else if (msg.action === 'play' && typeof window.play === 'function') {
-                window.play(JSON.stringify(msg.fields ?? {}));
+                currentFields = msg.fields ?? {};
+                window.play(JSON.stringify(currentFields));
+                if (runtime) runtime.tick(currentFrame);
               } else if (msg.action === 'stop' && typeof window.stop === 'function') {
                 window.stop();
+              } else if (msg.action === 'next' && typeof window.next === 'function') {
+                window.next();
+              } else if (msg.action === 'reset') {
+                // Re-seed every field to its declared default. update() merges, so
+                // a replace-mode update is what clears omitted keys back to default.
+                currentFields = {};
+                if (runtime) {
+                  runtime.update({}, { mode: 'replace' });
+                  runtime.tick(currentFrame);
+                }
               }
             } catch (e) {
               /* swallow preview-side errors */

@@ -263,6 +263,10 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
       load: (req) => Promise.resolve(preview.load(req.scene)),
       update: (req) => Promise.resolve(preview.update(req.fields)),
       reload: () => Promise.resolve(preview.reload()),
+      play: (req) => Promise.resolve(preview.play(req.fields)),
+      stop: () => Promise.resolve(preview.stop()),
+      next: () => Promise.resolve(preview.next()),
+      reset: () => Promise.resolve(preview.reset()),
     },
   };
 }
