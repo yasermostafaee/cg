@@ -9,6 +9,7 @@ import {
 } from '../../state/store.js';
 import { cx } from '../../cx.js';
 import { NewProjectModal } from './NewProjectModal.js';
+import { PreviewModal } from '../fields/PreviewModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
 import { ShortcutsModal } from './ShortcutsModal.js';
 import * as s from './TopToolbar.css.js';
@@ -41,6 +42,8 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
   const [hoverNav, setHoverNav] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [newModalOpen, setNewModalOpen] = useState(false);
+  // Snapshot of the open composition driven by the Preview modal (null = closed).
+  const [previewScene, setPreviewScene] = useState<Scene | null>(null);
   // Queues a switch action (Close / New / Open) when there's already a
   // scene loaded — the SaveBeforeSwitchModal runs first and only then
   // does the action proceed. `() => () => Promise<void>` is React's
@@ -132,6 +135,13 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
     }
     const { warnings } = await window.cg.export.runSingleFileHtml({ scene: target });
     if (warnings.length > 0) designerStore.showNotice(warnings.join('\n'));
+  }
+
+  /** Open the Preview modal on a snapshot of the open composition. */
+  function openPreview(): void {
+    const st = designerStore.get();
+    const target = editSceneOf(st.scene, st.activeCompositionId) ?? scene;
+    if (target !== null) setPreviewScene(target);
   }
 
   function runFileAction(fn: () => void | Promise<void>): void {
@@ -346,6 +356,15 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
       <button
         type="button"
         className={s.exportButton}
+        disabled={scene === null}
+        onClick={openPreview}
+        title="Preview the composition with live data (simulated CasparCG output)"
+      >
+        PREVIEW
+      </button>
+      <button
+        type="button"
+        className={s.exportButton}
         disabled={exportBlocked}
         onClick={() => void exportVcg()}
         title={errorCount > 0 ? 'Resolve validation errors first' : 'Export to .vcg'}
@@ -375,6 +394,9 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
       </button>
       {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
       {newModalOpen && <NewProjectModal onClose={() => setNewModalOpen(false)} />}
+      {previewScene !== null && (
+        <PreviewModal scene={previewScene} onClose={() => setPreviewScene(null)} />
+      )}
       {pendingSwitch !== null && scene !== null && (
         <SaveBeforeSwitchModal
           scene={scene}

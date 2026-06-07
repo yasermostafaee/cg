@@ -125,10 +125,5 @@ export interface DesignerBridge {
       req: ChannelRequest<typeof PreviewUpdateChannel>,
     ): Promise<ChannelResponse<typeof PreviewUpdateChannel>>;
     reload(): Promise<ChannelResponse<typeof PreviewReloadChannel>>;
-    /** D-018 — preview transport, driven by the PreviewFieldForm. */
-    play(req: { fields: Readonly<Record<string, unknown>> }): Promise<{ ok: boolean }>;
-    stop(): Promise<{ ok: boolean }>;
-    next(): Promise<{ ok: boolean }>;
-    reset(): Promise<{ ok: boolean }>;
   };
 }

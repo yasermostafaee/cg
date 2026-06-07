@@ -48,37 +48,17 @@ export class Preview {
     return { src: this.#docUrl, html };
   }
 
-  /** Push a live field update to the preview iframe(s). */
+  /**
+   * Push a live field update to the canvas preview iframe(s). (Transport —
+   * play/stop/next/reset — is driven by the Preview modal posting straight to
+   * its own dedicated iframe; the iframe message handler understands those
+   * actions either way.)
+   */
   update(fields: Readonly<Record<string, unknown>>): { ok: boolean } {
-    return this.#post({ action: 'update', fields });
-  }
-
-  /** Play the preview graphic (CasparCG `play`), optionally seeding field data. */
-  play(fields: Readonly<Record<string, unknown>> = {}): { ok: boolean } {
-    return this.#post({ action: 'play', fields });
-  }
-
-  /** Stop / take the preview graphic off air (CasparCG `stop`). */
-  stop(): { ok: boolean } {
-    return this.#post({ action: 'stop' });
-  }
-
-  /** Advance one step (CasparCG `next`) — a no-op for single-step templates. */
-  next(): { ok: boolean } {
-    return this.#post({ action: 'next' });
-  }
-
-  /** Reset every field back to its declared default. */
-  reset(): { ok: boolean } {
-    return this.#post({ action: 'reset' });
-  }
-
-  /** Post a `cg-preview` message to every live preview iframe. */
-  #post(message: Record<string, unknown>): { ok: boolean } {
     const frames = document.querySelectorAll<HTMLIFrameElement>('iframe[title="cgpreview"]');
     let delivered = false;
     frames.forEach((frame) => {
-      frame.contentWindow?.postMessage({ kind: 'cg-preview', ...message }, '*');
+      frame.contentWindow?.postMessage({ kind: 'cg-preview', action: 'update', fields }, '*');
       delivered = true;
     });
     return { ok: delivered };

@@ -6,14 +6,30 @@ import * as s from './PreviewFieldForm.css.js';
 
 type Values = Record<string, FieldValue>;
 
+/** Transport the form drives — the preview modal posts these to its iframe. */
+export interface PreviewDispatch {
+  update(fields: Values): void;
+  play(fields: Values): void;
+  stop(): void;
+  next(): void;
+  reset(): void;
+}
+
 /**
  * D-018 — live data-entry form for the preview. Generated from the
- * composition's dynamic fields; editing a value drives the canvas preview
- * through the same runtime used on air (`window.cg.preview.update`), and the
- * Play / Stop / Next / Reset controls map to the CasparCG transport. So the
- * operator sees the simulated CasparCG output for the data they type.
+ * composition's dynamic fields; editing a value drives the preview through the
+ * same runtime used on air (and that the single-file HTML export ships), via the
+ * `dispatch` its host (the Preview modal) wires to a dedicated preview iframe.
+ * Play / Stop / Next / Reset map to the CasparCG transport, so the operator sees
+ * the simulated CasparCG output for the data they type.
  */
-export function PreviewFieldForm({ scene }: { scene: Scene }): JSX.Element {
+export function PreviewFieldForm({
+  scene,
+  dispatch,
+}: {
+  scene: Scene;
+  dispatch: PreviewDispatch;
+}): JSX.Element {
   const fields = scene.fields;
   // Re-seed whenever the field *set* changes (add / remove / rename / retype) —
   // but not on every unrelated scene edit, so the operator's typed test values
@@ -30,14 +46,14 @@ export function PreviewFieldForm({ scene }: { scene: Scene }): JSX.Element {
   function setValue(id: string, v: FieldValue): void {
     setValues((prev) => {
       const next = { ...prev, [id]: v };
-      void window.cg.preview.update({ fields: next });
+      dispatch.update(next);
       return next;
     });
   }
 
   function reset(): void {
     setValues(seedDefaults(fields));
-    void window.cg.preview.reset();
+    dispatch.reset();
   }
 
   return (
@@ -46,14 +62,14 @@ export function PreviewFieldForm({ scene }: { scene: Scene }): JSX.Element {
         <button
           type="button"
           className={cx(s.btn, s.playBtn)}
-          onClick={() => void window.cg.preview.play({ fields: values })}
+          onClick={() => dispatch.play(values)}
         >
           ▶ Play
         </button>
-        <button type="button" className={s.btn} onClick={() => void window.cg.preview.stop()}>
+        <button type="button" className={s.btn} onClick={() => dispatch.stop()}>
           ■ Stop
         </button>
-        <button type="button" className={s.btn} onClick={() => void window.cg.preview.next()}>
+        <button type="button" className={s.btn} onClick={() => dispatch.next()}>
           ⤼ Next
         </button>
         <button type="button" className={s.btn} onClick={reset}>
