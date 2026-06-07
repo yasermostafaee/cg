@@ -30,6 +30,21 @@ describe('applyFieldValues', () => {
     expect(elementMap.get('name')?.textContent).toBe('replaced');
   });
 
+  it('truncates a text value to the field maxLength (code-point safe)', () => {
+    const sceneCopy = structuredClone(lowerThirdScene);
+    sceneCopy.bindings[0]!.target = { kind: 'text', elementId: 'name' }; // full-text replace
+    const anchor = sceneCopy.fields.find((f) => f.id === 'anchor');
+    if (anchor !== undefined && anchor.type === 'text') anchor.maxLength = 5;
+    const { container, elementMap, textOriginals } = buildScene(sceneCopy);
+
+    applyFieldValues(sceneCopy, { anchor: 'Hello World' }, elementMap, textOriginals, container);
+    expect(elementMap.get('name')?.textContent).toBe('Hello');
+
+    // Surrogate-pair chars count as one code point and are never split.
+    applyFieldValues(sceneCopy, { anchor: '👍👍👍👍👍👍' }, elementMap, textOriginals, container);
+    expect(elementMap.get('name')?.textContent).toBe('👍👍👍👍👍');
+  });
+
   it('writes a color binding to a shape fill', () => {
     const sceneCopy = structuredClone(lowerThirdScene);
     sceneCopy.fields.push({

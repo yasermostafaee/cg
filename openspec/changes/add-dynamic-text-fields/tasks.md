@@ -7,13 +7,13 @@
 
 ## 2. Runtime correctness
 
-- [ ] 2.1 `runtime.ts` `play()` merges instead of replacing:
+- [x] 2.1 `runtime.ts` `play()` merges instead of replacing:
       `currentValues = { ...currentValues, ...data }` (update-before-play retained)
-- [ ] 2.2 `adapters/caspar-globals.ts` `parsePayload` — implement the CasparCG
+- [x] 2.2 `adapters/caspar-globals.ts` `parsePayload` — implement the CasparCG
       legacy XML parser (`componentData id` / `data id="text" value`) → `{key:value}`;
       keep JSON canonical; accept JSON string or parsed object; ignore unknown keys
-- [ ] 2.3 `bindings.ts`/`transforms.ts` — truncate text targets to the field's
-      `maxLength` before applying (code-point safe; ZWNJ preserved)
+- [x] 2.3 `bindings.ts` — truncate text targets to the field's `maxLength` before
+      applying (code-point safe; surrogate pairs / ZWNJ preserved)
 
 ## 3. Store (convenience layer)
 
@@ -45,12 +45,11 @@
 ## 6. Tests + gate
 
 - [x] 6.1 `shared-schema` — new constraints validate; bad pattern/length rejected
-- [ ] 6.2 `template-runtime` — update→play retained; play merges; XML parses;
-      unknown keys ignored; `maxLength` truncates _(Feature 2 — not started)_
+- [x] 6.2 `template-runtime` — update→play retained; play merges; XML parses;
+      unknown keys ignored; `maxLength` truncates
 - [x] 6.3 `apps/designer` store test — `setElementDataKey` creates / renames /
       removes field+binding; duplicate key rejected (+ `setElementFieldMeta`
       variant switch)
-- [~] 6.4 Green gate: typecheck + lint + test + build — **done for
-  `@cg/shared-schema` + `@cg/designer`** (Feature 1); `@cg/template-runtime`
-  pending Feature 2
+- [x] 6.4 Green gate: typecheck + lint + test + build for `@cg/shared-schema`,
+      `@cg/template-runtime`, `@cg/designer`
 - [x] 6.5 `pnpm openspec validate add-dynamic-text-fields --strict`

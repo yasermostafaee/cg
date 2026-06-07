@@ -13,16 +13,21 @@ export function applyFieldValues(
   textOriginals: ReadonlyMap<string, string>,
   container: HTMLElement,
 ): void {
-  // Build a quick field-defaults lookup so missing values fall back cleanly.
+  // Build a quick field-defaults lookup so missing values fall back cleanly,
+  // plus per-field `maxLength` caps for text fields.
   const defaults = new Map<string, unknown>();
+  const maxLengths = new Map<string, number>();
   for (const field of scene.fields) {
     defaults.set(field.id, 'default' in field ? field.default : undefined);
+    if (field.type === 'text' && field.maxLength !== undefined) {
+      maxLengths.set(field.id, field.maxLength);
+    }
   }
 
   for (const binding of scene.bindings) {
     const raw = binding.fieldId in values ? values[binding.fieldId] : defaults.get(binding.fieldId);
     if (raw === undefined) continue;
-    applyOne(binding, raw, elementMap, textOriginals, container);
+    applyOne(binding, raw, elementMap, textOriginals, container, maxLengths.get(binding.fieldId));
   }
 }
 
@@ -32,13 +37,20 @@ function applyOne(
   elementMap: ReadonlyMap<string, HTMLElement>,
   textOriginals: ReadonlyMap<string, string>,
   container: HTMLElement,
+  maxLength?: number,
 ): void {
   const target = binding.target;
   switch (target.kind) {
     case 'text': {
       const el = elementMap.get(target.elementId);
       if (!el) return;
-      const stringValue = applyTransform(stringifyValue(raw), binding.transform);
+      let stringValue = applyTransform(stringifyValue(raw), binding.transform);
+      // Cap to the field's maxLength by code point (so a surrogate pair or a
+      // ZWNJ counts as one and isn't split); the element's own auto-size /
+      // auto-squeeze then handles fit.
+      if (maxLength !== undefined && [...stringValue].length > maxLength) {
+        stringValue = [...stringValue].slice(0, maxLength).join('');
+      }
       const original = textOriginals.get(target.elementId);
       if (target.placeholder && original !== undefined) {
         el.textContent = original.replaceAll(target.placeholder, stringValue);

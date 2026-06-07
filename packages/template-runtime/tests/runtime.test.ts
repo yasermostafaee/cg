@@ -36,6 +36,15 @@ describe('createRuntime — lifecycle', () => {
     expect(nameEl?.textContent).toBe('second');
   });
 
+  it('update() before play() is retained — play with no data preserves it', async () => {
+    const runtime = createRuntime(lowerThirdScene, { skipFontLoad: true });
+    await runtime.ready;
+    await runtime.update({ anchor: 'از CG ADD' });
+    await runtime.play({}); // CG PLAY with no data must not wipe the prior update
+    const nameEl = document.querySelector<HTMLElement>('[data-cg-element-id="name"]');
+    expect(nameEl?.textContent).toBe('از CG ADD');
+  });
+
   it('update() with replace mode clears omitted keys to defaults', async () => {
     const runtime = createRuntime(lowerThirdScene, { skipFontLoad: true });
     await runtime.play({ anchor: 'first' });

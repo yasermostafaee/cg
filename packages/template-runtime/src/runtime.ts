@@ -95,7 +95,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         throw new Error('Runtime removed; play() unavailable');
       }
       await ready;
-      currentValues = { ...data };
+      // Merge (don't replace) so a `CG PLAY` with no data preserves whatever a
+      // prior `CG ADD`/`UPDATE` already set — the CasparCG flow updates first,
+      // then plays with no args. play(data) still applies its data. Order no
+      // longer matters (D-018/D-019 acceptance).
+      currentValues = { ...currentValues, ...data };
       applyFieldValues(
         scene,
         currentValues,
