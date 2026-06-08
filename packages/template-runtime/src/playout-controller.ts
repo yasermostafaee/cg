@@ -159,13 +159,36 @@ export class PlayoutController {
 
   private onIntroEnd(): void {
     this.phase = 'hold';
+    // The HOLD plays the idle segment `[introEndFrame, outroStartFrame]` on a
+    // loop (a spinning logo, a pulsing dot, …). When the two markers coincide
+    // there is no segment, so the graphic simply holds the frozen intro-end
+    // frame. Either way the frames between IN and OUT are now visible.
+    this.startIdleLoop();
     const mode = this.o.playout.mode;
-    if (mode === 'manual') return; // hold until stop()
+    if (mode === 'manual') return; // loop the idle segment until stop()
     const ms =
       mode === 'content-driven'
         ? (this.o.durationHook?.() ?? this.o.playout.holdMs ?? 0)
         : (this.o.playout.holdMs ?? 0);
     this.scheduleHold(ms, () => this.startOutro());
+  }
+
+  /** Loop the held idle segment during HOLD; freeze when it's empty. */
+  private startIdleLoop(): void {
+    const lc = this.o.lifecycle;
+    if (lc === undefined || !this.o.hasAnimation) return;
+    if (lc.outroStartFrame <= lc.introEndFrame) return; // no idle segment — freeze
+    this.stopDriver();
+    this.driver = new FrameDriver({
+      frameRate: this.o.frameRate,
+      range: { in: lc.introEndFrame, out: lc.outroStartFrame },
+      mode: 'loop',
+      onFrame: this.o.applyFrame,
+      raf: this.clock.raf,
+      cancel: this.clock.cancel,
+      now: this.clock.now,
+    });
+    this.driver.start();
   }
 
   private startOutro(): void {

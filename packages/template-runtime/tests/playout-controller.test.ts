@@ -92,6 +92,34 @@ describe('PlayoutController', () => {
     expect(h.events).toEqual(['exit', 'settle']);
   });
 
+  it('hold loops the idle segment [introEnd, outroStart] when animated', () => {
+    const h = make({ mode: 'manual' }, { hasAnimation: true });
+    h.controller.play();
+    for (let i = 0; i < 25; i++) h.clock.advance(20); // play the intro, then the idle loop
+    const tail = h.frames.slice(-8);
+    expect(tail.every((f) => f >= 10 && f <= 40)).toBe(true); // inside the idle segment
+    expect(new Set(tail).size).toBeGreaterThan(1); // animating (looping), not frozen
+  });
+
+  it('hold freezes at introEnd when introEnd === outroStart', () => {
+    const clock = makeClock();
+    const frames: number[] = [];
+    const controller = new PlayoutController({
+      frameRate: 50,
+      active,
+      lifecycle: { introEndFrame: 10, outroStartFrame: 10 },
+      playout: { mode: 'manual' },
+      hasAnimation: true,
+      applyFrame: (f) => frames.push(f),
+      onExitStart: () => undefined,
+      onSettle: () => undefined,
+      clock,
+    });
+    controller.play();
+    for (let i = 0; i < 20; i++) clock.advance(20);
+    expect(Math.max(...frames)).toBe(10); // froze at intro-end, no idle loop
+  });
+
   it('auto-out: plays the outro automatically after holdMs', () => {
     const h = make({ mode: 'auto-out', holdMs: 2000 });
     h.controller.play();

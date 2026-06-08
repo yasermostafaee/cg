@@ -19,15 +19,23 @@ markers SHALL behave exactly as today (no distinct phases).
 ### Requirement: Play holds after intro; stop plays the outro
 
 When a composition defines lifecycle phases, `play()` SHALL play the intro once
-and then hold at the hold frame — it SHALL NOT loop the whole range and SHALL NOT
-auto-play the outro. `stop()` SHALL play the outro from the outro-start to the
-active-region end and then settle to hidden.
+and then hold — looping the idle segment `[introEndFrame, outroStartFrame]` when
+it is non-empty, or holding the frozen `introEndFrame` when the two markers
+coincide. It SHALL NOT loop the whole range and SHALL NOT auto-play the outro.
+`stop()` SHALL play the outro from the outro-start to the active-region end and
+then settle to hidden.
 
 #### Scenario: Play runs the intro and holds
 
 - **WHEN** `play()` is called on a composition with lifecycle phases
-- **THEN** the intro plays once and the composition holds at the hold frame
-  without looping and without playing the outro
+- **THEN** the intro plays once and the composition holds without looping the
+  whole range and without playing the outro
+
+#### Scenario: Hold loops the idle segment
+
+- **WHEN** the composition is holding and `introEndFrame < outroStartFrame`
+- **THEN** the frames between the intro-end and the outro-start play on a loop,
+  and when `introEndFrame == outroStartFrame` the intro-end frame is held frozen
 
 #### Scenario: Stop runs the outro
 

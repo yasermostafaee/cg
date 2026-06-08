@@ -5,10 +5,12 @@
   lifecycle capability adds `introEndFrame`/`outroStartFrame` **within** the
   active region, so the active region remains the outer playable window and the
   two specs compose.
-- **Hold = the held intro-end frame.** For v1 the HOLD is simply the frame held at
-  `introEndFrame`. Frames between `introEndFrame` and `outroStartFrame` are an
-  optional idle/loop segment — defer unless cheap; most templates will set
-  `introEndFrame == outroStartFrame`.
+- **Hold = the idle segment, looped.** The HOLD plays the frames between
+  `introEndFrame` and `outroStartFrame` on a loop (a spinning logo, a pulsing
+  dot), so animation in that region is visible while the graphic is held. When
+  `introEndFrame == outroStartFrame` there is no segment, so the graphic simply
+  holds the frozen intro-end frame (the common lower-third case). This is cheap —
+  it reuses the FrameDriver's existing loop mode over the sub-range.
 - **Self-running timing, operator does on/off.** `auto-out` and `loop-cycle` run
   inside the runtime from the `playout` config (like Loopic's crawler self-loop,
   but declarative and no-code). The operator never schedules cycles; a looping
