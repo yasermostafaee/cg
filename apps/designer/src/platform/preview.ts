@@ -162,6 +162,10 @@ export class Preview {
         let assetUrls = {};
         let currentScene = null;
         let editingTextId = null;
+        // D-020 — non-persistent playout override (mode / holdMs / repeat).
+        // Set by 'scene-replace' so the preview can test timing without touching
+        // the stored template; passed straight to createRuntime on every rebuild.
+        let playoutOverride = undefined;
         // Families we've already loaded into this iframe's
         // document.fonts. Keyed by family name; the value is the
         // assetUrl we loaded from, so we can re-fetch when a font
@@ -261,7 +265,7 @@ export class Preview {
             // both so the next createRuntime starts clean.
             document.body.classList.remove('cg-removed');
             document.body.classList.remove('cg-pending');
-            runtime = createRuntime(scene);
+            runtime = createRuntime(scene, { playoutOverride: playoutOverride });
             installCasparGlobals(runtime);
             await runtime.ready;
             document.body.classList.remove('cg-pending');
@@ -294,6 +298,12 @@ export class Preview {
                 if (typeof msg.editingTextId === 'string' || msg.editingTextId === null) {
                   editingTextId = msg.editingTextId;
                 }
+                // D-020 — session-only timing override travels with the scene so
+                // the rebuilt runtime applies it (undefined ⇒ stored defaults).
+                playoutOverride =
+                  msg.playoutOverride && typeof msg.playoutOverride === 'object'
+                    ? msg.playoutOverride
+                    : undefined;
                 await applyScene(msg.scene);
               } else if (msg.action === 'asset-urls' && msg.assetUrls) {
                 assetUrls = msg.assetUrls;

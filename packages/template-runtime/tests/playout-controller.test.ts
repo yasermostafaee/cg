@@ -43,7 +43,8 @@ function makeClock() {
 }
 
 const active = { in: 0, out: 50 };
-const lifecycle: Lifecycle = { introEndFrame: 10, outroStartFrame: 40 };
+// Single out-point: intro [0, 40], hold at 40, outro [40, 50].
+const lifecycle: Lifecycle = { outPoint: 40 };
 
 interface Harness {
   controller: PlayoutController;
@@ -54,7 +55,7 @@ interface Harness {
 
 function make(
   playout: Playout,
-  opts: { lifecycle?: Lifecycle; hasAnimation?: boolean } = {},
+  opts: { lifecycle?: Lifecycle; hasAnimation?: boolean; durationHook?: () => number } = {},
 ): Harness {
   const clock = makeClock();
   const frames: number[] = [];
@@ -68,19 +69,20 @@ function make(
     applyFrame: (f) => frames.push(f),
     onExitStart: () => events.push('exit'),
     onSettle: () => events.push('settle'),
+    durationHook: opts.durationHook,
     clock,
   });
   return { controller, frames, events, clock };
 }
 
 describe('PlayoutController', () => {
-  it('manual: play runs the intro and holds (no loop, no auto-outro)', () => {
+  it('manual: play runs the full intro and holds at the out-point (no loop, no auto-outro)', () => {
     const h = make({ mode: 'manual' });
     h.controller.play();
-    expect(h.frames).toEqual([10]); // held at introEndFrame
+    expect(h.frames).toEqual([40]); // held at outPoint
     expect(h.events).toEqual([]); // no exit while holding
     h.clock.advance(10_000); // time passes — still holding, nothing changes
-    expect(h.frames).toEqual([10]);
+    expect(h.frames).toEqual([40]);
     expect(h.events).toEqual([]);
   });
 
@@ -88,36 +90,38 @@ describe('PlayoutController', () => {
     const h = make({ mode: 'manual' });
     h.controller.play();
     h.controller.stop();
-    expect(h.frames).toEqual([10, 50]); // outro played to active.out
+    expect(h.frames).toEqual([40, 50]); // outro played to active.out
     expect(h.events).toEqual(['exit', 'settle']);
   });
 
-  it('hold loops the idle segment [introEnd, outroStart] when animated', () => {
+  it('hold freezes at the out-point — the entrance plays once and does not loop', () => {
     const h = make({ mode: 'manual' }, { hasAnimation: true });
     h.controller.play();
-    for (let i = 0; i < 25; i++) h.clock.advance(20); // play the intro, then the idle loop
-    const tail = h.frames.slice(-8);
-    expect(tail.every((f) => f >= 10 && f <= 40)).toBe(true); // inside the idle segment
-    expect(new Set(tail).size).toBeGreaterThan(1); // animating (looping), not frozen
+    for (let i = 0; i < 60; i++) h.clock.advance(20); // run well past the intro
+    expect(Math.max(...h.frames)).toBe(40); // never past outPoint
+    expect(h.frames[h.frames.length - 1]).toBe(40); // settled frozen at outPoint
+    const len = h.frames.length;
+    h.clock.advance(5000);
+    expect(h.frames.length).toBe(len); // frozen — no new frames (not looping)
   });
 
-  it('hold freezes at introEnd when introEnd === outroStart', () => {
-    const clock = makeClock();
-    const frames: number[] = [];
-    const controller = new PlayoutController({
-      frameRate: 50,
-      active,
-      lifecycle: { introEndFrame: 10, outroStartFrame: 10 },
-      playout: { mode: 'manual' },
-      hasAnimation: true,
-      applyFrame: (f) => frames.push(f),
-      onExitStart: () => undefined,
-      onSettle: () => undefined,
-      clock,
-    });
-    controller.play();
-    for (let i = 0; i < 20; i++) clock.advance(20);
-    expect(Math.max(...frames)).toBe(10); // froze at intro-end, no idle loop
+  it('no out-point: play plays the whole timeline once and holds the last frame (not loop)', () => {
+    const h = make({ mode: 'manual' }, { lifecycle: undefined, hasAnimation: true });
+    h.controller.play();
+    for (let i = 0; i < 70; i++) h.clock.advance(20);
+    expect(Math.max(...h.frames)).toBe(50); // implicit out-point = active.out
+    expect(h.frames[h.frames.length - 1]).toBe(50); // holds the last frame
+    const len = h.frames.length;
+    h.clock.advance(5000);
+    expect(h.frames.length).toBe(len); // frozen, not looping
+  });
+
+  it('no out-point: stop plays the (empty) outro and settles', () => {
+    const h = make({ mode: 'manual' }, { lifecycle: undefined });
+    h.controller.play();
+    expect(h.events).toEqual([]);
+    h.controller.stop();
+    expect(h.events).toEqual(['exit', 'settle']);
   });
 
   it('auto-out: plays the outro automatically after holdMs', () => {
@@ -128,7 +132,7 @@ describe('PlayoutController', () => {
     expect(h.events).toEqual([]); // not yet
     h.clock.advance(1);
     expect(h.events).toEqual(['exit', 'settle']);
-    expect(h.frames).toEqual([10, 50]);
+    expect(h.frames).toEqual([40, 50]);
   });
 
   it('loop-cycle: repeats N times then settles once', () => {
@@ -163,33 +167,58 @@ describe('PlayoutController', () => {
     expect(h.events).toEqual(['exit', 'settle']);
   });
 
-  it('content-driven: uses the durationHook for the hold', () => {
-    const clock = makeClock();
-    const events: string[] = [];
-    const controller = new PlayoutController({
-      frameRate: 50,
-      active,
-      lifecycle,
-      playout: { mode: 'content-driven' },
-      hasAnimation: false,
-      applyFrame: () => undefined,
-      onExitStart: () => events.push('exit'),
-      onSettle: () => events.push('settle'),
-      durationHook: () => 3000,
-      clock,
-    });
-    controller.play();
-    clock.advance(2999);
-    expect(events).toEqual([]);
-    clock.advance(1);
-    expect(events).toEqual(['exit', 'settle']);
+  it('content-driven: each pass takes its duration from the durationHook (holdMs ignored)', () => {
+    // holdMs is present but MUST be ignored for content-driven; the hook wins.
+    const h = make(
+      { mode: 'content-driven', holdMs: 99 },
+      { durationHook: () => 3000 },
+    );
+    h.controller.play();
+    h.clock.advance(2999);
+    expect(h.events).toEqual([]);
+    h.clock.advance(1); // single pass (repeat defaults to 1) → settle
+    expect(h.events).toEqual(['exit', 'settle']);
   });
 
-  it('no lifecycle: stop settles instantly (legacy behaviour)', () => {
-    const h = make({ mode: 'manual' }, { lifecycle: undefined });
+  it('content-driven repeat = N: runs N passes then settles once', () => {
+    const h = make(
+      { mode: 'content-driven', repeat: 3 },
+      { durationHook: () => 1000 },
+    );
     h.controller.play();
+    h.clock.advance(1000); // pass 1 → pass 2 (not final)
     expect(h.events).toEqual([]);
+    h.clock.advance(1000); // pass 2 → pass 3 (not final)
+    expect(h.events).toEqual([]);
+    h.clock.advance(1000); // pass 3 → final settle
+    expect(h.events).toEqual(['exit', 'settle']);
+  });
+
+  it('content-driven repeat = infinite: loops the pass forever; stop() ends it', () => {
+    const h = make(
+      { mode: 'content-driven', repeat: 'infinite' },
+      { durationHook: () => 500 },
+    );
+    h.controller.play();
+    for (let i = 0; i < 8; i++) h.clock.advance(500);
+    expect(h.events).toEqual([]); // keeps looping, never settles on its own
     h.controller.stop();
+    expect(h.events).toEqual(['exit', 'settle']);
+  });
+
+  it('content-driven: the duration hook is re-read each pass (dynamic content)', () => {
+    const durations = [400, 700];
+    let i = 0;
+    const h = make(
+      { mode: 'content-driven', repeat: 2 },
+      { durationHook: () => durations[i++] ?? 0 },
+    );
+    h.controller.play();
+    h.clock.advance(400); // pass 1 used 400ms → pass 2
+    expect(h.events).toEqual([]);
+    h.clock.advance(699);
+    expect(h.events).toEqual([]); // pass 2 needs 700ms, not 400
+    h.clock.advance(1);
     expect(h.events).toEqual(['exit', 'settle']);
   });
 });

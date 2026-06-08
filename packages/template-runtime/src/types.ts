@@ -1,4 +1,4 @@
-import type { Element, ElementAnimation, FieldValues, Scene } from '@cg/shared-schema';
+import type { Element, ElementAnimation, FieldValues, PlayoutMode, Scene } from '@cg/shared-schema';
 
 /**
  * Lifecycle events emitted by the runtime. Subscribers attach via
@@ -121,11 +121,33 @@ export interface RuntimeBootOptions {
   clock?: RuntimeClock;
 
   /**
-   * D-020 — supplies the hold duration (ms) for the `content-driven` playout
-   * mode. The mode + orchestration live here; the width→duration computation is
-   * delivered by the ticker item. Absent ⇒ falls back to `playout.holdMs`.
+   * D-020 — supplies the per-pass duration (ms) for the `content-driven` playout
+   * mode. The mode + orchestration live here; the content→duration computation is
+   * delivered by the ticker item, recomputed each pass. `holdMs` does not apply to
+   * `content-driven`; absent ⇒ a zero-length pass.
    */
   durationHook?: () => number;
+
+  /**
+   * D-020 — non-persistent playout override. The composition stores its defaults
+   * (`scene.playout`, play-once); these knobs override them for a single run
+   * without touching the stored template. The designer preview supplies them for
+   * session-only testing, and the rundown (the control app) will drive them live
+   * on air later — this is the seam that keeps mode + hold + repeat overridable.
+   * Absent fields fall back to the stored `scene.playout`.
+   */
+  playoutOverride?: PlayoutOverride;
+}
+
+/**
+ * D-020 — overridable playout knobs (non-persistent). They override the stored
+ * `scene.playout` for this run only. There is no continuous-loop flag: a looping
+ * playout is `mode: 'loop-cycle'` with `repeat: 'infinite'`.
+ */
+export interface PlayoutOverride {
+  mode?: PlayoutMode;
+  holdMs?: number;
+  repeat?: number | 'infinite';
 }
 
 /** Injectable rAF + timer clock for deterministic lifecycle/timing tests. */

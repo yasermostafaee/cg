@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { DynamicField } from '@cg/shared-schema';
-import { seedDefaults, validateField } from '../src/renderer/features/fields/PreviewFieldForm.js';
+import {
+  findDuplicateKeys,
+  seedDefaults,
+  validateField,
+} from '../src/renderer/features/fields/PreviewFieldForm.js';
 
 function textField(extra: Record<string, unknown>): DynamicField {
   return {
@@ -44,5 +48,17 @@ describe('PreviewFieldForm helpers', () => {
   it('does not validate non-text fields', () => {
     const num: DynamicField = { id: 'n', label: 'N', required: true, type: 'number', default: 0 };
     expect(validateField(num, 0)).toBeNull();
+  });
+
+  it('flags duplicate data keys (each repeated key once), none when all unique', () => {
+    const dup: DynamicField[] = [
+      { id: 'title', label: 'A', required: false, type: 'text', default: '' },
+      { id: 'title', label: 'B', required: false, type: 'text', default: '' },
+      { id: 'sub', label: 'C', required: false, type: 'text', default: '' },
+      { id: 'sub', label: 'D', required: false, type: 'text', default: '' },
+      { id: 'sub', label: 'E', required: false, type: 'text', default: '' },
+    ];
+    expect(findDuplicateKeys(dup).sort()).toEqual(['sub', 'title']);
+    expect(findDuplicateKeys([textField({ id: 'a' }), textField({ id: 'b' })])).toEqual([]);
   });
 });

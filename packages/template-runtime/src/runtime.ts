@@ -4,6 +4,7 @@ import {
   type Element,
   type FieldValues,
   type FrameRange,
+  type Playout,
   type Scene,
 } from '@cg/shared-schema';
 import {
@@ -71,15 +72,26 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     for (const entry of animated) applyAnimationAtFrame(entry, frame);
   };
 
-  // D-020 — the controller owns the playhead. Without a `lifecycle` it loops the
-  // active region exactly as the old FrameDriver did (backward-compatible); with
-  // one it runs IN → hold → OUT and the auto-out / loop-cycle timing. The
-  // exit callbacks settle the lifecycle state + visibility once per exit.
+  // D-020 — the controller owns the playhead. The default is play-once-and-hold:
+  // it plays `[activeRange.in → outPoint]` once (an absent `outPoint` is the last
+  // active frame) and holds, then the `mode` orchestration (auto-out / loop-cycle
+  // / content-driven) runs. Looping is no longer a silent default and there is no
+  // separate continuous-loop mode — a looping logo is `loop-cycle` with `repeat:
+  // 'infinite'`. The stored `scene.playout` carries the defaults; `playoutOverride`
+  // (preview session / future rundown) overrides them for this run only. The exit
+  // callbacks settle the lifecycle state + visibility once per exit.
+  const base = playoutOf(scene);
+  const ov = options.playoutOverride;
+  const effectivePlayout: Playout = {
+    mode: ov?.mode ?? base.mode,
+    holdMs: ov?.holdMs ?? base.holdMs,
+    repeat: ov?.repeat ?? base.repeat,
+  };
   const controller = new PlayoutController({
     frameRate: scene.frameRate,
     active: activeRangeOf(scene),
     lifecycle: scene.lifecycle,
-    playout: playoutOf(scene),
+    playout: effectivePlayout,
     hasAnimation: animated.length > 0,
     applyFrame,
     onExitStart: () => {
@@ -121,8 +133,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       bus.emit('play.start');
       doc.body.classList.remove('cg-pending');
       machine.transition('on-air');
-      // Lifecycle scenes: play the IN once and hold (no full-range loop, no
-      // auto-outro). Absent lifecycle: loop the active region as before.
+      // Play the IN once and hold (no full-range loop, no auto-outro by default);
+      // the mode orchestration (auto-out / loop-cycle / content-driven) then runs.
+      // Absent lifecycle: the whole timeline is the entrance and the hold is its
+      // last frame.
       controller.play();
       bus.emit('play.end');
     },

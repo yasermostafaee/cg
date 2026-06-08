@@ -33,9 +33,32 @@ export const stageFrame = style({
   transformOrigin: 'center',
 });
 
+// The sidebar is split so the (potentially long) data form scrolls on its own
+// while the transport + timing overrides stay pinned and always reachable.
 export const sidebar = style({
-  width: '320px',
+  width: '340px',
   flexShrink: 0,
-  overflowY: 'auto',
   minHeight: 0,
+  display: 'flex',
+  flexDirection: 'column',
+});
+
+// Data-key form — its OWN scroll region. Fields scroll here and never push the
+// transport / timing controls out of view.
+export const fieldsScroll = style({
+  flex: 1,
+  minHeight: 0,
+  overflowY: 'auto',
+  paddingRight: '0.2rem',
+});
+
+// Fixed, always-visible bar: the playout transport + the session timing overrides.
+export const fixedBar = style({
+  flexShrink: 0,
+  marginTop: '0.5rem',
+  paddingTop: '0.55rem',
+  borderTop: `1px solid ${colors.border}`,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.55rem',
 });

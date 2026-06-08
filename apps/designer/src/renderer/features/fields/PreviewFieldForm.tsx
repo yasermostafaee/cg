@@ -1,12 +1,11 @@
-import { useMemo, useState } from 'react';
 import type { DynamicField, FieldValue, Scene } from '@cg/shared-schema';
 import { cx } from '../../cx.js';
-import { CollapseSection } from '../inspector/CollapseSection.js';
+import { Callout } from '../../ui/Callout.js';
 import * as s from './PreviewFieldForm.css.js';
 
 type Values = Record<string, FieldValue>;
 
-/** Transport the form drives — the preview modal posts these to its iframe. */
+/** Transport the preview drives — the modal posts these to its iframe. */
 export interface PreviewDispatch {
   update(fields: Values): void;
   play(fields: Values): void;
@@ -18,80 +17,66 @@ export interface PreviewDispatch {
 }
 
 /**
- * D-018 — live data-entry form for the preview. Generated from the
- * composition's dynamic fields; editing a value drives the preview through the
- * same runtime used on air (and that the single-file HTML export ships), via the
- * `dispatch` its host (the Preview modal) wires to a dedicated preview iframe.
- * Play / Stop / Next / Reset map to the CasparCG transport, so the operator sees
- * the simulated CasparCG output for the data they type.
+ * D-018 — live data-entry form for the preview. Generated from the composition's
+ * dynamic fields; editing a value drives the preview through the same runtime used
+ * on air (and that the single-file HTML export ships).
+ *
+ * Controlled by the {@link PreviewModal}, which owns the value state so the
+ * (fixed) transport bar can `play()` with the current values while this form
+ * scrolls independently. Important problems — a duplicate data key, or per-field
+ * validation errors — are surfaced as prominent callouts, not muted hints.
  */
 export function PreviewFieldForm({
   scene,
-  dispatch,
+  values,
+  onChange,
 }: {
   scene: Scene;
-  dispatch: PreviewDispatch;
+  values: Values;
+  onChange: (id: string, value: FieldValue) => void;
 }): JSX.Element {
   const fields = scene.fields;
-  // Re-seed whenever the field *set* changes (add / remove / rename / retype) —
-  // but not on every unrelated scene edit, so the operator's typed test values
-  // survive. The "adjust state during render when a key changes" pattern keeps
-  // the seed in sync without an effect.
-  const fieldsKey = useMemo(() => fields.map((f) => `${f.id}:${f.type}`).join('|'), [fields]);
-  const [values, setValues] = useState<Values>(() => seedDefaults(fields));
-  const [seededKey, setSeededKey] = useState(fieldsKey);
-  if (seededKey !== fieldsKey) {
-    setSeededKey(fieldsKey);
-    setValues(seedDefaults(fields));
-  }
-
-  function setValue(id: string, v: FieldValue): void {
-    setValues((prev) => {
-      const next = { ...prev, [id]: v };
-      dispatch.update(next);
-      return next;
-    });
-  }
-
-  function reset(): void {
-    setValues(seedDefaults(fields));
-    dispatch.reset();
-  }
+  const duplicateKeys = findDuplicateKeys(fields);
+  const invalidCount = fields.filter((f) => validateField(f, values[f.id]) !== null).length;
 
   return (
-    <CollapseSection title="Preview" defaultExpanded>
-      <div className={s.controls}>
-        <button
-          type="button"
-          className={cx(s.btn, s.playBtn)}
-          onClick={() => dispatch.play(values)}
-        >
-          ▶ Play
-        </button>
-        <button type="button" className={s.btn} onClick={() => dispatch.stop()}>
-          ■ Stop
-        </button>
-        <button type="button" className={s.btn} onClick={() => dispatch.pause()}>
-          ⏸ Pause
-        </button>
-        <button type="button" className={s.btn} onClick={() => dispatch.resume()}>
-          ⏵ Resume
-        </button>
-        <button type="button" className={s.btn} onClick={() => dispatch.next()}>
-          ⤼ Next
-        </button>
-        <button type="button" className={s.btn} onClick={reset}>
-          ↺ Reset
-        </button>
+    <div>
+      <div className={s.header}>
+        <span className={s.title}>Data</span>
+        {fields.length > 0 && (
+          <span className={s.count}>
+            {String(fields.length)} field{fields.length === 1 ? '' : 's'}
+          </span>
+        )}
       </div>
+
+      {duplicateKeys.length > 0 && (
+        <Callout variant="danger" className={s.banner}>
+          Duplicate data {duplicateKeys.length === 1 ? 'key' : 'keys'}:{' '}
+          {duplicateKeys.map((k) => `"${k}"`).join(', ')}. Two elements share a key, so their preview
+          values collide — rename one in the inspector.
+        </Callout>
+      )}
+      {invalidCount > 0 && (
+        <Callout variant="danger" className={s.banner}>
+          {String(invalidCount)} field{invalidCount === 1 ? '' : 's'} need
+          {invalidCount === 1 ? 's' : ''} attention before this looks right on air.
+        </Callout>
+      )}
+
       {fields.length === 0 ? (
         <p className={s.hint}>No data fields yet — give a text element a Data key to add one.</p>
       ) : (
         fields.map((f) => (
-          <FieldRow key={f.id} field={f} value={values[f.id]} onChange={(v) => setValue(f.id, v)} />
+          <FieldRow
+            key={f.id}
+            field={f}
+            value={values[f.id]}
+            onChange={(v) => onChange(f.id, v)}
+          />
         ))
       )}
-    </CollapseSection>
+    </div>
   );
 }
 
@@ -112,7 +97,12 @@ function FieldRow({
         {field.required && <span className={s.required}> *</span>}
       </label>
       {renderInput(field, value, onChange, error !== null)}
-      {error !== null && <span className={s.error}>{error}</span>}
+      {error !== null && (
+        <span className={s.error} role="alert">
+          <span aria-hidden>⚠</span>
+          {error}
+        </span>
+      )}
     </div>
   );
 }
@@ -205,6 +195,17 @@ export function seedDefaults(fields: readonly DynamicField[]): Values {
       f.type === 'image' ? { assetId: f.defaultAssetId ?? '' } : (f.default as FieldValue);
   }
   return out;
+}
+
+/** Data keys that appear on more than one field (an authoring mistake). */
+export function findDuplicateKeys(fields: readonly DynamicField[]): string[] {
+  const seen = new Set<string>();
+  const dupes = new Set<string>();
+  for (const f of fields) {
+    if (seen.has(f.id)) dupes.add(f.id);
+    seen.add(f.id);
+  }
+  return [...dupes];
 }
 
 /** Validation message for a value against a field's constraints, or null if valid. */

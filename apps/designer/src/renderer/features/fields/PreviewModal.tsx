@@ -1,17 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Scene } from '@cg/shared-schema';
+import type { FieldValue, Scene } from '@cg/shared-schema';
 import { Modal } from '../shell/Modal.js';
 import { PreviewFieldForm, seedDefaults, type PreviewDispatch } from './PreviewFieldForm.js';
+import { PreviewTransport } from './PreviewTransport.js';
+import { PreviewTimingControls, type TimingOverride } from './PreviewTimingControls.js';
 import * as s from './PreviewModal.css.js';
 
+type Values = Record<string, FieldValue>;
+
 /**
- * D-018 — the preview as a large modal opened from the toolbar's "PREVIEW"
+ * Number of discrete steps a paginated template can advance through with
+ * `next()`. There is no pagination model yet (the runtime's `next()` is a stub),
+ * so every composition has exactly one step and Next stays disabled. When
+ * multi-step templates land, derive the real count from the scene here.
+ */
+function stepCount(_scene: Scene): number {
+  return 1;
+}
+
+/**
+ * D-018 / D-020 — the preview as a large modal opened from the toolbar's "PREVIEW"
  * button. It owns a *dedicated* preview iframe (the same `platform/preview.ts`
  * harness used by the canvas and shared with the single-file HTML export),
- * rendered at the composition's native resolution and scaled to fill the stage,
- * with the `PreviewFieldForm` and its Play / Stop / Next / Reset controls as a
- * sidebar. Built + seeded on open, stopped on close (the iframe unmounts with
- * the modal); the form drives it directly, never touching the canvas preview.
+ * rendered at the composition's native resolution and scaled to fill the stage.
+ *
+ * The sidebar separates concerns: the data-key form scrolls in its own region,
+ * while the playout transport (momentary Play / Pause / Stop / Next commands) and
+ * the session-only timing overrides live in a fixed, always-visible bar. The
+ * modal owns the field values + paused flag so the fixed transport can `play()`
+ * with the current data while the form scrolls independently.
  */
 export function PreviewModal({
   scene,
@@ -26,10 +43,34 @@ export function PreviewModal({
   // Measured stage size, so the composition scales to fit whatever the (large)
   // modal gives us rather than a fixed thumbnail.
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
+  // D-020 — session-only playout override (mode / holdMs / repeat). Held here,
+  // never written back to the stored scene; applied by rebuilding the preview
+  // runtime with this override (see the scene-replace effect).
+  const [override, setOverride] = useState<TimingOverride>({});
 
-  // Build a fresh, dedicated preview document on open.
+  // Field values live here (not in the form) so the fixed transport bar can
+  // play() with the current data. Re-seed when the field *set* changes (add /
+  // remove / rename / retype) but not on unrelated scene edits, so typed test
+  // values survive — the "adjust state during render on key change" pattern.
+  const fields = scene.fields;
+  const fieldsKey = useMemo(() => fields.map((f) => `${f.id}:${f.type}`).join('|'), [fields]);
+  const [values, setValues] = useState<Values>(() => seedDefaults(fields));
+  const [seededKey, setSeededKey] = useState(fieldsKey);
+  if (seededKey !== fieldsKey) {
+    setSeededKey(fieldsKey);
+    setValues(seedDefaults(fields));
+  }
+
+  // Tracks whether the operator paused, so Play becomes Resume and Pause disables.
+  const [paused, setPaused] = useState(false);
+
+  // Build a fresh, dedicated preview document on open. Reset any session
+  // override + paused flag when the composition itself changes (keeps controls in
+  // sync).
   useEffect(() => {
     let alive = true;
+    setOverride({});
+    setPaused(false);
     void window.cg.preview.load({ scene }).then((res) => {
       if (alive) setHtml(res.html);
     });
@@ -55,8 +96,8 @@ export function PreviewModal({
 
   const dispatch = useMemo<PreviewDispatch>(
     () => ({
-      update: (fields) => post({ action: 'update', fields }),
-      play: (fields) => post({ action: 'play', fields }),
+      update: (f) => post({ action: 'update', fields: f }),
+      play: (f) => post({ action: 'play', fields: f }),
       stop: () => post({ action: 'stop' }),
       next: () => post({ action: 'next' }),
       reset: () => post({ action: 'reset' }),
@@ -65,6 +106,51 @@ export function PreviewModal({
     }),
     [post],
   );
+
+  const onFieldChange = useCallback(
+    (id: string, value: FieldValue): void => {
+      setValues((prev) => {
+        const next = { ...prev, [id]: value };
+        dispatch.update(next);
+        return next;
+      });
+    },
+    [dispatch],
+  );
+
+  // Momentary playout commands. Play resumes when paused; otherwise plays with the
+  // current data. None of them is a toggle — each is a one-shot command.
+  const onPlay = useCallback(() => {
+    if (paused) {
+      dispatch.resume();
+      setPaused(false);
+    } else {
+      dispatch.play(values);
+    }
+  }, [dispatch, paused, values]);
+  const onPause = useCallback(() => {
+    dispatch.pause();
+    setPaused(true);
+  }, [dispatch]);
+  const onStop = useCallback(() => {
+    dispatch.stop();
+    setPaused(false);
+  }, [dispatch]);
+  const onNext = useCallback(() => dispatch.next(), [dispatch]);
+  const onReset = useCallback(() => {
+    setValues(seedDefaults(fields));
+    dispatch.reset();
+    setPaused(false);
+  }, [dispatch, fields]);
+
+  // Apply a session override by rebuilding the preview runtime with it (the
+  // stored scene + a non-persistent `playoutOverride`). The iframe preserves
+  // typed field values across the rebuild, and the stored scene is untouched.
+  // No-op until the operator actually changes a knob.
+  useEffect(() => {
+    if (Object.keys(override).length === 0) return;
+    post({ action: 'scene-replace', scene, playoutOverride: override });
+  }, [override, scene, post]);
 
   // Seed our iframe (only ours) once it signals readiness.
   useEffect(() => {
@@ -111,7 +197,25 @@ export function PreviewModal({
           )}
         </div>
         <div className={s.sidebar}>
-          <PreviewFieldForm scene={scene} dispatch={dispatch} />
+          <div className={s.fieldsScroll}>
+            <PreviewFieldForm scene={scene} values={values} onChange={onFieldChange} />
+          </div>
+          <div className={s.fixedBar}>
+            <PreviewTransport
+              paused={paused}
+              canStep={stepCount(scene) > 1}
+              onPlay={onPlay}
+              onPause={onPause}
+              onStop={onStop}
+              onNext={onNext}
+              onReset={onReset}
+            />
+            <PreviewTimingControls
+              scene={scene}
+              override={override}
+              onChange={(patch) => setOverride((prev) => ({ ...prev, ...patch }))}
+            />
+          </div>
         </div>
       </div>
     </Modal>

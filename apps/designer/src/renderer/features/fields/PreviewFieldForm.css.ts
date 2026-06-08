@@ -1,29 +1,27 @@
 import { style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
 
-export const controls = style({
+/** Header above the data-key form (its own scroll region in the modal). */
+export const header = style({
   display: 'flex',
-  gap: '0.3rem',
-  flexWrap: 'wrap',
-  marginBottom: '0.5rem',
+  alignItems: 'baseline',
+  justifyContent: 'space-between',
+  gap: '0.5rem',
+  marginBottom: '0.4rem',
 });
 
-export const btn = style({
-  flex: '1 1 auto',
-  background: colors.panelMuted,
-  color: colors.text,
-  border: `1px solid ${colors.border}`,
-  borderRadius: '0.22rem',
-  padding: '0.25rem 0.4rem',
-  fontSize: '0.72rem',
-  cursor: 'pointer',
-});
-
-export const playBtn = style({
-  background: colors.accent,
-  color: '#000',
-  borderColor: colors.accentMuted,
+export const title = style({
+  color: colors.textMuted,
+  fontSize: '0.6rem',
   fontWeight: 700,
+  letterSpacing: '0.07em',
+  textTransform: 'uppercase',
+});
+
+export const count = style({
+  color: colors.textMuted,
+  fontSize: '0.66rem',
+  fontVariantNumeric: 'tabular-nums',
 });
 
 export const row = style({
@@ -56,9 +54,14 @@ export const inputInvalid = style({
   borderColor: colors.danger,
 });
 
+/** Inline per-field error — distinct (danger) and announced, never muted. */
 export const error = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.25rem',
   color: colors.danger,
   fontSize: '0.66rem',
+  fontWeight: 600,
   lineHeight: 1.3,
 });
 
@@ -67,4 +70,9 @@ export const hint = style({
   fontSize: '0.68rem',
   lineHeight: 1.4,
   margin: '0.2rem 0',
+});
+
+/** Spacing under a warning banner so it sits clearly above the fields. */
+export const banner = style({
+  marginBottom: '0.45rem',
 });
