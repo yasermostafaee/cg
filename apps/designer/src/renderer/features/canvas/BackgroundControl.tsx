@@ -1,6 +1,7 @@
 import type { Scene } from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
 import { cx } from '../../cx.js';
+import { Button } from '../../ui/Button.js';
 import * as s from './BackgroundControl.css.js';
 
 interface Props {
@@ -30,15 +31,15 @@ export function BackgroundControl({ background, variant = 'compact' }: Props): J
 
   const controls = (
     <>
-      <button
-        type="button"
+      <Button
+        variant="bare"
         className={cx(s.toggle, isTransparent && s.toggleActive)}
         onClick={() => setTransparent()}
         title="Set the scene background to transparent"
         aria-pressed={isTransparent}
       >
         TR
-      </button>
+      </Button>
       <span
         className={cx(s.swatchButton, isTransparent && s.transparentChip)}
         style={isTransparent ? undefined : { background: swatchColor }}

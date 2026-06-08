@@ -7,6 +7,7 @@ import {
 } from '../assets/assetUrlCache.js';
 import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
+import { Control } from '../../ui/Control.js';
 import * as s from './CanvasArea.css.js';
 import {
   designerStore,
@@ -342,43 +343,43 @@ export function CanvasArea({
       <div className={s.header} aria-label="Canvas header">
         {showToolbar && <CanvasToolbar tool={tool} />}
         <span className={s.spacer} />
-        <button
-          type="button"
+        <Control
+          variant="bare"
           className={s.headerButton}
           onClick={fitToViewport}
           aria-label="Fit"
           title="Fit canvas"
         >
           ⛶
-        </button>
+        </Control>
         <span className={s.zoomReadout}>{zoomPct}%</span>
-        <button
-          type="button"
+        <Control
+          variant="bare"
           className={s.headerButton}
           onClick={() => setZoom(1)}
           aria-label="Reset zoom to 100%"
           title="Reset to 100%"
         >
           1×
-        </button>
-        <button
-          type="button"
+        </Control>
+        <Control
+          variant="bare"
           className={s.headerButton}
           onClick={() => setZoom((z) => clampZoom(z * ZOOM_STEP))}
           aria-label="Zoom in"
           title="Zoom in"
         >
           +
-        </button>
-        <button
-          type="button"
+        </Control>
+        <Control
+          variant="bare"
           className={s.headerButton}
           onClick={() => setZoom((z) => clampZoom(z / ZOOM_STEP))}
           aria-label="Zoom out"
           title="Zoom out"
         >
           −
-        </button>
+        </Control>
       </div>
       <div className={s.outer} style={{ cursor: outerCursor }} ref={outerRef}>
         {html !== null && (

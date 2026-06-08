@@ -30,6 +30,25 @@ export default [
     },
   },
   {
+    // Design-system guard: every interactive button in the renderer must go
+    // through the shared <Button> / <Control> (renderer/ui), which bake in the
+    // hover / active / focus-visible / disabled states — so a new raw <button>
+    // can't silently miss them. The ui/ components themselves are the one place a
+    // native <button> is allowed.
+    files: ['src/renderer/**/*.tsx'],
+    ignores: ['src/renderer/ui/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'JSXOpeningElement[name.name="button"]',
+          message:
+            'Use the shared <Button> / <Control> from renderer/ui instead of a raw <button> so the control inherits hover/active/focus-visible/disabled states. (variant="bare" keeps a bespoke look while still getting the states.)',
+        },
+      ],
+    },
+  },
+  {
     // Config files run in Node but live outside the tier dirs above.
     files: ['*.config.{ts,mts,cts,js,mjs,cjs}'],
     languageOptions: {

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { colors } from '../../theme.js';
 import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
 import { cx } from '../../cx.js';
+import { Button } from '../../ui/Button.js';
+import { Control } from '../../ui/Control.js';
 import * as s from './CompositionsPanel.css.js';
 
 /** MIME-ish key used when dragging a composition onto the canvas. */
@@ -52,8 +54,8 @@ export function CompositionsPanel(): JSX.Element {
     <aside className={s.panel} aria-label="Compositions">
       <div className={s.header}>
         <span className={s.title}>Compositions</span>
-        <button
-          type="button"
+        <Control
+          variant="bare"
           className={s.iconButton}
           aria-label="New composition"
           title="New composition"
@@ -64,7 +66,7 @@ export function CompositionsPanel(): JSX.Element {
           }}
         >
           +
-        </button>
+        </Control>
       </div>
       <div className={s.list}>
         {comps.length === 0 ? (
@@ -188,8 +190,8 @@ function MenuButton(props: {
   title?: string;
 }): JSX.Element {
   return (
-    <button
-      type="button"
+    <Button
+      variant="bare"
       role="menuitem"
       title={props.title}
       disabled={props.disabled === true}
@@ -201,6 +203,6 @@ function MenuButton(props: {
       onClick={props.disabled === true ? undefined : props.onClick}
     >
       {props.label}
-    </button>
+    </Button>
   );
 }

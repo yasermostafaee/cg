@@ -1,5 +1,6 @@
 import type { AnimatableProperty, Element, FieldBinding, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
+import { Button } from '../../ui/Button.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { BackgroundControl } from '../canvas/BackgroundControl.js';
 import { describeBinding, elementNameResolver } from '../fields/bind-resolver.js';
@@ -8,7 +9,7 @@ import { CollapseSection } from './CollapseSection.js';
 import { RealtimeNumberInput } from './controls.js';
 import { DynamicDataSection } from './DynamicDataSection.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
-import { PlayoutTimingSection } from './PlayoutTimingSection.js';
+import { PlayoutSection } from './PlayoutSection.js';
 import { StyleSection } from './StyleSection.js';
 import { TransformSection } from './TransformSection.js';
 import * as s from './InspectorPanel.css.js';
@@ -80,7 +81,7 @@ function SceneInspector({
       <Row label="elements" value={String(countElements(scene))} />
       <Row label="path" value={projectPath ?? '(unsaved)'} />
       <BackgroundControl background={scene.background} variant="full" />
-      <PlayoutTimingSection scene={scene} />
+      <PlayoutSection scene={scene} />
       {scene.fields.length > 0 && (
         <>
           <h3 className={s.heading}>FIELDS</h3>
@@ -176,14 +177,15 @@ function ElementBindings({
           <span style={{ color: colors.text, fontSize: '0.8rem' }}>
             <strong>{b.fieldId}</strong> → {describeBinding(b, nameOf)}
           </span>
-          <button
+          <Button
+            variant="bare"
             className={s.bindRemove}
             title="Unbind (keeps the field)"
             aria-label="Unbind"
             onClick={() => designerStore.removeBindingAt(idx)}
           >
             ×
-          </button>
+          </Button>
         </div>
       ))}
     </div>

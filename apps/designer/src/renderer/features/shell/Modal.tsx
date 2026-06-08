@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { colors } from '../../theme.js';
+import { Button } from '../../ui/Button.js';
+import { Control } from '../../ui/Control.js';
 import * as s from './Modal.css.js';
 
 const FOCUSABLE =
@@ -108,15 +109,15 @@ export function Modal({
       >
         <div className={s.header}>
           <h2 className={s.title}>{title}</h2>
-          <button
-            type="button"
+          <Control
+            variant="ghost"
             className={s.close}
             onClick={onClose}
             aria-label="Close"
             title="Close"
           >
             ✕
-          </button>
+          </Control>
         </div>
         <div
           className={s.body}
@@ -132,10 +133,10 @@ export function Modal({
 }
 
 /**
- * Consistent modal action button. `variant` styles it primary / secondary /
- * danger. The visual styling + hover live in `.cg-modal-btn*` rules in
- * index.css (a class so `:hover` can paint over the flat resting state); only
- * the per-variant text colour is inline.
+ * Consistent modal action button — a thin wrapper over the shared design-system
+ * {@link Button} so dialog actions share the same hover / active / focus-visible /
+ * disabled states as the rest of the app. `variant` maps straight through
+ * (primary / secondary / danger).
  */
 export function ModalButton({
   children,
@@ -150,17 +151,9 @@ export function ModalButton({
   disabled?: boolean;
   autoFocus?: boolean;
 }): JSX.Element {
-  const color = variant === 'primary' ? '#06121F' : variant === 'danger' ? '#fda4af' : colors.text;
   return (
-    <button
-      type="button"
-      className={`cg-modal-btn cg-modal-btn-${variant}`}
-      style={{ color }}
-      onClick={onClick}
-      disabled={disabled}
-      autoFocus={autoFocus}
-    >
+    <Button variant={variant} onClick={onClick} disabled={disabled} autoFocus={autoFocus}>
       {children}
-    </button>
+    </Button>
   );
 }

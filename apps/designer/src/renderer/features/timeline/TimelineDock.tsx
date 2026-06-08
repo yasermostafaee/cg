@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AnimatableProperty, Element, Scene } from '@cg/shared-schema';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
+import { Control } from '../../ui/Control.js';
 import * as s from './TimelineDock.css.js';
 import { DisplayRow } from './DisplayRow.js';
 import { ElementRow, lifespanColorFor } from './ElementRow.js';
@@ -260,10 +261,10 @@ export function TimelineDock({
     window.addEventListener('pointercancel', onUp);
   }
 
-  // D-020 — drag an intro-end / outro-start phase marker. The store clamps it to
-  // the active region and keeps `introEndFrame ≤ outroStartFrame`, so the schema
-  // invariant always holds however far it's dragged.
-  function startMarkerDrag(which: 'intro' | 'outro', e: React.PointerEvent): void {
+  // D-020 — drag the single `outPoint` marker. The store clamps it to the active
+  // region, so the schema invariant `activeRange.in ≤ outPoint ≤ activeRange.out`
+  // always holds however far it's dragged.
+  function startMarkerDrag(e: React.PointerEvent): void {
     e.stopPropagation();
     e.preventDefault();
     const lane = sceneLaneRef.current;
@@ -274,15 +275,10 @@ export function TimelineDock({
     const startX = e.clientX;
     const totalSpan = Math.max(1, scene.frameRange.out - scene.frameRange.in);
     const pxPerFrame = rect.width / totalSpan;
-    const startIntro = lc.introEndFrame;
-    const startOutro = lc.outroStartFrame;
+    const startOut = lc.outPoint;
     function onMove(ev: PointerEvent): void {
       const dframes = (ev.clientX - startX) / pxPerFrame;
-      designerStore.setLifecycle(
-        which === 'intro'
-          ? { introEndFrame: startIntro + dframes, outroStartFrame: startOutro }
-          : { introEndFrame: startIntro, outroStartFrame: startOutro + dframes },
-      );
+      designerStore.setLifecycle({ outPoint: startOut + dframes });
     }
     function onUp(): void {
       window.removeEventListener('pointermove', onMove);
@@ -310,18 +306,9 @@ export function TimelineDock({
     if (e.target === e.currentTarget) clearSelection();
   }
 
-  // Delete-key removes every selected keyframe.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent): void {
-      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
-      if (isEditableTarget(e.target)) return;
-      const kfs = designerStore.get().selectedKeyframes;
-      if (kfs.length === 0) return;
-      for (const kf of kfs) designerStore.removeKeyframe(kf.elementId, kf.property, kf.frame);
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  // Delete/Backspace is handled globally in App (keyframe(s) first, else the
+  // selected layer/shape) so it works from the canvas too — see
+  // `designerStore.deleteSelection`.
 
   function isCollapsed(id: string): boolean {
     return collapsedIds.has(id);
@@ -380,15 +367,15 @@ export function TimelineDock({
                           return (
                             <div key={groupKey}>
                               <div className={`cg-tl-row ${s.groupHeaderLabel}`}>
-                                <button
-                                  type="button"
+                                <Control
+                                  variant="bare"
                                   className={s.groupChevron}
                                   onClick={() => toggleGroupExpanded(groupKey)}
                                   aria-expanded={groupExpanded}
                                   aria-label={`Toggle ${group.title.toLowerCase()} tracks`}
                                 >
                                   {groupExpanded ? '▾' : '▸'}
-                                </button>
+                                </Control>
                                 <span>{group.title}</span>
                               </div>
                               {groupExpanded &&
@@ -480,26 +467,15 @@ export function TimelineDock({
                   title="Drag to resize the active region (play / export window) — the scene total stays"
                 />
                 {scene.lifecycle !== undefined && (
-                  <>
-                    <div
-                      className={s.phaseMarkerIntro}
-                      style={{ left: `${frameToPct(scene.lifecycle.introEndFrame).toFixed(3)}%` }}
-                      onPointerDown={(e) => startMarkerDrag('intro', e)}
-                      role="separator"
-                      aria-orientation="vertical"
-                      aria-label="Intro end marker"
-                      title="Intro end — where the opening finishes and the hold begins"
-                    />
-                    <div
-                      className={s.phaseMarkerOutro}
-                      style={{ left: `${frameToPct(scene.lifecycle.outroStartFrame).toFixed(3)}%` }}
-                      onPointerDown={(e) => startMarkerDrag('outro', e)}
-                      role="separator"
-                      aria-orientation="vertical"
-                      aria-label="Outro start marker"
-                      title="Outro start — where the exit animation begins"
-                    />
-                  </>
+                  <div
+                    className={s.phaseMarkerOut}
+                    style={{ left: `${frameToPct(scene.lifecycle.outPoint).toFixed(3)}%` }}
+                    onPointerDown={(e) => startMarkerDrag(e)}
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label="Out point marker"
+                    title="Out point — where the intro ends / the hold sits / the exit begins"
+                  />
                 )}
               </div>
               {elements.length === 0 ? (
@@ -609,8 +585,3 @@ function flattenElements(scene: Scene): readonly Element[] {
   return out;
 }
 
-function isEditableTarget(target: EventTarget | null): boolean {
-  if (target === null || !(target instanceof HTMLElement)) return false;
-  const tag = target.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
-}

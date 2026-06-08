@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { designerStore, type DesignerTool } from '../../state/store.js';
 import { cx } from '../../cx.js';
+import { Control } from '../../ui/Control.js';
 import * as s from './CanvasToolbar.css.js';
 
 interface Props {
@@ -44,9 +45,9 @@ export function CanvasToolbar({ tool }: Props): JSX.Element {
       {TOOLS.map((t) => {
         const active = t.id === tool;
         return (
-          <button
+          <Control
             key={t.id}
-            type="button"
+            variant="bare"
             className={cx(
               s.button,
               hovered === t.id && !active && s.buttonHover,
@@ -60,7 +61,7 @@ export function CanvasToolbar({ tool }: Props): JSX.Element {
             aria-pressed={active}
           >
             {t.icon}
-          </button>
+          </Control>
         );
       })}
     </div>

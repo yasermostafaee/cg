@@ -433,3 +433,67 @@ this later would mean re-authoring every template and reworking the frame driver
   `CG INVOKE "pause"`, which takes no args); the exported outro duration lets the
   control layer schedule precise timed auto-out.
   Change: `openspec/changes/add-animation-lifecycle-timing/`.
+## [x] D-022 — App-wide button/control consistency (shared Button/Control + states) ⟨priority: medium⟩ — focused fix
+
+**What:** Make hover / active / focus-visible / disabled the DEFAULT for every
+interactive button, not a per-button afterthought.
+**Why:** Buttons across the app (toolbar, panels, inspector, timeline, dialogs)
+were raw `<button>`s with ad-hoc styling and inconsistent (often missing)
+interactive states.
+**Acceptance:**
+- WHEN a developer needs a button THEN they use the shared `Button` (labelled) or
+  `Control` (icon-only) from `apps/designer/src/renderer/ui/`, a vanilla-extract
+  recipe on `renderer/theme.ts` (variants primary/secondary/ghost/danger/bare,
+  sizes, `selected` for toggles) — no `@cg/ui` change, no palette change
+- WHEN any existing Designer button is rendered THEN it routes through
+  `Button`/`Control` and has hover / active / focus-visible / disabled states
+- WHEN a raw `<button>` is added in `src/renderer/**` (outside `ui/`) THEN lint
+  errors (`no-restricted-syntax` in `apps/designer/eslint.config.mjs`)
+- WHEN the top-menu buttons (Preview / Export / HTML / Save) are used THEN they
+  show proper hover/active/focus-visible/disabled states
+  **Notes:** UI-consistency (quality) work — no spec behavior change. The later
+  D-020 preview-modal polish reuses these shared components (no preview-specific
+  button styles). `bare` variant = states-only escape hatch for bespoke surfaces
+  (menu items, list rows, the keyframe diamond).
+
+## [~] D-023 — Delete key removes the selection (keyframe precedence) ⟨priority: medium⟩ — change: `openspec/changes/add-delete-key-selection/`
+
+**What:** Delete/Backspace removes the current selection from the keyboard.
+**Why:** Layers/shapes could only be removed via the right-click menu; operators
+expect the Delete key. Clicking a keyframe selects both the keyframe and its parent,
+so the key needs a clear precedence.
+**Acceptance:**
+- WHEN a keyframe is selected (which also selects its parent) and Delete/Backspace
+  is pressed THEN the keyframe(s) are deleted and the parent layer/shape remains
+- WHEN no keyframe is selected and a layer/shape is selected THEN Delete/Backspace
+  removes the selected layer(s)/shape(s)
+- WHEN an input/textarea/select/contentEditable is focused THEN Delete/Backspace
+  deletes nothing (it edits the field)
+- WHEN several of the prioritised kind are selected THEN all are deleted
+- WHEN nothing is selected THEN it is a no-op; the delete is a single undo step
+  **Notes:** Handled globally in `App` via `designerStore.deleteSelection()`
+  (precedence + multi-delete); the timeline's old keyframe-only Delete handler was
+  removed. No schema/runtime change. Change: `openspec/changes/add-delete-key-selection/`.
+
+## [~] D-024 — Double-click to drill into a nested child composition ⟨priority: medium⟩ — change: `openspec/changes/add-drill-into-composition/`
+
+**What:** Double-clicking a shape inside a nested composition instance navigates to
+editing that child composition and selects the double-clicked shape (AE/Figma/Loopic
+style).
+**Why:** Today a nested child can only be selected as a unit; editing its insides
+means finding it in the compositions list and opening it.
+**Model:** Compositions are SHARED, reusable definitions — a child has no single
+parent. So NO breadcrumb / "back to parent"; navigation stays via the compositions
+list. Drill-in = open-from-list + select the shape; navigation + selection only, no
+new edit semantics, no per-instance overrides (editing the shape edits the shared
+child, affecting every parent).
+**Acceptance:**
+- WHEN the operator double-clicks a shape visually inside a nested composition
+  instance THEN the editing context switches to that child and the shape is selected
+- WHEN the operator single-clicks the instance THEN it is selected as a whole unit
+- WHEN drilled in THEN no breadcrumb / back-to-parent affordance is shown
+- WHEN double-clicking at arbitrary depth THEN each double-click drills one level
+  **Notes:** `features/canvas/drill.ts` maps the cursor into the child's coordinate
+  space (inverts the instance transform, scales into child resolution) and
+  hit-tests the child's shapes; `store.openCompositionAndSelect` does the atomic
+  open-child + select. No schema/runtime change. Change: `openspec/changes/add-drill-into-composition/`.
