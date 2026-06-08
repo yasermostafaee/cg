@@ -1,6 +1,7 @@
 import type { DynamicField, FieldBinding, Scene } from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
 import { cx } from '../../cx.js';
+import { Button } from '../../ui/Button.js';
 import * as s from './FieldsPanel.css.js';
 import { TextField } from '../inspector/controls.js';
 import { describeBinding, elementNameResolver } from './bind-resolver.js';
@@ -23,6 +24,16 @@ interface Props {
  *
  * Escape clears bind mode globally (handled in CanvasArea).
  */
+/**
+ * Whether "Bind from canvas" is allowed for a field: only while the field has NO
+ * binding yet (one binding per field). Removing the existing binding re-enables
+ * it. Exported for regression coverage. Relax this if a field should be bindable
+ * to several different targets at once.
+ */
+export function canBindFromCanvas(fieldId: string, bindings: readonly FieldBinding[]): boolean {
+  return !bindings.some((b) => b.fieldId === fieldId);
+}
+
 export function FieldsPanel({ scene, bindModeFieldId }: Props): JSX.Element {
   const nameOf = elementNameResolver(scene);
   return (
@@ -61,6 +72,11 @@ function FieldCard({
     .map((b, idx) => ({ b, idx }))
     .filter(({ b }) => b.fieldId === field.id);
   const bindActive = bindModeFieldId === field.id;
+  // One binding per field: "Bind from canvas" is enabled only while the field has
+  // no binding yet. To bind a different target the operator removes the existing
+  // binding (×) first, which re-enables it. (If we later want a field bound to
+  // several elements, relax this — see canBindFromCanvas.)
+  const canBind = canBindFromCanvas(field.id, bindings);
   return (
     <div className={s.fieldCard}>
       <div className={s.cardHeader}>
@@ -75,19 +91,28 @@ function FieldCard({
         }
       />
       <div className={s.cardActions}>
-        <button
+        <Button
+          variant="bare"
           className={cx(s.smallButton, bindActive && s.smallButtonActive)}
+          disabled={!canBind}
+          aria-pressed={bindActive}
+          title={
+            canBind
+              ? 'Bind this field to a canvas element'
+              : 'Already bound — remove the binding (×) to bind a different target'
+          }
           onClick={() => designerStore.setBindMode(bindActive ? null : field.id)}
         >
           {bindActive ? 'Click a canvas element…' : 'Bind from canvas'}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="bare"
           className={s.smallButton}
           title="Delete this field and all its bindings"
           onClick={() => designerStore.removeField(field.id)}
         >
           delete field
-        </button>
+        </Button>
       </div>
       <BindingList bindings={ownBindings} nameOf={nameOf} />
     </div>
@@ -109,14 +134,15 @@ function BindingList({
       {bindings.map(({ b, idx }) => (
         <div key={idx} className={s.bindRow}>
           <span>→ {describeBinding(b, nameOf)}</span>
-          <button
+          <Button
+            variant="bare"
             className={s.smallButton}
             title="Unbind (keeps the field)"
             aria-label="Unbind"
             onClick={() => designerStore.removeBindingAt(idx)}
           >
             ×
-          </button>
+          </Button>
         </div>
       ))}
     </div>

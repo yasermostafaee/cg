@@ -87,3 +87,22 @@ auto-squeeze behavior applies).
   resolution (scaled to fit) with a live field form and Play/Stop/Next/Reset
 - **WHEN** the modal is closed
 - **THEN** the preview instance is torn down so its timers and animation loops stop
+
+### Requirement: Bind from canvas binds one target per field
+
+The Fields panel's **Bind from canvas** action SHALL bind a field to exactly one
+target. The button SHALL be enabled only while the field has **no** binding, and
+SHALL be disabled once the field is bound. Activating it SHALL bind the next clicked
+canvas element and then exit bind mode (one activation = one bind). To bind a
+different target the operator SHALL first remove the existing binding (the `×` in
+the field's binding list), which re-enables the button. (This intentionally limits
+a field to one target for now; binding a field to several different elements at once
+is out of scope and would relax this rule.)
+
+#### Scenario: Bind from canvas is disabled while the field already has a binding
+
+- **WHEN** a field already has a binding
+- **THEN** its "Bind from canvas" button is disabled
+- **WHEN** the operator removes that binding via its `×`
+- **THEN** the button becomes enabled again, and a binding on a *different* field
+  never disables this field's button

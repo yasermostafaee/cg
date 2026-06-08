@@ -647,6 +647,20 @@ function sameKeyframeRef(a: KeyframeRef, b: KeyframeRef): boolean {
   return a.elementId === b.elementId && a.property === b.property && a.frame === b.frame;
 }
 
+/**
+ * Structural equality for two binding targets — they identify the same wire when
+ * every field matches (kind, elementId, and any discriminant-specific keys like
+ * `property` / `placeholder` / `layer` / `prop`). The target objects are flat and
+ * hold only primitives, so a key-by-key compare is exact. Used to dedupe
+ * field→target bindings (B-008).
+ */
+function sameBindingTarget(a: FieldBinding['target'], b: FieldBinding['target']): boolean {
+  const ak = Object.keys(a) as (keyof typeof a)[];
+  const bk = Object.keys(b);
+  if (ak.length !== bk.length) return false;
+  return ak.every((k) => (a as Record<string, unknown>)[k] === (b as Record<string, unknown>)[k]);
+}
+
 /** After a keyframe moves frame, keep the selection (primary + set) pointing at it. */
 function syncSelectionAfterMove(
   elementId: string,
@@ -816,6 +830,29 @@ export const designerStore = {
       selectedKeyframes: [],
       keyframeInspectorOpen: false,
       currentFrame: doc?.frameRange.in ?? 0,
+    });
+  },
+
+  /**
+   * D-024 — drill into a nested child composition AND select a shape inside it, in
+   * one atomic step (double-click on a composition instance). Exactly equivalent to
+   * opening `childId` from the compositions list (`setActiveComposition`) plus
+   * selecting `shapeId` — navigation + selection only, no new edit semantics, no
+   * per-instance overrides (editing the shape edits the shared child definition).
+   * `shapeId` null leaves nothing selected (the click landed on empty child space).
+   * No-op if `childId` isn't a known composition.
+   */
+  openCompositionAndSelect(childId: string, shapeId: string | null): void {
+    if (current.scene === null) return;
+    const child = current.scene.compositions?.find((c) => c.id === childId);
+    if (child === undefined) return;
+    set({
+      activeCompositionId: childId,
+      selection: shapeId !== null ? new Set<string>([shapeId]) : new Set<string>(),
+      selectedKeyframe: null,
+      selectedKeyframes: [],
+      keyframeInspectorOpen: false,
+      currentFrame: child.frameRange.in,
     });
   },
 
@@ -1050,27 +1087,23 @@ export const designerStore = {
   },
 
   /**
-   * D-020 — set the active composition's lifecycle phase markers (intro-end /
-   * outro-start). Clamps to the active region and keeps `introEndFrame ≤
-   * outroStartFrame` so the schema invariant always holds. Pass `null` to clear
-   * the lifecycle (back to no distinct phases).
+   * D-020 — set the active composition's lifecycle `outPoint` marker. Clamps to
+   * the active region so the schema invariant `activeRange.in ≤ outPoint ≤
+   * activeRange.out` always holds. Pass `null` to clear the lifecycle (back to no
+   * distinct phases).
    */
-  setLifecycle(markers: { introEndFrame: number; outroStartFrame: number } | null): void {
+  setLifecycle(marker: { outPoint: number } | null): void {
     if (current.scene === null) return;
-    if (markers === null) {
+    if (marker === null) {
       set({ scene: withActiveDoc(current.scene, { lifecycle: undefined }) });
       return;
     }
     const active = activeRangeOf(activeDocOf(current.scene));
-    const intro = Math.max(active.in, Math.min(active.out, Math.round(markers.introEndFrame)));
-    const outro = Math.max(intro, Math.min(active.out, Math.round(markers.outroStartFrame)));
+    const out = Math.max(active.in, Math.min(active.out, Math.round(marker.outPoint)));
     const prev = activeDocOf(current.scene).lifecycle;
-    if (prev !== undefined && prev.introEndFrame === intro && prev.outroStartFrame === outro)
-      return;
+    if (prev !== undefined && prev.outPoint === out) return;
     set({
-      scene: withActiveDoc(current.scene, {
-        lifecycle: { introEndFrame: intro, outroStartFrame: outro },
-      }),
+      scene: withActiveDoc(current.scene, { lifecycle: { outPoint: out } }),
     });
   },
 
@@ -1158,8 +1191,21 @@ export const designerStore = {
   },
 
   /** Append a binding (no dedup — same target appearing twice is allowed). */
+  /**
+   * Append a field→target binding, **idempotently**: if an identical
+   * field→target pair already exists it's a no-op (B-008). This guards the
+   * "Bind from canvas" flow (one activation = one bind, and re-activating +
+   * re-clicking the same element must not stack duplicates) at the single
+   * source, so every caller is protected. Binding a field to a DIFFERENT target
+   * (other element / property) is still allowed — only exact duplicates are
+   * dropped. The optional `transform` is not part of identity.
+   */
   addBinding(binding: FieldBinding): void {
     if (current.scene === null) return;
+    const duplicate = current.scene.bindings.some(
+      (b) => b.fieldId === binding.fieldId && sameBindingTarget(b.target, binding.target),
+    );
+    if (duplicate) return;
     const bindings = [...current.scene.bindings, binding];
     set({ scene: { ...current.scene, bindings } });
   },
@@ -2013,6 +2059,30 @@ export const designerStore = {
       selectedKeyframes: keepKey ? current.selectedKeyframes : [],
       keyframeInspectorOpen: keepKey ? current.keyframeInspectorOpen : false,
     });
+  },
+
+  /**
+   * Delete whatever is selected, for the keyboard Delete/Backspace gesture.
+   *
+   * PRECEDENCE: clicking a keyframe selects both the keyframe and its parent
+   * element, so if ANY keyframe is selected this deletes ALL selected keyframes
+   * and leaves the element(s) alone; only when NO keyframe is selected does it
+   * delete ALL selected elements (layers/shapes). No-op when nothing is selected.
+   *
+   * Each underlying `removeKeyframe`/`removeElement` is a `set()`; because history
+   * coalesces a synchronous burst (see `set`/`COALESCE_MS`), the whole delete is a
+   * single undo step. The selection lists are snapshotted first since each removal
+   * mutates them.
+   */
+  deleteSelection(): void {
+    if (current.scene === null) return;
+    const keyframes = [...current.selectedKeyframes];
+    if (keyframes.length > 0) {
+      for (const kf of keyframes) designerStore.removeKeyframe(kf.elementId, kf.property, kf.frame);
+      return;
+    }
+    const ids = [...current.selection];
+    for (const id of ids) designerStore.removeElement(id);
   },
 
   /**

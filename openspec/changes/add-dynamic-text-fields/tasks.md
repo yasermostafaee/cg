@@ -61,6 +61,12 @@
 - [x] 6.3 `apps/designer` store test — `setElementDataKey` creates / renames /
       removes field+binding; duplicate key rejected (+ `setElementFieldMeta`
       variant switch)
+- [x] 6.6 One binding per field — `FieldsPanel` "Bind from canvas" is disabled
+      (shared `Button` `disabled` state) while the field already has a binding;
+      removing the binding (`×`) re-enables it (`canBindFromCanvas` predicate).
+      Duplicate field→target binds are also dropped in `store.addBinding` (B-008).
+      Test: `canBindFromCanvas` — enabled at zero bindings, disabled once bound,
+      re-enabled after removal, unaffected by other fields' bindings.
 - [x] 6.4 Green gate: typecheck + lint + test + build for `@cg/shared-schema`,
       `@cg/template-runtime`, `@cg/designer`
 - [x] 6.5 `pnpm openspec validate add-dynamic-text-fields --strict`

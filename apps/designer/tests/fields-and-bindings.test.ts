@@ -6,6 +6,7 @@ import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 import { defaultShape, defaultText, defaultImage } from '../src/renderer/state/element-defaults.js';
 import { defaultField, FIELD_KINDS } from '../src/renderer/features/fields/field-defaults.js';
 import { resolveBinding } from '../src/renderer/features/fields/bind-resolver.js';
+import { canBindFromCanvas } from '../src/renderer/features/fields/FieldsPanel.js';
 
 afterEach(() => {
   designerStore._reset();
@@ -94,6 +95,84 @@ describe('designerStore — fields + bindings', () => {
     expect(designerStore.get().selection.has('el-1')).toBe(true);
     designerStore.setBindMode(null);
     expect(designerStore.get().bindModeFieldId).toBeNull();
+  });
+});
+
+describe('B-008 — "Bind from canvas" adds exactly one binding per target (dedupe)', () => {
+  it('one element → one binding; re-binding the SAME element adds none; a different element still binds', () => {
+    freshScene();
+    designerStore.addField(defaultField('title', 'text'));
+    const el1 = defaultText('el-1', 0, 0);
+    const el2 = defaultText('el-2', 0, 0);
+    designerStore.addElement(el1);
+    designerStore.addElement(el2);
+    const field = designerStore.get().scene!.fields[0]!;
+
+    // Simulate "Bind from canvas" → click el-1 (resolveBinding + addBinding).
+    designerStore.addBinding(resolveBinding(field, el1)!);
+    expect(designerStore.get().scene!.bindings).toHaveLength(1);
+
+    // Re-activate + click the SAME element repeatedly → NO new bindings (the bug).
+    for (let i = 0; i < 5; i++) designerStore.addBinding(resolveBinding(field, el1)!);
+    expect(designerStore.get().scene!.bindings).toHaveLength(1);
+
+    // Binding the field to a DIFFERENT element is still allowed.
+    designerStore.addBinding(resolveBinding(field, el2)!);
+    expect(designerStore.get().scene!.bindings).toHaveLength(2);
+    // …and that one is deduped on repeat too.
+    designerStore.addBinding(resolveBinding(field, el2)!);
+    expect(designerStore.get().scene!.bindings).toHaveLength(2);
+  });
+
+  it('same field+element but a DIFFERENT target property is not a duplicate', () => {
+    freshScene();
+    designerStore.addField(defaultField('c', 'color'));
+    const shape = defaultShape('s-1', 0, 0);
+    designerStore.addElement(shape);
+    const field = designerStore.get().scene!.fields[0]!;
+
+    designerStore.addBinding(resolveBinding(field, shape)!); // → color.fill
+    // A color binding on the SAME field+element but a different property differs.
+    designerStore.addBinding({
+      fieldId: field.id,
+      target: { kind: 'color', elementId: 's-1', property: 'stroke' },
+    });
+    expect(designerStore.get().scene!.bindings).toHaveLength(2);
+  });
+});
+
+describe('FieldsPanel — "Bind from canvas" is disabled while the field already has a binding', () => {
+  it('enabled with zero bindings; disabled once bound; re-enabled after removing the binding', () => {
+    freshScene();
+    designerStore.addField(defaultField('title', 'text'));
+    const el1 = defaultText('el-1', 0, 0);
+    designerStore.addElement(el1);
+    const field = designerStore.get().scene!.fields[0]!;
+
+    // No binding yet → button enabled.
+    expect(canBindFromCanvas(field.id, designerStore.get().scene!.bindings)).toBe(true);
+
+    // Bind from canvas → now disabled (one binding per field).
+    designerStore.addBinding(resolveBinding(field, el1)!);
+    expect(canBindFromCanvas(field.id, designerStore.get().scene!.bindings)).toBe(false);
+
+    // Removing the binding (×) re-enables it.
+    designerStore.removeBindingAt(0);
+    expect(canBindFromCanvas(field.id, designerStore.get().scene!.bindings)).toBe(true);
+  });
+
+  it("a binding on a DIFFERENT field does not disable this field's button", () => {
+    freshScene();
+    designerStore.addField(defaultField('title', 'text'));
+    designerStore.addField(defaultField('subtitle', 'text'));
+    const el1 = defaultText('el-1', 0, 0);
+    designerStore.addElement(el1);
+    const other = designerStore.get().scene!.fields.find((f) => f.id === 'subtitle')!;
+    designerStore.addBinding(resolveBinding(other, el1)!);
+
+    // 'subtitle' is bound; 'title' is still bindable.
+    expect(canBindFromCanvas('subtitle', designerStore.get().scene!.bindings)).toBe(false);
+    expect(canBindFromCanvas('title', designerStore.get().scene!.bindings)).toBe(true);
   });
 });
 
