@@ -210,9 +210,9 @@ export const groupChevron = style({
   textAlign: 'center',
 });
 
-// D-020 — draggable IN / OUT phase markers inside the scene lane. Intro-end is
-// green (where the hold begins), outro-start is amber (where the exit begins).
-const phaseMarkerBase = {
+// D-020 — the single draggable `outPoint` marker inside the scene lane (amber):
+// where the intro ends, the hold sits, and the exit begins (Loopic-style).
+export const phaseMarkerOut = style({
   position: 'absolute',
   top: 0,
   bottom: 0,
@@ -224,6 +224,5 @@ const phaseMarkerBase = {
   zIndex: 5,
   opacity: 0.9,
   borderRadius: '2px',
-} as const;
-export const phaseMarkerIntro = style({ ...phaseMarkerBase, background: '#3ddc97' });
-export const phaseMarkerOutro = style({ ...phaseMarkerBase, background: '#ffae57' });
+  background: '#ffae57',
+});

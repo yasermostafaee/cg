@@ -13,16 +13,15 @@ import { FieldBindingSchema } from './bindings.js';
 import { FrameRangeSchema, type FrameRange } from './animation.js';
 
 /**
- * D-020 — composition lifecycle phase markers, defined **inside** the active
- * region: IN = `[activeRange.in, introEndFrame]`, HOLD = the held
- * `introEndFrame`, OUT = `[outroStartFrame, activeRange.out]`. The invariant
- * `activeRange.in ≤ introEndFrame ≤ outroStartFrame ≤ activeRange.out` is
- * enforced on the host composition (see `refineLifecycle`). Absent `lifecycle`
+ * D-020 — composition lifecycle out-point, defined **inside** the active region.
+ * A single marker (matching Loopic's single outro frame): IN = `[activeRange.in,
+ * outPoint]` (plays fully), HOLD = the held `outPoint`, OUT = `[outPoint,
+ * activeRange.out]`. The invariant `activeRange.in ≤ outPoint ≤ activeRange.out`
+ * is enforced on the host composition (see `refineLifecycle`). Absent `lifecycle`
  * keeps today's behavior (no distinct phases — the full active region plays).
  */
 export const LifecycleSchema = z.object({
-  introEndFrame: DurationFramesSchema,
-  outroStartFrame: DurationFramesSchema,
+  outPoint: DurationFramesSchema,
 });
 export type Lifecycle = z.infer<typeof LifecycleSchema>;
 
@@ -32,10 +31,10 @@ export type PlayoutMode = z.infer<typeof PlayoutModeSchema>;
 
 /**
  * D-020 — composition playout timing config. `auto-out` runs the outro after the
- * intro + `holdMs`; `loop-cycle` repeats intro → hold(`holdMs`) → outro for
- * `repeat` cycles (or forever when `'infinite'`); `content-driven` is declared
- * here and supplied a duration by the runtime (the ticker computes it). Default
- * `manual`. Absent `playout` ⇒ `manual`.
+ * graphic reaches `outPoint` + `holdMs`; `loop-cycle` repeats `[in→outPoint]` →
+ * hold(`holdMs`) → `[outPoint→end]` for `repeat` cycles (or forever when
+ * `'infinite'`); `content-driven` is declared here and supplied a duration by the
+ * runtime (the ticker computes it). Default `manual`. Absent `playout` ⇒ `manual`.
  */
 export const PlayoutSchema = z.object({
   mode: PlayoutModeSchema.default('manual'),
@@ -58,14 +57,13 @@ function refineLifecycle(
 ): void {
   if (data.lifecycle === undefined) return;
   const active = data.activeRange ?? data.frameRange;
-  const { introEndFrame, outroStartFrame } = data.lifecycle;
-  const ok =
-    active.in <= introEndFrame && introEndFrame <= outroStartFrame && outroStartFrame <= active.out;
+  const { outPoint } = data.lifecycle;
+  const ok = active.in <= outPoint && outPoint <= active.out;
   if (!ok) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['lifecycle'],
-      message: `lifecycle must satisfy activeRange.in (${String(active.in)}) ≤ introEndFrame (${String(introEndFrame)}) ≤ outroStartFrame (${String(outroStartFrame)}) ≤ activeRange.out (${String(active.out)})`,
+      message: `lifecycle must satisfy activeRange.in (${String(active.in)}) ≤ outPoint (${String(outPoint)}) ≤ activeRange.out (${String(active.out)})`,
     });
   }
 }
@@ -106,7 +104,7 @@ export const CompositionSchema = z
     frameRate: FrameRateSchema,
     frameRange: FrameRangeSchema,
     activeRange: FrameRangeSchema.optional(),
-    /** D-020 lifecycle phase markers (optional; absent = no distinct phases). */
+    /** D-020 lifecycle out-point marker (optional; absent = no distinct phases). */
     lifecycle: LifecycleSchema.optional(),
     /** D-020 no-code playout timing (optional; absent = `manual`). */
     playout: PlayoutSchema.optional(),
@@ -166,7 +164,7 @@ export const SceneSchema = z
      * frameRange.out` and `activeRange.out > activeRange.in`.
      */
     activeRange: FrameRangeSchema.optional(),
-    /** D-020 lifecycle phase markers (optional; absent = no distinct phases). */
+    /** D-020 lifecycle out-point marker (optional; absent = no distinct phases). */
     lifecycle: LifecycleSchema.optional(),
     /** D-020 no-code playout timing (optional; absent = `manual`). */
     playout: PlayoutSchema.optional(),

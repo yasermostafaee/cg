@@ -9,15 +9,14 @@ import { activeRangeOf, playoutOf, type PlayoutMode, type Scene } from '@cg/shar
  */
 export interface PlayoutMetadata {
   mode: PlayoutMode;
-  introEndFrame?: number;
-  outroStartFrame?: number;
+  outPoint?: number;
   holdMs?: number;
   repeat?: number | 'infinite';
   /**
    * The outro's duration in milliseconds —
-   * `(activeRange.out − outroStartFrame) / frameRate × 1000`. Present only when
-   * the composition has lifecycle markers. Lets the control layer pause before
-   * the outro and stop exactly when it ends.
+   * `(activeRange.out − outPoint) / frameRate × 1000`. Present only when the
+   * composition has an `outPoint`. Lets the control layer pause before the outro
+   * and stop exactly when it ends.
    */
   outroDurationMs?: number;
 }
@@ -30,10 +29,9 @@ export function buildPlayoutMetadata(scene: Scene): PlayoutMetadata {
   if (playout.repeat !== undefined) meta.repeat = playout.repeat;
   if (scene.lifecycle !== undefined) {
     const active = activeRangeOf(scene);
-    meta.introEndFrame = scene.lifecycle.introEndFrame;
-    meta.outroStartFrame = scene.lifecycle.outroStartFrame;
+    meta.outPoint = scene.lifecycle.outPoint;
     meta.outroDurationMs = Math.round(
-      ((active.out - scene.lifecycle.outroStartFrame) / scene.frameRate) * 1000,
+      ((active.out - scene.lifecycle.outPoint) / scene.frameRate) * 1000,
     );
   }
   return meta;

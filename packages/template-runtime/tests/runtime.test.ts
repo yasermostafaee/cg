@@ -171,7 +171,7 @@ describe('createRuntime — D-020 lifecycle / playout', () => {
   it('manual lifecycle: play reveals and holds; stop re-hides via the outro', async () => {
     const scene: typeof lowerThirdScene = {
       ...lowerThirdScene,
-      lifecycle: { introEndFrame: 5, outroStartFrame: 45 },
+      lifecycle: { outPoint: 45 },
       playout: { mode: 'manual' },
     };
     const runtime = createRuntime(scene, { skipFontLoad: true });
@@ -185,7 +185,7 @@ describe('createRuntime — D-020 lifecycle / playout', () => {
     const clock = makeTimerClock();
     const scene: typeof lowerThirdScene = {
       ...lowerThirdScene,
-      lifecycle: { introEndFrame: 5, outroStartFrame: 45 },
+      lifecycle: { outPoint: 45 },
       playout: { mode: 'auto-out', holdMs: 1000 },
     };
     const runtime = createRuntime(scene, { skipFontLoad: true, clock });
@@ -201,7 +201,7 @@ describe('createRuntime — D-020 lifecycle / playout', () => {
     const clock = makeTimerClock();
     const scene: typeof lowerThirdScene = {
       ...lowerThirdScene,
-      lifecycle: { introEndFrame: 5, outroStartFrame: 45 },
+      lifecycle: { outPoint: 45 },
       playout: { mode: 'auto-out', holdMs: 500 },
     };
     const runtime = createRuntime(scene, { skipFontLoad: true, clock });
@@ -218,7 +218,7 @@ describe('createRuntime — D-020 lifecycle / playout', () => {
     const clock = makeTimerClock();
     const scene: typeof lowerThirdScene = {
       ...lowerThirdScene,
-      lifecycle: { introEndFrame: 5, outroStartFrame: 45 },
+      lifecycle: { outPoint: 45 },
       playout: { mode: 'auto-out', holdMs: 1000 },
     };
     const runtime = createRuntime(scene, { skipFontLoad: true, clock });
@@ -230,5 +230,27 @@ describe('createRuntime — D-020 lifecycle / playout', () => {
     runtime.resume();
     clock.advance(600); // remaining 600ms of the 1000ms hold
     expect(document.body.classList.contains('cg-pending')).toBe(true);
+  });
+
+  it('playoutOverride drives auto-out without mutating the stored scene (session-only)', async () => {
+    const clock = makeTimerClock();
+    // Stored defaults: an out-point but the default play-once-and-hold (manual).
+    const scene: typeof lowerThirdScene = {
+      ...lowerThirdScene,
+      lifecycle: { outPoint: 45 },
+    };
+    const runtime = createRuntime(scene, {
+      skipFontLoad: true,
+      clock,
+      // The preview's session override: auto-out after 500ms.
+      playoutOverride: { mode: 'auto-out', holdMs: 500 },
+    });
+    await runtime.play({});
+    expect(document.body.classList.contains('cg-pending')).toBe(false);
+    clock.advance(500);
+    expect(document.body.classList.contains('cg-pending')).toBe(true); // override ran the outro
+    // The stored scene is untouched — the override never persists.
+    expect(scene.playout).toBeUndefined();
+    expect(scene.lifecycle).toEqual({ outPoint: 45 });
   });
 });

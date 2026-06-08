@@ -36,4 +36,5 @@ export type {
   SceneInput,
   BuildSceneResult,
   RuntimeClock,
+  PlayoutOverride,
 } from './types.js';

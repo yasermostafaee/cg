@@ -131,36 +131,30 @@ describe('Scene — D-020 lifecycle / playout', () => {
     expect(s.playout).toBeUndefined();
   });
 
-  it('accepts lifecycle markers inside the active region', () => {
+  it('accepts an out-point inside the active region', () => {
     // active = frameRange [0, 50] (no activeRange)
     const s = SceneSchema.parse({
       ...minimalScene,
-      lifecycle: { introEndFrame: 12, outroStartFrame: 40 },
+      lifecycle: { outPoint: 40 },
     });
-    expect(s.lifecycle).toEqual({ introEndFrame: 12, outroStartFrame: 40 });
+    expect(s.lifecycle).toEqual({ outPoint: 40 });
   });
 
-  it('rejects introEndFrame > outroStartFrame', () => {
+  it('rejects an out-point beyond the active-region end', () => {
     expect(() =>
-      SceneSchema.parse({ ...minimalScene, lifecycle: { introEndFrame: 30, outroStartFrame: 10 } }),
+      SceneSchema.parse({ ...minimalScene, lifecycle: { outPoint: 60 } }),
     ).toThrow(/lifecycle/);
   });
 
-  it('rejects outroStartFrame beyond the active-region end', () => {
-    expect(() =>
-      SceneSchema.parse({ ...minimalScene, lifecycle: { introEndFrame: 10, outroStartFrame: 60 } }),
-    ).toThrow(/lifecycle/);
-  });
-
-  it('validates the lifecycle invariant against activeRange when present', () => {
+  it('validates the out-point invariant against activeRange when present', () => {
     const within = { ...minimalScene, activeRange: { in: 10, out: 30 } };
-    // intro/outro inside [10, 30] — valid
+    // out-point inside [10, 30] — valid
     expect(() =>
-      SceneSchema.parse({ ...within, lifecycle: { introEndFrame: 15, outroStartFrame: 25 } }),
+      SceneSchema.parse({ ...within, lifecycle: { outPoint: 25 } }),
     ).not.toThrow();
-    // introEndFrame below activeRange.in — invalid even though it's ≥ frameRange.in (0)
+    // out-point below activeRange.in — invalid even though it's ≥ frameRange.in (0)
     expect(() =>
-      SceneSchema.parse({ ...within, lifecycle: { introEndFrame: 5, outroStartFrame: 25 } }),
+      SceneSchema.parse({ ...within, lifecycle: { outPoint: 5 } }),
     ).toThrow(/lifecycle/);
   });
 

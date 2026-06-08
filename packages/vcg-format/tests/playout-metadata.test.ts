@@ -8,19 +8,18 @@ describe('buildPlayoutMetadata', () => {
     expect(buildPlayoutMetadata(fixtureScene)).toEqual({ mode: 'manual' });
   });
 
-  it('carries phases, timing, and the outro duration in ms', () => {
+  it('carries the out-point, timing, and the outro duration in ms', () => {
     // fixtureScene: frameRate 50, frameRange [0, 50] (active = full range).
     const scene: Scene = {
       ...fixtureScene,
-      lifecycle: { introEndFrame: 10, outroStartFrame: 40 },
+      lifecycle: { outPoint: 40 },
       playout: { mode: 'loop-cycle', holdMs: 2000, repeat: 3 },
     };
     expect(buildPlayoutMetadata(scene)).toEqual({
       mode: 'loop-cycle',
       holdMs: 2000,
       repeat: 3,
-      introEndFrame: 10,
-      outroStartFrame: 40,
+      outPoint: 40,
       // (50 - 40) / 50 fps * 1000 = 200 ms
       outroDurationMs: 200,
     });
@@ -30,7 +29,7 @@ describe('buildPlayoutMetadata', () => {
     const scene: Scene = {
       ...fixtureScene,
       activeRange: { in: 0, out: 30 },
-      lifecycle: { introEndFrame: 5, outroStartFrame: 20 },
+      lifecycle: { outPoint: 20 },
       playout: { mode: 'auto-out', holdMs: 1000 },
     };
     // (30 - 20) / 50 fps * 1000 = 200 ms

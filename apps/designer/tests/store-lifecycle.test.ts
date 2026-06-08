@@ -26,30 +26,28 @@ function activeDoc(): Pick<Composition, 'frameRange' | 'activeRange' | 'lifecycl
 }
 
 describe('designerStore — D-020 lifecycle / playout', () => {
-  it('setLifecycle clamps markers into the active region and keeps intro ≤ outro', () => {
+  it('setLifecycle clamps the out-point into the active region', () => {
     freshScene();
     const r = activeRangeOf(activeDoc());
-    // Request out-of-bounds + out-of-order markers.
-    designerStore.setLifecycle({ introEndFrame: r.out + 50, outroStartFrame: r.in - 10 });
+    // Request an out-of-bounds out-point.
+    designerStore.setLifecycle({ outPoint: r.out + 50 });
     const lc = activeDoc().lifecycle;
     expect(lc).toBeDefined();
     if (lc === undefined) return;
-    expect(lc.introEndFrame).toBeGreaterThanOrEqual(r.in);
-    expect(lc.introEndFrame).toBeLessThanOrEqual(r.out);
-    expect(lc.outroStartFrame).toBeGreaterThanOrEqual(lc.introEndFrame);
-    expect(lc.outroStartFrame).toBeLessThanOrEqual(r.out);
+    expect(lc.outPoint).toBeGreaterThanOrEqual(r.in);
+    expect(lc.outPoint).toBeLessThanOrEqual(r.out);
   });
 
   it('the stored lifecycle always satisfies the schema invariant', () => {
     freshScene();
-    designerStore.setLifecycle({ introEndFrame: 8, outroStartFrame: 3 }); // requested out of order
+    designerStore.setLifecycle({ outPoint: -10 }); // requested below the active region
     // SceneSchema validates the root + every nested composition's invariant.
     expect(() => SceneSchema.parse(designerStore.get().scene)).not.toThrow();
   });
 
-  it('setLifecycle(null) clears the markers', () => {
+  it('setLifecycle(null) clears the out-point', () => {
     freshScene();
-    designerStore.setLifecycle({ introEndFrame: 1, outroStartFrame: 2 });
+    designerStore.setLifecycle({ outPoint: 2 });
     expect(activeDoc().lifecycle).toBeDefined();
     designerStore.setLifecycle(null);
     expect(activeDoc().lifecycle).toBeUndefined();

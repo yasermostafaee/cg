@@ -72,10 +72,10 @@ describe('ExporterSingleFile', () => {
     expect(issues.some((i) => i.fieldId === 'logo' && i.severity === 'warning')).toBe(true);
   });
 
-  it('embeds D-020 lifecycle + playout metadata with the outro duration (ms)', async () => {
+  it('embeds D-020 out-point + playout metadata with the outro duration (ms)', async () => {
     const scene: Scene = {
       ...makeScene(),
-      lifecycle: { introEndFrame: 15, outroStartFrame: 80 },
+      lifecycle: { outPoint: 80 },
       playout: { mode: 'auto-out', holdMs: 3000 },
     } as unknown as Scene;
     const { html } = await makeExporter().produce(scene);
@@ -86,8 +86,7 @@ describe('ExporterSingleFile', () => {
     expect(meta).toMatchObject({
       mode: 'auto-out',
       holdMs: 3000,
-      introEndFrame: 15,
-      outroStartFrame: 80,
+      outPoint: 80,
       // (100 - 80) / 50 fps * 1000 = 400 ms
       outroDurationMs: 400,
     });
