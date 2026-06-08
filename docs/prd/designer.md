@@ -384,3 +384,52 @@ straight into CasparCG, and no GDD for standard CG clients.
   OGraf now). Keep CSS within common CasparCG CEF builds (63 = 2.2, 71 = 2.3.x,
   117 = 2.4.x). Leaves the existing `.vcg` exporter unchanged.
   Change: `openspec/changes/add-caspar-single-file-export/`.
+
+## [~] D-020 — Animation lifecycle + playout timing ⟨priority: high⟩
+
+**What:** Give every composition an explicit **IN / HOLD / OUT** lifecycle and a
+no-code **playout-timing** config, plus the runtime behavior to execute it. The
+author marks an **intro-end** (the hold frame) and an **outro-start** on the
+timeline (inside the existing active region); the runtime then plays the intro
+once and **holds** (instead of looping the whole range), `stop()` plays the
+outro, and new `pause()`/`resume()` freeze/continue the current frame. A
+per-composition timing config chooses `manual` (operator drives out),
+`auto-out` (hold for T then out), `loop-cycle` (intro→hold(T)→outro repeated N
+times or forever), or `content-driven` (duration computed from content — the
+crawler; computation delivered by the ticker item). Phase markers + timing
+config + the outro duration are exported in the template metadata.
+**Why:** This is the foundation every animated template needs and that the
+crawler, the looping logo, hold/pause-before-close, and timed auto-out all build
+on. The current runtime loops the entire timeline continuously, which is wrong
+for a broadcast template that must open, hold, and exit on command. Retrofitting
+this later would mean re-authoring every template and reworking the frame driver.
+**Acceptance:**
+
+- WHEN the author marks an intro-end and an outro-start on the timeline (within
+  the active region) THEN the composition stores them and IN/HOLD/OUT are derived
+  with `activeRange.in ≤ introEnd ≤ outroStart ≤ activeRange.out`
+- WHEN `play()` runs THEN the intro plays once and the composition holds at the
+  hold frame — it does not loop the whole range and does not auto-play the outro
+- WHEN `stop()` runs THEN the outro plays from the outro-start to the
+  active-region end
+- WHEN `pause()` is called THEN the current frame freezes, and `resume()`
+  continues from that frame
+- WHEN the timing mode is `auto-out` with hold = T THEN after the intro and T ms
+  of hold the outro plays automatically
+- WHEN the timing mode is `loop-cycle` with hold = T and repeat = N (or infinite)
+  THEN the composition repeats intro→hold(T)→outro for N cycles, or until `stop()`
+- WHEN a composition with phase markers + timing config is exported THEN the
+  template metadata carries the intro/outro frames, the mode, hold, repeat, and
+  the **outro duration in ms**
+- WHEN the composition is previewed THEN play / hold / pause / auto-out /
+  loop-cycle behave identically to the exported file (same runtime source)
+  **Notes:** New capability `designer-playout-lifecycle`; phase markers live
+  inside `designer-animation-timeline`'s `activeRange` (that spec is not
+  modified). Builds on **D-018** (runtime + preview) and **extends D-019**'s
+  export metadata. The current `FrameDriver` full-range loop is replaced by
+  "play a sub-range once and hold" + a cycle orchestrator. `content-driven` mode
+  is declared here; its width/duration computation lands with the ticker item.
+  `pause`/`resume` are runtime + control-layer methods (exposable on air later via
+  `CG INVOKE "pause"`, which takes no args); the exported outro duration lets the
+  control layer schedule precise timed auto-out.
+  Change: `openspec/changes/add-animation-lifecycle-timing/`.
