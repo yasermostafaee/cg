@@ -1,11 +1,19 @@
 import type { AnimatableProperty, Element, TextElement } from '@cg/shared-schema';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
-import { hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
+import {
+  effectiveAnimatableValue,
+  effectiveColorAt,
+  effectiveNumberAt,
+  hasKeyframeAt,
+  keyframeVariantFor,
+} from '../timeline/keyframe-helpers.js';
 import { CollapseSection } from './CollapseSection.js';
 import { FillField } from './FillPopover.js';
 import { RealtimeNumberInput } from './controls.js';
 import { cx } from '../../cx.js';
+import { Button } from '../../ui/Button.js';
+import { Control } from '../../ui/Control.js';
 import * as s from './TextStyleSection.css.js';
 
 /**
@@ -73,7 +81,9 @@ function animPoint(
         if (hasKeyframeAt(element, property, currentFrame)) {
           designerStore.removeKeyframe(element.id, property, currentFrame);
         } else {
-          designerStore.upsertKeyframe(element.id, property, currentFrame, read(element));
+          // Capture the evaluated value at the playhead (B-005/B-006).
+          const value = effectiveAnimatableValue(element, property, currentFrame, read(element));
+          designerStore.upsertKeyframe(element.id, property, currentFrame, value);
         }
       }}
       ariaLabel={`Toggle keyframe for ${property} at frame ${String(currentFrame)}`}
@@ -94,6 +104,28 @@ export function TextStyleSection({
   const wrapValue = element.wrap === false ? 'no' : 'yes';
   const squeezeValue = element.autoSqueeze === true ? 'yes' : 'no';
   const verticalAlign = element.verticalAlign ?? 'top';
+  // Evaluated-at-playhead values so animated text fields reflect the canvas and a
+  // colour edit's result shows immediately (B-005/B-006).
+  const textColor = effectiveColorAt(element, 'text.color', currentFrame, element.color);
+  const bgColor = effectiveColorAt(
+    element,
+    'backgroundColor',
+    currentFrame,
+    element.backgroundColor ?? '#FFFFFF00',
+  );
+  const fontSize = effectiveNumberAt(element, 'font.size', currentFrame, element.font.size);
+  const lineHeight = effectiveNumberAt(
+    element,
+    'font.lineHeight',
+    currentFrame,
+    element.font.lineHeight,
+  );
+  const letterSpacing = effectiveNumberAt(
+    element,
+    'font.letterSpacing',
+    currentFrame,
+    element.font.letterSpacing,
+  );
 
   return (
     <CollapseSection title="Text" defaultExpanded>
@@ -153,7 +185,7 @@ export function TextStyleSection({
         <FillField
           label="Text Color"
           labelWidth={90}
-          value={element.colorFill ?? { kind: 'solid', color: element.color }}
+          value={element.colorFill ?? { kind: 'solid', color: textColor }}
           onChange={(f) => {
             if (f.kind === 'solid') {
               designerStore.updateElement(id, {
@@ -175,12 +207,7 @@ export function TextStyleSection({
         <FillField
           label="Background"
           labelWidth={90}
-          value={
-            element.backgroundFill ??
-            (element.backgroundColor !== undefined
-              ? { kind: 'solid', color: element.backgroundColor }
-              : { kind: 'solid', color: '#FFFFFF00' })
-          }
+          value={element.backgroundFill ?? { kind: 'solid', color: bgColor }}
           onChange={(f) => {
             if (f.kind === 'solid') {
               designerStore.updateElement(id, {
@@ -242,7 +269,7 @@ export function TextStyleSection({
           </span>
           <RealtimeNumberInput
             className={s.chipInput}
-            value={element.font.size}
+            value={fontSize}
             step={1}
             min={1}
             onCommit={(n) => {
@@ -261,7 +288,7 @@ export function TextStyleSection({
             </span>
             <RealtimeNumberInput
               className={s.chipInput}
-              value={element.font.lineHeight}
+              value={lineHeight}
               step={0.05}
               min={0.1}
               onCommit={(n) => {
@@ -283,7 +310,7 @@ export function TextStyleSection({
             </span>
             <RealtimeNumberInput
               className={s.chipInput}
-              value={element.font.letterSpacing}
+              value={letterSpacing}
               step={0.01}
               onCommit={(n) => designerStore.commitAnimatable(id, 'font.letterSpacing', n)}
               ariaLabel="Letter spacing"
@@ -305,9 +332,9 @@ export function TextStyleSection({
             {(['start', 'center', 'end'] as const).map((opt) => {
               const active = element.align === opt;
               return (
-                <button
+                <Control
                   key={opt}
-                  type="button"
+                  variant="bare"
                   className={cx(s.alignButton, active && s.alignButtonActive)}
                   onClick={() =>
                     designerStore.updateElement(id, { align: opt } as Partial<Element>)
@@ -317,7 +344,7 @@ export function TextStyleSection({
                   title={`Align ${opt}`}
                 >
                   {opt === 'start' ? '⫷' : opt === 'center' ? '☰' : '⫸'}
-                </button>
+                </Control>
               );
             })}
           </div>
@@ -326,9 +353,9 @@ export function TextStyleSection({
             {(['top', 'middle', 'bottom'] as const).map((opt) => {
               const active = verticalAlign === opt;
               return (
-                <button
+                <Control
                   key={opt}
-                  type="button"
+                  variant="bare"
                   className={cx(s.alignButton, active && s.alignButtonActive)}
                   onClick={() =>
                     designerStore.updateElement(id, {
@@ -340,19 +367,19 @@ export function TextStyleSection({
                   title={`Vertical ${opt}`}
                 >
                   {opt === 'top' ? '⤒' : opt === 'middle' ? '⇳' : '⤓'}
-                </button>
+                </Control>
               );
             })}
           </div>
           <span className={s.alignSpacer} />
-          <button
-            type="button"
+          <Control
+            variant="bare"
             className={s.gearButton}
             aria-label="More text options"
             title="More text options"
           >
             ⚙
-          </button>
+          </Control>
         </div>
       </div>
     </CollapseSection>
@@ -377,15 +404,15 @@ function TogglePair<T extends string>({
       {options.map((opt) => {
         const active = opt.value === value;
         return (
-          <button
+          <Button
             key={opt.value}
-            type="button"
+            variant="bare"
             className={cx(s.toggleOption, active && s.toggleOptionActive)}
             onClick={() => onChange(opt.value)}
             aria-pressed={active}
           >
             {opt.label}
-          </button>
+          </Button>
         );
       })}
     </div>

@@ -1,14 +1,30 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Element, ShapeElement } from '@cg/shared-schema';
+import type { AnimatableProperty, Element, ShapeElement } from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 import { defaultShape } from '../src/renderer/state/element-defaults.js';
 import {
+  effectiveAnimatableValue,
+  effectiveColorAt,
+  effectiveRowValue,
   effectiveTransformAt,
   keyframeVariantFor,
   timelineGroupsFor,
+  type TimelineRow,
 } from '../src/renderer/features/timeline/keyframe-helpers.js';
+import { togglePropertyKeyframe } from '../src/renderer/features/inspector/TransformSection.js';
+import { addOrToggleKeyframeAtFrame } from '../src/renderer/features/timeline/TrackRow.js';
+
+/** Find the timeline row spec for `property` (the row the diamond is rendered for). */
+function rowFor(el: Element, property: AnimatableProperty): TimelineRow {
+  for (const group of timelineGroupsFor(el)) {
+    for (const entry of group.rows) {
+      if (entry.kind === 'animatable' && entry.row.property === property) return entry.row;
+    }
+  }
+  throw new Error(`no timeline row for ${property}`);
+}
 
 function freshSceneWithShape(): ShapeElement {
   const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
@@ -23,6 +39,12 @@ function selected(): Element {
   const state = designerStore.get();
   const el = editSceneOf(state.scene, state.activeCompositionId)!.layers[0]!.children[0]!;
   return el;
+}
+
+/** Children of the first layer of the active document (may be empty after deletes). */
+function firstLayerChildren(): readonly Element[] {
+  const state = designerStore.get();
+  return editSceneOf(state.scene, state.activeCompositionId)!.layers[0]!.children;
 }
 
 beforeEach(() => {
@@ -336,6 +358,87 @@ describe('B-002 — every keyframe on a track keeps its own distinct value', () 
   });
 });
 
+describe('B-005 — inspector diamond captures the evaluated value at the playhead', () => {
+  it('the diamond at F2 adds a keyframe holding the F1 value, not the static base — no jump', () => {
+    // A keyframe at F1=10 holds the moved value 300; the element's static base
+    // stays at its default (50). At F2 the evaluated value clamps to 300.
+    designerStore.upsertKeyframe('el-1', 'position.x', 10, 300);
+    designerStore.setCurrentFrame(40);
+
+    const before = selected();
+    const staticBase = before.transform.position.x;
+    expect(staticBase).toBe(50); // the OLD diamond captured this → the revert bug
+    expect(effectiveAnimatableValue(before, 'position.x', 40, staticBase)).toBe(300);
+
+    // Click the real diamond handler at F2.
+    togglePropertyKeyframe(before, 'position.x', 40);
+
+    const after = selected();
+    const kf = after.animation?.tracks['position.x']?.keyframes.find((k) => k.frame === 40);
+    expect(kf?.value).toBe(300); // captured the evaluated value V, not base 50
+    // The shape does not jump: the value at F2 is unchanged after adding the key.
+    expect(effectiveAnimatableValue(after, 'position.x', 40, after.transform.position.x)).toBe(300);
+  });
+});
+
+describe('B-006 — colour field display tracks the evaluated value at the playhead', () => {
+  it('editing a colour with a keyframe present updates both the keyframe (shape) and the displayed value', () => {
+    // fill.color is animated; the static base stays at the shape default (#BEBEBE).
+    designerStore.upsertKeyframe('el-1', 'fill.color', 0, '#FF0000');
+    designerStore.setCurrentFrame(0);
+
+    // Edit the colour — the working write path lands it as a keyframe at frame 0.
+    designerStore.commitAnimatable('el-1', 'fill.color', '#00FF00');
+
+    const el = selected();
+    const staticFill = el.type === 'shape' && el.fill?.kind === 'solid' ? el.fill.color : '#000000';
+    // The static value is NOT the edited colour — reading it (the old display path)
+    // is exactly why the input looked stale while the shape changed.
+    expect(staticFill).toBe('#BEBEBE');
+    // The evaluated value the field now displays matches the shape (the keyframe).
+    expect(effectiveColorAt(el, 'fill.color', 0, staticFill)).toBe('#00FF00');
+    const kf = el.animation?.tracks['fill.color']?.keyframes.find((k) => k.frame === 0);
+    expect(kf?.value).toBe('#00FF00'); // display and shape stay in sync
+  });
+});
+
+describe('B-007 — timeline diamond add-keyframe captures the evaluated value (all value kinds)', () => {
+  const F1 = 10;
+  const F2 = 40;
+  // One case per value KIND, to prove the single shared path handles them all.
+  const cases: { name: string; property: AnimatableProperty; moved: number | string }[] = [
+    { name: 'transform number (position.x)', property: 'position.x', moved: 200 },
+    { name: 'dimension (size.w)', property: 'size.w', moved: 480 },
+    { name: 'opacity (factored 0–1)', property: 'opacity', moved: 0.4 },
+    { name: 'colour (fill.color, non-numeric)', property: 'fill.color', moved: '#FF0000' },
+  ];
+
+  for (const c of cases) {
+    it(`${c.name}: diamond at F2 adds the moved value, not the stale base — no jump`, () => {
+      // F1 holds the moved/edited value; the element's static base is unchanged.
+      designerStore.upsertKeyframe('el-1', c.property, F1, c.moved);
+      designerStore.setCurrentFrame(F2);
+
+      const el = selected();
+      const row = rowFor(el, c.property);
+      // The OLD diamond captured `row.read(el)` — the stale base, which differs
+      // from the moved value (that was the bug).
+      expect(row.read(el)).not.toBe(c.moved);
+      // The fixed diamond captures the EVALUATED value at F2 (held from F1).
+      expect(effectiveRowValue(el, row, F2)).toBe(c.moved);
+
+      // Click the real shared timeline diamond handler at F2.
+      addOrToggleKeyframeAtFrame(el, row, F2);
+
+      const after = selected();
+      const kf = after.animation?.tracks[c.property]?.keyframes.find((k) => k.frame === F2);
+      expect(kf?.value).toBe(c.moved); // captured the moved value, not the base
+      // No jump: the evaluated value at F2 is unchanged after adding the keyframe.
+      expect(effectiveRowValue(after, rowFor(after, c.property), F2)).toBe(c.moved);
+    });
+  }
+});
+
 describe('D-010 — timelineGroupsFor returns the right groups per element type', () => {
   it('a shape returns Transform · Path style · Border radius · Drop Shadow · Filter', () => {
     const groups = timelineGroupsFor(selected());
@@ -549,5 +652,71 @@ describe('B-002 — single-click vs double-click on a timeline diamond', () => {
     });
     designerStore.setSelectedKeyframe({ elementId: 'el-1', property: 'opacity', frame: 8 });
     expect(designerStore.get().keyframeInspectorOpen).toBe(true);
+  });
+});
+
+describe('designerStore — deleteSelection (Delete/Backspace precedence)', () => {
+  it('keyframe selected → deletes the keyframe, keeps the layer/shape', () => {
+    designerStore.setSelection(['el-1']);
+    designerStore.upsertKeyframe('el-1', 'position.x', 10, 100);
+    designerStore.setSelectedKeyframe({ elementId: 'el-1', property: 'position.x', frame: 10 });
+    expect(designerStore.get().selectedKeyframes).toHaveLength(1);
+
+    designerStore.deleteSelection();
+
+    // Keyframe (its whole track, last point removed) is gone…
+    expect(selected().animation).toBeUndefined();
+    // …but the element is still there.
+    expect(firstLayerChildren()).toHaveLength(1);
+  });
+
+  it('no keyframe selected → deletes the selected layer/shape', () => {
+    designerStore.setSelection(['el-1']);
+    expect(designerStore.get().selectedKeyframes).toHaveLength(0);
+
+    designerStore.deleteSelection();
+
+    expect(firstLayerChildren()).toHaveLength(0);
+  });
+
+  it('multi-select: deletes ALL selected keyframes (layer kept)', () => {
+    designerStore.setSelection(['el-1']);
+    designerStore.upsertKeyframe('el-1', 'position.x', 10, 100);
+    designerStore.upsertKeyframe('el-1', 'position.x', 20, 200);
+    designerStore.setSelectedKeyframe({ elementId: 'el-1', property: 'position.x', frame: 10 });
+    designerStore.addKeyframeToSelection({ elementId: 'el-1', property: 'position.x', frame: 20 });
+    expect(designerStore.get().selectedKeyframes).toHaveLength(2);
+
+    designerStore.deleteSelection();
+
+    expect(selected().animation).toBeUndefined(); // both points gone → track dropped
+    expect(firstLayerChildren()).toHaveLength(1);
+  });
+
+  it('multi-select: with no keyframe, deletes ALL selected layers/shapes', () => {
+    designerStore.addElement(defaultShape('el-2', 10, 20));
+    designerStore.setSelection(['el-1', 'el-2']);
+
+    designerStore.deleteSelection();
+
+    expect(firstLayerChildren()).toHaveLength(0);
+  });
+
+  it('nothing selected → no-op', () => {
+    designerStore.setSelection([]);
+    designerStore.deleteSelection();
+    expect(firstLayerChildren()).toHaveLength(1);
+  });
+
+  it('delete is a single undo step (restores everything it removed)', () => {
+    designerStore.addElement(defaultShape('el-2', 10, 20));
+    designerStore.setSelection(['el-1', 'el-2']);
+
+    designerStore.markHistoryBoundary();
+    designerStore.deleteSelection();
+    expect(firstLayerChildren()).toHaveLength(0);
+
+    designerStore.undo();
+    expect(firstLayerChildren()).toHaveLength(2);
   });
 });

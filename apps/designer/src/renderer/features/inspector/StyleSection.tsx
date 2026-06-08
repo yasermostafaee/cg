@@ -10,7 +10,13 @@ import type {
 } from '@cg/shared-schema';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
-import { hasKeyframeAt, keyframeVariantFor } from '../timeline/keyframe-helpers.js';
+import {
+  effectiveAnimatableValue,
+  effectiveColorAt as evColor,
+  effectiveNumberAt as evNum,
+  hasKeyframeAt,
+  keyframeVariantFor,
+} from '../timeline/keyframe-helpers.js';
 import { CollapseSection } from './CollapseSection.js';
 import { ColorField, NumberField, SelectField, VectorField } from './controls.js';
 import { FillField } from './FillPopover.js';
@@ -40,8 +46,11 @@ function pointIcon(label: string): JSX.Element {
 
 /**
  * Real keyframe indicator for a numeric or colour animatable property.
- * Reads variant from keyframeVariantFor; clicking toggles a keyframe
- * at the current frame using the current static value.
+ * Reads variant from keyframeVariantFor; clicking toggles a keyframe at the
+ * current frame. The added keyframe CAPTURES the evaluated value at the playhead
+ * (what the field shows and the canvas renders), with `read` as the static
+ * fallback when the property isn't yet animated — so adding a keyframe past an
+ * existing one holds the animated value instead of reverting it (B-005/B-006).
  */
 function animPointIcon(
   element: Element,
@@ -58,7 +67,8 @@ function animPointIcon(
         if (hasKeyframeAt(element, property, currentFrame)) {
           designerStore.removeKeyframe(element.id, property, currentFrame);
         } else {
-          designerStore.upsertKeyframe(element.id, property, currentFrame, read(element));
+          const value = effectiveAnimatableValue(element, property, currentFrame, read(element));
+          designerStore.upsertKeyframe(element.id, property, currentFrame, value);
         }
       }}
       ariaLabel={`Toggle keyframe for ${property} at frame ${String(currentFrame)}`}
@@ -168,17 +178,25 @@ function ShapeSections({
   selectedKeyframe,
 }: SectionProps<ShapeElement>): JSX.Element {
   const id = element.id;
-  const fillColor =
+  // Show the EVALUATED value at the playhead when a property is animated, so the
+  // inspector reflects what the canvas renders (and a colour edit's result shows
+  // immediately) — falling back to the static value when unanimated (B-006).
+  const staticFill =
     element.fill !== undefined && element.fill.kind === 'solid' ? element.fill.color : '#000000';
-  const strokeColor = element.stroke?.color ?? '#000000';
-  const strokeWidth = element.stroke?.width ?? 0;
-  const strokeDashFirst = element.stroke?.dash?.[0] ?? 0;
+  const fillColor = evColor(element, 'fill.color', currentFrame, staticFill);
+  const displayFill =
+    element.fill !== undefined && element.fill.kind === 'solid'
+      ? { ...element.fill, color: fillColor }
+      : element.fill;
+  const strokeColor = evColor(element, 'stroke.color', currentFrame, element.stroke?.color ?? '#000000');
+  const strokeWidth = evNum(element, 'stroke.width', currentFrame, element.stroke?.width ?? 0);
+  const strokeDashFirst = evNum(element, 'stroke.dash', currentFrame, element.stroke?.dash?.[0] ?? 0);
   return (
     <>
       <CollapseSection title="Path Style" pinned>
         <FillField
           label="fill"
-          value={element.fill}
+          value={displayFill}
           onChange={(f) => {
             // A plain solid edit on an already-solid fill keeps the
             // keyframe-aware routing (so fill.color can still animate);
@@ -309,6 +327,11 @@ function DropShadowSection({
   const staticShadow: Shadow | undefined =
     element.type === 'shape' ? element.shadow : element.textShadow;
   const s: Shadow = staticShadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
+  // Evaluated-at-playhead values so animated shadow fields track the canvas.
+  const offsetX = evNum(element, 'shadow.offsetX', currentFrame, s.offsetX);
+  const offsetY = evNum(element, 'shadow.offsetY', currentFrame, s.offsetY);
+  const blur = evNum(element, 'shadow.blur', currentFrame, s.blur);
+  const color = evColor(element, 'shadow.color', currentFrame, s.color);
   return (
     <CollapseSection title={title}>
       <VectorField
@@ -317,7 +340,7 @@ function DropShadowSection({
           {
             icon: 'X',
             ariaLabel: 'offset X',
-            value: s.offsetX,
+            value: offsetX,
             step: 1,
             suffix: 'px',
             onCommit: (v) => designerStore.commitAnimatable(id, 'shadow.offsetX', v),
@@ -332,7 +355,7 @@ function DropShadowSection({
           {
             icon: 'Y',
             ariaLabel: 'offset Y',
-            value: s.offsetY,
+            value: offsetY,
             step: 1,
             suffix: 'px',
             onCommit: (v) => designerStore.commitAnimatable(id, 'shadow.offsetY', v),
@@ -348,7 +371,7 @@ function DropShadowSection({
       />
       <NumberField
         label="blur"
-        value={s.blur}
+        value={blur}
         step={1}
         min={0}
         suffix="px"
@@ -363,7 +386,7 @@ function DropShadowSection({
       />
       <ColorField
         label="color"
-        value={s.color}
+        value={color}
         onCommit={(color) => designerStore.commitAnimatable(id, 'shadow.color', color)}
         trailing={animPointIcon(
           element,
@@ -392,7 +415,7 @@ function TextPaddingSection({
     <CollapseSection title="Text Padding">
       <NumberField
         label="top"
-        value={p.top}
+        value={evNum(element, 'padding.top', currentFrame, p.top)}
         step={1}
         min={0}
         onCommit={(v) => designerStore.commitAnimatable(id, 'padding.top', v)}
@@ -406,7 +429,7 @@ function TextPaddingSection({
       />
       <NumberField
         label="right"
-        value={p.right}
+        value={evNum(element, 'padding.right', currentFrame, p.right)}
         step={1}
         min={0}
         onCommit={(v) => designerStore.commitAnimatable(id, 'padding.right', v)}
@@ -420,7 +443,7 @@ function TextPaddingSection({
       />
       <NumberField
         label="bottom"
-        value={p.bottom}
+        value={evNum(element, 'padding.bottom', currentFrame, p.bottom)}
         step={1}
         min={0}
         onCommit={(v) => designerStore.commitAnimatable(id, 'padding.bottom', v)}
@@ -434,7 +457,7 @@ function TextPaddingSection({
       />
       <NumberField
         label="left"
-        value={p.left}
+        value={evNum(element, 'padding.left', currentFrame, p.left)}
         step={1}
         min={0}
         onCommit={(v) => designerStore.commitAnimatable(id, 'padding.left', v)}
@@ -472,7 +495,7 @@ function BorderRadiusSection({
     <CollapseSection title="Border Radius">
       <NumberField
         label="radius"
-        value={radius}
+        value={evNum(element, 'cornerRadius', currentFrame, radius)}
         step={1}
         min={0}
         onCommit={(v) => designerStore.commitAnimatable(id, 'cornerRadius', v)}
@@ -509,7 +532,7 @@ function FilterSection({
     suffix: string | undefined,
   ): JSX.Element {
     const key = property.slice('filter.'.length) as keyof Filter;
-    const value = f[key] ?? fallback;
+    const value = evNum(element, property, currentFrame, f[key] ?? fallback);
     return (
       <NumberField
         label={label}

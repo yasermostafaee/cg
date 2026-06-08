@@ -81,7 +81,59 @@ proposal/commit).
 
 ---
 
-<!-- No open bugs yet. Add them above this line using the format. Example:
+## [x] B-005 — inspector diamond reverts an animated property to its base value ⟨priority: high⟩ — focused fix
+
+**Repro:**
+
+1. Select a shape; on any animatable property (e.g. Position X) click the diamond at frame F1 to add a keyframe.
+2. Move the shape on F1 (the F1 keyframe captures the new value V).
+3. Scrub to a later frame F2.
+4. Click the diamond (add-keyframe) next to Position X on F2.
+
+**Expected:** a keyframe is added at F2 holding the evaluated value V (the value the field shows and the canvas renders at F2); the shape does not move. (Dragging on F2 already does this correctly.)
+**Actual:** the shape reverts to the previous keyframe's pre-move base value — the diamond captured `row.read(element)` (the element's static transform) instead of the evaluated value at the playhead.
+**Env:** Browser / Designer dev; reproduces on `main` (preview branch).
+**Notes:** Root cause shared with B-006 — the inspector read the static value while the canvas drag path reads the evaluated value at the current frame. Fix: `TransformSection.togglePropertyKeyframe` / `StyleSection.animPointIcon` / `TextStyleSection.animPoint` now capture `effectiveAnimatableValue(el, prop, frame, staticFallback)`. Regression test: `apps/designer/tests/store-animation.test.ts` ("B-005 …"). Living-spec scenario added to `openspec/specs/designer-animation-timeline/spec.md`.
+
+## [x] B-006 — colour field display stays stale when the property is animated ⟨priority: high⟩ — focused fix
+
+**Repro:**
+
+1. Select a shape that has a colour keyframe (e.g. a `fill.color` track).
+2. With the playhead on a frame, edit the colour in the colour-picker / hex input.
+
+**Expected:** both the input's displayed value AND the shape update to the new colour, and they stay in sync.
+**Actual:** the shape changes (the edit lands as a keyframe via `commitAnimatable`), but the input keeps showing the old value — the colour field displayed the element's static `fill.color`/`stroke.color`/text colour instead of the evaluated colour at the current frame.
+**Env:** Browser / Designer dev; reproduces on `main` (preview branch).
+**Notes:** Same root cause as B-005 (read path used the static value, not the evaluated value at the playhead). Fix: colour/numeric display in `StyleSection` + `TextStyleSection` now uses `effectiveColorAt` / `effectiveNumberAt` (new colour-aware evaluators in `keyframe-helpers.ts`). Regression test: `apps/designer/tests/store-animation.test.ts` ("B-006 …").
+
+## [x] B-007 — timeline diamond add-keyframe captures the stale base value (all properties) ⟨priority: high⟩ — focused fix
+
+**Repro:**
+
+1. Select a shape; on any animatable property, click the diamond to add a keyframe at frame F1, then move/edit it there (e.g. Position X → 200). The F1 keyframe correctly holds 200.
+2. Move the playhead to a later frame F2. The shape correctly DISPLAYS the held value (200).
+3. Click the add-keyframe diamond **in the timeline track row** for that property at F2.
+
+**Expected:** a keyframe is added at F2 with the current evaluated value (200); the shape does not move.
+**Actual:** the keyframe is added with the property's ORIGINAL/pre-move base value (e.g. 0) and the shape jumps. Dragging or editing the input at F2 captures the correct value — only the diamond was wrong. Affects ALL animatable property kinds (transform numbers, dimensions, opacity, colour).
+**Env:** Browser / Designer dev; reproduces on `main` (preview branch).
+**Notes:** Distinct from B-005 (which fixed the **inspector** diamonds). This is the **timeline** track-row diamond — a second add-keyframe path. Root cause: `TrackRowLabel.toggleKeyframeHere` captured `row.read(element)` — the element's static base, which is NOT updated when a keyframe is moved — instead of the evaluated value at the playhead (`effectiveRowValue`, which the row's own value readout already used). Fix: the shared `addOrToggleKeyframeAtFrame` (in `apps/designer/src/renderer/features/timeline/TrackRow.tsx`) now captures `effectiveRowValue(element, row, frame)` — one path, all value kinds. Regression tests: `apps/designer/tests/store-animation.test.ts` ("B-007 …", parametric over position.x / size.w / opacity / fill.color). Living-spec requirement generalized + scenario added in `openspec/specs/designer-animation-timeline/spec.md`.
+
+## [x] B-008 — "Bind from canvas" creates duplicate bindings ⟨priority: high⟩ — focused fix
+
+**Repro:**
+
+1. Give a text element a Data key (creates a field), or add a field manually.
+2. On that field click **Bind from canvas**, then click a canvas element. A binding is added and bind mode exits.
+3. Re-activate **Bind from canvas** and click the **same** element again. Repeat.
+
+**Expected:** binding the same field to the same target is idempotent — no duplicate is added (e.g. one "text on Text" binding, not five). Binding the field to a *different* element/target is still allowed.
+**Actual:** each activation+click added another identical binding, stacking duplicates (5× "text on Text" for one field).
+**Env:** Browser / Designer dev; reproduces on `main` (preview branch).
+**Notes:** Two requirements: (a) one activation = one bind — `CanvasOverlay` already exits bind mode (`setBindMode(null)`) after a click, verified; (b) the missing guard — `designerStore.addBinding` now **dedupes**: it no-ops when a binding with the same `fieldId` AND structurally-equal `target` already exists (helper `sameBindingTarget`). Same field → a *different* target (other element, or same element different property) is still added. Store-level guard protects every caller. Regression test: `apps/designer/tests/fields-and-bindings.test.ts` ("B-008 …"). Spec note: the `designer-dynamic-fields` living spec is absent from the working tree (the `add-dynamic-text-fields` change is deleted), so there is no present spec to add a scenario to — the regression test is the executable spec for this fix.
+
+<!-- Add new open bugs above this line using the format. Example:
 
 ## [ ] B-001 — Export blocked dialog shows wrong error count
 **Repro:**
