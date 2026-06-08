@@ -16,6 +16,7 @@ import { COMPOSITION_DND_TYPE } from '../compositions/CompositionsPanel.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
 import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
+import { drillTarget } from './drill.js';
 import { Gizmo, lockCursor } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
 import * as s from './CanvasOverlay.css.js';
@@ -194,9 +195,22 @@ export function CanvasOverlay({
   function onDoubleClick(e: React.MouseEvent<HTMLDivElement>): void {
     const scenePoint = viewportToScene(e.clientX, e.clientY);
     const hit = topmostHit(allElementsAtFrame, scenePoint);
-    if (hit !== null && hit.type === 'text') {
+    if (hit === null) return;
+    if (hit.type === 'text') {
       designerStore.setSelection([hit.id]);
       designerStore.setEditingText(hit.id);
+      return;
+    }
+    // D-024 — double-click a nested child-composition instance: drill into that
+    // child (one level) and select the shape under the cursor. Single-click still
+    // selects the whole instance as a unit (see onPointerDown). The child is the
+    // SHARED definition — editing it affects every parent that uses it.
+    if (hit.type === 'composition') {
+      const child = scene.compositions?.find((c) => c.id === hit.compositionId);
+      if (child === undefined) return;
+      const target = drillTarget(hit, child, scenePoint, currentFrame);
+      if (target === null) return;
+      designerStore.openCompositionAndSelect(target.compositionId, target.shapeId);
     }
   }
 

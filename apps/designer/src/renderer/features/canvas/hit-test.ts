@@ -13,10 +13,20 @@ import type { Element } from '@cg/shared-schema';
  * scale then rotation about the anchor pivot, then bounds-test the resulting
  * point against the element's unscaled local box. (Skew is not hit-tested.)
  */
-export function hitsElement(element: Element, scenePoint: { x: number; y: number }): boolean {
-  const { transform } = element;
-  const { position, size, rotation, anchor, scale } = transform;
-  if (scale.x === 0 || scale.y === 0) return false;
+/**
+ * Invert the element's `Scale·Rotate`-about-anchor transform and return the point
+ * in the element's **unscaled local box** (origin at `position`, spanning
+ * `0..size.w × 0..size.h`), or `null` when the element has a zero scale. This is
+ * the shared core of {@link hitsElement} (which bounds-tests the result) and of
+ * drilling into a nested composition (which maps the local box into the child's
+ * coordinate space).
+ */
+export function inverseToLocal(
+  element: Element,
+  scenePoint: { x: number; y: number },
+): { x: number; y: number } | null {
+  const { position, size, rotation, anchor, scale } = element.transform;
+  if (scale.x === 0 || scale.y === 0) return null;
 
   // Pivot in scene coords — the anchor point of the unscaled box at `position`.
   const pivotX = position.x + anchor.x * size.w;
@@ -36,9 +46,14 @@ export function hitsElement(element: Element, scenePoint: { x: number; y: number
   }
 
   // Back to a point in the unscaled local box (relative to `position`).
-  const localX = anchor.x * size.w + dx;
-  const localY = anchor.y * size.h + dy;
-  return localX >= 0 && localX <= size.w && localY >= 0 && localY <= size.h;
+  return { x: anchor.x * size.w + dx, y: anchor.y * size.h + dy };
+}
+
+export function hitsElement(element: Element, scenePoint: { x: number; y: number }): boolean {
+  const local = inverseToLocal(element, scenePoint);
+  if (local === null) return false;
+  const { size } = element.transform;
+  return local.x >= 0 && local.x <= size.w && local.y >= 0 && local.y <= size.h;
 }
 
 /**
