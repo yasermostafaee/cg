@@ -1,5 +1,6 @@
 import {
   activeRangeOf,
+  playoutOf,
   type Element,
   type FieldValues,
   type FrameRange,
@@ -13,8 +14,8 @@ import {
 import { applyFieldValues } from './bindings.js';
 import { ensureBaselineCss } from './css.js';
 import { EventBus } from './event-bus.js';
-import { FrameDriver } from './frame-driver.js';
 import { LifecycleStateMachine } from './lifecycle.js';
+import { PlayoutController } from './playout-controller.js';
 import { buildScene } from './scene-builder.js';
 import type {
   PlayOptions,
@@ -66,26 +67,35 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const ready: Promise<void> = options.skipFontLoad ? Promise.resolve() : waitForFonts(doc);
   void ready.then(() => bus.emit('ready'));
 
-  let driver: FrameDriver | null = null;
-  const startDriver = (): void => {
-    if (animated.length === 0) return;
-    driver = new FrameDriver({
-      frameRate: scene.frameRate,
-      // The active region (resized scene bar) is the play / export window;
-      // it falls back to the full frameRange when unset.
-      range: activeRangeOf(scene),
-      onFrame: (frame) => {
-        for (const entry of animated) applyAnimationAtFrame(entry, frame);
-      },
-    });
-    driver.start();
+  const applyFrame = (frame: number): void => {
+    for (const entry of animated) applyAnimationAtFrame(entry, frame);
   };
-  const stopDriver = (): void => {
-    if (driver !== null) {
-      driver.stop();
-      driver = null;
-    }
-  };
+
+  // D-020 — the controller owns the playhead. Without a `lifecycle` it loops the
+  // active region exactly as the old FrameDriver did (backward-compatible); with
+  // one it runs IN → hold → OUT and the auto-out / loop-cycle timing. The
+  // exit callbacks settle the lifecycle state + visibility once per exit.
+  const controller = new PlayoutController({
+    frameRate: scene.frameRate,
+    active: activeRangeOf(scene),
+    lifecycle: scene.lifecycle,
+    playout: playoutOf(scene),
+    hasAnimation: animated.length > 0,
+    applyFrame,
+    onExitStart: () => {
+      if (machine.state === 'on-air' || machine.state === 'playing') {
+        machine.transition('exiting');
+        bus.emit('stop.start');
+      }
+    },
+    onSettle: () => {
+      if (machine.state === 'exiting') machine.transition('stopped');
+      doc.body.classList.add('cg-pending');
+      bus.emit('stop.end');
+    },
+    durationHook: options.durationHook,
+    clock: options.clock,
+  });
 
   const runtime: TemplateRuntime = {
     ready,
@@ -111,7 +121,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       bus.emit('play.start');
       doc.body.classList.remove('cg-pending');
       machine.transition('on-air');
-      startDriver();
+      // Lifecycle scenes: play the IN once and hold (no full-range loop, no
+      // auto-outro). Absent lifecycle: loop the active region as before.
+      controller.play();
       bus.emit('play.end');
     },
 
@@ -138,17 +150,25 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     async stop(_opts?: StopOptions): Promise<void> {
       if (machine.state === 'removed') return;
       if (machine.state !== 'on-air' && machine.state !== 'playing') return;
-      stopDriver();
-      machine.transition('exiting');
-      bus.emit('stop.start');
-      doc.body.classList.add('cg-pending');
-      machine.transition('stopped');
-      bus.emit('stop.end');
+      // Lifecycle scenes: play the OUT (outro-start → active-out) then settle
+      // hidden. Absent lifecycle: settle instantly (today's behaviour). The
+      // controller drives onExitStart/onSettle (stop.start / stop.end + hide).
+      controller.stop();
+    },
+
+    pause(): void {
+      if (machine.state === 'removed') return;
+      controller.pause();
+    },
+
+    resume(): void {
+      if (machine.state === 'removed') return;
+      controller.resume();
     },
 
     remove(): void {
       if (machine.state === 'removed') return;
-      stopDriver();
+      controller.destroy();
       machine.forceTransition('removed');
       bus.clear();
       built.container.remove();

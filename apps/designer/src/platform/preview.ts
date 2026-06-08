@@ -317,6 +317,11 @@ export class Preview {
                 window.stop();
               } else if (msg.action === 'next' && typeof window.next === 'function') {
                 window.next();
+              } else if (msg.action === 'pause') {
+                // D-020 — freeze the lifecycle (intro / hold countdown / outro).
+                if (runtime && typeof runtime.pause === 'function') runtime.pause();
+              } else if (msg.action === 'resume') {
+                if (runtime && typeof runtime.resume === 'function') runtime.resume();
               } else if (msg.action === 'reset') {
                 // Re-seed every field to its declared default. update() merges, so
                 // a replace-mode update is what clears omitted keys back to default.

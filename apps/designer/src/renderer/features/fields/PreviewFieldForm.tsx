@@ -13,6 +13,8 @@ export interface PreviewDispatch {
   stop(): void;
   next(): void;
   reset(): void;
+  pause(): void;
+  resume(): void;
 }
 
 /**
@@ -68,6 +70,12 @@ export function PreviewFieldForm({
         </button>
         <button type="button" className={s.btn} onClick={() => dispatch.stop()}>
           ■ Stop
+        </button>
+        <button type="button" className={s.btn} onClick={() => dispatch.pause()}>
+          ⏸ Pause
+        </button>
+        <button type="button" className={s.btn} onClick={() => dispatch.resume()}>
+          ⏵ Resume
         </button>
         <button type="button" className={s.btn} onClick={() => dispatch.next()}>
           ⤼ Next

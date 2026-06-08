@@ -48,6 +48,16 @@ export interface TemplateRuntime {
   /** Play the exit animation. Stub for M3.2-α — instant transition. */
   stop(opts?: StopOptions): Promise<void>;
 
+  /**
+   * D-020 — freeze playback at the current frame (intro, hold, or outro). The
+   * timing orchestrator (auto-out / loop-cycle) is paused too. No args, so a
+   * future `CG INVOKE "pause"` can reach it.
+   */
+  pause(): void;
+
+  /** D-020 — continue playback from the frame `pause()` froze. */
+  resume(): void;
+
   /** Optional. Advance to the next state for paginated templates. */
   next?(): Promise<void>;
 
@@ -102,6 +112,29 @@ export interface RuntimeBootOptions {
    * (happy-dom doesn't implement the FontFaceSet API).
    */
   skipFontLoad?: boolean;
+
+  /**
+   * D-020 — inject the rAF / timer clock so tests can drive lifecycle timing
+   * (intro frames, hold timers, auto-out, loop-cycle) deterministically.
+   * Defaults to the platform `requestAnimationFrame` / `setTimeout`.
+   */
+  clock?: RuntimeClock;
+
+  /**
+   * D-020 — supplies the hold duration (ms) for the `content-driven` playout
+   * mode. The mode + orchestration live here; the width→duration computation is
+   * delivered by the ticker item. Absent ⇒ falls back to `playout.holdMs`.
+   */
+  durationHook?: () => number;
+}
+
+/** Injectable rAF + timer clock for deterministic lifecycle/timing tests. */
+export interface RuntimeClock {
+  raf?: (cb: (timestamp: number) => void) => number;
+  cancel?: (handle: number) => void;
+  now?: () => number;
+  setTimeout?: (cb: () => void, ms: number) => unknown;
+  clearTimeout?: (handle: unknown) => void;
 }
 
 export interface BuildSceneResult {

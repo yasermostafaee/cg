@@ -1,6 +1,11 @@
 import type { Scene } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
-import { buildGddSchema, type GddSchema } from '@cg/vcg-format';
+import {
+  buildGddSchema,
+  buildPlayoutMetadata,
+  type GddSchema,
+  type PlayoutMetadata,
+} from '@cg/vcg-format';
 import type { AssetStore } from './AssetStore.js';
 
 export interface SingleFileExportOptions {
@@ -54,10 +59,12 @@ export class ExporterSingleFile {
   async produce(scene: Scene): Promise<SingleFileResult> {
     const issues = preflight(scene);
     const gdd = buildGddSchema(scene);
+    const playout = buildPlayoutMetadata(scene);
     const fontCss = await this.#inlineFonts(scene);
     const html = buildSingleFileHtml({
       scene,
       gdd,
+      playout,
       cgCss: this.#cgCss,
       fontCss,
       cgJsIife: this.#cgJsIife,
@@ -110,16 +117,18 @@ function preflight(scene: Scene): ExportIssue[] {
 interface HtmlParts {
   scene: Scene;
   gdd: GddSchema;
+  playout: PlayoutMetadata;
   cgCss: string;
   fontCss: string;
   cgJsIife: string;
 }
 
 function buildSingleFileHtml(parts: HtmlParts): string {
-  const { scene, gdd, cgCss, fontCss, cgJsIife } = parts;
+  const { scene, gdd, playout, cgCss, fontCss, cgJsIife } = parts;
   // Escape `</` so scene text / GDD strings can't close the <script>/<style>.
   const sceneLiteral = JSON.stringify(scene).replace(/</g, '\\u003c');
   const gddJson = JSON.stringify(gdd).replace(/</g, '\\u003c');
+  const playoutJson = JSON.stringify(playout).replace(/</g, '\\u003c');
   const w = String(scene.resolution.width);
   const h = String(scene.resolution.height);
   return `<!doctype html>
@@ -141,6 +150,11 @@ function buildSingleFileHtml(parts: HtmlParts): string {
 html,body{width:${w}px;height:${h}px;background:transparent;overflow:hidden}</style>
     <script name="graphics-data-definition" type="application/json+gdd">
 ${gddJson}
+    </script>
+    <!-- D-020 — lifecycle phases + playout timing + outro duration (ms) for a
+         control layer to schedule precise timed auto-out / looped playout. -->
+    <script name="cg-playout" type="application/json">
+${playoutJson}
     </script>
   </head>
   <body class="cg-pending">

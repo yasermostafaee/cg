@@ -15,6 +15,7 @@ export { LifecycleStateMachine, canTransition } from './lifecycle.js';
 export { ensureBaselineCss, BASELINE_CSS } from './css.js';
 export { EventBus } from './event-bus.js';
 export { FrameDriver, type FrameDriverOptions } from './frame-driver.js';
+export { PlayoutController, type PlayoutControllerOptions } from './playout-controller.js';
 export {
   applyAnimationAtFrame,
   collectAnimatedElements,
@@ -34,4 +35,5 @@ export type {
   ErrorEvent,
   SceneInput,
   BuildSceneResult,
+  RuntimeClock,
 } from './types.js';

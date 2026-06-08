@@ -60,6 +60,8 @@ export function PreviewModal({
       stop: () => post({ action: 'stop' }),
       next: () => post({ action: 'next' }),
       reset: () => post({ action: 'reset' }),
+      pause: () => post({ action: 'pause' }),
+      resume: () => post({ action: 'resume' }),
     }),
     [post],
   );

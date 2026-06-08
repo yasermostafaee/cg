@@ -10,10 +10,12 @@ import type {
   FrameRange,
   Keyframe,
   Layer,
+  Lifecycle,
+  Playout,
   Resolution,
   Scene,
 } from '@cg/shared-schema';
-import { activeRangeOf } from '@cg/shared-schema';
+import { activeRangeOf, playoutOf } from '@cg/shared-schema';
 
 /**
  * Designer renderer state — small pub-sub store with a JSON-patch-ish
@@ -240,6 +242,8 @@ interface EditDocFields {
   frameRate: Scene['frameRate'];
   frameRange: FrameRange;
   activeRange?: FrameRange | undefined;
+  lifecycle?: Lifecycle | undefined;
+  playout?: Playout | undefined;
   background: Scene['background'];
 }
 
@@ -310,6 +314,8 @@ export function editSceneOf(scene: Scene | null, id: string | null): Scene | nul
     frameRate: c.frameRate,
     frameRange: c.frameRange,
     activeRange: c.activeRange,
+    lifecycle: c.lifecycle,
+    playout: c.playout,
     background: c.background,
     layers: c.layers,
   };
@@ -974,6 +980,8 @@ export const designerStore = {
       'frameRate',
       'frameRange',
       'activeRange',
+      'lifecycle',
+      'playout',
       'background',
       'name',
       'layers',
@@ -1039,6 +1047,38 @@ export const designerStore = {
     const prev = doc.activeRange;
     if (prev !== undefined && prev.in === inFrame && prev.out === out) return;
     set({ scene: withActiveDoc(current.scene, { activeRange: { in: inFrame, out } }) });
+  },
+
+  /**
+   * D-020 — set the active composition's lifecycle phase markers (intro-end /
+   * outro-start). Clamps to the active region and keeps `introEndFrame ≤
+   * outroStartFrame` so the schema invariant always holds. Pass `null` to clear
+   * the lifecycle (back to no distinct phases).
+   */
+  setLifecycle(markers: { introEndFrame: number; outroStartFrame: number } | null): void {
+    if (current.scene === null) return;
+    if (markers === null) {
+      set({ scene: withActiveDoc(current.scene, { lifecycle: undefined }) });
+      return;
+    }
+    const active = activeRangeOf(activeDocOf(current.scene));
+    const intro = Math.max(active.in, Math.min(active.out, Math.round(markers.introEndFrame)));
+    const outro = Math.max(intro, Math.min(active.out, Math.round(markers.outroStartFrame)));
+    const prev = activeDocOf(current.scene).lifecycle;
+    if (prev !== undefined && prev.introEndFrame === intro && prev.outroStartFrame === outro)
+      return;
+    set({
+      scene: withActiveDoc(current.scene, {
+        lifecycle: { introEndFrame: intro, outroStartFrame: outro },
+      }),
+    });
+  },
+
+  /** D-020 — merge a patch onto the active composition's playout timing config. */
+  setPlayout(patch: Partial<Playout>): void {
+    if (current.scene === null) return;
+    const next: Playout = { ...playoutOf(activeDocOf(current.scene)), ...patch };
+    set({ scene: withActiveDoc(current.scene, { playout: next }) });
   },
 
   setTool(tool: DesignerTool): void {

@@ -260,6 +260,44 @@ export function TimelineDock({
     window.addEventListener('pointercancel', onUp);
   }
 
+  // D-020 — drag an intro-end / outro-start phase marker. The store clamps it to
+  // the active region and keeps `introEndFrame ≤ outroStartFrame`, so the schema
+  // invariant always holds however far it's dragged.
+  function startMarkerDrag(which: 'intro' | 'outro', e: React.PointerEvent): void {
+    e.stopPropagation();
+    e.preventDefault();
+    const lane = sceneLaneRef.current;
+    const lc = scene.lifecycle;
+    if (lane === null || lc === undefined) return;
+    const rect = lane.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const startX = e.clientX;
+    const totalSpan = Math.max(1, scene.frameRange.out - scene.frameRange.in);
+    const pxPerFrame = rect.width / totalSpan;
+    const startIntro = lc.introEndFrame;
+    const startOutro = lc.outroStartFrame;
+    function onMove(ev: PointerEvent): void {
+      const dframes = (ev.clientX - startX) / pxPerFrame;
+      designerStore.setLifecycle(
+        which === 'intro'
+          ? { introEndFrame: startIntro + dframes, outroStartFrame: startOutro }
+          : { introEndFrame: startIntro, outroStartFrame: startOutro + dframes },
+      );
+    }
+    function onUp(): void {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  }
+
+  // Position a frame as a percent of the full span (markers + overlays).
+  const frameToPct = (f: number): number =>
+    Math.max(0, Math.min(100, ((f - frameIn) / span) * 100));
+
   // Clicking empty timeline space or the (non-selectable) Scene row clears the
   // layer selection — mirrors the canvas, where clicking the dark area
   // deselects. `clearSelectionOnEmpty` guards on target===currentTarget for the
@@ -441,6 +479,28 @@ export function TimelineDock({
                   aria-label="Resize active region"
                   title="Drag to resize the active region (play / export window) — the scene total stays"
                 />
+                {scene.lifecycle !== undefined && (
+                  <>
+                    <div
+                      className={s.phaseMarkerIntro}
+                      style={{ left: `${frameToPct(scene.lifecycle.introEndFrame).toFixed(3)}%` }}
+                      onPointerDown={(e) => startMarkerDrag('intro', e)}
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label="Intro end marker"
+                      title="Intro end — where the opening finishes and the hold begins"
+                    />
+                    <div
+                      className={s.phaseMarkerOutro}
+                      style={{ left: `${frameToPct(scene.lifecycle.outroStartFrame).toFixed(3)}%` }}
+                      onPointerDown={(e) => startMarkerDrag('outro', e)}
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label="Outro start marker"
+                      title="Outro start — where the exit animation begins"
+                    />
+                  </>
+                )}
               </div>
               {elements.length === 0 ? (
                 <p className={s.empty}>&nbsp;</p>

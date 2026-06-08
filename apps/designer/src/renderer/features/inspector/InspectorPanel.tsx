@@ -8,6 +8,7 @@ import { CollapseSection } from './CollapseSection.js';
 import { RealtimeNumberInput } from './controls.js';
 import { DynamicDataSection } from './DynamicDataSection.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
+import { PlayoutTimingSection } from './PlayoutTimingSection.js';
 import { StyleSection } from './StyleSection.js';
 import { TransformSection } from './TransformSection.js';
 import * as s from './InspectorPanel.css.js';
@@ -79,6 +80,7 @@ function SceneInspector({
       <Row label="elements" value={String(countElements(scene))} />
       <Row label="path" value={projectPath ?? '(unsaved)'} />
       <BackgroundControl background={scene.background} variant="full" />
+      <PlayoutTimingSection scene={scene} />
       {scene.fields.length > 0 && (
         <>
           <h3 className={s.heading}>FIELDS</h3>

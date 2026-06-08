@@ -17,3 +17,6 @@ export type { Ed25519KeyInput } from './sign.js';
 
 export { buildGddSchema, gddExporter } from './gdd.js';
 export type { GddSchema, GddProperty, SchemaExporter } from './gdd.js';
+
+export { buildPlayoutMetadata } from './playout-metadata.js';
+export type { PlayoutMetadata } from './playout-metadata.js';

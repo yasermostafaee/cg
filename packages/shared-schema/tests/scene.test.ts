@@ -123,3 +123,74 @@ describe('Scene', () => {
     expect(SceneSchema.parse(s).background).toBe('#000000');
   });
 });
+
+describe('Scene — D-020 lifecycle / playout', () => {
+  it('absent lifecycle + playout still validates (behaves as before)', () => {
+    const s = SceneSchema.parse(minimalScene);
+    expect(s.lifecycle).toBeUndefined();
+    expect(s.playout).toBeUndefined();
+  });
+
+  it('accepts lifecycle markers inside the active region', () => {
+    // active = frameRange [0, 50] (no activeRange)
+    const s = SceneSchema.parse({
+      ...minimalScene,
+      lifecycle: { introEndFrame: 12, outroStartFrame: 40 },
+    });
+    expect(s.lifecycle).toEqual({ introEndFrame: 12, outroStartFrame: 40 });
+  });
+
+  it('rejects introEndFrame > outroStartFrame', () => {
+    expect(() =>
+      SceneSchema.parse({ ...minimalScene, lifecycle: { introEndFrame: 30, outroStartFrame: 10 } }),
+    ).toThrow(/lifecycle/);
+  });
+
+  it('rejects outroStartFrame beyond the active-region end', () => {
+    expect(() =>
+      SceneSchema.parse({ ...minimalScene, lifecycle: { introEndFrame: 10, outroStartFrame: 60 } }),
+    ).toThrow(/lifecycle/);
+  });
+
+  it('validates the lifecycle invariant against activeRange when present', () => {
+    const within = { ...minimalScene, activeRange: { in: 10, out: 30 } };
+    // intro/outro inside [10, 30] — valid
+    expect(() =>
+      SceneSchema.parse({ ...within, lifecycle: { introEndFrame: 15, outroStartFrame: 25 } }),
+    ).not.toThrow();
+    // introEndFrame below activeRange.in — invalid even though it's ≥ frameRange.in (0)
+    expect(() =>
+      SceneSchema.parse({ ...within, lifecycle: { introEndFrame: 5, outroStartFrame: 25 } }),
+    ).toThrow(/lifecycle/);
+  });
+
+  it('defaults playout.mode to manual', () => {
+    const s = SceneSchema.parse({ ...minimalScene, playout: {} });
+    expect(s.playout?.mode).toBe('manual');
+  });
+
+  it('accepts an auto-out playout with holdMs and repeat', () => {
+    const s = SceneSchema.parse({
+      ...minimalScene,
+      playout: { mode: 'loop-cycle', holdMs: 2000, repeat: 3 },
+    });
+    expect(s.playout).toEqual({ mode: 'loop-cycle', holdMs: 2000, repeat: 3 });
+  });
+
+  it('accepts repeat: "infinite"', () => {
+    const s = SceneSchema.parse({
+      ...minimalScene,
+      playout: { mode: 'loop-cycle', repeat: 'infinite' },
+    });
+    expect(s.playout?.repeat).toBe('infinite');
+  });
+
+  it('rejects negative holdMs and repeat < 1', () => {
+    expect(() =>
+      SceneSchema.parse({ ...minimalScene, playout: { mode: 'auto-out', holdMs: -1 } }),
+    ).toThrow();
+    expect(() =>
+      SceneSchema.parse({ ...minimalScene, playout: { mode: 'loop-cycle', repeat: 0 } }),
+    ).toThrow();
+  });
+});
