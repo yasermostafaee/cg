@@ -36,14 +36,14 @@ ElementAnimation
         Keyframe = { id?, frame, value, easing, bezier? }
 ```
 
-| Type                 | Shape / contract                                                                                                                                  |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Keyframe`           | `frame` (int ≥ 0), `value` (number **or** `#RRGGBB[AA]`), `easing`, optional custom `bezier`, optional stable `id`.                                |
-| `Easing`             | `linear · step · ease-in · ease-out · ease-in-out` — the keyframe's **outgoing** curve (per-keyframe, so adjacent points can differ).             |
-| `BezierEasing`       | `[x1,y1,x2,y2]` CSS `cubic-bezier()` form (P0=(0,0), P3=(1,1)). When present it **overrides** the named `easing` (except `step`, which snaps).     |
-| `Track`              | `keyframes: Keyframe[]` (`.min(1)`); frames are kept **strictly ascending** by the editor (the runtime stable-sorts and Designer's preflight surfaces violations). |
+| Type                 | Shape / contract                                                                                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Keyframe`           | `frame` (int ≥ 0), `value` (number **or** `#RRGGBB[AA]`), `easing`, optional custom `bezier`, optional stable `id`.                                                       |
+| `Easing`             | `linear · step · ease-in · ease-out · ease-in-out` — the keyframe's **outgoing** curve (per-keyframe, so adjacent points can differ).                                     |
+| `BezierEasing`       | `[x1,y1,x2,y2]` CSS `cubic-bezier()` form (P0=(0,0), P3=(1,1)). When present it **overrides** the named `easing` (except `step`, which snaps).                            |
+| `Track`              | `keyframes: Keyframe[]` (`.min(1)`); frames are kept **strictly ascending** by the editor (the runtime stable-sorts and Designer's preflight surfaces violations).        |
 | `AnimatableProperty` | The enum of property paths the runtime can write (transform/opacity + D-010 numeric styles + colours). **The contract between schema, timeline UI, and runtime applier.** |
-| `FrameRange`         | Scene-level `{ in, out }` — the playhead loops `in → out`; the dock sizes its ruler from it.                                                       |
+| `FrameRange`         | Scene-level `{ in, out }` — the playhead loops `in → out`; the dock sizes its ruler from it.                                                                              |
 
 **Value space is deliberately narrow** — numbers and hex colours only. Booleans,
 asset ids and select-strings don't interpolate (a toggle is a `step`-eased 0/1
@@ -55,7 +55,7 @@ the first value to the second.
 bisection solver browsers use for CSS `cubic-bezier()`. It is the **single bézier
 sampler** shared by the runtime evaluator and the Designer's display-time
 interpolation ([`keyframe-helpers.ts`](keyframe-helpers.ts)); the timeline's curve
-*editor* only positions handles (see below), it does not re-implement the solver.
+_editor_ only positions handles (see below), it does not re-implement the solver.
 
 ## The authoring surface
 
@@ -87,12 +87,12 @@ only the moving parts, not the whole tree.
 Two pixel spaces meet on the lane, and the conversions are all pure in
 [`timeline-geometry.ts`](timeline-geometry.ts):
 
-| From → to                  | Function                            | Used by                                  |
-| -------------------------- | ----------------------------------- | ---------------------------------------- |
-| pointer `clientX` → frame  | `frameFromClientX` (clamp + round)  | ruler scrub, keyframe drag — **snap-to-frame is the `Math.round`** |
-| frame → left offset %      | `frameToPct` / `frameToPctClamped`  | diamonds, ticks, playhead / draggable markers |
-| pixel delta → frame delta  | `deltaFramesFromPx`                 | Scene-active-region + out-point marker drags (continuous, store clamps) |
-| visible frames → tick step | `pickStride` (1/2/5/10/25 ladder)   | ruler labels **and** body gridlines (one stride keeps them aligned) |
+| From → to                  | Function                           | Used by                                                                 |
+| -------------------------- | ---------------------------------- | ----------------------------------------------------------------------- |
+| pointer `clientX` → frame  | `frameFromClientX` (clamp + round) | ruler scrub, keyframe drag — **snap-to-frame is the `Math.round`**      |
+| frame → left offset %      | `frameToPct` / `frameToPctClamped` | diamonds, ticks, playhead / draggable markers                           |
+| pixel delta → frame delta  | `deltaFramesFromPx`                | Scene-active-region + out-point marker drags (continuous, store clamps) |
+| visible frames → tick step | `pickStride` (1/2/5/10/25 ladder)  | ruler labels **and** body gridlines (one stride keeps them aligned)     |
 
 Position is a **percent of span** because the lane/ruler inner wrappers are
 `width: zoom × 100%`, so a percent left-offset stays correct at every zoom
@@ -136,7 +136,7 @@ progress) inside a padded SVG; the handle/preset math is pure in
   grows up); `screenToCurve` inverts a handle drag back, clamping into the plot.
 - `bezierPathD` builds the SVG path; `presetKeyFor` / `bezierApproxEqual` match the
   current curve against `EASING_PRESETS` for the dropdown; `effectiveBezier` picks
-  the curve to *show* for a keyframe (custom → named preset → linear for `step`).
+  the curve to _show_ for a keyframe (custom → named preset → linear for `step`).
 
 The editor writes `bezier` to the keyframe via `setKeyframeBezier`; the runtime
 then samples it with the schema's `cubicBezierEase`. **The editor positions the
@@ -164,10 +164,10 @@ curve; the schema solves it** — one solver, no drift.
 
 1. Add the key to `EasingSchema` in
    [`animation.ts`](../../../../../../packages/shared-schema/src/animation.ts) **iff**
-   it's a *named* curve (most new curves are just a preset and need no enum change).
+   it's a _named_ curve (most new curves are just a preset and need no enum change).
 2. Add its control points to `EASING_PRESETS` — this surfaces it in the
    `EasingEditor` dropdown (via `presetKeyFor`) automatically.
-3. Teach the **runtime applier** to honour it if it's a new *named* easing (a pure
+3. Teach the **runtime applier** to honour it if it's a new _named_ easing (a pure
    preset is already handled by `cubicBezierEase`). See the
    [template-runtime deep-dive](../../../../../../packages/template-runtime/README.md).
 

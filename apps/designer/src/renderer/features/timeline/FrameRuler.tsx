@@ -1,12 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import * as s from './FrameRuler.css.js';
-import {
-  frameFromClientX,
-  frameToPct,
-  stridePeriodPct,
-  tickFrames,
-} from './timeline-geometry.js';
+import { frameFromClientX, frameToPct, stridePeriodPct, tickFrames } from './timeline-geometry.js';
 
 interface Props {
   frameIn: number;

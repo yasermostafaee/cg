@@ -55,7 +55,14 @@ export function EasingEditor({ bezier, onChange }: Props): JSX.Element {
       const node = svgRef.current;
       if (node === null) return;
       const rect = node.getBoundingClientRect();
-      const { x: nx, y: ny } = screenToCurve(ev.clientX, ev.clientY, rect.left, rect.top, PAD, PLOT);
+      const { x: nx, y: ny } = screenToCurve(
+        ev.clientX,
+        ev.clientY,
+        rect.left,
+        rect.top,
+        PAD,
+        PLOT,
+      );
       const next: BezierEasing = [...bezier] as BezierEasing;
       if (point === 'p1') {
         next[0] = nx;
