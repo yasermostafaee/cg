@@ -146,6 +146,26 @@ proposal/commit).
 **Env:** Browser / Designer dev; reproduces on `main` (preview branch).
 **Notes:** Root cause — these inspector inputs are **uncontrolled** (`defaultValue`, which only applies at mount) and relied on a React `key` derived from the committed **value** (`dk-${currentKey}`, `key-${name}`, `${label}-${value}`). When the selection moves from A to B and both share the same committed value (e.g. both Data keys empty), the key is identical, so React **reuses the same DOM node** and keeps its in-progress draft — A's uncommitted text shows under B. (Commit was fine because `onBlur` fires on A before the switch.) Fix: fold the **selected element id** into each uncontrolled input's key so it re-initialises whenever the selection changes, regardless of value equality — data-key (`dk-${element.id}-${currentKey}`) and Name (`name-${elementId}-${name}`) inputs, and a new `resetKey` prop on the shared `TextField`/`ColorField` (threaded as `element.id` from `StyleSection`/`FieldMeta`, `field.id` from `FieldsPanel`). `RealtimeNumberInput`/`SelectField` are already controlled (buffer resyncs while unfocused / native `value`) and don't exhibit it; the colour popover remounts on open, so it's unaffected. Commit-on-blur is unchanged, so a pending edit still saves to the PREVIOUS element. Regression test: `apps/designer/tests/inspector-input-resync.test.ts` (renders `DynamicDataSection`, types into A, switches to B → B shows its own value AND A's value is saved). Spec: `openspec/changes/fix-inspector-input-selection-resync/` (new `designer-inspector` capability requirement).
 
+## [ ] B-010 — Double-click on a bound text element shows a different value ⟨priority: medium⟩
+
+**Repro:**
+
+1. Bind a text element to a data field (so it renders the field value, not its raw
+   authored text).
+2. Double-click the element to edit it on the canvas.
+
+**Expected:** editing reflects/keeps the value consistently with what's rendered (no
+mismatch between the displayed bound value and the edit surface).
+**Actual:** the double-click edit surface shows a different value than the rendered
+bound value (the authored/placeholder text vs the field value).
+**Env:** Browser / Designer dev — confirm whether it still reproduces on the latest
+`main`.
+**Notes:** DEFERRED bug, logged for hygiene — **full repro / Expected / Actual and a
+regression test to be detailed when scheduled**. Likely the canvas text-edit path
+reads the element's authored `text` while the render path applies the binding; relates
+to the bindings/`textOriginals` placeholder substitution in `@cg/template-runtime` and
+the inspector read-path bugs (B-005/B-006/B-009 family).
+
 <!-- Add new open bugs above this line using the format. Example:
 
 ## [ ] B-001 — Export blocked dialog shows wrong error count
