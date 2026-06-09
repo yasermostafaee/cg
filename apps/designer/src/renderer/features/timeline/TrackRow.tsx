@@ -37,7 +37,12 @@ export function addOrToggleKeyframeAtFrame(
     designerStore.removeKeyframe(element.id, row.property, frame);
     return;
   }
-  designerStore.upsertKeyframe(element.id, row.property, frame, effectiveRowValue(element, row, frame));
+  designerStore.upsertKeyframe(
+    element.id,
+    row.property,
+    frame,
+    effectiveRowValue(element, row, frame),
+  );
 }
 
 interface Props {

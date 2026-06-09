@@ -13,7 +13,7 @@ whole timeline is the entrance, the hold is the last frame, and the outro is emp
 
 - **WHEN** the author drags the out-point marker on the timeline
 - **THEN** the composition stores it with `activeRange.in ≤ outPoint ≤
-  activeRange.out`, and the IN / HOLD / OUT phases are derived from it
+activeRange.out`, and the IN / HOLD / OUT phases are derived from it
 
 #### Scenario: Absent out-point uses the last active frame
 

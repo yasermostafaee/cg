@@ -2,8 +2,8 @@
 
 - [x] 1.1 `features/canvas/hit-test.ts` — extract `inverseToLocal(element, point)`
       (the unscaled-local-box point); `hitsElement` bounds-tests its result.
-- [x] 1.2 `features/canvas/drill.ts` (new) — `drillTarget(instance, child, point,
-      frame)`: invert the instance transform → local box → scale into the child's
+- [x] 1.2 `features/canvas/drill.ts` (new) — `drillTarget(instance, child, point, frame)`:
+      invert the instance transform → local box → scale into the child's
       resolution, then `topmostHit` the child's elements at their effective frame.
       Returns `{ compositionId, shapeId | null }`; one call = one level.
 

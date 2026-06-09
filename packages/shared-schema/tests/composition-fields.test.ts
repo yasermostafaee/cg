@@ -17,7 +17,14 @@ function textField(id: string, def = ''): DynamicField {
 }
 
 function layer(children: Element[]): Layer {
-  return { id: `l-${children.length}`, name: 'L', visible: true, locked: false, children, blendMode: 'normal' };
+  return {
+    id: `l-${children.length}`,
+    name: 'L',
+    visible: true,
+    locked: false,
+    children,
+    blendMode: 'normal',
+  };
 }
 
 function instance(id: string, compositionId: string, name: string): Element {

@@ -23,7 +23,7 @@ nested child SHALL start together with its parent (offset 0); element `lifespan`
 
 - **WHEN** `stop()` is called on the parent
 - **THEN** each still-active nested child plays its OWN outro `[outPoint →
-  activeRange.out]` and settles, cascaded from the parent (a child that already
+activeRange.out]` and settles, cascaded from the parent (a child that already
   finished is left untouched — see the state-aware stop requirement)
 
 #### Scenario: Parent pause/resume cascades to children

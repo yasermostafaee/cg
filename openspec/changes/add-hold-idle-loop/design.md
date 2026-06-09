@@ -4,7 +4,7 @@
   `[holdLoopStart → outPoint]` is the end of the entrance: it plays once in full as
   part of `play()`, then repeats during hold. This is the key difference from the
   removed two-marker model (intro-end → outro-start), whose middle was never
-  played. So this adds the second marker back *safely* — as a loop-back point
+  played. So this adds the second marker back _safely_ — as a loop-back point
   inside the played range, not a skip.
 - **Opt-in; default stays one marker.** Absent `holdLoopStart`, behavior is
   identical to the single-marker frozen hold. Most templates set nothing.
@@ -23,7 +23,7 @@
 - **Seam jump.** A non-seamless idle segment loops visibly. Mitigation: authoring
   hint; optionally a future "ping-pong" loop option (out of scope here).
 - **Interaction with `loop-cycle`.** Two nested repetitions exist — the idle loop
-  (within a hold) and the whole-template `loop-cycle`. The idle loop runs *during*
+  (within a hold) and the whole-template `loop-cycle`. The idle loop runs _during_
   each cycle's hold and must end cleanly when that cycle's exit begins. Covered by
   a compose test.
 - **Marker ordering in the UI.** `holdLoopStart` must stay `≤ outPoint`; enforce in

@@ -8,22 +8,23 @@
 > **Read this whole file before writing any code.** The single most important
 > correction: **the three features are NOT greenfield.** Most of the runtime,
 > the preview harness, and a working dynamic‑field model already exist. The job
-> is to *reuse and extend* them, add three genuinely new pieces, and fix two
+> is to _reuse and extend_ them, add three genuinely new pieces, and fix two
 > concrete bugs — not to build a parallel system.
 
 ---
 
 ## 0. TL;DR of what changed vs. the original spec
 
-| Original spec assumed | Reality in this repo | What to do |
-| --- | --- | --- |
-| Dynamic fields don't exist; add `key/title/…` **onto the text element**. | A **scene‑level** model already exists: `Scene.fields: DynamicField[]` + `Scene.bindings: FieldBinding[]`, applied by `@cg/template-runtime`. It's more powerful and is used by the starter templates. | **Do NOT** add a parallel field‑on‑element system. Keep `fields[]`+`bindings[]` as the single source of truth. Add an element‑centric **convenience layer** (see §2) so the *UX* of "type a key to make it dynamic" works, while the data still lives in `fields[]`+`bindings[]`. |
-| Implement `play/stop/next/update/remove` globals + a runtime. | Already implemented: `installCasparGlobals` (`packages/template-runtime/src/adapters/caspar-globals.ts`) + `createRuntime` (`runtime.ts`). | Reuse. Only **fix `play()`** (§3 bug #1), **implement the XML fallback** (currently a stub), and decide `next()`/steps (§3). |
-| Build a live preview. | Already exists: `apps/designer/src/platform/preview.ts` runs the same runtime in an iframe and already understands a `postMessage` `update` action. Bridge method `preview.update()` exists. | Reuse the harness. The **only missing piece is the data‑entry form UI** + wiring `Reset`/`Next` (§5). |
-| Export = the only target; produce one `.html`. | A `.vcg` exporter already exists (`apps/designer/src/platform/Exporter.ts`) and already emits a CasparCG‑shaped `index.html` + `cg.js` + `cg.css`. **But that `index.html` uses ES‑module `import` + `fetch('./template.json')`, which does NOT work when loaded as a `file://` template** (Chromium blocks module scripts + local fetch over `file://`). | Keep `.vcg` as‑is (it's for the project's own Runtime over http). **Add a NEW, second exporter**: a single self‑contained `file://`‑safe `.html` (§6). Both share the same `@cg/template-runtime` source. |
-| GDD embedded in export. | No GDD anywhere in the repo today. | Net‑new, exactly as the spec describes. Cover **all** field types, not just text/number (§4). |
+| Original spec assumed                                                    | Reality in this repo                                                                                                                                                                                                                                                                                                                                      | What to do                                                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dynamic fields don't exist; add `key/title/…` **onto the text element**. | A **scene‑level** model already exists: `Scene.fields: DynamicField[]` + `Scene.bindings: FieldBinding[]`, applied by `@cg/template-runtime`. It's more powerful and is used by the starter templates.                                                                                                                                                    | **Do NOT** add a parallel field‑on‑element system. Keep `fields[]`+`bindings[]` as the single source of truth. Add an element‑centric **convenience layer** (see §2) so the _UX_ of "type a key to make it dynamic" works, while the data still lives in `fields[]`+`bindings[]`. |
+| Implement `play/stop/next/update/remove` globals + a runtime.            | Already implemented: `installCasparGlobals` (`packages/template-runtime/src/adapters/caspar-globals.ts`) + `createRuntime` (`runtime.ts`).                                                                                                                                                                                                                | Reuse. Only **fix `play()`** (§3 bug #1), **implement the XML fallback** (currently a stub), and decide `next()`/steps (§3).                                                                                                                                                      |
+| Build a live preview.                                                    | Already exists: `apps/designer/src/platform/preview.ts` runs the same runtime in an iframe and already understands a `postMessage` `update` action. Bridge method `preview.update()` exists.                                                                                                                                                              | Reuse the harness. The **only missing piece is the data‑entry form UI** + wiring `Reset`/`Next` (§5).                                                                                                                                                                             |
+| Export = the only target; produce one `.html`.                           | A `.vcg` exporter already exists (`apps/designer/src/platform/Exporter.ts`) and already emits a CasparCG‑shaped `index.html` + `cg.js` + `cg.css`. **But that `index.html` uses ES‑module `import` + `fetch('./template.json')`, which does NOT work when loaded as a `file://` template** (Chromium blocks module scripts + local fetch over `file://`). | Keep `.vcg` as‑is (it's for the project's own Runtime over http). **Add a NEW, second exporter**: a single self‑contained `file://`‑safe `.html` (§6). Both share the same `@cg/template-runtime` source.                                                                         |
+| GDD embedded in export.                                                  | No GDD anywhere in the repo today.                                                                                                                                                                                                                                                                                                                        | Net‑new, exactly as the spec describes. Cover **all** field types, not just text/number (§4).                                                                                                                                                                                     |
 
 **Two concrete bugs the original spec's acceptance test would expose** (details in §3):
+
 1. `runtime.play()` **overwrites** field values, wiping data set by a prior `update()` — breaks `CG ADD …{data} 1` then `CG PLAY`.
 2. The legacy‑XML payload path in `caspar-globals.ts` is a **stub** (`parsePayload` returns `{}` for XML).
 
@@ -53,12 +54,13 @@ Report these back before changing anything; most are already answered here, conf
   `ElementInspector` already renders `Transform`, `Style`, and a read‑only `Bindings`
   `CollapseSection`. **This is exactly where the new "Dynamic / Data" section goes.**
   ⚠️ **Naming collision:** `ElementInspector` already shows a field labelled **"Key"** —
-  but that is `element.name`, *not* a data‑binding key. Call the new concept
+  but that is `element.name`, _not_ a data‑binding key. Call the new concept
   **"Data key" / "Field key"** to avoid confusion. Do not overload the existing "Key" row.
 - **Fields panel:** `apps/designer/src/renderer/features/fields/FieldsPanel.tsx` (scene‑level field list + "Bind from canvas"). Store mutators that already exist: `addField`, `updateField`, `removeField`, `addBinding`, `removeBindingAt`, `setBindMode`.
 - **Export/preview platform:** `Exporter.ts` (→ `.vcg` via `@cg/vcg-format` `pack()`), `preview.ts` (iframe harness). Both receive the runtime bundle as strings `cgJs`/`cgCss` from `apps/designer/src/platform/cg-runtime.js`, wired in `createDesignerBridge.ts`.
 
 **Where each new feature plugs in** (propose/confirm in Step 0):
+
 - Field schema extension → `packages/shared-schema/src/fields.ts`.
 - Element‑centric convenience layer → `apps/designer/src/renderer/state/store.ts` + a new
   `features/inspector/DynamicDataSection.tsx`.
@@ -85,7 +87,9 @@ Report these back before changing anything; most are already answered here, conf
 > recommended.**
 
 ### 2a. Schema (`packages/shared-schema/src/fields.ts`)
+
 Add to `TextFieldSchema` (and `MultilineFieldSchema` where sensible):
+
 - `minLength?: number (int, ≥0)`
 - `pattern?: string` (regex source)
 
@@ -96,17 +100,20 @@ exist on the base/text field. `fieldType: "text"|"number"` maps to the existing 
 in sync.
 
 ### 2b. Store convenience helpers (`state/store.ts`)
+
 Add methods, e.g.:
+
 - `setElementDataKey(elementId, key)` — validates uniqueness across `scene.fields`
   (and across the whole project incl. compositions, mirroring `Exporter.preflight`'s walk);
   on first set, `addField` + `addBinding`; on change, rename field id + update binding;
   on empty, `removeField` + remove the matching binding (find its index by `fieldId`).
 - `setElementFieldMeta(elementId, patch)` — patch `title/description/required/minLength/maxLength/pattern/default` on the backing field.
 - Binding target: default to **full‑text replacement** (`{kind:'text', elementId}`, no
-  placeholder) since the convenience UX binds the *whole* element's text. (Placeholders
+  placeholder) since the convenience UX binds the _whole_ element's text. (Placeholders
   remain available for hand‑authored multi‑slot text — don't remove that path.)
 
 ### 2c. Inspector UI (`features/inspector/DynamicDataSection.tsx`)
+
 New `CollapseSection title="Dynamic / Data"` shown **only for `type === 'text'`** elements
 in `ElementInspector`. Controls: Data key (text), Title, Description, Required (checkbox),
 Field type (text/number), Multiline (checkbox, mirrors element), Min/Max length, Pattern,
@@ -158,7 +165,7 @@ Embedded by the single‑file exporter (§6) inside `<head>` exactly as:
 
 ```html
 <script name="graphics-data-definition" type="application/json+gdd">
-{ …generated… }
+  { …generated… }
 </script>
 ```
 
@@ -168,6 +175,7 @@ Top‑level shape and `gddPlayoutOptions` exactly as in the original spec
 
 Generation rules — **cover the whole `DynamicField` union** (the original spec only named
 text/number; the model has 7 types):
+
 - `text` → `{ type:"string", gddType: multiline ? "multi-line" : "single-line" }` + `minLength/maxLength/pattern/default` when set.
 - `multiline` → `{ type:"string", gddType:"multi-line" }` + `maxLines`→ informational; `default`.
 - `number` → `{ type:"number" }` + `minimum/maximum/default` when set.
@@ -197,6 +205,7 @@ the schema — no change needed there beyond §3.
 Reuse `preview.ts` + the canvas iframe (`features/canvas/CanvasArea.tsx`) — it already runs
 the real runtime and already handles `postMessage` `update`/`scrub`/`play`/`stop`/`scene-replace`.
 Add:
+
 - **`features/fields/PreviewFieldForm.tsx`** — auto‑generated from `scene.fields`
   (which the convenience layer populates): text→`<input>`, multiline→`<textarea>`,
   number→`<input type=number>`, plus color/boolean/select for completeness. Show `label`
@@ -220,6 +229,7 @@ to drop into CasparCG's `templates/`. Add a **"Download HTML"** action (next to 
 `.vcg` export in `features/shell/TopToolbar.tsx`).
 
 Requirements:
+
 - **Inline everything, no external refs, no ESM, no `fetch`** — this is what makes it
   `file://`‑safe (the existing `.vcg` `index.html` deliberately does NOT meet this and is for
   http serving only):
@@ -263,7 +273,7 @@ Requirements:
 - Embedded GDD parses as valid JSON‑schema and lists both fields with correct types/constraints.
 
 **Background facts that justify the AMCP path above (verified against current CasparCG docs):**
-`CG UPDATE` is the command that calls the page's `update()` and is the *only* data‑bearing CG
+`CG UPDATE` is the command that calls the page's `update()` and is the _only_ data‑bearing CG
 command; `CG INVOKE` takes no parameters (which is why an earlier spike in this repo —
 `docs/adrs/0006-amcp-update-mechanism-unresolved.md` — failed to pass data). `CG UPDATE`
 sent too soon after load can return `403`; allow a brief readiness window / retry.
@@ -283,6 +293,7 @@ sent too soon after load can return `403`; allow a brief readiness window / retr
   CasparCG export) — author the change before/with the code.
 
 ## 9. START HERE
+
 1. **Step 0** — explore and confirm §1 against the code; report the text‑element shape,
    render path, animation/`next` reality, and the exact inspector insertion point.
 2. **Feature 1 only** — schema (`minLength`/`pattern`), store convenience helpers, and the
@@ -290,6 +301,7 @@ sent too soon after load can return `403`; allow a brief readiness window / retr
 3. Do not start Features 2–5 until Feature 1 is reviewed.
 
 ## 10. Open questions for the product owner (answer before/at Step 0)
+
 1. **Target CasparCG version** — 2.3 LTS (CEF ≈ 71) or 2.4/2.5/2.6 (modern CEF)? Decides the
    IIFE JS/CSS floor and whether to worry about `file://` ESM at all.
 2. **Third‑party‑client interop** (SuperConductor / CasparCG Client) needed, or only this

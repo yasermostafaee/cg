@@ -15,10 +15,7 @@ import { applyScopedFieldValues } from './bindings.js';
  * (namespaces) merge recursively; scalars / image `{assetId}` / arrays replace.
  * So a partial `update({ home: { score: 2 } })` keeps `home.teamName`.
  */
-function mergeNestedValues(
-  base: NestedFieldValues,
-  patch: NestedFieldValues,
-): NestedFieldValues {
+function mergeNestedValues(base: NestedFieldValues, patch: NestedFieldValues): NestedFieldValues {
   const out: NestedFieldValues = { ...base };
   for (const [k, v] of Object.entries(patch)) {
     const prev = out[k];
@@ -122,7 +119,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   if (options.playoutOverride !== undefined && overrides[''] === undefined) {
     overrides[''] = options.playoutOverride;
   }
-  const effectivePlayoutFor = (source: { playout?: Playout | undefined }, path: string): Playout => {
+  const effectivePlayoutFor = (
+    source: { playout?: Playout | undefined },
+    path: string,
+  ): Playout => {
     const b = playoutOf(source);
     const o = overrides[path];
     return {

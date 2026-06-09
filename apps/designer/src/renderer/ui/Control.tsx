@@ -43,4 +43,3 @@ export const Control = forwardRef<HTMLButtonElement, ControlProps>(function Cont
     />
   );
 });
-

@@ -169,10 +169,7 @@ describe('PlayoutController', () => {
 
   it('content-driven: each pass takes its duration from the durationHook (holdMs ignored)', () => {
     // holdMs is present but MUST be ignored for content-driven; the hook wins.
-    const h = make(
-      { mode: 'content-driven', holdMs: 99 },
-      { durationHook: () => 3000 },
-    );
+    const h = make({ mode: 'content-driven', holdMs: 99 }, { durationHook: () => 3000 });
     h.controller.play();
     h.clock.advance(2999);
     expect(h.events).toEqual([]);
@@ -181,10 +178,7 @@ describe('PlayoutController', () => {
   });
 
   it('content-driven repeat = N: runs N passes then settles once', () => {
-    const h = make(
-      { mode: 'content-driven', repeat: 3 },
-      { durationHook: () => 1000 },
-    );
+    const h = make({ mode: 'content-driven', repeat: 3 }, { durationHook: () => 1000 });
     h.controller.play();
     h.clock.advance(1000); // pass 1 → pass 2 (not final)
     expect(h.events).toEqual([]);
@@ -195,10 +189,7 @@ describe('PlayoutController', () => {
   });
 
   it('content-driven repeat = infinite: loops the pass forever; stop() ends it', () => {
-    const h = make(
-      { mode: 'content-driven', repeat: 'infinite' },
-      { durationHook: () => 500 },
-    );
+    const h = make({ mode: 'content-driven', repeat: 'infinite' }, { durationHook: () => 500 });
     h.controller.play();
     for (let i = 0; i < 8; i++) h.clock.advance(500);
     expect(h.events).toEqual([]); // keeps looping, never settles on its own

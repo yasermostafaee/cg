@@ -584,4 +584,3 @@ function flattenElements(scene: Scene): readonly Element[] {
   for (const layer of scene.layers) walk(layer.children);
   return out;
 }
-

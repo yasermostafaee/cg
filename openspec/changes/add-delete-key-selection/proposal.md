@@ -35,7 +35,7 @@ thing.
 
 - **Designer:** `state/store.ts` (`deleteSelection()` action); `App.tsx` (global
   Delete/Backspace handler with editable-field guard); `features/timeline/
-  TimelineDock.tsx` (remove the now-redundant keyframe-only handler);
+TimelineDock.tsx` (remove the now-redundant keyframe-only handler);
   `features/shell/ShortcutsModal.tsx` (updated shortcut label).
 - **Tests:** `apps/designer` store test — keyframe selected → keyframe deleted
   (layer kept); no keyframe, layer selected → layer deleted; multi-select deletes

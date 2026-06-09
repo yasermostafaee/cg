@@ -18,7 +18,9 @@ import * as s from './PreviewModal.css.js';
  *  preview re-seeds only when the form structure changes — not on value edits. */
 function aggregateShapeKey(aggregate: AggregatedFields): string {
   const own = aggregate.fields.map((f) => `${f.id}:${f.type}`).join(',');
-  const groups = aggregate.groups.map((g) => `${g.name}{${aggregateShapeKey(g.aggregate)}}`).join(',');
+  const groups = aggregate.groups
+    .map((g) => `${g.name}{${aggregateShapeKey(g.aggregate)}}`)
+    .join(',');
   return `${own}|${groups}`;
 }
 
@@ -182,7 +184,12 @@ export function PreviewModal({
   useEffect(() => {
     const hasAny = Object.values(overrides).some((o) => Object.keys(o).length > 0);
     if (!hasAny) return;
-    post({ action: 'scene-replace', scene, playoutOverride: overrides[''], scopeOverrides: overrides });
+    post({
+      action: 'scene-replace',
+      scene,
+      playoutOverride: overrides[''],
+      scopeOverrides: overrides,
+    });
   }, [overrides, scene, post]);
 
   // Seed our iframe (only ours) once it signals readiness.

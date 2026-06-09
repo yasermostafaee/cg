@@ -74,9 +74,8 @@ PlayoutOverride>`, keyed by the scope's instance-name path (`''` = root, `'home'
 `'home.inner'`) — the SAME paths the field scopes use. `buildScopeController` now
 takes the scope's `path`, merges `overrides[path]` onto `playoutOf(scope.source)`
 for EVERY scope (root included; `effectivePlayout` is no longer a special case), and
-recurses with `path === '' ? c.name : `${path}.${c.name}``. `playoutOverride` stays
-as a back-compat alias for `scopeOverrides['']`. The preview builds the matching
-tree with `timingScopeList(scene)` (DFS over `compositionInstancesOf` + the
-`compositions` registry, same depth/visited guards) and renders one control group
+recurses with `path === '' ? c.name : `${path}.${c.name}``. `playoutOverride`stays
+as a back-compat alias for`scopeOverrides['']`. The preview builds the matching
+tree with `timingScopeList(scene)`(DFS over`compositionInstancesOf`+ the`compositions` registry, same depth/visited guards) and renders one control group
 per scope; nested scopes are shown only when timing-relevant. Per-scope overrides are
 session-only — the runtime reads them at boot and never writes back to the scene.

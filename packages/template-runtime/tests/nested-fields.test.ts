@@ -14,7 +14,13 @@ const baseTransform = {
   rotation: 0,
   anchor: { x: 0, y: 0 },
 };
-const baseElProps = { transform: baseTransform, opacity: 1, visible: true, locked: false, zIndex: 0 };
+const baseElProps = {
+  transform: baseTransform,
+  opacity: 1,
+  visible: true,
+  locked: false,
+  zIndex: 0,
+};
 
 /** A child composition with one text element bound to a `teamName` field. */
 const childComp: Composition = {
@@ -37,7 +43,14 @@ const childComp: Composition = {
           name: 'team-name',
           type: 'text',
           text: 'default',
-          font: { family: 'Inter', weight: 400, style: 'normal', size: 24, lineHeight: 1.2, letterSpacing: 0 },
+          font: {
+            family: 'Inter',
+            weight: 400,
+            style: 'normal',
+            size: 24,
+            lineHeight: 1.2,
+            letterSpacing: 0,
+          },
           color: '#FFFFFF',
           align: 'start',
           fitMode: 'autosize',

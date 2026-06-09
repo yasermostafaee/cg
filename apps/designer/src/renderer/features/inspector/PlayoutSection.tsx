@@ -89,7 +89,11 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
         <p style={hintStyle}>
           Out point @ frame {String(lifecycle.outPoint)} — drag the marker on the timeline. Hold /
           repeat are tuned live in the preview.{' '}
-          <Button variant="bare" style={linkBtnStyle} onClick={() => designerStore.setLifecycle(null)}>
+          <Button
+            variant="bare"
+            style={linkBtnStyle}
+            onClick={() => designerStore.setLifecycle(null)}
+          >
             Clear
           </Button>
         </p>

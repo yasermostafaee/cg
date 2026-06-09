@@ -22,8 +22,8 @@ sequence items build on, so it must exist first.
   (`activeRange.out`): the whole timeline is the entrance, the hold is the last
   frame, the outro is empty. No `schemaVersion` bump.
 - **Timing config (schema):** add optional `playout: { mode:
-  'manual' | 'auto-out' | 'loop-cycle' | 'content-driven'; holdMs?: number;
-  repeat?: number | 'infinite' }`. Default `manual`. This is the stored,
+'manual' | 'auto-out' | 'loop-cycle' | 'content-driven'; holdMs?: number;
+repeat?: number | 'infinite' }`. Default `manual`. This is the stored,
   design-time intent (play-once).
 - **Runtime lifecycle (`@cg/template-runtime`):**
   - **Default = play-once-and-hold (NOT loop).** `play()` plays the full
@@ -97,7 +97,7 @@ sequence items build on, so it must exist first.
 ## Impact
 
 - **Schema:** `packages/shared-schema/src/scene.ts` — optional `lifecycle:
-  { outPoint }` and `playout`; validators for the invariant and `playout` fields.
+{ outPoint }` and `playout`; validators for the invariant and `playout` fields.
 - **Runtime:** `packages/template-runtime/src/runtime.ts` (play→hold, stop→out,
   pause/resume, timing orchestrator); `frame-driver.ts` (play-sub-range-and-hold +
   cycle support instead of the unconditional `% span` loop);

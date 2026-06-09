@@ -92,7 +92,11 @@ export function LibraryPanel(): JSX.Element {
           </option>
         ))}
       </select>
-      <Button variant="bare" className={cx(s.button, s.buttonPrimary)} onClick={() => void createNew()}>
+      <Button
+        variant="bare"
+        className={cx(s.button, s.buttonPrimary)}
+        onClick={() => void createNew()}
+      >
         Create
       </Button>
 
@@ -104,7 +108,12 @@ export function LibraryPanel(): JSX.Element {
       ) : (
         <div className={s.list}>
           {recent.slice(0, 10).map((r) => (
-            <Button key={r.path} variant="bare" className={s.button} onClick={() => void openRecent(r.path)}>
+            <Button
+              key={r.path}
+              variant="bare"
+              className={s.button}
+              onClick={() => void openRecent(r.path)}
+            >
               {r.name}
             </Button>
           ))}

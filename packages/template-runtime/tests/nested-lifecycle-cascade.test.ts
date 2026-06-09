@@ -102,12 +102,7 @@ function instance(id: string, name: string, compositionId: string): Element {
   } as unknown as Element;
 }
 
-function comp(
-  id: string,
-  outPoint: number,
-  children: Element[],
-  playout?: Playout,
-): Composition {
+function comp(id: string, outPoint: number, children: Element[], playout?: Playout): Composition {
   return {
     id,
     name: id,
@@ -139,7 +134,14 @@ function parentScene(opts: {
     ...(opts.lifecycle !== undefined ? { lifecycle: opts.lifecycle } : {}),
     background: 'transparent',
     layers: [
-      { id: 'pl', name: 'main', visible: true, locked: false, blendMode: 'normal', children: opts.children },
+      {
+        id: 'pl',
+        name: 'main',
+        visible: true,
+        locked: false,
+        blendMode: 'normal',
+        children: opts.children,
+      },
     ],
     fields: [],
     bindings: [],
@@ -251,7 +253,11 @@ describe('D-026 — nested-lifecycle cascade', () => {
     run(clock, 2000);
 
     // Direct element holds at the parent's out-point (frame 20 → 0.5).
-    expect(parseFloat(document.querySelector<HTMLElement>('[data-cg-element-id="direct"]')!.style.opacity)).toBeCloseTo(0.5);
+    expect(
+      parseFloat(
+        document.querySelector<HTMLElement>('[data-cg-element-id="direct"]')!.style.opacity,
+      ),
+    ).toBeCloseTo(0.5);
     // Nested child holds at ITS own out-point (frame 10 → 0.25).
     expect(opacityAt('i-fast', 'fx')).toBeCloseTo(0.25);
     r.remove();

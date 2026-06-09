@@ -305,7 +305,6 @@ inspector hides frame/value/property and shows only the easing editor + a
   **Notes:** store gains `selectedKeyframes` (multi) + `addKeyframeToSelection`;
   supersedes the old single/double-click split from `add-animation-timeline-dock`.
 
-
 ## [~] D-018 — Dynamic text fields (data binding + live preview) ⟨priority: high⟩
 
 **What:** A text element becomes a runtime data field when it's given a **Data
@@ -433,6 +432,7 @@ this later would mean re-authoring every template and reworking the frame driver
   `CG INVOKE "pause"`, which takes no args); the exported outro duration lets the
   control layer schedule precise timed auto-out.
   Change: `openspec/changes/add-animation-lifecycle-timing/`.
+
 ## [x] D-022 — App-wide button/control consistency (shared Button/Control + states) ⟨priority: medium⟩ — focused fix
 
 **What:** Make hover / active / focus-visible / disabled the DEFAULT for every
@@ -441,6 +441,7 @@ interactive button, not a per-button afterthought.
 were raw `<button>`s with ad-hoc styling and inconsistent (often missing)
 interactive states.
 **Acceptance:**
+
 - WHEN a developer needs a button THEN they use the shared `Button` (labelled) or
   `Control` (icon-only) from `apps/designer/src/renderer/ui/`, a vanilla-extract
   recipe on `renderer/theme.ts` (variants primary/secondary/ghost/danger/bare,
@@ -463,6 +464,7 @@ interactive states.
 expect the Delete key. Clicking a keyframe selects both the keyframe and its parent,
 so the key needs a clear precedence.
 **Acceptance:**
+
 - WHEN a keyframe is selected (which also selects its parent) and Delete/Backspace
   is pressed THEN the keyframe(s) are deleted and the parent layer/shape remains
 - WHEN no keyframe is selected and a layer/shape is selected THEN Delete/Backspace
@@ -488,6 +490,7 @@ list. Drill-in = open-from-list + select the shape; navigation + selection only,
 new edit semantics, no per-instance overrides (editing the shape edits the shared
 child, affecting every parent).
 **Acceptance:**
+
 - WHEN the operator double-clicks a shape visually inside a nested composition
   instance THEN the editing context switches to that child and the shape is selected
 - WHEN the operator single-clicks the instance THEN it is selected as a whole unit
@@ -507,6 +510,7 @@ the right child copy. Model: Option C (instance-scoped namespacing).
 children's values never updated; the same child instanced twice couldn't be set
 independently.
 **Acceptance:**
+
 - WHEN a standalone composition is open THEN it shows only its own field(s), flat
 - WHEN a parent nests a child THEN the child's fields appear grouped under the
   instance's namespace (nested object in data/GDD)
@@ -531,6 +535,7 @@ inspector fps is read-only.
 parent timeline, so a child could not hold/exit on its own. And per-composition fps
 let nested children disagree, whereas a CasparCG channel has one fps.
 **Acceptance:**
+
 - WHEN the parent is played THEN each nested child holds at its OWN out-point
   independently (different children → different held frames at the same time)
 - WHEN the parent is stopped THEN each child plays its OWN outro

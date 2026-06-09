@@ -39,7 +39,7 @@
   `repeat` are overridable at the runtime seam so the rundown (the control app,
   future) can drive them live on air. We do **not** build rundown control now — we
   only keep the params overridable and the preview override non-persistent.
-- **The preview binds to the *effective* playout and re-syncs.** The preview's
+- **The preview binds to the _effective_ playout and re-syncs.** The preview's
   controls read `stored defaults + session override`, so they never show a stale
   value when the composition changes (out-point added/removed, mode changed). With
   no `outPoint` the preview shows "no out-point" and disables `auto-out` /

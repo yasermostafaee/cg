@@ -79,7 +79,6 @@ auto-squeeze behavior applies).
 - **THEN** the element's text is set to "Hello" and its auto-size / auto-squeeze
   behavior applies
 
-
   #### Scenario: Preview opens in a modal and tears down on close
 
 - **WHEN** the operator clicks the Preview button
@@ -104,5 +103,5 @@ is out of scope and would relax this rule.)
 - **WHEN** a field already has a binding
 - **THEN** its "Bind from canvas" button is disabled
 - **WHEN** the operator removes that binding via its `×`
-- **THEN** the button becomes enabled again, and a binding on a *different* field
+- **THEN** the button becomes enabled again, and a binding on a _different_ field
   never disables this field's button

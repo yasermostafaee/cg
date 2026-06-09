@@ -141,21 +141,17 @@ describe('Scene — D-020 lifecycle / playout', () => {
   });
 
   it('rejects an out-point beyond the active-region end', () => {
-    expect(() =>
-      SceneSchema.parse({ ...minimalScene, lifecycle: { outPoint: 60 } }),
-    ).toThrow(/lifecycle/);
+    expect(() => SceneSchema.parse({ ...minimalScene, lifecycle: { outPoint: 60 } })).toThrow(
+      /lifecycle/,
+    );
   });
 
   it('validates the out-point invariant against activeRange when present', () => {
     const within = { ...minimalScene, activeRange: { in: 10, out: 30 } };
     // out-point inside [10, 30] — valid
-    expect(() =>
-      SceneSchema.parse({ ...within, lifecycle: { outPoint: 25 } }),
-    ).not.toThrow();
+    expect(() => SceneSchema.parse({ ...within, lifecycle: { outPoint: 25 } })).not.toThrow();
     // out-point below activeRange.in — invalid even though it's ≥ frameRange.in (0)
-    expect(() =>
-      SceneSchema.parse({ ...within, lifecycle: { outPoint: 5 } }),
-    ).toThrow(/lifecycle/);
+    expect(() => SceneSchema.parse({ ...within, lifecycle: { outPoint: 5 } })).toThrow(/lifecycle/);
   });
 
   it('defaults playout.mode to manual', () => {

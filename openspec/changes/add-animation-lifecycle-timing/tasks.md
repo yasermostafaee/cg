@@ -4,8 +4,7 @@
       `packages/shared-schema/src/scene.ts`, validating
       `activeRange.in ≤ outPoint ≤ activeRange.out`. Absent `lifecycle` resolves
       (in the runtime) to an implicit out-point at `activeRange.out`.
-- [x] 1.2 Add optional `playout: { mode: 'manual'|'auto-out'|'loop-cycle'|
-      'content-driven'; holdMs?: number; repeat?: number|'infinite' }`
+- [x] 1.2 Add optional `playout: { mode: 'manual'|'auto-out'|'loop-cycle'|'content-driven'; holdMs?: number; repeat?: number|'infinite' }`
       (default `manual`, play-once); validate `holdMs ≥ 0` and `repeat ≥ 1`
 
 ## 2. Runtime lifecycle

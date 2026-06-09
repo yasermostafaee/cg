@@ -1,4 +1,9 @@
-import type { AggregatedFields, DynamicField, FieldValue, NestedFieldValues } from '@cg/shared-schema';
+import type {
+  AggregatedFields,
+  DynamicField,
+  FieldValue,
+  NestedFieldValues,
+} from '@cg/shared-schema';
 import { cx } from '../../cx.js';
 import { Callout } from '../../ui/Callout.js';
 import * as s from './PreviewFieldForm.css.js';
@@ -84,8 +89,8 @@ function AggregateSection({
       {duplicateKeys.length > 0 && (
         <Callout variant="danger" className={s.banner}>
           Duplicate data {duplicateKeys.length === 1 ? 'key' : 'keys'}:{' '}
-          {duplicateKeys.map((k) => `"${k}"`).join(', ')}. Two elements share a key, so their preview
-          values collide — rename one in the inspector.
+          {duplicateKeys.map((k) => `"${k}"`).join(', ')}. Two elements share a key, so their
+          preview values collide — rename one in the inspector.
         </Callout>
       )}
       {invalidCount > 0 && (

@@ -191,9 +191,7 @@ export class PlayoutController {
     // (the ticker computes content→duration), recomputed each pass; `holdMs`
     // does NOT apply. Every other timed mode holds for `holdMs`.
     const ms =
-      mode === 'content-driven'
-        ? (this.o.durationHook?.() ?? 0)
-        : (this.o.playout.holdMs ?? 0);
+      mode === 'content-driven' ? (this.o.durationHook?.() ?? 0) : (this.o.playout.holdMs ?? 0);
     this.scheduleHold(ms, () => this.startOutro());
   }
 

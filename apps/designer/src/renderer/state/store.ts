@@ -1943,7 +1943,10 @@ export const designerStore = {
       const taken = compositionInstancesOf({ layers: activeLayersOf(current.scene) })
         .filter((i) => i.id !== elementId)
         .map((i) => i.name);
-      const unique = uniqueInstanceName(patch.name.trim() === '' ? existing.name : patch.name, taken);
+      const unique = uniqueInstanceName(
+        patch.name.trim() === '' ? existing.name : patch.name,
+        taken,
+      );
       if (unique !== patch.name) effectivePatch = { ...patch, name: unique };
     }
     const merged = { ...existing, ...effectivePatch } as Element;
@@ -2118,9 +2121,7 @@ export const designerStore = {
       (b) => b.target.kind === 'scene-background' || b.target.elementId !== elementId,
     );
     const stillBound = new Set(nextBindings.map((b) => b.fieldId));
-    const nextFields = doc.fields.filter(
-      (f) => !(boundToEl.has(f.id) && !stillBound.has(f.id)),
-    );
+    const nextFields = doc.fields.filter((f) => !(boundToEl.has(f.id) && !stillBound.has(f.id)));
 
     const withLayers = withActiveLayers(current.scene, nextLayers);
     set({

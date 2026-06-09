@@ -104,7 +104,6 @@ a prompt changes behavior or a prior decision (outside the initial PRD flow abov
 - The OpenSpec `.claude/` slash commands are gitignored; regenerate with
   `pnpm openspec init --tools claude`.
 
-
 ## Design system — interactive controls (always)
 
 - Components are styled with `renderer/theme.ts` + vanilla-extract (the app's real

@@ -34,7 +34,14 @@ function childComp(id = 'child'): Composition {
     frameRange: { in: 0, out: 50 },
     background: 'transparent',
     layers: [
-      { id: 'l1', name: 'Layer', visible: true, locked: false, blendMode: 'normal', children: [childShape()] },
+      {
+        id: 'l1',
+        name: 'Layer',
+        visible: true,
+        locked: false,
+        blendMode: 'normal',
+        children: [childShape()],
+      },
     ],
   };
 }

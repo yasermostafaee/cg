@@ -17,7 +17,8 @@ export const base = style({
   appearance: 'none',
   cursor: 'pointer',
   userSelect: 'none',
-  transition: 'background 90ms ease, border-color 90ms ease, color 90ms ease, filter 90ms ease, box-shadow 90ms ease',
+  transition:
+    'background 90ms ease, border-color 90ms ease, color 90ms ease, filter 90ms ease, box-shadow 90ms ease',
   selectors: {
     '&:focus-visible': { outline: 'none', boxShadow: `0 0 0 2px ${colors.accent}` },
     '&:disabled': { opacity: 0.4, cursor: 'not-allowed' },

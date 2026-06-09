@@ -133,9 +133,7 @@ function compOwningElement(
   comps: readonly Composition[],
   elementId: string,
 ): Composition | undefined {
-  return comps.find((c) =>
-    c.layers.some((l) => l.children.some((el) => el.id === elementId)),
-  );
+  return comps.find((c) => c.layers.some((l) => l.children.some((el) => el.id === elementId)));
 }
 
 /**
@@ -166,7 +164,7 @@ export function migrateGlobalFieldsToCompositions(scene: Scene): Scene {
     const target = binding.target;
     const elementId = target.kind === 'scene-background' ? undefined : target.elementId;
     const owner =
-      elementId === undefined ? comps[0] : compOwningElement(comps, elementId) ?? comps[0];
+      elementId === undefined ? comps[0] : (compOwningElement(comps, elementId) ?? comps[0]);
     if (owner === undefined) continue;
     const bucket = ensure(owner.id);
     bucket.bindings.push(binding);

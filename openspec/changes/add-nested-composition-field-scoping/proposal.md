@@ -4,7 +4,7 @@ Two bugs in the dynamic-fields model once compositions can be nested:
 
 1. **Fields were project-global.** `fields`/`bindings` lived only on the root
    `Scene`, so every composition's data-key list (inspector + preview) showed
-   *all* fields across the whole project, not the open composition's.
+   _all_ fields across the whole project, not the open composition's.
 2. **Nested children's values never updated.** The runtime only put top-level
    elements in its binding map and applied a flat `{fieldId: value}` payload, so a
    nested child composition's fields couldn't be set; and the same child instanced
@@ -51,7 +51,7 @@ We adopt **Option C — instance-scoped namespacing via nested objects.**
 - **Designer:** `state/store` (per-comp field ops, migration, instance-name
   uniqueness), `editSceneOf` (surface comp fields/bindings), `FieldsPanel`
   (own + namespaced groups), `PreviewModal`/`PreviewFieldForm` (nested grouped form
-  + nested values), `InspectorPanel` (FIELDS shown when nested instances exist).
+  - nested values), `InspectorPanel` (FIELDS shown when nested instances exist).
 - **Tests:** schema aggregate/defaults/migration/naming; runtime nested routing
   (same child twice, partial update, default fallback); designer per-comp scope +
   instance-name uniqueness.

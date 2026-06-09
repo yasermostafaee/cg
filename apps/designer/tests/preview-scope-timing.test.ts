@@ -35,7 +35,16 @@ function comp(id: string, name: string, over: Partial<Composition> = {}): Compos
     resolution: { width: 100, height: 100 },
     frameRange: { in: 0, out: 40 },
     background: 'transparent',
-    layers: [{ id: `${id}-l`, name: 'main', visible: true, locked: false, blendMode: 'normal', children: [] }],
+    layers: [
+      {
+        id: `${id}-l`,
+        name: 'main',
+        visible: true,
+        locked: false,
+        blendMode: 'normal',
+        children: [],
+      },
+    ],
     ...over,
   } as unknown as Composition;
 }
@@ -91,13 +100,29 @@ describe('D-026 — per-scope preview timing tree', () => {
 
   it('nests deeper instances under a dotted path', () => {
     const grandchild = comp('gc', 'GC');
-    const child = comp('mid', 'Mid', { layers: [
-      { id: 'ml', name: 'main', visible: true, locked: false, blendMode: 'normal', children: [instance('i-g', 'g', 'gc')] },
-    ] });
+    const child = comp('mid', 'Mid', {
+      layers: [
+        {
+          id: 'ml',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [instance('i-g', 'g', 'gc')],
+        },
+      ],
+    });
     const scene = {
       ...parentScene(),
       layers: [
-        { id: 'pl', name: 'main', visible: true, locked: false, blendMode: 'normal', children: [instance('i-c', 'c', 'mid')] },
+        {
+          id: 'pl',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [instance('i-c', 'c', 'mid')],
+        },
       ],
       compositions: [child, grandchild],
     } as unknown as Scene;
@@ -110,7 +135,9 @@ describe('D-026 — per-scope preview timing tree', () => {
     const home = manual.find((n) => n.path === 'home')!;
     expect(TIMING_RELEVANT_MODES.has(effectiveMode(home.source, {}))).toBe(false);
     // An override flips it on (session-only) without changing the stored default.
-    expect(TIMING_RELEVANT_MODES.has(effectiveMode(home.source, { mode: 'loop-cycle' }))).toBe(true);
+    expect(TIMING_RELEVANT_MODES.has(effectiveMode(home.source, { mode: 'loop-cycle' }))).toBe(
+      true,
+    );
 
     // Stored loop-cycle → timing-relevant out of the box.
     const looped = timingScopeList(parentScene({ playout: { mode: 'loop-cycle' } }));

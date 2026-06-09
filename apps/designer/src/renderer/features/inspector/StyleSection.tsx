@@ -188,9 +188,19 @@ function ShapeSections({
     element.fill !== undefined && element.fill.kind === 'solid'
       ? { ...element.fill, color: fillColor }
       : element.fill;
-  const strokeColor = evColor(element, 'stroke.color', currentFrame, element.stroke?.color ?? '#000000');
+  const strokeColor = evColor(
+    element,
+    'stroke.color',
+    currentFrame,
+    element.stroke?.color ?? '#000000',
+  );
   const strokeWidth = evNum(element, 'stroke.width', currentFrame, element.stroke?.width ?? 0);
-  const strokeDashFirst = evNum(element, 'stroke.dash', currentFrame, element.stroke?.dash?.[0] ?? 0);
+  const strokeDashFirst = evNum(
+    element,
+    'stroke.dash',
+    currentFrame,
+    element.stroke?.dash?.[0] ?? 0,
+  );
   return (
     <>
       <CollapseSection title="Path Style" pinned>
