@@ -53,6 +53,12 @@ describe('hitsElement', () => {
     expect(hitsElement(rotated, { x: 50, y: 20 })).toBe(false);
   });
 
+  it('never hits a degenerate (zero-scale) element', () => {
+    const base = el('a', 0, 0, 100, 100);
+    const zero: Element = { ...base, transform: { ...base.transform, scale: { x: 0, y: 1 } } };
+    expect(hitsElement(zero, { x: 50, y: 50 })).toBe(false);
+  });
+
   it('honours a scaled element about its anchor', () => {
     // 100×100 rect scaled 2× about top-left {0,0} covers [0,200]×[0,200].
     const base = el('a', 0, 0, 100, 100, 0, { x: 0, y: 0 });

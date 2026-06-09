@@ -97,6 +97,12 @@ describe('drillTarget — double-click maps the cursor into the child and finds 
     const child = childComp();
     expect(drillTarget(childShape(), child, { x: 0, y: 0 }, 0)).toBeNull();
   });
+
+  it('returns null for a degenerate (zero-size) instance', () => {
+    const child = childComp();
+    const inst = instanceOf(child, { w: 0, h: 100 });
+    expect(drillTarget(inst, child, { x: 100, y: 75 }, 0)).toBeNull();
+  });
 });
 
 describe('single-click still selects the whole child instance as a unit', () => {

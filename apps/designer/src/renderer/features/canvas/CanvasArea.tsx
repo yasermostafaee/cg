@@ -7,6 +7,7 @@ import {
 } from '../assets/assetUrlCache.js';
 import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
+import { clampZoom as clampZoomPure, fitZoom, screenToScene } from './geometry.js';
 import { Control } from '../../ui/Control.js';
 import * as s from './CanvasArea.css.js';
 import {
@@ -222,11 +223,14 @@ export function CanvasArea({
     const s = latestSceneRef.current;
     if (el === null || s === null) return;
     const margin = 16;
-    const z = Math.min(
-      (el.clientWidth - margin) / s.resolution.width,
-      (el.clientHeight - margin) / s.resolution.height,
+    const z = fitZoom(
+      el.clientWidth,
+      el.clientHeight,
+      s.resolution.width,
+      s.resolution.height,
+      margin,
     );
-    if (Number.isFinite(z) && z > 0) setZoom(clampZoom(z));
+    if (z !== null) setZoom(clampZoom(z));
   }
 
   // Auto-fit on load / project (or composition size) switch. Runs in a layout
@@ -304,8 +308,7 @@ export function CanvasArea({
   function sceneFromClient(clientX: number, clientY: number): { x: number; y: number } {
     const s = stageRef.current;
     if (s === null) return { x: 0, y: 0 };
-    const r = s.getBoundingClientRect();
-    return { x: (clientX - r.left) / zoom, y: (clientY - r.top) / zoom };
+    return screenToScene(clientX, clientY, s.getBoundingClientRect(), zoom);
   }
 
   // Drag a guide (existing or freshly created). Guides can sit anywhere in the
@@ -641,7 +644,7 @@ function CanvasRuler({
   );
 }
 
+/** Thin wrapper binding the pure {@link clampZoomPure} to this view's zoom bounds. */
 function clampZoom(z: number): number {
-  if (!Number.isFinite(z)) return ZOOM_DEFAULT;
-  return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+  return clampZoomPure(z, ZOOM_MIN, ZOOM_MAX, ZOOM_DEFAULT);
 }
