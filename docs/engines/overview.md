@@ -126,6 +126,8 @@ typed runtime.
 
 - **template-runtime deep-dive (how it's built + how to extend it):**
   [`packages/template-runtime/README.md`](../../packages/template-runtime/README.md)
+- **Canvas editor deep-dive (the editing surface that overlays the runtime):**
+  [`apps/designer/src/renderer/features/canvas/README.md`](../../apps/designer/src/renderer/features/canvas/README.md)
 - **Behavioural specs:** [`openspec/specs/`](../../openspec/specs) and the changes
   under [`openspec/changes/`](../../openspec/changes) (e.g. nested-lifecycle-cascade,
   nested-composition-field-scoping, animation-lifecycle-timing).

@@ -2,6 +2,18 @@ import type { Element } from '@cg/shared-schema';
 import { designerStore, editSceneOf } from '../../state/store.js';
 import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { cx } from '../../cx.js';
+import {
+  cornerLocal,
+  computeResize,
+  computeRotationAngle,
+  handleLocal,
+  localToScene,
+  pivotClientFromGrab,
+  snapValue,
+  RESIZE_CFG,
+  type Corner,
+  type Handle,
+} from './geometry.js';
 import * as s from './Gizmo.css.js';
 
 interface Props {
@@ -19,10 +31,8 @@ const CORNER_HIT = 18;
 const ROT_ZONE = 18;
 /** Edge resize strips this thick (screen px) — also their hover highlight. */
 const EDGE = 6;
-const MIN_SIZE = 4;
-/** Resize snap threshold (screen px) and rotation snap threshold (degrees). */
+/** Resize snap threshold (screen px). Rotation's degree threshold lives in geometry. */
 const SNAP_PX = 7;
-const SNAP_DEG = 6;
 
 /**
  * Custom cursors matching the reference recording: a black double-headed
@@ -96,9 +106,6 @@ export function lockCursor(cursor: string): () => void {
   document.head.appendChild(style);
   return () => style.remove();
 }
-
-type Corner = 'tl' | 'tr' | 'bl' | 'br';
-type Handle = Corner | 't' | 'b' | 'l' | 'r';
 
 /** Base screen angle of each resize handle's arrow (before element rotation). */
 const RESIZE_ANGLE: Record<Handle, number> = {
@@ -258,53 +265,7 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   );
 }
 
-// ── geometry ────────────────────────────────────────────────────────────────
-
-function rot(vx: number, vy: number, cos: number, sin: number): { x: number; y: number } {
-  return { x: vx * cos - vy * sin, y: vx * sin + vy * cos };
-}
-
-/** Local coords (relative to the box top-left) of a named corner for size w×h. */
-function cornerLocal(c: Corner, w: number, h: number): { x: number; y: number } {
-  switch (c) {
-    case 'tl':
-      return { x: 0, y: 0 };
-    case 'tr':
-      return { x: w, y: 0 };
-    case 'bl':
-      return { x: 0, y: h };
-    case 'br':
-      return { x: w, y: h };
-  }
-}
-
-/** Which corner stays put + which axes a handle frees. */
-const RESIZE_CFG: Record<Handle, { fixed: Corner; freeW: boolean; freeH: boolean }> = {
-  br: { fixed: 'tl', freeW: true, freeH: true },
-  tl: { fixed: 'br', freeW: true, freeH: true },
-  tr: { fixed: 'bl', freeW: true, freeH: true },
-  bl: { fixed: 'tr', freeW: true, freeH: true },
-  r: { fixed: 'tl', freeW: true, freeH: false },
-  l: { fixed: 'tr', freeW: true, freeH: false },
-  b: { fixed: 'tl', freeW: false, freeH: true },
-  t: { fixed: 'bl', freeW: false, freeH: true },
-};
-
-/** Local grab point (box-relative) for each handle, used as the drag origin. */
-function handleLocal(handle: Handle, w: number, h: number): { x: number; y: number } {
-  switch (handle) {
-    case 'r':
-      return { x: w, y: h / 2 };
-    case 'l':
-      return { x: 0, y: h / 2 };
-    case 't':
-      return { x: w / 2, y: 0 };
-    case 'b':
-      return { x: w / 2, y: h };
-    default:
-      return cornerLocal(handle, w, h);
-  }
-}
+// ── interaction (impure: reads the store, drives the pointer gesture) ─────────
 
 /**
  * Snap targets in the active document: canvas edges + centre, every *other*
@@ -334,16 +295,6 @@ function buildSnapTargets(excludeId: string, currentFrame: number): { xs: number
   return { xs, ys };
 }
 
-/** Nearest target to `v` within `thr`, or null. */
-function snapValue(v: number, targets: readonly number[], thr: number): number | null {
-  let best: { t: number; d: number } | null = null;
-  for (const t of targets) {
-    const d = Math.abs(t - v);
-    if (d <= thr && (best === null || d < best.d)) best = { t, d };
-  }
-  return best === null ? null : best.t;
-}
-
 function beginResize(
   element: Element,
   handle: Handle,
@@ -352,26 +303,11 @@ function beginResize(
   ev: PointerEvent,
 ): void {
   const t0 = effectiveTransformAt(element, currentFrame);
-  const w0 = t0.size.w;
-  const h0 = t0.size.h;
-  const { x: px, y: py } = t0.position;
-  const a = t0.anchor;
-  const rad = (t0.rotation * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  // Pivot in scene coords (anchor point of the unscaled box).
-  const pivot = { x: px + a.x * w0, y: py + a.y * h0 };
-  const sceneOf = (lx: number, ly: number): { x: number; y: number } => {
-    const o = rot(lx - a.x * w0, ly - a.y * h0, cos, sin);
-    return { x: pivot.x + o.x, y: pivot.y + o.y };
-  };
   const cfg = RESIZE_CFG[handle];
-  const fixedScene = sceneOf(...cornerToArgs(cfg.fixed, w0, h0));
-  const grab = handleLocal(handle, w0, h0);
-  const grabScene = sceneOf(grab.x, grab.y);
-  // Local unit axes (scene space).
-  const ux = { x: cos, y: sin };
-  const uy = { x: -sin, y: cos };
+  // The grabbed handle's start position in scene coords — the pointer delta is
+  // added to this each move, then `computeResize` does the rotated-frame math.
+  const grab = handleLocal(handle, t0.size.w, t0.size.h);
+  const grabScene = localToScene(t0, grab.x, grab.y);
   const startX = ev.clientX;
   const startY = ev.clientY;
   // Hold this handle's cursor for the whole gesture (don't flip over others).
@@ -391,35 +327,25 @@ function beginResize(
     let guideY: number | null = null;
     if (snapping && e.shiftKey !== true) {
       if (cfg.freeW) {
-        const s = snapValue(pScene.x, targets.xs, thr);
-        if (s !== null) {
-          pScene.x = s;
-          guideX = s;
+        const sx = snapValue(pScene.x, targets.xs, thr);
+        if (sx !== null) {
+          pScene.x = sx;
+          guideX = sx;
         }
       }
       if (cfg.freeH) {
-        const s = snapValue(pScene.y, targets.ys, thr);
-        if (s !== null) {
-          pScene.y = s;
-          guideY = s;
+        const sy = snapValue(pScene.y, targets.ys, thr);
+        if (sy !== null) {
+          pScene.y = sy;
+          guideY = sy;
         }
       }
     }
-    const vx = pScene.x - fixedScene.x;
-    const vy = pScene.y - fixedScene.y;
-    const wNew = cfg.freeW ? Math.max(MIN_SIZE, Math.abs(vx * ux.x + vy * ux.y)) : w0;
-    const hNew = cfg.freeH ? Math.max(MIN_SIZE, Math.abs(vx * uy.x + vy * uy.y)) : h0;
-    // Recompute the top-left so the fixed corner stays put with the new size.
-    const qf = cornerLocal(cfg.fixed, wNew, hNew);
-    const pvx = a.x * wNew;
-    const pvy = a.y * hNew;
-    const ro = rot(qf.x - pvx, qf.y - pvy, cos, sin);
-    const Px = fixedScene.x - pvx - ro.x;
-    const Py = fixedScene.y - pvy - ro.y;
-    designerStore.commitAnimatable(element.id, 'position.x', Px);
-    designerStore.commitAnimatable(element.id, 'position.y', Py);
-    designerStore.commitAnimatable(element.id, 'size.w', wNew);
-    designerStore.commitAnimatable(element.id, 'size.h', hNew);
+    const next = computeResize(t0, handle, pScene);
+    designerStore.commitAnimatable(element.id, 'position.x', next.position.x);
+    designerStore.commitAnimatable(element.id, 'position.y', next.position.y);
+    designerStore.commitAnimatable(element.id, 'size.w', next.size.w);
+    designerStore.commitAnimatable(element.id, 'size.h', next.size.h);
     if (snapping) {
       designerStore.setSnapGuides({
         x: guideX === null ? [] : [guideX],
@@ -436,31 +362,6 @@ function beginResize(
   };
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);
-}
-
-function cornerToArgs(c: Corner, w: number, h: number): [number, number] {
-  const p = cornerLocal(c, w, h);
-  return [p.x, p.y];
-}
-
-/**
- * Recover the rotation pivot's client position from the grabbed handle's client
- * position and the handle's local offset from the pivot (in element-local px,
- * pre-zoom). Pure + exported for unit testing.
- */
-export function pivotClientFromGrab(
-  grabX: number,
-  grabY: number,
-  offLocalX: number,
-  offLocalY: number,
-  rotationDeg: number,
-  scale: number,
-): { x: number; y: number } {
-  const rad = (rotationDeg * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  const o = rot(offLocalX, offLocalY, cos, sin);
-  return { x: grabX - scale * o.x, y: grabY - scale * o.y };
 }
 
 function beginRotate(
@@ -487,13 +388,14 @@ function beginRotate(
 
   const onMove = (e: PointerEvent): void => {
     const ang = Math.atan2(e.clientY - pivot.y, e.clientX - pivot.x) * (180 / Math.PI);
-    let next = startAngle + (ang - startCursor);
     // Snap to the nearest 15° when close (hold Shift to rotate freely).
-    if (snapping && e.shiftKey !== true) {
-      const nearest = Math.round(next / 15) * 15;
-      if (Math.abs(next - nearest) <= SNAP_DEG) next = nearest;
-    }
-    designerStore.commitAnimatable(element.id, 'rotation', Number(next.toFixed(2)));
+    const next = computeRotationAngle(
+      startAngle,
+      startCursor,
+      ang,
+      snapping && e.shiftKey !== true,
+    );
+    designerStore.commitAnimatable(element.id, 'rotation', next);
   };
   const onUp = (): void => {
     window.removeEventListener('pointermove', onMove);

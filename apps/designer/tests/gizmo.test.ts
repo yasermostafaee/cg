@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pivotClientFromGrab } from '../src/renderer/features/canvas/Gizmo.js';
+import { pivotClientFromGrab } from '../src/renderer/features/canvas/geometry.js';
 
 /**
  * Corner rotation recovers the pivot's client position from the grabbed

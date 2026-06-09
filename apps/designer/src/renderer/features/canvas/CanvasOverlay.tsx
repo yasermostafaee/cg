@@ -17,6 +17,7 @@ import { resolveBinding } from '../fields/bind-resolver.js';
 import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
 import { drillTarget } from './drill.js';
+import { screenToScene, snapAxis } from './geometry.js';
 import { Gizmo, lockCursor } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
 import * as s from './CanvasOverlay.css.js';
@@ -116,10 +117,7 @@ export function CanvasOverlay({
   function viewportToScene(clientX: number, clientY: number): { x: number; y: number } {
     const rect = layerRef.current?.getBoundingClientRect();
     if (rect === undefined) return { x: 0, y: 0 };
-    return {
-      x: (clientX - rect.left) / scale,
-      y: (clientY - rect.top) / scale,
-    };
+    return screenToScene(clientX, clientY, rect, scale);
   }
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>): void {
@@ -379,28 +377,6 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
   // Ruler guides are snap targets too.
   for (const gx of state.guides.x) xTargets.push(gx);
   for (const gy of state.guides.y) yTargets.push(gy);
-
-  // Snap one axis: try the dragged box's near/centre/far anchors against every
-  // target; pick the closest within threshold. Returns the adjusted origin and
-  // the guide line (scene coord) to draw, or null.
-  function snapAxis(
-    origin: number,
-    size: number,
-    targets: readonly number[],
-    threshold: number,
-  ): { value: number; guide: number } | null {
-    const anchors = [origin, origin + size / 2, origin + size];
-    let best: { adj: number; guide: number } | null = null;
-    for (const a of anchors) {
-      for (const tg of targets) {
-        const d = tg - a;
-        if (Math.abs(d) <= threshold && (best === null || Math.abs(d) < Math.abs(best.adj))) {
-          best = { adj: d, guide: tg };
-        }
-      }
-    }
-    return best === null ? null : { value: origin + best.adj, guide: best.guide };
-  }
 
   let moved = false;
   const onMove = (e: PointerEvent): void => {

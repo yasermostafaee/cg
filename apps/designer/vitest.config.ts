@@ -12,7 +12,16 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],
-      include: ['src/platform/**/*.ts', 'src/renderer/state/**/*.ts'],
+      include: [
+        'src/platform/**/*.ts',
+        'src/renderer/state/**/*.ts',
+        // Canvas-editor PURE LOGIC (the non-React, testable math). The interactive
+        // React layer (Gizmo/CanvasOverlay/CanvasArea .tsx) is covered by the
+        // Playwright E2E suite, not unit coverage.
+        'src/renderer/features/canvas/geometry.ts',
+        'src/renderer/features/canvas/hit-test.ts',
+        'src/renderer/features/canvas/drill.ts',
+      ],
       exclude: ['src/platform/cg-runtime.ts'],
     },
   },
