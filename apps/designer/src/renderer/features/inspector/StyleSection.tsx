@@ -225,6 +225,7 @@ function ShapeSections({
         <ColorField
           label="stroke"
           value={strokeColor}
+          resetKey={id}
           onCommit={(color) => designerStore.commitAnimatable(id, 'stroke.color', color)}
           trailing={animPointIcon(
             element,
@@ -387,6 +388,7 @@ function DropShadowSection({
       <ColorField
         label="color"
         value={color}
+        resetKey={id}
         onCommit={(color) => designerStore.commitAnimatable(id, 'shadow.color', color)}
         trailing={animPointIcon(
           element,

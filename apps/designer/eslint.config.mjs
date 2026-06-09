@@ -27,6 +27,9 @@ export default [
     files: ['tests/**/*.{ts,tsx}'],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
+      // Tests aren't shipped code; component/render tests legitimately import
+      // `react` / `react-dom/client` to mount a component and assert its DOM.
+      'no-restricted-imports': 'off',
     },
   },
   {

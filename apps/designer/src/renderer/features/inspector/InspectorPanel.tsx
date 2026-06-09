@@ -154,7 +154,10 @@ function ElementNameRow({ elementId, name }: { elementId: string; name: string }
         onKeyDown={(e) => {
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
         }}
-        key={`key-${name}`}
+        // Key by the SELECTED element id (+ name) so the input re-initialises to
+        // the newly-selected element's name rather than keeping the previous
+        // element's uncommitted draft (B-009).
+        key={`name-${elementId}-${name}`}
       />
     </div>
   );

@@ -399,6 +399,14 @@ interface TextFieldProps {
   onCommit: (s: string) => void;
   /** Optional element rendered in a trailing column (e.g. KeyframeIndicator). */
   trailing?: JSX.Element;
+  /**
+   * Identity of the thing being edited (e.g. the selected element id, or the
+   * field id). Folded into the input's React key so the uncontrolled input
+   * re-initialises when the selection moves to a DIFFERENT owner — otherwise two
+   * owners sharing the same committed value keep one owner's uncommitted draft on
+   * the other (B-009). Defaults to the value alone (legacy behavior).
+   */
+  resetKey?: string;
 }
 
 export function TextField(props: TextFieldProps): JSX.Element {
@@ -415,7 +423,7 @@ export function TextField(props: TextFieldProps): JSX.Element {
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
           }}
-          key={`${props.label}-${props.value}`}
+          key={`${props.label}-${props.resetKey ?? ''}-${props.value}`}
         />
         {props.trailing}
       </div>
@@ -460,6 +468,8 @@ interface ColorFieldProps {
   onCommit: (hex: string) => void;
   /** Optional element rendered in a trailing column (e.g. KeyframeIndicator). */
   trailing?: JSX.Element;
+  /** See {@link TextFieldProps.resetKey} — owner identity for the input key (B-009). */
+  resetKey?: string;
 }
 
 export function ColorField(props: ColorFieldProps): JSX.Element {
@@ -486,7 +496,7 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
           }}
-          key={`${props.label}-${props.value}`}
+          key={`${props.label}-${props.resetKey ?? ''}-${props.value}`}
           aria-label={`${props.label} hex value`}
         />
         {props.trailing !== undefined && <span className={s.point}>{props.trailing}</span>}

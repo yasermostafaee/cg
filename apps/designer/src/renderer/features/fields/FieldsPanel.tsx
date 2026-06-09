@@ -122,6 +122,7 @@ function FieldCard({
       <TextField
         label="label"
         value={field.label}
+        resetKey={field.id}
         onCommit={(label) =>
           designerStore.updateField(field.id, { label } as Partial<DynamicField>)
         }
