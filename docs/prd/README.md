@@ -12,7 +12,8 @@ docs/prd/
 ├── runtime.md    ← Runtime (playout controller) features
 ├── caspar.md     ← CasparCG control / the local bridge
 ├── platform.md   ← cross-cutting / infra / tooling / tests
-└── bugs.md       ← bug reports (always include a repro)
+├── bugs.md       ← bug reports (always include a repro)
+└── roadmap.md    ← strategic / non-engineering notes (NOT D-/C-/P- items)
 ```
 
 ## Item format
