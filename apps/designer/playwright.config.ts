@@ -1,4 +1,6 @@
-import { defineConfig, devices } from '@playwright/test';
+import { existsSync } from 'node:fs';
+
+import { chromium, defineConfig, devices } from '@playwright/test';
 
 /**
  * Designer E2E (P-005). Runs the SAME shipped build via `vite preview` (matches
@@ -11,6 +13,31 @@ import { defineConfig, devices } from '@playwright/test';
  * the browser, then runs this.
  */
 const PORT = 4321;
+
+/**
+ * Which browser binary Chromium runs against.
+ *
+ * - Explicit `PW_CHANNEL` always wins (e.g. `PW_CHANNEL=msedge`).
+ * - CI runs the pinned, bundled Chromium — never auto-switch to a system browser,
+ *   so the gate stays on the exact version `playwright install` pinned.
+ * - Locally we AUTO-fall-back to system Chrome (`channel: 'chrome'`) when the bundled
+ *   Chromium isn't installed. Playwright's browser CDN is geo-blocked from some
+ *   locations (HTTP 403 "this service is not available in your location"), so the
+ *   bundled download can't run there; this lets `pnpm test:e2e` work out of the box
+ *   without anyone exporting `PW_CHANNEL` each time. See CLAUDE.md "E2E coverage".
+ */
+function resolveChannel(): string | undefined {
+  if (process.env.PW_CHANNEL) return process.env.PW_CHANNEL;
+  if (process.env.CI) return undefined;
+  try {
+    if (existsSync(chromium.executablePath())) return undefined;
+  } catch {
+    // executablePath() throws when no Chromium is registered → fall back below.
+  }
+  return 'chrome';
+}
+
+const channel = resolveChannel();
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -28,13 +55,13 @@ export default defineConfig({
     trace: 'on-first-retry',
     video: 'off',
   },
-  // CI installs the bundled Chromium (`playwright install --with-deps chromium`),
-  // so `channel` is unset there. Locally, set `PW_CHANNEL=chrome` (or `msedge`) to
-  // run against a system browser without downloading the bundled one.
+  // `channel` is resolved above: unset in CI (pinned bundled Chromium) and when the
+  // bundled browser is present locally; falls back to system Chrome locally when it
+  // isn't (geo-blocked CDN). Override with `PW_CHANNEL=chrome|msedge`.
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'], channel: process.env.PW_CHANNEL || undefined },
+      use: { ...devices['Desktop Chrome'], channel },
     },
   ],
   webServer: {

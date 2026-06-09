@@ -119,8 +119,15 @@ The Designer has a browser-E2E suite (`apps/designer/tests/e2e/`, Playwright). I
      preview via `app.previewFrame` / `app.previewElement(...)`.
   3. If a selector is ambiguous, add a single `data-testid` in the component (not a
      pile of them) and a helper in the page object.
-  4. Run `pnpm test:e2e` (locally: `PW_CHANNEL=chrome` reuses system Chrome instead
-     of the bundled browser).
+  4. Run `pnpm test:e2e`. Locally the config **auto-falls-back to system Chrome**
+     (`channel: 'chrome'`) when the bundled Chromium isn't installed — so the suite
+     just runs, no env var needed. This matters because Playwright's browser CDN is
+     **geo-blocked from some locations** (HTTP 403 "this service is not available in
+     your location"), so `playwright install chromium` can't download the bundle
+     there; the fallback drives your already-installed Chrome instead. Override the
+     browser explicitly with `PW_CHANNEL=chrome|msedge` if needed. **CI is never
+     affected**: it sets `CI=true`, installs the pinned bundled Chromium, and the
+     config keeps `channel` unset there so the gate stays on the pinned browser.
 - **Keep frame-/store-precise behavior in unit tests** (deterministic, injected
   clock); E2E guards the **integrated UI path** (controls wire through the bridge and
   the preview reflects them), not browser-clock frame math.
