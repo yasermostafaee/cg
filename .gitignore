@@ -58,3 +58,9 @@ fixtures/templates/*/template.vcg
 *.pfx
 *.snk
 keys/
+
+# Playwright E2E (P-005)
+playwright-report/
+test-results/
+blob-report/
+.playwright/

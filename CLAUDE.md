@@ -93,6 +93,38 @@ a prompt changes behavior or a prior decision (outside the initial PRD flow abov
 5. When all tasks are checked **and** the gate is green, **remind me to archive**;
    do not archive automatically (see workflow step 7).
 
+## E2E coverage (Playwright) — scenarios drive tests (P-005)
+
+The Designer has a browser-E2E suite (`apps/designer/tests/e2e/`, Playwright). It is
+**not** part of the fast per-change gate (it runs in its own CI job + locally via
+`pnpm test:e2e`), but coverage must **grow by default**, not by memory:
+
+- **Any change that adds or changes user-facing Designer behavior MUST add/extend an
+  E2E test**, mapping the change's OpenSpec `#### Scenario`s to Playwright steps
+  (the scenario is the spec; the E2E is its executable proof through the real UI).
+  Pure-logic/schema changes with no UI surface are exempt (unit tests cover them).
+- **Compose the shared fixtures** — never hand-roll selectors. The page object lives
+  in `apps/designer/tests/e2e/fixtures/designer.ts` (`DesignerApp`): `newProject`,
+  `newComposition`, `addTextElement`/`addRectangle`, `setDataKey`, `bindFromCanvas`,
+  `openPreviewModal`, `setPreviewField`, `play`/`stop`/`pause`/`next`,
+  `addKeyframeViaDiamond`, `dragShape`, `nestCompositionInstance`, `setPlayoutTiming`,
+  `setPreviewTiming`, `exportHtml`, + preview-iframe readers (`previewFrame`,
+  `previewElement`). Add a NEW helper here once when a flow isn't covered, then reuse.
+- **How to add an E2E test:**
+  1. `import { test, expect } from './fixtures/designer.js'` — the `app` fixture
+     boots the app in test mode (`window.CG_E2E` → `MemoryWorkspace`/`MemoryKv`, no
+     native dialogs) and gives you a `DesignerApp`.
+  2. For each `#### Scenario` (WHEN/THEN), drive the WHEN via fixture helpers and
+     assert the THEN — prefer `getByRole`/`getByLabel`; read rendered output in the
+     preview via `app.previewFrame` / `app.previewElement(...)`.
+  3. If a selector is ambiguous, add a single `data-testid` in the component (not a
+     pile of them) and a helper in the page object.
+  4. Run `pnpm test:e2e` (locally: `PW_CHANNEL=chrome` reuses system Chrome instead
+     of the bundled browser).
+- **Keep frame-/store-precise behavior in unit tests** (deterministic, injected
+  clock); E2E guards the **integrated UI path** (controls wire through the bridge and
+  the preview reflects them), not browser-clock frame math.
+
 ## Key references
 
 - Architecture decision: `docs/adrs/0007-electron-to-browser-migration.md`

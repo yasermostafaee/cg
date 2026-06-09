@@ -114,7 +114,7 @@ function FieldCard({
   // several elements, relax this — see canBindFromCanvas.)
   const canBind = canBindFromCanvas(field.id, bindings);
   return (
-    <div className={s.fieldCard}>
+    <div className={s.fieldCard} data-testid={`field-card-${field.id}`}>
       <div className={s.cardHeader}>
         <span className={s.cardId}>{field.id}</span>
         <span className={s.cardType}>{field.type}</span>

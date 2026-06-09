@@ -264,6 +264,10 @@ export function CanvasOverlay({
     <div
       ref={layerRef}
       className={s.layer}
+      // Stable hook for E2E: the interactive canvas surface (pointer placement /
+      // selection / drag). It's a bespoke overlay div with no inherent role, so a
+      // test id is the least-ambiguous target.
+      data-testid="canvas-surface"
       style={{ cursor: cursorStyle }}
       onPointerDown={onPointerDown}
       onDoubleClick={onDoubleClick}

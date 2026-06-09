@@ -51,3 +51,38 @@ under-covered.
   scene and Preview builds a document for a scene
   **Notes:** `Exporter`/`Preview` already take `cgJs`/`cgCss` via constructor, so
   they're testable without the `?raw` bundle.
+
+## [~] P-005 — Designer E2E + UI test coverage (Playwright), built to scale ⟨priority: high⟩ — change: `openspec/changes/add-designer-e2e-testing/`
+
+**What:** A Playwright browser-E2E harness for the Designer SPA, built so FUTURE
+features inherit coverage by default. Runs the SAME shipped build in a test mode
+(`window.CG_E2E` → `MemoryWorkspace` + `MemoryKv`, no native dialogs), with reusable
+page-object fixtures for common actions, an initial suite covering the critical
+flows + recent bug regressions, a separate required CI job, and a CLAUDE.md rule
+that maps each OpenSpec `#### Scenario` to Playwright steps.
+**Why:** There was no E2E/UI coverage — only unit tests. Integrated flows (canvas →
+inspector → preview → export) and cross-cutting regressions were unguarded, and new
+features had no default path to E2E coverage.
+**Acceptance:**
+
+- WHEN `pnpm test:e2e` runs (locally or in CI) THEN the Designer boots against the
+  built app in test mode with NO native file dialogs, and the suite runs headless
+- WHEN a test is written THEN it composes reusable fixtures (newComposition,
+  addTextElement, setDataKey, bindFromCanvas, openPreviewModal, play/stop/pause,
+  addKeyframeViaDiamond, dragShape, nestCompositionInstance, setPlayoutTiming,
+  exportHtml) instead of rewriting boilerplate
+- WHEN the critical flow runs THEN create composition → add text with a data key →
+  preview (edit field value live) → lifecycle play/hold/stop → export single-file
+  HTML all pass
+- WHEN the recent fixes are exercised THEN their regressions pass (diamond keyframe
+  captures current value; colour edits sync display+shape; bind-once + disable;
+  data-key resync on selection change; per-composition + nested namespaced field
+  scope in the parent preview; nested-lifecycle cascade; per-scope preview timing)
+- WHEN CI runs THEN a separate `e2e` job (Chromium cached) runs the suite and is
+  required green, kept out of the fast unit gate
+- WHEN a future change adds user-facing behavior THEN it MUST add an E2E test mapping
+  its OpenSpec scenarios to Playwright steps (CLAUDE.md rule)
+  **Notes:** test mode = `window.CG_E2E` set by Playwright `addInitScript` before app
+  JS (test-only; a real user can't trigger it); built app via `vite preview`
+  (matches turbo `test:e2e` dependsOn build); E2E lives in `apps/designer/tests/e2e`.
+  Change: `openspec/changes/add-designer-e2e-testing/`.
