@@ -178,6 +178,9 @@ function renderInput(
   invalid: boolean,
 ): JSX.Element {
   const cls = cx(s.input, invalid && s.inputInvalid);
+  // A stable accessible name per field (label, else the data key) so the preview
+  // form is reachable by `getByLabel` in E2E — and a genuine a11y improvement.
+  const label = field.label || field.id;
   switch (field.type) {
     case 'multiline':
       return (
@@ -186,6 +189,7 @@ function renderInput(
           rows={2}
           value={asString(value)}
           onChange={(e) => onChange(e.target.value)}
+          aria-label={label}
         />
       );
     case 'number':
@@ -198,6 +202,7 @@ function renderInput(
           max={field.max}
           step={field.step}
           onChange={(e) => onChange(Number(e.target.value))}
+          aria-label={label}
         />
       );
     case 'color':
@@ -207,6 +212,7 @@ function renderInput(
           type="color"
           value={asString(value) || field.default}
           onChange={(e) => onChange(e.target.value.toUpperCase())}
+          aria-label={label}
         />
       );
     case 'boolean':
@@ -215,12 +221,17 @@ function renderInput(
           type="checkbox"
           checked={value === true}
           onChange={(e) => onChange(e.target.checked)}
-          aria-label={field.label}
+          aria-label={label}
         />
       );
     case 'select':
       return (
-        <select className={cls} value={asString(value)} onChange={(e) => onChange(e.target.value)}>
+        <select
+          className={cls}
+          value={asString(value)}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label={label}
+        >
           {field.options.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
@@ -236,6 +247,7 @@ function renderInput(
           placeholder="asset id"
           value={imageId(value)}
           onChange={(e) => onChange({ assetId: e.target.value })}
+          aria-label={label}
         />
       );
     case 'text':
@@ -246,6 +258,7 @@ function renderInput(
           type="text"
           value={asString(value)}
           onChange={(e) => onChange(e.target.value)}
+          aria-label={label}
         />
       );
   }

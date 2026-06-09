@@ -21,8 +21,26 @@ const HANDLE_ID = 'designer-library';
 
 let active: Workspace | null = null;
 
+/**
+ * E2E test mode. Playwright sets `window.CG_E2E = true` via `addInitScript` BEFORE
+ * any app JS runs (a real user can't trigger it — it isn't a URL/env flag). In test
+ * mode the Designer uses fresh in-memory storage so runs are isolated and
+ * deterministic and never touch OPFS / the File System Access API (no native
+ * dialogs). This is the ONLY effect of the flag; the Playwright harness separately
+ * neutralizes the native pickers. Test-only — do NOT rely on it in production.
+ */
+export function isE2E(): boolean {
+  return typeof window !== 'undefined' && (window as { CG_E2E?: boolean }).CG_E2E === true;
+}
+
 export async function initWorkspace(): Promise<Workspace> {
   if (active !== null) return active;
+
+  // E2E: isolated in-memory storage, fresh per page load (no OPFS / FS Access).
+  if (isE2E()) {
+    active = new MemoryWorkspace();
+    return active;
+  }
 
   // Prefer a previously-connected on-disk folder when its permission survives.
   if (isFileSystemAccessSupported()) {
@@ -66,6 +84,9 @@ export function isPersistentFolderSupported(): boolean {
   return isFileSystemAccessSupported();
 }
 
-/** Small preferences store (recent files, UI flags). */
+/** Small preferences store (recent files, UI flags). In E2E test mode it is
+ *  in-memory so prefs never leak between runs. */
 export const prefs: KeyValueStore =
-  typeof localStorage !== 'undefined' ? new LocalStorageKv('cg-designer') : new MemoryKv();
+  isE2E() || typeof localStorage === 'undefined'
+    ? new MemoryKv()
+    : new LocalStorageKv('cg-designer');
