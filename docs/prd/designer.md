@@ -555,3 +555,124 @@ let nested children disagree, whereas a CasparCG channel has one fps.
   overrides (mode/holdMs/repeat) are **per-scope**, grouped by the parent + nested
   instance names, session-only. Change:
   `openspec/changes/add-nested-lifecycle-cascade/`.
+
+<!-- Backlog stubs (registered for hygiene; Acceptance to be detailed when scheduled). -->
+
+## [ ] D-027 — Digital clock element ⟨priority: medium⟩
+
+**What:** A clock element that renders live wall-clock / countdown / count-up time
+with a format string (and Persian-digit support).
+**Why:** Clocks are a staple broadcast graphic; today there's no time-driven element.
+**Acceptance to be detailed when scheduled.**
+**Notes:** new element type → `@cg/shared-schema` + `@cg/template-runtime` render
+(see the "add a new element type" extension point in
+`packages/template-runtime/README.md`); reuse `@cg/text-shaping` for digits. Needs a
+runtime time source (relates to the FrameDriver clock seam).
+
+## [ ] D-028 — Ticker / crawler ⟨priority: high⟩
+
+**What:** A horizontal/vertical scrolling ticker fed by a list of items, with
+continuous crawl and per-item pacing.
+**Why:** News crawls are a core deliverable and the most-requested template type.
+**Acceptance to be detailed when scheduled.**
+**Notes:** builds on D-020 `content-driven` playout (per-pass duration from the
+content) and the `durationHook` seam; likely a new element type + a data-list field.
+Depends on D-018 (dynamic fields) and D-020.
+
+## [ ] D-029 — Sequence / now-next ⟨priority: medium⟩
+
+**What:** A template that pages through a sequence of entries (e.g. now/next/later)
+advancing on command or on a timer.
+**Why:** Rundown-style "now & next" lower-thirds are common and not expressible today.
+**Acceptance to be detailed when scheduled.**
+**Notes:** pairs with D-031 (`steps` + real `next()`) and the rundown control app
+(C-002). Depends on D-018.
+
+## [ ] D-030 — Repeater / data-driven layout ⟨priority: medium⟩
+
+**What:** Repeat a sub-layout once per row of a data array (leaderboards, lineups,
+results tables), laying out instances automatically.
+**Why:** Tabular graphics today need manual duplication; a repeater is the scalable
+primitive.
+**Acceptance to be detailed when scheduled.**
+**Notes:** likely composes the nested-composition instancing (D-025) with an
+array-typed field; layout strategy (stack/grid) TBD. Depends on D-025.
+
+## [ ] D-031 — Multi-step templates (`steps`) + real `next()` ⟨priority: medium⟩
+
+**What:** Author discrete steps in a template and wire CasparCG `next()` /
+`runtime.next()` to advance between them.
+**Why:** `TemplateRuntime.next()` is currently an optional stub; multi-step graphics
+(builds, reveals) need it.
+**Acceptance to be detailed when scheduled.**
+**Notes:** schema (`steps`) → runtime `next()` implementation in
+`@cg/template-runtime` (today `next` is unimplemented in `createRuntime`). Underpins
+D-029. Capture behaviour as an OpenSpec change.
+
+## [ ] D-032 — Temporal start-offset for nested instances ⟨priority: medium⟩
+
+**What:** Let each nested composition instance start its lifecycle at a per-instance
+time offset (staggered entrances), instead of all starting at the cascade `play()`.
+**Why:** D-026 explicitly ships child offset 0 for v1; staggering is the natural next
+step for choreographed multi-instance graphics.
+**Acceptance to be detailed when scheduled.**
+**Notes:** extends the D-026 cascade (per-scope delay before `startIntro`); depends on
+D-026.
+
+## [ ] D-033 — Reverse-on-stop option ⟨priority: low⟩
+
+**What:** A playout option to play the entrance in reverse as the exit (instead of a
+separate outro range).
+**Why:** A common quick way to author a clean exit without a dedicated outro segment.
+**Acceptance to be detailed when scheduled.**
+**Notes:** a PlayoutController option (see "add a new playout mode / lifecycle
+behaviour" in `packages/template-runtime/README.md`); depends on D-020.
+
+## [ ] D-034 — Per-cycle event ⟨priority: low⟩
+
+**What:** Emit a runtime event at the boundary of each `loop-cycle` / `content-driven`
+pass (so the host can react / swap data per cycle).
+**Why:** Looping/content-driven graphics need a hook to advance data each pass.
+**Acceptance to be detailed when scheduled.**
+**Notes:** extends the `EventBus` + `PlayoutController.onOutroEnd` cycle boundary;
+distinct from D-021 (idle loop during hold). Depends on D-020.
+
+## [ ] D-035 — `store.ts` refactor ⟨priority: low⟩
+
+**What:** Break up / restructure the Designer renderer store for clarity and
+testability once the feature set settles.
+**Why:** The store has accreted across many features; a refactor reduces risk and
+eases future work.
+**Acceptance to be detailed when scheduled.**
+**Notes:** **do AFTER feature churn settles**, and only **with tests in place first**
+(relates to D-038 + P-004) so the refactor is safety-netted. No behaviour change.
+
+## [ ] D-036 — Engine docs + coverage: canvas editor (Item 2 step 2) ⟨priority: medium⟩
+
+**What:** Internal architecture docs + test-coverage pass for the Designer canvas
+editor, mirroring the template-runtime engine docs effort (Item 2 step 1).
+**Why:** The canvas editor is core + churned; it needs the same "how it's built +
+extension points + coverage" treatment so it stays maintainable.
+**Acceptance to be detailed when scheduled.**
+**Notes:** docs + tests only, no behaviour change (track as a quality item like the
+template-runtime pass); follow the engine doc-sync rule in `CLAUDE.md`. Companion to
+D-037.
+
+## [ ] D-037 — Engine docs + coverage: animation/keyframe (Item 2 step 3) ⟨priority: medium⟩
+
+**What:** Internal architecture docs + test-coverage pass for the Designer
+animation/keyframe subsystem (timeline, keyframe-helpers, evaluators).
+**Why:** Animation is the most bug-prone area (see B-005/006/007); docs + coverage
+harden it.
+**Acceptance to be detailed when scheduled.**
+**Notes:** docs + tests only, no behaviour change; quality item. Companion to D-036.
+
+## [ ] D-038 — Broaden Designer UI unit coverage ⟨priority: low⟩
+
+**What:** Grow unit-test coverage of the Designer renderer (inspector sections,
+panels, store reducers) beyond the current animation/binding focus.
+**Why:** Many UI paths are only covered by E2E (P-005) or not at all; unit coverage
+catches regressions faster.
+**Acceptance to be detailed when scheduled.**
+**Notes:** complements P-004 (Exporter/Preview tests) and P-005 (E2E); prerequisite
+safety net for D-035.
