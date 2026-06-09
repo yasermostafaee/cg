@@ -47,6 +47,7 @@ import { buildScene } from './scene-builder.js';
 import type {
   FieldScope,
   PlayOptions,
+  PlayoutOverride,
   RuntimeBootOptions,
   StopOptions,
   TemplateRuntime,
@@ -111,14 +112,24 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // (auto-out / loop-cycle / content-driven) runs. Looping is no longer a silent
   // default and there is no separate continuous-loop mode — a looping logo is
   // `loop-cycle` with `repeat: 'infinite'`. The stored `playout` carries the
-  // defaults; `playoutOverride` (preview session / future rundown) overrides them
-  // for THIS run only, and only on the ROOT scope.
-  const base = playoutOf(scene);
-  const ov = options.playoutOverride;
-  const effectivePlayout: Playout = {
-    mode: ov?.mode ?? base.mode,
-    holdMs: ov?.holdMs ?? base.holdMs,
-    repeat: ov?.repeat ?? base.repeat,
+  // defaults.
+  //
+  // D-026 — per-scope, non-persistent overrides (preview session / future rundown)
+  // override the stored playout for THIS run only, keyed by the scope's
+  // instance-name path (`''` = root). `playoutOverride` is the legacy root-only
+  // alias for `scopeOverrides['']`.
+  const overrides: Record<string, PlayoutOverride> = { ...(options.scopeOverrides ?? {}) };
+  if (options.playoutOverride !== undefined && overrides[''] === undefined) {
+    overrides[''] = options.playoutOverride;
+  }
+  const effectivePlayoutFor = (source: { playout?: Playout | undefined }, path: string): Playout => {
+    const b = playoutOf(source);
+    const o = overrides[path];
+    return {
+      mode: o?.mode ?? b.mode,
+      holdMs: o?.holdMs ?? b.holdMs,
+      repeat: o?.repeat ?? b.repeat,
+    };
   };
 
   // D-026 — the root scope alone drives the global lifecycle machine + events: its
@@ -137,18 +148,18 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
   // D-026 — build a PARALLEL controller tree over the field-scope tree: one
   // controller per scope, all on the single project fps (`scene.frameRate`). The
-  // root uses the effective (overridable) playout and drives the machine/events;
-  // each nested instance uses its own stored `playout`/`lifecycle`/`activeRange`
-  // and emits nothing globally, so play/stop/pause cascade while every child runs
-  // its own in→hold→out independently.
+  // root drives the machine/events; each scope uses its own stored
+  // `playout`/`lifecycle`/`activeRange` merged with its per-scope override, so
+  // play/stop/pause cascade while every child runs its own in→hold→out
+  // independently and can be timed independently in the preview.
   const noop = (): void => undefined;
-  const buildScopeController = (scope: FieldScope, isRoot: boolean): ScopeNode => {
+  const buildScopeController = (scope: FieldScope, isRoot: boolean, path: string): ScopeNode => {
     const own = scope.animated;
     const controller = new PlayoutController({
       frameRate: scene.frameRate,
       active: activeRangeOf(scope.source),
       lifecycle: scope.source.lifecycle,
-      playout: isRoot ? effectivePlayout : playoutOf(scope.source),
+      playout: effectivePlayoutFor(scope.source, path),
       hasAnimation: own.length > 0,
       applyFrame: (frame: number): void => {
         for (const entry of own) applyAnimationAtFrame(entry, frame);
@@ -158,10 +169,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       durationHook: isRoot ? options.durationHook : undefined,
       clock: options.clock,
     });
-    const children = scope.children.map((c) => buildScopeController(c.scope, false));
+    const children = scope.children.map((c) =>
+      buildScopeController(c.scope, false, path === '' ? c.name : `${path}.${c.name}`),
+    );
     return { controller, children };
   };
-  const rootNode = buildScopeController(built.scopeTree, true);
+  const rootNode = buildScopeController(built.scopeTree, true, '');
 
   // Apply an operation to every controller in the tree (parent first), so
   // play/stop/pause/resume/remove cascade to every nested instance.

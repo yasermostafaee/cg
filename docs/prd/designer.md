@@ -543,5 +543,10 @@ let nested children disagree, whereas a CasparCG channel has one fps.
   inspector fps is read-only
   **Notes:** child offset 0 for v1 (no `lifespan` overload); root scope drives the
   global machine/events + session playout override, children use their own stored
-  playout; single fps applied across all scopes (FrameDriver is time-based). Change:
+  playout; single fps applied across all scopes (FrameDriver is time-based).
+  Refinements (same change): cascade `stop()` is **state-aware** — a child that
+  already finished (auto-out exited / finite loop-cycle or content-driven completed)
+  is NOT re-exited; active/infinite/manual/paused children still exit. Preview timing
+  overrides (mode/holdMs/repeat) are **per-scope**, grouped by the parent + nested
+  instance names, session-only. Change:
   `openspec/changes/add-nested-lifecycle-cascade/`.

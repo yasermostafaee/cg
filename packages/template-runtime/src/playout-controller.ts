@@ -79,6 +79,12 @@ export class PlayoutController {
   private cyclesLeft: number | 'infinite' = 1;
   // Guards `onExitStart` to fire exactly once per exit, before `onSettle`.
   private exitAnnounced = false;
+  // D-026 — has this controller finished its lifecycle and settled (its outro ran
+  // to the end, or a finite loop-cycle / content-driven completed all its cycles)?
+  // A settled controller is DONE: a cascaded `stop()` must NOT replay its exit.
+  // Reset by `play()` (via `reset()`); an infinite loop / manual hold / paused
+  // scope is NOT settled, so it still exits on stop.
+  private settled = false;
 
   constructor(options: PlayoutControllerOptions) {
     this.o = options;
@@ -100,14 +106,28 @@ export class PlayoutController {
     this.startIntro();
   }
 
-  /** Take the graphic off air: run the OUT (instant when the outro is empty). */
+  /**
+   * Take the graphic off air: run the OUT (instant when the outro is empty).
+   *
+   * D-026 — a SETTLED controller (its lifecycle already finished: auto-out exited,
+   * or a finite loop-cycle / content-driven completed its cycles) is a no-op — a
+   * cascaded `stop()` from the parent must not replay the exit on a child that's
+   * already done. A still-active scope (intro / hold / infinite loop / manual /
+   * paused) exits normally.
+   */
   stop(): void {
+    if (this.settled) return; // already finished — don't replay the exit
     this.clearHold();
     // Force the current cycle to be the last, then play the outro once. An empty
     // outro (`outPoint === active.out`, e.g. no marker) settles instantly.
     this.cyclesLeft = 1;
     if (this.phase === 'outro') return; // already exiting
     this.startOutro();
+  }
+
+  /** D-026 — whether this controller has finished its lifecycle and settled. */
+  isSettled(): boolean {
+    return this.settled;
   }
 
   pause(): void {
@@ -197,6 +217,7 @@ export class PlayoutController {
       }
     }
     this.phase = 'idle';
+    this.settled = true;
     this.announceExit();
     this.o.onSettle();
   }
@@ -268,5 +289,6 @@ export class PlayoutController {
     this.phase = 'idle';
     this.paused = false;
     this.exitAnnounced = false;
+    this.settled = false;
   }
 }

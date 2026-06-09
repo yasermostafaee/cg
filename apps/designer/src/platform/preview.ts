@@ -166,6 +166,9 @@ export class Preview {
         // Set by 'scene-replace' so the preview can test timing without touching
         // the stored template; passed straight to createRuntime on every rebuild.
         let playoutOverride = undefined;
+        // D-026 — PER-SCOPE overrides keyed by instance-name path ('' = root). Lets
+        // the preview time each nested child independently (session-only).
+        let scopeOverrides = undefined;
         // Families we've already loaded into this iframe's
         // document.fonts. Keyed by family name; the value is the
         // assetUrl we loaded from, so we can re-fetch when a font
@@ -265,7 +268,10 @@ export class Preview {
             // both so the next createRuntime starts clean.
             document.body.classList.remove('cg-removed');
             document.body.classList.remove('cg-pending');
-            runtime = createRuntime(scene, { playoutOverride: playoutOverride });
+            runtime = createRuntime(scene, {
+              playoutOverride: playoutOverride,
+              scopeOverrides: scopeOverrides,
+            });
             installCasparGlobals(runtime);
             await runtime.ready;
             document.body.classList.remove('cg-pending');
@@ -303,6 +309,11 @@ export class Preview {
                 playoutOverride =
                   msg.playoutOverride && typeof msg.playoutOverride === 'object'
                     ? msg.playoutOverride
+                    : undefined;
+                // D-026 — per-scope overrides (path → {mode/holdMs/repeat}).
+                scopeOverrides =
+                  msg.scopeOverrides && typeof msg.scopeOverrides === 'object'
+                    ? msg.scopeOverrides
                     : undefined;
                 await applyScene(msg.scene);
               } else if (msg.action === 'asset-urls' && msg.assetUrls) {

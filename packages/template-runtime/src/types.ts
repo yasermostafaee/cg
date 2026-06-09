@@ -143,9 +143,23 @@ export interface RuntimeBootOptions {
    * without touching the stored template. The designer preview supplies them for
    * session-only testing, and the rundown (the control app) will drive them live
    * on air later — this is the seam that keeps mode + hold + repeat overridable.
-   * Absent fields fall back to the stored `scene.playout`.
+   * Absent fields fall back to the stored `scene.playout`. Equivalent to
+   * `scopeOverrides['']` (the root scope); if both are given, `scopeOverrides['']`
+   * wins.
    */
   playoutOverride?: PlayoutOverride;
+
+  /**
+   * D-026 — PER-SCOPE non-persistent playout overrides, keyed by the scope's
+   * instance-name PATH within the composition-instance tree: `''` is the root
+   * (this composition), `'home'` a direct child instance, `'home.inner'` a
+   * grandchild — the same instance names the nested field scopes use. Each entry
+   * overrides that scope's stored `playout` (mode / holdMs / repeat) for THIS run
+   * only, so a parent can independently test each child's timing (e.g. `home`
+   * loops 3×, `away` loops infinitely) without touching any stored template.
+   * Absent scopes fall back to their own stored `playout`.
+   */
+  scopeOverrides?: Record<string, PlayoutOverride>;
 }
 
 /**

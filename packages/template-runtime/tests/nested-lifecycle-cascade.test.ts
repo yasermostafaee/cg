@@ -273,3 +273,83 @@ describe('D-026 — nested-lifecycle cascade', () => {
     r.remove();
   });
 });
+
+describe('D-026 — state-aware cascade stop', () => {
+  it('(P1-a) parent stop does NOT re-exit a child that already finished (auto-out)', async () => {
+    const clock = makeClock();
+    // Child auto-outs on its own: intro [0→20] (→0.5), hold, outro [20→40] (→1.0),
+    // then settles at frame 40 (opacity 1.0).
+    const done = comp('done', 20, [animShape('dx')], { mode: 'auto-out', holdMs: 100 });
+    const scene = parentScene({
+      compositions: [done],
+      children: [instance('i-done', 'done', 'done')],
+      lifecycle: { outPoint: 20 }, // parent itself holds (manual)
+    });
+    const r = createRuntime(scene, { skipFontLoad: true, clock });
+    await r.play({});
+    run(clock, 2000); // the child auto-outs and settles at its outro end (1.0)
+    expect(opacityAt('i-done', 'dx')).toBeCloseTo(1);
+
+    await r.stop();
+    // The settled child is NOT re-exited: it stays at 1.0. A replayed exit would
+    // restart its outro from the out-point (frame 20 → 0.5), jumping it backwards.
+    expect(opacityAt('i-done', 'dx')).toBeCloseTo(1);
+    r.remove();
+  });
+
+  it('(P1-b) parent stop DOES exit an active infinite-loop child', async () => {
+    const clock = makeClock();
+    const loop = comp('loop', 20, [animShape('lx')], {
+      mode: 'loop-cycle',
+      holdMs: 100,
+      repeat: 'infinite',
+    });
+    const scene = parentScene({
+      compositions: [loop],
+      children: [instance('i-loop', 'loop', 'loop')],
+      lifecycle: { outPoint: 20 },
+    });
+    const r = createRuntime(scene, { skipFontLoad: true, clock });
+    await r.play({});
+    run(clock, 1500); // looping — never settles on its own
+
+    await r.stop();
+    run(clock, 1500); // forced final outro completes
+    // Exited: frozen at its outro end (frame 40 → 1.0) and no longer looping.
+    const settledValue = opacityAt('i-loop', 'lx');
+    expect(settledValue).toBeCloseTo(1);
+    run(clock, 2000);
+    expect(opacityAt('i-loop', 'lx')).toBeCloseTo(settledValue); // stable, not looping
+    r.remove();
+  });
+});
+
+describe('D-026 — per-scope preview timing overrides', () => {
+  it('(P2) a per-scope override times one child without affecting its sibling or the stored template', async () => {
+    const clock = makeClock();
+    // The SAME child composition instanced twice (home / away), stored as manual.
+    const team = comp('team', 20, [animShape('tx')]);
+    const scene = parentScene({
+      compositions: [team],
+      children: [instance('i-home', 'home', 'team'), instance('i-away', 'away', 'team')],
+      lifecycle: { outPoint: 20 },
+    });
+    const r = createRuntime(scene, {
+      skipFontLoad: true,
+      clock,
+      // Only HOME is overridden (session-only) to auto-out; AWAY keeps its stored
+      // manual default.
+      scopeOverrides: { home: { mode: 'auto-out', holdMs: 100 } },
+    });
+    await r.play({});
+    run(clock, 3000);
+
+    // home ran its auto-out outro and settled at its outro end (frame 40 → 1.0).
+    expect(opacityAt('i-home', 'tx')).toBeCloseTo(1);
+    // away got NO override → stored manual → holds at its out-point (frame 20 → 0.5).
+    expect(opacityAt('i-away', 'tx')).toBeCloseTo(0.5);
+    // Session-only: the stored composition's playout is untouched.
+    expect(scene.compositions?.find((c) => c.id === 'team')?.playout).toBeUndefined();
+    r.remove();
+  });
+});

@@ -19,11 +19,12 @@ nested child SHALL start together with its parent (offset 0); element `lifespan`
 - **THEN** each child plays its own intro once and holds at its OWN out-point, so two
   children with different out-points hold at different frames at the same time
 
-#### Scenario: Parent stop runs each child's own exit
+#### Scenario: Parent stop runs each ACTIVE child's own exit
 
 - **WHEN** `stop()` is called on the parent
-- **THEN** each nested child plays its OWN outro `[outPoint → activeRange.out]` and
-  settles, cascaded from the parent
+- **THEN** each still-active nested child plays its OWN outro `[outPoint →
+  activeRange.out]` and settles, cascaded from the parent (a child that already
+  finished is left untouched — see the state-aware stop requirement)
 
 #### Scenario: Parent pause/resume cascades to children
 
@@ -81,3 +82,55 @@ whole project.
 - **WHEN** the inspector shows a composition's frame rate
 - **THEN** it is presented read-only (the single project fps), not an editable
   per-composition control
+
+### Requirement: Cascade stop is state-aware (settled scopes are not re-exited)
+
+A cascaded `stop()` SHALL respect each scope's CURRENT lifecycle state. A scope that
+is still ACTIVE — playing its intro, holding, looping (including an infinite loop),
+manual, or paused — SHALL play its exit and settle. A scope that has already SETTLED
+on its own — an `auto-out` that already exited, or a `loop-cycle` / `content-driven`
+that completed its finite cycles/passes — SHALL be a NO-OP: it is left in its
+finished state and its exit SHALL NOT be replayed. This SHALL apply to the parent's
+own controller too (its own stop only exits when its direct-element lifecycle is
+still active).
+
+#### Scenario: A finished child is not re-exited on parent stop
+
+- **WHEN** a nested child has already finished on its own (its `auto-out` exited, or
+  its finite `loop-cycle` / `content-driven` completed) and then `stop()` is called
+  on the parent
+- **THEN** that child is NOT re-exited — it stays in its finished state, and the exit
+  is not replayed
+
+#### Scenario: Active, infinite-loop, manual, and paused children still exit
+
+- **WHEN** `stop()` is called on the parent while a child is still active — mid
+  intro/hold, looping infinitely, holding in `manual`, or paused
+- **THEN** that child plays its own exit and settles
+
+### Requirement: Preview timing overrides are per-scope and session-only
+
+The preview's session-only timing overrides (`mode` / `holdMs` / `repeat`) SHALL be
+PER-SCOPE, grouped by the composition-instance tree (the parent plus each nested
+child instance, using the SAME instance names as the nested field scopes). Each
+scope SHALL carry its own override, applied to the preview run only and addressed by
+the scope's instance-name path, so a parent can test each child's timing
+independently (e.g. one child loops 3×, another loops infinitely). Changing one
+scope's override SHALL affect ONLY that scope and SHALL NOT change any stored
+template defaults (consistent with the existing session-only override rule;
+authoritative per-child on-air control belongs to the rundown). The preview SHALL
+show timing controls for the active composition always, and for a nested scope only
+when its mode is timing-relevant (`auto-out` / `loop-cycle` / `content-driven`).
+
+#### Scenario: The preview shows per-scope timing controls grouped by instance
+
+- **WHEN** the preview opens on a parent that nests child instances `home` and `away`
+- **THEN** the timing controls are grouped per scope — the parent plus each
+  timing-relevant nested instance, labelled by its instance name
+
+#### Scenario: A per-scope override times one child without touching others or the template
+
+- **WHEN** the operator changes a child scope's mode / hold / repeat in the preview
+- **THEN** only that scope's preview timing changes for the session (e.g. `home`
+  loops 3× while `away` loops infinitely), every other scope and all stored template
+  defaults are left unchanged

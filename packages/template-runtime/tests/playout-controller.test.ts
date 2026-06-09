@@ -222,3 +222,54 @@ describe('PlayoutController', () => {
     expect(h.events).toEqual(['exit', 'settle']);
   });
 });
+
+describe('PlayoutController — D-026 state-aware stop', () => {
+  it('stop() on a SETTLED auto-out controller is a no-op (does not replay the exit)', () => {
+    const h = make({ mode: 'auto-out', holdMs: 1000 });
+    h.controller.play();
+    h.clock.advance(1000); // hold elapses → outro → settle
+    expect(h.events).toEqual(['exit', 'settle']);
+    expect(h.controller.isSettled()).toBe(true);
+    h.controller.stop(); // already finished — must NOT re-exit
+    expect(h.events).toEqual(['exit', 'settle']); // unchanged
+  });
+
+  it('stop() on a COMPLETED finite loop-cycle is a no-op', () => {
+    const h = make({ mode: 'loop-cycle', holdMs: 500, repeat: 2 });
+    h.controller.play();
+    h.clock.advance(500); // cycle 1 → cycle 2
+    h.clock.advance(500); // cycle 2 → settle
+    expect(h.events).toEqual(['exit', 'settle']);
+    expect(h.controller.isSettled()).toBe(true);
+    h.controller.stop();
+    expect(h.events).toEqual(['exit', 'settle']); // not re-exited
+  });
+
+  it('stop() still exits an INFINITE loop (it never settles on its own)', () => {
+    const h = make({ mode: 'loop-cycle', holdMs: 500, repeat: 'infinite' });
+    h.controller.play();
+    for (let i = 0; i < 4; i++) h.clock.advance(500);
+    expect(h.events).toEqual([]); // looping, not settled
+    expect(h.controller.isSettled()).toBe(false);
+    h.controller.stop();
+    expect(h.events).toEqual(['exit', 'settle']);
+  });
+
+  it('stop() still exits a MANUAL hold', () => {
+    const h = make({ mode: 'manual' });
+    h.controller.play();
+    expect(h.controller.isSettled()).toBe(false);
+    h.controller.stop();
+    expect(h.events).toEqual(['exit', 'settle']);
+  });
+
+  it('stop() still exits a PAUSED controller', () => {
+    const h = make({ mode: 'auto-out', holdMs: 1000 });
+    h.controller.play();
+    h.clock.advance(400);
+    h.controller.pause();
+    expect(h.controller.isSettled()).toBe(false);
+    h.controller.stop();
+    expect(h.events).toEqual(['exit', 'settle']);
+  });
+});

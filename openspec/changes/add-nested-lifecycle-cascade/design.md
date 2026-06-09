@@ -54,3 +54,29 @@ in practice every comp already matched the project fps.
 The injected-clock controllers drive on-air playback. `tick(frame)` (the designer
 scrubber) paints a single shared frame across a flat union of every scope's
 `animated`, independent of the controllers.
+
+### State-aware cascade stop
+
+The naïve cascade replayed the exit on every child, even one whose own lifecycle had
+already finished (an `auto-out` that exited, or a finite `loop-cycle` /
+`content-driven` that completed). The `PlayoutController` already owns a lifecycle
+state, so it gains a `settled` flag — set in `onOutroEnd` when it actually settles,
+reset in `reset()` (i.e. on `play()`). `stop()` self-gates: `if (this.settled)
+return;`. Self-gating (rather than gating in the runtime cascade) keeps the rule in
+one place and makes `stop()` idempotent for every caller, including the parent's own
+controller. An infinite loop never reaches the settle branch, and manual/paused
+scopes are mid-lifecycle — all stay `settled === false`, so they still exit.
+
+### Per-scope overrides keyed by instance-name path
+
+The single root-only `playoutOverride` becomes `scopeOverrides: Record<path,
+PlayoutOverride>`, keyed by the scope's instance-name path (`''` = root, `'home'`,
+`'home.inner'`) — the SAME paths the field scopes use. `buildScopeController` now
+takes the scope's `path`, merges `overrides[path]` onto `playoutOf(scope.source)`
+for EVERY scope (root included; `effectivePlayout` is no longer a special case), and
+recurses with `path === '' ? c.name : `${path}.${c.name}``. `playoutOverride` stays
+as a back-compat alias for `scopeOverrides['']`. The preview builds the matching
+tree with `timingScopeList(scene)` (DFS over `compositionInstancesOf` + the
+`compositions` registry, same depth/visited guards) and renders one control group
+per scope; nested scopes are shown only when timing-relevant. Per-scope overrides are
+session-only — the runtime reads them at boot and never writes back to the scene.

@@ -10,7 +10,8 @@ import {
 import { Modal } from '../shell/Modal.js';
 import { PreviewFieldForm, type PreviewDispatch } from './PreviewFieldForm.js';
 import { PreviewTransport } from './PreviewTransport.js';
-import { PreviewTimingControls, type TimingOverride } from './PreviewTimingControls.js';
+import { PreviewScopeTiming } from './PreviewScopeTiming.js';
+import { type TimingOverride } from './PreviewTimingControls.js';
 import * as s from './PreviewModal.css.js';
 
 /** A stable key for the aggregate's SHAPE (fields + nested namespaces), so the
@@ -70,10 +71,12 @@ export function PreviewModal({
   // Measured stage size, so the composition scales to fit whatever the (large)
   // modal gives us rather than a fixed thumbnail.
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
-  // D-020 — session-only playout override (mode / holdMs / repeat). Held here,
-  // never written back to the stored scene; applied by rebuilding the preview
-  // runtime with this override (see the scene-replace effect).
-  const [override, setOverride] = useState<TimingOverride>({});
+  // D-020 / D-026 — session-only playout overrides (mode / holdMs / repeat), now
+  // PER-SCOPE: keyed by the composition-instance path (`''` = this composition,
+  // `'home'` a child instance, `'home.inner'` a grandchild — the same names the
+  // nested field scopes use). Held here, never written back to the stored scene;
+  // applied by rebuilding the preview runtime with these overrides.
+  const [overrides, setOverrides] = useState<Record<string, TimingOverride>>({});
 
   // D-025 — the aggregated fields: this composition's own fields plus each nested
   // child instance's fields under its namespace.
@@ -98,7 +101,7 @@ export function PreviewModal({
   // sync).
   useEffect(() => {
     let alive = true;
-    setOverride({});
+    setOverrides({});
     setPaused(false);
     void window.cg.preview.load({ scene }).then((res) => {
       if (alive) setHtml(res.html);
@@ -172,14 +175,15 @@ export function PreviewModal({
     setPaused(false);
   }, [dispatch, aggregate]);
 
-  // Apply a session override by rebuilding the preview runtime with it (the
-  // stored scene + a non-persistent `playoutOverride`). The iframe preserves
-  // typed field values across the rebuild, and the stored scene is untouched.
-  // No-op until the operator actually changes a knob.
+  // Apply the session overrides by rebuilding the preview runtime with them (the
+  // stored scene + non-persistent per-scope overrides). The iframe preserves typed
+  // field values across the rebuild, and the stored scene is untouched. No-op until
+  // the operator actually changes a knob on some scope.
   useEffect(() => {
-    if (Object.keys(override).length === 0) return;
-    post({ action: 'scene-replace', scene, playoutOverride: override });
-  }, [override, scene, post]);
+    const hasAny = Object.values(overrides).some((o) => Object.keys(o).length > 0);
+    if (!hasAny) return;
+    post({ action: 'scene-replace', scene, playoutOverride: overrides[''], scopeOverrides: overrides });
+  }, [overrides, scene, post]);
 
   // Seed our iframe (only ours) once it signals readiness.
   useEffect(() => {
@@ -239,10 +243,12 @@ export function PreviewModal({
               onNext={onNext}
               onReset={onReset}
             />
-            <PreviewTimingControls
+            <PreviewScopeTiming
               scene={scene}
-              override={override}
-              onChange={(patch) => setOverride((prev) => ({ ...prev, ...patch }))}
+              overrides={overrides}
+              onChange={(path, patch) =>
+                setOverrides((prev) => ({ ...prev, [path]: { ...prev[path], ...patch } }))
+              }
             />
           </div>
         </div>

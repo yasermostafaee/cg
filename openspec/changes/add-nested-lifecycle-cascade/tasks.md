@@ -35,8 +35,34 @@
 - [x] 4.1 `news.ts`, `showcase.ts` — composition literals drop `frameRate` (scene
       fps retained).
 
-## 5. Gate
+## 5. State-aware cascade stop (refinement)
 
-- [x] 5.1 Green gate: typecheck + lint + test + build for `@cg/shared-schema`,
+- [x] 5.1 `playout-controller.ts` — track a `settled` flag (set when the outro
+      finishes / a finite loop completes, reset by `play()`); `stop()` no-ops when
+      settled; add `isSettled()`.
+- [x] 5.2 Tests — controller: stop on a settled auto-out / completed finite
+      loop-cycle is a no-op; stop still exits infinite-loop / manual / paused.
+- [x] 5.3 Tests — runtime: a finished child is NOT re-exited on parent stop; an
+      active infinite-loop child IS exited.
+
+## 6. Per-scope preview timing (refinement)
+
+- [x] 6.1 `types.ts` — add `RuntimeBootOptions.scopeOverrides` (path → override);
+      `runtime.ts` merges each scope's override onto its stored playout by path
+      (`''` = root; `playoutOverride` is the root alias).
+- [x] 6.2 `PreviewTimingControls.tsx` — accept a narrowed `source` + `title`; export
+      `effectiveMode` / `TIMING_RELEVANT_MODES`. `PreviewScopeTiming.tsx` (NEW) —
+      build the per-scope timing tree (`timingScopeList`) and render grouped
+      controls (root always; nested only when timing-relevant). `PreviewModal.tsx` —
+      per-scope `overrides` state, posts `scopeOverrides`. `platform/preview.ts` —
+      plumb `scopeOverrides` into `createRuntime`.
+- [x] 6.3 Tests — runtime: a per-scope override times one child, leaving its sibling
+      and the stored template unchanged (session-only). Designer: `timingScopeList`
+      groups by parent + each nested instance (distinct paths; deeper dotted paths);
+      timing-relevance gating.
+
+## 7. Gate
+
+- [x] 7.1 Green gate: typecheck + lint + test + build for `@cg/shared-schema`,
       `@cg/template-runtime`, `@cg/starter-templates`, `@cg/designer`.
-- [x] 5.2 `pnpm openspec validate add-nested-lifecycle-cascade --strict`.
+- [x] 7.2 `pnpm openspec validate add-nested-lifecycle-cascade --strict`.

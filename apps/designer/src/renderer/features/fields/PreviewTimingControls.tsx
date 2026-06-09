@@ -1,9 +1,27 @@
-import { playoutOf, type PlayoutMode, type Scene } from '@cg/shared-schema';
+import { playoutOf, type Lifecycle, type Playout, type PlayoutMode } from '@cg/shared-schema';
 import { Callout } from '../../ui/Callout.js';
 import { CollapseSection } from '../inspector/CollapseSection.js';
 import { RealtimeNumberInput } from '../inspector/controls.js';
 import * as s from '../inspector/InspectorPanel.css.js';
 import * as t from './PreviewTimingControls.css.js';
+
+/** The lifecycle-relevant fields of the scope a timing control edits. */
+export interface TimingSource {
+  playout?: Playout | undefined;
+  lifecycle?: Lifecycle | undefined;
+}
+
+/** Modes that are worth timing in the preview (have an outro / repeat to tune). */
+export const TIMING_RELEVANT_MODES: ReadonlySet<PlayoutMode> = new Set<PlayoutMode>([
+  'auto-out',
+  'loop-cycle',
+  'content-driven',
+]);
+
+/** The effective playout mode of a scope: its override, else its stored default. */
+export function effectiveMode(source: TimingSource, override: TimingOverride): PlayoutMode {
+  return override.mode ?? playoutOf(source).mode;
+}
 
 /**
  * D-020 — a session-only playout override: `mode` + `holdMs` + `repeat`. Held by
@@ -40,16 +58,24 @@ const NEEDS_OUTPOINT: ReadonlySet<PlayoutMode> = new Set<PlayoutMode>(['auto-out
  * toggle. Authoritative live control of these belongs to the rundown (future).
  */
 export function PreviewTimingControls({
-  scene,
+  source,
+  title = 'Timing (session)',
+  defaultExpanded = true,
+  showFooter = true,
   override,
   onChange,
 }: {
-  scene: Scene;
+  source: TimingSource;
+  /** Section header — the scope's label (e.g. the composition or instance name). */
+  title?: string;
+  defaultExpanded?: boolean;
+  /** Show the "session only" footnote (once is enough when many scopes stack). */
+  showFooter?: boolean;
   override: TimingOverride;
   onChange: (patch: TimingOverride) => void;
 }): JSX.Element {
-  const stored = playoutOf(scene);
-  const hasOutPoint = scene.lifecycle !== undefined;
+  const stored = playoutOf(source);
+  const hasOutPoint = source.lifecycle !== undefined;
   const mode = override.mode ?? stored.mode;
   const holdMs = override.holdMs ?? stored.holdMs ?? 0;
   const repeat = override.repeat ?? stored.repeat;
@@ -62,10 +88,10 @@ export function PreviewTimingControls({
   const showRepeat = mode === 'content-driven' || (mode === 'loop-cycle' && hasOutPoint);
 
   return (
-    <CollapseSection title="Timing (session)" defaultExpanded>
+    <CollapseSection title={title} defaultExpanded={defaultExpanded}>
       {hasOutPoint ? (
         <p className={t.hint}>
-          Out point @ frame {String(scene.lifecycle?.outPoint)} (set on the timeline).
+          Out point @ frame {String(source.lifecycle?.outPoint)} (set on the timeline).
         </p>
       ) : (
         <Callout variant="info" className={t.notice}>
@@ -135,10 +161,12 @@ export function PreviewTimingControls({
         </div>
       )}
 
-      <p className={t.hint}>
-        Session only — these test the playout and do not change the template&apos;s stored defaults.
-        Authoritative live control belongs to the rundown.
-      </p>
+      {showFooter && (
+        <p className={t.hint}>
+          Session only — these test the playout and do not change the template&apos;s stored
+          defaults. Authoritative live control belongs to the rundown.
+        </p>
+      )}
     </CollapseSection>
   );
 }
