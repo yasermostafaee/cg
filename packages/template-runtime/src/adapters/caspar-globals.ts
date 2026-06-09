@@ -24,11 +24,11 @@ export function installCasparGlobals(
   const previousRemove = win.remove;
   const previousCg = win.cg;
 
-  win.play = (payload?: string) => {
-    void runtime.play(parsePayload(payload) as FieldValues);
+  win.play = (payload?: string | Record<string, unknown>) => {
+    void runtime.play(coercePayload(payload) as FieldValues);
   };
-  win.update = (payload?: string) => {
-    void runtime.update(parsePayload(payload));
+  win.update = (payload?: string | Record<string, unknown>) => {
+    void runtime.update(coercePayload(payload));
   };
   // window.stop already exists in lib.dom (it cancels page loads). We're
   // overriding it intentionally for the broadcast template — the page
@@ -62,15 +62,22 @@ export function installCasparGlobals(
   };
 }
 
-function parsePayload(s?: string): Partial<FieldValues> {
-  if (!s) return {};
+/**
+ * Accept what CasparCG (a JSON/XML *string*) and a direct `window.update({…})`
+ * caller (an already-parsed *object*) both send. JSON stays canonical; unknown
+ * keys are harmless (bindings only apply declared fields).
+ */
+function coercePayload(payload?: string | Record<string, unknown>): Partial<FieldValues> {
+  if (payload === undefined || payload === null) return {};
+  if (typeof payload === 'string') return parsePayload(payload);
+  if (typeof payload === 'object') return payload as Partial<FieldValues>;
+  return {};
+}
+
+function parsePayload(s: string): Partial<FieldValues> {
   const trimmed = s.trim();
-  if (trimmed.startsWith('<')) {
-    // Legacy XML payload — deferred. Stations migrating from existing
-    // CG systems will need this; for M3 we accept the raw string and
-    // pass through (operator gets one update with no fields applied).
-    return {};
-  }
+  if (trimmed === '') return {};
+  if (trimmed.startsWith('<')) return parseCasparXml(trimmed);
   try {
     const parsed = JSON.parse(trimmed) as unknown;
     if (parsed && typeof parsed === 'object') return parsed as Partial<FieldValues>;
@@ -81,10 +88,44 @@ function parsePayload(s?: string): Partial<FieldValues> {
   return {};
 }
 
+/**
+ * Parse CasparCG's legacy template-data XML into `{ key: value }`:
+ *   <templateData>
+ *     <componentData id="f0"><data id="text" value="Hello"/></componentData>
+ *     …
+ *   </templateData>
+ * Each `componentData id` is a field key; its inner `<data … value="…"/>` holds
+ * the value. Regex-based (no DOMParser) so it runs identically in the broadcast
+ * frame and in tests; entities in the value are decoded.
+ */
+function parseCasparXml(xml: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const comp = /<componentData\b[^>]*\bid="([^"]*)"[^>]*>([\s\S]*?)<\/componentData>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = comp.exec(xml)) !== null) {
+    const key = decodeXmlEntities(m[1] ?? '');
+    if (key === '') continue;
+    const dataM = /<data\b[^>]*\bvalue="([^"]*)"/i.exec(m[2] ?? '');
+    if (dataM !== null) out[key] = decodeXmlEntities(dataM[1] ?? '');
+  }
+  return out;
+}
+
+function decodeXmlEntities(s: string): string {
+  return s
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d: string) => String.fromCodePoint(Number(d)))
+    .replace(/&amp;/g, '&'); // last, so "&amp;lt;" decodes to "&lt;" not "<"
+}
+
 declare global {
   interface Window {
-    play?: (payload?: string) => void;
-    update?: (payload?: string) => void;
+    play?: (payload?: string | Record<string, unknown>) => void;
+    update?: (payload?: string | Record<string, unknown>) => void;
     next?: () => void;
     remove?: () => void;
     cg?: TemplateRuntime;

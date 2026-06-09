@@ -305,7 +305,6 @@ inspector hides frame/value/property and shows only the easing editor + a
   **Notes:** store gains `selectedKeyframes` (multi) + `addKeyframeToSelection`;
   supersedes the old single/double-click split from `add-animation-timeline-dock`.
 
-
 ## [~] D-018 — Dynamic text fields (data binding + live preview) ⟨priority: high⟩
 
 **What:** A text element becomes a runtime data field when it's given a **Data
@@ -348,7 +347,7 @@ broadcast CG template.
   (`apps/designer/src/platform/preview.ts`, `bridge.preview.update`).
   Change: `openspec/changes/add-dynamic-text-fields/`.
 
-## [ ] D-019 — Single-file CasparCG HTML export (+ embedded GDD) ⟨priority: high⟩
+## [~] D-019 — Single-file CasparCG HTML export (+ embedded GDD) ⟨priority: high⟩
 
 **What:** A "Download HTML" action that exports the current composition as **one
 self-contained, `file://`-safe `.html`** to drop into CasparCG's `templates/`:
@@ -384,3 +383,175 @@ straight into CasparCG, and no GDD for standard CG clients.
   OGraf now). Keep CSS within common CasparCG CEF builds (63 = 2.2, 71 = 2.3.x,
   117 = 2.4.x). Leaves the existing `.vcg` exporter unchanged.
   Change: `openspec/changes/add-caspar-single-file-export/`.
+
+## [~] D-020 — Animation lifecycle + playout timing ⟨priority: high⟩
+
+**What:** Give every composition an explicit **IN / HOLD / OUT** lifecycle and a
+no-code **playout-timing** config, plus the runtime behavior to execute it. The
+author marks an **intro-end** (the hold frame) and an **outro-start** on the
+timeline (inside the existing active region); the runtime then plays the intro
+once and **holds** (instead of looping the whole range), `stop()` plays the
+outro, and new `pause()`/`resume()` freeze/continue the current frame. A
+per-composition timing config chooses `manual` (operator drives out),
+`auto-out` (hold for T then out), `loop-cycle` (intro→hold(T)→outro repeated N
+times or forever), or `content-driven` (duration computed from content — the
+crawler; computation delivered by the ticker item). Phase markers + timing
+config + the outro duration are exported in the template metadata.
+**Why:** This is the foundation every animated template needs and that the
+crawler, the looping logo, hold/pause-before-close, and timed auto-out all build
+on. The current runtime loops the entire timeline continuously, which is wrong
+for a broadcast template that must open, hold, and exit on command. Retrofitting
+this later would mean re-authoring every template and reworking the frame driver.
+**Acceptance:**
+
+- WHEN the author marks an intro-end and an outro-start on the timeline (within
+  the active region) THEN the composition stores them and IN/HOLD/OUT are derived
+  with `activeRange.in ≤ introEnd ≤ outroStart ≤ activeRange.out`
+- WHEN `play()` runs THEN the intro plays once and the composition holds at the
+  hold frame — it does not loop the whole range and does not auto-play the outro
+- WHEN `stop()` runs THEN the outro plays from the outro-start to the
+  active-region end
+- WHEN `pause()` is called THEN the current frame freezes, and `resume()`
+  continues from that frame
+- WHEN the timing mode is `auto-out` with hold = T THEN after the intro and T ms
+  of hold the outro plays automatically
+- WHEN the timing mode is `loop-cycle` with hold = T and repeat = N (or infinite)
+  THEN the composition repeats intro→hold(T)→outro for N cycles, or until `stop()`
+- WHEN a composition with phase markers + timing config is exported THEN the
+  template metadata carries the intro/outro frames, the mode, hold, repeat, and
+  the **outro duration in ms**
+- WHEN the composition is previewed THEN play / hold / pause / auto-out /
+  loop-cycle behave identically to the exported file (same runtime source)
+  **Notes:** New capability `designer-playout-lifecycle`; phase markers live
+  inside `designer-animation-timeline`'s `activeRange` (that spec is not
+  modified). Builds on **D-018** (runtime + preview) and **extends D-019**'s
+  export metadata. The current `FrameDriver` full-range loop is replaced by
+  "play a sub-range once and hold" + a cycle orchestrator. `content-driven` mode
+  is declared here; its width/duration computation lands with the ticker item.
+  `pause`/`resume` are runtime + control-layer methods (exposable on air later via
+  `CG INVOKE "pause"`, which takes no args); the exported outro duration lets the
+  control layer schedule precise timed auto-out.
+  Change: `openspec/changes/add-animation-lifecycle-timing/`.
+
+## [x] D-022 — App-wide button/control consistency (shared Button/Control + states) ⟨priority: medium⟩ — focused fix
+
+**What:** Make hover / active / focus-visible / disabled the DEFAULT for every
+interactive button, not a per-button afterthought.
+**Why:** Buttons across the app (toolbar, panels, inspector, timeline, dialogs)
+were raw `<button>`s with ad-hoc styling and inconsistent (often missing)
+interactive states.
+**Acceptance:**
+
+- WHEN a developer needs a button THEN they use the shared `Button` (labelled) or
+  `Control` (icon-only) from `apps/designer/src/renderer/ui/`, a vanilla-extract
+  recipe on `renderer/theme.ts` (variants primary/secondary/ghost/danger/bare,
+  sizes, `selected` for toggles) — no `@cg/ui` change, no palette change
+- WHEN any existing Designer button is rendered THEN it routes through
+  `Button`/`Control` and has hover / active / focus-visible / disabled states
+- WHEN a raw `<button>` is added in `src/renderer/**` (outside `ui/`) THEN lint
+  errors (`no-restricted-syntax` in `apps/designer/eslint.config.mjs`)
+- WHEN the top-menu buttons (Preview / Export / HTML / Save) are used THEN they
+  show proper hover/active/focus-visible/disabled states
+  **Notes:** UI-consistency (quality) work — no spec behavior change. The later
+  D-020 preview-modal polish reuses these shared components (no preview-specific
+  button styles). `bare` variant = states-only escape hatch for bespoke surfaces
+  (menu items, list rows, the keyframe diamond).
+
+## [~] D-023 — Delete key removes the selection (keyframe precedence) ⟨priority: medium⟩ — change: `openspec/changes/add-delete-key-selection/`
+
+**What:** Delete/Backspace removes the current selection from the keyboard.
+**Why:** Layers/shapes could only be removed via the right-click menu; operators
+expect the Delete key. Clicking a keyframe selects both the keyframe and its parent,
+so the key needs a clear precedence.
+**Acceptance:**
+
+- WHEN a keyframe is selected (which also selects its parent) and Delete/Backspace
+  is pressed THEN the keyframe(s) are deleted and the parent layer/shape remains
+- WHEN no keyframe is selected and a layer/shape is selected THEN Delete/Backspace
+  removes the selected layer(s)/shape(s)
+- WHEN an input/textarea/select/contentEditable is focused THEN Delete/Backspace
+  deletes nothing (it edits the field)
+- WHEN several of the prioritised kind are selected THEN all are deleted
+- WHEN nothing is selected THEN it is a no-op; the delete is a single undo step
+  **Notes:** Handled globally in `App` via `designerStore.deleteSelection()`
+  (precedence + multi-delete); the timeline's old keyframe-only Delete handler was
+  removed. No schema/runtime change. Change: `openspec/changes/add-delete-key-selection/`.
+
+## [~] D-024 — Double-click to drill into a nested child composition ⟨priority: medium⟩ — change: `openspec/changes/add-drill-into-composition/`
+
+**What:** Double-clicking a shape inside a nested composition instance navigates to
+editing that child composition and selects the double-clicked shape (AE/Figma/Loopic
+style).
+**Why:** Today a nested child can only be selected as a unit; editing its insides
+means finding it in the compositions list and opening it.
+**Model:** Compositions are SHARED, reusable definitions — a child has no single
+parent. So NO breadcrumb / "back to parent"; navigation stays via the compositions
+list. Drill-in = open-from-list + select the shape; navigation + selection only, no
+new edit semantics, no per-instance overrides (editing the shape edits the shared
+child, affecting every parent).
+**Acceptance:**
+
+- WHEN the operator double-clicks a shape visually inside a nested composition
+  instance THEN the editing context switches to that child and the shape is selected
+- WHEN the operator single-clicks the instance THEN it is selected as a whole unit
+- WHEN drilled in THEN no breadcrumb / back-to-parent affordance is shown
+- WHEN double-clicking at arbitrary depth THEN each double-click drills one level
+  **Notes:** `features/canvas/drill.ts` maps the cursor into the child's coordinate
+  space (inverts the instance transform, scales into child resolution) and
+  hit-tests the child's shapes; `store.openCompositionAndSelect` does the atomic
+  open-child + select. No schema/runtime change. Change: `openspec/changes/add-drill-into-composition/`.
+
+## [~] D-025 — Nested-composition field scoping + instance namespacing ⟨priority: high⟩ — change: `openspec/changes/add-nested-composition-field-scoping/`
+
+**What:** Fields are per-composition; nested child instances expose their fields in
+the parent under a per-instance namespace (nested objects), with values routed to
+the right child copy. Model: Option C (instance-scoped namespacing).
+**Why:** Fields were project-global (every comp showed all fields), and nested
+children's values never updated; the same child instanced twice couldn't be set
+independently.
+**Acceptance:**
+
+- WHEN a standalone composition is open THEN it shows only its own field(s), flat
+- WHEN a parent nests a child THEN the child's fields appear grouped under the
+  instance's namespace (nested object in data/GDD)
+- WHEN the same child is instanced twice (home/away) THEN two independent namespaces
+  with independent values
+- WHEN a namespaced field is set in the parent preview THEN the right nested child's
+  element updates
+- WHEN a second instance is added/renamed to a taken name THEN it's uniquified
+  **Notes:** schema-first (`Composition.fields/bindings` + `composition-fields.ts`
+  helpers); runtime field-scope tree + `applyScopedFieldValues`; GDD nested objects;
+  legacy global fields migrated on load. Change: `openspec/changes/add-nested-composition-field-scoping/`.
+
+## [~] D-026 — Nested-lifecycle cascade + shared project fps ⟨priority: high⟩ — change: `openspec/changes/add-nested-lifecycle-cascade/`
+
+**What:** `play/stop/pause/resume/remove` cascade recursively to every nested
+composition instance — each runs its OWN intro→hold→outro at its own out-point — by
+building a controller tree over the D-025 field-scope tree (hybrid: the parent keeps
+its own controller for its direct elements). Frame rate becomes a single
+project-level setting (`Scene.frameRate`); `Composition.frameRate` is dropped and the
+inspector fps is read-only.
+**Why:** D-020's lifecycle was top-level-only — it animated nested elements along the
+parent timeline, so a child could not hold/exit on its own. And per-composition fps
+let nested children disagree, whereas a CasparCG channel has one fps.
+**Acceptance:**
+
+- WHEN the parent is played THEN each nested child holds at its OWN out-point
+  independently (different children → different held frames at the same time)
+- WHEN the parent is stopped THEN each child plays its OWN outro
+- WHEN the parent is paused/resumed THEN the cascade freezes/continues every child
+- WHEN the parent has its own out-point THEN its direct elements hold at it AND the
+  cascade still applies to children
+- WHEN nesting is arbitrarily deep THEN the cascade reaches grandchildren
+- WHEN a project is opened THEN every composition shares the single project fps
+  (`Scene.frameRate`), and a legacy per-composition fps is stripped on load; the
+  inspector fps is read-only
+  **Notes:** child offset 0 for v1 (no `lifespan` overload); root scope drives the
+  global machine/events + session playout override, children use their own stored
+  playout; single fps applied across all scopes (FrameDriver is time-based).
+  Refinements (same change): cascade `stop()` is **state-aware** — a child that
+  already finished (auto-out exited / finite loop-cycle or content-driven completed)
+  is NOT re-exited; active/infinite/manual/paused children still exit. Preview timing
+  overrides (mode/holdMs/repeat) are **per-scope**, grouped by the parent + nested
+  instance names, session-only. Change:
+  `openspec/changes/add-nested-lifecycle-cascade/`.

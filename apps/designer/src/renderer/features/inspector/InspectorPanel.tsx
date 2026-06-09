@@ -1,5 +1,12 @@
-import type { AnimatableProperty, Element, FieldBinding, Scene } from '@cg/shared-schema';
+import {
+  compositionInstancesOf,
+  type AnimatableProperty,
+  type Element,
+  type FieldBinding,
+  type Scene,
+} from '@cg/shared-schema';
 import { colors } from '../../theme.js';
+import { Button } from '../../ui/Button.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { BackgroundControl } from '../canvas/BackgroundControl.js';
 import { describeBinding, elementNameResolver } from '../fields/bind-resolver.js';
@@ -8,6 +15,7 @@ import { CollapseSection } from './CollapseSection.js';
 import { RealtimeNumberInput } from './controls.js';
 import { DynamicDataSection } from './DynamicDataSection.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
+import { PlayoutSection } from './PlayoutSection.js';
 import { StyleSection } from './StyleSection.js';
 import { TransformSection } from './TransformSection.js';
 import * as s from './InspectorPanel.css.js';
@@ -79,7 +87,8 @@ function SceneInspector({
       <Row label="elements" value={String(countElements(scene))} />
       <Row label="path" value={projectPath ?? '(unsaved)'} />
       <BackgroundControl background={scene.background} variant="full" />
-      {scene.fields.length > 0 && (
+      <PlayoutSection scene={scene} />
+      {(scene.fields.length > 0 || compositionInstancesOf(scene).length > 0) && (
         <>
           <h3 className={s.heading}>FIELDS</h3>
           <FieldsPanel scene={scene} bindModeFieldId={bindModeFieldId} />
@@ -145,7 +154,10 @@ function ElementNameRow({ elementId, name }: { elementId: string; name: string }
         onKeyDown={(e) => {
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
         }}
-        key={`key-${name}`}
+        // Key by the SELECTED element id (+ name) so the input re-initialises to
+        // the newly-selected element's name rather than keeping the previous
+        // element's uncommitted draft (B-009).
+        key={`name-${elementId}-${name}`}
       />
     </div>
   );
@@ -174,14 +186,15 @@ function ElementBindings({
           <span style={{ color: colors.text, fontSize: '0.8rem' }}>
             <strong>{b.fieldId}</strong> → {describeBinding(b, nameOf)}
           </span>
-          <button
+          <Button
+            variant="bare"
             className={s.bindRemove}
             title="Unbind (keeps the field)"
             aria-label="Unbind"
             onClick={() => designerStore.removeBindingAt(idx)}
           >
             ×
-          </button>
+          </Button>
         </div>
       ))}
     </div>
@@ -327,28 +340,18 @@ function SizeRow({ scene }: { scene: Scene }): JSX.Element {
   );
 }
 
-const FRAME_RATES = [25, 29.97, 50, 59.94, 60] as const;
-
-/** Editable frame rate (snapped to the supported set). Routes to the active document. */
+/**
+ * D-026 — frame rate is a single PROJECT-level setting (`Scene.frameRate`) shared
+ * by every composition (one CasparCG channel fps), so the inspector shows it
+ * READ-ONLY here. It is set once for the project, not per composition.
+ */
 function FrameRateRow({ scene }: { scene: Scene }): JSX.Element {
   return (
     <div className={s.row}>
       <span className={s.label}>frame rate</span>
-      <select
-        className={s.docNum}
-        style={{ width: 'auto' }}
-        value={String(scene.frameRate)}
-        onChange={(e) =>
-          designerStore.updateScene({ frameRate: Number(e.target.value) as Scene['frameRate'] })
-        }
-        aria-label="Composition frame rate"
-      >
-        {FRAME_RATES.map((r) => (
-          <option key={r} value={r}>
-            {r}
-          </option>
-        ))}
-      </select>
+      <span className={s.value} aria-label="Project frame rate (read-only)">
+        {scene.frameRate} fps
+      </span>
     </div>
   );
 }

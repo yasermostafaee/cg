@@ -1,0 +1,172 @@
+import { playoutOf, type Lifecycle, type Playout, type PlayoutMode } from '@cg/shared-schema';
+import { Callout } from '../../ui/Callout.js';
+import { CollapseSection } from '../inspector/CollapseSection.js';
+import { RealtimeNumberInput } from '../inspector/controls.js';
+import * as s from '../inspector/InspectorPanel.css.js';
+import * as t from './PreviewTimingControls.css.js';
+
+/** The lifecycle-relevant fields of the scope a timing control edits. */
+export interface TimingSource {
+  playout?: Playout | undefined;
+  lifecycle?: Lifecycle | undefined;
+}
+
+/** Modes that are worth timing in the preview (have an outro / repeat to tune). */
+export const TIMING_RELEVANT_MODES: ReadonlySet<PlayoutMode> = new Set<PlayoutMode>([
+  'auto-out',
+  'loop-cycle',
+  'content-driven',
+]);
+
+/** The effective playout mode of a scope: its override, else its stored default. */
+export function effectiveMode(source: TimingSource, override: TimingOverride): PlayoutMode {
+  return override.mode ?? playoutOf(source).mode;
+}
+
+/**
+ * D-020 — a session-only playout override: `mode` + `holdMs` + `repeat`. Held by
+ * the preview modal, applied by rebuilding the preview runtime (`playoutOverride`),
+ * and never written back to the stored template. There is no continuous-loop
+ * toggle: to see a composition loop, pick `loop-cycle` with `repeat: ∞` (or
+ * `content-driven` with `repeat: ∞`).
+ */
+export interface TimingOverride {
+  mode?: PlayoutMode;
+  holdMs?: number;
+  repeat?: number | 'infinite';
+}
+
+const MODE_LABELS: Record<PlayoutMode, string> = {
+  manual: 'Manual — hold until stop',
+  'auto-out': 'Auto-out — outro after hold',
+  'loop-cycle': 'Loop cycle — repeat in → hold → out',
+  'content-driven': 'Content-driven — duration from content',
+};
+
+/** Modes that need an explicit out-point to mean anything (an exit segment). */
+const NEEDS_OUTPOINT: ReadonlySet<PlayoutMode> = new Set<PlayoutMode>(['auto-out', 'loop-cycle']);
+
+/**
+ * D-020 — live playout override for the preview modal, bound to the
+ * composition's **effective** playout (stored defaults + the current session
+ * override) so it re-syncs whenever the composition changes (out-point added or
+ * removed, stored mode changed). Tuning here is **session-only**: it never
+ * changes the template's stored defaults. With no out-point the entrance is the
+ * whole timeline and the default is play-once-and-hold; `auto-out` / `loop-cycle`
+ * are disabled because they have no exit segment to run. Continuous looping is
+ * `loop-cycle` (or `content-driven`) with `repeat: ∞` — there is no separate loop
+ * toggle. Authoritative live control of these belongs to the rundown (future).
+ */
+export function PreviewTimingControls({
+  source,
+  title = 'Timing (session)',
+  defaultExpanded = true,
+  showFooter = true,
+  override,
+  onChange,
+}: {
+  source: TimingSource;
+  /** Section header — the scope's label (e.g. the composition or instance name). */
+  title?: string;
+  defaultExpanded?: boolean;
+  /** Show the "session only" footnote (once is enough when many scopes stack). */
+  showFooter?: boolean;
+  override: TimingOverride;
+  onChange: (patch: TimingOverride) => void;
+}): JSX.Element {
+  const stored = playoutOf(source);
+  const hasOutPoint = source.lifecycle !== undefined;
+  const mode = override.mode ?? stored.mode;
+  const holdMs = override.holdMs ?? stored.holdMs ?? 0;
+  const repeat = override.repeat ?? stored.repeat;
+  const repeatInfinite = repeat === 'infinite';
+
+  // `auto-out` / `loop-cycle` only do something with an explicit out-point.
+  const showHold = hasOutPoint && (mode === 'auto-out' || mode === 'loop-cycle');
+  // `loop-cycle` repeats the full cycle (needs an out-point); `content-driven`
+  // repeats its content passes (no out-point required). Both honour `repeat`.
+  const showRepeat = mode === 'content-driven' || (mode === 'loop-cycle' && hasOutPoint);
+
+  return (
+    <CollapseSection title={title} defaultExpanded={defaultExpanded}>
+      {hasOutPoint ? (
+        <p className={t.hint}>
+          Out point @ frame {String(source.lifecycle?.outPoint)} (set on the timeline).
+        </p>
+      ) : (
+        <Callout variant="info" className={t.notice}>
+          No out-point set — the whole timeline is the entrance and it holds the last frame. Add an
+          out-point on the timeline to enable auto-out / loop-cycle.
+        </Callout>
+      )}
+
+      <div className={s.row}>
+        <span className={s.label}>mode</span>
+        <select
+          className={t.select}
+          value={mode}
+          aria-label="Preview playout mode"
+          onChange={(e) => onChange({ mode: e.target.value as PlayoutMode })}
+        >
+          {(Object.keys(MODE_LABELS) as PlayoutMode[]).map((m) => (
+            <option key={m} value={m} disabled={!hasOutPoint && NEEDS_OUTPOINT.has(m)}>
+              {MODE_LABELS[m]}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {showHold && (
+        <div className={s.row}>
+          <span className={s.label}>hold</span>
+          <div className={t.inline}>
+            <RealtimeNumberInput
+              className={t.num}
+              min={0}
+              step={100}
+              value={holdMs}
+              onCommit={(n) => onChange({ holdMs: Math.max(0, Math.round(n)) })}
+              ariaLabel="Preview hold duration in milliseconds"
+            />
+            <span className={t.muted}>ms</span>
+          </div>
+        </div>
+      )}
+
+      {showRepeat && (
+        <div className={s.row}>
+          <span className={s.label}>repeat</span>
+          <div className={t.repeatControls}>
+            {repeatInfinite ? (
+              <span className={t.muted}>∞ until stop</span>
+            ) : (
+              <RealtimeNumberInput
+                className={t.num}
+                min={1}
+                step={1}
+                value={typeof repeat === 'number' ? repeat : 1}
+                onCommit={(n) => onChange({ repeat: Math.max(1, Math.round(n)) })}
+                ariaLabel="Preview repeat count"
+              />
+            )}
+            <label className={t.checkLabel}>
+              <input
+                type="checkbox"
+                checked={repeatInfinite}
+                onChange={(e) => onChange({ repeat: e.target.checked ? 'infinite' : 1 })}
+              />
+              infinite
+            </label>
+          </div>
+        </div>
+      )}
+
+      {showFooter && (
+        <p className={t.hint}>
+          Session only — these test the playout and do not change the template&apos;s stored
+          defaults. Authoritative live control belongs to the rundown.
+        </p>
+      )}
+    </CollapseSection>
+  );
+}

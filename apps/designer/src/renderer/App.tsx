@@ -16,6 +16,8 @@ import { useIssues } from './hooks/useIssues.js';
 import { designerStore, editSceneOf, shallowEqual, useDesignerSelector } from './state/store.js';
 import { colors } from './theme.js';
 import { cx } from './cx.js';
+import { Button } from './ui/Button.js';
+import { Control } from './ui/Control.js';
 import * as s from './App.css.js';
 
 declare global {
@@ -36,15 +38,15 @@ function Toast({ message }: { message: string }): JSX.Element {
   return (
     <div role="status" className={s.toast}>
       <span>{message}</span>
-      <button
-        type="button"
+      <Control
+        variant="bare"
         aria-label="Dismiss"
         title="Dismiss"
         onClick={() => designerStore.dismissNotice()}
         className={s.toastClose}
       >
         ✕
-      </button>
+      </Control>
     </div>
   );
 }
@@ -58,13 +60,13 @@ function EmptyStage(): JSX.Element {
         <rect x="5.5" y="2" width="8.5" height="8" rx="1.4" fill="#38BDF8" />
       </svg>
       <div className={s.emptyTitle}>No Active Compositions</div>
-      <button
-        type="button"
+      <Button
+        variant="bare"
         className={s.emptyButton}
         onClick={() => designerStore.addComposition()}
       >
         Create New Composition
-      </button>
+      </Button>
     </div>
   );
 }
@@ -79,8 +81,8 @@ function LeftRail({
 }): JSX.Element {
   return (
     <div className={s.rail} aria-label="Panel switcher">
-      <button
-        type="button"
+      <Control
+        variant="bare"
         title="Compositions"
         aria-label="Compositions"
         aria-pressed={panel === 'compositions'}
@@ -108,9 +110,9 @@ function LeftRail({
             fill={colors.background}
           />
         </svg>
-      </button>
-      <button
-        type="button"
+      </Control>
+      <Control
+        variant="bare"
         title="Project assets"
         aria-label="Project assets"
         aria-pressed={panel === 'assets'}
@@ -125,7 +127,7 @@ function LeftRail({
             strokeLinejoin="round"
           />
         </svg>
-      </button>
+      </Control>
     </div>
   );
 }
@@ -297,6 +299,34 @@ export function App(): JSX.Element {
         e.preventDefault();
         designerStore.toggleRuler();
       }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Delete / Backspace removes the current selection — keyframe(s) first, else the
+  // selected layer(s)/shape(s) (see store.deleteSelection for the precedence).
+  // Ignored while an editable field is focused so typing Delete in the label input
+  // doesn't delete the layer. Undoable (history coalesces the burst).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      const t = e.target;
+      if (
+        t instanceof HTMLElement &&
+        (t.tagName === 'INPUT' ||
+          t.tagName === 'TEXTAREA' ||
+          t.tagName === 'SELECT' ||
+          t.isContentEditable)
+      ) {
+        return;
+      }
+      const st = designerStore.get();
+      if (st.selectedKeyframes.length === 0 && st.selection.size === 0) return;
+      e.preventDefault();
+      // Start a fresh undo entry so the delete isn't coalesced with a prior edit.
+      designerStore.markHistoryBoundary();
+      designerStore.deleteSelection();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

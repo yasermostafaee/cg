@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { cx } from '../../cx.js';
+import { Control } from '../../ui/Control.js';
 import * as s from './ColorPopover.css.js';
 
 /**
@@ -30,9 +31,9 @@ export function ColorPicker(props: ColorPickerProps): JSX.Element {
   const btnRef = useRef<HTMLButtonElement>(null);
   return (
     <>
-      <button
+      <Control
         ref={btnRef}
-        type="button"
+        variant="bare"
         title="Pick a colour"
         aria-label={props.ariaLabel}
         onClick={() => setOpen((o) => !o)}
@@ -42,7 +43,7 @@ export function ColorPicker(props: ColorPickerProps): JSX.Element {
         {props.transparent !== true && (
           <span className={s.swatchFill} style={{ background: props.value }} />
         )}
-      </button>
+      </Control>
       {open && (
         <Popover
           anchor={btnRef.current}

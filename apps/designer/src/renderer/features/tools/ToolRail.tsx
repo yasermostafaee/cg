@@ -1,5 +1,6 @@
 import { designerStore, type DesignerTool } from '../../state/store.js';
 import { cx } from '../../cx.js';
+import { Control } from '../../ui/Control.js';
 import * as s from './ToolRail.css.js';
 
 interface Props {
@@ -24,8 +25,9 @@ export function ToolRail({ tool }: Props): JSX.Element {
       {tools.map((t) => {
         const active = t.id === tool;
         return (
-          <button
+          <Control
             key={t.id}
+            variant="bare"
             className={cx(s.button, active && s.buttonActive)}
             onClick={() => designerStore.setTool(t.id)}
             title={t.label}
@@ -33,7 +35,7 @@ export function ToolRail({ tool }: Props): JSX.Element {
             aria-pressed={active}
           >
             {t.icon}
-          </button>
+          </Control>
         );
       })}
     </nav>

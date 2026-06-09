@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
-import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
+import {
+  designerStore,
+  editSceneOf,
+  shallowEqual,
+  useDesignerSelector,
+} from '../../state/store.js';
 import { cx } from '../../cx.js';
+import { Button } from '../../ui/Button.js';
 import { NewProjectModal } from './NewProjectModal.js';
+import { PreviewModal } from '../fields/PreviewModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
 import { ShortcutsModal } from './ShortcutsModal.js';
 import * as s from './TopToolbar.css.js';
@@ -36,6 +43,8 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
   const [hoverNav, setHoverNav] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [newModalOpen, setNewModalOpen] = useState(false);
+  // Snapshot of the open composition driven by the Preview modal (null = closed).
+  const [previewScene, setPreviewScene] = useState<Scene | null>(null);
   // Queues a switch action (Close / New / Open) when there's already a
   // scene loaded — the SaveBeforeSwitchModal runs first and only then
   // does the action proceed. `() => () => Promise<void>` is React's
@@ -115,6 +124,27 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
     await window.cg.export.runDisk({ scene });
   }
 
+  /** D-019 — download a single self-contained CasparCG `.html` for the active comp. */
+  async function exportHtml(): Promise<void> {
+    const st = designerStore.get();
+    // Export the open composition (what's on the canvas), not the layerless root.
+    const target = editSceneOf(st.scene, st.activeCompositionId) ?? scene;
+    if (target === null) return;
+    if (errorCount > 0) {
+      window.alert(`Export blocked: ${String(errorCount)} validation error(s) in Issues panel.`);
+      return;
+    }
+    const { warnings } = await window.cg.export.runSingleFileHtml({ scene: target });
+    if (warnings.length > 0) designerStore.showNotice(warnings.join('\n'));
+  }
+
+  /** Open the Preview modal on a snapshot of the open composition. */
+  function openPreview(): void {
+    const st = designerStore.get();
+    const target = editSceneOf(st.scene, st.activeCompositionId) ?? scene;
+    if (target !== null) setPreviewScene(target);
+  }
+
   function runFileAction(fn: () => void | Promise<void>): void {
     setOpenMenu(null);
     void Promise.resolve(fn());
@@ -180,8 +210,8 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
   return (
     <nav className={s.bar} aria-label="Application menu">
       <div className={s.group}>
-        <button
-          type="button"
+        <Button
+          variant="bare"
           className={navClass('home')}
           onClick={() => guardedSwitch(() => designerStore.setView('landing'))}
           onMouseEnter={() => setHoverNav('home')}
@@ -190,11 +220,11 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
           aria-label="Home"
         >
           Home
-        </button>
+        </Button>
         <div className={s.menuItemWrap} onPointerDown={(e) => e.stopPropagation()}>
-          <button
+          <Button
             ref={fileBtnRef}
-            type="button"
+            variant="bare"
             className={navClass('file')}
             onClick={() => setOpenMenu((m) => (m === 'file' ? null : 'file'))}
             onMouseEnter={() => setHoverNav('file')}
@@ -203,7 +233,7 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
             aria-expanded={openMenu === 'file'}
           >
             File
-          </button>
+          </Button>
           {openMenu === 'file' && (
             <div className={s.dropdown} role="menu">
               <FileMenuItem label="New" onClick={() => runFileSwitch(newProject)} />
@@ -235,8 +265,8 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
           )}
         </div>
         <div className={s.menuItemWrap} onPointerDown={(e) => e.stopPropagation()}>
-          <button
-            type="button"
+          <Button
+            variant="bare"
             className={navClass('edit')}
             onClick={() => setOpenMenu((m) => (m === 'edit' ? null : 'edit'))}
             onMouseEnter={() => setHoverNav('edit')}
@@ -245,7 +275,7 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
             aria-expanded={openMenu === 'edit'}
           >
             Edit
-          </button>
+          </Button>
           {openMenu === 'edit' && (
             <div className={s.dropdown} role="menu">
               <FileMenuItem
@@ -262,8 +292,8 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
           )}
         </div>
         <div className={s.menuItemWrap} onPointerDown={(e) => e.stopPropagation()}>
-          <button
-            type="button"
+          <Button
+            variant="bare"
             className={navClass('view')}
             onClick={() => setOpenMenu((m) => (m === 'view' ? null : 'view'))}
             onMouseEnter={() => setHoverNav('view')}
@@ -272,7 +302,7 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
             aria-expanded={openMenu === 'view'}
           >
             View
-          </button>
+          </Button>
           {openMenu === 'view' && (
             <div className={s.dropdown} role="menu">
               <ToggleMenuItem
@@ -295,8 +325,8 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
           )}
         </div>
         <div className={s.menuItemWrap} onPointerDown={(e) => e.stopPropagation()}>
-          <button
-            type="button"
+          <Button
+            variant="bare"
             className={navClass('help')}
             onClick={() => setOpenMenu((m) => (m === 'help' ? null : 'help'))}
             onMouseEnter={() => setHoverNav('help')}
@@ -305,7 +335,7 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
             aria-expanded={openMenu === 'help'}
           >
             Help
-          </button>
+          </Button>
           {openMenu === 'help' && (
             <div className={s.dropdown} role="menu">
               <FileMenuItem label="Start Tutorial" disabled onClick={() => undefined} />
@@ -324,25 +354,42 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
         </div>
       </div>
       <span className={s.spacer} />
-      <button
-        type="button"
-        className={s.exportButton}
+      <Button
+        size="sm"
+        disabled={scene === null}
+        onClick={openPreview}
+        title="Preview the composition with live data (simulated CasparCG output)"
+      >
+        PREVIEW
+      </Button>
+      <Button
+        size="sm"
         disabled={exportBlocked}
         onClick={() => void exportVcg()}
         title={errorCount > 0 ? 'Resolve validation errors first' : 'Export to .vcg'}
       >
         EXPORT
-      </button>
-      <button
-        type="button"
-        className={s.saveButton}
-        disabled={scene === null}
-        onClick={() => void save()}
+      </Button>
+      <Button
+        size="sm"
+        disabled={exportBlocked}
+        onClick={() => void exportHtml()}
+        title={
+          errorCount > 0
+            ? 'Resolve validation errors first'
+            : 'Download a single self-contained CasparCG .html (with embedded GDD)'
+        }
       >
+        HTML
+      </Button>
+      <Button size="sm" variant="primary" disabled={scene === null} onClick={() => void save()}>
         SAVE
-      </button>
+      </Button>
       {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
       {newModalOpen && <NewProjectModal onClose={() => setNewModalOpen(false)} />}
+      {previewScene !== null && (
+        <PreviewModal scene={previewScene} onClose={() => setPreviewScene(null)} />
+      )}
       {pendingSwitch !== null && scene !== null && (
         <SaveBeforeSwitchModal
           scene={scene}
@@ -370,8 +417,8 @@ function FileMenuItem({
 }): JSX.Element {
   const [hover, setHover] = useState(false);
   return (
-    <button
-      type="button"
+    <Button
+      variant="bare"
       role="menuitem"
       className={cx(
         s.dropdownItem,
@@ -384,7 +431,7 @@ function FileMenuItem({
       onClick={onClick}
     >
       {label}
-    </button>
+    </Button>
   );
 }
 
@@ -400,8 +447,8 @@ function ToggleMenuItem({
 }): JSX.Element {
   const [hover, setHover] = useState(false);
   return (
-    <button
-      type="button"
+    <Button
+      variant="bare"
       role="menuitemcheckbox"
       aria-checked={checked}
       className={cx(s.dropdownItem, hover && s.dropdownItemActive)}
@@ -413,7 +460,7 @@ function ToggleMenuItem({
         {checked ? '✓' : ''}
       </span>
       {label}
-    </button>
+    </Button>
   );
 }
 

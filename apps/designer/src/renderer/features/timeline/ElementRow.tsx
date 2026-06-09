@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import type { Element, FrameRange, ShapeElement } from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
 import { cx } from '../../cx.js';
+import { Control } from '../../ui/Control.js';
 import * as s from './ElementRow.css.js';
 
 export { ELEMENT_ROW_HEIGHT } from './metrics.js';
@@ -61,8 +62,8 @@ function ElementRowLabel(props: Props): JSX.Element {
             }
       }
     >
-      <button
-        type="button"
+      <Control
+        variant="bare"
         className={s.chevron}
         data-role="chevron"
         onClick={(e) => {
@@ -73,7 +74,7 @@ function ElementRowLabel(props: Props): JSX.Element {
         aria-label={`Toggle ${element.name} tracks`}
       >
         {expanded ? '▾' : '▸'}
-      </button>
+      </Control>
       <span className={s.typeIcon}>
         <LayerTypeIcon
           element={element}
@@ -81,8 +82,8 @@ function ElementRowLabel(props: Props): JSX.Element {
         />
       </span>
       <span className={cx(s.name, isSelected && s.nameSelected)}>{element.name}</span>
-      <button
-        type="button"
+      <Control
+        variant="bare"
         className={cx('cg-tl-toggle', s.toggleButton, element.visible && s.toggleButtonActive)}
         title={element.visible ? 'Hide element' : 'Show element'}
         aria-label={element.visible ? 'Hide element' : 'Show element'}
@@ -95,9 +96,9 @@ function ElementRowLabel(props: Props): JSX.Element {
         }}
       >
         {element.visible ? <EyeOpenIcon /> : <EyeClosedIcon />}
-      </button>
-      <button
-        type="button"
+      </Control>
+      <Control
+        variant="bare"
         className={cx('cg-tl-toggle', s.toggleButton, element.locked && s.lockLocked)}
         title={element.locked ? 'Unlock element' : 'Lock element'}
         aria-label={element.locked ? 'Unlock element' : 'Lock element'}
@@ -110,7 +111,7 @@ function ElementRowLabel(props: Props): JSX.Element {
         }}
       >
         {element.locked ? <LockClosedIcon /> : <LockOpenIcon />}
-      </button>
+      </Control>
     </div>
   );
 }

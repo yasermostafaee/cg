@@ -14,12 +14,14 @@ function freshScene(): void {
   designerStore.setScene(scene, null);
 }
 
-/** Project-global field/binding arrays (kept on the root scene by editSceneOf). */
+/** The ACTIVE composition's own fields/bindings (D-025 — fields are per-comp). */
 function fields() {
-  return designerStore.get().scene!.fields;
+  const st = designerStore.get();
+  return editSceneOf(st.scene, st.activeCompositionId)!.fields;
 }
 function bindings() {
-  return designerStore.get().scene!.bindings;
+  const st = designerStore.get();
+  return editSceneOf(st.scene, st.activeCompositionId)!.bindings;
 }
 
 describe('designerStore — D-018 Data key convenience layer', () => {

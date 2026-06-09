@@ -60,14 +60,29 @@ describe('installCasparGlobals', () => {
     expect(document.body.classList.contains('cg-pending')).toBe(true);
   });
 
-  it('ignores legacy XML payloads (M3.2-α placeholder behavior)', async () => {
+  it('parses CasparCG legacy XML payloads and ignores unknown keys', async () => {
     const runtime = createRuntime(lowerThirdScene, { skipFontLoad: true });
     uninstall = installCasparGlobals(runtime);
-    window.play?.('<templateData><componentData id="anchor">x</componentData></templateData>');
+    window.play?.(
+      '<templateData>' +
+        '<componentData id="anchor"><data id="text" value="از XML"/></componentData>' +
+        '<componentData id="nope"><data id="text" value="ignored"/></componentData>' +
+        '</templateData>',
+    );
     await new Promise((r) => setTimeout(r, 0));
-    // XML body is silently dropped; the scene falls back to declared default.
     const nameEl = document.querySelector<HTMLElement>('[data-cg-element-id="name"]');
-    expect(nameEl?.textContent).toBe('سارا نادری');
+    expect(nameEl?.textContent).toBe('از XML'); // unknown "nope" key harmlessly dropped
+  });
+
+  it('window.update accepts an already-parsed object (Chrome console use)', async () => {
+    const runtime = createRuntime(lowerThirdScene, { skipFontLoad: true });
+    uninstall = installCasparGlobals(runtime);
+    window.play?.('{}');
+    await new Promise((r) => setTimeout(r, 0));
+    window.update?.({ anchor: 'از آبجکت' });
+    await new Promise((r) => setTimeout(r, 0));
+    const nameEl = document.querySelector<HTMLElement>('[data-cg-element-id="name"]');
+    expect(nameEl?.textContent).toBe('از آبجکت');
   });
 
   it('drops malformed JSON without throwing', async () => {

@@ -27,6 +27,28 @@ export default [
     files: ['tests/**/*.{ts,tsx}'],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
+      // Tests aren't shipped code; component/render tests legitimately import
+      // `react` / `react-dom/client` to mount a component and assert its DOM.
+      'no-restricted-imports': 'off',
+    },
+  },
+  {
+    // Design-system guard: every interactive button in the renderer must go
+    // through the shared <Button> / <Control> (renderer/ui), which bake in the
+    // hover / active / focus-visible / disabled states — so a new raw <button>
+    // can't silently miss them. The ui/ components themselves are the one place a
+    // native <button> is allowed.
+    files: ['src/renderer/**/*.tsx'],
+    ignores: ['src/renderer/ui/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'JSXOpeningElement[name.name="button"]',
+          message:
+            'Use the shared <Button> / <Control> from renderer/ui instead of a raw <button> so the control inherits hover/active/focus-visible/disabled states. (variant="bare" keeps a bespoke look while still getting the states.)',
+        },
+      ],
     },
   },
   {

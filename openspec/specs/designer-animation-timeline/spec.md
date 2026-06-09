@@ -312,3 +312,43 @@ than drawn exactly on top of one another.
 - **WHEN** two or more points share a frame on a track
 - **THEN** their diamonds are drawn at distinct vertical offsets on that frame's
   column so each can be grabbed
+
+### Requirement: Inspector controls reflect and commit the evaluated value at the current frame
+
+For an animatable property, the inspector's property control SHALL DISPLAY the
+**evaluated value at the current playhead frame** when the property has keyframes
+(falling back to the element's static value when it has none), so the control stays
+in lock-step with what the canvas renders — for numeric and colour properties
+alike. Adding a keyframe via **any** add-keyframe diamond — both the inspector
+property rows AND the timeline track rows — SHALL CAPTURE that same evaluated value
+at the current frame (not the element's static base), for every value kind
+(transform numbers, dimensions, opacity, colour); and editing a control's value
+SHALL commit a keyframe at the current frame. This makes the inspector and timeline
+consistent with the canvas drag path, which already samples the evaluated value.
+
+#### Scenario: Diamond captures the evaluated value, not the static base
+
+- **WHEN** a property has a keyframe at frame F1 holding value V, the playhead is at
+  a later frame F2 with no keyframe there, and the operator clicks the property's
+  add-keyframe diamond
+- **THEN** a keyframe is added at F2 with value V (the evaluated value the field
+  shows and the canvas renders), and the element does not jump to its static base
+  value
+
+#### Scenario: Timeline diamond captures the evaluated value for every value kind
+
+- **WHEN** a keyframe at F1 holds a moved/edited value V for ANY animatable property
+  kind (a transform number, a dimension, opacity, or a colour), the playhead is at a
+  later frame F2, and the operator clicks that row's add-keyframe diamond in the
+  timeline
+- **THEN** the shared add-keyframe path adds a keyframe at F2 with the evaluated
+  value V (not the property's stale static base), and the element does not jump —
+  identically for numeric and colour value kinds
+
+#### Scenario: Colour field display stays in sync with the shape
+
+- **WHEN** a colour property is animated and the operator edits the colour at the
+  current frame
+- **THEN** the edit commits a keyframe at that frame AND the colour control's
+  displayed value updates to the edited colour, so the control and the rendered
+  shape stay in sync

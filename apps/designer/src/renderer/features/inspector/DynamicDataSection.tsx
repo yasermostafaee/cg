@@ -75,7 +75,10 @@ export function DynamicDataSection({
             type="text"
             placeholder="(static)"
             defaultValue={currentKey}
-            key={`dk-${currentKey}`}
+            // Key by the SELECTED element id (+ the committed key) so the input
+            // re-initialises when the selection moves to another element instead
+            // of keeping the previous element's uncommitted draft (B-009).
+            key={`dk-${element.id}-${currentKey}`}
             aria-label="Data key"
             list={adoptable.length > 0 ? 'cg-data-key-options' : undefined}
             onFocus={(e) => e.currentTarget.select()}
@@ -132,11 +135,17 @@ function FieldMeta({ element, field }: { element: TextElement; field: DynamicFie
 
   return (
     <>
-      <TextField label="Title" value={field.label} onCommit={(v) => patch({ title: v })} />
+      <TextField
+        label="Title"
+        value={field.label}
+        onCommit={(v) => patch({ title: v })}
+        resetKey={element.id}
+      />
       <TextField
         label="Description"
         value={field.description ?? ''}
         onCommit={(v) => patch({ description: v })}
+        resetKey={element.id}
       />
       <CheckRow
         label="Required"
@@ -176,6 +185,7 @@ function FieldMeta({ element, field }: { element: TextElement; field: DynamicFie
             label="Pattern"
             value={patternOf(field)}
             onCommit={(v) => patch({ pattern: v })}
+            resetKey={element.id}
           />
         </>
       )}
@@ -191,6 +201,7 @@ function FieldMeta({ element, field }: { element: TextElement; field: DynamicFie
           label="Value"
           value={defaultStr(field)}
           onCommit={(v) => patch({ default: v })}
+          resetKey={element.id}
         />
       )}
     </>

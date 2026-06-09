@@ -1,4 +1,5 @@
 import { colors } from '../../theme.js';
+import { Button } from '../../ui/Button.js';
 
 /**
  * Two states per B-003:
@@ -57,8 +58,8 @@ export function KeyframeIndicator({
 }: Props): JSX.Element {
   const style = { ...diamondBase, ...variantStyle(variant) };
   return (
-    <button
-      type="button"
+    <Button
+      variant="bare"
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       aria-label={ariaLabel}
@@ -66,7 +67,7 @@ export function KeyframeIndicator({
       data-variant={variant}
     >
       <span style={style} />
-    </button>
+    </Button>
   );
 }
 

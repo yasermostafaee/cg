@@ -3,6 +3,8 @@ import type { Scene } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import * as s from './StatusBar.css.js';
+import { Button } from '../../ui/Button.js';
+import { Control } from '../../ui/Control.js';
 import { IssuesPanel } from '../issues/IssuesPanel.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
 
@@ -51,14 +53,13 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
         {scene === null ? '0×0' : `${scene.resolution.width}×${scene.resolution.height}`}
       </span>
       {issues.length > 0 && (
-        <button
-          type="button"
+        <Button
+          variant="bare"
           onClick={() => setIssuesOpen(true)}
           aria-label="Show issues"
           title="Show issues"
           className={s.pill}
           style={{
-            cursor: 'pointer',
             borderColor: errorCount > 0 ? '#fda4af' : '#fcd34d',
             color: errorCount > 0 ? '#fda4af' : '#fcd34d',
           }}
@@ -66,12 +67,12 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
           {errorCount > 0
             ? `${String(errorCount)} error${errorCount === 1 ? '' : 's'}`
             : `${String(issues.length)} issue${issues.length === 1 ? '' : 's'}`}
-        </button>
+        </Button>
       )}
       <span className={s.spacer} />
       <div className={s.zoomWrap} aria-label="Timeline zoom">
-        <button
-          type="button"
+        <Control
+          variant="bare"
           className={s.zoomButton}
           onClick={() => designerStore.setTimelineZoom(timelineZoom - 1)}
           disabled={timelineZoom <= ZOOM_MIN}
@@ -79,7 +80,7 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
           title="Zoom out timeline"
         >
           −
-        </button>
+        </Control>
         <input
           type="range"
           min={ZOOM_MIN}
@@ -91,8 +92,8 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
           aria-label="Timeline zoom"
           title={`Timeline zoom ${String(timelineZoom)}×`}
         />
-        <button
-          type="button"
+        <Control
+          variant="bare"
           className={s.zoomButton}
           onClick={() => designerStore.setTimelineZoom(timelineZoom + 1)}
           disabled={timelineZoom >= ZOOM_MAX}
@@ -100,7 +101,7 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
           title="Zoom in timeline"
         >
           +
-        </button>
+        </Control>
         <span className={s.zoomReadout}>{timelineZoom}×</span>
       </div>
       {issuesOpen && (

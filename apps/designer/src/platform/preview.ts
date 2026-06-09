@@ -48,7 +48,12 @@ export class Preview {
     return { src: this.#docUrl, html };
   }
 
-  /** Push a live field update to the preview iframe(s). */
+  /**
+   * Push a live field update to the canvas preview iframe(s). (Transport —
+   * play/stop/next/reset — is driven by the Preview modal posting straight to
+   * its own dedicated iframe; the iframe message handler understands those
+   * actions either way.)
+   */
   update(fields: Readonly<Record<string, unknown>>): { ok: boolean } {
     const frames = document.querySelectorAll<HTMLIFrameElement>('iframe[title="cgpreview"]');
     let delivered = false;
@@ -157,6 +162,13 @@ export class Preview {
         let assetUrls = {};
         let currentScene = null;
         let editingTextId = null;
+        // D-020 — non-persistent playout override (mode / holdMs / repeat).
+        // Set by 'scene-replace' so the preview can test timing without touching
+        // the stored template; passed straight to createRuntime on every rebuild.
+        let playoutOverride = undefined;
+        // D-026 — PER-SCOPE overrides keyed by instance-name path ('' = root). Lets
+        // the preview time each nested child independently (session-only).
+        let scopeOverrides = undefined;
         // Families we've already loaded into this iframe's
         // document.fonts. Keyed by family name; the value is the
         // assetUrl we loaded from, so we can re-fetch when a font
@@ -256,7 +268,10 @@ export class Preview {
             // both so the next createRuntime starts clean.
             document.body.classList.remove('cg-removed');
             document.body.classList.remove('cg-pending');
-            runtime = createRuntime(scene);
+            runtime = createRuntime(scene, {
+              playoutOverride: playoutOverride,
+              scopeOverrides: scopeOverrides,
+            });
             installCasparGlobals(runtime);
             await runtime.ready;
             document.body.classList.remove('cg-pending');
@@ -289,6 +304,17 @@ export class Preview {
                 if (typeof msg.editingTextId === 'string' || msg.editingTextId === null) {
                   editingTextId = msg.editingTextId;
                 }
+                // D-020 — session-only timing override travels with the scene so
+                // the rebuilt runtime applies it (undefined ⇒ stored defaults).
+                playoutOverride =
+                  msg.playoutOverride && typeof msg.playoutOverride === 'object'
+                    ? msg.playoutOverride
+                    : undefined;
+                // D-026 — per-scope overrides (path → {mode/holdMs/repeat}).
+                scopeOverrides =
+                  msg.scopeOverrides && typeof msg.scopeOverrides === 'object'
+                    ? msg.scopeOverrides
+                    : undefined;
                 await applyScene(msg.scene);
               } else if (msg.action === 'asset-urls' && msg.assetUrls) {
                 assetUrls = msg.assetUrls;
@@ -305,9 +331,26 @@ export class Preview {
                 currentFrame = msg.frame;
                 if (runtime) runtime.tick(currentFrame);
               } else if (msg.action === 'play' && typeof window.play === 'function') {
-                window.play(JSON.stringify(msg.fields ?? {}));
+                currentFields = msg.fields ?? {};
+                window.play(JSON.stringify(currentFields));
+                if (runtime) runtime.tick(currentFrame);
               } else if (msg.action === 'stop' && typeof window.stop === 'function') {
                 window.stop();
+              } else if (msg.action === 'next' && typeof window.next === 'function') {
+                window.next();
+              } else if (msg.action === 'pause') {
+                // D-020 — freeze the lifecycle (intro / hold countdown / outro).
+                if (runtime && typeof runtime.pause === 'function') runtime.pause();
+              } else if (msg.action === 'resume') {
+                if (runtime && typeof runtime.resume === 'function') runtime.resume();
+              } else if (msg.action === 'reset') {
+                // Re-seed every field to its declared default. update() merges, so
+                // a replace-mode update is what clears omitted keys back to default.
+                currentFields = {};
+                if (runtime) {
+                  runtime.update({}, { mode: 'replace' });
+                  runtime.tick(currentFrame);
+                }
               }
             } catch (e) {
               /* swallow preview-side errors */

@@ -7,6 +7,7 @@ export * from './elements.js';
 export * from './fields.js';
 export * from './bindings.js';
 export * from './scene.js';
+export * from './composition-fields.js';
 export * from './manifest.js';
 export * from './runtime/index.js';
 export * as migrations from './migrations/index.js';

@@ -5,6 +5,8 @@ import { colors } from '../../theme.js';
 import { ColorEditor } from './ColorPopover.js';
 import { RealtimeNumberInput } from './controls.js';
 import { cx } from '../../cx.js';
+import { Button } from '../../ui/Button.js';
+import { Control } from '../../ui/Control.js';
 import * as s from './FillPopover.css.js';
 
 /**
@@ -89,16 +91,16 @@ export function FillField(props: FillFieldProps): JSX.Element {
     >
       <span className={s.label}>{props.label}</span>
       <div className={cx('cg-field', s.field)}>
-        <button
+        <Control
           ref={btnRef}
-          type="button"
+          variant="bare"
           aria-label={`${props.label} fill`}
           title="Edit fill"
           onClick={() => setOpen((o) => !o)}
           className={cx(s.swatchButton, s.checker)}
         >
           <span className={s.swatchFill} style={{ background: previewCss(fill) }} />
-        </button>
+        </Control>
         <span className={s.kindLabel}>{KIND_NAME[fill.kind]}</span>
         {props.trailing !== undefined && <span className={s.point}>{props.trailing}</span>}
       </div>
@@ -215,9 +217,9 @@ function FillPopover({
         {(['solid', 'linear', 'radial'] as const).map((k) => {
           const active = value.kind === k;
           return (
-            <button
+            <Button
               key={k}
-              type="button"
+              variant="bare"
               onClick={() => {
                 setSelected(0);
                 onChange(toKind(value, k));
@@ -231,7 +233,7 @@ function FillPopover({
               }}
             >
               {KIND_NAME[k]}
-            </button>
+            </Button>
           );
         })}
       </div>
@@ -246,28 +248,28 @@ function FillPopover({
           {/* Stop swatches */}
           <div className={s.stopRow}>
             {stops.map((stop, i) => (
-              <button
+              <Control
                 key={i}
-                type="button"
+                variant="bare"
                 aria-label={`Stop ${String(i + 1)}`}
                 onClick={() => setSelected(i)}
                 className={cx(s.stopButton, s.checker)}
                 style={{ border: `2px solid ${i === sel ? colors.accent : colors.border}` }}
               >
                 <span className={s.swatchFill} style={{ background: stop.color }} />
-              </button>
+              </Control>
             ))}
-            <button
-              type="button"
+            <Control
+              variant="bare"
               aria-label="Add stop"
               title="Add stop"
               onClick={addStop}
               className={s.miniBtn}
             >
               +
-            </button>
-            <button
-              type="button"
+            </Control>
+            <Control
+              variant="bare"
               aria-label="Remove stop"
               title="Remove stop"
               onClick={removeStop}
@@ -276,7 +278,7 @@ function FillPopover({
               style={{ opacity: stops.length <= 2 ? 0.4 : 1 }}
             >
               −
-            </button>
+            </Control>
           </div>
           {/* Selected stop position */}
           <MiniNumber

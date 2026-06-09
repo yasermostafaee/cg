@@ -1,4 +1,11 @@
-import type { FieldBinding, FieldValues, Scene } from '@cg/shared-schema';
+import type {
+  DynamicField,
+  FieldBinding,
+  FieldValues,
+  NestedFieldValues,
+  Scene,
+} from '@cg/shared-schema';
+import type { FieldScope } from './types.js';
 import { applyTransform, stringifyValue } from './transforms.js';
 
 /**
@@ -13,17 +20,85 @@ export function applyFieldValues(
   textOriginals: ReadonlyMap<string, string>,
   container: HTMLElement,
 ): void {
-  // Build a quick field-defaults lookup so missing values fall back cleanly.
+  // Build a quick field-defaults lookup so missing values fall back cleanly,
+  // plus per-field `maxLength` caps for text fields.
   const defaults = new Map<string, unknown>();
+  const maxLengths = new Map<string, number>();
   for (const field of scene.fields) {
     defaults.set(field.id, 'default' in field ? field.default : undefined);
+    if (field.type === 'text' && field.maxLength !== undefined) {
+      maxLengths.set(field.id, field.maxLength);
+    }
   }
 
   for (const binding of scene.bindings) {
     const raw = binding.fieldId in values ? values[binding.fieldId] : defaults.get(binding.fieldId);
     if (raw === undefined) continue;
-    applyOne(binding, raw, elementMap, textOriginals, container);
+    applyOne(binding, raw, elementMap, textOriginals, container, maxLengths.get(binding.fieldId));
   }
+}
+
+/** A doc that owns fields + bindings: the root scene or a composition. */
+interface FieldDocLite {
+  fields?: readonly DynamicField[] | undefined;
+  bindings?: readonly FieldBinding[] | undefined;
+}
+
+/**
+ * D-025 — apply a NESTED field-value object across the scope tree. The root doc's
+ * own bindings apply to the root scope; each nested instance's namespace
+ * (`values[instanceName]`) is applied to that instance's child scope, recursively.
+ * This routes the same child instanced twice (e.g. `home`/`away`) to the correct
+ * DOM copy. A scene with no nested instances behaves exactly like the flat
+ * {@link applyFieldValues}.
+ */
+export function applyScopedFieldValues(
+  scene: Scene,
+  rootDoc: FieldDocLite,
+  values: NestedFieldValues,
+  scope: FieldScope,
+): void {
+  applyDocScope(scene, rootDoc, values, scope);
+}
+
+function applyDocScope(
+  scene: Scene,
+  doc: FieldDocLite,
+  values: NestedFieldValues,
+  scope: FieldScope,
+): void {
+  const defaults = new Map<string, unknown>();
+  const maxLengths = new Map<string, number>();
+  for (const field of doc.fields ?? []) {
+    defaults.set(field.id, 'default' in field ? field.default : undefined);
+    if (field.type === 'text' && field.maxLength !== undefined) {
+      maxLengths.set(field.id, field.maxLength);
+    }
+  }
+  for (const binding of doc.bindings ?? []) {
+    const raw = binding.fieldId in values ? values[binding.fieldId] : defaults.get(binding.fieldId);
+    if (raw === undefined) continue;
+    applyOne(
+      binding,
+      raw,
+      scope.elementMap,
+      scope.textOriginals,
+      scope.container,
+      maxLengths.get(binding.fieldId),
+    );
+  }
+  for (const child of scope.children) {
+    const childDoc = scene.compositions?.find((c) => c.id === child.compositionId);
+    if (childDoc === undefined) continue;
+    const sub = values[child.name];
+    const subVals: NestedFieldValues = isNamespace(sub) ? sub : {};
+    applyDocScope(scene, childDoc, subVals, child.scope);
+  }
+}
+
+/** A namespace sub-object (not a scalar field value, not an image `{assetId}`). */
+function isNamespace(v: unknown): v is NestedFieldValues {
+  return typeof v === 'object' && v !== null && !Array.isArray(v) && !('assetId' in v);
 }
 
 function applyOne(
@@ -32,13 +107,20 @@ function applyOne(
   elementMap: ReadonlyMap<string, HTMLElement>,
   textOriginals: ReadonlyMap<string, string>,
   container: HTMLElement,
+  maxLength?: number,
 ): void {
   const target = binding.target;
   switch (target.kind) {
     case 'text': {
       const el = elementMap.get(target.elementId);
       if (!el) return;
-      const stringValue = applyTransform(stringifyValue(raw), binding.transform);
+      let stringValue = applyTransform(stringifyValue(raw), binding.transform);
+      // Cap to the field's maxLength by code point (so a surrogate pair or a
+      // ZWNJ counts as one and isn't split); the element's own auto-size /
+      // auto-squeeze then handles fit.
+      if (maxLength !== undefined && [...stringValue].length > maxLength) {
+        stringValue = [...stringValue].slice(0, maxLength).join('');
+      }
       const original = textOriginals.get(target.elementId);
       if (target.placeholder && original !== undefined) {
         el.textContent = original.replaceAll(target.placeholder, stringValue);

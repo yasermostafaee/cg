@@ -3,6 +3,7 @@ import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import {
   TIMELINE_ROWS,
+  effectiveAnimatableValue,
   effectiveOpacityAt,
   effectiveTransformAt,
   hasKeyframeAt,
@@ -199,7 +200,12 @@ function SingleField(props: FieldProps): JSX.Element {
   );
 }
 
-function togglePropertyKeyframe(
+/**
+ * Toggle a keyframe for `property` at `frame` from a diamond click. Exported for
+ * regression coverage (B-005): the added keyframe must capture the EVALUATED value
+ * at the playhead, not the element's static base.
+ */
+export function togglePropertyKeyframe(
   element: Element,
   property: AnimatableProperty,
   frame: number,
@@ -210,7 +216,11 @@ function togglePropertyKeyframe(
   }
   const row = TIMELINE_ROWS.find((r) => r.property === property);
   if (row === undefined) return;
-  designerStore.upsertKeyframe(element.id, property, frame, row.read(element));
+  // Capture the EVALUATED value at the playhead (what the field shows and the
+  // canvas renders) — not the element's static base — so adding a keyframe past
+  // an existing one holds the animated value instead of reverting it (B-005).
+  const value = effectiveAnimatableValue(element, property, frame, row.read(element));
+  designerStore.upsertKeyframe(element.id, property, frame, value);
 }
 
 function percent(scaleOrOpacity: number): number {

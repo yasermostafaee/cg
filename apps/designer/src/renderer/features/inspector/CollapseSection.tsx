@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { Button } from '../../ui/Button.js';
 import * as s from './CollapseSection.css.js';
 
 interface Props {
@@ -36,8 +37,8 @@ export function CollapseSection({
           {trailing !== undefined && <span className={s.trailing}>{trailing}</span>}
         </div>
       ) : (
-        <button
-          type="button"
+        <Button
+          variant="bare"
           className={s.header}
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
@@ -46,7 +47,7 @@ export function CollapseSection({
           <span className={s.chevron}>{open ? '▾' : '▸'}</span>
           <span>{title}</span>
           {trailing !== undefined && <span className={s.trailing}>{trailing}</span>}
-        </button>
+        </Button>
       )}
       {expanded && <div className={s.body}>{children}</div>}
     </div>

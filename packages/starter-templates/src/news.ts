@@ -660,7 +660,7 @@ const comp = (id: string, name: string, w: number, h: number, children: Element[
   id,
   name,
   resolution: { width: w, height: h },
-  frameRate: FPS,
+  // D-026 — fps is project-level (`Scene.frameRate`); compositions no longer carry it.
   frameRange: range,
   background: 'transparent' as const,
   layers: [layer(`${id}-l`, name, children)],

@@ -7,6 +7,8 @@ import { emitAssetRemoved, useAssets } from './useAssets.js';
 import { clearAll as clearAllAssetUrls, revoke as revokeAssetUrl } from './assetUrlCache.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
 import { cx } from '../../cx.js';
+import { Button } from '../../ui/Button.js';
+import { Control } from '../../ui/Control.js';
 import * as s from './ProjectAssetsPanel.css.js';
 
 /**
@@ -209,8 +211,8 @@ export function ProjectAssetsPanel(): JSX.Element {
     <aside className={s.panel} aria-label="Project assets">
       <div className={s.header}>
         <span className={s.title}>Project Assets</span>
-        <button
-          type="button"
+        <Control
+          variant="bare"
           className={s.iconButton}
           aria-label={assetView === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
           title={assetView === 'grid' ? 'List view' : 'Grid view'}
@@ -219,10 +221,10 @@ export function ProjectAssetsPanel(): JSX.Element {
           onClick={() => changeAssetView(assetView === 'grid' ? 'list' : 'grid')}
         >
           {assetView === 'grid' ? <ListIcon /> : <GridIcon />}
-        </button>
-        <button
+        </Control>
+        <Control
           ref={addBtnRef}
-          type="button"
+          variant="bare"
           className={s.iconButton}
           aria-label="Add asset"
           title="Add asset"
@@ -233,7 +235,7 @@ export function ProjectAssetsPanel(): JSX.Element {
           }}
         >
           +
-        </button>
+        </Control>
       </div>
       <div className={s.searchWrap}>
         <input
@@ -272,22 +274,22 @@ export function ProjectAssetsPanel(): JSX.Element {
           role="menu"
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <button
-            type="button"
+          <Button
+            variant="bare"
             role="menuitem"
             className={s.menuItem}
             onClick={() => void importKind('image')}
           >
             Image…
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="bare"
             role="menuitem"
             className={s.menuItem}
             onClick={() => void importKind('font')}
           >
             Font…
-          </button>
+          </Button>
         </div>
       )}
       {ctxMenu !== null && (
@@ -297,14 +299,14 @@ export function ProjectAssetsPanel(): JSX.Element {
           role="menu"
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <button
-            type="button"
+          <Button
+            variant="bare"
             role="menuitem"
             className={cx(s.menuItem, s.menuItemDanger)}
             onClick={() => openDeleteConfirm(ctxMenu.asset)}
           >
             Delete asset
-          </button>
+          </Button>
         </div>
       )}
       {confirm !== null && (

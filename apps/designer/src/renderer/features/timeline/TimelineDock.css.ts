@@ -209,3 +209,20 @@ export const groupChevron = style({
   width: '16px',
   textAlign: 'center',
 });
+
+// D-020 — the single draggable `outPoint` marker inside the scene lane (amber):
+// where the intro ends, the hold sits, and the exit begins (Loopic-style).
+export const phaseMarkerOut = style({
+  position: 'absolute',
+  top: 0,
+  bottom: 0,
+  width: '4px',
+  transform: 'translateX(-50%)',
+  cursor: 'ew-resize',
+  touchAction: 'none',
+  pointerEvents: 'auto',
+  zIndex: 5,
+  opacity: 0.9,
+  borderRadius: '2px',
+  background: '#ffae57',
+});

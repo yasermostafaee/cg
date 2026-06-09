@@ -6,6 +6,7 @@ import {
   type Scene,
 } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
+import { Button } from '../../ui/Button.js';
 import { designerStore, type KeyframeRef } from '../../state/store.js';
 import { TIMELINE_ROWS } from '../timeline/keyframe-helpers.js';
 import { NumberField } from './controls.js';
@@ -32,14 +33,14 @@ function bezierApproxEqual(a: BezierEasing, b: BezierEasing): boolean {
 
 function BackButton(): JSX.Element {
   return (
-    <button
-      type="button"
+    <Button
+      variant="bare"
       className={s.closeButton}
       onClick={() => designerStore.closeKeyframeInspector()}
       aria-label="Back to element inspector"
     >
       ← back
-    </button>
+    </Button>
   );
 }
 
@@ -116,13 +117,13 @@ export function KeyframeInspector({ scene, selectedKeyframes }: Props): JSX.Elem
         bezier={effectiveBezier(keyframe)}
         onChange={(b) => designerStore.setKeyframeBezier(elementId, property, frame, b)}
       />
-      <button
-        type="button"
+      <Button
+        variant="bare"
         className={s.removeButton}
         onClick={() => designerStore.removeKeyframe(elementId, property, frame)}
       >
         Remove keyframe
-      </button>
+      </Button>
     </aside>
   );
 }
@@ -196,15 +197,15 @@ function MultiKeyframeView({
             designerStore.setKeyframeBezier(r.elementId, r.property, r.frame, b);
         }}
       />
-      <button
-        type="button"
+      <Button
+        variant="bare"
         className={s.removeButton}
         onClick={() => {
           for (const r of [...refs]) designerStore.removeKeyframe(r.elementId, r.property, r.frame);
         }}
       >
         Remove keyframes
-      </button>
+      </Button>
     </aside>
   );
 }

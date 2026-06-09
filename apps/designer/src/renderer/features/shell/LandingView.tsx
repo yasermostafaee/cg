@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { StarterEntry } from '@cg/shared-ipc';
 import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
+import { Button } from '../../ui/Button.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
 import * as s from './LandingView.css.js';
@@ -81,14 +82,14 @@ export function LandingView(): JSX.Element {
         </p>
       </div>
 
-      <button
-        type="button"
+      <Button
+        variant="bare"
         className={s.newButton}
         onClick={() => guardedSwitch('a new project', () => Promise.resolve(setModalOpen(true)))}
         aria-label="New project"
       >
         + New project
-      </button>
+      </Button>
 
       <h2 className={s.sectionTitle}>START FROM A TEMPLATE</h2>
       {starters.length === 0 ? (
@@ -96,9 +97,9 @@ export function LandingView(): JSX.Element {
       ) : (
         <div className={s.grid}>
           {starters.map((st) => (
-            <button
+            <Button
               key={st.id}
-              type="button"
+              variant="bare"
               className={s.card}
               onClick={() => guardedSwitch(st.label, () => loadStarter(st.id))}
             >
@@ -112,7 +113,7 @@ export function LandingView(): JSX.Element {
                 <span className={s.cardLabel}>{st.label}</span>
                 <span className={s.cardDesc}>{st.description}</span>
               </span>
-            </button>
+            </Button>
           ))}
         </div>
       )}
@@ -123,9 +124,9 @@ export function LandingView(): JSX.Element {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
           {recent.slice(0, 12).map((r) => (
-            <button
+            <Button
               key={r.path}
-              type="button"
+              variant="bare"
               className={s.recentRow}
               onClick={() => guardedSwitch(r.name, () => openRecent(r.path))}
             >
@@ -133,7 +134,7 @@ export function LandingView(): JSX.Element {
                 <strong>{r.name}</strong> <span className={s.recentMeta}>· {r.templateType}</span>
               </span>
               <span className={s.recentMeta}>{formatWhen(r.lastOpenedAt)}</span>
-            </button>
+            </Button>
           ))}
         </div>
       )}

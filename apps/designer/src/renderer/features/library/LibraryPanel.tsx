@@ -3,6 +3,7 @@ import type { TemplateType } from '@cg/shared-schema';
 import type { StarterEntry } from '@cg/shared-ipc';
 import { designerStore } from '../../state/store.js';
 import { cx } from '../../cx.js';
+import { Button } from '../../ui/Button.js';
 import * as s from './LibraryPanel.css.js';
 
 const TEMPLATE_TYPES: TemplateType[] = [
@@ -57,14 +58,15 @@ export function LibraryPanel(): JSX.Element {
           <h2 className={s.heading}>STARTERS</h2>
           <div className={s.list}>
             {starters.map((st) => (
-              <button
+              <Button
                 key={st.id}
+                variant="bare"
                 className={s.button}
                 title={st.description}
                 onClick={() => void loadStarter(st.id)}
               >
                 {st.label}
-              </button>
+              </Button>
             ))}
           </div>
         </>
@@ -90,9 +92,13 @@ export function LibraryPanel(): JSX.Element {
           </option>
         ))}
       </select>
-      <button className={cx(s.button, s.buttonPrimary)} onClick={() => void createNew()}>
+      <Button
+        variant="bare"
+        className={cx(s.button, s.buttonPrimary)}
+        onClick={() => void createNew()}
+      >
         Create
-      </button>
+      </Button>
 
       <h2 className={s.heading} style={{ marginTop: '0.5rem' }}>
         RECENT
@@ -102,9 +108,14 @@ export function LibraryPanel(): JSX.Element {
       ) : (
         <div className={s.list}>
           {recent.slice(0, 10).map((r) => (
-            <button key={r.path} className={s.button} onClick={() => void openRecent(r.path)}>
+            <Button
+              key={r.path}
+              variant="bare"
+              className={s.button}
+              onClick={() => void openRecent(r.path)}
+            >
               {r.name}
-            </button>
+            </Button>
           ))}
         </div>
       )}

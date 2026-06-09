@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { activeRangeOf, type Scene } from '@cg/shared-schema';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { cx } from '../../cx.js';
+import { Button } from '../../ui/Button.js';
 import * as s from './TransportBar.css.js';
 
 interface Props {
@@ -239,8 +240,8 @@ export function TransportBar({ scene }: Props): JSX.Element {
   return (
     <div className={s.bar} aria-label="Playback transport">
       <div className={s.group}>
-        <button
-          type="button"
+        <Button
+          variant="bare"
           className={btnClass('start')}
           {...hoverProps('start')}
           onClick={() => designerStore.setCurrentFrame(frameIn)}
@@ -248,9 +249,9 @@ export function TransportBar({ scene }: Props): JSX.Element {
           title="Go to start"
         >
           {IconStart}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="bare"
           className={btnClass('back')}
           {...hoverProps('back')}
           onClick={() => designerStore.setCurrentFrame(currentFrame - 1)}
@@ -258,9 +259,9 @@ export function TransportBar({ scene }: Props): JSX.Element {
           title="Step back one frame"
         >
           {IconStepBack}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="bare"
           className={btnClass('play')}
           {...hoverProps('play')}
           onClick={() => {
@@ -271,9 +272,9 @@ export function TransportBar({ scene }: Props): JSX.Element {
           title={playing ? 'Pause' : 'Play'}
         >
           {playing ? IconPause : IconPlay}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="bare"
           className={btnClass('fwd')}
           {...hoverProps('fwd')}
           onClick={() => designerStore.setCurrentFrame(currentFrame + 1)}
@@ -281,10 +282,10 @@ export function TransportBar({ scene }: Props): JSX.Element {
           title="Step forward one frame"
         >
           {IconStepFwd}
-        </button>
+        </Button>
         <span className={s.groupDivider} aria-hidden />
-        <button
-          type="button"
+        <Button
+          variant="bare"
           className={btnClass('loop', loopMode === 'loop')}
           {...hoverProps('loop')}
           onClick={() => toggleLoop('loop')}
@@ -293,9 +294,9 @@ export function TransportBar({ scene }: Props): JSX.Element {
           title="Loop — wrap to start at the end"
         >
           {IconLoop}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="bare"
           className={btnClass('bounce', loopMode === 'bounce')}
           {...hoverProps('bounce')}
           onClick={() => toggleLoop('bounce')}
@@ -304,7 +305,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
           title="Ping-pong — reverse direction at each boundary"
         >
           {IconBounce}
-        </button>
+        </Button>
       </div>
       <span className={s.frameReadout} aria-label="Current frame">
         frame {currentFrame} / {totalOut}

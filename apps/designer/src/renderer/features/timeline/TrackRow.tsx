@@ -6,6 +6,7 @@ import { RealtimeNumberInput } from '../inspector/controls.js';
 import { ColorPicker } from '../inspector/ColorPopover.js';
 import { KeyframeIndicator } from './KeyframeIndicator.js';
 import { cx } from '../../cx.js';
+import { Button } from '../../ui/Button.js';
 import * as s from './TrackRow.css.js';
 import {
   effectiveRowValue,
@@ -16,6 +17,33 @@ import {
 } from './keyframe-helpers.js';
 
 export { TRACK_ROW_HEIGHT } from './metrics.js';
+
+/**
+ * Shared add/toggle for a property's keyframe at `frame` from a diamond click —
+ * the single code path for EVERY animatable property kind (transform numbers,
+ * dimensions, opacity, colour). When adding, it CAPTURES the EVALUATED value at
+ * the playhead (`effectiveRowValue` — exactly what the row readout shows and the
+ * canvas renders), NOT the element's static base. Reading `row.read(element)` (the
+ * base, which isn't updated when a keyframe is moved) is what made the diamond add
+ * a keyframe with the pre-move value and the shape jump (B-007). Exported for
+ * regression coverage.
+ */
+export function addOrToggleKeyframeAtFrame(
+  element: Element,
+  row: TimelineRow,
+  frame: number,
+): void {
+  if (hasKeyframeAt(element, row.property, frame)) {
+    designerStore.removeKeyframe(element.id, row.property, frame);
+    return;
+  }
+  designerStore.upsertKeyframe(
+    element.id,
+    row.property,
+    frame,
+    effectiveRowValue(element, row, frame),
+  );
+}
 
 interface Props {
   row: TimelineRow;
@@ -66,16 +94,16 @@ function TrackRowLabel(props: Props): JSX.Element {
   const currentFrame = useDesignerSelector((s) => s.currentFrame);
 
   function toggleKeyframeHere(): void {
-    if (hasKeyframeAt(element, row.property, currentFrame)) {
-      designerStore.removeKeyframe(element.id, row.property, currentFrame);
-      return;
+    const existed = hasKeyframeAt(element, row.property, currentFrame);
+    addOrToggleKeyframeAtFrame(element, row, currentFrame);
+    // Select the freshly-added point (not on removal).
+    if (!existed) {
+      designerStore.setSelectedKeyframe({
+        elementId: element.id,
+        property: row.property,
+        frame: currentFrame,
+      });
     }
-    designerStore.upsertKeyframe(element.id, row.property, currentFrame, row.read(element));
-    designerStore.setSelectedKeyframe({
-      elementId: element.id,
-      property: row.property,
-      frame: currentFrame,
-    });
   }
 
   const variant = keyframeVariantFor(element, row.property, currentFrame, selectedKeyframe);
@@ -305,8 +333,8 @@ function TrackRowLane(props: Props): JSX.Element {
             {row.label} · frame {menu.frame}
           </div>
           <div className={s.menuSeparator} role="separator" />
-          <button
-            type="button"
+          <Button
+            variant="bare"
             role="menuitem"
             className={cx(s.menuItem, s.menuItemDanger)}
             onClick={() => {
@@ -315,7 +343,7 @@ function TrackRowLane(props: Props): JSX.Element {
             }}
           >
             Delete keyframe
-          </button>
+          </Button>
         </div>
       )}
     </div>

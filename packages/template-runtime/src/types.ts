@@ -1,4 +1,13 @@
-import type { Element, ElementAnimation, FieldValues, Scene } from '@cg/shared-schema';
+import type {
+  Element,
+  ElementAnimation,
+  FieldValues,
+  FrameRange,
+  Lifecycle,
+  Playout,
+  PlayoutMode,
+  Scene,
+} from '@cg/shared-schema';
 
 /**
  * Lifecycle events emitted by the runtime. Subscribers attach via
@@ -47,6 +56,16 @@ export interface TemplateRuntime {
 
   /** Play the exit animation. Stub for M3.2-α — instant transition. */
   stop(opts?: StopOptions): Promise<void>;
+
+  /**
+   * D-020 — freeze playback at the current frame (intro, hold, or outro). The
+   * timing orchestrator (auto-out / loop-cycle) is paused too. No args, so a
+   * future `CG INVOKE "pause"` can reach it.
+   */
+  pause(): void;
+
+  /** D-020 — continue playback from the frame `pause()` froze. */
+  resume(): void;
 
   /** Optional. Advance to the next state for paginated templates. */
   next?(): Promise<void>;
@@ -102,6 +121,65 @@ export interface RuntimeBootOptions {
    * (happy-dom doesn't implement the FontFaceSet API).
    */
   skipFontLoad?: boolean;
+
+  /**
+   * D-020 — inject the rAF / timer clock so tests can drive lifecycle timing
+   * (intro frames, hold timers, auto-out, loop-cycle) deterministically.
+   * Defaults to the platform `requestAnimationFrame` / `setTimeout`.
+   */
+  clock?: RuntimeClock;
+
+  /**
+   * D-020 — supplies the per-pass duration (ms) for the `content-driven` playout
+   * mode. The mode + orchestration live here; the content→duration computation is
+   * delivered by the ticker item, recomputed each pass. `holdMs` does not apply to
+   * `content-driven`; absent ⇒ a zero-length pass.
+   */
+  durationHook?: () => number;
+
+  /**
+   * D-020 — non-persistent playout override. The composition stores its defaults
+   * (`scene.playout`, play-once); these knobs override them for a single run
+   * without touching the stored template. The designer preview supplies them for
+   * session-only testing, and the rundown (the control app) will drive them live
+   * on air later — this is the seam that keeps mode + hold + repeat overridable.
+   * Absent fields fall back to the stored `scene.playout`. Equivalent to
+   * `scopeOverrides['']` (the root scope); if both are given, `scopeOverrides['']`
+   * wins.
+   */
+  playoutOverride?: PlayoutOverride;
+
+  /**
+   * D-026 — PER-SCOPE non-persistent playout overrides, keyed by the scope's
+   * instance-name PATH within the composition-instance tree: `''` is the root
+   * (this composition), `'home'` a direct child instance, `'home.inner'` a
+   * grandchild — the same instance names the nested field scopes use. Each entry
+   * overrides that scope's stored `playout` (mode / holdMs / repeat) for THIS run
+   * only, so a parent can independently test each child's timing (e.g. `home`
+   * loops 3×, `away` loops infinitely) without touching any stored template.
+   * Absent scopes fall back to their own stored `playout`.
+   */
+  scopeOverrides?: Record<string, PlayoutOverride>;
+}
+
+/**
+ * D-020 — overridable playout knobs (non-persistent). They override the stored
+ * `scene.playout` for this run only. There is no continuous-loop flag: a looping
+ * playout is `mode: 'loop-cycle'` with `repeat: 'infinite'`.
+ */
+export interface PlayoutOverride {
+  mode?: PlayoutMode;
+  holdMs?: number;
+  repeat?: number | 'infinite';
+}
+
+/** Injectable rAF + timer clock for deterministic lifecycle/timing tests. */
+export interface RuntimeClock {
+  raf?: (cb: (timestamp: number) => void) => number;
+  cancel?: (handle: number) => void;
+  now?: () => number;
+  setTimeout?: (cb: () => void, ms: number) => unknown;
+  clearTimeout?: (handle: unknown) => void;
 }
 
 export interface BuildSceneResult {
@@ -112,13 +190,50 @@ export interface BuildSceneResult {
   /** Root container we added to `root`. */
   container: HTMLElement;
   /**
-   * Animated elements discovered *inside* nested composition instances
-   * (already paired with their concrete DOM nodes). Top-level animated
-   * elements are collected separately from `elementMap`; the runtime applies
-   * both lists each frame so a pre-comp's own animation plays along the parent
-   * timeline.
+   * D-025 — the field-scope tree. Each scope owns the DOM nodes for ONE
+   * composition instance (its own `elementMap`/`textOriginals`/container) and
+   * lists its nested child instances by namespace, so namespaced (nested) field
+   * values route to the right copy even when a child is instanced more than once.
    */
-  nestedAnimated: NestedAnimatedEntry[];
+  scopeTree: FieldScope;
+}
+
+/**
+ * D-025 / D-026 — one composition instance's scope. The root scope is the active
+ * document; each nested `composition` instance gets its own child scope so the same
+ * child instanced twice (e.g. `home`/`away`) has two independent element maps AND
+ * its own lifecycle (D-026 cascade). One scope, two uses: field application
+ * (`elementMap`/`textOriginals`) and lifecycle/animation (`animated`/`source`).
+ */
+export interface FieldScope {
+  /** Element id → node, for elements rendered directly in THIS scope. */
+  elementMap: Map<string, HTMLElement>;
+  /** Original text per text element in this scope. */
+  textOriginals: Map<string, string>;
+  /** This scope's container (root stage, or an instance's inner box). */
+  container: HTMLElement;
+  /** Nested child instances, each under its (parent-unique) namespace `name`. */
+  children: FieldScopeChild[];
+  /** D-026 — animated elements rendered directly in this scope (its own lifecycle). */
+  animated: NestedAnimatedEntry[];
+  /** D-026 — the comp/scene this scope renders, for its lifecycle/playout/active. */
+  source: LifecycleSource;
+}
+
+/** The lifecycle-relevant fields of the comp/scene a scope renders (D-026). */
+export interface LifecycleSource {
+  frameRange: FrameRange;
+  activeRange?: FrameRange | undefined;
+  lifecycle?: Lifecycle | undefined;
+  playout?: Playout | undefined;
+}
+
+export interface FieldScopeChild {
+  /** Namespace key — the instance's name (parent-unique). */
+  name: string;
+  /** The referenced child composition id (resolved against `scene.compositions`). */
+  compositionId: string;
+  scope: FieldScope;
 }
 
 /** A nested element + its node + animation, collected during comp expansion. */

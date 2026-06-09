@@ -271,14 +271,21 @@ export function hasKeyframeAt(el: Element, property: AnimatableProperty, frame: 
  * drag in an ambient `Window.cg?: TemplateRuntime` declaration that
  * collides with the Designer's `Window.cg: DesignerBridge` typing.
  */
-function interpolateNumericTrack(track: Track, frame: number): number | null {
+/**
+ * Interpolate a track's value at `frame` — numeric OR hex colour — mirroring
+ * the runtime's `interpolateAtFrame` (clamp before first / after last keyframe,
+ * per-keyframe outgoing easing). Returns `null` only when the track is empty.
+ * Kept local rather than imported from `@cg/template-runtime` because that drags
+ * in an ambient `Window.cg?: TemplateRuntime` declaration that collides with the
+ * Designer's `Window.cg: DesignerBridge` typing.
+ */
+function interpolateTrack(track: Track, frame: number): number | string | null {
   const kfs = track.keyframes;
   const first = kfs[0];
   const last = kfs[kfs.length - 1];
   if (first === undefined || last === undefined) return null;
-  if (typeof first.value !== 'number') return null;
   if (frame <= first.frame) return first.value;
-  if (frame >= last.frame) return typeof last.value === 'number' ? last.value : null;
+  if (frame >= last.frame) return last.value;
   let prev: Keyframe = first;
   let next: Keyframe = last;
   for (let i = 1; i < kfs.length; i++) {
@@ -291,13 +298,52 @@ function interpolateNumericTrack(track: Track, frame: number): number | null {
       break;
     }
   }
-  if (typeof prev.value !== 'number' || typeof next.value !== 'number') return null;
   if (prev.easing === 'step') return prev.value;
   const span = next.frame - prev.frame;
   const t = span === 0 ? 1 : (frame - prev.frame) / span;
   const eased =
     prev.bezier !== undefined ? cubicBezierEase(prev.bezier, t) : applyEasing(prev.easing, t);
-  return prev.value + (next.value - prev.value) * eased;
+  return lerpKeyframeValue(prev.value, next.value, eased);
+}
+
+/** Numeric-only view of {@link interpolateTrack} for the transform/opacity samplers. */
+function interpolateNumericTrack(track: Track, frame: number): number | null {
+  const v = interpolateTrack(track, frame);
+  return typeof v === 'number' ? v : null;
+}
+
+function lerpKeyframeValue(a: number | string, b: number | string, t: number): number | string {
+  if (typeof a === 'number' && typeof b === 'number') return a + (b - a) * t;
+  if (typeof a === 'string' && typeof b === 'string') return lerpHexColor(a, b, t);
+  // Mixed types — schema doesn't allow this, but be defensive: snap to `a`.
+  return a;
+}
+
+/** Lerp two `#RRGGBB`/`#RRGGBBAA` hex strings componentwise (mirrors the runtime). */
+function lerpHexColor(a: string, b: string, t: number): string {
+  const ca = parseHex(a);
+  const cb = parseHex(b);
+  const r = Math.round(ca.r + (cb.r - ca.r) * t);
+  const g = Math.round(ca.g + (cb.g - ca.g) * t);
+  const bl = Math.round(ca.b + (cb.b - ca.b) * t);
+  const hasAlpha = ca.a !== undefined || cb.a !== undefined;
+  if (!hasAlpha) return `#${hex2(r)}${hex2(g)}${hex2(bl)}`;
+  const alpha = Math.round((ca.a ?? 255) + ((cb.a ?? 255) - (ca.a ?? 255)) * t);
+  return `#${hex2(r)}${hex2(g)}${hex2(bl)}${hex2(alpha)}`;
+}
+
+function parseHex(hex: string): { r: number; g: number; b: number; a?: number } {
+  const str = hex.startsWith('#') ? hex.slice(1) : hex;
+  const r = parseInt(str.slice(0, 2), 16);
+  const g = parseInt(str.slice(2, 4), 16);
+  const b = parseInt(str.slice(4, 6), 16);
+  if (str.length === 8) return { r, g, b, a: parseInt(str.slice(6, 8), 16) };
+  return { r, g, b };
+}
+
+function hex2(n: number): string {
+  const v = Math.max(0, Math.min(255, n));
+  return v.toString(16).padStart(2, '0').toUpperCase();
 }
 
 function applyEasing(easing: Easing, t: number): number {
@@ -360,12 +406,50 @@ export function effectiveOpacityAt(el: Element, frame: number): number {
  * fall back to the static value; numeric interpolation only.)
  */
 export function effectiveRowValue(el: Element, row: TimelineRow, frame: number): number | string {
-  const track = el.animation?.tracks[row.property];
-  if (track !== undefined) {
-    const v = interpolateNumericTrack(track, frame);
-    if (v !== null) return v;
-  }
-  return row.read(el);
+  return effectiveAnimatableValue(el, row.property, frame, row.read(el));
+}
+
+/**
+ * The visually-effective value for an animatable property at `frame`: the
+ * interpolated keyframe value (numeric OR colour) when the property has a track,
+ * otherwise the supplied static `fallback`. This is the SINGLE source of truth the
+ * inspector and timeline must reflect for DISPLAY, and the value a freshly-added
+ * keyframe must CAPTURE — identical to what the canvas drag path samples via
+ * {@link effectiveTransformAt}. Reading the static value instead is the root cause
+ * of the diamond-reverts-position (B-005) and colour-display-stale (B-006) bugs.
+ */
+export function effectiveAnimatableValue(
+  el: Element,
+  property: AnimatableProperty,
+  frame: number,
+  fallback: number | string,
+): number | string {
+  const track = trackOf(el, property);
+  if (track === undefined) return fallback;
+  const v = interpolateTrack(track, frame);
+  return v ?? fallback;
+}
+
+/** {@link effectiveAnimatableValue} narrowed to numbers (static `fallback` if unanimated). */
+export function effectiveNumberAt(
+  el: Element,
+  property: AnimatableProperty,
+  frame: number,
+  fallback: number,
+): number {
+  const v = effectiveAnimatableValue(el, property, frame, fallback);
+  return typeof v === 'number' ? v : fallback;
+}
+
+/** {@link effectiveAnimatableValue} narrowed to hex colours (static `fallback` if unanimated). */
+export function effectiveColorAt(
+  el: Element,
+  property: AnimatableProperty,
+  frame: number,
+  fallback: string,
+): string {
+  const v = effectiveAnimatableValue(el, property, frame, fallback);
+  return typeof v === 'string' ? v : fallback;
 }
 
 import type { KeyframeIndicatorVariant } from './KeyframeIndicator.js';
