@@ -90,7 +90,8 @@ export class ProjectStore {
           id: uuid(),
           name: 'comp1',
           resolution,
-          frameRate,
+          // D-026 — fps is project-level (`Scene.frameRate`); compositions no longer
+          // carry their own.
           frameRange,
           background: 'transparent',
           layers: [],

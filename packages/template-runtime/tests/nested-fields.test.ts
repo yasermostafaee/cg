@@ -21,7 +21,6 @@ const childComp: Composition = {
   id: 'team',
   name: 'Team',
   resolution: { width: 200, height: 100 },
-  frameRate: 50,
   frameRange: { in: 0, out: 50 },
   background: 'transparent',
   layers: [

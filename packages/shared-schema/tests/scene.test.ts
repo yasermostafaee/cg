@@ -188,3 +188,34 @@ describe('Scene — D-020 lifecycle / playout', () => {
     ).toThrow();
   });
 });
+
+describe('Scene — D-026 single project fps (no per-composition frameRate)', () => {
+  const comp = (over: Record<string, unknown> = {}) => ({
+    id: 'c1',
+    name: 'Comp',
+    resolution: { width: 1920, height: 1080 },
+    frameRange: { in: 0, out: 50 },
+    background: 'transparent' as const,
+    layers: [],
+    ...over,
+  });
+
+  it('fps lives only on the Scene (the single project frame rate)', () => {
+    const s = SceneSchema.parse({ ...minimalScene, frameRate: 25, compositions: [comp()] });
+    expect(s.frameRate).toBe(25);
+    // Compositions have no frameRate of their own.
+    expect((s.compositions?.[0] as Record<string, unknown>).frameRate).toBeUndefined();
+  });
+
+  it('strips a legacy per-composition frameRate on load (coerced to the project fps)', () => {
+    // A project authored before D-026 carried fps on each composition; parsing
+    // drops it so every composition shares the single `Scene.frameRate`.
+    const s = SceneSchema.parse({
+      ...minimalScene,
+      frameRate: 50,
+      compositions: [comp({ frameRate: 25 })],
+    });
+    expect((s.compositions?.[0] as Record<string, unknown>).frameRate).toBeUndefined();
+    expect(s.frameRate).toBe(50);
+  });
+});

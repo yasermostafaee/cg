@@ -44,7 +44,6 @@ function comp(over: Partial<Composition> & { id: string }): Composition {
   return {
     name: over.id,
     resolution: { width: 200, height: 100 },
-    frameRate: 50,
     frameRange: { in: 0, out: 50 },
     background: 'transparent',
     layers: [],

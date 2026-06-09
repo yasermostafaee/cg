@@ -337,28 +337,18 @@ function SizeRow({ scene }: { scene: Scene }): JSX.Element {
   );
 }
 
-const FRAME_RATES = [25, 29.97, 50, 59.94, 60] as const;
-
-/** Editable frame rate (snapped to the supported set). Routes to the active document. */
+/**
+ * D-026 — frame rate is a single PROJECT-level setting (`Scene.frameRate`) shared
+ * by every composition (one CasparCG channel fps), so the inspector shows it
+ * READ-ONLY here. It is set once for the project, not per composition.
+ */
 function FrameRateRow({ scene }: { scene: Scene }): JSX.Element {
   return (
     <div className={s.row}>
       <span className={s.label}>frame rate</span>
-      <select
-        className={s.docNum}
-        style={{ width: 'auto' }}
-        value={String(scene.frameRate)}
-        onChange={(e) =>
-          designerStore.updateScene({ frameRate: Number(e.target.value) as Scene['frameRate'] })
-        }
-        aria-label="Composition frame rate"
-      >
-        {FRAME_RATES.map((r) => (
-          <option key={r} value={r}>
-            {r}
-          </option>
-        ))}
-      </select>
+      <span className={s.value} aria-label="Project frame rate (read-only)">
+        {scene.frameRate} fps
+      </span>
     </div>
   );
 }

@@ -518,3 +518,30 @@ independently.
   **Notes:** schema-first (`Composition.fields/bindings` + `composition-fields.ts`
   helpers); runtime field-scope tree + `applyScopedFieldValues`; GDD nested objects;
   legacy global fields migrated on load. Change: `openspec/changes/add-nested-composition-field-scoping/`.
+
+## [~] D-026 — Nested-lifecycle cascade + shared project fps ⟨priority: high⟩ — change: `openspec/changes/add-nested-lifecycle-cascade/`
+
+**What:** `play/stop/pause/resume/remove` cascade recursively to every nested
+composition instance — each runs its OWN intro→hold→outro at its own out-point — by
+building a controller tree over the D-025 field-scope tree (hybrid: the parent keeps
+its own controller for its direct elements). Frame rate becomes a single
+project-level setting (`Scene.frameRate`); `Composition.frameRate` is dropped and the
+inspector fps is read-only.
+**Why:** D-020's lifecycle was top-level-only — it animated nested elements along the
+parent timeline, so a child could not hold/exit on its own. And per-composition fps
+let nested children disagree, whereas a CasparCG channel has one fps.
+**Acceptance:**
+- WHEN the parent is played THEN each nested child holds at its OWN out-point
+  independently (different children → different held frames at the same time)
+- WHEN the parent is stopped THEN each child plays its OWN outro
+- WHEN the parent is paused/resumed THEN the cascade freezes/continues every child
+- WHEN the parent has its own out-point THEN its direct elements hold at it AND the
+  cascade still applies to children
+- WHEN nesting is arbitrarily deep THEN the cascade reaches grandchildren
+- WHEN a project is opened THEN every composition shares the single project fps
+  (`Scene.frameRate`), and a legacy per-composition fps is stripped on load; the
+  inspector fps is read-only
+  **Notes:** child offset 0 for v1 (no `lifespan` overload); root scope drives the
+  global machine/events + session playout override, children use their own stored
+  playout; single fps applied across all scopes (FrameDriver is time-based). Change:
+  `openspec/changes/add-nested-lifecycle-cascade/`.

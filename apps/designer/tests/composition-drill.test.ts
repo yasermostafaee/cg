@@ -31,7 +31,6 @@ function childComp(id = 'child'): Composition {
     id,
     name: 'Child',
     resolution: { width: 200, height: 100 },
-    frameRate: 50,
     frameRange: { in: 0, out: 50 },
     background: 'transparent',
     layers: [

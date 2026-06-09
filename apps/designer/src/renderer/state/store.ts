@@ -245,7 +245,8 @@ function set(patch: Partial<DesignerStoreState>): void {
  */
 interface EditDocFields {
   resolution: Resolution;
-  frameRate: Scene['frameRate'];
+  // D-026 — fps is project-level (`Scene.frameRate`), shared by every composition;
+  // it is NOT a per-document field, so it is not edited through the active doc.
   frameRange: FrameRange;
   activeRange?: FrameRange | undefined;
   lifecycle?: Lifecycle | undefined;
@@ -346,7 +347,8 @@ export function editSceneOf(scene: Scene | null, id: string | null): Scene | nul
     ...scene,
     name: c.name,
     resolution: c.resolution,
-    frameRate: c.frameRate,
+    // D-026 — fps is project-level; the projected scene keeps the project fps.
+    frameRate: scene.frameRate,
     frameRange: c.frameRange,
     activeRange: c.activeRange,
     lifecycle: c.lifecycle,
@@ -385,7 +387,6 @@ function ensureCompositions(scene: Scene): { scene: Scene; activeId: string | nu
       id: freshCompositionId(),
       name: scene.name === '' ? 'comp1' : scene.name,
       resolution: scene.resolution,
-      frameRate: scene.frameRate,
       frameRange: scene.frameRange,
       ...(scene.activeRange !== undefined ? { activeRange: scene.activeRange } : {}),
       background: scene.background,
@@ -920,7 +921,6 @@ export const designerStore = {
       id,
       name: `comp${String(n)}`,
       resolution: { ...current.scene.resolution },
-      frameRate: current.scene.frameRate,
       frameRange: { in: 0, out: Math.max(1, span) },
       background: 'transparent',
       layers: [],
@@ -1067,9 +1067,10 @@ export const designerStore = {
       set({ scene: { ...current.scene, ...patch } });
       return;
     }
+    // D-026 — `frameRate` is project-level: it is intentionally NOT a doc key, so
+    // an fps patch routes to the scene root (shared by every composition).
     const docKeys = new Set([
       'resolution',
-      'frameRate',
       'frameRange',
       'activeRange',
       'lifecycle',

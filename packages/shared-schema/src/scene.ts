@@ -101,7 +101,11 @@ export const CompositionSchema = z
     id: IdSchema,
     name: z.string(),
     resolution: ResolutionSchema,
-    frameRate: FrameRateSchema,
+    // D-026 — fps is a single PROJECT-level setting on `Scene.frameRate`, shared by
+    // every composition (one CasparCG channel fps; keeps cascade timing comparable
+    // across nested children). Compositions no longer carry their own `frameRate`;
+    // legacy per-composition fps is stripped on load (schema) and the project fps
+    // applies everywhere.
     frameRange: FrameRangeSchema,
     activeRange: FrameRangeSchema.optional(),
     /** D-020 lifecycle out-point marker (optional; absent = no distinct phases). */

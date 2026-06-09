@@ -11,7 +11,7 @@ import type {
   ShapeElement,
   Transform,
 } from '@cg/shared-schema';
-import type { BuildSceneResult, FieldScope, NestedAnimatedEntry } from './types.js';
+import type { BuildSceneResult, FieldScope, LifecycleSource } from './types.js';
 
 /**
  * Build a DOM tree from a Scene. Returns the container element (caller
@@ -23,26 +23,27 @@ import type { BuildSceneResult, FieldScope, NestedAnimatedEntry } from './types.
  */
 /**
  * Threaded build context. `depth`/`visited` bound nested-composition recursion
- * (cycle + runaway guard); `nestedAnimated` collects animated elements found
- * inside instances so the runtime can play their animation; `scene` carries the
- * composition registry so `composition` elements resolve.
+ * (cycle + runaway guard); each `scope` collects its own animated elements (D-026)
+ * so a nested instance runs its own lifecycle; `scene` carries the composition
+ * registry so `composition` elements resolve.
  */
 interface BuildCtx {
   doc: Document;
   scene: Scene;
-  /** The current field-application scope — elements land in `scope.elementMap`. */
+  /** The current scope — elements land in `scope.elementMap`/`scope.animated`. */
   scope: FieldScope;
-  nestedAnimated: NestedAnimatedEntry[];
   depth: number;
   visited: ReadonlySet<string>;
 }
 
-function newScope(container: HTMLElement): FieldScope {
+function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
   return {
     elementMap: new Map<string, HTMLElement>(),
     textOriginals: new Map<string, string>(),
     container,
     children: [],
+    animated: [],
+    source,
   };
 }
 
@@ -57,12 +58,11 @@ export function buildScene(scene: Scene, doc: Document = document): BuildSceneRe
     container.style.background = scene.background;
   }
 
-  const rootScope = newScope(container);
+  const rootScope = newScope(container, scene);
   const ctx: BuildCtx = {
     doc,
     scene,
     scope: rootScope,
-    nestedAnimated: [],
     depth: 0,
     visited: new Set<string>(),
   };
@@ -75,7 +75,6 @@ export function buildScene(scene: Scene, doc: Document = document): BuildSceneRe
     container,
     elementMap: rootScope.elementMap,
     textOriginals: rootScope.textOriginals,
-    nestedAnimated: ctx.nestedAnimated,
     scopeTree: rootScope,
   };
 }
@@ -95,10 +94,10 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
     // Every scope owns its elements, keyed by id, so field bindings apply within
     // the right instance (the same child instanced twice has two scopes).
     ctx.scope.elementMap.set(element.id, elementNode);
-    if (ctx.depth > 0 && element.animation !== undefined) {
-      // Inside an instance: collect so the runtime animates it directly
-      // (it isn't reachable through the parent scene's layer tree).
-      ctx.nestedAnimated.push({
+    // D-026 — animated elements belong to THIS scope's lifecycle/controller, so a
+    // nested child runs its own in→hold→out independently of the parent.
+    if (element.animation !== undefined && Object.keys(element.animation.tracks).length > 0) {
+      ctx.scope.animated.push({
         id: element.id,
         node: elementNode,
         source: element,
@@ -168,7 +167,7 @@ function buildComposition(element: CompositionElement, ctx: BuildCtx): HTMLEleme
 
   // A fresh field scope for THIS instance — so the same child instanced twice
   // gets two independent element maps, addressed by the instance's namespace.
-  const childScope = newScope(inner);
+  const childScope = newScope(inner, comp);
   ctx.scope.children.push({
     name: element.name,
     compositionId: element.compositionId,

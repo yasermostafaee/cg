@@ -2,6 +2,9 @@ import type {
   Element,
   ElementAnimation,
   FieldValues,
+  FrameRange,
+  Lifecycle,
+  Playout,
   PlayoutMode,
   Scene,
 } from '@cg/shared-schema';
@@ -173,14 +176,6 @@ export interface BuildSceneResult {
   /** Root container we added to `root`. */
   container: HTMLElement;
   /**
-   * Animated elements discovered *inside* nested composition instances
-   * (already paired with their concrete DOM nodes). Top-level animated
-   * elements are collected separately from `elementMap`; the runtime applies
-   * both lists each frame so a pre-comp's own animation plays along the parent
-   * timeline.
-   */
-  nestedAnimated: NestedAnimatedEntry[];
-  /**
    * D-025 — the field-scope tree. Each scope owns the DOM nodes for ONE
    * composition instance (its own `elementMap`/`textOriginals`/container) and
    * lists its nested child instances by namespace, so namespaced (nested) field
@@ -190,10 +185,11 @@ export interface BuildSceneResult {
 }
 
 /**
- * D-025 — one composition instance's scope. The root scope is the active document;
- * each nested `composition` instance gets its own child scope so the same child
- * instanced twice (e.g. `home`/`away`) has two independent element maps, addressed
- * by the instance's namespace.
+ * D-025 / D-026 — one composition instance's scope. The root scope is the active
+ * document; each nested `composition` instance gets its own child scope so the same
+ * child instanced twice (e.g. `home`/`away`) has two independent element maps AND
+ * its own lifecycle (D-026 cascade). One scope, two uses: field application
+ * (`elementMap`/`textOriginals`) and lifecycle/animation (`animated`/`source`).
  */
 export interface FieldScope {
   /** Element id → node, for elements rendered directly in THIS scope. */
@@ -204,6 +200,18 @@ export interface FieldScope {
   container: HTMLElement;
   /** Nested child instances, each under its (parent-unique) namespace `name`. */
   children: FieldScopeChild[];
+  /** D-026 — animated elements rendered directly in this scope (its own lifecycle). */
+  animated: NestedAnimatedEntry[];
+  /** D-026 — the comp/scene this scope renders, for its lifecycle/playout/active. */
+  source: LifecycleSource;
+}
+
+/** The lifecycle-relevant fields of the comp/scene a scope renders (D-026). */
+export interface LifecycleSource {
+  frameRange: FrameRange;
+  activeRange?: FrameRange | undefined;
+  lifecycle?: Lifecycle | undefined;
+  playout?: Playout | undefined;
 }
 
 export interface FieldScopeChild {
