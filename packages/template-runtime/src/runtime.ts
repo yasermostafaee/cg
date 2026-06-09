@@ -169,6 +169,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       durationHook: isRoot ? options.durationHook : undefined,
       clock: options.clock,
     });
+    // Build each child's path by appending its instance name to the parent's
+    // dotted path (root = ''): '' → 'home' → 'home.inner'. This is the key
+    // `effectivePlayoutFor`/`scopeOverrides` use to target one scope's timing.
     const children = scope.children.map((c) =>
       buildScopeController(c.scope, false, path === '' ? c.name : `${path}.${c.name}`),
     );

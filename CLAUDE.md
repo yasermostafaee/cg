@@ -140,8 +140,28 @@ The Designer has a browser-E2E suite (`apps/designer/tests/e2e/`, Playwright). I
   clock); E2E guards the **integrated UI path** (controls wire through the bridge and
   the preview reflects them), not browser-clock frame math.
 
+## Engine doc-sync — architecture docs are memory too
+
+The same principle as spec-discipline applies to the **engine architecture docs**: a
+prompt is ephemeral, the doc is the memory. When you change an engine's **structure,
+contracts/invariants, or extension points** (e.g. `@cg/template-runtime`,
+`@cg/shared-schema`, `@cg/vcg-format`), **update its engine doc in the same change**:
+
+- The package's own deep-dive (`packages/<pkg>/README.md`, e.g.
+  [`packages/template-runtime/README.md`](packages/template-runtime/README.md)) for
+  how it's built / how to extend it, and
+- the cross-engine map ([`docs/engines/overview.md`](docs/engines/overview.md)) when
+  the data flow or a seam between engines changes.
+
+Engine docs describe **how it's built**; the **behavioural contract** stays in the
+OpenSpec specs/changes — keep the doc pointing at the spec, don't duplicate behaviour
+(it drifts). A structural change that leaves a stale engine doc is **incomplete**, the
+same way a stale test is.
+
 ## Key references
 
+- Engine architecture (read first): `docs/engines/overview.md`; the heart's
+  deep-dive: `packages/template-runtime/README.md`
 - Architecture decision: `docs/adrs/0007-electron-to-browser-migration.md`
 - Roadmap: `docs/phases/phase-10-browser-migration.md`
 - `.vcg` format: `packages/vcg-format/` (isomorphic pack/unpack/verify)

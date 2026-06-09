@@ -86,3 +86,27 @@ features had no default path to E2E coverage.
   JS (test-only; a real user can't trigger it); built app via `vite preview`
   (matches turbo `test:e2e` dependsOn build); E2E lives in `apps/designer/tests/e2e`.
   Change: `openspec/changes/add-designer-e2e-testing/`.
+
+## [!] P-006 — End-user product documentation site (Loopic-style) ⟨priority: low⟩ — blocked: post-feature-stabilization / GTM
+
+**What:** A public, end-user-facing documentation site for the CG platform —
+getting-started, building a lower-third/ticker/fullscreen, data fields & bindings,
+preview/playout, export to `.vcg`, and a CasparCG operator guide — in the style of
+Loopic's product docs. Audience is broadcast operators & template authors, NOT
+contributors.
+**Why:** Today's docs are engineer-facing (`CLAUDE.md`, `docs/engines/`, OpenSpec,
+`docs/operator-guide/`). When the product stabilizes and we go to market, end users
+will need approachable, task-oriented docs with screenshots/video — a different
+artifact from the internal architecture docs.
+**Acceptance:**
+
+- WHEN a new operator follows "getting started" THEN they can build, preview, and
+  export a working lower-third without reading any code or internal docs
+- WHEN a feature ships THEN its user-facing behavior has a docs page (mirrors how
+  OpenSpec scenarios + E2E grow with features)
+  **Notes:** TRACKED, NOT BUILT NOW — explicitly deferred until feature set
+  stabilizes and a GTM motion exists (hence `[!]` blocked). Likely a static docs
+  site (e.g. Astro Starlight / VitePress) separate from the engineer docs; reuse
+  `docs/operator-guide/` + `docs/designer-guide/` content as seeds. Internal
+  architecture docs (`docs/engines/`, package READMEs) stay the source of truth for
+  _how it's built_; this is the _how to use it_ layer.
