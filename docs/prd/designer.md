@@ -497,3 +497,24 @@ child, affecting every parent).
   space (inverts the instance transform, scales into child resolution) and
   hit-tests the child's shapes; `store.openCompositionAndSelect` does the atomic
   open-child + select. No schema/runtime change. Change: `openspec/changes/add-drill-into-composition/`.
+
+## [~] D-025 — Nested-composition field scoping + instance namespacing ⟨priority: high⟩ — change: `openspec/changes/add-nested-composition-field-scoping/`
+
+**What:** Fields are per-composition; nested child instances expose their fields in
+the parent under a per-instance namespace (nested objects), with values routed to
+the right child copy. Model: Option C (instance-scoped namespacing).
+**Why:** Fields were project-global (every comp showed all fields), and nested
+children's values never updated; the same child instanced twice couldn't be set
+independently.
+**Acceptance:**
+- WHEN a standalone composition is open THEN it shows only its own field(s), flat
+- WHEN a parent nests a child THEN the child's fields appear grouped under the
+  instance's namespace (nested object in data/GDD)
+- WHEN the same child is instanced twice (home/away) THEN two independent namespaces
+  with independent values
+- WHEN a namespaced field is set in the parent preview THEN the right nested child's
+  element updates
+- WHEN a second instance is added/renamed to a taken name THEN it's uniquified
+  **Notes:** schema-first (`Composition.fields/bindings` + `composition-fields.ts`
+  helpers); runtime field-scope tree + `applyScopedFieldValues`; GDD nested objects;
+  legacy global fields migrated on load. Change: `openspec/changes/add-nested-composition-field-scoping/`.

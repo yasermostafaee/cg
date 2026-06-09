@@ -15,7 +15,13 @@ import type {
   Resolution,
   Scene,
 } from '@cg/shared-schema';
-import { activeRangeOf, playoutOf } from '@cg/shared-schema';
+import {
+  activeRangeOf,
+  playoutOf,
+  migrateGlobalFieldsToCompositions,
+  uniqueInstanceName,
+  compositionInstancesOf,
+} from '@cg/shared-schema';
 
 /**
  * Designer renderer state — small pub-sub store with a JSON-patch-ish
@@ -292,6 +298,35 @@ function withActiveDoc(scene: Scene, patch: Partial<EditDocFields>): Scene {
 }
 
 /**
+ * D-025 — the active document's OWN fields/bindings (per-composition). Mutations
+ * to data keys / bindings go through here so they scope to the open composition,
+ * not the project root.
+ */
+function activeFieldData(scene: Scene): {
+  fields: readonly DynamicField[];
+  bindings: readonly FieldBinding[];
+} {
+  const id = activeCompId();
+  const c = id !== null ? scene.compositions?.find((x) => x.id === id) : undefined;
+  const doc = c ?? scene;
+  return { fields: doc.fields ?? [], bindings: doc.bindings ?? [] };
+}
+
+function withActiveFieldData(
+  scene: Scene,
+  patch: { fields?: DynamicField[]; bindings?: FieldBinding[] },
+): Scene {
+  const id = activeCompId();
+  if (id !== null && scene.compositions?.some((x) => x.id === id) === true) {
+    return {
+      ...scene,
+      compositions: scene.compositions.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+    };
+  }
+  return { ...scene, ...patch };
+}
+
+/**
  * Project the active document onto a `Scene` shape for the canvas / timeline /
  * inspector / transport, which all read `scene.resolution`, `scene.layers`,
  * `scene.frameRange`, etc. When a composition is active those fields are
@@ -318,6 +353,11 @@ export function editSceneOf(scene: Scene | null, id: string | null): Scene | nul
     playout: c.playout,
     background: c.background,
     layers: c.layers,
+    // D-025 — fields/bindings are per-composition; surface the active comp's own
+    // (the inspector/preview/exporter read these). `compositions` stays from the
+    // root so nested instances resolve and aggregate.
+    fields: c.fields ?? [],
+    bindings: c.bindings ?? [],
   };
 }
 
@@ -335,7 +375,9 @@ function freshCompositionId(): string {
 function ensureCompositions(scene: Scene): { scene: Scene; activeId: string | null } {
   const comps = scene.compositions ?? [];
   if (comps.length > 0) {
-    return { scene: { ...scene, layers: [] }, activeId: comps[0]?.id ?? null };
+    // D-025 — distribute any legacy GLOBAL fields/bindings into the owning comps.
+    const next = migrateGlobalFieldsToCompositions({ ...scene, layers: [] });
+    return { scene: next, activeId: comps[0]?.id ?? null };
   }
   const rootLayers = Array.isArray(scene.layers) ? scene.layers : [];
   if (rootLayers.length > 0) {
@@ -348,8 +390,16 @@ function ensureCompositions(scene: Scene): { scene: Scene; activeId: string | nu
       ...(scene.activeRange !== undefined ? { activeRange: scene.activeRange } : {}),
       background: scene.background,
       layers: rootLayers,
+      fields: [],
+      bindings: [],
     };
-    return { scene: { ...scene, compositions: [comp], layers: [] }, activeId: comp.id };
+    // Move the root's global fields/bindings into the migrated composition.
+    const next = migrateGlobalFieldsToCompositions({
+      ...scene,
+      compositions: [comp],
+      layers: [],
+    });
+    return { scene: next, activeId: comp.id };
   }
   return { scene: { ...scene, compositions: [], layers: [] }, activeId: null };
 }
@@ -976,9 +1026,14 @@ export const designerStore = {
     const child = current.scene.compositions?.find((c) => c.id === childId);
     if (child === undefined) return false;
     if (!canNestComposition(current.scene, current.activeCompositionId, childId)) return false;
+    // D-025 — the instance name is the field namespace, so it must be unique among
+    // the active doc's instances (default to the child name, then "name 2", …).
+    const takenNames = compositionInstancesOf({ layers: activeLayersOf(current.scene) }).map(
+      (i) => i.name,
+    );
     const el: Element = {
       id: freshElementId(),
-      name: child.name,
+      name: uniqueInstanceName(child.name, takenNames),
       type: 'composition',
       compositionId: childId,
       transform: {
@@ -1142,11 +1197,11 @@ export const designerStore = {
     set({ bindModeFieldId: fieldId });
   },
 
-  /** Append a dynamic field to scene.fields. */
+  /** Append a dynamic field to the ACTIVE composition's fields (D-025). */
   addField(field: DynamicField): void {
     if (current.scene === null) return;
-    const fields = [...current.scene.fields, field];
-    set({ scene: { ...current.scene, fields } });
+    const fields = [...activeFieldData(current.scene).fields, field];
+    set({ scene: withActiveFieldData(current.scene, { fields }) });
   },
 
   /**
@@ -1176,18 +1231,19 @@ export const designerStore = {
   /** Patch a field's editable properties (label/required/default/etc.). */
   updateField(fieldId: string, patch: Partial<DynamicField>): void {
     if (current.scene === null) return;
-    const fields = current.scene.fields.map((f) =>
+    const fields = activeFieldData(current.scene).fields.map((f) =>
       f.id === fieldId ? ({ ...f, ...patch } as DynamicField) : f,
     );
-    set({ scene: { ...current.scene, fields } });
+    set({ scene: withActiveFieldData(current.scene, { fields }) });
   },
 
-  /** Remove a field and any bindings that reference it. */
+  /** Remove a field and any bindings that reference it (active composition). */
   removeField(fieldId: string): void {
     if (current.scene === null) return;
-    const fields = current.scene.fields.filter((f) => f.id !== fieldId);
-    const bindings = current.scene.bindings.filter((b) => b.fieldId !== fieldId);
-    set({ scene: { ...current.scene, fields, bindings } });
+    const doc = activeFieldData(current.scene);
+    const fields = doc.fields.filter((f) => f.id !== fieldId);
+    const bindings = doc.bindings.filter((b) => b.fieldId !== fieldId);
+    set({ scene: withActiveFieldData(current.scene, { fields, bindings }) });
   },
 
   /** Append a binding (no dedup — same target appearing twice is allowed). */
@@ -1202,23 +1258,25 @@ export const designerStore = {
    */
   addBinding(binding: FieldBinding): void {
     if (current.scene === null) return;
-    const duplicate = current.scene.bindings.some(
+    const doc = activeFieldData(current.scene);
+    const duplicate = doc.bindings.some(
       (b) => b.fieldId === binding.fieldId && sameBindingTarget(b.target, binding.target),
     );
     if (duplicate) return;
-    const bindings = [...current.scene.bindings, binding];
-    set({ scene: { ...current.scene, bindings } });
+    const bindings = [...doc.bindings, binding];
+    set({ scene: withActiveFieldData(current.scene, { bindings }) });
   },
 
   /**
-   * Remove a binding identified by its array index. Index-based removal
-   * is unambiguous when two bindings share the same field/target.
+   * Remove a binding identified by its array index (into the active composition's
+   * bindings). Index-based removal is unambiguous when two share a field/target.
    */
   removeBindingAt(index: number): void {
     if (current.scene === null) return;
-    if (index < 0 || index >= current.scene.bindings.length) return;
-    const bindings = current.scene.bindings.filter((_, i) => i !== index);
-    set({ scene: { ...current.scene, bindings } });
+    const doc = activeFieldData(current.scene);
+    if (index < 0 || index >= doc.bindings.length) return;
+    const bindings = doc.bindings.filter((_, i) => i !== index);
+    set({ scene: withActiveFieldData(current.scene, { bindings }) });
   },
 
   /**
@@ -1241,7 +1299,8 @@ export const designerStore = {
   setElementDataKey(elementId: string, key: string): boolean {
     if (current.scene === null) return false;
     const trimmed = key.trim();
-    const bindings = current.scene.bindings;
+    const doc = activeFieldData(current.scene);
+    const bindings = doc.bindings;
     const convIdx = bindings.findIndex(
       (b) =>
         b.target.kind === 'text' &&
@@ -1268,14 +1327,14 @@ export const designerStore = {
     );
     if (ownedElsewhere) return false;
 
-    const existing = current.scene.fields.find((f) => f.id === trimmed);
+    const existing = doc.fields.find((f) => f.id === trimmed);
 
     if (currentKey === null) {
       const binding: FieldBinding = { fieldId: trimmed, target: { kind: 'text', elementId } };
       // Re-adopt an orphaned field (keep its config); otherwise create a fresh
       // one seeded from the element's current text.
       if (existing !== undefined) {
-        set({ scene: { ...current.scene, bindings: [...bindings, binding] } });
+        set({ scene: withActiveFieldData(current.scene, { bindings: [...bindings, binding] }) });
         return true;
       }
       const found = locate(current.scene, elementId);
@@ -1290,11 +1349,10 @@ export const designerStore = {
         maxLength: DEFAULT_DATA_FIELD_MAX_LENGTH,
       };
       set({
-        scene: {
-          ...current.scene,
-          fields: [...current.scene.fields, field],
+        scene: withActiveFieldData(current.scene, {
+          fields: [...doc.fields, field],
           bindings: [...bindings, binding],
-        },
+        }),
       });
       return true;
     }
@@ -1302,13 +1360,13 @@ export const designerStore = {
     // Rename. If an (orphaned) field already owns the new id, don't fork the id
     // space — reject and let the operator clear then re-set.
     if (existing !== undefined) return false;
-    const fields = current.scene.fields.map((f) =>
+    const fields = doc.fields.map((f) =>
       f.id === currentKey ? ({ ...f, id: trimmed } as DynamicField) : f,
     );
     const nextBindings = bindings.map((b) =>
       b.fieldId === currentKey ? { ...b, fieldId: trimmed } : b,
     );
-    set({ scene: { ...current.scene, fields, bindings: nextBindings } });
+    set({ scene: withActiveFieldData(current.scene, { fields, bindings: nextBindings }) });
     return true;
   },
 
@@ -1320,18 +1378,19 @@ export const designerStore = {
    */
   setElementFieldMeta(elementId: string, patch: ElementFieldMetaPatch): void {
     if (current.scene === null) return;
-    const conv = current.scene.bindings.find(
+    const doc = activeFieldData(current.scene);
+    const conv = doc.bindings.find(
       (b) =>
         b.target.kind === 'text' &&
         b.target.elementId === elementId &&
         b.target.placeholder === undefined,
     );
     if (conv === undefined) return;
-    const oldField = current.scene.fields.find((f) => f.id === conv.fieldId);
+    const oldField = doc.fields.find((f) => f.id === conv.fieldId);
     if (oldField === undefined) return;
     const newField = rebuildField(oldField, patch);
-    const fields = current.scene.fields.map((f) => (f.id === conv.fieldId ? newField : f));
-    set({ scene: { ...current.scene, fields } });
+    const fields = doc.fields.map((f) => (f.id === conv.fieldId ? newField : f));
+    set({ scene: withActiveFieldData(current.scene, { fields }) });
 
     // Keep the element's authoring text in lockstep with the field default
     // whenever the default changed (editing "Default" here, or a field-type
@@ -1876,7 +1935,17 @@ export const designerStore = {
     const { layer, layerIdx, elIdx } = found;
     const existing = layer.children[elIdx];
     if (existing === undefined) return;
-    const merged = { ...existing, ...patch } as Element;
+    let effectivePatch = patch;
+    // D-025 — a composition instance's name is its field namespace, so renaming it
+    // must stay unique among the active doc's instances. Uniquify on collision.
+    if (existing.type === 'composition' && typeof patch.name === 'string') {
+      const taken = compositionInstancesOf({ layers: activeLayersOf(current.scene) })
+        .filter((i) => i.id !== elementId)
+        .map((i) => i.name);
+      const unique = uniqueInstanceName(patch.name.trim() === '' ? existing.name : patch.name, taken);
+      if (unique !== patch.name) effectivePatch = { ...patch, name: unique };
+    }
+    const merged = { ...existing, ...effectivePatch } as Element;
     const nextChildren = [...layer.children];
     nextChildren[elIdx] = merged;
     const nextLayer: Layer = { ...layer, children: nextChildren };
@@ -2034,26 +2103,27 @@ export const designerStore = {
     const keepKey =
       current.selectedKeyframe !== null && current.selectedKeyframe.elementId !== elementId;
 
-    // Cascade-clean the dynamic-field wiring: drop every binding that targets the
-    // deleted element (otherwise it dangles at a non-existent id), then drop any
-    // field that was bound to this element and is now referenced by no binding —
-    // i.e. a field created for this element. Fields still used elsewhere stay.
+    // Cascade-clean the dynamic-field wiring (in the active composition): drop
+    // every binding that targets the deleted element, then drop any field bound to
+    // this element and now referenced by no binding. Fields still used elsewhere
+    // stay. Scoped to the active doc's own fields/bindings (D-025).
+    const doc = activeFieldData(current.scene);
     const boundToEl = new Set(
-      current.scene.bindings
+      doc.bindings
         .filter((b) => b.target.kind !== 'scene-background' && b.target.elementId === elementId)
         .map((b) => b.fieldId),
     );
-    const nextBindings = current.scene.bindings.filter(
+    const nextBindings = doc.bindings.filter(
       (b) => b.target.kind === 'scene-background' || b.target.elementId !== elementId,
     );
     const stillBound = new Set(nextBindings.map((b) => b.fieldId));
-    const nextFields = current.scene.fields.filter(
+    const nextFields = doc.fields.filter(
       (f) => !(boundToEl.has(f.id) && !stillBound.has(f.id)),
     );
 
     const withLayers = withActiveLayers(current.scene, nextLayers);
     set({
-      scene: { ...withLayers, fields: nextFields, bindings: nextBindings },
+      scene: withActiveFieldData({ ...withLayers }, { fields: nextFields, bindings: nextBindings }),
       selection: nextSelection,
       selectedKeyframe: keepKey ? current.selectedKeyframe : null,
       selectedKeyframes: keepKey ? current.selectedKeyframes : [],

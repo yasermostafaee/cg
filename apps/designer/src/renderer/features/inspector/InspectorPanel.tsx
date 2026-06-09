@@ -1,4 +1,10 @@
-import type { AnimatableProperty, Element, FieldBinding, Scene } from '@cg/shared-schema';
+import {
+  compositionInstancesOf,
+  type AnimatableProperty,
+  type Element,
+  type FieldBinding,
+  type Scene,
+} from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
@@ -82,7 +88,7 @@ function SceneInspector({
       <Row label="path" value={projectPath ?? '(unsaved)'} />
       <BackgroundControl background={scene.background} variant="full" />
       <PlayoutSection scene={scene} />
-      {scene.fields.length > 0 && (
+      {(scene.fields.length > 0 || compositionInstancesOf(scene).length > 0) && (
         <>
           <h3 className={s.heading}>FIELDS</h3>
           <FieldsPanel scene={scene} bindModeFieldId={bindModeFieldId} />

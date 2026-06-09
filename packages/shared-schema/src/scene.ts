@@ -110,6 +110,15 @@ export const CompositionSchema = z
     playout: PlayoutSchema.optional(),
     background: z.union([z.literal('transparent'), HexColorSchema]),
     layers: z.array(LayerSchema),
+    /**
+     * D-025 — this composition's OWN dynamic fields + their bindings. Fields are
+     * per-composition (each composition scopes its own data keys, flat and unique
+     * within it). A parent that nests this composition aggregates these under the
+     * instance's namespace (see `aggregateCompositionFields`). Default `[]` so
+     * compositions authored before this field validate unchanged (absent ⇒ none).
+     */
+    fields: z.array(DynamicFieldSchema).optional(),
+    bindings: z.array(FieldBindingSchema).optional(),
   })
   .superRefine(refineLifecycle);
 export type Composition = z.infer<typeof CompositionSchema>;

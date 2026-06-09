@@ -76,3 +76,19 @@ export const hint = style({
 export const banner = style({
   marginBottom: '0.45rem',
 });
+
+/** A nested child-instance namespace group (D-025) — indented + left rule. */
+export const group = style({
+  marginTop: '0.5rem',
+  paddingLeft: '0.5rem',
+  borderLeft: `2px solid ${colors.border}`,
+});
+
+/** The namespace (instance name) heading for a group. */
+export const groupTitle = style({
+  color: colors.accent,
+  fontSize: '0.62rem',
+  fontWeight: 700,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+});

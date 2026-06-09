@@ -1,4 +1,10 @@
-import { activeRangeOf, type DynamicField, type Scene } from '@cg/shared-schema';
+import {
+  activeRangeOf,
+  aggregateCompositionFields,
+  type AggregatedFields,
+  type DynamicField,
+  type Scene,
+} from '@cg/shared-schema';
 
 /**
  * GDD — Graphics Data Definition (superflytv). A JSON-schema subset that
@@ -32,7 +38,7 @@ export interface GddSchema {
 }
 
 export interface GddProperty {
-  type: 'string' | 'number' | 'boolean';
+  type: 'string' | 'number' | 'boolean' | 'object';
   label: string;
   description?: string;
   gddType?: 'single-line' | 'multi-line' | 'color-rrggbb';
@@ -43,6 +49,9 @@ export interface GddProperty {
   maximum?: number;
   enum?: string[];
   default?: string | number | boolean;
+  /** D-025 — for `type: 'object'` (a nested child-instance namespace). */
+  properties?: Record<string, GddProperty>;
+  required?: string[];
 }
 
 /**
@@ -52,12 +61,10 @@ export interface GddProperty {
  * `dataformat: 'json'`).
  */
 export function buildGddSchema(scene: Scene): GddSchema {
-  const properties: Record<string, GddProperty> = {};
-  const required: string[] = [];
-  for (const field of scene.fields) {
-    properties[field.id] = gddPropertyFor(field);
-    if (field.required) required.push(field.id);
-  }
+  // D-025 — aggregate the (active) composition's own fields plus each nested child
+  // instance's fields under the instance's namespace, as nested objects. A scene
+  // with no nested instances yields a flat schema (unchanged).
+  const { properties, required } = gddPropertiesFor(aggregateCompositionFields(scene, scene));
 
   // The play window is the active range (resized scene bar), falling back to the
   // full frame range. There is no "manual out" in the model yet, so duration is
@@ -74,6 +81,30 @@ export function buildGddSchema(scene: Scene): GddSchema {
       client: { duration: durationMs, steps: 1, dataformat: 'json' },
     },
   };
+}
+
+/** Build `properties`/`required` for an aggregate — flat fields + nested-instance
+ *  namespaces as `type: 'object'` sub-schemas (recursive). */
+function gddPropertiesFor(aggregate: AggregatedFields): {
+  properties: Record<string, GddProperty>;
+  required: string[];
+} {
+  const properties: Record<string, GddProperty> = {};
+  const required: string[] = [];
+  for (const field of aggregate.fields) {
+    properties[field.id] = gddPropertyFor(field);
+    if (field.required) required.push(field.id);
+  }
+  for (const group of aggregate.groups) {
+    const sub = gddPropertiesFor(group.aggregate);
+    properties[group.name] = {
+      type: 'object',
+      label: group.name,
+      properties: sub.properties,
+      ...(sub.required.length > 0 ? { required: sub.required } : {}),
+    };
+  }
+  return { properties, required };
 }
 
 function gddPropertyFor(field: DynamicField): GddProperty {

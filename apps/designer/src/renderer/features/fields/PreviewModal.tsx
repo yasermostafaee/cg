@@ -1,12 +1,39 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { FieldValue, Scene } from '@cg/shared-schema';
+import {
+  aggregateCompositionFields,
+  defaultNestedValues,
+  type AggregatedFields,
+  type FieldValue,
+  type NestedFieldValues,
+  type Scene,
+} from '@cg/shared-schema';
 import { Modal } from '../shell/Modal.js';
-import { PreviewFieldForm, seedDefaults, type PreviewDispatch } from './PreviewFieldForm.js';
+import { PreviewFieldForm, type PreviewDispatch } from './PreviewFieldForm.js';
 import { PreviewTransport } from './PreviewTransport.js';
 import { PreviewTimingControls, type TimingOverride } from './PreviewTimingControls.js';
 import * as s from './PreviewModal.css.js';
 
-type Values = Record<string, FieldValue>;
+/** A stable key for the aggregate's SHAPE (fields + nested namespaces), so the
+ *  preview re-seeds only when the form structure changes — not on value edits. */
+function aggregateShapeKey(aggregate: AggregatedFields): string {
+  const own = aggregate.fields.map((f) => `${f.id}:${f.type}`).join(',');
+  const groups = aggregate.groups.map((g) => `${g.name}{${aggregateShapeKey(g.aggregate)}}`).join(',');
+  return `${own}|${groups}`;
+}
+
+/** Immutable nested set: `setIn({home:{}}, ['home','score'], 2)`. */
+function setIn(obj: NestedFieldValues, path: string[], value: FieldValue): NestedFieldValues {
+  if (path.length === 0) return obj;
+  const [head, ...rest] = path;
+  const key = head as string;
+  if (rest.length === 0) return { ...obj, [key]: value };
+  const child = obj[key];
+  const childObj =
+    child !== null && typeof child === 'object' && !Array.isArray(child) && !('assetId' in child)
+      ? (child as NestedFieldValues)
+      : {};
+  return { ...obj, [key]: setIn(childObj, rest, value) };
+}
 
 /**
  * Number of discrete steps a paginated template can advance through with
@@ -48,17 +75,19 @@ export function PreviewModal({
   // runtime with this override (see the scene-replace effect).
   const [override, setOverride] = useState<TimingOverride>({});
 
-  // Field values live here (not in the form) so the fixed transport bar can
-  // play() with the current data. Re-seed when the field *set* changes (add /
-  // remove / rename / retype) but not on unrelated scene edits, so typed test
-  // values survive — the "adjust state during render on key change" pattern.
-  const fields = scene.fields;
-  const fieldsKey = useMemo(() => fields.map((f) => `${f.id}:${f.type}`).join('|'), [fields]);
-  const [values, setValues] = useState<Values>(() => seedDefaults(fields));
-  const [seededKey, setSeededKey] = useState(fieldsKey);
-  if (seededKey !== fieldsKey) {
-    setSeededKey(fieldsKey);
-    setValues(seedDefaults(fields));
+  // D-025 — the aggregated fields: this composition's own fields plus each nested
+  // child instance's fields under its namespace.
+  const aggregate = useMemo(() => aggregateCompositionFields(scene, scene), [scene]);
+  // Nested field values live here (not in the form) so the fixed transport bar can
+  // play() with the current data. Re-seed when the form *shape* changes (fields or
+  // nested instances added/removed/renamed) but not on unrelated edits, so typed
+  // test values survive — the "adjust state during render on key change" pattern.
+  const shapeKey = useMemo(() => aggregateShapeKey(aggregate), [aggregate]);
+  const [values, setValues] = useState<NestedFieldValues>(() => defaultNestedValues(aggregate));
+  const [seededKey, setSeededKey] = useState(shapeKey);
+  if (seededKey !== shapeKey) {
+    setSeededKey(shapeKey);
+    setValues(defaultNestedValues(aggregate));
   }
 
   // Tracks whether the operator paused, so Play becomes Resume and Pause disables.
@@ -108,9 +137,9 @@ export function PreviewModal({
   );
 
   const onFieldChange = useCallback(
-    (id: string, value: FieldValue): void => {
+    (path: string[], value: FieldValue): void => {
       setValues((prev) => {
-        const next = { ...prev, [id]: value };
+        const next = setIn(prev, path, value);
         dispatch.update(next);
         return next;
       });
@@ -138,10 +167,10 @@ export function PreviewModal({
   }, [dispatch]);
   const onNext = useCallback(() => dispatch.next(), [dispatch]);
   const onReset = useCallback(() => {
-    setValues(seedDefaults(fields));
+    setValues(defaultNestedValues(aggregate));
     dispatch.reset();
     setPaused(false);
-  }, [dispatch, fields]);
+  }, [dispatch, aggregate]);
 
   // Apply a session override by rebuilding the preview runtime with it (the
   // stored scene + a non-persistent `playoutOverride`). The iframe preserves
@@ -159,11 +188,11 @@ export function PreviewModal({
       if (msg?.kind !== 'cg-preview-ready') return;
       if (evt.source !== iframeRef.current?.contentWindow) return;
       post({ action: 'scrub', frame: 0 });
-      post({ action: 'update', fields: seedDefaults(scene.fields) });
+      post({ action: 'update', fields: defaultNestedValues(aggregate) });
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [post, scene.fields]);
+  }, [post, aggregate]);
 
   // Tear down on close — stop the runtime; the iframe unmounts with the modal.
   useEffect(() => () => post({ action: 'stop' }), [post]);
@@ -198,7 +227,7 @@ export function PreviewModal({
         </div>
         <div className={s.sidebar}>
           <div className={s.fieldsScroll}>
-            <PreviewFieldForm scene={scene} values={values} onChange={onFieldChange} />
+            <PreviewFieldForm aggregate={aggregate} values={values} onChange={onFieldChange} />
           </div>
           <div className={s.fixedBar}>
             <PreviewTransport

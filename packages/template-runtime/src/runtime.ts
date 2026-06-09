@@ -2,8 +2,8 @@ import {
   activeRangeOf,
   playoutOf,
   type Element,
-  type FieldValues,
   type FrameRange,
+  type NestedFieldValues,
   type Playout,
   type Scene,
 } from '@cg/shared-schema';
@@ -12,7 +12,37 @@ import {
   collectAnimatedElements,
   type AnimatedElement,
 } from './animation-applier.js';
-import { applyFieldValues } from './bindings.js';
+import { applyScopedFieldValues } from './bindings.js';
+
+/**
+ * Deep-merge a nested field-value patch into the current values. Plain objects
+ * (namespaces) merge recursively; scalars / image `{assetId}` / arrays replace.
+ * So a partial `update({ home: { score: 2 } })` keeps `home.teamName`.
+ */
+function mergeNestedValues(
+  base: NestedFieldValues,
+  patch: NestedFieldValues,
+): NestedFieldValues {
+  const out: NestedFieldValues = { ...base };
+  for (const [k, v] of Object.entries(patch)) {
+    const prev = out[k];
+    if (
+      v !== null &&
+      typeof v === 'object' &&
+      !Array.isArray(v) &&
+      !('assetId' in v) &&
+      prev !== null &&
+      typeof prev === 'object' &&
+      !Array.isArray(prev) &&
+      !('assetId' in prev)
+    ) {
+      out[k] = mergeNestedValues(prev, v);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
 import { ensureBaselineCss } from './css.js';
 import { EventBus } from './event-bus.js';
 import { LifecycleStateMachine } from './lifecycle.js';
@@ -41,7 +71,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const built = buildScene(scene, doc);
   root.appendChild(built.container);
 
-  applyFieldValues(scene, {}, built.elementMap, built.textOriginals, built.container);
+  applyScopedFieldValues(scene, scene, {}, built.scopeTree);
 
   const animated: AnimatedElement[] = [
     ...collectAnimatedElements(
@@ -63,7 +93,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
   const machine = new LifecycleStateMachine();
   const bus = new EventBus();
-  let currentValues: FieldValues = {};
+  // Nested so namespaced child-instance values (e.g. { home: { teamName } }) route
+  // by namespace; a flat scene just uses top-level keys.
+  let currentValues: NestedFieldValues = {};
 
   const ready: Promise<void> = options.skipFontLoad ? Promise.resolve() : waitForFonts(doc);
   void ready.then(() => bus.emit('ready'));
@@ -121,14 +153,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // prior `CG ADD`/`UPDATE` already set — the CasparCG flow updates first,
       // then plays with no args. play(data) still applies its data. Order no
       // longer matters (D-018/D-019 acceptance).
-      currentValues = { ...currentValues, ...data };
-      applyFieldValues(
-        scene,
-        currentValues,
-        built.elementMap,
-        built.textOriginals,
-        built.container,
-      );
+      currentValues = mergeNestedValues(currentValues, data as NestedFieldValues);
+      applyScopedFieldValues(scene, scene, currentValues, built.scopeTree);
       machine.transition('playing');
       bus.emit('play.start');
       doc.body.classList.remove('cg-pending');
@@ -147,17 +173,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       }
       const mode = opts.mode ?? 'merge';
       if (mode === 'replace') {
-        currentValues = { ...(data as FieldValues) };
+        currentValues = { ...(data as NestedFieldValues) };
       } else {
-        currentValues = { ...currentValues, ...(data as FieldValues) };
+        currentValues = mergeNestedValues(currentValues, data as NestedFieldValues);
       }
-      applyFieldValues(
-        scene,
-        currentValues,
-        built.elementMap,
-        built.textOriginals,
-        built.container,
-      );
+      applyScopedFieldValues(scene, scene, currentValues, built.scopeTree);
       bus.emit('update');
     },
 

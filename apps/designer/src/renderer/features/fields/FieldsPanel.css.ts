@@ -15,6 +15,27 @@ export const list = style({
 
 export const empty = style({ color: colors.textMuted, fontSize: '0.82rem' });
 
+/** A nested child-instance namespace group (D-025) — read-only, indented. */
+export const nsGroup = style({
+  paddingLeft: '0.5rem',
+  borderLeft: `2px solid ${colors.border}`,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.1rem',
+});
+
+export const nsTitle = style({
+  color: colors.accent,
+  fontSize: '0.66rem',
+  fontWeight: 700,
+  letterSpacing: '0.05em',
+  textTransform: 'uppercase',
+});
+
+export const nsItem = style({ color: colors.text, fontSize: '0.74rem' });
+
+export const nsType = style({ color: colors.textMuted, fontSize: '0.66rem' });
+
 export const fieldCard = style({
   display: 'flex',
   flexDirection: 'column',

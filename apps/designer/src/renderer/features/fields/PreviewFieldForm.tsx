@@ -1,14 +1,14 @@
-import type { DynamicField, FieldValue, Scene } from '@cg/shared-schema';
+import type { AggregatedFields, DynamicField, FieldValue, NestedFieldValues } from '@cg/shared-schema';
 import { cx } from '../../cx.js';
 import { Callout } from '../../ui/Callout.js';
 import * as s from './PreviewFieldForm.css.js';
 
 type Values = Record<string, FieldValue>;
 
-/** Transport the preview drives — the modal posts these to its iframe. */
+/** Transport the preview drives — the modal posts these (nested) to its iframe. */
 export interface PreviewDispatch {
-  update(fields: Values): void;
-  play(fields: Values): void;
+  update(fields: NestedFieldValues): void;
+  play(fields: NestedFieldValues): void;
   stop(): void;
   next(): void;
   reset(): void;
@@ -17,35 +17,66 @@ export interface PreviewDispatch {
 }
 
 /**
- * D-018 — live data-entry form for the preview. Generated from the composition's
- * dynamic fields; editing a value drives the preview through the same runtime used
- * on air (and that the single-file HTML export ships).
+ * D-018 / D-025 — live data-entry form for the preview. Generated from the
+ * composition's AGGREGATED fields: its own flat fields plus, for each nested child
+ * instance, a namespaced sub-group (recursive). Editing drives the preview through
+ * the same runtime used on air. Values are a NESTED object keyed by field id within
+ * a composition and by instance name across nesting (`{ home: { teamName } }`), so
+ * the same child instanced twice updates independently.
  *
- * Controlled by the {@link PreviewModal}, which owns the value state so the
- * (fixed) transport bar can `play()` with the current values while this form
- * scrolls independently. Important problems — a duplicate data key, or per-field
- * validation errors — are surfaced as prominent callouts, not muted hints.
+ * Controlled by the {@link PreviewModal}, which owns the nested value state; this
+ * form reports edits by `path` (e.g. `['home','teamName']`).
  */
 export function PreviewFieldForm({
-  scene,
+  aggregate,
   values,
   onChange,
 }: {
-  scene: Scene;
-  values: Values;
-  onChange: (id: string, value: FieldValue) => void;
+  aggregate: AggregatedFields;
+  values: NestedFieldValues;
+  onChange: (path: string[], value: FieldValue) => void;
 }): JSX.Element {
-  const fields = scene.fields;
-  const duplicateKeys = findDuplicateKeys(fields);
-  const invalidCount = fields.filter((f) => validateField(f, values[f.id]) !== null).length;
+  return (
+    <AggregateSection
+      aggregate={aggregate}
+      values={values}
+      path={[]}
+      onChange={onChange}
+      title="Data"
+      depth={0}
+    />
+  );
+}
+
+/** One composition's fields (flat) + its nested-instance namespaces (recursive). */
+function AggregateSection({
+  aggregate,
+  values,
+  path,
+  onChange,
+  title,
+  depth,
+}: {
+  aggregate: AggregatedFields;
+  values: NestedFieldValues;
+  path: string[];
+  onChange: (path: string[], value: FieldValue) => void;
+  title: string;
+  depth: number;
+}): JSX.Element {
+  const duplicateKeys = findDuplicateKeys(aggregate.fields);
+  const invalidCount = aggregate.fields.filter(
+    (f) => validateField(f, scalarAt(values, f.id)) !== null,
+  ).length;
+  const empty = aggregate.fields.length === 0 && aggregate.groups.length === 0;
 
   return (
-    <div>
+    <div className={depth > 0 ? s.group : undefined}>
       <div className={s.header}>
-        <span className={s.title}>Data</span>
-        {fields.length > 0 && (
+        <span className={depth > 0 ? s.groupTitle : s.title}>{title}</span>
+        {aggregate.fields.length > 0 && (
           <span className={s.count}>
-            {String(fields.length)} field{fields.length === 1 ? '' : 's'}
+            {String(aggregate.fields.length)} field{aggregate.fields.length === 1 ? '' : 's'}
           </span>
         )}
       </div>
@@ -64,20 +95,48 @@ export function PreviewFieldForm({
         </Callout>
       )}
 
-      {fields.length === 0 ? (
+      {empty && depth === 0 && (
         <p className={s.hint}>No data fields yet — give a text element a Data key to add one.</p>
-      ) : (
-        fields.map((f) => (
-          <FieldRow
-            key={f.id}
-            field={f}
-            value={values[f.id]}
-            onChange={(v) => onChange(f.id, v)}
-          />
-        ))
       )}
+
+      {aggregate.fields.map((f) => (
+        <FieldRow
+          key={f.id}
+          field={f}
+          value={scalarAt(values, f.id)}
+          onChange={(v) => onChange([...path, f.id], v)}
+        />
+      ))}
+
+      {aggregate.groups.map((g) => (
+        <AggregateSection
+          key={g.instanceId}
+          aggregate={g.aggregate}
+          values={namespaceAt(values, g.name)}
+          path={[...path, g.name]}
+          onChange={onChange}
+          title={g.name}
+          depth={depth + 1}
+        />
+      ))}
     </div>
   );
+}
+
+/** A field's scalar value (not a nested namespace object). */
+function scalarAt(values: NestedFieldValues, id: string): FieldValue | undefined {
+  const v = values[id];
+  return isNamespace(v) ? undefined : (v as FieldValue | undefined);
+}
+
+/** A nested-instance namespace sub-object (empty when missing). */
+function namespaceAt(values: NestedFieldValues, name: string): NestedFieldValues {
+  const v = values[name];
+  return isNamespace(v) ? v : {};
+}
+
+function isNamespace(v: unknown): v is NestedFieldValues {
+  return typeof v === 'object' && v !== null && !Array.isArray(v) && !('assetId' in v);
 }
 
 function FieldRow({

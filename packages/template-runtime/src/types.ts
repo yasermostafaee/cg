@@ -1,4 +1,10 @@
-import type { Element, ElementAnimation, FieldValues, PlayoutMode, Scene } from '@cg/shared-schema';
+import type {
+  Element,
+  ElementAnimation,
+  FieldValues,
+  PlayoutMode,
+  Scene,
+} from '@cg/shared-schema';
 
 /**
  * Lifecycle events emitted by the runtime. Subscribers attach via
@@ -174,6 +180,38 @@ export interface BuildSceneResult {
    * timeline.
    */
   nestedAnimated: NestedAnimatedEntry[];
+  /**
+   * D-025 — the field-scope tree. Each scope owns the DOM nodes for ONE
+   * composition instance (its own `elementMap`/`textOriginals`/container) and
+   * lists its nested child instances by namespace, so namespaced (nested) field
+   * values route to the right copy even when a child is instanced more than once.
+   */
+  scopeTree: FieldScope;
+}
+
+/**
+ * D-025 — one composition instance's scope. The root scope is the active document;
+ * each nested `composition` instance gets its own child scope so the same child
+ * instanced twice (e.g. `home`/`away`) has two independent element maps, addressed
+ * by the instance's namespace.
+ */
+export interface FieldScope {
+  /** Element id → node, for elements rendered directly in THIS scope. */
+  elementMap: Map<string, HTMLElement>;
+  /** Original text per text element in this scope. */
+  textOriginals: Map<string, string>;
+  /** This scope's container (root stage, or an instance's inner box). */
+  container: HTMLElement;
+  /** Nested child instances, each under its (parent-unique) namespace `name`. */
+  children: FieldScopeChild[];
+}
+
+export interface FieldScopeChild {
+  /** Namespace key — the instance's name (parent-unique). */
+  name: string;
+  /** The referenced child composition id (resolved against `scene.compositions`). */
+  compositionId: string;
+  scope: FieldScope;
 }
 
 /** A nested element + its node + animation, collected during comp expansion. */

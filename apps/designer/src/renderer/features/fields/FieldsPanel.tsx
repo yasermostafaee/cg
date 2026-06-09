@@ -1,4 +1,10 @@
-import type { DynamicField, FieldBinding, Scene } from '@cg/shared-schema';
+import {
+  aggregateCompositionFields,
+  type CompositionFieldGroup,
+  type DynamicField,
+  type FieldBinding,
+  type Scene,
+} from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
@@ -36,13 +42,17 @@ export function canBindFromCanvas(fieldId: string, bindings: readonly FieldBindi
 
 export function FieldsPanel({ scene, bindModeFieldId }: Props): JSX.Element {
   const nameOf = elementNameResolver(scene);
+  // D-025 — this composition's OWN fields (editable here) plus its nested child
+  // instances' fields, shown grouped/namespaced (edited by opening the child).
+  const aggregate = aggregateCompositionFields(scene, scene);
+  const empty = aggregate.fields.length === 0 && aggregate.groups.length === 0;
   return (
     <div className={s.block}>
-      {scene.fields.length === 0 ? (
+      {empty ? (
         <p className={s.empty}>No fields.</p>
       ) : (
         <div className={s.list}>
-          {scene.fields.map((f) => (
+          {aggregate.fields.map((f) => (
             <FieldCard
               key={f.id}
               field={f}
@@ -51,8 +61,34 @@ export function FieldsPanel({ scene, bindModeFieldId }: Props): JSX.Element {
               nameOf={nameOf}
             />
           ))}
+          {aggregate.groups.map((g) => (
+            <NamespaceGroup key={g.instanceId} group={g} />
+          ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * D-025 — a nested child instance's fields, shown under its namespace (read-only
+ * here; they're authored by opening the child composition). Recurses for deeper
+ * nesting.
+ */
+function NamespaceGroup({ group }: { group: CompositionFieldGroup }): JSX.Element {
+  const { fields, groups } = group.aggregate;
+  return (
+    <div className={s.nsGroup}>
+      <div className={s.nsTitle}>{group.name}</div>
+      {fields.map((f) => (
+        <div key={f.id} className={s.nsItem}>
+          {f.label || f.id} <span className={s.nsType}>{f.type}</span>
+        </div>
+      ))}
+      {groups.map((g) => (
+        <NamespaceGroup key={g.instanceId} group={g} />
+      ))}
+      {fields.length === 0 && groups.length === 0 && <div className={s.nsItem}>(no fields)</div>}
     </div>
   );
 }
