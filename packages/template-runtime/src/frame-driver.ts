@@ -111,12 +111,15 @@ export class FrameDriver {
   }
 
   private tick(): void {
+    // Derive the frame from ELAPSED WALL-TIME, not a tick count: a dropped/long
+    // rAF frame still lands on the right frame index, so playback can't desync.
     const elapsedMs = this.opts.now() - this.startedAt;
     const totalFrames = Math.floor((elapsedMs / 1000) * this.opts.frameRate);
     const { in: rin, out: rout } = this.opts.range;
     if (this.opts.mode === 'once') {
       const frame = rin + totalFrames;
       if (frame >= rout) {
+        // Clamp the final paint to `out` (don't overshoot) then settle.
         this.opts.onFrame(rout);
         this.finishOnce();
         return;
@@ -124,6 +127,9 @@ export class FrameDriver {
       this.opts.onFrame(frame);
       return;
     }
+    // Loop: wrap the elapsed frame count back into [in, out) via modulo. A
+    // zero-or-negative span has no room to advance, so hold at `in` (also avoids
+    // a modulo-by-zero).
     const span = rout - rin;
     const frame = span <= 0 ? rin : rin + (totalFrames % span);
     this.opts.onFrame(frame);
