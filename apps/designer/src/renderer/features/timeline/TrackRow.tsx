@@ -15,6 +15,14 @@ import {
   trackOf,
   type TimelineRow,
 } from './keyframe-helpers.js';
+import {
+  buildKeyframeStacks,
+  frameFromClientX,
+  frameToPct,
+  isKeyframeSelected,
+  segmentPct,
+  stackOffsetPx,
+} from './timeline-geometry.js';
 
 export { TRACK_ROW_HEIGHT } from './metrics.js';
 
@@ -135,26 +143,15 @@ function TrackRowLabel(props: Props): JSX.Element {
 function TrackRowLane(props: Props): JSX.Element {
   const { row, element, frameIn, frameOut, selectedKeyframes } = props;
   const isSelectedFrame = (f: number): boolean =>
-    selectedKeyframes.some(
-      (r) => r.elementId === element.id && r.property === row.property && r.frame === f,
-    );
+    isKeyframeSelected(selectedKeyframes, element.id, row.property, f);
   const laneRef = useRef<HTMLDivElement | null>(null);
-  const span = Math.max(1, frameOut - frameIn);
   const track = trackOf(element, row.property);
   const keyframes: readonly Keyframe[] = track?.keyframes ?? [];
 
   // Points that share a frame are fanned vertically so each stays visible and
-  // grabbable (otherwise the diamonds overlap exactly). `stackCount` is how
-  // many sit on a frame; `stackIndex` is each point's slot within that group.
-  const stackCount = new Map<number, number>();
-  for (const k of keyframes) stackCount.set(k.frame, (stackCount.get(k.frame) ?? 0) + 1);
-  const stackIndex = new Map<string, number>();
-  const stackSeen = new Map<number, number>();
-  for (const k of keyframes) {
-    const i = stackSeen.get(k.frame) ?? 0;
-    if (k.id !== undefined) stackIndex.set(k.id, i);
-    stackSeen.set(k.frame, i + 1);
-  }
+  // grabbable (otherwise the diamonds overlap exactly). `countByFrame` is how
+  // many sit on a frame; `indexById` is each point's slot within that group.
+  const { countByFrame: stackCount, indexById: stackIndex } = buildKeyframeStacks(keyframes);
 
   const [menu, setMenu] = useState<{ x: number; y: number; frame: number } | null>(null);
   useEffect(() => {
@@ -177,9 +174,7 @@ function TrackRowLane(props: Props): JSX.Element {
     const el = laneRef.current;
     if (el === null) return designerStore.get().currentFrame;
     const rect = el.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const ratio = Math.max(0, Math.min(1, x / rect.width));
-    return Math.round(frameIn + ratio * span);
+    return frameFromClientX(clientX, rect.left, rect.width, frameIn, frameOut);
   }
 
   return (
@@ -196,9 +191,7 @@ function TrackRowLane(props: Props): JSX.Element {
       {keyframes.slice(0, -1).map((k, i) => {
         const next = keyframes[i + 1];
         if (next === undefined) return null;
-        const leftPct = ((k.frame - frameIn) / span) * 100;
-        const rightPct = ((next.frame - frameIn) / span) * 100;
-        const widthPct = rightPct - leftPct;
+        const { leftPct, widthPct } = segmentPct(k.frame, next.frame, frameIn, frameOut);
         if (widthPct <= 0) return null;
         const isLeftSelected = isSelectedFrame(k.frame);
         return (
@@ -249,12 +242,12 @@ function TrackRowLane(props: Props): JSX.Element {
         );
       })}
       {keyframes.map((k, kIdx) => {
-        const pct = ((k.frame - frameIn) / span) * 100;
+        const pct = frameToPct(k.frame, frameIn, frameOut);
         const isSelected = isSelectedFrame(k.frame);
         // Fan stacked points vertically around the row centre.
         const count = stackCount.get(k.frame) ?? 1;
         const idx = (k.id !== undefined ? stackIndex.get(k.id) : undefined) ?? 0;
-        const offsetPx = count > 1 ? (idx - (count - 1) / 2) * 5 : 0;
+        const offsetPx = stackOffsetPx(idx, count);
         const kfId = k.id;
         return (
           <div

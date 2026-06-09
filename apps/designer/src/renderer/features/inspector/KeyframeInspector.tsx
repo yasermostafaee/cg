@@ -11,6 +11,7 @@ import { designerStore, type KeyframeRef } from '../../state/store.js';
 import { TIMELINE_ROWS } from '../timeline/keyframe-helpers.js';
 import { NumberField } from './controls.js';
 import { EasingEditor } from './EasingEditor.js';
+import { bezierApproxEqual, effectiveBezier as effectiveBezierFor } from './easing-geometry.js';
 import * as s from './KeyframeInspector.css.js';
 
 interface Props {
@@ -18,17 +19,9 @@ interface Props {
   selectedKeyframes: readonly KeyframeRef[];
 }
 
-/**
- * The bézier to show in the easing editor: the keyframe's custom curve when set,
- * otherwise the preset matching its named easing (step falls back to linear).
- */
+/** The bézier to show in the easing editor for a keyframe (see `effectiveBezier`). */
 function effectiveBezier(keyframe: Keyframe): BezierEasing {
-  if (keyframe.bezier !== undefined) return keyframe.bezier;
-  return EASING_PRESETS[keyframe.easing] ?? EASING_PRESETS.linear ?? [0, 0, 1, 1];
-}
-
-function bezierApproxEqual(a: BezierEasing, b: BezierEasing): boolean {
-  return a.every((v, i) => Math.abs(v - (b[i] ?? 0)) < 0.005);
+  return effectiveBezierFor(keyframe.easing, keyframe.bezier);
 }
 
 function BackButton(): JSX.Element {

@@ -2,6 +2,14 @@ import { useRef } from 'react';
 import { EASING_PRESETS, type BezierEasing } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { RealtimeNumberInput } from './controls.js';
+import {
+  bezierPathD,
+  clamp01,
+  curveToScreenX,
+  curveToScreenY,
+  presetKeyFor,
+  screenToCurve,
+} from './easing-geometry.js';
 import * as s from './EasingEditor.css.js';
 
 interface Props {
@@ -24,25 +32,9 @@ const SIZE = 196;
 const PAD = 14;
 const PLOT = SIZE - PAD * 2;
 
-function approxEq(a: BezierEasing, b: BezierEasing): boolean {
-  return a.every((v, i) => Math.abs(v - (b[i] ?? 0)) < 0.005);
-}
-
-function presetKeyFor(b: BezierEasing): string {
-  for (const [key, preset] of Object.entries(EASING_PRESETS)) {
-    if (approxEq(b, preset)) return key;
-  }
-  return 'custom';
-}
-
-/** Screen X for a curve x ∈ [0,1]. */
-function sx(x: number): number {
-  return PAD + x * PLOT;
-}
-/** Screen Y for a curve y ∈ [0,1] (progress points up). */
-function sy(y: number): number {
-  return PAD + (1 - y) * PLOT;
-}
+/** Curve→screen helpers bound to this editor's plot box (pure math in easing-geometry). */
+const sx = (x: number): number => curveToScreenX(x, PAD, PLOT);
+const sy = (y: number): number => curveToScreenY(y, PAD, PLOT);
 
 export function EasingEditor({ bezier, onChange }: Props): JSX.Element {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -63,8 +55,7 @@ export function EasingEditor({ bezier, onChange }: Props): JSX.Element {
       const node = svgRef.current;
       if (node === null) return;
       const rect = node.getBoundingClientRect();
-      const nx = Math.max(0, Math.min(1, (ev.clientX - rect.left - PAD) / PLOT));
-      const ny = Math.max(0, Math.min(1, 1 - (ev.clientY - rect.top - PAD) / PLOT));
+      const { x: nx, y: ny } = screenToCurve(ev.clientX, ev.clientY, rect.left, rect.top, PAD, PLOT);
       const next: BezierEasing = [...bezier] as BezierEasing;
       if (point === 'p1') {
         next[0] = nx;
@@ -171,7 +162,7 @@ export function EasingEditor({ bezier, onChange }: Props): JSX.Element {
           />
           {/* the curve */}
           <path
-            d={`M ${String(sx(0))} ${String(sy(0))} C ${String(sx(x1))} ${String(sy(y1))} ${String(sx(x2))} ${String(sy(y2))} ${String(sx(1))} ${String(sy(1))}`}
+            d={bezierPathD(bezier, PAD, PLOT)}
             fill="none"
             stroke={colors.accent}
             strokeWidth={1.75}
@@ -216,10 +207,6 @@ export function EasingEditor({ bezier, onChange }: Props): JSX.Element {
       </div>
     </div>
   );
-}
-
-function clamp01(v: number): number {
-  return Math.max(0, Math.min(1, v));
 }
 
 function AxisInput({

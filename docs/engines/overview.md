@@ -128,6 +128,8 @@ typed runtime.
   [`packages/template-runtime/README.md`](../../packages/template-runtime/README.md)
 - **Canvas editor deep-dive (the editing surface that overlays the runtime):**
   [`apps/designer/src/renderer/features/canvas/README.md`](../../apps/designer/src/renderer/features/canvas/README.md)
+- **Animation timeline deep-dive (the keyframe model + the authoring dock/inspector):**
+  [`apps/designer/src/renderer/features/timeline/README.md`](../../apps/designer/src/renderer/features/timeline/README.md)
 - **Behavioural specs:** [`openspec/specs/`](../../openspec/specs) and the changes
   under [`openspec/changes/`](../../openspec/changes) (e.g. nested-lifecycle-cascade,
   nested-composition-field-scoping, animation-lifecycle-timing).

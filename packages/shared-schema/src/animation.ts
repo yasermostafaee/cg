@@ -17,6 +17,13 @@ import { DurationFramesSchema, HexColorSchema } from './primitives.js';
  *
  * The renderer enforces the additional invariant that frames within a
  * track are strictly ascending; Designer's preflight surfaces this.
+ *
+ * Deep-dive on this model + how it's authored (the timeline dock, the keyframe
+ * diamond, the easing-curve editor) and the extension points (add an easing / a
+ * new animatable property):
+ *   apps/designer/src/renderer/features/timeline/README.md
+ * The runtime side — how a track is *evaluated* per frame — lives in
+ * packages/template-runtime/README.md.
  */
 
 /** Per-keyframe outgoing easing curve. */
