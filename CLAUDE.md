@@ -47,6 +47,14 @@ pnpm --filter @cg/<pkg> typecheck|lint|test|build   # one workspace
 pnpm openspec <cmd>                     # OpenSpec CLI (new change / validate / archive)
 ```
 
+## Branching — one change per branch
+
+- Start every change/task on its OWN branch off `main` (`feat/…`, `fix/…`,
+  `docs/…`, `chore/…`). One branch = one PR = one concern.
+- Don't stack unrelated work on an existing feature branch — it mixes concerns and
+  makes PRs hard to review/revert.
+- Branch from up-to-date `main`; keep the PR focused.
+
 ## Feature workflow — PRD → OpenSpec → code
 
 Feature requests and bugs live in **`docs/prd/`** (one file per category).
