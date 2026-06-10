@@ -7,6 +7,7 @@ import type {
   Playout,
   PlayoutMode,
   Scene,
+  TickerElement,
 } from '@cg/shared-schema';
 
 /**
@@ -131,11 +132,22 @@ export interface RuntimeBootOptions {
 
   /**
    * D-020 — supplies the per-pass duration (ms) for the `content-driven` playout
-   * mode. The mode + orchestration live here; the content→duration computation is
-   * delivered by the ticker item, recomputed each pass. `holdMs` does not apply to
-   * `content-driven`; absent ⇒ a zero-length pass.
+   * mode, recomputed each pass. `holdMs` does not apply to `content-driven`.
+   *
+   * D-028 — the runtime now SELF-WIRES a per-scope hook from the scope's ticker
+   * elements (measured content width ÷ speed), so preview and the exported HTML
+   * need no boot wiring. An explicit hook passed here OVERRIDES the root scope's
+   * self-wired one (external override / test seam). A `content-driven` scope
+   * with neither tickers nor an explicit hook keeps zero-length passes.
    */
   durationHook?: () => number;
+
+  /**
+   * D-028 — injectable ticker item-width measurement (defaults to
+   * `offsetWidth`). Test seam: happy-dom has no layout engine, so runtime-level
+   * ticker tests supply deterministic widths.
+   */
+  tickerMeasure?: (node: HTMLElement) => number;
 
   /**
    * D-020 — non-persistent playout override. The composition stores its defaults
@@ -216,8 +228,19 @@ export interface FieldScope {
   children: FieldScopeChild[];
   /** D-026 — animated elements rendered directly in this scope (its own lifecycle). */
   animated: NestedAnimatedEntry[];
+  /** D-028 — ticker elements rendered directly in this scope (band + track nodes). */
+  tickers: TickerEntry[];
   /** D-026 — the comp/scene this scope renders, for its lifecycle/playout/active. */
   source: LifecycleSource;
+}
+
+/** D-028 — one built ticker: its element config + the band/track DOM nodes. */
+export interface TickerEntry {
+  element: TickerElement;
+  /** The clipped band (registered in the scope's elementMap). */
+  band: HTMLElement;
+  /** The inner track the driver feeds and translates. */
+  track: HTMLElement;
 }
 
 /** The lifecycle-relevant fields of the comp/scene a scope renders (D-026). */

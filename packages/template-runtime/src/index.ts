@@ -17,6 +17,13 @@ export { EventBus } from './event-bus.js';
 export { FrameDriver, type FrameDriverOptions } from './frame-driver.js';
 export { PlayoutController, type PlayoutControllerOptions } from './playout-controller.js';
 export {
+  TickerDriver,
+  coerceTickerItems,
+  tickerDriverFor,
+  type TickerDriverItem,
+  type TickerDriverOptions,
+} from './ticker-driver.js';
+export {
   applyAnimationAtFrame,
   collectAnimatedElements,
   type AnimatedElement,

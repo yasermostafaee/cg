@@ -32,6 +32,7 @@ Everything consumers use is re-exported from [`src/index.ts`](./src/index.ts):
 | `applyAnimationAtFrame`, `collectAnimatedElements`    | Per-frame animation application.                                                                                     |
 | `interpolateAtFrame`, `applyEasing`, `lerpHexColor`   | Keyframe math.                                                                                                       |
 | `FrameDriver`, `PlayoutController`                    | The timing primitives (normally owned by `createRuntime`).                                                           |
+| `TickerDriver`, `tickerDriverFor`, `coerceTickerItems` | The ticker/crawler treadmill (D-028; normally owned by `createRuntime`).                                            |
 | `LifecycleStateMachine`, `EventBus`, `applyTransform` | Lifecycle state, events, value transforms.                                                                           |
 
 ## How it's built — module map
@@ -44,6 +45,8 @@ createRuntime (runtime.ts)  ─ the orchestrator
  │    └─ FrameDriver (frame-driver.ts)          rAF playhead for one range
  │         └─ applyAnimationAtFrame (animation-applier.ts)
  │              └─ interpolateAtFrame (keyframe-eval.ts)
+ ├─ TickerDriver (ticker-driver.ts)       one per ticker element: the crawl
+ │      treadmill + the scope's self-wired content-driven durationHook
  ├─ LifecycleStateMachine (lifecycle.ts)  pending→playing→on-air→exiting→stopped
  ├─ EventBus (event-bus.ts)               play.start / stop.end / ready / …
  └─ installCasparGlobals (adapters/caspar-globals.ts)   window.* → runtime
@@ -53,10 +56,17 @@ transforms.ts · css.ts   value formatters · baseline stylesheet
 ### scene-builder — `Scene` → DOM + the scope tree
 
 `buildScene` walks layers (sorted by `zIndex`) and creates one node per element
-(`text` / `image` / `shape` rendered; `container` / `lottie` / `video-placeholder`
-emit a tagged placeholder div so layout and ids survive). It returns a
-**`scopeTree`** (a `FieldScope`): each composition instance owns its **own**
-`elementMap`, `textOriginals`, container, `animated` list, and lifecycle `source`.
+(`text` / `ticker` / `image` / `shape` rendered; `container` / `lottie` /
+`video-placeholder` emit a tagged placeholder div so layout and ids survive). It
+returns a **`scopeTree`** (a `FieldScope`): each composition instance owns its
+**own** `elementMap`, `textOriginals`, container, `animated` list, `tickers`
+list, and lifecycle `source`.
+
+A `ticker` element builds as a clipped band + an inner `track` (the driver's
+crawl surface) + a static flex-row authoring layout (so the Designer canvas
+shows the items with zero measurement; the driver removes it when the crawl
+starts), and registers `{ element, band, track }` on `scope.tickers` for the
+runtime to instantiate the driver.
 
 **Invariants**
 
@@ -74,7 +84,9 @@ declared `bindings`, look up each `fieldId` in the supplied values (falling back
 the field's `default`), run the optional `transform` (`transforms.ts`, e.g.
 `persian-digits`, `date-fa`), and write to the DOM by `target.kind`
 (`text` / `image` / `color` / `visible` / `transform` / `scene-background` /
-`lottie-override`).
+`lottie-override` / `ticker-items` — the last routes a `list` value to the
+band's `TickerDriver` via the `tickerDriverFor` registry, which reconciles by
+stable item id).
 
 **Invariants**
 
@@ -121,6 +133,10 @@ Playout **modes** (`scene.playout.mode`):
 There is **no separate continuous-loop mode** — a looping logo is `loop-cycle` with
 `repeat: 'infinite'` (and `holdMs: 0` to loop the whole timeline).
 
+`onHoldStart` (optional) fires at **every** hold entry, before the mode timing —
+the runtime starts the scope's ticker treadmills there (idempotent), so a
+`content-driven` hook always measures a started crawl.
+
 **Invariants**
 
 - `pause()` / `resume()` freeze and continue **both** the driver and the hold-timer
@@ -148,7 +164,38 @@ override) on its **own** timeline.
   `'home'` a child, `'home.inner'` a grandchild) so a preview/rundown can time each
   instance independently without touching the stored template.
 - `tick(frame)` paints one shared frame across the **flattened** animated list — for
-  the Designer scrubber, separate from the on-air per-scope drivers.
+  the Designer scrubber, separate from the on-air per-scope drivers. The **ticker
+  crawl is wall-clock-driven and has no representation in `tick()`** — scrubbing
+  does not move it (by design; D-028).
+
+### TickerDriver — the crawler treadmill + the content-driven duration (D-028)
+
+One driver per ticker element, instantiated by `createRuntime` per scope. It
+virtualizes the item stream: nodes are fed just ahead of the entering edge,
+recycled after they exit, positioned absolutely from widths **measured once per
+text** (at/after `play()`, which awaits `document.fonts.ready`), and moved by a
+single `transform: translateX` per frame. Items are bidi-isolated spans; the
+element's `direction` is the **reading** direction (`'rtl'`: RTL layout, track
+moves visually left→right — the Persian crawl).
+
+**Self-wired duration:** a scope whose composition contains tickers gets an
+internal `durationHook` = max over its drivers' `passRemainingMs()` (the ms
+until the current content cycle's seam fully crosses the band). So preview,
+the single-file export, and `.vcg` need **no boot wiring**, and a ticker nested
+in a child composition drives *its own* scope. An **explicit**
+`RuntimeBootOptions.durationHook` still overrides the root scope (test seam).
+
+**Invariants**
+
+- The treadmill rolls **continuously across pass boundaries** (intro/outro
+  replays never restart it; `start()` is idempotent); a fresh `play()` resets it.
+- `pause()`/`resume()` freeze/continue it in lockstep with the hold timer;
+  settling stops it (frozen at the exact boundary).
+- `setItems()` (the `update()` path) reconciles by stable id: entered nodes
+  keep their position, the unseen fed tail is dropped and re-fed from the new
+  list — no visual jump; removed items are never re-fed.
+- `RuntimeBootOptions.tickerMeasure` injects width measurement (happy-dom has
+  no layout); `RuntimeClock` injects the rAF/now clock.
 
 ### animation-applier + keyframe-eval — per-frame writes
 
@@ -182,25 +229,40 @@ payloads are dropped silently (a broadcast frame can't write logs).
 
 ### Add a new element type
 
+> Worked example: the **ticker** (D-028) — schema variant `TickerElementSchema`,
+> `buildTicker` in `scene-builder.ts`, and a per-element runtime driver
+> (`ticker-driver.ts`) wired by `createRuntime`.
+
 1. **Schema** — add the element variant to `@cg/shared-schema`
    (`packages/shared-schema/src/elements.ts`) and the `Element` union.
 2. **Render** — add a `case` in `buildElement` (`scene-builder.ts`) and a
    `buildXxx(element, doc)` that sets `dataset['cgElementId']`, calls
    `applyBaseStyles`, and renders the type-specific look. Until it's supported it
    falls through to `buildPlaceholder` (tagged div) automatically.
-3. **Designer UI** — the canvas/inspector to author it (`apps/designer`).
-4. If it can be **animated/bound**, make sure `applyBaseStyles` / `animation-applier`
+3. **Runtime behaviour** — if the element is live (time-driven, like the ticker),
+   give it a driver owned by `createRuntime`: collect its nodes on the scope
+   during build (cf. `scope.tickers`), instantiate per scope, and hook its
+   lifecycle into the cascade (play reset / pause / resume / settle / remove).
+4. **Designer UI** — the canvas/inspector to author it (`apps/designer`).
+5. If it can be **animated/bound**, make sure `applyBaseStyles` / `animation-applier`
    / `bindings` handle its target properties (see below).
 
 ### Add a new field type / binding target
 
+> Worked example: the **`list` field** + **`ticker-items`** target (D-028) — an
+> extensible structured value (array of open `{ id, … }` items) routed to the
+> ticker driver's reconcile.
+
 - **New field type:** add it to `@cg/shared-schema` (fields). `applyFieldValues`
   reads `field.default` and (for text) `field.maxLength` generically; only touch
   bindings if the value needs new coercion in `stringifyValue` (`transforms.ts`).
+  A **structured** (non-string) value skips `stringifyValue`/`applyTransform`
+  entirely — its `applyOne` case consumes the raw value (cf. `ticker-items`).
 - **New binding target kind:** add the variant to `BindingTargetSchema`
   (`packages/shared-schema/src/bindings.ts`), then add a `case target.kind` in
   `applyOne` (`bindings.ts`) that writes to the DOM. Keep it **idempotent and
-  stateless** (no read-back).
+  stateless** (no read-back) — a target that drives stateful behaviour (the
+  ticker) must make its consumer reconcile idempotently instead.
 - **New value transform** (e.g. a new formatter): add it to `BindingTransformSchema`
   and `applyTransform` (`transforms.ts`); reuse `@cg/text-shaping` for
   Persian/RTL-aware formatting.
@@ -222,9 +284,12 @@ payloads are dropped silently (a broadcast frame can't write logs).
    hold/exit logic in `onIntroEnd` / `onOutroEnd` / `isFinalOutro`. Preserve the
    invariants above (settled-is-a-no-op on `stop()`, single `onExitStart`,
    pause/resume freezes driver **and** hold timer).
-3. If the mode needs externally-computed timing (like `content-driven`'s
-   `durationHook`), thread it through `RuntimeBootOptions` (`types.ts`) →
-   `createRuntime` → `PlayoutControllerOptions`.
+3. If the mode needs computed timing, prefer **self-wiring inside the runtime**
+   from scene content (cf. `content-driven`: `createRuntime` derives each scope's
+   `durationHook` from its ticker elements, so preview/exports need no boot
+   wiring) and keep `RuntimeBootOptions` as the external override/test seam,
+   threaded `RuntimeBootOptions` (`types.ts`) → `createRuntime` →
+   `PlayoutControllerOptions`.
 4. Capture the **behaviour** as an OpenSpec change (WHEN/THEN scenarios) — this doc
    only records the wiring.
 

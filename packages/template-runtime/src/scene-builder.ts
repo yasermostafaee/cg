@@ -7,6 +7,7 @@ import type {
   Scene,
   Shadow,
   TextElement,
+  TickerElement,
   ImageElement,
   ShapeElement,
   Transform,
@@ -43,6 +44,7 @@ function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
     container,
     children: [],
     animated: [],
+    tickers: [],
     source,
   };
 }
@@ -112,13 +114,14 @@ function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null 
   switch (element.type) {
     case 'text':
       return buildText(element, ctx.doc, ctx.scope.textOriginals);
+    case 'ticker':
+      return buildTicker(element, ctx);
     case 'image':
       return buildImage(element, ctx.doc);
     case 'shape':
       return buildShape(element, ctx.doc);
     case 'composition':
       return buildComposition(element, ctx);
-    case 'ticker':
     case 'container':
     case 'lottie':
     case 'video-placeholder':
@@ -335,6 +338,91 @@ function buildText(
   }
   el.textContent = element.text;
   textOriginals.set(element.id, element.text);
+  return el;
+}
+
+/**
+ * D-028 — render a ticker element: a clipped band whose inner `track` the
+ * {@link TickerDriver} feeds and translates at playout. The builder itself
+ * renders a STATIC authoring layout (a flex row in reading direction — no
+ * measurement needed) so the Designer canvas shows the items; the driver
+ * removes it when the crawl starts. The band + track are registered on the
+ * scope (`scope.tickers`) so the runtime can instantiate the driver and
+ * self-wire the scope's `content-driven` duration hook.
+ */
+function buildTicker(element: TickerElement, ctx: BuildCtx): HTMLElement {
+  const doc = ctx.doc;
+  const el = doc.createElement('div');
+  el.dataset['cgElementId'] = element.id;
+  applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
+  el.style.overflow = 'hidden';
+  // Same shaping-capable fallback stack as text elements (Vazirmatn first) —
+  // items inherit these from the band.
+  el.style.fontFamily = `${element.font.family}, Vazirmatn, "Noto Sans Arabic", "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif`;
+  el.style.fontWeight = String(element.font.weight);
+  el.style.fontStyle = element.font.style;
+  el.style.fontSize = `${element.font.size}px`;
+  el.style.lineHeight = String(element.font.lineHeight);
+  el.style.letterSpacing = `${element.font.letterSpacing}em`;
+  el.style.color = element.color;
+  // READING direction (explicit 'rtl' | 'ltr' — no 'auto' for a crawl).
+  el.style.direction = element.direction;
+  if (element.backgroundColor) el.style.backgroundColor = element.backgroundColor;
+  if (element.backgroundFill !== undefined) el.style.background = fillToCss(element.backgroundFill);
+  if (element.cornerRadius !== undefined && element.cornerRadius > 0) {
+    el.style.borderRadius = `${element.cornerRadius}px`;
+  }
+  if (element.padding) {
+    el.style.paddingTop = `${element.padding.top}px`;
+    el.style.paddingRight = `${element.padding.right}px`;
+    el.style.paddingBottom = `${element.padding.bottom}px`;
+    el.style.paddingLeft = `${element.padding.left}px`;
+    el.style.boxSizing = 'border-box';
+  }
+
+  // The crawl surface. Items are absolutely positioned from measured offsets
+  // (no inline flow → item order is fixed by construction, immune to bidi
+  // reordering across item boundaries); only this track's transform changes
+  // per frame.
+  const track = doc.createElement('div');
+  track.className = 'cg-ticker-track';
+  track.style.position = 'absolute';
+  track.style.left = '0';
+  track.style.top = '0';
+  track.style.height = '100%';
+  track.style.willChange = 'transform';
+
+  // Static authoring layout: lets the canvas show the items without any
+  // measurement (flex lays them out; `direction` puts the list head at the
+  // reading start edge). Lives on the BAND (which has real width) and is
+  // removed by the driver when the crawl starts.
+  const staticRow = doc.createElement('div');
+  staticRow.dataset['cgTickerStatic'] = '1';
+  staticRow.style.position = 'absolute';
+  staticRow.style.inset = '0';
+  staticRow.style.display = 'flex';
+  staticRow.style.alignItems = 'center';
+  staticRow.style.columnGap = `${element.gap}px`;
+  staticRow.style.direction = element.direction;
+  const addStaticSpan = (text: string): void => {
+    const span = doc.createElement('span');
+    span.style.whiteSpace = 'pre';
+    span.style.direction = element.direction;
+    span.style.unicodeBidi = 'isolate';
+    span.style.flexShrink = '0';
+    span.textContent = text;
+    staticRow.appendChild(span);
+  };
+  element.items.forEach((item, i) => {
+    if (i > 0 && element.separator !== undefined && element.separator !== '') {
+      addStaticSpan(element.separator);
+    }
+    addStaticSpan(item.text);
+  });
+
+  el.appendChild(track);
+  el.appendChild(staticRow);
+  ctx.scope.tickers.push({ element, band: el, track });
   return el;
 }
 

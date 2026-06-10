@@ -23,6 +23,13 @@ export interface PlayoutControllerOptions {
   /** Fully settled hidden (outro finished). */
   onSettle: () => void;
   /**
+   * D-028 — fired at EVERY hold entry (the intro just finished), before the
+   * mode timing (and before `durationHook` on a `content-driven` pass). The
+   * runtime starts the scope's ticker treadmills here; they roll continuously
+   * across later pass boundaries (start is idempotent).
+   */
+  onHoldStart?: (() => void) | undefined;
+  /**
    * `content-driven` per-pass duration (ms). The ticker supplies the real
    * content→duration computation; recomputed each pass so dynamic content gets
    * a fresh duration. `holdMs` does NOT apply to `content-driven`.
@@ -185,6 +192,10 @@ export class PlayoutController {
     // that frame. (A looping idle while holding is D-021's opt-in, not part of
     // this change.)
     this.stopDriver();
+    // D-028 — start (or keep rolling) the scope's tickers before the pass
+    // timing is computed, so a content-driven `durationHook` measures a
+    // started treadmill.
+    this.o.onHoldStart?.();
     const mode = this.o.playout.mode;
     if (mode === 'manual') return; // hold frozen at outPoint until stop()
     // `content-driven`: the pass duration comes from the runtime `durationHook`

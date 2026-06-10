@@ -41,6 +41,7 @@ import { EventBus } from './event-bus.js';
 import { LifecycleStateMachine } from './lifecycle.js';
 import { PlayoutController } from './playout-controller.js';
 import { buildScene } from './scene-builder.js';
+import { TickerDriver, registerTickerDriver } from './ticker-driver.js';
 import type {
   FieldScope,
   PlayOptions,
@@ -77,6 +78,36 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
   const built = buildScene(scene, doc);
   root.appendChild(built.container);
+
+  // D-028 — one treadmill driver per ticker element, per scope (the same child
+  // composition instanced twice gets two independent drivers). Instantiated
+  // BEFORE the initial field application below so a `list` field default can
+  // already reconcile into its driver. The band→driver registry is how the
+  // bindings applier routes `ticker-items` values.
+  const allTickers: TickerDriver[] = [];
+  const tickersByScope = new Map<FieldScope, TickerDriver[]>();
+  const instantiateTickers = (scope: FieldScope): void => {
+    const drivers = scope.tickers.map((t) => {
+      const driver = new TickerDriver({
+        band: t.band,
+        track: t.track,
+        viewportWidth: t.element.transform.size.w,
+        direction: t.element.direction,
+        speed: t.element.speed,
+        gap: t.element.gap,
+        separator: t.element.separator,
+        items: t.element.items,
+        clock: options.clock,
+        measure: options.tickerMeasure,
+      });
+      registerTickerDriver(t.band, driver);
+      allTickers.push(driver);
+      return driver;
+    });
+    if (drivers.length > 0) tickersByScope.set(scope, drivers);
+    for (const child of scope.children) instantiateTickers(child.scope);
+  };
+  instantiateTickers(built.scopeTree);
 
   applyScopedFieldValues(scene, scene, {}, built.scopeTree);
 
@@ -155,6 +186,21 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const noop = (): void => undefined;
   const buildScopeController = (scope: FieldScope, isRoot: boolean, path: string): ScopeNode => {
     const own = scope.animated;
+    // D-028 — self-wire the scope's content-driven duration from its tickers:
+    // the hook returns the ms until the scope's current content cycle completes
+    // (max across tickers — the longest-running one governs the pass, so no
+    // ticker is cut mid-cycle). An EXPLICIT boot-option hook still wins for the
+    // root scope (external override / test seam). The treadmills start at the
+    // first hold (`onHoldStart`, idempotent) and roll continuously across pass
+    // boundaries; a settled scope freezes its own tickers.
+    const scopeTickers = tickersByScope.get(scope) ?? [];
+    const tickerHook =
+      scopeTickers.length > 0
+        ? (): number => Math.max(...scopeTickers.map((t) => t.passRemainingMs()))
+        : undefined;
+    const stopScopeTickers = (): void => {
+      for (const t of scopeTickers) t.stop();
+    };
     const controller = new PlayoutController({
       frameRate: scene.frameRate,
       active: activeRangeOf(scope.source),
@@ -165,8 +211,19 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         for (const entry of own) applyAnimationAtFrame(entry, frame);
       },
       onExitStart: isRoot ? rootOnExitStart : noop,
-      onSettle: isRoot ? rootOnSettle : noop,
-      durationHook: isRoot ? options.durationHook : undefined,
+      onSettle: isRoot
+        ? (): void => {
+            stopScopeTickers();
+            rootOnSettle();
+          }
+        : stopScopeTickers,
+      durationHook: isRoot && options.durationHook !== undefined ? options.durationHook : tickerHook,
+      onHoldStart:
+        scopeTickers.length > 0
+          ? (): void => {
+              for (const t of scopeTickers) t.start();
+            }
+          : undefined,
       clock: options.clock,
     });
     // Build each child's path by appending its instance name to the parent's
@@ -204,6 +261,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       bus.emit('play.start');
       doc.body.classList.remove('cg-pending');
       machine.transition('on-air');
+      // D-028 — a fresh run restarts every crawl from its entering edge (the
+      // controllers' first hold then starts the treadmills).
+      for (const t of allTickers) t.reset();
       // Play the IN once and hold (no full-range loop, no auto-outro by default);
       // the mode orchestration (auto-out / loop-cycle / content-driven) then runs.
       // Absent lifecycle: the whole timeline is the entrance and the hold is its
@@ -239,16 +299,20 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     pause(): void {
       if (machine.state === 'removed') return;
       cascade(rootNode, (c) => c.pause());
+      // D-028 — freeze the crawls in lockstep with the frozen hold timers.
+      for (const t of allTickers) t.pause();
     },
 
     resume(): void {
       if (machine.state === 'removed') return;
       cascade(rootNode, (c) => c.resume());
+      for (const t of allTickers) t.resume();
     },
 
     remove(): void {
       if (machine.state === 'removed') return;
       cascade(rootNode, (c) => c.destroy());
+      for (const t of allTickers) t.destroy();
       machine.forceTransition('removed');
       bus.clear();
       built.container.remove();

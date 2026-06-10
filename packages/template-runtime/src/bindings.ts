@@ -6,6 +6,7 @@ import type {
   Scene,
 } from '@cg/shared-schema';
 import type { FieldScope } from './types.js';
+import { coerceTickerItems, tickerDriverFor } from './ticker-driver.js';
 import { applyTransform, stringifyValue } from './transforms.js';
 
 /**
@@ -195,6 +196,16 @@ function applyOne(
     }
     case 'lottie-override': {
       // Lottie field overrides land with M3.3.
+      return;
+    }
+    case 'ticker-items': {
+      // D-028 — route a list value to the band's treadmill driver, which
+      // reconciles by stable id (visible items keep position; removed items
+      // scroll out and are never re-fed; new items enter on the next feed).
+      // Bare string arrays get positional ids (degraded fallback).
+      const el = elementMap.get(target.elementId);
+      if (!el || !Array.isArray(raw)) return;
+      tickerDriverFor(el)?.setItems(coerceTickerItems(raw));
       return;
     }
   }
