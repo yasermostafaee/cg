@@ -110,6 +110,18 @@ function preflight(scene: Scene): ExportIssue[] {
         fieldId: field.id,
       });
     }
+    if (field.type === 'list') {
+      // D-028 — GDD v1 has no array gddType, so the list exports as a plain
+      // typed array; third-party clients may not render an editor for it, and
+      // list values travel as JSON only (the legacy CasparCG XML template-data
+      // payload can't carry an array).
+      issues.push({
+        code: 'gdd-list-field-limited-clients',
+        severity: 'warning',
+        message: `List field "${field.id}" exports as a plain GDD array (no array gddType exists); third-party GDD clients may not offer an items editor, and values must be sent as JSON (not CasparCG XML).`,
+        fieldId: field.id,
+      });
+    }
   }
   return issues;
 }

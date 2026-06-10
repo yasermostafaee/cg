@@ -80,6 +80,20 @@ export class Exporter {
       }
     }
 
+    // D-028 — the .vcg currently ships NO font bytes; a ticker on a machine
+    // without the face measures fallback glyphs, so its content-driven pass
+    // duration is silently wrong. The single-file HTML export inlines all
+    // fonts and is the font-complete on-air path.
+    const tickers = [...elementsById.values()].filter((el) => el.type === 'ticker');
+    if (tickers.length > 0) {
+      issues.push({
+        severity: 'warning',
+        code: 'vcg-ticker-fonts-not-bundled',
+        message: `This package contains ${String(tickers.length)} ticker element(s) but .vcg exports don't bundle font files yet — on a machine without the fonts, the crawl measures fallback glyphs and its content-driven duration will be wrong. Prefer the single-file HTML export (fonts inlined).`,
+        elementId: tickers[0]?.id ?? '',
+      });
+    }
+
     const fieldsById = new Map(scene.fields.map((f) => [f.id, f]));
 
     for (const field of scene.fields) {

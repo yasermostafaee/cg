@@ -92,3 +92,37 @@ describe('ExporterSingleFile', () => {
     });
   });
 });
+
+describe('ExporterSingleFile — D-028 list field / ticker preflight', () => {
+  it('exports a list field as a GDD array and warns about limited third-party clients', async () => {
+    const scene: Scene = {
+      ...makeScene(),
+      fields: [
+        {
+          id: 'headlines',
+          label: 'Headlines',
+          required: false,
+          type: 'list',
+          default: [{ id: 'i1', text: 'خبر' }],
+        },
+      ],
+    } as unknown as Scene;
+    const { html, issues } = await makeExporter().produce(scene);
+
+    const m = /<script name="graphics-data-definition"[^>]*>([\s\S]*?)<\/script>/.exec(html);
+    const gdd = JSON.parse((m?.[1] ?? '').trim()) as {
+      properties: Record<string, { type: string; items?: { type: string } }>;
+    };
+    expect(gdd.properties['headlines']?.type).toBe('array');
+    expect(gdd.properties['headlines']?.items?.type).toBe('object');
+
+    expect(
+      issues.some(
+        (i) =>
+          i.code === 'gdd-list-field-limited-clients' &&
+          i.severity === 'warning' &&
+          i.fieldId === 'headlines',
+      ),
+    ).toBe(true);
+  });
+});
