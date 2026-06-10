@@ -76,7 +76,10 @@ high-priority designer item"), follow `docs/prd/README.md` exactly. In short:
    PRD item `[~]` and note the change dir.
 7. Archive (`pnpm openspec archive <name> -y` → folds the spec into
    `openspec/specs/`, item → `[x]`) **when the user confirms** — unless they
-   said "and archive".
+   said "and archive". After archiving, run
+   `pnpm exec prettier --write "openspec/specs/**/*.md"` (archive output isn't
+   prettier-clean; markdown occasionally needs a second `--write` pass) and
+   include it in the same commit, then `pnpm format:check` before push.
 
 ## Spec discipline — when a prompt changes a decision
 
