@@ -1,5 +1,9 @@
 import type {
+  AnimatableProperty,
+  Composition,
   DynamicField,
+  Element,
+  ElementAnimation,
   FieldBinding,
   FrameRange,
   Layer,
@@ -8,6 +12,7 @@ import type {
   Resolution,
   Scene,
 } from '@cg/shared-schema';
+import { migrateGlobalFieldsToCompositions } from '@cg/shared-schema';
 import { current } from './store-core.js';
 
 /**
@@ -148,4 +153,83 @@ export function locate(
     if (elIdx !== -1) return { layer, layerIdx: li, elIdx };
   }
   return null;
+}
+
+// ── Shared id generators + scene-load transforms ───────────────────────────
+
+export function freshCompositionId(): string {
+  return `comp-${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`;
+}
+
+export function freshKeyframeId(): string {
+  return `kf-${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`;
+}
+
+/**
+ * Normalise a loaded project to the composition model (no "main scene"). If it
+ * already has compositions, open the first. Otherwise, if the legacy root has
+ * any layers, migrate them into one composition and open it. A genuinely empty
+ * project gets no compositions and opens to the empty state. Returns the
+ * (possibly rewritten) scene and the composition to open.
+ */
+export function ensureCompositions(scene: Scene): { scene: Scene; activeId: string | null } {
+  const comps = scene.compositions ?? [];
+  if (comps.length > 0) {
+    // D-025 — distribute any legacy GLOBAL fields/bindings into the owning comps.
+    const next = migrateGlobalFieldsToCompositions({ ...scene, layers: [] });
+    return { scene: next, activeId: comps[0]?.id ?? null };
+  }
+  const rootLayers = Array.isArray(scene.layers) ? scene.layers : [];
+  if (rootLayers.length > 0) {
+    const comp: Composition = {
+      id: freshCompositionId(),
+      name: scene.name === '' ? 'comp1' : scene.name,
+      resolution: scene.resolution,
+      frameRange: scene.frameRange,
+      ...(scene.activeRange !== undefined ? { activeRange: scene.activeRange } : {}),
+      background: scene.background,
+      layers: rootLayers,
+      fields: [],
+      bindings: [],
+    };
+    // Move the root's global fields/bindings into the migrated composition.
+    const next = migrateGlobalFieldsToCompositions({
+      ...scene,
+      compositions: [comp],
+      layers: [],
+    });
+    return { scene: next, activeId: comp.id };
+  }
+  return { scene: { ...scene, compositions: [], layers: [] }, activeId: null };
+}
+
+/**
+ * Ensure every keyframe carries an `id`. Scenes authored before the id field
+ * (or starter templates) load without ids; assigning them on load means the
+ * timeline can always track/stack points reliably. The runtime ignores ids.
+ */
+export function normalizeKeyframeIds(scene: Scene): Scene {
+  if (!Array.isArray(scene.layers)) return scene;
+  function fixEl(el: Element): Element {
+    let next = el;
+    if (el.animation !== undefined) {
+      const tracks = el.animation.tracks;
+      const nextTracks: ElementAnimation['tracks'] = {};
+      for (const key of Object.keys(tracks) as AnimatableProperty[]) {
+        const track = tracks[key];
+        if (track === undefined) continue;
+        nextTracks[key] = {
+          keyframes: track.keyframes.map((k) =>
+            k.id === undefined ? { ...k, id: freshKeyframeId() } : k,
+          ),
+        };
+      }
+      next = { ...next, animation: { tracks: nextTracks } } as Element;
+    }
+    if (next.type === 'container') {
+      next = { ...next, children: next.children.map(fixEl) } as Element;
+    }
+    return next;
+  }
+  return { ...scene, layers: scene.layers.map((l) => ({ ...l, children: l.children.map(fixEl) })) };
 }

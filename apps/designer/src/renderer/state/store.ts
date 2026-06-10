@@ -9,30 +9,18 @@ import type {
   FieldBinding,
   Keyframe,
   Layer,
-  Playout,
   Scene,
 } from '@cg/shared-schema';
-import {
-  activeRangeOf,
-  playoutOf,
-  migrateGlobalFieldsToCompositions,
-  uniqueInstanceName,
-  compositionInstancesOf,
-} from '@cg/shared-schema';
+import { activeRangeOf, uniqueInstanceName, compositionInstancesOf } from '@cg/shared-schema';
 import {
   _resetCore,
   current,
   getClipboard,
-  getNoticeTimer,
   markHistoryBoundary,
   markSaved,
   redo,
-  resetHistory,
   set,
   setClipboard,
-  setNoticeTimer,
-  setSavedScene,
-  setSuppressHistory,
   subscribe,
   undo,
   type DesignerStoreState,
@@ -41,16 +29,17 @@ import {
   type KeyframeRef,
 } from './store-core.js';
 import {
-  activeCompId,
   activeDocOf,
   activeFieldData,
   activeLayersOf,
   editSceneOf,
+  freshCompositionId,
+  freshKeyframeId,
   locate,
-  withActiveDoc,
   withActiveFieldData,
   withActiveLayers,
 } from './scene-doc.js';
+import { documentSlice } from './slices/document.js';
 import { selectionSlice } from './slices/selection.js';
 import { viewSlice } from './slices/view.js';
 
@@ -70,48 +59,6 @@ export { editSceneOf };
  * This entry composes the engine (`store-core.ts`) + shared scene helpers
  * (`scene-doc.ts`) + the domain slices; see `state/README.md`.
  */
-
-function freshCompositionId(): string {
-  return `comp-${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`;
-}
-
-/**
- * Normalise a loaded project to the composition model (no "main scene"). If it
- * already has compositions, open the first. Otherwise, if the legacy root has
- * any layers, migrate them into one composition and open it. A genuinely empty
- * project gets no compositions and opens to the empty state. Returns the
- * (possibly rewritten) scene and the composition to open.
- */
-function ensureCompositions(scene: Scene): { scene: Scene; activeId: string | null } {
-  const comps = scene.compositions ?? [];
-  if (comps.length > 0) {
-    // D-025 — distribute any legacy GLOBAL fields/bindings into the owning comps.
-    const next = migrateGlobalFieldsToCompositions({ ...scene, layers: [] });
-    return { scene: next, activeId: comps[0]?.id ?? null };
-  }
-  const rootLayers = Array.isArray(scene.layers) ? scene.layers : [];
-  if (rootLayers.length > 0) {
-    const comp: Composition = {
-      id: freshCompositionId(),
-      name: scene.name === '' ? 'comp1' : scene.name,
-      resolution: scene.resolution,
-      frameRange: scene.frameRange,
-      ...(scene.activeRange !== undefined ? { activeRange: scene.activeRange } : {}),
-      background: scene.background,
-      layers: rootLayers,
-      fields: [],
-      bindings: [],
-    };
-    // Move the root's global fields/bindings into the migrated composition.
-    const next = migrateGlobalFieldsToCompositions({
-      ...scene,
-      compositions: [comp],
-      layers: [],
-    });
-    return { scene: next, activeId: comp.id };
-  }
-  return { scene: { ...scene, compositions: [], layers: [] }, activeId: null };
-}
 
 /** Collect the composition ids referenced by `composition` elements in a layer tree. */
 function collectCompRefs(children: readonly Element[], out: Set<string>): void {
@@ -292,42 +239,6 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
   };
 }
 
-/** A stable per-keyframe id (used for React keys, drag tracking, stacking). */
-function freshKeyframeId(): string {
-  return `kf-${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`;
-}
-
-/**
- * Ensure every keyframe carries an `id`. Scenes authored before the id field
- * (or starter templates) load without ids; assigning them on load means the
- * timeline can always track/stack points reliably. The runtime ignores ids.
- */
-function normalizeKeyframeIds(scene: Scene): Scene {
-  if (!Array.isArray(scene.layers)) return scene;
-  function fixEl(el: Element): Element {
-    let next = el;
-    if (el.animation !== undefined) {
-      const tracks = el.animation.tracks;
-      const nextTracks: ElementAnimation['tracks'] = {};
-      for (const key of Object.keys(tracks) as AnimatableProperty[]) {
-        const track = tracks[key];
-        if (track === undefined) continue;
-        nextTracks[key] = {
-          keyframes: track.keyframes.map((k) =>
-            k.id === undefined ? { ...k, id: freshKeyframeId() } : k,
-          ),
-        };
-      }
-      next = { ...next, animation: { tracks: nextTracks } } as Element;
-    }
-    if (next.type === 'container') {
-      next = { ...next, children: next.children.map(fixEl) } as Element;
-    }
-    return next;
-  }
-  return { ...scene, layers: scene.layers.map((l) => ({ ...l, children: l.children.map(fixEl) })) };
-}
-
 /** A short unique element id in the `el-…` convention used across the app. */
 function freshElementId(): string {
   return `el-${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`;
@@ -418,39 +329,9 @@ export const designerStore = {
     return current;
   },
 
-  setScene(scene: Scene | null, projectPath: string | null): void {
-    resetHistory();
-    setClipboard(null);
-    setSuppressHistory(true);
-    // Normalise to the composition model (migrate legacy root layers → a comp)
-    // and open the first composition, if any.
-    let activeId: string | null = null;
-    let normalized: Scene | null = null;
-    if (scene !== null) {
-      const ensured = ensureCompositions(normalizeKeyframeIds(scene));
-      normalized = ensured.scene;
-      activeId = ensured.activeId;
-    }
-    // A freshly loaded/closed project starts clean — nothing to save yet.
-    setSavedScene(normalized);
-    try {
-      set({
-        scene: normalized,
-        projectPath,
-        activeCompositionId: activeId,
-        view: scene === null ? 'landing' : 'studio',
-        selection: new Set<string>(),
-        selectedKeyframe: null,
-        selectedKeyframes: [],
-        keyframeInspectorOpen: false,
-        currentFrame: 0,
-        snapGuides: { x: [], y: [] },
-        guides: { x: [], y: [] },
-      });
-    } finally {
-      setSuppressHistory(false);
-    }
-  },
+  // Document lifecycle (setScene/setView/notice) + active-doc scene props
+  // (duration / active region / lifecycle / playout).
+  ...documentSlice,
 
   // Undo/redo + the history boundary/save markers live in `store-core.ts` — the
   // history engine is welded to `set`'s coalescing and the `dirty` flag.
@@ -458,35 +339,6 @@ export const designerStore = {
   redo,
   markHistoryBoundary,
   markSaved,
-
-  /** Explicitly switch top-level view (used by "back to projects"). */
-  setView(view: DesignerView): void {
-    if (view === current.view) return;
-    set({ view });
-  },
-
-  /** Show a transient toast notice (auto-clears). Replaces any current one. */
-  showNotice(message: string): void {
-    const t = getNoticeTimer();
-    if (t !== null) clearTimeout(t);
-    set({ notice: message });
-    setNoticeTimer(
-      setTimeout(() => {
-        setNoticeTimer(null);
-        set({ notice: null });
-      }, 5000) as unknown as number,
-    );
-  },
-
-  /** Dismiss the current toast notice immediately. */
-  dismissNotice(): void {
-    const t = getNoticeTimer();
-    if (t !== null) {
-      clearTimeout(t);
-      setNoticeTimer(null);
-    }
-    if (current.notice !== null) set({ notice: null });
-  },
 
   // ── Compositions ────────────────────────────────────────────────────────
 
@@ -676,124 +528,6 @@ export const designerStore = {
     };
     designerStore.addElement(el);
     return true;
-  },
-
-  /**
-   * Merge a shallow patch onto the active scene (background, name,
-   * frameRange, etc.). The scene reference is replaced so React /
-   * preview subscribers re-render through the existing pipeline.
-   */
-  updateScene(patch: Partial<Scene>): void {
-    if (current.scene === null) return;
-    // When the main scene is active, a plain shallow merge. When a composition
-    // is active, doc-level keys (size / duration / background / name / layers)
-    // target the composition; project-level keys (fields, bindings, fonts,
-    // compositions, metadata) stay on the scene root.
-    if (activeCompId() === null) {
-      set({ scene: { ...current.scene, ...patch } });
-      return;
-    }
-    // D-026 — `frameRate` is project-level: it is intentionally NOT a doc key, so
-    // an fps patch routes to the scene root (shared by every composition).
-    const docKeys = new Set([
-      'resolution',
-      'frameRange',
-      'activeRange',
-      'lifecycle',
-      'playout',
-      'background',
-      'name',
-      'layers',
-    ]);
-    const docPatch: Record<string, unknown> = {};
-    const rootPatch: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(patch)) {
-      (docKeys.has(k) ? docPatch : rootPatch)[k] = v;
-    }
-    let scene = current.scene;
-    if (Object.keys(docPatch).length > 0) {
-      scene = {
-        ...scene,
-        compositions: (scene.compositions ?? []).map((c) =>
-          c.id === current.activeCompositionId ? { ...c, ...docPatch } : c,
-        ),
-      };
-    }
-    if (Object.keys(rootPatch).length > 0) scene = { ...scene, ...rootPatch };
-    set({ scene });
-  },
-
-  /**
-   * Set the scene's **total** duration in frames. Updates `frameRange.out`
-   * to `frameRange.in + frames` and clamps the authoring `currentFrame` so
-   * the playhead can't sit past the new end. When an `activeRange` exists it
-   * is clamped to stay within the new total (a shorter total pulls the active
-   * out-point in; a longer total leaves the active region untouched).
-   * Existing keyframes are preserved — widening again restores their effect.
-   */
-  setSceneDurationFrames(frames: number): void {
-    if (current.scene === null) return;
-    const doc = activeDocOf(current.scene);
-    const safe = Math.max(1, Math.floor(frames));
-    const inFrame = doc.frameRange.in;
-    const out = inFrame + safe;
-    const nextFrame = Math.min(out, Math.max(inFrame, current.currentFrame));
-    const prevActive = doc.activeRange;
-    let activeRange = prevActive;
-    if (prevActive !== undefined) {
-      const aOut = Math.min(prevActive.out, out);
-      const aIn = Math.max(inFrame, Math.min(prevActive.in, aOut - 1));
-      activeRange = { in: aIn, out: aOut };
-    }
-    set({
-      scene: withActiveDoc(current.scene, { frameRange: { in: inFrame, out }, activeRange }),
-      currentFrame: nextFrame,
-    });
-  },
-
-  /**
-   * Resize the **active region** (the scene / main-layer bar) by setting its
-   * out-point, clamped to `[activeRange.in + 1, frameRange.out]`. This never
-   * touches `frameRange`, so the total frame count — and therefore the ruler
-   * and the trailing frames — stay put. Playback and export use this window.
-   */
-  setSceneActiveOut(outFrames: number): void {
-    if (current.scene === null) return;
-    const doc = activeDocOf(current.scene);
-    const { in: total0, out: total1 } = doc.frameRange;
-    const inFrame = doc.activeRange?.in ?? total0;
-    const out = Math.max(inFrame + 1, Math.min(total1, Math.round(outFrames)));
-    const prev = doc.activeRange;
-    if (prev !== undefined && prev.in === inFrame && prev.out === out) return;
-    set({ scene: withActiveDoc(current.scene, { activeRange: { in: inFrame, out } }) });
-  },
-
-  /**
-   * D-020 — set the active composition's lifecycle `outPoint` marker. Clamps to
-   * the active region so the schema invariant `activeRange.in ≤ outPoint ≤
-   * activeRange.out` always holds. Pass `null` to clear the lifecycle (back to no
-   * distinct phases).
-   */
-  setLifecycle(marker: { outPoint: number } | null): void {
-    if (current.scene === null) return;
-    if (marker === null) {
-      set({ scene: withActiveDoc(current.scene, { lifecycle: undefined }) });
-      return;
-    }
-    const active = activeRangeOf(activeDocOf(current.scene));
-    const out = Math.max(active.in, Math.min(active.out, Math.round(marker.outPoint)));
-    const prev = activeDocOf(current.scene).lifecycle;
-    if (prev !== undefined && prev.outPoint === out) return;
-    set({
-      scene: withActiveDoc(current.scene, { lifecycle: { outPoint: out } }),
-    });
-  },
-
-  /** D-020 — merge a patch onto the active composition's playout timing config. */
-  setPlayout(patch: Partial<Playout>): void {
-    if (current.scene === null) return;
-    const next: Playout = { ...playoutOf(activeDocOf(current.scene)), ...patch };
-    set({ scene: withActiveDoc(current.scene, { playout: next }) });
   },
 
   // View / canvas-aids actions (tool, ruler/snapping, snap + ruler guides).
