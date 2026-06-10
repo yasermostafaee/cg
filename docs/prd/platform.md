@@ -110,3 +110,20 @@ artifact from the internal architecture docs.
   `docs/operator-guide/` + `docs/designer-guide/` content as seeds. Internal
   architecture docs (`docs/engines/`, package READMEs) stay the source of truth for
   _how it's built_; this is the _how to use it_ layer.
+
+## [ ] P-007 — Extract domain skills from scattered docs ⟨priority: low⟩
+
+**What:** Package situational domain knowledge as Claude Code **skills** instead
+of always-on CLAUDE.md rules: (a) **caspar-template** — the CG ADD+UPDATE
+sequence, `file://`-safe/IIFE constraints, CSP, the CEF floor, the 403 readiness
+trap, GDD rules; (b) **persian-rtl** — ZWNJ, per-item bidi isolation, crawl
+direction, mixed-content test patterns; (c) **engine-extension** — a thin
+wrapper over the existing engine READMEs' extension points.
+**Why:** This expertise is scattered across docs and only matters situationally;
+packaged as skills it loads on demand instead of bloating the always-on context.
+**Acceptance:**
+
+- To be detailed when the item is scheduled.
+  **Notes:** Boundary rule — always-on behavioral rules STAY in CLAUDE.md;
+  skills are for situational expertise. Sequenced post-feature-wave; see
+  `docs/ROADMAP.md` ("Then — infra/quality").
