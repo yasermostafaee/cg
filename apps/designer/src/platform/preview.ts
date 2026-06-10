@@ -263,17 +263,19 @@ export class Preview {
           busy = true;
           try {
             currentScene = scene;
+            // D-028 — operator (asset-*) faces load BEFORE the old stage is
+            // torn down (no blank-checkerboard flash while a font fetches)
+            // and before the runtime exists, so runtime.ready
+            // (document.fonts.ready) and the ticker's first-pass width
+            // measurement see final glyphs. Failures degrade gracefully
+            // (applyFontFaces posts cg-preview-error itself) — a broken font
+            // must not brick the preview.
+            await applyFontFaces().catch(() => {});
             if (runtime) runtime.remove();
             // remove() leaves body.cg-removed / pending state; clear
             // both so the next createRuntime starts clean.
             document.body.classList.remove('cg-removed');
             document.body.classList.remove('cg-pending');
-            // D-028 — operator (asset-*) faces load BEFORE the runtime exists,
-            // so runtime.ready (document.fonts.ready) and the ticker's
-            // first-pass width measurement see final glyphs. Failures degrade
-            // gracefully (applyFontFaces posts cg-preview-error itself) — a
-            // broken font must not brick the preview.
-            await applyFontFaces().catch(() => {});
             runtime = createRuntime(scene, {
               playoutOverride: playoutOverride,
               scopeOverrides: scopeOverrides,

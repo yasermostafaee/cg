@@ -58,8 +58,10 @@ A ticker bound to a `list` field SHALL reconcile on `update()`: items are
 matched by `id`; existing items keep their node and on-screen position; new
 items enter the feed at their list position; removed items leave gracefully
 once off-screen (they are never re-fed); an existing id with changed text is
-re-measured and updated without a visual jump of the surrounding content. A
-bare string-array payload SHALL be accepted with positional-id fallback.
+corrected IN PLACE — re-measured with its leading edge unchanged and the
+following on-screen content shifted by exactly the width delta (no restart,
+no flash; a re-feed never pops in behind the entering edge). A bare
+string-array payload SHALL be accepted with positional-id fallback.
 
 #### Scenario: Live update without a visual jump
 

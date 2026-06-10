@@ -260,6 +260,82 @@ describe('TickerDriver — reconcile by stable id (update())', () => {
     expect(remaining).toBeLessThanOrEqual(1100); // one new-cycle width / speed
   });
 
+  it('an entered item with changed text is corrected IN PLACE — leading edge fixed, downstream shifted by the delta', () => {
+    const h = make();
+    h.driver.start();
+    h.clock.advance(2000); // d = 200: a (o=0..100) and b (o=110..310) both entered
+    const nodes = h.track.querySelectorAll<HTMLElement>('[data-cg-ticker-item]');
+    const nodeA = nodes[1];
+    const nodeB = nodes[2];
+    expect(nodeA?.textContent).toBe(itemA.text);
+    expect(nodeB?.style.left).toBe('-310px'); // rtl: -(110+200)
+
+    h.driver.setItems([{ id: 'a', text: 'XXXX' }, itemB]); // a: 100px → 40px (Δ=−60)
+
+    // The on-screen headline is corrected immediately…
+    expect(nodeA?.textContent).toBe('XXXX');
+    // …its leading (rtl: right) edge unchanged: left = −(0+40)
+    expect(nodeA?.style.left).toBe('-40px');
+    // …and the following entered node shifts by exactly the width delta:
+    // o 110→50 ⇒ left = −(50+200)
+    expect(nodeB?.style.left).toBe('-250px');
+    expect(nodeB?.textContent).toBe(itemB.text);
+  });
+
+  it('a shrunk in-place edit never re-feeds behind the entering edge (no pop-in)', () => {
+    const h = make();
+    h.driver.start();
+    h.clock.advance(1000); // d = 100: only a entered
+    h.driver.setItems([{ id: 'a', text: 'XX' }, itemB]); // a: 100px → 20px
+    // Kept end is now 20+gap=30 < d=100 — the re-fed tail must start at d, not 30.
+    const fedAfter = [...h.track.querySelectorAll<HTMLElement>('[data-cg-ticker-item]')]
+      .filter((n) => n.style.visibility !== 'hidden')
+      .map((n) => Number.parseFloat(n.style.left));
+    // rtl: left = −(o+w) ⇒ every re-fed node has o ≥ 100 ⇒ left ≤ −(100+w) < −100.
+    // The edited node itself sits at −20; everything else must be ≤ −100−min(w).
+    const others = fedAfter.filter((left) => left !== -20);
+    for (const left of others) expect(left).toBeLessThanOrEqual(-120);
+  });
+
+  it('projection after a mid-list-resume reconcile derives the wrap from feeder state, not cycle multiples', () => {
+    const h = make();
+    h.driver.start();
+    h.clock.advance(1000); // d = 100
+    // New list: q(50px), a(100px), z(1000px) — kept 'a' is at idx 1, so feeding
+    // resumes at z; the real wrap lands at 110+1000+10 = 1120, beyond the feed
+    // horizon, and the old seams were filtered by the reconcile.
+    h.driver.setItems([
+      { id: 'q', text: 'qqqqq' },
+      itemA,
+      { id: 'z', text: 'z'.repeat(100) },
+    ]);
+    // True boundary: (1120 + 400 − 100) / 100 ⇒ 14200 ms (a cycle-multiple
+    // projection would wrongly give (1180+400−100)/100 = 14800).
+    expect(h.driver.passRemainingMs()).toBe(14200);
+  });
+
+  it('reset() removes the static authoring layout (a fresh play never shows stale items)', () => {
+    const h = make();
+    const staticRow = document.createElement('div');
+    staticRow.dataset['cgTickerStatic'] = '1';
+    h.band.appendChild(staticRow);
+    h.driver.reset();
+    expect(h.band.querySelector('[data-cg-ticker-static]')).toBeNull();
+  });
+
+  it('pre-start setItems re-renders the static authoring row from the new list', () => {
+    const h = make({ separator: '•' });
+    const staticRow = document.createElement('div');
+    staticRow.dataset['cgTickerStatic'] = '1';
+    h.band.appendChild(staticRow);
+    h.driver.setItems([
+      { id: 'x', text: 'X' },
+      { id: 'y', text: 'Y' },
+    ]);
+    const texts = [...staticRow.querySelectorAll('span')].map((n) => n.textContent);
+    expect(texts).toEqual(['X', '•', 'Y']);
+  });
+
   it('pre-start setItems (field default) replaces the authored items wholesale', () => {
     const h = make();
     h.driver.setItems([{ id: 'x', text: 'xxxx' }]);

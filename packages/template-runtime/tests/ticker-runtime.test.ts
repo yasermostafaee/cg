@@ -274,6 +274,93 @@ describe('createRuntime — self-wired content-driven ticker (D-028)', () => {
     expect(document.body.classList.contains('cg-pending')).toBe(false); // root still on air
   });
 
+  it('a finite root self-settle exits a nested infinite ticker (nothing rolls under the hidden stage)', async () => {
+    const clock = makeClock();
+    const scene: Scene = {
+      ...tickerScene(1), // root: content-driven repeat 1, NO root ticker → 0ms pass
+      layers: [
+        {
+          id: 'L1',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [
+            {
+              id: 'inst',
+              name: 'band-instance',
+              type: 'composition',
+              compositionId: 'comp-band',
+              transform: baseTransform,
+              opacity: 1,
+              visible: true,
+              locked: false,
+              zIndex: 0,
+            },
+          ],
+        },
+      ],
+      compositions: [
+        {
+          id: 'comp-band',
+          name: 'band',
+          resolution: { width: 400, height: 60 },
+          frameRange: { in: 0, out: 50 },
+          background: 'transparent',
+          playout: { mode: 'content-driven', repeat: 'infinite' },
+          layers: [
+            {
+              id: 'CL1',
+              name: 'band-layer',
+              visible: true,
+              locked: false,
+              blendMode: 'normal',
+              children: [tickerElement],
+            },
+          ],
+        },
+      ],
+    };
+    const runtime = createRuntime(scene, { skipFontLoad: true, clock, tickerMeasure });
+    await runtime.play({});
+    clock.advance(1); // fires the root's 0ms pass → final outro → root settles
+    expect(document.body.classList.contains('cg-pending')).toBe(true);
+    const track = bandEl().querySelector<HTMLElement>('.cg-ticker-track');
+    const frozen = track?.style.transform;
+    clock.advance(60_000); // would be many crawl passes if anything still ran
+    expect(track?.style.transform).toBe(frozen); // crawl frozen — rAF stopped
+  });
+
+  it('band padding shrinks the crawl viewport (pass duration uses the padded width)', async () => {
+    const clock = makeClock();
+    const scene: Scene = {
+      ...tickerScene(1),
+      layers: [
+        {
+          id: 'L1',
+          name: 'band',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [
+            { ...tickerElement, padding: { top: 4, right: 30, bottom: 4, left: 30 } },
+          ],
+        },
+      ],
+    };
+    const runtime = createRuntime(scene, { skipFontLoad: true, clock, tickerMeasure });
+    const events: string[] = [];
+    runtime.on('stop.end', () => events.push('stop.end'));
+    await runtime.play({});
+    // viewport = 400 − 30 − 30 = 340 ⇒ single pass (320 + 340) / 100 = 6600 ms
+    clock.advance(6500);
+    expect(events).toEqual([]);
+    clock.advance(100);
+    expect(events).toEqual(['stop.end']);
+    // …and the crawl lives inside the padding-inset viewport div.
+    expect(bandEl().querySelector('.cg-ticker-viewport')).not.toBeNull();
+  });
+
   it('update() with a list field reconciles the crawl through the ticker-items binding', async () => {
     const clock = makeClock();
     const scene: Scene = {

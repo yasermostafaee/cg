@@ -43,6 +43,21 @@ must NOT restart with them. So:
   crawl rolls until `stop()`): the driver is started by the scope's hold entry
   and stopped by settle, independent of mode; only the *hook* is
   `content-driven`-specific.
+- **Root self-settle cascades:** when the ROOT scope settles on its own, the
+  runtime cascades `stop()` to every nested scope (settled children no-op per
+  D-026) and freezes every crawl — otherwise an infinite nested lifecycle
+  keeps timers/rAF rolling under the hidden stage with `stop()` unreachable.
+- **Static authoring layout:** `buildTicker` renders a measurement-free flex
+  row so the Designer canvas shows the items (re-rendered when a list-field
+  default replaces them pre-play); a real `play()` removes it (driver reset),
+  so every on-air intro shows the same empty band the crawl then enters — the
+  first play never flashes stale authored items. It avoids `inset` and flex
+  `column-gap` (above the exported single-file's CEF floor — CasparCG 2.2/2.3
+  = CEF 63/71): explicit offsets + per-span directional margins.
+- **Padding:** CSS padding would be inert for the absolutely-positioned track
+  (abspos children resolve against the padding box), so the band nests a
+  padding-inset `viewport` div that is the actual clip + travel box; the
+  driver's `viewportWidth` subtracts the horizontal padding.
 
 ## D3. Treadmill = virtualized feed + node recycling, measured once per content
 
@@ -60,13 +75,18 @@ changes per frame.
 **Reconcile (`update()`):** match by stable `id`. Visible nodes keep position;
 removed-but-visible items scroll out naturally (they are simply never fed
 again); new items enter at their list position on the next feed; an existing
-id with changed text is re-measured and updated in place with track-offset
-compensation so visible content does not jump. Bare `string[]` payloads get
-positional ids (`item-<index>`) as a degraded fallback — documented as
-jump-free only for appends. A reconcile recomputes the logical cycle width for
-future cycle-boundary math; the in-flight pass keeps its already-scheduled
-duration (the next pass picks up the new width — per-pass recompute is the
-D-020 contract).
+id with changed text is corrected in place — re-measured, leading edge fixed,
+downstream kept nodes and recorded seams shifted by exactly the width delta
+(track-offset compensation). A re-feed never starts behind the entering edge
+(a shrunk edit leaves a one-off wider gap instead of popping a node in
+mid-band). Bare `string[]` payloads get positional ids (`item-<index>`) as a
+degraded fallback — documented as jump-free only for appends. A reconcile
+recomputes the logical cycle width for future cycle-boundary math — and
+because a reconcile can resume mid-list, pass-boundary projection derives the
+next un-fed wrap from the feeder's real state (`nextOffset` + the width of
+the items left in the cycle), never from multiples of the cycle width; the
+in-flight pass keeps its already-scheduled duration (the next pass picks up
+the new width — per-pass recompute is the D-020 contract).
 
 ## D4. RTL model: `direction` is the reading direction
 

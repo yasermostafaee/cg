@@ -45,3 +45,20 @@ ticker nor an external hook keeps the existing behaviour (zero-length passes).
 - **WHEN** `createRuntime` is called with an explicit `durationHook` for a
   scene whose root scope also contains a ticker
 - **THEN** the explicit hook's value governs the root scope's passes
+
+### Requirement: Root self-settle takes every nested scope off air
+
+The runtime SHALL cascade `stop()` to every nested scope when the root scope
+settles on its own (a finite `auto-out` / `loop-cycle` / `content-driven`
+lifecycle completing) — already-settled children remain no-ops per the
+state-aware-stop rule — and SHALL freeze every ticker crawl, so no nested
+lifecycle, hold timer, or crawl keeps running under the hidden stage.
+
+#### Scenario: A finite root exits while a nested infinite ticker crawls
+
+- **WHEN** the root composition completes its final pass and settles while a
+  nested instance's `content-driven` ticker is crawling with
+  `repeat: 'infinite'`
+- **THEN** the nested scope plays its outro and settles too, its crawl
+  freezes, and no timers or animation frames continue under the hidden
+  template

@@ -78,6 +78,8 @@ interface FedNode {
   w: number;
   /** Item id ('' for separator nodes). */
   id: string;
+  /** The text this node currently renders (reconcile detects edits with it). */
+  text: string;
   isSep: boolean;
 }
 
@@ -126,7 +128,19 @@ export class TickerDriver {
       cancel: c?.cancel ?? ((h): void => cancelAnimationFrame(h)),
       now: c?.now ?? ((): number => performance.now()),
     };
-    this.measure = options.measure ?? ((node): number => node.offsetWidth);
+    // Default measurement: the COMPUTED used width — fractional (offsetWidth
+    // rounds to ints, which would under/over-gap every boundary by ≤0.5px)
+    // and in local layout px, so ancestor `transform: scale` (nested
+    // composition instances) can't skew it. offsetWidth is the fallback for
+    // environments without getComputedStyle width resolution.
+    this.measure =
+      options.measure ??
+      ((node): number => {
+        const win = node.ownerDocument.defaultView;
+        if (win === null) return node.offsetWidth;
+        const used = Number.parseFloat(win.getComputedStyle(node).width);
+        return Number.isFinite(used) && used > 0 ? used : node.offsetWidth;
+      });
   }
 
   /**
@@ -171,7 +185,13 @@ export class TickerDriver {
     this.cancelFrame();
   }
 
-  /** Full reset for a fresh `play()`: clear the fed stream and bookkeeping. */
+  /**
+   * Full reset for a fresh `play()`: clear the fed stream and bookkeeping.
+   * Also removes the static authoring layout — every play's intro shows the
+   * same (empty) band the crawl then enters, instead of the first play
+   * showing possibly-stale authored items that snap away at hold start.
+   * The Designer canvas (which never plays) keeps the static row.
+   */
   reset(): void {
     this.stop();
     for (const f of this.fed) this.release(f.node);
@@ -182,6 +202,7 @@ export class TickerDriver {
     this.hasFed = false;
     this.pausedAccumMs = 0;
     this.o.track.style.transform = '';
+    this.o.band.querySelector('[data-cg-ticker-static]')?.remove();
   }
 
   destroy(): void {
@@ -206,26 +227,46 @@ export class TickerDriver {
     for (const seam of this.cycleSeams) {
       if (seam + V > d) return ((seam + V - d) / this.o.speed) * 1000;
     }
-    // …else project past the known feed with the CURRENT cycle width.
-    let seam =
-      this.cycleSeams.length > 0 ? (this.cycleSeams[this.cycleSeams.length - 1] ?? 0) + cw : cw;
+    // …else project from the feeder's REAL state: the next un-recorded wrap is
+    // the current feed point plus the width of the items left in this cycle
+    // (a reconcile can resume mid-list, so wraps are NOT at multiples of the
+    // cycle width), then whole cycles beyond it.
+    let seam = this.nextIdx === 0 ? this.nextOffset : this.nextOffset + this.tailWidth(this.nextIdx);
     while (seam + V <= d) seam += cw;
     return ((seam + V - d) / this.o.speed) * 1000;
   }
 
+  /** Width of the remaining items `from..end` of the current cycle (incl. spacing). */
+  private tailWidth(from: number): number {
+    const sep = this.o.separator;
+    const sepBlock = sep !== undefined && sep !== '' ? this.measureText(sep) + this.o.gap : 0;
+    let total = 0;
+    for (let i = from; i < this.logical.length; i += 1) {
+      const item = this.logical[i];
+      if (item === undefined) continue;
+      total += this.measureText(item.text) + this.o.gap + sepBlock;
+    }
+    return total;
+  }
+
   /**
    * Reconcile to a new logical list by stable id — the `update()` path.
-   * Nothing on screen moves: nodes already entered keep their position and
-   * play out; the not-yet-visible fed tail is dropped and re-fed from the new
-   * list (so removed items never appear, new items enter in order), resuming
-   * after the last visible item's position in the NEW list.
+   * Entered nodes keep their leading edge; an entered item whose text changed
+   * is updated IN PLACE (re-measured, downstream kept content shifted by
+   * exactly the width delta — track-offset compensation, no jump); the
+   * not-yet-visible fed tail is dropped and re-fed from the new list (so
+   * removed items never appear, new items enter in order), resuming after the
+   * last visible item's position in the NEW list.
    */
   setItems(items: TickerDriverItem[]): void {
     this.logical = items.map((i) => ({ id: i.id, text: i.text }));
     this.cycleWidthCache = null;
     if (!this.running) {
-      // Pre-start (field default applied before play): next start feeds fresh.
+      // Pre-start (field default applied before play): the next start feeds
+      // fresh; the static authoring layout re-renders so the canvas shows the
+      // bound list, not the stale authored items.
       this.nextIdx = 0;
+      this.rebuildStaticRow();
       return;
     }
     const d = this.distance();
@@ -239,6 +280,31 @@ export class TickerDriver {
       const firstDropped = dropped[0];
       if (firstDropped !== undefined) {
         this.cycleSeams = this.cycleSeams.filter((s) => s < firstDropped.o);
+      }
+    }
+    // In-place edit: a kept (on-screen) item whose id survives with NEW text
+    // is corrected immediately — broadcast crawls must fix headlines without
+    // waiting a full cycle. Its leading edge stays fixed; every later kept
+    // node (and seam) shifts by the width delta so spacing stays exact.
+    for (let i = 0; i < this.fed.length; i += 1) {
+      const f = this.fed[i];
+      if (f === undefined || f.isSep) continue;
+      const next = this.logical.find((it) => it.id === f.id);
+      if (next === undefined || next.text === f.text) continue;
+      const newW = this.measureText(next.text);
+      const delta = newW - f.w;
+      f.node.textContent = next.text;
+      f.text = next.text;
+      f.w = newW;
+      this.position(f);
+      if (delta !== 0) {
+        for (let j = i + 1; j < this.fed.length; j += 1) {
+          const g = this.fed[j];
+          if (g === undefined) continue;
+          g.o += delta;
+          this.position(g);
+        }
+        this.cycleSeams = this.cycleSeams.map((s) => (s > f.o ? s + delta : s));
       }
     }
     // Resume feeding after the last kept ITEM as positioned in the new list;
@@ -256,7 +322,11 @@ export class TickerDriver {
     }
     this.nextIdx = this.logical.length > 0 ? resume : 0;
     const lastKept = this.fed[this.fed.length - 1];
-    this.nextOffset = lastKept !== undefined ? lastKept.o + lastKept.w + this.o.gap : d;
+    // Never re-feed BEHIND the entering edge (a shrunk in-place edit can pull
+    // the kept end before `d`; a node fed there would pop in mid-band — a
+    // one-off wider gap is the lesser evil).
+    this.nextOffset =
+      lastKept !== undefined ? Math.max(lastKept.o + lastKept.w + this.o.gap, d) : d;
     this.step();
   }
 
@@ -326,10 +396,15 @@ export class TickerDriver {
     const w = this.measureText(text);
     const node = this.acquire();
     node.textContent = text;
-    node.style.left =
-      this.o.direction === 'ltr' ? `${this.nextOffset}px` : `${-(this.nextOffset + w)}px`;
-    this.fed.push({ node, o: this.nextOffset, w, id, isSep });
+    const fedNode: FedNode = { node, o: this.nextOffset, w, id, text, isSep };
+    this.position(fedNode);
+    this.fed.push(fedNode);
     this.nextOffset += w + this.o.gap;
+  }
+
+  /** Write a fed node's CSS position from its abstract offset + width. */
+  private position(f: FedNode): void {
+    f.node.style.left = this.o.direction === 'ltr' ? `${f.o}px` : `${-(f.o + f.w)}px`;
   }
 
   private recycle(d: number): void {
@@ -376,6 +451,21 @@ export class TickerDriver {
     return w;
   }
 
+  /**
+   * Re-render the static authoring layout from the current logical list (the
+   * Designer canvas path: a list-field default replaces the authored items
+   * before any play, and the canvas must show the bound data).
+   */
+  private rebuildStaticRow(): void {
+    const row = this.o.band.querySelector<HTMLElement>('[data-cg-ticker-static]');
+    if (row === null) return;
+    populateTickerStaticRow(row, this.logical, {
+      direction: this.o.direction,
+      gap: this.o.gap,
+      separator: this.o.separator,
+    });
+  }
+
   private acquire(): HTMLElement {
     const node = this.pool.pop() ?? this.makeItemNode();
     this.o.track.appendChild(node);
@@ -409,6 +499,43 @@ export class TickerDriver {
     node.style.unicodeBidi = 'isolate';
     return node;
   }
+}
+
+/**
+ * (Re)populate a ticker's static authoring row: bidi-isolated spans in
+ * reading-direction flex order, spaced with per-span margins rather than flex
+ * `column-gap`/`inset` (both above the exported single-file's CEF floor —
+ * CasparCG 2.2/2.3 ship CEF 63/71). Shared by the scene-builder (initial
+ * build) and the driver (pre-start reconcile), so the two can't drift.
+ */
+export function populateTickerStaticRow(
+  row: HTMLElement,
+  items: readonly TickerDriverItem[],
+  opts: { direction: 'ltr' | 'rtl'; gap: number; separator?: string | undefined },
+): void {
+  const doc = row.ownerDocument;
+  while (row.firstChild !== null) row.removeChild(row.firstChild);
+  const addSpan = (text: string, first: boolean): void => {
+    const span = doc.createElement('span');
+    span.style.whiteSpace = 'pre';
+    span.style.direction = opts.direction;
+    span.style.unicodeBidi = 'isolate';
+    span.style.flexShrink = '0';
+    if (!first) {
+      // The gap faces the PREVIOUS item: in an rtl row the next item sits to
+      // the left, so its gap is its right margin; ltr is the mirror.
+      if (opts.direction === 'rtl') span.style.marginRight = `${opts.gap}px`;
+      else span.style.marginLeft = `${opts.gap}px`;
+    }
+    span.textContent = text;
+    row.appendChild(span);
+  };
+  items.forEach((item, i) => {
+    if (i > 0 && opts.separator !== undefined && opts.separator !== '') {
+      addSpan(opts.separator, false);
+    }
+    addSpan(item.text, i === 0);
+  });
 }
 
 /**

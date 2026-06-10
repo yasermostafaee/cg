@@ -88,10 +88,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const tickersByScope = new Map<FieldScope, TickerDriver[]>();
   const instantiateTickers = (scope: FieldScope): void => {
     const drivers = scope.tickers.map((t) => {
+      // The crawl lives in the padding-inset viewport div (CSS padding is
+      // inert for the abspos track), so the travel width shrinks with it.
+      const pad = t.element.padding;
+      const horizontalPad = pad === undefined ? 0 : pad.left + pad.right;
       const driver = new TickerDriver({
         band: t.band,
         track: t.track,
-        viewportWidth: t.element.transform.size.w,
+        viewportWidth: Math.max(0, t.element.transform.size.w - horizontalPad),
         direction: t.element.direction,
         speed: t.element.speed,
         gap: t.element.gap,
@@ -184,6 +188,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // play/stop/pause cascade while every child runs its own in→hold→out
   // independently and can be timed independently in the preview.
   const noop = (): void => undefined;
+  // Assigned once the controller tree exists (the closure below fires long
+  // after). The ROOT settling on its own (auto-out / finite loop-cycle /
+  // finite content-driven) takes the whole template off air: cascade stop()
+  // to every nested scope (settled children no-op per D-026) and freeze every
+  // crawl — otherwise an infinite nested lifecycle keeps timers/rAF rolling
+  // under the hidden stage, with stop() unreachable (machine already
+  // 'stopped').
+  let onRootSettled: () => void = noop;
   const buildScopeController = (scope: FieldScope, isRoot: boolean, path: string): ScopeNode => {
     const own = scope.animated;
     // D-028 — self-wire the scope's content-driven duration from its tickers:
@@ -213,8 +225,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       onExitStart: isRoot ? rootOnExitStart : noop,
       onSettle: isRoot
         ? (): void => {
-            stopScopeTickers();
-            rootOnSettle();
+            onRootSettled();
           }
         : stopScopeTickers,
       durationHook: isRoot && options.durationHook !== undefined ? options.durationHook : tickerHook,
@@ -241,6 +252,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const cascade = (node: ScopeNode, op: (c: PlayoutController) => void): void => {
     op(node.controller);
     for (const child of node.children) cascade(child, op);
+  };
+
+  onRootSettled = (): void => {
+    cascade(rootNode, (c) => c.stop()); // root itself is settled — a no-op
+    for (const t of allTickers) t.stop();
+    rootOnSettle();
   };
 
   const runtime: TemplateRuntime = {

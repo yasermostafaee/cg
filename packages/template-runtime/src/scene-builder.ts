@@ -13,6 +13,7 @@ import type {
   Transform,
 } from '@cg/shared-schema';
 import type { BuildSceneResult, FieldScope, LifecycleSource } from './types.js';
+import { populateTickerStaticRow } from './ticker-driver.js';
 
 /**
  * Build a DOM tree from a Scene. Returns the container element (caller
@@ -372,13 +373,22 @@ function buildTicker(element: TickerElement, ctx: BuildCtx): HTMLElement {
   if (element.cornerRadius !== undefined && element.cornerRadius > 0) {
     el.style.borderRadius = `${element.cornerRadius}px`;
   }
-  if (element.padding) {
-    el.style.paddingTop = `${element.padding.top}px`;
-    el.style.paddingRight = `${element.padding.right}px`;
-    el.style.paddingBottom = `${element.padding.bottom}px`;
-    el.style.paddingLeft = `${element.padding.left}px`;
-    el.style.boxSizing = 'border-box';
-  }
+
+  // The padded inner viewport. CSS padding on the band would be inert here —
+  // the track/static row are absolutely positioned, and abspos children
+  // resolve against the PADDING box, so padding insets nothing for them.
+  // Instead the viewport div is inset by the padding values and is the clip
+  // + sizing context the crawl actually lives in (the runtime subtracts the
+  // horizontal padding from the driver's viewportWidth to match).
+  const pad = element.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  const viewport = doc.createElement('div');
+  viewport.className = 'cg-ticker-viewport';
+  viewport.style.position = 'absolute';
+  viewport.style.top = `${pad.top}px`;
+  viewport.style.right = `${pad.right}px`;
+  viewport.style.bottom = `${pad.bottom}px`;
+  viewport.style.left = `${pad.left}px`;
+  viewport.style.overflow = 'hidden';
 
   // The crawl surface. Items are absolutely positioned from measured offsets
   // (no inline flow → item order is fixed by construction, immune to bidi
@@ -394,34 +404,28 @@ function buildTicker(element: TickerElement, ctx: BuildCtx): HTMLElement {
 
   // Static authoring layout: lets the canvas show the items without any
   // measurement (flex lays them out; `direction` puts the list head at the
-  // reading start edge). Lives on the BAND (which has real width) and is
-  // removed by the driver when the crawl starts.
+  // reading start edge). Removed at the first real `play()` (driver reset) so
+  // every on-air intro shows the same band the crawl then enters; re-rendered
+  // by the driver when a list-field default replaces the items pre-play.
   const staticRow = doc.createElement('div');
   staticRow.dataset['cgTickerStatic'] = '1';
   staticRow.style.position = 'absolute';
-  staticRow.style.inset = '0';
+  staticRow.style.top = '0';
+  staticRow.style.right = '0';
+  staticRow.style.bottom = '0';
+  staticRow.style.left = '0';
   staticRow.style.display = 'flex';
   staticRow.style.alignItems = 'center';
-  staticRow.style.columnGap = `${element.gap}px`;
   staticRow.style.direction = element.direction;
-  const addStaticSpan = (text: string): void => {
-    const span = doc.createElement('span');
-    span.style.whiteSpace = 'pre';
-    span.style.direction = element.direction;
-    span.style.unicodeBidi = 'isolate';
-    span.style.flexShrink = '0';
-    span.textContent = text;
-    staticRow.appendChild(span);
-  };
-  element.items.forEach((item, i) => {
-    if (i > 0 && element.separator !== undefined && element.separator !== '') {
-      addStaticSpan(element.separator);
-    }
-    addStaticSpan(item.text);
+  populateTickerStaticRow(staticRow, element.items, {
+    direction: element.direction,
+    gap: element.gap,
+    separator: element.separator,
   });
 
-  el.appendChild(track);
-  el.appendChild(staticRow);
+  viewport.appendChild(track);
+  viewport.appendChild(staticRow);
+  el.appendChild(viewport);
   ctx.scope.tickers.push({ element, band: el, track });
   return el;
 }

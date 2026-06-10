@@ -188,14 +188,21 @@ in a child composition drives *its own* scope. An **explicit**
 **Invariants**
 
 - The treadmill rolls **continuously across pass boundaries** (intro/outro
-  replays never restart it; `start()` is idempotent); a fresh `play()` resets it.
+  replays never restart it; `start()` is idempotent); a fresh `play()` resets it
+  (and removes the static authoring layout, so every intro shows the same band).
 - `pause()`/`resume()` freeze/continue it in lockstep with the hold timer;
-  settling stops it (frozen at the exact boundary).
+  settling stops it (frozen at the exact boundary). A ROOT self-settle cascades
+  `stop()` to nested scopes and freezes every crawl — nothing rolls under a
+  hidden stage.
 - `setItems()` (the `update()` path) reconciles by stable id: entered nodes
-  keep their position, the unseen fed tail is dropped and re-fed from the new
-  list — no visual jump; removed items are never re-fed.
+  keep their position; an entered item with changed text is corrected **in
+  place** (re-measured, leading edge fixed, downstream content shifted by the
+  width delta); the unseen fed tail is dropped and re-fed from the new list —
+  removed items are never re-fed, and a re-feed never pops in behind the
+  entering edge.
 - `RuntimeBootOptions.tickerMeasure` injects width measurement (happy-dom has
-  no layout); `RuntimeClock` injects the rAF/now clock.
+  no layout); `RuntimeClock` injects the rAF/now clock. The default measure is
+  the fractional computed width (offsetWidth would round every boundary).
 
 ### animation-applier + keyframe-eval — per-frame writes
 
