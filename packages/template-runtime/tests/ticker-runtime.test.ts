@@ -212,6 +212,31 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
     expect(events).toEqual(['stop.end']); // 2 cycles × 2 passes = 4 crawls total
   });
 
+  it('stop() during a content-driven hold is IMMEDIATE — hard out, mid-scroll (no waiting for the pass)', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      tickerScene({
+        playout: { mode: 'auto-out', holdSource: 'content-driven' },
+        tickerRepeat: 2, // would complete at 10300ms — stop() must NOT wait
+      }),
+      { skipFontLoad: true, clock, tickerMeasure },
+    );
+    const events: string[] = [];
+    runtime.on('stop.start', () => events.push('stop.start'));
+    runtime.on('stop.end', () => events.push('stop.end'));
+    await runtime.play({});
+    await run(clock, 2000); // d = 200 — mid pass 1, items on screen
+    await runtime.stop();
+    // The outro is instant here (no keyframes): the exit happened NOW, with
+    // the crawl frozen mid-scroll — not at a pass boundary, not drained.
+    expect(events).toEqual(['stop.start', 'stop.end']);
+    const track = bandEl().querySelector<HTMLElement>('.cg-ticker-track');
+    expect(track?.style.transform).toBe('translateX(200px)'); // mid-scroll
+    // The abandoned completion can never re-trigger an exit (hold token).
+    await run(clock, 60_000, 5000);
+    expect(events).toEqual(['stop.start', 'stop.end']);
+  });
+
   it('an explicit boot contentHold overrides the self-wired ticker completion (root scope)', async () => {
     const clock = makeClock();
     const runtime = createRuntime(

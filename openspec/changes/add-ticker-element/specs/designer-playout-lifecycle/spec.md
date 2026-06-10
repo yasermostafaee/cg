@@ -62,6 +62,14 @@ and test seam).
 - **THEN** completion never fires and the composition holds (crawling) until
   `stop()`
 
+#### Scenario: stop() during a content-driven hold is IMMEDIATE (hard out)
+
+- **WHEN** `stop()` arrives while a content-driven hold is crawling
+- **THEN** the hold token invalidates the pending ticker completion, the outro
+  plays right away, and the ticker exits mid-scroll with the band — there is
+  no built-in waiting for the pass to finish (a graceful/soft stop is a
+  rundown-layer feature on the override seam, not runtime behaviour — C-008)
+
 #### Scenario: Stale completion after stop is ignored
 
 - **WHEN** the operator stops a composition during a content-driven hold and
