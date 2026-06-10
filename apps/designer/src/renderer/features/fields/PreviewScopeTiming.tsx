@@ -1,8 +1,9 @@
-import { compositionInstancesOf, type Scene } from '@cg/shared-schema';
+import { compositionInstancesOf, type Element, type Scene } from '@cg/shared-schema';
 import {
   effectiveMode,
   PreviewTimingControls,
   TIMING_RELEVANT_MODES,
+  type TickerTimingDefaults,
   type TimingOverride,
   type TimingSource,
 } from './PreviewTimingControls.js';
@@ -20,9 +21,30 @@ export interface TimingScopeNode {
   label: string;
   source: TimingSource;
   depth: number;
+  /** D-028 — the scope's first ticker's authored repeat/boundary (resting UI values). */
+  tickerDefaults: TickerTimingDefaults | null;
 }
 
 const MAX_DEPTH = 8;
+
+/** D-028 — the scope's first ticker element (recursing containers), if any. */
+function firstTickerOf(doc: { layers: Scene['layers'] }): TickerTimingDefaults | null {
+  const walk = (children: readonly Element[]): TickerTimingDefaults | null => {
+    for (const el of children) {
+      if (el.type === 'ticker') return { repeat: el.repeat, boundary: el.cycleBoundary };
+      if (el.type === 'container') {
+        const found = walk(el.children);
+        if (found !== null) return found;
+      }
+    }
+    return null;
+  };
+  for (const layer of doc.layers) {
+    const found = walk(layer.children);
+    if (found !== null) return found;
+  }
+  return null;
+}
 
 /**
  * Flatten the composition-instance tree (root first, DFS) into per-scope timing
@@ -30,7 +52,9 @@ const MAX_DEPTH = 8;
  * depth/visited guards so a cyclic graph can't loop forever.
  */
 export function timingScopeList(scene: Scene): TimingScopeNode[] {
-  const out: TimingScopeNode[] = [{ path: '', label: scene.name, source: scene, depth: 0 }];
+  const out: TimingScopeNode[] = [
+    { path: '', label: scene.name, source: scene, depth: 0, tickerDefaults: firstTickerOf(scene) },
+  ];
   const walk = (
     doc: { layers: Scene['layers'] },
     parentPath: string,
@@ -43,7 +67,13 @@ export function timingScopeList(scene: Scene): TimingScopeNode[] {
       const comp = scene.compositions?.find((c) => c.id === inst.compositionId);
       if (comp === undefined) continue;
       const path = parentPath === '' ? inst.name : `${parentPath}.${inst.name}`;
-      out.push({ path, label: inst.name, source: comp, depth });
+      out.push({
+        path,
+        label: inst.name,
+        source: comp,
+        depth,
+        tickerDefaults: firstTickerOf(comp),
+      });
       walk(comp, path, depth + 1, new Set([...visited, inst.compositionId]));
     }
   };
@@ -84,6 +114,8 @@ export function PreviewScopeTiming({
             title={node.path === '' ? 'Timing (session)' : `Timing — ${node.label}`}
             defaultExpanded={node.path === ''}
             showFooter={i === visible.length - 1}
+            hasTicker={node.tickerDefaults !== null}
+            tickerDefaults={node.tickerDefaults}
             override={overrides[node.path] ?? {}}
             onChange={(patch) => onChange(node.path, patch)}
           />

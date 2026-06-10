@@ -573,9 +573,13 @@ runtime time source (relates to the FrameDriver clock seam).
 
 **What:** A new `ticker` element type: a clipped horizontal band that scrolls a
 list of text items continuously (marquee/crawl). The scroll duration is
-content-driven — measured content width ÷ `speed` (px/s) — supplied to the
-composition's `content-driven` playout mode and looped via its `repeat`
-(`'infinite'` | N passes then exit). Items are authored on the element
+content-driven — measured content width ÷ `speed` (px/s). The ticker owns its
+own crawl loop: `repeat` (`'infinite'` default | N passes) with
+`cycleBoundary: 'seamless' | 'drain'`; a finite run ends cleanly (the last
+item fully exits the band) and signals completion, which the composition's
+`holdSource: 'content-driven'` hold awaits — usable under `auto-out` AND
+`loop-cycle`, whose `repeat` counts open/close cycles. Items are authored on
+the element
 (`items: [{ id, text }]`) and can be driven dynamically through a new `list`
 field type bound to the ticker; `update()` reconciles items by stable id.
 `direction: 'rtl' | 'ltr'` is the reading direction (Persian default `'rtl'`:
@@ -587,8 +591,17 @@ a fixed distance, so long text clips and short text leaves dead air.
 
 - WHEN a ticker's items are replaced with longer text THEN the pass duration
   grows proportionally (measured width ÷ speed) with no manual duration edit
-- WHEN playout `repeat` is N THEN the composition exits after exactly N passes;
-  WHEN `'infinite'` THEN the crawl runs until `stop()`
+- WHEN a ticker's `repeat` is N THEN feeding stops after pass N and the run
+  completes when the last item has fully exited the band (clean end, never cut
+  mid-scroll, completion signalled); WHEN `'infinite'` (the default) THEN the
+  crawl runs until `stop()`
+- WHEN `cycleBoundary` is `'seamless'` THEN the next pass follows the last at
+  the configured spacing; WHEN `'drain'` THEN the band empties between passes
+- WHEN a composition holds with `holdSource: 'content-driven'` THEN the hold
+  lasts until every scope ticker completes (usable under `auto-out` AND
+  `loop-cycle`; an infinite ticker holds until `stop()`); WHEN `loop-cycle`
+  `repeat: 3` contains a ticker with `repeat: 2` THEN each cycle holds for 2
+  crawl passes with the full open/close between — the content is seen 6×
 - WHEN `update()` delivers a new items list THEN items reconcile by stable id —
   existing items keep position, new items append, removed items leave once
   off-screen — with no restart or visual jump
@@ -605,10 +618,13 @@ a fixed distance, so long text clips and short text leaves dead air.
   UI states it is time-driven (scrub does not apply)
 - WHEN a `list` field is bound to a ticker THEN the preview field form shows an
   items editor (add/remove/reorder) that live-updates the crawl
-  **Notes:** first consumer of D-020 `content-driven` + the `durationHook` seam —
-  the runtime self-wires a per-scope hook from the ticker element (no boot-option
-  wiring needed in preview/export; `RuntimeBootOptions.durationHook` stays as the
-  external override/test seam). New `list` field type has an extensible item shape
+  **Notes:** supersedes D-020's `content-driven` *mode* + `durationHook` seam
+  with a completion model — the runtime self-wires each scope's content-driven
+  hold from its tickers' completion signals (`Promise.all`; no boot-option
+  wiring needed in preview/export; `RuntimeBootOptions.contentHold` is the
+  root-scope external override/test seam), and a stored legacy
+  `mode: 'content-driven'` normalizes to `loop-cycle` +
+  `holdSource: 'content-driven'`. New `list` field type has an extensible item shape
   (required `id` + open fields; the ticker reads `text`) so the repeater (D-030)
   and sequence (D-029) can reuse it. Lists travel as JSON only (legacy CasparCG
   XML payloads can't carry them). Change dir:

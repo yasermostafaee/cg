@@ -1,4 +1,4 @@
-import type { Scene } from '@cg/shared-schema';
+import { playoutOf, type Element, type Scene, type TickerElement } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
 import {
   buildGddSchema,
@@ -123,7 +123,47 @@ function preflight(scene: Scene): ExportIssue[] {
       });
     }
   }
+
+  // D-028 — a TIMED hold with a FINITE ticker is authored intent, but worth a
+  // heads-up: the crawl drains after its passes and the band sits empty until
+  // the timer ends the hold.
+  const docs: { layers: Scene['layers']; playout?: Scene['playout'] }[] = [
+    scene,
+    ...(scene.compositions ?? []),
+  ];
+  for (const doc of docs) {
+    const playout = playoutOf(doc);
+    if (playout.mode === 'manual' || playout.holdSource === 'content-driven') continue;
+    const finiteTicker = findFiniteTicker(doc.layers);
+    if (finiteTicker !== null) {
+      issues.push({
+        code: 'ticker-finite-with-timed-hold',
+        severity: 'info',
+        message: `Ticker "${finiteTicker.name || finiteTicker.id}" runs ${String(finiteTicker.repeat)} pass(es) under a TIMED hold — after its passes the band sits empty until the timer ends the hold. Use a content-driven hold to exit when the crawl completes.`,
+        elementId: finiteTicker.id,
+      });
+    }
+  }
   return issues;
+}
+
+/** The first finite-repeat ticker in a doc's layers (recursing containers). */
+function findFiniteTicker(layers: Scene['layers']): TickerElement | null {
+  const walk = (children: readonly Element[]): TickerElement | null => {
+    for (const el of children) {
+      if (el.type === 'ticker' && el.repeat !== 'infinite') return el;
+      if (el.type === 'container') {
+        const found = walk(el.children);
+        if (found !== null) return found;
+      }
+    }
+    return null;
+  };
+  for (const layer of layers) {
+    const found = walk(layer.children);
+    if (found !== null) return found;
+  }
+  return null;
 }
 
 interface HtmlParts {

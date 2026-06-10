@@ -329,6 +329,8 @@ describe('TickerElement (D-028)', () => {
     textShadow: { offsetX: 0, offsetY: 2, blur: 6, color: '#000000' },
     direction: 'rtl' as const,
     speed: 120,
+    repeat: 'infinite' as const,
+    cycleBoundary: 'seamless' as const,
     gap: 48,
     separator: ' • ',
     items: [
@@ -359,5 +361,16 @@ describe('TickerElement (D-028)', () => {
   });
   it('accepts an empty items list (authored later / field-driven)', () => {
     expect(TickerElementSchema.parse({ ...ticker, items: [] }).items).toEqual([]);
+  });
+  it("defaults repeat to 'infinite' and cycleBoundary to 'seamless' (additive)", () => {
+    const { repeat: _r, cycleBoundary: _c, ...withoutLoop } = ticker;
+    const parsed = TickerElementSchema.parse(withoutLoop);
+    expect(parsed.repeat).toBe('infinite');
+    expect(parsed.cycleBoundary).toBe('seamless');
+  });
+  it('accepts a finite repeat + drain boundary', () => {
+    const parsed = TickerElementSchema.parse({ ...ticker, repeat: 3, cycleBoundary: 'drain' });
+    expect(parsed.repeat).toBe(3);
+    expect(parsed.cycleBoundary).toBe('drain');
   });
 });

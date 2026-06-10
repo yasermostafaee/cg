@@ -6,11 +6,14 @@ News crawls are a core broadcast deliverable and the most-requested template
 type. Today both ticker starters fake the crawl with hard-coded linear
 `position.x` keyframes over a fixed distance (`starter-templates/src/ticker.ts`,
 `news.ts`): long text gets clipped, short text leaves dead air, nothing loops,
-and the items live in one delimiter-joined string field. D-020 built the
-`content-driven` playout mode and left a `durationHook` seam explicitly "for the
-ticker item" — **no production code supplies it yet**. This change ships the
-first real consumer: a `ticker` element whose pass duration is computed from
-measured content width ÷ speed.
+and the items live in one delimiter-joined string field. D-020 left a
+content-timing seam explicitly "for the ticker item" — **no production code
+supplies it yet**. This change ships the first real content element: a
+`ticker` whose crawl duration is computed from measured content width ÷
+speed. It also supersedes D-020's `content-driven` *mode* + `durationHook`
+seam with a **two-loop completion model**: the ticker owns its own crawl
+passes and signals completion; the composition's hold can await that
+completion (`holdSource`).
 
 ## What Changes
 
@@ -20,9 +23,21 @@ measured content width ÷ speed.
     background); `direction: 'rtl' | 'ltr'` (**reading direction** — explicit,
     no `'auto'`; `'rtl'` = RTL item layout, track moves visually left→right,
     matching the Persian news-starter convention); `speed` (px/s, positive);
-    `gap` (px between items); `separator?` (rendered between items); and
-    `items: [{ id, text }]` as authored defaults. Added to both element unions.
-    Additive — no `schemaVersion` bump.
+    `gap` (px between items); `separator?` (rendered between items);
+    `items: [{ id, text }]` as authored defaults; and the **inner repeat
+    loop** — `repeat: 'infinite' | N` (default `'infinite'`) crawl passes with
+    `cycleBoundary: 'seamless' | 'drain'` (default `'seamless'`) deciding the
+    seam between passes. Added to both element unions. Additive — no
+    `schemaVersion` bump.
+  - **`Playout` gains the `holdSource` axis** (`'timed' | 'content-driven'`,
+    absent = `'timed'`): WHAT ENDS A HOLD, orthogonal to `mode` and usable
+    under both `auto-out` and `loop-cycle` (`mode` keeps counting open/close
+    cycles). `'content-driven'` is **no longer a mode**; a stored legacy
+    `mode: 'content-driven'` normalizes at parse time (`z.preprocess`) — and
+    defensively in `playoutOf()` for unparsed scenes — to
+    `mode: 'loop-cycle', holdSource: 'content-driven'` (behaviourally
+    faithful: no pre-D-028 scene had tickers, so holds were zero-length in
+    both forms).
   - New `list` dynamic-field type. The item shape is **extensible by design**:
     an object with a **required `id`** plus open fields (the ticker consumes
     `text`; the upcoming repeater (D-030) and sequence (D-029) will reuse the
@@ -36,21 +51,30 @@ measured content width ÷ speed.
     track; items are individually positioned from measured widths with
     per-item bidi isolation, so mixed RTL/LTR items cannot reorder across item
     boundaries (the ADR-0003 pitfall).
-  - A **ticker driver** (treadmill): measures item widths once per content
-    (after `document.fonts.ready`), scrolls via `transform: translateX` on an
-    rAF playhead with the injectable `RuntimeClock`, recycles exited nodes,
-    and rolls **continuously across pass boundaries** (pass replays of the
-    composition's intro/outro never restart the crawl). `pause()`/`resume()`
-    freeze/continue it in lockstep with the playout controller's hold timer.
-  - **The runtime self-wires the per-scope `durationHook`**: a scope whose
-    composition contains ticker elements gets an internal hook that returns
-    the ms until the current content cycle completes (so `repeat: N` exits
-    after exactly N full content passes, immune to intro/outro replay time).
-    Works for the root scene **and nested composition scopes** (supersedes the
-    root-only external wiring). An explicitly passed
-    `RuntimeBootOptions.durationHook` still wins (external override/test
-    seam). With several tickers in one scope the longest-running ticker
-    governs the pass.
+  - A **ticker driver** (treadmill): measures item widths at/after
+    `document.fonts.ready` (re-measured once per content cycle — the
+    self-heal), scrolls via `transform: translateX` on an rAF playhead with
+    the injectable `RuntimeClock`, and recycles exited nodes. It owns the
+    **inner repeat loop**: a finite `repeat: N` run ends **cleanly** —
+    feeding stops after the Nth pass's last item and `whenComplete()` resolves
+    once that item has fully exited the band (never cut mid-scroll;
+    `cycleBoundary: 'drain'` also empties the band BETWEEN passes). The
+    treadmill rolls continuously WITHIN one hold; each composition open/close
+    cycle restarts the crawl from its entering edge. `pause()`/`resume()`
+    freeze/continue it in lockstep with the playout controller's hold timing.
+  - **The runtime self-wires per-scope content completion**: a scope whose
+    composition contains ticker elements gets a `waitForContent` supplier —
+    `Promise.all` over its drivers' `whenComplete()` (all finite tickers done;
+    an infinite ticker never resolves, so the scope holds until `stop()`; no
+    tickers ⇒ a zero-length hold, deferred like a 0ms timer). Each hold entry
+    resets + starts the scope's tickers (`onHoldStart`), so every open/close
+    cycle gets a fresh crawl. Works for the root scene **and nested
+    composition scopes**. An explicitly passed
+    `RuntimeBootOptions.contentHold` still wins for the root scope (external
+    override/test seam).
+  - `PlayoutOverride` (and the preview's per-scope timing override) gains
+    `holdSource`, `tickerRepeat`, `tickerBoundary` — session-only, per scope,
+    gated in the UI to scopes that actually contain tickers.
   - `update()` with a new items list **reconciles by stable id**: existing
     items keep their node and position, new items enter on the next feed,
     removed items leave once off-screen — no restart, no visual jump. Bare
@@ -93,21 +117,30 @@ measured content width ÷ speed.
 
 ### Modified Capabilities
 
-- `designer-playout-lifecycle`: the `content-driven` mode gains its first real
-  duration supplier — the runtime self-wires a per-scope `durationHook` from
-  ticker elements (root and nested scopes); an explicit
-  `RuntimeBootOptions.durationHook` overrides it. Pass boundaries align with
-  content-cycle completions.
+- `designer-playout-lifecycle`: hold duration becomes its own axis —
+  `holdSource: 'timed' | 'content-driven'`, orthogonal to `mode` (which keeps
+  counting open/close cycles; `'content-driven'` is no longer a mode — legacy
+  stored values normalize to `loop-cycle` + `holdSource: 'content-driven'`).
+  A `content-driven` hold lasts until every ticker in the scope completes
+  (`Promise.all`; an infinite ticker holds until `stop()`; no tickers ⇒ a
+  zero-length hold). The runtime self-wires this from ticker elements (root
+  and nested scopes) via the controller's `waitForContent` seam, with a hold
+  token guarding stale resolutions; an explicit
+  `RuntimeBootOptions.contentHold` overrides the root scope.
 
 ## Impact
 
 - **Schema:** `packages/shared-schema/src/elements.ts` (ticker variant + both
-  unions), `fields.ts` (list field + widened `FieldValue`), `bindings.ts`
-  (`ticker-items` target).
+  unions, incl. `repeat`/`cycleBoundary`), `scene.ts` (`holdSource` axis +
+  legacy `PlayoutSchema` normalization + `playoutOf` guard), `fields.ts` (list
+  field + widened `FieldValue`), `bindings.ts` (`ticker-items` target).
 - **Runtime:** `packages/template-runtime/src/scene-builder.ts` (`buildTicker`),
-  new `ticker-driver.ts`, `runtime.ts` (per-scope self-wired hook; driver
-  lifecycle on play/stop/pause/resume/settle), `bindings.ts` (`ticker-items`),
-  `README.md` (extension-point doc-sync).
+  new `ticker-driver.ts` (incl. `whenComplete()`), `runtime.ts` (per-scope
+  self-wired content completion; driver lifecycle on
+  play/stop/pause/resume/settle), `playout-controller.ts` (`holdSource` +
+  `waitForContent` + hold token), `types.ts` (`contentHold`;
+  `PlayoutOverride` `holdSource`/`tickerRepeat`/`tickerBoundary`),
+  `bindings.ts` (`ticker-items`), `README.md` (extension-point doc-sync).
 - **Designer:** `state/store-core.ts` + `features/tools/ToolRail.tsx` (tool),
   `state/element-defaults.ts`, `features/canvas/CanvasOverlay.tsx` (insert),
   `features/inspector/StyleSection.tsx` (+ ticker section incl. items editor),
@@ -118,9 +151,12 @@ measured content width ÷ speed.
   `platform/preview.ts` (await font faces before play).
 - **Export:** `packages/vcg-format/src/gdd.ts` (array property + list case),
   `apps/designer/src/platform/ExporterSingleFile.ts` (preflight warnings).
-- **Tests:** schema validation; runtime unit (duration math golden, reconcile
-  logic, playout integration with injected clock + fake measurement); Designer
-  store tests; E2E (author → preview → update flow via the shared fixtures).
-- **Dependencies:** D-018 (dynamic fields), D-020 (`content-driven` +
-  `durationHook` — change `add-animation-lifecycle-timing`). Unblocks D-030
-  (repeater) and D-029 (sequence) by establishing the extensible `list` field.
+- **Tests:** schema validation (incl. legacy-mode normalization); runtime unit
+  (completion timing golden, drain offsets, finite end-empty, reconcile logic,
+  playout integration with injected clock + fake measurement); Designer store
+  tests; E2E (author → preview → update flow via the shared fixtures).
+- **Dependencies:** D-018 (dynamic fields), D-020 (playout lifecycle — change
+  `add-animation-lifecycle-timing`; its `content-driven` mode + `durationHook`
+  seam are superseded here by the `holdSource` axis + the completion seam).
+  Unblocks D-030 (repeater) and D-029 (sequence) by establishing the
+  extensible `list` field.

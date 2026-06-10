@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SceneSchema } from '../src/scene.js';
+import { PlayoutSchema, playoutOf, SceneSchema } from '../src/scene.js';
 
 const baseTransform = {
   position: { x: 0, y: 0 },
@@ -213,5 +213,37 @@ describe('Scene — D-026 single project fps (no per-composition frameRate)', ()
     });
     expect((s.compositions?.[0] as Record<string, unknown>).frameRate).toBeUndefined();
     expect(s.frameRate).toBe(50);
+  });
+});
+
+describe('Playout — D-028 holdSource axis + legacy normalization', () => {
+  it("normalizes legacy mode 'content-driven' to loop-cycle + content hold at parse time", () => {
+    const parsed = PlayoutSchema.parse({ mode: 'content-driven', repeat: 3 });
+    expect(parsed).toMatchObject({
+      mode: 'loop-cycle',
+      holdSource: 'content-driven',
+      repeat: 3,
+    });
+  });
+
+  it('accepts the two-axis form (mode x holdSource)', () => {
+    const parsed = PlayoutSchema.parse({ mode: 'auto-out', holdSource: 'content-driven' });
+    expect(parsed).toMatchObject({ mode: 'auto-out', holdSource: 'content-driven' });
+  });
+
+  it("playoutOf defensively normalizes an UNPARSED legacy object (old template.json)", () => {
+    const legacy = { playout: { mode: 'content-driven', repeat: 2 } } as unknown as Parameters<
+      typeof playoutOf
+    >[0];
+    expect(playoutOf(legacy)).toMatchObject({
+      mode: 'loop-cycle',
+      holdSource: 'content-driven',
+      repeat: 2,
+    });
+  });
+
+  it('playoutOf resolves an absent holdSource to timed', () => {
+    expect(playoutOf({ playout: { mode: 'auto-out' } }).holdSource).toBe('timed');
+    expect(playoutOf({}).holdSource).toBe('timed');
   });
 });

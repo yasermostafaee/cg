@@ -52,6 +52,34 @@ test.describe('Ticker / crawler (D-028)', () => {
     await app.stop();
   });
 
+  test('a finite ticker (repeat=2, drain seam) COMPLETES a content-driven hold — the stage settles on its own', async ({
+    app,
+  }) => {
+    await app.newProject('TickerFinite');
+    await app.addTicker();
+
+    // Inner loop: 2 passes, drain seam; crank the speed so the run fits the
+    // test budget (completion = (content×2 + spacer + viewport) / speed).
+    await app.inspector.getByRole('combobox', { name: 'repeat' }).selectOption('count');
+    await app.page.getByLabel('passes', { exact: true }).fill('2');
+    await app.page.getByLabel('passes', { exact: true }).press('Enter');
+    await app.inspector.getByRole('combobox', { name: 'cycle seam' }).selectOption('drain');
+    await app.page.getByLabel('speed', { exact: true }).fill('3000');
+    await app.page.getByLabel('speed', { exact: true }).press('Enter');
+
+    // Outer loop: auto-out whose hold ends when the ticker completes.
+    await app.setPlayoutTiming('auto-out');
+    await app.setHoldSource('content-driven');
+
+    await app.openPreviewModal();
+    await app.play();
+    // The crawl runs its two passes, drains, signals completion → the
+    // composition plays its outro and settles hidden — with NO stop() sent.
+    await expect(app.previewFrame.locator('body')).toHaveClass(/cg-pending/, {
+      timeout: 20_000,
+    });
+  });
+
   test('the exported single-file HTML carries the ticker and the GDD list field', async ({
     app,
   }) => {

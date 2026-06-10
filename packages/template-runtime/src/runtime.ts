@@ -79,6 +79,17 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const built = buildScene(scene, doc);
   root.appendChild(built.container);
 
+  // D-020/D-026 — per-scope, non-persistent overrides (preview session / future
+  // rundown) override the stored playout — and the scope's tickers' own
+  // repeat/boundary — for THIS run only, keyed by the scope's instance-name path
+  // (`''` = root). `playoutOverride` is the legacy root-only alias for
+  // `scopeOverrides['']`. Hoisted above driver instantiation so ticker overrides
+  // can apply at construction.
+  const overrides: Record<string, PlayoutOverride> = { ...(options.scopeOverrides ?? {}) };
+  if (options.playoutOverride !== undefined && overrides[''] === undefined) {
+    overrides[''] = options.playoutOverride;
+  }
+
   // D-028 — one treadmill driver per ticker element, per scope (the same child
   // composition instanced twice gets two independent drivers). Instantiated
   // BEFORE the initial field application below so a `list` field default can
@@ -86,7 +97,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // bindings applier routes `ticker-items` values.
   const allTickers: TickerDriver[] = [];
   const tickersByScope = new Map<FieldScope, TickerDriver[]>();
-  const instantiateTickers = (scope: FieldScope): void => {
+  const instantiateTickers = (scope: FieldScope, path: string): void => {
+    const scopeOverride = overrides[path];
     const drivers = scope.tickers.map((t) => {
       // The crawl lives in the padding-inset viewport div (CSS padding is
       // inert for the abspos track), so the travel width shrinks with it.
@@ -101,6 +113,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         gap: t.element.gap,
         separator: t.element.separator,
         items: t.element.items,
+        // D-028 inner loop — the element's authored repeat/boundary, session-
+        // overridable per scope (the same layering as holdMs/repeat).
+        repeat: scopeOverride?.tickerRepeat ?? t.element.repeat,
+        cycleBoundary: scopeOverride?.tickerBoundary ?? t.element.cycleBoundary,
         clock: options.clock,
         measure: options.tickerMeasure,
       });
@@ -109,9 +125,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       return driver;
     });
     if (drivers.length > 0) tickersByScope.set(scope, drivers);
-    for (const child of scope.children) instantiateTickers(child.scope);
+    for (const child of scope.children) {
+      instantiateTickers(child.scope, path === '' ? child.name : `${path}.${child.name}`);
+    }
   };
-  instantiateTickers(built.scopeTree);
+  instantiateTickers(built.scopeTree, '');
 
   applyScopedFieldValues(scene, scene, {}, built.scopeTree);
 
@@ -138,22 +156,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const ready: Promise<void> = options.skipFontLoad ? Promise.resolve() : waitForFonts(doc);
   void ready.then(() => bus.emit('ready'));
 
-  // D-020 — each controller owns its scope's playhead. The default is
+  // D-020/D-028 — each controller owns its scope's playhead. The default is
   // play-once-and-hold: it plays `[activeRange.in → outPoint]` once (an absent
   // `outPoint` is the last active frame) and holds, then the `mode` orchestration
-  // (auto-out / loop-cycle / content-driven) runs. Looping is no longer a silent
-  // default and there is no separate continuous-loop mode — a looping logo is
-  // `loop-cycle` with `repeat: 'infinite'`. The stored `playout` carries the
-  // defaults.
-  //
-  // D-026 — per-scope, non-persistent overrides (preview session / future rundown)
-  // override the stored playout for THIS run only, keyed by the scope's
-  // instance-name path (`''` = root). `playoutOverride` is the legacy root-only
-  // alias for `scopeOverrides['']`.
-  const overrides: Record<string, PlayoutOverride> = { ...(options.scopeOverrides ?? {}) };
-  if (options.playoutOverride !== undefined && overrides[''] === undefined) {
-    overrides[''] = options.playoutOverride;
-  }
+  // (auto-out / loop-cycle) runs, with `holdSource` deciding what ends each hold
+  // (timed `holdMs` vs. the scope's tickers completing). Looping is no longer a
+  // silent default and there is no separate continuous-loop mode — a looping
+  // logo is `loop-cycle` with `repeat: 'infinite'`. The stored `playout` carries
+  // the defaults; `overrides` (hoisted above) layers the session knobs per scope.
   const effectivePlayoutFor = (
     source: { playout?: Playout | undefined },
     path: string,
@@ -162,6 +172,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     const o = overrides[path];
     return {
       mode: o?.mode ?? b.mode,
+      holdSource: o?.holdSource ?? b.holdSource,
       holdMs: o?.holdMs ?? b.holdMs,
       repeat: o?.repeat ?? b.repeat,
     };
@@ -198,18 +209,21 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   let onRootSettled: () => void = noop;
   const buildScopeController = (scope: FieldScope, isRoot: boolean, path: string): ScopeNode => {
     const own = scope.animated;
-    // D-028 — self-wire the scope's content-driven duration from its tickers:
-    // the hook returns the ms until the scope's current content cycle completes
-    // (max across tickers — the longest-running one governs the pass, so no
-    // ticker is cut mid-cycle). An EXPLICIT boot-option hook still wins for the
-    // root scope (external override / test seam). The treadmills start at the
-    // first hold (`onHoldStart`, idempotent) and roll continuously across pass
-    // boundaries; a settled scope freezes its own tickers.
+    // D-028 — self-wire the scope's content completion from its tickers: a
+    // `holdSource: 'content-driven'` hold lasts until EVERY scope ticker's run
+    // resolves (an infinite ticker never resolves ⇒ hold until stop(); no
+    // tickers ⇒ null ⇒ a zero-length hold). An EXPLICIT boot-option
+    // `contentHold` still wins for the root scope (external override / test
+    // seam). Each hold entry resets + starts the scope's tickers, so every
+    // open/close cycle replays the crawl from its entering edge.
     const scopeTickers = tickersByScope.get(scope) ?? [];
-    const tickerHook =
+    const tickerWait =
       scopeTickers.length > 0
-        ? (): number => Math.max(...scopeTickers.map((t) => t.passRemainingMs()))
+        ? (): Promise<void> =>
+            Promise.all(scopeTickers.map((t) => t.whenComplete())).then(() => undefined)
         : undefined;
+    const externalWait = isRoot && options.contentHold !== undefined ? options.contentHold : undefined;
+    const waitForContent = externalWait ?? tickerWait;
     const stopScopeTickers = (): void => {
       for (const t of scopeTickers) t.stop();
     };
@@ -228,11 +242,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             onRootSettled();
           }
         : stopScopeTickers,
-      durationHook: isRoot && options.durationHook !== undefined ? options.durationHook : tickerHook,
+      waitForContent: waitForContent === undefined ? undefined : (): Promise<void> => waitForContent(),
       onHoldStart:
         scopeTickers.length > 0
           ? (): void => {
-              for (const t of scopeTickers) t.start();
+              // Fresh crawl per composition cycle (reset BEFORE the wait is
+              // requested, so the controller awaits this run's completion).
+              for (const t of scopeTickers) {
+                t.reset();
+                t.start();
+              }
             }
           : undefined,
       clock: options.clock,

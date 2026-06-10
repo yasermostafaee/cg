@@ -21,14 +21,16 @@ import type { RuntimeClock } from './types.js';
  *   - `rtl`: node CSS `left = −(o + w)`, track `translateX(d)` (content
  *     enters from the band's left edge, moving right — the Persian crawl).
  *
- * The treadmill is SEAMLESS: after the last item the first follows again
- * (gap/separator preserved), and it rolls continuously across playout pass
- * boundaries — the playout controller starts it on the first hold
- * (`onHoldStart`) and only `pause()`/`stop()`/`reset()` interrupt it. Pass
- * accounting lives in {@link passRemainingMs}: cycle seams (the offset where
- * cycle k+1 begins) are recorded as the feeder wraps, so "ms until the
- * current content cycle completes" self-corrects for time consumed by
- * intro/outro replays between passes.
+ * D-028 two-loop model: this driver owns the INNER repeat loop —
+ * `repeat: 'infinite' | N` crawl passes per run, with `cycleBoundary`
+ * deciding the seam ('seamless' = the first item follows the last;
+ * 'drain' = the band empties between passes). A finite run ends CLEANLY:
+ * feeding stops after the Nth cycle's last item, and {@link whenComplete}
+ * resolves once that item has fully exited the band — the scope's playout
+ * controller awaits it for `holdSource: 'content-driven'` holds. The OUTER
+ * loop (composition `loop-cycle` repeat) restarts the crawl each cycle: the
+ * controller's hold entry resets + starts this driver, so every open/close
+ * cycle replays the crawl from its entering edge.
  */
 
 /** A normalized ticker item — the reconcile unit. */
@@ -57,6 +59,15 @@ export interface TickerDriverOptions {
   separator?: string | undefined;
   /** Initial logical items (authored defaults; a bound list field replaces them). */
   items: TickerDriverItem[];
+  /**
+   * D-028 — the INNER repeat loop: crawl passes before this driver completes
+   * ('infinite' = until stop()). A finite run always ends cleanly: feeding
+   * stops after the Nth cycle's last item, and completion fires when that item
+   * has FULLY exited the band — never cut mid-scroll.
+   */
+  repeat: number | 'infinite';
+  /** 'seamless' = continuous treadmill; 'drain' = the band empties between cycles. */
+  cycleBoundary: 'seamless' | 'drain';
   clock?: RuntimeClock | undefined;
   /**
    * Injectable width measurement (defaults to `offsetWidth` — layout px,
@@ -116,6 +127,15 @@ export class TickerDriver {
   /** Offsets where cycle k+1 begins (recorded as the feeder wraps). */
   private cycleSeams: number[] = [];
   private hasFed = false;
+  /** Cycles the feeder has STARTED (1-based once the first item feeds). */
+  private cyclesStarted = 0;
+  /** Finite repeat exhausted — nothing further will be fed this run. */
+  private feedingDone = false;
+  /** End offset (o + w) of the last fed node once `feedingDone`. */
+  private finalEnd: number | null = null;
+  private completed = false;
+  private resolveComplete: (() => void) | null = null;
+  private completion: Promise<void>;
 
   private running = false;
   private paused = false;
@@ -130,6 +150,9 @@ export class TickerDriver {
   constructor(options: TickerDriverOptions) {
     this.o = options;
     this.logical = options.items.map((i) => ({ id: i.id, text: i.text }));
+    this.completion = new Promise<void>((res) => {
+      this.resolveComplete = res;
+    });
     const c = options.clock;
     this.clock = {
       raf: c?.raf ?? ((cb): number => requestAnimationFrame(cb)),
@@ -152,9 +175,10 @@ export class TickerDriver {
   }
 
   /**
-   * Start the treadmill (idempotent — the playout controller fires this at
-   * EVERY hold entry, and the crawl must roll continuously across pass
-   * boundaries, so a running driver ignores repeat starts).
+   * Start a crawl run. The playout controller's hold entry resets first
+   * (`reset()` then `start()`), so every composition cycle replays the crawl
+   * from its entering edge; within ONE hold the treadmill rolls continuously
+   * through the ticker's own `repeat` passes.
    */
   start(): void {
     if (this.destroyed || this.running) return;
@@ -165,8 +189,29 @@ export class TickerDriver {
     // The crawl replaces the static authoring layout the scene-builder
     // rendered for the canvas (content now enters from the band edge).
     this.o.band.querySelector('[data-cg-ticker-static]')?.remove();
+    // Empty / zero-width content has nothing to crawl — it is complete by
+    // definition (the old zero-length-pass parity), regardless of `repeat`.
+    if (this.logical.length === 0 || this.cycleWidth() <= 0) {
+      this.fireComplete();
+    }
     this.step();
     this.scheduleFrame();
+  }
+
+  /**
+   * D-028 — resolves when this run's finite `repeat` has fully played out
+   * (the last item has completely exited the band). Never resolves for
+   * `repeat: 'infinite'` (the scope then holds until `stop()`). A fresh
+   * promise is minted per run (constructor + `reset()`).
+   */
+  whenComplete(): Promise<void> {
+    return this.completion;
+  }
+
+  private fireComplete(): void {
+    if (this.completed) return;
+    this.completed = true;
+    this.resolveComplete?.();
   }
 
   /** Freeze the crawl (lockstep with the playout controller's hold timer). */
@@ -209,6 +254,14 @@ export class TickerDriver {
     this.nextOffset = 0;
     this.hasFed = false;
     this.pausedAccumMs = 0;
+    this.cyclesStarted = 0;
+    this.feedingDone = false;
+    this.finalEnd = null;
+    // A fresh run gets a fresh completion (the controller awaits per hold).
+    this.completed = false;
+    this.completion = new Promise<void>((res) => {
+      this.resolveComplete = res;
+    });
     this.o.track.style.transform = '';
     this.o.band.querySelector('[data-cg-ticker-static]')?.remove();
   }
@@ -216,45 +269,6 @@ export class TickerDriver {
   destroy(): void {
     this.reset();
     this.destroyed = true;
-  }
-
-  /**
-   * D-028 / D-020 — the content-driven duration supply: remaining ms until
-   * the CURRENT content cycle's seam fully crosses the band. First pass ≈
-   * `(viewportWidth + cycleWidth) / speed × 1000`; later calls self-correct
-   * for whatever time intro/outro replays consumed (the crawl kept rolling).
-   * Empty content ⇒ 0 (a zero-length pass — D-020's "absent hook" semantics).
-   */
-  passRemainingMs(): number {
-    if (this.logical.length === 0) return 0;
-    const cw = this.cycleWidth();
-    if (cw <= 0) return 0;
-    const d = this.distance();
-    const V = this.o.viewportWidth;
-    // First recorded seam still ahead of the playhead…
-    for (const seam of this.cycleSeams) {
-      if (seam + V > d) return ((seam + V - d) / this.o.speed) * 1000;
-    }
-    // …else project from the feeder's REAL state: the next un-recorded wrap is
-    // the current feed point plus the width of the items left in this cycle
-    // (a reconcile can resume mid-list, so wraps are NOT at multiples of the
-    // cycle width), then whole cycles beyond it.
-    let seam = this.nextIdx === 0 ? this.nextOffset : this.nextOffset + this.tailWidth(this.nextIdx);
-    while (seam + V <= d) seam += cw;
-    return ((seam + V - d) / this.o.speed) * 1000;
-  }
-
-  /** Width of the remaining items `from..end` of the current cycle (incl. spacing). */
-  private tailWidth(from: number): number {
-    const sep = this.o.separator;
-    const sepBlock = sep !== undefined && sep !== '' ? this.measureText(sep) + this.o.gap : 0;
-    let total = 0;
-    for (let i = from; i < this.logical.length; i += 1) {
-      const item = this.logical[i];
-      if (item === undefined) continue;
-      total += this.measureText(item.text) + this.o.gap + sepBlock;
-    }
-    return total;
   }
 
   /**
@@ -357,6 +371,15 @@ export class TickerDriver {
       this.o.direction === 'ltr' ? `translateX(${V - d}px)` : `translateX(${d}px)`;
     this.ensureFed(d);
     this.recycle(d);
+    // Clean end: a finite run completes when the LAST item has fully exited
+    // the band — then this driver signals its scope and freezes (no re-entrant
+    // stop(): the band is already empty, so no final paint is needed).
+    if (!this.completed && this.feedingDone && this.finalEnd !== null && d >= this.finalEnd + V) {
+      this.fireComplete();
+      this.running = false;
+      this.paused = false;
+      this.cancelFrame();
+    }
   }
 
   private scheduleFrame(): void {
@@ -376,11 +399,11 @@ export class TickerDriver {
   }
 
   private ensureFed(d: number): void {
-    if (this.logical.length === 0) return;
+    if (this.logical.length === 0 || this.feedingDone) return;
     // Zero-width content (all-empty texts, gap 0, no separator) can never
     // advance the feed cursor — bail rather than loop forever.
     if (this.cycleWidth() <= 0) return;
-    while (this.nextOffset < d + this.o.viewportWidth + FEED_BUFFER_PX) {
+    while (!this.feedingDone && this.nextOffset < d + this.o.viewportWidth + FEED_BUFFER_PX) {
       this.feedNext();
     }
   }
@@ -389,9 +412,25 @@ export class TickerDriver {
     const idx = this.nextIdx % this.logical.length;
     const item = this.logical[idx];
     if (item === undefined) return;
-    // The feeder wrapped back to the list head — a new content cycle begins
-    // here; its completion (seam + viewport crossed) ends the previous pass.
-    if (idx === 0 && this.hasFed) this.cycleSeams.push(this.nextOffset);
+    // The feeder is at the list head — a new content cycle would begin here.
+    if (idx === 0) {
+      // Finite repeat: refuse the (N+1)th cycle — the run ends cleanly once
+      // the already-fed tail has fully exited (see step()).
+      if (this.o.repeat !== 'infinite' && this.cyclesStarted >= this.o.repeat) {
+        this.feedingDone = true;
+        const last = this.fed[this.fed.length - 1];
+        this.finalEnd = last !== undefined ? last.o + last.w : 0;
+        return;
+      }
+      if (this.hasFed) {
+        // 'drain': the next cycle's head may only enter once the previous
+        // cycle's tail has fully exited — a viewport-width spacer guarantees
+        // an empty band at the seam.
+        if (this.o.cycleBoundary === 'drain') this.nextOffset += this.o.viewportWidth;
+        this.cycleSeams.push(this.nextOffset);
+      }
+      this.cyclesStarted += 1;
+    }
     this.nextIdx = (idx + 1) % this.logical.length;
     this.hasFed = true;
 

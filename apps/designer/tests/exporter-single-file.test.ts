@@ -126,3 +126,71 @@ describe('ExporterSingleFile — D-028 list field / ticker preflight', () => {
     ).toBe(true);
   });
 });
+
+describe('ExporterSingleFile — D-028 finite ticker under a TIMED hold (info)', () => {
+  it('flags the combo as info (authored intent, never blocks)', async () => {
+    const scene: Scene = {
+      ...makeScene(),
+      playout: { mode: 'auto-out', holdMs: 3000 },
+      layers: [
+        {
+          id: 'L1',
+          name: 'band',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [
+            {
+              id: 'tk-1',
+              name: 'Crawl',
+              type: 'ticker',
+              transform: {
+                position: { x: 0, y: 980 },
+                size: { w: 1200, h: 72 },
+                scale: { x: 1, y: 1 },
+                rotation: 0,
+                anchor: { x: 0, y: 0 },
+              },
+              opacity: 1,
+              visible: true,
+              locked: false,
+              zIndex: 0,
+              font: {
+                family: 'Vazirmatn',
+                weight: 500,
+                style: 'normal',
+                size: 36,
+                lineHeight: 1.4,
+                letterSpacing: 0,
+              },
+              color: '#FFFFFF',
+              direction: 'rtl',
+              speed: 120,
+              repeat: 2,
+              cycleBoundary: 'seamless',
+              gap: 48,
+              items: [{ id: 'i1', text: 'sample' }],
+            },
+          ],
+        },
+      ],
+      fields: [],
+    } as unknown as Scene;
+    const { issues } = await makeExporter().produce(scene);
+    const info = issues.find((i) => i.code === 'ticker-finite-with-timed-hold');
+    expect(info).toBeDefined();
+    expect(info?.severity).toBe('info');
+    expect(info?.elementId).toBe('tk-1');
+  });
+
+  it('stays silent when the hold is content-driven', async () => {
+    const scene: Scene = {
+      ...makeScene(),
+      playout: { mode: 'auto-out', holdSource: 'content-driven' },
+      layers: [],
+      fields: [],
+    } as unknown as Scene;
+    const { issues } = await makeExporter().produce(scene);
+    expect(issues.some((i) => i.code === 'ticker-finite-with-timed-hold')).toBe(false);
+  });
+});

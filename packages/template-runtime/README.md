@@ -3,8 +3,9 @@
 The rendering + playout engine for broadcast HTML graphics. Given a `Scene`
 ([`@cg/shared-schema`](../shared-schema)) it builds the DOM, binds live data,
 animates keyframed properties, and drives the broadcast lifecycle (entrance →
-hold → exit, with loop / auto-out / content-driven variants) — including across
-**nested composition instances**, each with its own independent lifecycle.
+hold → exit, with auto-out / loop cycles with timed or content-driven holds) —
+including across **nested composition instances**, each with its own
+independent lifecycle.
 
 The **same code** runs in the Designer preview, the exported `.vcg`, and the
 single-file CasparCG HTML, so what the Designer shows is what airs. For where this
@@ -32,7 +33,7 @@ Everything consumers use is re-exported from [`src/index.ts`](./src/index.ts):
 | `applyAnimationAtFrame`, `collectAnimatedElements`    | Per-frame animation application.                                                                                     |
 | `interpolateAtFrame`, `applyEasing`, `lerpHexColor`   | Keyframe math.                                                                                                       |
 | `FrameDriver`, `PlayoutController`                    | The timing primitives (normally owned by `createRuntime`).                                                           |
-| `TickerDriver`, `tickerDriverFor`, `coerceTickerItems` | The ticker/crawler treadmill (D-028; normally owned by `createRuntime`).                                            |
+| `TickerDriver`, `tickerDriverFor`, `coerceTickerItems` | The ticker/crawler treadmill — inner repeat loop + `whenComplete()` content completion (D-028; normally owned by `createRuntime`). |
 | `LifecycleStateMachine`, `EventBus`, `applyTransform` | Lifecycle state, events, value transforms.                                                                           |
 
 ## How it's built — module map
@@ -46,7 +47,7 @@ createRuntime (runtime.ts)  ─ the orchestrator
  │         └─ applyAnimationAtFrame (animation-applier.ts)
  │              └─ interpolateAtFrame (keyframe-eval.ts)
  ├─ TickerDriver (ticker-driver.ts)       one per ticker element: the crawl
- │      treadmill + the scope's self-wired content-driven durationHook
+ │      treadmill + the scope's self-wired content completion (whenComplete)
  ├─ LifecycleStateMachine (lifecycle.ts)  pending→playing→on-air→exiting→stopped
  ├─ EventBus (event-bus.ts)               play.start / stop.end / ready / …
  └─ installCasparGlobals (adapters/caspar-globals.ts)   window.* → runtime
@@ -123,28 +124,41 @@ plays its whole timeline once and holds the last frame; **it does not loop**.
 
 Playout **modes** (`scene.playout.mode`):
 
-| Mode                 | Behaviour after the intro reaches `outPoint`                                                                                                                 |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `manual` _(default)_ | hold frozen until `stop()`                                                                                                                                   |
-| `auto-out`           | hold `holdMs`, then run the outro automatically                                                                                                              |
-| `loop-cycle`         | repeat IN → hold → OUT for `repeat` cycles (`'infinite'` = forever)                                                                                          |
-| `content-driven`     | like `loop-cycle`, but each pass's duration comes from `durationHook()` (the ticker computes content→duration), recomputed per pass; `holdMs` does not apply |
+| Mode                 | Behaviour after the intro reaches `outPoint`                        |
+| -------------------- | ------------------------------------------------------------------- |
+| `manual` _(default)_ | hold frozen until `stop()`                                          |
+| `auto-out`           | hold once, then run the outro automatically                         |
+| `loop-cycle`         | repeat IN → hold → OUT for `repeat` cycles (`'infinite'` = forever) |
+
+What ends each hold is the orthogonal **`holdSource`** axis (`auto-out` and
+`loop-cycle`; ignored by `manual`): `'timed'` (default) holds for `holdMs`;
+`'content-driven'` holds until the controller's `waitForContent` promise
+resolves — the scope's tickers complete (an infinite ticker ⇒ until `stop()`;
+no content ⇒ a zero-length hold, deferred like a 0ms timer). There is **no**
+`content-driven` mode — a stored legacy `mode: 'content-driven'` normalizes to
+`loop-cycle` + `holdSource: 'content-driven'` (`@cg/shared-schema`'s
+`PlayoutSchema` preprocess / `playoutOf`).
 
 There is **no separate continuous-loop mode** — a looping logo is `loop-cycle` with
 `repeat: 'infinite'` (and `holdMs: 0` to loop the whole timeline).
 
-`onHoldStart` (optional) fires at **every** hold entry, before the mode timing —
-the runtime starts the scope's ticker treadmills there (idempotent), so a
-`content-driven` hook always measures a started crawl.
+`onHoldStart` (optional) fires at **every** hold entry, before the hold timing —
+the runtime RESETS + STARTS the scope's ticker treadmills there, so each
+composition open/close cycle replays the crawl from its entering edge (a fresh
+run per cycle) and a `content-driven` wait always awaits the run it just
+started.
 
 **Invariants**
 
 - `pause()` / `resume()` freeze and continue **both** the driver and the hold-timer
   countdown.
 - A **settled** controller (its lifecycle finished: `auto-out` exited, or a finite
-  `loop-cycle`/`content-driven` ran out of cycles) is a **no-op on `stop()`** — a
-  cascaded parent `stop()` must not replay the exit on a child that's already done.
-  An infinite loop / manual hold / paused scope is _not_ settled and still exits.
+  `loop-cycle` ran out of cycles) is a **no-op on `stop()`** — a cascaded parent
+  `stop()` must not replay the exit on a child that's already done. An infinite
+  loop / manual hold / paused scope is _not_ settled and still exits.
+- A stale `waitForContent` resolution (after `stop()`, or from an earlier
+  cycle's hold) is ignored via a **hold token** — it can never replay the
+  outro or settle the scope a second time.
 - `onExitStart` fires **exactly once** per exit, before `onSettle`.
 
 ### The scope tree + the nested-lifecycle cascade
@@ -168,7 +182,7 @@ override) on its **own** timeline.
   crawl is wall-clock-driven and has no representation in `tick()`** — scrubbing
   does not move it (by design; D-028).
 
-### TickerDriver — the crawler treadmill + the content-driven duration (D-028)
+### TickerDriver — the crawler treadmill + content completion (D-028)
 
 One driver per ticker element, instantiated by `createRuntime` per scope. It
 virtualizes the item stream: nodes are fed just ahead of the entering edge,
@@ -180,20 +194,28 @@ re-awaits fonts), and moved by a single `transform: translateX` per frame. Items
 element's `direction` is the **reading** direction (`'rtl'`: RTL layout, track
 moves visually left→right — the Persian crawl).
 
-**Self-wired duration:** a scope whose composition contains tickers gets an
-internal `durationHook` = max over its drivers' `passRemainingMs()` (the ms
-until the current content cycle's seam fully crosses the band). A scope's
-content-driven pass duration is therefore its LONGEST ticker; shorter tickers
-roll multiple laps within the pass — intended behaviour, not a bug. So preview,
+The driver owns the **inner repeat loop**: `repeat: 'infinite' | N` (default
+`'infinite'`) crawl passes per run, with `cycleBoundary: 'seamless' | 'drain'`
+deciding the seam between passes. A finite run ends **cleanly** — feeding
+stops after the Nth pass's last item, and `whenComplete()` resolves once that
+item has fully exited the band (never cut mid-scroll; `'drain'` additionally
+empties the band BETWEEN passes).
+
+**Self-wired completion:** a scope whose composition contains tickers gets an
+internal `waitForContent` = `Promise.all` over its drivers' `whenComplete()` —
+a `content-driven` hold ends when ALL the scope's finite tickers complete; an
+infinite ticker never resolves, holding the scope until `stop()`. So preview,
 the single-file export, and `.vcg` need **no boot wiring**, and a ticker nested
-in a child composition drives *its own* scope. An **explicit**
-`RuntimeBootOptions.durationHook` still overrides the root scope (test seam).
+in a child composition governs *its own* scope. An **explicit**
+`RuntimeBootOptions.contentHold` still overrides the root scope (external
+override/test seam).
 
 **Invariants**
 
-- The treadmill rolls **continuously across pass boundaries** (intro/outro
-  replays never restart it; `start()` is idempotent); a fresh `play()` resets it
-  (and removes the static authoring layout, so every intro shows the same band).
+- The treadmill rolls continuously **within one hold**; each composition
+  open/close cycle gets a **fresh run** (the controller's hold entry does
+  reset + start), and a fresh `play()` resets it too (removing the static
+  authoring layout, so every intro shows the same band).
 - `pause()`/`resume()` freeze/continue it in lockstep with the hold timer;
   settling stops it (frozen at the exact boundary). A ROOT self-settle cascades
   `stop()` to nested scopes and freezes every crawl — nothing rolls under a
@@ -295,12 +317,13 @@ payloads are dropped silently (a broadcast frame can't write logs).
    hold/exit logic in `onIntroEnd` / `onOutroEnd` / `isFinalOutro`. Preserve the
    invariants above (settled-is-a-no-op on `stop()`, single `onExitStart`,
    pause/resume freezes driver **and** hold timer).
-3. If the mode needs computed timing, prefer **self-wiring inside the runtime**
-   from scene content (cf. `content-driven`: `createRuntime` derives each scope's
-   `durationHook` from its ticker elements, so preview/exports need no boot
-   wiring) and keep `RuntimeBootOptions` as the external override/test seam,
-   threaded `RuntimeBootOptions` (`types.ts`) → `createRuntime` →
-   `PlayoutControllerOptions`.
+3. If the behaviour needs content-computed timing, prefer **self-wiring inside
+   the runtime** from scene content (cf. content-driven holds: `createRuntime`
+   derives each scope's `waitForContent` completion promise from its ticker
+   elements' `whenComplete()`, so preview/exports need no boot wiring) and keep
+   `RuntimeBootOptions` as the external override/test seam (cf. `contentHold`
+   for the root scope), threaded `RuntimeBootOptions` (`types.ts`) →
+   `createRuntime` → `PlayoutControllerOptions`.
 4. Capture the **behaviour** as an OpenSpec change (WHEN/THEN scenarios) — this doc
    only records the wiring.
 

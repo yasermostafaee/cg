@@ -1,5 +1,12 @@
 import type { CSSProperties } from 'react';
-import { activeRangeOf, playoutOf, type PlayoutMode, type Scene } from '@cg/shared-schema';
+import {
+  activeRangeOf,
+  playoutOf,
+  type Element,
+  type HoldSource,
+  type PlayoutMode,
+  type Scene,
+} from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Select } from '../../ui/Select.js';
@@ -11,8 +18,19 @@ const MODE_LABELS: Record<PlayoutMode, string> = {
   manual: 'Manual — hold until stop',
   'auto-out': 'Auto-out — outro after hold',
   'loop-cycle': 'Loop cycle — repeat in → hold → out',
-  'content-driven': 'Content-driven — duration from content',
 };
+
+const HOLD_LABELS: Record<HoldSource, string> = {
+  timed: 'Timed — hold for a duration',
+  'content-driven': 'Content-driven — until the ticker completes',
+};
+
+/** Does this composition contain a content-driven element (a ticker)? */
+function hasContentElement(scene: Scene): boolean {
+  const walk = (children: readonly Element[]): boolean =>
+    children.some((el) => el.type === 'ticker' || (el.type === 'container' && walk(el.children)));
+  return scene.layers.some((l) => walk(l.children));
+}
 
 const selectStyle: CSSProperties = {
   background: colors.panelMuted,
@@ -49,6 +67,10 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
   const playout = playoutOf(scene);
   const mode = playout.mode;
   const lifecycle = scene.lifecycle;
+  // D-028 — the Hold-source select only exists when the composition actually
+  // contains a content-driven element (a ticker): a dead control teaches
+  // nothing (same principle as Next disabled at steps=1).
+  const hasTicker = hasContentElement(scene);
 
   /** Default out-point at 75 % of the active region (leaves room for the exit). */
   function defaultMarker(): { outPoint: number } {
@@ -59,9 +81,8 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
 
   function changeMode(next: PlayoutMode): void {
     // `auto-out` / `loop-cycle` need an out-point (an exit segment) — seed a
-    // sensible one so the mode does something out of the box (the operator then
-    // drags it). `content-driven` runs `repeat` passes off the duration hook and
-    // does not require an out-point, so it is left alone.
+    // sensible one so the mode does something out of the box (the operator
+    // then drags it).
     if ((next === 'auto-out' || next === 'loop-cycle') && lifecycle === undefined) {
       designerStore.setLifecycle(defaultMarker());
     }
@@ -85,6 +106,24 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
           ))}
         </Select>
       </div>
+
+      {hasTicker && mode !== 'manual' && (
+        <div className={s.row}>
+          <span className={s.label}>hold</span>
+          <Select
+            style={selectStyle}
+            value={playout.holdSource ?? 'timed'}
+            aria-label="Hold source"
+            onChange={(e) => designerStore.setPlayout({ holdSource: e.target.value as HoldSource })}
+          >
+            {(Object.keys(HOLD_LABELS) as HoldSource[]).map((h) => (
+              <option key={h} value={h}>
+                {HOLD_LABELS[h]}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
 
       {lifecycle !== undefined ? (
         <p style={hintStyle}>

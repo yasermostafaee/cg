@@ -1,49 +1,70 @@
 # Design — add-ticker-element
 
-## D1. The runtime self-wires the per-scope durationHook
+## D1. The runtime self-wires per-scope content completion
 
 **Decision:** `createRuntime` detects ticker elements per field scope and
-installs an internal duration supplier for that scope's `PlayoutController`.
-An explicitly passed `RuntimeBootOptions.durationHook` takes precedence (it
-remains the external override/test seam). Precedence: explicit boot option →
-internal ticker hook → absent (= 0 ms passes, the existing D-020 behaviour).
+installs that scope's `waitForContent` supplier on its `PlayoutController`:
+`Promise.all` over the scope drivers' `whenComplete()`. All finite tickers
+done ⇒ the hold ends; an infinite ticker never resolves ⇒ the scope holds
+until `stop()`; a scope with NO content elements supplies `null` ⇒ a
+**zero-length hold deferred like a 0ms timer** (a zero-hold root must not
+settle before its children receive the play cascade). An explicitly passed
+`RuntimeBootOptions.contentHold` overrides the ROOT scope (the external
+override/test seam). Precedence: explicit boot option → internal ticker
+completion → no content (= deferred zero-length holds).
 
-**Why:** nothing in production supplies the hook today, and the exported
-single-file HTML boots with `CG.createRuntime(scene)` — no options at all
-(`ExporterSingleFile.ts`, emitted boot script). Threading the hook externally
-would require editing two emitted-HTML template strings (single-file + `.vcg`
-index) *and* the preview, and would still be root-scope-only
-(`runtime.ts`: `durationHook: isRoot ? options.durationHook : undefined`).
-Self-wiring makes preview, single-file export, and `.vcg` correct with zero
-boot-code changes and lets a ticker inside a nested composition drive that
-child scope's passes.
+**Why:** nothing in production supplies external wiring today, and the
+exported single-file HTML boots with `CG.createRuntime(scene)` — no options at
+all (`ExporterSingleFile.ts`, emitted boot script). Threading a seam
+externally would require editing two emitted-HTML template strings
+(single-file + `.vcg` index) *and* the preview, and would still be
+root-scope-only. Self-wiring makes preview, single-file export, and `.vcg`
+correct with zero boot-code changes and lets a ticker inside a nested
+composition govern that child scope's holds.
 
-**Multiple tickers in one scope:** the scope hook returns the **max** across
-its tickers — a scope's content-driven pass duration is its LONGEST ticker,
-and shorter tickers roll multiple laps within the pass (intended behaviour,
-not a defect); no ticker's content is cut off mid-cycle.
+**Multiple tickers in one scope:** `Promise.all` — the hold ends when ALL
+the scope's finite tickers complete (the longest run governs by construction);
+no ticker's content is ever cut off mid-run.
 
-## D2. Pass = content cycle; the hook returns "ms until the current cycle completes"
+## D2. Two nested loops + the `holdSource` axis
 
-The PlayoutController's cycle model replays the composition's intro/outro
-keyframes every pass (D-020 semantics, shared with `loop-cycle`). The crawl
-must NOT restart with them. So:
+The old model — "`durationHook` returns the ms until the current content cycle
+completes; the composition's `repeat` counts crawl passes; the treadmill rolls
+continuously across pass boundaries" — is **superseded**. The approved model:
 
-- The treadmill starts when the scope first enters its hold phase and then
-  rolls **continuously** — through outro/intro replays of later passes and
-  through the final outro — until the controller settles (then it stops and
-  resets; a later `play()` starts fresh).
-- The internal hook does not return a fixed formula; it returns the **remaining
-  ms until the current content cycle's tail exits the viewport**, computed from
-  driver bookkeeping (fed-width cycle seams vs. current position). First call ≈
-  `(viewportWidth + trackWidth) / speed × 1000`; later calls self-correct for
-  whatever time intro/outro replays consumed. Result: `repeat: N` exits after
-  exactly N full content passes, with pass boundaries aligned to content-cycle
-  completions, immune to intro/outro drift.
-- Tickers also crawl in non-`content-driven` modes (e.g. `manual`: band holds,
-  crawl rolls until `stop()`): the driver is started by the scope's hold entry
-  and stopped by settle, independent of mode; only the *hook* is
-  `content-driven`-specific.
+- **INNER loop — the ticker's own:** `TickerElement.repeat: 'infinite' | N`
+  (default `'infinite'`) crawl passes per run, with
+  `cycleBoundary: 'seamless' | 'drain'` deciding the seam between passes. A
+  finite run ends **cleanly**: feeding stops after the Nth pass's last item
+  and the run completes only when that item has fully exited the band — never
+  cut mid-scroll. `'drain'` additionally empties the band BETWEEN passes.
+- **OUTER loop — the composition's:** `mode` keeps answering "how many
+  open/close cycles" (`manual` / `auto-out` / `loop-cycle`;
+  `'content-driven'` is **no longer a mode**). The orthogonal
+  `holdSource: 'timed' | 'content-driven'` answers what ends each hold:
+  `'timed'` = `holdMs` (unchanged); `'content-driven'` = until the scope's
+  tickers complete (D1). The acceptance example: `loop-cycle, repeat: 3` +
+  `holdSource: 'content-driven'` + ticker `repeat: 2` ⇒ 2 crawl passes per
+  hold, the full open/close between, 3 cycles ⇒ content seen 6×.
+- **Fresh run per hold:** `onHoldStart` does RESET + START — each composition
+  open/close cycle replays the crawl from its entering edge. The treadmill is
+  continuous WITHIN one hold only (the old "rolls continuously across pass
+  boundaries / `start()` is idempotent across passes" invariant is
+  superseded; pass boundaries are now the ticker's own, inside one hold).
+- **Hold-token guard:** a stale completion (resolving after `stop()` or after
+  the hold already ended) is ignored — it can never replay the outro or
+  settle the scope a second time.
+- **Legacy normalization:** a stored `mode: 'content-driven'` normalizes via
+  `z.preprocess` at parse time — and defensively in `playoutOf()` for
+  unparsed scenes handed straight to `createRuntime` — to
+  `mode: 'loop-cycle', holdSource: 'content-driven'`; behaviourally faithful
+  for every pre-D-028 scene (none had tickers ⇒ zero-length holds in both
+  forms). A registry migration is deferred — `migrate()` currently has no
+  production call site.
+- Tickers also crawl under `timed`/`manual` holds (band holds, crawl rolls
+  until the hold ends / `stop()`): the driver is started by the scope's hold
+  entry and stopped by settle, independent of `holdSource`; only the *wait*
+  is `content-driven`-specific.
 - **Root self-settle cascades:** when the ROOT scope settles on its own, the
   runtime cascades `stop()` to every nested scope (settled children no-op per
   D-026) and freezes every crawl — otherwise an infinite nested lifecycle
@@ -86,12 +107,12 @@ downstream kept nodes and recorded seams shifted by exactly the width delta
 (a shrunk edit leaves a one-off wider gap instead of popping a node in
 mid-band). Bare `string[]` payloads get positional ids (`item-<index>`) as a
 degraded fallback — documented as jump-free only for appends. A reconcile
-recomputes the logical cycle width for future cycle-boundary math — and
-because a reconcile can resume mid-list, pass-boundary projection derives the
-next un-fed wrap from the feeder's real state (`nextOffset` + the width of
-the items left in the cycle), never from multiples of the cycle width; the
-in-flight pass keeps its already-scheduled duration (the next pass picks up
-the new width — per-pass recompute is the D-020 contract).
+recomputes the logical cycle width for future cycle-boundary math. Completion
+bookkeeping is feeder-state-driven: a finite run stops feeding after the Nth
+pass's last item and records that item's final end offset; the run completes
+when the crawl distance crosses `finalEnd + viewportWidth` (the last item has
+fully exited the band). There is no pass-duration projection —
+`passRemainingMs()` and the seam-projection math are deleted.
 
 ## D4. RTL model: `direction` is the reading direction
 
@@ -141,8 +162,16 @@ double-escaped `\\n`).
 - No per-item pacing/dwell (PRD's old "per-item pacing" wording is superseded
   by constant px/s speed — the measured-width model).
 - No vertical ticker (the schema's band model doesn't preclude one later).
-- No emptying-band exit: with `repeat: N` the treadmill stays seamless, so the
-  final outro plays over cycle N+1's head entering — accepted.
+- No mid-scroll cut, ever: a finite run always END-drains — feeding stops
+  after pass N and completion waits for the last item to fully exit the band,
+  so no N+1 head ever enters and the outro never plays over a chopped crawl;
+  `cycleBoundary: 'drain'` extends the same emptying to the seams BETWEEN
+  passes. (Supersedes the earlier "final outro plays over cycle N+1's head —
+  accepted" trade-off.)
+- A finite ticker under a **timed** hold is authored intent (the timer ends
+  the hold regardless of crawl progress); export preflight surfaces an
+  info-level `ticker-finite-with-timed-hold` so the combination is deliberate,
+  never a silent surprise.
 - No D-034 per-pass events (not needed: per-pass duration recompute is pull,
   not push).
 - Scrub does not move the ticker (wall-clock-driven; `tick(frame)` only

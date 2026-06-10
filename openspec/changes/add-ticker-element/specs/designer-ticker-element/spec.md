@@ -6,12 +6,12 @@
 
 The schema SHALL define a `ticker` element: a clipped horizontal band (geometry
 from the base transform) that scrolls a list of text items continuously, styled
-with the shared text styling (`font`, `color`, optional background), configured
-by `direction: 'rtl' | 'ltr'` (reading direction, explicit — no `'auto'`),
-`speed` (px/s, positive), `gap` (px between items), optional `separator`, and
-`items: [{ id, text }]` as authored defaults. The crawl's pass duration SHALL
-be content-driven: measured content width ÷ `speed` — never a manually
-authored duration.
+with the shared text styling (`font`, `color`, optional background and
+`textShadow`), configured by `direction: 'rtl' | 'ltr'` (reading direction,
+explicit — no `'auto'`), `speed` (px/s, positive), `gap` (px between items),
+optional `separator`, and `items: [{ id, text }]` as authored defaults. The
+crawl's duration SHALL be content-driven: measured content width ÷ `speed` —
+never a manually authored duration.
 
 #### Scenario: Longer content crawls proportionally longer
 
@@ -28,31 +28,57 @@ authored duration.
   this includes operator-imported `asset-*` font faces, which the preview
   loads and awaits before the runtime can play
 
-### Requirement: Seamless treadmill crawl
+### Requirement: Treadmill crawl with an inner repeat loop
 
 The runtime SHALL render the ticker as a clipped band with an inner track
 translated via `transform` (no per-frame relayout). Item widths SHALL be
 measured at or after fonts-ready and RE-measured once per content cycle (the
-per-pass self-heal: a width measured mid-font-swap — e.g. an `update()` whose
-text first triggers a lazy `unicode-range` face — is corrected within one
-lap); exited item nodes SHALL be recycled to feed the continuing crawl. The crawl SHALL be seamless: after
-the last item, the first item follows again (separated by `gap`/`separator`)
-with no gap, flash, or restart at the loop seam — including across playout
-pass boundaries (intro/outro replays of the owning composition SHALL NOT
-restart or pause the crawl). `pause()` SHALL freeze the crawl and `resume()`
-SHALL continue it, in lockstep with the playout controller's hold timer.
+self-heal: a width measured mid-font-swap — e.g. an `update()` whose text
+first triggers a lazy `unicode-range` face — is corrected within one lap);
+exited item nodes SHALL be recycled to feed the continuing crawl.
+
+The ticker SHALL own its INNER repeat loop: `repeat: 'infinite' | N`
+(default `'infinite'`) crawl passes per run, with
+`cycleBoundary: 'seamless' | 'drain'` (default `'seamless'`) deciding the
+seam between passes — `'seamless'` lets the first item follow the last
+(separated by `gap`/`separator`) with no gap, flash, or restart; `'drain'`
+lets each pass fully EXIT the band before the next re-enters. A finite run
+SHALL end CLEANLY: feeding stops after the Nth pass's last item, and the run
+completes only when that item has fully exited the band — never cut
+mid-scroll — then signals completion to its scope's playout (the
+`designer-playout-lifecycle` content-driven hold). WITHIN one hold the
+treadmill rolls continuously; each composition open/close cycle restarts the
+crawl from its entering edge. These are designer-set defaults and
+session-overridable per scope (`tickerRepeat` / `tickerBoundary`), the same
+layering as `holdMs`/`repeat`. `pause()` SHALL freeze the crawl and
+`resume()` SHALL continue it, in lockstep with the playout controller's hold
+timing.
 
 #### Scenario: Seamless wrap at the loop seam
 
-- **WHEN** the crawl reaches the end of the item list
+- **WHEN** the crawl reaches the end of the item list with
+  `cycleBoundary: 'seamless'` (and passes remain)
 - **THEN** the first item follows the last item at the configured spacing with
   no visible gap, flash, or jump
+
+#### Scenario: Drain empties the band between passes
+
+- **WHEN** the crawl reaches the end of the item list with
+  `cycleBoundary: 'drain'` (and passes remain)
+- **THEN** every item of the finished pass fully exits the band before the
+  next pass's first item enters
+
+#### Scenario: A finite repeat ends cleanly and completes
+
+- **WHEN** a `repeat: 2` ticker's second pass's last item fully exits the band
+- **THEN** the run signals completion to its scope (no third pass is ever fed,
+  and nothing is cut mid-scroll)
 
 #### Scenario: Pause freezes the crawl
 
 - **WHEN** `pause()` is called mid-crawl and `resume()` follows
 - **THEN** the crawl freezes at its current offset and continues from exactly
-  there, consistent with the frozen pass timer
+  there, consistent with the frozen hold timing
 
 ### Requirement: update() reconciles items by stable id
 
@@ -115,12 +141,18 @@ CasparCG XML payload path cannot carry them).
 ### Requirement: Designer authoring and live preview editing
 
 The Designer SHALL provide a ticker tool that inserts a ticker element, and an
-inspector section editing `direction`, `speed`, `gap`, `separator`, and the
-items (add / remove / reorder / edit text). Assigning a data key to a ticker
-SHALL seed a `list` field from the element's authored items and bind it via
-`ticker-items`; the preview field form SHALL render a `list` field as the same
-items editor, live-updating the crawl. The UI SHALL state that the ticker is
-time-driven: timeline scrubbing does not move it.
+inspector section editing `direction`, `speed`, `gap`, `separator`, the inner
+loop (`repeat` — a fresh ticker shows `'infinite'` by design — and
+`cycleBoundary`), text styling parity (font family/weight/size, colour, band
+background defaulting to transparent, shadow, padding, radius), and the items
+(add / remove / reorder / edit text). The composition inspector and the
+preview's per-scope timing SHALL expose the hold-source select and the
+session-only `tickerRepeat`/`tickerBoundary` overrides ONLY when the scope
+actually contains a ticker (no dead controls). Assigning a data key to a
+ticker SHALL seed a `list` field from the element's authored items and bind it
+via `ticker-items`; the preview field form SHALL render a `list` field as the
+same items editor, live-updating the crawl. The UI SHALL state that the ticker
+is time-driven: timeline scrubbing does not move it.
 
 #### Scenario: Author → bind → live-edit flow
 

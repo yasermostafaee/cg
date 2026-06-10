@@ -55,7 +55,11 @@ interface Harness {
 
 function make(
   playout: Playout,
-  opts: { lifecycle?: Lifecycle; hasAnimation?: boolean; durationHook?: () => number } = {},
+  opts: {
+    lifecycle?: Lifecycle;
+    hasAnimation?: boolean;
+    waitForContent?: () => Promise<void> | null;
+  } = {},
 ): Harness {
   const clock = makeClock();
   const frames: number[] = [];
@@ -69,7 +73,7 @@ function make(
     applyFrame: (f) => frames.push(f),
     onExitStart: () => events.push('exit'),
     onSettle: () => events.push('settle'),
-    durationHook: opts.durationHook,
+    waitForContent: opts.waitForContent,
     clock,
   });
   return { controller, frames, events, clock };
@@ -167,52 +171,90 @@ describe('PlayoutController', () => {
     expect(h.events).toEqual(['exit', 'settle']);
   });
 
-  it('content-driven: each pass takes its duration from the durationHook (holdMs ignored)', () => {
-    // holdMs is present but MUST be ignored for content-driven; the hook wins.
-    const h = make({ mode: 'content-driven', holdMs: 99 }, { durationHook: () => 3000 });
+  it("content-driven hold ends when waitForContent resolves (holdMs ignored)", async () => {
+    // holdMs is present but MUST be ignored — the completion promise wins.
+    let resolveContent: () => void = () => undefined;
+    const h = make(
+      { mode: 'auto-out', holdSource: 'content-driven', holdMs: 99 },
+      { waitForContent: () => new Promise<void>((res) => (resolveContent = res)) },
+    );
     h.controller.play();
-    h.clock.advance(2999);
+    h.clock.advance(10_000); // time alone never ends a content hold
     expect(h.events).toEqual([]);
-    h.clock.advance(1); // single pass (repeat defaults to 1) → settle
+    resolveContent();
+    await flushMicrotasks();
     expect(h.events).toEqual(['exit', 'settle']);
   });
 
-  it('content-driven repeat = N: runs N passes then settles once', () => {
-    const h = make({ mode: 'content-driven', repeat: 3 }, { durationHook: () => 1000 });
+  it('a null waitForContent (no content elements) is a zero-length hold', () => {
+    const h = make(
+      { mode: 'auto-out', holdSource: 'content-driven' },
+      { waitForContent: () => null },
+    );
     h.controller.play();
-    h.clock.advance(1000); // pass 1 → pass 2 (not final)
+    // Deferred like a 0ms timed hold (NOT synchronous — a zero-hold root must
+    // not settle before its children receive the play() cascade).
     expect(h.events).toEqual([]);
-    h.clock.advance(1000); // pass 2 → pass 3 (not final)
-    expect(h.events).toEqual([]);
-    h.clock.advance(1000); // pass 3 → final settle
+    h.clock.advance(0);
     expect(h.events).toEqual(['exit', 'settle']);
   });
 
-  it('content-driven repeat = infinite: loops the pass forever; stop() ends it', () => {
-    const h = make({ mode: 'content-driven', repeat: 'infinite' }, { durationHook: () => 500 });
+  it('a never-resolving wait (infinite ticker) holds until stop()', () => {
+    const h = make(
+      { mode: 'loop-cycle', holdSource: 'content-driven', repeat: 'infinite' },
+      { waitForContent: () => new Promise<void>(() => undefined) },
+    );
     h.controller.play();
-    for (let i = 0; i < 8; i++) h.clock.advance(500);
-    expect(h.events).toEqual([]); // keeps looping, never settles on its own
+    h.clock.advance(100_000);
+    expect(h.events).toEqual([]); // still holding
     h.controller.stop();
     expect(h.events).toEqual(['exit', 'settle']);
   });
 
-  it('content-driven: the duration hook is re-read each pass (dynamic content)', () => {
-    const durations = [400, 700];
-    let i = 0;
+  it('a STALE content resolution (after stop) is ignored — the hold token guards', async () => {
+    let resolveContent: () => void = () => undefined;
     const h = make(
-      { mode: 'content-driven', repeat: 2 },
-      { durationHook: () => durations[i++] ?? 0 },
+      { mode: 'auto-out', holdSource: 'content-driven' },
+      { waitForContent: () => new Promise<void>((res) => (resolveContent = res)) },
     );
     h.controller.play();
-    h.clock.advance(400); // pass 1 used 400ms → pass 2
-    expect(h.events).toEqual([]);
-    h.clock.advance(699);
-    expect(h.events).toEqual([]); // pass 2 needs 700ms, not 400
-    h.clock.advance(1);
+    h.controller.stop(); // operator stops mid-hold → outro + settle now
     expect(h.events).toEqual(['exit', 'settle']);
+    const frames = h.frames.length;
+    resolveContent(); // the abandoned hold's promise resolves late
+    await flushMicrotasks();
+    expect(h.events).toEqual(['exit', 'settle']); // no second exit
+    expect(h.frames.length).toBe(frames); // no replayed outro frames
+  });
+
+  it('loop-cycle × content-driven: a FRESH wait per cycle; repeat N exits after N cycles', async () => {
+    const resolvers: (() => void)[] = [];
+    let calls = 0;
+    const h = make(
+      { mode: 'loop-cycle', holdSource: 'content-driven', repeat: 2 },
+      {
+        waitForContent: () => {
+          calls += 1;
+          return new Promise<void>((res) => resolvers.push(res));
+        },
+      },
+    );
+    h.controller.play();
+    expect(calls).toBe(1); // cycle 1 holding on content
+    resolvers[0]?.();
+    await flushMicrotasks();
+    expect(h.events).toEqual([]); // cycle 1 outro→intro → cycle 2 holds
+    expect(calls).toBe(2); // re-invoked — cycle 2 awaits a NEW run
+    resolvers[1]?.();
+    await flushMicrotasks();
+    expect(h.events).toEqual(['exit', 'settle']); // 2 cycles done
   });
 });
+
+/** Content-completion resolutions land on microtasks — drain them. */
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 6; i += 1) await Promise.resolve();
+}
 
 describe('PlayoutController — D-026 state-aware stop', () => {
   it('stop() on a SETTLED auto-out controller is a no-op (does not replay the exit)', () => {

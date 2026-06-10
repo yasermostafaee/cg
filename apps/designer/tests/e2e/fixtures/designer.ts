@@ -200,11 +200,18 @@ export class DesignerApp {
    * Set the open composition's playout mode in the inspector (non-preview). The
    * Playout section lives in the COMPOSITION inspector, so deselect first.
    */
-  async setPlayoutTiming(
-    mode: 'manual' | 'auto-out' | 'loop-cycle' | 'content-driven',
-  ): Promise<void> {
+  async setPlayoutTiming(mode: 'manual' | 'auto-out' | 'loop-cycle'): Promise<void> {
     await this.deselect();
     await this.page.getByRole('combobox', { name: 'Playout mode' }).selectOption(mode);
+  }
+
+  /**
+   * D-028 — set the composition's hold source (the select only renders when the
+   * composition contains a ticker and the mode isn't manual). Deselects first.
+   */
+  async setHoldSource(source: 'timed' | 'content-driven'): Promise<void> {
+    await this.deselect();
+    await this.page.getByRole('combobox', { name: 'Hold source' }).selectOption(source);
   }
 
   /**

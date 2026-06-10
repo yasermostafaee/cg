@@ -58,11 +58,27 @@ function make(overrides: Partial<TickerDriverOptions> = {}): Harness {
     speed: 100,
     gap: 10,
     items: [itemA, itemB],
+    repeat: 'infinite',
+    cycleBoundary: 'seamless',
     clock,
     measure,
     ...overrides,
   });
   return { driver, band, track, clock };
+}
+
+/** Tracks a run's completion promise as a synchronously inspectable flag. */
+function completionFlag(driver: TickerDriver): { readonly done: boolean } {
+  const state = { done: false };
+  void driver.whenComplete().then(() => {
+    state.done = true;
+  });
+  return state;
+}
+
+/** Completion resolutions land on microtasks — drain them between advances. */
+async function flush(): Promise<void> {
+  for (let i = 0; i < 6; i += 1) await Promise.resolve();
 }
 
 /** Texts of the currently fed (non-measure) item spans, in feed order. */
@@ -76,76 +92,117 @@ beforeEach(() => {
   document.body.innerHTML = '';
 });
 
-describe('TickerDriver — content-driven duration math', () => {
-  it('first pass = (viewportWidth + cycleWidth) / speed (golden)', () => {
-    const h = make();
+describe('TickerDriver — completion (the inner repeat loop, D-028)', () => {
+  // Fixture math: items a(100px) + b(200px), gap 10 ⇒ cycle layout
+  // a@0, b@110 | a@320, b@430 … Finite repeat 2: feeding stops after the 2nd
+  // cycle's b (finalEnd = 430+200 = 630); the run completes when that item has
+  // FULLY exited: d ≥ 630 + 400 (viewport) = 1030px ⇒ 10300 ms @ 100px/s.
+  it('finite repeat completes exactly when the LAST item has fully exited (clean end)', async () => {
+    const h = make({ repeat: 2 });
+    const done = completionFlag(h.driver);
     h.driver.start();
-    // (320 + 400) px at 100 px/s = 7200 ms
-    expect(h.driver.passRemainingMs()).toBe(7200);
+    h.clock.advance(10_290); // d = 1029 — the tail is 1px from gone
+    await flush();
+    expect(done.done).toBe(false);
+    h.clock.advance(20); // d = 1031 — fully exited
+    await flush();
+    expect(done.done).toBe(true);
   });
 
-  it('longer content ⇒ proportionally longer pass (no manual duration anywhere)', () => {
+  it('longer content ⇒ proportionally later completion (duration stays content-driven)', async () => {
     const h = make({
+      repeat: 1,
       items: [
         { id: 'a', text: 'a'.repeat(20) }, // 200px
         { id: 'b', text: 'b'.repeat(40) }, // 400px
       ],
     });
+    // One cycle: a@0(200), b@210(400) ⇒ finalEnd 610 ⇒ complete at d ≥ 1010.
+    const done = completionFlag(h.driver);
     h.driver.start();
-    // cycle = (200+10)+(400+10) = 620 ⇒ (620+400)/100 = 10200 ms
-    expect(h.driver.passRemainingMs()).toBe(10200);
+    h.clock.advance(10_090);
+    await flush();
+    expect(done.done).toBe(false);
+    h.clock.advance(20);
+    await flush();
+    expect(done.done).toBe(true);
   });
 
-  it('separators join the cycle width', () => {
-    const h = make({ separator: ' • ' }); // 3 chars → 30px
+  it('never feeds a cycle past the finite repeat (the band ends EMPTY)', () => {
+    const h = make({ repeat: 1 });
     h.driver.start();
-    // per item: w + gap + sep(30) + gap ⇒ (100+10+30+10)+(200+10+30+10) = 400
-    expect(h.driver.passRemainingMs()).toBe(8000); // (400+400)/100
+    h.clock.advance(60_000); // far beyond the single pass
+    expect(fedTexts(h.track)).toEqual([]); // everything recycled, nothing re-fed
   });
 
-  it('self-corrects: time consumed between passes shrinks the remaining hold', () => {
-    const h = make();
+  it("'infinite' never completes (the scope holds until stop())", async () => {
+    const h = make({ repeat: 'infinite' });
+    const done = completionFlag(h.driver);
     h.driver.start();
-    h.clock.advance(1000); // d = 100px into cycle 1
-    // cycle 1 seam at 320 ⇒ remaining (320+400-100)/100 = 6200 ms
-    expect(h.driver.passRemainingMs()).toBe(6200);
+    h.clock.advance(120_000);
+    await flush();
+    expect(done.done).toBe(false);
   });
 
-  it('later passes align to content-cycle completions', () => {
-    const h = make();
+  it('empty content completes immediately (nothing to crawl)', async () => {
+    const h = make({ items: [], repeat: 2 });
+    const done = completionFlag(h.driver);
     h.driver.start();
-    h.clock.advance(7500); // d = 750 — cycle 1 (seam 320: 720 ≤ 750) has completed
-    // next boundary: seam 640 ⇒ (640+400-750)/100 = 2900 ms
-    expect(h.driver.passRemainingMs()).toBe(2900);
+    await flush();
+    expect(done.done).toBe(true);
   });
 
-  it('empty content ⇒ zero-length pass (D-020 absent-hook semantics)', () => {
-    const h = make({ items: [] });
+  it("'drain' empties the band between cycles (the next head waits for the prior tail)", () => {
+    const h = make({ repeat: 2, cycleBoundary: 'drain' });
     h.driver.start();
-    expect(h.driver.passRemainingMs()).toBe(0);
+    h.clock.advance(8000); // d = 800 — cycle 2 fed (spacer applied at the wrap)
+    // Wrap at offset 320 gains a viewport-width spacer ⇒ cycle 2 starts at
+    // 720: a@720 (rtl left = −(720+100) = −820), b@830 (left = −1030).
+    const lefts = [...h.track.querySelectorAll<HTMLElement>('[data-cg-ticker-item]')]
+      .filter((n) => n.style.visibility !== 'hidden')
+      .map((n) => n.style.left);
+    expect(lefts).toContain('-820px');
+    // Empty-band window: cycle 1's tail (ends 310) exits at d=710; cycle 2's
+    // head enters only at d=720 — guaranteed by construction (720 ≥ 310+400).
   });
 
-  it('widths are RE-measured once per content cycle — a mid-font-swap width self-heals within one lap', () => {
-    // Simulate a font swap landing after the first measurements: the measurer
-    // doubles its metrics partway through (as final glyphs replace fallback).
+  it('a fresh run after reset() completes again (per-composition-cycle restarts)', async () => {
+    const h = make({ repeat: 1 }); // finalEnd 310 ⇒ complete at d ≥ 710 ⇒ 7100ms
+    const first = completionFlag(h.driver);
+    h.driver.start();
+    h.clock.advance(7200);
+    await flush();
+    expect(first.done).toBe(true);
+    h.driver.reset(); // the controller does reset+start at every hold entry
+    const second = completionFlag(h.driver);
+    h.driver.start();
+    h.clock.advance(7000);
+    await flush();
+    expect(second.done).toBe(false); // a genuinely fresh run, not pre-resolved
+    h.clock.advance(200);
+    await flush();
+    expect(second.done).toBe(true);
+  });
+
+  it('widths are RE-measured once per content cycle (mid-font-swap self-heal)', () => {
+    // The cache clears when a cycle completes, so a face that finished loading
+    // mid-flight gets fresh metrics one lap later: measure() is re-consulted.
     let scale = 10;
-    const h = make({ measure: (node) => (node.textContent?.length ?? 0) * scale });
+    let measuresOfA = 0;
+    const h = make({
+      measure: (node) => {
+        if (node.textContent === itemA.text) measuresOfA += 1;
+        return (node.textContent?.length ?? 0) * scale;
+      },
+    });
     h.driver.start();
-    expect(h.driver.passRemainingMs()).toBe(7200); // cycle 320 @ 10px/char
-    scale = 20; // the real face finished loading — true widths are 2×
-    // Still inside cycle 1: cached (stale) widths keep this pass consistent.
-    h.clock.advance(1000);
-    expect(h.driver.passRemainingMs()).toBe(6200);
-    // Run far enough that cycle 1 completed (cache cleared) and the feeder has
-    // long been feeding with HEALED metrics (cycle width (200+10)+(400+10)=620).
-    // Advance in small steps — like real 60fps playback — so feeding
-    // interleaves with cycle completion instead of batching stale feeds.
-    for (let i = 0; i < 120; i += 1) h.clock.advance(500);
-    // Crossing one pass boundary now spaces passes by exactly the healed
-    // cycle: 620px / 100px/s = 6200 ms (stale metrics would give 3200 ms).
-    const r0 = h.driver.passRemainingMs();
-    h.clock.advance(r0); // land exactly on a pass boundary
-    expect(h.driver.passRemainingMs()).toBe(6200);
+    expect(measuresOfA).toBe(1); // cached within cycle 1
+    scale = 20; // font swap lands
+    // Small steps like real playback so feeding interleaves with completion.
+    for (let i = 0; i < 30; i += 1) h.clock.advance(500);
+    expect(measuresOfA).toBeGreaterThanOrEqual(2); // healed after a lap
+    // Fresh feeds use the healed (2×) width: an 'a' fed post-heal is 200px
+    // wide, so consecutive a→b spacing reflects w=200 (left gap = 210).
   });
 });
 
@@ -198,18 +255,19 @@ describe('TickerDriver — treadmill behaviour', () => {
     h.clock.advance(500); // d = 50
     h.driver.pause();
     h.clock.advance(10_000); // frozen — no movement
-    expect(h.driver.passRemainingMs()).toBe(6700); // (320+400-50)/100
+    expect(h.track.style.transform).toBe('translateX(50px)');
     h.driver.resume();
-    h.clock.advance(500); // d = 100
-    expect(h.driver.passRemainingMs()).toBe(6200);
+    h.clock.advance(500); // d = 100 (the paused span never counted)
+    expect(h.track.style.transform).toBe('translateX(100px)');
   });
 
-  it('start is idempotent — pass boundaries never restart the crawl', () => {
+  it('start is idempotent while running (a double start never rewinds the offset)', () => {
     const h = make();
     h.driver.start();
     h.clock.advance(1000); // d = 100
-    h.driver.start(); // controller re-enters hold on pass 2+
-    expect(h.driver.passRemainingMs()).toBe(6200); // NOT reset to 7200
+    h.driver.start();
+    h.clock.advance(500); // d = 150 — startedAt was NOT re-stamped
+    expect(h.track.style.transform).toBe('translateX(150px)');
   });
 
   it('reset() restarts from the entering edge (fresh play())', () => {
@@ -218,7 +276,8 @@ describe('TickerDriver — treadmill behaviour', () => {
     h.clock.advance(1000);
     h.driver.reset();
     h.driver.start();
-    expect(h.driver.passRemainingMs()).toBe(7200);
+    h.clock.advance(500); // a fresh run: d counts from this start
+    expect(h.track.style.transform).toBe('translateX(50px)');
   });
 
   it('removes the static authoring layout when the crawl starts', () => {
@@ -272,15 +331,16 @@ describe('TickerDriver — reconcile by stable id (update())', () => {
     expect(fedTexts(h.track)).not.toContain(itemB.text);
   });
 
-  it('reconcile updates the cycle width for FUTURE pass math', () => {
-    const h = make();
+  it('a reconcile mid-run still ends a finite repeat cleanly (completion with the NEW list)', async () => {
+    const h = make({ repeat: 2 });
+    const done = completionFlag(h.driver);
     h.driver.start();
-    h.clock.advance(1000); // d = 100
-    h.driver.setItems([itemA]); // cycle now (100+10) = 110
-    h.clock.advance(60_000); // run far ahead so recorded seams are consumed
-    const remaining = h.driver.passRemainingMs();
-    expect(remaining).toBeGreaterThan(0);
-    expect(remaining).toBeLessThanOrEqual(1100); // one new-cycle width / speed
+    h.clock.advance(1000); // d = 100 — mid cycle 1
+    h.driver.setItems([itemA]); // b removed; remaining feeds use the new list
+    for (let i = 0; i < 30; i += 1) h.clock.advance(500); // run well past the end
+    await flush();
+    expect(done.done).toBe(true); // the run completed — it never stalls
+    expect(fedTexts(h.track)).toEqual([]); // and ended empty (nothing re-fed)
   });
 
   it('an entered item with changed text is corrected IN PLACE — leading edge fixed, downstream shifted by the delta', () => {
@@ -320,21 +380,19 @@ describe('TickerDriver — reconcile by stable id (update())', () => {
     for (const left of others) expect(left).toBeLessThanOrEqual(-120);
   });
 
-  it('projection after a mid-list-resume reconcile derives the wrap from feeder state, not cycle multiples', () => {
+  it('a mid-list-resume reconcile keeps feeding the new list in order (no skipped wrap)', () => {
     const h = make();
     h.driver.start();
-    h.clock.advance(1000); // d = 100
-    // New list: q(50px), a(100px), z(1000px) — kept 'a' is at idx 1, so feeding
-    // resumes at z; the real wrap lands at 110+1000+10 = 1120, beyond the feed
-    // horizon, and the old seams were filtered by the reconcile.
+    h.clock.advance(1000); // d = 100 — kept 'a' is at idx 1 of the NEW list
     h.driver.setItems([
       { id: 'q', text: 'qqqqq' },
       itemA,
-      { id: 'z', text: 'z'.repeat(100) },
+      { id: 'z', text: 'zzzz' },
     ]);
-    // True boundary: (1120 + 400 − 100) / 100 ⇒ 14200 ms (a cycle-multiple
-    // projection would wrongly give (1180+400−100)/100 = 14800).
-    expect(h.driver.passRemainingMs()).toBe(14200);
+    // Feeding resumes AFTER 'a' in the new list: z, then wraps to q, a, z …
+    const texts = fedTexts(h.track);
+    expect(texts[0]).toBe(itemA.text); // the kept entered node
+    expect(texts.slice(1, 4)).toEqual(['zzzz', 'qqqqq', itemA.text]);
   });
 
   it('reset() removes the static authoring layout (a fresh play never shows stale items)', () => {
@@ -363,9 +421,8 @@ describe('TickerDriver — reconcile by stable id (update())', () => {
     const h = make();
     h.driver.setItems([{ id: 'x', text: 'xxxx' }]);
     h.driver.start();
-    // cycle = 40+10 = 50 ⇒ (50+400)/100 = 4500 ms
-    expect(h.driver.passRemainingMs()).toBe(4500);
     expect(fedTexts(h.track)).not.toContain(itemA.text);
+    expect(fedTexts(h.track)[0]).toBe('xxxx');
   });
 });
 

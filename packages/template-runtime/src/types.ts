@@ -3,6 +3,7 @@ import type {
   ElementAnimation,
   FieldValues,
   FrameRange,
+  HoldSource,
   Lifecycle,
   Playout,
   PlayoutMode,
@@ -131,16 +132,14 @@ export interface RuntimeBootOptions {
   clock?: RuntimeClock;
 
   /**
-   * D-020 — supplies the per-pass duration (ms) for the `content-driven` playout
-   * mode, recomputed each pass. `holdMs` does not apply to `content-driven`.
-   *
-   * D-028 — the runtime now SELF-WIRES a per-scope hook from the scope's ticker
-   * elements (measured content width ÷ speed), so preview and the exported HTML
-   * need no boot wiring. An explicit hook passed here OVERRIDES the root scope's
-   * self-wired one (external override / test seam). A `content-driven` scope
-   * with neither tickers nor an explicit hook keeps zero-length passes.
+   * D-028 — external override for the root scope's `content-driven` hold (test
+   * seam / future rundown): invoked at each hold entry; the hold lasts until
+   * the returned promise resolves. Absent ⇒ the runtime self-wires completion
+   * from the scope's ticker elements (all finite tickers done; an infinite
+   * ticker holds until `stop()`; a scope with no tickers gets a zero-length
+   * hold), so preview and the exported HTML need no boot wiring.
    */
-  durationHook?: () => number;
+  contentHold?: () => Promise<void>;
 
   /**
    * D-028 — injectable ticker item-width measurement (defaults to
@@ -175,14 +174,19 @@ export interface RuntimeBootOptions {
 }
 
 /**
- * D-020 — overridable playout knobs (non-persistent). They override the stored
- * `scene.playout` for this run only. There is no continuous-loop flag: a looping
- * playout is `mode: 'loop-cycle'` with `repeat: 'infinite'`.
+ * D-020/D-028 — overridable playout knobs (non-persistent). They override the
+ * stored `scene.playout` (and the scope's ticker elements' own repeat/boundary)
+ * for this run only. There is no continuous-loop flag: a looping playout is
+ * `mode: 'loop-cycle'` with `repeat: 'infinite'`.
  */
 export interface PlayoutOverride {
   mode?: PlayoutMode;
+  holdSource?: HoldSource;
   holdMs?: number;
   repeat?: number | 'infinite';
+  /** D-028 — overrides EVERY ticker in the scope (session-only). */
+  tickerRepeat?: number | 'infinite';
+  tickerBoundary?: 'seamless' | 'drain';
 }
 
 /** Injectable rAF + timer clock for deterministic lifecycle/timing tests. */

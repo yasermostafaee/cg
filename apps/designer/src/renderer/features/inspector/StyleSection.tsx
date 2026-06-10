@@ -392,6 +392,40 @@ function TickerSections({
             } as Partial<Element>)
           }
         />
+        {/* D-028 — the ticker's INNER repeat loop. A fresh ticker is infinite
+            by design; finite passes complete cleanly (the last item fully
+            exits) and signal the composition's content-driven hold. */}
+        <SelectField
+          label="repeat"
+          value={element.repeat === 'infinite' ? 'infinite' : 'count'}
+          options={['infinite', 'count'] as const}
+          onCommit={(v) =>
+            designerStore.updateElement(id, {
+              repeat: v === 'infinite' ? 'infinite' : 2,
+            } as Partial<Element>)
+          }
+        />
+        {element.repeat !== 'infinite' && (
+          <NumberField
+            label="passes"
+            value={element.repeat}
+            step={1}
+            min={1}
+            onCommit={(n) =>
+              designerStore.updateElement(id, {
+                repeat: Math.max(1, Math.round(n)),
+              } as Partial<Element>)
+            }
+          />
+        )}
+        <SelectField
+          label="cycle seam"
+          value={element.cycleBoundary}
+          options={['seamless', 'drain'] as const}
+          onCommit={(cycleBoundary) =>
+            designerStore.updateElement(id, { cycleBoundary } as Partial<Element>)
+          }
+        />
         <p className={dds.hint}>
           Time-driven: the crawl runs during playback (its pass length comes from the measured
           content width ÷ speed) — scrubbing the timeline doesn’t move it.

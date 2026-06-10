@@ -82,6 +82,10 @@ export function defaultTicker(id: string, x: number, y: number): TickerElement {
     // opts into a bar colour in the inspector.
     direction: 'rtl',
     speed: 120,
+    // INNER repeat loop — a fresh ticker crawls forever by design (no hidden
+    // loop default to hunt for); finite passes are an explicit inspector edit.
+    repeat: 'infinite',
+    cycleBoundary: 'seamless',
     gap: 48,
     separator: ' • ',
     items: [

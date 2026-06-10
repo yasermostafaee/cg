@@ -159,6 +159,21 @@ export const TickerElementSchema = ElementBaseSchema.extend({
   direction: z.enum(['ltr', 'rtl']),
   /** Crawl speed in px/s. */
   speed: z.number().positive(),
+  /**
+   * D-028 — the INNER repeat loop: how many crawl passes this ticker runs
+   * before signalling completion to its scope's playout ('infinite' = crawl
+   * until `stop()`). A finite run always ENDS CLEANLY: the last item fully
+   * exits the band before completion fires — never cut mid-scroll. The
+   * composition's own `playout.repeat` is the OUTER loop (open/close cycles);
+   * each cycle restarts the crawl.
+   */
+  repeat: z.union([z.number().int().min(1), z.literal('infinite')]).default('infinite'),
+  /**
+   * D-028 — what the seam between crawl passes looks like: 'seamless' keeps
+   * the treadmill continuous (the first item follows the last); 'drain' lets
+   * each pass fully EXIT the band before the next re-enters.
+   */
+  cycleBoundary: z.enum(['seamless', 'drain']).default('seamless'),
   /** Horizontal gap between items (px). */
   gap: z.number().nonnegative(),
   /**
@@ -249,19 +264,42 @@ export type Element =
   | CompositionElement
   | ContainerElement;
 
+/**
+ * The PARSE-INPUT side of the union. The ticker's `repeat`/`cycleBoundary`
+ * carry Zod defaults, so stored JSON may omit them while the parsed `Element`
+ * always has them — the recursive schemas below must be annotated with both
+ * sides or the lazy `z.ZodType` annotation rejects the divergence.
+ */
+export type ElementInput =
+  | TextElement
+  | z.input<typeof TickerElementSchema>
+  | ImageElement
+  | ShapeElement
+  | LottieElement
+  | VideoPlaceholderElement
+  | CompositionElement
+  | ContainerElementInput;
+
 export interface ContainerElement extends ElementBase {
   type: 'container';
   clip: boolean;
   children: Element[];
 }
 
-export const ContainerElementSchema: z.ZodType<ContainerElement> = z.lazy(() =>
-  ElementBaseSchema.extend({
-    type: z.literal('container'),
-    clip: z.boolean(),
-    children: z.array(ElementSchema),
-  }),
-);
+export interface ContainerElementInput extends ElementBase {
+  type: 'container';
+  clip: boolean;
+  children: ElementInput[];
+}
+
+export const ContainerElementSchema: z.ZodType<ContainerElement, z.ZodTypeDef, ContainerElementInput> =
+  z.lazy(() =>
+    ElementBaseSchema.extend({
+      type: z.literal('container'),
+      clip: z.boolean(),
+      children: z.array(ElementSchema),
+    }),
+  );
 
 /**
  * Top-level Element schema. Uses `z.union` rather than `z.discriminatedUnion`
@@ -269,7 +307,7 @@ export const ContainerElementSchema: z.ZodType<ContainerElement> = z.lazy(() =>
  * `discriminatedUnion` doesn't accept. Parse perf is fine for scene-graph
  * loads (cold-start path, not hot path).
  */
-export const ElementSchema: z.ZodType<Element> = z.lazy(() =>
+export const ElementSchema: z.ZodType<Element, z.ZodTypeDef, ElementInput> = z.lazy(() =>
   z.union([
     TextElementSchema,
     TickerElementSchema,
