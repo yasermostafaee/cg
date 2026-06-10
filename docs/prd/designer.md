@@ -569,15 +569,50 @@ with a format string (and Persian-digit support).
 `packages/template-runtime/README.md`); reuse `@cg/text-shaping` for digits. Needs a
 runtime time source (relates to the FrameDriver clock seam).
 
-## [ ] D-028 — Ticker / crawler ⟨priority: high⟩
+## [~] D-028 — Ticker / crawler ⟨priority: high⟩
 
-**What:** A horizontal/vertical scrolling ticker fed by a list of items, with
-continuous crawl and per-item pacing.
-**Why:** News crawls are a core deliverable and the most-requested template type.
-**Acceptance to be detailed when scheduled.**
-**Notes:** builds on D-020 `content-driven` playout (per-pass duration from the
-content) and the `durationHook` seam; likely a new element type + a data-list field.
-Depends on D-018 (dynamic fields) and D-020.
+**What:** A new `ticker` element type: a clipped horizontal band that scrolls a
+list of text items continuously (marquee/crawl). The scroll duration is
+content-driven — measured content width ÷ `speed` (px/s) — supplied to the
+composition's `content-driven` playout mode and looped via its `repeat`
+(`'infinite'` | N passes then exit). Items are authored on the element
+(`items: [{ id, text }]`) and can be driven dynamically through a new `list`
+field type bound to the ticker; `update()` reconciles items by stable id.
+`direction: 'rtl' | 'ltr'` is the reading direction (Persian default `'rtl'`:
+RTL item layout, track moves visually left→right, mirroring the news starter).
+**Why:** News crawls are a core deliverable and the most-requested template
+type; today both ticker starters fake the crawl with hard-coded keyframes over
+a fixed distance, so long text clips and short text leaves dead air.
+**Acceptance:**
+
+- WHEN a ticker's items are replaced with longer text THEN the pass duration
+  grows proportionally (measured width ÷ speed) with no manual duration edit
+- WHEN playout `repeat` is N THEN the composition exits after exactly N passes;
+  WHEN `'infinite'` THEN the crawl runs until `stop()`
+- WHEN `update()` delivers a new items list THEN items reconcile by stable id —
+  existing items keep position, new items append, removed items leave once
+  off-screen — with no restart or visual jump
+- WHEN the crawl wraps around THEN the loop seam shows no gap or flash
+- WHEN fonts are still loading THEN measurement waits for `document.fonts.ready`
+  (no mis-measured first pass; in the Designer preview this includes
+  operator-imported `asset-*` fonts)
+- WHEN `direction` is `'rtl'` THEN items lay out right-to-left with per-item
+  bidi isolation (mixed RTL/LTR items render correctly) and the track moves
+  visually left→right; `'ltr'` is the mirror
+- WHEN the same scene is previewed and exported THEN the ticker behaves
+  identically (single-file export carries it; GDD represents the list field)
+- WHEN the operator scrubs the timeline THEN the ticker does not move and the
+  UI states it is time-driven (scrub does not apply)
+- WHEN a `list` field is bound to a ticker THEN the preview field form shows an
+  items editor (add/remove/reorder) that live-updates the crawl
+  **Notes:** first consumer of D-020 `content-driven` + the `durationHook` seam —
+  the runtime self-wires a per-scope hook from the ticker element (no boot-option
+  wiring needed in preview/export; `RuntimeBootOptions.durationHook` stays as the
+  external override/test seam). New `list` field type has an extensible item shape
+  (required `id` + open fields; the ticker reads `text`) so the repeater (D-030)
+  and sequence (D-029) can reuse it. Lists travel as JSON only (legacy CasparCG
+  XML payloads can't carry them). Change dir:
+  `openspec/changes/add-ticker-element/`.
 
 ## [ ] D-029 — Sequence / now-next ⟨priority: medium⟩
 
