@@ -96,9 +96,9 @@ export class DesignerApp {
     return this.page.getByTestId('canvas-surface');
   }
 
-  /** Select a canvas tool by its toolbar label (Select / Text / Rectangle / Ellipse). */
+  /** Select a canvas tool by its toolbar label (Select / Text / Ticker / Rectangle / Ellipse). */
   async selectTool(
-    label: 'Select' | 'Text' | 'Rectangle' | 'Ellipse' | 'Hand (pan)',
+    label: 'Select' | 'Text' | 'Ticker' | 'Rectangle' | 'Ellipse' | 'Hand (pan)',
   ): Promise<void> {
     await this.page.getByRole('button', { name: label, exact: true }).click();
   }
@@ -117,6 +117,29 @@ export class DesignerApp {
   async addRectangle(pos: { x: number; y: number } = { x: 240, y: 200 }): Promise<void> {
     await this.selectTool('Rectangle');
     await this.canvas.click({ position: pos });
+  }
+
+  /** D-028 — add a ticker band by placing the Ticker tool (auto-selected). */
+  async addTicker(pos: { x: number; y: number } = { x: 120, y: 260 }): Promise<void> {
+    await this.selectTool('Ticker');
+    await this.canvas.click({ position: pos });
+  }
+
+  /**
+   * D-028 — an items-editor row input by its accessible name: the editor labels
+   * rows "<label> item <n>" (1-based). In the inspector the label is the element
+   * name ("Ticker"); in the preview form it's the field label / data key.
+   */
+  tickerItemInput(label: string, n: number, scope?: Locator): Locator {
+    return (scope ?? this.page).getByRole('textbox', {
+      name: `${label} item ${String(n)}`,
+      exact: true,
+    });
+  }
+
+  /** D-028 — append an empty item via the items editor's "Add item" button. */
+  async addTickerItem(scope?: Locator): Promise<void> {
+    await (scope ?? this.page).getByRole('button', { name: 'Add item' }).click();
   }
 
   /** Drag the currently-selected shape on the canvas by (dx, dy) screen pixels. */

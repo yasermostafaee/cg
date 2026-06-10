@@ -52,32 +52,36 @@
 
 ## 4. Designer UI
 
-- [ ] 4.1 Ticker tool: `DesignerTool` union, `ToolRail`, `CanvasOverlay`
-      insert branch, `defaultTicker` factory
-- [ ] 4.2 Inspector ticker section: direction, speed, gap, separator, items
-      editor (add/remove/reorder/edit); data-key gate for ticker
-- [ ] 4.3 Data-key flow: list-field seeding from authored items
-      (`state/slices/fields.ts`), `bind-resolver` arm (list × ticker →
-      `ticker-items`), `describeBinding` case
-- [ ] 4.4 `PreviewFieldForm`: `list` case rendering the items editor;
-      validation as needed
-- [ ] 4.5 Timeline: `LayerTypeIcon` ticker glyph; time-driven (no-scrub) note
-      where ticker timing surfaces
-- [ ] 4.6 Designer store/unit tests for the new actions + seeding
+- [x] 4.1 Ticker tool: `DesignerTool` union, `ToolRail` + `CanvasToolbar`,
+      `CanvasOverlay` insert branch, `defaultTicker` factory (Persian-first
+      defaults)
+- [x] 4.2 Inspector ticker section: direction, speed, gap, separator, items
+      editor (add/remove/reorder/edit via the shared `ListItemsEditor`);
+      data-key gate for ticker
+- [x] 4.3 Data-key flow: list-field seeding from authored items + lockstep
+      `setTickerItems` (`state/slices/fields.ts`), `bind-resolver` arm
+      (list × ticker → `ticker-items`), `describeBinding` case
+- [x] 4.4 `PreviewFieldForm`: `list` case rendering the items editor;
+      required-list validation
+- [x] 4.5 Timeline: `LayerTypeIcon` ticker glyph + lifespan colour;
+      time-driven (no-scrub) note in the inspector Ticker section
+- [x] 4.6 Designer store tests (seeding, one-key-one-owner, kind-mismatch
+      rejection, items lockstep, list-aware meta)
 
 ## 5. Export / GDD
 
 - [x] 5.1 `gdd.ts`: widen `GddProperty` for arrays; `case 'list'` with object
       items schema (verified against the GDD meta-schema: arrays are
       `type: 'array'` + `items`; **no array `gddType` exists in GDD v1**)
-- [ ] 5.2 Preflight warnings: list-field third-party editor limitation; `.vcg`
-      no-font-bytes ticker-measurement warning; JSON-only note for lists
-- [ ] 5.3 Export tests (GDD list property; preflight issues)
+- [x] 5.2 Preflight warnings: `gdd-list-field-limited-clients` (single-file;
+      incl. the JSON-only note) and `vcg-ticker-fonts-not-bundled` (.vcg)
+- [x] 5.3 Export tests (GDD list property; both preflight issues)
 
 ## 6. E2E + gate
 
-- [ ] 6.1 E2E fixtures: `addTicker`, items-editor helpers; E2E test mapping
-      the author → preview → update scenario
-- [ ] 6.2 Green gate: `pnpm turbo run build typecheck lint test` for
-      shared-schema, template-runtime, vcg-format, designer; `pnpm test:e2e`;
+- [x] 6.1 E2E fixtures: `addTicker`, `tickerItemInput`/`addTickerItem`
+      helpers; ticker.spec.ts (author → items → data key → live preview
+      update → crawl; export carries ticker + GDD array)
+- [x] 6.2 Green gate: full `pnpm turbo run build typecheck lint test` (67
+      tasks) + `turbo test:e2e` (10 passed) +
       `pnpm openspec validate add-ticker-element --strict`
