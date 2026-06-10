@@ -44,9 +44,10 @@
 
 ## 3. Designer preview font fix
 
-- [ ] 3.1 `platform/preview.ts`: load + await `asset-*` font faces before the
-      runtime can play (failures degrade gracefully, escaping rules
-      respected); first pass measures final glyphs
+- [x] 3.1 `platform/preview.ts`: load + await `asset-*` font faces before the
+      runtime can play (awaited in `applyScene` pre-`createRuntime` AND in the
+      `play` action for late-arriving asset urls; failures degrade gracefully,
+      escaping rules respected); first pass measures final glyphs
 
 ## 4. Designer UI
 
