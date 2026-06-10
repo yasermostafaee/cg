@@ -11,7 +11,7 @@
     "prebuild": "node ./scripts/bundle-runtime.mjs",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --tsBuildInfoFile typecheck.tsbuildinfo",
     "pretest": "node ./scripts/bundle-runtime.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",

@@ -4,12 +4,12 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "build/**", "out/**", "*.tsbuildinfo"],
+      "outputs": ["dist/**", "build/**", "out/**", "*.tsbuildinfo", "!typecheck.tsbuildinfo"],
       "inputs": ["src/**", "tsconfig.json", "package.json"]
     },
     "typecheck": {
       "dependsOn": ["^build"],
-      "outputs": ["*.tsbuildinfo"],
+      "outputs": [],
       "inputs": ["src/**", "tsconfig.json", "package.json"]
     },
     "lint": {
@@ -21,6 +21,25 @@
       "dependsOn": ["^build", "build"],
       "outputs": ["coverage/**"],
       "inputs": ["src/**", "tests/**", "scripts/**", "vitest.config.*", "package.json"]
+    },
+    "@cg/template-fixtures#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["../../fixtures/templates/**"],
+      "inputs": ["build.mjs", "*.scene.mjs", "package.json"]
+    },
+    "@cg/soak-runner#test": {
+      "dependsOn": ["^build", "build"],
+      "outputs": ["coverage/**"],
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "vitest.config.*",
+        "package.json",
+        "$TURBO_ROOT$/pnpm-workspace.yaml",
+        "$TURBO_ROOT$/apps/*/package.json",
+        "$TURBO_ROOT$/packages/*/package.json",
+        "$TURBO_ROOT$/tools/*/package.json"
+      ]
     },
     "test:integration": {
       "dependsOn": ["^build", "@cg/amcp-mock#build"],
