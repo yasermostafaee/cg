@@ -51,6 +51,7 @@ import {
   withActiveFieldData,
   withActiveLayers,
 } from './scene-doc.js';
+import { selectionSlice } from './slices/selection.js';
 import { viewSlice } from './slices/view.js';
 
 // Re-export the public types + `editSceneOf` so the `state/store` entry surface
@@ -798,24 +799,8 @@ export const designerStore = {
   // View / canvas-aids actions (tool, ruler/snapping, snap + ruler guides).
   ...viewSlice,
 
-  /** Replace selection. Pass `[]` to deselect. */
-  setSelection(ids: readonly string[]): void {
-    const nextSel = new Set(ids);
-    const keepKey =
-      current.selectedKeyframe !== null && nextSel.has(current.selectedKeyframe.elementId);
-    set({
-      selection: nextSel,
-      editingTextId: null,
-      selectedKeyframe: keepKey ? current.selectedKeyframe : null,
-      selectedKeyframes: keepKey ? current.selectedKeyframes : [],
-      keyframeInspectorOpen: keepKey ? current.keyframeInspectorOpen : false,
-    });
-  },
-
-  /** Enter inline edit mode for a text element. Pass null to exit. */
-  setEditingText(elementId: string | null): void {
-    set({ editingTextId: elementId });
-  },
+  // Element selection + inline-text-edit target.
+  ...selectionSlice,
 
   /** Enter bind-from-canvas mode for a field. Pass null to cancel. */
   setBindMode(fieldId: string | null): void {
