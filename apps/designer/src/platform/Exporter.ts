@@ -286,6 +286,8 @@ function fieldHasMeaningfulDefault(field: DynamicField): boolean {
     case 'number':
     case 'boolean':
       return true;
+    case 'list':
+      return field.default.length > 0;
   }
 }
 
@@ -301,6 +303,10 @@ function isFormatterApplicable(transform: BindingTransform, field: DynamicField)
     case 'color':
     case 'boolean':
     case 'image':
+      return false;
+    case 'list':
+      // Formatters are string transforms; a list is structured data — items
+      // are rendered verbatim by the ticker, so no formatter applies.
       return false;
   }
 }

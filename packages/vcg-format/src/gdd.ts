@@ -38,7 +38,7 @@ export interface GddSchema {
 }
 
 export interface GddProperty {
-  type: 'string' | 'number' | 'boolean' | 'object';
+  type: 'string' | 'number' | 'boolean' | 'object' | 'array';
   label: string;
   description?: string;
   gddType?: 'single-line' | 'multi-line' | 'color-rrggbb';
@@ -48,10 +48,12 @@ export interface GddProperty {
   minimum?: number;
   maximum?: number;
   enum?: string[];
-  default?: string | number | boolean;
+  default?: string | number | boolean | Record<string, unknown>[];
   /** D-025 — for `type: 'object'` (a nested child-instance namespace). */
   properties?: Record<string, GddProperty>;
   required?: string[];
+  /** D-028 — for `type: 'array'` (a list field): the item schema. */
+  items?: GddProperty;
 }
 
 /**
@@ -163,6 +165,25 @@ function gddPropertyFor(field: DynamicField): GddProperty {
       // Emitted as a plain string (the asset id). A third-party GDD client can't
       // resolve the project's assets — the exporter flags this in preflight.
       return { ...base, type: 'string', default: field.defaultAssetId ?? '' };
+    case 'list':
+      // D-028 — array of open item objects (stable `id` reconcile key; consumers
+      // read the keys they know, e.g. the ticker reads `text`). GDD v1 has no
+      // array gddType, and third-party clients may not render an array editor —
+      // the exporter flags this in preflight. `id` is not GDD-required: the
+      // runtime falls back to positional ids for clients that omit it.
+      return {
+        ...base,
+        type: 'array',
+        items: {
+          type: 'object',
+          label: field.label,
+          properties: {
+            id: { type: 'string', label: 'id' },
+            text: { type: 'string', label: 'text', gddType: 'single-line' },
+          },
+        },
+        default: field.default,
+      };
   }
 }
 

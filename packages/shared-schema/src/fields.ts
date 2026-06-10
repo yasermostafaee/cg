@@ -74,6 +74,26 @@ const SelectFieldSchema = DynamicFieldBaseSchema.extend({
   options: z.array(z.object({ value: z.string(), label: z.string() })).min(1),
 });
 
+/**
+ * One item of a `list` field value. DELIBERATELY extensible: a required
+ * stable `id` (the reconcile key) plus open additional fields — each consumer
+ * reads the fields it knows (the ticker reads `text`; the repeater (D-030)
+ * will read `name`/`number`/…; sequence items (D-029) `text`/`repeat`).
+ * Don't narrow this shape to one consumer's fields.
+ */
+export const ListItemSchema = z.object({ id: z.string().min(1) }).passthrough();
+export type ListItem = z.infer<typeof ListItemSchema>;
+
+/**
+ * List field (D-028) — an ordered array of extensible items. Values travel as
+ * JSON only: the legacy CasparCG XML payload path (flat string map) cannot
+ * carry a list.
+ */
+const ListFieldSchema = DynamicFieldBaseSchema.extend({
+  type: z.literal('list'),
+  default: z.array(ListItemSchema),
+});
+
 /** Discriminated union of declared dynamic-field types. */
 export const DynamicFieldSchema = z.discriminatedUnion('type', [
   TextFieldSchema,
@@ -83,6 +103,7 @@ export const DynamicFieldSchema = z.discriminatedUnion('type', [
   BooleanFieldSchema,
   NumberFieldSchema,
   SelectFieldSchema,
+  ListFieldSchema,
 ]);
 export type DynamicField = z.infer<typeof DynamicFieldSchema>;
 
@@ -93,6 +114,7 @@ export const FieldValueSchema = z.union([
   z.boolean(),
   z.object({ assetId: IdSchema }),
   HexColorSchema,
+  z.array(ListItemSchema),
 ]);
 export type FieldValue = z.infer<typeof FieldValueSchema>;
 

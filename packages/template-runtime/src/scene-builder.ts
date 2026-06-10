@@ -118,6 +118,7 @@ function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null 
       return buildShape(element, ctx.doc);
     case 'composition':
       return buildComposition(element, ctx);
+    case 'ticker':
     case 'container':
     case 'lottie':
     case 'video-placeholder':

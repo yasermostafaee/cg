@@ -11,6 +11,7 @@ describe('FieldBinding target variants', () => {
     { kind: 'transform' as const, elementId: 'e1', property: 'opacity' as const },
     { kind: 'scene-background' as const },
     { kind: 'lottie-override' as const, elementId: 'e1', layer: 'L1', prop: 'color' },
+    { kind: 'ticker-items' as const, elementId: 'e1' },
   ])('accepts $kind target', (target) => {
     const b = { fieldId: 'headline', target };
     expect(FieldBindingSchema.parse(b)).toEqual(b);

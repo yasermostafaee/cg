@@ -47,6 +47,13 @@ describe('buildGddSchema', () => {
         ],
       },
       { id: 'i', label: 'I', required: false, type: 'image', accept: ['png'] },
+      {
+        id: 'l',
+        label: 'L',
+        required: false,
+        type: 'list',
+        default: [{ id: 'i1', text: 'خبر' }],
+      },
     ];
     const scene: Scene = { ...fixtureScene, fields, bindings: [] };
     const g = buildGddSchema(scene);
@@ -73,6 +80,20 @@ describe('buildGddSchema', () => {
     expect(g.properties['b']).toMatchObject({ type: 'boolean', default: true });
     expect(g.properties['s']).toMatchObject({ type: 'string', enum: ['a', 'b'], default: 'a' });
     expect(g.properties['i']).toMatchObject({ type: 'string' });
+    // D-028 — a list field is a typed array of open item objects (no array
+    // gddType exists in GDD v1; `id` is not GDD-required — positional fallback).
+    expect(g.properties['l']).toMatchObject({
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          text: { type: 'string', gddType: 'single-line' },
+        },
+      },
+      default: [{ id: 'i1', text: 'خبر' }],
+    });
+    expect(g.properties['l']?.items?.required).toBeUndefined();
     expect(g.required).toEqual(['n']);
   });
 

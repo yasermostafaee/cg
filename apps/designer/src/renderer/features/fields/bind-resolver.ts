@@ -54,6 +54,13 @@ export function resolveBinding(field: DynamicField, element: Element): FieldBind
       target: { kind: 'transform', elementId: element.id, property: 'opacity' },
     };
   }
+  // D-028 — a list field drives a ticker's items.
+  if (field.type === 'list') {
+    if (element.type === 'ticker') {
+      return { fieldId: field.id, target: { kind: 'ticker-items', elementId: element.id } };
+    }
+    return null;
+  }
   // select fields have no canonical visual target; the operator needs
   // to set transform/lottie/etc. by hand. Return null so the UI says
   // "no automatic target".
@@ -100,5 +107,7 @@ export function describeBinding(binding: FieldBinding, nameOf?: (id: string) => 
       return 'scene background';
     case 'lottie-override':
       return `lottie ${t.layer}.${t.prop} ${on(t.elementId)}`;
+    case 'ticker-items':
+      return `ticker items ${on(t.elementId)}`;
   }
 }

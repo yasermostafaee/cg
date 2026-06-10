@@ -48,6 +48,11 @@ const BindingTargetSchema = z.discriminatedUnion('kind', [
     layer: z.string(),
     prop: z.string(),
   }),
+  /** D-028 — a `list` field drives a ticker element's items. */
+  z.object({
+    kind: z.literal('ticker-items'),
+    elementId: IdSchema,
+  }),
 ]);
 
 /**

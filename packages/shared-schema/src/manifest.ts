@@ -41,7 +41,7 @@ const CompatibilitySchema = z.object({
 
 const FieldIndexEntrySchema = z.object({
   id: z.string().min(1),
-  type: z.enum(['text', 'multiline', 'image', 'color', 'boolean', 'number', 'select']),
+  type: z.enum(['text', 'multiline', 'image', 'color', 'boolean', 'number', 'select', 'list']),
   required: z.boolean(),
 });
 

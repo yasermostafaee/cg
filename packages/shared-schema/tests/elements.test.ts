@@ -7,6 +7,7 @@ import {
   LottieElementSchema,
   ShapeElementSchema,
   TextElementSchema,
+  TickerElementSchema,
   VideoPlaceholderElementSchema,
 } from '../src/elements.js';
 
@@ -309,5 +310,53 @@ describe('Element union dispatch', () => {
     };
     const parsed = ElementSchema.parse(variants[kind]);
     expect((parsed as { type: string }).type).toBe(kind);
+  });
+});
+
+describe('TickerElement (D-028)', () => {
+  const ticker = {
+    ...baseProps,
+    type: 'ticker' as const,
+    font: {
+      family: 'Vazirmatn',
+      weight: 500,
+      style: 'normal' as const,
+      size: 36,
+      lineHeight: 1.4,
+      letterSpacing: 0,
+    },
+    color: '#FFFFFF',
+    direction: 'rtl' as const,
+    speed: 120,
+    gap: 48,
+    separator: ' • ',
+    items: [
+      { id: 'i1', text: 'خبر فوری: بازار جهانی' },
+      { id: 'i2', text: 'Brand X رکورد زد' },
+    ],
+  };
+  it('accepts a Persian ticker with mixed-content items', () => {
+    expect(TickerElementSchema.parse(ticker)).toEqual(ticker);
+  });
+  it('round-trips through the Element union', () => {
+    const parsed = ElementSchema.parse(ticker);
+    expect((parsed as { type: string }).type).toBe('ticker');
+  });
+  it('rejects direction "auto" (reading direction must be explicit)', () => {
+    expect(() => TickerElementSchema.parse({ ...ticker, direction: 'auto' })).toThrow();
+  });
+  it('rejects a non-positive speed', () => {
+    expect(() => TickerElementSchema.parse({ ...ticker, speed: 0 })).toThrow();
+  });
+  it('rejects a negative gap', () => {
+    expect(() => TickerElementSchema.parse({ ...ticker, gap: -1 })).toThrow();
+  });
+  it('rejects an item without a stable id', () => {
+    expect(() =>
+      TickerElementSchema.parse({ ...ticker, items: [{ id: '', text: 'x' }] }),
+    ).toThrow();
+  });
+  it('accepts an empty items list (authored later / field-driven)', () => {
+    expect(TickerElementSchema.parse({ ...ticker, items: [] }).items).toEqual([]);
   });
 });

@@ -110,6 +110,66 @@ export const TextElementSchema = ElementBaseSchema.extend({
 });
 export type TextElement = z.infer<typeof TextElementSchema>;
 
+/**
+ * One authored ticker item. Stable `id` is the reconcile key: a runtime
+ * `update()` with a new list keeps/moves/retires items by id, so text edits
+ * never restart the crawl. (The dynamic `list` FIELD item is the open,
+ * extensible shape — see `fields.ts`; the element stores only what it renders.)
+ */
+export const TickerItemSchema = z.object({
+  id: z.string().min(1),
+  text: z.string(),
+});
+export type TickerItem = z.infer<typeof TickerItemSchema>;
+
+/**
+ * Ticker / crawler element (D-028) — a clipped horizontal band that scrolls
+ * its items continuously. Geometry comes from the base `transform` (the band
+ * is the box; the runtime clips it). The scroll duration is content-driven:
+ * measured content width ÷ `speed`, supplied per pass to the composition's
+ * `content-driven` playout mode — never authored as a duration.
+ */
+export const TickerElementSchema = ElementBaseSchema.extend({
+  type: z.literal('ticker'),
+  font: z.object({
+    family: z.string().min(1),
+    weight: FontWeightSchema,
+    style: z.enum(['normal', 'italic']),
+    size: z.number().positive(),
+    lineHeight: z.number().positive(),
+    letterSpacing: z.number(),
+  }),
+  color: HexColorSchema,
+  /** Band background colour (defaults to transparent). */
+  backgroundColor: HexColorSchema.optional(),
+  /** Optional gradient (or solid) band background; overrides `backgroundColor`. */
+  backgroundFill: FillSchema.optional(),
+  /** Band border-radius (px). */
+  cornerRadius: z.number().nonnegative().optional(),
+  /** Inner padding inside the band (items are vertically centred within). */
+  padding: PaddingSchema.optional(),
+  /**
+   * READING direction — explicit only (no 'auto': the runtime's auto⇒LTR
+   * container fallback is a footgun for a crawl). 'rtl' (Persian default) lays
+   * items out right-to-left and the track moves visually left→right, mirroring
+   * the English convention; 'ltr' is the exact mirror.
+   */
+  direction: z.enum(['ltr', 'rtl']),
+  /** Crawl speed in px/s. */
+  speed: z.number().positive(),
+  /** Horizontal gap between items (px). */
+  gap: z.number().nonnegative(),
+  /**
+   * Optional separator rendered between items as its own bidi-neutral span
+   * (e.g. ' • '). Never concatenated into item text — keeps reconcile and
+   * bidi isolation per item intact.
+   */
+  separator: z.string().optional(),
+  /** Authored default items; a bound `list` field replaces them at playout. */
+  items: z.array(TickerItemSchema),
+});
+export type TickerElement = z.infer<typeof TickerElementSchema>;
+
 /** Image element. References an asset by id. */
 export const ImageElementSchema = ElementBaseSchema.extend({
   type: z.literal('image'),
@@ -179,6 +239,7 @@ export type CompositionElement = z.infer<typeof CompositionElementSchema>;
  */
 export type Element =
   | TextElement
+  | TickerElement
   | ImageElement
   | ShapeElement
   | LottieElement
@@ -209,6 +270,7 @@ export const ContainerElementSchema: z.ZodType<ContainerElement> = z.lazy(() =>
 export const ElementSchema: z.ZodType<Element> = z.lazy(() =>
   z.union([
     TextElementSchema,
+    TickerElementSchema,
     ImageElementSchema,
     ShapeElementSchema,
     LottieElementSchema,
