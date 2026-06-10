@@ -569,7 +569,7 @@ with a format string (and Persian-digit support).
 `packages/template-runtime/README.md`); reuse `@cg/text-shaping` for digits. Needs a
 runtime time source (relates to the FrameDriver clock seam).
 
-## [~] D-028 — Ticker / crawler ⟨priority: high⟩
+## [x] D-028 — Ticker / crawler ⟨priority: high⟩
 
 **What:** A new `ticker` element type: a clipped horizontal band that scrolls a
 list of text items continuously (marquee/crawl). The scroll duration is
@@ -628,7 +628,7 @@ a fixed distance, so long text clips and short text leaves dead air.
   (required `id` + open fields; the ticker reads `text`) so the repeater (D-030)
   and sequence (D-029) can reuse it. Lists travel as JSON only (legacy CasparCG
   XML payloads can't carry them). Change dir:
-  `openspec/changes/add-ticker-element/`.
+  `openspec/changes/archive/2026-06-10-add-ticker-element/`.
 
 ## [ ] D-029 — Sequence / now-next ⟨priority: medium⟩
 
