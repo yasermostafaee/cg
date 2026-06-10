@@ -7,7 +7,10 @@ import type {
   Shadow,
   ShapeElement,
   TextElement,
+  TickerElement,
 } from '@cg/shared-schema';
+import { ListItemsEditor } from '../fields/ListItemsEditor.js';
+import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import {
@@ -18,7 +21,7 @@ import {
   keyframeVariantFor,
 } from '../timeline/keyframe-helpers.js';
 import { CollapseSection } from './CollapseSection.js';
-import { ColorField, NumberField, SelectField, VectorField } from './controls.js';
+import { ColorField, NumberField, SelectField, TextField, VectorField } from './controls.js';
 import { FillField } from './FillPopover.js';
 import { TextStyleSection } from './TextStyleSection.js';
 
@@ -107,6 +110,14 @@ export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element 
   if (element.type === 'image')
     return (
       <ImageSections
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    );
+  if (element.type === 'ticker')
+    return (
+      <TickerSections
         element={element}
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
@@ -310,6 +321,90 @@ function ImageSections({
           trailing={pointIcon('fit')}
         />
       </CollapseSection>
+      <FilterSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    </>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────
+//                              TICKER
+// ────────────────────────────────────────────────────────────────────────
+
+/**
+ * D-028 — the ticker/crawler config. There is deliberately NO duration knob:
+ * the crawl duration is content-driven (measured width ÷ speed) and the
+ * composition's playout `repeat` loops it. The items editor edits the
+ * element's authored items (and keeps a bound `list` field's default in sync
+ * via the store's `setTickerItems`).
+ */
+function TickerSections({
+  element,
+  currentFrame,
+  selectedKeyframe,
+}: SectionProps<TickerElement>): JSX.Element {
+  const id = element.id;
+  return (
+    <>
+      <CollapseSection title="Ticker" pinned>
+        <SelectField
+          label="direction"
+          value={element.direction}
+          options={['rtl', 'ltr'] as const}
+          onCommit={(direction) =>
+            designerStore.updateElement(id, { direction } as Partial<Element>)
+          }
+          trailing={pointIcon('direction')}
+        />
+        <NumberField
+          label="speed"
+          value={element.speed}
+          step={10}
+          min={1}
+          suffix="px/s"
+          onCommit={(speed) =>
+            designerStore.updateElement(id, { speed: Math.max(1, speed) } as Partial<Element>)
+          }
+          trailing={pointIcon('speed')}
+        />
+        <NumberField
+          label="gap"
+          value={element.gap}
+          step={4}
+          min={0}
+          suffix="px"
+          onCommit={(gap) =>
+            designerStore.updateElement(id, { gap: Math.max(0, gap) } as Partial<Element>)
+          }
+          trailing={pointIcon('gap')}
+        />
+        <TextField
+          label="separator"
+          value={element.separator ?? ''}
+          resetKey={id}
+          onCommit={(separator) =>
+            designerStore.updateElement(id, {
+              separator: separator === '' ? undefined : separator,
+            } as Partial<Element>)
+          }
+        />
+        <p className={dds.hint}>
+          Time-driven: the crawl runs during playback (its pass length comes from the measured
+          content width ÷ speed) — scrubbing the timeline doesn’t move it.
+        </p>
+      </CollapseSection>
+
+      <CollapseSection title="Items" defaultExpanded>
+        <ListItemsEditor
+          items={element.items}
+          label={element.name || 'Ticker'}
+          onChange={(items) => designerStore.setTickerItems(id, items)}
+        />
+      </CollapseSection>
+
       <FilterSection
         element={element}
         currentFrame={currentFrame}

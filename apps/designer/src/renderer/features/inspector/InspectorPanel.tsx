@@ -121,7 +121,9 @@ function ElementInspector({
         <TransformSection element={element} selectedKeyframe={selectedKeyframe} />
       </CollapseSection>
       <StyleSection element={element} selectedKeyframe={selectedKeyframe} />
-      {element.type === 'text' && <DynamicDataSection element={element} scene={scene} />}
+      {(element.type === 'text' || element.type === 'ticker') && (
+        <DynamicDataSection element={element} scene={scene} />
+      )}
       {bindings.length > 0 && (
         <CollapseSection title="Bindings" defaultExpanded>
           <ElementBindings bindings={bindings} nameOf={elementNameResolver(scene)} />

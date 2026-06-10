@@ -1,4 +1,10 @@
-import type { ImageElement, ShapeElement, TextElement, Transform } from '@cg/shared-schema';
+import type {
+  ImageElement,
+  ShapeElement,
+  TextElement,
+  TickerElement,
+  Transform,
+} from '@cg/shared-schema';
 
 /**
  * Default element factories — what we drop on the canvas when the
@@ -44,6 +50,44 @@ export function defaultText(id: string, x: number, y: number): TextElement {
     direction: 'auto',
     fitMode: 'fixed',
     overflow: 'clip',
+  };
+}
+
+/**
+ * Ticker / crawler band (D-028). Persian-first defaults: reading direction
+ * `rtl` (the crawl moves visually left→right), Vazirmatn, sample Persian
+ * items. The crawl duration is content-driven (measured width ÷ speed) —
+ * there is deliberately no duration knob anywhere.
+ */
+export function defaultTicker(id: string, x: number, y: number): TickerElement {
+  return {
+    id,
+    name: 'Ticker',
+    type: 'ticker',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    zIndex: 0,
+    transform: baseTransform(x, y, 1200, 72),
+    font: {
+      family: 'Vazirmatn',
+      weight: 500,
+      style: 'normal',
+      size: 36,
+      lineHeight: 1.4,
+      letterSpacing: 0,
+    },
+    color: '#FFFFFF',
+    backgroundColor: '#111827',
+    direction: 'rtl',
+    speed: 120,
+    gap: 48,
+    separator: ' • ',
+    items: [
+      { id: 'item-1', text: 'خبر نخست — متن نمونه' },
+      { id: 'item-2', text: 'خبر دوم — متن نمونه' },
+      { id: 'item-3', text: 'خبر سوم — متن نمونه' },
+    ],
   };
 }
 
