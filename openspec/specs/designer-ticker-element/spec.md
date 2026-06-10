@@ -1,8 +1,11 @@
 # designer-ticker-element Specification
 
 ## Purpose
+
 TBD - created by archiving change add-ticker-element. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Ticker element with content-driven crawl
 
 The schema SHALL define a `ticker` element: a clipped horizontal band (geometry
@@ -193,4 +196,3 @@ fallback fonts are silently wrong).
   single-file HTML
 - **THEN** the export succeeds and the warnings include the third-party
   list-editor limitation
-

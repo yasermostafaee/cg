@@ -1,8 +1,11 @@
 # designer-playout-lifecycle Specification
 
 ## Purpose
+
 TBD - created by archiving change add-ticker-element. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Hold duration is its own axis — timed or content-driven
 
 The playout config SHALL model WHAT ENDS A HOLD as an axis orthogonal to the
@@ -99,4 +102,3 @@ keeps running under the hidden stage.
 - **THEN** the nested scope plays its outro and settles too, its crawl
   freezes, and no timers or animation frames continue under the hidden
   template
-
