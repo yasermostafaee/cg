@@ -144,7 +144,12 @@ describe('ListField (D-028)', () => {
     ).toThrow();
   });
   it('a list value round-trips through FieldValues', () => {
-    const v = { headlines: [{ id: 'i1', text: 'خبر' }, { id: 'i2', text: 'Brand X' }] };
+    const v = {
+      headlines: [
+        { id: 'i1', text: 'خبر' },
+        { id: 'i2', text: 'Brand X' },
+      ],
+    };
     expect(FieldValuesSchema.parse(v)).toEqual(v);
   });
   it('rejects a list value whose items lack ids', () => {

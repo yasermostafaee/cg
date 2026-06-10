@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import type { DynamicField, FieldBinding, Scene, TextElement, TickerElement } from '@cg/shared-schema';
+import type {
+  DynamicField,
+  FieldBinding,
+  Scene,
+  TextElement,
+  TickerElement,
+} from '@cg/shared-schema';
 import { designerStore, type ElementFieldMetaPatch } from '../../state/store.js';
 import { CollapseSection } from './CollapseSection.js';
 import { NumberField, SelectField, TextField } from './controls.js';

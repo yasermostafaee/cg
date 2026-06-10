@@ -558,9 +558,25 @@ function TickerShadowRows({ element }: { element: TickerElement }): JSX.Element 
   };
   return (
     <>
-      <NumberField label="offset X" value={s.offsetX} step={1} onCommit={(v) => patch({ offsetX: v })} />
-      <NumberField label="offset Y" value={s.offsetY} step={1} onCommit={(v) => patch({ offsetY: v })} />
-      <NumberField label="blur" value={s.blur} step={1} min={0} onCommit={(v) => patch({ blur: v })} />
+      <NumberField
+        label="offset X"
+        value={s.offsetX}
+        step={1}
+        onCommit={(v) => patch({ offsetX: v })}
+      />
+      <NumberField
+        label="offset Y"
+        value={s.offsetY}
+        step={1}
+        onCommit={(v) => patch({ offsetY: v })}
+      />
+      <NumberField
+        label="blur"
+        value={s.blur}
+        step={1}
+        min={0}
+        onCommit={(v) => patch({ blur: v })}
+      />
       <ColorField
         label="color"
         value={s.color}

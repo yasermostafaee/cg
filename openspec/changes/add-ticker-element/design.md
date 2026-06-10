@@ -17,7 +17,7 @@ completion → no content (= deferred zero-length holds).
 exported single-file HTML boots with `CG.createRuntime(scene)` — no options at
 all (`ExporterSingleFile.ts`, emitted boot script). Threading a seam
 externally would require editing two emitted-HTML template strings
-(single-file + `.vcg` index) *and* the preview, and would still be
+(single-file + `.vcg` index) _and_ the preview, and would still be
 root-scope-only. Self-wiring makes preview, single-file export, and `.vcg`
 correct with zero boot-code changes and lets a ticker inside a nested
 composition govern that child scope's holds.
@@ -63,7 +63,7 @@ continuously across pass boundaries" — is **superseded**. The approved model:
   production call site.
 - Tickers also crawl under `timed`/`manual` holds (band holds, crawl rolls
   until the hold ends / `stop()`): the driver is started by the scope's hold
-  entry and stopped by settle, independent of `holdSource`; only the *wait*
+  entry and stopped by settle, independent of `holdSource`; only the _wait_
   is `content-driven`-specific.
 - **Root self-settle cascades:** when the ROOT scope settles on its own, the
   runtime cascades `stop()` to every nested scope (settled children no-op per
@@ -117,7 +117,7 @@ fully exited the band). There is no pass-duration projection —
 ## D4. RTL model: `direction` is the reading direction
 
 `direction: 'rtl'` (Persian default) = items laid out right-to-left (first
-item enters at the band's left edge first… i.e. the track's *content head* is
+item enters at the band's left edge first… i.e. the track's _content head_ is
 its visual right end) and the track moves **visually left→right**, mirroring
 the English convention and matching the news starter
 (`news.ts`: "the line travels left → right, entering off the left edge").
@@ -149,7 +149,7 @@ format; the legacy CasparCG XML path (flat string map) cannot express a list.
 ## D6. Preview font fix ships now
 
 `applyScene` in `platform/preview.ts` currently fires `applyFontFaces()`
-fire-and-forget *after* `runtime.ready`, so a first pass could measure
+fire-and-forget _after_ `runtime.ready`, so a first pass could measure
 `asset-*` fonts against fallback metrics. Reorder: load + `await` the font
 faces **before** constructing/playing the runtime (failures still degrade
 gracefully via the existing `cg-preview-error` net — a broken font must not

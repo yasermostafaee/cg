@@ -231,7 +231,7 @@ describe('Playout — D-028 holdSource axis + legacy normalization', () => {
     expect(parsed).toMatchObject({ mode: 'auto-out', holdSource: 'content-driven' });
   });
 
-  it("playoutOf defensively normalizes an UNPARSED legacy object (old template.json)", () => {
+  it('playoutOf defensively normalizes an UNPARSED legacy object (old template.json)', () => {
     const legacy = { playout: { mode: 'content-driven', repeat: 2 } } as unknown as Parameters<
       typeof playoutOf
     >[0];

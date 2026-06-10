@@ -103,7 +103,7 @@
       `z.preprocess` at parse time and defensively in `playoutOf()`
       (→ `loop-cycle` + `holdSource: 'content-driven'`)
 - [x] 7.2 `playout-controller.ts`: `waitForContent?: () => Promise<void> |
-      null` seam; hold token guards stale resolutions (after stop / from an
+null` seam; hold token guards stale resolutions (after stop / from an
       earlier cycle); `null` (no content in scope) ⇒ a zero-length hold
       deferred like a 0ms timer
 - [x] 7.3 Driver completion (`whenComplete()`, clean finite end, drain) +

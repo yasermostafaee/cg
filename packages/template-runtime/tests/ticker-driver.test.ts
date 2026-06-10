@@ -384,11 +384,7 @@ describe('TickerDriver — reconcile by stable id (update())', () => {
     const h = make();
     h.driver.start();
     h.clock.advance(1000); // d = 100 — kept 'a' is at idx 1 of the NEW list
-    h.driver.setItems([
-      { id: 'q', text: 'qqqqq' },
-      itemA,
-      { id: 'z', text: 'zzzz' },
-    ]);
+    h.driver.setItems([{ id: 'q', text: 'qqqqq' }, itemA, { id: 'z', text: 'zzzz' }]);
     // Feeding resumes AFTER 'a' in the new list: z, then wraps to q, a, z …
     const texts = fedTexts(h.track);
     expect(texts[0]).toBe(itemA.text); // the kept entered node

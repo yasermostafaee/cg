@@ -222,7 +222,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         ? (): Promise<void> =>
             Promise.all(scopeTickers.map((t) => t.whenComplete())).then(() => undefined)
         : undefined;
-    const externalWait = isRoot && options.contentHold !== undefined ? options.contentHold : undefined;
+    const externalWait =
+      isRoot && options.contentHold !== undefined ? options.contentHold : undefined;
     const waitForContent = externalWait ?? tickerWait;
     const stopScopeTickers = (): void => {
       for (const t of scopeTickers) t.stop();
@@ -242,7 +243,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             onRootSettled();
           }
         : stopScopeTickers,
-      waitForContent: waitForContent === undefined ? undefined : (): Promise<void> => waitForContent(),
+      waitForContent:
+        waitForContent === undefined ? undefined : (): Promise<void> => waitForContent(),
       onHoldStart:
         scopeTickers.length > 0
           ? (): void => {

@@ -292,14 +292,17 @@ export interface ContainerElementInput extends ElementBase {
   children: ElementInput[];
 }
 
-export const ContainerElementSchema: z.ZodType<ContainerElement, z.ZodTypeDef, ContainerElementInput> =
-  z.lazy(() =>
-    ElementBaseSchema.extend({
-      type: z.literal('container'),
-      clip: z.boolean(),
-      children: z.array(ElementSchema),
-    }),
-  );
+export const ContainerElementSchema: z.ZodType<
+  ContainerElement,
+  z.ZodTypeDef,
+  ContainerElementInput
+> = z.lazy(() =>
+  ElementBaseSchema.extend({
+    type: z.literal('container'),
+    clip: z.boolean(),
+    children: z.array(ElementSchema),
+  }),
+);
 
 /**
  * Top-level Element schema. Uses `z.union` rather than `z.discriminatedUnion`

@@ -10,7 +10,7 @@ and the items live in one delimiter-joined string field. D-020 left a
 content-timing seam explicitly "for the ticker item" — **no production code
 supplies it yet**. This change ships the first real content element: a
 `ticker` whose crawl duration is computed from measured content width ÷
-speed. It also supersedes D-020's `content-driven` *mode* + `durationHook`
+speed. It also supersedes D-020's `content-driven` _mode_ + `durationHook`
 seam with a **two-loop completion model**: the ticker owns its own crawl
 passes and signals completion; the composition's hold can await that
 completion (`holdSource`).

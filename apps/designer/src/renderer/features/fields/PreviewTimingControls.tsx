@@ -244,9 +244,7 @@ export function PreviewTimingControls({
               className={t.select}
               value={tickerBoundary}
               aria-label="Preview ticker cycle boundary"
-              onChange={(e) =>
-                onChange({ tickerBoundary: e.target.value as 'seamless' | 'drain' })
-              }
+              onChange={(e) => onChange({ tickerBoundary: e.target.value as 'seamless' | 'drain' })}
             >
               <option value="seamless">Seamless — first follows last</option>
               <option value="drain">Drain — empty band between passes</option>

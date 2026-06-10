@@ -23,7 +23,7 @@ both forms).
 - **WHEN** a stored scene with `playout: { mode: 'content-driven', repeat: 2 }`
   is parsed (or handed unparsed to `createRuntime`)
 - **THEN** it behaves as `mode: 'loop-cycle', holdSource: 'content-driven',
-  repeat: 2`, and the exported playout metadata carries the normalized form
+repeat: 2`, and the exported playout metadata carries the normalized form
 
 #### Scenario: Timed modes are unchanged
 
@@ -49,7 +49,7 @@ and test seam).
 #### Scenario: Nested loops — loop-cycle repeat=3 × ticker repeat=2 ⇒ 6 passes
 
 - **WHEN** a composition has `mode: 'loop-cycle', repeat: 3,
-  holdSource: 'content-driven'` and its ticker has `repeat: 2`
+holdSource: 'content-driven'` and its ticker has `repeat: 2`
 - **THEN** each composition cycle holds for exactly 2 crawl passes (the crawl
   restarting from its entering edge each cycle), then plays the outro; after
   3 cycles the composition settles — the content is seen 6 times with the

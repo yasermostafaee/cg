@@ -9,9 +9,7 @@ import { test, expect } from './fixtures/designer.js';
  * editor → live update → crawl runs.
  */
 test.describe('Ticker / crawler (D-028)', () => {
-  test('author a ticker → edit items → data key → live preview update → crawl', async ({
-    app,
-  }) => {
+  test('author a ticker → edit items → data key → live preview update → crawl', async ({ app }) => {
     await app.newProject('Ticker');
     await app.addTicker({ x: 120, y: 260 });
 

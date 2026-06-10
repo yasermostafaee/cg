@@ -171,7 +171,7 @@ describe('PlayoutController', () => {
     expect(h.events).toEqual(['exit', 'settle']);
   });
 
-  it("content-driven hold ends when waitForContent resolves (holdMs ignored)", async () => {
+  it('content-driven hold ends when waitForContent resolves (holdMs ignored)', async () => {
     // holdMs is present but MUST be ignored — the completion promise wins.
     let resolveContent: () => void = () => undefined;
     const h = make(

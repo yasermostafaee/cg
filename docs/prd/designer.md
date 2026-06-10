@@ -618,7 +618,7 @@ a fixed distance, so long text clips and short text leaves dead air.
   UI states it is time-driven (scrub does not apply)
 - WHEN a `list` field is bound to a ticker THEN the preview field form shows an
   items editor (add/remove/reorder) that live-updates the crawl
-  **Notes:** supersedes D-020's `content-driven` *mode* + `durationHook` seam
+  **Notes:** supersedes D-020's `content-driven` _mode_ + `durationHook` seam
   with a completion model — the runtime self-wires each scope's content-driven
   hold from its tickers' completion signals (`Promise.all`; no boot-option
   wiring needed in preview/export; `RuntimeBootOptions.contentHold` is the

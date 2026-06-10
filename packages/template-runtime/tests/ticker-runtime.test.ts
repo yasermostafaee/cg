@@ -48,7 +48,11 @@ function makeClock() {
  * the boundary, and the controller's reaction (outro → next cycle) must land
  * before the next advance.
  */
-async function run(clock: ReturnType<typeof makeClock>, totalMs: number, step = 100): Promise<void> {
+async function run(
+  clock: ReturnType<typeof makeClock>,
+  totalMs: number,
+  step = 100,
+): Promise<void> {
   let left = totalMs;
   while (left > 0) {
     const d = Math.min(step, left);
@@ -206,7 +210,9 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
     expect(events).toEqual([]); // one composition cycle left
     const track = bandEl().querySelector<HTMLElement>('.cg-ticker-track');
     // Fresh run: the offset restarted (translateX counts from the new hold).
-    const tx = Number.parseFloat(/translateX\((-?[\d.]+)px\)/.exec(track?.style.transform ?? '')?.[1] ?? 'NaN');
+    const tx = Number.parseFloat(
+      /translateX\((-?[\d.]+)px\)/.exec(track?.style.transform ?? '')?.[1] ?? 'NaN',
+    );
     expect(tx).toBeLessThan(1030); // restarted — not continuing past cycle 1's end
     await run(clock, 10_400);
     expect(events).toEqual(['stop.end']); // 2 cycles × 2 passes = 4 crawls total
@@ -458,7 +464,12 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
       .map((n) => n.textContent ?? '');
     expect(initial).not.toContain('bbbbbbbbbbbbbbbbbbbb');
 
-    await runtime.update({ headlines: [{ id: 'a', text: 'aaaaaaaaaa' }, { id: 'n', text: 'nn' }] });
+    await runtime.update({
+      headlines: [
+        { id: 'a', text: 'aaaaaaaaaa' },
+        { id: 'n', text: 'nn' },
+      ],
+    });
     await run(clock, 60_000, 5000); // run ahead — the new item joins the cycle
     const texts = [...bandEl().querySelectorAll<HTMLElement>('[data-cg-ticker-item]')]
       .filter((n) => n.style.visibility !== 'hidden')

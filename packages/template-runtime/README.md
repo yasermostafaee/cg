@@ -24,17 +24,17 @@ first.
 
 Everything consumers use is re-exported from [`src/index.ts`](./src/index.ts):
 
-| Export                                                | Role                                                                                                                 |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `createRuntime(scene, options?)`                      | Build + own a runtime; returns the `TemplateRuntime` (`play`/`update`/`stop`/`pause`/`resume`/`remove`/`tick`/`on`). |
-| `installCasparGlobals(runtime, win?)`                 | Wire CasparCG's bare `window.play/update/stop/next/remove` to the runtime. Returns an uninstaller.                   |
-| `buildScene(scene, doc?)`                             | Pure DOM builder → `{ container, elementMap, textOriginals, scopeTree }`.                                            |
-| `applyFieldValues` / `applyScopedFieldValues`         | Apply field values onto built DOM via the scene's bindings (flat / nested-scope).                                    |
-| `applyAnimationAtFrame`, `collectAnimatedElements`    | Per-frame animation application.                                                                                     |
-| `interpolateAtFrame`, `applyEasing`, `lerpHexColor`   | Keyframe math.                                                                                                       |
-| `FrameDriver`, `PlayoutController`                    | The timing primitives (normally owned by `createRuntime`).                                                           |
+| Export                                                 | Role                                                                                                                               |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `createRuntime(scene, options?)`                       | Build + own a runtime; returns the `TemplateRuntime` (`play`/`update`/`stop`/`pause`/`resume`/`remove`/`tick`/`on`).               |
+| `installCasparGlobals(runtime, win?)`                  | Wire CasparCG's bare `window.play/update/stop/next/remove` to the runtime. Returns an uninstaller.                                 |
+| `buildScene(scene, doc?)`                              | Pure DOM builder → `{ container, elementMap, textOriginals, scopeTree }`.                                                          |
+| `applyFieldValues` / `applyScopedFieldValues`          | Apply field values onto built DOM via the scene's bindings (flat / nested-scope).                                                  |
+| `applyAnimationAtFrame`, `collectAnimatedElements`     | Per-frame animation application.                                                                                                   |
+| `interpolateAtFrame`, `applyEasing`, `lerpHexColor`    | Keyframe math.                                                                                                                     |
+| `FrameDriver`, `PlayoutController`                     | The timing primitives (normally owned by `createRuntime`).                                                                         |
 | `TickerDriver`, `tickerDriverFor`, `coerceTickerItems` | The ticker/crawler treadmill — inner repeat loop + `whenComplete()` content completion (D-028; normally owned by `createRuntime`). |
-| `LifecycleStateMachine`, `EventBus`, `applyTransform` | Lifecycle state, events, value transforms.                                                                           |
+| `LifecycleStateMachine`, `EventBus`, `applyTransform`  | Lifecycle state, events, value transforms.                                                                                         |
 
 ## How it's built — module map
 
@@ -206,7 +206,7 @@ internal `waitForContent` = `Promise.all` over its drivers' `whenComplete()` —
 a `content-driven` hold ends when ALL the scope's finite tickers complete; an
 infinite ticker never resolves, holding the scope until `stop()`. So preview,
 the single-file export, and `.vcg` need **no boot wiring**, and a ticker nested
-in a child composition governs *its own* scope. An **explicit**
+in a child composition governs _its own_ scope. An **explicit**
 `RuntimeBootOptions.contentHold` still overrides the root scope (external
 override/test seam).
 
