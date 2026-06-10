@@ -140,6 +140,8 @@ export const TickerElementSchema = ElementBaseSchema.extend({
     letterSpacing: z.number(),
   }),
   color: HexColorSchema,
+  /** Text drop shadow (matches the text element's `textShadow`). */
+  textShadow: ShadowSchema.optional(),
   /** Band background colour (defaults to transparent). */
   backgroundColor: HexColorSchema.optional(),
   /** Optional gradient (or solid) band background; overrides `backgroundColor`. */

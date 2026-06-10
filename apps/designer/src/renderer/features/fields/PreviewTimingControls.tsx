@@ -1,5 +1,6 @@
 import { playoutOf, type Lifecycle, type Playout, type PlayoutMode } from '@cg/shared-schema';
 import { Callout } from '../../ui/Callout.js';
+import { Select } from '../../ui/Select.js';
 import { CollapseSection } from '../inspector/CollapseSection.js';
 import { RealtimeNumberInput } from '../inspector/controls.js';
 import * as s from '../inspector/InspectorPanel.css.js';
@@ -102,7 +103,7 @@ export function PreviewTimingControls({
 
       <div className={s.row}>
         <span className={s.label}>mode</span>
-        <select
+        <Select
           className={t.select}
           value={mode}
           aria-label="Preview playout mode"
@@ -113,7 +114,7 @@ export function PreviewTimingControls({
               {MODE_LABELS[m]}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {showHold && (

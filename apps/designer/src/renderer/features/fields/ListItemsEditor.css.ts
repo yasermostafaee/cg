@@ -26,13 +26,6 @@ export const itemInput = style({
   outline: 'none',
 });
 
-export const rowControl = style({
-  fontSize: '0.7rem',
-  lineHeight: 1,
-  padding: '0.2rem 0.3rem',
-  borderRadius: '0.2rem',
-});
-
 export const addRow = style({
   marginTop: '0.3rem',
 });

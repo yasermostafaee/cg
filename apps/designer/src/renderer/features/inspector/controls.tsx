@@ -7,6 +7,7 @@ import {
 } from 'react';
 import { ColorPicker } from './ColorPopover.js';
 import { cx } from '../../cx.js';
+import { Select } from '../../ui/Select.js';
 import * as s from './controls.css.js';
 
 /**
@@ -445,9 +446,10 @@ export function SelectField<T extends string>(props: SelectFieldProps<T>): JSX.E
     <div className={s.row}>
       <span className={s.label}>{props.label}</span>
       <div className="cg-field">
-        <select
+        <Select
           className={s.inputInner}
           value={props.value}
+          aria-label={props.label}
           onChange={(e) => props.onCommit(e.target.value as T)}
         >
           {props.options.map((o) => (
@@ -455,7 +457,7 @@ export function SelectField<T extends string>(props: SelectFieldProps<T>): JSX.E
               {o}
             </option>
           ))}
-        </select>
+        </Select>
         {props.trailing}
       </div>
     </div>

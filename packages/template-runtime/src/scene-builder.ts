@@ -366,6 +366,10 @@ function buildTicker(element: TickerElement, ctx: BuildCtx): HTMLElement {
   el.style.lineHeight = String(element.font.lineHeight);
   el.style.letterSpacing = `${element.font.letterSpacing}em`;
   el.style.color = element.color;
+  if (element.textShadow) {
+    const ts = element.textShadow;
+    el.style.textShadow = `${ts.offsetX}px ${ts.offsetY}px ${ts.blur}px ${ts.color}`;
+  }
   // READING direction (explicit 'rtl' | 'ltr' — no 'auto' for a crawl).
   el.style.direction = element.direction;
   if (element.backgroundColor) el.style.backgroundColor = element.backgroundColor;

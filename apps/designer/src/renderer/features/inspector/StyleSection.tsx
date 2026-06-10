@@ -23,6 +23,7 @@ import {
 import { CollapseSection } from './CollapseSection.js';
 import { ColorField, NumberField, SelectField, TextField, VectorField } from './controls.js';
 import { FillField } from './FillPopover.js';
+import { FontFamilySelect } from './FontFamilySelect.js';
 import { TextStyleSection } from './TextStyleSection.js';
 
 interface Props {
@@ -405,10 +406,132 @@ function TickerSections({
         />
       </CollapseSection>
 
+      {/* Style parity with text: family/weight/size, colour, band background
+          (default transparent). Plain commits — ticker styling isn't
+          keyframe-animatable (the crawl is time-driven, not timeline-driven). */}
+      <CollapseSection title="Ticker Text" defaultExpanded>
+        <FontFamilySelect
+          value={element.font.family}
+          onCommit={(family) =>
+            designerStore.updateElement(id, {
+              font: { ...element.font, family },
+            } as Partial<Element>)
+          }
+        />
+        <SelectField
+          label="weight"
+          value={String(element.font.weight)}
+          options={['100', '200', '300', '400', '500', '600', '700', '800', '900'] as const}
+          onCommit={(w) =>
+            designerStore.updateElement(id, {
+              font: { ...element.font, weight: Number(w) },
+            } as Partial<Element>)
+          }
+        />
+        <NumberField
+          label="size"
+          value={element.font.size}
+          step={1}
+          min={1}
+          suffix="px"
+          onCommit={(size) => {
+            if (size > 0)
+              designerStore.updateElement(id, {
+                font: { ...element.font, size },
+              } as Partial<Element>);
+          }}
+        />
+        <ColorField
+          label="text color"
+          value={element.color}
+          resetKey={id}
+          onCommit={(color) => designerStore.updateElement(id, { color } as Partial<Element>)}
+        />
+        <FillField
+          label="background"
+          value={
+            element.backgroundFill ?? {
+              kind: 'solid',
+              color: element.backgroundColor ?? '#00000000',
+            }
+          }
+          onChange={(f) => {
+            if (f.kind === 'solid') {
+              designerStore.updateElement(id, {
+                backgroundFill: undefined,
+                backgroundColor: f.color,
+              } as Partial<Element>);
+            } else {
+              designerStore.updateElement(id, { backgroundFill: f } as Partial<Element>);
+            }
+          }}
+        />
+      </CollapseSection>
+
+      <CollapseSection title="Drop Shadow">
+        <TickerShadowRows element={element} />
+      </CollapseSection>
+
+      <CollapseSection title="Band Padding">
+        {(['top', 'right', 'bottom', 'left'] as const).map((side) => (
+          <NumberField
+            key={side}
+            label={side}
+            value={element.padding?.[side] ?? 0}
+            step={1}
+            min={0}
+            suffix="px"
+            onCommit={(v) => {
+              const p = element.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
+              designerStore.updateElement(id, {
+                padding: { ...p, [side]: Math.max(0, v) },
+              } as Partial<Element>);
+            }}
+          />
+        ))}
+      </CollapseSection>
+
+      <CollapseSection title="Border Radius">
+        <NumberField
+          label="radius"
+          value={element.cornerRadius ?? 0}
+          step={1}
+          min={0}
+          suffix="px"
+          onCommit={(v) =>
+            designerStore.updateElement(id, {
+              cornerRadius: Math.max(0, v),
+            } as Partial<Element>)
+          }
+        />
+      </CollapseSection>
+
       <FilterSection
         element={element}
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
+      />
+    </>
+  );
+}
+
+/** Ticker text-shadow rows — plain (non-animatable) commits. */
+function TickerShadowRows({ element }: { element: TickerElement }): JSX.Element {
+  const id = element.id;
+  const s = element.textShadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
+  const patch = (p: Partial<typeof s>): void => {
+    designerStore.updateElement(id, { textShadow: { ...s, ...p } } as Partial<Element>);
+  };
+  return (
+    <>
+      <NumberField label="offset X" value={s.offsetX} step={1} onCommit={(v) => patch({ offsetX: v })} />
+      <NumberField label="offset Y" value={s.offsetY} step={1} onCommit={(v) => patch({ offsetY: v })} />
+      <NumberField label="blur" value={s.blur} step={1} min={0} onCommit={(v) => patch({ blur: v })} />
+      <ColorField
+        label="color"
+        value={s.color}
+        resetKey={id}
+        onCommit={(color) => patch({ color })}
       />
     </>
   );

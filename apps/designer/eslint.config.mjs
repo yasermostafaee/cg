@@ -36,8 +36,10 @@ export default [
     // Design-system guard: every interactive button in the renderer must go
     // through the shared <Button> / <Control> (renderer/ui), which bake in the
     // hover / active / focus-visible / disabled states — so a new raw <button>
-    // can't silently miss them. The ui/ components themselves are the one place a
-    // native <button> is allowed.
+    // can't silently miss them. Same deal for dropdowns: a raw <select> must go
+    // through the shared <Select>, which bakes in the dark color-scheme and the
+    // interaction states. The ui/ components themselves are the one place a
+    // native <button> / <select> is allowed.
     files: ['src/renderer/**/*.tsx'],
     ignores: ['src/renderer/ui/**'],
     rules: {
@@ -47,6 +49,11 @@ export default [
           selector: 'JSXOpeningElement[name.name="button"]',
           message:
             'Use the shared <Button> / <Control> from renderer/ui instead of a raw <button> so the control inherits hover/active/focus-visible/disabled states. (variant="bare" keeps a bespoke look while still getting the states.)',
+        },
+        {
+          selector: 'JSXOpeningElement[name.name="select"]',
+          message:
+            'Use the shared <Select> from renderer/ui instead of a raw <select> so the dropdown inherits the dark color-scheme (the native popup otherwise renders light) and the design-system states.',
         },
       ],
     },

@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import { activeRangeOf, playoutOf, type PlayoutMode, type Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { Select } from '../../ui/Select.js';
 import { designerStore } from '../../state/store.js';
 import { CollapseSection } from './CollapseSection.js';
 import * as s from './InspectorPanel.css.js';
@@ -71,7 +72,7 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
     <CollapseSection title="Playout" defaultExpanded>
       <div className={s.row}>
         <span className={s.label}>mode</span>
-        <select
+        <Select
           style={selectStyle}
           value={mode}
           aria-label="Playout mode"
@@ -82,7 +83,7 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
               {MODE_LABELS[m]}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {lifecycle !== undefined ? (

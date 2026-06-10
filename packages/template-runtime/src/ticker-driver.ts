@@ -404,6 +404,11 @@ export class TickerDriver {
     const w = this.measureText(text);
     const node = this.acquire();
     node.textContent = text;
+    // Separator glyphs like '*' or '•' sit high relative to the text baseline;
+    // line-height 1 shrinks the separator's line box to the glyph so the
+    // node's flex centering really centres it in the band. (Set per placement
+    // — pooled nodes swap roles.)
+    node.style.lineHeight = isSep ? '1' : '';
     const fedNode: FedNode = { node, o: this.nextOffset, w, id, text, isSep };
     this.position(fedNode);
     this.fed.push(fedNode);
@@ -531,12 +536,19 @@ export function populateTickerStaticRow(
 ): void {
   const doc = row.ownerDocument;
   while (row.firstChild !== null) row.removeChild(row.firstChild);
-  const addSpan = (text: string, first: boolean): void => {
+  const addSpan = (text: string, first: boolean, isSep: boolean): void => {
     const span = doc.createElement('span');
     span.style.whiteSpace = 'pre';
     span.style.direction = opts.direction;
     span.style.unicodeBidi = 'isolate';
     span.style.flexShrink = '0';
+    if (isSep) {
+      // Centre high-riding separator glyphs ('*', '•') in the band regardless
+      // of baseline: shrink the line box to the glyph and let the row's flex
+      // centring place it.
+      span.style.lineHeight = '1';
+      span.style.alignSelf = 'center';
+    }
     if (!first) {
       // The gap faces the PREVIOUS item: in an rtl row the next item sits to
       // the left, so its gap is its right margin; ltr is the mirror.
@@ -548,9 +560,9 @@ export function populateTickerStaticRow(
   };
   items.forEach((item, i) => {
     if (i > 0 && opts.separator !== undefined && opts.separator !== '') {
-      addSpan(opts.separator, false);
+      addSpan(opts.separator, false, true);
     }
-    addSpan(item.text, i === 0);
+    addSpan(item.text, i === 0, false);
   });
 }
 

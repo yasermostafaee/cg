@@ -617,11 +617,18 @@ a fixed distance, so long text clips and short text leaves dead air.
 ## [ ] D-029 — Sequence / now-next ⟨priority: medium⟩
 
 **What:** A template that pages through a sequence of entries (e.g. now/next/later)
-advancing on command or on a timer.
-**Why:** Rundown-style "now & next" lower-thirds are common and not expressible today.
+showing **one item at a time**, advancing on command or on a timer. Each item has
+its own configurable **dwell time** (per-item, not one global), and the in/out
+transition between items is a selectable **transition style** — initially
+`horizontal` / `vertical` / `slideUp` / `slideDown` / `hide-show`, modeled as an
+extensible enum so new styles can be added without a breaking change.
+**Why:** Rundown-style "now & next" lower-thirds are common and not expressible
+today.
 **Acceptance to be detailed when scheduled.**
 **Notes:** pairs with D-031 (`steps` + real `next()`) and the rundown control app
-(C-002). Depends on D-018.
+(C-002). Depends on D-018; reuses the D-028 extensible `list` field for its items
+(`{ id, text, dwellMs? … }` — the open item shape was designed for this). Timer
+advance relates to the D-028 driver-clock seam (injectable `RuntimeClock`).
 
 ## [ ] D-030 — Repeater / data-driven layout ⟨priority: medium⟩
 
@@ -711,3 +718,18 @@ catches regressions faster.
 **Acceptance to be detailed when scheduled.**
 **Notes:** complements P-004 (Exporter/Preview tests) and P-005 (E2E); prerequisite
 safety net for D-035.
+
+## [ ] D-039 — Ticker image/logo separators ⟨priority: low⟩
+
+**What:** Let the ticker's `separator` be an image/logo instead of (or alongside)
+a text glyph: the operator picks a logo from the project's asset/logo list and the
+runtime renders it between items, sized to the band and vertically centred —
+design TBD when scheduled.
+**Why:** Branded crawls (channel bug between headlines) are a common broadcast
+look; a text-only separator can't express it.
+**Acceptance to be detailed when scheduled.**
+**Notes:** extends the D-028 ticker (`TickerElement.separator` would widen to a
+union, e.g. `string | { assetId }`); the treadmill driver already measures and
+feeds separator nodes generically, so the work is mostly schema + asset
+resolution + the inspector picker. Relates to the asset pipeline (preview blob
+URLs / export inlining) the image element already uses.

@@ -326,6 +326,7 @@ describe('TickerElement (D-028)', () => {
       letterSpacing: 0,
     },
     color: '#FFFFFF',
+    textShadow: { offsetX: 0, offsetY: 2, blur: 6, color: '#000000' },
     direction: 'rtl' as const,
     speed: 120,
     gap: 48,

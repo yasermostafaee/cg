@@ -7,6 +7,7 @@ import type {
 } from '@cg/shared-schema';
 import { cx } from '../../cx.js';
 import { Callout } from '../../ui/Callout.js';
+import { Select } from '../../ui/Select.js';
 import { ListItemsEditor } from './ListItemsEditor.js';
 import * as s from './PreviewFieldForm.css.js';
 
@@ -228,7 +229,7 @@ function renderInput(
       );
     case 'select':
       return (
-        <select
+        <Select
           className={cls}
           value={asString(value)}
           onChange={(e) => onChange(e.target.value)}
@@ -239,7 +240,7 @@ function renderInput(
               {o.label}
             </option>
           ))}
-        </select>
+        </Select>
       );
     case 'image':
       return (

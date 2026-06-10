@@ -1,5 +1,5 @@
 import type { AnimatableProperty, Element, TextElement } from '@cg/shared-schema';
-import { designerStore, useDesignerSelector } from '../../state/store.js';
+import { designerStore } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import {
   effectiveAnimatableValue,
@@ -10,6 +10,7 @@ import {
 } from '../timeline/keyframe-helpers.js';
 import { CollapseSection } from './CollapseSection.js';
 import { FillField } from './FillPopover.js';
+import { FontFamilySelect } from './FontFamilySelect.js';
 import { RealtimeNumberInput } from './controls.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
@@ -35,18 +36,6 @@ import * as s from './TextStyleSection.css.js';
  * properties aren't in AnimatableProperty yet, but the visual matches
  * the screenshot.
  */
-
-const FONT_FAMILIES = [
-  'Arial',
-  'Helvetica',
-  'Inter',
-  'Vazirmatn',
-  'Times New Roman',
-  'Georgia',
-  'Courier New',
-  'Verdana',
-  'Tahoma',
-] as const;
 
 interface Props {
   element: TextElement;
@@ -97,9 +86,6 @@ export function TextStyleSection({
   selectedKeyframe = null,
 }: Props): JSX.Element {
   const id = element.id;
-  // D-011 — project-asset fonts merged into the dropdown after the built-ins.
-  const scene = useDesignerSelector((s) => s.scene);
-  const sceneFonts = scene?.fonts ?? [];
   const sizingValue = element.fitMode === 'fixed' ? 'fixed' : 'auto';
   const wrapValue = element.wrap === false ? 'no' : 'yes';
   const squeezeValue = element.autoSqueeze === true ? 'yes' : 'no';
@@ -231,36 +217,16 @@ export function TextStyleSection({
           }
         />
 
-        {/* Font family dropdown */}
-        <select
+        {/* Font family dropdown (shared with the Ticker inspector) */}
+        <FontFamilySelect
           className={s.fontSelect}
           value={element.font.family}
-          onChange={(e) =>
+          onCommit={(family) =>
             designerStore.updateElement(id, {
-              font: { ...element.font, family: e.target.value },
+              font: { ...element.font, family },
             } as Partial<Element>)
           }
-          aria-label="Font family"
-        >
-          {FONT_FAMILIES.includes(element.font.family as (typeof FONT_FAMILIES)[number]) ||
-          sceneFonts.some((f) => f.family === element.font.family) ? null : (
-            <option value={element.font.family}>{element.font.family}</option>
-          )}
-          {FONT_FAMILIES.map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
-          ))}
-          {sceneFonts.length > 0 && (
-            <optgroup label="Project fonts">
-              {sceneFonts.map((f) => (
-                <option key={f.family} value={f.family}>
-                  {f.bundledPath ?? f.family}
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </select>
+        />
 
         {/* Font size (full-width chip with tT icon) */}
         <div className="cg-field">

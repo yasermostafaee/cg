@@ -58,8 +58,7 @@ export function ListItemsEditor({ items, onChange, label }: Props): JSX.Element 
             }
           />
           <Control
-            variant="bare"
-            className={s.rowControl}
+            size="sm"
             title="Move up"
             aria-label={`Move ${label} item ${String(i + 1)} up`}
             disabled={i === 0}
@@ -68,8 +67,7 @@ export function ListItemsEditor({ items, onChange, label }: Props): JSX.Element 
             ↑
           </Control>
           <Control
-            variant="bare"
-            className={s.rowControl}
+            size="sm"
             title="Move down"
             aria-label={`Move ${label} item ${String(i + 1)} down`}
             disabled={i === items.length - 1}
@@ -79,7 +77,7 @@ export function ListItemsEditor({ items, onChange, label }: Props): JSX.Element 
           </Control>
           <Control
             variant="danger"
-            className={s.rowControl}
+            size="sm"
             title="Remove item"
             aria-label={`Remove ${label} item ${String(i + 1)}`}
             onClick={() => onChange(items.filter((_, j) => j !== i))}

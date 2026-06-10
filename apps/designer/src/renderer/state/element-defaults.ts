@@ -78,7 +78,8 @@ export function defaultTicker(id: string, x: number, y: number): TickerElement {
       letterSpacing: 0,
     },
     color: '#FFFFFF',
-    backgroundColor: '#111827',
+    // No backgroundColor — a fresh band is TRANSPARENT by design; the operator
+    // opts into a bar colour in the inspector.
     direction: 'rtl',
     speed: 120,
     gap: 48,
