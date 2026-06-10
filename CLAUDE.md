@@ -32,7 +32,7 @@ Persian / RTL is a core requirement.
 | How a scene renders (animation, element visual) | `@cg/template-runtime`                                                                                                     |
 | `.vcg` package format / manifest / signing      | `@cg/shared-schema` (manifest) + `@cg/vcg-format`                                                                          |
 | Runtime/playout (intents, connections)          | `@cg/shared-ipc` channel + `apps/runtime/src/platform/MockRuntime.ts` + renderer (real logic → `@cg/caspar-client`)        |
-| Shared tokens / theme                           | `@cg/ui`                                                                                                                   |
+| Shared tokens / theme                           | `@cg/ui` (tokens ONLY — components live app-local, see Design system)                                                      |
 | Storage backend                                 | `@cg/storage`                                                                                                              |
 
 ## Commands
@@ -42,18 +42,20 @@ pnpm install
 pnpm build                              # turbo: build all @cg/* packages
 pnpm --filter @cg/designer dev          # Designer SPA → http://127.0.0.1:5173
 pnpm --filter @cg/runtime  dev          # Runtime  SPA → http://127.0.0.1:5174
-pnpm turbo run build typecheck lint test   # full workspace check (must stay green)
+pnpm turbo run format:check typecheck lint test build   # full green gate (must stay green)
+pnpm test:e2e                           # Playwright E2E via turbo (builds first — never run against a stale dist)
 pnpm --filter @cg/<pkg> typecheck|lint|test|build   # one workspace
 pnpm openspec <cmd>                     # OpenSpec CLI (new change / validate / archive)
 ```
 
-## Branching — one change per branch
+## Green gate — definition of done
 
-- Start every change/task on its OWN branch off `main` (`feat/…`, `fix/…`,
-  `docs/…`, `chore/…`). One branch = one PR = one concern.
-- Don't stack unrelated work on an existing feature branch — it mixes concerns and
-  makes PRs hard to review/revert.
-- Branch from up-to-date `main`; keep the PR focused.
+`format:check` + `typecheck` + `lint` + `test` + `build` for every touched
+workspace. Formatting is part of the gate: if `format:check` fails, run the
+format/write script and include the result in the same commit — never leave
+formatting to CI. Before claiming the gate green ahead of a push, run the test
+task **uncached at least once** (`turbo --force`) — a stale turbo cache has
+produced a false green before.
 
 ## Feature workflow — PRD → OpenSpec → code
 
@@ -68,17 +70,18 @@ high-priority designer item"), follow `docs/prd/README.md` exactly. In short:
    `## MODIFIED Requirements` when the capability already exists.
 3. `pnpm openspec validate <name> --strict`.
 4. Implement per the "Where features go" map.
-5. Green gate: `typecheck` + `lint` + `test` + `build` for the affected workspaces.
-6. Conventional commit + push. Mark the PRD item `[~]` and note the change dir.
+5. Full green gate (see definition above) for the affected workspaces;
+   user-facing changes also add **and run** their E2E (see E2E coverage).
+6. Conventional commit + push (verify per "Verify before claiming"). Mark the
+   PRD item `[~]` and note the change dir.
 7. Archive (`pnpm openspec archive <name> -y` → folds the spec into
    `openspec/specs/`, item → `[x]`) **when the user confirms** — unless they
    said "and archive".
 
 ## Spec discipline — when a prompt changes a decision
 
-A CLI prompt is ephemeral; the **spec is the memory**. A decision that lives only
-in a prompt is lost on the next session and a re-check will revert it. So whenever
-a prompt changes behavior or a prior decision (outside the initial PRD flow above):
+A CLI prompt is ephemeral; the **spec is the memory**. Whenever a prompt changes
+behavior or a prior decision (outside the initial PRD flow above):
 
 1. **Implement it and chase every ripple** — update all affected code, **tests**,
    the exporter/metadata, and any other consumers of the changed behavior, not
@@ -90,108 +93,77 @@ a prompt changes behavior or a prior decision (outside the initial PRD flow abov
    invalidates (e.g. a test asserting the old behavior). **Replace** superseded
    requirements/scenarios; never leave contradictory old text. The spec, not the
    prompt, is the source of truth.
-3. **The change isn't done until the full green gate passes** (`typecheck` +
-   `lint` + `test` + `build` for every touched workspace) — this is the safety net
-   that forces stale tests and type-coupled code to be fixed. Then
-   `pnpm openspec validate <change> --strict`, re-read the spec, and report which
-   superseded text/tests you changed.
+3. **The change isn't done until the full green gate passes** (definition
+   above). Then `pnpm openspec validate <change> --strict`, re-read the spec,
+   and report which superseded text/tests you changed.
 4. **On re-check, verify against the UPDATED spec only** — never revert to
    superseded behavior, even if `tasks.md` checkmarks were reset (e.g. by a
    re-drop). Keep the matching `docs/prd/*` item consistent.
-5. When all tasks are checked **and** the gate is green, **remind me to archive**;
-   do not archive automatically (see workflow step 7).
+5. When all tasks are checked **and** the gate is green, **remind me to
+   archive**; do not archive automatically (workflow step 7).
 
-## E2E coverage (Playwright) — scenarios drive tests (P-005)
+## Branching — one change per branch
 
-The Designer has a browser-E2E suite (`apps/designer/tests/e2e/`, Playwright). It is
-**not** part of the fast per-change gate (it runs in its own CI job + locally via
-`pnpm test:e2e`), but coverage must **grow by default**, not by memory:
+- Start every change/task on its OWN branch off **up-to-date** `main`
+  (`feat/…`, `fix/…`, `docs/…`, `chore/…`). One branch = one PR = one concern.
+- Don't stack unrelated work on an existing feature branch — it mixes concerns
+  and makes PRs hard to review/revert.
+- Never reuse a merged branch; after a merge, work continues from a fresh branch
+  off pulled `main`.
 
-- **Any change that adds or changes user-facing Designer behavior MUST add/extend an
-  E2E test**, mapping the change's OpenSpec `#### Scenario`s to Playwright steps
-  (the scenario is the spec; the E2E is its executable proof through the real UI).
-  Pure-logic/schema changes with no UI surface are exempt (unit tests cover them).
-- **Compose the shared fixtures** — never hand-roll selectors. The page object lives
-  in `apps/designer/tests/e2e/fixtures/designer.ts` (`DesignerApp`): `newProject`,
-  `newComposition`, `addTextElement`/`addRectangle`, `setDataKey`, `bindFromCanvas`,
-  `openPreviewModal`, `setPreviewField`, `play`/`stop`/`pause`/`next`,
-  `addKeyframeViaDiamond`, `dragShape`, `nestCompositionInstance`, `setPlayoutTiming`,
-  `setPreviewTiming`, `exportHtml`, + preview-iframe readers (`previewFrame`,
-  `previewElement`). Add a NEW helper here once when a flow isn't covered, then reuse.
-- **How to add an E2E test:**
-  1. `import { test, expect } from './fixtures/designer.js'` — the `app` fixture
-     boots the app in test mode (`window.CG_E2E` → `MemoryWorkspace`/`MemoryKv`, no
-     native dialogs) and gives you a `DesignerApp`.
-  2. For each `#### Scenario` (WHEN/THEN), drive the WHEN via fixture helpers and
-     assert the THEN — prefer `getByRole`/`getByLabel`; read rendered output in the
-     preview via `app.previewFrame` / `app.previewElement(...)`.
-  3. If a selector is ambiguous, add a single `data-testid` in the component (not a
-     pile of them) and a helper in the page object.
-  4. Run `pnpm test:e2e`. Locally the config **auto-falls-back to system Chrome**
-     (`channel: 'chrome'`) when the bundled Chromium isn't installed — so the suite
-     just runs, no env var needed. This matters because Playwright's browser CDN is
-     **geo-blocked from some locations** (HTTP 403 "this service is not available in
-     your location"), so `playwright install chromium` can't download the bundle
-     there; the fallback drives your already-installed Chrome instead. Override the
-     browser explicitly with `PW_CHANNEL=chrome|msedge` if needed. **CI is never
-     affected**: it sets `CI=true`, installs the pinned bundled Chromium, and the
-     config keeps `channel` unset there so the gate stays on the pinned browser.
-- **Keep frame-/store-precise behavior in unit tests** (deterministic, injected
-  clock); E2E guards the **integrated UI path** (controls wire through the bridge and
-  the preview reflects them), not browser-clock frame math.
+## Verify before claiming
 
-## Engine doc-sync — architecture docs are memory too
+- Never report an external action (push, PR created, merged, archived, CI
+  green) as DONE without verifying it: after a push, confirm the remote head
+  (`git ls-remote origin <branch>` matches local); only cite a PR number/URL
+  after actually creating or viewing it (`gh pr view <n>`); only claim CI green
+  after seeing the check's real status.
+- If a step fails or can't be verified (e.g. `gh` unavailable), say exactly
+  that — "pushed branch X; PR not created, open it manually" — never invent or
+  guess an identifier.
 
-The same principle as spec-discipline applies to the **engine architecture docs**: a
-prompt is ephemeral, the doc is the memory. When you change an engine's **structure,
-contracts/invariants, or extension points** (e.g. `@cg/template-runtime`,
-`@cg/shared-schema`, `@cg/vcg-format`), **update its engine doc in the same change**:
+## E2E coverage (Playwright)
 
-- The package's own deep-dive (`packages/<pkg>/README.md`, e.g.
-  [`packages/template-runtime/README.md`](packages/template-runtime/README.md)) for
-  how it's built / how to extend it, and
-- the cross-engine map ([`docs/engines/overview.md`](docs/engines/overview.md)) when
-  the data flow or a seam between engines changes.
+- Any change that adds or alters **user-facing behavior** MUST add an E2E test
+  mapping its OpenSpec `#### Scenario`s to Playwright steps, composed from the
+  fixtures/page objects in `apps/designer/tests/e2e/` — and run it.
+- Run via `pnpm test:e2e` (turbo builds first; the suite runs against the built
+  `dist/`, so invoking Playwright directly against a stale build gives false
+  results).
+- Browsers: CI uses the pinned bundled Chromium. Locally the Playwright CDN is
+  geo-blocked (HTTP 403), so the config auto-falls-back to system Chrome when
+  the bundled browser is absent — no `PW_CHANNEL` needed.
 
-Engine docs describe **how it's built**; the **behavioural contract** stays in the
-OpenSpec specs/changes — keep the doc pointing at the spec, don't duplicate behaviour
-(it drifts). A structural change that leaves a stale engine doc is **incomplete**, the
-same way a stale test is.
+## Engine doc-sync
+
+When a change alters an engine's **structure, contracts, or extension points**,
+update that engine's doc **in the same change**: `docs/engines/overview.md` and
+the deep-dives — `packages/template-runtime/README.md`,
+`apps/designer/src/renderer/features/canvas/README.md`,
+`apps/designer/src/renderer/features/timeline/README.md`,
+`apps/designer/src/renderer/state/README.md`. Behavior stays in the OpenSpec
+specs; engine docs cover "how it's built".
+
+## Design system — interactive controls
+
+- Components are styled with `renderer/theme.ts` + vanilla-extract (the app's
+  real design system). `@cg/ui` is **tokens-only** — do NOT add components
+  there or change the palette.
+- ALL buttons and interactive controls use the shared primitives in
+  `apps/designer/src/renderer/ui/` (`Button`/`Control`, shared `Select`), which
+  bake in hover / active / focus-visible / disabled states for **every
+  variant**, each tuned to that variant's colors. No raw `<button>`/`<select>`
+  or ad-hoc control styling in the renderer — lint rules enforce this; new
+  controls inherit the states by default.
 
 ## Key references
 
-- Engine architecture (read first): `docs/engines/overview.md`; the heart's
-  deep-dive: `packages/template-runtime/README.md`
+- Roadmap (agreed sequence of upcoming work): `docs/ROADMAP.md`
 - Architecture decision: `docs/adrs/0007-electron-to-browser-migration.md`
-- Roadmap: `docs/phases/phase-10-browser-migration.md`
+- Migration phases: `docs/phases/phase-10-browser-migration.md`
+- Engine docs: `docs/engines/overview.md` (+ per-engine deep-dives listed under
+  Engine doc-sync)
 - `.vcg` format: `packages/vcg-format/` (isomorphic pack/unpack/verify)
 - Living specs: `openspec/specs/` · changes: `openspec/changes/`
-- Human workflow reference (verify greps, optional prompt tail, archive command):
-  `cg-spec-workflow.md`
 - The OpenSpec `.claude/` slash commands are gitignored; regenerate with
   `pnpm openspec init --tools claude`.
-
-## Design system — interactive controls (always)
-
-- Components are styled with `renderer/theme.ts` + vanilla-extract (the app's real
-  design system). `@cg/ui` is tokens-only — do NOT add components there or change
-  the palette.
-- ALL buttons / interactive controls use the shared **`Button`** (labelled) and
-  **`Control`** (icon-only) from
-  **`apps/designer/src/renderer/ui/`** (`Button.tsx`, `Control.tsx`, recipe in
-  `Button.css.ts`). They bake in hover / active / focus-visible / disabled from
-  theme.ts. Variants: `primary | secondary | ghost | danger | bare` (+ `selected`
-  for toggles via `aria-pressed`). **Every** variant — including `bare` — has all
-  four interaction states, each tuned to that variant's own colours (e.g. `danger`
-  hovers/presses rose, not grey). `bare` = no chrome of its own (use it to wrap a
-  bespoke surface — menu item, list row, the keyframe diamond — via `className`),
-  but it still hovers/presses: a plain bare button gets a neutral fill, while a
-  pressed toggle (`aria-pressed="true"`) keeps its active colour and is lightened on
-  hover. Per-component classes must only EXTEND the resting look (padding, sizing,
-  bespoke chrome) — never redefine `:hover`/`:active`/etc., which would strip the
-  shared states.
-- Do NOT use a raw `<button>` or ad-hoc per-element styling for interactive
-  controls — new controls inherit the states by default.
-- A lint rule (`no-restricted-syntax` in `apps/designer/eslint.config.mjs`) errors
-  on a raw `<button>` JSX element anywhere in `src/renderer/**` except
-  `src/renderer/ui/**`.
