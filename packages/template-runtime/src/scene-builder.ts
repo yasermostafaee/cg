@@ -7,11 +7,13 @@ import type {
   Scene,
   Shadow,
   TextElement,
+  TickerElement,
   ImageElement,
   ShapeElement,
   Transform,
 } from '@cg/shared-schema';
 import type { BuildSceneResult, FieldScope, LifecycleSource } from './types.js';
+import { populateTickerStaticRow } from './ticker-driver.js';
 
 /**
  * Build a DOM tree from a Scene. Returns the container element (caller
@@ -43,6 +45,7 @@ function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
     container,
     children: [],
     animated: [],
+    tickers: [],
     source,
   };
 }
@@ -112,6 +115,8 @@ function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null 
   switch (element.type) {
     case 'text':
       return buildText(element, ctx.doc, ctx.scope.textOriginals);
+    case 'ticker':
+      return buildTicker(element, ctx);
     case 'image':
       return buildImage(element, ctx.doc);
     case 'shape':
@@ -334,6 +339,98 @@ function buildText(
   }
   el.textContent = element.text;
   textOriginals.set(element.id, element.text);
+  return el;
+}
+
+/**
+ * D-028 — render a ticker element: a clipped band whose inner `track` the
+ * {@link TickerDriver} feeds and translates at playout. The builder itself
+ * renders a STATIC authoring layout (a flex row in reading direction — no
+ * measurement needed) so the Designer canvas shows the items; the driver
+ * removes it when the crawl starts. The band + track are registered on the
+ * scope (`scope.tickers`) so the runtime can instantiate the driver and
+ * self-wire the scope's `content-driven` duration hook.
+ */
+function buildTicker(element: TickerElement, ctx: BuildCtx): HTMLElement {
+  const doc = ctx.doc;
+  const el = doc.createElement('div');
+  el.dataset['cgElementId'] = element.id;
+  applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
+  el.style.overflow = 'hidden';
+  // Same shaping-capable fallback stack as text elements (Vazirmatn first) —
+  // items inherit these from the band.
+  el.style.fontFamily = `${element.font.family}, Vazirmatn, "Noto Sans Arabic", "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif`;
+  el.style.fontWeight = String(element.font.weight);
+  el.style.fontStyle = element.font.style;
+  el.style.fontSize = `${element.font.size}px`;
+  el.style.lineHeight = String(element.font.lineHeight);
+  el.style.letterSpacing = `${element.font.letterSpacing}em`;
+  el.style.color = element.color;
+  if (element.textShadow) {
+    const ts = element.textShadow;
+    el.style.textShadow = `${ts.offsetX}px ${ts.offsetY}px ${ts.blur}px ${ts.color}`;
+  }
+  // READING direction (explicit 'rtl' | 'ltr' — no 'auto' for a crawl).
+  el.style.direction = element.direction;
+  if (element.backgroundColor) el.style.backgroundColor = element.backgroundColor;
+  if (element.backgroundFill !== undefined) el.style.background = fillToCss(element.backgroundFill);
+  if (element.cornerRadius !== undefined && element.cornerRadius > 0) {
+    el.style.borderRadius = `${element.cornerRadius}px`;
+  }
+
+  // The padded inner viewport. CSS padding on the band would be inert here —
+  // the track/static row are absolutely positioned, and abspos children
+  // resolve against the PADDING box, so padding insets nothing for them.
+  // Instead the viewport div is inset by the padding values and is the clip
+  // + sizing context the crawl actually lives in (the runtime subtracts the
+  // horizontal padding from the driver's viewportWidth to match).
+  const pad = element.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  const viewport = doc.createElement('div');
+  viewport.className = 'cg-ticker-viewport';
+  viewport.style.position = 'absolute';
+  viewport.style.top = `${pad.top}px`;
+  viewport.style.right = `${pad.right}px`;
+  viewport.style.bottom = `${pad.bottom}px`;
+  viewport.style.left = `${pad.left}px`;
+  viewport.style.overflow = 'hidden';
+
+  // The crawl surface. Items are absolutely positioned from measured offsets
+  // (no inline flow → item order is fixed by construction, immune to bidi
+  // reordering across item boundaries); only this track's transform changes
+  // per frame.
+  const track = doc.createElement('div');
+  track.className = 'cg-ticker-track';
+  track.style.position = 'absolute';
+  track.style.left = '0';
+  track.style.top = '0';
+  track.style.height = '100%';
+  track.style.willChange = 'transform';
+
+  // Static authoring layout: lets the canvas show the items without any
+  // measurement (flex lays them out; `direction` puts the list head at the
+  // reading start edge). Removed at the first real `play()` (driver reset) so
+  // every on-air intro shows the same band the crawl then enters; re-rendered
+  // by the driver when a list-field default replaces the items pre-play.
+  const staticRow = doc.createElement('div');
+  staticRow.dataset['cgTickerStatic'] = '1';
+  staticRow.style.position = 'absolute';
+  staticRow.style.top = '0';
+  staticRow.style.right = '0';
+  staticRow.style.bottom = '0';
+  staticRow.style.left = '0';
+  staticRow.style.display = 'flex';
+  staticRow.style.alignItems = 'center';
+  staticRow.style.direction = element.direction;
+  populateTickerStaticRow(staticRow, element.items, {
+    direction: element.direction,
+    gap: element.gap,
+    separator: element.separator,
+  });
+
+  viewport.appendChild(track);
+  viewport.appendChild(staticRow);
+  el.appendChild(viewport);
+  ctx.scope.tickers.push({ element, band: el, track });
   return el;
 }
 

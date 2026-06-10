@@ -2,10 +2,13 @@ import type {
   AggregatedFields,
   DynamicField,
   FieldValue,
+  ListItem,
   NestedFieldValues,
 } from '@cg/shared-schema';
 import { cx } from '../../cx.js';
 import { Callout } from '../../ui/Callout.js';
+import { Select } from '../../ui/Select.js';
+import { ListItemsEditor } from './ListItemsEditor.js';
 import * as s from './PreviewFieldForm.css.js';
 
 type Values = Record<string, FieldValue>;
@@ -226,7 +229,7 @@ function renderInput(
       );
     case 'select':
       return (
-        <select
+        <Select
           className={cls}
           value={asString(value)}
           onChange={(e) => onChange(e.target.value)}
@@ -237,7 +240,7 @@ function renderInput(
               {o.label}
             </option>
           ))}
-        </select>
+        </Select>
       );
     case 'image':
       return (
@@ -248,6 +251,16 @@ function renderInput(
           value={imageId(value)}
           onChange={(e) => onChange({ assetId: e.target.value })}
           aria-label={label}
+        />
+      );
+    case 'list':
+      // D-028 — the same items editor the ticker inspector uses; every edit
+      // live-updates the crawl (the runtime reconciles by stable item id).
+      return (
+        <ListItemsEditor
+          items={listItems(value, field.default)}
+          label={label}
+          onChange={(items) => onChange(items)}
         />
       );
     case 'text':
@@ -285,8 +298,16 @@ export function findDuplicateKeys(fields: readonly DynamicField[]): string[] {
   return [...dupes];
 }
 
+/** A list field's current items (falling back to its declared default). */
+function listItems(value: FieldValue | undefined, fallback: readonly ListItem[]): ListItem[] {
+  return Array.isArray(value) ? value : [...fallback];
+}
+
 /** Validation message for a value against a field's constraints, or null if valid. */
 export function validateField(field: DynamicField, value: FieldValue | undefined): string | null {
+  if (field.type === 'list') {
+    return field.required && listItems(value, field.default).length === 0 ? 'Required' : null;
+  }
   if (field.type !== 'text' && field.type !== 'multiline') return null;
   const str = asString(value);
   if (field.required && str === '') return 'Required';

@@ -25,6 +25,29 @@ describe('buildPlayoutMetadata', () => {
     });
   });
 
+  it('emits holdSource only for content-driven holds (absent = timed)', () => {
+    const scene: Scene = {
+      ...fixtureScene,
+      playout: { mode: 'auto-out', holdSource: 'content-driven' },
+    };
+    expect(buildPlayoutMetadata(scene)).toEqual({
+      mode: 'auto-out',
+      holdSource: 'content-driven',
+    });
+  });
+
+  it("normalizes the LEGACY 'content-driven' mode into loop-cycle + content hold", () => {
+    const scene = {
+      ...fixtureScene,
+      playout: { mode: 'content-driven', repeat: 2 },
+    } as unknown as Scene;
+    expect(buildPlayoutMetadata(scene)).toEqual({
+      mode: 'loop-cycle',
+      holdSource: 'content-driven',
+      repeat: 2,
+    });
+  });
+
   it('computes the outro duration against activeRange when set', () => {
     const scene: Scene = {
       ...fixtureScene,

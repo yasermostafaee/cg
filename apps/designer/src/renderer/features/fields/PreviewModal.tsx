@@ -7,6 +7,7 @@ import {
   type NestedFieldValues,
   type Scene,
 } from '@cg/shared-schema';
+import { getAll as assetUrlGetAll } from '../assets/assetUrlCache.js';
 import { Modal } from '../shell/Modal.js';
 import { PreviewFieldForm, type PreviewDispatch } from './PreviewFieldForm.js';
 import { PreviewTransport } from './PreviewTransport.js';
@@ -187,6 +188,7 @@ export function PreviewModal({
     post({
       action: 'scene-replace',
       scene,
+      assetUrls: assetUrlGetAll(),
       playoutOverride: overrides[''],
       scopeOverrides: overrides,
     });
@@ -198,6 +200,10 @@ export function PreviewModal({
       const msg = evt.data as { kind?: string } | undefined;
       if (msg?.kind !== 'cg-preview-ready') return;
       if (evt.source !== iframeRef.current?.contentWindow) return;
+      // D-028 — the iframe boots with an empty assetUrls map; without this
+      // push, operator-imported (asset-*) fonts could never load here and the
+      // play-path font await would be a no-op on the only surface that plays.
+      post({ action: 'asset-urls', assetUrls: assetUrlGetAll() });
       post({ action: 'scrub', frame: 0 });
       post({ action: 'update', fields: defaultNestedValues(aggregate) });
     }

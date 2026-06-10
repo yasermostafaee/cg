@@ -193,6 +193,33 @@ runtime's ready promise resolves (post a message / set a marker attribute), and 
 the E2E fixture wait on THAT instead of on time; then re-evaluate whether `retries: 1`
 can stay or be removed.
 
+## [ ] B-012 — CI one-off: soak-runner "Reconciler is not a constructor" ⟨priority: low⟩
+
+**Repro:** none reliable.
+
+1. PR #79 run `27288386408` (`feat/add-ticker-element` @ `ee4401c`): the
+   Lint•Typecheck•Test•Build job failed in `@cg/soak-runner`
+   `tests/harness.test.ts` — 7/9 tests with `TypeError: Reconciler is not a
+constructor` (the `@cg/caspar-client` import resolved to undefined).
+2. The IDENTICAL rerun of the same commit passed; `main` was green throughout.
+
+**Expected:** soak-runner's vitest always sees a fully-built
+`caspar-client/dist`.
+**Actual:** one CI run imported an undefined `Reconciler`. NOT reproducible
+locally, even from a fully clean rebuild (dist + tsbuildinfo deleted, turbo
+`--force`). The CI log interleaving showed `@cg/caspar-client:build` output
+inside the same Test step seconds before the failures — suspected one-off
+turbo scheduling/output anomaly (test consuming a partially-emitted dist)
+despite a correct task graph (`test` dependsOn `["^build", "build"]`, dep
+declared).
+**Env:** GitHub Actions only; first-ever execution of the test step on a
+branch with broad cache invalidation (schema change → many rebuilds racing).
+**Notes:** DEFERRED test-infra hygiene log — **do not fix now**; no action
+unless it recurs. If it recurs: capture the full Test-step log (build
+completion timestamps vs. vitest start), and consider pinning
+`@cg/soak-runner#test` with an explicit `dependsOn` on
+`@cg/caspar-client#build` or `--concurrency` reduction as a probe.
+
 <!-- Add new open bugs above this line using the format. Example:
 
 ## [ ] B-001 — Export blocked dialog shows wrong error count

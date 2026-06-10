@@ -3,6 +3,7 @@ import type { FrameRate, Resolution, TemplateType } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore } from '../../state/store.js';
 import { RealtimeNumberInput } from '../inspector/controls.js';
+import { Select } from '../../ui/Select.js';
 import { Modal, ModalButton } from './Modal.js';
 import * as s from './NewProjectModal.css.js';
 
@@ -88,7 +89,7 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
 
       <div className={s.row}>
         <span className={s.label}>Resolution</span>
-        <select
+        <Select
           className={s.input}
           value={presetIdx}
           onChange={(e) => setPresetIdx(Number(e.target.value))}
@@ -99,7 +100,7 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
               {p.label}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {isCustom && (
@@ -129,7 +130,7 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
 
       <div className={s.row}>
         <span className={s.label}>Frame rate</span>
-        <select
+        <Select
           className={s.input}
           value={String(frameRate)}
           onChange={(e) => setFrameRate(Number(e.target.value) as FrameRate)}
@@ -140,7 +141,7 @@ export function NewProjectModal({ onClose }: Props): JSX.Element {
               {f} fps
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div className={s.row}>

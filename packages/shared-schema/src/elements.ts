@@ -110,6 +110,83 @@ export const TextElementSchema = ElementBaseSchema.extend({
 });
 export type TextElement = z.infer<typeof TextElementSchema>;
 
+/**
+ * One authored ticker item. Stable `id` is the reconcile key: a runtime
+ * `update()` with a new list keeps/moves/retires items by id, so text edits
+ * never restart the crawl. (The dynamic `list` FIELD item is the open,
+ * extensible shape — see `fields.ts`; the element stores only what it renders.)
+ */
+export const TickerItemSchema = z.object({
+  id: z.string().min(1),
+  text: z.string(),
+});
+export type TickerItem = z.infer<typeof TickerItemSchema>;
+
+/**
+ * Ticker / crawler element (D-028) — a clipped horizontal band that scrolls
+ * its items continuously. Geometry comes from the base `transform` (the band
+ * is the box; the runtime clips it). The scroll duration is content-driven:
+ * measured content width ÷ `speed`, supplied per pass to the composition's
+ * `content-driven` playout mode — never authored as a duration.
+ */
+export const TickerElementSchema = ElementBaseSchema.extend({
+  type: z.literal('ticker'),
+  font: z.object({
+    family: z.string().min(1),
+    weight: FontWeightSchema,
+    style: z.enum(['normal', 'italic']),
+    size: z.number().positive(),
+    lineHeight: z.number().positive(),
+    letterSpacing: z.number(),
+  }),
+  color: HexColorSchema,
+  /** Text drop shadow (matches the text element's `textShadow`). */
+  textShadow: ShadowSchema.optional(),
+  /** Band background colour (defaults to transparent). */
+  backgroundColor: HexColorSchema.optional(),
+  /** Optional gradient (or solid) band background; overrides `backgroundColor`. */
+  backgroundFill: FillSchema.optional(),
+  /** Band border-radius (px). */
+  cornerRadius: z.number().nonnegative().optional(),
+  /** Inner padding inside the band (items are vertically centred within). */
+  padding: PaddingSchema.optional(),
+  /**
+   * READING direction — explicit only (no 'auto': the runtime's auto⇒LTR
+   * container fallback is a footgun for a crawl). 'rtl' (Persian default) lays
+   * items out right-to-left and the track moves visually left→right, mirroring
+   * the English convention; 'ltr' is the exact mirror.
+   */
+  direction: z.enum(['ltr', 'rtl']),
+  /** Crawl speed in px/s. */
+  speed: z.number().positive(),
+  /**
+   * D-028 — the INNER repeat loop: how many crawl passes this ticker runs
+   * before signalling completion to its scope's playout ('infinite' = crawl
+   * until `stop()`). A finite run always ENDS CLEANLY: the last item fully
+   * exits the band before completion fires — never cut mid-scroll. The
+   * composition's own `playout.repeat` is the OUTER loop (open/close cycles);
+   * each cycle restarts the crawl.
+   */
+  repeat: z.union([z.number().int().min(1), z.literal('infinite')]).default('infinite'),
+  /**
+   * D-028 — what the seam between crawl passes looks like: 'seamless' keeps
+   * the treadmill continuous (the first item follows the last); 'drain' lets
+   * each pass fully EXIT the band before the next re-enters.
+   */
+  cycleBoundary: z.enum(['seamless', 'drain']).default('seamless'),
+  /** Horizontal gap between items (px). */
+  gap: z.number().nonnegative(),
+  /**
+   * Optional separator rendered between items as its own bidi-neutral span
+   * (e.g. ' • '). Never concatenated into item text — keeps reconcile and
+   * bidi isolation per item intact.
+   */
+  separator: z.string().optional(),
+  /** Authored default items; a bound `list` field replaces them at playout. */
+  items: z.array(TickerItemSchema),
+});
+export type TickerElement = z.infer<typeof TickerElementSchema>;
+
 /** Image element. References an asset by id. */
 export const ImageElementSchema = ElementBaseSchema.extend({
   type: z.literal('image'),
@@ -179,6 +256,7 @@ export type CompositionElement = z.infer<typeof CompositionElementSchema>;
  */
 export type Element =
   | TextElement
+  | TickerElement
   | ImageElement
   | ShapeElement
   | LottieElement
@@ -186,13 +264,39 @@ export type Element =
   | CompositionElement
   | ContainerElement;
 
+/**
+ * The PARSE-INPUT side of the union. The ticker's `repeat`/`cycleBoundary`
+ * carry Zod defaults, so stored JSON may omit them while the parsed `Element`
+ * always has them — the recursive schemas below must be annotated with both
+ * sides or the lazy `z.ZodType` annotation rejects the divergence.
+ */
+export type ElementInput =
+  | TextElement
+  | z.input<typeof TickerElementSchema>
+  | ImageElement
+  | ShapeElement
+  | LottieElement
+  | VideoPlaceholderElement
+  | CompositionElement
+  | ContainerElementInput;
+
 export interface ContainerElement extends ElementBase {
   type: 'container';
   clip: boolean;
   children: Element[];
 }
 
-export const ContainerElementSchema: z.ZodType<ContainerElement> = z.lazy(() =>
+export interface ContainerElementInput extends ElementBase {
+  type: 'container';
+  clip: boolean;
+  children: ElementInput[];
+}
+
+export const ContainerElementSchema: z.ZodType<
+  ContainerElement,
+  z.ZodTypeDef,
+  ContainerElementInput
+> = z.lazy(() =>
   ElementBaseSchema.extend({
     type: z.literal('container'),
     clip: z.boolean(),
@@ -206,9 +310,10 @@ export const ContainerElementSchema: z.ZodType<ContainerElement> = z.lazy(() =>
  * `discriminatedUnion` doesn't accept. Parse perf is fine for scene-graph
  * loads (cold-start path, not hot path).
  */
-export const ElementSchema: z.ZodType<Element> = z.lazy(() =>
+export const ElementSchema: z.ZodType<Element, z.ZodTypeDef, ElementInput> = z.lazy(() =>
   z.union([
     TextElementSchema,
+    TickerElementSchema,
     ImageElementSchema,
     ShapeElementSchema,
     LottieElementSchema,

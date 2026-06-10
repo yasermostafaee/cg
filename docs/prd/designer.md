@@ -569,24 +569,82 @@ with a format string (and Persian-digit support).
 `packages/template-runtime/README.md`); reuse `@cg/text-shaping` for digits. Needs a
 runtime time source (relates to the FrameDriver clock seam).
 
-## [ ] D-028 — Ticker / crawler ⟨priority: high⟩
+## [~] D-028 — Ticker / crawler ⟨priority: high⟩
 
-**What:** A horizontal/vertical scrolling ticker fed by a list of items, with
-continuous crawl and per-item pacing.
-**Why:** News crawls are a core deliverable and the most-requested template type.
-**Acceptance to be detailed when scheduled.**
-**Notes:** builds on D-020 `content-driven` playout (per-pass duration from the
-content) and the `durationHook` seam; likely a new element type + a data-list field.
-Depends on D-018 (dynamic fields) and D-020.
+**What:** A new `ticker` element type: a clipped horizontal band that scrolls a
+list of text items continuously (marquee/crawl). The scroll duration is
+content-driven — measured content width ÷ `speed` (px/s). The ticker owns its
+own crawl loop: `repeat` (`'infinite'` default | N passes) with
+`cycleBoundary: 'seamless' | 'drain'`; a finite run ends cleanly (the last
+item fully exits the band) and signals completion, which the composition's
+`holdSource: 'content-driven'` hold awaits — usable under `auto-out` AND
+`loop-cycle`, whose `repeat` counts open/close cycles. Items are authored on
+the element
+(`items: [{ id, text }]`) and can be driven dynamically through a new `list`
+field type bound to the ticker; `update()` reconciles items by stable id.
+`direction: 'rtl' | 'ltr'` is the reading direction (Persian default `'rtl'`:
+RTL item layout, track moves visually left→right, mirroring the news starter).
+**Why:** News crawls are a core deliverable and the most-requested template
+type; today both ticker starters fake the crawl with hard-coded keyframes over
+a fixed distance, so long text clips and short text leaves dead air.
+**Acceptance:**
+
+- WHEN a ticker's items are replaced with longer text THEN the pass duration
+  grows proportionally (measured width ÷ speed) with no manual duration edit
+- WHEN a ticker's `repeat` is N THEN feeding stops after pass N and the run
+  completes when the last item has fully exited the band (clean end, never cut
+  mid-scroll, completion signalled); WHEN `'infinite'` (the default) THEN the
+  crawl runs until `stop()`
+- WHEN `cycleBoundary` is `'seamless'` THEN the next pass follows the last at
+  the configured spacing; WHEN `'drain'` THEN the band empties between passes
+- WHEN a composition holds with `holdSource: 'content-driven'` THEN the hold
+  lasts until every scope ticker completes (usable under `auto-out` AND
+  `loop-cycle`; an infinite ticker holds until `stop()`); WHEN `loop-cycle`
+  `repeat: 3` contains a ticker with `repeat: 2` THEN each cycle holds for 2
+  crawl passes with the full open/close between — the content is seen 6×
+- WHEN `update()` delivers a new items list THEN items reconcile by stable id —
+  existing items keep position, new items append, removed items leave once
+  off-screen — with no restart or visual jump
+- WHEN the crawl wraps around THEN the loop seam shows no gap or flash
+- WHEN fonts are still loading THEN measurement waits for `document.fonts.ready`
+  (no mis-measured first pass; in the Designer preview this includes
+  operator-imported `asset-*` fonts)
+- WHEN `direction` is `'rtl'` THEN items lay out right-to-left with per-item
+  bidi isolation (mixed RTL/LTR items render correctly) and the track moves
+  visually left→right; `'ltr'` is the mirror
+- WHEN the same scene is previewed and exported THEN the ticker behaves
+  identically (single-file export carries it; GDD represents the list field)
+- WHEN the operator scrubs the timeline THEN the ticker does not move and the
+  UI states it is time-driven (scrub does not apply)
+- WHEN a `list` field is bound to a ticker THEN the preview field form shows an
+  items editor (add/remove/reorder) that live-updates the crawl
+  **Notes:** supersedes D-020's `content-driven` _mode_ + `durationHook` seam
+  with a completion model — the runtime self-wires each scope's content-driven
+  hold from its tickers' completion signals (`Promise.all`; no boot-option
+  wiring needed in preview/export; `RuntimeBootOptions.contentHold` is the
+  root-scope external override/test seam), and a stored legacy
+  `mode: 'content-driven'` normalizes to `loop-cycle` +
+  `holdSource: 'content-driven'`. New `list` field type has an extensible item shape
+  (required `id` + open fields; the ticker reads `text`) so the repeater (D-030)
+  and sequence (D-029) can reuse it. Lists travel as JSON only (legacy CasparCG
+  XML payloads can't carry them). Change dir:
+  `openspec/changes/add-ticker-element/`.
 
 ## [ ] D-029 — Sequence / now-next ⟨priority: medium⟩
 
 **What:** A template that pages through a sequence of entries (e.g. now/next/later)
-advancing on command or on a timer.
-**Why:** Rundown-style "now & next" lower-thirds are common and not expressible today.
+showing **one item at a time**, advancing on command or on a timer. Each item has
+its own configurable **dwell time** (per-item, not one global), and the in/out
+transition between items is a selectable **transition style** — initially
+`horizontal` / `vertical` / `slideUp` / `slideDown` / `hide-show`, modeled as an
+extensible enum so new styles can be added without a breaking change.
+**Why:** Rundown-style "now & next" lower-thirds are common and not expressible
+today.
 **Acceptance to be detailed when scheduled.**
 **Notes:** pairs with D-031 (`steps` + real `next()`) and the rundown control app
-(C-002). Depends on D-018.
+(C-002). Depends on D-018; reuses the D-028 extensible `list` field for its items
+(`{ id, text, dwellMs? … }` — the open item shape was designed for this). Timer
+advance relates to the D-028 driver-clock seam (injectable `RuntimeClock`).
 
 ## [ ] D-030 — Repeater / data-driven layout ⟨priority: medium⟩
 
@@ -676,3 +734,18 @@ catches regressions faster.
 **Acceptance to be detailed when scheduled.**
 **Notes:** complements P-004 (Exporter/Preview tests) and P-005 (E2E); prerequisite
 safety net for D-035.
+
+## [ ] D-039 — Ticker image/logo separators ⟨priority: low⟩
+
+**What:** Let the ticker's `separator` be an image/logo instead of (or alongside)
+a text glyph: the operator picks a logo from the project's asset/logo list and the
+runtime renders it between items, sized to the band and vertically centred —
+design TBD when scheduled.
+**Why:** Branded crawls (channel bug between headlines) are a common broadcast
+look; a text-only separator can't express it.
+**Acceptance to be detailed when scheduled.**
+**Notes:** extends the D-028 ticker (`TickerElement.separator` would widen to a
+union, e.g. `string | { assetId }`); the treadmill driver already measures and
+feeds separator nodes generically, so the work is mostly schema + asset
+resolution + the inspector picker. Relates to the asset pipeline (preview blob
+URLs / export inlining) the image element already uses.

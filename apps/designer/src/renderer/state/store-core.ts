@@ -15,7 +15,7 @@ import type { AnimatableProperty, Element, Scene } from '@cg/shared-schema';
  * cross-slice mutation behaves exactly as before. See `state/README.md`.
  */
 
-export type DesignerTool = 'cursor' | 'text' | 'shape' | 'ellipse' | 'image' | 'hand';
+export type DesignerTool = 'cursor' | 'text' | 'ticker' | 'shape' | 'ellipse' | 'image' | 'hand';
 
 export type DesignerView = 'landing' | 'studio';
 

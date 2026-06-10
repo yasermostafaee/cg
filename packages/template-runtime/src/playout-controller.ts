@@ -23,11 +23,20 @@ export interface PlayoutControllerOptions {
   /** Fully settled hidden (outro finished). */
   onSettle: () => void;
   /**
-   * `content-driven` per-pass duration (ms). The ticker supplies the real
-   * content→duration computation; recomputed each pass so dynamic content gets
-   * a fresh duration. `holdMs` does NOT apply to `content-driven`.
+   * D-028 — fired at EVERY hold entry (the intro just finished), before the
+   * hold timing starts. The runtime resets + starts the scope's ticker
+   * treadmills here — each composition cycle gets a FRESH crawl run.
    */
-  durationHook?: (() => number) | undefined;
+  onHoldStart?: (() => void) | undefined;
+  /**
+   * D-028 — content-completion supplier for `holdSource: 'content-driven'`:
+   * invoked at each hold entry; the hold lasts until the returned promise
+   * resolves (all the scope's finite tickers done). Returning `null` (no
+   * content elements in scope) ⇒ a zero-length hold. A promise that never
+   * resolves (an infinite ticker) holds until `stop()`. Stale resolutions
+   * (after stop / a later cycle) are ignored via a hold token.
+   */
+  waitForContent?: (() => Promise<void> | null) | undefined;
   clock?: RuntimeClock | undefined;
 }
 
@@ -42,7 +51,7 @@ interface NormalizedClock {
 }
 
 /**
- * D-020 — drives a composition's runtime lifecycle and playout timing.
+ * D-020/D-028 — drives a composition's runtime lifecycle and playout timing.
  *
  * The default is **play-once-and-hold**: `play()` runs the full entrance
  * `[active.in → outPoint]` once and holds (frozen) at `outPoint`; `stop()` runs
@@ -50,14 +59,17 @@ interface NormalizedClock {
  * the last active frame, so a composition with no marker plays its whole timeline
  * once and holds the last frame (the outro is empty) — it does **not** loop.
  *
- * `auto-out` runs the OUT automatically after reaching `outPoint` + `holdMs`;
- * `loop-cycle` repeats IN → hold → OUT for `repeat` cycles (or forever when
- * `repeat` is `'infinite'`). `content-driven` runs `repeat` passes (or forever
- * when `'infinite'`), each pass taking its duration from `durationHook` instead
- * of `holdMs`. There is no separate continuous-loop mode — a looping logo is
+ * Two orthogonal axes (D-028): `mode` counts open/close cycles — `auto-out` runs
+ * the OUT automatically after one hold; `loop-cycle` repeats IN → hold → OUT for
+ * `repeat` cycles (or forever when `'infinite'`). `holdSource` decides what ends
+ * each hold — `timed` holds for `holdMs`; `content-driven` holds until
+ * `waitForContent`'s promise resolves (the scope's tickers complete; an infinite
+ * ticker never resolves, holding until `stop()`; no content ⇒ a zero-length
+ * hold). There is no separate continuous-loop mode — a looping logo is
  * `loop-cycle` with `repeat: 'infinite'` (and `holdMs: 0` to loop the full
  * timeline). `pause()` / `resume()` freeze and continue both the driver and the
- * hold timer.
+ * hold timer (a content hold needs no freeze bookkeeping — pausing the runtime
+ * pauses the tickers, so completion simply arrives later).
  */
 export class PlayoutController {
   private readonly o: PlayoutControllerOptions;
@@ -74,9 +86,12 @@ export class PlayoutController {
   private holdStartedAt = 0;
   private holdRemainingMs: number | null = null;
 
-  // Cycles/passes left for `loop-cycle` / `content-driven` (`'infinite'` repeats
-  // until stop()).
+  // Cycles left for `loop-cycle` (`'infinite'` repeats until stop()).
   private cyclesLeft: number | 'infinite' = 1;
+  // D-028 — identifies the CURRENT content hold; bumped by stop()/reset()/
+  // startOutro() so a stale `waitForContent` resolution (after stop, or from a
+  // previous cycle) can never trigger a second outro.
+  private holdToken = 0;
   // Guards `onExitStart` to fire exactly once per exit, before `onSettle`.
   private exitAnnounced = false;
   // D-026 — has this controller finished its lifecycle and settled (its outro ran
@@ -167,10 +182,9 @@ export class PlayoutController {
     return this.o.lifecycle?.outPoint ?? this.o.active.out;
   }
 
-  /** Modes that repeat IN → hold → OUT for `repeat` cycles/passes. */
+  /** Modes that repeat IN → hold → OUT for `repeat` cycles. */
   private cyclic(): boolean {
-    const mode = this.o.playout.mode;
-    return mode === 'loop-cycle' || mode === 'content-driven';
+    return this.o.playout.mode === 'loop-cycle';
   }
 
   private startIntro(): void {
@@ -185,14 +199,31 @@ export class PlayoutController {
     // that frame. (A looping idle while holding is D-021's opt-in, not part of
     // this change.)
     this.stopDriver();
-    const mode = this.o.playout.mode;
-    if (mode === 'manual') return; // hold frozen at outPoint until stop()
-    // `content-driven`: the pass duration comes from the runtime `durationHook`
-    // (the ticker computes content→duration), recomputed each pass; `holdMs`
-    // does NOT apply. Every other timed mode holds for `holdMs`.
-    const ms =
-      mode === 'content-driven' ? (this.o.durationHook?.() ?? 0) : (this.o.playout.holdMs ?? 0);
-    this.scheduleHold(ms, () => this.startOutro());
+    // D-028 — every hold entry gets a FRESH content run (the runtime resets +
+    // starts the scope's tickers here), so each loop-cycle pass replays the
+    // crawl from its entering edge.
+    this.o.onHoldStart?.();
+    if (this.o.playout.mode === 'manual') return; // hold frozen until stop()
+    if (this.o.playout.holdSource === 'content-driven') {
+      // The hold lasts until the scope's content completes. A token guards
+      // against stale resolutions (stop()/a later cycle); a null wait (no
+      // content elements) is a zero-length hold.
+      const token = ++this.holdToken;
+      const wait = this.o.waitForContent?.() ?? null;
+      if (wait === null) {
+        // Zero-length hold — but DEFER the outro (a 0ms timer, exactly like a
+        // timed hold of 0): a synchronous outro would let a zero-hold ROOT
+        // settle — and cascade stop() — before its children even received the
+        // play() cascade.
+        this.scheduleHold(0, () => this.startOutro());
+        return;
+      }
+      void wait.then(() => {
+        if (token === this.holdToken && this.phase === 'hold') this.startOutro();
+      });
+      return;
+    }
+    this.scheduleHold(this.o.playout.holdMs ?? 0, () => this.startOutro());
   }
 
   private startOutro(): void {
@@ -266,6 +297,10 @@ export class PlayoutController {
   }
 
   private clearHold(): void {
+    // Invalidate any pending content-completion resolution along with the
+    // timer — clearHold runs on stop(), outro start, and reset(), which are
+    // exactly the moments a stale `waitForContent` promise must be ignored.
+    this.holdToken += 1;
     if (this.holdTimer !== null) {
       this.clock.clearTimeout(this.holdTimer);
       this.holdTimer = null;

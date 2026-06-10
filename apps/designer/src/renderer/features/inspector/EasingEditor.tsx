@@ -10,6 +10,7 @@ import {
   presetKeyFor,
   screenToCurve,
 } from './easing-geometry.js';
+import { Select } from '../../ui/Select.js';
 import * as s from './EasingEditor.css.js';
 
 interface Props {
@@ -88,7 +89,7 @@ export function EasingEditor({ bezier, onChange }: Props): JSX.Element {
       <h3 className={s.heading}>KEYFRAME INTERPOLATION</h3>
       <div className={s.presetRow}>
         <span className={s.label}>Preset</span>
-        <select
+        <Select
           className={s.select}
           value={presetKey}
           onChange={(e) => {
@@ -102,7 +103,7 @@ export function EasingEditor({ bezier, onChange }: Props): JSX.Element {
               {p.label}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div className={s.graphWrap}>

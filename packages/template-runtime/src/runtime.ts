@@ -41,6 +41,7 @@ import { EventBus } from './event-bus.js';
 import { LifecycleStateMachine } from './lifecycle.js';
 import { PlayoutController } from './playout-controller.js';
 import { buildScene } from './scene-builder.js';
+import { TickerDriver, registerTickerDriver } from './ticker-driver.js';
 import type {
   FieldScope,
   PlayOptions,
@@ -78,6 +79,58 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const built = buildScene(scene, doc);
   root.appendChild(built.container);
 
+  // D-020/D-026 — per-scope, non-persistent overrides (preview session / future
+  // rundown) override the stored playout — and the scope's tickers' own
+  // repeat/boundary — for THIS run only, keyed by the scope's instance-name path
+  // (`''` = root). `playoutOverride` is the legacy root-only alias for
+  // `scopeOverrides['']`. Hoisted above driver instantiation so ticker overrides
+  // can apply at construction.
+  const overrides: Record<string, PlayoutOverride> = { ...(options.scopeOverrides ?? {}) };
+  if (options.playoutOverride !== undefined && overrides[''] === undefined) {
+    overrides[''] = options.playoutOverride;
+  }
+
+  // D-028 — one treadmill driver per ticker element, per scope (the same child
+  // composition instanced twice gets two independent drivers). Instantiated
+  // BEFORE the initial field application below so a `list` field default can
+  // already reconcile into its driver. The band→driver registry is how the
+  // bindings applier routes `ticker-items` values.
+  const allTickers: TickerDriver[] = [];
+  const tickersByScope = new Map<FieldScope, TickerDriver[]>();
+  const instantiateTickers = (scope: FieldScope, path: string): void => {
+    const scopeOverride = overrides[path];
+    const drivers = scope.tickers.map((t) => {
+      // The crawl lives in the padding-inset viewport div (CSS padding is
+      // inert for the abspos track), so the travel width shrinks with it.
+      const pad = t.element.padding;
+      const horizontalPad = pad === undefined ? 0 : pad.left + pad.right;
+      const driver = new TickerDriver({
+        band: t.band,
+        track: t.track,
+        viewportWidth: Math.max(0, t.element.transform.size.w - horizontalPad),
+        direction: t.element.direction,
+        speed: t.element.speed,
+        gap: t.element.gap,
+        separator: t.element.separator,
+        items: t.element.items,
+        // D-028 inner loop — the element's authored repeat/boundary, session-
+        // overridable per scope (the same layering as holdMs/repeat).
+        repeat: scopeOverride?.tickerRepeat ?? t.element.repeat,
+        cycleBoundary: scopeOverride?.tickerBoundary ?? t.element.cycleBoundary,
+        clock: options.clock,
+        measure: options.tickerMeasure,
+      });
+      registerTickerDriver(t.band, driver);
+      allTickers.push(driver);
+      return driver;
+    });
+    if (drivers.length > 0) tickersByScope.set(scope, drivers);
+    for (const child of scope.children) {
+      instantiateTickers(child.scope, path === '' ? child.name : `${path}.${child.name}`);
+    }
+  };
+  instantiateTickers(built.scopeTree, '');
+
   applyScopedFieldValues(scene, scene, {}, built.scopeTree);
 
   // D-026 — every scope (the root scene + each nested instance) owns its animated
@@ -103,22 +156,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const ready: Promise<void> = options.skipFontLoad ? Promise.resolve() : waitForFonts(doc);
   void ready.then(() => bus.emit('ready'));
 
-  // D-020 — each controller owns its scope's playhead. The default is
+  // D-020/D-028 — each controller owns its scope's playhead. The default is
   // play-once-and-hold: it plays `[activeRange.in → outPoint]` once (an absent
   // `outPoint` is the last active frame) and holds, then the `mode` orchestration
-  // (auto-out / loop-cycle / content-driven) runs. Looping is no longer a silent
-  // default and there is no separate continuous-loop mode — a looping logo is
-  // `loop-cycle` with `repeat: 'infinite'`. The stored `playout` carries the
-  // defaults.
-  //
-  // D-026 — per-scope, non-persistent overrides (preview session / future rundown)
-  // override the stored playout for THIS run only, keyed by the scope's
-  // instance-name path (`''` = root). `playoutOverride` is the legacy root-only
-  // alias for `scopeOverrides['']`.
-  const overrides: Record<string, PlayoutOverride> = { ...(options.scopeOverrides ?? {}) };
-  if (options.playoutOverride !== undefined && overrides[''] === undefined) {
-    overrides[''] = options.playoutOverride;
-  }
+  // (auto-out / loop-cycle) runs, with `holdSource` deciding what ends each hold
+  // (timed `holdMs` vs. the scope's tickers completing). Looping is no longer a
+  // silent default and there is no separate continuous-loop mode — a looping
+  // logo is `loop-cycle` with `repeat: 'infinite'`. The stored `playout` carries
+  // the defaults; `overrides` (hoisted above) layers the session knobs per scope.
   const effectivePlayoutFor = (
     source: { playout?: Playout | undefined },
     path: string,
@@ -127,6 +172,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     const o = overrides[path];
     return {
       mode: o?.mode ?? b.mode,
+      holdSource: o?.holdSource ?? b.holdSource,
       holdMs: o?.holdMs ?? b.holdMs,
       repeat: o?.repeat ?? b.repeat,
     };
@@ -153,8 +199,35 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // play/stop/pause cascade while every child runs its own in→hold→out
   // independently and can be timed independently in the preview.
   const noop = (): void => undefined;
+  // Assigned once the controller tree exists (the closure below fires long
+  // after). The ROOT settling on its own (auto-out / finite loop-cycle /
+  // finite content-driven) takes the whole template off air: cascade stop()
+  // to every nested scope (settled children no-op per D-026) and freeze every
+  // crawl — otherwise an infinite nested lifecycle keeps timers/rAF rolling
+  // under the hidden stage, with stop() unreachable (machine already
+  // 'stopped').
+  let onRootSettled: () => void = noop;
   const buildScopeController = (scope: FieldScope, isRoot: boolean, path: string): ScopeNode => {
     const own = scope.animated;
+    // D-028 — self-wire the scope's content completion from its tickers: a
+    // `holdSource: 'content-driven'` hold lasts until EVERY scope ticker's run
+    // resolves (an infinite ticker never resolves ⇒ hold until stop(); no
+    // tickers ⇒ null ⇒ a zero-length hold). An EXPLICIT boot-option
+    // `contentHold` still wins for the root scope (external override / test
+    // seam). Each hold entry resets + starts the scope's tickers, so every
+    // open/close cycle replays the crawl from its entering edge.
+    const scopeTickers = tickersByScope.get(scope) ?? [];
+    const tickerWait =
+      scopeTickers.length > 0
+        ? (): Promise<void> =>
+            Promise.all(scopeTickers.map((t) => t.whenComplete())).then(() => undefined)
+        : undefined;
+    const externalWait =
+      isRoot && options.contentHold !== undefined ? options.contentHold : undefined;
+    const waitForContent = externalWait ?? tickerWait;
+    const stopScopeTickers = (): void => {
+      for (const t of scopeTickers) t.stop();
+    };
     const controller = new PlayoutController({
       frameRate: scene.frameRate,
       active: activeRangeOf(scope.source),
@@ -165,8 +238,24 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         for (const entry of own) applyAnimationAtFrame(entry, frame);
       },
       onExitStart: isRoot ? rootOnExitStart : noop,
-      onSettle: isRoot ? rootOnSettle : noop,
-      durationHook: isRoot ? options.durationHook : undefined,
+      onSettle: isRoot
+        ? (): void => {
+            onRootSettled();
+          }
+        : stopScopeTickers,
+      waitForContent:
+        waitForContent === undefined ? undefined : (): Promise<void> => waitForContent(),
+      onHoldStart:
+        scopeTickers.length > 0
+          ? (): void => {
+              // Fresh crawl per composition cycle (reset BEFORE the wait is
+              // requested, so the controller awaits this run's completion).
+              for (const t of scopeTickers) {
+                t.reset();
+                t.start();
+              }
+            }
+          : undefined,
       clock: options.clock,
     });
     // Build each child's path by appending its instance name to the parent's
@@ -184,6 +273,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const cascade = (node: ScopeNode, op: (c: PlayoutController) => void): void => {
     op(node.controller);
     for (const child of node.children) cascade(child, op);
+  };
+
+  onRootSettled = (): void => {
+    cascade(rootNode, (c) => c.stop()); // root itself is settled — a no-op
+    for (const t of allTickers) t.stop();
+    rootOnSettle();
   };
 
   const runtime: TemplateRuntime = {
@@ -204,6 +299,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       bus.emit('play.start');
       doc.body.classList.remove('cg-pending');
       machine.transition('on-air');
+      // D-028 — a fresh run restarts every crawl from its entering edge (the
+      // controllers' first hold then starts the treadmills).
+      for (const t of allTickers) t.reset();
       // Play the IN once and hold (no full-range loop, no auto-outro by default);
       // the mode orchestration (auto-out / loop-cycle / content-driven) then runs.
       // Absent lifecycle: the whole timeline is the entrance and the hold is its
@@ -239,16 +337,20 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     pause(): void {
       if (machine.state === 'removed') return;
       cascade(rootNode, (c) => c.pause());
+      // D-028 — freeze the crawls in lockstep with the frozen hold timers.
+      for (const t of allTickers) t.pause();
     },
 
     resume(): void {
       if (machine.state === 'removed') return;
       cascade(rootNode, (c) => c.resume());
+      for (const t of allTickers) t.resume();
     },
 
     remove(): void {
       if (machine.state === 'removed') return;
       cascade(rootNode, (c) => c.destroy());
+      for (const t of allTickers) t.destroy();
       machine.forceTransition('removed');
       bus.clear();
       built.container.remove();

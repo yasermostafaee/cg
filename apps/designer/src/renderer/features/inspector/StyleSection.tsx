@@ -7,7 +7,10 @@ import type {
   Shadow,
   ShapeElement,
   TextElement,
+  TickerElement,
 } from '@cg/shared-schema';
+import { ListItemsEditor } from '../fields/ListItemsEditor.js';
+import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import {
@@ -18,8 +21,9 @@ import {
   keyframeVariantFor,
 } from '../timeline/keyframe-helpers.js';
 import { CollapseSection } from './CollapseSection.js';
-import { ColorField, NumberField, SelectField, VectorField } from './controls.js';
+import { ColorField, NumberField, SelectField, TextField, VectorField } from './controls.js';
 import { FillField } from './FillPopover.js';
+import { FontFamilySelect } from './FontFamilySelect.js';
 import { TextStyleSection } from './TextStyleSection.js';
 
 interface Props {
@@ -107,6 +111,14 @@ export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element 
   if (element.type === 'image')
     return (
       <ImageSections
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    );
+  if (element.type === 'ticker')
+    return (
+      <TickerSections
         element={element}
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
@@ -314,6 +326,262 @@ function ImageSections({
         element={element}
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
+      />
+    </>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────
+//                              TICKER
+// ────────────────────────────────────────────────────────────────────────
+
+/**
+ * D-028 — the ticker/crawler config. There is deliberately NO duration knob:
+ * the crawl duration is content-driven (measured width ÷ speed) and the
+ * composition's playout `repeat` loops it. The items editor edits the
+ * element's authored items (and keeps a bound `list` field's default in sync
+ * via the store's `setTickerItems`).
+ */
+function TickerSections({
+  element,
+  currentFrame,
+  selectedKeyframe,
+}: SectionProps<TickerElement>): JSX.Element {
+  const id = element.id;
+  return (
+    <>
+      <CollapseSection title="Ticker" pinned>
+        <SelectField
+          label="direction"
+          value={element.direction}
+          options={['rtl', 'ltr'] as const}
+          onCommit={(direction) =>
+            designerStore.updateElement(id, { direction } as Partial<Element>)
+          }
+          trailing={pointIcon('direction')}
+        />
+        <NumberField
+          label="speed"
+          value={element.speed}
+          step={10}
+          min={1}
+          suffix="px/s"
+          onCommit={(speed) =>
+            designerStore.updateElement(id, { speed: Math.max(1, speed) } as Partial<Element>)
+          }
+          trailing={pointIcon('speed')}
+        />
+        <NumberField
+          label="gap"
+          value={element.gap}
+          step={4}
+          min={0}
+          suffix="px"
+          onCommit={(gap) =>
+            designerStore.updateElement(id, { gap: Math.max(0, gap) } as Partial<Element>)
+          }
+          trailing={pointIcon('gap')}
+        />
+        <TextField
+          label="separator"
+          value={element.separator ?? ''}
+          resetKey={id}
+          onCommit={(separator) =>
+            designerStore.updateElement(id, {
+              separator: separator === '' ? undefined : separator,
+            } as Partial<Element>)
+          }
+        />
+        {/* D-028 — the ticker's INNER repeat loop. A fresh ticker is infinite
+            by design; finite passes complete cleanly (the last item fully
+            exits) and signal the composition's content-driven hold. */}
+        <SelectField
+          label="repeat"
+          value={element.repeat === 'infinite' ? 'infinite' : 'count'}
+          options={['infinite', 'count'] as const}
+          onCommit={(v) =>
+            designerStore.updateElement(id, {
+              repeat: v === 'infinite' ? 'infinite' : 2,
+            } as Partial<Element>)
+          }
+        />
+        {element.repeat !== 'infinite' && (
+          <NumberField
+            label="passes"
+            value={element.repeat}
+            step={1}
+            min={1}
+            onCommit={(n) =>
+              designerStore.updateElement(id, {
+                repeat: Math.max(1, Math.round(n)),
+              } as Partial<Element>)
+            }
+          />
+        )}
+        <SelectField
+          label="cycle seam"
+          value={element.cycleBoundary}
+          options={['seamless', 'drain'] as const}
+          onCommit={(cycleBoundary) =>
+            designerStore.updateElement(id, { cycleBoundary } as Partial<Element>)
+          }
+        />
+        <p className={dds.hint}>
+          Time-driven: the crawl runs during playback (its pass length comes from the measured
+          content width ÷ speed) — scrubbing the timeline doesn’t move it.
+        </p>
+      </CollapseSection>
+
+      <CollapseSection title="Items" defaultExpanded>
+        <ListItemsEditor
+          items={element.items}
+          label={element.name || 'Ticker'}
+          onChange={(items) => designerStore.setTickerItems(id, items)}
+        />
+      </CollapseSection>
+
+      {/* Style parity with text: family/weight/size, colour, band background
+          (default transparent). Plain commits — ticker styling isn't
+          keyframe-animatable (the crawl is time-driven, not timeline-driven). */}
+      <CollapseSection title="Ticker Text" defaultExpanded>
+        <FontFamilySelect
+          value={element.font.family}
+          onCommit={(family) =>
+            designerStore.updateElement(id, {
+              font: { ...element.font, family },
+            } as Partial<Element>)
+          }
+        />
+        <SelectField
+          label="weight"
+          value={String(element.font.weight)}
+          options={['100', '200', '300', '400', '500', '600', '700', '800', '900'] as const}
+          onCommit={(w) =>
+            designerStore.updateElement(id, {
+              font: { ...element.font, weight: Number(w) },
+            } as Partial<Element>)
+          }
+        />
+        <NumberField
+          label="size"
+          value={element.font.size}
+          step={1}
+          min={1}
+          suffix="px"
+          onCommit={(size) => {
+            if (size > 0)
+              designerStore.updateElement(id, {
+                font: { ...element.font, size },
+              } as Partial<Element>);
+          }}
+        />
+        <ColorField
+          label="text color"
+          value={element.color}
+          resetKey={id}
+          onCommit={(color) => designerStore.updateElement(id, { color } as Partial<Element>)}
+        />
+        <FillField
+          label="background"
+          value={
+            element.backgroundFill ?? {
+              kind: 'solid',
+              color: element.backgroundColor ?? '#00000000',
+            }
+          }
+          onChange={(f) => {
+            if (f.kind === 'solid') {
+              designerStore.updateElement(id, {
+                backgroundFill: undefined,
+                backgroundColor: f.color,
+              } as Partial<Element>);
+            } else {
+              designerStore.updateElement(id, { backgroundFill: f } as Partial<Element>);
+            }
+          }}
+        />
+      </CollapseSection>
+
+      <CollapseSection title="Drop Shadow">
+        <TickerShadowRows element={element} />
+      </CollapseSection>
+
+      <CollapseSection title="Band Padding">
+        {(['top', 'right', 'bottom', 'left'] as const).map((side) => (
+          <NumberField
+            key={side}
+            label={side}
+            value={element.padding?.[side] ?? 0}
+            step={1}
+            min={0}
+            suffix="px"
+            onCommit={(v) => {
+              const p = element.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
+              designerStore.updateElement(id, {
+                padding: { ...p, [side]: Math.max(0, v) },
+              } as Partial<Element>);
+            }}
+          />
+        ))}
+      </CollapseSection>
+
+      <CollapseSection title="Border Radius">
+        <NumberField
+          label="radius"
+          value={element.cornerRadius ?? 0}
+          step={1}
+          min={0}
+          suffix="px"
+          onCommit={(v) =>
+            designerStore.updateElement(id, {
+              cornerRadius: Math.max(0, v),
+            } as Partial<Element>)
+          }
+        />
+      </CollapseSection>
+
+      <FilterSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    </>
+  );
+}
+
+/** Ticker text-shadow rows — plain (non-animatable) commits. */
+function TickerShadowRows({ element }: { element: TickerElement }): JSX.Element {
+  const id = element.id;
+  const s = element.textShadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
+  const patch = (p: Partial<typeof s>): void => {
+    designerStore.updateElement(id, { textShadow: { ...s, ...p } } as Partial<Element>);
+  };
+  return (
+    <>
+      <NumberField
+        label="offset X"
+        value={s.offsetX}
+        step={1}
+        onCommit={(v) => patch({ offsetX: v })}
+      />
+      <NumberField
+        label="offset Y"
+        value={s.offsetY}
+        step={1}
+        onCommit={(v) => patch({ offsetY: v })}
+      />
+      <NumberField
+        label="blur"
+        value={s.blur}
+        step={1}
+        min={0}
+        onCommit={(v) => patch({ blur: v })}
+      />
+      <ColorField
+        label="color"
+        value={s.color}
+        resetKey={id}
+        onCommit={(color) => patch({ color })}
       />
     </>
   );

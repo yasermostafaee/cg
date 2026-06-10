@@ -113,3 +113,46 @@ describe('FieldValues', () => {
     expect(FieldValuesSchema.parse({})).toEqual({});
   });
 });
+
+describe('ListField (D-028)', () => {
+  it('accepts a list field with {id, text} default items', () => {
+    const f = {
+      ...baseField,
+      type: 'list' as const,
+      default: [
+        { id: 'i1', text: 'یک' },
+        { id: 'i2', text: 'دو' },
+      ],
+    };
+    expect(DynamicFieldSchema.parse(f)).toEqual(f);
+  });
+  it('keeps the item shape OPEN — extra fields pass through (repeater/sequence reuse)', () => {
+    const f = {
+      ...baseField,
+      type: 'list' as const,
+      default: [{ id: 'p1', name: 'Player', number: 9, text: 'optional' }],
+    };
+    const parsed = DynamicFieldSchema.parse(f);
+    expect(parsed).toEqual(f);
+    if (parsed.type === 'list') {
+      expect(parsed.default[0]).toMatchObject({ name: 'Player', number: 9 });
+    }
+  });
+  it('rejects an item missing the required id', () => {
+    expect(() =>
+      DynamicFieldSchema.parse({ ...baseField, type: 'list', default: [{ text: 'x' }] }),
+    ).toThrow();
+  });
+  it('a list value round-trips through FieldValues', () => {
+    const v = {
+      headlines: [
+        { id: 'i1', text: 'خبر' },
+        { id: 'i2', text: 'Brand X' },
+      ],
+    };
+    expect(FieldValuesSchema.parse(v)).toEqual(v);
+  });
+  it('rejects a list value whose items lack ids', () => {
+    expect(() => FieldValuesSchema.parse({ headlines: [{ text: 'x' }] })).toThrow();
+  });
+});

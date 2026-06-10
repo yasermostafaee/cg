@@ -263,6 +263,14 @@ export class Preview {
           busy = true;
           try {
             currentScene = scene;
+            // D-028 — operator (asset-*) faces load BEFORE the old stage is
+            // torn down (no blank-checkerboard flash while a font fetches)
+            // and before the runtime exists, so runtime.ready
+            // (document.fonts.ready) and the ticker's first-pass width
+            // measurement see final glyphs. Failures degrade gracefully
+            // (applyFontFaces posts cg-preview-error itself) — a broken font
+            // must not brick the preview.
+            await applyFontFaces().catch(() => {});
             if (runtime) runtime.remove();
             // remove() leaves body.cg-removed / pending state; clear
             // both so the next createRuntime starts clean.
@@ -278,7 +286,6 @@ export class Preview {
             await runtime.update(currentFields);
             runtime.tick(currentFrame);
             applyAssetUrls();
-            applyFontFaces().catch(() => {});
             applyEditingHide();
           } finally {
             busy = false;
@@ -332,6 +339,10 @@ export class Preview {
                 if (runtime) runtime.tick(currentFrame);
               } else if (msg.action === 'play' && typeof window.play === 'function') {
                 currentFields = msg.fields ?? {};
+                // D-028 — asset fonts may have arrived after the scene build;
+                // await them so the first pass a user ever sees measures with
+                // final glyphs (no-op when already loaded).
+                await applyFontFaces().catch(() => {});
                 window.play(JSON.stringify(currentFields));
                 if (runtime) runtime.tick(currentFrame);
               } else if (msg.action === 'stop' && typeof window.stop === 'function') {

@@ -4,6 +4,7 @@ import type { StarterEntry } from '@cg/shared-ipc';
 import { designerStore } from '../../state/store.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
+import { Select } from '../../ui/Select.js';
 import * as s from './LibraryPanel.css.js';
 
 const TEMPLATE_TYPES: TemplateType[] = [
@@ -81,17 +82,18 @@ export function LibraryPanel(): JSX.Element {
         onChange={(e) => setName(e.target.value)}
         placeholder="Project name"
       />
-      <select
+      <Select
         className={s.select}
         value={type}
         onChange={(e) => setType(e.target.value as TemplateType)}
+        aria-label="Template type"
       >
         {TEMPLATE_TYPES.map((t) => (
           <option key={t} value={t}>
             {t}
           </option>
         ))}
-      </select>
+      </Select>
       <Button
         variant="bare"
         className={cx(s.button, s.buttonPrimary)}

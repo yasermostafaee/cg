@@ -26,22 +26,52 @@ export const LifecycleSchema = z.object({
 export type Lifecycle = z.infer<typeof LifecycleSchema>;
 
 /** No-code playout timing modes. `manual` holds after the intro until `stop()`. */
-export const PlayoutModeSchema = z.enum(['manual', 'auto-out', 'loop-cycle', 'content-driven']);
+export const PlayoutModeSchema = z.enum(['manual', 'auto-out', 'loop-cycle']);
 export type PlayoutMode = z.infer<typeof PlayoutModeSchema>;
 
 /**
- * D-020 — composition playout timing config. `auto-out` runs the outro after the
- * graphic reaches `outPoint` + `holdMs`; `loop-cycle` repeats `[in→outPoint]` →
- * hold(`holdMs`) → `[outPoint→end]` for `repeat` cycles (or forever when
- * `'infinite'`); `content-driven` is declared here and supplied a duration by the
- * runtime (the ticker computes it). Default `manual`. Absent `playout` ⇒ `manual`.
+ * D-028 — what ends a hold (orthogonal to `mode`): `timed` holds for `holdMs`;
+ * `content-driven` holds until the scope's content elements (tickers) signal
+ * completion — all finite tickers done; an infinite ticker holds until `stop()`;
+ * a scope with no content elements gets a zero-length hold. Ignored by `manual`
+ * (the operator ends the hold).
  */
-export const PlayoutSchema = z.object({
+export const HoldSourceSchema = z.enum(['timed', 'content-driven']);
+export type HoldSource = z.infer<typeof HoldSourceSchema>;
+
+const PlayoutObjectSchema = z.object({
   mode: PlayoutModeSchema.default('manual'),
+  /** Absent ⇒ 'timed' (resolved by `playoutOf` / the controller). */
+  holdSource: HoldSourceSchema.optional(),
   holdMs: z.number().min(0).optional(),
   repeat: z.union([z.number().int().min(1), z.literal('infinite')]).optional(),
 });
-export type Playout = z.infer<typeof PlayoutSchema>;
+
+/**
+ * D-020/D-028 — composition playout timing config, TWO orthogonal axes:
+ * `mode` answers "how many open/close cycles" (`auto-out` runs the outro once
+ * after the hold; `loop-cycle` repeats `[in→outPoint]` → hold → `[outPoint→end]`
+ * for `repeat` cycles or forever when `'infinite'`); `holdSource` answers "how
+ * long each hold lasts" (`timed` = `holdMs`; `content-driven` = until the
+ * scope's tickers complete — the ticker's own `repeat` counts crawl passes).
+ * Default `manual`/`timed`. Absent `playout` ⇒ `manual`.
+ *
+ * Legacy: `mode: 'content-driven'` (pre-D-028, when it was a sibling mode) is
+ * normalized at parse time to `mode: 'loop-cycle', holdSource: 'content-driven'`
+ * — behaviourally faithful for every stored scene (none had tickers, so holds
+ * were zero-length in both forms). A registry migration is deferred until a
+ * schema-version bump is unavoidable.
+ */
+export const PlayoutSchema = z.preprocess((raw) => {
+  if (raw !== null && typeof raw === 'object' && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>;
+    if (o['mode'] === 'content-driven') {
+      return { ...o, mode: 'loop-cycle', holdSource: 'content-driven' };
+    }
+  }
+  return raw;
+}, PlayoutObjectSchema);
+export type Playout = z.infer<typeof PlayoutObjectSchema>;
 
 /**
  * Enforce the lifecycle phase invariant against the host's active region
@@ -215,7 +245,15 @@ export function activeRangeOf(scene: Pick<Scene, 'frameRange' | 'activeRange'>):
  * The effective playout config: the composition's explicit `playout`, or the
  * `manual` default when absent. Single place the runtime resolves timing so an
  * absent `playout` always behaves as `manual` (hold after intro until stop).
+ * Defensively normalizes the legacy `mode: 'content-driven'` for scene objects
+ * handed straight to `createRuntime` without re-parsing (e.g. old exported
+ * `template.json` driven by a NEW runtime bundle).
  */
 export function playoutOf(scene: Pick<Scene, 'playout'>): Playout {
-  return scene.playout ?? { mode: 'manual' };
+  const p = scene.playout;
+  if (p === undefined) return { mode: 'manual', holdSource: 'timed' };
+  if ((p.mode as string) === 'content-driven') {
+    return { ...p, mode: 'loop-cycle', holdSource: 'content-driven' };
+  }
+  return { ...p, holdSource: p.holdSource ?? 'timed' };
 }

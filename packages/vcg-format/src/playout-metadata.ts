@@ -1,4 +1,10 @@
-import { activeRangeOf, playoutOf, type PlayoutMode, type Scene } from '@cg/shared-schema';
+import {
+  activeRangeOf,
+  playoutOf,
+  type HoldSource,
+  type PlayoutMode,
+  type Scene,
+} from '@cg/shared-schema';
 
 /**
  * D-020 — the lifecycle + playout timing a control layer needs to schedule a
@@ -9,6 +15,12 @@ import { activeRangeOf, playoutOf, type PlayoutMode, type Scene } from '@cg/shar
  */
 export interface PlayoutMetadata {
   mode: PlayoutMode;
+  /**
+   * D-028 — present ONLY when 'content-driven' (absent = timed, the universal
+   * default): the hold ends when the scope's tickers complete, so a scheduler
+   * cannot precompute its length — the scene's content decides at runtime.
+   */
+  holdSource?: HoldSource;
   outPoint?: number;
   holdMs?: number;
   repeat?: number | 'infinite';
@@ -25,6 +37,7 @@ export interface PlayoutMetadata {
 export function buildPlayoutMetadata(scene: Scene): PlayoutMetadata {
   const playout = playoutOf(scene);
   const meta: PlayoutMetadata = { mode: playout.mode };
+  if (playout.holdSource === 'content-driven') meta.holdSource = 'content-driven';
   if (playout.holdMs !== undefined) meta.holdMs = playout.holdMs;
   if (playout.repeat !== undefined) meta.repeat = playout.repeat;
   if (scene.lifecycle !== undefined) {

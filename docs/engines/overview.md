@@ -64,7 +64,9 @@ the editor UI and the runtime renderer (the "Where features go" map in
   declared bindings (`applyFieldValues`),
 - **animates** keyframed properties per frame (animation-applier + keyframe-eval),
 - **drives** the broadcast lifecycle and playout timing — entrance → hold → exit,
-  auto-out / loop / content-driven (PlayoutController + FrameDriver),
+  auto-out / loop cycles with timed or content-driven holds (PlayoutController +
+  FrameDriver; the ticker's TickerDriver signals content completion for
+  content-driven holds),
 - cascades all of the above through **nested composition instances**.
 
 The renderer talks to its "backend" only through the typed `window.cg` bridge; the

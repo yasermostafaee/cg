@@ -11,6 +11,7 @@ import {
   defaultImage,
   defaultShape,
   defaultText,
+  defaultTicker,
 } from '../../state/element-defaults.js';
 import { COMPOSITION_DND_TYPE } from '../compositions/CompositionsPanel.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
@@ -168,6 +169,12 @@ export function CanvasOverlay({
     if (tool === 'text') {
       const id = `el-${String(Date.now())}`;
       designerStore.addElement(defaultText(id, scenePoint.x, scenePoint.y));
+      designerStore.setTool('cursor');
+      return;
+    }
+    if (tool === 'ticker') {
+      const id = `el-${String(Date.now())}`;
+      designerStore.addElement(defaultTicker(id, scenePoint.x, scenePoint.y));
       designerStore.setTool('cursor');
       return;
     }

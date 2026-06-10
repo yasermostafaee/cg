@@ -3,8 +3,9 @@
 The rendering + playout engine for broadcast HTML graphics. Given a `Scene`
 ([`@cg/shared-schema`](../shared-schema)) it builds the DOM, binds live data,
 animates keyframed properties, and drives the broadcast lifecycle (entrance →
-hold → exit, with loop / auto-out / content-driven variants) — including across
-**nested composition instances**, each with its own independent lifecycle.
+hold → exit, with auto-out / loop cycles with timed or content-driven holds) —
+including across **nested composition instances**, each with its own
+independent lifecycle.
 
 The **same code** runs in the Designer preview, the exported `.vcg`, and the
 single-file CasparCG HTML, so what the Designer shows is what airs. For where this
@@ -23,16 +24,17 @@ first.
 
 Everything consumers use is re-exported from [`src/index.ts`](./src/index.ts):
 
-| Export                                                | Role                                                                                                                 |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `createRuntime(scene, options?)`                      | Build + own a runtime; returns the `TemplateRuntime` (`play`/`update`/`stop`/`pause`/`resume`/`remove`/`tick`/`on`). |
-| `installCasparGlobals(runtime, win?)`                 | Wire CasparCG's bare `window.play/update/stop/next/remove` to the runtime. Returns an uninstaller.                   |
-| `buildScene(scene, doc?)`                             | Pure DOM builder → `{ container, elementMap, textOriginals, scopeTree }`.                                            |
-| `applyFieldValues` / `applyScopedFieldValues`         | Apply field values onto built DOM via the scene's bindings (flat / nested-scope).                                    |
-| `applyAnimationAtFrame`, `collectAnimatedElements`    | Per-frame animation application.                                                                                     |
-| `interpolateAtFrame`, `applyEasing`, `lerpHexColor`   | Keyframe math.                                                                                                       |
-| `FrameDriver`, `PlayoutController`                    | The timing primitives (normally owned by `createRuntime`).                                                           |
-| `LifecycleStateMachine`, `EventBus`, `applyTransform` | Lifecycle state, events, value transforms.                                                                           |
+| Export                                                 | Role                                                                                                                               |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `createRuntime(scene, options?)`                       | Build + own a runtime; returns the `TemplateRuntime` (`play`/`update`/`stop`/`pause`/`resume`/`remove`/`tick`/`on`).               |
+| `installCasparGlobals(runtime, win?)`                  | Wire CasparCG's bare `window.play/update/stop/next/remove` to the runtime. Returns an uninstaller.                                 |
+| `buildScene(scene, doc?)`                              | Pure DOM builder → `{ container, elementMap, textOriginals, scopeTree }`.                                                          |
+| `applyFieldValues` / `applyScopedFieldValues`          | Apply field values onto built DOM via the scene's bindings (flat / nested-scope).                                                  |
+| `applyAnimationAtFrame`, `collectAnimatedElements`     | Per-frame animation application.                                                                                                   |
+| `interpolateAtFrame`, `applyEasing`, `lerpHexColor`    | Keyframe math.                                                                                                                     |
+| `FrameDriver`, `PlayoutController`                     | The timing primitives (normally owned by `createRuntime`).                                                                         |
+| `TickerDriver`, `tickerDriverFor`, `coerceTickerItems` | The ticker/crawler treadmill — inner repeat loop + `whenComplete()` content completion (D-028; normally owned by `createRuntime`). |
+| `LifecycleStateMachine`, `EventBus`, `applyTransform`  | Lifecycle state, events, value transforms.                                                                                         |
 
 ## How it's built — module map
 
@@ -44,6 +46,8 @@ createRuntime (runtime.ts)  ─ the orchestrator
  │    └─ FrameDriver (frame-driver.ts)          rAF playhead for one range
  │         └─ applyAnimationAtFrame (animation-applier.ts)
  │              └─ interpolateAtFrame (keyframe-eval.ts)
+ ├─ TickerDriver (ticker-driver.ts)       one per ticker element: the crawl
+ │      treadmill + the scope's self-wired content completion (whenComplete)
  ├─ LifecycleStateMachine (lifecycle.ts)  pending→playing→on-air→exiting→stopped
  ├─ EventBus (event-bus.ts)               play.start / stop.end / ready / …
  └─ installCasparGlobals (adapters/caspar-globals.ts)   window.* → runtime
@@ -53,10 +57,17 @@ transforms.ts · css.ts   value formatters · baseline stylesheet
 ### scene-builder — `Scene` → DOM + the scope tree
 
 `buildScene` walks layers (sorted by `zIndex`) and creates one node per element
-(`text` / `image` / `shape` rendered; `container` / `lottie` / `video-placeholder`
-emit a tagged placeholder div so layout and ids survive). It returns a
-**`scopeTree`** (a `FieldScope`): each composition instance owns its **own**
-`elementMap`, `textOriginals`, container, `animated` list, and lifecycle `source`.
+(`text` / `ticker` / `image` / `shape` rendered; `container` / `lottie` /
+`video-placeholder` emit a tagged placeholder div so layout and ids survive). It
+returns a **`scopeTree`** (a `FieldScope`): each composition instance owns its
+**own** `elementMap`, `textOriginals`, container, `animated` list, `tickers`
+list, and lifecycle `source`.
+
+A `ticker` element builds as a clipped band + an inner `track` (the driver's
+crawl surface) + a static flex-row authoring layout (so the Designer canvas
+shows the items with zero measurement; the driver removes it when the crawl
+starts), and registers `{ element, band, track }` on `scope.tickers` for the
+runtime to instantiate the driver.
 
 **Invariants**
 
@@ -74,7 +85,9 @@ declared `bindings`, look up each `fieldId` in the supplied values (falling back
 the field's `default`), run the optional `transform` (`transforms.ts`, e.g.
 `persian-digits`, `date-fa`), and write to the DOM by `target.kind`
 (`text` / `image` / `color` / `visible` / `transform` / `scene-background` /
-`lottie-override`).
+`lottie-override` / `ticker-items` — the last routes a `list` value to the
+band's `TickerDriver` via the `tickerDriverFor` registry, which reconciles by
+stable item id).
 
 **Invariants**
 
@@ -111,24 +124,41 @@ plays its whole timeline once and holds the last frame; **it does not loop**.
 
 Playout **modes** (`scene.playout.mode`):
 
-| Mode                 | Behaviour after the intro reaches `outPoint`                                                                                                                 |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `manual` _(default)_ | hold frozen until `stop()`                                                                                                                                   |
-| `auto-out`           | hold `holdMs`, then run the outro automatically                                                                                                              |
-| `loop-cycle`         | repeat IN → hold → OUT for `repeat` cycles (`'infinite'` = forever)                                                                                          |
-| `content-driven`     | like `loop-cycle`, but each pass's duration comes from `durationHook()` (the ticker computes content→duration), recomputed per pass; `holdMs` does not apply |
+| Mode                 | Behaviour after the intro reaches `outPoint`                        |
+| -------------------- | ------------------------------------------------------------------- |
+| `manual` _(default)_ | hold frozen until `stop()`                                          |
+| `auto-out`           | hold once, then run the outro automatically                         |
+| `loop-cycle`         | repeat IN → hold → OUT for `repeat` cycles (`'infinite'` = forever) |
+
+What ends each hold is the orthogonal **`holdSource`** axis (`auto-out` and
+`loop-cycle`; ignored by `manual`): `'timed'` (default) holds for `holdMs`;
+`'content-driven'` holds until the controller's `waitForContent` promise
+resolves — the scope's tickers complete (an infinite ticker ⇒ until `stop()`;
+no content ⇒ a zero-length hold, deferred like a 0ms timer). There is **no**
+`content-driven` mode — a stored legacy `mode: 'content-driven'` normalizes to
+`loop-cycle` + `holdSource: 'content-driven'` (`@cg/shared-schema`'s
+`PlayoutSchema` preprocess / `playoutOf`).
 
 There is **no separate continuous-loop mode** — a looping logo is `loop-cycle` with
 `repeat: 'infinite'` (and `holdMs: 0` to loop the whole timeline).
+
+`onHoldStart` (optional) fires at **every** hold entry, before the hold timing —
+the runtime RESETS + STARTS the scope's ticker treadmills there, so each
+composition open/close cycle replays the crawl from its entering edge (a fresh
+run per cycle) and a `content-driven` wait always awaits the run it just
+started.
 
 **Invariants**
 
 - `pause()` / `resume()` freeze and continue **both** the driver and the hold-timer
   countdown.
 - A **settled** controller (its lifecycle finished: `auto-out` exited, or a finite
-  `loop-cycle`/`content-driven` ran out of cycles) is a **no-op on `stop()`** — a
-  cascaded parent `stop()` must not replay the exit on a child that's already done.
-  An infinite loop / manual hold / paused scope is _not_ settled and still exits.
+  `loop-cycle` ran out of cycles) is a **no-op on `stop()`** — a cascaded parent
+  `stop()` must not replay the exit on a child that's already done. An infinite
+  loop / manual hold / paused scope is _not_ settled and still exits.
+- A stale `waitForContent` resolution (after `stop()`, or from an earlier
+  cycle's hold) is ignored via a **hold token** — it can never replay the
+  outro or settle the scope a second time.
 - `onExitStart` fires **exactly once** per exit, before `onSettle`.
 
 ### The scope tree + the nested-lifecycle cascade
@@ -148,7 +178,57 @@ override) on its **own** timeline.
   `'home'` a child, `'home.inner'` a grandchild) so a preview/rundown can time each
   instance independently without touching the stored template.
 - `tick(frame)` paints one shared frame across the **flattened** animated list — for
-  the Designer scrubber, separate from the on-air per-scope drivers.
+  the Designer scrubber, separate from the on-air per-scope drivers. The **ticker
+  crawl is wall-clock-driven and has no representation in `tick()`** — scrubbing
+  does not move it (by design; D-028).
+
+### TickerDriver — the crawler treadmill + content completion (D-028)
+
+One driver per ticker element, instantiated by `createRuntime` per scope. It
+virtualizes the item stream: nodes are fed just ahead of the entering edge,
+recycled after they exit, positioned absolutely from measured widths (first
+measured at/after `play()`, which awaits `document.fonts.ready`, and
+**re-measured once per content cycle** — the per-pass self-heal that corrects
+a width measured mid-font-swap within one lap, since `update()` never
+re-awaits fonts), and moved by a single `transform: translateX` per frame. Items are bidi-isolated spans; the
+element's `direction` is the **reading** direction (`'rtl'`: RTL layout, track
+moves visually left→right — the Persian crawl).
+
+The driver owns the **inner repeat loop**: `repeat: 'infinite' | N` (default
+`'infinite'`) crawl passes per run, with `cycleBoundary: 'seamless' | 'drain'`
+deciding the seam between passes. A finite run ends **cleanly** — feeding
+stops after the Nth pass's last item, and `whenComplete()` resolves once that
+item has fully exited the band (never cut mid-scroll; `'drain'` additionally
+empties the band BETWEEN passes).
+
+**Self-wired completion:** a scope whose composition contains tickers gets an
+internal `waitForContent` = `Promise.all` over its drivers' `whenComplete()` —
+a `content-driven` hold ends when ALL the scope's finite tickers complete; an
+infinite ticker never resolves, holding the scope until `stop()`. So preview,
+the single-file export, and `.vcg` need **no boot wiring**, and a ticker nested
+in a child composition governs _its own_ scope. An **explicit**
+`RuntimeBootOptions.contentHold` still overrides the root scope (external
+override/test seam).
+
+**Invariants**
+
+- The treadmill rolls continuously **within one hold**; each composition
+  open/close cycle gets a **fresh run** (the controller's hold entry does
+  reset + start), and a fresh `play()` resets it too (removing the static
+  authoring layout, so every intro shows the same band).
+- `pause()`/`resume()` freeze/continue it in lockstep with the hold timer;
+  settling stops it (frozen at the exact boundary). A ROOT self-settle cascades
+  `stop()` to nested scopes and freezes every crawl — nothing rolls under a
+  hidden stage.
+- `setItems()` (the `update()` path) reconciles by stable id: entered nodes
+  keep their position; an entered item with changed text is corrected **in
+  place** (re-measured, leading edge fixed, downstream content shifted by the
+  width delta); the unseen fed tail is dropped and re-fed from the new list —
+  removed items are never re-fed, and a re-feed never pops in behind the
+  entering edge.
+- `RuntimeBootOptions.tickerMeasure` injects width measurement (happy-dom has
+  no layout); `RuntimeClock` injects the rAF/now clock. The default measure is
+  the fractional computed width (offsetWidth would round every boundary).
 
 ### animation-applier + keyframe-eval — per-frame writes
 
@@ -182,25 +262,40 @@ payloads are dropped silently (a broadcast frame can't write logs).
 
 ### Add a new element type
 
+> Worked example: the **ticker** (D-028) — schema variant `TickerElementSchema`,
+> `buildTicker` in `scene-builder.ts`, and a per-element runtime driver
+> (`ticker-driver.ts`) wired by `createRuntime`.
+
 1. **Schema** — add the element variant to `@cg/shared-schema`
    (`packages/shared-schema/src/elements.ts`) and the `Element` union.
 2. **Render** — add a `case` in `buildElement` (`scene-builder.ts`) and a
    `buildXxx(element, doc)` that sets `dataset['cgElementId']`, calls
    `applyBaseStyles`, and renders the type-specific look. Until it's supported it
    falls through to `buildPlaceholder` (tagged div) automatically.
-3. **Designer UI** — the canvas/inspector to author it (`apps/designer`).
-4. If it can be **animated/bound**, make sure `applyBaseStyles` / `animation-applier`
+3. **Runtime behaviour** — if the element is live (time-driven, like the ticker),
+   give it a driver owned by `createRuntime`: collect its nodes on the scope
+   during build (cf. `scope.tickers`), instantiate per scope, and hook its
+   lifecycle into the cascade (play reset / pause / resume / settle / remove).
+4. **Designer UI** — the canvas/inspector to author it (`apps/designer`).
+5. If it can be **animated/bound**, make sure `applyBaseStyles` / `animation-applier`
    / `bindings` handle its target properties (see below).
 
 ### Add a new field type / binding target
 
+> Worked example: the **`list` field** + **`ticker-items`** target (D-028) — an
+> extensible structured value (array of open `{ id, … }` items) routed to the
+> ticker driver's reconcile.
+
 - **New field type:** add it to `@cg/shared-schema` (fields). `applyFieldValues`
   reads `field.default` and (for text) `field.maxLength` generically; only touch
   bindings if the value needs new coercion in `stringifyValue` (`transforms.ts`).
+  A **structured** (non-string) value skips `stringifyValue`/`applyTransform`
+  entirely — its `applyOne` case consumes the raw value (cf. `ticker-items`).
 - **New binding target kind:** add the variant to `BindingTargetSchema`
   (`packages/shared-schema/src/bindings.ts`), then add a `case target.kind` in
   `applyOne` (`bindings.ts`) that writes to the DOM. Keep it **idempotent and
-  stateless** (no read-back).
+  stateless** (no read-back) — a target that drives stateful behaviour (the
+  ticker) must make its consumer reconcile idempotently instead.
 - **New value transform** (e.g. a new formatter): add it to `BindingTransformSchema`
   and `applyTransform` (`transforms.ts`); reuse `@cg/text-shaping` for
   Persian/RTL-aware formatting.
@@ -222,8 +317,12 @@ payloads are dropped silently (a broadcast frame can't write logs).
    hold/exit logic in `onIntroEnd` / `onOutroEnd` / `isFinalOutro`. Preserve the
    invariants above (settled-is-a-no-op on `stop()`, single `onExitStart`,
    pause/resume freezes driver **and** hold timer).
-3. If the mode needs externally-computed timing (like `content-driven`'s
-   `durationHook`), thread it through `RuntimeBootOptions` (`types.ts`) →
+3. If the behaviour needs content-computed timing, prefer **self-wiring inside
+   the runtime** from scene content (cf. content-driven holds: `createRuntime`
+   derives each scope's `waitForContent` completion promise from its ticker
+   elements' `whenComplete()`, so preview/exports need no boot wiring) and keep
+   `RuntimeBootOptions` as the external override/test seam (cf. `contentHold`
+   for the root scope), threaded `RuntimeBootOptions` (`types.ts`) →
    `createRuntime` → `PlayoutControllerOptions`.
 4. Capture the **behaviour** as an OpenSpec change (WHEN/THEN scenarios) — this doc
    only records the wiring.

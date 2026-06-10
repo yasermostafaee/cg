@@ -185,6 +185,15 @@ function LayerTypeIcon({ element, color }: { element: Element; color: string }):
       </svg>
     );
   }
+  if (element.type === 'ticker') {
+    // A clipped band with motion dashes — the crawl.
+    return (
+      <svg {...svg}>
+        <rect x="2" y="5" width="12" height="6" rx="1" {...stroke} />
+        <path d="M4.5 8 h2 M8 8 h2 M11.5 8 h1.5" {...stroke} />
+      </svg>
+    );
+  }
   // shape kinds
   switch (element.shape) {
     case 'ellipse':
@@ -424,6 +433,7 @@ const SHAPE_COLORS: Record<ShapeElement['shape'], string> = {
 
 const TYPE_COLORS: Record<Exclude<Element['type'], 'shape'>, string> = {
   text: '#F59E0B', // amber
+  ticker: '#EAB308', // yellow — crawl band
   image: '#EC4899', // pink
   lottie: '#A78BFA', // violet
   'video-placeholder': '#EF4444', // red

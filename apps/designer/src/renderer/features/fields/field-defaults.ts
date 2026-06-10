@@ -10,6 +10,7 @@ export const FIELD_KINDS: readonly FieldKind[] = [
   'boolean',
   'image',
   'select',
+  'list',
 ] as const;
 
 /**
@@ -41,5 +42,7 @@ export function defaultField(id: string, kind: FieldKind): DynamicField {
           { value: 'b', label: 'B' },
         ],
       };
+    case 'list':
+      return { ...base, type: 'list', default: [] };
   }
 }

@@ -90,3 +90,21 @@ on-target confirmation before relying on it on air.
 **Notes:** the IIFE bundle + `window.CG` path already targets this (D-019,
 `bundle-runtime.mjs`); this item is the validation + any fixes. Relates to the
 frame-accuracy validation note in `roadmap.md`.
+
+## [ ] C-008 — Graceful / soft stop for content-driven holds ⟨priority: low⟩
+
+**What:** A rundown-layer "soft out" command: instead of the runtime's built-in
+HARD stop (immediate outro — the ticker exits mid-scroll with the band), finish
+the ticker's current pass (or fully drain the band), then play the outro by
+letting natural content completion close the hold.
+**Why:** Editorially, cutting a crawl mid-headline can look abrupt; a show may
+prefer "finish the line, then out". The runtime deliberately ships only the
+hard stop (pinned in the D-028 `designer-playout-lifecycle` spec) — graceful
+exit is an operator policy, so it belongs at the control surface.
+**Acceptance to be detailed when scheduled.**
+**Notes:** implementable on the EXISTING override seam, no new runtime
+behaviour: force the scope's ticker repeat to end at the current pass (the
+D-028 `tickerRepeat` per-scope override / a driver-level "finish current pass"
+variant) and let `whenComplete()` → the content-driven hold → the outro run
+naturally. Depends on C-002 (rundown) + D-028; relates to C-003 (live
+per-scope overrides).

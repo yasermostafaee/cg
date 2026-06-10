@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
-import { defaultText } from '../src/renderer/state/element-defaults.js';
+import { defaultText, defaultTicker } from '../src/renderer/state/element-defaults.js';
 
 afterEach(() => {
   designerStore._reset();
@@ -221,3 +221,98 @@ function textOf(id: string): string | undefined {
   );
   return el !== undefined && el.type === 'text' ? el.text : undefined;
 }
+
+describe('designerStore — D-028 ticker Data key + items', () => {
+  function addTicker(id: string): void {
+    designerStore.addElement(defaultTicker(id, 0, 0));
+  }
+  function tickerItemsOf(id: string): { id: string; text: string }[] | undefined {
+    const st = designerStore.get();
+    const scene = editSceneOf(st.scene, st.activeCompositionId)!;
+    for (const layer of scene.layers) {
+      for (const el of layer.children) {
+        if (el.id === id && el.type === 'ticker') return el.items;
+      }
+    }
+    return undefined;
+  }
+
+  it('setElementDataKey on a ticker seeds a LIST field from the authored items + ticker-items binding', () => {
+    freshScene();
+    addTicker('tk-1');
+    const ok = designerStore.setElementDataKey('tk-1', 'headlines');
+    expect(ok).toBe(true);
+
+    const f = fields().find((x) => x.id === 'headlines');
+    expect(f?.type).toBe('list');
+    if (f?.type === 'list') {
+      expect(f.default).toEqual(tickerItemsOf('tk-1'));
+      expect(f.default.length).toBeGreaterThan(0);
+    }
+    expect(bindings()).toContainEqual({
+      fieldId: 'headlines',
+      target: { kind: 'ticker-items', elementId: 'tk-1' },
+    });
+  });
+
+  it('one key, one owner — a ticker key conflicts with a text key of the same name', () => {
+    freshScene();
+    designerScene_addText('el-1');
+    addTicker('tk-1');
+    designerStore.setElementDataKey('el-1', 'headline');
+    expect(designerStore.setElementDataKey('tk-1', 'headline')).toBe(false);
+    expect(
+      bindings().some((b) => b.target.kind === 'ticker-items' && b.target.elementId === 'tk-1'),
+    ).toBe(false);
+  });
+
+  it('a ticker cannot adopt an orphaned TEXT field (kind mismatch)', () => {
+    freshScene();
+    designerScene_addText('el-1');
+    designerStore.setElementDataKey('el-1', 'title');
+    // Orphan the text field (remove its binding, keep the field).
+    const idx = bindings().findIndex((b) => b.fieldId === 'title');
+    designerStore.removeBindingAt(idx);
+    addTicker('tk-1');
+    expect(designerStore.setElementDataKey('tk-1', 'title')).toBe(false);
+  });
+
+  it('setTickerItems updates the element AND keeps the bound list field default in lockstep', () => {
+    freshScene();
+    addTicker('tk-1');
+    designerStore.setElementDataKey('tk-1', 'headlines');
+    const next = [
+      { id: 'n1', text: 'خبر تازه' },
+      { id: 'n2', text: 'Brand X', note: 'extra fields survive' },
+    ];
+    designerStore.setTickerItems('tk-1', next);
+
+    // The element stores only what it renders ({id, text})…
+    expect(tickerItemsOf('tk-1')).toEqual([
+      { id: 'n1', text: 'خبر تازه' },
+      { id: 'n2', text: 'Brand X' },
+    ]);
+    // …while the field default keeps the FULL open item shape.
+    const f = fields().find((x) => x.id === 'headlines');
+    expect(f?.type).toBe('list');
+    if (f?.type === 'list') expect(f.default).toEqual(next);
+  });
+
+  it('setTickerItems without a Data key edits only the element (no field side-effects)', () => {
+    freshScene();
+    addTicker('tk-1');
+    const fieldCount = fields().length;
+    designerStore.setTickerItems('tk-1', [{ id: 'a', text: 'فقط عنصر' }]);
+    expect(tickerItemsOf('tk-1')).toEqual([{ id: 'a', text: 'فقط عنصر' }]);
+    expect(fields()).toHaveLength(fieldCount);
+  });
+
+  it('ticker field meta keeps the list variant (title/required apply; no type switch)', () => {
+    freshScene();
+    addTicker('tk-1');
+    designerStore.setElementDataKey('tk-1', 'headlines');
+    designerStore.setElementFieldMeta('tk-1', { title: 'Headlines', required: true });
+    const f = fields().find((x) => x.id === 'headlines');
+    expect(f).toMatchObject({ type: 'list', label: 'Headlines', required: true });
+  });
+});
