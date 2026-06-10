@@ -32,8 +32,10 @@ authored duration.
 
 The runtime SHALL render the ticker as a clipped band with an inner track
 translated via `transform` (no per-frame relayout). Item widths SHALL be
-measured once per content (cached by item identity); exited item nodes SHALL
-be recycled to feed the continuing crawl. The crawl SHALL be seamless: after
+measured at or after fonts-ready and RE-measured once per content cycle (the
+per-pass self-heal: a width measured mid-font-swap — e.g. an `update()` whose
+text first triggers a lazy `unicode-range` face — is corrected within one
+lap); exited item nodes SHALL be recycled to feed the continuing crawl. The crawl SHALL be seamless: after
 the last item, the first item follows again (separated by `gap`/`separator`)
 with no gap, flash, or restart at the loop seam — including across playout
 pass boundaries (intro/outro replays of the owning composition SHALL NOT

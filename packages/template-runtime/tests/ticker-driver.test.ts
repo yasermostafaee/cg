@@ -124,6 +124,29 @@ describe('TickerDriver — content-driven duration math', () => {
     h.driver.start();
     expect(h.driver.passRemainingMs()).toBe(0);
   });
+
+  it('widths are RE-measured once per content cycle — a mid-font-swap width self-heals within one lap', () => {
+    // Simulate a font swap landing after the first measurements: the measurer
+    // doubles its metrics partway through (as final glyphs replace fallback).
+    let scale = 10;
+    const h = make({ measure: (node) => (node.textContent?.length ?? 0) * scale });
+    h.driver.start();
+    expect(h.driver.passRemainingMs()).toBe(7200); // cycle 320 @ 10px/char
+    scale = 20; // the real face finished loading — true widths are 2×
+    // Still inside cycle 1: cached (stale) widths keep this pass consistent.
+    h.clock.advance(1000);
+    expect(h.driver.passRemainingMs()).toBe(6200);
+    // Run far enough that cycle 1 completed (cache cleared) and the feeder has
+    // long been feeding with HEALED metrics (cycle width (200+10)+(400+10)=620).
+    // Advance in small steps — like real 60fps playback — so feeding
+    // interleaves with cycle completion instead of batching stale feeds.
+    for (let i = 0; i < 120; i += 1) h.clock.advance(500);
+    // Crossing one pass boundary now spaces passes by exactly the healed
+    // cycle: 620px / 100px/s = 6200 ms (stale metrics would give 3200 ms).
+    const r0 = h.driver.passRemainingMs();
+    h.clock.advance(r0); // land exactly on a pass boundary
+    expect(h.driver.passRemainingMs()).toBe(6200);
+  });
 });
 
 describe('TickerDriver — treadmill behaviour', () => {

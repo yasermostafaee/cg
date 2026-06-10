@@ -12,7 +12,9 @@ cycle completes (first pass ≈ `(viewportWidth + contentWidth) / speed × 1000`
 later passes self-correct for time consumed by intro/outro replays), so that
 `repeat: N` settles after exactly N full content passes and pass boundaries
 align with content-cycle completions. With multiple tickers in one scope the
-hook SHALL return the maximum across them. An explicitly supplied
+hook SHALL return the maximum across them: a scope's content-driven pass
+duration is its LONGEST ticker, and shorter tickers roll multiple laps within
+the pass — intended behaviour, not a defect. An explicitly supplied
 `RuntimeBootOptions.durationHook` SHALL take precedence for the root scope
 (external override and test seam). A `content-driven` scope with neither a
 ticker nor an external hook keeps the existing behaviour (zero-length passes).

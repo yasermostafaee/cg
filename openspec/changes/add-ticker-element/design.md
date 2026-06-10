@@ -19,8 +19,9 @@ boot-code changes and lets a ticker inside a nested composition drive that
 child scope's passes.
 
 **Multiple tickers in one scope:** the scope hook returns the **max** across
-its tickers — the longest-running ticker governs the pass, so no ticker's
-content is cut off mid-cycle.
+its tickers — a scope's content-driven pass duration is its LONGEST ticker,
+and shorter tickers roll multiple laps within the pass (intended behaviour,
+not a defect); no ticker's content is cut off mid-cycle.
 
 ## D2. Pass = content cycle; the hook returns "ms until the current cycle completes"
 
@@ -64,9 +65,13 @@ must NOT restart with them. So:
 The driver keeps a logical item list and feeds DOM nodes on demand: when the
 last fed node's trailing edge approaches the viewport (+ buffer), it feeds the
 next logical item, recycling nodes that have fully exited. Item widths are
-measured once per (id, text) — cached — with measurement valid because the
-first measurement happens at/after `play()`, which awaits
-`document.fonts.ready`. The track moves via `transform: translateX` (rAF on
+cached per text — first measured at/after `play()` (which awaits
+`document.fonts.ready`) and **re-measured once per content cycle**: the cache
+clears each time a lap completes, so a width measured mid-font-swap (an
+`update()` whose text first triggers a lazy `unicode-range` face — `update()`
+never re-awaits fonts) self-heals within one cycle instead of poisoning the
+crawl. Fed nodes keep their bookkept widths (layout stays self-consistent);
+only future feeds and cycle math pick up corrected metrics. The track moves via `transform: translateX` (rAF on
 the injectable `RuntimeClock`; transforms are direction-agnostic under CSS
 `direction`, so motion is deterministic). No per-frame relayout: positions are
 absolute offsets computed from measured widths; only the track transform

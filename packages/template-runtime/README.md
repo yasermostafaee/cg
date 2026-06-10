@@ -172,15 +172,19 @@ override) on its **own** timeline.
 
 One driver per ticker element, instantiated by `createRuntime` per scope. It
 virtualizes the item stream: nodes are fed just ahead of the entering edge,
-recycled after they exit, positioned absolutely from widths **measured once per
-text** (at/after `play()`, which awaits `document.fonts.ready`), and moved by a
-single `transform: translateX` per frame. Items are bidi-isolated spans; the
+recycled after they exit, positioned absolutely from measured widths (first
+measured at/after `play()`, which awaits `document.fonts.ready`, and
+**re-measured once per content cycle** — the per-pass self-heal that corrects
+a width measured mid-font-swap within one lap, since `update()` never
+re-awaits fonts), and moved by a single `transform: translateX` per frame. Items are bidi-isolated spans; the
 element's `direction` is the **reading** direction (`'rtl'`: RTL layout, track
 moves visually left→right — the Persian crawl).
 
 **Self-wired duration:** a scope whose composition contains tickers gets an
 internal `durationHook` = max over its drivers' `passRemainingMs()` (the ms
-until the current content cycle's seam fully crosses the band). So preview,
+until the current content cycle's seam fully crosses the band). A scope's
+content-driven pass duration is therefore its LONGEST ticker; shorter tickers
+roll multiple laps within the pass — intended behaviour, not a bug. So preview,
 the single-file export, and `.vcg` need **no boot wiring**, and a ticker nested
 in a child composition drives *its own* scope. An **explicit**
 `RuntimeBootOptions.durationHook` still overrides the root scope (test seam).

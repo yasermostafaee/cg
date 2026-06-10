@@ -95,7 +95,15 @@ export class TickerDriver {
   private readonly measure: (node: HTMLElement) => number;
 
   private logical: TickerDriverItem[];
-  /** Width cache keyed by text — measured once, at/after fonts-ready. */
+  /**
+   * Width cache keyed by text. First filled at/after fonts-ready and CLEARED
+   * each time a content cycle completes (see {@link recycle}) — the per-pass
+   * remeasure self-heal: a width measured mid-font-swap (e.g. an `update()`
+   * whose new text triggers a lazy `unicode-range` face for the first time —
+   * `update()` never re-awaits fonts) is corrected within one lap instead of
+   * poisoning the crawl forever. Already-fed nodes keep their bookkept widths
+   * (layout stays self-consistent); only future feeds and cycle math heal.
+   */
   private readonly widthCache = new Map<string, number>();
   private measureNode: HTMLElement | null = null;
 
@@ -415,11 +423,19 @@ export class TickerDriver {
       this.fed.shift();
       this.release(head.node);
     }
-    // Passed seams can't end a future pass — prune them (memory bound).
+    // Passed seams can't end a future pass — prune them (memory bound), and
+    // remeasure on the next cycle: a completed lap invalidates the width
+    // cache so font swaps triggered mid-flight self-heal within one cycle.
+    let cycleCompleted = false;
     while (this.cycleSeams.length > 0) {
       const s = this.cycleSeams[0];
       if (s === undefined || s + this.o.viewportWidth > d) break;
       this.cycleSeams.shift();
+      cycleCompleted = true;
+    }
+    if (cycleCompleted) {
+      this.widthCache.clear();
+      this.cycleWidthCache = null;
     }
   }
 

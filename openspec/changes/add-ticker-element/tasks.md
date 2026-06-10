@@ -22,7 +22,8 @@
       bidi-isolated spans, separators as standalone spans, Vazirmatn-first
       font stack, registered in the scope element map
 - [x] 2.2 `ticker-driver.ts`: virtualized treadmill feed + node recycling;
-      width measurement once per (id, text) at/after fonts-ready; rAF
+      width measurement at/after fonts-ready, re-measured per content cycle
+      (self-heal for mid-font-swap measurements); rAF
       playhead on the injectable `RuntimeClock`; `translateX` only;
       start-on-hold / stop-on-settle; pause/resume; cycle-seam bookkeeping;
       `passRemainingMs()` for the duration hook; `reconcile(items)` by stable
