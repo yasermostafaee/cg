@@ -166,6 +166,33 @@ reads the element's authored `text` while the render path applies the binding; r
 to the bindings/`textOriginals` placeholder substitution in `@cg/template-runtime` and
 the inspector read-path bugs (B-005/B-006/B-009 family).
 
+## [ ] B-011 — Playwright preview-iframe E2E test is timing-flaky ⟨priority: low⟩
+
+**Repro:**
+
+1. Run the Designer E2E suite (`pnpm --filter @cg/designer test:e2e`) repeatedly.
+2. Occasionally the critical-flow test fails at the live-preview assertion (the
+   preview iframe hasn't rendered the field value within the 7s `expect` timeout);
+   re-running passes.
+
+**Expected:** the preview-iframe assertions are deterministic — they wait on a
+"preview ready / rendered" signal, not on elapsed time, so the test never flakes.
+**Actual:** intermittently fails on a timing window and passes on re-run.
+**Env:** Browser / Designer dev + CI. Observed once on the `refactor/store-slices`
+branch (the selection-slice commit): `setPreviewField('headline', 'Hello E2E')`
+then `expect(previewFrame.getByText('Hello E2E')).toBeVisible()` timed out, green on
+re-run. **Pre-existing**, unrelated to that refactor; currently **masked in CI by
+`retries: 1`** (`apps/designer/playwright.config.ts`).
+**Notes:** DEFERRED test-infra bug, logged for hygiene — **do not fix now.** Spec:
+`apps/designer/tests/e2e/critical-flow.spec.ts` (the `compose → data key → live
+preview → …` test, ~line 22); fixture: `apps/designer/tests/e2e/fixtures/designer.ts`
+(`previewFrame` / `setPreviewField`). Suspected cause: the test waits on timing
+rather than a deterministic "preview ready" signal from the iframe. **Proposed fix
+(when scheduled):** have the preview iframe expose a readiness flag once the
+runtime's ready promise resolves (post a message / set a marker attribute), and make
+the E2E fixture wait on THAT instead of on time; then re-evaluate whether `retries: 1`
+can stay or be removed.
+
 <!-- Add new open bugs above this line using the format. Example:
 
 ## [ ] B-001 — Export blocked dialog shows wrong error count
