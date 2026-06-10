@@ -193,32 +193,63 @@ runtime's ready promise resolves (post a message / set a marker attribute), and 
 the E2E fixture wait on THAT instead of on time; then re-evaluate whether `retries: 1`
 can stay or be removed.
 
-## [ ] B-012 — CI one-off: soak-runner "Reconciler is not a constructor" ⟨priority: low⟩
+## [x] B-012 — CI: soak-runner "Reconciler is not a constructor" (typecheck-emit race) ⟨priority: low⟩
 
-**Repro:** none reliable.
+**Repro:** nondeterministic in CI (raced twice on PR #79: runs `27288006490`
+@ `6c7c00c` and `27288386408` attempt 1 @ `ee4401c`); identical reruns passed.
 
-1. PR #79 run `27288386408` (`feat/add-ticker-element` @ `ee4401c`): the
-   Lint•Typecheck•Test•Build job failed in `@cg/soak-runner`
+1. `Lint•Typecheck•Test•Build` failed in `@cg/soak-runner`
    `tests/harness.test.ts` — 7/9 tests with `TypeError: Reconciler is not a
 constructor` (the `@cg/caspar-client` import resolved to undefined).
-2. The IDENTICAL rerun of the same commit passed; `main` was green throughout.
 
 **Expected:** soak-runner's vitest always sees a fully-built
 `caspar-client/dist`.
-**Actual:** one CI run imported an undefined `Reconciler`. NOT reproducible
-locally, even from a fully clean rebuild (dist + tsbuildinfo deleted, turbo
-`--force`). The CI log interleaving showed `@cg/caspar-client:build` output
-inside the same Test step seconds before the failures — suspected one-off
-turbo scheduling/output anomaly (test consuming a partially-emitted dist)
-despite a correct task graph (`test` dependsOn `["^build", "build"]`, dep
-declared).
-**Env:** GitHub Actions only; first-ever execution of the test step on a
-branch with broad cache invalidation (schema change → many rebuilds racing).
-**Notes:** DEFERRED test-infra hygiene log — **do not fix now**; no action
-unless it recurs. If it recurs: capture the full Test-step log (build
-completion timestamps vs. vitest start), and consider pinning
-`@cg/soak-runner#test` with an explicit `dependsOn` on
-`@cg/caspar-client#build` or `--concurrency` reduction as a probe.
+**Actual — root cause (diagnosed, fixed):** NOT an API drift and NOT a one-off:
+soak-runner type-checks and passes 9/9 against current `@cg/caspar-client`
+built from a fully clean tree. The real bug: lib packages used
+`typecheck: tsc -b`, which **emits `dist/`** — the same files `build` emits —
+while turbo's `typecheck` task declared only `*.tsbuildinfo` outputs and had
+**no edge to the package's own `build`** (both depend only on `^build`), so
+`X#typecheck` and `X#build` ran two concurrent `tsc -b` over the same
+`dist/` + `tsconfig.tsbuildinfo`. Turbo snapshotted `caspar-client#build`
+outputs while the sibling typecheck `tsc` was still writing → torn dist in the
+cache artifact → restored on cache hit in the Test step (the
+"`@cg/caspar-client:build` output inside the Test step" was cache-hit log
+replay accompanying that restore) → vitest imported a half-written dist →
+`Reconciler` undefined. Reruns passed because the failed job skipped its
+"Post Cache Turbo" upload, so the poisoned artifact never left the runner.
+**Env:** GitHub Actions; widest race window on broad cache invalidation
+(schema change → many packages rebuilding concurrently).
+**Notes:** FIXED — `fix/turbo-typecheck-emit-race`: every `typecheck`
+script is now plain-mode `tsc --noEmit` with a private
+`--tsBuildInfoFile typecheck.tsbuildinfo` (pure reader; build mode is out:
+`tsc -b --noEmit` TS6310-fails whenever a referenced project is out of date,
+and otherwise writes tsbuildinfo across the whole reference closure — other
+packages' build state). Turbo's `typecheck` task declares `outputs: []` so no
+stale state is ever restored over a build's coherent dist+tsbuildinfo pair,
+and the `build` task's outputs exclude `typecheck.tsbuildinfo` so build
+artifacts stay deterministic.
+Regression pin: `tools/soak-runner/tests/typecheck-no-emit.test.ts` (fails if
+any workspace typecheck script can emit, or turbo typecheck regrows outputs).
+Also fixed alongside: `@cg/template-fixtures#build` turbo outputs/inputs (CI
+warned "no output files found"; outputs go to repo-root `fixtures/templates/**`
+and its real inputs are `build.mjs` + `*.scene.mjs`, so cache hits never
+restored the fixtures and scene edits didn't bust the cache).
+
+## [ ] B-013 — `clean` scripts fail on Windows (rimraf 6 + unexpanded glob) ⟨priority: low⟩
+
+**Repro:**
+
+1. On Windows, run `pnpm --filter @cg/audit clean` (or `pnpm turbo run clean`).
+
+**Expected:** `dist` and `*.tsbuildinfo` removed in every package.
+**Actual:** rimraf 6 receives the literal `*.tsbuildinfo` (no shell glob
+expansion on Windows) and exits 1 before deleting anything, so
+`pnpm turbo run clean` aborts mid-graph. POSIX shells expand the glob first, so
+CI/dev on Linux/macOS is unaffected.
+**Env:** Windows only; all packages with `clean: rimraf dist *.tsbuildinfo`.
+**Notes:** Fix is mechanical: `rimraf --glob dist "*.tsbuildinfo"` in every
+package's clean script. Surfaced while reproducing B-012 from a clean tree.
 
 <!-- Add new open bugs above this line using the format. Example:
 
