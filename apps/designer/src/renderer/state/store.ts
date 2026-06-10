@@ -7,12 +7,9 @@ import type {
   Element,
   ElementAnimation,
   FieldBinding,
-  FrameRange,
   Keyframe,
   Layer,
-  Lifecycle,
   Playout,
-  Resolution,
   Scene,
 } from '@cg/shared-schema';
 import {
@@ -22,6 +19,43 @@ import {
   uniqueInstanceName,
   compositionInstancesOf,
 } from '@cg/shared-schema';
+import {
+  _resetCore,
+  current,
+  getClipboard,
+  getNoticeTimer,
+  markHistoryBoundary,
+  markSaved,
+  redo,
+  resetHistory,
+  set,
+  setClipboard,
+  setNoticeTimer,
+  setSavedScene,
+  setSuppressHistory,
+  subscribe,
+  undo,
+  type DesignerStoreState,
+  type DesignerTool,
+  type DesignerView,
+  type KeyframeRef,
+} from './store-core.js';
+import {
+  activeCompId,
+  activeDocOf,
+  activeFieldData,
+  activeLayersOf,
+  editSceneOf,
+  locate,
+  withActiveDoc,
+  withActiveFieldData,
+  withActiveLayers,
+} from './scene-doc.js';
+
+// Re-export the public types + `editSceneOf` so the `state/store` entry surface
+// is byte-identical for every consumer (no import-path or symbol changes).
+export type { DesignerStoreState, DesignerTool, DesignerView, KeyframeRef };
+export { editSceneOf };
 
 /**
  * Designer renderer state — small pub-sub store with a JSON-patch-ish
@@ -30,338 +64,10 @@ import {
  *
  * Selection is a `Set<elementId>` — multi-select lands by shift-clicking
  * (M6.5's Inspector cares; canvas hit-test in M6.4 only sets single).
- */
-
-export type DesignerTool = 'cursor' | 'text' | 'shape' | 'ellipse' | 'image' | 'hand';
-
-export type DesignerView = 'landing' | 'studio';
-
-/** A reference to one keyframe (by element, property, and frame). */
-export interface KeyframeRef {
-  elementId: string;
-  property: AnimatableProperty;
-  frame: number;
-}
-
-export interface DesignerStoreState {
-  scene: Scene | null;
-  projectPath: string | null;
-  /**
-   * Which composition is currently being edited. `null` = the main scene
-   * (the `Scene` itself); otherwise the id of an entry in
-   * `scene.compositions`. The canvas, timeline, transport and every layer
-   * mutation operate on this "active document" — its own size, duration and
-   * layers. Switching is done from the Compositions panel (double-click).
-   */
-  activeCompositionId: string | null;
-  /**
-   * A transient, user-facing notice (e.g. why an action was refused). Shown as
-   * a small toast and auto-cleared; `null` when nothing to show.
-   */
-  notice: string | null;
-  /**
-   * Top-level routing: the Designer starts at the Landing screen
-   * (starter picker / recent / new) and flips to the Studio whenever
-   * a scene becomes active. Clearing the scene flips it back.
-   */
-  view: DesignerView;
-  tool: DesignerTool;
-  /** Element IDs currently selected. */
-  selection: ReadonlySet<string>;
-  /** When set, the canvas shows an inline TextEditor for this element. */
-  editingTextId: string | null;
-  /**
-   * When set, the next canvas click binds this field to the clicked
-   * element instead of selecting it. Set by the Fields panel's
-   * "Bind from canvas" button; cleared after the binding is created
-   * or the operator presses Escape.
-   */
-  bindModeFieldId: string | null;
-  /**
-   * The "authoring cursor" frame the timeline dock sits at. Adding a
-   * keyframe lands at this frame; editing a property's value through
-   * the Inspector updates the keyframe (if any) on that frame for that
-   * property instead of the static value. Clamped to the scene's
-   * frameRange at write time.
-   */
-  currentFrame: number;
-  /**
-   * Currently-selected keyframe in the timeline. Drives the yellow
-   * highlight on the diamond glyph (in the timeline lane, the track
-   * row's left label, and the Inspector's per-row indicator). A bare
-   * single-click on a timeline diamond sets only this — the Inspector
-   * stays on the Element view.
-   */
-  selectedKeyframe: KeyframeRef | null;
-  /**
-   * Full keyframe selection (supports multi-select for batch easing). Always
-   * mirrors `selectedKeyframe` as its last/primary entry. The timeline
-   * highlights every ref here; the Keyframe Inspector shows the per-point
-   * fields only when exactly one is selected.
-   */
-  selectedKeyframes: readonly KeyframeRef[];
-  /**
-   * Whether the right-side Inspector is showing the dedicated Keyframe
-   * Inspector (frame / value / easing editor) for `selectedKeyframe`.
-   * Toggled true only by an explicit double-click on a keyframe diamond
-   * (or by the "edit point" action). Single-click leaves it false so
-   * the Inspector keeps showing the Element view with diamond indicators
-   * lit up for the selected point.
-   */
-  keyframeInspectorOpen: boolean;
-  /**
-   * Horizontal zoom of the timeline lane: 1 = full scene span fits, 2 =
-   * see half the frames at twice the width, etc. Controlled by the
-   * status-bar slider; the dock derives a view window from this and the
-   * playhead frame and pans automatically as the operator scrubs.
-   */
-  timelineZoom: number;
-  /** View menu — show the canvas pixel rulers (top + left). */
-  rulerVisible: boolean;
-  /** View menu — snap element edges/centers while dragging on the canvas. */
-  snappingEnabled: boolean;
-  /**
-   * Active snap guide lines (scene coordinates) to draw while a drag is
-   * snapped — `x` are vertical lines, `y` are horizontal. Empty when idle.
-   */
-  snapGuides: { x: readonly number[]; y: readonly number[] };
-  /**
-   * Persistent ruler guide lines the operator pulls from the rulers (scene
-   * coordinates). `x` are vertical guides (a scene-x each), `y` horizontal.
-   * Editor aids — session-only, not saved into the scene.
-   */
-  guides: { x: readonly number[]; y: readonly number[] };
-  /** Whether the past stack has at least one entry. */
-  canUndo: boolean;
-  /** Whether the future stack has at least one entry. */
-  canRedo: boolean;
-  /**
-   * Whether the active project has unsaved changes — the current scene differs
-   * from the one last loaded or saved. Drives the "save before switching"
-   * prompt so it only appears when there's actually something to lose.
-   */
-  dirty: boolean;
-}
-
-const initialState: DesignerStoreState = {
-  scene: null,
-  projectPath: null,
-  activeCompositionId: null,
-  notice: null,
-  view: 'landing',
-  tool: 'cursor',
-  selection: new Set<string>(),
-  editingTextId: null,
-  bindModeFieldId: null,
-  currentFrame: 0,
-  selectedKeyframe: null,
-  selectedKeyframes: [],
-  keyframeInspectorOpen: false,
-  timelineZoom: 1,
-  rulerVisible: false,
-  snappingEnabled: true,
-  snapGuides: { x: [], y: [] },
-  guides: { x: [], y: [] },
-  canUndo: false,
-  canRedo: false,
-  dirty: false,
-};
-
-type Listener = (state: DesignerStoreState) => void;
-const listeners = new Set<Listener>();
-let current = initialState;
-
-/**
- * Basic undo/redo: every time `set` writes a *different* Scene object
- * we push the prior one onto `past` and drop the redo stack. The
- * snapshot is the immutable scene reference itself (mutations always
- * produce a fresh object), so memory cost is one pointer per entry.
  *
- * `setScene` (project load / close) resets both stacks so the operator
- * can't undo across a project switch. Calls coming from `undo` /
- * `redo` set `suppressHistory` to avoid re-pushing the same value.
- *
- * Granularity is per-mutation — a long drag generates many history
- * entries. Coalescing intermediate frames into a single transaction
- * is a polish item for later.
+ * This entry composes the engine (`store-core.ts`) + shared scene helpers
+ * (`scene-doc.ts`) + the domain slices; see `state/README.md`.
  */
-const MAX_HISTORY = 100;
-/**
- * Coalescing window. Mutations that arrive within this many ms of the
- * last history push do not generate a new entry — they just update the
- * present. This is what lets a drag (or a live colour picker dragging
- * across hues) collapse to a single undo step that restores the
- * pre-burst state, instead of stepping back one ~16 ms tick per Ctrl+Z.
- * `markHistoryBoundary` lets explicit gestures (pointerup, key release)
- * close the burst early so the *next* mutation snapshots immediately.
- */
-const COALESCE_MS = 300;
-let past: Scene[] = [];
-let future: Scene[] = [];
-let suppressHistory = false;
-let lastSnapshotAt = -Infinity;
-/**
- * The scene object as it was at the last load or save. `dirty` is simply
- * `current.scene !== savedScene` — every mutation produces a fresh scene
- * object, so an identity check is enough.
- */
-let savedScene: Scene | null = null;
-
-function now(): number {
-  return typeof performance !== 'undefined' ? performance.now() : Date.now();
-}
-
-function set(patch: Partial<DesignerStoreState>): void {
-  if (
-    patch.scene !== undefined &&
-    patch.scene !== current.scene &&
-    !suppressHistory &&
-    current.scene !== null
-  ) {
-    const t = now();
-    if (t - lastSnapshotAt > COALESCE_MS) {
-      past.push(current.scene);
-      if (past.length > MAX_HISTORY) past.shift();
-      future = [];
-    }
-    lastSnapshotAt = t;
-  }
-  const nextScene = patch.scene !== undefined ? patch.scene : current.scene;
-  current = {
-    ...current,
-    ...patch,
-    canUndo: past.length > 0,
-    canRedo: future.length > 0,
-    dirty: nextScene !== null && nextScene !== savedScene,
-  };
-  for (const l of listeners) l(current);
-}
-
-/**
- * The "active document" is whatever the editor is currently editing: the main
- * scene (`activeCompositionId === null`) or one of `scene.compositions`. These
- * helpers read and write its layers and its doc-level fields (size / duration /
- * background) so every mutation below stays agnostic of which one is active.
- */
-interface EditDocFields {
-  resolution: Resolution;
-  // D-026 — fps is project-level (`Scene.frameRate`), shared by every composition;
-  // it is NOT a per-document field, so it is not edited through the active doc.
-  frameRange: FrameRange;
-  activeRange?: FrameRange | undefined;
-  lifecycle?: Lifecycle | undefined;
-  playout?: Playout | undefined;
-  background: Scene['background'];
-}
-
-function activeCompId(): string | null {
-  return current.activeCompositionId;
-}
-
-function activeLayersOf(scene: Scene): readonly Layer[] {
-  const id = activeCompId();
-  if (id !== null) {
-    const c = scene.compositions?.find((x) => x.id === id);
-    if (c !== undefined) return c.layers;
-  }
-  return scene.layers;
-}
-
-function withActiveLayers(scene: Scene, layers: Layer[]): Scene {
-  const id = activeCompId();
-  if (id !== null && scene.compositions?.some((x) => x.id === id) === true) {
-    return {
-      ...scene,
-      compositions: scene.compositions.map((c) => (c.id === id ? { ...c, layers } : c)),
-    };
-  }
-  return { ...scene, layers };
-}
-
-function activeDocOf(scene: Scene): EditDocFields {
-  const id = activeCompId();
-  if (id !== null) {
-    const c = scene.compositions?.find((x) => x.id === id);
-    if (c !== undefined) return c;
-  }
-  return scene;
-}
-
-function withActiveDoc(scene: Scene, patch: Partial<EditDocFields>): Scene {
-  const id = activeCompId();
-  if (id !== null && scene.compositions?.some((x) => x.id === id) === true) {
-    return {
-      ...scene,
-      compositions: scene.compositions.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-    };
-  }
-  return { ...scene, ...patch };
-}
-
-/**
- * D-025 — the active document's OWN fields/bindings (per-composition). Mutations
- * to data keys / bindings go through here so they scope to the open composition,
- * not the project root.
- */
-function activeFieldData(scene: Scene): {
-  fields: readonly DynamicField[];
-  bindings: readonly FieldBinding[];
-} {
-  const id = activeCompId();
-  const c = id !== null ? scene.compositions?.find((x) => x.id === id) : undefined;
-  const doc = c ?? scene;
-  return { fields: doc.fields ?? [], bindings: doc.bindings ?? [] };
-}
-
-function withActiveFieldData(
-  scene: Scene,
-  patch: { fields?: DynamicField[]; bindings?: FieldBinding[] },
-): Scene {
-  const id = activeCompId();
-  if (id !== null && scene.compositions?.some((x) => x.id === id) === true) {
-    return {
-      ...scene,
-      compositions: scene.compositions.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-    };
-  }
-  return { ...scene, ...patch };
-}
-
-/**
- * Project the active document onto a `Scene` shape for the canvas / timeline /
- * inspector / transport, which all read `scene.resolution`, `scene.layers`,
- * `scene.frameRange`, etc. When a composition is active those fields are
- * swapped for the composition's; `compositions`, `fonts`, `fields` and
- * `bindings` are kept from the project so nested instances still resolve and
- * text fonts still load. Returns the scene unchanged when the main scene is
- * active or the id is stale.
- */
-export function editSceneOf(scene: Scene | null, id: string | null): Scene | null {
-  // No "main scene": editing always targets a composition. When none is open
-  // (or the id is stale) there is no editable surface — the UI shows the
-  // "No Active Compositions" empty state.
-  if (scene === null || id === null) return null;
-  const c = scene.compositions?.find((x) => x.id === id);
-  if (c === undefined) return null;
-  return {
-    ...scene,
-    name: c.name,
-    resolution: c.resolution,
-    // D-026 — fps is project-level; the projected scene keeps the project fps.
-    frameRate: scene.frameRate,
-    frameRange: c.frameRange,
-    activeRange: c.activeRange,
-    lifecycle: c.lifecycle,
-    playout: c.playout,
-    background: c.background,
-    layers: c.layers,
-    // D-025 — fields/bindings are per-composition; surface the active comp's own
-    // (the inspector/preview/exporter read these). `compositions` stays from the
-    // root so nested instances resolve and aggregate.
-    fields: c.fields ?? [],
-    bindings: c.bindings ?? [],
-  };
-}
 
 function freshCompositionId(): string {
   return `comp-${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`;
@@ -478,21 +184,6 @@ function mutateAnimation(
   const nextLayers = [...activeLayersOf(current.scene)];
   nextLayers[layerIdx] = nextLayer;
   set({ scene: withActiveLayers(current.scene, nextLayers) });
-}
-
-/** Find the layer + index of an element. Used by every mutation. */
-function locate(
-  scene: Scene,
-  elementId: string,
-): { layer: Layer; layerIdx: number; elIdx: number } | null {
-  const layers = activeLayersOf(scene);
-  for (let li = 0; li < layers.length; li++) {
-    const layer = layers[li];
-    if (layer === undefined) continue;
-    const elIdx = layer.children.findIndex((e) => e.id === elementId);
-    if (elIdx !== -1) return { layer, layerIdx: li, elIdx };
-  }
-  return null;
 }
 
 /**
@@ -635,16 +326,6 @@ function normalizeKeyframeIds(scene: Scene): Scene {
   return { ...scene, layers: scene.layers.map((l) => ({ ...l, children: l.children.map(fixEl) })) };
 }
 
-/**
- * In-memory element clipboard for the layer right-click Copy / Cut / Paste
- * actions. Module-level (not part of the scene or undo history) — the menu
- * reads `hasClipboardElement()` when it opens to enable/disable Paste.
- */
-let clipboardElement: Element | null = null;
-
-/** Timer handle for the auto-dismissing toast notice. */
-let noticeTimer: number | null = null;
-
 /** A short unique element id in the `el-…` convention used across the app. */
 function freshElementId(): string {
   return `el-${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`;
@@ -736,10 +417,9 @@ export const designerStore = {
   },
 
   setScene(scene: Scene | null, projectPath: string | null): void {
-    past = [];
-    future = [];
-    clipboardElement = null;
-    suppressHistory = true;
+    resetHistory();
+    setClipboard(null);
+    setSuppressHistory(true);
     // Normalise to the composition model (migrate legacy root layers → a comp)
     // and open the first composition, if any.
     let activeId: string | null = null;
@@ -750,7 +430,7 @@ export const designerStore = {
       activeId = ensured.activeId;
     }
     // A freshly loaded/closed project starts clean — nothing to save yet.
-    savedScene = normalized;
+    setSavedScene(normalized);
     try {
       set({
         scene: normalized,
@@ -766,76 +446,16 @@ export const designerStore = {
         guides: { x: [], y: [] },
       });
     } finally {
-      suppressHistory = false;
+      setSuppressHistory(false);
     }
   },
 
-  /**
-   * Step backward in the per-scene undo history. No-op when the past
-   * stack is empty. The redo stack receives the *current* scene so
-   * `redo()` returns to it.
-   */
-  undo(): void {
-    const prev = past[past.length - 1];
-    if (prev === undefined) return;
-    past = past.slice(0, -1);
-    if (current.scene !== null) future.push(current.scene);
-    suppressHistory = true;
-    try {
-      set({
-        scene: prev,
-        selection: new Set<string>(),
-        selectedKeyframe: null,
-        selectedKeyframes: [],
-        keyframeInspectorOpen: false,
-      });
-    } finally {
-      suppressHistory = false;
-    }
-  },
-
-  /**
-   * Step forward through the redo stack. No-op when the future stack
-   * is empty (i.e. there's nothing the operator has undone).
-   */
-  redo(): void {
-    const next = future[future.length - 1];
-    if (next === undefined) return;
-    future = future.slice(0, -1);
-    if (current.scene !== null) past.push(current.scene);
-    suppressHistory = true;
-    try {
-      set({
-        scene: next,
-        selection: new Set<string>(),
-        selectedKeyframe: null,
-        selectedKeyframes: [],
-        keyframeInspectorOpen: false,
-      });
-    } finally {
-      suppressHistory = false;
-    }
-  },
-
-  /**
-   * Force the next scene mutation to start a fresh history entry, even
-   * if it lands within the coalescing window. Call this from gesture
-   * endpoints (e.g. pointerup after a drag) so an immediately-following
-   * unrelated edit doesn't fold into the drag's undo group.
-   */
-  markHistoryBoundary(): void {
-    lastSnapshotAt = -Infinity;
-  },
-
-  /**
-   * Mark the current scene as saved — clears the `dirty` flag. Call after a
-   * successful save so the "unsaved changes" prompt won't fire until the next
-   * edit.
-   */
-  markSaved(): void {
-    savedScene = current.scene;
-    set({});
-  },
+  // Undo/redo + the history boundary/save markers live in `store-core.ts` — the
+  // history engine is welded to `set`'s coalescing and the `dirty` flag.
+  undo,
+  redo,
+  markHistoryBoundary,
+  markSaved,
 
   /** Explicitly switch top-level view (used by "back to projects"). */
   setView(view: DesignerView): void {
@@ -845,19 +465,23 @@ export const designerStore = {
 
   /** Show a transient toast notice (auto-clears). Replaces any current one. */
   showNotice(message: string): void {
-    if (noticeTimer !== null) clearTimeout(noticeTimer);
+    const t = getNoticeTimer();
+    if (t !== null) clearTimeout(t);
     set({ notice: message });
-    noticeTimer = setTimeout(() => {
-      noticeTimer = null;
-      set({ notice: null });
-    }, 5000) as unknown as number;
+    setNoticeTimer(
+      setTimeout(() => {
+        setNoticeTimer(null);
+        set({ notice: null });
+      }, 5000) as unknown as number,
+    );
   },
 
   /** Dismiss the current toast notice immediately. */
   dismissNotice(): void {
-    if (noticeTimer !== null) {
-      clearTimeout(noticeTimer);
-      noticeTimer = null;
+    const t = getNoticeTimer();
+    if (t !== null) {
+      clearTimeout(t);
+      setNoticeTimer(null);
     }
     if (current.notice !== null) set({ notice: null });
   },
@@ -2182,7 +1806,7 @@ export const designerStore = {
     if (found === null) return;
     const el = found.layer.children[found.elIdx];
     if (el === undefined) return;
-    clipboardElement = structuredClone(el);
+    setClipboard(structuredClone(el));
   },
 
   /** Copy an element to the clipboard, then remove it from the scene. */
@@ -2193,7 +1817,7 @@ export const designerStore = {
 
   /** True when there is a clipboard element available to paste. */
   hasClipboardElement(): boolean {
-    return clipboardElement !== null;
+    return getClipboard() !== null;
   },
 
   /**
@@ -2215,8 +1839,9 @@ export const designerStore = {
    * otherwise it is appended to the first layer. No-op with an empty clipboard.
    */
   pasteElement(): void {
-    if (current.scene === null || clipboardElement === null) return;
-    const clone = cloneElementWithNewIds(clipboardElement);
+    const clip = getClipboard();
+    if (current.scene === null || clip === null) return;
+    const clone = cloneElementWithNewIds(clip);
     const layers = activeLayersOf(current.scene);
     if (layers.length === 0) {
       designerStore.addElement(clone);
@@ -2240,35 +1865,10 @@ export const designerStore = {
     return out;
   },
 
-  subscribe(l: Listener): () => void {
-    listeners.add(l);
-    return () => listeners.delete(l);
-  },
-
-  /** Reset for tests. */
-  _reset(): void {
-    past = [];
-    future = [];
-    clipboardElement = null;
-    if (noticeTimer !== null) {
-      clearTimeout(noticeTimer);
-      noticeTimer = null;
-    }
-    suppressHistory = false;
-    lastSnapshotAt = -Infinity;
-    current = {
-      ...initialState,
-      selection: new Set<string>(),
-      editingTextId: null,
-      bindModeFieldId: null,
-      currentFrame: 0,
-      selectedKeyframe: null,
-      selectedKeyframes: [],
-      keyframeInspectorOpen: false,
-      view: 'landing',
-    };
-    listeners.clear();
-  },
+  // Subscription + the test reset live in `store-core.ts` (they own the listener
+  // set + the private singletons).
+  subscribe,
+  _reset: _resetCore,
 } as const;
 
 /**
