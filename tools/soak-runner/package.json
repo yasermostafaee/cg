@@ -22,7 +22,7 @@
   "scripts": {
     "build": "tsc -b",
     "clean": "rimraf dist *.tsbuildinfo",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc --noEmit -p tsconfig.json --tsBuildInfoFile typecheck.tsbuildinfo",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run --coverage"
   },

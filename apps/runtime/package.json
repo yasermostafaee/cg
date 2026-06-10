@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --tsBuildInfoFile typecheck.tsbuildinfo",
     "test": "vitest run",
     "lint": "eslint .",
     "clean": "rimraf dist .vite coverage *.tsbuildinfo"
