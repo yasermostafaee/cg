@@ -21,6 +21,12 @@ export default defineConfig({
         'src/renderer/features/canvas/geometry.ts',
         'src/renderer/features/canvas/hit-test.ts',
         'src/renderer/features/canvas/drill.ts',
+        // Timeline-authoring PURE LOGIC (time↔pixel, ruler stride, keyframe lane
+        // layout, selection) + the easing-curve handle math. The interactive
+        // React layer (TimelineDock/TrackRow/FrameRuler/EasingEditor .tsx) is
+        // covered by the Playwright E2E suite, not unit coverage.
+        'src/renderer/features/timeline/timeline-geometry.ts',
+        'src/renderer/features/inspector/easing-geometry.ts',
       ],
       exclude: ['src/platform/cg-runtime.ts'],
     },

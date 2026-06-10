@@ -5,10 +5,18 @@ import { Control } from '../../ui/Control.js';
 import * as s from './TimelineDock.css.js';
 import { DisplayRow } from './DisplayRow.js';
 import { ElementRow, lifespanColorFor } from './ElementRow.js';
-import { FrameRuler, pickStride } from './FrameRuler.js';
+import { FrameRuler } from './FrameRuler.js';
 import { LayerContextMenu } from './LayerContextMenu.js';
 import { LABEL_COL_PX, timelineGroupsFor } from './keyframe-helpers.js';
 import { TrackRow } from './TrackRow.js';
+import {
+  deltaFramesFromPx,
+  frameSpan,
+  frameToPct,
+  frameToPctClamped,
+  pickStride,
+  stridePeriodPct,
+} from './timeline-geometry.js';
 
 interface Props {
   scene: Scene;
@@ -59,16 +67,16 @@ export function TimelineDock({
   // density only depends on those two numbers. One stride for the
   // ruler labels and the body gridlines keeps the two visually
   // synchronised.
-  const span = Math.max(1, frameOut - frameIn);
+  const span = frameSpan(frameIn, frameOut);
   // The active region (resized scene bar) within the full total span. The
   // ruler/grid stay on the total `span`; only the scene bar and the dimmed
   // trailing overlay are driven by the active out-point.
   const active = scene.activeRange ?? scene.frameRange;
-  const activePct = Math.max(0, Math.min(100, ((active.out - frameIn) / span) * 100));
+  const activePct = frameToPctClamped(active.out, frameIn, frameOut);
   const hasInactiveTail = active.out < frameOut;
   const visibleFrames = span / Math.max(1, timelineZoom);
   const tickStride = pickStride(visibleFrames);
-  const gridPeriodPct = ((tickStride * 100) / span).toFixed(4);
+  const gridPeriodPct = stridePeriodPct(tickStride, frameIn, frameOut).toFixed(4);
   const rightBodyRef = useRef<HTMLDivElement | null>(null);
   // Outer label viewport (overflow:hidden) — used to forward wheel events to
   // the lane body. Its content is offset by `leftBodyInnerRef`'s transform.
@@ -245,10 +253,13 @@ export function TimelineDock({
     const startX = e.clientX;
     const active = scene.activeRange ?? scene.frameRange;
     const startOut = active.out;
-    const totalSpan = Math.max(1, scene.frameRange.out - scene.frameRange.in);
-    const pxPerFrame = rect.width / totalSpan;
     function onMove(ev: PointerEvent): void {
-      const dframes = (ev.clientX - startX) / pxPerFrame;
+      const dframes = deltaFramesFromPx(
+        ev.clientX - startX,
+        rect.width,
+        scene.frameRange.in,
+        scene.frameRange.out,
+      );
       designerStore.setSceneActiveOut(startOut + dframes);
     }
     function onUp(): void {
@@ -273,11 +284,14 @@ export function TimelineDock({
     const rect = lane.getBoundingClientRect();
     if (rect.width <= 0) return;
     const startX = e.clientX;
-    const totalSpan = Math.max(1, scene.frameRange.out - scene.frameRange.in);
-    const pxPerFrame = rect.width / totalSpan;
     const startOut = lc.outPoint;
     function onMove(ev: PointerEvent): void {
-      const dframes = (ev.clientX - startX) / pxPerFrame;
+      const dframes = deltaFramesFromPx(
+        ev.clientX - startX,
+        rect.width,
+        scene.frameRange.in,
+        scene.frameRange.out,
+      );
       designerStore.setLifecycle({ outPoint: startOut + dframes });
     }
     function onUp(): void {
@@ -291,8 +305,7 @@ export function TimelineDock({
   }
 
   // Position a frame as a percent of the full span (markers + overlays).
-  const frameToPct = (f: number): number =>
-    Math.max(0, Math.min(100, ((f - frameIn) / span) * 100));
+  const markerPct = (f: number): number => frameToPctClamped(f, frameIn, frameOut);
 
   // Clicking empty timeline space or the (non-selectable) Scene row clears the
   // layer selection — mirrors the canvas, where clicking the dark area
@@ -469,7 +482,7 @@ export function TimelineDock({
                 {scene.lifecycle !== undefined && (
                   <div
                     className={s.phaseMarkerOut}
-                    style={{ left: `${frameToPct(scene.lifecycle.outPoint).toFixed(3)}%` }}
+                    style={{ left: `${markerPct(scene.lifecycle.outPoint).toFixed(3)}%` }}
                     onPointerDown={(e) => startMarkerDrag(e)}
                     role="separator"
                     aria-orientation="vertical"
@@ -569,7 +582,7 @@ function FrameReadout({ frameOut }: { frameOut: number }): JSX.Element {
  */
 function BodyPlayhead({ frameIn, frameOut }: { frameIn: number; frameOut: number }): JSX.Element {
   const currentFrame = useDesignerSelector((s) => s.currentFrame);
-  const pct = (((currentFrame - frameIn) / Math.max(1, frameOut - frameIn)) * 100).toFixed(3);
+  const pct = frameToPct(currentFrame, frameIn, frameOut).toFixed(3);
   return <div className={s.bodyPlayhead} style={{ left: `${pct}%` }} />;
 }
 

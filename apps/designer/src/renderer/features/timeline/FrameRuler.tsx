@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import * as s from './FrameRuler.css.js';
+import { frameFromClientX, frameToPct, stridePeriodPct, tickFrames } from './timeline-geometry.js';
 
 interface Props {
   frameIn: number;
@@ -21,19 +22,16 @@ interface Props {
  */
 export function FrameRuler({ frameIn, frameOut, stride, onScrub }: Props): JSX.Element {
   const ref = useRef<HTMLDivElement | null>(null);
-  const span = Math.max(1, frameOut - frameIn);
   const ticks = tickFrames(frameIn, frameOut, stride);
   // Same stride drives the ruler's own background lines so labels sit
   // directly above their gridline rather than landing between two.
-  const linePeriodPct = ((stride * 100) / span).toFixed(4);
+  const linePeriodPct = stridePeriodPct(stride, frameIn, frameOut).toFixed(4);
 
   function frameAt(clientX: number): number {
     const el = ref.current;
     if (el === null) return designerStore.get().currentFrame;
     const rect = el.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const ratio = Math.max(0, Math.min(1, x / rect.width));
-    return Math.round(frameIn + ratio * span);
+    return frameFromClientX(clientX, rect.left, rect.width, frameIn, frameOut);
   }
 
   function handlePointerDown(e: React.PointerEvent<HTMLDivElement>): void {
@@ -63,7 +61,7 @@ export function FrameRuler({ frameIn, frameOut, stride, onScrub }: Props): JSX.E
         <span
           key={f}
           className={s.tick}
-          style={{ left: `${(((f - frameIn) / span) * 100).toFixed(3)}%` }}
+          style={{ left: `${frameToPct(f, frameIn, frameOut).toFixed(3)}%` }}
         >
           {f}
         </span>
@@ -88,8 +86,7 @@ function RulerPlayhead({
   sliderRef: React.RefObject<HTMLDivElement | null>;
 }): JSX.Element {
   const currentFrame = useDesignerSelector((s) => s.currentFrame);
-  const span = Math.max(1, frameOut - frameIn);
-  const pct = (((currentFrame - frameIn) / span) * 100).toFixed(3);
+  const pct = frameToPct(currentFrame, frameIn, frameOut).toFixed(3);
   // Keep the slider's a11y value live without re-rendering the ruler itself.
   useEffect(() => {
     sliderRef.current?.setAttribute('aria-valuenow', String(currentFrame));
@@ -102,32 +99,4 @@ function RulerPlayhead({
       </div>
     </>
   );
-}
-
-/**
- * Choose a tick stride based on how many frames fit in the viewport.
- * The 1/2/5/10/25 ladder reads naturally — the operator's eye groups
- * "every 5" without effort, where strides like 3 or 7 would feel
- * arbitrary. Exported so the timeline body's gridlines stay in lockstep
- * with the ruler labels.
- *
- *      ≤  44 → every frame
- *     45–90 → every 2 (0, 2, 4, …)
- *    91–200 → every 5
- *   201–500 → every 10
- *      >500 → every 25
- */
-export function pickStride(visibleFrames: number): number {
-  if (visibleFrames <= 44) return 1;
-  if (visibleFrames <= 90) return 2;
-  if (visibleFrames <= 200) return 5;
-  if (visibleFrames <= 500) return 10;
-  return 25;
-}
-
-function tickFrames(lo: number, hi: number, stride: number): readonly number[] {
-  if (hi <= lo) return [lo];
-  const out: number[] = [];
-  for (let f = lo; f <= hi; f += stride) out.push(f);
-  return out;
 }
