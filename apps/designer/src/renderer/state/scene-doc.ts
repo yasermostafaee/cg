@@ -165,6 +165,24 @@ export function freshKeyframeId(): string {
   return `kf-${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`;
 }
 
+/** A short unique element id in the `el-…` convention used across the app. */
+export function freshElementId(): string {
+  return `el-${String(Date.now())}-${String(Math.floor(Math.random() * 1e6))}`;
+}
+
+/**
+ * Reassign a fresh id to an element and (recursively) to every nested container
+ * child, so a pasted / duplicated subtree never collides with the original ids.
+ * Keeps the name (used for nested children + composition duplication).
+ */
+export function reassignIdsDeep(el: Element): Element {
+  const next = { ...el, id: freshElementId() } as Element;
+  if (next.type === 'container') {
+    next.children = next.children.map(reassignIdsDeep);
+  }
+  return next;
+}
+
 /**
  * Normalise a loaded project to the composition model (no "main scene"). If it
  * already has compositions, open the first. Otherwise, if the legacy root has
