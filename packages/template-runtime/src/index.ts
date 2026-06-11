@@ -46,6 +46,14 @@ export {
   type SequenceTransitionSpec,
 } from './sequence-motion.js';
 export {
+  RepeaterDriver,
+  coerceRepeaterItems,
+  repeaterDriverFor,
+  type RepeaterDriverOptions,
+  type RepeaterRowHandle,
+} from './repeater-driver.js';
+export { buildRepeaterRows, clampRowCount, repeaterItemValues } from './scene-builder.js';
+export {
   applyAnimationAtFrame,
   collectAnimatedElements,
   type AnimatedElement,

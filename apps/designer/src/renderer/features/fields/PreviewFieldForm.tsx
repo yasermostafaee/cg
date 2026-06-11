@@ -9,6 +9,7 @@ import { cx } from '../../cx.js';
 import { Callout } from '../../ui/Callout.js';
 import { Select } from '../../ui/Select.js';
 import { ListItemsEditor } from './ListItemsEditor.js';
+import type { ListItemColumn } from './repeater-columns.js';
 import * as s from './PreviewFieldForm.css.js';
 
 type Values = Record<string, FieldValue>;
@@ -40,12 +41,15 @@ export function PreviewFieldForm({
   values,
   onChange,
   dwellFieldIds,
+  columnsByFieldId,
 }: {
   aggregate: AggregatedFields;
   values: NestedFieldValues;
   onChange: (path: string[], value: FieldValue) => void;
   /** D-029 — `list` fields bound `sequence-items` get the per-item dwell column. */
   dwellFieldIds?: ReadonlySet<string>;
+  /** D-030 — `list` fields bound `repeater-items` get child-field columns. */
+  columnsByFieldId?: ReadonlyMap<string, readonly ListItemColumn[]>;
 }): JSX.Element {
   return (
     <AggregateSection
@@ -56,6 +60,7 @@ export function PreviewFieldForm({
       title="Data"
       depth={0}
       dwellFieldIds={dwellFieldIds}
+      columnsByFieldId={columnsByFieldId}
     />
   );
 }
@@ -69,6 +74,7 @@ function AggregateSection({
   title,
   depth,
   dwellFieldIds,
+  columnsByFieldId,
 }: {
   aggregate: AggregatedFields;
   values: NestedFieldValues;
@@ -77,6 +83,7 @@ function AggregateSection({
   title: string;
   depth: number;
   dwellFieldIds?: ReadonlySet<string> | undefined;
+  columnsByFieldId?: ReadonlyMap<string, readonly ListItemColumn[]> | undefined;
 }): JSX.Element {
   const duplicateKeys = findDuplicateKeys(aggregate.fields);
   const invalidCount = aggregate.fields.filter(
@@ -120,6 +127,7 @@ function AggregateSection({
           value={scalarAt(values, f.id)}
           onChange={(v) => onChange([...path, f.id], v)}
           showDwell={dwellFieldIds?.has(f.id) ?? false}
+          columns={columnsByFieldId?.get(f.id)}
         />
       ))}
 
@@ -133,6 +141,7 @@ function AggregateSection({
           title={g.name}
           depth={depth + 1}
           dwellFieldIds={dwellFieldIds}
+          columnsByFieldId={columnsByFieldId}
         />
       ))}
     </div>
@@ -160,11 +169,13 @@ function FieldRow({
   value,
   onChange,
   showDwell,
+  columns,
 }: {
   field: DynamicField;
   value: FieldValue | undefined;
   onChange: (v: FieldValue) => void;
   showDwell?: boolean | undefined;
+  columns?: readonly ListItemColumn[] | undefined;
 }): JSX.Element {
   const error = validateField(field, value);
   return (
@@ -173,7 +184,7 @@ function FieldRow({
         {field.label || field.id}
         {field.required && <span className={s.required}> *</span>}
       </label>
-      {renderInput(field, value, onChange, error !== null, showDwell === true)}
+      {renderInput(field, value, onChange, error !== null, showDwell === true, columns)}
       {error !== null && (
         <span className={s.error} role="alert">
           <span aria-hidden>⚠</span>
@@ -190,6 +201,7 @@ function renderInput(
   onChange: (v: FieldValue) => void,
   invalid: boolean,
   showDwell = false,
+  columns?: readonly ListItemColumn[],
 ): JSX.Element {
   const cls = cx(s.input, invalid && s.inputInvalid);
   // A stable accessible name per field (label, else the data key) so the preview
@@ -265,14 +277,16 @@ function renderInput(
         />
       );
     case 'list':
-      // D-028 — the same items editor the ticker/sequence inspectors use;
-      // every edit live-updates the stage (the runtime reconciles by stable
-      // item id). D-029 — sequence-bound lists get the per-item dwell column.
+      // D-028 — the same items editor the ticker/sequence/repeater
+      // inspectors use; every edit live-updates the stage. D-029 —
+      // sequence-bound lists get the per-item dwell column. D-030 —
+      // repeater-bound lists get one column per child field.
       return (
         <ListItemsEditor
           items={listItems(value, field.default)}
           label={label}
           showDwell={showDwell}
+          columns={columns}
           onChange={(items) => onChange(items)}
         />
       );

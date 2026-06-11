@@ -21,6 +21,7 @@ export type DesignerTool =
   | 'ticker'
   | 'clock'
   | 'sequence'
+  | 'repeater'
   | 'shape'
   | 'ellipse'
   | 'image'

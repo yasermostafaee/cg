@@ -1,5 +1,6 @@
 import type {
   ClockElement,
+  RepeaterElement,
   SequenceElement,
   Element,
   ElementAnimation,
@@ -247,6 +248,8 @@ export interface FieldScope {
   clocks: ClockEntry[];
   /** D-029 — sequence elements rendered directly in this scope (host boxes). */
   sequences: SequenceEntry[];
+  /** D-030 — repeater elements rendered directly in this scope (host boxes). */
+  repeaters: RepeaterEntry[];
   /** D-026 — the comp/scene this scope renders, for its lifecycle/playout/active. */
   source: LifecycleSource;
 }
@@ -272,6 +275,17 @@ export interface SequenceEntry {
   element: SequenceElement;
   /** The clipped grid box the driver renders items into (also in the elementMap). */
   host: HTMLElement;
+}
+
+/** D-030 — one built repeater: element config + host box + the build-context guards. */
+export interface RepeaterEntry {
+  element: RepeaterElement;
+  /** The clipped box rows are stamped into (also in the elementMap). */
+  host: HTMLElement;
+  /** Composition recursion depth at the build site (rows stamp at depth+1). */
+  depth: number;
+  /** Composition ids on the build path (the cycle guard for row stamping). */
+  visited: ReadonlySet<string>;
 }
 
 /** The lifecycle-relevant fields of the comp/scene a scope renders (D-026). */

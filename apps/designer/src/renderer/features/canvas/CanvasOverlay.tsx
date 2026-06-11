@@ -10,6 +10,7 @@ import {
   defaultClock,
   defaultEllipse,
   defaultImage,
+  defaultRepeater,
   defaultSequence,
   defaultShape,
   defaultText,
@@ -189,6 +190,25 @@ export function CanvasOverlay({
     if (tool === 'sequence') {
       const id = `el-${String(Date.now())}`;
       designerStore.addElement(defaultSequence(id, scenePoint.x, scenePoint.y));
+      designerStore.setTool('cursor');
+      return;
+    }
+    if (tool === 'repeater') {
+      // D-030 — a repeater needs a child composition to stamp: insert only
+      // when a valid (non-cyclic, not the open composition) one exists,
+      // preselecting the first valid; otherwise explain instead of inserting.
+      const valid = (scene.compositions ?? []).find((c) =>
+        designerStore.canNestCompositionInActive(c.id),
+      );
+      if (valid === undefined) {
+        designerStore.showNotice(
+          'A repeater stamps another composition per row — create one first (it can’t repeat the open composition or anything that would loop).',
+        );
+        designerStore.setTool('cursor');
+        return;
+      }
+      const id = `el-${String(Date.now())}`;
+      designerStore.addElement(defaultRepeater(id, scenePoint.x, scenePoint.y, valid));
       designerStore.setTool('cursor');
       return;
     }

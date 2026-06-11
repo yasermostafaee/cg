@@ -138,16 +138,17 @@ function sameBindingTarget(a: FieldBinding['target'], b: FieldBinding['target'])
 }
 
 /**
- * D-018/D-028/D-029 — is `b` a Data-key convenience binding (for ANY
+ * D-018/D-028/D-029/D-030 — is `b` a Data-key convenience binding (for ANY
  * element)? A text element's convenience binding is its full-text binding
- * (no placeholder); a ticker's is its `ticker-items` binding; a sequence's
- * its `sequence-items` binding.
+ * (no placeholder); a ticker's / sequence's / repeater's is its
+ * `*-items` binding.
  */
 function isConvBinding(b: FieldBinding): boolean {
   return (
     (b.target.kind === 'text' && b.target.placeholder === undefined) ||
     b.target.kind === 'ticker-items' ||
-    b.target.kind === 'sequence-items'
+    b.target.kind === 'sequence-items' ||
+    b.target.kind === 'repeater-items'
   );
 }
 
@@ -276,7 +277,9 @@ export const fieldsSlice = {
         ? ('ticker-items' as const)
         : el !== undefined && el.type === 'sequence'
           ? ('sequence-items' as const)
-          : null;
+          : el !== undefined && el.type === 'repeater'
+            ? ('repeater-items' as const)
+            : null;
     const isListElement = itemsKind !== null;
     const convIdx = bindings.findIndex((b) => isConvBinding(b) && convElementId(b) === elementId);
     const currentKey = convIdx === -1 ? null : (bindings[convIdx]?.fieldId ?? null);
@@ -319,10 +322,12 @@ export const fieldsSlice = {
             type: 'list',
             label: trimmed,
             required: false,
-            // Seed from the element's authored items (stable ids — and for a
-            // sequence, per-item dwellMs — carry over).
+            // Seed from the element's authored items (stable ids — and any
+            // open fields like a sequence's dwellMs or a repeater's row
+            // values — carry over).
             default:
-              el !== undefined && (el.type === 'ticker' || el.type === 'sequence')
+              el !== undefined &&
+              (el.type === 'ticker' || el.type === 'sequence' || el.type === 'repeater')
                 ? el.items.map((i) => ({ ...i }))
                 : [],
           }
@@ -436,6 +441,26 @@ export const fieldsSlice = {
     const doc = activeFieldData(current.scene);
     const conv = doc.bindings.find(
       (b) => b.target.kind === 'sequence-items' && b.target.elementId === elementId,
+    );
+    if (conv === undefined) return;
+    const field = doc.fields.find((f) => f.id === conv.fieldId);
+    if (field === undefined || field.type !== 'list') return;
+    designerStore.updateField(field.id, { default: items.map((i) => ({ ...i })) });
+  },
+
+  /**
+   * D-030 — edit a repeater's rows as ONE intent: the element stores the
+   * FULL open items (row keys are child field values), and a bound `list`
+   * field's default stays in lockstep (the setTickerItems pattern).
+   */
+  setRepeaterItems(elementId: string, items: ListItem[]): void {
+    if (current.scene === null) return;
+    designerStore.updateElement(elementId, {
+      items: items.map((i) => ({ ...i })),
+    } as Partial<Element>);
+    const doc = activeFieldData(current.scene);
+    const conv = doc.bindings.find(
+      (b) => b.target.kind === 'repeater-items' && b.target.elementId === elementId,
     );
     if (conv === undefined) return;
     const field = doc.fields.find((f) => f.id === conv.fieldId);

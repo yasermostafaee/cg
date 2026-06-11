@@ -3,6 +3,7 @@ import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 import {
+  defaultRepeater,
   defaultSequence,
   defaultText,
   defaultTicker,
@@ -392,3 +393,51 @@ describe('designerStore — D-029 sequence Data key + items', () => {
 function addTickerForConflict(id: string): void {
   designerStore.addElement(defaultTicker(id, 0, 0));
 }
+
+describe('designerStore — D-030 repeater Data key + rows', () => {
+  function addRepeater(id: string): void {
+    designerStore.addElement(
+      defaultRepeater(id, 0, 0, {
+        id: 'child-1',
+        fields: [{ id: 'name', label: 'Name', required: false, type: 'text', default: 'تیم' }],
+      }),
+    );
+  }
+  function repeaterItemsOf(id: string): Record<string, unknown>[] | undefined {
+    const st = designerStore.get();
+    const scene = editSceneOf(st.scene, st.activeCompositionId)!;
+    for (const layer of scene.layers) {
+      for (const el of layer.children) {
+        if (el.id === id && el.type === 'repeater') return el.items as Record<string, unknown>[];
+      }
+    }
+    return undefined;
+  }
+
+  it('setElementDataKey on a repeater seeds a LIST field + repeater-items binding', () => {
+    freshScene();
+    addRepeater('rp-1');
+    expect(designerStore.setElementDataKey('rp-1', 'standings')).toBe(true);
+    const f = fields().find((x) => x.id === 'standings');
+    expect(f?.type).toBe('list');
+    if (f?.type === 'list') expect(f.default).toEqual(repeaterItemsOf('rp-1'));
+    expect(bindings()).toContainEqual({
+      fieldId: 'standings',
+      target: { kind: 'repeater-items', elementId: 'rp-1' },
+    });
+  });
+
+  it('setRepeaterItems keeps the FULL open rows on the element AND the bound field', () => {
+    freshScene();
+    addRepeater('rp-1');
+    designerStore.setElementDataKey('rp-1', 'standings');
+    const next = [
+      { id: 'r1', name: 'تیم یک', score: 3, extra: 'survives' },
+      { id: 'r2', name: 'Brand X', score: 1 },
+    ];
+    designerStore.setRepeaterItems('rp-1', next);
+    expect(repeaterItemsOf('rp-1')).toEqual(next); // open rows stay whole
+    const f = fields().find((x) => x.id === 'standings');
+    if (f?.type === 'list') expect(f.default).toEqual(next);
+  });
+});

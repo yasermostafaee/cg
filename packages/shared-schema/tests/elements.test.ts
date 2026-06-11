@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ClockElementSchema,
+  RepeaterElementSchema,
   SequenceElementSchema,
   ContainerElementSchema,
   ElementBaseSchema,
@@ -516,5 +517,41 @@ describe('SequenceElement (D-029)', () => {
     expect(() =>
       SequenceElementSchema.parse({ ...sequence, items: [{ id: '', text: 'x' }] }),
     ).toThrow();
+  });
+});
+
+describe('RepeaterElement (D-030)', () => {
+  const repeater = {
+    ...baseProps,
+    type: 'repeater' as const,
+    compositionId: 'rowc',
+  };
+  it('applies the defaults (column / rtl flow / gap 8 / no items) and round-trips', () => {
+    const parsed = RepeaterElementSchema.parse(repeater);
+    expect(parsed.direction).toBe('column');
+    expect(parsed.flow).toBe('rtl');
+    expect(parsed.gap).toBe(8);
+    expect(parsed.maxItems).toBeUndefined();
+    expect(parsed.items).toEqual([]);
+    expect(RepeaterElementSchema.parse(parsed)).toEqual(parsed);
+  });
+  it('round-trips through the Element union with OPEN row items', () => {
+    const parsed = ElementSchema.parse({
+      ...repeater,
+      items: [{ id: 'r1', name: 'تیم یک', score: 3 }],
+    });
+    expect((parsed as { type: string }).type).toBe('repeater');
+    expect((parsed as { items: unknown[] }).items).toEqual([
+      { id: 'r1', name: 'تیم یک', score: 3 },
+    ]);
+  });
+  it('rejects a negative gap / non-positive maxItems / missing compositionId', () => {
+    expect(() => RepeaterElementSchema.parse({ ...repeater, gap: -1 })).toThrow();
+    expect(() => RepeaterElementSchema.parse({ ...repeater, maxItems: 0 })).toThrow();
+    const { compositionId: _c, ...withoutComp } = repeater;
+    expect(() => RepeaterElementSchema.parse(withoutComp)).toThrow();
+  });
+  it('rejects a row item without a stable id', () => {
+    expect(() => RepeaterElementSchema.parse({ ...repeater, items: [{ name: 'x' }] })).toThrow();
   });
 });

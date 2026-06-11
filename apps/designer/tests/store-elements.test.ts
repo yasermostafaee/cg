@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { ClockElementSchema, SequenceElementSchema } from '@cg/shared-schema';
+import {
+  ClockElementSchema,
+  RepeaterElementSchema,
+  SequenceElementSchema,
+} from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 import {
   defaultClock,
+  defaultRepeater,
   defaultSequence,
   defaultShape,
   defaultText,
@@ -144,5 +149,31 @@ describe('element-defaults', () => {
     expect(q.repeat).toBe('infinite');
     expect(q.items).toHaveLength(3);
     expect(SequenceElementSchema.parse(q)).toEqual(q);
+  });
+
+  it('defaultRepeater seeds 3 rows keyed by the child fields with their defaults (D-030)', () => {
+    const r = defaultRepeater('el-1', 3, 4, {
+      id: 'rowc',
+      fields: [
+        { id: 'name', label: 'Name', required: false, type: 'text', default: 'تیم' },
+        { id: 'score', label: 'Score', required: false, type: 'number', default: 0 },
+      ],
+    });
+    expect(r.type).toBe('repeater');
+    expect(r.compositionId).toBe('rowc');
+    expect(r.direction).toBe('column');
+    expect(r.flow).toBe('rtl');
+    expect(r.gap).toBe(8);
+    expect(r.items).toEqual([
+      { id: 'row-1', name: 'تیم', score: 0 },
+      { id: 'row-2', name: 'تیم', score: 0 },
+      { id: 'row-3', name: 'تیم', score: 0 },
+    ]);
+    expect(RepeaterElementSchema.parse(r)).toEqual(r);
+  });
+
+  it('defaultRepeater with a field-less child seeds 3 bare {id} rows', () => {
+    const r = defaultRepeater('el-1', 0, 0, { id: 'rowc' });
+    expect(r.items).toEqual([{ id: 'row-1' }, { id: 'row-2' }, { id: 'row-3' }]);
   });
 });

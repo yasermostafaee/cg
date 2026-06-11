@@ -10,6 +10,7 @@ import {
 import { getAll as assetUrlGetAll } from '../assets/assetUrlCache.js';
 import { Modal } from '../shell/Modal.js';
 import { PreviewFieldForm, type PreviewDispatch } from './PreviewFieldForm.js';
+import { columnsForFields, type ListItemColumn } from './repeater-columns.js';
 import { PreviewTransport } from './PreviewTransport.js';
 import { PreviewScopeTiming } from './PreviewScopeTiming.js';
 import { type TimingOverride } from './PreviewTimingControls.js';
@@ -62,6 +63,45 @@ function sequenceListFieldIds(scene: Scene): ReadonlySet<string> {
   for (const d of docs) {
     for (const b of d.bindings ?? []) {
       if (b.target.kind === 'sequence-items') out.add(b.fieldId);
+    }
+  }
+  return out;
+}
+
+/**
+ * D-030 — `list` fields bound `repeater-items` get one editor column per
+ * referenced child-composition field (the same columned editor the
+ * inspector shows). The map is keyed by field id across all docs.
+ */
+function repeaterColumnsByFieldId(scene: Scene): ReadonlyMap<string, readonly ListItemColumn[]> {
+  const out = new Map<string, readonly ListItemColumn[]>();
+  const docs: { layers: Scene['layers']; bindings?: Scene['bindings'] | undefined }[] = [
+    scene,
+    ...(scene.compositions ?? []),
+  ];
+  const findRepeater = (
+    children: readonly Scene['layers'][number]['children'][number][],
+    elementId: string,
+  ): { compositionId: string } | undefined => {
+    for (const el of children) {
+      if (el.type === 'repeater' && el.id === elementId) return el;
+      if (el.type === 'container') {
+        const found = findRepeater(el.children, elementId);
+        if (found !== undefined) return found;
+      }
+    }
+    return undefined;
+  };
+  for (const d of docs) {
+    for (const b of d.bindings ?? []) {
+      if (b.target.kind !== 'repeater-items' || !('elementId' in b.target)) continue;
+      for (const layer of d.layers) {
+        const el = findRepeater(layer.children, b.target.elementId);
+        if (el === undefined) continue;
+        const child = scene.compositions?.find((c) => c.id === el.compositionId);
+        if (child !== undefined) out.set(b.fieldId, columnsForFields(child.fields));
+        break;
+      }
     }
   }
   return out;
@@ -267,6 +307,7 @@ export function PreviewModal({
               values={values}
               onChange={onFieldChange}
               dwellFieldIds={sequenceListFieldIds(scene)}
+              columnsByFieldId={repeaterColumnsByFieldId(scene)}
             />
           </div>
           <div className={s.fixedBar}>

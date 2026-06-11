@@ -6,12 +6,14 @@ import type {
   Filter,
   ImageElement,
   Padding,
+  RepeaterElement,
   SequenceElement,
   Shadow,
   ShapeElement,
   TextElement,
   TickerElement,
 } from '@cg/shared-schema';
+import { columnsForFields } from '../fields/repeater-columns.js';
 import {
   SEQUENCE_PRESET_ORDER,
   SEQUENCE_TRANSITION_PRESETS,
@@ -143,6 +145,14 @@ export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element 
   if (element.type === 'sequence')
     return (
       <SequenceSections
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    );
+  if (element.type === 'repeater')
+    return (
+      <RepeaterSections
         element={element}
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
@@ -1064,6 +1074,112 @@ function SequenceSections({
               cornerRadius: Math.max(0, v),
             } as Partial<Element>)
           }
+        />
+      </CollapseSection>
+
+      <FilterSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    </>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────
+//                              REPEATER
+// ────────────────────────────────────────────────────────────────────────
+
+/**
+ * D-030 — the repeater config. The child composition select offers only
+ * VALID choices (the existing nest cycle guard — self/ancestor references
+ * are blocked); the items editor renders one column per child field. Rows
+ * render statically on the canvas; at playout the row COUNT stamps at each
+ * fresh play while row VALUES update live (model B).
+ */
+function RepeaterSections({
+  element,
+  currentFrame,
+  selectedKeyframe,
+}: SectionProps<RepeaterElement>): JSX.Element {
+  const id = element.id;
+  const scene = useDesignerSelector((s) => s.scene);
+  const comps = scene?.compositions ?? [];
+  // Valid = the existing author-time cycle guard; keep the CURRENT choice
+  // listed even if momentarily invalid so the select doesn't jump.
+  const options = comps.filter(
+    (c) => c.id === element.compositionId || designerStore.canNestCompositionInActive(c.id),
+  );
+  const child = comps.find((c) => c.id === element.compositionId);
+  const columns = columnsForFields(child?.fields);
+  return (
+    <>
+      <CollapseSection title="Repeater" pinned>
+        <SelectField
+          label="composition"
+          value={element.compositionId}
+          options={options.map((c) => c.id)}
+          labels={options.map((c) => c.name)}
+          onCommit={(compositionId) => {
+            // The guard above filters the options; re-check on commit so a
+            // stale list can never write a cyclic reference.
+            if (
+              compositionId === element.compositionId ||
+              designerStore.canNestCompositionInActive(compositionId)
+            ) {
+              designerStore.updateElement(id, { compositionId } as Partial<Element>);
+            }
+          }}
+        />
+        <SelectField
+          label="direction"
+          value={element.direction}
+          options={['column', 'row'] as const}
+          onCommit={(direction) =>
+            designerStore.updateElement(id, { direction } as Partial<Element>)
+          }
+        />
+        {element.direction === 'row' && (
+          <SelectField
+            label="flow"
+            value={element.flow}
+            options={['rtl', 'ltr'] as const}
+            onCommit={(flow) => designerStore.updateElement(id, { flow } as Partial<Element>)}
+          />
+        )}
+        <NumberField
+          label="gap"
+          value={element.gap}
+          step={1}
+          min={0}
+          suffix="px"
+          onCommit={(gap) =>
+            designerStore.updateElement(id, { gap: Math.max(0, gap) } as Partial<Element>)
+          }
+        />
+        <NumberField
+          label="max items"
+          value={element.maxItems ?? 0}
+          step={1}
+          min={0}
+          onCommit={(n) =>
+            designerStore.updateElement(id, {
+              maxItems: n >= 1 ? Math.round(n) : undefined,
+            } as Partial<Element>)
+          }
+        />
+        <p className={dds.hint}>
+          Rows stamp one “{child?.name ?? element.compositionId}” per item. Values update live on
+          air; the row count is stamped at each play (0 max items = unlimited).
+        </p>
+      </CollapseSection>
+
+      <CollapseSection title="Rows" defaultExpanded>
+        <ListItemsEditor
+          items={element.items}
+          label={element.name || 'Repeater'}
+          columns={columns}
+          onChange={(items) => designerStore.setRepeaterItems(id, items)}
         />
       </CollapseSection>
 

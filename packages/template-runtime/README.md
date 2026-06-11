@@ -38,6 +38,8 @@ Everything consumers use is re-exported from [`src/index.ts`](./src/index.ts):
 | `formatWallClock`, `formatCountClock`                        | The pure clock format-string engine (tokens, overflow absorption, digit mapping).                                                  |
 | `SequenceDriver`, `sequenceDriverFor`, `coerceSequenceItems` | The now/next rotation — dwell/advance/passes, `next()`, reconcile + `whenComplete()` (D-029; normally owned by `createRuntime`).   |
 | `edgeOffset`, `sampleTransition`, `transitionTotalMs`        | The pure sequence motion mapper (edge → vector, simultaneous/sequential composition, shared easing).                               |
+| `RepeaterDriver`, `repeaterDriverFor`, `coerceRepeaterItems` | Data-driven rows — stamp-at-play / live-values (model B), NOT a content source (D-030; normally owned by `createRuntime`).         |
+| `buildRepeaterRows`, `clampRowCount`, `repeaterItemValues`   | The row builder (flow cells + fresh row scopes) and its pure helpers.                                                              |
 | `LifecycleStateMachine`, `EventBus`, `applyTransform`        | Lifecycle state, events, value transforms.                                                                                         |
 
 ## How it's built — module map
@@ -58,6 +60,9 @@ createRuntime (runtime.ts)  ─ the orchestrator
  ├─ SequenceDriver (sequence-driver.ts)   one per sequence element: now/next
  │      rotation (dwell + next()); a finite run joins the content completion
  │      └─ sequence-motion.ts             pure transition motion mapper
+ ├─ RepeaterDriver (repeater-driver.ts)   one per repeater element: stamps a
+ │      ROW SUBTREE per data item through wireScopeSubtree (count at play,
+ │      values live); not a content source
  ├─ LifecycleStateMachine (lifecycle.ts)  pending→playing→on-air→exiting→stopped
  ├─ EventBus (event-bus.ts)               play.start / stop.end / ready / …
  └─ installCasparGlobals (adapters/caspar-globals.ts)   window.* → runtime
@@ -92,6 +97,16 @@ during a transition) with item 1 statically rendered through the driver's
 shared item-node factory (bidi-isolated per `direction`); registered as
 `{ element, host }` on `scope.sequences`.
 
+A `repeater` element builds as the clipped outer box, registered as
+`{ element, host, depth, visited }` on `scope.repeaters` (the build-context
+guards travel with it so runtime row stamping keeps the cycle/depth limits).
+`buildRepeaterRows` stamps flow-positioned cells (column = width-fit, row =
+height-fit by `flow`, aspect preserved, zero-resolution guard) each holding a
+FRESH row scope built from the child's layers. CRITICAL distinction: row
+scopes join the WIRING tree only — they are never pushed into
+`scope.children`, the D-025 NAMESPACE tree that feeds field aggregation and
+GDD namespaces; the repeater's single bound `list` field is the data surface.
+
 **Invariants**
 
 - Element ids are unique **within a scope**, not globally — the same child
@@ -108,9 +123,10 @@ declared `bindings`, look up each `fieldId` in the supplied values (falling back
 the field's `default`), run the optional `transform` (`transforms.ts`, e.g.
 `persian-digits`, `date-fa`), and write to the DOM by `target.kind`
 (`text` / `image` / `color` / `visible` / `transform` / `scene-background` /
-`lottie-override` / `ticker-items` / `sequence-items` — the last two route a
-`list` value to the element's driver via the `tickerDriverFor` /
-`sequenceDriverFor` registries, which reconcile by
+`lottie-override` / `ticker-items` / `sequence-items` / `repeater-items` —
+the last three route a `list` value to the element's driver via the
+`tickerDriverFor` / `sequenceDriverFor` / `repeaterDriverFor` registries,
+which reconcile by
 stable item id).
 
 **Invariants**
@@ -342,6 +358,38 @@ in-scope sequences in that change).
   zero-content parity). Transition edges are PHYSICAL — `direction` drives
   per-item bidi isolation only, never mirrors motion.
 
+### wireScopeSubtree + RepeaterDriver — dynamic scope wiring (D-030)
+
+`createRuntime` wires every scope subtree through ONE factory:
+`wireScopeSubtree(scope, path, isRootSubtree) → WiredSubtree { node,
+tickers, clocks, sequences, repeaters, destroy }` — driver instantiation +
+the controller tree for that subtree, with SYMMETRIC teardown (rows, then
+controllers, then drivers). A `subtrees` set is what every runtime cascade
+iterates (play resets, pause/resume, settle freeze, `next()` dispatch,
+`remove()`), kind-major in wiring order. The static scene is the first
+subtree; the factory exists so DYNAMIC scopes can join and leave the run
+with exactly the same machinery — this is the extension seam for anything
+that stamps scopes at runtime.
+
+`RepeaterDriver` is its first consumer (liveness model B):
+
+- **Count at fresh play:** `play()` resets repeaters FIRST — each tears its
+  rows down and re-stamps from the CURRENT effective items (the bound list's
+  retained value incl. a pre-play `update()`, else the authored items),
+  clamped by `maxItems`. Every row is `buildRepeaterRows` + value apply (the
+  per-scope `applyScopedFieldValues` path, item keys minus `id` = the
+  child's field values) + `wireScopeSubtree` + attach under the hosting
+  scope's `ScopeNode` — so the controller cascade reaches rows exactly like
+  authored children (own out-point hold, own outro, pause/resume, own
+  content-driven hold from the row's content sources).
+- **Values live mid-hold:** `setItems()` applies positionally (row i ←
+  item i; reorder is live). A SHORTER list hides surplus cells (display
+  only — scopes persist); regrowth within the stamped count re-shows them;
+  a LONGER list defers to the next fresh play (no mid-run scope creation).
+- NOT a content source (no `whenComplete`); `tick(frame)` walks the live
+  rows so scrubbing paints them like authored instances; teardown is
+  leak-checked (no orphan rAF/timers after `remove()`).
+
 ### animation-applier + keyframe-eval — per-frame writes
 
 `applyAnimationAtFrame` walks an element's `animation.tracks` and writes the
@@ -395,7 +443,9 @@ payloads are dropped silently (a broadcast frame can't write logs).
    per scope, and hook its lifecycle into the cascade (play reset / pause /
    resume / settle / remove). If it can END a content-driven hold, expose
    `whenComplete()` and join the scope's content-source `Promise.all` (cf. the
-   countdown clock).
+   countdown clock). If it creates SCOPES at runtime, stamp them through
+   `wireScopeSubtree` and attach under the hosting `ScopeNode` (cf. the
+   repeater).
 4. **Designer UI** — the canvas/inspector to author it (`apps/designer`).
 5. If it can be **animated/bound**, make sure `applyBaseStyles` / `animation-applier`
    / `bindings` handle its target properties (see below).

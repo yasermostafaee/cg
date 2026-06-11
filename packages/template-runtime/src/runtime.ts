@@ -3,6 +3,7 @@ import {
   playoutOf,
   type Element,
   type FrameRange,
+  type ListItem,
   type NestedFieldValues,
   type Playout,
   type Scene,
@@ -40,8 +41,13 @@ import { ensureBaselineCss } from './css.js';
 import { EventBus } from './event-bus.js';
 import { LifecycleStateMachine } from './lifecycle.js';
 import { PlayoutController } from './playout-controller.js';
-import { buildScene } from './scene-builder.js';
+import { buildRepeaterRows, buildScene, repeaterItemValues } from './scene-builder.js';
 import { ClockDriver } from './clock-driver.js';
+import {
+  RepeaterDriver,
+  registerRepeaterDriver,
+  type RepeaterRowHandle,
+} from './repeater-driver.js';
 import { SequenceDriver, registerSequenceDriver } from './sequence-driver.js';
 import { TickerDriver, registerTickerDriver } from './ticker-driver.js';
 import type {
@@ -73,6 +79,7 @@ interface WiredSubtree {
   tickers: TickerDriver[];
   clocks: ClockDriver[];
   sequences: SequenceDriver[];
+  repeaters: RepeaterDriver[];
   /** Stop + destroy every driver and controller of this subtree, deregister. */
   destroy(): void;
 }
@@ -181,6 +188,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     const tickers: TickerDriver[] = [];
     const clocks: ClockDriver[] = [];
     const sequences: SequenceDriver[] = [];
+    const repeaters: RepeaterDriver[] = [];
     const controllers: PlayoutController[] = [];
 
     const wireScope = (scope: FieldScope, path: string, isSubtreeRoot: boolean): ScopeNode => {
@@ -325,7 +333,61 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       const children = scope.children.map((c) =>
         wireScope(c.scope, path === '' ? c.name : `${path}.${c.name}`, false),
       );
-      return { controller, children };
+      const node: ScopeNode = { controller, children };
+
+      // D-030 — repeater drivers (after the node exists: stamped rows attach
+      // under it so the cascade reaches them like authored children). Each
+      // stamp wires a fresh ROW subtree through wireScopeSubtree — real
+      // per-scope semantics by reuse — and teardown is symmetric. Row scopes
+      // are NOT in scope.children, so they never join the D-025 namespace
+      // aggregation; the single bound list field is the data surface.
+      for (const entry of scope.repeaters) {
+        const comp = scene.compositions?.find((c) => c.id === entry.element.compositionId);
+        const stampRows = (items: ListItem[]): RepeaterRowHandle[] => {
+          const rows = buildRepeaterRows(
+            scene,
+            entry.element,
+            entry.host,
+            items.length,
+            { depth: entry.depth, visited: entry.visited },
+            doc,
+          );
+          return rows.map((row, i) => {
+            const rowSub = wireScopeSubtree(
+              row.scope,
+              `${path}#${entry.element.id}[${String(i)}]`,
+              false,
+            );
+            node.children.push(rowSub.node);
+            const rowAnimated: AnimatedElement[] = [];
+            collectScopeAnimated(row.scope, rowAnimated);
+            const apply = (values: Record<string, unknown>): void => {
+              if (comp !== undefined) {
+                applyScopedFieldValues(scene, comp, values as NestedFieldValues, row.scope);
+              }
+            };
+            const item = items[i];
+            if (item !== undefined) apply(repeaterItemValues(item));
+            return {
+              cell: row.cell,
+              apply,
+              applyFrame: (frame: number): void => {
+                for (const e of rowAnimated) applyAnimationAtFrame(e, frame);
+              },
+              destroy: (): void => {
+                rowSub.destroy();
+                const idx = node.children.indexOf(rowSub.node);
+                if (idx >= 0) node.children.splice(idx, 1);
+                row.cell.remove();
+              },
+            };
+          });
+        };
+        const driver = new RepeaterDriver({ element: entry.element, host: entry.host, stampRows });
+        registerRepeaterDriver(entry.host, driver);
+        repeaters.push(driver);
+      }
+      return node;
     };
 
     const node = wireScope(subtreeScope, subtreePath, true);
@@ -334,10 +396,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       tickers,
       clocks,
       sequences,
+      repeaters,
       destroy(): void {
-        // Symmetric teardown, controllers first (stop timers/rAF before the
-        // drivers release their DOM), then drivers — matching remove()'s
-        // original order.
+        // Symmetric teardown: rows first (each tears down its OWN subtree),
+        // then controllers (stop timers/rAF before the drivers release their
+        // DOM), then drivers — matching remove()'s original order.
+        for (const r of repeaters) r.destroy();
         for (const c of controllers) c.destroy();
         for (const t of tickers) t.destroy();
         for (const c of clocks) c.destroy();
@@ -382,6 +446,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       for (const t of sub.tickers) t.stop();
       for (const c of sub.clocks) c.stop();
       for (const s of sub.sequences) s.stop();
+      for (const r of sub.repeaters) r.stop();
     }
     rootOnSettle();
   };
@@ -418,6 +483,17 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       bus.emit('play.start');
       doc.body.classList.remove('cg-pending');
       machine.transition('on-air');
+      // D-030 — repeaters re-stamp FIRST: the row COUNT comes from the
+      // CURRENT effective items (a retained pre-play update() included),
+      // and the fresh row subtrees join `subtrees` before the per-kind
+      // resets below and the controller cascade — Set iteration visits
+      // entries added mid-walk, so nested repeaters inside rows stamp too.
+      for (const sub of subtrees) {
+        for (const r of sub.repeaters) {
+          r.reset();
+          r.start();
+        }
+      }
       // D-028 — a fresh run restarts every crawl from its entering edge (the
       // controllers' first hold then starts the treadmills).
       for (const sub of subtrees) for (const t of sub.tickers) t.reset();
@@ -507,6 +583,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     tick(frame: number): void {
       for (const entry of allAnimated) applyAnimationAtFrame(entry, frame);
+      // D-030 — scrub parity: stamped repeater rows paint the same frame as
+      // authored nested instances (their scopes aren't in the static
+      // allAnimated list, so walk the live rows).
+      for (const sub of subtrees) {
+        for (const r of sub.repeaters) {
+          for (const row of r.stampedRows) row.applyFrame(frame);
+        }
+      }
       for (const gate of lifespanGates) {
         const inside = frame >= gate.lifespan.in && frame <= gate.lifespan.out;
         gate.node.style.display = inside ? gate.naturalDisplay : 'none';

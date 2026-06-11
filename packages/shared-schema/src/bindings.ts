@@ -58,6 +58,11 @@ const BindingTargetSchema = z.discriminatedUnion('kind', [
     kind: z.literal('sequence-items'),
     elementId: IdSchema,
   }),
+  /** D-030 — a `list` field drives a repeater element's rows. */
+  z.object({
+    kind: z.literal('repeater-items'),
+    elementId: IdSchema,
+  }),
 ]);
 
 /**
