@@ -694,7 +694,7 @@ a fixed distance, so long text clips and short text leaves dead air.
   XML payloads can't carry them). Change dir:
   `openspec/changes/archive/2026-06-10-add-ticker-element/`.
 
-## [~] D-029 — Sequence / now-next element ⟨priority: medium⟩ — change: `openspec/changes/add-sequence-element/`
+## [x] D-029 — Sequence / now-next element ⟨priority: medium⟩
 
 **What:** A new `sequence` element type: a clipped box that shows ONE item of
 an ordered list at a time and advances — on a per-item timer (`dwellMs`,
@@ -794,8 +794,8 @@ Requirements` on `designer-playout-lifecycle` (content sources gain finite
   `PreviewTransport.tsx`; transition Preset select follows the EasingEditor
   Preset/Custom pattern. Items are text-only in v1 (rich per-item layout
   belongs to D-030); per-item transition overrides are out of v1; fix the
-  `ListItemSchema` comment nit (`text`/`dwellMs`). Change:
-  `openspec/changes/add-sequence-element/`.
+  `ListItemSchema` comment nit (`text`/`dwellMs`). Change dir:
+  `openspec/changes/archive/2026-06-11-add-sequence-element/`.
 
 ## [ ] D-030 — Repeater / data-driven layout ⟨priority: medium⟩
 
