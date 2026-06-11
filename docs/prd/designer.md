@@ -694,21 +694,108 @@ a fixed distance, so long text clips and short text leaves dead air.
   XML payloads can't carry them). Change dir:
   `openspec/changes/archive/2026-06-10-add-ticker-element/`.
 
-## [ ] D-029 — Sequence / now-next ⟨priority: medium⟩
+## [~] D-029 — Sequence / now-next element ⟨priority: medium⟩ — change: `openspec/changes/add-sequence-element/`
 
-**What:** A template that pages through a sequence of entries (e.g. now/next/later)
-showing **one item at a time**, advancing on command or on a timer. Each item has
-its own configurable **dwell time** (per-item, not one global), and the in/out
-transition between items is a selectable **transition style** — initially
-`horizontal` / `vertical` / `slideUp` / `slideDown` / `hide-show`, modeled as an
-extensible enum so new styles can be added without a breaking change.
-**Why:** Rundown-style "now & next" lower-thirds are common and not expressible
-today.
-**Acceptance to be detailed when scheduled.**
-**Notes:** pairs with D-031 (`steps` + real `next()`) and the rundown control app
-(C-002). Depends on D-018; reuses the D-028 extensible `list` field for its items
-(`{ id, text, dwellMs? … }` — the open item shape was designed for this). Timer
-advance relates to the D-028 driver-clock seam (injectable `RuntimeClock`).
+**What:** A new `sequence` element type: a clipped box that shows ONE item of
+an ordered list at a time and advances — on a per-item timer (`dwellMs`,
+falling back to the element's `defaultDwellMs`) and/or on command
+(`CG NEXT` / `runtime.next()`, implemented for real in this change). The move
+between items is a DECOMPOSED, fully authorable transition: an IN edge
+(`top|bottom|left|right|none`), an OUT edge (same set), and a timing
+(`simultaneous` push vs `sequential` out-then-in), each motion over
+`transitionMs` — with named presets over those fields (Push up/down/left/
+right, Slide up/down/left/right, Hide-show, else Custom), and the
+decomposition itself as the extensible seam for future styles (e.g. fade).
+Items are authored on the element (`{ id, text, dwellMs? }`) and can be
+driven dynamically through the D-028 `list` field (reconciled by stable id).
+`repeat: 'infinite' | N` counts full passes; a finite sequence is a CONTENT
+SOURCE: advancing past the last item of pass N (by timer or by next())
+signals completion to the scope's `holdSource: 'content-driven'` hold,
+alongside finite tickers and countdown clocks. Text styling mirrors the
+ticker/clock subset; reading `direction` ('rtl' default) drives per-item
+bidi isolation (transition edges are physical — no hidden mirroring).
+**Why:** Rundown-style now/next lower-thirds are a staple and not
+expressible today; and `TemplateRuntime.next()` is a stub even though the
+CasparCG global is already wired — this lands its first real consumer and
+the per-scope dispatch seam the future steps model (D-031) plugs into.
+**Acceptance:**
+
+- WHEN the operator picks the Sequence tool and clicks the canvas THEN a
+  sequence element is added (3 sample Persian now/next items, `rtl`,
+  `advance: 'auto'`, `defaultDwellMs: 5000`, `transitionIn: 'bottom'`,
+  `transitionOut: 'top'`, `transitionTiming: 'simultaneous'` — the "Push up"
+  preset — `transitionMs: 400`, `repeat: 'infinite'`) and the authoring
+  canvas shows item 1
+- WHEN playback runs THEN item 1 displays statically through the intro and
+  advancing begins at hold entry; each hold entry (every `loop-cycle` cycle)
+  starts a fresh run from item 1
+- WHEN `advance` is `'auto'` THEN each item holds for its own `dwellMs`
+  (falling back to `defaultDwellMs`) and then transitions to the next item
+- WHEN a transition runs THEN the outgoing item exits through its OUT edge
+  and the incoming enters from its IN edge, per the timing —
+  `'simultaneous'` moves both together (push), `'sequential'` completes the
+  exit before the entry begins — each motion lasting `transitionMs`, clipped
+  to the box; an edge of `'none'` makes that side an instant cut (IN `none`
+  - OUT `none` = the hide-show hard swap)
+- WHEN the operator picks a transition preset THEN the three fields are set
+  accordingly (Push × 4 = simultaneous, Slide × 4 = sequential, Hide-show =
+  none/none) and editing any field afterwards shows **Custom** — every
+  IN × OUT × timing combination is authorable
+- WHEN `direction` is `'rtl'` THEN items render with per-item bidi
+  isolation; transition edges stay physical and explicit (the
+  Persian-natural horizontal motion is the Push/Slide **right** presets,
+  matching the crawl direction)
+- WHEN `advance` is `'manual'` THEN no dwell timers run and only `next()`
+  advances
+- WHEN `next()` / `CG NEXT` arrives THEN the sequence advances one item with
+  its transition (in `'auto'` the new item's dwell restarts); a template
+  with no sequences keeps `next()` a safe no-op; a `next()` before the run
+  has started (during the intro) is ignored
+- WHEN `repeat` is N THEN advancing past the last item of pass N — by timer
+  OR by `next()` — completes the run: the last item stays on screen and
+  completion is signalled; `'infinite'` cycles until `stop()`
+- WHEN a composition holds with `holdSource: 'content-driven'` THEN finite
+  sequences join finite tickers and countdown clocks in the same
+  `Promise.all`; an infinite sequence holds the scope until `stop()`
+- WHEN `update()` delivers a bound `list` value THEN items reconcile by
+  stable id; the CURRENT item is never yanked mid-display (a text edit
+  applies in place; a removal takes effect at the next advance); per-item
+  `dwellMs` carried in the list value is honored
+- WHEN items are edited in the inspector or the preview field form THEN the
+  shared items editor exposes an optional per-item dwell, and unknown item
+  fields are preserved (existing editor invariant)
+- WHEN `pause()` is called THEN the dwell timer AND any in-flight transition
+  freeze; `resume()` continues both with no jump
+- WHEN the operator scrubs the timeline THEN the sequence does not move and
+  the inspector states it is time-driven (same affordance as ticker/clock)
+- WHEN a composition contains a sequence THEN the playout inspector offers
+  the content-driven hold source (copy generalized: ticker passes /
+  countdown / sequence passes)
+- WHEN the same scene is previewed and exported THEN behavior is identical;
+  the preview modal transport gains a **Next** control; the GDD represents
+  the bound list field exactly as D-028 (lists remain JSON-only — the
+  existing preflight warning covers it)
+  **Notes:** New capability `designer-sequence-element` + `## MODIFIED
+Requirements` on `designer-playout-lifecycle` (content sources gain finite
+  sequences as the third member; all existing scenarios preserved).
+  Schema-first: `SequenceElementSchema` (`type: 'sequence'`) +
+  `SequenceItemSchema { id, text, dwellMs? }` in the element union. Runtime:
+  `buildSequence` in `scene-builder.ts` (collected on `scope.sequences`) +
+  `sequence-driver.ts` on the established driver surface
+  (start/pause/resume/stop/reset/destroy/whenComplete/next/setItems,
+  injectable `RuntimeClock`, hold-entry reset+start, full cascade); the
+  transition is a small MOTION MAPPER over the in/out/timing decomposition
+  (edge → vector; `none` = instant; future styles extend the enums + mapper
+  — no breaking change); `createRuntime` implements `runtime.next()`
+  cascading per scope to its sequence drivers — the dispatch seam D-031's
+  steps model will plug into (D-031 Notes updated in the same change). New
+  binding target `sequence-items` mirroring `ticker-items`;
+  `ListItemsEditor` gains a prop-gated dwell column; Next button in
+  `PreviewTransport.tsx`; transition Preset select follows the EasingEditor
+  Preset/Custom pattern. Items are text-only in v1 (rich per-item layout
+  belongs to D-030); per-item transition overrides are out of v1; fix the
+  `ListItemSchema` comment nit (`text`/`dwellMs`). Change:
+  `openspec/changes/add-sequence-element/`.
 
 ## [ ] D-030 — Repeater / data-driven layout ⟨priority: medium⟩
 
@@ -728,8 +815,14 @@ array-typed field; layout strategy (stack/grid) TBD. Depends on D-025.
 (builds, reveals) need it.
 **Acceptance to be detailed when scheduled.**
 **Notes:** schema (`steps`) → runtime `next()` implementation in
-`@cg/template-runtime` (today `next` is unimplemented in `createRuntime`). Underpins
-D-029. Capture behaviour as an OpenSpec change.
+`@cg/template-runtime`. UPDATE (with D-029): the `next()` PLUMBING now
+exists — `createRuntime` implements `next()` and cascades it per scope to
+registered consumers (the D-029 sequence drivers are the first; CasparCG's
+`CG NEXT` global was already wired). This item is therefore rescoped to the
+authored multi-STEP model itself (discrete template states / step ranges)
+plugging into that same dispatch — including defining its precedence vs.
+in-scope sequences. No longer blocks D-029. Capture behaviour as an OpenSpec
+change.
 
 ## [ ] D-032 — Temporal start-offset for nested instances ⟨priority: medium⟩
 
