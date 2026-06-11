@@ -797,15 +797,106 @@ Requirements` on `designer-playout-lifecycle` (content sources gain finite
   `ListItemSchema` comment nit (`text`/`dwellMs`). Change dir:
   `openspec/changes/archive/2026-06-11-add-sequence-element/`.
 
-## [ ] D-030 — Repeater / data-driven layout ⟨priority: medium⟩
+## [~] D-030 — Repeater / data-driven layout ⟨priority: medium⟩ — change: `openspec/changes/add-repeater-element/`
 
-**What:** Repeat a sub-layout once per row of a data array (leaderboards, lineups,
-results tables), laying out instances automatically.
-**Why:** Tabular graphics today need manual duplication; a repeater is the scalable
-primitive.
-**Acceptance to be detailed when scheduled.**
-**Notes:** likely composes the nested-composition instancing (D-025) with an
-array-typed field; layout strategy (stack/grid) TBD. Depends on D-025.
+**What:** A new `repeater` element type: a clipped box that renders one
+instance of a referenced child composition PER ROW of a data list, laid out
+automatically along an axis (`direction: 'column' | 'row'`, `gap`, the row
+axis ordered by `flow: 'rtl' | 'ltr'`), each cell scaled to fit the box's
+cross axis with the child's aspect preserved. The data surface is ONE
+`list` field (binding target `repeater-items`) whose item keys are the
+child composition's field ids — authored `items` on the element are the
+design-time rows and the seed when a Data key is set. Liveness model B: row
+VALUES update live mid-hold (positional application; a shorter list hides
+the surplus rows, and regrowth within the stamped count re-shows them),
+while the row COUNT is stamped at each fresh `play()` from the CURRENT
+effective items (so the CasparCG ADD-data → PLAY flow honors any count);
+growth beyond the stamped count applies at the next fresh play. Every
+stamped row is a REAL nested scope: it runs the child's own lifecycle in
+lockstep (offset 0), cascades pause/stop, and its inner content sources
+join the ROW's content-driven hold — all by reuse of the D-025/D-026
+machinery. Rows do NOT appear as per-instance namespaced field groups in
+the parent; the single list field is the data surface, and the GDD derives
+the list's ITEM SCHEMA from the child composition's fields.
+**Why:** Tabular graphics (leaderboards, lineups, results) today need
+manual duplication of elements per row; the repeater is the scalable
+primitive. The instancing, field-scoping, and lifecycle-cascade groundwork
+(D-025/D-026) plus the open list item shape (D-028) were built for exactly
+this composition.
+**Acceptance:**
+
+- WHEN the operator picks the Repeater tool and clicks the canvas with at
+  least one valid (non-cyclic) other composition in the scene THEN a
+  repeater is added referencing the first valid composition (changeable in
+  the inspector) with 3 seeded rows (item keys = the child's field ids,
+  default values) and the authoring canvas shows the 3 rows; with NO valid
+  composition the tool does not insert and a hint explains why
+- WHEN `direction` is `'column'` THEN cells fill the box width (child
+  aspect preserved) and stack top-to-bottom with `gap`; WHEN `'row'` THEN
+  cells fill the box height and lay along the row axis ordered by `flow`
+  (`'rtl'` default); overflow is clipped
+- WHEN a row cell is edited in the items editor (inspector or preview field
+  form — columns derived from the child's fields) THEN that row's rendered
+  values update; unknown item fields are preserved (existing editor
+  invariant)
+- WHEN the operator sets a Data key THEN a `list` field is seeded from the
+  authored items and bound `repeater-items`, and the GDD represents that
+  field with an ITEM SCHEMA derived from the child composition's fields
+  (types, constraints, required)
+- WHEN `play()` runs THEN rows are stamped from the CURRENT effective items
+  (a retained `update()` delivered before play is honored — 8 items ⇒ 8
+  rows), clamped by `maxItems` when set
+- WHEN `update()` delivers a list mid-hold THEN existing rows' values
+  update live in place (positional — reordering values is live); a SHORTER
+  list hides the surplus rows (re-shown if a later update regrows within
+  the stamped count); a LONGER list takes effect at the next fresh play /
+  cycle
+- WHEN the child composition has its own out-point THEN every row holds at
+  it and plays its own outro on `stop()` — lockstep (offset 0), exactly the
+  D-026 nested semantics; `pause()`/`resume()` cascade into rows
+- WHEN a row's child contains a content source (e.g. a countdown) THEN it
+  participates in that ROW scope's content-driven hold — unchanged
+  per-scope semantics; the lifecycle living spec is NOT modified by this
+  item
+- WHEN the chosen composition would create a cycle (self/ancestor) THEN the
+  inspector blocks the selection, and the runtime's depth/visited guard
+  renders an empty box if forced
+- WHEN the operator scrubs the timeline THEN rows behave exactly as
+  authored nested instances do (no new scrub rule)
+- WHEN the composition is previewed and exported THEN behavior is
+  identical; the exported file boots clean and `update()` with a different
+  row count followed by re-play stamps the new count
+- WHEN the existing test suite runs after the wiring refactor THEN it stays
+  green — extracting the per-scope wiring into a reusable subtree factory
+  is behavior-preserving for static trees
+  **Notes:** New capability `designer-repeater-element`;
+  `designer-playout-lifecycle` is NOT modified (rows are ordinary scopes —
+  if implementation appears to force a wording change there, STOP and
+  report). Depends on D-025/D-026 (merged); reuses the D-028 open
+  `ListItemSchema` for items. Schema-first: `RepeaterElementSchema`
+  (`type: 'repeater'`, required `compositionId`,
+  `direction`/`flow`/`gap`/`maxItems?`, `items`). Runtime: `buildRepeater`
+  (+ a row builder mirroring `buildComposition`'s inner stage; rows
+  collected on `scope.repeaters`, NOT pushed into `scope.children` —
+  wiring-tree yes, namespace-tree no) + `repeater-driver.ts` (stamp /
+  teardown at fresh play, positional live values, hide-surplus; NOT a
+  content source itself; no `whenComplete`); the centerpiece refactor
+  extracts `createRuntime`'s per-scope wiring (driver instantiation +
+  `buildScopeController`) into a reusable `wireScopeSubtree(scope, path)`
+  factory with symmetric teardown, called by the driver per row. GDD:
+  derive the bound list's item schema from the child's fields in
+  `@cg/vcg-format` (extend the capability owning GDD list representation
+  via `## MODIFIED Requirements` if one exists, else put the requirement in
+  the new capability — report which). Designer: Repeater tool,
+  `defaultRepeater`, `RepeaterSections` (composition select with the
+  existing cycle guard, direction/flow/gap/maxItems, columned items editor
+  — `ListItemsEditor` generalized with a `columns` prop derived from the
+  child's fields, used by the inspector AND the preview form), Data-key
+  flow mirroring ticker/sequence; `PlayoutSection` unchanged. OUT OF SCOPE
+  v1 (record in design.md): live count changes mid-hold + per-row
+  enter/exit transitions (the model-A follow-up), per-row stagger (D-032),
+  grid layout, explicit `itemSize` override, guaranteed row drill-in.
+  Change: `openspec/changes/add-repeater-element/`.
 
 ## [ ] D-031 — Multi-step templates (`steps`) + real `next()` ⟨priority: medium⟩
 
