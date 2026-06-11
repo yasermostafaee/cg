@@ -87,13 +87,20 @@ Tool `{ id: 'clock', label: 'Clock', icon: '◷' }` + canvas placement;
 `defaultClock` = wall, `'HH:mm:ss'`, digits `'persian'`, Vazirmatn weight
 600 size 48, transform ≈320×84, color `#FFFFFF`, align `'center'`,
 transparent background. `ClockSections` in `StyleSection.tsx` modeled on
-`TickerSections`: a pinned "Clock" CollapseSection (Mode select; Format
-text input with a token hint; Digits select; countdown target editor — a
-Duration/Date-time kind toggle, duration edited in SECONDS mapped to
-stored ms, datetime via `<input type="datetime-local">` mapped to stored
-ISO) + the time-driven note (same wording style as the ticker's) +
-`TextStyleSection` reuse for font/color/shadow. NO `DynamicDataSection`
-for clocks — the clock has no fields in v1. `PlayoutSection`'s
+`TickerSections`: a pinned "Clock" CollapseSection (Mode select — switching
+to countdown seeds a default duration target so the element stays
+schema-valid; Format text input with a token hint; Digits select; countdown
+target editor — a Duration/Date-time kind toggle, duration edited in
+SECONDS mapped to stored ms, datetime via `<input type="datetime-local">`
+mapped to stored ISO) + the time-driven note (same wording style as the
+ticker's). Font/color/shadow editing achieves TEXT-STYLE PARITY the way
+the ticker does — a "Clock Text" section + Drop Shadow rows built from the
+shared inspector primitives (`FontFamilySelect`, `FillField`, `ColorField`,
+`NumberField`) — rather than mounting `TextStyleSection` itself: that
+component is hard-typed to `TextElement` and carries text-only widgets
+(sizing/wrap/align groups, animatable text properties), exactly the
+trade-off the ticker already settled. NO `DynamicDataSection` for clocks —
+the clock has no fields in v1. `PlayoutSection`'s
 `hasContentElement` also returns true for `mode: 'countdown'` clocks, and
 the content-driven copy generalizes: "until the content completes (ticker
 passes / countdown reaching zero)".

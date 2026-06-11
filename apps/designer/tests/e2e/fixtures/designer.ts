@@ -96,9 +96,9 @@ export class DesignerApp {
     return this.page.getByTestId('canvas-surface');
   }
 
-  /** Select a canvas tool by its toolbar label (Select / Text / Ticker / Rectangle / Ellipse). */
+  /** Select a canvas tool by its toolbar label (Select / Text / Ticker / Clock / Rectangle / Ellipse). */
   async selectTool(
-    label: 'Select' | 'Text' | 'Ticker' | 'Rectangle' | 'Ellipse' | 'Hand (pan)',
+    label: 'Select' | 'Text' | 'Ticker' | 'Clock' | 'Rectangle' | 'Ellipse' | 'Hand (pan)',
   ): Promise<void> {
     await this.page.getByRole('button', { name: label, exact: true }).click();
   }
@@ -123,6 +123,23 @@ export class DesignerApp {
   async addTicker(pos: { x: number; y: number } = { x: 120, y: 260 }): Promise<void> {
     await this.selectTool('Ticker');
     await this.canvas.click({ position: pos });
+  }
+
+  /** D-027 — add a clock by placing the Clock tool (auto-selected). */
+  async addClock(pos: { x: number; y: number } = { x: 240, y: 160 }): Promise<void> {
+    await this.selectTool('Clock');
+    await this.canvas.click({ position: pos });
+  }
+
+  /**
+   * D-027 — switch the SELECTED clock to a duration countdown via the inspector
+   * (the mode switch seeds a default target; the duration field is in seconds).
+   */
+  async setClockCountdown(seconds: number): Promise<void> {
+    await this.inspector.getByRole('combobox', { name: 'mode' }).selectOption('countdown');
+    const duration = this.page.getByLabel('duration', { exact: true });
+    await duration.fill(String(seconds));
+    await duration.press('Enter');
   }
 
   /**

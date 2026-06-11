@@ -1,4 +1,5 @@
 import type {
+  ClockElement,
   Element,
   ElementAnimation,
   FieldValues,
@@ -234,6 +235,8 @@ export interface FieldScope {
   animated: NestedAnimatedEntry[];
   /** D-028 — ticker elements rendered directly in this scope (band + track nodes). */
   tickers: TickerEntry[];
+  /** D-027 — clock elements rendered directly in this scope (time-span nodes). */
+  clocks: ClockEntry[];
   /** D-026 — the comp/scene this scope renders, for its lifecycle/playout/active. */
   source: LifecycleSource;
 }
@@ -245,6 +248,13 @@ export interface TickerEntry {
   band: HTMLElement;
   /** The inner track the driver feeds and translates. */
   track: HTMLElement;
+}
+
+/** D-027 — one built clock: its element config + the inner time span the driver repaints. */
+export interface ClockEntry {
+  element: ClockElement;
+  /** The LTR-isolated time span inside the clock box (the box is in the elementMap). */
+  node: HTMLElement;
 }
 
 /** The lifecycle-relevant fields of the comp/scene a scope renders (D-026). */

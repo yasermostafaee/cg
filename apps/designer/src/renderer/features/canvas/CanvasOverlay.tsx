@@ -7,6 +7,7 @@ import {
   type DesignerTool,
 } from '../../state/store.js';
 import {
+  defaultClock,
   defaultEllipse,
   defaultImage,
   defaultShape,
@@ -175,6 +176,12 @@ export function CanvasOverlay({
     if (tool === 'ticker') {
       const id = `el-${String(Date.now())}`;
       designerStore.addElement(defaultTicker(id, scenePoint.x, scenePoint.y));
+      designerStore.setTool('cursor');
+      return;
+    }
+    if (tool === 'clock') {
+      const id = `el-${String(Date.now())}`;
+      designerStore.addElement(defaultClock(id, scenePoint.x, scenePoint.y));
       designerStore.setTool('cursor');
       return;
     }

@@ -28,6 +28,7 @@ const TOOLS: readonly ToolEntry[] = [
   { id: 'hand', label: 'Hand (pan)', icon: HAND_ICON },
   { id: 'text', label: 'Text', icon: 'T' },
   { id: 'ticker', label: 'Ticker', icon: '⇇' },
+  { id: 'clock', label: 'Clock', icon: '◷' },
   { id: 'shape', label: 'Rectangle', icon: '▭' },
   { id: 'ellipse', label: 'Ellipse', icon: '○' },
   // Image tool hidden for now — placement/upload flow needs rework before it

@@ -1,4 +1,5 @@
 import type {
+  ClockElement,
   ImageElement,
   ShapeElement,
   TextElement,
@@ -93,6 +94,39 @@ export function defaultTicker(id: string, x: number, y: number): TickerElement {
       { id: 'item-2', text: 'خبر دوم — متن نمونه' },
       { id: 'item-3', text: 'خبر سوم — متن نمونه' },
     ],
+  };
+}
+
+/**
+ * Digital clock (D-027). Persian-first defaults: wall mode, `HH:mm:ss`,
+ * Persian digits, Vazirmatn. The clock is time-driven like the ticker — a
+ * runtime driver repaints it once per second; scrubbing never moves it.
+ */
+export function defaultClock(id: string, x: number, y: number): ClockElement {
+  return {
+    id,
+    name: 'Clock',
+    type: 'clock',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    zIndex: 0,
+    transform: baseTransform(x, y, 320, 84),
+    font: {
+      family: 'Vazirmatn',
+      weight: 600,
+      style: 'normal',
+      size: 48,
+      lineHeight: 1.2,
+      letterSpacing: 0,
+    },
+    color: '#FFFFFF',
+    // No backgroundColor — a fresh clock box is TRANSPARENT by design; the
+    // operator opts into a bar colour in the inspector.
+    align: 'center',
+    mode: 'wall',
+    format: 'HH:mm:ss',
+    digits: 'persian',
   };
 }
 

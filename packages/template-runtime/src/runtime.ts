@@ -41,6 +41,7 @@ import { EventBus } from './event-bus.js';
 import { LifecycleStateMachine } from './lifecycle.js';
 import { PlayoutController } from './playout-controller.js';
 import { buildScene } from './scene-builder.js';
+import { ClockDriver } from './clock-driver.js';
 import { TickerDriver, registerTickerDriver } from './ticker-driver.js';
 import type {
   FieldScope,
@@ -95,9 +96,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // BEFORE the initial field application below so a `list` field default can
   // already reconcile into its driver. The band→driver registry is how the
   // bindings applier routes `ticker-items` values.
+  // D-027 — clock drivers are instantiated in the same walk (no overrides and
+  // no bindings: the clock has no fields in v1).
   const allTickers: TickerDriver[] = [];
   const tickersByScope = new Map<FieldScope, TickerDriver[]>();
-  const instantiateTickers = (scope: FieldScope, path: string): void => {
+  const allClocks: ClockDriver[] = [];
+  const clocksByScope = new Map<FieldScope, ClockDriver[]>();
+  const instantiateDrivers = (scope: FieldScope, path: string): void => {
     const scopeOverride = overrides[path];
     const drivers = scope.tickers.map((t) => {
       // The crawl lives in the padding-inset viewport div (CSS padding is
@@ -125,11 +130,24 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       return driver;
     });
     if (drivers.length > 0) tickersByScope.set(scope, drivers);
+    const clockDrivers = scope.clocks.map((c) => {
+      const driver = new ClockDriver({
+        node: c.node,
+        mode: c.element.mode,
+        format: c.element.format,
+        digits: c.element.digits,
+        target: c.element.target,
+        clock: options.clock,
+      });
+      allClocks.push(driver);
+      return driver;
+    });
+    if (clockDrivers.length > 0) clocksByScope.set(scope, clockDrivers);
     for (const child of scope.children) {
-      instantiateTickers(child.scope, path === '' ? child.name : `${path}.${child.name}`);
+      instantiateDrivers(child.scope, path === '' ? child.name : `${path}.${child.name}`);
     }
   };
-  instantiateTickers(built.scopeTree, '');
+  instantiateDrivers(built.scopeTree, '');
 
   applyScopedFieldValues(scene, scene, {}, built.scopeTree);
 
@@ -209,24 +227,31 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   let onRootSettled: () => void = noop;
   const buildScopeController = (scope: FieldScope, isRoot: boolean, path: string): ScopeNode => {
     const own = scope.animated;
-    // D-028 — self-wire the scope's content completion from its tickers: a
-    // `holdSource: 'content-driven'` hold lasts until EVERY scope ticker's run
-    // resolves (an infinite ticker never resolves ⇒ hold until stop(); no
-    // tickers ⇒ null ⇒ a zero-length hold). An EXPLICIT boot-option
+    // D-028/D-027 — self-wire the scope's content completion from its CONTENT
+    // SOURCES: every ticker AND every countdown clock in the scope
+    // (`Promise.all` — an infinite ticker never resolves ⇒ hold until stop();
+    // wall/countup clocks are NOT content sources and are never awaited; no
+    // content sources ⇒ null ⇒ a zero-length hold). An EXPLICIT boot-option
     // `contentHold` still wins for the root scope (external override / test
-    // seam). Each hold entry resets + starts the scope's tickers, so every
-    // open/close cycle replays the crawl from its entering edge.
+    // seam). Each hold entry resets + starts the scope's tickers and clocks,
+    // so every open/close cycle replays the crawl / re-runs the count.
     const scopeTickers = tickersByScope.get(scope) ?? [];
-    const tickerWait =
-      scopeTickers.length > 0
+    const scopeClocks = clocksByScope.get(scope) ?? [];
+    const scopeCountdowns = scopeClocks.filter((c) => c.mode === 'countdown');
+    const contentWait =
+      scopeTickers.length > 0 || scopeCountdowns.length > 0
         ? (): Promise<void> =>
-            Promise.all(scopeTickers.map((t) => t.whenComplete())).then(() => undefined)
+            Promise.all([
+              ...scopeTickers.map((t) => t.whenComplete()),
+              ...scopeCountdowns.map((c) => c.whenComplete()),
+            ]).then(() => undefined)
         : undefined;
     const externalWait =
       isRoot && options.contentHold !== undefined ? options.contentHold : undefined;
-    const waitForContent = externalWait ?? tickerWait;
-    const stopScopeTickers = (): void => {
+    const waitForContent = externalWait ?? contentWait;
+    const stopScopeContent = (): void => {
       for (const t of scopeTickers) t.stop();
+      for (const c of scopeClocks) c.stop();
     };
     const controller = new PlayoutController({
       frameRate: scene.frameRate,
@@ -242,17 +267,22 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         ? (): void => {
             onRootSettled();
           }
-        : stopScopeTickers,
+        : stopScopeContent,
       waitForContent:
         waitForContent === undefined ? undefined : (): Promise<void> => waitForContent(),
       onHoldStart:
-        scopeTickers.length > 0
+        scopeTickers.length > 0 || scopeClocks.length > 0
           ? (): void => {
-              // Fresh crawl per composition cycle (reset BEFORE the wait is
-              // requested, so the controller awaits this run's completion).
+              // Fresh crawl / fresh count per composition cycle (reset BEFORE
+              // the wait is requested, so the controller awaits this run's
+              // completion).
               for (const t of scopeTickers) {
                 t.reset();
                 t.start();
+              }
+              for (const c of scopeClocks) {
+                c.reset();
+                c.start();
               }
             }
           : undefined,
@@ -278,6 +308,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   onRootSettled = (): void => {
     cascade(rootNode, (c) => c.stop()); // root itself is settled — a no-op
     for (const t of allTickers) t.stop();
+    for (const c of allClocks) c.stop();
     rootOnSettle();
   };
 
@@ -302,6 +333,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // D-028 — a fresh run restarts every crawl from its entering edge (the
       // controllers' first hold then starts the treadmills).
       for (const t of allTickers) t.reset();
+      // D-027 — clocks reset to their initial value; ABSOLUTE clocks (wall,
+      // datetime countdown) start now so they tick during the intro, while
+      // relative counts display their initial value until their hold-entry
+      // run begins (the hold entry resets + starts every scope clock).
+      for (const c of allClocks) {
+        c.reset();
+        if (c.isAbsolute) c.start();
+      }
       // Play the IN once and hold (no full-range loop, no auto-outro by default);
       // the mode orchestration (auto-out / loop-cycle / content-driven) then runs.
       // Absent lifecycle: the whole timeline is the entrance and the hold is its
@@ -337,20 +376,24 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     pause(): void {
       if (machine.state === 'removed') return;
       cascade(rootNode, (c) => c.pause());
-      // D-028 — freeze the crawls in lockstep with the frozen hold timers.
+      // D-028/D-027 — freeze the crawls and clocks in lockstep with the
+      // frozen hold timers.
       for (const t of allTickers) t.pause();
+      for (const c of allClocks) c.pause();
     },
 
     resume(): void {
       if (machine.state === 'removed') return;
       cascade(rootNode, (c) => c.resume());
       for (const t of allTickers) t.resume();
+      for (const c of allClocks) c.resume();
     },
 
     remove(): void {
       if (machine.state === 'removed') return;
       cascade(rootNode, (c) => c.destroy());
       for (const t of allTickers) t.destroy();
+      for (const c of allClocks) c.destroy();
       machine.forceTransition('removed');
       bus.clear();
       built.container.remove();

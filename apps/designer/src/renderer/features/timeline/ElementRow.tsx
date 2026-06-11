@@ -194,6 +194,15 @@ function LayerTypeIcon({ element, color }: { element: Element; color: string }):
       </svg>
     );
   }
+  if (element.type === 'clock') {
+    // A clock face with hands — the time-driven element (D-027).
+    return (
+      <svg {...svg}>
+        <circle cx="8" cy="8" r="5.2" {...stroke} />
+        <path d="M8 5.2 v2.8 l2.2 1.4" {...stroke} />
+      </svg>
+    );
+  }
   // shape kinds
   switch (element.shape) {
     case 'ellipse':
@@ -434,6 +443,7 @@ const SHAPE_COLORS: Record<ShapeElement['shape'], string> = {
 const TYPE_COLORS: Record<Exclude<Element['type'], 'shape'>, string> = {
   text: '#F59E0B', // amber
   ticker: '#EAB308', // yellow — crawl band
+  clock: '#06B6D4', // cyan — time-driven clock
   image: '#EC4899', // pink
   lottie: '#A78BFA', // violet
   'video-placeholder': '#EF4444', // red

@@ -22,13 +22,23 @@ const MODE_LABELS: Record<PlayoutMode, string> = {
 
 const HOLD_LABELS: Record<HoldSource, string> = {
   timed: 'Timed — hold for a duration',
-  'content-driven': 'Content-driven — until the ticker completes',
+  'content-driven':
+    'Content-driven — until the content completes (ticker passes / countdown reaching zero)',
 };
 
-/** Does this composition contain a content-driven element (a ticker)? */
+/**
+ * Does this composition contain a content source — a ticker, or a countdown
+ * clock (D-027)? Wall/countup clocks are NOT content sources: they never
+ * complete, so they can't end a hold.
+ */
 function hasContentElement(scene: Scene): boolean {
   const walk = (children: readonly Element[]): boolean =>
-    children.some((el) => el.type === 'ticker' || (el.type === 'container' && walk(el.children)));
+    children.some(
+      (el) =>
+        el.type === 'ticker' ||
+        (el.type === 'clock' && el.mode === 'countdown') ||
+        (el.type === 'container' && walk(el.children)),
+    );
   return scene.layers.some((l) => walk(l.children));
 }
 
@@ -67,10 +77,10 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
   const playout = playoutOf(scene);
   const mode = playout.mode;
   const lifecycle = scene.lifecycle;
-  // D-028 — the Hold-source select only exists when the composition actually
-  // contains a content-driven element (a ticker): a dead control teaches
-  // nothing (same principle as Next disabled at steps=1).
-  const hasTicker = hasContentElement(scene);
+  // D-028/D-027 — the Hold-source select only exists when the composition
+  // actually contains a content source (a ticker or a countdown clock): a
+  // dead control teaches nothing (same principle as Next disabled at steps=1).
+  const hasContent = hasContentElement(scene);
 
   /** Default out-point at 75 % of the active region (leaves room for the exit). */
   function defaultMarker(): { outPoint: number } {
@@ -107,7 +117,7 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
         </Select>
       </div>
 
-      {hasTicker && mode !== 'manual' && (
+      {hasContent && mode !== 'manual' && (
         <div className={s.row}>
           <span className={s.label}>hold</span>
           <Select

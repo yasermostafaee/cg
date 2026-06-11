@@ -1,4 +1,5 @@
 import type {
+  ClockElement,
   CompositionElement,
   Element as SceneElement,
   Fill,
@@ -13,6 +14,7 @@ import type {
   Transform,
 } from '@cg/shared-schema';
 import type { BuildSceneResult, FieldScope, LifecycleSource } from './types.js';
+import { clockInitialText } from './clock-driver.js';
 import { populateTickerStaticRow } from './ticker-driver.js';
 
 /**
@@ -46,6 +48,7 @@ function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
     children: [],
     animated: [],
     tickers: [],
+    clocks: [],
     source,
   };
 }
@@ -117,6 +120,8 @@ function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null 
       return buildText(element, ctx.doc, ctx.scope.textOriginals);
     case 'ticker':
       return buildTicker(element, ctx);
+    case 'clock':
+      return buildClock(element, ctx);
     case 'image':
       return buildImage(element, ctx.doc);
     case 'shape':
@@ -431,6 +436,82 @@ function buildTicker(element: TickerElement, ctx: BuildCtx): HTMLElement {
   viewport.appendChild(staticRow);
   el.appendChild(viewport);
   ctx.scope.tickers.push({ element, band: el, track });
+  return el;
+}
+
+/**
+ * D-027 — render a clock element: a box styled like the ticker band's subset
+ * (background/fill/radius/padding) holding one LTR-isolated, tabular-numeral
+ * time span the {@link ClockDriver} repaints at playout. The builder paints a
+ * STATIC initial value (wall = now at build, countdown = the full target
+ * remaining, countup = zero) so the authoring canvas is truthful without a
+ * driver; the span is registered on the scope (`scope.clocks`) so the runtime
+ * can instantiate the driver and self-wire countdowns into the scope's
+ * `content-driven` hold.
+ */
+function buildClock(element: ClockElement, ctx: BuildCtx): HTMLElement {
+  const doc = ctx.doc;
+  const el = doc.createElement('div');
+  el.dataset['cgElementId'] = element.id;
+  applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
+  // Same shaping-capable fallback stack as text/ticker (Vazirmatn first).
+  el.style.fontFamily = `${element.font.family}, Vazirmatn, "Noto Sans Arabic", "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif`;
+  el.style.fontWeight = String(element.font.weight);
+  el.style.fontStyle = element.font.style;
+  el.style.fontSize = `${element.font.size}px`;
+  el.style.lineHeight = String(element.font.lineHeight);
+  el.style.letterSpacing = `${element.font.letterSpacing}em`;
+  el.style.color = element.color;
+  if (element.textShadow) {
+    const ts = element.textShadow;
+    el.style.textShadow = `${ts.offsetX}px ${ts.offsetY}px ${ts.blur}px ${ts.color}`;
+  }
+  if (element.backgroundColor) el.style.backgroundColor = element.backgroundColor;
+  if (element.backgroundFill !== undefined) el.style.background = fillToCss(element.backgroundFill);
+  if (element.cornerRadius !== undefined && element.cornerRadius > 0) {
+    el.style.borderRadius = `${element.cornerRadius}px`;
+  }
+  // Unlike the ticker band, the time span is in normal flow (a flex child),
+  // so plain CSS padding works — no inset viewport needed.
+  if (element.padding) {
+    el.style.paddingTop = `${element.padding.top}px`;
+    el.style.paddingRight = `${element.padding.right}px`;
+    el.style.paddingBottom = `${element.padding.bottom}px`;
+    el.style.paddingLeft = `${element.padding.left}px`;
+    el.style.boxSizing = 'border-box';
+  }
+  // Gradient (or solid) text fill — the text element's convention: a gradient
+  // paints through background-clip:text (supersedes a band background on the
+  // same element); a solid behaves like `color`.
+  if (element.colorFill !== undefined) {
+    if (element.colorFill.kind === 'solid') {
+      el.style.color = element.colorFill.color;
+    } else {
+      el.style.background = fillToCss(element.colorFill);
+      el.style.setProperty('-webkit-background-clip', 'text');
+      el.style.setProperty('background-clip', 'text');
+      el.style.color = 'transparent';
+    }
+  }
+  el.style.display = 'flex';
+  el.style.alignItems = 'center';
+  el.style.justifyContent =
+    element.align === 'start' ? 'flex-start' : element.align === 'end' ? 'flex-end' : 'center';
+
+  // The time span: kept LTR and bidi-isolated inside RTL layouts, with
+  // tabular numerals so the width is stable as digits tick.
+  const span = doc.createElement('span');
+  span.dataset['cgClockTime'] = '1';
+  span.style.direction = 'ltr';
+  span.style.unicodeBidi = 'isolate';
+  span.style.fontVariantNumeric = 'tabular-nums';
+  span.style.whiteSpace = 'pre';
+  span.textContent = clockInitialText(
+    { mode: element.mode, format: element.format, digits: element.digits, target: element.target },
+    Date.now(),
+  );
+  el.appendChild(span);
+  ctx.scope.clocks.push({ element, node: span });
   return el;
 }
 
