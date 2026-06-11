@@ -285,5 +285,27 @@ describe('SequenceDriver (D-029)', () => {
       h.driver.reset();
       expect(visible(h.host)).toEqual(['X']);
     });
+
+    it('removal resumes at the first SURVIVING successor (no phantom pass boundary)', async () => {
+      // Mid-transition a→b, a reconcile removes BOTH a and b but keeps c:
+      // b finishes entering (never yanked), and the next advance must land on
+      // c — not skip past the end and complete the finite run prematurely.
+      const h = make({ repeat: 1, advance: 'manual' });
+      const done = completionFlag(h.driver);
+      h.driver.start();
+      h.driver.next(); // a → b transition in flight
+      h.clock.advance(100); // mid-motion
+      h.driver.setItems([{ id: 'c', text: ITEMS[2]?.text ?? '' }]);
+      h.clock.advance(300); // the transition completes — b on stage, orphaned
+      expect(visible(h.host)).toEqual([ITEMS[1]?.text]);
+      h.driver.next(); // resumes at c (b's surviving successor), NOT the end
+      h.clock.advance(400);
+      expect(visible(h.host)).toEqual([ITEMS[2]?.text]);
+      await flush();
+      expect(done.done).toBe(false); // no premature completion
+      h.driver.next(); // past the real last item — NOW the run completes
+      await flush();
+      expect(done.done).toBe(true);
+    });
   });
 });

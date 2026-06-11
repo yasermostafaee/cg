@@ -244,11 +244,27 @@ export class SequenceDriver {
         shown.dwellMs = replacement.dwellMs;
         return;
       }
-      // Removed while on screen: keep displaying; remember where the list
-      // continues so the NEXT advance lands on its successor position.
+      // Removed while on screen: keep displaying; the NEXT advance resumes at
+      // the first of its OLD successors that survives in the new list (their
+      // NEW position) — else past the end (a pass boundary). A plain
+      // old-index clamp would skip survivors that moved forward and could hit
+      // a phantom pass boundary (premature completion on finite repeats).
       const oldIdx = oldLogical.findIndex((i) => i.id === shown.id);
-      this.resumeIdx = Math.min(oldIdx >= 0 ? oldIdx : this.resumeIdx, this.logical.length);
+      let resume = this.logical.length;
+      for (let j = oldIdx + 1; oldIdx >= 0 && j < oldLogical.length; j += 1) {
+        const successor = oldLogical[j];
+        const newIdx =
+          successor === undefined ? -1 : this.logical.findIndex((i) => i.id === successor.id);
+        if (newIdx >= 0) {
+          resume = newIdx;
+          break;
+        }
+      }
+      this.resumeIdx = resume;
     };
+    // Order matters: the incoming item (when mid-transition) is what gets
+    // promoted to current, so ITS resume point must win when both were
+    // removed by this same reconcile.
     fixUp(this.current, this.currentNode);
     fixUp(this.incoming, this.incomingNode);
   }

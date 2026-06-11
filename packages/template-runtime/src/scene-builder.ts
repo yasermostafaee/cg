@@ -573,6 +573,12 @@ function buildSequence(element: SequenceElement, ctx: BuildCtx): HTMLElement {
       el.style.color = 'transparent';
     }
   }
+  // READING direction on the host so `justify-items: start/end` resolves
+  // against the element's own direction (grid alignment is direction-
+  // sensitive): a Persian `align: 'start'` places items at the reading start
+  // (the right edge). Transition motion is unaffected — translate offsets
+  // are physical. Items re-state direction + bidi isolation themselves.
+  el.style.direction = element.direction;
   // One grid cell: the current and incoming item stack in it during a
   // transition; `align-items` centres vertically, `justify-items` maps the
   // `align` enum 1:1 (grid ships well below the exported single-file's CEF

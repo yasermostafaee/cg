@@ -354,6 +354,15 @@ describe('buildSequence — static item-1 render (D-029)', () => {
     expect(host?.style.fontFamily.startsWith('Vazirmatn,')).toBe(true);
   });
 
+  it("the host carries the READING direction so `align: 'start'` is the reading start", () => {
+    // Grid `justify-items` is direction-sensitive: without this, a Persian
+    // `start` would resolve against the inherited LTR and land on the left.
+    const rtl = buildScene(sequenceScene({})).elementMap.get('seq');
+    expect(rtl?.style.direction).toBe('rtl');
+    const ltr = buildScene(sequenceScene({ direction: 'ltr' })).elementMap.get('seq');
+    expect(ltr?.style.direction).toBe('ltr');
+  });
+
   it('an empty items list renders an empty box', () => {
     const built = buildScene(sequenceScene({ items: [] }));
     const host = built.elementMap.get('seq');
