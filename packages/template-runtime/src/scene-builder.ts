@@ -6,6 +6,7 @@ import type {
   Filter,
   Layer,
   Scene,
+  SequenceElement,
   Shadow,
   TextElement,
   TickerElement,
@@ -15,6 +16,7 @@ import type {
 } from '@cg/shared-schema';
 import type { BuildSceneResult, FieldScope, LifecycleSource } from './types.js';
 import { clockInitialText } from './clock-driver.js';
+import { makeSequenceItemNode } from './sequence-driver.js';
 import { populateTickerStaticRow } from './ticker-driver.js';
 
 /**
@@ -49,6 +51,7 @@ function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
     animated: [],
     tickers: [],
     clocks: [],
+    sequences: [],
     source,
   };
 }
@@ -122,6 +125,8 @@ function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null 
       return buildTicker(element, ctx);
     case 'clock':
       return buildClock(element, ctx);
+    case 'sequence':
+      return buildSequence(element, ctx);
     case 'image':
       return buildImage(element, ctx.doc);
     case 'shape':
@@ -512,6 +517,79 @@ function buildClock(element: ClockElement, ctx: BuildCtx): HTMLElement {
   );
   el.appendChild(span);
   ctx.scope.clocks.push({ element, node: span });
+  return el;
+}
+
+/**
+ * D-029 — render a sequence element: a clipped single-cell GRID box (two
+ * items can stack in the one cell during a transition; `justify-items` maps
+ * the `align` enum directly) styled like the ticker band's subset. The
+ * builder renders item 1 statically via the driver's shared item-node
+ * factory (so the authoring canvas and the live run can't drift); the
+ * {@link SequenceDriver} owns the rotation at playout. Registered on
+ * `scope.sequences` so the runtime can instantiate the driver, self-wire a
+ * FINITE sequence into the scope's `content-driven` hold, and route
+ * `runtime.next()`.
+ */
+function buildSequence(element: SequenceElement, ctx: BuildCtx): HTMLElement {
+  const doc = ctx.doc;
+  const el = doc.createElement('div');
+  el.dataset['cgElementId'] = element.id;
+  applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
+  el.style.overflow = 'hidden';
+  // Same shaping-capable fallback stack as text/ticker/clock (Vazirmatn first).
+  el.style.fontFamily = `${element.font.family}, Vazirmatn, "Noto Sans Arabic", "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif`;
+  el.style.fontWeight = String(element.font.weight);
+  el.style.fontStyle = element.font.style;
+  el.style.fontSize = `${element.font.size}px`;
+  el.style.lineHeight = String(element.font.lineHeight);
+  el.style.letterSpacing = `${element.font.letterSpacing}em`;
+  el.style.color = element.color;
+  if (element.textShadow) {
+    const ts = element.textShadow;
+    el.style.textShadow = `${ts.offsetX}px ${ts.offsetY}px ${ts.blur}px ${ts.color}`;
+  }
+  if (element.backgroundColor) el.style.backgroundColor = element.backgroundColor;
+  if (element.backgroundFill !== undefined) el.style.background = fillToCss(element.backgroundFill);
+  if (element.cornerRadius !== undefined && element.cornerRadius > 0) {
+    el.style.borderRadius = `${element.cornerRadius}px`;
+  }
+  // Items are grid children (normal flow), so plain CSS padding works.
+  if (element.padding) {
+    el.style.paddingTop = `${element.padding.top}px`;
+    el.style.paddingRight = `${element.padding.right}px`;
+    el.style.paddingBottom = `${element.padding.bottom}px`;
+    el.style.paddingLeft = `${element.padding.left}px`;
+    el.style.boxSizing = 'border-box';
+  }
+  // Gradient (or solid) text fill — the text/clock convention.
+  if (element.colorFill !== undefined) {
+    if (element.colorFill.kind === 'solid') {
+      el.style.color = element.colorFill.color;
+    } else {
+      el.style.background = fillToCss(element.colorFill);
+      el.style.setProperty('-webkit-background-clip', 'text');
+      el.style.setProperty('background-clip', 'text');
+      el.style.color = 'transparent';
+    }
+  }
+  // One grid cell: the current and incoming item stack in it during a
+  // transition; `align-items` centres vertically, `justify-items` maps the
+  // `align` enum 1:1 (grid ships well below the exported single-file's CEF
+  // floor — CasparCG 2.2/2.3 = CEF 63/71).
+  el.style.display = 'grid';
+  el.style.alignItems = 'center';
+  el.style.justifyItems = element.align;
+
+  // Static initial render: item 1 through the shared factory (empty items ⇒
+  // an empty box). The driver re-renders the same markup on reset().
+  const first = element.items[0];
+  if (first !== undefined) {
+    const node = makeSequenceItemNode(doc, element.direction);
+    node.textContent = first.text;
+    el.appendChild(node);
+  }
+  ctx.scope.sequences.push({ element, host: el });
   return el;
 }
 

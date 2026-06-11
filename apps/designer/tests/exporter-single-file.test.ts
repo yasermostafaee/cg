@@ -198,6 +198,85 @@ describe('ExporterSingleFile — D-027 clock is export/GDD-neutral', () => {
   });
 });
 
+describe('ExporterSingleFile — D-029 sequence rides the existing list/GDD path', () => {
+  it('the export carries the sequence; a bound list field GDDs exactly as D-028', async () => {
+    const scene: Scene = {
+      ...makeScene(),
+      layers: [
+        {
+          id: 'L1',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [
+            {
+              id: 'sq-1',
+              name: 'NowNext',
+              type: 'sequence',
+              transform: {
+                position: { x: 100, y: 900 },
+                size: { w: 720, h: 72 },
+                scale: { x: 1, y: 1 },
+                rotation: 0,
+                anchor: { x: 0.5, y: 0.5 },
+              },
+              opacity: 1,
+              visible: true,
+              locked: false,
+              zIndex: 0,
+              font: {
+                family: 'Vazirmatn',
+                weight: 500,
+                style: 'normal',
+                size: 36,
+                lineHeight: 1.4,
+                letterSpacing: 0,
+              },
+              color: '#FFFFFF',
+              align: 'start',
+              direction: 'rtl',
+              items: [{ id: 'a', text: 'اکنون: یک', dwellMs: 800 }],
+              defaultDwellMs: 5000,
+              advance: 'auto',
+              transitionIn: 'bottom',
+              transitionOut: 'top',
+              transitionTiming: 'simultaneous',
+              transitionMs: 400,
+              repeat: 'infinite',
+            },
+          ],
+        },
+      ],
+      fields: [
+        {
+          id: 'rundown',
+          label: 'Rundown',
+          required: false,
+          type: 'list',
+          default: [{ id: 'a', text: 'اکنون: یک', dwellMs: 800 }],
+        },
+      ],
+      bindings: [{ fieldId: 'rundown', target: { kind: 'sequence-items', elementId: 'sq-1' } }],
+    } as unknown as Scene;
+    const { html, issues } = await makeExporter().produce(scene);
+
+    // The element ships inside the inlined scene; the bundled runtime carries
+    // its driver and the real next() — no emitted-boot changes.
+    expect(html).toContain('"type":"sequence"');
+    expect(html).toContain('CG.createRuntime(scene)');
+    // The bound list field exports as the SAME typed GDD array D-028 defined.
+    const m = /<script name="graphics-data-definition"[^>]*>([\s\S]*?)<\/script>/.exec(html);
+    const gdd = JSON.parse((m?.[1] ?? '').trim()) as {
+      properties: Record<string, { type: string; items?: { type: string } }>;
+    };
+    expect(gdd.properties['rundown']?.type).toBe('array');
+    expect(gdd.properties['rundown']?.items?.type).toBe('object');
+    // The existing JSON-only/limited-clients warning covers the list field.
+    expect(issues.some((i) => i.code === 'gdd-list-field-limited-clients')).toBe(true);
+  });
+});
+
 describe('ExporterSingleFile — D-028 finite ticker under a TIMED hold (info)', () => {
   it('flags the combo as info (authored intent, never blocks)', async () => {
     const scene: Scene = {

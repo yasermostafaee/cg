@@ -1,6 +1,7 @@
 import type {
   ClockElement,
   ImageElement,
+  SequenceElement,
   ShapeElement,
   TextElement,
   TickerElement,
@@ -127,6 +128,49 @@ export function defaultClock(id: string, x: number, y: number): ClockElement {
     mode: 'wall',
     format: 'HH:mm:ss',
     digits: 'persian',
+  };
+}
+
+/**
+ * Sequence / now-next (D-029). Persian-first defaults: `rtl`, Vazirmatn,
+ * three sample now/next items, the "Push up" transition (in from the bottom,
+ * out through the top, simultaneous), auto-advance every 5s, infinite passes.
+ * Time-driven like the ticker/clock — scrubbing never moves it.
+ */
+export function defaultSequence(id: string, x: number, y: number): SequenceElement {
+  return {
+    id,
+    name: 'Sequence',
+    type: 'sequence',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    zIndex: 0,
+    transform: baseTransform(x, y, 720, 72),
+    font: {
+      family: 'Vazirmatn',
+      weight: 500,
+      style: 'normal',
+      size: 36,
+      lineHeight: 1.4,
+      letterSpacing: 0,
+    },
+    color: '#FFFFFF',
+    // No backgroundColor — a fresh box is TRANSPARENT by design.
+    align: 'start',
+    direction: 'rtl',
+    items: [
+      { id: 'item-1', text: 'اکنون: برنامهٔ نخست' },
+      { id: 'item-2', text: 'سپس: برنامهٔ دوم' },
+      { id: 'item-3', text: 'بعد: برنامهٔ سوم' },
+    ],
+    defaultDwellMs: 5000,
+    advance: 'auto',
+    transitionIn: 'bottom',
+    transitionOut: 'top',
+    transitionTiming: 'simultaneous',
+    transitionMs: 400,
+    repeat: 'infinite',
   };
 }
 

@@ -26,6 +26,19 @@ export const itemInput = style({
   outline: 'none',
 });
 
+/** D-029 — the narrow per-item dwell (seconds) column for sequences. */
+export const dwellInput = style({
+  width: '3.2rem',
+  background: colors.panelMuted,
+  color: colors.text,
+  border: `1px solid ${colors.border}`,
+  borderRadius: '0.2rem',
+  padding: '0.2rem 0.35rem',
+  fontSize: '0.74rem',
+  boxSizing: 'border-box',
+  outline: 'none',
+});
+
 export const addRow = style({
   marginTop: '0.3rem',
 });

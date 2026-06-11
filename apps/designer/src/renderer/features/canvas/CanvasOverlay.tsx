@@ -10,6 +10,7 @@ import {
   defaultClock,
   defaultEllipse,
   defaultImage,
+  defaultSequence,
   defaultShape,
   defaultText,
   defaultTicker,
@@ -182,6 +183,12 @@ export function CanvasOverlay({
     if (tool === 'clock') {
       const id = `el-${String(Date.now())}`;
       designerStore.addElement(defaultClock(id, scenePoint.x, scenePoint.y));
+      designerStore.setTool('cursor');
+      return;
+    }
+    if (tool === 'sequence') {
+      const id = `el-${String(Date.now())}`;
+      designerStore.addElement(defaultSequence(id, scenePoint.x, scenePoint.y));
       designerStore.setTool('cursor');
       return;
     }

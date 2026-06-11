@@ -62,7 +62,7 @@ const MODE_LABELS: Record<PlayoutMode, string> = {
 const HOLD_LABELS: Record<HoldSource, string> = {
   timed: 'Timed — hold for a duration',
   'content-driven':
-    'Content-driven — until the content completes (ticker passes / countdown reaching zero)',
+    'Content-driven — until the content completes (ticker passes / countdown / sequence passes)',
 };
 
 /** Modes that need an explicit out-point to mean anything (an exit segment). */

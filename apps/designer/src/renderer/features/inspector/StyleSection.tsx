@@ -6,11 +6,17 @@ import type {
   Filter,
   ImageElement,
   Padding,
+  SequenceElement,
   Shadow,
   ShapeElement,
   TextElement,
   TickerElement,
 } from '@cg/shared-schema';
+import {
+  SEQUENCE_PRESET_ORDER,
+  SEQUENCE_TRANSITION_PRESETS,
+  sequencePresetKeyFor,
+} from './sequence-presets.js';
 import { ListItemsEditor } from '../fields/ListItemsEditor.js';
 import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
@@ -129,6 +135,14 @@ export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element 
   if (element.type === 'clock')
     return (
       <ClockSections
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    );
+  if (element.type === 'sequence')
+    return (
+      <SequenceSections
         element={element}
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
@@ -804,8 +818,270 @@ function ClockSections({
   );
 }
 
-/** Ticker/clock text-shadow rows — plain (non-animatable) commits. */
-function TickerShadowRows({ element }: { element: TickerElement | ClockElement }): JSX.Element {
+// ────────────────────────────────────────────────────────────────────────
+//                              SEQUENCE
+// ────────────────────────────────────────────────────────────────────────
+
+/**
+ * D-029 — the sequence/now-next config. The transition is DECOMPOSED
+ * (IN edge / OUT edge / timing) with named presets over those fields — the
+ * preset select shows Custom when the combination matches none (selecting
+ * Custom itself is a no-op, same as the EasingEditor). Time-driven like the
+ * ticker/clock: a runtime driver advances it; scrubbing never moves it.
+ * Items are edited with the shared editor (per-item dwell column on);
+ * `setSequenceItems` keeps a bound list field's default in lockstep.
+ */
+function SequenceSections({
+  element,
+  currentFrame,
+  selectedKeyframe,
+}: SectionProps<SequenceElement>): JSX.Element {
+  const id = element.id;
+  const presetKey = sequencePresetKeyFor(element);
+  return (
+    <>
+      <CollapseSection title="Sequence" pinned>
+        <SelectField
+          label="transition"
+          value={presetKey}
+          options={SEQUENCE_PRESET_ORDER.map((p) => p.key)}
+          labels={SEQUENCE_PRESET_ORDER.map((p) => p.label)}
+          onCommit={(key) => {
+            const preset = SEQUENCE_TRANSITION_PRESETS[key];
+            if (preset !== undefined) {
+              designerStore.updateElement(id, { ...preset } as Partial<Element>);
+            }
+            // 'custom' is a display state, not a writable value — no-op.
+          }}
+        />
+        <SelectField
+          label="in"
+          value={element.transitionIn}
+          options={['top', 'bottom', 'left', 'right', 'none'] as const}
+          onCommit={(transitionIn) =>
+            designerStore.updateElement(id, { transitionIn } as Partial<Element>)
+          }
+        />
+        <SelectField
+          label="out"
+          value={element.transitionOut}
+          options={['top', 'bottom', 'left', 'right', 'none'] as const}
+          onCommit={(transitionOut) =>
+            designerStore.updateElement(id, { transitionOut } as Partial<Element>)
+          }
+        />
+        <SelectField
+          label="timing"
+          value={element.transitionTiming}
+          options={['simultaneous', 'sequential'] as const}
+          onCommit={(transitionTiming) =>
+            designerStore.updateElement(id, { transitionTiming } as Partial<Element>)
+          }
+        />
+        <NumberField
+          label="transition"
+          value={element.transitionMs}
+          step={50}
+          min={50}
+          suffix="ms"
+          onCommit={(v) =>
+            designerStore.updateElement(id, {
+              transitionMs: Math.max(50, Math.round(v)),
+            } as Partial<Element>)
+          }
+        />
+        <SelectField
+          label="advance"
+          value={element.advance}
+          options={['auto', 'manual'] as const}
+          onCommit={(advance) => designerStore.updateElement(id, { advance } as Partial<Element>)}
+        />
+        <NumberField
+          label="default dwell"
+          value={element.defaultDwellMs / 1000}
+          step={0.5}
+          min={0.1}
+          suffix="s"
+          onCommit={(secs) =>
+            designerStore.updateElement(id, {
+              defaultDwellMs: Math.max(100, Math.round(secs * 1000)),
+            } as Partial<Element>)
+          }
+        />
+        <SelectField
+          label="repeat"
+          value={element.repeat === 'infinite' ? 'infinite' : 'count'}
+          options={['infinite', 'count'] as const}
+          onCommit={(v) =>
+            designerStore.updateElement(id, {
+              repeat: v === 'infinite' ? 'infinite' : 1,
+            } as Partial<Element>)
+          }
+        />
+        {element.repeat !== 'infinite' && (
+          <NumberField
+            label="passes"
+            value={element.repeat}
+            step={1}
+            min={1}
+            onCommit={(n) =>
+              designerStore.updateElement(id, {
+                repeat: Math.max(1, Math.round(n)),
+              } as Partial<Element>)
+            }
+          />
+        )}
+        <SelectField
+          label="direction"
+          value={element.direction}
+          options={['rtl', 'ltr'] as const}
+          onCommit={(direction) =>
+            designerStore.updateElement(id, { direction } as Partial<Element>)
+          }
+        />
+        <p className={dds.hint}>
+          Time-driven: items advance on their dwell / on Next during playback — scrubbing the
+          timeline doesn’t move the sequence.
+        </p>
+      </CollapseSection>
+
+      <CollapseSection title="Items" defaultExpanded>
+        <ListItemsEditor
+          items={element.items}
+          label={element.name || 'Sequence'}
+          showDwell
+          onChange={(items) => designerStore.setSequenceItems(id, items)}
+        />
+      </CollapseSection>
+
+      {/* Style parity with the ticker/clock text sections — plain commits
+          (sequence styling isn't keyframe-animatable; time-driven). */}
+      <CollapseSection title="Sequence Text" defaultExpanded>
+        <FontFamilySelect
+          value={element.font.family}
+          onCommit={(family) =>
+            designerStore.updateElement(id, {
+              font: { ...element.font, family },
+            } as Partial<Element>)
+          }
+        />
+        <SelectField
+          label="weight"
+          value={String(element.font.weight)}
+          options={['100', '200', '300', '400', '500', '600', '700', '800', '900'] as const}
+          onCommit={(w) =>
+            designerStore.updateElement(id, {
+              font: { ...element.font, weight: Number(w) },
+            } as Partial<Element>)
+          }
+        />
+        <NumberField
+          label="size"
+          value={element.font.size}
+          step={1}
+          min={1}
+          suffix="px"
+          onCommit={(size) => {
+            if (size > 0)
+              designerStore.updateElement(id, {
+                font: { ...element.font, size },
+              } as Partial<Element>);
+          }}
+        />
+        <SelectField
+          label="align"
+          value={element.align}
+          options={['start', 'center', 'end'] as const}
+          onCommit={(align) => designerStore.updateElement(id, { align } as Partial<Element>)}
+        />
+        <FillField
+          label="text color"
+          value={element.colorFill ?? { kind: 'solid', color: element.color }}
+          onChange={(f) => {
+            if (f.kind === 'solid') {
+              designerStore.updateElement(id, {
+                color: f.color,
+                colorFill: undefined,
+              } as Partial<Element>);
+            } else {
+              designerStore.updateElement(id, { colorFill: f } as Partial<Element>);
+            }
+          }}
+        />
+        <FillField
+          label="background"
+          value={
+            element.backgroundFill ?? {
+              kind: 'solid',
+              color: element.backgroundColor ?? '#00000000',
+            }
+          }
+          onChange={(f) => {
+            if (f.kind === 'solid') {
+              designerStore.updateElement(id, {
+                backgroundFill: undefined,
+                backgroundColor: f.color,
+              } as Partial<Element>);
+            } else {
+              designerStore.updateElement(id, { backgroundFill: f } as Partial<Element>);
+            }
+          }}
+        />
+      </CollapseSection>
+
+      <CollapseSection title="Drop Shadow">
+        <TickerShadowRows element={element} />
+      </CollapseSection>
+
+      <CollapseSection title="Box Padding">
+        {(['top', 'right', 'bottom', 'left'] as const).map((side) => (
+          <NumberField
+            key={side}
+            label={side}
+            value={element.padding?.[side] ?? 0}
+            step={1}
+            min={0}
+            suffix="px"
+            onCommit={(v) => {
+              const p = element.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
+              designerStore.updateElement(id, {
+                padding: { ...p, [side]: Math.max(0, v) },
+              } as Partial<Element>);
+            }}
+          />
+        ))}
+      </CollapseSection>
+
+      <CollapseSection title="Border Radius">
+        <NumberField
+          label="radius"
+          value={element.cornerRadius ?? 0}
+          step={1}
+          min={0}
+          suffix="px"
+          onCommit={(v) =>
+            designerStore.updateElement(id, {
+              cornerRadius: Math.max(0, v),
+            } as Partial<Element>)
+          }
+        />
+      </CollapseSection>
+
+      <FilterSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    </>
+  );
+}
+
+/** Ticker/clock/sequence text-shadow rows — plain (non-animatable) commits. */
+function TickerShadowRows({
+  element,
+}: {
+  element: TickerElement | ClockElement | SequenceElement;
+}): JSX.Element {
   const id = element.id;
   const s = element.textShadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
   const patch = (p: Partial<typeof s>): void => {

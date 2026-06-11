@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ClockElement, Scene } from '@cg/shared-schema';
+import type { ClockElement, Scene, SequenceElement } from '@cg/shared-schema';
 import { buildScene } from '../src/scene-builder.js';
 import { lowerThirdScene } from './fixtures.js';
 
@@ -262,5 +262,108 @@ describe('buildClock — static initial render (D-027)', () => {
     expect(built.scopeTree.clocks).toHaveLength(1);
     expect(built.scopeTree.clocks[0]?.element.id).toBe('clk');
     expect(built.scopeTree.clocks[0]?.node).toBe(span(built));
+  });
+});
+
+describe('buildSequence — static item-1 render (D-029)', () => {
+  function sequenceScene(seq: Partial<SequenceElement>): Scene {
+    const element: SequenceElement = {
+      id: 'seq',
+      name: 'now-next',
+      type: 'sequence',
+      transform: {
+        position: { x: 10, y: 20 },
+        size: { w: 720, h: 72 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0.5, y: 0.5 },
+      },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 0,
+      font: {
+        family: 'Vazirmatn',
+        weight: 500,
+        style: 'normal',
+        size: 36,
+        lineHeight: 1.4,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      align: 'start',
+      direction: 'rtl',
+      items: [
+        { id: 'a', text: 'اکنون: برنامهٔ نخست' },
+        { id: 'b', text: 'سپس: برنامهٔ دوم' },
+      ],
+      defaultDwellMs: 5000,
+      advance: 'auto',
+      transitionIn: 'bottom',
+      transitionOut: 'top',
+      transitionTiming: 'simultaneous',
+      transitionMs: 400,
+      repeat: 'infinite',
+      ...seq,
+    };
+    return {
+      schemaVersion: 1,
+      id: 'scene-seq',
+      name: 'sequence',
+      templateType: 'custom',
+      resolution: { width: 1920, height: 1080 },
+      frameRate: 50,
+      safeAreas: { title: 10, action: 5 },
+      frameRange: { in: 0, out: 50 },
+      background: 'transparent',
+      layers: [
+        {
+          id: 'L1',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [element],
+        },
+      ],
+      fields: [],
+      bindings: [],
+      fonts: [],
+      metadata: { createdAt: '2026-06-11T00:00:00.000Z', updatedAt: '2026-06-11T00:00:00.000Z' },
+    };
+  }
+
+  it('renders ONLY item 1 statically, bidi-isolated with the element direction', () => {
+    const built = buildScene(sequenceScene({}));
+    const host = built.elementMap.get('seq');
+    const items = host?.querySelectorAll<HTMLElement>('[data-cg-sequence-item]') ?? [];
+    expect(items).toHaveLength(1);
+    expect(items[0]?.textContent).toBe('اکنون: برنامهٔ نخست');
+    expect(items[0]?.style.direction).toBe('rtl');
+    expect(items[0]?.style.unicodeBidi).toBe('isolate');
+    expect(items[0]?.style.gridArea).toContain('1');
+  });
+
+  it('the host is a clipped single-cell grid, aligned per `align`', () => {
+    const built = buildScene(sequenceScene({ align: 'end' }));
+    const host = built.elementMap.get('seq');
+    expect(host?.style.overflow).toBe('hidden');
+    expect(host?.style.display).toBe('grid');
+    expect(host?.style.alignItems).toBe('center');
+    expect(host?.style.justifyItems).toBe('end');
+    expect(host?.style.fontFamily.startsWith('Vazirmatn,')).toBe(true);
+  });
+
+  it('an empty items list renders an empty box', () => {
+    const built = buildScene(sequenceScene({ items: [] }));
+    const host = built.elementMap.get('seq');
+    expect(host?.querySelectorAll('[data-cg-sequence-item]')).toHaveLength(0);
+  });
+
+  it('built sequences are collected on the scope (driver + next() seam)', () => {
+    const built = buildScene(sequenceScene({}));
+    expect(built.scopeTree.sequences).toHaveLength(1);
+    expect(built.scopeTree.sequences[0]?.element.id).toBe('seq');
+    expect(built.scopeTree.sequences[0]?.host).toBe(built.elementMap.get('seq'));
   });
 });

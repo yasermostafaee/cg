@@ -1,9 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { ClockElementSchema } from '@cg/shared-schema';
+import { ClockElementSchema, SequenceElementSchema } from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
-import { defaultClock, defaultShape, defaultText } from '../src/renderer/state/element-defaults.js';
+import {
+  defaultClock,
+  defaultSequence,
+  defaultShape,
+  defaultText,
+} from '../src/renderer/state/element-defaults.js';
 
 afterEach(() => {
   designerStore._reset();
@@ -124,5 +129,20 @@ describe('element-defaults', () => {
     expect(c.font.family).toBe('Vazirmatn');
     // Schema-valid as authored (wall needs no target; defaults are explicit).
     expect(ClockElementSchema.parse(c)).toEqual(c);
+  });
+
+  it('defaultSequence produces a schema-valid Persian now/next — the Push-up preset (D-029)', () => {
+    const q = defaultSequence('el-1', 11, 12);
+    expect(q.type).toBe('sequence');
+    expect(q.transform.position).toEqual({ x: 11, y: 12 });
+    expect(q.direction).toBe('rtl');
+    expect(q.advance).toBe('auto');
+    expect(q.defaultDwellMs).toBe(5000);
+    expect(q.transitionIn).toBe('bottom');
+    expect(q.transitionOut).toBe('top');
+    expect(q.transitionTiming).toBe('simultaneous');
+    expect(q.repeat).toBe('infinite');
+    expect(q.items).toHaveLength(3);
+    expect(SequenceElementSchema.parse(q)).toEqual(q);
   });
 });

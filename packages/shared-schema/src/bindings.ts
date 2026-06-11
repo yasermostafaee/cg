@@ -53,6 +53,11 @@ const BindingTargetSchema = z.discriminatedUnion('kind', [
     kind: z.literal('ticker-items'),
     elementId: IdSchema,
   }),
+  /** D-029 — a `list` field drives a sequence element's items. */
+  z.object({
+    kind: z.literal('sequence-items'),
+    elementId: IdSchema,
+  }),
 ]);
 
 /**
