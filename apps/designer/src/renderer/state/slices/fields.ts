@@ -138,14 +138,16 @@ function sameBindingTarget(a: FieldBinding['target'], b: FieldBinding['target'])
 }
 
 /**
- * D-018/D-028 — is `b` a Data-key convenience binding (for ANY element)?
- * A text element's convenience binding is its full-text binding (no
- * placeholder); a ticker's is its `ticker-items` binding.
+ * D-018/D-028/D-029 — is `b` a Data-key convenience binding (for ANY
+ * element)? A text element's convenience binding is its full-text binding
+ * (no placeholder); a ticker's is its `ticker-items` binding; a sequence's
+ * its `sequence-items` binding.
  */
 function isConvBinding(b: FieldBinding): boolean {
   return (
     (b.target.kind === 'text' && b.target.placeholder === undefined) ||
-    b.target.kind === 'ticker-items'
+    b.target.kind === 'ticker-items' ||
+    b.target.kind === 'sequence-items'
   );
 }
 
@@ -264,11 +266,18 @@ export const fieldsSlice = {
     const trimmed = key.trim();
     const doc = activeFieldData(current.scene);
     const bindings = doc.bindings;
-    // D-028 — the element's type decides the convenience-binding kind: a text
-    // element syncs a full-text binding, a ticker its `ticker-items` binding.
+    // D-028/D-029 — the element's type decides the convenience-binding kind:
+    // a text element syncs a full-text binding, a ticker its `ticker-items`
+    // binding, a sequence its `sequence-items` binding (both list-backed).
     const found = locate(current.scene, elementId);
     const el = found === null ? undefined : found.layer.children[found.elIdx];
-    const isTicker = el !== undefined && el.type === 'ticker';
+    const itemsKind =
+      el !== undefined && el.type === 'ticker'
+        ? ('ticker-items' as const)
+        : el !== undefined && el.type === 'sequence'
+          ? ('sequence-items' as const)
+          : null;
+    const isListElement = itemsKind !== null;
     const convIdx = bindings.findIndex((b) => isConvBinding(b) && convElementId(b) === elementId);
     const currentKey = convIdx === -1 ? null : (bindings[convIdx]?.fieldId ?? null);
 
@@ -288,28 +297,34 @@ export const fieldsSlice = {
     if (ownedElsewhere) return false;
 
     const existing = doc.fields.find((f) => f.id === trimmed);
-    // A ticker can only adopt a `list` field (and a text element only a
-    // text-shaped one) — a kind mismatch would wire an uneditable value.
-    if (existing !== undefined && (existing.type === 'list') !== isTicker) return false;
+    // A ticker/sequence can only adopt a `list` field (and a text element
+    // only a text-shaped one) — a kind mismatch would wire an uneditable
+    // value.
+    if (existing !== undefined && (existing.type === 'list') !== isListElement) return false;
 
     if (currentKey === null) {
-      const binding: FieldBinding = isTicker
-        ? { fieldId: trimmed, target: { kind: 'ticker-items', elementId } }
-        : { fieldId: trimmed, target: { kind: 'text', elementId } };
+      const binding: FieldBinding =
+        itemsKind !== null
+          ? { fieldId: trimmed, target: { kind: itemsKind, elementId } }
+          : { fieldId: trimmed, target: { kind: 'text', elementId } };
       // Re-adopt an orphaned field (keep its config); otherwise create a fresh
       // one seeded from the element's current content.
       if (existing !== undefined) {
         set({ scene: withActiveFieldData(current.scene, { bindings: [...bindings, binding] }) });
         return true;
       }
-      const field: DynamicField = isTicker
+      const field: DynamicField = isListElement
         ? {
             id: trimmed,
             type: 'list',
             label: trimmed,
             required: false,
-            // Seed from the ticker's authored items (stable ids carry over).
-            default: el.type === 'ticker' ? el.items.map((i) => ({ ...i })) : [],
+            // Seed from the element's authored items (stable ids — and for a
+            // sequence, per-item dwellMs — carry over).
+            default:
+              el !== undefined && (el.type === 'ticker' || el.type === 'sequence')
+                ? el.items.map((i) => ({ ...i }))
+                : [],
           }
         : {
             id: trimmed,
@@ -392,6 +407,35 @@ export const fieldsSlice = {
     const doc = activeFieldData(current.scene);
     const conv = doc.bindings.find(
       (b) => b.target.kind === 'ticker-items' && b.target.elementId === elementId,
+    );
+    if (conv === undefined) return;
+    const field = doc.fields.find((f) => f.id === conv.fieldId);
+    if (field === undefined || field.type !== 'list') return;
+    designerStore.updateField(field.id, { default: items.map((i) => ({ ...i })) });
+  },
+
+  /**
+   * D-029 — edit a sequence's items as ONE intent: updates the element's
+   * authored items and, when a `list` field is bound via the element's Data
+   * key, keeps that field's default in lockstep (the `setTickerItems`
+   * pattern).
+   */
+  setSequenceItems(elementId: string, items: ListItem[]): void {
+    if (current.scene === null) return;
+    // The sequence element stores what it renders: {id, text, dwellMs?}. The
+    // bound field's default keeps the FULL open item shape (extras survive).
+    const authored = items.map((i) => {
+      const o = i as Record<string, unknown>;
+      const text = typeof o['text'] === 'string' ? o['text'] : '';
+      const dwell = o['dwellMs'];
+      const dwellMs =
+        typeof dwell === 'number' && Number.isInteger(dwell) && dwell > 0 ? dwell : undefined;
+      return dwellMs === undefined ? { id: i.id, text } : { id: i.id, text, dwellMs };
+    });
+    designerStore.updateElement(elementId, { items: authored } as Partial<Element>);
+    const doc = activeFieldData(current.scene);
+    const conv = doc.bindings.find(
+      (b) => b.target.kind === 'sequence-items' && b.target.elementId === elementId,
     );
     if (conv === undefined) return;
     const field = doc.fields.find((f) => f.id === conv.fieldId);

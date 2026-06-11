@@ -42,6 +42,7 @@ import { LifecycleStateMachine } from './lifecycle.js';
 import { PlayoutController } from './playout-controller.js';
 import { buildScene } from './scene-builder.js';
 import { ClockDriver } from './clock-driver.js';
+import { SequenceDriver, registerSequenceDriver } from './sequence-driver.js';
 import { TickerDriver, registerTickerDriver } from './ticker-driver.js';
 import type {
   FieldScope,
@@ -98,10 +99,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // bindings applier routes `ticker-items` values.
   // D-027 — clock drivers are instantiated in the same walk (no overrides and
   // no bindings: the clock has no fields in v1).
+  // D-029 — sequence drivers too; the host→driver registry routes
+  // `sequence-items` bindings, and `runtime.next()` dispatches per scope.
   const allTickers: TickerDriver[] = [];
   const tickersByScope = new Map<FieldScope, TickerDriver[]>();
   const allClocks: ClockDriver[] = [];
   const clocksByScope = new Map<FieldScope, ClockDriver[]>();
+  const allSequences: SequenceDriver[] = [];
+  const sequencesByScope = new Map<FieldScope, SequenceDriver[]>();
   const instantiateDrivers = (scope: FieldScope, path: string): void => {
     const scopeOverride = overrides[path];
     const drivers = scope.tickers.map((t) => {
@@ -143,6 +148,25 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       return driver;
     });
     if (clockDrivers.length > 0) clocksByScope.set(scope, clockDrivers);
+    const sequenceDrivers = scope.sequences.map((s) => {
+      const driver = new SequenceDriver({
+        host: s.host,
+        direction: s.element.direction,
+        items: s.element.items,
+        defaultDwellMs: s.element.defaultDwellMs,
+        advance: s.element.advance,
+        transitionIn: s.element.transitionIn,
+        transitionOut: s.element.transitionOut,
+        transitionTiming: s.element.transitionTiming,
+        transitionMs: s.element.transitionMs,
+        repeat: s.element.repeat,
+        clock: options.clock,
+      });
+      registerSequenceDriver(s.host, driver);
+      allSequences.push(driver);
+      return driver;
+    });
+    if (sequenceDrivers.length > 0) sequencesByScope.set(scope, sequenceDrivers);
     for (const child of scope.children) {
       instantiateDrivers(child.scope, path === '' ? child.name : `${path}.${child.name}`);
     }
@@ -227,23 +251,30 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   let onRootSettled: () => void = noop;
   const buildScopeController = (scope: FieldScope, isRoot: boolean, path: string): ScopeNode => {
     const own = scope.animated;
-    // D-028/D-027 — self-wire the scope's content completion from its CONTENT
-    // SOURCES: every ticker AND every countdown clock in the scope
-    // (`Promise.all` — an infinite ticker never resolves ⇒ hold until stop();
-    // wall/countup clocks are NOT content sources and are never awaited; no
-    // content sources ⇒ null ⇒ a zero-length hold). An EXPLICIT boot-option
-    // `contentHold` still wins for the root scope (external override / test
-    // seam). Each hold entry resets + starts the scope's tickers and clocks,
-    // so every open/close cycle replays the crawl / re-runs the count.
+    // D-028/D-027/D-029 — self-wire the scope's content completion from its
+    // CONTENT SOURCES: every ticker, every countdown clock, and every FINITE
+    // sequence in the scope (`Promise.all` — an infinite ticker or infinite
+    // sequence never resolves ⇒ hold until stop(); wall/countup clocks and
+    // infinite sequences are never awaited; no content sources ⇒ null ⇒ a
+    // zero-length hold). An EXPLICIT boot-option `contentHold` still wins for
+    // the root scope (external override / test seam). Each hold entry resets +
+    // starts the scope's tickers, clocks, and sequences, so every open/close
+    // cycle replays the crawl / re-runs the count / restarts from item 1.
     const scopeTickers = tickersByScope.get(scope) ?? [];
     const scopeClocks = clocksByScope.get(scope) ?? [];
     const scopeCountdowns = scopeClocks.filter((c) => c.mode === 'countdown');
+    const scopeSequences = sequencesByScope.get(scope) ?? [];
+    // ALL tickers and sequences join the wait — an infinite one's
+    // whenComplete() never resolves, which IS how it holds the scope until
+    // stop(); only the clock filter is by kind (wall/countup are excluded
+    // because they're not content sources at all).
     const contentWait =
-      scopeTickers.length > 0 || scopeCountdowns.length > 0
+      scopeTickers.length > 0 || scopeCountdowns.length > 0 || scopeSequences.length > 0
         ? (): Promise<void> =>
             Promise.all([
               ...scopeTickers.map((t) => t.whenComplete()),
               ...scopeCountdowns.map((c) => c.whenComplete()),
+              ...scopeSequences.map((s) => s.whenComplete()),
             ]).then(() => undefined)
         : undefined;
     const externalWait =
@@ -252,6 +283,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     const stopScopeContent = (): void => {
       for (const t of scopeTickers) t.stop();
       for (const c of scopeClocks) c.stop();
+      for (const s of scopeSequences) s.stop();
     };
     const controller = new PlayoutController({
       frameRate: scene.frameRate,
@@ -271,11 +303,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       waitForContent:
         waitForContent === undefined ? undefined : (): Promise<void> => waitForContent(),
       onHoldStart:
-        scopeTickers.length > 0 || scopeClocks.length > 0
+        scopeTickers.length > 0 || scopeClocks.length > 0 || scopeSequences.length > 0
           ? (): void => {
-              // Fresh crawl / fresh count per composition cycle (reset BEFORE
-              // the wait is requested, so the controller awaits this run's
-              // completion).
+              // Fresh crawl / fresh count / fresh run from item 1 per
+              // composition cycle (reset BEFORE the wait is requested, so the
+              // controller awaits this run's completion).
               for (const t of scopeTickers) {
                 t.reset();
                 t.start();
@@ -283,6 +315,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
               for (const c of scopeClocks) {
                 c.reset();
                 c.start();
+              }
+              for (const s of scopeSequences) {
+                s.reset();
+                s.start();
               }
             }
           : undefined,
@@ -309,7 +345,20 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     cascade(rootNode, (c) => c.stop()); // root itself is settled — a no-op
     for (const t of allTickers) t.stop();
     for (const c of allClocks) c.stop();
+    for (const s of allSequences) s.stop();
     rootOnSettle();
+  };
+
+  // D-029 — the per-scope next() dispatch, parent-first over the scope tree.
+  // Today the consumers are each scope's sequence drivers; this dispatch is
+  // DELIBERATELY the seam the D-031 authored steps model will join (steps
+  // register as another per-scope consumer here, defining their precedence
+  // vs. in-scope sequences in that change). A template with no consumers is
+  // a safe no-op — the optional `TemplateRuntime.next?` contract that the
+  // CasparCG `CG NEXT` global (caspar-globals) already calls.
+  const dispatchNext = (scope: FieldScope): void => {
+    for (const s of sequencesByScope.get(scope) ?? []) s.next();
+    for (const child of scope.children) dispatchNext(child.scope);
   };
 
   const runtime: TemplateRuntime = {
@@ -341,6 +390,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         c.reset();
         if (c.isAbsolute) c.start();
       }
+      // D-029 — sequences reset to item 1, displayed statically through the
+      // intro; advancing begins at hold entry (which resets + starts them).
+      for (const s of allSequences) s.reset();
       // Play the IN once and hold (no full-range loop, no auto-outro by default);
       // the mode orchestration (auto-out / loop-cycle / content-driven) then runs.
       // Absent lifecycle: the whole timeline is the entrance and the hold is its
@@ -376,10 +428,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     pause(): void {
       if (machine.state === 'removed') return;
       cascade(rootNode, (c) => c.pause());
-      // D-028/D-027 — freeze the crawls and clocks in lockstep with the
-      // frozen hold timers.
+      // D-028/D-027/D-029 — freeze the crawls, clocks, and sequences (dwell
+      // AND in-flight transitions) in lockstep with the frozen hold timers.
       for (const t of allTickers) t.pause();
       for (const c of allClocks) c.pause();
+      for (const s of allSequences) s.pause();
     },
 
     resume(): void {
@@ -387,6 +440,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       cascade(rootNode, (c) => c.resume());
       for (const t of allTickers) t.resume();
       for (const c of allClocks) c.resume();
+      for (const s of allSequences) s.resume();
+    },
+
+    async next(): Promise<void> {
+      if (machine.state === 'removed') return;
+      // D-029 — implemented for real: cascade parent-first to every scope's
+      // sequence drivers, resolving immediately (a pre-run or mid-transition
+      // next() is each driver's own no-op). See dispatchNext for the D-031
+      // steps-model seam.
+      dispatchNext(built.scopeTree);
     },
 
     remove(): void {
@@ -394,6 +457,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       cascade(rootNode, (c) => c.destroy());
       for (const t of allTickers) t.destroy();
       for (const c of allClocks) c.destroy();
+      for (const s of allSequences) s.destroy();
       machine.forceTransition('removed');
       bus.clear();
       built.container.remove();

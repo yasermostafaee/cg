@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ClockElementSchema,
+  SequenceElementSchema,
   ContainerElementSchema,
   ElementBaseSchema,
   ElementSchema,
@@ -447,5 +448,73 @@ describe('ClockElement (D-027)', () => {
   });
   it('rejects an empty format string', () => {
     expect(() => ClockElementSchema.parse({ ...clock, format: '' })).toThrow();
+  });
+});
+
+describe('SequenceElement (D-029)', () => {
+  const sequence = {
+    ...baseProps,
+    type: 'sequence' as const,
+    font: {
+      family: 'Vazirmatn',
+      weight: 500,
+      style: 'normal' as const,
+      size: 36,
+      lineHeight: 1.4,
+      letterSpacing: 0,
+    },
+    color: '#FFFFFF',
+    direction: 'rtl' as const,
+    items: [
+      { id: 'a', text: 'اکنون: برنامهٔ نخست' },
+      { id: 'b', text: 'سپس: Brand X', dwellMs: 8000 },
+    ],
+  };
+  it('applies the defaults (align/dwell/advance/transition/repeat) and round-trips', () => {
+    const parsed = SequenceElementSchema.parse(sequence);
+    expect(parsed.align).toBe('start');
+    expect(parsed.defaultDwellMs).toBe(5000);
+    expect(parsed.advance).toBe('auto');
+    expect(parsed.transitionIn).toBe('bottom');
+    expect(parsed.transitionOut).toBe('top');
+    expect(parsed.transitionTiming).toBe('simultaneous');
+    expect(parsed.transitionMs).toBe(400);
+    expect(parsed.repeat).toBe('infinite');
+    expect(parsed.items).toEqual(sequence.items);
+    // Round-trip: parsing the parsed value is identity.
+    expect(SequenceElementSchema.parse(parsed)).toEqual(parsed);
+  });
+  it('round-trips through the Element union', () => {
+    const parsed = ElementSchema.parse(sequence);
+    expect((parsed as { type: string }).type).toBe('sequence');
+  });
+  it('accepts every edge incl. none and a finite repeat', () => {
+    const parsed = SequenceElementSchema.parse({
+      ...sequence,
+      transitionIn: 'none',
+      transitionOut: 'left',
+      transitionTiming: 'sequential',
+      repeat: 3,
+    });
+    expect(parsed.transitionIn).toBe('none');
+    expect(parsed.repeat).toBe(3);
+  });
+  it('rejects a non-positive per-item dwellMs', () => {
+    expect(() =>
+      SequenceElementSchema.parse({
+        ...sequence,
+        items: [{ id: 'a', text: 'x', dwellMs: 0 }],
+      }),
+    ).toThrow();
+  });
+  it('rejects a non-positive defaultDwellMs / transitionMs and a bad edge', () => {
+    expect(() => SequenceElementSchema.parse({ ...sequence, defaultDwellMs: 0 })).toThrow();
+    expect(() => SequenceElementSchema.parse({ ...sequence, transitionMs: -1 })).toThrow();
+    expect(() => SequenceElementSchema.parse({ ...sequence, transitionIn: 'fade' })).toThrow();
+  });
+  it('rejects an item without a stable id', () => {
+    expect(() =>
+      SequenceElementSchema.parse({ ...sequence, items: [{ id: '', text: 'x' }] }),
+    ).toThrow();
   });
 });

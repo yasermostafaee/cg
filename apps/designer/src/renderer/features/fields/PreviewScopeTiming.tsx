@@ -23,8 +23,9 @@ export interface TimingScopeNode {
   depth: number;
   /** D-028 — the scope's first ticker's authored repeat/boundary (resting UI values). */
   tickerDefaults: TickerTimingDefaults | null;
-  /** D-027 — whether the scope contains a countdown clock (a content source). */
-  hasCountdownClock: boolean;
+  /** D-027/D-029 — whether the scope contains a non-ticker content source
+   *  (a countdown clock or a sequence). */
+  hasOtherContent: boolean;
 }
 
 const MAX_DEPTH = 8;
@@ -48,12 +49,13 @@ function firstTickerOf(doc: { layers: Scene['layers'] }): TickerTimingDefaults |
   return null;
 }
 
-/** D-027 — does the scope contain a countdown clock (recursing containers)? */
-function hasCountdownClockIn(doc: { layers: Scene['layers'] }): boolean {
+/** D-027/D-029 — does the scope contain a countdown clock or a sequence? */
+function hasOtherContentIn(doc: { layers: Scene['layers'] }): boolean {
   const walk = (children: readonly Element[]): boolean =>
     children.some(
       (el) =>
         (el.type === 'clock' && el.mode === 'countdown') ||
+        el.type === 'sequence' ||
         (el.type === 'container' && walk(el.children)),
     );
   return doc.layers.some((l) => walk(l.children));
@@ -72,7 +74,7 @@ export function timingScopeList(scene: Scene): TimingScopeNode[] {
       source: scene,
       depth: 0,
       tickerDefaults: firstTickerOf(scene),
-      hasCountdownClock: hasCountdownClockIn(scene),
+      hasOtherContent: hasOtherContentIn(scene),
     },
   ];
   const walk = (
@@ -93,7 +95,7 @@ export function timingScopeList(scene: Scene): TimingScopeNode[] {
         source: comp,
         depth,
         tickerDefaults: firstTickerOf(comp),
-        hasCountdownClock: hasCountdownClockIn(comp),
+        hasOtherContent: hasOtherContentIn(comp),
       });
       walk(comp, path, depth + 1, new Set([...visited, inst.compositionId]));
     }
@@ -136,7 +138,7 @@ export function PreviewScopeTiming({
             defaultExpanded={node.path === ''}
             showFooter={i === visible.length - 1}
             hasTicker={node.tickerDefaults !== null}
-            hasContent={node.tickerDefaults !== null || node.hasCountdownClock}
+            hasContent={node.tickerDefaults !== null || node.hasOtherContent}
             tickerDefaults={node.tickerDefaults}
             override={overrides[node.path] ?? {}}
             onChange={(patch) => onChange(node.path, patch)}

@@ -1,4 +1,4 @@
-﻿# Tasks â€” add-clock-element
+# Tasks — add-clock-element
 
 ## 1. Schema (@cg/shared-schema)
 
@@ -18,8 +18,8 @@
 
 - [x] 2.1 `clock-format.ts` (pure): longest-token-first tokenization of
       `HH H hh h mm m ss s A a`; literals pass through; largest present unit
-      absorbs overflow (`mm:ss` â†’ `90:00`); count modes: `hh`/`h` as
-      `HH`/`H`, `A`/`a` â†’ `''`; wall local time (24h/12h); digits mapped
+      absorbs overflow (`mm:ss` → `90:00`); count modes: `hh`/`h` as
+      `HH`/`H`, `A`/`a` → `''`; wall local time (24h/12h); digits mapped
       LAST via `@cg/text-shaping`
 - [x] 2.2 `buildClock` in `scene-builder.ts`: dataset `cgElementId` +
       `applyBaseStyles`; band-subset box styling
@@ -28,7 +28,7 @@ unicode-bidi: isolate; font-variant-numeric: tabular-nums`,
       flex-aligned per `align`; static initial render (wall = now at build,
       countdown = full target, countup = zero); `ctx.scope.clocks.push(
 { element, node })` with `clocks: []` at every scope-creation site
-- [x] 2.3 `clock-driver.ts`: `ClockDriver` â€” options `{ node, mode, format,
+- [x] 2.3 `clock-driver.ts`: `ClockDriver` — options `{ node, mode, format,
 digits, target?, clock? }`; surface `start/pause/resume/stop/reset/
 destroy/whenComplete`; rAF on the normalized clock; repaint only when
       the formatted string changes; relative modes by accumulated active
@@ -60,17 +60,17 @@ destroy/whenComplete`; rAF on the normalized clock; repaint only when
 
 ## 3. Designer UI
 
-- [x] 3.1 Clock tool `{ id: 'clock', label: 'Clock', icon: 'â—·' }` in the
+- [x] 3.1 Clock tool `{ id: 'clock', label: 'Clock', icon: '◷' }` in the
       canvas toolbar + placement branch in the canvas overlay;
       `defaultClock` in `state/element-defaults.ts` (wall, `'HH:mm:ss'`,
-      digits `'persian'`, Vazirmatn 600/48, transform â‰ˆ320Ã—84, color
+      digits `'persian'`, Vazirmatn 600/48, transform ≈320×84, color
       `#FFFFFF`, align `'center'`, transparent background); any
       element-type switch that must learn `'clock'` (timeline icon etc.)
 - [x] 3.2 `ClockSections` in `features/inspector/StyleSection.tsx` modeled
       on `TickerSections`: pinned "Clock" CollapseSection (Mode select;
       Format input with token hint; Digits select; countdown target editor
-      â€” Duration/Date-time kind toggle, duration edited in SECONDS â†”
-      stored ms, datetime via `<input type="datetime-local">` â†” stored
+      — Duration/Date-time kind toggle, duration edited in SECONDS ↔
+      stored ms, datetime via `<input type="datetime-local">` ↔ stored
       ISO) + time-driven note + `TextStyleSection` reuse; NO
       DynamicDataSection for clock
 - [x] 3.3 `PlayoutSection.tsx`: `hasContentElement` also true for
@@ -89,10 +89,10 @@ destroy/whenComplete`; rAF on the normalized clock; repaint only when
 
 - [x] 5.1 `apps/designer/tests/e2e/clock.spec.ts` mapping the spec
       scenarios through the real UI (extend `fixtures/designer.ts` with
-      `addClock` etc.): add clock â†’ canvas shows Persian-digit time
-      (`/[Û°-Û¹]{2}:[Û°-Û¹]{2}:[Û°-Û¹]{2}/`) â†’ wall ticks in the preview (text
-      changes within ~1.5s of play) â†’ switch to countdown duration=2s +
-      auto-out + content-driven hold via PlayoutSection â†’ preview plays,
+      `addClock` etc.): add clock → canvas shows Persian-digit time
+      (`/[۰-۹]{2}:[۰-۹]{2}:[۰-۹]{2}/`) → wall ticks in the preview (text
+      changes within ~1.5s of play) → switch to countdown duration=2s +
+      auto-out + content-driven hold via PlayoutSection → preview plays,
       holds, and exits on its own shortly after zero; run via
       `pnpm test:e2e`
 - [x] 5.2 Green gate per CLAUDE.md for touched workspaces (format:check +

@@ -40,13 +40,31 @@ function setIn(obj: NestedFieldValues, path: string[], value: FieldValue): Neste
 }
 
 /**
- * Number of discrete steps a paginated template can advance through with
- * `next()`. There is no pagination model yet (the runtime's `next()` is a stub),
- * so every composition has exactly one step and Next stays disabled. When
- * multi-step templates land, derive the real count from the scene here.
+ * D-029 — can `next()` advance anything in this scene? True when the scene
+ * (or any of its compositions — nested instances advance via the runtime's
+ * per-scope cascade) contains a sequence element. The D-031 steps model will
+ * widen this same predicate when authored steps join the next() dispatch.
  */
-function stepCount(_scene: Scene): number {
-  return 1;
+function canStepScene(scene: Scene): boolean {
+  const docs = [scene, ...(scene.compositions ?? [])];
+  const walk = (children: readonly Scene['layers'][number]['children'][number][]): boolean =>
+    children.some((el) => el.type === 'sequence' || (el.type === 'container' && walk(el.children)));
+  return docs.some((d) => d.layers.some((l) => walk(l.children)));
+}
+
+/**
+ * D-029 — `list` fields bound `sequence-items` (in the scene or any
+ * composition doc) get the per-item dwell column in the preview form.
+ */
+function sequenceListFieldIds(scene: Scene): ReadonlySet<string> {
+  const out = new Set<string>();
+  const docs = [scene, ...(scene.compositions ?? [])];
+  for (const d of docs) {
+    for (const b of d.bindings ?? []) {
+      if (b.target.kind === 'sequence-items') out.add(b.fieldId);
+    }
+  }
+  return out;
 }
 
 /**
@@ -244,12 +262,17 @@ export function PreviewModal({
         </div>
         <div className={s.sidebar}>
           <div className={s.fieldsScroll}>
-            <PreviewFieldForm aggregate={aggregate} values={values} onChange={onFieldChange} />
+            <PreviewFieldForm
+              aggregate={aggregate}
+              values={values}
+              onChange={onFieldChange}
+              dwellFieldIds={sequenceListFieldIds(scene)}
+            />
           </div>
           <div className={s.fixedBar}>
             <PreviewTransport
               paused={paused}
-              canStep={stepCount(scene) > 1}
+              canStep={canStepScene(scene)}
               onPlay={onPlay}
               onPause={onPause}
               onStop={onStop}

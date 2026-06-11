@@ -6,6 +6,7 @@ import type {
   Scene,
 } from '@cg/shared-schema';
 import type { FieldScope } from './types.js';
+import { coerceSequenceItems, sequenceDriverFor } from './sequence-driver.js';
 import { coerceTickerItems, tickerDriverFor } from './ticker-driver.js';
 import { applyTransform, stringifyValue } from './transforms.js';
 
@@ -206,6 +207,17 @@ function applyOne(
       const el = elementMap.get(target.elementId);
       if (!el || !Array.isArray(raw)) return;
       tickerDriverFor(el)?.setItems(coerceTickerItems(raw));
+      return;
+    }
+    case 'sequence-items': {
+      // D-029 — route a list value to the sequence driver, which reconciles
+      // by stable id (the CURRENT item is never yanked mid-display; a text
+      // edit corrects in place; a removal takes effect at the next advance;
+      // per-item dwellMs comes from the list value). Structured value — no
+      // stringify/transform, same as ticker-items.
+      const el = elementMap.get(target.elementId);
+      if (!el || !Array.isArray(raw)) return;
+      sequenceDriverFor(el)?.setItems(coerceSequenceItems(raw));
       return;
     }
   }

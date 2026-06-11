@@ -96,9 +96,17 @@ export class DesignerApp {
     return this.page.getByTestId('canvas-surface');
   }
 
-  /** Select a canvas tool by its toolbar label (Select / Text / Ticker / Clock / Rectangle / Ellipse). */
+  /** Select a canvas tool by its toolbar label (Select / Text / Ticker / Clock / Sequence / …). */
   async selectTool(
-    label: 'Select' | 'Text' | 'Ticker' | 'Clock' | 'Rectangle' | 'Ellipse' | 'Hand (pan)',
+    label:
+      | 'Select'
+      | 'Text'
+      | 'Ticker'
+      | 'Clock'
+      | 'Sequence'
+      | 'Rectangle'
+      | 'Ellipse'
+      | 'Hand (pan)',
   ): Promise<void> {
     await this.page.getByRole('button', { name: label, exact: true }).click();
   }
@@ -129,6 +137,19 @@ export class DesignerApp {
   async addClock(pos: { x: number; y: number } = { x: 240, y: 160 }): Promise<void> {
     await this.selectTool('Clock');
     await this.canvas.click({ position: pos });
+  }
+
+  /** D-029 — add a now/next sequence by placing the Sequence tool (auto-selected). */
+  async addSequence(pos: { x: number; y: number } = { x: 160, y: 200 }): Promise<void> {
+    await this.selectTool('Sequence');
+    await this.canvas.click({ position: pos });
+  }
+
+  /** D-029 — set the SELECTED sequence's default dwell (seconds) via the inspector. */
+  async setSequenceDwell(seconds: number): Promise<void> {
+    const dwell = this.page.getByLabel('default dwell', { exact: true });
+    await dwell.fill(String(seconds));
+    await dwell.press('Enter');
   }
 
   /**

@@ -12,6 +12,7 @@ const tools: { id: DesignerTool; label: string; icon: string }[] = [
   { id: 'text', label: 'Text', icon: 'T' },
   { id: 'ticker', label: 'Ticker', icon: '⇇' },
   { id: 'clock', label: 'Clock', icon: '◷' },
+  { id: 'sequence', label: 'Sequence', icon: '⇉' },
   { id: 'shape', label: 'Rectangle', icon: '▭' },
   { id: 'ellipse', label: 'Ellipse', icon: '○' },
   { id: 'image', label: 'Image', icon: '▦' },

@@ -20,6 +20,7 @@ export type DesignerTool =
   | 'text'
   | 'ticker'
   | 'clock'
+  | 'sequence'
   | 'shape'
   | 'ellipse'
   | 'image'

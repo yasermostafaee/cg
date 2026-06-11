@@ -261,6 +261,93 @@ export const ClockElementSchema = ElementBaseSchema.extend({
 });
 export type ClockElement = z.infer<typeof ClockElementSchema>;
 
+/**
+ * One authored sequence item (D-029). Stable `id` is the reconcile key (a
+ * runtime `update()` with a new list never yanks the CURRENT item
+ * mid-display); `dwellMs` overrides the element's `defaultDwellMs` for this
+ * item only. (The dynamic `list` FIELD item stays the open, extensible
+ * shape — see `fields.ts`; the element stores only what it renders.)
+ */
+export const SequenceItemSchema = z.object({
+  id: z.string().min(1),
+  text: z.string(),
+  dwellMs: z.number().int().positive().optional(),
+});
+export type SequenceItem = z.infer<typeof SequenceItemSchema>;
+
+/** A transition edge: where an item enters from / exits to. `none` = instant cut. */
+const SequenceEdgeSchema = z.enum(['top', 'bottom', 'left', 'right', 'none']);
+
+/**
+ * Sequence / now-next element (D-029) — a clipped box that shows ONE item of
+ * an ordered list at a time and advances on a per-item timer and/or on
+ * command (`CG NEXT` / `runtime.next()`). The move between items is a
+ * DECOMPOSED transition: an IN edge, an OUT edge, and a timing
+ * (`simultaneous` push vs `sequential` out-then-in), each motion over
+ * `transitionMs` — named presets (Push/Slide/Hide-show) are just values over
+ * these fields, and the decomposition is the extensible seam for future
+ * styles. `repeat` counts full passes; a FINITE sequence is a content
+ * source: advancing past the last item of pass N signals completion to the
+ * scope's `holdSource: 'content-driven'` hold (alongside finite tickers and
+ * countdown clocks). Time-driven: scrubbing never moves it.
+ */
+export const SequenceElementSchema = ElementBaseSchema.extend({
+  type: z.literal('sequence'),
+  font: z.object({
+    family: z.string().min(1),
+    weight: FontWeightSchema,
+    style: z.enum(['normal', 'italic']),
+    size: z.number().positive(),
+    lineHeight: z.number().positive(),
+    letterSpacing: z.number(),
+  }),
+  color: HexColorSchema,
+  /** Optional gradient (or solid) text fill; overrides `color` (cf. text). */
+  colorFill: FillSchema.optional(),
+  textShadow: ShadowSchema.optional(),
+  /** Box background colour (defaults to transparent). */
+  backgroundColor: HexColorSchema.optional(),
+  /** Optional gradient (or solid) box background; overrides `backgroundColor`. */
+  backgroundFill: FillSchema.optional(),
+  /** Box border-radius (px). */
+  cornerRadius: z.number().nonnegative().optional(),
+  /** Inner padding inside the box. */
+  padding: PaddingSchema.optional(),
+  /** Horizontal placement of the item text inside the box. */
+  align: z.enum(['start', 'center', 'end']).default('start'),
+  /**
+   * READING direction — drives per-item bidi isolation only. Transition
+   * edges are PHYSICAL and never mirrored (the Persian-natural horizontal
+   * motion is the …-right presets, matching the crawl convention).
+   */
+  direction: z.enum(['ltr', 'rtl']),
+  /** Authored default items; a bound `list` field replaces them at playout. */
+  items: z.array(SequenceItemSchema),
+  /** Per-item display time when the item carries no own `dwellMs`. */
+  defaultDwellMs: z.number().int().positive().default(5000),
+  /** `auto` = dwell timer + next(); `manual` = only next() advances. */
+  advance: z.enum(['auto', 'manual']).default('auto'),
+  /** Where the incoming item enters from. */
+  transitionIn: SequenceEdgeSchema.default('bottom'),
+  /** Where the outgoing item exits to. */
+  transitionOut: SequenceEdgeSchema.default('top'),
+  /**
+   * `simultaneous` = push (both motions together); `sequential` = the exit
+   * completes before the entry begins (total 2 × transitionMs).
+   */
+  transitionTiming: z.enum(['simultaneous', 'sequential']).default('simultaneous'),
+  /** Duration of EACH motion (ms). */
+  transitionMs: z.number().int().positive().default(400),
+  /**
+   * D-029 — full passes through the list before signalling completion
+   * ('infinite' = cycle until stop()). Advancing past the last item of pass
+   * N — by timer or next() — completes the run; the LAST item stays on
+   * screen.
+   */
+  repeat: z.union([z.number().int().min(1), z.literal('infinite')]).default('infinite'),
+});
+export type SequenceElement = z.infer<typeof SequenceElementSchema>;
+
 /** Image element. References an asset by id. */
 export const ImageElementSchema = ElementBaseSchema.extend({
   type: z.literal('image'),
@@ -332,6 +419,7 @@ export type Element =
   | TextElement
   | TickerElement
   | ClockElement
+  | SequenceElement
   | ImageElement
   | ShapeElement
   | LottieElement
@@ -349,6 +437,7 @@ export type ElementInput =
   | TextElement
   | z.input<typeof TickerElementSchema>
   | z.input<typeof ClockElementSchema>
+  | z.input<typeof SequenceElementSchema>
   | ImageElement
   | ShapeElement
   | LottieElement
@@ -391,6 +480,7 @@ export const ElementSchema: z.ZodType<Element, z.ZodTypeDef, ElementInput> = z.l
     TextElementSchema,
     TickerElementSchema,
     ClockElementSchema,
+    SequenceElementSchema,
     ImageElementSchema,
     ShapeElementSchema,
     LottieElementSchema,

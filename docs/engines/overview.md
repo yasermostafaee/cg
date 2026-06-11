@@ -65,8 +65,10 @@ the editor UI and the runtime renderer (the "Where features go" map in
 - **animates** keyframed properties per frame (animation-applier + keyframe-eval),
 - **drives** the broadcast lifecycle and playout timing — entrance → hold → exit,
   auto-out / loop cycles with timed or content-driven holds (PlayoutController +
-  FrameDriver; the ticker's TickerDriver and the countdown clock's ClockDriver
-  signal content completion for content-driven holds),
+  FrameDriver; the ticker's TickerDriver, the countdown clock's ClockDriver, and
+  the finite sequence's SequenceDriver signal content completion for
+  content-driven holds; `runtime.next()` dispatches per scope to sequence
+  drivers — the D-031 steps seam),
 - cascades all of the above through **nested composition instances**.
 
 The renderer talks to its "backend" only through the typed `window.cg` bridge; the

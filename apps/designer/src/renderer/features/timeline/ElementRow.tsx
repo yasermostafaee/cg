@@ -203,6 +203,15 @@ function LayerTypeIcon({ element, color }: { element: Element; color: string }):
       </svg>
     );
   }
+  if (element.type === 'sequence') {
+    // Stacked lines with an advance arrow — one item at a time (D-029).
+    return (
+      <svg {...svg}>
+        <path d="M3 5 h7 M3 8 h7 M3 11 h7" {...stroke} />
+        <path d="M11.5 8 h2.5 M12.5 6.5 L14 8 l-1.5 1.5" {...stroke} />
+      </svg>
+    );
+  }
   // shape kinds
   switch (element.shape) {
     case 'ellipse':
@@ -444,6 +453,7 @@ const TYPE_COLORS: Record<Exclude<Element['type'], 'shape'>, string> = {
   text: '#F59E0B', // amber
   ticker: '#EAB308', // yellow — crawl band
   clock: '#06B6D4', // cyan — time-driven clock
+  sequence: '#84CC16', // lime — now/next rotation
   image: '#EC4899', // pink
   lottie: '#A78BFA', // violet
   'video-placeholder': '#EF4444', // red

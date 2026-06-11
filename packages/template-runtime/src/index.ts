@@ -31,6 +31,21 @@ export {
 } from './clock-driver.js';
 export { formatCountClock, formatWallClock, type ClockDigits } from './clock-format.js';
 export {
+  SequenceDriver,
+  coerceSequenceItems,
+  sequenceDriverFor,
+  type SequenceDriverItem,
+  type SequenceDriverOptions,
+} from './sequence-driver.js';
+export {
+  edgeOffset,
+  sampleTransition,
+  transitionTotalMs,
+  type SequenceEdge,
+  type SequenceTiming,
+  type SequenceTransitionSpec,
+} from './sequence-motion.js';
+export {
   applyAnimationAtFrame,
   collectAnimatedElements,
   type AnimatedElement,

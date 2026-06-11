@@ -39,10 +39,13 @@ export function PreviewFieldForm({
   aggregate,
   values,
   onChange,
+  dwellFieldIds,
 }: {
   aggregate: AggregatedFields;
   values: NestedFieldValues;
   onChange: (path: string[], value: FieldValue) => void;
+  /** D-029 — `list` fields bound `sequence-items` get the per-item dwell column. */
+  dwellFieldIds?: ReadonlySet<string>;
 }): JSX.Element {
   return (
     <AggregateSection
@@ -52,6 +55,7 @@ export function PreviewFieldForm({
       onChange={onChange}
       title="Data"
       depth={0}
+      dwellFieldIds={dwellFieldIds}
     />
   );
 }
@@ -64,6 +68,7 @@ function AggregateSection({
   onChange,
   title,
   depth,
+  dwellFieldIds,
 }: {
   aggregate: AggregatedFields;
   values: NestedFieldValues;
@@ -71,6 +76,7 @@ function AggregateSection({
   onChange: (path: string[], value: FieldValue) => void;
   title: string;
   depth: number;
+  dwellFieldIds?: ReadonlySet<string> | undefined;
 }): JSX.Element {
   const duplicateKeys = findDuplicateKeys(aggregate.fields);
   const invalidCount = aggregate.fields.filter(
@@ -113,6 +119,7 @@ function AggregateSection({
           field={f}
           value={scalarAt(values, f.id)}
           onChange={(v) => onChange([...path, f.id], v)}
+          showDwell={dwellFieldIds?.has(f.id) ?? false}
         />
       ))}
 
@@ -125,6 +132,7 @@ function AggregateSection({
           onChange={onChange}
           title={g.name}
           depth={depth + 1}
+          dwellFieldIds={dwellFieldIds}
         />
       ))}
     </div>
@@ -151,10 +159,12 @@ function FieldRow({
   field,
   value,
   onChange,
+  showDwell,
 }: {
   field: DynamicField;
   value: FieldValue | undefined;
   onChange: (v: FieldValue) => void;
+  showDwell?: boolean | undefined;
 }): JSX.Element {
   const error = validateField(field, value);
   return (
@@ -163,7 +173,7 @@ function FieldRow({
         {field.label || field.id}
         {field.required && <span className={s.required}> *</span>}
       </label>
-      {renderInput(field, value, onChange, error !== null)}
+      {renderInput(field, value, onChange, error !== null, showDwell === true)}
       {error !== null && (
         <span className={s.error} role="alert">
           <span aria-hidden>⚠</span>
@@ -179,6 +189,7 @@ function renderInput(
   value: FieldValue | undefined,
   onChange: (v: FieldValue) => void,
   invalid: boolean,
+  showDwell = false,
 ): JSX.Element {
   const cls = cx(s.input, invalid && s.inputInvalid);
   // A stable accessible name per field (label, else the data key) so the preview
@@ -254,12 +265,14 @@ function renderInput(
         />
       );
     case 'list':
-      // D-028 — the same items editor the ticker inspector uses; every edit
-      // live-updates the crawl (the runtime reconciles by stable item id).
+      // D-028 — the same items editor the ticker/sequence inspectors use;
+      // every edit live-updates the stage (the runtime reconciles by stable
+      // item id). D-029 — sequence-bound lists get the per-item dwell column.
       return (
         <ListItemsEditor
           items={listItems(value, field.default)}
           label={label}
+          showDwell={showDwell}
           onChange={(items) => onChange(items)}
         />
       );

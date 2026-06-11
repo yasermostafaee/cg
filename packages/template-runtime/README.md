@@ -24,19 +24,21 @@ first.
 
 Everything consumers use is re-exported from [`src/index.ts`](./src/index.ts):
 
-| Export                                                 | Role                                                                                                                               |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `createRuntime(scene, options?)`                       | Build + own a runtime; returns the `TemplateRuntime` (`play`/`update`/`stop`/`pause`/`resume`/`remove`/`tick`/`on`).               |
-| `installCasparGlobals(runtime, win?)`                  | Wire CasparCG's bare `window.play/update/stop/next/remove` to the runtime. Returns an uninstaller.                                 |
-| `buildScene(scene, doc?)`                              | Pure DOM builder → `{ container, elementMap, textOriginals, scopeTree }`.                                                          |
-| `applyFieldValues` / `applyScopedFieldValues`          | Apply field values onto built DOM via the scene's bindings (flat / nested-scope).                                                  |
-| `applyAnimationAtFrame`, `collectAnimatedElements`     | Per-frame animation application.                                                                                                   |
-| `interpolateAtFrame`, `applyEasing`, `lerpHexColor`    | Keyframe math.                                                                                                                     |
-| `FrameDriver`, `PlayoutController`                     | The timing primitives (normally owned by `createRuntime`).                                                                         |
-| `TickerDriver`, `tickerDriverFor`, `coerceTickerItems` | The ticker/crawler treadmill — inner repeat loop + `whenComplete()` content completion (D-028; normally owned by `createRuntime`). |
-| `ClockDriver`, `clockInitialText`                      | The digital-clock driver — wall/countup/countdown repaint + countdown `whenComplete()` (D-027; normally owned by `createRuntime`). |
-| `formatWallClock`, `formatCountClock`                  | The pure clock format-string engine (tokens, overflow absorption, digit mapping).                                                  |
-| `LifecycleStateMachine`, `EventBus`, `applyTransform`  | Lifecycle state, events, value transforms.                                                                                         |
+| Export                                                       | Role                                                                                                                               |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `createRuntime(scene, options?)`                             | Build + own a runtime; returns the `TemplateRuntime` (`play`/`update`/`stop`/`pause`/`resume`/`remove`/`tick`/`on`).               |
+| `installCasparGlobals(runtime, win?)`                        | Wire CasparCG's bare `window.play/update/stop/next/remove` to the runtime. Returns an uninstaller.                                 |
+| `buildScene(scene, doc?)`                                    | Pure DOM builder → `{ container, elementMap, textOriginals, scopeTree }`.                                                          |
+| `applyFieldValues` / `applyScopedFieldValues`                | Apply field values onto built DOM via the scene's bindings (flat / nested-scope).                                                  |
+| `applyAnimationAtFrame`, `collectAnimatedElements`           | Per-frame animation application.                                                                                                   |
+| `interpolateAtFrame`, `applyEasing`, `lerpHexColor`          | Keyframe math.                                                                                                                     |
+| `FrameDriver`, `PlayoutController`                           | The timing primitives (normally owned by `createRuntime`).                                                                         |
+| `TickerDriver`, `tickerDriverFor`, `coerceTickerItems`       | The ticker/crawler treadmill — inner repeat loop + `whenComplete()` content completion (D-028; normally owned by `createRuntime`). |
+| `ClockDriver`, `clockInitialText`                            | The digital-clock driver — wall/countup/countdown repaint + countdown `whenComplete()` (D-027; normally owned by `createRuntime`). |
+| `formatWallClock`, `formatCountClock`                        | The pure clock format-string engine (tokens, overflow absorption, digit mapping).                                                  |
+| `SequenceDriver`, `sequenceDriverFor`, `coerceSequenceItems` | The now/next rotation — dwell/advance/passes, `next()`, reconcile + `whenComplete()` (D-029; normally owned by `createRuntime`).   |
+| `edgeOffset`, `sampleTransition`, `transitionTotalMs`        | The pure sequence motion mapper (edge → vector, simultaneous/sequential composition, shared easing).                               |
+| `LifecycleStateMachine`, `EventBus`, `applyTransform`        | Lifecycle state, events, value transforms.                                                                                         |
 
 ## How it's built — module map
 
@@ -53,6 +55,9 @@ createRuntime (runtime.ts)  ─ the orchestrator
  ├─ ClockDriver (clock-driver.ts)         one per clock element: per-second
  │      time repaint; a countdown joins the content completion (whenComplete)
  │      └─ clock-format.ts                pure format-string engine
+ ├─ SequenceDriver (sequence-driver.ts)   one per sequence element: now/next
+ │      rotation (dwell + next()); a finite run joins the content completion
+ │      └─ sequence-motion.ts             pure transition motion mapper
  ├─ LifecycleStateMachine (lifecycle.ts)  pending→playing→on-air→exiting→stopped
  ├─ EventBus (event-bus.ts)               play.start / stop.end / ready / …
  └─ installCasparGlobals (adapters/caspar-globals.ts)   window.* → runtime
@@ -62,11 +67,12 @@ transforms.ts · css.ts   value formatters · baseline stylesheet
 ### scene-builder — `Scene` → DOM + the scope tree
 
 `buildScene` walks layers (sorted by `zIndex`) and creates one node per element
-(`text` / `ticker` / `clock` / `image` / `shape` rendered; `container` /
-`lottie` / `video-placeholder` emit a tagged placeholder div so layout and ids
-survive). It returns a **`scopeTree`** (a `FieldScope`): each composition
-instance owns its **own** `elementMap`, `textOriginals`, container, `animated`
-list, `tickers` + `clocks` lists, and lifecycle `source`.
+(`text` / `ticker` / `clock` / `sequence` / `image` / `shape` rendered;
+`container` / `lottie` / `video-placeholder` emit a tagged placeholder div so
+layout and ids survive). It returns a **`scopeTree`** (a `FieldScope`): each
+composition instance owns its **own** `elementMap`, `textOriginals`, container,
+`animated` list, `tickers` + `clocks` + `sequences` lists, and lifecycle
+`source`.
 
 A `ticker` element builds as a clipped band + an inner `track` (the driver's
 crawl surface) + a static flex-row authoring layout (so the Designer canvas
@@ -79,6 +85,12 @@ plus one LTR-isolated, `tabular-nums` time span, painted with a STATIC initial
 value (wall = now at build, countdown = the full target remaining, countup =
 zero) so the canvas is truthful without a driver; the span is registered as
 `{ element, node }` on `scope.clocks`.
+
+A `sequence` element builds as a clipped single-cell GRID box (`align-items`
+centres; `justify-items` maps `align` 1:1; two items stack in the one cell
+during a transition) with item 1 statically rendered through the driver's
+shared item-node factory (bidi-isolated per `direction`); registered as
+`{ element, host }` on `scope.sequences`.
 
 **Invariants**
 
@@ -96,8 +108,9 @@ declared `bindings`, look up each `fieldId` in the supplied values (falling back
 the field's `default`), run the optional `transform` (`transforms.ts`, e.g.
 `persian-digits`, `date-fa`), and write to the DOM by `target.kind`
 (`text` / `image` / `color` / `visible` / `transform` / `scene-background` /
-`lottie-override` / `ticker-items` — the last routes a `list` value to the
-band's `TickerDriver` via the `tickerDriverFor` registry, which reconciles by
+`lottie-override` / `ticker-items` / `sequence-items` — the last two route a
+`list` value to the element's driver via the `tickerDriverFor` /
+`sequenceDriverFor` registries, which reconcile by
 stable item id).
 
 **Invariants**
@@ -144,11 +157,12 @@ Playout **modes** (`scene.playout.mode`):
 What ends each hold is the orthogonal **`holdSource`** axis (`auto-out` and
 `loop-cycle`; ignored by `manual`): `'timed'` (default) holds for `holdMs`;
 `'content-driven'` holds until the controller's `waitForContent` promise
-resolves — the scope's CONTENT SOURCES complete: its tickers AND its countdown
-clocks (an infinite ticker ⇒ until `stop()`; wall/countup clocks are NOT
-content sources and never extend the hold; no content sources ⇒ a zero-length
-hold, deferred like a 0ms timer). There is **no** `content-driven` mode — a
-stored legacy `mode: 'content-driven'` normalizes to `loop-cycle` +
+resolves — the scope's CONTENT SOURCES complete: its tickers, its countdown
+clocks, AND its sequences (an infinite ticker or infinite sequence ⇒ until
+`stop()`; wall/countup clocks are NOT content sources and never extend the
+hold; no content sources ⇒ a zero-length hold, deferred like a 0ms timer).
+There is **no** `content-driven` mode — a stored legacy
+`mode: 'content-driven'` normalizes to `loop-cycle` +
 `holdSource: 'content-driven'` (`@cg/shared-schema`'s `PlayoutSchema`
 preprocess / `playoutOf`).
 
@@ -156,10 +170,11 @@ There is **no separate continuous-loop mode** — a looping logo is `loop-cycle`
 `repeat: 'infinite'` (and `holdMs: 0` to loop the whole timeline).
 
 `onHoldStart` (optional) fires at **every** hold entry, before the hold timing —
-the runtime RESETS + STARTS the scope's ticker treadmills AND clocks there, so
-each composition open/close cycle replays the crawl from its entering edge /
-re-runs the count from the top (a fresh run per cycle) and a `content-driven`
-wait always awaits the run it just started.
+the runtime RESETS + STARTS the scope's ticker treadmills, clocks, AND
+sequences there, so each composition open/close cycle replays the crawl from
+its entering edge / re-runs the count from the top / restarts the rotation
+from item 1 (a fresh run per cycle) and a `content-driven` wait always awaits
+the run it just started.
 
 **Invariants**
 
@@ -192,8 +207,9 @@ override) on its **own** timeline.
   instance independently without touching the stored template.
 - `tick(frame)` paints one shared frame across the **flattened** animated list — for
   the Designer scrubber, separate from the on-air per-scope drivers. The **ticker
-  crawl and the clock are wall-clock-driven and have no representation in
-  `tick()`** — scrubbing moves neither (by design; D-028/D-027).
+  crawl, the clock, and the sequence are wall-clock-driven and have no
+  representation in `tick()`** — scrubbing moves none of them (by design;
+  D-028/D-027/D-029).
 
 ### TickerDriver — the crawler treadmill + content completion (D-028)
 
@@ -215,10 +231,11 @@ item has fully exited the band (never cut mid-scroll; `'drain'` additionally
 empties the band BETWEEN passes).
 
 **Self-wired completion:** a scope whose composition contains CONTENT SOURCES
-(tickers and/or countdown clocks) gets an internal `waitForContent` =
-`Promise.all` over those drivers' `whenComplete()` — a `content-driven` hold
-ends when ALL the scope's finite tickers AND countdown clocks complete; an
-infinite ticker never resolves, holding the scope until `stop()`; wall/countup
+(tickers, countdown clocks, and/or sequences) gets an internal
+`waitForContent` = `Promise.all` over those drivers' `whenComplete()` — a
+`content-driven` hold ends when ALL the scope's finite tickers, countdown
+clocks, AND finite sequences complete; an infinite ticker or infinite
+sequence never resolves, holding the scope until `stop()`; wall/countup
 clocks are excluded by construction. So preview, the single-file export, and
 `.vcg` need **no boot wiring**, and a content source nested in a child
 composition governs _its own_ scope. An **explicit**
@@ -281,6 +298,50 @@ modes need a real epoch; the ticker's clock is performance-style).
   design — a datetime deadline is absolute and keeps approaching while the
   template idles; only a duration countdown repaints a constant.
 
+### SequenceDriver — the now/next rotation + next() dispatch (D-029)
+
+One driver per sequence element, instantiated by `createRuntime` per scope,
+on the established self-wire surface
+(`start`/`pause`/`resume`/`stop`/`reset`/`destroy`/`whenComplete`, injectable
+`RuntimeClock`) plus `next()` and `setItems()`. ONE item is on stage at a
+time; the move between items is mapped by the pure `sequence-motion.ts`
+module over the DECOMPOSED transition (IN edge / OUT edge / timing — each
+motion `transitionMs`, eased with the shared `ease-in-out`, transform-only
+inside the clipped grid box). The decomposition is the extension seam: a
+future style (fade, crossfade) is new enum member(s) + a mapper case —
+additive, no schema break.
+
+Dwell and transition progress are accumulated ACTIVE time — `pause()`
+freezes the dwell AND an in-flight transition mid-motion; `resume()`
+continues both with no jump. `advance: 'auto'` advances on each item's
+`dwellMs` (falling back to `defaultDwellMs`) and on `next()` (which restarts
+the new item's dwell); `'manual'` runs no timers. Advancing past the last
+item of pass N (`repeat: N`) — by timer or `next()` — completes the run
+exactly once: the LAST item stays on screen and `whenComplete()` resolves;
+`reset()` mints a fresh promise and returns to item 1.
+
+**`runtime.next()` is implemented here**: a per-scope dispatch, parent-first
+over the scope tree, calling each scope's sequence drivers' `next()` and
+resolving immediately — a safe no-op without sequences. The CasparCG
+`CG NEXT` global (caspar-globals) already routes to it. This dispatch is
+DELIBERATELY the seam the D-031 authored steps model will join (steps
+register as another per-scope consumer, defining their precedence vs.
+in-scope sequences in that change).
+
+**Invariants**
+
+- A `next()` before `start()` (during the intro) is IGNORED — no queueing;
+  and a `next()` while a transition is in flight is ignored too (v1 — no
+  mid-motion restarts).
+- `setItems()` (the `sequence-items` binding path) reconciles by stable id:
+  the CURRENT item is never yanked mid-display — a text edit corrects it in
+  place; a removal takes effect at the next advance (the driver remembers
+  the successor position); item order and per-item `dwellMs` come from the
+  new list value.
+- An empty items list is complete by definition at `start()` (the ticker's
+  zero-content parity). Transition edges are PHYSICAL — `direction` drives
+  per-item bidi isolation only, never mirrors motion.
+
 ### animation-applier + keyframe-eval — per-frame writes
 
 `applyAnimationAtFrame` walks an element's `animation.tracks` and writes the
@@ -315,10 +376,12 @@ payloads are dropped silently (a broadcast frame can't write logs).
 
 > Worked examples: the **ticker** (D-028) — schema variant
 > `TickerElementSchema`, `buildTicker` in `scene-builder.ts`, and a per-element
-> runtime driver (`ticker-driver.ts`) wired by `createRuntime` — and the
+> runtime driver (`ticker-driver.ts`) wired by `createRuntime` — the
 > **clock** (D-027), the smallest driver-backed element on the same pattern
 > (`ClockElementSchema`, `buildClock`, `clock-driver.ts` + the pure
-> `clock-format.ts`).
+> `clock-format.ts`) — and the **sequence** (D-029), which adds a structured
+> binding (`sequence-items`) AND a command surface (`next()`) on top of it
+> (`sequence-driver.ts` + the pure `sequence-motion.ts`).
 
 1. **Schema** — add the element variant to `@cg/shared-schema`
    (`packages/shared-schema/src/elements.ts`) and the `Element` union.
@@ -377,7 +440,7 @@ payloads are dropped silently (a broadcast frame can't write logs).
 3. If the behaviour needs content-computed timing, prefer **self-wiring inside
    the runtime** from scene content (cf. content-driven holds: `createRuntime`
    derives each scope's `waitForContent` completion promise from its content
-   elements' `whenComplete()` — tickers + countdown clocks — so
+   elements' `whenComplete()` — tickers + countdown clocks + sequences — so
    preview/exports need no boot wiring) and keep
    `RuntimeBootOptions` as the external override/test seam (cf. `contentHold`
    for the root scope), threaded `RuntimeBootOptions` (`types.ts`) →

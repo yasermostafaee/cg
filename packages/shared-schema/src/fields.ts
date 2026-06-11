@@ -77,8 +77,8 @@ const SelectFieldSchema = DynamicFieldBaseSchema.extend({
 /**
  * One item of a `list` field value. DELIBERATELY extensible: a required
  * stable `id` (the reconcile key) plus open additional fields — each consumer
- * reads the fields it knows (the ticker reads `text`; the repeater (D-030)
- * will read `name`/`number`/…; sequence items (D-029) `text`/`repeat`).
+ * reads the fields it knows (the ticker reads `text`; the sequence (D-029)
+ * reads `text`/`dwellMs`; the repeater (D-030) will read `name`/`number`/…).
  * Don't narrow this shape to one consumer's fields.
  */
 export const ListItemSchema = z.object({ id: z.string().min(1) }).passthrough();

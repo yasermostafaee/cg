@@ -1,5 +1,6 @@
 import type {
   ClockElement,
+  SequenceElement,
   Element,
   ElementAnimation,
   FieldValues,
@@ -70,7 +71,14 @@ export interface TemplateRuntime {
   /** D-020 — continue playback from the frame `pause()` froze. */
   resume(): void;
 
-  /** Optional. Advance to the next state for paginated templates. */
+  /**
+   * D-029 — advance paginated content one step (`CG NEXT`). Implemented by
+   * `createRuntime` as a per-scope dispatch, parent-first: today it routes
+   * to each scope's sequence drivers (a pre-run or mid-transition next() is
+   * the driver's own no-op); the D-031 authored steps model will join the
+   * same dispatch. A template with no consumers is a safe no-op. Optional on
+   * the interface so minimal runtimes stay conformant.
+   */
   next?(): Promise<void>;
 
   /**
@@ -237,6 +245,8 @@ export interface FieldScope {
   tickers: TickerEntry[];
   /** D-027 — clock elements rendered directly in this scope (time-span nodes). */
   clocks: ClockEntry[];
+  /** D-029 — sequence elements rendered directly in this scope (host boxes). */
+  sequences: SequenceEntry[];
   /** D-026 — the comp/scene this scope renders, for its lifecycle/playout/active. */
   source: LifecycleSource;
 }
@@ -255,6 +265,13 @@ export interface ClockEntry {
   element: ClockElement;
   /** The LTR-isolated time span inside the clock box (the box is in the elementMap). */
   node: HTMLElement;
+}
+
+/** D-029 — one built sequence: its element config + the clipped host box. */
+export interface SequenceEntry {
+  element: SequenceElement;
+  /** The clipped grid box the driver renders items into (also in the elementMap). */
+  host: HTMLElement;
 }
 
 /** The lifecycle-relevant fields of the comp/scene a scope renders (D-026). */

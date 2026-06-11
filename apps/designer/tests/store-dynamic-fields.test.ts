@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
-import { defaultText, defaultTicker } from '../src/renderer/state/element-defaults.js';
+import {
+  defaultSequence,
+  defaultText,
+  defaultTicker,
+} from '../src/renderer/state/element-defaults.js';
 
 afterEach(() => {
   designerStore._reset();
@@ -316,3 +320,75 @@ describe('designerStore — D-028 ticker Data key + items', () => {
     expect(f).toMatchObject({ type: 'list', label: 'Headlines', required: true });
   });
 });
+
+describe('designerStore — D-029 sequence Data key + items', () => {
+  function addSequence(id: string): void {
+    designerStore.addElement(defaultSequence(id, 0, 0));
+  }
+  function sequenceItemsOf(
+    id: string,
+  ): { id: string; text: string; dwellMs?: number }[] | undefined {
+    const st = designerStore.get();
+    const scene = editSceneOf(st.scene, st.activeCompositionId)!;
+    for (const layer of scene.layers) {
+      for (const el of layer.children) {
+        if (el.id === id && el.type === 'sequence') return el.items;
+      }
+    }
+    return undefined;
+  }
+
+  it('setElementDataKey on a sequence seeds a LIST field + sequence-items binding', () => {
+    freshScene();
+    addSequence('sq-1');
+    expect(designerStore.setElementDataKey('sq-1', 'rundown')).toBe(true);
+
+    const f = fields().find((x) => x.id === 'rundown');
+    expect(f?.type).toBe('list');
+    if (f?.type === 'list') {
+      expect(f.default).toEqual(sequenceItemsOf('sq-1'));
+      expect(f.default.length).toBeGreaterThan(0);
+    }
+    expect(bindings()).toContainEqual({
+      fieldId: 'rundown',
+      target: { kind: 'sequence-items', elementId: 'sq-1' },
+    });
+  });
+
+  it('one key, one owner — across ticker and sequence too', () => {
+    freshScene();
+    addTickerForConflict('tk-1');
+    addSequence('sq-1');
+    designerStore.setElementDataKey('tk-1', 'shared');
+    expect(designerStore.setElementDataKey('sq-1', 'shared')).toBe(false);
+    expect(
+      bindings().some((b) => b.target.kind === 'sequence-items' && b.target.elementId === 'sq-1'),
+    ).toBe(false);
+  });
+
+  it('setSequenceItems keeps element + bound field in lockstep, preserving dwellMs and extras', () => {
+    freshScene();
+    addSequence('sq-1');
+    designerStore.setElementDataKey('sq-1', 'rundown');
+    const next = [
+      { id: 'n1', text: 'اکنون: خبر ویژه', dwellMs: 8000 },
+      { id: 'n2', text: 'سپس: Brand X', note: 'extra fields survive' },
+    ];
+    designerStore.setSequenceItems('sq-1', next);
+
+    // The element stores what it renders ({id, text, dwellMs?})…
+    expect(sequenceItemsOf('sq-1')).toEqual([
+      { id: 'n1', text: 'اکنون: خبر ویژه', dwellMs: 8000 },
+      { id: 'n2', text: 'سپس: Brand X' },
+    ]);
+    // …while the field default keeps the FULL open item shape.
+    const f = fields().find((x) => x.id === 'rundown');
+    expect(f?.type).toBe('list');
+    if (f?.type === 'list') expect(f.default).toEqual(next);
+  });
+});
+
+/** A ticker for cross-kind conflict tests (avoids shadowing the D-028 helper). */
+function addTickerForConflict(id: string): void {
+  designerStore.addElement(defaultTicker(id, 0, 0));
+}

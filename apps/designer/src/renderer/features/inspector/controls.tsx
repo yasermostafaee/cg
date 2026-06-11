@@ -436,6 +436,8 @@ interface SelectFieldProps<T extends string> {
   label: string;
   value: T;
   options: readonly T[];
+  /** Optional display text per option (same order); falls back to the value. */
+  labels?: readonly string[];
   onCommit: (v: T) => void;
   /** Optional element rendered in a trailing column (e.g. KeyframeIndicator). */
   trailing?: JSX.Element;
@@ -452,9 +454,9 @@ export function SelectField<T extends string>(props: SelectFieldProps<T>): JSX.E
           aria-label={props.label}
           onChange={(e) => props.onCommit(e.target.value as T)}
         >
-          {props.options.map((o) => (
+          {props.options.map((o, i) => (
             <option key={o} value={o}>
-              {o}
+              {props.labels?.[i] ?? o}
             </option>
           ))}
         </Select>

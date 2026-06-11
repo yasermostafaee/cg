@@ -23,19 +23,22 @@ const MODE_LABELS: Record<PlayoutMode, string> = {
 const HOLD_LABELS: Record<HoldSource, string> = {
   timed: 'Timed — hold for a duration',
   'content-driven':
-    'Content-driven — until the content completes (ticker passes / countdown reaching zero)',
+    'Content-driven — until the content completes (ticker passes / countdown / sequence passes)',
 };
 
 /**
- * Does this composition contain a content source — a ticker, or a countdown
- * clock (D-027)? Wall/countup clocks are NOT content sources: they never
- * complete, so they can't end a hold.
+ * Does this composition contain a content source — a ticker, a countdown
+ * clock (D-027), or a sequence (D-029)? Wall/countup clocks are NOT content
+ * sources: they never complete, so they can't end a hold. Tickers and
+ * sequences count regardless of their authored `repeat` (an infinite one
+ * holds until stop — still a meaningful content-driven authoring choice).
  */
 function hasContentElement(scene: Scene): boolean {
   const walk = (children: readonly Element[]): boolean =>
     children.some(
       (el) =>
         el.type === 'ticker' ||
+        el.type === 'sequence' ||
         (el.type === 'clock' && el.mode === 'countdown') ||
         (el.type === 'container' && walk(el.children)),
     );
