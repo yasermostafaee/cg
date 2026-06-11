@@ -30,6 +30,7 @@ const TOOLS: readonly ToolEntry[] = [
   { id: 'ticker', label: 'Ticker', icon: '⇇' },
   { id: 'clock', label: 'Clock', icon: '◷' },
   { id: 'sequence', label: 'Sequence', icon: '⇉' },
+  { id: 'repeater', label: 'Repeater', icon: '▤' },
   { id: 'shape', label: 'Rectangle', icon: '▭' },
   { id: 'ellipse', label: 'Ellipse', icon: '○' },
   // Image tool hidden for now — placement/upload flow needs rework before it

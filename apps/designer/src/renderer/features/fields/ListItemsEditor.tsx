@@ -1,6 +1,7 @@
 import type { ListItem } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
+import type { ListItemColumn } from './repeater-columns.js';
 import * as s from './ListItemsEditor.css.js';
 
 /**
@@ -26,6 +27,12 @@ interface Props {
   label: string;
   /** D-029 — show the optional per-item dwell input (sequence contexts). */
   showDwell?: boolean;
+  /**
+   * D-030 — render one input PER COLUMN instead of the single `text` input
+   * (repeater contexts: columns = the child composition's fields). Unknown
+   * item fields are still preserved.
+   */
+  columns?: readonly ListItemColumn[] | undefined;
 }
 
 let seq = 0;
@@ -58,7 +65,34 @@ function withDwell(item: ListItem, secondsRaw: string): ListItem {
   return next as ListItem;
 }
 
-export function ListItemsEditor({ items, onChange, label, showDwell = false }: Props): JSX.Element {
+/** Display value for one column cell ('' when unset). */
+function cellOf(item: ListItem, key: string): string {
+  const v = (item as Record<string, unknown>)[key];
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number') return String(v);
+  return '';
+}
+
+/** Set one column cell, preserving every other field (number columns coerce). */
+function withCell(item: ListItem, column: ListItemColumn, raw: string): ListItem {
+  const next: Record<string, unknown> = { ...item };
+  if (column.kind === 'number') {
+    const n = Number.parseFloat(raw);
+    if (raw.trim() === '' || !Number.isFinite(n)) delete next[column.key];
+    else next[column.key] = n;
+  } else {
+    next[column.key] = raw;
+  }
+  return next as ListItem;
+}
+
+export function ListItemsEditor({
+  items,
+  onChange,
+  label,
+  showDwell = false,
+  columns,
+}: Props): JSX.Element {
   const move = (from: number, to: number): void => {
     if (to < 0 || to >= items.length) return;
     const next = [...items];
@@ -73,15 +107,33 @@ export function ListItemsEditor({ items, onChange, label, showDwell = false }: P
       {items.length === 0 && <p className={s.empty}>No items yet — add the first one.</p>}
       {items.map((item, i) => (
         <div key={item.id} className={s.itemRow}>
-          <input
-            className={s.itemInput}
-            type="text"
-            value={textOf(item)}
-            aria-label={`${label} item ${String(i + 1)}`}
-            onChange={(e) =>
-              onChange(items.map((it, j) => (j === i ? { ...it, text: e.target.value } : it)))
-            }
-          />
+          {columns !== undefined && columns.length > 0 ? (
+            // D-030 — one input per child-composition field (column).
+            columns.map((col) => (
+              <input
+                key={col.key}
+                className={s.itemInput}
+                type={col.kind === 'number' ? 'number' : 'text'}
+                placeholder={col.label}
+                title={col.label}
+                value={cellOf(item, col.key)}
+                aria-label={`${label} item ${String(i + 1)} ${col.label}`}
+                onChange={(e) =>
+                  onChange(items.map((it, j) => (j === i ? withCell(it, col, e.target.value) : it)))
+                }
+              />
+            ))
+          ) : (
+            <input
+              className={s.itemInput}
+              type="text"
+              value={textOf(item)}
+              aria-label={`${label} item ${String(i + 1)}`}
+              onChange={(e) =>
+                onChange(items.map((it, j) => (j === i ? { ...it, text: e.target.value } : it)))
+              }
+            />
+          )}
           {showDwell && (
             <input
               className={s.dwellInput}

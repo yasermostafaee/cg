@@ -6,6 +6,7 @@ import type {
   Scene,
 } from '@cg/shared-schema';
 import type { FieldScope } from './types.js';
+import { coerceRepeaterItems, repeaterDriverFor } from './repeater-driver.js';
 import { coerceSequenceItems, sequenceDriverFor } from './sequence-driver.js';
 import { coerceTickerItems, tickerDriverFor } from './ticker-driver.js';
 import { applyTransform, stringifyValue } from './transforms.js';
@@ -218,6 +219,17 @@ function applyOne(
       const el = elementMap.get(target.elementId);
       if (!el || !Array.isArray(raw)) return;
       sequenceDriverFor(el)?.setItems(coerceSequenceItems(raw));
+      return;
+    }
+    case 'repeater-items': {
+      // D-030 — route a list value to the repeater driver: positional live
+      // VALUES into the stamped rows mid-run (shorter hides surplus rows,
+      // regrowth re-shows, longer defers to the next fresh play, which
+      // re-stamps the COUNT from this same effective value). Structured —
+      // no stringify/transform.
+      const el = elementMap.get(target.elementId);
+      if (!el || !Array.isArray(raw)) return;
+      repeaterDriverFor(el)?.setItems(coerceRepeaterItems(raw));
       return;
     }
   }

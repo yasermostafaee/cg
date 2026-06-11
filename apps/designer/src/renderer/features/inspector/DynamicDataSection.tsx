@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type {
   DynamicField,
   FieldBinding,
+  RepeaterElement,
   Scene,
   SequenceElement,
   TextElement,
@@ -28,12 +29,18 @@ export function DynamicDataSection({
   element,
   scene,
 }: {
-  element: TextElement | TickerElement | SequenceElement;
+  element: TextElement | TickerElement | SequenceElement | RepeaterElement;
   scene: Scene;
 }): JSX.Element {
   // The element kinds whose Data key backs a LIST field (items binding).
-  const isListElement = element.type === 'ticker' || element.type === 'sequence';
-  const itemsKind = element.type === 'sequence' ? 'sequence-items' : 'ticker-items';
+  const isListElement =
+    element.type === 'ticker' || element.type === 'sequence' || element.type === 'repeater';
+  const itemsKind =
+    element.type === 'repeater'
+      ? 'repeater-items'
+      : element.type === 'sequence'
+        ? 'sequence-items'
+        : 'ticker-items';
   // The convenience binding for this element: the full-text one for text (no
   // placeholder), the items one for a ticker/sequence; its field is what the
   // meta edits.
@@ -54,7 +61,8 @@ export function DynamicDataSection({
     return (
       ((b.target.kind === 'text' && b.target.placeholder === undefined) ||
         b.target.kind === 'ticker-items' ||
-        b.target.kind === 'sequence-items') &&
+        b.target.kind === 'sequence-items' ||
+        b.target.kind === 'repeater-items') &&
       'elementId' in b.target &&
       b.target.elementId !== element.id
     );
@@ -153,7 +161,7 @@ function FieldMeta({
   element,
   field,
 }: {
-  element: TextElement | TickerElement | SequenceElement;
+  element: TextElement | TickerElement | SequenceElement | RepeaterElement;
   field: DynamicField;
 }): JSX.Element {
   const fieldType: 'text' | 'number' = field.type === 'number' ? 'number' : 'text';

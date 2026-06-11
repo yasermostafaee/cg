@@ -3,6 +3,7 @@ import {
   playoutOf,
   type Element,
   type FrameRange,
+  type ListItem,
   type NestedFieldValues,
   type Playout,
   type Scene,
@@ -40,8 +41,13 @@ import { ensureBaselineCss } from './css.js';
 import { EventBus } from './event-bus.js';
 import { LifecycleStateMachine } from './lifecycle.js';
 import { PlayoutController } from './playout-controller.js';
-import { buildScene } from './scene-builder.js';
+import { buildRepeaterRows, buildScene, repeaterItemValues } from './scene-builder.js';
 import { ClockDriver } from './clock-driver.js';
+import {
+  RepeaterDriver,
+  registerRepeaterDriver,
+  type RepeaterRowHandle,
+} from './repeater-driver.js';
 import { SequenceDriver, registerSequenceDriver } from './sequence-driver.js';
 import { TickerDriver, registerTickerDriver } from './ticker-driver.js';
 import type {
@@ -58,6 +64,24 @@ import type {
 interface ScopeNode {
   controller: PlayoutController;
   children: ScopeNode[];
+}
+
+/**
+ * D-030 — one WIRED subtree: the controller tree + every driver of one scope
+ * tree, with symmetric teardown. The static scene is one subtree; a repeater
+ * stamps one more per row at each fresh play and destroys them on re-stamp.
+ * Wiring-tree membership is what the play/pause/resume/next/settle cascades
+ * iterate — distinct from the D-025 NAMESPACE tree (`scope.children`), which
+ * feeds field aggregation/GDD and which stamped rows never join.
+ */
+interface WiredSubtree {
+  node: ScopeNode;
+  tickers: TickerDriver[];
+  clocks: ClockDriver[];
+  sequences: SequenceDriver[];
+  repeaters: RepeaterDriver[];
+  /** Stop + destroy every driver and controller of this subtree, deregister. */
+  destroy(): void;
 }
 
 /** Flatten every scope's animated elements (parent first) into one list. */
@@ -85,109 +109,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // rundown) override the stored playout — and the scope's tickers' own
   // repeat/boundary — for THIS run only, keyed by the scope's instance-name path
   // (`''` = root). `playoutOverride` is the legacy root-only alias for
-  // `scopeOverrides['']`. Hoisted above driver instantiation so ticker overrides
-  // can apply at construction.
+  // `scopeOverrides['']`.
   const overrides: Record<string, PlayoutOverride> = { ...(options.scopeOverrides ?? {}) };
   if (options.playoutOverride !== undefined && overrides[''] === undefined) {
     overrides[''] = options.playoutOverride;
   }
-
-  // D-028 — one treadmill driver per ticker element, per scope (the same child
-  // composition instanced twice gets two independent drivers). Instantiated
-  // BEFORE the initial field application below so a `list` field default can
-  // already reconcile into its driver. The band→driver registry is how the
-  // bindings applier routes `ticker-items` values.
-  // D-027 — clock drivers are instantiated in the same walk (no overrides and
-  // no bindings: the clock has no fields in v1).
-  // D-029 — sequence drivers too; the host→driver registry routes
-  // `sequence-items` bindings, and `runtime.next()` dispatches per scope.
-  const allTickers: TickerDriver[] = [];
-  const tickersByScope = new Map<FieldScope, TickerDriver[]>();
-  const allClocks: ClockDriver[] = [];
-  const clocksByScope = new Map<FieldScope, ClockDriver[]>();
-  const allSequences: SequenceDriver[] = [];
-  const sequencesByScope = new Map<FieldScope, SequenceDriver[]>();
-  const instantiateDrivers = (scope: FieldScope, path: string): void => {
-    const scopeOverride = overrides[path];
-    const drivers = scope.tickers.map((t) => {
-      // The crawl lives in the padding-inset viewport div (CSS padding is
-      // inert for the abspos track), so the travel width shrinks with it.
-      const pad = t.element.padding;
-      const horizontalPad = pad === undefined ? 0 : pad.left + pad.right;
-      const driver = new TickerDriver({
-        band: t.band,
-        track: t.track,
-        viewportWidth: Math.max(0, t.element.transform.size.w - horizontalPad),
-        direction: t.element.direction,
-        speed: t.element.speed,
-        gap: t.element.gap,
-        separator: t.element.separator,
-        items: t.element.items,
-        // D-028 inner loop — the element's authored repeat/boundary, session-
-        // overridable per scope (the same layering as holdMs/repeat).
-        repeat: scopeOverride?.tickerRepeat ?? t.element.repeat,
-        cycleBoundary: scopeOverride?.tickerBoundary ?? t.element.cycleBoundary,
-        clock: options.clock,
-        measure: options.tickerMeasure,
-      });
-      registerTickerDriver(t.band, driver);
-      allTickers.push(driver);
-      return driver;
-    });
-    if (drivers.length > 0) tickersByScope.set(scope, drivers);
-    const clockDrivers = scope.clocks.map((c) => {
-      const driver = new ClockDriver({
-        node: c.node,
-        mode: c.element.mode,
-        format: c.element.format,
-        digits: c.element.digits,
-        target: c.element.target,
-        clock: options.clock,
-      });
-      allClocks.push(driver);
-      return driver;
-    });
-    if (clockDrivers.length > 0) clocksByScope.set(scope, clockDrivers);
-    const sequenceDrivers = scope.sequences.map((s) => {
-      const driver = new SequenceDriver({
-        host: s.host,
-        direction: s.element.direction,
-        items: s.element.items,
-        defaultDwellMs: s.element.defaultDwellMs,
-        advance: s.element.advance,
-        transitionIn: s.element.transitionIn,
-        transitionOut: s.element.transitionOut,
-        transitionTiming: s.element.transitionTiming,
-        transitionMs: s.element.transitionMs,
-        repeat: s.element.repeat,
-        clock: options.clock,
-      });
-      registerSequenceDriver(s.host, driver);
-      allSequences.push(driver);
-      return driver;
-    });
-    if (sequenceDrivers.length > 0) sequencesByScope.set(scope, sequenceDrivers);
-    for (const child of scope.children) {
-      instantiateDrivers(child.scope, path === '' ? child.name : `${path}.${child.name}`);
-    }
-  };
-  instantiateDrivers(built.scopeTree, '');
-
-  applyScopedFieldValues(scene, scene, {}, built.scopeTree);
-
-  // D-026 — every scope (the root scene + each nested instance) owns its animated
-  // elements on `scope.animated`. `allAnimated` is the flat union across the whole
-  // tree, used by tick() (the designer scrubber) to paint one shared frame; each
-  // scope's own controller animates only its own list along its own timeline.
-  const allAnimated: AnimatedElement[] = [];
-  collectScopeAnimated(built.scopeTree, allAnimated);
-
-  // Per-element lifespan gates — only elements with an explicit
-  // `lifespan` are tracked here; the rest stay visible for every
-  // frame (the default behaviour the Designer ships with). We
-  // remember the prior display value so the toggle restores the
-  // element's own visibility instead of forcing `display: block`.
-  const lifespanGates = collectLifespanGates(scene, built.elementMap);
 
   const machine = new LifecycleStateMachine();
   const bus = new EventBus();
@@ -202,10 +128,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // play-once-and-hold: it plays `[activeRange.in → outPoint]` once (an absent
   // `outPoint` is the last active frame) and holds, then the `mode` orchestration
   // (auto-out / loop-cycle) runs, with `holdSource` deciding what ends each hold
-  // (timed `holdMs` vs. the scope's tickers completing). Looping is no longer a
-  // silent default and there is no separate continuous-loop mode — a looping
-  // logo is `loop-cycle` with `repeat: 'infinite'`. The stored `playout` carries
-  // the defaults; `overrides` (hoisted above) layers the session knobs per scope.
+  // (timed `holdMs` vs. the scope's content sources completing). The stored
+  // `playout` carries the defaults; `overrides` layers the session knobs per scope.
   const effectivePlayoutFor = (
     source: { playout?: Playout | undefined },
     path: string,
@@ -234,108 +158,283 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     bus.emit('stop.end');
   };
 
-  // D-026 — build a PARALLEL controller tree over the field-scope tree: one
-  // controller per scope, all on the single project fps (`scene.frameRate`). The
-  // root drives the machine/events; each scope uses its own stored
-  // `playout`/`lifecycle`/`activeRange` merged with its per-scope override, so
-  // play/stop/pause cascade while every child runs its own in→hold→out
-  // independently and can be timed independently in the preview.
   const noop = (): void => undefined;
-  // Assigned once the controller tree exists (the closure below fires long
-  // after). The ROOT settling on its own (auto-out / finite loop-cycle /
-  // finite content-driven) takes the whole template off air: cascade stop()
-  // to every nested scope (settled children no-op per D-026) and freeze every
-  // crawl — otherwise an infinite nested lifecycle keeps timers/rAF rolling
-  // under the hidden stage, with stop() unreachable (machine already
-  // 'stopped').
+  // Assigned once the wiring exists (the closure below fires long after). The
+  // ROOT settling on its own (auto-out / finite loop-cycle / finite
+  // content-driven) takes the whole template off air: cascade stop() to every
+  // nested scope (settled children no-op per D-026) and freeze every driver —
+  // otherwise an infinite nested lifecycle keeps timers/rAF rolling under the
+  // hidden stage, with stop() unreachable (machine already 'stopped').
   let onRootSettled: () => void = noop;
-  const buildScopeController = (scope: FieldScope, isRoot: boolean, path: string): ScopeNode => {
-    const own = scope.animated;
-    // D-028/D-027/D-029 — self-wire the scope's content completion from its
-    // CONTENT SOURCES: every ticker, every countdown clock, and every FINITE
-    // sequence in the scope (`Promise.all` — an infinite ticker or infinite
-    // sequence never resolves ⇒ hold until stop(); wall/countup clocks and
-    // infinite sequences are never awaited; no content sources ⇒ null ⇒ a
-    // zero-length hold). An EXPLICIT boot-option `contentHold` still wins for
-    // the root scope (external override / test seam). Each hold entry resets +
-    // starts the scope's tickers, clocks, and sequences, so every open/close
-    // cycle replays the crawl / re-runs the count / restarts from item 1.
-    const scopeTickers = tickersByScope.get(scope) ?? [];
-    const scopeClocks = clocksByScope.get(scope) ?? [];
-    const scopeCountdowns = scopeClocks.filter((c) => c.mode === 'countdown');
-    const scopeSequences = sequencesByScope.get(scope) ?? [];
-    // ALL tickers and sequences join the wait — an infinite one's
-    // whenComplete() never resolves, which IS how it holds the scope until
-    // stop(); only the clock filter is by kind (wall/countup are excluded
-    // because they're not content sources at all).
-    const contentWait =
-      scopeTickers.length > 0 || scopeCountdowns.length > 0 || scopeSequences.length > 0
-        ? (): Promise<void> =>
-            Promise.all([
-              ...scopeTickers.map((t) => t.whenComplete()),
-              ...scopeCountdowns.map((c) => c.whenComplete()),
-              ...scopeSequences.map((s) => s.whenComplete()),
-            ]).then(() => undefined)
-        : undefined;
-    const externalWait =
-      isRoot && options.contentHold !== undefined ? options.contentHold : undefined;
-    const waitForContent = externalWait ?? contentWait;
-    const stopScopeContent = (): void => {
-      for (const t of scopeTickers) t.stop();
-      for (const c of scopeClocks) c.stop();
-      for (const s of scopeSequences) s.stop();
-    };
-    const controller = new PlayoutController({
-      frameRate: scene.frameRate,
-      active: activeRangeOf(scope.source),
-      lifecycle: scope.source.lifecycle,
-      playout: effectivePlayoutFor(scope.source, path),
-      hasAnimation: own.length > 0,
-      applyFrame: (frame: number): void => {
-        for (const entry of own) applyAnimationAtFrame(entry, frame);
-      },
-      onExitStart: isRoot ? rootOnExitStart : noop,
-      onSettle: isRoot
-        ? (): void => {
-            onRootSettled();
-          }
-        : stopScopeContent,
-      waitForContent:
-        waitForContent === undefined ? undefined : (): Promise<void> => waitForContent(),
-      onHoldStart:
-        scopeTickers.length > 0 || scopeClocks.length > 0 || scopeSequences.length > 0
+
+  // Every wired subtree, in wiring order (the static tree first; repeater rows
+  // join per stamp). The runtime-level cascades iterate this set.
+  const subtrees = new Set<WiredSubtree>();
+
+  /**
+   * D-030 — wire ONE scope subtree: instantiate its drivers (tickers with
+   * per-scope overrides, clocks, sequences) and build its controller tree,
+   * returning a handle with symmetric teardown. Extracted from the original
+   * inline wiring so a repeater can stamp/tear down row subtrees with exactly
+   * the same machinery the static tree uses; behavior-preserving for the
+   * static tree (`isRootSubtree` gates the root-only hooks: the external
+   * `contentHold` override and the global machine/event wiring).
+   */
+  const wireScopeSubtree = (
+    subtreeScope: FieldScope,
+    subtreePath: string,
+    isRootSubtree: boolean,
+  ): WiredSubtree => {
+    const tickers: TickerDriver[] = [];
+    const clocks: ClockDriver[] = [];
+    const sequences: SequenceDriver[] = [];
+    const repeaters: RepeaterDriver[] = [];
+    const controllers: PlayoutController[] = [];
+
+    const wireScope = (scope: FieldScope, path: string, isSubtreeRoot: boolean): ScopeNode => {
+      const scopeOverride = overrides[path];
+      // D-028 — one treadmill driver per ticker element, per scope (the same
+      // child composition instanced twice gets two independent drivers).
+      // Instantiated BEFORE the initial field application so a `list` field
+      // default can already reconcile into its driver. The node→driver
+      // registries are how the bindings applier routes `*-items` values.
+      const scopeTickers = scope.tickers.map((t) => {
+        // The crawl lives in the padding-inset viewport div (CSS padding is
+        // inert for the abspos track), so the travel width shrinks with it.
+        const pad = t.element.padding;
+        const horizontalPad = pad === undefined ? 0 : pad.left + pad.right;
+        const driver = new TickerDriver({
+          band: t.band,
+          track: t.track,
+          viewportWidth: Math.max(0, t.element.transform.size.w - horizontalPad),
+          direction: t.element.direction,
+          speed: t.element.speed,
+          gap: t.element.gap,
+          separator: t.element.separator,
+          items: t.element.items,
+          // D-028 inner loop — the element's authored repeat/boundary, session-
+          // overridable per scope (the same layering as holdMs/repeat).
+          repeat: scopeOverride?.tickerRepeat ?? t.element.repeat,
+          cycleBoundary: scopeOverride?.tickerBoundary ?? t.element.cycleBoundary,
+          clock: options.clock,
+          measure: options.tickerMeasure,
+        });
+        registerTickerDriver(t.band, driver);
+        tickers.push(driver);
+        return driver;
+      });
+      // D-027 — clock drivers (no overrides and no bindings: no fields in v1).
+      const scopeClocks = scope.clocks.map((c) => {
+        const driver = new ClockDriver({
+          node: c.node,
+          mode: c.element.mode,
+          format: c.element.format,
+          digits: c.element.digits,
+          target: c.element.target,
+          clock: options.clock,
+        });
+        clocks.push(driver);
+        return driver;
+      });
+      // D-029 — sequence drivers; the host→driver registry routes
+      // `sequence-items` bindings, and `runtime.next()` dispatches per scope.
+      const scopeSequences = scope.sequences.map((s) => {
+        const driver = new SequenceDriver({
+          host: s.host,
+          direction: s.element.direction,
+          items: s.element.items,
+          defaultDwellMs: s.element.defaultDwellMs,
+          advance: s.element.advance,
+          transitionIn: s.element.transitionIn,
+          transitionOut: s.element.transitionOut,
+          transitionTiming: s.element.transitionTiming,
+          transitionMs: s.element.transitionMs,
+          repeat: s.element.repeat,
+          clock: options.clock,
+        });
+        registerSequenceDriver(s.host, driver);
+        sequences.push(driver);
+        return driver;
+      });
+
+      // D-028/D-027/D-029 — self-wire the scope's content completion from its
+      // CONTENT SOURCES: every ticker, every countdown clock, and every
+      // sequence in the scope. ALL tickers and sequences join the wait — an
+      // infinite one's whenComplete() never resolves, which IS how it holds
+      // the scope until stop(); only the clock filter is by kind (wall/countup
+      // are excluded because they're not content sources at all). No content
+      // sources ⇒ null ⇒ a zero-length hold. An EXPLICIT boot-option
+      // `contentHold` still wins for the ROOT scope (external override / test
+      // seam). Each hold entry resets + starts the scope's drivers, so every
+      // open/close cycle replays the crawl / re-runs the count / restarts
+      // from item 1.
+      const scopeCountdowns = scopeClocks.filter((c) => c.mode === 'countdown');
+      const contentWait =
+        scopeTickers.length > 0 || scopeCountdowns.length > 0 || scopeSequences.length > 0
+          ? (): Promise<void> =>
+              Promise.all([
+                ...scopeTickers.map((t) => t.whenComplete()),
+                ...scopeCountdowns.map((c) => c.whenComplete()),
+                ...scopeSequences.map((s) => s.whenComplete()),
+              ]).then(() => undefined)
+          : undefined;
+      const isGlobalRoot = isSubtreeRoot && isRootSubtree;
+      const externalWait =
+        isGlobalRoot && options.contentHold !== undefined ? options.contentHold : undefined;
+      const waitForContent = externalWait ?? contentWait;
+      const stopScopeContent = (): void => {
+        for (const t of scopeTickers) t.stop();
+        for (const c of scopeClocks) c.stop();
+        for (const s of scopeSequences) s.stop();
+      };
+      const controller = new PlayoutController({
+        frameRate: scene.frameRate,
+        active: activeRangeOf(scope.source),
+        lifecycle: scope.source.lifecycle,
+        playout: effectivePlayoutFor(scope.source, path),
+        hasAnimation: scope.animated.length > 0,
+        applyFrame: (frame: number): void => {
+          for (const entry of scope.animated) applyAnimationAtFrame(entry, frame);
+        },
+        onExitStart: isGlobalRoot ? rootOnExitStart : noop,
+        onSettle: isGlobalRoot
           ? (): void => {
-              // Fresh crawl / fresh count / fresh run from item 1 per
-              // composition cycle (reset BEFORE the wait is requested, so the
-              // controller awaits this run's completion).
-              for (const t of scopeTickers) {
-                t.reset();
-                t.start();
-              }
-              for (const c of scopeClocks) {
-                c.reset();
-                c.start();
-              }
-              for (const s of scopeSequences) {
-                s.reset();
-                s.start();
-              }
+              onRootSettled();
             }
-          : undefined,
-      clock: options.clock,
-    });
-    // Build each child's path by appending its instance name to the parent's
-    // dotted path (root = ''): '' → 'home' → 'home.inner'. This is the key
-    // `effectivePlayoutFor`/`scopeOverrides` use to target one scope's timing.
-    const children = scope.children.map((c) =>
-      buildScopeController(c.scope, false, path === '' ? c.name : `${path}.${c.name}`),
-    );
-    return { controller, children };
+          : stopScopeContent,
+        waitForContent:
+          waitForContent === undefined ? undefined : (): Promise<void> => waitForContent(),
+        onHoldStart:
+          scopeTickers.length > 0 || scopeClocks.length > 0 || scopeSequences.length > 0
+            ? (): void => {
+                // Fresh crawl / fresh count / fresh run from item 1 per
+                // composition cycle (reset BEFORE the wait is requested, so
+                // the controller awaits this run's completion).
+                for (const t of scopeTickers) {
+                  t.reset();
+                  t.start();
+                }
+                for (const c of scopeClocks) {
+                  c.reset();
+                  c.start();
+                }
+                for (const s of scopeSequences) {
+                  s.reset();
+                  s.start();
+                }
+              }
+            : undefined,
+        clock: options.clock,
+      });
+      controllers.push(controller);
+      // Build each child's path by appending its instance name to the parent's
+      // dotted path (root = ''): '' → 'home' → 'home.inner'. This is the key
+      // `effectivePlayoutFor`/`scopeOverrides` use to target one scope's timing.
+      const children = scope.children.map((c) =>
+        wireScope(c.scope, path === '' ? c.name : `${path}.${c.name}`, false),
+      );
+      const node: ScopeNode = { controller, children };
+
+      // D-030 — repeater drivers (after the node exists: stamped rows attach
+      // under it so the cascade reaches them like authored children). Each
+      // stamp wires a fresh ROW subtree through wireScopeSubtree — real
+      // per-scope semantics by reuse — and teardown is symmetric. Row scopes
+      // are NOT in scope.children, so they never join the D-025 namespace
+      // aggregation; the single bound list field is the data surface.
+      for (const entry of scope.repeaters) {
+        const comp = scene.compositions?.find((c) => c.id === entry.element.compositionId);
+        const stampRows = (items: ListItem[]): RepeaterRowHandle[] => {
+          const rows = buildRepeaterRows(
+            scene,
+            entry.element,
+            entry.host,
+            items.length,
+            { depth: entry.depth, visited: entry.visited },
+            doc,
+          );
+          return rows.map((row, i) => {
+            const rowSub = wireScopeSubtree(
+              row.scope,
+              `${path}#${entry.element.id}[${String(i)}]`,
+              false,
+            );
+            node.children.push(rowSub.node);
+            const rowAnimated: AnimatedElement[] = [];
+            collectScopeAnimated(row.scope, rowAnimated);
+            const apply = (values: Record<string, unknown>): void => {
+              if (comp !== undefined) {
+                applyScopedFieldValues(scene, comp, values as NestedFieldValues, row.scope);
+              }
+            };
+            const item = items[i];
+            if (item !== undefined) apply(repeaterItemValues(item));
+            return {
+              cell: row.cell,
+              apply,
+              applyFrame: (frame: number): void => {
+                for (const e of rowAnimated) applyAnimationAtFrame(e, frame);
+              },
+              destroy: (): void => {
+                rowSub.destroy();
+                const idx = node.children.indexOf(rowSub.node);
+                if (idx >= 0) node.children.splice(idx, 1);
+                row.cell.remove();
+              },
+            };
+          });
+        };
+        const driver = new RepeaterDriver({ element: entry.element, host: entry.host, stampRows });
+        registerRepeaterDriver(entry.host, driver);
+        repeaters.push(driver);
+      }
+      return node;
+    };
+
+    const node = wireScope(subtreeScope, subtreePath, true);
+    const sub: WiredSubtree = {
+      node,
+      tickers,
+      clocks,
+      sequences,
+      repeaters,
+      destroy(): void {
+        // Symmetric teardown: rows first (each tears down its OWN subtree),
+        // then controllers (stop timers/rAF before the drivers release their
+        // DOM), then drivers — matching remove()'s original order.
+        for (const r of repeaters) r.destroy();
+        for (const c of controllers) c.destroy();
+        for (const t of tickers) t.destroy();
+        for (const c of clocks) c.destroy();
+        for (const s of sequences) s.destroy();
+        subtrees.delete(sub);
+      },
+    };
+    subtrees.add(sub);
+    return sub;
   };
-  const rootNode = buildScopeController(built.scopeTree, true, '');
+
+  // The static scene is the first (and for non-repeater scenes, only) subtree.
+  const rootSub = wireScopeSubtree(built.scopeTree, '', true);
+  const rootNode = rootSub.node;
+
+  applyScopedFieldValues(scene, scene, {}, built.scopeTree);
+
+  // D-026 — every scope (the root scene + each nested instance) owns its animated
+  // elements on `scope.animated`. `allAnimated` is the flat union across the whole
+  // tree, used by tick() (the designer scrubber) to paint one shared frame; each
+  // scope's own controller animates only its own list along its own timeline.
+  const allAnimated: AnimatedElement[] = [];
+  collectScopeAnimated(built.scopeTree, allAnimated);
+
+  // Per-element lifespan gates — only elements with an explicit
+  // `lifespan` are tracked here; the rest stay visible for every
+  // frame (the default behaviour the Designer ships with). We
+  // remember the prior display value so the toggle restores the
+  // element's own visibility instead of forcing `display: block`.
+  const lifespanGates = collectLifespanGates(scene, built.elementMap);
 
   // Apply an operation to every controller in the tree (parent first), so
-  // play/stop/pause/resume/remove cascade to every nested instance.
+  // play/stop/pause/remove cascade to every nested instance.
   const cascade = (node: ScopeNode, op: (c: PlayoutController) => void): void => {
     op(node.controller);
     for (const child of node.children) cascade(child, op);
@@ -343,22 +442,27 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
   onRootSettled = (): void => {
     cascade(rootNode, (c) => c.stop()); // root itself is settled — a no-op
-    for (const t of allTickers) t.stop();
-    for (const c of allClocks) c.stop();
-    for (const s of allSequences) s.stop();
+    for (const sub of subtrees) {
+      for (const t of sub.tickers) t.stop();
+      for (const c of sub.clocks) c.stop();
+      for (const s of sub.sequences) s.stop();
+      for (const r of sub.repeaters) r.stop();
+    }
     rootOnSettle();
   };
 
-  // D-029 — the per-scope next() dispatch, parent-first over the scope tree.
-  // Today the consumers are each scope's sequence drivers; this dispatch is
-  // DELIBERATELY the seam the D-031 authored steps model will join (steps
-  // register as another per-scope consumer here, defining their precedence
-  // vs. in-scope sequences in that change). A template with no consumers is
-  // a safe no-op — the optional `TemplateRuntime.next?` contract that the
-  // CasparCG `CG NEXT` global (caspar-globals) already calls.
-  const dispatchNext = (scope: FieldScope): void => {
-    for (const s of sequencesByScope.get(scope) ?? []) s.next();
-    for (const child of scope.children) dispatchNext(child.scope);
+  // D-029 — the per-scope next() dispatch, parent-first in wiring order (the
+  // static tree first, then any stamped subtrees in stamp order). Today the
+  // consumers are each scope's sequence drivers; this dispatch is DELIBERATELY
+  // the seam the D-031 authored steps model will join (steps register as
+  // another per-scope consumer here, defining their precedence vs. in-scope
+  // sequences in that change). A template with no consumers is a safe no-op —
+  // the optional `TemplateRuntime.next?` contract that the CasparCG `CG NEXT`
+  // global (caspar-globals) already calls.
+  const dispatchNext = (): void => {
+    for (const sub of subtrees) {
+      for (const s of sub.sequences) s.next();
+    }
   };
 
   const runtime: TemplateRuntime = {
@@ -379,20 +483,33 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       bus.emit('play.start');
       doc.body.classList.remove('cg-pending');
       machine.transition('on-air');
+      // D-030 — repeaters re-stamp FIRST: the row COUNT comes from the
+      // CURRENT effective items (a retained pre-play update() included),
+      // and the fresh row subtrees join `subtrees` before the per-kind
+      // resets below and the controller cascade — Set iteration visits
+      // entries added mid-walk, so nested repeaters inside rows stamp too.
+      for (const sub of subtrees) {
+        for (const r of sub.repeaters) {
+          r.reset();
+          r.start();
+        }
+      }
       // D-028 — a fresh run restarts every crawl from its entering edge (the
       // controllers' first hold then starts the treadmills).
-      for (const t of allTickers) t.reset();
+      for (const sub of subtrees) for (const t of sub.tickers) t.reset();
       // D-027 — clocks reset to their initial value; ABSOLUTE clocks (wall,
       // datetime countdown) start now so they tick during the intro, while
       // relative counts display their initial value until their hold-entry
       // run begins (the hold entry resets + starts every scope clock).
-      for (const c of allClocks) {
-        c.reset();
-        if (c.isAbsolute) c.start();
+      for (const sub of subtrees) {
+        for (const c of sub.clocks) {
+          c.reset();
+          if (c.isAbsolute) c.start();
+        }
       }
       // D-029 — sequences reset to item 1, displayed statically through the
       // intro; advancing begins at hold entry (which resets + starts them).
-      for (const s of allSequences) s.reset();
+      for (const sub of subtrees) for (const s of sub.sequences) s.reset();
       // Play the IN once and hold (no full-range loop, no auto-outro by default);
       // the mode orchestration (auto-out / loop-cycle / content-driven) then runs.
       // Absent lifecycle: the whole timeline is the entrance and the hold is its
@@ -430,34 +547,33 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       cascade(rootNode, (c) => c.pause());
       // D-028/D-027/D-029 — freeze the crawls, clocks, and sequences (dwell
       // AND in-flight transitions) in lockstep with the frozen hold timers.
-      for (const t of allTickers) t.pause();
-      for (const c of allClocks) c.pause();
-      for (const s of allSequences) s.pause();
+      for (const sub of subtrees) for (const t of sub.tickers) t.pause();
+      for (const sub of subtrees) for (const c of sub.clocks) c.pause();
+      for (const sub of subtrees) for (const s of sub.sequences) s.pause();
     },
 
     resume(): void {
       if (machine.state === 'removed') return;
       cascade(rootNode, (c) => c.resume());
-      for (const t of allTickers) t.resume();
-      for (const c of allClocks) c.resume();
-      for (const s of allSequences) s.resume();
+      for (const sub of subtrees) for (const t of sub.tickers) t.resume();
+      for (const sub of subtrees) for (const c of sub.clocks) c.resume();
+      for (const sub of subtrees) for (const s of sub.sequences) s.resume();
     },
 
     async next(): Promise<void> {
       if (machine.state === 'removed') return;
-      // D-029 — implemented for real: cascade parent-first to every scope's
+      // D-029 — implemented for real: dispatch to every wired scope's
       // sequence drivers, resolving immediately (a pre-run or mid-transition
       // next() is each driver's own no-op). See dispatchNext for the D-031
       // steps-model seam.
-      dispatchNext(built.scopeTree);
+      dispatchNext();
     },
 
     remove(): void {
       if (machine.state === 'removed') return;
-      cascade(rootNode, (c) => c.destroy());
-      for (const t of allTickers) t.destroy();
-      for (const c of allClocks) c.destroy();
-      for (const s of allSequences) s.destroy();
+      // Symmetric subtree teardown (controllers, then drivers — see
+      // WiredSubtree.destroy). Copy first: destroy() deregisters itself.
+      for (const sub of [...subtrees]) sub.destroy();
       machine.forceTransition('removed');
       bus.clear();
       built.container.remove();
@@ -467,6 +583,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     tick(frame: number): void {
       for (const entry of allAnimated) applyAnimationAtFrame(entry, frame);
+      // D-030 — scrub parity: stamped repeater rows paint the same frame as
+      // authored nested instances (their scopes aren't in the static
+      // allAnimated list, so walk the live rows).
+      for (const sub of subtrees) {
+        for (const r of sub.repeaters) {
+          for (const row of r.stampedRows) row.applyFrame(frame);
+        }
+      }
       for (const gate of lifespanGates) {
         const inside = frame >= gate.lifespan.in && frame <= gate.lifespan.out;
         gate.node.style.display = inside ? gate.naturalDisplay : 'none';

@@ -5,6 +5,8 @@ import type {
   Fill,
   Filter,
   Layer,
+  ListItem,
+  RepeaterElement,
   Scene,
   SequenceElement,
   Shadow,
@@ -52,6 +54,7 @@ function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
     tickers: [],
     clocks: [],
     sequences: [],
+    repeaters: [],
     source,
   };
 }
@@ -127,6 +130,8 @@ function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null 
       return buildClock(element, ctx);
     case 'sequence':
       return buildSequence(element, ctx);
+    case 'repeater':
+      return buildRepeater(element, ctx);
     case 'image':
       return buildImage(element, ctx.doc);
     case 'shape':
@@ -597,6 +602,148 @@ function buildSequence(element: SequenceElement, ctx: BuildCtx): HTMLElement {
   }
   ctx.scope.sequences.push({ element, host: el });
   return el;
+}
+
+/**
+ * D-030 — render a repeater element: the clipped outer box, registered on
+ * `scope.repeaters` with the build-context guards (depth/visited) so the
+ * runtime's {@link RepeaterDriver} can re-stamp rows at every fresh play
+ * through the SAME machinery. Build-time stamps the AUTHORED items so the
+ * editor canvas shows rows statically (values applied by the caller — the
+ * builder itself has no bindings dependency). CRITICAL: row scopes are NOT
+ * pushed into `scope.children` — that list feeds the D-025 namespace
+ * aggregation (preview form groups / GDD namespaces); rows live only in the
+ * wiring tree.
+ */
+function buildRepeater(element: RepeaterElement, ctx: BuildCtx): HTMLElement {
+  const el = ctx.doc.createElement('div');
+  el.dataset['cgElementId'] = element.id;
+  applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
+  el.style.overflow = 'hidden';
+  ctx.scope.repeaters.push({
+    element,
+    host: el,
+    depth: ctx.depth,
+    visited: ctx.visited,
+  });
+  // Static authored stamp (count only — the runtime driver re-stamps with
+  // values; golden/builder tests see the raw row structure).
+  buildRepeaterRows(
+    ctx.scene,
+    element,
+    el,
+    clampRowCount(element, element.items.length),
+    { depth: ctx.depth, visited: ctx.visited },
+    ctx.doc,
+  );
+  return el;
+}
+
+/** The effective stamped row count: the list length clamped by `maxItems`. */
+export function clampRowCount(element: Pick<RepeaterElement, 'maxItems'>, count: number): number {
+  return element.maxItems !== undefined ? Math.min(count, element.maxItems) : count;
+}
+
+/** One stamped repeater row: the flow-positioned cell + its fresh scope. */
+export interface RepeaterRowBuild {
+  cell: HTMLElement;
+  scope: FieldScope;
+}
+
+/**
+ * D-030 — stamp `count` rows of `element`'s child composition into `host`,
+ * mirroring {@link buildComposition}'s inner stage per row: a cell positioned
+ * in the flow (`'column'` ⇒ cells fill the box width and stack top-to-bottom;
+ * `'row'` ⇒ cells fill the box height and lay along the row axis ordered by
+ * `flow`), the child's aspect preserved, with the zero-resolution guard.
+ * Each row gets a FRESH scope built from the child's layers with depth+1 and
+ * visited+childId (the cycle/runaway guard renders an empty box if forced).
+ * Returns the rows in order; the caller applies values / wires drivers.
+ */
+export function buildRepeaterRows(
+  scene: Scene,
+  element: RepeaterElement,
+  host: HTMLElement,
+  count: number,
+  guard: { depth: number; visited: ReadonlySet<string> },
+  doc: Document,
+): RepeaterRowBuild[] {
+  const comp = scene.compositions?.find((c) => c.id === element.compositionId);
+  if (
+    comp === undefined ||
+    guard.depth >= MAX_COMPOSITION_DEPTH ||
+    guard.visited.has(element.compositionId)
+  ) {
+    return []; // missing/over-deep/cyclic reference ⇒ the empty clipped box
+  }
+  const boxW = element.transform.size.w;
+  const boxH = element.transform.size.h;
+  // Cross-axis fit, aspect preserved; a zero-resolution child scales 1 (the
+  // buildComposition guard) so nothing divides by zero.
+  const scale =
+    element.direction === 'column'
+      ? comp.resolution.width === 0
+        ? 1
+        : boxW / comp.resolution.width
+      : comp.resolution.height === 0
+        ? 1
+        : boxH / comp.resolution.height;
+  const cellW = comp.resolution.width * scale;
+  const cellH = comp.resolution.height * scale;
+
+  const rows: RepeaterRowBuild[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const cell = doc.createElement('div');
+    cell.dataset['cgRepeaterRow'] = String(i);
+    cell.style.position = 'absolute';
+    cell.style.overflow = 'hidden';
+    cell.style.width = `${cellW}px`;
+    cell.style.height = `${cellH}px`;
+    if (element.direction === 'column') {
+      cell.style.left = '0';
+      cell.style.top = `${i * (cellH + element.gap)}px`;
+    } else {
+      const offset = i * (cellW + element.gap);
+      cell.style.top = '0';
+      // `flow` orders the ROW axis: 'rtl' lays row 1 at the right edge.
+      cell.style.left = element.flow === 'rtl' ? `${boxW - cellW - offset}px` : `${offset}px`;
+    }
+
+    const inner = doc.createElement('div');
+    inner.className = 'cg-comp-inner';
+    inner.style.position = 'absolute';
+    inner.style.left = '0';
+    inner.style.top = '0';
+    inner.style.width = `${comp.resolution.width}px`;
+    inner.style.height = `${comp.resolution.height}px`;
+    inner.style.transformOrigin = '0 0';
+    inner.style.transform = `scale(${String(scale)}, ${String(scale)})`;
+    if (comp.background !== 'transparent') inner.style.background = comp.background;
+
+    // A fresh ROW scope — real per-scope semantics (lifecycle, drivers,
+    // content holds) by construction, but NEVER in `scope.children`.
+    const rowScope = newScope(inner, comp);
+    const rowCtx: BuildCtx = {
+      doc,
+      scene,
+      scope: rowScope,
+      depth: guard.depth + 1,
+      visited: new Set([...guard.visited, element.compositionId]),
+    };
+    for (const layer of comp.layers) {
+      inner.appendChild(buildLayer(layer, rowCtx));
+    }
+    cell.appendChild(inner);
+    host.appendChild(cell);
+    rows.push({ cell, scope: rowScope });
+  }
+  return rows;
+}
+
+/** Strip the reconcile `id` off a list item — the rest are child field values. */
+export function repeaterItemValues(item: ListItem): Record<string, unknown> {
+  const { id: _id, ...values } = item as Record<string, unknown>;
+  return values;
 }
 
 function buildImage(element: ImageElement, doc: Document): HTMLElement {

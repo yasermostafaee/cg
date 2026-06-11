@@ -212,6 +212,16 @@ function LayerTypeIcon({ element, color }: { element: Element; color: string }):
       </svg>
     );
   }
+  if (element.type === 'repeater') {
+    // Stacked row cells — one child instance per data row (D-030).
+    return (
+      <svg {...svg}>
+        <rect x="2.5" y="3" width="11" height="3" rx="0.8" {...stroke} />
+        <rect x="2.5" y="7" width="11" height="3" rx="0.8" {...stroke} />
+        <rect x="2.5" y="11" width="11" height="3" rx="0.8" {...stroke} />
+      </svg>
+    );
+  }
   // shape kinds
   switch (element.shape) {
     case 'ellipse':
@@ -454,6 +464,7 @@ const TYPE_COLORS: Record<Exclude<Element['type'], 'shape'>, string> = {
   ticker: '#EAB308', // yellow — crawl band
   clock: '#06B6D4', // cyan — time-driven clock
   sequence: '#84CC16', // lime — now/next rotation
+  repeater: '#10B981', // emerald — data-driven rows
   image: '#EC4899', // pink
   lottie: '#A78BFA', // violet
   'video-placeholder': '#EF4444', // red

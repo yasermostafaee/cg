@@ -104,6 +104,7 @@ export class DesignerApp {
       | 'Ticker'
       | 'Clock'
       | 'Sequence'
+      | 'Repeater'
       | 'Rectangle'
       | 'Ellipse'
       | 'Hand (pan)',
@@ -150,6 +151,18 @@ export class DesignerApp {
     const dwell = this.page.getByLabel('default dwell', { exact: true });
     await dwell.fill(String(seconds));
     await dwell.press('Enter');
+  }
+
+  /** D-030 — add a repeater by placing the Repeater tool (guard-gated insert). */
+  async addRepeater(pos: { x: number; y: number } = { x: 200, y: 120 }): Promise<void> {
+    await this.selectTool('Repeater');
+    await this.canvas.click({ position: pos });
+  }
+
+  /** D-020 — add the default out point via the COMPOSITION inspector link. */
+  async addOutPoint(): Promise<void> {
+    await this.deselect();
+    await this.page.getByRole('button', { name: 'Add an out point' }).click();
   }
 
   /**

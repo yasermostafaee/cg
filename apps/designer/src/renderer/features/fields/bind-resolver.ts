@@ -54,13 +54,17 @@ export function resolveBinding(field: DynamicField, element: Element): FieldBind
       target: { kind: 'transform', elementId: element.id, property: 'opacity' },
     };
   }
-  // D-028/D-029 — a list field drives a ticker's or a sequence's items.
+  // D-028/D-029/D-030 — a list field drives a ticker's, sequence's, or
+  // repeater's items.
   if (field.type === 'list') {
     if (element.type === 'ticker') {
       return { fieldId: field.id, target: { kind: 'ticker-items', elementId: element.id } };
     }
     if (element.type === 'sequence') {
       return { fieldId: field.id, target: { kind: 'sequence-items', elementId: element.id } };
+    }
+    if (element.type === 'repeater') {
+      return { fieldId: field.id, target: { kind: 'repeater-items', elementId: element.id } };
     }
     return null;
   }
@@ -114,5 +118,7 @@ export function describeBinding(binding: FieldBinding, nameOf?: (id: string) => 
       return `ticker items ${on(t.elementId)}`;
     case 'sequence-items':
       return `sequence items ${on(t.elementId)}`;
+    case 'repeater-items':
+      return `repeater rows ${on(t.elementId)}`;
   }
 }

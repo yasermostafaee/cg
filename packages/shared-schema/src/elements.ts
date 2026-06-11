@@ -13,6 +13,7 @@ import {
   ZIndexSchema,
 } from './primitives.js';
 import { ElementAnimationSchema, FrameRangeSchema } from './animation.js';
+import { ListItemSchema } from './fields.js';
 
 const TextDirectionSchema = z.enum(['auto', 'ltr', 'rtl']);
 
@@ -348,6 +349,39 @@ export const SequenceElementSchema = ElementBaseSchema.extend({
 });
 export type SequenceElement = z.infer<typeof SequenceElementSchema>;
 
+/**
+ * Repeater / data-driven layout (D-030) — a clipped box that renders one
+ * instance of a referenced child composition PER ROW of a data list, laid
+ * out automatically along an axis, each cell scaled to fit the box's cross
+ * axis with the child's aspect preserved. The data surface is ONE `list`
+ * field (binding target `repeater-items`) whose item keys are the child
+ * composition's field ids; the authored `items` are the design-time rows
+ * and the Data-key seed. Liveness model B: row VALUES update live mid-hold,
+ * the row COUNT is stamped at each fresh `play()`. Every stamped row is a
+ * REAL nested scope (own lifecycle, cascade, content-driven hold — the
+ * D-025/D-026 machinery) but rows never join the per-instance field
+ * NAMESPACES — the single list field is the data surface.
+ */
+export const RepeaterElementSchema = ElementBaseSchema.extend({
+  type: z.literal('repeater'),
+  /** The child composition stamped per row (cycle-guarded at author time). */
+  compositionId: IdSchema,
+  /** Layout axis: cells stack top-to-bottom or along the row axis. */
+  direction: z.enum(['column', 'row']).default('column'),
+  /** Row-axis order ('rtl' = first row at the right); ignored for column. */
+  flow: z.enum(['rtl', 'ltr']).default('rtl'),
+  /** Space between cells (px). */
+  gap: z.number().min(0).default(8),
+  /** Optional stamp clamp — at most this many rows per fresh play. */
+  maxItems: z.number().int().positive().optional(),
+  /**
+   * Authored design-time rows — the open D-028 list-item shape (stable `id`
+   * + open fields); row keys are the child composition's field ids.
+   */
+  items: z.array(ListItemSchema).default([]),
+});
+export type RepeaterElement = z.infer<typeof RepeaterElementSchema>;
+
 /** Image element. References an asset by id. */
 export const ImageElementSchema = ElementBaseSchema.extend({
   type: z.literal('image'),
@@ -420,6 +454,7 @@ export type Element =
   | TickerElement
   | ClockElement
   | SequenceElement
+  | RepeaterElement
   | ImageElement
   | ShapeElement
   | LottieElement
@@ -438,6 +473,7 @@ export type ElementInput =
   | z.input<typeof TickerElementSchema>
   | z.input<typeof ClockElementSchema>
   | z.input<typeof SequenceElementSchema>
+  | z.input<typeof RepeaterElementSchema>
   | ImageElement
   | ShapeElement
   | LottieElement
@@ -481,6 +517,7 @@ export const ElementSchema: z.ZodType<Element, z.ZodTypeDef, ElementInput> = z.l
     TickerElementSchema,
     ClockElementSchema,
     SequenceElementSchema,
+    RepeaterElementSchema,
     ImageElementSchema,
     ShapeElementSchema,
     LottieElementSchema,

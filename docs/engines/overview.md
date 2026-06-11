@@ -68,7 +68,9 @@ the editor UI and the runtime renderer (the "Where features go" map in
   FrameDriver; the ticker's TickerDriver, the countdown clock's ClockDriver, and
   the finite sequence's SequenceDriver signal content completion for
   content-driven holds; `runtime.next()` dispatches per scope to sequence
-  drivers — the D-031 steps seam),
+  drivers — the D-031 steps seam; the repeater's RepeaterDriver stamps one
+  child-composition scope per data row through the `wireScopeSubtree`
+  factory — count at play, values live),
 - cascades all of the above through **nested composition instances**.
 
 The renderer talks to its "backend" only through the typed `window.cg` bridge; the

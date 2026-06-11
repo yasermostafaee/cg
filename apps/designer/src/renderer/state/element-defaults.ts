@@ -1,6 +1,9 @@
 import type {
   ClockElement,
+  DynamicField,
   ImageElement,
+  ListItem,
+  RepeaterElement,
   SequenceElement,
   ShapeElement,
   TextElement,
@@ -171,6 +174,48 @@ export function defaultSequence(id: string, x: number, y: number): SequenceEleme
     transitionTiming: 'simultaneous',
     transitionMs: 400,
     repeat: 'infinite',
+  };
+}
+
+/**
+ * Repeater / data-driven layout (D-030). References the given child
+ * composition and seeds 3 rows whose keys are the child's field ids with
+ * their default values (a field-less child seeds 3 bare `{id}` rows) — the
+ * same rows a Data key later seeds into the bound `list` field.
+ */
+export function defaultRepeater(
+  id: string,
+  x: number,
+  y: number,
+  child: { id: string; fields?: readonly DynamicField[] | undefined },
+): RepeaterElement {
+  // Seed ONLY fields that carry a standard `default` — writing a key for a
+  // default-less kind (e.g. an image field's `defaultAssetId`) would OVERRIDE
+  // that field's real default at apply time (`fieldId in values` wins over
+  // the fallback); an omitted key falls back correctly at runtime.
+  const seedRow = (n: number): ListItem =>
+    ({
+      id: `row-${String(n)}`,
+      ...Object.fromEntries(
+        (child.fields ?? [])
+          .filter((f) => 'default' in f)
+          .map((f) => [f.id, (f as { default: unknown }).default]),
+      ),
+    }) as ListItem;
+  return {
+    id,
+    name: 'Repeater',
+    type: 'repeater',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    zIndex: 0,
+    transform: baseTransform(x, y, 480, 360),
+    compositionId: child.id,
+    direction: 'column',
+    flow: 'rtl',
+    gap: 8,
+    items: [seedRow(1), seedRow(2), seedRow(3)],
   };
 }
 
