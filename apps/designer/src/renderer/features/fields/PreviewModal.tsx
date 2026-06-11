@@ -71,7 +71,11 @@ function sequenceListFieldIds(scene: Scene): ReadonlySet<string> {
 /**
  * D-030 — `list` fields bound `repeater-items` get one editor column per
  * referenced child-composition field (the same columned editor the
- * inspector shows). The map is keyed by field id across all docs.
+ * inspector shows). KNOWN LIMIT: the map is keyed by field id ONLY — field
+ * bindings are per-document (D-025), so the SAME id bound to repeaters with
+ * different children in two docs would show one doc's columns for both
+ * (display-only; values and runtime routing stay correct). Keying by
+ * namespace path is the fix if that authoring pattern ever matters.
  */
 function repeaterColumnsByFieldId(scene: Scene): ReadonlyMap<string, readonly ListItemColumn[]> {
   const out = new Map<string, readonly ListItemColumn[]>();

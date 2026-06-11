@@ -176,4 +176,18 @@ describe('element-defaults', () => {
     const r = defaultRepeater('el-1', 0, 0, { id: 'rowc' });
     expect(r.items).toEqual([{ id: 'row-1' }, { id: 'row-2' }, { id: 'row-3' }]);
   });
+
+  it('defaultRepeater OMITS default-less field kinds (an image key would override its defaultAssetId)', () => {
+    const r = defaultRepeater('el-1', 0, 0, {
+      id: 'rowc',
+      fields: [
+        { id: 'name', label: 'Name', required: false, type: 'text', default: 'تیم' },
+        { id: 'logo', label: 'Logo', required: false, type: 'image', accept: ['png'] },
+      ],
+    });
+    // `logo` is absent — at apply time the missing key falls back to the
+    // field's own default (a seeded '' would win over it and break images).
+    expect(r.items[0]).toEqual({ id: 'row-1', name: 'تیم' });
+    expect('logo' in (r.items[0] as Record<string, unknown>)).toBe(false);
+  });
 });

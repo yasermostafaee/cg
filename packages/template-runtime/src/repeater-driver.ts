@@ -139,8 +139,19 @@ export class RepeaterDriver {
   // — internals ————————————————————————————————————————————————————————
 
   private teardown(): void {
-    for (const row of this.rows) row.destroy();
+    // Detach the registry FIRST and survive a throwing destroy: one failed
+    // row teardown must not strand its siblings' scope nodes in the hosting
+    // cascade (they'd keep receiving play/stop with no owner).
+    const rows = this.rows;
     this.rows = [];
+    for (const row of rows) {
+      try {
+        row.destroy();
+      } catch {
+        // A row that fails to tear down is already detached from `rows`;
+        // the leftover-cell sweep below still removes its DOM.
+      }
+    }
     // Also clear any non-driver-managed stamped cells (the scene-builder's
     // build-time authored stamp on the very first restamp).
     for (const leftover of [...this.o.host.querySelectorAll('[data-cg-repeater-row]')]) {

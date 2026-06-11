@@ -189,11 +189,17 @@ export function defaultRepeater(
   y: number,
   child: { id: string; fields?: readonly DynamicField[] | undefined },
 ): RepeaterElement {
+  // Seed ONLY fields that carry a standard `default` — writing a key for a
+  // default-less kind (e.g. an image field's `defaultAssetId`) would OVERRIDE
+  // that field's real default at apply time (`fieldId in values` wins over
+  // the fallback); an omitted key falls back correctly at runtime.
   const seedRow = (n: number): ListItem =>
     ({
       id: `row-${String(n)}`,
       ...Object.fromEntries(
-        (child.fields ?? []).map((f) => [f.id, 'default' in f ? f.default : '']),
+        (child.fields ?? [])
+          .filter((f) => 'default' in f)
+          .map((f) => [f.id, (f as { default: unknown }).default]),
       ),
     }) as ListItem;
   return {
