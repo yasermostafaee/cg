@@ -10,16 +10,16 @@ the order changes. Strategic / non-engineering notes live in
 
 - Ticker/crawler ([D-028](./prd/designer.md)) — merged; two-loop model (ticker
   repeat/cycleBoundary + holdSource axis), hard-stop pinned
+- Clock element ([D-027](./prd/designer.md)) — merged; wall/countup/countdown
+  on the ticker's self-wire pattern, countdown = content source
 
 ## Next — feature wave (in this order)
 
 1. UX features (list TBD by the owner — slot here when provided)
-2. Clock element ([D-027](./prd/designer.md)): digital / count-up / count-down;
-   small driver on the ticker's self-wire pattern
-3. Sequence / now-next ([D-029](./prd/designer.md)): one item at a time,
+2. Sequence / now-next ([D-029](./prd/designer.md)): one item at a time,
    extensible transitions (horizontal/vertical/slideUp/slideDown/hide-show),
    per-item dwell; needs multi-step `steps` + real `next()`
-4. Repeater / data-driven layout ([D-030](./prd/designer.md)): reuses the
+3. Repeater / data-driven layout ([D-030](./prd/designer.md)): reuses the
    extensible list field from D-028
 
 ## Then — hardening wave (after features)

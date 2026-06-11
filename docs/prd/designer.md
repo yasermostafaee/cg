@@ -558,7 +558,7 @@ let nested children disagree, whereas a CasparCG channel has one fps.
 
 <!-- Backlog stubs (registered for hygiene; Acceptance to be detailed when scheduled). -->
 
-## [~] D-027 — Digital clock element ⟨priority: medium⟩ — change: `openspec/changes/add-clock-element/`
+## [x] D-027 — Digital clock element ⟨priority: medium⟩
 
 **What:** A new `clock` element type that renders live time as text — three
 modes: `wall` (current local time), `countup` (stopwatch), and `countdown` (to
@@ -630,8 +630,8 @@ Requirements` on `designer-playout-lifecycle` (the content-completion
   `hasContentElement` + copy in `PlayoutSection.tsx`. OUT OF SCOPE v1 (record
   in design.md): date tokens (Jalali `dateFa` already exists in
   `@cg/text-shaping`), blinking separator, timezone offset, field-driven
-  target, overrun-after-zero count-up, starter template. Change:
-  `openspec/changes/add-clock-element/`.
+  target, overrun-after-zero count-up, starter template. Change dir:
+  `openspec/changes/archive/2026-06-11-add-clock-element/`.
 
 ## [x] D-028 — Ticker / crawler ⟨priority: high⟩
 

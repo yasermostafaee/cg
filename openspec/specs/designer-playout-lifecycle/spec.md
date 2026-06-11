@@ -37,16 +37,19 @@ repeat: 2`, and the exported playout metadata carries the normalized form
 
 ### Requirement: A content-driven hold ends on the scope's content completion
 
-For `holdSource: 'content-driven'`, the runtime SHALL hold until every ticker
-in the scope completes its own run (`Promise.all` semantics): all finite
-tickers done; an infinite ticker never completes, so the scope holds until
-`stop()`; a scope with NO content elements gets a zero-length hold (deferred
-like a 0ms timer — a zero-hold root must not settle before its children
-receive the play cascade). Each hold entry SHALL reset and restart the
-scope's tickers (a fresh crawl per open/close cycle), and a stale completion
-(resolving after `stop()` or after the hold already ended) SHALL be ignored.
-The runtime SHALL self-wire this from the scope's ticker elements — preview
-and exports need no boot wiring; an explicitly supplied
+For `holdSource: 'content-driven'`, the runtime SHALL hold until every
+CONTENT SOURCE in the scope completes its own run (`Promise.all` semantics).
+Content sources are the scope's finite tickers AND its countdown clocks;
+wall and countup clocks are NOT content sources and SHALL never extend the
+hold. All finite tickers done and all countdowns at zero ⇒ the hold ends; an
+infinite ticker never completes, so the scope holds until `stop()`; a scope
+with NO content sources gets a zero-length hold (deferred like a 0ms timer —
+a zero-hold root must not settle before its children receive the play
+cascade). Each hold entry SHALL reset and restart the scope's tickers and
+clocks (a fresh crawl / a fresh count per open/close cycle), and a stale
+completion (resolving after `stop()` or after the hold already ended) SHALL
+be ignored. The runtime SHALL self-wire this from the scope's content
+elements — preview and exports need no boot wiring; an explicitly supplied
 `RuntimeBootOptions.contentHold` overrides the ROOT scope (external override
 and test seam).
 
@@ -86,6 +89,24 @@ holdSource: 'content-driven'` and its ticker has `repeat: 2`
 - **WHEN** `createRuntime` is called with an explicit `contentHold` for a
   scene whose root scope also contains a ticker
 - **THEN** the explicit promise governs the root scope's content holds
+
+#### Scenario: A countdown clock alone governs the hold
+
+- **WHEN** an `auto-out` composition with `holdSource: 'content-driven'`
+  contains a single countdown clock (`target: { kind: 'duration', ms: 2000 }`)
+  and no ticker
+- **THEN** the hold lasts until the countdown reaches zero (≈2s of active
+  hold time), then the outro plays — the composition exits on its own exactly
+  at 00:00, while a wall or countup clock in the same scope would add nothing
+  to the wait
+
+#### Scenario: Mixed ticker and countdown — the last content source governs
+
+- **WHEN** a `content-driven` hold's scope contains both a finite ticker and
+  a countdown clock
+- **THEN** the hold ends only when BOTH have completed (`Promise.all`) —
+  whichever finishes last governs — and each hold entry re-runs both (a fresh
+  crawl and a fresh count per open/close cycle)
 
 ### Requirement: Root self-settle takes every nested scope off air
 
