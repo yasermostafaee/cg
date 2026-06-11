@@ -274,9 +274,12 @@ modes need a real epoch; the ticker's clock is performance-style).
 - Absolute clocks (wall, datetime countdown) are also started at `play()`
   (`isAbsolute`), so they tick during the intro; relative counts display their
   initial value until their hold-entry run begins.
-- `reset()` repaints the same initial value the scene-builder rendered
-  statically (wall = now, countup = zero, countdown = the full target), so the
-  authoring canvas and a between-runs stage can't drift.
+- `reset()` repaints the initial value by the same RULE the scene-builder's
+  static render uses (wall = now, countup = zero, countdown = the target
+  remaining now), so the authoring canvas and a between-runs stage can't drift
+  in semantics. The time-dependent cases are recomputed at reset time by
+  design — a datetime deadline is absolute and keeps approaching while the
+  template idles; only a duration countdown repaints a constant.
 
 ### animation-applier + keyframe-eval — per-frame writes
 

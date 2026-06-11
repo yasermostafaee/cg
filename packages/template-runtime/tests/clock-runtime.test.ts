@@ -288,6 +288,65 @@ describe('createRuntime — clock content sources (D-027)', () => {
     expect(events).toEqual(['stop.end']);
   });
 
+  it('loop-cycle × countup: the stopwatch RESTARTS from zero at each hold entry', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      clockScene({
+        playout: { mode: 'loop-cycle', holdSource: 'timed', holdMs: 3000, repeat: 2 },
+        clock: { mode: 'countup', format: 'ss' },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await runtime.play({});
+    await run(clock, 2500); // cycle 1, ~2.5s into its hold
+    expect(spanText()).toBe('02');
+    await run(clock, 3000); // ≈5.5s total — ~2.5s into CYCLE 2's hold
+    // A fresh count per cycle: ~02 again, NOT the ~05 a continuous count shows.
+    expect(spanText()).toBe('02');
+  });
+
+  it('loop-cycle × wall: the clock keeps showing the TRUE time across cycles (no jump)', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      clockScene({
+        playout: { mode: 'loop-cycle', holdSource: 'timed', holdMs: 3000, repeat: 2 },
+        clock: { mode: 'wall', format: 'ss' },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    const expectSecs = (ms: number): string => String(new Date(ms).getSeconds()).padStart(2, '0');
+    await runtime.play({});
+    await run(clock, 2000); // cycle 1
+    expect(spanText()).toBe(expectSecs(2000));
+    await run(clock, 3000); // ≈5s total — inside cycle 2, across the hold-entry reset
+    expect(spanText()).toBe(expectSecs(5000));
+  });
+
+  it('loop-cycle × datetime countdown: the ABSOLUTE deadline governs across cycles', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      clockScene({
+        playout: { mode: 'loop-cycle', holdSource: 'content-driven', repeat: 2 },
+        clock: {
+          mode: 'countdown',
+          target: { kind: 'datetime', iso: new Date(8000).toISOString() },
+        },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    const events: string[] = [];
+    runtime.on('stop.end', () => events.push('stop.end'));
+    await runtime.play({});
+    await run(clock, 7800); // cycle 1 holds until the real deadline…
+    expect(events).toEqual([]);
+    // …then cycle 2's fresh run finds the deadline already past, completes
+    // immediately (zero-length hold), and the composition settles — it does
+    // NOT wait another 8s (the deadline is absolute, not per-cycle).
+    await run(clock, 800);
+    expect(events).toEqual(['stop.end']);
+    expect(spanText()).toBe('00:00');
+  });
+
   it('pause()/resume() freeze the countdown and the hold in lockstep', async () => {
     const clock = makeClock();
     const runtime = createRuntime(

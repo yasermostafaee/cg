@@ -50,11 +50,14 @@ interface NormalizedDriverClock {
 }
 
 /**
- * The text a clock shows BEFORE its run starts (the scene-builder's static
- * render and the driver's `reset()` paint the same value, so the authoring
- * canvas and a between-runs stage can't drift): wall = the time at `nowMs`,
- * countup = zero, countdown = the full target remaining (a past datetime
- * clamps to 0).
+ * The text a clock shows BEFORE its run starts — the scene-builder's static
+ * render and the driver's `reset()` both compute it with THIS rule, so the
+ * authoring canvas and a between-runs stage can't drift in semantics:
+ * wall = the time at `nowMs`, countup = zero, countdown = the target
+ * remaining at `nowMs`. Note the time-dependent cases are recomputed at each
+ * call by design — a wall value or a datetime target's remaining naturally
+ * differs between build time and a later `reset()` (the deadline is absolute
+ * and keeps approaching); only a duration countdown is a constant.
  */
 export function clockInitialText(
   opts: Pick<ClockDriverOptions, 'mode' | 'format' | 'digits' | 'target'>,

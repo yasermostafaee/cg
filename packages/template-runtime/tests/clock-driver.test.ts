@@ -97,6 +97,21 @@ describe('ClockDriver (D-027)', () => {
     expect(h.node.textContent).toBe('00:00');
   });
 
+  it('a FRACTIONAL duration target starts at ceil and sheds the fraction first (intended)', () => {
+    // The Designer authors whole seconds; a hand-authored 1500ms target shows
+    // ceil = 2 at start, and the FIRST displayed second lasts only the 500ms
+    // fraction — faithful ceil rendering, pinned here as intentional.
+    const h = make({ mode: 'countdown', target: { kind: 'duration', ms: 1500 } });
+    h.driver.start();
+    expect(h.node.textContent).toBe('00:02');
+    h.clock.advance(499); // remaining 1001 → still ceil 2
+    expect(h.node.textContent).toBe('00:02');
+    h.clock.advance(1); // remaining 1000 → 1 (the fraction is gone)
+    expect(h.node.textContent).toBe('00:01');
+    h.clock.advance(1000); // remaining 0 — completes exactly at zero
+    expect(h.node.textContent).toBe('00:00');
+  });
+
   it('clamps a big overshoot to 00:00 in one step', async () => {
     const h = make({ mode: 'countdown', target: { kind: 'duration', ms: 1500 } });
     const done = completionFlag(h.driver);
