@@ -558,16 +558,80 @@ let nested children disagree, whereas a CasparCG channel has one fps.
 
 <!-- Backlog stubs (registered for hygiene; Acceptance to be detailed when scheduled). -->
 
-## [ ] D-027 — Digital clock element ⟨priority: medium⟩
+## [~] D-027 — Digital clock element ⟨priority: medium⟩ — change: `openspec/changes/add-clock-element/`
 
-**What:** A clock element that renders live wall-clock / countdown / count-up time
-with a format string (and Persian-digit support).
-**Why:** Clocks are a staple broadcast graphic; today there's no time-driven element.
-**Acceptance to be detailed when scheduled.**
-**Notes:** new element type → `@cg/shared-schema` + `@cg/template-runtime` render
-(see the "add a new element type" extension point in
-`packages/template-runtime/README.md`); reuse `@cg/text-shaping` for digits. Needs a
-runtime time source (relates to the FrameDriver clock seam).
+**What:** A new `clock` element type that renders live time as text — three
+modes: `wall` (current local time), `countup` (stopwatch), and `countdown` (to
+a `duration` or an absolute `datetime` target) — through a format string
+(`HH H hh h mm m ss s A a` tokens + literal text) with Persian / Arabic-Indic
+digit support via `@cg/text-shaping`. The clock is time-driven like the
+ticker: a small per-element `ClockDriver` (on the ticker's self-wire pattern)
+repaints the text once per second; a `countdown` reaching zero signals
+completion and participates in the scope's `holdSource: 'content-driven'`
+hold alongside finite tickers, so an `auto-out` composition exits exactly at
+00:00. Wall/countup never complete (not content sources). Text styling
+(font/color/shadow/background/padding/radius) mirrors the ticker's subset.
+**Why:** Clocks are a staple broadcast graphic (time-of-day bugs, countdown to
+air, match timers); there is no time-driven element today and keyframes can't
+tick real time. The ticker built exactly the seams this needs (per-scope
+drivers, injectable `RuntimeClock`, content-driven completion) — the clock is
+the smallest element that reuses them.
+**Acceptance:**
+
+- WHEN the operator picks the Clock tool and clicks the canvas THEN a clock
+  element is added (default `wall`, format `HH:mm:ss`, Persian digits,
+  Vazirmatn) and the authoring canvas shows the current time
+- WHEN mode is `wall` THEN during playback the text ticks once per second with
+  the machine's local time, formatted by the format string
+- WHEN mode is `countup` THEN the count starts at zero at each hold entry and
+  counts up in ACTIVE (unpaused) time until `stop()`; each `loop-cycle` cycle
+  restarts it from zero
+- WHEN mode is `countdown` with a `duration` target THEN the display starts at
+  the full duration, counts down in active time during the hold, clamps at
+  zero (never negative), and signals completion exactly at 00:00; each
+  `loop-cycle` cycle re-runs the full count
+- WHEN mode is `countdown` with a `datetime` target THEN remaining = target −
+  real now (pause does not delay a real deadline), clamping at zero and
+  signalling completion; a target already in the past completes immediately
+  (zero-length content hold)
+- WHEN a composition holds with `holdSource: 'content-driven'` THEN the hold
+  ends when ALL the scope's content sources complete — finite tickers AND
+  countdown clocks (`Promise.all`); wall/countup clocks are NOT content
+  sources and never extend the hold
+- WHEN `pause()` is called THEN the displayed time freezes in every mode;
+  `resume()` continues a relative count with no jump, and an absolute clock
+  (wall / datetime countdown) resumes showing the true current value
+- WHEN the format omits a larger unit THEN the largest present unit absorbs
+  the overflow (`mm:ss` → `90:00` for a 90-minute countdown); non-token
+  characters pass through literally
+- WHEN digits is `persian` (default) or `arabic-indic` THEN digits map via
+  `@cg/text-shaping`, the time string stays LTR (bidi-isolated) inside RTL
+  layouts, and width is stable (tabular numerals)
+- WHEN the operator scrubs the timeline THEN the clock does not move and the
+  inspector states it is time-driven (same affordance as the ticker)
+- WHEN a composition contains a countdown clock THEN the playout inspector
+  offers the content-driven hold source (copy generalized beyond "ticker")
+- WHEN the same scene is previewed and exported THEN the clock behaves
+  identically (the single-file export carries the driver; the clock adds no
+  fields, so the GDD is unchanged)
+  **Notes:** New capability `designer-clock-element` + `## MODIFIED
+Requirements` on `designer-playout-lifecycle` (the content-completion
+  requirement generalizes "tickers" → content sources; every existing
+  scenario preserved). Schema-first: `ClockElementSchema` (`type: 'clock'`)
+  in the `@cg/shared-schema` element union. Runtime: `buildClock` in
+  `scene-builder.ts` (collected on `scope.clocks`, cf. `scope.tickers`) +
+  `clock-driver.ts` on the TickerDriver lifecycle surface
+  (start/pause/resume/stop/reset/destroy/whenComplete, injectable
+  `RuntimeClock`), wired in `createRuntime` (hold-entry reset+start, cascade,
+  content-source `Promise.all`); repaint only when the formatted string
+  changes; `font-variant-numeric: tabular-nums`. Designer: Clock tool,
+  `defaultClock`, `ClockSections` in `StyleSection.tsx`
+  (mode/format/digits/target + `TextStyleSection` reuse),
+  `hasContentElement` + copy in `PlayoutSection.tsx`. OUT OF SCOPE v1 (record
+  in design.md): date tokens (Jalali `dateFa` already exists in
+  `@cg/text-shaping`), blinking separator, timezone offset, field-driven
+  target, overrun-after-zero count-up, starter template. Change:
+  `openspec/changes/add-clock-element/`.
 
 ## [x] D-028 — Ticker / crawler ⟨priority: high⟩
 
