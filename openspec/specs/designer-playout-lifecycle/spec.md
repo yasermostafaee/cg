@@ -39,19 +39,21 @@ repeat: 2`, and the exported playout metadata carries the normalized form
 
 For `holdSource: 'content-driven'`, the runtime SHALL hold until every
 CONTENT SOURCE in the scope completes its own run (`Promise.all` semantics).
-Content sources are the scope's finite tickers AND its countdown clocks;
-wall and countup clocks are NOT content sources and SHALL never extend the
-hold. All finite tickers done and all countdowns at zero ⇒ the hold ends; an
-infinite ticker never completes, so the scope holds until `stop()`; a scope
-with NO content sources gets a zero-length hold (deferred like a 0ms timer —
-a zero-hold root must not settle before its children receive the play
-cascade). Each hold entry SHALL reset and restart the scope's tickers and
-clocks (a fresh crawl / a fresh count per open/close cycle), and a stale
-completion (resolving after `stop()` or after the hold already ended) SHALL
-be ignored. The runtime SHALL self-wire this from the scope's content
+Content sources are the scope's finite tickers, its countdown clocks, AND
+its finite sequences; wall and countup clocks are NOT content sources and
+SHALL never extend the hold. All finite tickers done, all countdowns at
+zero, and all finite sequences past their last pass ⇒ the hold ends; an
+infinite ticker or an infinite sequence never completes, so the scope holds
+until `stop()`; a scope with NO content sources gets a zero-length hold
+(deferred like a 0ms timer — a zero-hold root must not settle before its
+children receive the play cascade). Each hold entry SHALL reset and restart
+the scope's tickers, clocks, and sequences (a fresh crawl / a fresh count /
+a fresh run from item 1 per open/close cycle), and a stale completion
+(resolving after `stop()` or after the hold already ended) SHALL be
+ignored. The runtime SHALL self-wire this from the scope's content
 elements — preview and exports need no boot wiring; an explicitly supplied
-`RuntimeBootOptions.contentHold` overrides the ROOT scope (external override
-and test seam).
+`RuntimeBootOptions.contentHold` overrides the ROOT scope (external
+override and test seam).
 
 #### Scenario: Nested loops — loop-cycle repeat=3 × ticker repeat=2 ⇒ 6 passes
 
@@ -107,6 +109,24 @@ holdSource: 'content-driven'` and its ticker has `repeat: 2`
 - **THEN** the hold ends only when BOTH have completed (`Promise.all`) —
   whichever finishes last governs — and each hold entry re-runs both (a fresh
   crawl and a fresh count per open/close cycle)
+
+#### Scenario: A finite sequence alone governs the hold
+
+- **WHEN** an `auto-out` composition with `holdSource: 'content-driven'`
+  contains a single `repeat: 1` sequence (no ticker, no clock)
+- **THEN** the hold lasts until the sequence advances past its last item —
+  by dwell timer or by `next()` — then the outro plays, the last item
+  staying on screen through the exit; an infinite sequence would hold the
+  scope until `stop()`
+
+#### Scenario: All three content-source kinds mixed — the last one governs
+
+- **WHEN** a `content-driven` hold's scope contains a finite ticker, a
+  countdown clock, AND a finite sequence
+- **THEN** the hold ends only when ALL THREE have completed (`Promise.all`)
+  — whichever finishes last governs — and each hold entry re-runs all three
+  (a fresh crawl / a fresh count / a fresh run from item 1 per open/close
+  cycle)
 
 ### Requirement: Root self-settle takes every nested scope off air
 
