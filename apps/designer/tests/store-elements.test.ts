@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { ClockElementSchema } from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
-import { defaultShape, defaultText } from '../src/renderer/state/element-defaults.js';
+import { defaultClock, defaultShape, defaultText } from '../src/renderer/state/element-defaults.js';
 
 afterEach(() => {
   designerStore._reset();
@@ -110,5 +111,18 @@ describe('element-defaults', () => {
     expect(s.type).toBe('shape');
     expect(s.transform.position).toEqual({ x: 7, y: 8 });
     expect(s.fill).toMatchObject({ kind: 'solid' });
+  });
+
+  it('defaultClock produces a schema-valid Persian wall clock (D-027)', () => {
+    const c = defaultClock('el-1', 9, 10);
+    expect(c.type).toBe('clock');
+    expect(c.transform.position).toEqual({ x: 9, y: 10 });
+    expect(c.mode).toBe('wall');
+    expect(c.format).toBe('HH:mm:ss');
+    expect(c.digits).toBe('persian');
+    expect(c.align).toBe('center');
+    expect(c.font.family).toBe('Vazirmatn');
+    // Schema-valid as authored (wall needs no target; defaults are explicit).
+    expect(ClockElementSchema.parse(c)).toEqual(c);
   });
 });

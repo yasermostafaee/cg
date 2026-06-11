@@ -127,6 +127,77 @@ describe('ExporterSingleFile — D-028 list field / ticker preflight', () => {
   });
 });
 
+describe('ExporterSingleFile — D-027 clock is export/GDD-neutral', () => {
+  it('a clock adds no fields: the GDD and preflight are unchanged; the scene literal carries it', async () => {
+    const base = makeScene();
+    const withClock: Scene = {
+      ...base,
+      playout: { mode: 'auto-out', holdSource: 'content-driven' },
+      layers: [
+        {
+          id: 'L1',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [
+            {
+              id: 'clk-1',
+              name: 'Clock',
+              type: 'clock',
+              transform: {
+                position: { x: 100, y: 100 },
+                size: { w: 320, h: 84 },
+                scale: { x: 1, y: 1 },
+                rotation: 0,
+                anchor: { x: 0.5, y: 0.5 },
+              },
+              opacity: 1,
+              visible: true,
+              locked: false,
+              zIndex: 0,
+              font: {
+                family: 'Vazirmatn',
+                weight: 600,
+                style: 'normal',
+                size: 48,
+                lineHeight: 1.2,
+                letterSpacing: 0,
+              },
+              color: '#FFFFFF',
+              align: 'center',
+              mode: 'countdown',
+              format: 'mm:ss',
+              digits: 'persian',
+              target: { kind: 'duration', ms: 120_000 },
+            },
+          ],
+        },
+      ],
+    } as unknown as Scene;
+    const withoutClock: Scene = {
+      ...withClock,
+      layers: [{ ...withClock.layers[0]!, children: [] }],
+    } as Scene;
+
+    const a = await makeExporter().produce(withoutClock);
+    const b = await makeExporter().produce(withClock);
+
+    const gddOf = (html: string): unknown => {
+      const m = /<script name="graphics-data-definition"[^>]*>([\s\S]*?)<\/script>/.exec(html);
+      return JSON.parse((m?.[1] ?? '').trim());
+    };
+    // The clock adds no dynamic fields ⇒ the GDD is byte-for-byte the same…
+    expect(gddOf(b.html)).toEqual(gddOf(a.html));
+    // …no new preflight issues appear…
+    expect(b.issues).toEqual(a.issues);
+    // …and the element ships inside the inlined scene (the bundled runtime
+    // carries its driver — no boot wiring in the emitted HTML changes).
+    expect(b.html).toContain('"type":"clock"');
+    expect(b.html).toContain('CG.createRuntime(scene)');
+  });
+});
+
 describe('ExporterSingleFile — D-028 finite ticker under a TIMED hold (info)', () => {
   it('flags the combo as info (authored intent, never blocks)', async () => {
     const scene: Scene = {

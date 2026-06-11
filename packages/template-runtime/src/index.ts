@@ -24,6 +24,13 @@ export {
   type TickerDriverOptions,
 } from './ticker-driver.js';
 export {
+  ClockDriver,
+  clockInitialText,
+  type ClockDriverMode,
+  type ClockDriverOptions,
+} from './clock-driver.js';
+export { formatCountClock, formatWallClock, type ClockDigits } from './clock-format.js';
+export {
   applyAnimationAtFrame,
   collectAnimatedElements,
   type AnimatedElement,

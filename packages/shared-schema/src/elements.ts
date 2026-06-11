@@ -187,6 +187,80 @@ export const TickerElementSchema = ElementBaseSchema.extend({
 });
 export type TickerElement = z.infer<typeof TickerElementSchema>;
 
+/**
+ * Countdown target (D-027): a relative duration (counts down in ACTIVE hold
+ * time) or an absolute wall-clock deadline (remaining = target − real now; a
+ * pause never delays a real deadline).
+ */
+export const ClockTargetSchema = z.union([
+  z.object({ kind: z.literal('duration'), ms: z.number().int().positive() }),
+  z.object({
+    kind: z.literal('datetime'),
+    iso: z.string().datetime({ offset: true, local: true }),
+  }),
+]);
+export type ClockTarget = z.infer<typeof ClockTargetSchema>;
+
+/**
+ * Digital clock element (D-027) — renders live time as text through a format
+ * string (`HH H hh h mm m ss s A a` tokens + literal characters; the largest
+ * unit present absorbs overflow, so `mm:ss` shows `90:00` for 90 minutes).
+ * Time-driven like the ticker: a per-element runtime driver repaints it once
+ * per second — keyframes/scrubbing never move it. A `countdown` reaching zero
+ * signals completion and participates in the scope's
+ * `holdSource: 'content-driven'` hold; `wall`/`countup` never complete.
+ * Text styling mirrors the ticker's subset.
+ */
+export const ClockElementSchema = ElementBaseSchema.extend({
+  type: z.literal('clock'),
+  font: z.object({
+    family: z.string().min(1),
+    weight: FontWeightSchema,
+    style: z.enum(['normal', 'italic']),
+    size: z.number().positive(),
+    lineHeight: z.number().positive(),
+    letterSpacing: z.number(),
+  }),
+  color: HexColorSchema,
+  /** Optional gradient (or solid) text fill; overrides `color` (cf. text). */
+  colorFill: FillSchema.optional(),
+  textShadow: ShadowSchema.optional(),
+  /** Box background colour (defaults to transparent). */
+  backgroundColor: HexColorSchema.optional(),
+  /** Optional gradient (or solid) box background; overrides `backgroundColor`. */
+  backgroundFill: FillSchema.optional(),
+  /** Box border-radius (px). */
+  cornerRadius: z.number().nonnegative().optional(),
+  /** Inner padding inside the box. */
+  padding: PaddingSchema.optional(),
+  /** Horizontal placement of the time text inside the box. */
+  align: z.enum(['start', 'center', 'end']).default('center'),
+  /**
+   * `wall` = current local time; `countup` = stopwatch from zero per hold
+   * entry; `countdown` = to `target` (required — see the refinement).
+   */
+  mode: z.enum(['wall', 'countup', 'countdown']),
+  /**
+   * Format string. Tokens `HH H hh h mm m ss s A a` (longest-token-first);
+   * non-token characters render literally. In count modes `hh`/`h` behave as
+   * `HH`/`H` and `A`/`a` render empty (meridiem is wall-only).
+   */
+  format: z.string().min(1).default('HH:mm:ss'),
+  /** Digit script, mapped via @cg/text-shaping AFTER formatting. */
+  digits: z.enum(['latin', 'persian', 'arabic-indic']).default('persian'),
+  /** Countdown target; ignored by `wall`/`countup`. */
+  target: ClockTargetSchema.optional(),
+}).superRefine((el, ctx) => {
+  if (el.mode === 'countdown' && !el.target) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['target'],
+      message: "mode 'countdown' requires a target (duration or datetime)",
+    });
+  }
+});
+export type ClockElement = z.infer<typeof ClockElementSchema>;
+
 /** Image element. References an asset by id. */
 export const ImageElementSchema = ElementBaseSchema.extend({
   type: z.literal('image'),
@@ -257,6 +331,7 @@ export type CompositionElement = z.infer<typeof CompositionElementSchema>;
 export type Element =
   | TextElement
   | TickerElement
+  | ClockElement
   | ImageElement
   | ShapeElement
   | LottieElement
@@ -273,6 +348,7 @@ export type Element =
 export type ElementInput =
   | TextElement
   | z.input<typeof TickerElementSchema>
+  | z.input<typeof ClockElementSchema>
   | ImageElement
   | ShapeElement
   | LottieElement
@@ -314,6 +390,7 @@ export const ElementSchema: z.ZodType<Element, z.ZodTypeDef, ElementInput> = z.l
   z.union([
     TextElementSchema,
     TickerElementSchema,
+    ClockElementSchema,
     ImageElementSchema,
     ShapeElementSchema,
     LottieElementSchema,

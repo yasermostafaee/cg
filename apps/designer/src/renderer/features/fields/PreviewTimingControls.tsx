@@ -61,7 +61,8 @@ const MODE_LABELS: Record<PlayoutMode, string> = {
 
 const HOLD_LABELS: Record<HoldSource, string> = {
   timed: 'Timed — hold for a duration',
-  'content-driven': 'Content-driven — until the ticker completes',
+  'content-driven':
+    'Content-driven — until the content completes (ticker passes / countdown reaching zero)',
 };
 
 /** Modes that need an explicit out-point to mean anything (an exit segment). */
@@ -84,6 +85,7 @@ export function PreviewTimingControls({
   defaultExpanded = true,
   showFooter = true,
   hasTicker = false,
+  hasContent = hasTicker,
   tickerDefaults = null,
   override,
   onChange,
@@ -94,8 +96,13 @@ export function PreviewTimingControls({
   defaultExpanded?: boolean;
   /** Show the "session only" footnote (once is enough when many scopes stack). */
   showFooter?: boolean;
-  /** D-028 — whether this scope contains ticker elements (gates the rows). */
+  /** D-028 — whether this scope contains ticker elements (gates the ticker rows). */
   hasTicker?: boolean;
+  /**
+   * D-027 — whether this scope contains ANY content source (ticker or
+   * countdown clock); gates the hold-source select. Defaults to `hasTicker`.
+   */
+  hasContent?: boolean;
   /** D-028 — the scope's authored ticker repeat/boundary (resting values). */
   tickerDefaults?: TickerTimingDefaults | null;
   override: TimingOverride;
@@ -114,7 +121,7 @@ export function PreviewTimingControls({
 
   // `auto-out` / `loop-cycle` only do something with an explicit out-point;
   // the timed hold input is moot when the hold is content-driven.
-  const timedHold = !hasTicker || holdSource === 'timed';
+  const timedHold = !hasContent || holdSource === 'timed';
   const showHold = hasOutPoint && timedHold && (mode === 'auto-out' || mode === 'loop-cycle');
   // `loop-cycle` repeats the full open/close cycle (needs an out-point).
   const showRepeat = mode === 'loop-cycle' && hasOutPoint;
@@ -148,7 +155,7 @@ export function PreviewTimingControls({
         </Select>
       </div>
 
-      {hasTicker && mode !== 'manual' && (
+      {hasContent && mode !== 'manual' && (
         <div className={s.row}>
           <span className={s.label}>hold</span>
           <Select

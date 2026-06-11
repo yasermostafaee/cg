@@ -1,0 +1,144 @@
+import { arabicIndicDigits, persianDigits } from '@cg/text-shaping';
+
+/**
+ * Clock format-string engine (D-027). Pure — no DOM, no timers — so every
+ * rule is table-testable.
+ *
+ * Tokens: `HH H hh h mm m ss s A a`, matched longest-token-first; any
+ * non-token character passes through literally. Double tokens zero-pad to at
+ * least two digits; single tokens don't pad.
+ *
+ * Two faces:
+ * - `formatWallClock(date, …)` — time of day. `HH`/`H` are 24-hour, `hh`/`h`
+ *   12-hour (0 → 12), `A`/`a` the meridiem.
+ * - `formatCountClock(totalSeconds, …)` — a count (stopwatch / countdown).
+ *   The LARGEST unit present in the format absorbs the overflow: with no hour
+ *   token, `mm` shows total minutes (`mm:ss` → `90:00` for 90 minutes); with
+ *   no minute token either, `ss` shows total seconds. `hh`/`h` behave as
+ *   `HH`/`H` (a count has no meridiem) and `A`/`a` render empty.
+ *
+ * Digit mapping (`persian` / `arabic-indic` via @cg/text-shaping) happens
+ * LAST, after all arithmetic and padding on Latin digits.
+ */
+
+export type ClockDigits = 'latin' | 'persian' | 'arabic-indic';
+
+type ClockToken = 'HH' | 'H' | 'hh' | 'h' | 'mm' | 'm' | 'ss' | 's' | 'A' | 'a';
+
+/** Longest-token-first — `hh` must win over `h`, `mm` over `m`, … */
+const TOKENS: readonly ClockToken[] = ['HH', 'hh', 'mm', 'ss', 'H', 'h', 'm', 's', 'A', 'a'];
+
+type FormatPart = { kind: 'token'; token: ClockToken } | { kind: 'literal'; text: string };
+
+function tokenize(format: string): FormatPart[] {
+  const parts: FormatPart[] = [];
+  let i = 0;
+  outer: while (i < format.length) {
+    for (const token of TOKENS) {
+      if (format.startsWith(token, i)) {
+        parts.push({ kind: 'token', token });
+        i += token.length;
+        continue outer;
+      }
+    }
+    const last = parts[parts.length - 1];
+    if (last && last.kind === 'literal') last.text += format[i];
+    else parts.push({ kind: 'literal', text: format[i] ?? '' });
+    i += 1;
+  }
+  return parts;
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+function mapDigits(s: string, digits: ClockDigits): string {
+  if (digits === 'persian') return persianDigits(s);
+  if (digits === 'arabic-indic') return arabicIndicDigits(s);
+  return s;
+}
+
+/** Format a time of day (machine-local components of `date`). */
+export function formatWallClock(date: Date, format: string, digits: ClockDigits): string {
+  const h24 = date.getHours();
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  const out = tokenize(format)
+    .map((part) => {
+      if (part.kind === 'literal') return part.text;
+      switch (part.token) {
+        case 'HH':
+          return pad2(h24);
+        case 'H':
+          return String(h24);
+        case 'hh':
+          return pad2(h12);
+        case 'h':
+          return String(h12);
+        case 'mm':
+          return pad2(date.getMinutes());
+        case 'm':
+          return String(date.getMinutes());
+        case 'ss':
+          return pad2(date.getSeconds());
+        case 's':
+          return String(date.getSeconds());
+        case 'A':
+          return h24 < 12 ? 'AM' : 'PM';
+        case 'a':
+          return h24 < 12 ? 'am' : 'pm';
+      }
+    })
+    .join('');
+  return mapDigits(out, digits);
+}
+
+/**
+ * Format a count (whole seconds, clamped at 0). The largest unit present in
+ * the format absorbs the overflow; meridiem tokens render empty.
+ */
+export function formatCountClock(
+  totalSeconds: number,
+  format: string,
+  digits: ClockDigits,
+): string {
+  const total = Math.max(0, Math.floor(totalSeconds));
+  const parts = tokenize(format);
+  const hasHours = parts.some(
+    (p) =>
+      p.kind === 'token' &&
+      (p.token === 'HH' || p.token === 'H' || p.token === 'hh' || p.token === 'h'),
+  );
+  const hasMinutes = parts.some((p) => p.kind === 'token' && (p.token === 'mm' || p.token === 'm'));
+
+  const hours = hasHours ? Math.floor(total / 3600) : 0;
+  const minutes = hasMinutes ? Math.floor((total - hours * 3600) / 60) : 0;
+  const seconds = total - hours * 3600 - minutes * 60;
+
+  const out = parts
+    .map((part) => {
+      if (part.kind === 'literal') return part.text;
+      switch (part.token) {
+        // In count modes hh/h behave as HH/H — a count has no 12-hour wrap.
+        case 'HH':
+        case 'hh':
+          return pad2(hours);
+        case 'H':
+        case 'h':
+          return String(hours);
+        case 'mm':
+          return pad2(minutes);
+        case 'm':
+          return String(minutes);
+        case 'ss':
+          return pad2(seconds);
+        case 's':
+          return String(seconds);
+        case 'A':
+        case 'a':
+          return '';
+      }
+    })
+    .join('');
+  return mapDigits(out, digits);
+}

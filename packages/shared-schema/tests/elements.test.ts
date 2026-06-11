@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ClockElementSchema,
   ContainerElementSchema,
   ElementBaseSchema,
   ElementSchema,
@@ -372,5 +373,79 @@ describe('TickerElement (D-028)', () => {
     const parsed = TickerElementSchema.parse({ ...ticker, repeat: 3, cycleBoundary: 'drain' });
     expect(parsed.repeat).toBe(3);
     expect(parsed.cycleBoundary).toBe('drain');
+  });
+});
+
+describe('ClockElement (D-027)', () => {
+  const clock = {
+    ...baseProps,
+    type: 'clock' as const,
+    font: {
+      family: 'Vazirmatn',
+      weight: 600,
+      style: 'normal' as const,
+      size: 48,
+      lineHeight: 1.2,
+      letterSpacing: 0,
+    },
+    color: '#FFFFFF',
+    mode: 'wall' as const,
+  };
+  it('accepts a wall clock and applies the defaults (align/format/digits)', () => {
+    const parsed = ClockElementSchema.parse(clock);
+    expect(parsed.align).toBe('center');
+    expect(parsed.format).toBe('HH:mm:ss');
+    expect(parsed.digits).toBe('persian');
+  });
+  it('round-trips through the Element union', () => {
+    const parsed = ElementSchema.parse(clock);
+    expect((parsed as { type: string }).type).toBe('clock');
+  });
+  it('accepts a countup clock without a target', () => {
+    expect(ClockElementSchema.parse({ ...clock, mode: 'countup' }).mode).toBe('countup');
+  });
+  it('accepts a countdown to a duration', () => {
+    const parsed = ClockElementSchema.parse({
+      ...clock,
+      mode: 'countdown',
+      target: { kind: 'duration', ms: 120_000 },
+    });
+    expect(parsed.target).toEqual({ kind: 'duration', ms: 120_000 });
+  });
+  it('accepts a countdown to a datetime (UTC, offset, and local forms)', () => {
+    for (const iso of [
+      '2026-06-11T18:30:00.000Z',
+      '2026-06-11T18:30:00+03:30',
+      '2026-06-11T18:30:00',
+    ]) {
+      const parsed = ClockElementSchema.parse({
+        ...clock,
+        mode: 'countdown',
+        target: { kind: 'datetime', iso },
+      });
+      expect(parsed.target).toEqual({ kind: 'datetime', iso });
+    }
+  });
+  it("rejects mode 'countdown' without a target (refinement)", () => {
+    expect(() => ClockElementSchema.parse({ ...clock, mode: 'countdown' })).toThrow();
+  });
+  it('rejects a non-positive / non-integer duration target', () => {
+    for (const ms of [0, -1000, 1500.5]) {
+      expect(() =>
+        ClockElementSchema.parse({ ...clock, mode: 'countdown', target: { kind: 'duration', ms } }),
+      ).toThrow();
+    }
+  });
+  it('rejects a malformed datetime target', () => {
+    expect(() =>
+      ClockElementSchema.parse({
+        ...clock,
+        mode: 'countdown',
+        target: { kind: 'datetime', iso: 'tomorrow at noon' },
+      }),
+    ).toThrow();
+  });
+  it('rejects an empty format string', () => {
+    expect(() => ClockElementSchema.parse({ ...clock, format: '' })).toThrow();
   });
 });

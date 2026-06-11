@@ -1,5 +1,7 @@
 import type {
   AnimatableProperty,
+  ClockElement,
+  ClockTarget,
   Element,
   Filter,
   ImageElement,
@@ -119,6 +121,14 @@ export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element 
   if (element.type === 'ticker')
     return (
       <TickerSections
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    );
+  if (element.type === 'clock')
+    return (
+      <ClockSections
         element={element}
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
@@ -549,8 +559,253 @@ function TickerSections({
   );
 }
 
-/** Ticker text-shadow rows — plain (non-animatable) commits. */
-function TickerShadowRows({ element }: { element: TickerElement }): JSX.Element {
+// ────────────────────────────────────────────────────────────────────────
+//                              CLOCK
+// ────────────────────────────────────────────────────────────────────────
+
+/** Seeded when the operator switches a clock to countdown with no target. */
+const DEFAULT_CLOCK_TARGET: ClockTarget = { kind: 'duration', ms: 60_000 };
+
+/** Stored ISO → `<input type="datetime-local">` value (local components). */
+function isoToLocalInput(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (n: number): string => String(n).padStart(2, '0');
+  return `${String(d.getFullYear())}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+/**
+ * D-027 — the clock config. The clock is time-driven like the ticker (a
+ * runtime driver repaints it once per second; scrubbing never moves it) and
+ * has NO dynamic fields in v1, so there is no Data section. Text styling
+ * mirrors the ticker's parity sections (plain commits — clock styling isn't
+ * keyframe-animatable).
+ */
+function ClockSections({
+  element,
+  currentFrame,
+  selectedKeyframe,
+}: SectionProps<ClockElement>): JSX.Element {
+  const id = element.id;
+  const target = element.target;
+  return (
+    <>
+      <CollapseSection title="Clock" pinned>
+        <SelectField
+          label="mode"
+          value={element.mode}
+          options={['wall', 'countup', 'countdown'] as const}
+          onCommit={(mode) =>
+            // Switching to countdown must keep the element schema-valid:
+            // countdown REQUIRES a target, so seed one if none is stored yet.
+            designerStore.updateElement(id, {
+              mode,
+              ...(mode === 'countdown' && target === undefined
+                ? { target: DEFAULT_CLOCK_TARGET }
+                : {}),
+            } as Partial<Element>)
+          }
+          trailing={pointIcon('mode')}
+        />
+        <TextField
+          label="format"
+          value={element.format}
+          resetKey={id}
+          onCommit={(format) => {
+            if (format !== '') designerStore.updateElement(id, { format } as Partial<Element>);
+          }}
+        />
+        <p className={dds.hint}>
+          Tokens: HH H hh h mm m ss s A a — other characters render literally; the largest unit
+          absorbs the overflow (mm:ss shows 90:00 for a 90-minute count).
+        </p>
+        <SelectField
+          label="digits"
+          value={element.digits}
+          options={['persian', 'latin', 'arabic-indic'] as const}
+          onCommit={(digits) => designerStore.updateElement(id, { digits } as Partial<Element>)}
+          trailing={pointIcon('digits')}
+        />
+        {element.mode === 'countdown' && (
+          <>
+            <SelectField
+              label="target"
+              value={(target ?? DEFAULT_CLOCK_TARGET).kind}
+              options={['duration', 'datetime'] as const}
+              onCommit={(kind) => {
+                if (kind === (target ?? DEFAULT_CLOCK_TARGET).kind) return;
+                designerStore.updateElement(id, {
+                  target:
+                    kind === 'duration'
+                      ? DEFAULT_CLOCK_TARGET
+                      : { kind: 'datetime', iso: new Date().toISOString() },
+                } as Partial<Element>);
+              }}
+            />
+            {(target ?? DEFAULT_CLOCK_TARGET).kind === 'duration' ? (
+              <NumberField
+                label="duration"
+                value={Math.round((target?.kind === 'duration' ? target.ms : 60_000) / 1000)}
+                step={1}
+                min={1}
+                suffix="s"
+                onCommit={(secs) =>
+                  designerStore.updateElement(id, {
+                    target: { kind: 'duration', ms: Math.max(1, Math.round(secs)) * 1000 },
+                  } as Partial<Element>)
+                }
+              />
+            ) : (
+              <div className={dds.hint}>
+                <input
+                  type="datetime-local"
+                  step={1}
+                  aria-label="Countdown target date-time"
+                  value={target?.kind === 'datetime' ? isoToLocalInput(target.iso) : ''}
+                  onChange={(e) => {
+                    const d = new Date(e.target.value);
+                    if (Number.isNaN(d.getTime())) return;
+                    designerStore.updateElement(id, {
+                      target: { kind: 'datetime', iso: d.toISOString() },
+                    } as Partial<Element>);
+                  }}
+                />
+              </div>
+            )}
+          </>
+        )}
+        <p className={dds.hint}>
+          Time-driven: the clock repaints once per second during playback — scrubbing the timeline
+          doesn’t move it.
+        </p>
+      </CollapseSection>
+
+      {/* Style parity with the ticker text section: family/weight/size, colour
+          (solid or gradient fill), align, box background (default transparent).
+          Plain commits — clock styling isn't keyframe-animatable (the clock is
+          time-driven, not timeline-driven). */}
+      <CollapseSection title="Clock Text" defaultExpanded>
+        <FontFamilySelect
+          value={element.font.family}
+          onCommit={(family) =>
+            designerStore.updateElement(id, {
+              font: { ...element.font, family },
+            } as Partial<Element>)
+          }
+        />
+        <SelectField
+          label="weight"
+          value={String(element.font.weight)}
+          options={['100', '200', '300', '400', '500', '600', '700', '800', '900'] as const}
+          onCommit={(w) =>
+            designerStore.updateElement(id, {
+              font: { ...element.font, weight: Number(w) },
+            } as Partial<Element>)
+          }
+        />
+        <NumberField
+          label="size"
+          value={element.font.size}
+          step={1}
+          min={1}
+          suffix="px"
+          onCommit={(size) => {
+            if (size > 0)
+              designerStore.updateElement(id, {
+                font: { ...element.font, size },
+              } as Partial<Element>);
+          }}
+        />
+        <SelectField
+          label="align"
+          value={element.align}
+          options={['start', 'center', 'end'] as const}
+          onCommit={(align) => designerStore.updateElement(id, { align } as Partial<Element>)}
+        />
+        <FillField
+          label="text color"
+          value={element.colorFill ?? { kind: 'solid', color: element.color }}
+          onChange={(f) => {
+            if (f.kind === 'solid') {
+              designerStore.updateElement(id, {
+                color: f.color,
+                colorFill: undefined,
+              } as Partial<Element>);
+            } else {
+              designerStore.updateElement(id, { colorFill: f } as Partial<Element>);
+            }
+          }}
+        />
+        <FillField
+          label="background"
+          value={
+            element.backgroundFill ?? {
+              kind: 'solid',
+              color: element.backgroundColor ?? '#00000000',
+            }
+          }
+          onChange={(f) => {
+            if (f.kind === 'solid') {
+              designerStore.updateElement(id, {
+                backgroundFill: undefined,
+                backgroundColor: f.color,
+              } as Partial<Element>);
+            } else {
+              designerStore.updateElement(id, { backgroundFill: f } as Partial<Element>);
+            }
+          }}
+        />
+      </CollapseSection>
+
+      <CollapseSection title="Drop Shadow">
+        <TickerShadowRows element={element} />
+      </CollapseSection>
+
+      <CollapseSection title="Box Padding">
+        {(['top', 'right', 'bottom', 'left'] as const).map((side) => (
+          <NumberField
+            key={side}
+            label={side}
+            value={element.padding?.[side] ?? 0}
+            step={1}
+            min={0}
+            suffix="px"
+            onCommit={(v) => {
+              const p = element.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
+              designerStore.updateElement(id, {
+                padding: { ...p, [side]: Math.max(0, v) },
+              } as Partial<Element>);
+            }}
+          />
+        ))}
+      </CollapseSection>
+
+      <CollapseSection title="Border Radius">
+        <NumberField
+          label="radius"
+          value={element.cornerRadius ?? 0}
+          step={1}
+          min={0}
+          suffix="px"
+          onCommit={(v) =>
+            designerStore.updateElement(id, {
+              cornerRadius: Math.max(0, v),
+            } as Partial<Element>)
+          }
+        />
+      </CollapseSection>
+
+      <FilterSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    </>
+  );
+}
+
+/** Ticker/clock text-shadow rows — plain (non-animatable) commits. */
+function TickerShadowRows({ element }: { element: TickerElement | ClockElement }): JSX.Element {
   const id = element.id;
   const s = element.textShadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
   const patch = (p: Partial<typeof s>): void => {
