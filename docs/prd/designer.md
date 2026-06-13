@@ -1073,16 +1073,77 @@ meant to read never existed.
   per-project overrides of a shared image. Change:
   `openspec/changes/add-shared-image-library/`.
 
-## [ ] D-041 — Multi-select shapes (canvas + layers) + shared-property editing ⟨priority: high⟩
+## [~] D-041 — Multi-select elements (canvas + layers) + shared-property editing ⟨priority: high⟩ — change: `openspec/changes/add-multi-select-editing/`
 
-**What:** Select multiple shapes on the canvas and in the layer list (for group move/
-delete), and edit COMMON properties across the selection — when mixed kinds are
-selected (e.g. a text + an ellipse) only the shared properties show and are editable.
-**Why:** No way today to move/delete several shapes together or change a shared
-property (e.g. colour) on many at once.
-**Acceptance to be detailed when scheduled.**
-**Notes:** foundation for the wave — touches selection + inspector. Full package
-authored at scheduling time.
+**What:** Select multiple elements — on the canvas (shift/ctrl-click to
+add/remove; plain click still replaces) and in the timeline layer rows (same
+modifiers) — to move and delete them together, and edit their COMMON
+properties at once from the inspector. With a homogeneous selection (e.g. two
+rectangles) every property of that kind is editable; with a MIXED selection
+(e.g. a text + an ellipse) only the shared properties show, and a field whose
+values differ across the selection shows a "mixed" state until set. Editing a
+shared field applies to every selected element as ONE undo step. Group MOVE
+drags all selected elements by the same delta (one undo step) with a single
+bounding-box gizmo around the whole selection; delete removes them all (the
+existing multi-aware delete). Selection is the existing `Set<string>` — this
+fills the `size === 1`-only gaps in the inspector, the gizmo, and drag.
+**Why:** Today only a single element can be moved or have its properties
+changed; there is no way to reposition, delete, or recolour several at once,
+even though their properties largely overlap. The selection state is already
+a set — the renderer just collapses to "single or nothing" everywhere.
+**Acceptance:**
+
+- WHEN the operator shift/ctrl-clicks elements on the canvas THEN each toggles
+  in/out of the selection (a plain click still replaces the selection with the
+  one clicked); the same modifiers on timeline layer rows build the same
+  multi-selection, and the two surfaces stay in sync
+- WHEN more than one element is selected THEN every selected element shows a
+  selected affordance on the canvas (and its layer row is highlighted), and a
+  single bounding box spanning the whole selection is shown
+- WHEN a multi-selection is dragged on the canvas THEN all selected elements
+  move by the same delta as ONE undo step; locked/hidden elements in the set
+  are not moved (consistent with single-element drag)
+- WHEN more than one element is selected THEN the inspector shows a
+  multi-selection editor exposing only the properties COMMON to the selected
+  kinds — for a homogeneous selection that is the full property set of the
+  kind; for a mixed selection it is the shared subset (at minimum the common
+  transform: position X/Y, width, height, rotation, opacity, and fill where
+  all selected kinds have it)
+- WHEN a shared property has the same value across all selected elements THEN
+  the field shows that value; WHEN the values differ THEN the field shows a
+  neutral "mixed" state and does not coerce them until edited
+- WHEN the operator edits a shared property with several elements selected
+  THEN the new value applies to every selected element as ONE undo step, and
+  the canvas + inspector reflect it
+- WHEN several elements are selected and Delete/Backspace is pressed THEN all
+  selected elements are removed in one step (the existing multi-aware delete),
+  unless an input/textarea/contentEditable is focused
+- WHEN the multi-selection editor is shown THEN per-keyframe controls (the
+  diamonds) are hidden — group editing in v1 sets static values only and does
+  not add/alter keyframes
+- WHEN exactly one element is selected THEN the inspector, gizmo, and drag
+  behave exactly as today (no regression to single-selection editing)
+- WHEN a multi-selection is reduced to one element THEN the full
+  single-element inspector returns; WHEN it is cleared THEN the inspector
+  shows its empty state
+  **Notes:** Foundation item — no schema change; `selection` is already
+  `ReadonlySet<string>` with `setSelection(ids[])`. The work fills the three
+  `selection.size === 1` gaps: (a) `InspectorPanel.findSelected` →
+  add a multi-selection path computing the shared-property set across the
+  selected kinds and rendering a multi editor; (b) `CanvasOverlay` gizmo →
+  a bounding-box-only gizmo for >1 (move, no resize/rotate handles in v1);
+  (c) selection building → shift/ctrl branches in `CanvasOverlay.onPointerDown`
+  and `ElementRow.onClick` (today both unconditionally `setSelection([id])`).
+  Group edits fan out over the existing `updateElement(id, patch)` /
+  `commitAnimatable(id, prop, value)` store methods wrapped in one undo
+  transaction; group move reuses the existing drag delta applied per selected
+  id; group delete already exists (`deleteSelection`, D-023) — keep it intact.
+  Shared-kind property model: derive each kind's editable property set and
+  intersect; "mixed" is a display state in the inspector inputs, not a schema
+  value. OUT OF SCOPE v1 (record in design.md): marquee / rubber-band
+  selection, group resize/rotate (bounding-box scaling), group keyframe
+  add/edit, and aligning/distributing the selection. Change:
+  `openspec/changes/add-multi-select-editing/`.
 
 ## [ ] D-042 — Per-corner border radius (toggle) ⟨priority: medium⟩
 
