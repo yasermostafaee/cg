@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
-import { defaultShape, defaultText } from '../src/renderer/state/element-defaults.js';
+import {
+  defaultEllipse,
+  defaultShape,
+  defaultText,
+} from '../src/renderer/state/element-defaults.js';
 import {
   sharedEditableProperties,
   selectedElements,
@@ -73,13 +77,31 @@ describe('sharedEditableProperties — kind intersection (D-041)', () => {
     );
   });
 
-  it('a mixed text+shape selection intersects down to the transform set only', () => {
+  it('a mixed text+shape selection shares the universal set (transform + filter) but no kind-specific props (D-050)', () => {
     const keys = sharedEditableProperties([defaultShape('a', 0, 0), defaultText('b', 0, 0)]).map(
       (p) => p.descriptor.key,
     );
-    expect(keys).toEqual(['position.x', 'position.y', 'size.w', 'size.h', 'rotation', 'opacity']);
-    expect(keys).not.toContain('fill.color');
-    expect(keys).not.toContain('text.color');
+    // Universal (on ElementBase): transform incl. scale + opacity + filter.* —
+    // shared by every kind.
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        'position.x',
+        'position.y',
+        'size.w',
+        'size.h',
+        'scale.x',
+        'scale.y',
+        'rotation',
+        'opacity',
+        'filter.blur',
+        'filter.brightness',
+      ]),
+    );
+    // Kind-specific props are NOT shared across text + shape.
+    expect(keys).not.toContain('fill.color'); // shape-only
+    expect(keys).not.toContain('stroke.width'); // shape-only
+    expect(keys).not.toContain('cornerRadius'); // shape-only
+    expect(keys).not.toContain('text.color'); // text-only
   });
 
   it('agrees when values match and is mixed (no coercion) when they differ', () => {
@@ -112,6 +134,53 @@ describe('sharedEditableProperties — kind intersection (D-041)', () => {
   it('is empty for an empty selection', () => {
     expect(sharedEditableProperties([])).toEqual([]);
   });
+
+  it('two shapes expose the FULL shape set — scale, stroke, cornerRadius, drop-shadow, filter (D-050)', () => {
+    const keys = sharedEditableProperties([
+      defaultEllipse('a', 0, 0),
+      defaultEllipse('b', 0, 0),
+    ]).map((p) => p.descriptor.key);
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        'scale.x',
+        'scale.y',
+        'fill.color',
+        'stroke.color',
+        'stroke.width',
+        'stroke.dash',
+        'cornerRadius',
+        'shadow.offsetX',
+        'shadow.offsetY',
+        'shadow.blur',
+        'shadow.color',
+        'filter.blur',
+        'filter.brightness',
+        'filter.sepia',
+      ]),
+    );
+  });
+
+  it('rectangles + ellipses share the full shape set (both are the shape kind) (D-050)', () => {
+    const keys = sharedEditableProperties([defaultShape('a', 0, 0), defaultEllipse('b', 0, 0)]).map(
+      (p) => p.descriptor.key,
+    );
+    expect(keys).toEqual(
+      expect.arrayContaining(['stroke.width', 'cornerRadius', 'shadow.blur', 'filter.blur']),
+    );
+  });
+
+  it('adding a text shrinks a shape selection to the universal set (no shape-specific) (D-050)', () => {
+    const keys = sharedEditableProperties([
+      defaultShape('a', 0, 0),
+      defaultEllipse('b', 0, 0),
+      defaultText('c', 0, 0),
+    ]).map((p) => p.descriptor.key);
+    expect(keys).toContain('opacity');
+    expect(keys).toContain('filter.blur'); // universal (on ElementBase)
+    expect(keys).not.toContain('stroke.width'); // shape-only → dropped
+    expect(keys).not.toContain('cornerRadius');
+    expect(keys).not.toContain('fill.color');
+  });
 });
 
 describe('applySharedProperty — group edit as one undo step (D-041)', () => {
@@ -142,6 +211,22 @@ describe('applySharedProperty — group edit as one undo step (D-041)', () => {
     expect(elById('el-1')!.transform.position.x).toBe(42);
     expect(elById('el-1')!.animation).toBeUndefined();
     expect(elById('el-2')!.animation).toBeUndefined();
+  });
+
+  it('a shared SHAPE-property edit (stroke width) applies to all, keyframe-free, in one undo (D-050)', () => {
+    freshScene();
+    designerStore.addElement(defaultShape('el-1', 0, 0));
+    designerStore.addElement(defaultShape('el-2', 0, 0));
+    designerStore.applySharedProperty(['el-1', 'el-2'], 'stroke.width', 6);
+    const a = elById('el-1');
+    const b = elById('el-2');
+    expect(a?.type === 'shape' ? a.stroke?.width : null).toBe(6);
+    expect(b?.type === 'shape' ? b.stroke?.width : null).toBe(6);
+    expect(a?.animation).toBeUndefined(); // keyframe-free
+    designerStore.undo();
+    expect((elById('el-1')?.type === 'shape' && elById('el-1')) || null).toBeTruthy();
+    const a2 = elById('el-1');
+    expect(a2?.type === 'shape' ? (a2.stroke?.width ?? 0) : null).toBe(0); // one undo reverts
   });
 });
 

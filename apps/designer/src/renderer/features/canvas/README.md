@@ -87,9 +87,10 @@ pointer gestures live in `Gizmo.tsx` (they read the store and run the
   when the property is animated, else the static value) and call
   `markHistoryBoundary()` on pointer-up for a single undo step.
 
-`MultiGizmo` (same file) is the **multi-selection** affordance (D-041, D-049): an
-individual selection box around EACH selected shape — **move only, no
-resize/rotate handles, and no single group-spanning bounding box** (D-049). It's
+`MultiGizmo` (same file) is the **multi-selection** affordance (D-041, D-049,
+D-050): an individual selection box (2px, D-050) around EACH selected shape —
+**move only, no resize/rotate handles, and no single group-spanning bounding
+box** (D-049). It's
 visual (`pointerEvents: none`); the group move drag is initiated from
 `CanvasOverlay` (grabbing any selected element), and a press in empty space hits
 nothing → clears the selection (the cursor-tool rule), so there is no group box

@@ -21,9 +21,10 @@ export const frame = style({
 // D-049 — per-shape selection box in a multi-selection: a solid accent box
 // around EACH selected shape (no single group-spanning bounding box). Visual
 // only — the group move drag is initiated from the overlay on a member press.
+// D-050 — 2px (was 1px) for readability.
 export const multiBox = style({
   position: 'absolute',
-  border: `1px solid ${colors.accent}`,
+  border: `2px solid ${colors.accent}`,
   boxSizing: 'border-box',
   pointerEvents: 'none',
 });

@@ -75,11 +75,15 @@ and the timeline rows share this single path, so both surfaces reflect one set).
 The inspector branches on `selection.size` (0 scene / 1 `StyleSection` / >1 the
 `MultiSelectSection`); the **shared-property intersection** seam is a pure helper
 ([`features/inspector/shared-properties.ts`](../features/inspector/shared-properties.ts))
-that intersects each selected kind's editable descriptors and flags agree-vs-mixed.
+that intersects each selected kind's FULL editable-descriptor set (D-050 — it
+MIRRORS the single inspector's `prop`s + reads, since there's no central metadata
+table; ⚠️ keep it in sync with `StyleSection.tsx`) and flags agree-vs-mixed.
 A group edit fans out over `applySharedProperty(ids, prop, value)` — the
 **keyframe-free** base write (`writeStaticAnimatable`, NOT `commitAnimatable` which
 would keyframe a tracked property) wrapped in `runAsSingleHistoryEntry` so N
-elements collapse to ONE undo entry. There is no transaction object: that wrapper
+elements collapse to ONE undo entry. The multi number field commits on Enter/blur
+(D-050 — `RealtimeNumberInput commitMode='blur'`), so a typed edit is one entry
+per committed value, not one per keystroke. There is no transaction object: that wrapper
 just brackets the synchronous fan-out with `markHistoryBoundary` (the same
 time-coalescing a drag relies on). Group move/delete reuse the existing
 per-element drag/`deleteSelection` paths.
