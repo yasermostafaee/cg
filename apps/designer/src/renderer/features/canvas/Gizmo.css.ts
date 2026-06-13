@@ -18,6 +18,16 @@ export const frame = style({
   pointerEvents: 'none',
 });
 
+// D-041 — per-element selected affordance in a multi-selection: a faint dashed
+// outline. The solid `frame` above is reused for the single union bounding box.
+export const memberOutline = style({
+  position: 'absolute',
+  border: `1px dashed ${colors.accent}`,
+  opacity: 0.55,
+  boxSizing: 'border-box',
+  pointerEvents: 'none',
+});
+
 // Loopic-style corner handle: white fill, accent outline. Visual only — the
 // (larger) cornerHit area below owns the resize gesture.
 export const handle = style({

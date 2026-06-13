@@ -87,14 +87,29 @@ pointer gestures live in `Gizmo.tsx` (they read the store and run the
   when the property is animated, else the static value) and call
   `markHistoryBoundary()` on pointer-up for a single undo step.
 
+`MultiGizmo` (same file) is the **multi-selection** affordance (D-041): a faint
+dashed outline per selected element plus ONE solid bounding box spanning their
+union — **move only, no resize/rotate handles** in v1. It's visual
+(`pointerEvents: none`); the group move drag is initiated from `CanvasOverlay`
+(grabbing any selected element). The `size === 1` path keeps the full `Gizmo`
+above, untouched.
+
 ## Drag, snap, selection, hit-testing
 
 - **Hit-testing** — `hitsElement` (point-in-rotated-box via `inverseToLocal`) and
   `topmostHit` (iterate in paint order, **last hit wins**; skips invisible/locked).
 - **Selection / create / drill** — `CanvasOverlay.onPointerDown` dispatches by the
-  active tool; double-click enters text edit or **drills one level** into a nested
-  composition instance (`drillTarget` maps the click into the child's resolution).
-- **Move** — `beginDrag` streams `position.x/y` via `commitAnimatable`.
+  active tool; a plain click replaces the selection, **shift/ctrl-click toggles**
+  one element in/out (`toggleInSelection`, D-041); double-click enters text edit or
+  **drills one level** into a nested composition instance (`drillTarget` maps the
+  click into the child's resolution).
+- **Move** — `beginDrag` streams a single element's `position.x/y` via
+  `commitAnimatable` (keyframe-aware). For a multi-selection, `beginGroupDrag`
+  applies the SAME delta to every movable member (visible & unlocked —
+  `collectGroupMoveTargets` in `group-move.ts`) via the **keyframe-free**
+  `writeStaticAnimatable`, snapping the grabbed anchor only; one undo step via
+  `markHistoryBoundary` at the gesture ends. A pure click on a member collapses the
+  selection to it.
 - **Snap** — `snapValue` (single resize edge) and `snapAxis` (drag: tries the box's
   near / centre / far anchors) snap to **canvas edges + centre, every other
   element's edges + centre, and the operator's ruler guides**, within ~6–7 screen px

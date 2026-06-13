@@ -1,4 +1,4 @@
-import type { Element, Layer } from '@cg/shared-schema';
+import type { AnimatableProperty, Element, Layer } from '@cg/shared-schema';
 import { activeRangeOf, compositionInstancesOf, uniqueInstanceName } from '@cg/shared-schema';
 import { current, getClipboard, set, setClipboard } from '../store-core.js';
 import {
@@ -321,6 +321,27 @@ export const elementsSlice = {
     }
     const ids = [...current.selection];
     for (const id of ids) designerStore.removeElement(id);
+  },
+
+  /**
+   * D-041 — apply ONE animatable property value to every id in a
+   * multi-selection as a SINGLE undo step. Routes through the keyframe-free
+   * base write (`writeStaticAnimatable`) — group editing in v1 never
+   * creates/alters keyframes (`commitAnimatable` WOULD keyframe an element that
+   * already has a track for the property) — and wraps the fan-out in
+   * `runAsSingleHistoryEntry` so N elements collapse to ONE history entry, not N.
+   * Each per-element write that doesn't apply to that kind is a no-op in
+   * `writeStaticAnimatable`, so a shared property is only ever offered when the
+   * intersection guarantees every selected kind accepts it.
+   */
+  applySharedProperty(
+    ids: readonly string[],
+    property: AnimatableProperty,
+    value: number | string,
+  ): void {
+    designerStore.runAsSingleHistoryEntry(() => {
+      for (const id of ids) designerStore.writeStaticAnimatable(id, property, value);
+    });
   },
 
   /**

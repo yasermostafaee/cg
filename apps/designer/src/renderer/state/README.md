@@ -23,16 +23,16 @@ method bodies moved unchanged; only the file they live in differs.
 
 ## Slice ownership
 
-| Slice                                       | State it owns                                                                  | Actions                                                                                                                                                                                                                                                                                        |
-| ------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`view`](slices/view.ts)                    | `tool`, `rulerVisible`, `snappingEnabled`, `snapGuides`, `guides`              | `setTool`, `toggleRuler`, `toggleSnapping`, `setSnapGuides`, `addGuide`, `setGuidePos`, `removeGuide`                                                                                                                                                                                          |
-| [`selection`](slices/selection.ts)          | `selection`, `editingTextId`                                                   | `setSelection`, `setEditingText`                                                                                                                                                                                                                                                               |
-| [`document`](slices/document.ts)            | `scene`, `projectPath`, `view`, `notice`                                       | `setScene`, `setView`, `showNotice`, `dismissNotice`, `updateScene`, `setSceneDurationFrames`, `setSceneActiveOut`, `setLifecycle`, `setPlayout`                                                                                                                                               |
-| [`composition`](slices/composition.ts)      | `activeCompositionId`                                                          | `setActiveComposition`, `openCompositionAndSelect`, `addComposition`, `renameComposition`, `duplicateComposition`, `deleteComposition`, `canNestCompositionInActive`, `addCompositionInstance`                                                                                                 |
-| [`fields`](slices/fields.ts)                | `bindModeFieldId`                                                              | `setBindMode`, `addField`, `addSceneFont`, `updateField`, `removeField`, `addBinding`, `removeBindingAt`, `setElementDataKey`, `setElementFieldMeta` (owns the public `ElementFieldMetaPatch`)                                                                                                 |
-| [`timeline`](slices/timeline.ts)            | `currentFrame`, `timelineZoom`, `selectedKeyframe(s)`, `keyframeInspectorOpen` | `setCurrentFrame`, `setTimelineZoom`, `upsert/move/moveById/removeKeyframe`, `commitAnimatable`, `writeStaticAnimatable`, `setSelectedKeyframe`, `openKeyframeInspector`, `addKeyframeToSelection`, `closeKeyframeInspector`, `setKeyframeValue/Easing/Bezier`                                 |
-| [`elements`](slices/elements.ts)            | (the layer tree, via `scene`; clipboard lives in core)                         | `setElementText`, `addElement`, `updateElement`, `updateTransform`, `updateElementLifespan`, `removeElement`, `deleteSelection`, `setElementTimelineColor`, `fitElementLifespanToActiveRange`, `removeAssetFromScene`, `copy/cut/paste/duplicateElement`, `hasClipboardElement`, `allElements` |
-| _engine_ ([`store-core.ts`](store-core.ts)) | history stacks, clipboard, notice timer, `current`                             | `undo`, `redo`, `markHistoryBoundary`, `markSaved`, `subscribe`, `_reset`                                                                                                                                                                                                                      |
+| Slice                                       | State it owns                                                                  | Actions                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`view`](slices/view.ts)                    | `tool`, `rulerVisible`, `snappingEnabled`, `snapGuides`, `guides`              | `setTool`, `toggleRuler`, `toggleSnapping`, `setSnapGuides`, `addGuide`, `setGuidePos`, `removeGuide`                                                                                                                                                                                                                 |
+| [`selection`](slices/selection.ts)          | `selection`, `editingTextId`                                                   | `setSelection`, `toggleInSelection`, `setEditingText`                                                                                                                                                                                                                                                                 |
+| [`document`](slices/document.ts)            | `scene`, `projectPath`, `view`, `notice`                                       | `setScene`, `setView`, `showNotice`, `dismissNotice`, `updateScene`, `setSceneDurationFrames`, `setSceneActiveOut`, `setLifecycle`, `setPlayout`                                                                                                                                                                      |
+| [`composition`](slices/composition.ts)      | `activeCompositionId`                                                          | `setActiveComposition`, `openCompositionAndSelect`, `addComposition`, `renameComposition`, `duplicateComposition`, `deleteComposition`, `canNestCompositionInActive`, `addCompositionInstance`                                                                                                                        |
+| [`fields`](slices/fields.ts)                | `bindModeFieldId`                                                              | `setBindMode`, `addField`, `addSceneFont`, `updateField`, `removeField`, `addBinding`, `removeBindingAt`, `setElementDataKey`, `setElementFieldMeta` (owns the public `ElementFieldMetaPatch`)                                                                                                                        |
+| [`timeline`](slices/timeline.ts)            | `currentFrame`, `timelineZoom`, `selectedKeyframe(s)`, `keyframeInspectorOpen` | `setCurrentFrame`, `setTimelineZoom`, `upsert/move/moveById/removeKeyframe`, `commitAnimatable`, `writeStaticAnimatable`, `setSelectedKeyframe`, `openKeyframeInspector`, `addKeyframeToSelection`, `closeKeyframeInspector`, `setKeyframeValue/Easing/Bezier`                                                        |
+| [`elements`](slices/elements.ts)            | (the layer tree, via `scene`; clipboard lives in core)                         | `setElementText`, `addElement`, `updateElement`, `updateTransform`, `updateElementLifespan`, `removeElement`, `deleteSelection`, `applySharedProperty`, `setElementTimelineColor`, `fitElementLifespanToActiveRange`, `removeAssetFromScene`, `copy/cut/paste/duplicateElement`, `hasClipboardElement`, `allElements` |
+| _engine_ ([`store-core.ts`](store-core.ts)) | history stacks, clipboard, notice timer, `current`                             | `undo`, `redo`, `markHistoryBoundary`, `runAsSingleHistoryEntry`, `markSaved`, `subscribe`, `_reset`                                                                                                                                                                                                                  |
 
 ## How it holds together (mechanism: live ES-module bindings)
 
@@ -65,6 +65,24 @@ module-level cache (not part of the scene or undo history), and the `_reset` tes
 hook clears it alongside the history in one place. The elements slice reaches it
 through `getClipboard` / `setClipboard`. (Same story for the toast-notice timer,
 used by the document slice.)
+
+### Note: the selection set drives multi-select (D-041)
+
+`selection` is a `ReadonlySet<string>` — multi-select is the renderer **consuming
+the whole set** instead of collapsing to `size === 1`. `setSelection(ids[])`
+replaces; `toggleInSelection(id)` adds/removes one (shift/ctrl-click on the canvas
+and the timeline rows share this single path, so both surfaces reflect one set).
+The inspector branches on `selection.size` (0 scene / 1 `StyleSection` / >1 the
+`MultiSelectSection`); the **shared-property intersection** seam is a pure helper
+([`features/inspector/shared-properties.ts`](../features/inspector/shared-properties.ts))
+that intersects each selected kind's editable descriptors and flags agree-vs-mixed.
+A group edit fans out over `applySharedProperty(ids, prop, value)` — the
+**keyframe-free** base write (`writeStaticAnimatable`, NOT `commitAnimatable` which
+would keyframe a tracked property) wrapped in `runAsSingleHistoryEntry` so N
+elements collapse to ONE undo entry. There is no transaction object: that wrapper
+just brackets the synchronous fan-out with `markHistoryBoundary` (the same
+time-coalescing a drag relies on). Group move/delete reuse the existing
+per-element drag/`deleteSelection` paths.
 
 ## Adding to the store
 

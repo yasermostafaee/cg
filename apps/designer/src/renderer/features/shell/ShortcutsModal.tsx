@@ -23,6 +23,7 @@ const SHORTCUTS: readonly { keys: string; label: string }[] = [
   { keys: 'K + L', label: 'Go to next frame' },
   { keys: 'K + J', label: 'Go to previous frame' },
   { keys: 'Delete / Backspace', label: 'Delete selected keyframe(s), else selected layer(s)' },
+  { keys: 'Shift / Ctrl + Click', label: 'Add / remove from selection (canvas or layer)' },
   { keys: 'Double-click point', label: 'Open keyframe inspector' },
   { keys: 'Right-click layer', label: 'Layer menu (color, copy, delete…)' },
   { keys: `${MOD} + Scroll`, label: 'Zoom canvas / timeline' },
