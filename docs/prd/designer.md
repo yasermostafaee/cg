@@ -1072,3 +1072,82 @@ meant to read never existed.
   library, SVG-specific handling beyond what the image element already does,
   per-project overrides of a shared image. Change:
   `openspec/changes/add-shared-image-library/`.
+
+## [ ] D-041 — Multi-select shapes (canvas + layers) + shared-property editing ⟨priority: high⟩
+
+**What:** Select multiple shapes on the canvas and in the layer list (for group move/
+delete), and edit COMMON properties across the selection — when mixed kinds are
+selected (e.g. a text + an ellipse) only the shared properties show and are editable.
+**Why:** No way today to move/delete several shapes together or change a shared
+property (e.g. colour) on many at once.
+**Acceptance to be detailed when scheduled.**
+**Notes:** foundation for the wave — touches selection + inspector. Full package
+authored at scheduling time.
+
+## [ ] D-042 — Per-corner border radius (toggle) ⟨priority: medium⟩
+
+**What:** Toggle a shape's border radius between a single value and four independent
+corners; right inspector shows four inputs side-by-side, the timeline-left inspector
+shows four stacked — matching the Loopic reference.
+**Why:** Only a single uniform radius is editable today.
+**Acceptance to be detailed when scheduled.**
+**Notes:** schema-first (per-corner radius). Loopic refs:
+docs/designer-guide/sample-assets/D-042-radius-0.png / -1.png / -2.png.
+
+## [ ] D-043 — Extended drop-shadow (outset/inset + spread) + text-shadow section ⟨priority: medium⟩
+
+**What:** Drop-shadow gains outset/inset (no keyframe) and spread (keyframable) — the
+full CSS box-shadow model; text elements additionally get a separate text-shadow
+section (like drop-shadow but without outset/inset and spread).
+**Why:** Current shadow is missing inset and spread; text has no dedicated text-shadow.
+**Acceptance to be detailed when scheduled.**
+**Notes:** schema-first (shadow model). New templates will rely on it.
+
+## [ ] D-044 — Font-weight for plain text ⟨priority: low⟩
+
+**What:** Add the font-weight control (already present on ticker/sequence) to the
+plain text element.
+**Why:** Plain text can't set weight today though ticker/sequence can.
+**Acceptance to be detailed when scheduled.**
+**Notes:** small schema/UI parity item.
+
+## [ ] D-045 — Unify text alignment + vertical align for ticker/sequence + align is not keyframable ⟨priority: medium⟩
+
+**What:** Make alignment consistent across text/ticker/sequence (the text model is the
+target), add vertical align to ticker/sequence, and make alignment (horizontal AND
+vertical) non-keyframable.
+**Why:** Alignment differs per element type today; ticker/sequence lack vertical align.
+**Acceptance to be detailed when scheduled.**
+**Notes:** behavioral; must land before the D-048 visual polish (same controls). Loopic
+refs: docs/designer-guide/sample-assets/D-045-align-0.png / -1.png.
+
+## [ ] D-046 — Sizing=auto behavior (modal + squeeze off + no keyframes on text-metrics) ⟨priority: high⟩
+
+**What:** Setting sizing to auto shows a confirm modal, disables auto-squeeze (set to
+no), and forbids keyframes on font-size / font / letter-spacing / line-height —
+existing keyframes on those four are removed and new ones blocked until sizing is set
+back to fixed.
+**Why:** auto sizing conflicts with keyframed text metrics; today it's unguarded.
+**Acceptance to be detailed when scheduled.**
+**Notes:** most sensitive behavioral item — touches the keyframe model + schema. Loopic
+ref for the modal: (owner to add).
+
+## [ ] D-047 — Layer reordering via drag (z-index) + drop indicator ⟨priority: medium⟩
+
+**What:** Reorder layers (z-index) by dragging the layer-row title up/down, with a
+horizontal drop-indicator line shown above/below the cursor at the droppable position.
+**Why:** No way to change layer stacking order today.
+**Acceptance to be detailed when scheduled.**
+**Notes:** independent of the text chain; touches layer order + timeline interaction.
+
+## [ ] D-048 — Inspector visual polish (align/padding/sizing buttons, text-settings popover, no blue button) ⟨priority: medium⟩
+
+**What:** Match Loopic for the align buttons, the padding layout (four inputs side-by-
+side, not one per row), and the sizing(auto/fixed)/auto-squeeze/text-wrap controls;
+a small settings popover for text (font-weight/decoration/transform/variant/style); no
+blue accent button inside the inspector — styles consistent with the properties panel.
+**Why:** Current inspector controls are visually inconsistent with the reference.
+**Acceptance to be detailed when scheduled.**
+**Notes:** appearance only, no behavior change; MUST come after D-045/D-046 (depends on
+their final controls). Loopic refs: docs/designer-guide/sample-assets/textalign.png-era
+shots → D-045-align-0/1.png, D-048-textpadding-0.png, D-048-popover-0.png.
