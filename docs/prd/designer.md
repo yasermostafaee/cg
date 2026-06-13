@@ -797,7 +797,7 @@ Requirements` on `designer-playout-lifecycle` (content sources gain finite
   `ListItemSchema` comment nit (`text`/`dwellMs`). Change dir:
   `openspec/changes/archive/2026-06-11-add-sequence-element/`.
 
-## [~] D-030 — Repeater / data-driven layout ⟨priority: medium⟩ — change: `openspec/changes/add-repeater-element/`
+## [x] D-030 — Repeater / data-driven layout ⟨priority: medium⟩
 
 **What:** A new `repeater` element type: a clipped box that renders one
 instance of a referenced child composition PER ROW of a data list, laid out
@@ -896,7 +896,7 @@ this composition.
   v1 (record in design.md): live count changes mid-hold + per-row
   enter/exit transitions (the model-A follow-up), per-row stagger (D-032),
   grid layout, explicit `itemSize` override, guaranteed row drill-in.
-  Change: `openspec/changes/add-repeater-element/`.
+  Change dir: `openspec/changes/archive/2026-06-13-add-repeater-element/`.
 
 ## [ ] D-031 — Multi-step templates (`steps`) + real `next()` ⟨priority: medium⟩
 
