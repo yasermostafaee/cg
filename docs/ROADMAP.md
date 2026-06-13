@@ -18,9 +18,24 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Next — feature wave (in this order)
 
-1. UX features (list TBD by the owner — slot here when provided)
+1. Owner UX-feature wave ([D-041](./prd/designer.md) → [D-048](./prd/designer.md)) —
+   see the subsection below
 2. Repeater / data-driven layout ([D-030](./prd/designer.md)): reuses the
    extensible list field from D-028
+
+### Owner UX-feature wave (D-041 → D-048, in this order)
+
+1. [D-041](./prd/designer.md) — Multi-select shapes (canvas + layers) + shared-property editing
+2. [D-042](./prd/designer.md) — Per-corner border radius (toggle)
+3. [D-043](./prd/designer.md) — Extended drop-shadow (outset/inset + spread) + text-shadow section
+4. [D-044](./prd/designer.md) — Font-weight for plain text
+5. [D-045](./prd/designer.md) — Unify text alignment + vertical align (ticker/sequence) + align not keyframable
+6. [D-046](./prd/designer.md) — Sizing=auto behavior (modal + squeeze off + no keyframes on text-metrics)
+7. [D-047](./prd/designer.md) — Layer reordering via drag (z-index) + drop indicator
+8. [D-048](./prd/designer.md) — Inspector visual polish (align/padding/sizing buttons, text-settings popover, no blue button)
+
+**Tail (after D-048):** template cleanup — rebuild/refresh the bundled sample
+templates against the wave's finalized controls (the explicit tail of this wave).
 
 ## Then — hardening wave (after features)
 

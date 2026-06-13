@@ -997,3 +997,157 @@ union, e.g. `string | { assetId }`); the treadmill driver already measures and
 feeds separator nodes generically, so the work is mostly schema + asset
 resolution + the inspector picker. Relates to the asset pipeline (preview blob
 URLs / export inlining) the image element already uses.
+
+## [ ] D-040 — Shared image library + logo element ⟨priority: medium⟩
+
+**What:** A device-level **shared image library** (network logos, persistent
+bugs) that lives ONCE outside any single project, plus the existing canvas
+"logo/image" tool — currently inert — wired to pick from it. The operator
+adds images to the shared library once; in any project a logo element
+references one by id and the inspector's combo box lists the library. The
+reference is a DESIGN-TIME convenience only: at export the resolved bytes are
+INLINED into the `.vcg` / single-file HTML exactly like a per-project asset,
+so the played file stays self-contained (CasparCG CEF on `file://` cannot
+reach the library). Storage lives in a new `@cg/storage` namespace alongside
+projects — "shared" means shared across projects ON THIS storage backend
+(no central backend exists; if the operator points `@cg/storage` at a real
+folder / network drive, OS-level sharing across machines falls out for free,
+but that is the operator's setup, not a feature we build).
+**Why:** A channel logo or persistent bug is reused across every project and
+composition; re-importing it per project (the D-001 per-project flow, which
+stays) is wasteful and drifts. The canvas already has a logo/image tool but
+it inserts nothing and its picker is empty because the shared source it was
+meant to read never existed.
+**Acceptance:**
+
+- WHEN the operator opens the shared image library and adds an image THEN it
+  is stored in the shared `@cg/storage` namespace (not in any project) and
+  appears in the library list, persisting across projects and sessions
+- WHEN the operator removes a library image THEN it leaves the library list;
+  projects that already EXPORTED it are unaffected (bytes were inlined), and
+  a still-open project that only REFERENCES it falls back to a visible
+  missing-asset placeholder with a clear warning (never a crash)
+- WHEN the operator uses the canvas logo/image tool with a non-empty library
+  THEN a logo element is inserted and selected (default sized to the image's
+  aspect), referencing the first/selected library image; WHEN the library is
+  empty THEN the tool does not silently insert nothing — it surfaces a hint
+  to add a library image first
+- WHEN a logo element is selected THEN its inspector shows a combo box
+  listing the shared library (thumbnail + name) and changing the selection
+  re-points the element to that image
+- WHEN a scene containing a logo element is PREVIEWED THEN the live preview
+  resolves the bytes from the shared library and renders them (asset
+  resolution tries the shared library AND the project store)
+- WHEN a scene containing a logo element is EXPORTED (`.vcg` or single-file
+  HTML) THEN the resolved bytes are inlined (base64 / packaged) exactly like
+  a per-project image — no external reference, and the exported file renders
+  the logo with no network/`file://` access
+- WHEN the same logo is used in two different projects THEN each resolves and
+  inlines independently from the one shared source (no per-project re-import)
+- WHEN a logo element references a library id that no longer resolves at
+  export THEN export reports it via the existing preflight/validation path
+  (blocked or clearly warned — consistent with how unresolved assets are
+  handled today), not a silent broken export
+  **Notes:** New capability `designer-shared-image-library`. Storage-first:
+  add a shared-asset namespace + API to `@cg/storage` (mirror the existing
+  per-project `AssetStore` surface — import/list/get/remove — but
+  project-independent); reuse the existing asset byte/blob handling, do NOT
+  invent a parallel encoding. Schema: a logo element kind (or the existing
+  image element widened with a `source: 'project' | 'shared'` + the shared
+  id) in `@cg/shared-schema` — pick the smaller diff and record which in
+  design.md. The CENTRAL refactor + main risk: the asset resolver becomes
+  TWO-SOURCE (shared-library first, then project) everywhere bytes are
+  resolved — `apps/designer/src/platform/preview.ts` AND both exporters
+  (`@cg/vcg-format` packaging + `ExporterSingleFile.ts` base64 inlining) —
+  so a referenced library image is found in preview, `.vcg`, and HTML alike;
+  this is where it most easily breaks and MUST be covered by tests on all
+  three paths. Designer: a Shared Library panel/affordance to manage the
+  device library (add/list/remove with thumbnails); wire the existing inert
+  canvas logo/image tool + its inspector combo box to the library; the
+  insertion guard mirrors D-030's (no library image ⇒ hint, no silent
+  insert). Relates to D-001 (per-project assets, unchanged) and P-001
+  (offline fonts — same "broadcast machines are air-gapped, inline
+  everything" rationale). OUT OF SCOPE v1 (record in design.md): cross-
+  machine/central sync (no backend), categories/folders/tagging in the
+  library, SVG-specific handling beyond what the image element already does,
+  per-project overrides of a shared image. Change:
+  `openspec/changes/add-shared-image-library/`.
+
+## [ ] D-041 — Multi-select shapes (canvas + layers) + shared-property editing ⟨priority: high⟩
+
+**What:** Select multiple shapes on the canvas and in the layer list (for group move/
+delete), and edit COMMON properties across the selection — when mixed kinds are
+selected (e.g. a text + an ellipse) only the shared properties show and are editable.
+**Why:** No way today to move/delete several shapes together or change a shared
+property (e.g. colour) on many at once.
+**Acceptance to be detailed when scheduled.**
+**Notes:** foundation for the wave — touches selection + inspector. Full package
+authored at scheduling time.
+
+## [ ] D-042 — Per-corner border radius (toggle) ⟨priority: medium⟩
+
+**What:** Toggle a shape's border radius between a single value and four independent
+corners; right inspector shows four inputs side-by-side, the timeline-left inspector
+shows four stacked — matching the Loopic reference.
+**Why:** Only a single uniform radius is editable today.
+**Acceptance to be detailed when scheduled.**
+**Notes:** schema-first (per-corner radius). Loopic refs:
+docs/designer-guide/sample-assets/D-042-radius-0.png / -1.png / -2.png.
+
+## [ ] D-043 — Extended drop-shadow (outset/inset + spread) + text-shadow section ⟨priority: medium⟩
+
+**What:** Drop-shadow gains outset/inset (no keyframe) and spread (keyframable) — the
+full CSS box-shadow model; text elements additionally get a separate text-shadow
+section (like drop-shadow but without outset/inset and spread).
+**Why:** Current shadow is missing inset and spread; text has no dedicated text-shadow.
+**Acceptance to be detailed when scheduled.**
+**Notes:** schema-first (shadow model). New templates will rely on it.
+
+## [ ] D-044 — Font-weight for plain text ⟨priority: low⟩
+
+**What:** Add the font-weight control (already present on ticker/sequence) to the
+plain text element.
+**Why:** Plain text can't set weight today though ticker/sequence can.
+**Acceptance to be detailed when scheduled.**
+**Notes:** small schema/UI parity item.
+
+## [ ] D-045 — Unify text alignment + vertical align for ticker/sequence + align is not keyframable ⟨priority: medium⟩
+
+**What:** Make alignment consistent across text/ticker/sequence (the text model is the
+target), add vertical align to ticker/sequence, and make alignment (horizontal AND
+vertical) non-keyframable.
+**Why:** Alignment differs per element type today; ticker/sequence lack vertical align.
+**Acceptance to be detailed when scheduled.**
+**Notes:** behavioral; must land before the D-048 visual polish (same controls). Loopic
+refs: docs/designer-guide/sample-assets/D-045-align-0.png / -1.png.
+
+## [ ] D-046 — Sizing=auto behavior (modal + squeeze off + no keyframes on text-metrics) ⟨priority: high⟩
+
+**What:** Setting sizing to auto shows a confirm modal, disables auto-squeeze (set to
+no), and forbids keyframes on font-size / font / letter-spacing / line-height —
+existing keyframes on those four are removed and new ones blocked until sizing is set
+back to fixed.
+**Why:** auto sizing conflicts with keyframed text metrics; today it's unguarded.
+**Acceptance to be detailed when scheduled.**
+**Notes:** most sensitive behavioral item — touches the keyframe model + schema. Loopic
+ref for the modal: (owner to add).
+
+## [ ] D-047 — Layer reordering via drag (z-index) + drop indicator ⟨priority: medium⟩
+
+**What:** Reorder layers (z-index) by dragging the layer-row title up/down, with a
+horizontal drop-indicator line shown above/below the cursor at the droppable position.
+**Why:** No way to change layer stacking order today.
+**Acceptance to be detailed when scheduled.**
+**Notes:** independent of the text chain; touches layer order + timeline interaction.
+
+## [ ] D-048 — Inspector visual polish (align/padding/sizing buttons, text-settings popover, no blue button) ⟨priority: medium⟩
+
+**What:** Match Loopic for the align buttons, the padding layout (four inputs side-by-
+side, not one per row), and the sizing(auto/fixed)/auto-squeeze/text-wrap controls;
+a small settings popover for text (font-weight/decoration/transform/variant/style); no
+blue accent button inside the inspector — styles consistent with the properties panel.
+**Why:** Current inspector controls are visually inconsistent with the reference.
+**Acceptance to be detailed when scheduled.**
+**Notes:** appearance only, no behavior change; MUST come after D-045/D-046 (depends on
+their final controls). Loopic refs: docs/designer-guide/sample-assets/textalign.png-era
+shots → D-045-align-0/1.png, D-048-textpadding-0.png, D-048-popover-0.png.
