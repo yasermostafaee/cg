@@ -1265,3 +1265,65 @@ knows.
   empty-interior drag region). No schema change. Loopic single-inspector look
   is the reference for the input/unit styling. Change:
   `openspec/changes/fix-multi-select-inspector-parity/`.
+
+## [~] D-050 — Multi-select: complete shared properties + single-undo panel edits + thicker box ⟨priority: high⟩ — change: `openspec/changes/complete-multi-select-shared-props/`
+
+**What:** Finish the D-049 multi-selection editor. (a) Expose ALL properties
+common to the selected kinds — not just the transform subset — so several
+shapes (e.g. circles, or circles + rectangles) also share scale, stroke,
+border-radius, drop-shadow, filter, etc.; the intersection is computed over
+the real editable-property sets of the selected kinds (text/ticker/etc. still
+contribute only what they genuinely share). (b) A shared-property edit typed
+in the inspector commits as ONE undo step exactly like single selection —
+keystrokes show live via onChange, but only Enter/blur records a history
+entry (today the multi path records intermediate values, so many redos are
+needed to revert one edit). (c) The per-shape multi-selection box is 1px
+thicker for visibility. All of this stays keyframe-free — diamonds and
+keyframe-aware group editing remain out of scope (separate item).
+**Why:** D-049 restored input parity but the multi editor still lists only a
+limited property subset (the original ask was ALL shared properties), and
+inspector number edits in multi mode spam the undo stack with intermediate
+values instead of one entry per committed edit.
+**Acceptance:**
+
+- WHEN several elements of the same kind are selected (e.g. two ellipses)
+  THEN the inspector exposes every property of that kind (scale, stroke,
+  border-radius, drop-shadow, filter, … — not just position/size/opacity),
+  each grouped under its section
+- WHEN a mixed-kind selection is selected THEN the inspector exposes exactly
+  the properties common to all selected kinds (rectangles + ellipses share
+  most shape properties; text/ticker contribute only their genuine overlap),
+  computed from the kinds' real editable-property sets
+- WHEN the operator edits a shared number field in the inspector THEN
+  keystrokes update the value live (onChange) but ONLY Enter or blur records
+  a single undo entry, and one undo reverts the whole edit across all
+  selected elements (parity with single-selection commit-on-blur)
+- WHEN a shared property is "mixed" THEN it still shows the mixed state and
+  edits commit the same single-undo way
+- WHEN more than one shape is selected THEN each per-shape selection box is
+  drawn 1px thicker than before for readability
+- WHEN exactly one element is selected THEN inspector, undo behavior, and
+  selection box are unchanged (no regression)
+- WHEN a shared edit or group move is made THEN no keyframe is created or
+  altered (this item stays keyframe-free; diamonds remain hidden in multi)
+  **Notes:** Second follow-up to D-041 (`designer-multi-select`); extend that
+  living capability via `## MODIFIED Requirements` (the shared-property set +
+  the single-undo panel-edit guarantee + the box thickness), preserving other
+  scenarios. (a) widen the shared-property intersection helper
+  (shared-properties.ts) to enumerate each kind's FULL editable-property set
+  by mirroring the single inspector's prop ids + read accessors (there is no
+  central metadata table — short-path duplication, kept in sync by comments
+  at both sites; recorded as tech debt in design.md), then intersect; the
+  multi editor renders each shared section with the existing single-inspector
+  primitives (the D-049 `transform-fields.tsx` pattern). Agree/"mixed"
+  computation applies per property as in D-049. (b) the panel-edit undo bug:
+  the D-049 multi field wires onCommit=applySharedProperty and
+  RealtimeNumberInput fires onCommit on every onChange keystroke, while
+  applySharedProperty wraps each in runAsSingleHistoryEntry → one undo entry
+  PER KEYSTROKE; fix by moving the applySharedProperty fan-out off onChange
+  onto the commit handler (Enter/blur), one runAsSingleHistoryEntry per
+  committed edit, onChange staying visual — matching single selection. (c)
+  bump the `multiBox` border from 1px to 2px in `Gizmo.css.ts`. Group MOVE
+  undo and keyframe-aware multi editing are explicitly OUT of scope here —
+  they belong to the keyframe-aware item (diamonds + one-undo group drag).
+  Change: `openspec/changes/complete-multi-select-shared-props/`.
