@@ -15,13 +15,14 @@ the order changes. Strategic / non-engineering notes live in
 - Sequence / now-next ([D-029](./prd/designer.md)) — merged; decomposed
   in/out/timing transitions with presets, per-item dwell, real `next()`
   dispatch (the D-031 seam), finite sequence = third content source
+- Repeater / data-driven layout ([D-030](./prd/designer.md)) — merged; one
+  child-composition instance per data-list row, reuses the D-028 extensible
+  list field
 
 ## Next — feature wave (in this order)
 
 1. Owner UX-feature wave ([D-041](./prd/designer.md) → [D-048](./prd/designer.md)) —
    see the subsection below
-2. Repeater / data-driven layout ([D-030](./prd/designer.md)): reuses the
-   extensible list field from D-028
 
 ### Owner UX-feature wave (D-041 → D-048, in this order)
 
