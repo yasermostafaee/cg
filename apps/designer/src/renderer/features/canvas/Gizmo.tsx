@@ -272,12 +272,12 @@ interface MultiProps {
 }
 
 /**
- * Multi-selection gizmo (D-041): a faint dashed outline around each selected
- * element plus ONE solid accent bounding box spanning their union — MOVE ONLY,
- * with no resize/rotate handles in v1. Visual only (`pointerEvents: none`); the
- * group move drag is initiated from `CanvasOverlay` when a selected element is
- * grabbed. Boxes are the elements' effective axis-aligned boxes at the current
- * frame (rotation is not unioned in v1 — group rotate is out of scope).
+ * Multi-selection gizmo (D-041 + D-049): an individual selection box around EACH
+ * selected shape — MOVE ONLY, with no resize/rotate handles, and NO single
+ * group-spanning bounding box. Visual only (`pointerEvents: none`); the group
+ * move drag is initiated from `CanvasOverlay` when a selected element is grabbed
+ * (a press in empty space hits nothing → clears, per the cursor-tool rule).
+ * Boxes are the elements' effective axis-aligned boxes at the current frame.
  */
 export function MultiGizmo({ elements, scale, currentFrame }: MultiProps): JSX.Element | null {
   if (elements.length < 2) return null;
@@ -291,26 +291,17 @@ export function MultiGizmo({ elements, scale, currentFrame }: MultiProps): JSX.E
       h: t.size.h * t.scale.y * scale,
     };
   });
-  const minX = Math.min(...boxes.map((b) => b.x));
-  const minY = Math.min(...boxes.map((b) => b.y));
-  const maxX = Math.max(...boxes.map((b) => b.x + b.w));
-  const maxY = Math.max(...boxes.map((b) => b.y + b.h));
   return (
     <>
       {boxes.map((b) => (
         <div
           key={`member-${b.id}`}
-          className={s.memberOutline}
+          className={s.multiBox}
           style={{ left: b.x, top: b.y, width: b.w, height: b.h }}
+          data-testid="multi-select-box"
           aria-hidden
         />
       ))}
-      <div
-        className={s.frame}
-        style={{ left: minX, top: minY, width: maxX - minX, height: maxY - minY }}
-        data-testid="multi-select-bbox"
-        aria-hidden
-      />
     </>
   );
 }

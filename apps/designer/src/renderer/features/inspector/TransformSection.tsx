@@ -9,8 +9,7 @@ import {
   hasKeyframeAt,
   keyframeVariantFor,
 } from '../timeline/keyframe-helpers.js';
-import { RealtimeNumberInput, fieldScrub } from './controls.js';
-import { cx } from '../../cx.js';
+import { Seg, SingleField, transformFieldProps } from './transform-fields.js';
 import * as s from './TransformSection.css.js';
 
 interface Props {
@@ -19,12 +18,13 @@ interface Props {
 }
 
 /**
- * Compact Loopic-style transform inspector. Each row is one or two cells
- * styled like a chip — single-letter / arrow / glyph "icon" labels (X, Y,
- * W, H, ↔, ↕, ↻, %) — followed by a small KeyframeIndicator diamond. The
- * 8 M12 animatable properties commit through `commitAnimatable` so an
- * edit at any frame on an animated property lands as a keyframe at the
- * current frame.
+ * Compact Loopic-style transform inspector. Each row is one or two cells styled
+ * like a chip — single-letter / arrow / glyph "icon" labels (X, Y, W, H, ↔, ↕,
+ * ↻, ◑) — followed by a small KeyframeIndicator diamond. The field primitives +
+ * per-property display metadata (icon / unit / stored↔shown conversion) live in
+ * `transform-fields.tsx` and are SHARED with the multi-selection editor (D-049).
+ * The 8 animatable properties commit through `commitAnimatable` so an edit at
+ * any frame on an animated property lands as a keyframe at the current frame.
  */
 export function TransformSection({ element, selectedKeyframe }: Props): JSX.Element {
   // Self-subscribe to the frame so only this value-bearing section re-renders
@@ -48,154 +48,58 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
     );
   }
 
+  // Commit a property's STORED value (the shared field props convert the
+  // displayed value — e.g. opacity %, scale % — back to stored units).
+  const commit =
+    (property: AnimatableProperty) =>
+    (v: number): void =>
+      designerStore.commitAnimatable(id, property, v);
+
   return (
     <div className={s.col}>
       {/* Position X/Y — one combined field, each axis editable separately. */}
       <div className="cg-input-group">
         <Seg
-          icon="X"
-          ariaLabel="X position"
-          value={t.position.x}
-          step={1}
-          onCommit={(v) => designerStore.commitAnimatable(id, 'position.x', v)}
+          {...transformFieldProps('position.x', t.position.x, commit('position.x'))}
           point={indicatorFor('position.x')}
         />
         <Seg
-          icon="Y"
-          ariaLabel="Y position"
-          value={t.position.y}
-          step={1}
-          onCommit={(v) => designerStore.commitAnimatable(id, 'position.y', v)}
+          {...transformFieldProps('position.y', t.position.y, commit('position.y'))}
           point={indicatorFor('position.y')}
         />
       </div>
       {/* Size W/H */}
       <div className="cg-input-group">
         <Seg
-          icon="W"
-          ariaLabel="Width"
-          value={t.size.w}
-          step={1}
-          onCommit={(v) => designerStore.commitAnimatable(id, 'size.w', v)}
+          {...transformFieldProps('size.w', t.size.w, commit('size.w'))}
           point={indicatorFor('size.w')}
         />
         <Seg
-          icon="H"
-          ariaLabel="Height"
-          value={t.size.h}
-          step={1}
-          onCommit={(v) => designerStore.commitAnimatable(id, 'size.h', v)}
+          {...transformFieldProps('size.h', t.size.h, commit('size.h'))}
           point={indicatorFor('size.h')}
         />
       </div>
       {/* Scale X/Y (percent) */}
       <div className="cg-input-group">
         <Seg
-          icon="↔"
-          ariaLabel="Scale X"
-          value={percent(t.scale.x)}
-          suffix="%"
-          step={1}
-          onCommit={(v) => designerStore.commitAnimatable(id, 'scale.x', v / 100)}
+          {...transformFieldProps('scale.x', t.scale.x, commit('scale.x'))}
           point={indicatorFor('scale.x')}
         />
         <Seg
-          icon="↕"
-          ariaLabel="Scale Y"
-          value={percent(t.scale.y)}
-          suffix="%"
-          step={1}
-          onCommit={(v) => designerStore.commitAnimatable(id, 'scale.y', v / 100)}
+          {...transformFieldProps('scale.y', t.scale.y, commit('scale.y'))}
           point={indicatorFor('scale.y')}
         />
       </div>
       {/* Rotation (degrees) — single field, diamond outside the border. */}
       <SingleField
-        icon="↻"
-        ariaLabel="Rotation"
-        value={Math.round(t.rotation * 100) / 100}
-        suffix="°"
-        step={1}
-        onCommit={(v) => designerStore.commitAnimatable(id, 'rotation', v)}
+        {...transformFieldProps('rotation', t.rotation, commit('rotation'))}
         point={indicatorFor('rotation')}
       />
       {/* Opacity (percent) — single field, diamond outside the border. */}
       <SingleField
-        icon="◑"
-        ariaLabel="Opacity"
-        value={percent(opacity)}
-        suffix="%"
-        step={1}
-        min={0}
-        max={100}
-        onCommit={(v) => designerStore.commitAnimatable(id, 'opacity', clamp01(v / 100))}
+        {...transformFieldProps('opacity', opacity, commit('opacity'))}
         point={indicatorFor('opacity')}
       />
-    </div>
-  );
-}
-
-interface FieldProps {
-  icon: string;
-  ariaLabel: string;
-  value: number;
-  step?: number;
-  min?: number;
-  max?: number;
-  suffix?: string;
-  onCommit: (n: number) => void;
-  /** Keyframe diamond for this property. */
-  point: JSX.Element;
-}
-
-/**
- * Icon + scrubbable number + optional unit. When a unit is present the
- * input sizes to its content (.cg-num-unit → field-sizing: content) so the
- * unit hugs the value on the LEFT, next to the icon, rather than drifting
- * to the far edge of a full-width input.
- */
-function FieldBody(props: FieldProps): JSX.Element {
-  const hasUnit = props.suffix !== undefined;
-  return (
-    <>
-      <span className={s.icon} aria-hidden>
-        {props.icon}
-      </span>
-      <RealtimeNumberInput
-        value={props.value}
-        onCommit={props.onCommit}
-        step={props.step}
-        min={props.min}
-        max={props.max}
-        scrub={false}
-        className={cx(hasUnit ? s.inputUnit : s.input, hasUnit && 'cg-num-unit')}
-        ariaLabel={props.ariaLabel}
-      />
-      {hasUnit && <span className="cg-unit">{props.suffix}</span>}
-    </>
-  );
-}
-
-/** One axis of a combined vector field — the whole segment scrubs the value;
- *  diamond at the segment's right edge. */
-function Seg(props: FieldProps): JSX.Element {
-  const scrub = fieldScrub(props);
-  return (
-    <div className={cx('cg-seg', s.scrubSurface)} onPointerDown={scrub.onPointerDown}>
-      <FieldBody {...props} />
-      <span className={s.point}>{props.point}</span>
-    </div>
-  );
-}
-
-/** Standalone field — icon, value+unit on the left, diamond at the right,
- *  all inside one bordered box; the whole box scrubs the value. */
-function SingleField(props: FieldProps): JSX.Element {
-  const scrub = fieldScrub(props);
-  return (
-    <div className={cx('cg-field', s.scrubSurface)} onPointerDown={scrub.onPointerDown}>
-      <FieldBody {...props} />
-      <span className={s.point}>{props.point}</span>
     </div>
   );
 }
@@ -221,12 +125,4 @@ export function togglePropertyKeyframe(
   // an existing one holds the animated value instead of reverting it (B-005).
   const value = effectiveAnimatableValue(element, property, frame, row.read(element));
   designerStore.upsertKeyframe(element.id, property, frame, value);
-}
-
-function percent(scaleOrOpacity: number): number {
-  return Math.round(scaleOrOpacity * 100);
-}
-
-function clamp01(v: number): number {
-  return Math.max(0, Math.min(1, v));
 }

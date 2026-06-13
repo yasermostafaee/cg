@@ -1,77 +1,100 @@
-import type { Element } from '@cg/shared-schema';
+import type { AnimatableProperty, Element, Fill } from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
-import { ColorPicker } from './ColorPopover.js';
-import { sharedEditableProperties, type SharedProperty } from './shared-properties.js';
+import { CollapseSection } from './CollapseSection.js';
+import { FillField } from './FillPopover.js';
+import { Seg, SingleField, transformFieldProps } from './transform-fields.js';
+import { sharedEditableProperties } from './shared-properties.js';
 import * as s from './InspectorPanel.css.js';
+import * as tx from './TransformSection.css.js';
 
 /**
- * Multi-selection inspector (D-041). Shown when more than one element is
+ * Multi-selection inspector (D-041 + D-049). Shown when more than one element is
  * selected; renders ONLY the properties COMMON to the selected kinds (the
- * intersection from `sharedEditableProperties`). A field whose selected
- * elements AGREE shows the value; one that DIFFERS shows a neutral "mixed"
- * placeholder and does not coerce until edited. Editing fans the value out to
- * every selected element as ONE undo step (`applySharedProperty`). No
- * per-keyframe diamonds — group editing sets static values only in v1.
+ * intersection from `sharedEditableProperties`) using the SAME primitives and
+ * section grouping as the single-element inspector — the horizontal-drag number
+ * field (`Seg`/`SingleField` + `TRANSFORM_FIELD_META` units) under a Transform
+ * section, and `FillField` under Path Style — instead of a bespoke flat list. A
+ * field whose selected elements DIFFER shows the neutral "mixed" state through
+ * the same primitive (no coercion). Editing fans out to every selected element
+ * as ONE undo step (`applySharedProperty`, keyframe-free). No per-keyframe
+ * diamonds — group editing sets static values only.
  */
 export function MultiSelectSection({ elements }: { elements: readonly Element[] }): JSX.Element {
   const shared = sharedEditableProperties(elements);
   const ids = elements.map((e) => e.id);
+  const byKey = new Map(shared.map((sp) => [sp.descriptor.key, sp]));
+
+  const has = (key: string): boolean => byKey.has(key);
+  const isMixed = (key: string): boolean => byKey.get(key)?.mixed === true;
+  const storedOf = (key: string): number => {
+    const v = byKey.get(key)?.value;
+    return typeof v === 'number' ? v : 0;
+  };
+  // Field props for a shared transform property — same display metadata (icon,
+  // unit, conversion) as the single inspector; commit fans out to all selected.
+  const tfp = (prop: AnimatableProperty) =>
+    transformFieldProps(prop, storedOf(prop), (v) =>
+      designerStore.applySharedProperty(ids, prop, v),
+    );
+
+  const fillSp = byKey.get('fill.color');
+  const fillValue: Fill | undefined =
+    fillSp === undefined || fillSp.mixed || typeof fillSp.value !== 'string'
+      ? undefined
+      : { kind: 'solid', color: fillSp.value };
+  // Solid edits fan out via the same keyframe-free path as the number fields; a
+  // gradient (or other non-solid) edit applies the whole Fill to every selected
+  // shape as one undo entry (still keyframe-free).
+  const applyFill = (f: Fill): void => {
+    if (f.kind === 'solid') {
+      designerStore.applySharedProperty(ids, 'fill.color', f.color);
+    } else {
+      designerStore.runAsSingleHistoryEntry(() => {
+        for (const el of elements) {
+          if (el.type === 'shape')
+            designerStore.updateElement(el.id, { fill: f } as Partial<Element>);
+        }
+      });
+    }
+  };
+
   return (
     <aside className={s.panel} aria-label="Inspector" data-testid="multi-select-inspector">
       <h2 className={s.headingFirst}>{elements.length} ELEMENTS SELECTED</h2>
-      <p className={s.empty}>Shared properties — edits apply to all selected.</p>
       {shared.length === 0 ? (
         <p className={s.empty}>No shared editable properties for this mix.</p>
       ) : (
-        shared.map((sp) => <MultiField key={sp.descriptor.key} sp={sp} ids={ids} />)
+        <>
+          <CollapseSection title="Transform" pinned>
+            <div className={tx.col}>
+              {(has('position.x') || has('position.y')) && (
+                <div className="cg-input-group">
+                  {has('position.x') && (
+                    <Seg {...tfp('position.x')} mixed={isMixed('position.x')} />
+                  )}
+                  {has('position.y') && (
+                    <Seg {...tfp('position.y')} mixed={isMixed('position.y')} />
+                  )}
+                </div>
+              )}
+              {(has('size.w') || has('size.h')) && (
+                <div className="cg-input-group">
+                  {has('size.w') && <Seg {...tfp('size.w')} mixed={isMixed('size.w')} />}
+                  {has('size.h') && <Seg {...tfp('size.h')} mixed={isMixed('size.h')} />}
+                </div>
+              )}
+              {has('rotation') && <SingleField {...tfp('rotation')} mixed={isMixed('rotation')} />}
+              {has('opacity') && <SingleField {...tfp('opacity')} mixed={isMixed('opacity')} />}
+            </div>
+          </CollapseSection>
+          {has('fill.color') && (
+            <CollapseSection title="Path Style" pinned>
+              <FillField label="fill" value={fillValue} onChange={applyFill} />
+              {isMixed('fill.color') && <p className={s.empty}>mixed</p>}
+            </CollapseSection>
+          )}
+        </>
       )}
     </aside>
-  );
-}
-
-function MultiField({ sp, ids }: { sp: SharedProperty; ids: readonly string[] }): JSX.Element {
-  const { descriptor, value, mixed } = sp;
-  const apply = (v: number | string): void =>
-    designerStore.applySharedProperty(ids, descriptor.prop, v);
-  const labelText = mixed ? `${descriptor.label} (mixed)` : descriptor.label;
-  return (
-    <div className={s.row}>
-      <span className={s.label}>{labelText}</span>
-      {descriptor.kind === 'color' ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-          <ColorPicker
-            value={typeof value === 'string' ? value : '#000000'}
-            ariaLabel={labelText}
-            onChange={(hex) => apply(hex)}
-          />
-          {mixed && <span className={s.empty}>mixed</span>}
-        </div>
-      ) : (
-        <input
-          // Commit on blur/Enter (not per keystroke) so a multi-element edit is
-          // one undo step, not one per keystroke; re-key on the agreed value so
-          // the field re-initialises when the selection or value changes.
-          key={`${descriptor.key}-${mixed ? 'mixed' : String(value)}`}
-          className={s.docNum}
-          style={{ width: '100%' }}
-          type="number"
-          step={descriptor.step}
-          min={descriptor.min}
-          max={descriptor.max}
-          placeholder={mixed ? 'mixed' : undefined}
-          defaultValue={mixed || typeof value !== 'number' ? '' : String(value)}
-          aria-label={labelText}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-          }}
-          onBlur={(e) => {
-            const raw = e.target.value;
-            if (raw === '') return;
-            const n = Number(raw);
-            if (Number.isFinite(n)) apply(n);
-          }}
-        />
-      )}
-    </div>
   );
 }

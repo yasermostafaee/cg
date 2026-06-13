@@ -1212,3 +1212,56 @@ blue accent button inside the inspector — styles consistent with the propertie
 **Notes:** appearance only, no behavior change; MUST come after D-045/D-046 (depends on
 their final controls). Loopic refs: docs/designer-guide/sample-assets/textalign.png-era
 shots → D-045-align-0/1.png, D-048-textpadding-0.png, D-048-popover-0.png.
+
+## [~] D-049 — Multi-select inspector parity + units + per-shape selection boxes ⟨priority: high⟩ — change: `openspec/changes/fix-multi-select-inspector-parity/`
+
+**What:** Fix three follow-up gaps in the D-041 multi-selection editor so it
+matches single-selection UX. (a) Shared properties render with the SAME
+primitives as the single-element inspector — horizontal-drag number inputs,
+grouped under their section headers (e.g. opacity and position X under
+Transform), not a flat ad-hoc layout. (b) Properties with a display unit show
+it exactly as single-selection does (opacity as `%`, and every other united
+property likewise). (c) The multi-selection gizmo draws a selection box around
+EACH selected shape individually (no single bounding box around the whole
+group); dragging any one shape moves the whole selection. Keyframe-aware group
+move is explicitly NOT in this item (tracked separately).
+**Why:** D-041 shipped multi-edit with a bespoke flat editor that drops the
+familiar drag-inputs, section grouping, and unit suffixes, and a whole-group
+bounding box whose empty interior is draggable in a confusing way. These are
+parity regressions against the single-element inspector the operator already
+knows.
+**Acceptance:**
+
+- WHEN more than one element is selected THEN each shared property uses the
+  same input primitive as the single-element inspector (horizontal-drag
+  number fields, colour controls, etc.), not a different widget
+- WHEN shared properties are shown THEN they are grouped under the same
+  section headers as single selection (transform properties under Transform,
+  etc.), in the same order, rather than a flat list
+- WHEN a shared property has a display unit THEN the multi editor shows that
+  unit exactly as single selection does (opacity in `%`; every other united
+  property shows its unit)
+- WHEN a "mixed" shared field is displayed THEN it still uses the correct
+  primitive + unit and shows the neutral mixed state until edited (the D-041
+  mixed behavior is preserved, just rendered with the right control)
+- WHEN more than one shape is selected THEN a selection box is drawn around
+  each selected shape individually and NO single group-spanning bounding box
+  is shown
+- WHEN the operator presses on one selected shape and drags THEN the whole
+  selection moves together (group move is unchanged); pressing in empty space
+  between shapes does NOT drag the group (there is no group box to grab)
+- WHEN exactly one element is selected THEN the inspector and gizmo are
+  unchanged (no regression)
+  **Notes:** Follow-up to D-041 (`designer-multi-select`); extend that living
+  capability via `## MODIFIED Requirements` (the multi-editor rendering + the
+  gizmo box requirement), preserving all other scenarios. NO new behavior in
+  group move/delete/selection-building, and NO keyframe change — group move
+  stays keyframe-free here (the keyframe-aware version is a separate item).
+  Likely files: `MultiSelectSection.tsx` (reuse the single-inspector input
+  primitives + section grouping + unit formatting instead of bespoke widgets —
+  factor shared render helpers out of `StyleSection`/`TransformSection` rather
+  than duplicating), and `Gizmo.tsx` `MultiGizmo` (per-shape boxes, drop the
+  union bounding box; keep the press-on-member group-drag, remove the
+  empty-interior drag region). No schema change. Loopic single-inspector look
+  is the reference for the input/unit styling. Change:
+  `openspec/changes/fix-multi-select-inspector-parity/`.
