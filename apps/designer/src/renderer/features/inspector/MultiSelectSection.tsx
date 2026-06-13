@@ -1,23 +1,38 @@
 import type { AnimatableProperty, Element, Fill } from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
 import { CollapseSection } from './CollapseSection.js';
+import { ColorField, NumberField } from './controls.js';
 import { FillField } from './FillPopover.js';
 import { Seg, SingleField, transformFieldProps } from './transform-fields.js';
-import { sharedEditableProperties } from './shared-properties.js';
+import {
+  sharedEditableProperties,
+  type SharedProperty,
+  type SharedSection,
+} from './shared-properties.js';
 import * as s from './InspectorPanel.css.js';
 import * as tx from './TransformSection.css.js';
 
+/** Non-transform sections, in the single-inspector order (Transform is rendered first, explicitly). */
+const SECTION_ORDER: readonly SharedSection[] = [
+  'Path Style',
+  'Border Radius',
+  'Drop Shadow',
+  'Filter',
+];
+
 /**
- * Multi-selection inspector (D-041 + D-049). Shown when more than one element is
- * selected; renders ONLY the properties COMMON to the selected kinds (the
+ * Multi-selection inspector (D-041 / D-049 / D-050). Shown when more than one
+ * element is selected; renders ALL properties COMMON to the selected kinds (the
  * intersection from `sharedEditableProperties`) using the SAME primitives and
- * section grouping as the single-element inspector — the horizontal-drag number
- * field (`Seg`/`SingleField` + `TRANSFORM_FIELD_META` units) under a Transform
- * section, and `FillField` under Path Style — instead of a bespoke flat list. A
- * field whose selected elements DIFFER shows the neutral "mixed" state through
- * the same primitive (no coercion). Editing fans out to every selected element
- * as ONE undo step (`applySharedProperty`, keyframe-free). No per-keyframe
- * diamonds — group editing sets static values only.
+ * section grouping as the single inspector — the horizontal-drag number field
+ * under Transform, plus Path Style / Border Radius / Drop Shadow / Filter via
+ * `NumberField` / `ColorField` / `FillField`. A field whose selected elements
+ * DIFFER shows the neutral "mixed" state through the same primitive.
+ *
+ * D-050 commit model: each number field commits on Enter/blur (`deferCommit`),
+ * so a typed edit is ONE history entry per committed value (not one per
+ * keystroke) — `applySharedProperty` runs inside one `runAsSingleHistoryEntry`
+ * per commit, keyframe-free. No per-keyframe diamonds.
  */
 export function MultiSelectSection({ elements }: { elements: readonly Element[] }): JSX.Element {
   const shared = sharedEditableProperties(elements);
@@ -26,25 +41,28 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
 
   const has = (key: string): boolean => byKey.has(key);
   const isMixed = (key: string): boolean => byKey.get(key)?.mixed === true;
-  const storedOf = (key: string): number => {
+  const numOf = (key: string): number => {
     const v = byKey.get(key)?.value;
     return typeof v === 'number' ? v : 0;
   };
-  // Field props for a shared transform property — same display metadata (icon,
-  // unit, conversion) as the single inspector; commit fans out to all selected.
-  const tfp = (prop: AnimatableProperty) =>
-    transformFieldProps(prop, storedOf(prop), (v) =>
-      designerStore.applySharedProperty(ids, prop, v),
-    );
+  const applyNum =
+    (prop: AnimatableProperty) =>
+    (v: number): void =>
+      designerStore.applySharedProperty(ids, prop, v);
 
-  const fillSp = byKey.get('fill.color');
-  const fillValue: Fill | undefined =
-    fillSp === undefined || fillSp.mixed || typeof fillSp.value !== 'string'
-      ? undefined
-      : { kind: 'solid', color: fillSp.value };
-  // Solid edits fan out via the same keyframe-free path as the number fields; a
-  // gradient (or other non-solid) edit applies the whole Fill to every selected
-  // shape as one undo entry (still keyframe-free).
+  // Transform field props (icon-based Seg/SingleField; display via TRANSFORM_FIELD_META),
+  // deferred-commit + mixed-aware.
+  const tf = (prop: AnimatableProperty) => ({
+    ...transformFieldProps(prop, numOf(prop), applyNum(prop)),
+    mixed: isMixed(prop),
+    deferCommit: true,
+  });
+
+  const inSection = (section: SharedSection): SharedProperty[] =>
+    shared.filter((sp) => sp.descriptor.section === section);
+
+  // Solid fill fans out keyframe-free like the number fields; a gradient applies
+  // the whole Fill to every selected shape as one undo entry.
   const applyFill = (f: Fill): void => {
     if (f.kind === 'solid') {
       designerStore.applySharedProperty(ids, 'fill.color', f.color);
@@ -58,6 +76,40 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
     }
   };
 
+  function renderField(sp: SharedProperty): JSX.Element {
+    const d = sp.descriptor;
+    if (d.kind === 'fill') {
+      const fillValue: Fill | undefined =
+        sp.mixed || typeof sp.value !== 'string' ? undefined : { kind: 'solid', color: sp.value };
+      return <FillField key={d.key} label={d.label} value={fillValue} onChange={applyFill} />;
+    }
+    if (d.kind === 'color') {
+      return (
+        <ColorField
+          key={d.key}
+          label={d.label}
+          value={typeof sp.value === 'string' ? sp.value : '#000000'}
+          mixed={sp.mixed}
+          onCommit={(hex) => designerStore.applySharedProperty(ids, d.prop, hex)}
+        />
+      );
+    }
+    return (
+      <NumberField
+        key={d.key}
+        label={d.label}
+        value={numOf(d.key)}
+        step={d.step}
+        min={d.min}
+        max={d.max}
+        suffix={d.suffix}
+        mixed={sp.mixed}
+        deferCommit
+        onCommit={applyNum(d.prop)}
+      />
+    );
+  }
+
   return (
     <aside className={s.panel} aria-label="Inspector" data-testid="multi-select-inspector">
       <h2 className={s.headingFirst}>{elements.length} ELEMENTS SELECTED</h2>
@@ -69,30 +121,35 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
             <div className={tx.col}>
               {(has('position.x') || has('position.y')) && (
                 <div className="cg-input-group">
-                  {has('position.x') && (
-                    <Seg {...tfp('position.x')} mixed={isMixed('position.x')} />
-                  )}
-                  {has('position.y') && (
-                    <Seg {...tfp('position.y')} mixed={isMixed('position.y')} />
-                  )}
+                  {has('position.x') && <Seg {...tf('position.x')} />}
+                  {has('position.y') && <Seg {...tf('position.y')} />}
                 </div>
               )}
               {(has('size.w') || has('size.h')) && (
                 <div className="cg-input-group">
-                  {has('size.w') && <Seg {...tfp('size.w')} mixed={isMixed('size.w')} />}
-                  {has('size.h') && <Seg {...tfp('size.h')} mixed={isMixed('size.h')} />}
+                  {has('size.w') && <Seg {...tf('size.w')} />}
+                  {has('size.h') && <Seg {...tf('size.h')} />}
                 </div>
               )}
-              {has('rotation') && <SingleField {...tfp('rotation')} mixed={isMixed('rotation')} />}
-              {has('opacity') && <SingleField {...tfp('opacity')} mixed={isMixed('opacity')} />}
+              {(has('scale.x') || has('scale.y')) && (
+                <div className="cg-input-group">
+                  {has('scale.x') && <Seg {...tf('scale.x')} />}
+                  {has('scale.y') && <Seg {...tf('scale.y')} />}
+                </div>
+              )}
+              {has('rotation') && <SingleField {...tf('rotation')} />}
+              {has('opacity') && <SingleField {...tf('opacity')} />}
             </div>
           </CollapseSection>
-          {has('fill.color') && (
-            <CollapseSection title="Path Style" pinned>
-              <FillField label="fill" value={fillValue} onChange={applyFill} />
-              {isMixed('fill.color') && <p className={s.empty}>mixed</p>}
-            </CollapseSection>
-          )}
+          {SECTION_ORDER.map((section) => {
+            const descs = inSection(section);
+            if (descs.length === 0) return null;
+            return (
+              <CollapseSection key={section} title={section} pinned={section === 'Path Style'}>
+                {descs.map(renderField)}
+              </CollapseSection>
+            );
+          })}
         </>
       )}
     </aside>

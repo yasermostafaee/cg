@@ -116,4 +116,48 @@ test.describe('Multi-select inspector parity + per-shape boxes (D-049)', () => {
       .poll(() => app.canvasFrame.locator('[data-cg-element-id]').count())
       .toBe(before - 2);
   });
+
+  test('two shapes expose the FULL shape sections; a typed shared edit + Enter is one undo across both (D-050)', async ({
+    app,
+  }) => {
+    await app.newProject('Multi050');
+    const cb = (await app.canvas.boundingBox())!;
+    const A = { x: rnd(cb.width * 0.14), y: rnd(cb.height * 0.22) };
+    const B = { x: rnd(cb.width * 0.62), y: rnd(cb.height * 0.22) };
+    const inA = { x: A.x + 10, y: A.y + 8 };
+    const inB = { x: B.x + 10, y: B.y + 8 };
+
+    await app.addEllipse(A);
+    await app.addEllipse(B);
+    await app.clickCanvas(inA);
+    await app.shiftClickCanvas(inB);
+    await expect(app.multiInspector).toBeVisible();
+
+    // The full shape set is exposed — stroke (Path Style), Border Radius, Drop
+    // Shadow, Filter — not just transform; plus per-shape boxes.
+    const strokeWidth = app.multiInspector.getByRole('spinbutton', { name: 'stroke width' });
+    await expect(strokeWidth).toBeVisible();
+    await expect(
+      app.multiInspector.getByRole('button', { name: 'Toggle Border Radius' }),
+    ).toBeVisible();
+    await expect(
+      app.multiInspector.getByRole('button', { name: 'Toggle Drop Shadow' }),
+    ).toBeVisible();
+    await expect(app.multiInspector.getByRole('button', { name: 'Toggle Filter' })).toBeVisible();
+    await expect(app.multiBoxes).toHaveCount(2);
+
+    // A typed shared edit commits on Enter as ONE history entry across both: the
+    // field reads the agreed new value; a single undo reverts BOTH (back to the
+    // shared 0 — not a "mixed" half-reverted state).
+    await strokeWidth.fill('8');
+    await strokeWidth.press('Enter');
+    await expect(strokeWidth).toHaveValue('8');
+
+    await app.undo();
+    await app.clickCanvas(inA);
+    await app.shiftClickCanvas(inB);
+    await expect(app.multiInspector.getByRole('spinbutton', { name: 'stroke width' })).toHaveValue(
+      '0',
+    );
+  });
 });

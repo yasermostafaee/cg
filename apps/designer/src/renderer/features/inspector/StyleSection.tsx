@@ -218,6 +218,12 @@ function TextSections({
 //                              SHAPE
 // ────────────────────────────────────────────────────────────────────────
 
+// ⚠️ SYNC WITH shared-properties.ts. The multi-selection editor (D-050) mirrors
+// these shape fields' `prop` ids + read accessors in `BY_KIND.shape` /
+// `UNIVERSAL` to compute the shared-property intersection — there is no central
+// metadata table (a refactor toward one is a separate quality item, parked near
+// D-035). When a shape property here is added/changed, UPDATE shared-properties.ts
+// too. See its header note + the change's design.md (tech debt).
 function ShapeSections({
   element,
   currentFrame,

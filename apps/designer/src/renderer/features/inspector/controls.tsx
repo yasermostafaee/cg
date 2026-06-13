@@ -153,13 +153,17 @@ interface NumberFieldProps {
   label: string;
   value: number;
   onCommit: (n: number) => void;
-  step?: number;
-  min?: number;
-  max?: number;
+  step?: number | undefined;
+  min?: number | undefined;
+  max?: number | undefined;
   /** Optional dim unit shown after the value (e.g. "°", "%"). */
-  suffix?: string;
+  suffix?: string | undefined;
   /** Optional element rendered outside the field border (e.g. KeyframeIndicator). */
   trailing?: JSX.Element;
+  /** D-049 — multi-selection "mixed" state (values differ; show a placeholder). */
+  mixed?: boolean;
+  /** D-050 — defer commit to Enter/blur (one undo per edit) + drop drag-scrub. */
+  deferCommit?: boolean;
 }
 
 export function NumberField(props: NumberFieldProps): JSX.Element {
@@ -170,23 +174,28 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
     min: props.min,
     max: props.max,
   };
-  const labelScrub = scrubHandle(opts);
-  const field = fieldScrub(opts);
+  const defer = props.deferCommit === true;
+  const labelScrub = defer ? undefined : scrubHandle(opts);
+  const field = defer ? undefined : fieldScrub(opts);
   const hasUnit = props.suffix !== undefined;
   return (
     <div className={s.row}>
       <span
         className={s.label}
-        style={labelScrub.style}
-        onPointerDown={labelScrub.onPointerDown}
-        title="Drag to adjust"
+        style={labelScrub?.style}
+        onPointerDown={labelScrub?.onPointerDown}
+        title={defer ? undefined : 'Drag to adjust'}
       >
         {props.label}
       </span>
       {/* The whole field scrubs the value (Loopic); click focuses to type.
           With a unit the input sizes to its content so the value+unit cluster
-          on the left, and the diamond is pushed to the right edge. */}
-      <div className={cx('cg-field', s.scrubSurface)} onPointerDown={field.onPointerDown}>
+          on the left, and the diamond is pushed to the right edge. In the
+          multi editor (`deferCommit`) the field is type-to-edit (no scrub). */}
+      <div
+        className={cx('cg-field', !defer && s.scrubSurface)}
+        onPointerDown={field?.onPointerDown}
+      >
         <RealtimeNumberInput
           value={props.value}
           onCommit={props.onCommit}
@@ -194,6 +203,9 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
           min={props.min}
           max={props.max}
           scrub={false}
+          mixed={props.mixed}
+          placeholder={props.mixed === true ? '—' : undefined}
+          commitMode={defer ? 'blur' : undefined}
           className={cx(hasUnit ? s.inputInnerAuto : s.inputInner, hasUnit && 'cg-num-unit')}
           ariaLabel={props.label}
         />
@@ -294,6 +306,14 @@ interface RealtimeNumberInputProps {
    */
   mixed?: boolean | undefined;
   placeholder?: string | undefined;
+  /**
+   * D-050 — when to fire `onCommit`. `'change'` (default) commits live on every
+   * keystroke (single selection, relies on history time-coalescing). `'blur'`
+   * defers: `onChange` updates only the visible buffer, and `onCommit` fires
+   * once on Enter/blur — so a multi-selection edit is ONE history entry per
+   * committed value, not one per keystroke.
+   */
+  commitMode?: 'change' | 'blur' | undefined;
 }
 
 /**
@@ -317,6 +337,9 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
   const [editing, setEditing] = useState(false);
   const focused = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Set by Escape so the following blur discards the buffer instead of committing it.
+  const discardRef = useRef(false);
+  const deferred = props.commitMode === 'blur';
 
   useEffect(() => {
     if (!focused.current) setBuf(display);
@@ -361,13 +384,23 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
         setEditing(true);
         e.currentTarget.select();
       }}
-      onBlur={() => {
+      onBlur={(e) => {
         focused.current = false;
         setEditing(false);
+        // Deferred (multi) commit: fire ONCE on blur with the input's value, so
+        // the whole edit is one history entry — unless Escape asked to discard.
+        if (deferred && !discardRef.current) {
+          const raw = e.target.value;
+          const n = Number(raw);
+          if (raw.trim() !== '' && Number.isFinite(n) && n !== props.value) props.onCommit(n);
+        }
+        discardRef.current = false;
         setBuf(display);
       }}
       onChange={(e) => {
         setBuf(e.target.value);
+        // Deferred mode keeps onChange visual-only (no history); commit on blur.
+        if (deferred) return;
         const n = Number(e.target.value);
         if (Number.isFinite(n) && n !== props.value) props.onCommit(n);
       }}
@@ -377,6 +410,7 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
           return;
         }
         if (e.key === 'Escape') {
+          discardRef.current = true;
           setBuf(display);
           (e.target as HTMLInputElement).blur();
           return;
@@ -387,10 +421,15 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
         if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
           e.preventDefault();
           const inc = (props.step ?? 1) * (e.shiftKey ? 10 : 1);
-          let next = Number((props.value + (e.key === 'ArrowUp' ? inc : -inc)).toFixed(4));
+          const base = deferred && buf.trim() !== '' ? Number(buf) : props.value;
+          let next = Number((base + (e.key === 'ArrowUp' ? inc : -inc)).toFixed(4));
           if (props.min !== undefined) next = Math.max(props.min, next);
           if (props.max !== undefined) next = Math.min(props.max, next);
-          if (next !== props.value) {
+          if (Number.isNaN(next)) return;
+          // Deferred: nudge the buffer only (commit on blur); live: commit now.
+          if (deferred) {
+            setBuf(formatNumberDisplay(next));
+          } else if (next !== props.value) {
             props.onCommit(next);
             setBuf(formatNumberDisplay(next));
           }
@@ -485,10 +524,13 @@ interface ColorFieldProps {
   trailing?: JSX.Element;
   /** See {@link TextFieldProps.resetKey} — owner identity for the input key (B-009). */
   resetKey?: string;
+  /** D-049 — multi-selection "mixed" state: the selected elements differ on this colour. */
+  mixed?: boolean;
 }
 
 export function ColorField(props: ColorFieldProps): JSX.Element {
-  const hex = props.value.replace(/^#/, '').toUpperCase();
+  const mixed = props.mixed === true;
+  const hex = mixed ? '' : props.value.replace(/^#/, '').toUpperCase();
   return (
     <div className={s.row}>
       <span className={s.label}>{props.label}</span>
@@ -502,6 +544,7 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
           className={s.hexInput}
           type="text"
           defaultValue={hex}
+          placeholder={mixed ? 'mixed' : undefined}
           onFocus={(e) => e.currentTarget.select()}
           onBlur={(e) => {
             const v = e.target.value.trim();
@@ -511,7 +554,7 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
           }}
-          key={`${props.label}-${props.resetKey ?? ''}-${props.value}`}
+          key={`${props.label}-${props.resetKey ?? ''}-${mixed ? 'mixed' : props.value}`}
           aria-label={`${props.label} hex value`}
         />
         {props.trailing !== undefined && <span className={s.point}>{props.trailing}</span>}

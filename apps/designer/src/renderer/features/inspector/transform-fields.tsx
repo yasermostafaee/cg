@@ -104,6 +104,12 @@ export interface FieldProps {
   point?: JSX.Element | undefined;
   /** D-049 — the multi-selection values differ on this property. */
   mixed?: boolean | undefined;
+  /**
+   * D-050 — defer commit to Enter/blur (one history entry per committed edit)
+   * and drop the drag-scrub surface. Used by the multi-selection editor so a
+   * typed edit is one undo step, not one per keystroke.
+   */
+  deferCommit?: boolean | undefined;
 }
 
 /**
@@ -156,6 +162,7 @@ function FieldBody(props: FieldProps): JSX.Element {
         scrub={false}
         mixed={props.mixed}
         placeholder={props.mixed === true ? '—' : undefined}
+        commitMode={props.deferCommit === true ? 'blur' : undefined}
         className={cx(hasUnit ? s.inputUnit : s.input, hasUnit && 'cg-num-unit')}
         ariaLabel={props.ariaLabel}
       />
@@ -164,12 +171,16 @@ function FieldBody(props: FieldProps): JSX.Element {
   );
 }
 
-/** One axis of a combined vector field — the whole segment scrubs the value;
- *  diamond (if any) at the segment's right edge. */
+/** One axis of a combined vector field — the whole segment scrubs the value
+ *  (unless `deferCommit`, the multi editor's type-to-edit mode); diamond (if
+ *  any) at the segment's right edge. */
 export function Seg(props: FieldProps): JSX.Element {
-  const scrub = fieldScrub(props);
+  const scrub = props.deferCommit === true ? undefined : fieldScrub(props);
   return (
-    <div className={cx('cg-seg', s.scrubSurface)} onPointerDown={scrub.onPointerDown}>
+    <div
+      className={cx('cg-seg', props.deferCommit !== true && s.scrubSurface)}
+      onPointerDown={scrub?.onPointerDown}
+    >
       <FieldBody {...props} />
       {props.point !== undefined && <span className={s.point}>{props.point}</span>}
     </div>
@@ -177,11 +188,15 @@ export function Seg(props: FieldProps): JSX.Element {
 }
 
 /** Standalone field — icon, value+unit on the left, diamond (if any) at the
- *  right, all inside one bordered box; the whole box scrubs the value. */
+ *  right, all inside one bordered box; the whole box scrubs the value (unless
+ *  `deferCommit`). */
 export function SingleField(props: FieldProps): JSX.Element {
-  const scrub = fieldScrub(props);
+  const scrub = props.deferCommit === true ? undefined : fieldScrub(props);
   return (
-    <div className={cx('cg-field', s.scrubSurface)} onPointerDown={scrub.onPointerDown}>
+    <div
+      className={cx('cg-field', props.deferCommit !== true && s.scrubSurface)}
+      onPointerDown={scrub?.onPointerDown}
+    >
       <FieldBody {...props} />
       {props.point !== undefined && <span className={s.point}>{props.point}</span>}
     </div>

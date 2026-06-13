@@ -128,6 +128,12 @@ export class DesignerApp {
     await this.canvas.click({ position: pos });
   }
 
+  /** Add an ellipse by placing the Ellipse tool on the canvas (auto-selected). */
+  async addEllipse(pos: { x: number; y: number } = { x: 240, y: 200 }): Promise<void> {
+    await this.selectTool('Ellipse');
+    await this.canvas.click({ position: pos });
+  }
+
   /** D-028 — add a ticker band by placing the Ticker tool (auto-selected). */
   async addTicker(pos: { x: number; y: number } = { x: 120, y: 260 }): Promise<void> {
     await this.selectTool('Ticker');
