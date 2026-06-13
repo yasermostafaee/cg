@@ -20,9 +20,10 @@ import { COMPOSITION_DND_TYPE } from '../compositions/CompositionsPanel.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
 import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
+import { collectGroupMoveTargets } from './group-move.js';
 import { drillTarget } from './drill.js';
 import { screenToScene, snapAxis } from './geometry.js';
-import { Gizmo, lockCursor } from './Gizmo.js';
+import { Gizmo, MultiGizmo, lockCursor } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
 import * as s from './CanvasOverlay.css.js';
 
@@ -87,6 +88,8 @@ export function CanvasOverlay({
   }));
   const selectedEl =
     selection.size === 1 ? (allElements.find((e) => selection.has(e.id)) ?? null) : null;
+  // D-041 — the selected elements for the multi-selection gizmo (size > 1).
+  const selectedEls = selection.size > 1 ? allElements.filter((e) => selection.has(e.id)) : [];
   const editingEl = editingTextId
     ? (allElements.find((e) => e.id === editingTextId) ?? null)
     : null;
@@ -154,14 +157,32 @@ export function CanvasOverlay({
       return;
     }
     if (tool === 'cursor') {
+      // D-041 — shift / ctrl(+meta) build a multi-selection.
+      const modifier = e.shiftKey || e.ctrlKey || e.metaKey;
       const hit = topmostHit(allElementsAtFrame, scenePoint);
-      if (hit !== null) {
+      if (hit === null) {
+        // A plain click on empty space clears; a modifier-click on empty space
+        // is a no-op (it must not wipe an in-progress multi-selection).
+        if (!modifier) designerStore.setSelection([]);
+        return;
+      }
+      if (modifier) {
+        // Toggle this element in/out of the selection — no drag on a toggle.
+        designerStore.toggleInSelection(hit.id);
+        return;
+      }
+      // Plain click on a member of an existing multi-selection → start a GROUP
+      // move (it collapses to just this element if it turns out to be a click,
+      // not a drag). Otherwise replace the selection with this element and run
+      // the single-element drag (today's keyframe-aware path, unchanged).
+      const isMember = selection.size > 1 && selection.has(hit.id);
+      if (isMember && !hit.locked) {
+        beginGroupDrag(hit.id, scale, currentFrame, e.nativeEvent);
+      } else {
         designerStore.setSelection([hit.id]);
         // A locked element can be selected (to recolor / unlock it) but not
         // moved — and its resize/rotate gizmo is hidden (see render below).
         if (!hit.locked) beginDrag(hit.id, scale, currentFrame, e.nativeEvent);
-      } else {
-        designerStore.setSelection([]);
       }
       return;
     }
@@ -320,6 +341,9 @@ export function CanvasOverlay({
         bindModeFieldId === null && (
           <Gizmo element={selectedEl} scale={scale} currentFrame={currentFrame} />
         )}
+      {selectedEls.length > 1 && editingEl === null && bindModeFieldId === null && (
+        <MultiGizmo elements={selectedEls} scale={scale} currentFrame={currentFrame} />
+      )}
       {editingEl !== null && editingEl.type === 'text' && (
         <TextEditor
           element={editingEl as TextElement}
@@ -450,6 +474,89 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
     window.removeEventListener('pointerup', onUp);
     unlockCursor();
     designerStore.setSnapGuides({ x: [], y: [] });
+  };
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+}
+
+/**
+ * D-041 — group move. Drag every SELECTED element by the same delta as ONE undo
+ * step. Reuses the single-drag delta + snapping math, but anchors snapping on
+ * the grabbed element and writes each member's STATIC position
+ * (`writeStaticAnimatable`, keyframe-free) — group editing does not touch the
+ * keyframe model in v1. Locked/hidden members are skipped (like single drag). A
+ * pure click (no movement) collapses the selection to just the grabbed element.
+ */
+function beginGroupDrag(
+  anchorId: string,
+  scale: number,
+  currentFrame: number,
+  ev: PointerEvent,
+): void {
+  const state = designerStore.get();
+  if (state.scene === null) return;
+  const doc = editSceneOf(state.scene, state.activeCompositionId);
+  if (doc === null) return;
+  const { movers, anchor, xTargets, yTargets } = collectGroupMoveTargets(
+    doc.layers,
+    state.selection,
+    anchorId,
+    currentFrame,
+    doc.resolution,
+  );
+  if (anchor === null) return;
+  const anc = anchor;
+  // Ruler guides are snap targets too.
+  for (const gx of state.guides.x) xTargets.push(gx);
+  for (const gy of state.guides.y) yTargets.push(gy);
+
+  const unlockCursor = lockCursor(ARROW_CURSOR);
+  const startX = ev.clientX;
+  const startY = ev.clientY;
+  // Start a fresh undo entry; per-move writes coalesce into it; the boundary at
+  // pointer-up closes it — the whole gesture is a single undo step.
+  designerStore.markHistoryBoundary();
+  let moved = false;
+
+  const onMove = (e: PointerEvent): void => {
+    const dx = (e.clientX - startX) / scale;
+    const dy = (e.clientY - startY) / scale;
+    if (!moved && Math.abs(dx) + Math.abs(dy) < 2) return; // click vs drag
+    moved = true;
+    // Snap the ANCHOR, then apply its (snapped) delta to every member so the
+    // selection's relative offsets are preserved.
+    let ax = anc.x + dx;
+    let ay = anc.y + dy;
+    const guides: { x: number[]; y: number[] } = { x: [], y: [] };
+    if (designerStore.get().snappingEnabled) {
+      const threshold = 6 / scale; // ~6 screen px regardless of zoom
+      const sx = snapAxis(ax, anc.w, xTargets, threshold);
+      if (sx !== null) {
+        ax = sx.value;
+        guides.x.push(sx.guide);
+      }
+      const sy = snapAxis(ay, anc.h, yTargets, threshold);
+      if (sy !== null) {
+        ay = sy.value;
+        guides.y.push(sy.guide);
+      }
+    }
+    const fdx = ax - anc.x;
+    const fdy = ay - anc.y;
+    for (const m of movers) {
+      designerStore.writeStaticAnimatable(m.id, 'position.x', m.x + fdx);
+      designerStore.writeStaticAnimatable(m.id, 'position.y', m.y + fdy);
+    }
+    designerStore.setSnapGuides(guides);
+  };
+  const onUp = (): void => {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    unlockCursor();
+    designerStore.setSnapGuides({ x: [], y: [] });
+    designerStore.markHistoryBoundary();
+    // A pure click (no drag) on a member collapses the selection to just it.
+    if (!moved) designerStore.setSelection([anchorId]);
   };
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);

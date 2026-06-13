@@ -326,6 +326,26 @@ export function markHistoryBoundary(): void {
 }
 
 /**
+ * Run `fn` so its scene mutations collapse to EXACTLY ONE undo entry, isolated
+ * from neighbouring edits. There is no transaction object — history grouping is
+ * the time-coalescing in `set` (a burst within `COALESCE_MS` is one entry). The
+ * leading boundary makes `fn`'s first write snapshot the pre-edit scene (so the
+ * group is its own entry even when it follows other synchronous edits, e.g. in
+ * tests); the trailing boundary keeps the NEXT edit from folding in. Used by the
+ * D-041 group property edit (fan-out over selected ids); NOT for continuous
+ * gestures like a drag, whose ticks must coalesce WITHOUT a boundary between
+ * them (they call `markHistoryBoundary` at the gesture endpoints instead).
+ */
+export function runAsSingleHistoryEntry(fn: () => void): void {
+  markHistoryBoundary();
+  try {
+    fn();
+  } finally {
+    markHistoryBoundary();
+  }
+}
+
+/**
  * Mark the current scene as saved — clears the `dirty` flag. Call after a
  * successful save so the "unsaved changes" prompt won't fire until the next
  * edit.

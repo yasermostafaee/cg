@@ -7,6 +7,18 @@ import * as s from './ElementRow.css.js';
 
 export { ELEMENT_ROW_HEIGHT } from './metrics.js';
 
+/**
+ * Select an element from a timeline row. D-041 — shift / ctrl(+meta) toggle the
+ * element in/out of the shared multi-selection (the same modifiers as the
+ * canvas, one selection set); a plain click still replaces with just this
+ * element. Used by both the label and lane click handlers (the lifespan-bar
+ * click bubbles to the lane handler), so canvas and layers stay in sync.
+ */
+function selectFromRow(e: React.MouseEvent, elementId: string): void {
+  if (e.shiftKey || e.ctrlKey || e.metaKey) designerStore.toggleInSelection(elementId);
+  else designerStore.setSelection([elementId]);
+}
+
 interface Props {
   element: Element;
   expanded: boolean;
@@ -49,7 +61,7 @@ function ElementRowLabel(props: Props): JSX.Element {
       data-element-id={element.id}
       onClick={(e) => {
         if ((e.target as HTMLElement).dataset.role === 'chevron') return;
-        designerStore.setSelection([element.id]);
+        selectFromRow(e, element.id);
       }}
       onContextMenu={
         onContextMenu === undefined
@@ -408,7 +420,7 @@ function ElementRowLane(props: Props): JSX.Element {
     <div
       ref={cellRef}
       className={cx(s.laneCell, isSelected && s.rowSelected)}
-      onClick={() => designerStore.setSelection([element.id])}
+      onClick={(e) => selectFromRow(e, element.id)}
       onContextMenu={
         onContextMenu === undefined
           ? undefined

@@ -20,6 +20,27 @@ export const selectionSlice = {
     });
   },
 
+  /**
+   * Toggle one element in/out of the selection (shift / ctrl-click) — add when
+   * absent, remove when present — so the canvas and the timeline layer rows
+   * build ONE shared multi-selection (D-041). Like `setSelection`, the keyframe
+   * selection is dropped unless the kept keyframe's element survives.
+   */
+  toggleInSelection(id: string): void {
+    const nextSel = new Set(current.selection);
+    if (nextSel.has(id)) nextSel.delete(id);
+    else nextSel.add(id);
+    const keepKey =
+      current.selectedKeyframe !== null && nextSel.has(current.selectedKeyframe.elementId);
+    set({
+      selection: nextSel,
+      editingTextId: null,
+      selectedKeyframe: keepKey ? current.selectedKeyframe : null,
+      selectedKeyframes: keepKey ? current.selectedKeyframes : [],
+      keyframeInspectorOpen: keepKey ? current.keyframeInspectorOpen : false,
+    });
+  },
+
   /** Enter inline edit mode for a text element. Pass null to exit. */
   setEditingText(elementId: string | null): void {
     set({ editingTextId: elementId });

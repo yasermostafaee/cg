@@ -265,6 +265,56 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   );
 }
 
+interface MultiProps {
+  elements: readonly Element[];
+  scale: number;
+  currentFrame: number;
+}
+
+/**
+ * Multi-selection gizmo (D-041): a faint dashed outline around each selected
+ * element plus ONE solid accent bounding box spanning their union — MOVE ONLY,
+ * with no resize/rotate handles in v1. Visual only (`pointerEvents: none`); the
+ * group move drag is initiated from `CanvasOverlay` when a selected element is
+ * grabbed. Boxes are the elements' effective axis-aligned boxes at the current
+ * frame (rotation is not unioned in v1 — group rotate is out of scope).
+ */
+export function MultiGizmo({ elements, scale, currentFrame }: MultiProps): JSX.Element | null {
+  if (elements.length < 2) return null;
+  const boxes = elements.map((el) => {
+    const t = effectiveTransformAt(el, currentFrame);
+    return {
+      id: el.id,
+      x: t.position.x * scale,
+      y: t.position.y * scale,
+      w: t.size.w * t.scale.x * scale,
+      h: t.size.h * t.scale.y * scale,
+    };
+  });
+  const minX = Math.min(...boxes.map((b) => b.x));
+  const minY = Math.min(...boxes.map((b) => b.y));
+  const maxX = Math.max(...boxes.map((b) => b.x + b.w));
+  const maxY = Math.max(...boxes.map((b) => b.y + b.h));
+  return (
+    <>
+      {boxes.map((b) => (
+        <div
+          key={`member-${b.id}`}
+          className={s.memberOutline}
+          style={{ left: b.x, top: b.y, width: b.w, height: b.h }}
+          aria-hidden
+        />
+      ))}
+      <div
+        className={s.frame}
+        style={{ left: minX, top: minY, width: maxX - minX, height: maxY - minY }}
+        data-testid="multi-select-bbox"
+        aria-hidden
+      />
+    </>
+  );
+}
+
 // ── interaction (impure: reads the store, drives the pointer gesture) ─────────
 
 /**

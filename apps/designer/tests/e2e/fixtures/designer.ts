@@ -214,6 +214,59 @@ export class DesignerApp {
     await this.canvas.click({ position: { x: 6, y: 6 } });
   }
 
+  // ── multi-select (D-041) ──────────────────────────────────────────────────
+
+  /** The canvas's live preview iframe (same-origin srcDoc — readable). */
+  get canvasFrame(): FrameLocator {
+    return this.page.frameLocator('iframe[title="cgpreview"]');
+  }
+
+  /** Shift-click the canvas at a position — toggles that element in the multi-selection. */
+  async shiftClickCanvas(pos: { x: number; y: number }): Promise<void> {
+    await this.selectTool('Select');
+    await this.canvas.click({ position: pos, modifiers: ['Shift'] });
+  }
+
+  /** Drag a group: press over a selected element at `from` and move by (dx,dy). */
+  async groupDrag(from: { x: number; y: number }, by: { x: number; y: number }): Promise<void> {
+    await this.selectTool('Select');
+    await this.dragShape(from, by);
+  }
+
+  /** The multi-selection inspector (shown when more than one element is selected). */
+  get multiInspector(): Locator {
+    return this.page.getByTestId('multi-select-inspector');
+  }
+
+  /** The single union bounding box drawn around a multi-selection. */
+  get multiBbox(): Locator {
+    return this.page.getByTestId('multi-select-bbox');
+  }
+
+  /** Set the multi-selection's shared Fill via the inspector colour popover. */
+  async setMultiFill(hex: string): Promise<void> {
+    await this.multiInspector.getByRole('button', { name: 'Fill' }).click();
+    const hexInput = this.page.getByRole('textbox', { name: 'Hex colour value' });
+    await hexInput.fill(hex);
+    await hexInput.press('Enter');
+  }
+
+  /** Count canvas-preview elements whose computed background equals `rgb`. */
+  async canvasElementsWithBackground(rgb: string): Promise<number> {
+    return this.canvasFrame
+      .locator('[data-cg-element-id]')
+      .evaluateAll(
+        (els, want) =>
+          els.filter((e) => getComputedStyle(e as HTMLElement).backgroundColor === want).length,
+        rgb,
+      );
+  }
+
+  /** Ctrl/Cmd+Z undo (the app skips this while a text input is focused). */
+  async undo(): Promise<void> {
+    await this.page.keyboard.press('Control+z');
+  }
+
   // ── inspector ────────────────────────────────────────────────────────────────
 
   get inspector(): Locator {

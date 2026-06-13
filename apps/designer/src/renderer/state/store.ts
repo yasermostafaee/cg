@@ -5,6 +5,7 @@ import {
   markHistoryBoundary,
   markSaved,
   redo,
+  runAsSingleHistoryEntry,
   subscribe,
   undo,
   type DesignerStoreState,
@@ -52,6 +53,7 @@ export const designerStore = {
   undo,
   redo,
   markHistoryBoundary,
+  runAsSingleHistoryEntry,
   markSaved,
 
   // ── Compositions ────────────────────────────────────────────────────────

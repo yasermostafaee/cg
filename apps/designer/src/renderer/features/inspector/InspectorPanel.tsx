@@ -15,7 +15,9 @@ import { CollapseSection } from './CollapseSection.js';
 import { RealtimeNumberInput } from './controls.js';
 import { DynamicDataSection } from './DynamicDataSection.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
+import { MultiSelectSection } from './MultiSelectSection.js';
 import { PlayoutSection } from './PlayoutSection.js';
+import { selectedElements } from './shared-properties.js';
 import { StyleSection } from './StyleSection.js';
 import { TransformSection } from './TransformSection.js';
 import * as s from './InspectorPanel.css.js';
@@ -64,6 +66,11 @@ export function InspectorPanel({
 
   const selected = findSelected(scene, selection);
   if (selected === null) {
+    // D-041 — more than one element selected → the shared-property multi editor;
+    // zero selected → the scene metadata inspector (unchanged).
+    if (selection.size > 1) {
+      return <MultiSelectSection elements={selectedElements(scene, selection)} />;
+    }
     return <SceneInspector scene={scene} projectPath={projectPath} />;
   }
   return <ElementInspector element={selected} scene={scene} selectedKeyframe={selectedKeyframe} />;
