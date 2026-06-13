@@ -1,89 +1,114 @@
 import { test, expect } from './fixtures/designer.js';
 
 /**
- * D-041 — multi-select editing through the real UI. The shared-property
- * intersection, the undo coalescing, and the move math are unit-tested; this
- * guards the integrated path: shift-click building a selection across the
- * canvas, the single union bounding box, group move as one undo step, the
- * shared-property editor (group fill + the mixed state for a mixed selection),
- * and group delete.
+ * Multi-select editing through the real UI (D-041 + D-049). The shared-property
+ * intersection, undo coalescing, and move math are unit-tested; this guards the
+ * integrated path: building a selection, the single-inspector PARITY (grouped,
+ * unit-bearing horizontal-drag inputs — D-049), the PER-SHAPE selection boxes
+ * (no group bounding box — D-049), group move as one undo step, that an
+ * empty-space press does not drag the group, the shared fill edit, the mixed
+ * state, and group delete.
  *
  * Shapes are placed relative to the canvas size (the scene is 1920×1080, so a
  * 320-px shape is ~1/6 of the canvas width — the placements stay well apart and
- * never overlap regardless of the fit scale). A shape's placement point is its
- * top-left corner, so clicking near it re-selects it.
+ * never overlap). A shape's placement point is its top-left corner.
  */
-test.describe('Multi-select editing (D-041)', () => {
-  test('shift-click builds a selection; one bbox; group move is one undo; group fill recolours all', async ({
+const rnd = (n: number): number => Math.round(n);
+
+test.describe('Multi-select inspector parity + per-shape boxes (D-049)', () => {
+  test('grouped unit-bearing inspector; per-shape boxes (no group box); group move one undo; empty press does not drag', async ({
     app,
   }) => {
     await app.newProject('Multi');
     const cb = (await app.canvas.boundingBox())!;
-    const A = { x: Math.round(cb.width * 0.14), y: Math.round(cb.height * 0.22) };
-    const B = { x: Math.round(cb.width * 0.62), y: Math.round(cb.height * 0.22) };
-    const C = { x: Math.round(cb.width * 0.14), y: Math.round(cb.height * 0.62) };
+    const A = { x: rnd(cb.width * 0.14), y: rnd(cb.height * 0.22) };
+    const B = { x: rnd(cb.width * 0.62), y: rnd(cb.height * 0.22) };
+    const C = { x: rnd(cb.width * 0.14), y: rnd(cb.height * 0.62) };
     const inA = { x: A.x + 10, y: A.y + 8 };
     const inB = { x: B.x + 10, y: B.y + 8 };
 
     await app.addRectangle(A);
     await app.addRectangle(B);
     await app.addRectangle(C);
-
-    // Plain click selects one; shift-click adds a second → multi editor + ONE bbox.
     await app.clickCanvas(inA);
     await app.shiftClickCanvas(inB);
     await expect(app.multiInspector).toBeVisible();
-    await expect(app.multiInspector).toContainText('2 ELEMENTS SELECTED');
-    await expect(app.multiBbox).toHaveCount(1);
 
-    // Group move: both translate by the same delta — the union box keeps its
-    // size and shifts — and a single undo reverts the whole move.
-    const box0 = (await app.multiBbox.boundingBox())!;
+    // Parity: transform props are grouped under a Transform section and use the
+    // same horizontal-drag number primitive as single selection, WITH units —
+    // opacity shows the percent value + `%`, not the raw 0–1 the D-041 flat
+    // editor showed.
+    await expect(app.multiInspector.getByText('Transform', { exact: false }).first()).toBeVisible();
+    const opacity = app.multiInspector.getByRole('spinbutton', { name: 'Opacity' });
+    await expect(opacity).toHaveValue('100');
+    await expect(app.multiInspector.getByText('%').first()).toBeVisible();
+
+    // Per-shape selection boxes, and NO single group bounding box.
+    await expect(app.multiBoxes).toHaveCount(2);
+    await expect(app.multiBbox).toHaveCount(0);
+
+    // Group move: both per-shape boxes translate by the SAME delta; one undo
+    // reverts the whole move.
+    const a0 = (await app.multiBoxes.nth(0).boundingBox())!;
+    const b0 = (await app.multiBoxes.nth(1).boundingBox())!;
     await app.groupDrag(inA, { x: 130, y: 80 });
-    const box1 = (await app.multiBbox.boundingBox())!;
-    expect(box1.x - box0.x).toBeGreaterThan(20);
-    expect(box1.y - box0.y).toBeGreaterThan(10);
-    expect(Math.abs(box1.width - box0.width)).toBeLessThan(6); // rigid translation, not a resize
+    const a1 = (await app.multiBoxes.nth(0).boundingBox())!;
+    const b1 = (await app.multiBoxes.nth(1).boundingBox())!;
+    expect(a1.x - a0.x).toBeGreaterThan(20);
+    expect(b1.x - b0.x).toBeGreaterThan(20);
+    expect(Math.abs(a1.x - a0.x - (b1.x - b0.x))).toBeLessThan(6); // same delta
 
     await app.undo();
-    // Undo clears the selection; re-pick at the ORIGINAL spots — they only hit
-    // if the move was reverted — and the box returns to where it started.
     await app.clickCanvas(inA);
     await app.shiftClickCanvas(inB);
-    const box2 = (await app.multiBbox.boundingBox())!;
-    expect(Math.abs(box2.x - box0.x)).toBeLessThan(6);
-    expect(Math.abs(box2.width - box0.width)).toBeLessThan(6);
+    expect(Math.abs((await app.multiBoxes.nth(0).boundingBox())!.x - a0.x)).toBeLessThan(6);
 
-    // Group fill: editing the shared Fill recolours BOTH selected shapes; the
-    // third (unselected) keeps its default grey.
+    // An empty-space press does not drag the group (there is no group box to
+    // grab) — it clears the selection per the cursor-tool rule, moving nothing.
+    const before = (await app.multiBoxes.nth(0).boundingBox())!;
+    await app.groupDrag({ x: rnd(cb.width * 0.85), y: rnd(cb.height * 0.85) }, { x: 120, y: 0 });
+    await expect(app.multiInspector).toHaveCount(0);
+    await app.clickCanvas(inA);
+    await app.shiftClickCanvas(inB);
+    expect(Math.abs((await app.multiBoxes.nth(0).boundingBox())!.x - before.x)).toBeLessThan(6);
+  });
+
+  test('editing the shared fill recolours every selected shape', async ({ app }) => {
+    await app.newProject('MultiFill');
+    const cb = (await app.canvas.boundingBox())!;
+    const A = { x: rnd(cb.width * 0.14), y: rnd(cb.height * 0.22) };
+    const B = { x: rnd(cb.width * 0.62), y: rnd(cb.height * 0.22) };
+    await app.addRectangle(A);
+    await app.addRectangle(B);
+    await app.clickCanvas({ x: A.x + 10, y: A.y + 8 });
+    await app.shiftClickCanvas({ x: B.x + 10, y: B.y + 8 });
+
     await app.setMultiFill('#FF0000');
     await expect.poll(() => app.canvasElementsWithBackground('rgb(255, 0, 0)')).toBe(2);
   });
 
-  test('a mixed selection exposes only shared props with a mixed value; Delete removes the whole selection', async ({
+  test('a mixed selection shows the mixed state through the same primitive; Delete removes all', async ({
     app,
   }) => {
     await app.newProject('MultiMixed');
     const cb = (await app.canvas.boundingBox())!;
-    const A = { x: Math.round(cb.width * 0.14), y: Math.round(cb.height * 0.2) };
-    const text = { x: Math.round(cb.width * 0.6), y: Math.round(cb.height * 0.62) };
-    const inA = { x: A.x + 10, y: A.y + 8 };
+    const A = { x: rnd(cb.width * 0.14), y: rnd(cb.height * 0.2) };
+    const text = { x: rnd(cb.width * 0.6), y: rnd(cb.height * 0.62) };
 
     await app.addRectangle(A);
     await app.addTextElement(text); // auto-selected after placing
+    await app.shiftClickCanvas({ x: A.x + 10, y: A.y + 8 }); // text + shape → mixed
 
-    // Text (selected) + the rectangle → a MIXED selection.
-    await app.shiftClickCanvas(inA);
     await expect(app.multiInspector).toBeVisible();
-    await expect(app.multiInspector).toContainText('2 ELEMENTS SELECTED');
+    // Mixed renders through the SAME primitive: the X field is the drag-input
+    // showing an EMPTY (mixed) value, not a "(mixed)" text label.
+    await expect(app.multiInspector.getByRole('spinbutton', { name: 'X position' })).toHaveValue(
+      '',
+    );
+    await expect(app.multiInspector.getByText('%').first()).toBeVisible(); // unit intact
+    // Fill is shape-only → not shared across text+shape → no fill control.
+    await expect(app.multiInspector.getByRole('button', { name: 'fill fill' })).toHaveCount(0);
 
-    // Shared subset only: a transform field reads "mixed" (text & shape differ),
-    // and there is NO Fill control (fill is not shared across the two kinds).
-    await expect(app.multiInspector.getByText(/mixed/i).first()).toBeVisible();
-    await expect(app.multiInspector.getByRole('button', { name: 'Fill' })).toHaveCount(0);
-
-    // Delete removes the WHOLE selection in one step → the multi editor is gone
-    // and two elements left the canvas.
     const before = await app.canvasFrame.locator('[data-cg-element-id]').count();
     await app.page.keyboard.press('Delete');
     await expect(app.multiInspector).toHaveCount(0);

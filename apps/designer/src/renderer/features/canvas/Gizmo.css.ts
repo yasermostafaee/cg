@@ -18,12 +18,12 @@ export const frame = style({
   pointerEvents: 'none',
 });
 
-// D-041 — per-element selected affordance in a multi-selection: a faint dashed
-// outline. The solid `frame` above is reused for the single union bounding box.
-export const memberOutline = style({
+// D-049 — per-shape selection box in a multi-selection: a solid accent box
+// around EACH selected shape (no single group-spanning bounding box). Visual
+// only — the group move drag is initiated from the overlay on a member press.
+export const multiBox = style({
   position: 'absolute',
-  border: `1px dashed ${colors.accent}`,
-  opacity: 0.55,
+  border: `1px solid ${colors.accent}`,
   boxSizing: 'border-box',
   pointerEvents: 'none',
 });

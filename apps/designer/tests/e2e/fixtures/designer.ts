@@ -238,14 +238,19 @@ export class DesignerApp {
     return this.page.getByTestId('multi-select-inspector');
   }
 
-  /** The single union bounding box drawn around a multi-selection. */
+  /** D-049 — the per-shape selection boxes (one per selected shape). */
+  get multiBoxes(): Locator {
+    return this.page.getByTestId('multi-select-box');
+  }
+
+  /** D-049 — the (removed) single union bounding box; should never be present. */
   get multiBbox(): Locator {
     return this.page.getByTestId('multi-select-bbox');
   }
 
-  /** Set the multi-selection's shared Fill via the inspector colour popover. */
+  /** Set the multi-selection's shared Fill via the inspector's FillField popover. */
   async setMultiFill(hex: string): Promise<void> {
-    await this.multiInspector.getByRole('button', { name: 'Fill' }).click();
+    await this.multiInspector.getByRole('button', { name: 'fill fill' }).click();
     const hexInput = this.page.getByRole('textbox', { name: 'Hex colour value' });
     await hexInput.fill(hex);
     await hexInput.press('Enter');

@@ -286,6 +286,14 @@ interface RealtimeNumberInputProps {
    * gesture, so the two don't both fire.
    */
   scrub?: boolean | undefined;
+  /**
+   * D-049 — multi-selection "mixed" state: the selected elements DIFFER on this
+   * property, so the field shows the `placeholder` (a neutral hint) instead of a
+   * value until edited. Scrub/typing still commit through `onCommit` (scrubbing
+   * starts from `value`, so callers pass a sane baseline, e.g. 0).
+   */
+  mixed?: boolean | undefined;
+  placeholder?: string | undefined;
 }
 
 /**
@@ -302,7 +310,9 @@ interface RealtimeNumberInputProps {
  * as a draggable number with an `ew-resize` cursor.
  */
 export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Element {
-  const display = formatNumberDisplay(props.value);
+  // A "mixed" multi-selection field shows nothing (just the placeholder) until
+  // the operator edits it — no value is coerced onto the differing elements.
+  const display = props.mixed === true ? '' : formatNumberDisplay(props.value);
   const [buf, setBuf] = useState(display);
   const [editing, setEditing] = useState(false);
   const focused = useRef(false);
@@ -322,6 +332,7 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
       step={props.step}
       min={props.min}
       max={props.max}
+      placeholder={props.placeholder}
       aria-label={props.ariaLabel}
       onPointerDown={(e) => {
         // When an ancestor owns the gesture, do nothing here.
