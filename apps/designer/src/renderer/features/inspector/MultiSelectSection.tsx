@@ -9,6 +9,7 @@ import {
   type SharedProperty,
   type SharedSection,
 } from './shared-properties.js';
+import { clearOrphanColourTrack } from './fill-commit.js';
 import * as s from './InspectorPanel.css.js';
 import * as tx from './TransformSection.css.js';
 
@@ -69,8 +70,12 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
     } else {
       designerStore.runAsSingleHistoryEntry(() => {
         for (const el of elements) {
-          if (el.type === 'shape')
+          if (el.type === 'shape') {
             designerStore.updateElement(el.id, { fill: f } as Partial<Element>);
+            // B-014 — the gradient makes fill.color non-keyframe-able; drop the
+            // orphaned colour track (same undo step as the fan-out).
+            clearOrphanColourTrack({ ...el, fill: f } as Element, 'fill.color');
+          }
         }
       });
     }

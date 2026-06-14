@@ -27,6 +27,7 @@ import {
   effectiveNumberAt as evNum,
 } from '../timeline/keyframe-helpers.js';
 import { KeyframeDot } from './keyframe-diamond.js';
+import { applyFillModeChange } from './fill-commit.js';
 import { CollapseSection } from './CollapseSection.js';
 import { ColorField, NumberField, SelectField, TextField, VectorField } from './controls.js';
 import { FillField } from './FillPopover.js';
@@ -226,7 +227,9 @@ function ShapeSections({
             ) {
               designerStore.commitAnimatable(id, 'fill.color', f.color);
             } else {
-              designerStore.updateElement(id, { fill: f } as Partial<Element>);
+              // B-014 — switching to a gradient makes fill.color non-keyframe-able;
+              // drop the now-orphaned colour track in the same undo step.
+              applyFillModeChange(element, 'fill.color', { fill: f } as Partial<Element>);
             }
           }}
           trailing={KeyframeDot(element, 'fill.color', currentFrame, selectedKeyframe)}

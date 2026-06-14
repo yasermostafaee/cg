@@ -218,6 +218,41 @@ export const timelineSlice = {
   },
 
   /**
+   * Remove an element's ENTIRE keyframe track for a property (every keyframe),
+   * pruning the `animation` field when no tracks remain. Used when a fill/colour
+   * mode change makes the property non-keyframe-able (B-014) — the orphaned track
+   * must not keep animating once the diamond is gone. No-op when there is no track.
+   * Clears any selection refs that pointed at the removed track so the keyframe
+   * inspector doesn't dangle. Wrap in `runAsSingleHistoryEntry` with the mode change
+   * for one-undo recovery.
+   */
+  clearKeyframeTrack(elementId: string, property: AnimatableProperty): void {
+    let hadTrack = false;
+    mutateAnimation(elementId, (anim) => {
+      if (anim.tracks[property] === undefined) return anim;
+      hadTrack = true;
+      const tracks: ElementAnimation['tracks'] = { ...anim.tracks };
+      delete tracks[property];
+      return { ...anim, tracks };
+    });
+    if (!hadTrack) return;
+    // Drop selection refs that pointed at ANY keyframe of the removed track.
+    const refsTrack = (r: KeyframeRef): boolean =>
+      r.elementId === elementId && r.property === property;
+    const nextList = current.selectedKeyframes.filter((r) => !refsTrack(r));
+    const primaryGone = current.selectedKeyframe !== null && refsTrack(current.selectedKeyframe);
+    if (nextList.length !== current.selectedKeyframes.length || primaryGone) {
+      set({
+        selectedKeyframes: nextList,
+        selectedKeyframe: primaryGone
+          ? (nextList[nextList.length - 1] ?? null)
+          : current.selectedKeyframe,
+        keyframeInspectorOpen: nextList.length > 0 ? current.keyframeInspectorOpen : false,
+      });
+    }
+  },
+
+  /**
    * Commit a value for an animatable numeric property. The "track-aware"
    * routing rule (D-006):
    *

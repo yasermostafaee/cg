@@ -94,6 +94,31 @@ test.describe('Regressions', () => {
     await expect(diamond).toHaveAttribute('data-variant', 'at-frame'); // captured at the frame
   });
 
+  test('B-014 — switching a keyframed fill to a gradient deletes the orphaned colour track', async ({
+    app,
+  }) => {
+    await app.newProject('B014');
+    await app.addRectangle({ x: 240, y: 200 });
+
+    // Keyframe the solid fill colour at the playhead (Path Style is pinned/visible).
+    const diamond = () =>
+      app.inspector.getByRole('button', { name: /Toggle keyframe for fill\.color/ });
+    await diamond().first().click();
+    await expect(diamond().first()).toHaveAttribute('data-variant', 'at-frame');
+
+    // Switch the fill to a linear gradient via the fill popover → the diamond is gone
+    // (gradient isn't keyframe-able, D-051).
+    const editor = app.page.getByRole('dialog', { name: 'Fill editor' });
+    await app.inspector.getByRole('button', { name: 'fill fill' }).click();
+    await editor.getByRole('button', { name: 'Linear' }).click();
+    await expect(diamond()).toHaveCount(0);
+
+    // Switch back to solid → the diamond is EMPTY: the keyframes were DELETED, not
+    // hidden (before B-014 they survived and re-appeared as 'at-frame').
+    await editor.getByRole('button', { name: 'Solid' }).click();
+    await expect(diamond().first()).toHaveAttribute('data-variant', 'empty');
+  });
+
   test('D-026 — parent play cascades into a nested child (child renders)', async ({ app }) => {
     await app.newProject('CascadeChild'); // "comp1" — the child, with a bound text
     await app.addTextElement({ x: 200, y: 120 });

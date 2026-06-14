@@ -2,6 +2,7 @@ import type { AnimatableProperty, Element, TextElement } from '@cg/shared-schema
 import { designerStore } from '../../state/store.js';
 import { effectiveColorAt, effectiveNumberAt } from '../timeline/keyframe-helpers.js';
 import { KeyframeDot } from './keyframe-diamond.js';
+import { applyFillModeChange } from './fill-commit.js';
 import { CollapseSection } from './CollapseSection.js';
 import { FillField } from './FillPopover.js';
 import { FontFamilySelect } from './FontFamilySelect.js';
@@ -137,7 +138,11 @@ export function TextStyleSection({
               } as unknown as Partial<Element>);
               designerStore.commitAnimatable(id, 'text.color', f.color);
             } else {
-              designerStore.updateElement(id, { colorFill: f } as unknown as Partial<Element>);
+              // B-014 — gradient text colour isn't keyframe-able; drop the orphaned
+              // text.color track in the same undo step.
+              applyFillModeChange(element, 'text.color', {
+                colorFill: f,
+              } as unknown as Partial<Element>);
             }
           }}
           trailing={KeyframeDot(element, 'text.color', currentFrame, selectedKeyframe)}
@@ -155,7 +160,11 @@ export function TextStyleSection({
               } as unknown as Partial<Element>);
               designerStore.commitAnimatable(id, 'backgroundColor', f.color);
             } else {
-              designerStore.updateElement(id, { backgroundFill: f } as unknown as Partial<Element>);
+              // B-014 — gradient background isn't keyframe-able; drop the orphaned
+              // backgroundColor track in the same undo step.
+              applyFillModeChange(element, 'backgroundColor', {
+                backgroundFill: f,
+              } as unknown as Partial<Element>);
             }
           }}
           trailing={KeyframeDot(element, 'backgroundColor', currentFrame, selectedKeyframe)}
