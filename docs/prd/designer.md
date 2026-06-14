@@ -1390,3 +1390,35 @@ inconsistency, and it means every new element kind re-introduces the risk.
   thorough regression tests and a behavior-preserving proof (existing suite
   green BEFORE the diamond corrections are layered on). Change:
   `openspec/changes/add-keyframe-ability-registry/`.
+
+## [ ] D-052 — Keyframe-able styling for time-driven elements (ticker/clock/sequence/repeater) ⟨priority: medium⟩
+
+**What:** Make the text, drop/text-shadow, box-padding, and border-radius styling of
+the time-driven element kinds (ticker, clock, sequence, repeater) keyframe-able — the
+diamonds D-051 deliberately deferred. Their transform/opacity/filter already animate;
+this extends timeline-driven animation to the box STYLE while the content motion
+(crawl / clock tick / sequence advance) stays time-driven.
+**Why:** D-051 made the inspector-field registry the single source of
+keyframe-ability but kept these kinds' styling non-keyframe-able because the runtime
+apply-step (`@cg/template-runtime/animation-applier.ts`) can't yet apply those
+animated values for them: `text.color` / `backgroundColor` are gated to
+`type==='text'`, shadow is written as `boxShadow` for non-text and never reads their
+`textShadow`, and the ticker's padding lives on an inner viewport div (animating the
+band is inert). Adding diamonds without that runtime work would author keyframes the
+engine silently drops.
+**Acceptance:**
+
+- WHEN a ticker/clock/sequence text property (size, line-height, letter-spacing,
+  colour, background) is keyframed THEN the runtime applies the interpolated value at
+  playout — EXCEPT font-family, font-weight, and alignments, which stay
+  non-animatable (matching the text element's rule)
+- WHEN a ticker/clock/sequence drop/text-shadow or box-padding (including the
+  ticker's inner-viewport padding) is keyframed THEN the runtime applies it at playout
+- WHEN these properties become keyframe-able THEN they are declared ONCE in the
+  D-051 field registry (one descriptor each) and appear correctly in the right
+  inspector, the timeline-left, and the multi editor with no per-file edits
+- WHEN scenes authored before this change are loaded, played, and exported THEN
+  behaviour is unchanged apart from the newly-animatable styling
+  **Notes:** Builds directly on D-051's registry — enabling each property is a single
+  `keyframeable` descriptor addition plus the runtime apply-step change + runtime
+  tests + the `template-runtime` engine doc. High-risk (touches the playout engine).

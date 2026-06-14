@@ -75,9 +75,12 @@ and the timeline rows share this single path, so both surfaces reflect one set).
 The inspector branches on `selection.size` (0 scene / 1 `StyleSection` / >1 the
 `MultiSelectSection`); the **shared-property intersection** seam is a pure helper
 ([`features/inspector/shared-properties.ts`](../features/inspector/shared-properties.ts))
-that intersects each selected kind's FULL editable-descriptor set (D-050 — it
-MIRRORS the single inspector's `prop`s + reads, since there's no central metadata
-table; ⚠️ keep it in sync with `StyleSection.tsx`) and flags agree-vs-mixed.
+that intersects each selected kind's editable-descriptor set and flags
+agree-vs-mixed. Those descriptors are now **generated from the central field
+registry** ([`features/inspector/field-registry.ts`](../features/inspector/field-registry.ts),
+D-051) — the single source of keyframe-ability + inspector-field presence that the
+single inspector and the timeline also read, so the old "mirror `StyleSection.tsx`
+by hand / keep both in sync" tech debt is gone.
 A group edit fans out over `applySharedProperty(ids, prop, value)` — the
 **keyframe-free** base write (`writeStaticAnimatable`, NOT `commitAnimatable` which
 would keyframe a tracked property) wrapped in `runAsSingleHistoryEntry` so N
