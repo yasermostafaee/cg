@@ -81,29 +81,37 @@ registry** ([`features/inspector/field-registry.ts`](../features/inspector/field
 D-051) — the single source of keyframe-ability + inspector-field presence that the
 single inspector and the timeline also read, so the old "mirror `StyleSection.tsx`
 by hand / keep both in sync" tech debt is gone.
-A group edit fans out over one of two **keyframe-free** base-write paths
-(`writeStaticAnimatable`, NOT `commitAnimatable` which would keyframe a tracked
-property):
+A group edit fans out KEYFRAME-AWARE (D-054 — multi == single selection, fanned
+out) over the SAME `commitAnimatable` helper the single-element drag uses: a
+selected member WITH a track on the property keyframes at the playhead, one WITHOUT
+writes its static base. Two callers wrap it:
 
-- **Discrete commits** (colour pick, gradient apply) use
-  `applySharedProperty(ids, prop, value)` — the fan-out wrapped in
-  `runAsSingleHistoryEntry` (a leading+trailing `markHistoryBoundary`) so the
-  whole one-shot is ONE undo entry.
-- **Continuous gestures** on a number field (drag-scrub / typing) use
-  `applySharedPropertyLive(ids, prop, value)` (D-053) — the SAME fan-out but with
-  NO history boundary, so consecutive live writes time-coalesce into one entry
-  exactly like the single-element drag. The multi number field is now the SAME
-  primitive as single selection (drag-scrub + live `onChange`); it sets ONE
-  boundary at the gesture endpoint via an `onCommitBoundary` callback
-  (`markHistoryBoundary` on drag release / Enter / blur), so the whole burst is one
-  undo entry isolated from the next edit. This supersedes D-050's deferred
-  commit-on-blur (`RealtimeNumberInput commitMode='blur'`, drag removed), which
-  spawned one entry per keystroke when wired through the boundary-wrapped path.
+- **Live gestures** on a number field (drag-scrub / typing) use
+  `applySharedPropertyLiveKeyframed(ids, prop, value)` — the fan-out with NO history
+  boundary, so live writes time-coalesce into one entry; the field sets ONE boundary
+  at the gesture endpoint via an `onCommitBoundary` callback (`markHistoryBoundary`
+  on drag release / Enter / blur). The multi number field is the SAME primitive as
+  single selection (drag-scrub + live `onChange`, D-053).
+- **Discrete commits** (colour pick, solid fill) use
+  `applySharedPropertyKeyframed(ids, prop, value)` — the same fan-out wrapped in
+  `runAsSingleHistoryEntry` (one undo). A gradient fill (not keyframe-able) writes
+  the whole `Fill` via `updateElement`.
+
+The keyframe-FREE primitives `applySharedProperty` (D-041) and
+`applySharedPropertyLive` (D-053) are RETAINED as tested store primitives (the
+D-054 regression backbone) but the UI now routes through the keyframe-aware pair;
+group MOVE on canvas (`beginGroupDrag`) likewise calls `commitAnimatable` per
+member. Each shared keyframe-able property (per the D-051 registry `isKeyframeable`
+for EVERY selected kind) shows an aggregate keyframe diamond — `empty` / `at-frame`
+/ `partial` (the D-054 third `KeyframeIndicator` variant) — whose click toggles
+keyframes across the selection in one `runAsSingleHistoryEntry` (`MultiKeyframeDot` /
+`toggleGroupKeyframe` in `features/inspector/keyframe-diamond.tsx`).
 
 There is no transaction object — history grouping is the `set`/`COALESCE_MS`
-time-coalescing a drag relies on. Group editing stays keyframe-free (diamonds +
-keyframe-aware group move are D-054). Group move/delete reuse the existing
-per-element drag/`deleteSelection` paths.
+time-coalescing a drag relies on. The single-selection path, `commitAnimatable`,
+`togglePropertyKeyframe`, and `upsertKeyframe` are UNCHANGED — D-054 only added
+callers. Group move/delete reuse the existing per-element drag/`deleteSelection`
+paths.
 
 ## Adding to the store
 

@@ -226,3 +226,52 @@ test.describe('Multi-select number fields: drag + realtime (D-053)', () => {
     );
   });
 });
+
+test.describe('Keyframe-aware group move + diamonds (D-054)', () => {
+  test('group-drag keyframes an animated member at the playhead; the aggregate diamond is partial then fills', async ({
+    app,
+  }) => {
+    await app.newProject('Multi054');
+    const cb = (await app.canvas.boundingBox())!;
+    const A = { x: rnd(cb.width * 0.14), y: rnd(cb.height * 0.22) };
+    const B = { x: rnd(cb.width * 0.62), y: rnd(cb.height * 0.22) };
+    const inA = { x: A.x + 10, y: A.y + 8 };
+    const inB = { x: B.x + 10, y: B.y + 8 };
+    await app.addRectangle(A);
+    await app.addRectangle(B);
+
+    // Give shape A a position.x keyframe at the playhead (frame 0) via its inspector
+    // diamond; B stays un-animated.
+    await app.clickCanvas(inA);
+    await app.toggleInspectorKeyframe('position.x');
+    await expect(app.inspectorDiamond('position.x')).toHaveAttribute('data-variant', 'at-frame');
+
+    // Multi-select A + B → the aggregate position-X diamond is PARTIAL (A keyframed, B not).
+    await app.clickCanvas(inA);
+    await app.shiftClickCanvas(inB);
+    await expect(app.multiInspector).toBeVisible();
+    await expect(app.inspectorDiamond('position.x')).toHaveAttribute('data-variant', 'partial');
+
+    // Group-drag both. The animated member A MUST move at the playhead — proving the
+    // drag KEYFRAMED A (the old keyframe-free path wrote a static base the keyframe
+    // would override, so A would NOT move). B's static base moves too.
+    const a0 = (await app.multiBoxes.nth(0).boundingBox())!;
+    const b0 = (await app.multiBoxes.nth(1).boundingBox())!;
+    await app.groupDrag(inA, { x: 120, y: 0 });
+    const a1 = (await app.multiBoxes.nth(0).boundingBox())!;
+    const b1 = (await app.multiBoxes.nth(1).boundingBox())!;
+    expect(a1.x - a0.x).toBeGreaterThan(20); // A (animated) moved → its keyframe updated
+    expect(b1.x - b0.x).toBeGreaterThan(20); // B (static base) moved
+    expect(Math.abs(a1.x - a0.x - (b1.x - b0.x))).toBeLessThan(6); // same delta
+
+    // One undo reverts the whole group move.
+    await app.undo();
+    await app.clickCanvas(inA);
+    await app.shiftClickCanvas(inB);
+    expect(Math.abs((await app.multiBoxes.nth(0).boundingBox())!.x - a0.x)).toBeLessThan(6);
+
+    // Clicking the aggregate diamond fills the missing member (B) → both keyframed → at-frame.
+    await app.toggleInspectorKeyframe('position.x');
+    await expect(app.inspectorDiamond('position.x')).toHaveAttribute('data-variant', 'at-frame');
+  });
+});

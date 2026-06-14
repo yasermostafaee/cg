@@ -364,6 +364,42 @@ export const elementsSlice = {
   },
 
   /**
+   * D-054 (Option B) — the LIVE keyframe-AWARE multi-apply path. Identical to
+   * `applySharedPropertyLive` but loops the shared `commitAnimatable` instead of
+   * `writeStaticAnimatable`: a selected member WITH a track on the property gets a
+   * keyframe at the current frame (the upsert at a fixed frame coalesces across
+   * ticks exactly like the static write), a member WITHOUT one writes its static
+   * base — the SAME rule single-element drag uses. No per-tick history boundary;
+   * the caller sets ONE at the gesture endpoint. `commitAnimatable` itself is NOT
+   * modified — this only adds a new caller (the recon's reuse-not-rewrite seam).
+   */
+  applySharedPropertyLiveKeyframed(
+    ids: readonly string[],
+    property: AnimatableProperty,
+    value: number | string,
+  ): void {
+    for (const id of ids) designerStore.commitAnimatable(id, property, value);
+  },
+
+  /**
+   * D-054 (Option B) — the DISCRETE keyframe-AWARE group commit (colour pick /
+   * solid fill). Like `applySharedProperty` but loops `commitAnimatable`, so an
+   * edited member with a track keyframes at the playhead and others write static —
+   * one undo entry. Without this, editing a colour that HAS a track would write a
+   * static base the runtime ignores (the edit would be invisible at a keyframed
+   * frame) — the same class D-054 fixes for numbers.
+   */
+  applySharedPropertyKeyframed(
+    ids: readonly string[],
+    property: AnimatableProperty,
+    value: number | string,
+  ): void {
+    designerStore.runAsSingleHistoryEntry(() => {
+      for (const id of ids) designerStore.commitAnimatable(id, property, value);
+    });
+  },
+
+  /**
    * Set the timeline lifespan-bar colour for an element (layer right-click →
    * Color). The colour persists on the element as `timelineColor`.
    */

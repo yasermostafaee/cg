@@ -390,6 +390,23 @@ export class DesignerApp {
     return this.page.getByRole('button', { name: `Keyframe at frame ${String(frame)}` });
   }
 
+  /**
+   * The right-inspector keyframe diamond for an animatable `property` (e.g.
+   * `position.x`), scoped to whichever inspector aside is shown (single or
+   * multi-select). Its `data-variant` is `empty` / `at-frame` / `partial` (D-054).
+   */
+  inspectorDiamond(property: string): Locator {
+    return this.page
+      .getByRole('complementary', { name: 'Inspector' })
+      .getByRole('button', { name: new RegExp(`Toggle keyframe for ${property}\\b`, 'i') })
+      .first();
+  }
+
+  /** Click the inspector keyframe diamond for `property` (single or multi). */
+  async toggleInspectorKeyframe(property: string): Promise<void> {
+    await this.inspectorDiamond(property).click();
+  }
+
   // ── preview modal ─────────────────────────────────────────────────────────────
 
   /** Open the Preview modal from the toolbar. */

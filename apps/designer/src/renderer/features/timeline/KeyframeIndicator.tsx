@@ -2,14 +2,17 @@ import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 
 /**
- * Two states per B-003:
+ * States per B-003 (+ D-054 `partial`):
  *   `empty`    — no keyframe at the current frame on this property
  *   `at-frame` — there IS a keyframe at the current frame
+ *   `partial`  — D-054 multi-select AGGREGATE: SOME selected elements have a
+ *                keyframe at the current frame and some do not (a distinct colour).
+ *                Single-element indicators never use this (one element is binary).
  *
  * Selection state is shown on the lane diamond itself, not on the
  * property-row / label indicator.
  */
-export type KeyframeIndicatorVariant = 'empty' | 'at-frame';
+export type KeyframeIndicatorVariant = 'empty' | 'at-frame' | 'partial';
 
 interface Props {
   variant: KeyframeIndicatorVariant;
@@ -77,5 +80,12 @@ function variantStyle(variant: KeyframeIndicatorVariant): React.CSSProperties {
       return { background: 'transparent', border: `1px solid ${colors.keyframeBorder}` };
     case 'at-frame':
       return { background: '#FDE047', border: `1px solid ${colors.keyframeBorder}` };
+    case 'partial':
+      // D-054 — "some but not all selected" reads as a faded fill, distinct from the
+      // solid `at-frame` yellow and the hollow `empty`.
+      return {
+        background: 'rgba(253, 224, 71, 0.4)',
+        border: `1px solid ${colors.keyframeBorder}`,
+      };
   }
 }
