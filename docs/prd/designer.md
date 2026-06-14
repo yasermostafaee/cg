@@ -1145,7 +1145,7 @@ a set — the renderer just collapses to "single or nothing" everywhere.
   add/edit, and aligning/distributing the selection. Change:
   `openspec/changes/archive/2026-06-14-add-multi-select-editing/`.
 
-## [ ] D-042 — Per-corner border radius (toggle) ⟨priority: medium⟩
+## [~] D-042 — Per-corner border radius (toggle) ⟨priority: medium⟩ — change: `openspec/changes/box-props-all-elements/`
 
 **What:** Toggle a shape's border radius between a single value and four independent
 corners; right inspector shows four inputs side-by-side, the timeline-left inspector
