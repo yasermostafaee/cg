@@ -1479,7 +1479,7 @@ live writes with no per-tick boundary (time-coalesced), one boundary on commit.
   entry. Keyframe-free (writeStaticAnimatable); diamonds + keyframe-aware group
   move are D-054. Change: `openspec/changes/multi-select-realtime-fields/`.
 
-## [ ] D-054 — Keyframe-aware group move + diamonds in multi-select ⟨priority: high⟩
+## [~] D-054 — Keyframe-aware group move + diamonds in multi-select ⟨priority: high⟩ — change: `openspec/changes/keyframe-aware-group-move/`
 
 **What:** Group move in multi-select must be keyframe-aware exactly like single-element
 drag (D-006): a selected member that has a keyframe on the moved axis gets a keyframe at
