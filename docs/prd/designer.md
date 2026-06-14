@@ -1422,3 +1422,42 @@ engine silently drops.
   **Notes:** Builds directly on D-051's registry — enabling each property is a single
   `keyframeable` descriptor addition plus the runtime apply-step change + runtime
   tests + the `template-runtime` engine doc. High-risk (touches the playout engine).
+
+## [ ] D-053 — Multi-select number fields: drag + realtime with single-undo commit ⟨priority: high⟩
+
+**What:** In the multi-select inspector, number fields must behave like single-selection
+— horizontal-drag to scrub AND live (onChange) value updates while editing — while STILL
+recording exactly one undo entry per committed edit (drag drop / Enter / blur). Today's
+multi fields are type-to-edit only (drag removed, no live update): a workaround D-050
+took to make undo deterministic, which the owner rejected.
+**Why:** D-050 fixed the undo-spam by disabling drag + realtime on multi number fields
+(type-to-edit). That diverges from single-selection UX (the owner's original ask was
+"like single selection"). The correct shape is: apply live during drag/typing WITHOUT a
+history boundary (so changes time-coalesce), and set the boundary once on commit — same
+as single selection, just fanned out across the selection.
+**Acceptance to be detailed when scheduled.**
+**Notes:** Follow-up to D-050 (`designer-multi-select`); reverses the type-to-edit
+trade-off recorded in D-050's design.md. Single-selection scrubs via commitAnimatable
+with no history boundary (keystrokes coalesce); the multi path must apply live across the
+selection without a per-tick boundary and commit one runAsSingleHistoryEntry on
+drop/Enter/blur. Stays keyframe-free here (group keyframe-aware editing is D-054).
+
+## [ ] D-054 — Keyframe-aware group move + diamonds in multi-select ⟨priority: high⟩
+
+**What:** Group move in multi-select must be keyframe-aware exactly like single-element
+drag (D-006): a selected member that has a keyframe on the moved axis gets a keyframe at
+the playhead — as if each were dragged individually — instead of writing a static base.
+And keyframe diamonds return in the multi-select inspector for shared keyframe-able
+properties, working correctly. This unifies the two drag write-paths that D-041
+deliberately kept separate (single = keyframe-aware commitAnimatable; multi = keyframe-
+free writeStaticAnimatable).
+**Why:** D-041/D-049/D-050 kept group editing keyframe-free (diamonds hidden, group move
+writes static base) to avoid regressing the D-006 single-drag path. The owner wants
+group move to behave like single drag — animated members keyframe at the playhead — and
+diamonds present + functional in multi. This is the largest/highest-risk multi-select
+piece: it touches the keyframe subsystem (the B-005/006/007 area).
+**Acceptance to be detailed when scheduled.**
+**Notes:** Follow-up to D-041 (`designer-multi-select`); depends on D-051's registry
+(diamond presence already routed through it). Unifies the single/multi drag write paths —
+must go with thorough regression tests so the D-006 single-drag and B-005/006/007 fixes
+don't regress. Likely the heaviest item in the multi-select chain.
