@@ -81,7 +81,12 @@ single `translateY` (see `TimelineDock.syncScroll`). The per-kind property group
 field registry** (D-051) — the same source the right inspector and the multi-select
 editor read — so the timeline shows a diamond for exactly the keyframe-able set and
 right/left stays in parity by construction (see
-[`inspector/field-registry.ts`](../inspector/field-registry.ts)). The dock deliberately does
+[`inspector/field-registry.ts`](../inspector/field-registry.ts)). D-054 — the
+multi-select editor now renders the SAME `KeyframeIndicator` for each property
+keyframe-able across the whole selection, with a third **`partial`** variant (some
+selected keyframed, some not) on top of `empty` / `at-frame`; clicking it toggles
+keyframes across the selection in one undo (`MultiKeyframeDot` in
+[`inspector/keyframe-diamond.tsx`](../inspector/keyframe-diamond.tsx)). The dock deliberately does
 **not** subscribe to `currentFrame` — the playhead, the frame readout and each
 row's live value are **self-subscribing leaves** (`RulerPlayhead`,
 `BodyPlayhead`, `FrameReadout`, `TrackRowLabel`), so a playback tick re-renders

@@ -108,10 +108,12 @@ to grab. The `size === 1` path keeps the full `Gizmo` above, untouched.
 - **Move** — `beginDrag` streams a single element's `position.x/y` via
   `commitAnimatable` (keyframe-aware). For a multi-selection, `beginGroupDrag`
   applies the SAME delta to every movable member (visible & unlocked —
-  `collectGroupMoveTargets` in `group-move.ts`) via the **keyframe-free**
-  `writeStaticAnimatable`, snapping the grabbed anchor only; one undo step via
-  `markHistoryBoundary` at the gesture ends. A pure click on a member collapses the
-  selection to it.
+  `collectGroupMoveTargets` in `group-move.ts`) via the SAME **keyframe-aware**
+  `commitAnimatable` (D-054 — a member with a track on the moved axis keyframes at
+  the playhead, others write their static base; `m.x/m.y` are evaluated-at-playhead
+  so the keyframe holds start+delta, B-005-safe), snapping the grabbed anchor only;
+  one undo step via `markHistoryBoundary` at the gesture ends. A pure click on a
+  member collapses the selection to it.
 - **Snap** — `snapValue` (single resize edge) and `snapAxis` (drag: tries the box's
   near / centre / far anchors) snap to **canvas edges + centre, every other
   element's edges + centre, and the operator's ruler guides**, within ~6–7 screen px

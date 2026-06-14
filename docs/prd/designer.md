@@ -1481,20 +1481,72 @@ live writes with no per-tick boundary (time-coalesced), one boundary on commit.
 
 ## [~] D-054 — Keyframe-aware group move + diamonds in multi-select ⟨priority: high⟩ — change: `openspec/changes/keyframe-aware-group-move/`
 
-**What:** Group move in multi-select must be keyframe-aware exactly like single-element
-drag (D-006): a selected member that has a keyframe on the moved axis gets a keyframe at
-the playhead — as if each were dragged individually — instead of writing a static base.
-And keyframe diamonds return in the multi-select inspector for shared keyframe-able
-properties, working correctly. This unifies the two drag write-paths that D-041
-deliberately kept separate (single = keyframe-aware commitAnimatable; multi = keyframe-
-free writeStaticAnimatable).
-**Why:** D-041/D-049/D-050 kept group editing keyframe-free (diamonds hidden, group move
-writes static base) to avoid regressing the D-006 single-drag path. The owner wants
-group move to behave like single drag — animated members keyframe at the playhead — and
-diamonds present + functional in multi. This is the largest/highest-risk multi-select
-piece: it touches the keyframe subsystem (the B-005/006/007 area).
-**Acceptance to be detailed when scheduled.**
-**Notes:** Follow-up to D-041 (`designer-multi-select`); depends on D-051's registry
-(diamond presence already routed through it). Unifies the single/multi drag write paths —
-must go with thorough regression tests so the D-006 single-drag and B-005/006/007 fixes
-don't regress. Likely the heaviest item in the multi-select chain.
+**What:** Make multi-select behave like single selection, fanned out. (1) Group
+move on canvas is keyframe-aware: a selected member with a track on the moved
+axis gets a keyframe at the playhead (as if dragged individually), else its
+static base is written — exactly the single-drag rule. (2) The right-inspector
+multi editor shows keyframe diamonds for properties keyframe-able across the
+whole selection; clicking one toggles a keyframe on every selected element (one
+undo). A partial selection (some members keyframed at this frame, some not) gets
+a distinct THIRD diamond state (different colour). (3) Group field edits become
+keyframe-aware too (Option B), so the same property never behaves differently
+between a field edit and a canvas drag and the diamond never lies. D-053's
+realtime/one-undo field behavior is preserved (an un-animated member still lands
+on its static base — the keyframe-free path is just what the shared commit takes
+for un-animated members).
+**Why:** D-041/049/050/053 kept group editing keyframe-free (diamonds hidden,
+group move/field edits write the static base) to avoid regressing the single
+drag (D-006) and the B-005/006/007 read-path fixes. The owner wants group move
+to keyframe animated members at the playhead and working diamonds in the multi
+inspector — i.e. multi == single, fanned out.
+**Acceptance:**
+
+- WHEN a multi-selection is dragged on canvas AND a selected member has a track
+  on the moved axis THEN that member gets a keyframe at the current frame holding
+  the dragged value (as if dragged alone); a member with no track on that axis
+  has its static base written; the whole drag is ONE undo entry
+- WHEN a dragged member has a position track THEN the keyframe captures the
+  evaluated-at-playhead start value plus the drag delta (B-005-safe — no revert
+  to a stale base)
+- WHEN more than one element is selected THEN the right inspector shows a
+  keyframe diamond for every property that is keyframe-able for ALL selected
+  kinds (per the D-051 registry); properties not shared/keyframe-able across the
+  selection show no diamond
+- WHEN every selected element has a keyframe at the current frame for a shared
+  property THEN its diamond shows the "at-frame" (filled) state; WHEN none do,
+  the "empty" state; WHEN SOME do and some don't, a distinct THIRD "partial"
+  state (visually different colour)
+- WHEN the operator clicks a shared property's diamond AND all selected already
+  have a keyframe there THEN the keyframe is removed from all; WHEN some or none
+  do THEN a keyframe is added to every selected element that lacks one — each as
+  ONE undo entry across the selection
+- WHEN the operator edits a shared property's value in the multi inspector AND a
+  selected member has a track for it THEN that member keyframes at the playhead;
+  an un-animated member gets its static base — same rule as the canvas drag, and
+  still realtime + one undo on commit (D-053 preserved)
+- WHEN exactly one element is selected THEN single-drag, the single inspector
+  diamonds, commitAnimatable, togglePropertyKeyframe, upsertKeyframe, and the
+  B-005/006/007 behavior are ALL unchanged (no regression)
+- WHEN a scene is played/previewed/exported after a group keyframe edit THEN the
+  keyframes behave identically to ones authored via single selection
+  **Notes:** Final multi-select chain item; depends on D-051 (registry drives
+  diamond presence) and D-053 (the live fan-out + onCommitBoundary infra).
+  Confirmed reuse seam (recon): `commitAnimatable` (timeline.ts) already routes
+  keyframe-at-playhead-vs-static internally; group paths must call THAT shared
+  helper in a loop. (1) Group move: in `beginGroupDrag` (CanvasOverlay.tsx) swap
+  the two `writeStaticAnimatable` calls → `commitAnimatable` (per axis, per
+  member) — leading+trailing boundaries already correct; `m.x/m.y` are already
+  the evaluated-at-playhead start (group-move.ts), so B-005-safe. (2) Field
+  edits: add a keyframe-aware sibling of D-053's `applySharedPropertyLive` (loop
+  `commitAnimatable`, no per-tick boundary, `onCommitBoundary` unchanged); point
+  MultiSelectSection number fields at it. (3) Diamonds: render a point per shared
+  keyframe-able property (gate on all-selected `isKeyframeable`), an aggregate
+  variant (empty / at-frame / partial — add the third `KeyframeIndicator`
+  variant), and a fan-out `togglePropertyKeyframe` over the selection wrapped in
+  ONE `runAsSingleHistoryEntry`. DO NOT modify `commitAnimatable`,
+  `togglePropertyKeyframe`, `upsertKeyframe`, or the single-drag handlers — only
+  add new callers (the recon's near-zero-regression strategy). Group move stays
+  position-only (resize/rotate group is still out); non-transform shared-prop
+  diamonds (stroke/shadow/…) are field-edit-only. Mixed-kind: a property shows a
+  diamond only if keyframe-able for every selected kind. Change:
+  `openspec/changes/keyframe-aware-group-move/`.

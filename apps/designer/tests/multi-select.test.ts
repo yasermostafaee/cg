@@ -12,6 +12,10 @@ import {
   selectedElements,
 } from '../src/renderer/features/inspector/shared-properties.js';
 import { collectGroupMoveTargets } from '../src/renderer/features/canvas/group-move.js';
+import {
+  effectiveAnimatableValue,
+  hasKeyframeAt,
+} from '../src/renderer/features/timeline/keyframe-helpers.js';
 
 afterEach(() => {
   designerStore._reset();
@@ -313,6 +317,64 @@ describe('applySharedPropertyLive — live multi edit, one undo on commit (D-053
     expect(elById('el-1')!.opacity).toBe(0.6);
     designerStore.undo();
     expect(elById('el-1')!.opacity).toBe(before); // one undo reverts the whole single burst
+  });
+});
+
+describe('D-054 — keyframe-aware group editing (store)', () => {
+  it('applySharedPropertyLiveKeyframed: an animated member keyframes at the playhead, an un-animated one writes static; one undo', () => {
+    freshScene();
+    designerStore.addElement(defaultShape('el-1', 100, 0));
+    designerStore.addElement(defaultShape('el-2', 200, 0));
+    const f = designerStore.get().currentFrame;
+    designerStore.upsertKeyframe('el-1', 'position.x', f, 100); // el-1 animated on position.x
+    expect(hasKeyframeAt(elById('el-1')!, 'position.x', f)).toBe(true);
+    expect(elById('el-2')!.animation).toBeUndefined();
+
+    designerStore.markHistoryBoundary();
+    designerStore.applySharedPropertyLiveKeyframed(['el-1', 'el-2'], 'position.x', 150);
+    designerStore.markHistoryBoundary();
+
+    // el-1 keyframes at the playhead → 150; el-2 writes its static base → 150, no track.
+    expect(hasKeyframeAt(elById('el-1')!, 'position.x', f)).toBe(true);
+    expect(effectiveAnimatableValue(elById('el-1')!, 'position.x', f, 0)).toBe(150);
+    expect(elById('el-2')!.transform.position.x).toBe(150);
+    expect(elById('el-2')!.animation).toBeUndefined(); // un-animated stays keyframe-free
+
+    designerStore.undo(); // ONE undo reverts both
+    expect(effectiveAnimatableValue(elById('el-1')!, 'position.x', f, 0)).toBe(100);
+    expect(elById('el-2')!.transform.position.x).toBe(200);
+  });
+
+  it('applySharedPropertyKeyframed (discrete colour/solid-fill path): same keyframe-aware rule in one undo', () => {
+    freshScene();
+    designerStore.addElement(defaultShape('el-1', 0, 0));
+    designerStore.addElement(defaultShape('el-2', 0, 0));
+    const f = designerStore.get().currentFrame;
+    designerStore.upsertKeyframe('el-1', 'stroke.width', f, 2); // el-1 animated on stroke.width
+
+    designerStore.applySharedPropertyKeyframed(['el-1', 'el-2'], 'stroke.width', 8);
+
+    expect(effectiveAnimatableValue(elById('el-1')!, 'stroke.width', f, 0)).toBe(8); // keyframed
+    expect(hasKeyframeAt(elById('el-1')!, 'stroke.width', f)).toBe(true);
+    const b = elById('el-2');
+    expect(b?.type === 'shape' ? b.stroke?.width : null).toBe(8); // static base
+    expect(b?.animation).toBeUndefined();
+
+    designerStore.undo(); // one undo reverts both
+    expect(effectiveAnimatableValue(elById('el-1')!, 'stroke.width', f, 0)).toBe(2);
+  });
+
+  it('the keyframe-free primitives are RETAINED (regression backbone): applySharedPropertyLive still writes static even for an animated member', () => {
+    freshScene();
+    designerStore.addElement(defaultShape('el-1', 0, 0));
+    designerStore.addElement(defaultShape('el-2', 0, 0));
+    const f = designerStore.get().currentFrame;
+    designerStore.upsertKeyframe('el-1', 'position.x', f, 0); // animated
+    designerStore.applySharedPropertyLive(['el-1', 'el-2'], 'position.x', 77);
+    // keyframe-FREE: writes the static base (the keyframe at f is untouched → still 0).
+    expect(elById('el-1')!.transform.position.x).toBe(77);
+    expect(effectiveAnimatableValue(elById('el-1')!, 'position.x', f, -1)).toBe(0); // keyframe wins
+    expect(elById('el-2')!.transform.position.x).toBe(77);
   });
 });
 

@@ -1,8 +1,9 @@
 import type { AnimatableProperty, Element, Fill } from '@cg/shared-schema';
-import { designerStore } from '../../state/store.js';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { CollapseSection } from './CollapseSection.js';
 import { ColorField, NumberField } from './controls.js';
 import { FillField } from './FillPopover.js';
+import { MultiKeyframeDot } from './keyframe-diamond.js';
 import { Seg, SingleField, transformFieldProps } from './transform-fields.js';
 import {
   sharedEditableProperties,
@@ -30,13 +31,16 @@ const SECTION_ORDER: readonly SharedSection[] = [
  * `NumberField` / `ColorField` / `FillField`. A field whose selected elements
  * DIFFER shows the neutral "mixed" state through the same primitive.
  *
- * D-053 commit model: each number field is the SAME primitive as single
- * selection — drag-scrub + live (onChange) updates. Live values fan out through
- * `applySharedPropertyLive` (keyframe-free, NO per-tick history boundary, so the
- * burst time-coalesces); `onCommitBoundary` calls `markHistoryBoundary` once at
- * the gesture endpoint (drag release / Enter / blur), so the whole edit is ONE
- * undo entry across the selection. Discrete commits (colour pick / gradient) keep
- * the boundary-wrapped `applySharedProperty`. No per-keyframe diamonds (D-054).
+ * Commit model (D-053 + D-054): each field is the SAME primitive as single
+ * selection — drag-scrub + live (onChange) updates — and now KEYFRAME-AWARE
+ * (Option B). Number-field live values fan out through
+ * `applySharedPropertyLiveKeyframed` (loops `commitAnimatable`: a member with a
+ * track keyframes at the playhead, others write static; NO per-tick boundary so the
+ * burst coalesces), with `onCommitBoundary` → `markHistoryBoundary` once at the
+ * gesture endpoint = ONE undo. Discrete colour / solid-fill commits use
+ * `applySharedPropertyKeyframed` (one undo). Each shared keyframe-able property
+ * shows an aggregate `MultiKeyframeDot` (empty / at-frame / partial) whose click
+ * toggles keyframes across the selection in one undo (D-054).
  */
 export function MultiSelectSection({ elements }: { elements: readonly Element[] }): JSX.Element {
   const shared = sharedEditableProperties(elements);
@@ -49,31 +53,42 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
     const v = byKey.get(key)?.value;
     return typeof v === 'number' ? v : 0;
   };
-  // D-053 — number fields apply LIVE during the gesture (drag-scrub / typing)
-  // with no per-tick boundary, then set ONE history boundary at the commit
+  // D-054 — the playhead drives keyframe-vs-static per member (via commitAnimatable),
+  // and the aggregate diamond's state; subscribe so it tracks playback.
+  const currentFrame = useDesignerSelector((st) => st.currentFrame);
+  // Number fields apply LIVE during the gesture (drag-scrub / typing) with no
+  // per-tick boundary, KEYFRAME-AWARE (Option B — a member with a track keyframes at
+  // the playhead, others write static), then set ONE history boundary at the commit
   // endpoint so the whole edit is one undo entry across the selection.
   const applyNumLive =
     (prop: AnimatableProperty) =>
     (v: number): void =>
-      designerStore.applySharedPropertyLive(ids, prop, v);
+      designerStore.applySharedPropertyLiveKeyframed(ids, prop, v);
   const commitBoundary = (): void => designerStore.markHistoryBoundary();
+  // The aggregate keyframe diamond for a shared property — undefined (no glyph) when
+  // it isn't keyframe-able for every selected kind (D-051 registry gate).
+  const dot = (prop: AnimatableProperty): JSX.Element | undefined =>
+    MultiKeyframeDot(elements, prop, currentFrame);
 
   // Transform field props (icon-based Seg/SingleField; display via TRANSFORM_FIELD_META),
-  // live-apply + boundary-on-commit + mixed-aware — the SAME primitive as single.
+  // live keyframe-aware apply + boundary-on-commit + the aggregate diamond — the SAME
+  // primitive (and now the same keyframe behaviour) as single selection.
   const tf = (prop: AnimatableProperty) => ({
     ...transformFieldProps(prop, numOf(prop), applyNumLive(prop)),
     mixed: isMixed(prop),
     onCommitBoundary: commitBoundary,
+    point: dot(prop),
   });
 
   const inSection = (section: SharedSection): SharedProperty[] =>
     shared.filter((sp) => sp.descriptor.section === section);
 
-  // Solid fill fans out keyframe-free like the number fields; a gradient applies
-  // the whole Fill to every selected shape as one undo entry.
+  // Solid fill fans out keyframe-AWARE like the number fields (D-054 — a member with
+  // a fill.color track keyframes at the playhead, others write static); a gradient
+  // (not keyframe-able) applies the whole Fill to every selected shape as one undo.
   const applyFill = (f: Fill): void => {
     if (f.kind === 'solid') {
-      designerStore.applySharedProperty(ids, 'fill.color', f.color);
+      designerStore.applySharedPropertyKeyframed(ids, 'fill.color', f.color);
     } else {
       designerStore.runAsSingleHistoryEntry(() => {
         for (const el of elements) {
@@ -93,7 +108,15 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
     if (d.kind === 'fill') {
       const fillValue: Fill | undefined =
         sp.mixed || typeof sp.value !== 'string' ? undefined : { kind: 'solid', color: sp.value };
-      return <FillField key={d.key} label={d.label} value={fillValue} onChange={applyFill} />;
+      return (
+        <FillField
+          key={d.key}
+          label={d.label}
+          value={fillValue}
+          onChange={applyFill}
+          trailing={dot('fill.color')}
+        />
+      );
     }
     if (d.kind === 'color') {
       return (
@@ -102,7 +125,8 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
           label={d.label}
           value={typeof sp.value === 'string' ? sp.value : '#000000'}
           mixed={sp.mixed}
-          onCommit={(hex) => designerStore.applySharedProperty(ids, d.prop, hex)}
+          onCommit={(hex) => designerStore.applySharedPropertyKeyframed(ids, d.prop, hex)}
+          trailing={dot(d.prop)}
         />
       );
     }
@@ -118,6 +142,7 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
         mixed={sp.mixed}
         onCommit={applyNumLive(d.prop)}
         onCommitBoundary={commitBoundary}
+        trailing={dot(d.prop)}
       />
     );
   }

@@ -481,11 +481,12 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
 
 /**
  * D-041 — group move. Drag every SELECTED element by the same delta as ONE undo
- * step. Reuses the single-drag delta + snapping math, but anchors snapping on
- * the grabbed element and writes each member's STATIC position
- * (`writeStaticAnimatable`, keyframe-free) — group editing does not touch the
- * keyframe model in v1. Locked/hidden members are skipped (like single drag). A
- * pure click (no movement) collapses the selection to just the grabbed element.
+ * step. Reuses the single-drag delta + snapping math, anchoring snapping on the
+ * grabbed element. D-054 — each member's position is written KEYFRAME-AWARE via the
+ * shared `commitAnimatable`: a member with a track on the moved axis keyframes at
+ * the playhead (as if dragged alone), others write their static base — exactly the
+ * single-drag rule. Locked/hidden members are skipped (like single drag). A pure
+ * click (no movement) collapses the selection to just the grabbed element.
  */
 function beginGroupDrag(
   anchorId: string,
@@ -544,8 +545,12 @@ function beginGroupDrag(
     const fdx = ax - anc.x;
     const fdy = ay - anc.y;
     for (const m of movers) {
-      designerStore.writeStaticAnimatable(m.id, 'position.x', m.x + fdx);
-      designerStore.writeStaticAnimatable(m.id, 'position.y', m.y + fdy);
+      // D-054 — keyframe-AWARE per member via the shared single-drag helper: a
+      // member with a position track keyframes at the playhead (m.x/m.y are the
+      // evaluated-at-playhead start, so the keyframe holds start+delta, B-005-safe),
+      // others write their static base. commitAnimatable is unmodified.
+      designerStore.commitAnimatable(m.id, 'position.x', m.x + fdx);
+      designerStore.commitAnimatable(m.id, 'position.y', m.y + fdy);
     }
     designerStore.setSnapGuides(guides);
   };
