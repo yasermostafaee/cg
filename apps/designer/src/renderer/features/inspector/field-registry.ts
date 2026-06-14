@@ -1,4 +1,4 @@
-import type { AnimatableProperty, Element } from '@cg/shared-schema';
+import type { AnimatableProperty, Element, Stroke } from '@cg/shared-schema';
 
 /**
  * D-051 — the central inspector-field registry: the SINGLE source of
@@ -218,32 +218,40 @@ function filterDesc(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Shape-specific — Path Style · Border Radius · Drop Shadow (reads el.shadow).
+// Box styling (D-042) — stroke + (uniform-or-per-corner) border radius, shared by
+// every BACKGROUND-CAPABLE kind (shape, text, ticker, clock, sequence). Stroke is
+// keyframe-able only for shape (Option A — time-driven stroke animation is D-052).
+// The per-corner sub-tracks are present/keyframe-able only while the element is in
+// per-corner (tuple) mode; the uniform `cornerRadius` only in uniform mode.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SHAPE_SPECIFIC: readonly PropertyDescriptor[] = [
-  {
-    property: 'fill.color',
-    section: 'Path Style',
-    fieldKind: 'fill',
-    label: 'fill',
-    timelineLabel: 'Fill',
-    read: (el) => (el.type === 'shape' && el.fill?.kind === 'solid' ? el.fill.color : '#000000'),
-    // The uniform colour, or null (→ "mixed") for a gradient / non-solid fill.
-    multiRead: (el) => (el.type === 'shape' && el.fill?.kind === 'solid' ? el.fill.color : null),
-    // A colour is keyframe-able only while it is a SOLID fill — gradients can't
-    // interpolate, so no diamond (in either panel) when the fill is a gradient.
-    keyframeable: (el) =>
-      el.type === 'shape' && (el.fill === undefined || el.fill.kind === 'solid'),
-    multiSelect: true,
-  },
+interface BoxLike {
+  stroke?: Stroke;
+  cornerRadius?: number | [number, number, number, number];
+}
+const boxStroke = (el: Element): Stroke | undefined => (el as BoxLike).stroke;
+const boxCorner = (el: Element): number | [number, number, number, number] | undefined =>
+  (el as BoxLike).cornerRadius;
+const isPerCorner = (el: Element): boolean => Array.isArray(boxCorner(el));
+const uniformRadius = (el: Element): number => {
+  const cr = boxCorner(el);
+  return typeof cr === 'number' ? cr : Array.isArray(cr) ? cr[0] : 0;
+};
+const cornerAt = (el: Element, i: 0 | 1 | 2 | 3): number => {
+  const cr = boxCorner(el);
+  return Array.isArray(cr) ? cr[i] : typeof cr === 'number' ? cr : 0;
+};
+
+const STROKE_DESCS: readonly PropertyDescriptor[] = [
   {
     property: 'stroke.color',
     section: 'Path Style',
     fieldKind: 'color',
     label: 'stroke',
     timelineLabel: 'Stroke',
-    read: (el) => (el.type === 'shape' ? (el.stroke?.color ?? '#000000') : '#000000'),
+    read: (el) => boxStroke(el)?.color ?? '#000000',
+    // Option A — stroke animation is offered only on shapes (D-052 for the rest).
+    keyframeable: (el) => el.type === 'shape',
     multiSelect: true,
   },
   {
@@ -252,7 +260,8 @@ const SHAPE_SPECIFIC: readonly PropertyDescriptor[] = [
     fieldKind: 'number',
     label: 'stroke width',
     timelineLabel: 'Stroke width',
-    read: (el) => (el.type === 'shape' ? (el.stroke?.width ?? 0) : 0),
+    read: (el) => boxStroke(el)?.width ?? 0,
+    keyframeable: (el) => el.type === 'shape',
     multiSelect: true,
     step: 1,
     min: 0,
@@ -263,38 +272,83 @@ const SHAPE_SPECIFIC: readonly PropertyDescriptor[] = [
     fieldKind: 'number',
     label: 'dash array',
     timelineLabel: 'Stroke dasharray',
-    read: (el) => (el.type === 'shape' ? (el.stroke?.dash?.[0] ?? 0) : 0),
+    read: (el) => boxStroke(el)?.dash?.[0] ?? 0,
+    keyframeable: (el) => el.type === 'shape',
     multiSelect: true,
     step: 1,
     min: 0,
   },
+];
+
+/** One per-corner radius sub-property (D-042) — present/keyframe-able only in per-corner mode. */
+function cornerDesc(
+  property: AnimatableProperty,
+  label: string,
+  timelineLabel: string,
+  i: 0 | 1 | 2 | 3,
+): PropertyDescriptor {
+  return {
+    property,
+    section: 'Border Radius',
+    fieldKind: 'number',
+    label,
+    timelineLabel,
+    read: (el) => cornerAt(el, i),
+    keyframeable: (el) => isPerCorner(el),
+    step: 1,
+    min: 0,
+  };
+}
+
+const RADIUS_DESCS: readonly PropertyDescriptor[] = [
   {
     property: 'cornerRadius',
     section: 'Border Radius',
     fieldKind: 'number',
     label: 'radius',
     timelineLabel: 'Radius',
-    read: (el) =>
-      el.type === 'shape'
-        ? typeof el.cornerRadius === 'number'
-          ? el.cornerRadius
-          : Array.isArray(el.cornerRadius)
-            ? el.cornerRadius[0]
-            : 0
-        : 0,
-    // The uniform radius; a per-corner tuple (D-042) reads null (→ "mixed").
-    multiRead: (el) =>
-      el.type === 'shape'
-        ? typeof el.cornerRadius === 'number'
-          ? el.cornerRadius
-          : el.cornerRadius === undefined
-            ? 0
-            : null
-        : null,
+    read: (el) => uniformRadius(el),
+    // The uniform value; a per-corner tuple reads null (→ "mixed") in multi-select.
+    multiRead: (el) => {
+      const cr = boxCorner(el);
+      return typeof cr === 'number' ? cr : cr === undefined ? 0 : null;
+    },
+    // Keyframe-able only in UNIFORM mode; per-corner uses the tl/tr/br/bl sub-tracks.
+    keyframeable: (el) => !isPerCorner(el),
     multiSelect: true,
     step: 1,
     min: 0,
   },
+  cornerDesc('cornerRadius.tl', 'top left radius', 'Top left radius', 0),
+  cornerDesc('cornerRadius.tr', 'top right radius', 'Top right radius', 1),
+  cornerDesc('cornerRadius.br', 'bottom right radius', 'Bottom right radius', 2),
+  cornerDesc('cornerRadius.bl', 'bottom left radius', 'Bottom left radius', 3),
+];
+
+/** The shared box descriptor set (Path Style stroke + Border Radius), in section order. */
+const BOX_DESCS: readonly PropertyDescriptor[] = [...STROKE_DESCS, ...RADIUS_DESCS];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shape-specific — fill (Path Style) · Drop Shadow (reads el.shadow). Stroke +
+// border-radius now come from the shared BOX_DESCS above.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SHAPE_FILL: PropertyDescriptor = {
+  property: 'fill.color',
+  section: 'Path Style',
+  fieldKind: 'fill',
+  label: 'fill',
+  timelineLabel: 'Fill',
+  read: (el) => (el.type === 'shape' && el.fill?.kind === 'solid' ? el.fill.color : '#000000'),
+  // The uniform colour, or null (→ "mixed") for a gradient / non-solid fill.
+  multiRead: (el) => (el.type === 'shape' && el.fill?.kind === 'solid' ? el.fill.color : null),
+  // A colour is keyframe-able only while it is a SOLID fill — gradients can't
+  // interpolate, so no diamond (in either panel) when the fill is a gradient.
+  keyframeable: (el) => el.type === 'shape' && (el.fill === undefined || el.fill.kind === 'solid'),
+  multiSelect: true,
+};
+
+const SHAPE_SHADOW: readonly PropertyDescriptor[] = [
   shadowDesc('shadow.offsetX', 'offset X', 'Offset X', { step: 1, unit: 'px', multiSelect: true }),
   shadowDesc('shadow.offsetY', 'offset Y', 'Offset Y', { step: 1, unit: 'px', multiSelect: true }),
   shadowDesc('shadow.blur', 'blur', 'Blur', { step: 1, min: 0, unit: 'px', multiSelect: true }),
@@ -363,16 +417,7 @@ const TEXT_SPECIFIC: readonly PropertyDescriptor[] = [
   paddingDesc('padding.right', 'right', 'Padding right'),
   paddingDesc('padding.bottom', 'bottom', 'Padding bottom'),
   paddingDesc('padding.left', 'left', 'Padding left'),
-  {
-    property: 'cornerRadius',
-    section: 'Border Radius',
-    fieldKind: 'number',
-    label: 'radius',
-    timelineLabel: 'Radius',
-    read: (el) => (el.type === 'text' ? (el.cornerRadius ?? 0) : 0),
-    step: 1,
-    min: 0,
-  },
+  // cornerRadius (+ stroke) now come from the shared BOX_DESCS (D-042).
 ];
 
 /**
@@ -436,13 +481,17 @@ function paddingDesc(
 
 const UNIVERSAL_ONLY: readonly PropertyDescriptor[] = [...TRANSFORM, ...FILTER];
 
+// D-042 — the background-capable kinds (shape, text, ticker, clock, sequence) all
+// include the shared BOX_DESCS (stroke + border radius). Order keeps each section's
+// descriptors consecutive (shape: fill then stroke under Path Style). Repeater (no
+// background) and the bare kinds stay transform + filter only.
 export const FIELD_REGISTRY: Record<Element['type'], readonly PropertyDescriptor[]> = {
-  shape: [...TRANSFORM, ...SHAPE_SPECIFIC, ...FILTER],
-  text: [...TRANSFORM, ...TEXT_SPECIFIC, ...FILTER],
+  shape: [...TRANSFORM, SHAPE_FILL, ...BOX_DESCS, ...SHAPE_SHADOW, ...FILTER],
+  text: [...TRANSFORM, ...TEXT_SPECIFIC, ...BOX_DESCS, ...FILTER],
   image: UNIVERSAL_ONLY,
-  ticker: UNIVERSAL_ONLY,
-  clock: UNIVERSAL_ONLY,
-  sequence: UNIVERSAL_ONLY,
+  ticker: [...TRANSFORM, ...BOX_DESCS, ...FILTER],
+  clock: [...TRANSFORM, ...BOX_DESCS, ...FILTER],
+  sequence: [...TRANSFORM, ...BOX_DESCS, ...FILTER],
   repeater: UNIVERSAL_ONLY,
   composition: UNIVERSAL_ONLY,
   lottie: UNIVERSAL_ONLY,

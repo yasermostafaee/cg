@@ -1,4 +1,5 @@
 import type {
+  BoxStyle,
   ClockElement,
   CompositionElement,
   Element as SceneElement,
@@ -334,9 +335,8 @@ function buildText(
       el.style.color = 'transparent';
     }
   }
-  if (element.cornerRadius !== undefined && element.cornerRadius > 0) {
-    el.style.borderRadius = `${element.cornerRadius}px`;
-  }
+  // D-042 — stroke border + uniform-or-per-corner radius (shared box style).
+  applyBoxStyle(el, element);
   // D-010-pic-5 — `wrap === false` forces single-line; vertical align
   // is honoured by turning the text node into a flex container.
   if (element.wrap === false) {
@@ -389,9 +389,8 @@ function buildTicker(element: TickerElement, ctx: BuildCtx): HTMLElement {
   el.style.direction = element.direction;
   if (element.backgroundColor) el.style.backgroundColor = element.backgroundColor;
   if (element.backgroundFill !== undefined) el.style.background = fillToCss(element.backgroundFill);
-  if (element.cornerRadius !== undefined && element.cornerRadius > 0) {
-    el.style.borderRadius = `${element.cornerRadius}px`;
-  }
+  // D-042 — stroke border + uniform-or-per-corner radius (shared box style).
+  applyBoxStyle(el, element);
 
   // The padded inner viewport. CSS padding on the band would be inert here —
   // the track/static row are absolutely positioned, and abspos children
@@ -478,9 +477,8 @@ function buildClock(element: ClockElement, ctx: BuildCtx): HTMLElement {
   }
   if (element.backgroundColor) el.style.backgroundColor = element.backgroundColor;
   if (element.backgroundFill !== undefined) el.style.background = fillToCss(element.backgroundFill);
-  if (element.cornerRadius !== undefined && element.cornerRadius > 0) {
-    el.style.borderRadius = `${element.cornerRadius}px`;
-  }
+  // D-042 — stroke border + uniform-or-per-corner radius (shared box style).
+  applyBoxStyle(el, element);
   // Unlike the ticker band, the time span is in normal flow (a flex child),
   // so plain CSS padding works — no inset viewport needed.
   if (element.padding) {
@@ -556,9 +554,8 @@ function buildSequence(element: SequenceElement, ctx: BuildCtx): HTMLElement {
   }
   if (element.backgroundColor) el.style.backgroundColor = element.backgroundColor;
   if (element.backgroundFill !== undefined) el.style.background = fillToCss(element.backgroundFill);
-  if (element.cornerRadius !== undefined && element.cornerRadius > 0) {
-    el.style.borderRadius = `${element.cornerRadius}px`;
-  }
+  // D-042 — stroke border + uniform-or-per-corner radius (shared box style).
+  applyBoxStyle(el, element);
   // Items are grid children (normal flow), so plain CSS padding works.
   if (element.padding) {
     el.style.paddingTop = `${element.padding.top}px`;
@@ -760,6 +757,25 @@ function buildImage(element: ImageElement, doc: Document): HTMLElement {
   return el;
 }
 
+/**
+ * D-042 — apply the shared box style to a background-capable element's node: the
+ * border from `stroke` (a non-empty dash → `dashed`) and a uniform-or-per-corner
+ * `border-radius`. Reused by every kind that mixes in `BoxStyleSchema` (shape,
+ * text, ticker, clock, sequence). Background itself stays per-kind.
+ */
+function applyBoxStyle(el: HTMLElement, box: BoxStyle): void {
+  if (box.stroke) {
+    const style = box.stroke.dash !== undefined && box.stroke.dash.length > 0 ? 'dashed' : 'solid';
+    el.style.border = `${box.stroke.width}px ${style} ${box.stroke.color}`;
+  }
+  if (box.cornerRadius !== undefined) {
+    el.style.borderRadius =
+      typeof box.cornerRadius === 'number'
+        ? `${box.cornerRadius}px`
+        : `${box.cornerRadius[0]}px ${box.cornerRadius[1]}px ${box.cornerRadius[2]}px ${box.cornerRadius[3]}px`;
+  }
+}
+
 function buildShape(element: ShapeElement, doc: Document): HTMLElement {
   const el = doc.createElement('div');
   el.dataset['cgElementId'] = element.id;
@@ -767,26 +783,11 @@ function buildShape(element: ShapeElement, doc: Document): HTMLElement {
   if (element.fill !== undefined) {
     el.style.background = fillToCss(element.fill);
   }
-  if (element.stroke) {
-    // D-010 — `dash` array maps to a dashed/dotted border. SVG-style
-    // dash arrays don't map 1:1 to CSS `border-style`, so a non-empty
-    // dash triggers `dashed`; a more granular SVG renderer is a later
-    // upgrade.
-    const style =
-      element.stroke.dash !== undefined && element.stroke.dash.length > 0 ? 'dashed' : 'solid';
-    el.style.border = `${element.stroke.width}px ${style} ${element.stroke.color}`;
-  }
+  // D-042 — shared box style (border from stroke, uniform-or-per-corner radius);
+  // ellipse keeps a 50% radius regardless of any authored cornerRadius.
+  applyBoxStyle(el, element);
   if (element.shape === 'ellipse') {
     el.style.borderRadius = '50%';
-  } else if (element.cornerRadius !== undefined) {
-    // Apply cornerRadius for any rect-ish shape so the static slider
-    // affects plain `rect` as well as `rounded-rect`; ellipse keeps 50%.
-    if (typeof element.cornerRadius === 'number') {
-      el.style.borderRadius = `${element.cornerRadius}px`;
-    } else {
-      const [tl, tr, br, bl] = element.cornerRadius;
-      el.style.borderRadius = `${tl}px ${tr}px ${br}px ${bl}px`;
-    }
   }
   // D-010 — drop shadow rendered as box-shadow.
   if (element.shadow) {

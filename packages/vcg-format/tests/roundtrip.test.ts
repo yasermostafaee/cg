@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Element, Scene } from '@cg/shared-schema';
 import { pack } from '../src/pack.js';
 import { unpack } from '../src/unpack.js';
 import { verify } from '../src/verify.js';
@@ -23,6 +24,33 @@ describe('pack → unpack round-trip', () => {
     });
     const { scene } = await unpack(buf);
     expect(scene).toEqual(fixtureScene);
+  });
+
+  it('D-042 — round-trips a per-corner cornerRadius + a stroke on a non-shape element', async () => {
+    const children = fixtureScene.layers[0]!.children.map((c, j) =>
+      j === 0
+        ? ({
+            ...c,
+            cornerRadius: [4, 8, 12, 16],
+            stroke: { width: 3, color: '#00FF00' },
+          } as Element)
+        : c,
+    );
+    const scene: Scene = {
+      ...fixtureScene,
+      layers: [{ ...fixtureScene.layers[0]!, children }, ...fixtureScene.layers.slice(1)],
+    };
+    const buf = await pack({
+      scene,
+      manifestExtras: fixtureManifestExtras,
+      indexHtml: fixtureIndexHtml,
+      cgJs: fixtureCgJs,
+      cgCss: fixtureCgCss,
+    });
+    const out = (await unpack(buf)).scene;
+    const el = out.layers[0]!.children[0]! as { cornerRadius?: unknown; stroke?: unknown };
+    expect(el.cornerRadius).toEqual([4, 8, 12, 16]);
+    expect(el.stroke).toEqual({ width: 3, color: '#00FF00' });
   });
 
   it('preserves text content with Persian characters', async () => {

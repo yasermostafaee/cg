@@ -77,11 +77,10 @@ export function applyAnimationAtFrame(entry: AnimatedElement, frame: number): vo
     if (typeof v === 'string') entry.node.style.backgroundColor = v;
   }
 
-  // D-010 — direct numeric writes for stand-alone style properties.
-  applyNumeric(tracks, 'cornerRadius', frame, (v) => {
-    entry.node.style.borderRadius = `${v}px`;
-  });
-  // Stroke width / colour — recompose the border declaration.
+  // D-042 — tuple-aware border-radius (uniform OR per-corner sub-tracks).
+  applyCornerRadius(entry, tracks, frame);
+  // Stroke width / colour — recompose the border declaration (shape-only; D-052
+  // covers stroke animation for the time-driven kinds).
   applyStroke(entry, tracks, frame);
   // Font sub-properties.
   applyNumeric(tracks, 'font.size', frame, (v) => {
@@ -138,6 +137,13 @@ const STROKE_PROPS = [
   'stroke.dash',
 ] as const satisfies readonly AnimatableProperty[];
 
+const CORNER_PROPS = [
+  'cornerRadius.tl',
+  'cornerRadius.tr',
+  'cornerRadius.br',
+  'cornerRadius.bl',
+] as const satisfies readonly AnimatableProperty[];
+
 const FILTER_PROPS = [
   'filter.blur',
   'filter.brightness',
@@ -170,6 +176,39 @@ function readStringTrack(
   if (track === undefined) return undefined;
   const v = interpolateAtFrame(track, frame);
   return typeof v === 'string' ? v : undefined;
+}
+
+/**
+ * D-042 — recompose `border-radius` each frame, tuple-aware. Per-corner sub-tracks
+ * (`cornerRadius.tl/tr/br/bl`) win when any is present: each corner reads its
+ * sub-track, falling back to the element's static per-corner value. Otherwise a
+ * single `cornerRadius` track animates the uniform value. This fixes the
+ * previously-broken animated-tuple path (the old code serialised an array into one
+ * `px` value) and applies to every background-capable kind (cornerRadius animation
+ * is ungated, unlike stroke).
+ */
+function applyCornerRadius(
+  entry: AnimatedElement,
+  tracks: ElementAnimation['tracks'],
+  frame: number,
+): void {
+  if (CORNER_PROPS.some((p) => tracks[p] !== undefined)) {
+    const cr = (entry.source as { cornerRadius?: number | [number, number, number, number] })
+      .cornerRadius;
+    const base: [number, number, number, number] = Array.isArray(cr)
+      ? cr
+      : typeof cr === 'number'
+        ? [cr, cr, cr, cr]
+        : [0, 0, 0, 0];
+    const tl = readNumericTrack(tracks, 'cornerRadius.tl', frame) ?? base[0];
+    const tr = readNumericTrack(tracks, 'cornerRadius.tr', frame) ?? base[1];
+    const br = readNumericTrack(tracks, 'cornerRadius.br', frame) ?? base[2];
+    const bl = readNumericTrack(tracks, 'cornerRadius.bl', frame) ?? base[3];
+    entry.node.style.borderRadius = `${tl}px ${tr}px ${br}px ${bl}px`;
+    return;
+  }
+  const v = readNumericTrack(tracks, 'cornerRadius', frame);
+  if (v !== undefined) entry.node.style.borderRadius = `${v}px`;
 }
 
 function applyStroke(

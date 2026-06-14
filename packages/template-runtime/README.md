@@ -399,6 +399,16 @@ the element's static transform for any un-tracked axis. Composite properties
 (shadow, filter, stroke) **recompose the whole CSS declaration** from static +
 animated components so animating one sub-property keeps the others.
 
+**Box style (D-042).** Every background-capable kind — shape, text, ticker, clock,
+sequence (the shared `BoxStyleSchema`) — renders a `stroke` border and a uniform
+or per-corner `cornerRadius` (`scene-builder` emits the four-value `border-radius`
+for a `[tl,tr,br,bl]` tuple). `applyAnimationAtFrame` is tuple-aware: it recomposes
+`border-radius` each frame from the per-corner sub-tracks `cornerRadius.tl/tr/br/bl`
+(each corner falling back to the static tuple), which also fixed the previously
+broken animated-tuple path. Per **Option A**, cornerRadius animation is ungated
+(all kinds), but `applyStroke` stays shape-only — animating stroke/background on the
+time-driven kinds is deferred to D-052.
+
 `interpolateAtFrame` contract: `frame ≤ first` → first value (no pre-roll
 extrapolation); `frame ≥ last` → last value; otherwise interpolate between the two
 surrounding keyframes using the **earlier** keyframe's outgoing easing (`step`

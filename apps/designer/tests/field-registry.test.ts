@@ -105,12 +105,15 @@ describe('field-registry — per-kind keyframe-able truth table (post-D-051)', (
     expect(kf(defaultImage('i', 0, 0, 'asset-1'))).toEqual([...TRANSFORM, ...FILTER]);
   });
 
-  it('time-driven kinds (ticker/clock/sequence/repeater) expose only transform + filter (styling deferred to D-052)', () => {
-    const expected = [...TRANSFORM, ...FILTER];
-    expect(kf(defaultTicker('tk', 0, 0))).toEqual(expected);
-    expect(kf(defaultClock('ck', 0, 0))).toEqual(expected);
-    expect(kf(defaultSequence('sq', 0, 0))).toEqual(expected);
-    expect(kf(defaultRepeater('rp', 0, 0, { id: 'comp-1' }))).toEqual(expected);
+  it('time-driven kinds expose transform + cornerRadius + filter (D-042); repeater stays transform + filter', () => {
+    // D-042 — ticker/clock/sequence are background-capable, so cornerRadius is now
+    // keyframe-able (stroke is present but static — Option A). The rest of their
+    // styling stays deferred to D-052. Repeater (no background) is unchanged.
+    const withRadius = [...TRANSFORM, 'cornerRadius', ...FILTER];
+    expect(kf(defaultTicker('tk', 0, 0))).toEqual(withRadius);
+    expect(kf(defaultClock('ck', 0, 0))).toEqual(withRadius);
+    expect(kf(defaultSequence('sq', 0, 0))).toEqual(withRadius);
+    expect(kf(defaultRepeater('rp', 0, 0, { id: 'comp-1' }))).toEqual([...TRANSFORM, ...FILTER]);
   });
 });
 
@@ -132,11 +135,11 @@ describe('field-registry — right/left parity (both derive from the registry)',
 });
 
 describe('field-registry — §2 diamond corrections', () => {
-  it('clock digits/mode are not keyframe-able (no diamond) — only transform + filter', () => {
+  it('clock digits/mode are not keyframe-able (no diamond); cornerRadius is (D-042)', () => {
     const clockKf = kf(defaultClock('ck', 0, 0));
     expect(clockKf).not.toContain('digits');
     expect(clockKf).not.toContain('mode');
-    expect(clockKf).toEqual([...TRANSFORM, ...FILTER]);
+    expect(clockKf).toEqual([...TRANSFORM, 'cornerRadius', ...FILTER]);
   });
 
   it('border-radius is keyframe-able on shape and text (diamond present in both panels)', () => {

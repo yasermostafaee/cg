@@ -86,7 +86,13 @@ multi-select editor now renders the SAME `KeyframeIndicator` for each property
 keyframe-able across the whole selection, with a third **`partial`** variant (some
 selected keyframed, some not) on top of `empty` / `at-frame`; clicking it toggles
 keyframes across the selection in one undo (`MultiKeyframeDot` in
-[`inspector/keyframe-diamond.tsx`](../inspector/keyframe-diamond.tsx)). The dock deliberately does
+[`inspector/keyframe-diamond.tsx`](../inspector/keyframe-diamond.tsx)). D-042 — the
+shared box descriptors (stroke + border radius) are declared once and included by
+the five background-capable kinds (shape/text/ticker/clock/sequence), so each gets
+the rows automatically; the uniform `cornerRadius` row shows in uniform mode and
+the four `cornerRadius.tl/tr/br/bl` rows in per-corner mode (the registry's
+`keyframeable` predicate reads the value shape), while stroke is keyframe-able only
+on shapes (Option A). The dock deliberately does
 **not** subscribe to `currentFrame` — the playhead, the frame readout and each
 row's live value are **self-subscribing leaves** (`RulerPlayhead`,
 `BodyPlayhead`, `FrameReadout`, `TrackRowLabel`), so a playback tick re-renders
