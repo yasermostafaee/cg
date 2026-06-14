@@ -110,6 +110,35 @@ export const StrokeSchema = z.object({
 });
 export type Stroke = z.infer<typeof StrokeSchema>;
 
+/**
+ * Border radius (D-042) — a single uniform value, or a per-corner tuple
+ * `[topLeft, topRight, bottomRight, bottomLeft]`. The value SHAPE is itself the
+ * uniform↔per-corner toggle: a number is uniform, a 4-tuple is per-corner.
+ */
+export const CornerRadiusSchema = z.union([
+  z.number().nonnegative(),
+  z.tuple([
+    z.number().nonnegative(),
+    z.number().nonnegative(),
+    z.number().nonnegative(),
+    z.number().nonnegative(),
+  ]),
+]);
+export type CornerRadius = z.infer<typeof CornerRadiusSchema>;
+
+/**
+ * Box styling shared by every BACKGROUND-CAPABLE element kind — shape, text,
+ * ticker, clock, sequence (D-042): an optional stroke/border and an optional
+ * uniform-or-per-corner border radius. Background itself stays per-kind (`fill`
+ * for shape; `backgroundColor`/`backgroundFill` for the others) and is NOT part
+ * of this mixin.
+ */
+export const BoxStyleSchema = z.object({
+  stroke: StrokeSchema.optional(),
+  cornerRadius: CornerRadiusSchema.optional(),
+});
+export type BoxStyle = z.infer<typeof BoxStyleSchema>;
+
 /** Opacity is 0..1 inclusive. */
 export const OpacitySchema = z.number().min(0).max(1);
 

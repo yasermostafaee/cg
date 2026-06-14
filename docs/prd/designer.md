@@ -1145,15 +1145,74 @@ a set — the renderer just collapses to "single or nothing" everywhere.
   add/edit, and aligning/distributing the selection. Change:
   `openspec/changes/archive/2026-06-14-add-multi-select-editing/`.
 
-## [ ] D-042 — Per-corner border radius (toggle) ⟨priority: medium⟩
+## [~] D-042 — Per-corner border radius + stroke for all background-capable elements ⟨priority: medium⟩ — change: `openspec/changes/box-props-all-elements/`
 
-**What:** Toggle a shape's border radius between a single value and four independent
-corners; right inspector shows four inputs side-by-side, the timeline-left inspector
-shows four stacked — matching the Loopic reference.
-**Why:** Only a single uniform radius is editable today.
-**Acceptance to be detailed when scheduled.**
-**Notes:** schema-first (per-corner radius). Loopic refs:
-docs/designer-guide/sample-assets/D-042-radius-0.png / -1.png / -2.png.
+**What:** Give every background-capable element (shape, text, ticker, clock,
+sequence — NOT repeater, which has no background) both a **stroke/border** and a
+**per-corner border radius** with a per-element toggle between a single uniform
+value and four independent corners (matching the Loopic reference: a uniform
+input + a toggle icon that expands to four side-by-side inputs in the right
+inspector, four stacked rows Top-left / Top-right / Bottom-right / Bottom-left in
+the timeline-left inspector). Shape already has both; the work extends them to
+text/ticker/clock/sequence. Per-corner radius is keyframe-able on all five kinds;
+this also fixes a latent bug where an animated 4-tuple cornerRadius is currently
+broken even for shapes. Stroke stays keyframe-able for shapes as today; animating
+stroke on the time-driven kinds (ticker/clock/sequence) is explicitly deferred to
+D-052 (the runtime ungating), so those kinds get static stroke + a stroke section
+now, with stroke keyframes only where the runtime already applies them.
+**Why:** Border and rounded corners are basic box styling the owner wants on any
+element that can have a background, not just shapes; and per-corner radius (a
+common broadcast look) has no UI today and a half-done schema. Centralizing the
+box properties also fixes the broken animated-tuple path.
+**Acceptance:**
+
+- WHEN any of shape/text/ticker/clock/sequence is inspected THEN it exposes a
+  stroke section (color/width/dash) and a border-radius control, each grouped as
+  in the single-element inspector; repeater (no background) does NOT
+- WHEN the operator toggles a border-radius control to per-corner THEN it shows
+  four inputs (right inspector: side-by-side; timeline-left: four stacked rows in
+  tl/tr/br/bl order) and each corner is independently editable; toggling back to
+  uniform collapses to one value
+- WHEN the per-corner toggle state is set on one element THEN it is per-element
+  (another element can be uniform at the same time) and persists on the element
+- WHEN a per-corner radius is rendered (static) on any of the five kinds THEN the
+  runtime emits the four-value border-radius (not a broken single value), and
+  preview == export
+- WHEN a static stroke is set on text/ticker/clock/sequence THEN the runtime
+  renders the border (mirroring shape), in preview and export
+- WHEN a corner radius is keyframed on any of the five kinds THEN it animates
+  correctly (via per-corner sub-tracks recomposed each frame), fixing the
+  previously-broken animated-tuple case for shapes too
+- WHEN the operator toggles a per-corner radius back to uniform AND extra
+  per-corner keyframe tracks exist THEN those extra tracks are removed in ONE
+  undo step (no orphaned still-applied tracks — the B-014 class)
+- WHEN stroke is keyframed on a shape THEN it animates as today (unchanged); the
+  multi editor and timeline-left show the new box-property diamonds via the D-051
+  registry; stroke animation on ticker/clock/sequence is NOT offered here
+  (deferred to D-052)
+- WHEN a scene authored before this change is loaded, played, previewed, and
+  exported THEN it stays valid (uniform `number` cornerRadius still in the union;
+  kinds without stroke before now simply have none until set)
+  **Notes:** Depends on D-051 (registry drives the new descriptors' inspector
+  presence + keyframe-ability across all three surfaces) — recon confirmed the
+  registry left the seam (cornerRadius read/multiRead already union-aware). Scope
+  decision: **Option A** — D-042 ships static stroke+radius on all five kinds +
+  per-corner radius keyframing everywhere; stroke keyframing stays shape-only;
+  time-driven stroke/background animation is D-052 (do NOT ungate applyStroke for
+  non-shape here). Schema: a shared `BoxStyleSchema` mixin (`stroke?` +
+  `cornerRadius: number | [tl,tr,br,bl]`) extended by the five kinds (shape
+  already matches); keep `fill` vs `backgroundColor` as the per-kind background
+  (do NOT unify). Add four animatable sub-property keys `cornerRadius.tl/tr/br/bl`
+  for per-corner keyframing + tuple recomposition in `animation-applier`. Runtime:
+  non-shape static tuple render + non-shape static border (mirror shape's
+  branches); fix the animated-tuple path for ALL kinds incl. shape. UI: the
+  uniform↔per-corner toggle in StyleSection reusing `VectorField`/`cg-input-group`
+  (the Position-X/Y + shadow-offset pattern); timeline-left + multi-select follow
+  via the registry. The cornerRadius-union change ripples to scene-builder,
+  animation-applier, the registry read/multiRead, the inspector, AND `.vcg`
+  export — verify export/import round-trips a 4-tuple. Toggle→uniform dropping the
+  extra tracks reuses the B-014 orphan-track clearing approach. Change:
+  `openspec/changes/box-props-all-elements/`.
 
 ## [ ] D-043 — Extended drop-shadow (outset/inset + spread) + text-shadow section ⟨priority: medium⟩
 

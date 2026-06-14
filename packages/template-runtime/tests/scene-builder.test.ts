@@ -231,6 +231,17 @@ describe('buildClock — static initial render (D-027)', () => {
     expect(span(built).textContent).toBe('00:00');
   });
 
+  it('renders a per-corner border-radius + a static stroke on a non-shape kind (D-042)', () => {
+    const built = buildScene(
+      clockScene({ cornerRadius: [4, 8, 12, 16], stroke: { width: 3, color: '#00FF00' } }),
+    );
+    const node = built.elementMap.get('clk')!;
+    expect(node.style.borderRadius).toBe('4px 8px 12px 16px');
+    expect(node.style.border).toContain('3px');
+    expect(node.style.border).toContain('solid');
+    expect(node.style.border.toLowerCase()).toContain('#00ff00');
+  });
+
   it('the time span is LTR, bidi-isolated, and width-stable (tabular numerals)', () => {
     const built = buildScene(clockScene({}));
     const node = span(built);

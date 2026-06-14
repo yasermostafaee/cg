@@ -229,6 +229,53 @@ describe('applyAnimationAtFrame', () => {
     expect(node.style.borderRadius).toBe('20px');
   });
 
+  it('recomposes per-corner border-radius from the tl/tr/br/bl sub-tracks (D-042)', () => {
+    const { source, node } = makeShape();
+    const src: ShapeElement = { ...source, cornerRadius: [4, 8, 12, 16] };
+    const entry: AnimatedElement = {
+      id: src.id,
+      node,
+      source: src,
+      animation: {
+        tracks: {
+          'cornerRadius.tl': {
+            keyframes: [
+              { frame: 0, value: 0, easing: 'linear' },
+              { frame: 10, value: 40, easing: 'linear' },
+            ],
+          },
+        },
+      },
+    };
+    applyAnimationAtFrame(entry, 10);
+    // tl animates to 40; the other corners fall back to the static tuple.
+    expect(node.style.borderRadius).toBe('40px 8px 12px 16px');
+  });
+
+  it('per-corner radius animates on a NON-shape kind too (text) — the previously-broken tuple path', () => {
+    const { source, node } = makeText();
+    // Distinct corners so CSS doesn't collapse the four-value shorthand.
+    const src: TextElement = { ...source, cornerRadius: [1, 2, 3, 4] };
+    const entry: AnimatedElement = {
+      id: src.id,
+      node,
+      source: src,
+      animation: {
+        tracks: {
+          'cornerRadius.br': {
+            keyframes: [
+              { frame: 0, value: 3, easing: 'linear' },
+              { frame: 10, value: 33, easing: 'linear' },
+            ],
+          },
+        },
+      },
+    };
+    applyAnimationAtFrame(entry, 10);
+    // br animates to 33; the other corners fall back to the static tuple.
+    expect(node.style.borderRadius).toBe('1px 2px 33px 4px');
+  });
+
   it('writes text.color to color only for text elements', () => {
     const { source, node } = makeText();
     const entry: AnimatedElement = {

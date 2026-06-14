@@ -157,6 +157,12 @@ export const AnimatablePropertySchema = z.enum([
   'stroke.width',
   'stroke.dash',
   'cornerRadius',
+  // D-042 — per-corner border-radius sub-tracks, recomposed into `border-radius`
+  // each frame; present only while the element is in per-corner (tuple) mode.
+  'cornerRadius.tl',
+  'cornerRadius.tr',
+  'cornerRadius.br',
+  'cornerRadius.bl',
   'shadow.offsetX',
   'shadow.offsetY',
   'shadow.blur',

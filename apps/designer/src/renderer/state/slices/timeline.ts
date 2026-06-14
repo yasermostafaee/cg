@@ -410,6 +410,15 @@ export const timelineSlice = {
     // The whole transform / numeric branch only handles numbers — the
     // color cases at the bottom of this switch handle strings.
     const numeric = typeof value === 'number' ? value : 0;
+    // D-042 — the background-capable kinds that carry the shared box style
+    // (stroke + border radius). Static stroke is editable on all of them; stroke
+    // ANIMATION stays shape-only (Option A — the applier is gated, not this write).
+    const boxKind =
+      el.type === 'shape' ||
+      el.type === 'text' ||
+      el.type === 'ticker' ||
+      el.type === 'clock' ||
+      el.type === 'sequence';
     switch (property) {
       case 'position.x':
         designerStore.updateTransform(elementId, { position: { ...tx.position, x: numeric } });
@@ -435,21 +444,56 @@ export const timelineSlice = {
       case 'opacity':
         designerStore.updateElement(elementId, { opacity: numeric } as Partial<Element>);
         return;
-      // D-010 — numeric style properties.
+      // D-010 / D-042 — border radius. `cornerRadius` is the uniform value; the
+      // per-corner sub-props each write one corner of the [tl,tr,br,bl] tuple.
       case 'cornerRadius':
         designerStore.updateElement(elementId, {
           cornerRadius: numeric,
         } as unknown as Partial<Element>);
         return;
+      case 'cornerRadius.tl':
+      case 'cornerRadius.tr':
+      case 'cornerRadius.br':
+      case 'cornerRadius.bl': {
+        const cur = (el as { cornerRadius?: number | [number, number, number, number] })
+          .cornerRadius;
+        const tuple: [number, number, number, number] = Array.isArray(cur)
+          ? [cur[0], cur[1], cur[2], cur[3]]
+          : typeof cur === 'number'
+            ? [cur, cur, cur, cur]
+            : [0, 0, 0, 0];
+        const idx =
+          property === 'cornerRadius.tl'
+            ? 0
+            : property === 'cornerRadius.tr'
+              ? 1
+              : property === 'cornerRadius.br'
+                ? 2
+                : 3;
+        tuple[idx] = numeric;
+        designerStore.updateElement(elementId, {
+          cornerRadius: tuple,
+        } as unknown as Partial<Element>);
+        return;
+      }
       case 'stroke.width': {
-        if (el.type !== 'shape') return;
-        const stroke = { ...(el.stroke ?? { color: '#000000', width: 0 }), width: numeric };
+        if (!boxKind) return;
+        const stroke = {
+          ...((el as { stroke?: { color: string; width: number } }).stroke ?? {
+            color: '#000000',
+            width: 0,
+          }),
+          width: numeric,
+        };
         designerStore.updateElement(elementId, { stroke } as unknown as Partial<Element>);
         return;
       }
       case 'stroke.dash': {
-        if (el.type !== 'shape') return;
-        const base = el.stroke ?? { color: '#000000', width: 0 };
+        if (!boxKind) return;
+        const base = (el as { stroke?: { color: string; width: number } }).stroke ?? {
+          color: '#000000',
+          width: 0,
+        };
         const stroke = { ...base, dash: numeric > 0 ? [numeric] : [] };
         designerStore.updateElement(elementId, { stroke } as unknown as Partial<Element>);
         return;
@@ -518,8 +562,11 @@ export const timelineSlice = {
         return;
       }
       case 'stroke.color': {
-        if (el.type !== 'shape' || typeof value !== 'string') return;
-        const base = el.stroke ?? { width: 0, color: '#000000' };
+        if (!boxKind || typeof value !== 'string') return;
+        const base = (el as { stroke?: { color: string; width: number } }).stroke ?? {
+          width: 0,
+          color: '#000000',
+        };
         const stroke = { ...base, color: value };
         designerStore.updateElement(elementId, { stroke } as unknown as Partial<Element>);
         return;

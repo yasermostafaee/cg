@@ -273,6 +273,28 @@ export class DesignerApp {
       );
   }
 
+  /** Count canvas-preview elements with a non-zero top-left border radius (D-042). */
+  async canvasElementsWithRoundedCorner(): Promise<number> {
+    return this.canvasFrame.locator('[data-cg-element-id]').evaluateAll(
+      (els) =>
+        els.filter((e) => {
+          const r = getComputedStyle(e as HTMLElement).borderTopLeftRadius;
+          return r !== '' && r !== '0px';
+        }).length,
+    );
+  }
+
+  /** Count canvas-preview elements that render a border (non-`0px` border width) (D-042). */
+  async canvasElementsWithBorder(): Promise<number> {
+    return this.canvasFrame.locator('[data-cg-element-id]').evaluateAll(
+      (els) =>
+        els.filter((e) => {
+          const w = getComputedStyle(e as HTMLElement).borderTopWidth;
+          return w !== '' && w !== '0px';
+        }).length,
+    );
+  }
+
   /** Count canvas-preview elements whose computed opacity is below 1 (D-053). */
   async canvasElementsWithOpacityBelow1(): Promise<number> {
     return this.canvasFrame

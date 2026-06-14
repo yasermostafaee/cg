@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  BoxStyleSchema,
   FillSchema,
   FilterSchema,
   HexColorSchema,
@@ -7,7 +8,6 @@ import {
   OpacitySchema,
   PaddingSchema,
   ShadowSchema,
-  StrokeSchema,
   TransformSchema,
   Vec2Schema,
   ZIndexSchema,
@@ -93,8 +93,6 @@ export const TextElementSchema = ElementBaseSchema.extend({
    * linear/radial both render). Absent ⇒ use `backgroundColor`.
    */
   backgroundFill: FillSchema.optional(),
-  /** D-010 — text-box border-radius (in pixels). */
-  cornerRadius: z.number().nonnegative().optional(),
   /**
    * D-010-pic-5 — when true, the runtime shrinks the font to fit the
    * box (CSS-side; analogous to fitMode === 'shrink-to-fit'). Default
@@ -108,7 +106,7 @@ export const TextElementSchema = ElementBaseSchema.extend({
   wrap: z.boolean().optional(),
   /** D-010-pic-5 — vertical alignment inside the text box. */
   verticalAlign: z.enum(['top', 'middle', 'bottom']).optional(),
-});
+}).merge(BoxStyleSchema);
 export type TextElement = z.infer<typeof TextElementSchema>;
 
 /**
@@ -147,8 +145,6 @@ export const TickerElementSchema = ElementBaseSchema.extend({
   backgroundColor: HexColorSchema.optional(),
   /** Optional gradient (or solid) band background; overrides `backgroundColor`. */
   backgroundFill: FillSchema.optional(),
-  /** Band border-radius (px). */
-  cornerRadius: z.number().nonnegative().optional(),
   /** Inner padding inside the band (items are vertically centred within). */
   padding: PaddingSchema.optional(),
   /**
@@ -185,7 +181,7 @@ export const TickerElementSchema = ElementBaseSchema.extend({
   separator: z.string().optional(),
   /** Authored default items; a bound `list` field replaces them at playout. */
   items: z.array(TickerItemSchema),
-});
+}).merge(BoxStyleSchema);
 export type TickerElement = z.infer<typeof TickerElementSchema>;
 
 /**
@@ -230,8 +226,6 @@ export const ClockElementSchema = ElementBaseSchema.extend({
   backgroundColor: HexColorSchema.optional(),
   /** Optional gradient (or solid) box background; overrides `backgroundColor`. */
   backgroundFill: FillSchema.optional(),
-  /** Box border-radius (px). */
-  cornerRadius: z.number().nonnegative().optional(),
   /** Inner padding inside the box. */
   padding: PaddingSchema.optional(),
   /** Horizontal placement of the time text inside the box. */
@@ -251,15 +245,17 @@ export const ClockElementSchema = ElementBaseSchema.extend({
   digits: z.enum(['latin', 'persian', 'arabic-indic']).default('persian'),
   /** Countdown target; ignored by `wall`/`countup`. */
   target: ClockTargetSchema.optional(),
-}).superRefine((el, ctx) => {
-  if (el.mode === 'countdown' && !el.target) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['target'],
-      message: "mode 'countdown' requires a target (duration or datetime)",
-    });
-  }
-});
+})
+  .merge(BoxStyleSchema)
+  .superRefine((el, ctx) => {
+    if (el.mode === 'countdown' && !el.target) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['target'],
+        message: "mode 'countdown' requires a target (duration or datetime)",
+      });
+    }
+  });
 export type ClockElement = z.infer<typeof ClockElementSchema>;
 
 /**
@@ -310,8 +306,6 @@ export const SequenceElementSchema = ElementBaseSchema.extend({
   backgroundColor: HexColorSchema.optional(),
   /** Optional gradient (or solid) box background; overrides `backgroundColor`. */
   backgroundFill: FillSchema.optional(),
-  /** Box border-radius (px). */
-  cornerRadius: z.number().nonnegative().optional(),
   /** Inner padding inside the box. */
   padding: PaddingSchema.optional(),
   /** Horizontal placement of the item text inside the box. */
@@ -346,7 +340,7 @@ export const SequenceElementSchema = ElementBaseSchema.extend({
    * screen.
    */
   repeat: z.union([z.number().int().min(1), z.literal('infinite')]).default('infinite'),
-});
+}).merge(BoxStyleSchema);
 export type SequenceElement = z.infer<typeof SequenceElementSchema>;
 
 /**
@@ -397,15 +391,11 @@ export const ShapeElementSchema = ElementBaseSchema.extend({
   type: z.literal('shape'),
   shape: z.enum(['rect', 'rounded-rect', 'ellipse', 'polygon', 'path']),
   fill: FillSchema.optional(),
-  stroke: StrokeSchema.optional(),
-  cornerRadius: z
-    .union([z.number().nonnegative(), z.tuple([z.number(), z.number(), z.number(), z.number()])])
-    .optional(),
   pathData: z.string().optional(),
   polygon: z.array(Vec2Schema).optional(),
   /** D-010 — drop shadow on the shape (rendered as box-shadow). */
   shadow: ShadowSchema.optional(),
-});
+}).merge(BoxStyleSchema);
 export type ShapeElement = z.infer<typeof ShapeElementSchema>;
 
 /** Lottie animation element. */

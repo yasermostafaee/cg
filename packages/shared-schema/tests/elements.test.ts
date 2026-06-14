@@ -80,6 +80,36 @@ describe('TextElement', () => {
       }),
     ).toThrow();
   });
+  it('D-042 — text accepts a stroke + a per-corner (tuple) radius; a uniform number still validates', () => {
+    const baseText = {
+      ...baseProps,
+      type: 'text' as const,
+      text: 'x',
+      font: {
+        family: 'X',
+        weight: 400,
+        style: 'normal' as const,
+        size: 16,
+        lineHeight: 1.5,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      align: 'start' as const,
+      direction: 'auto' as const,
+      fitMode: 'fixed' as const,
+      overflow: 'clip' as const,
+    };
+    // Migration: a pre-existing uniform (number) radius still validates.
+    expect(TextElementSchema.parse({ ...baseText, cornerRadius: 8 }).cornerRadius).toBe(8);
+    // D-042: text now also accepts a stroke + a 4-tuple per-corner radius.
+    const parsed = TextElementSchema.parse({
+      ...baseText,
+      stroke: { width: 2, color: '#FF0000' },
+      cornerRadius: [1, 2, 3, 4] as [number, number, number, number],
+    });
+    expect(parsed.stroke).toEqual({ width: 2, color: '#FF0000' });
+    expect(parsed.cornerRadius).toEqual([1, 2, 3, 4]);
+  });
 });
 
 describe('ImageElement', () => {
