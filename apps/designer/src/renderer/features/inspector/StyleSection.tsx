@@ -10,6 +10,7 @@ import type {
   SequenceElement,
   Shadow,
   ShapeElement,
+  Stroke,
   TextElement,
   TickerElement,
 } from '@cg/shared-schema';
@@ -33,6 +34,7 @@ import { ColorField, NumberField, SelectField, TextField, VectorField } from './
 import { FillField } from './FillPopover.js';
 import { FontFamilySelect } from './FontFamilySelect.js';
 import { TextStyleSection } from './TextStyleSection.js';
+import { Button } from '../../ui/Button.js';
 
 interface Props {
   element: Element;
@@ -153,6 +155,12 @@ function TextSections({
       />
 
       <TextPaddingSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+
+      <StrokeSection
         element={element}
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
@@ -501,20 +509,16 @@ function TickerSections({
         ))}
       </CollapseSection>
 
-      <CollapseSection title="Border Radius">
-        <NumberField
-          label="radius"
-          value={element.cornerRadius ?? 0}
-          step={1}
-          min={0}
-          suffix="px"
-          onCommit={(v) =>
-            designerStore.updateElement(id, {
-              cornerRadius: Math.max(0, v),
-            } as Partial<Element>)
-          }
-        />
-      </CollapseSection>
+      <StrokeSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+      <BorderRadiusSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
 
       <FilterSection
         element={element}
@@ -744,20 +748,16 @@ function ClockSections({
         ))}
       </CollapseSection>
 
-      <CollapseSection title="Border Radius">
-        <NumberField
-          label="radius"
-          value={element.cornerRadius ?? 0}
-          step={1}
-          min={0}
-          suffix="px"
-          onCommit={(v) =>
-            designerStore.updateElement(id, {
-              cornerRadius: Math.max(0, v),
-            } as Partial<Element>)
-          }
-        />
-      </CollapseSection>
+      <StrokeSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+      <BorderRadiusSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
 
       <FilterSection
         element={element}
@@ -1002,20 +1002,16 @@ function SequenceSections({
         ))}
       </CollapseSection>
 
-      <CollapseSection title="Border Radius">
-        <NumberField
-          label="radius"
-          value={element.cornerRadius ?? 0}
-          step={1}
-          min={0}
-          suffix="px"
-          onCommit={(v) =>
-            designerStore.updateElement(id, {
-              cornerRadius: Math.max(0, v),
-            } as Partial<Element>)
-          }
-        />
-      </CollapseSection>
+      <StrokeSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+      <BorderRadiusSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
 
       <FilterSection
         element={element}
@@ -1292,33 +1288,139 @@ function TextPaddingSection({
   );
 }
 
-function BorderRadiusSection({
-  element,
-  currentFrame,
-  selectedKeyframe,
-}: {
-  element: ShapeElement | TextElement;
+interface BoxProps {
+  element: Element;
   currentFrame: number;
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
+}
+
+/** D-042 — toggle between a single uniform radius and four independent corners. */
+function RadiusToggle({
+  perCorner,
+  onClick,
+}: {
+  perCorner: boolean;
+  onClick: () => void;
 }): JSX.Element {
+  return (
+    <Button
+      variant="bare"
+      onClick={onClick}
+      aria-label={perCorner ? 'Use a single border radius' : 'Use per-corner border radius'}
+      title={perCorner ? 'Single radius' : 'Per-corner radius'}
+      style={{ fontSize: 13, lineHeight: 1, padding: '0 4px', opacity: 0.75 }}
+    >
+      {perCorner ? '▣' : '▢'}
+    </Button>
+  );
+}
+
+const RADIUS_CORNERS = [
+  { prop: 'cornerRadius.tl', icon: '⌜', label: 'top left radius', i: 0 },
+  { prop: 'cornerRadius.tr', icon: '⌝', label: 'top right radius', i: 1 },
+  { prop: 'cornerRadius.br', icon: '⌟', label: 'bottom right radius', i: 2 },
+  { prop: 'cornerRadius.bl', icon: '⌞', label: 'bottom left radius', i: 3 },
+] as const satisfies readonly {
+  prop: AnimatableProperty;
+  icon: string;
+  label: string;
+  i: 0 | 1 | 2 | 3;
+}[];
+
+/**
+ * D-042 — border radius for any background-capable kind, with a per-element toggle
+ * between a single uniform value and four independent corners (tl/tr/br/bl). The
+ * value SHAPE is the toggle: a number is uniform, a 4-tuple is per-corner.
+ * Collapsing back to uniform drops the per-corner keyframe tracks in one undo.
+ */
+function BorderRadiusSection({ element, currentFrame, selectedKeyframe }: BoxProps): JSX.Element {
   const id = element.id;
-  const radius =
-    element.type === 'shape'
-      ? typeof element.cornerRadius === 'number'
-        ? element.cornerRadius
-        : Array.isArray(element.cornerRadius)
-          ? element.cornerRadius[0]
-          : 0
-      : (element.cornerRadius ?? 0);
+  const cr = (element as { cornerRadius?: number | [number, number, number, number] }).cornerRadius;
+  const perCorner = Array.isArray(cr);
+  const corners: [number, number, number, number] = Array.isArray(cr)
+    ? cr
+    : typeof cr === 'number'
+      ? [cr, cr, cr, cr]
+      : [0, 0, 0, 0];
+
+  const toPerCorner = (): void =>
+    designerStore.updateElement(id, { cornerRadius: corners } as unknown as Partial<Element>);
+  const toUniform = (): void =>
+    designerStore.runAsSingleHistoryEntry(() => {
+      designerStore.updateElement(id, { cornerRadius: corners[0] } as unknown as Partial<Element>);
+      for (const c of RADIUS_CORNERS) designerStore.clearKeyframeTrack(id, c.prop);
+    });
+
   return (
     <CollapseSection title="Border Radius">
+      {perCorner ? (
+        <>
+          <VectorField
+            label="radius"
+            axes={RADIUS_CORNERS.map((c) => ({
+              icon: c.icon,
+              ariaLabel: c.label,
+              value: evNum(element, c.prop, currentFrame, corners[c.i]),
+              step: 1,
+              min: 0,
+              onCommit: (v: number) => designerStore.commitAnimatable(id, c.prop, Math.max(0, v)),
+              point: KeyframeDot(element, c.prop, currentFrame, selectedKeyframe),
+            }))}
+          />
+          <RadiusToggle perCorner onClick={toUniform} />
+        </>
+      ) : (
+        <NumberField
+          label="radius"
+          value={evNum(element, 'cornerRadius', currentFrame, corners[0])}
+          step={1}
+          min={0}
+          onCommit={(v) => designerStore.commitAnimatable(id, 'cornerRadius', Math.max(0, v))}
+          trailing={
+            <>
+              {KeyframeDot(element, 'cornerRadius', currentFrame, selectedKeyframe)}
+              <RadiusToggle perCorner={false} onClick={toPerCorner} />
+            </>
+          }
+        />
+      )}
+    </CollapseSection>
+  );
+}
+
+/**
+ * D-042 — stroke / border for the background-capable kinds that don't already have
+ * a Path Style section (text, ticker, clock, sequence). The diamond renders only
+ * for shapes (Option A — stroke animation on the time-driven kinds is D-052), via
+ * the registry-gated `KeyframeDot`, so these kinds get a STATIC stroke section.
+ */
+function StrokeSection({ element, currentFrame, selectedKeyframe }: BoxProps): JSX.Element {
+  const id = element.id;
+  const stroke = (element as { stroke?: Stroke }).stroke;
+  return (
+    <CollapseSection title="Path Style">
+      <ColorField
+        label="stroke"
+        value={stroke?.color ?? '#000000'}
+        resetKey={id}
+        onCommit={(c) => designerStore.commitAnimatable(id, 'stroke.color', c)}
+        trailing={KeyframeDot(element, 'stroke.color', currentFrame, selectedKeyframe)}
+      />
       <NumberField
-        label="radius"
-        value={evNum(element, 'cornerRadius', currentFrame, radius)}
+        label="stroke width"
+        value={evNum(element, 'stroke.width', currentFrame, stroke?.width ?? 0)}
         step={1}
         min={0}
-        onCommit={(v) => designerStore.commitAnimatable(id, 'cornerRadius', v)}
-        trailing={KeyframeDot(element, 'cornerRadius', currentFrame, selectedKeyframe)}
+        onCommit={(v) => designerStore.commitAnimatable(id, 'stroke.width', v)}
+        trailing={KeyframeDot(element, 'stroke.width', currentFrame, selectedKeyframe)}
+      />
+      <NumberField
+        label="dash array"
+        value={stroke?.dash?.[0] ?? 0}
+        step={1}
+        min={0}
+        onCommit={(v) => designerStore.commitAnimatable(id, 'stroke.dash', v)}
+        trailing={KeyframeDot(element, 'stroke.dash', currentFrame, selectedKeyframe)}
       />
     </CollapseSection>
   );

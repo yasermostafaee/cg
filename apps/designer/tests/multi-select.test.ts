@@ -103,9 +103,11 @@ describe('sharedEditableProperties — kind intersection (D-041)', () => {
     );
     // Kind-specific props are NOT shared across text + shape.
     expect(keys).not.toContain('fill.color'); // shape-only
-    expect(keys).not.toContain('stroke.width'); // shape-only
-    expect(keys).not.toContain('cornerRadius'); // shape-only
     expect(keys).not.toContain('text.color'); // text-only
+    // D-042 — text + shape are BOTH background-capable, so the shared box style
+    // (stroke + border radius) IS common to them now.
+    expect(keys).toContain('stroke.width');
+    expect(keys).toContain('cornerRadius');
   });
 
   it('agrees when values match and is mixed (no coercion) when they differ', () => {
@@ -181,9 +183,10 @@ describe('sharedEditableProperties — kind intersection (D-041)', () => {
     ]).map((p) => p.descriptor.key);
     expect(keys).toContain('opacity');
     expect(keys).toContain('filter.blur'); // universal (on ElementBase)
-    expect(keys).not.toContain('stroke.width'); // shape-only → dropped
-    expect(keys).not.toContain('cornerRadius');
-    expect(keys).not.toContain('fill.color');
+    // D-042 — stroke + border radius are box style shared by shape AND text.
+    expect(keys).toContain('stroke.width');
+    expect(keys).toContain('cornerRadius');
+    expect(keys).not.toContain('fill.color'); // shape-only (text has no fill) → not shared
   });
 });
 

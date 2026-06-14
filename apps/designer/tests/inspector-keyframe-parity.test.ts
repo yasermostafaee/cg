@@ -108,14 +108,17 @@ describe('right/left keyframe-diamond parity (D-051) — the rendered inspector 
 });
 
 describe('right inspector — §2 diamond corrections (rendered)', () => {
-  it('a clock renders NO diamond for digits or mode (and none for its text styling)', () => {
+  it('a clock renders no diamond for digits/mode/stroke/text-styling, but DOES for cornerRadius (D-042)', () => {
     const c = renderRightInspector(defaultClock('ck', 0, 0));
     const props = rightDiamondProps(c);
     expect(props).not.toContain('digits');
     expect(props).not.toContain('mode');
-    // Only the universal transform + filter diamonds (styling deferred to D-052).
+    // Text styling stays deferred to D-052 (no font diamond); stroke is STATIC on
+    // the time-driven kinds (Option A — no stroke diamond)...
     expect(props).not.toContain('font.size');
-    expect(props).not.toContain('cornerRadius');
+    expect(props).not.toContain('stroke.width');
+    // ...but cornerRadius IS now keyframe-able on background-capable kinds (D-042).
+    expect(props).toContain('cornerRadius');
   });
 
   it('a shape renders a border-radius diamond in the right inspector (parity with the timeline)', () => {
