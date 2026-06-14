@@ -105,11 +105,11 @@ export interface FieldProps {
   /** D-049 — the multi-selection values differ on this property. */
   mixed?: boolean | undefined;
   /**
-   * D-050 — defer commit to Enter/blur (one history entry per committed edit)
-   * and drop the drag-scrub surface. Used by the multi-selection editor so a
-   * typed edit is one undo step, not one per keystroke.
+   * D-053 — close the undo group at the gesture endpoint (drag release / Enter /
+   * blur). The multi editor passes `markHistoryBoundary` so a live drag/typing
+   * burst is ONE undo entry; single selection omits it (relies on coalescing).
    */
-  deferCommit?: boolean | undefined;
+  onCommitBoundary?: (() => void) | undefined;
 }
 
 /**
@@ -162,7 +162,7 @@ function FieldBody(props: FieldProps): JSX.Element {
         scrub={false}
         mixed={props.mixed}
         placeholder={props.mixed === true ? '—' : undefined}
-        commitMode={props.deferCommit === true ? 'blur' : undefined}
+        onCommitBoundary={props.onCommitBoundary}
         className={cx(hasUnit ? s.inputUnit : s.input, hasUnit && 'cg-num-unit')}
         ariaLabel={props.ariaLabel}
       />
@@ -172,15 +172,12 @@ function FieldBody(props: FieldProps): JSX.Element {
 }
 
 /** One axis of a combined vector field — the whole segment scrubs the value
- *  (unless `deferCommit`, the multi editor's type-to-edit mode); diamond (if
- *  any) at the segment's right edge. */
+ *  (drag) and edits live (D-053); diamond (if any) at the segment's right edge.
+ *  The multi editor sets a history boundary on commit via `onCommitBoundary`. */
 export function Seg(props: FieldProps): JSX.Element {
-  const scrub = props.deferCommit === true ? undefined : fieldScrub(props);
+  const scrub = fieldScrub(props);
   return (
-    <div
-      className={cx('cg-seg', props.deferCommit !== true && s.scrubSurface)}
-      onPointerDown={scrub?.onPointerDown}
-    >
+    <div className={cx('cg-seg', s.scrubSurface)} onPointerDown={scrub.onPointerDown}>
       <FieldBody {...props} />
       {props.point !== undefined && <span className={s.point}>{props.point}</span>}
     </div>
@@ -188,15 +185,12 @@ export function Seg(props: FieldProps): JSX.Element {
 }
 
 /** Standalone field — icon, value+unit on the left, diamond (if any) at the
- *  right, all inside one bordered box; the whole box scrubs the value (unless
- *  `deferCommit`). */
+ *  right, all inside one bordered box; the whole box scrubs the value (drag) and
+ *  edits live (D-053). */
 export function SingleField(props: FieldProps): JSX.Element {
-  const scrub = props.deferCommit === true ? undefined : fieldScrub(props);
+  const scrub = fieldScrub(props);
   return (
-    <div
-      className={cx('cg-field', props.deferCommit !== true && s.scrubSurface)}
-      onPointerDown={scrub?.onPointerDown}
-    >
+    <div className={cx('cg-field', s.scrubSurface)} onPointerDown={scrub.onPointerDown}>
       <FieldBody {...props} />
       {props.point !== undefined && <span className={s.point}>{props.point}</span>}
     </div>

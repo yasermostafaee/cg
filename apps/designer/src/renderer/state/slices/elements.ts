@@ -345,6 +345,25 @@ export const elementsSlice = {
   },
 
   /**
+   * D-053 — the LIVE multi-apply path for a continuous gesture (drag-scrub /
+   * typing) on a multi-selection number field. Fans the same keyframe-free base
+   * write (`writeStaticAnimatable`) over the selected ids but WITHOUT a history
+   * boundary, so consecutive live calls time-coalesce in `store-core.set`'s
+   * COALESCE window into ONE undo entry — exactly like the single-element drag's
+   * per-tick `commitAnimatable`. The caller sets ONE `markHistoryBoundary()` at
+   * the gesture endpoint (drag release / Enter / blur) to close the burst and
+   * isolate the next edit. Use `applySharedProperty` (boundary-wrapped) instead
+   * for discrete one-shot commits (colour pick / gradient) that are each one entry.
+   */
+  applySharedPropertyLive(
+    ids: readonly string[],
+    property: AnimatableProperty,
+    value: number | string,
+  ): void {
+    for (const id of ids) designerStore.writeStaticAnimatable(id, property, value);
+  },
+
+  /**
    * Set the timeline lifespan-bar colour for an element (layer right-click →
    * Color). The colour persists on the element as `timelineColor`.
    */

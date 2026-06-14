@@ -97,8 +97,8 @@ describe('MultiSelectSection — single-inspector parity (D-049)', () => {
   });
 });
 
-describe('MultiSelectSection — single-undo commit (D-050)', () => {
-  it('a typed edit is visual-only until blur, then commits ONE undo across all selected', () => {
+describe('MultiSelectSection — live edit + single-undo commit (D-053)', () => {
+  it('a typed edit updates EVERY selected element live on keystroke, and one boundary on blur makes it ONE undo across all', () => {
     const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
     const { scene } = projects.newScene('demo', 'lower-third');
     designerStore.setScene(scene, null);
@@ -112,13 +112,20 @@ describe('MultiSelectSection — single-undo commit (D-050)', () => {
     const opacity = input(c, 'Opacity')!;
     expect(opacity.value).toBe('100');
 
-    // Typing updates the field but NOT the elements / history (deferred onChange).
+    // Focusing the field via click sets a leading history boundary (the scrub
+    // surface's onEnd → markHistoryBoundary); simulate it so the typed burst is
+    // isolated from the synchronous setup writes.
+    designerStore.markHistoryBoundary();
+
+    // D-053 — typing now updates EVERY selected element LIVE on each keystroke
+    // (onChange), not visual-only-until-blur as in D-050.
     typeInto(opacity, '40');
     expect(opacity.value).toBe('40');
-    expect(opacityOf('el-1')).toBe(1);
-    expect(opacityOf('el-2')).toBe(1);
+    expect(opacityOf('el-1')).toBeCloseTo(0.4);
+    expect(opacityOf('el-2')).toBeCloseTo(0.4);
 
-    // Blur commits ONCE → both elements become 0.4; a single undo reverts both.
+    // Blur sets the single commit boundary (the value already applied live); the
+    // whole typed edit is ONE undo entry reverting both elements together.
     act(() => opacity.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
     expect(opacityOf('el-1')).toBeCloseTo(0.4);
     expect(opacityOf('el-2')).toBeCloseTo(0.4);
