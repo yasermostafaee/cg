@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures/designer.js';
+import { test, expect, type DesignerApp } from './fixtures/designer.js';
 
 /**
  * Multi-select editing through the real UI (D-041 + D-049). The shared-property
@@ -158,6 +158,71 @@ test.describe('Multi-select inspector parity + per-shape boxes (D-049)', () => {
     await app.shiftClickCanvas(inB);
     await expect(app.multiInspector.getByRole('spinbutton', { name: 'stroke width' })).toHaveValue(
       '0',
+    );
+  });
+});
+
+test.describe('Multi-select number fields: drag + realtime (D-053)', () => {
+  const sel = async (app: DesignerApp) => {
+    await app.newProject('Multi053');
+    const cb = (await app.canvas.boundingBox())!;
+    const A = { x: rnd(cb.width * 0.14), y: rnd(cb.height * 0.22) };
+    const B = { x: rnd(cb.width * 0.62), y: rnd(cb.height * 0.22) };
+    const inA = { x: A.x + 10, y: A.y + 8 };
+    const inB = { x: B.x + 10, y: B.y + 8 };
+    await app.addEllipse(A);
+    await app.addEllipse(B);
+    await app.clickCanvas(inA);
+    await app.shiftClickCanvas(inB);
+    await expect(app.multiInspector).toBeVisible();
+    return { inA, inB };
+  };
+
+  test('dragging a shared number field scrubs all selected live; release is one undo', async ({
+    app,
+  }) => {
+    const { inA, inB } = await sel(app);
+    const opacity = app.multiInspector.getByRole('spinbutton', { name: 'Opacity' });
+    await expect(opacity).toHaveValue('100');
+
+    // Drag the field LEFT to scrub opacity down — drag-scrub is RE-ENABLED in the
+    // multi editor (D-050 had removed it). Mid-drag, before release, the field
+    // already shows a single agreed lower value (1–2 digits, NOT the mixed empty
+    // state) AND both preview ellipses are faded — live across the selection.
+    await app.scrubField(opacity, -40, async () => {
+      await expect(opacity).toHaveValue(/^\d{1,2}$/);
+      await expect.poll(() => app.canvasElementsWithOpacityBelow1()).toBe(2);
+    });
+    await expect(opacity).toHaveValue(/^\d{1,2}$/);
+
+    // Release was ONE undo entry: a single undo restores BOTH to 100%.
+    await app.undo();
+    await app.clickCanvas(inA);
+    await app.shiftClickCanvas(inB);
+    await expect(app.multiInspector.getByRole('spinbutton', { name: 'Opacity' })).toHaveValue(
+      '100',
+    );
+  });
+
+  test('typing into a shared number field applies live across the selection; Enter is one undo', async ({
+    app,
+  }) => {
+    const { inA, inB } = await sel(app);
+    const opacity = app.multiInspector.getByRole('spinbutton', { name: 'Opacity' });
+    await expect(opacity).toHaveValue('100');
+
+    // Typing applies LIVE on keystroke (BEFORE Enter): both preview ellipses fade.
+    await opacity.fill('50');
+    await expect.poll(() => app.canvasElementsWithOpacityBelow1()).toBe(2);
+
+    // Enter sets the commit boundary; ONE undo reverts BOTH back to 100%.
+    await opacity.press('Enter');
+    await expect(opacity).toHaveValue('50');
+    await app.undo();
+    await app.clickCanvas(inA);
+    await app.shiftClickCanvas(inB);
+    await expect(app.multiInspector.getByRole('spinbutton', { name: 'Opacity' })).toHaveValue(
+      '100',
     );
   });
 });

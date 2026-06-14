@@ -230,6 +230,92 @@ describe('applySharedProperty — group edit as one undo step (D-041)', () => {
   });
 });
 
+describe('applySharedPropertyLive — live multi edit, one undo on commit (D-053)', () => {
+  it('a live burst (boundary, several live applies, boundary) is ONE undo reverting ALL selected', () => {
+    freshScene();
+    designerStore.addElement(defaultShape('el-1', 0, 0));
+    designerStore.addElement(defaultShape('el-2', 0, 0));
+    designerStore.addElement(defaultShape('el-3', 0, 0));
+    const ids = ['el-1', 'el-2', 'el-3'];
+    const before = elById('el-1')!.opacity;
+    // Mirror the real gesture: a leading boundary (a field gesture is preceded by
+    // one — the focus-click / previous edit's trailing boundary), live ticks with
+    // NO per-tick boundary, then ONE boundary on release.
+    designerStore.markHistoryBoundary();
+    designerStore.applySharedPropertyLive(ids, 'opacity', 0.9);
+    designerStore.applySharedPropertyLive(ids, 'opacity', 0.7);
+    designerStore.applySharedPropertyLive(ids, 'opacity', 0.5);
+    designerStore.markHistoryBoundary();
+    expect(elById('el-1')!.opacity).toBe(0.5);
+    expect(elById('el-2')!.opacity).toBe(0.5);
+    expect(elById('el-3')!.opacity).toBe(0.5);
+    // ONE undo reverts the WHOLE burst (back to the pre-gesture value, not just
+    // the last tick) across every selected element — no per-tick undo spam.
+    designerStore.undo();
+    expect(elById('el-1')!.opacity).toBe(before);
+    expect(elById('el-2')!.opacity).toBe(before);
+    expect(elById('el-3')!.opacity).toBe(before);
+    expect(layers()[0]!.children).toHaveLength(3); // setup intact
+  });
+
+  it('applies each live value to EVERY selected element during the gesture (before any commit boundary)', () => {
+    freshScene();
+    designerStore.addElement(defaultShape('el-1', 0, 0));
+    designerStore.addElement(defaultShape('el-2', 0, 0));
+    const ids = ['el-1', 'el-2'];
+    designerStore.markHistoryBoundary();
+    designerStore.applySharedPropertyLive(ids, 'position.x', 25);
+    // No trailing boundary yet — the values are already applied live, mid-gesture.
+    expect(elById('el-1')!.transform.position.x).toBe(25);
+    expect(elById('el-2')!.transform.position.x).toBe(25);
+    designerStore.applySharedPropertyLive(ids, 'position.x', 40);
+    expect(elById('el-1')!.transform.position.x).toBe(40);
+    expect(elById('el-2')!.transform.position.x).toBe(40);
+  });
+
+  it('a mixed-value selection applies live to all; one undo restores each element’s differing original', () => {
+    freshScene();
+    designerStore.addElement(defaultShape('el-1', 10, 0));
+    designerStore.addElement(defaultShape('el-2', 90, 0));
+    const ids = ['el-1', 'el-2'];
+    expect(elById('el-1')!.transform.position.x).toBe(10);
+    expect(elById('el-2')!.transform.position.x).toBe(90);
+    designerStore.markHistoryBoundary();
+    designerStore.applySharedPropertyLive(ids, 'position.x', 55); // unifies the mixed field
+    designerStore.markHistoryBoundary();
+    expect(elById('el-1')!.transform.position.x).toBe(55);
+    expect(elById('el-2')!.transform.position.x).toBe(55);
+    designerStore.undo();
+    expect(elById('el-1')!.transform.position.x).toBe(10); // each original restored
+    expect(elById('el-2')!.transform.position.x).toBe(90);
+  });
+
+  it('writes static values and never creates an animation track (keyframe-free)', () => {
+    freshScene();
+    designerStore.addElement(defaultShape('el-1', 0, 0));
+    designerStore.addElement(defaultShape('el-2', 0, 0));
+    designerStore.applySharedPropertyLive(['el-1', 'el-2'], 'position.x', 42);
+    expect(elById('el-1')!.transform.position.x).toBe(42);
+    expect(elById('el-1')!.animation).toBeUndefined();
+    expect(elById('el-2')!.animation).toBeUndefined();
+  });
+
+  it('single-selection commitAnimatable is unchanged — a burst with no per-tick boundary coalesces to one undo (regression)', () => {
+    freshScene();
+    designerStore.addElement(defaultShape('el-1', 0, 0));
+    const before = elById('el-1')!.opacity;
+    // The single field/canvas scrub commits live per tick with no per-tick
+    // boundary; this path is untouched by D-053.
+    designerStore.markHistoryBoundary();
+    designerStore.commitAnimatable('el-1', 'opacity', 0.8);
+    designerStore.commitAnimatable('el-1', 'opacity', 0.6);
+    designerStore.markHistoryBoundary();
+    expect(elById('el-1')!.opacity).toBe(0.6);
+    designerStore.undo();
+    expect(elById('el-1')!.opacity).toBe(before); // one undo reverts the whole single burst
+  });
+});
+
 describe('group move (D-041)', () => {
   it('collectGroupMoveTargets keeps visible/unlocked members + anchor, skips locked & hidden', () => {
     freshScene();

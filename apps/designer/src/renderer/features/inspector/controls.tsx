@@ -26,6 +26,13 @@ interface ScrubOpts {
   step?: number | undefined;
   min?: number | undefined;
   max?: number | undefined;
+  /**
+   * D-053 — close the undo group at the gesture endpoint. Called once on
+   * pointerup so a multi-selection field's whole drag/typing burst is ONE undo
+   * entry (the live `onCommit` writes coalesce; this sets the boundary). Single
+   * selection passes nothing → no boundary added (it relies on time-coalescing).
+   */
+  onCommitBoundary?: (() => void) | undefined;
 }
 
 // Distance the pointer must travel before a press becomes a scrub rather
@@ -109,6 +116,7 @@ export function scrubHandle(opts: ScrubOpts): {
         min: opts.min,
         max: opts.max,
         onCommit: opts.onCommit,
+        onEnd: () => opts.onCommitBoundary?.(),
       });
     },
   };
@@ -143,6 +151,9 @@ export function fieldScrub(opts: ScrubOpts): {
         onCommit: opts.onCommit,
         onEnd: (moved) => {
           if (!moved && input !== null) input.focus();
+          // D-053 — close the undo group at pointerup (a drag's trailing
+          // boundary; for a focus-click this leads the ensuing typed edit).
+          opts.onCommitBoundary?.();
         },
       });
     },
@@ -162,8 +173,12 @@ interface NumberFieldProps {
   trailing?: JSX.Element | undefined;
   /** D-049 — multi-selection "mixed" state (values differ; show a placeholder). */
   mixed?: boolean;
-  /** D-050 — defer commit to Enter/blur (one undo per edit) + drop drag-scrub. */
-  deferCommit?: boolean;
+  /**
+   * D-053 — close the undo group at the gesture endpoint (drag release / Enter /
+   * blur). The multi editor passes `markHistoryBoundary` so a live drag/typing
+   * burst is ONE undo entry; single selection omits it (relies on coalescing).
+   */
+  onCommitBoundary?: (() => void) | undefined;
 }
 
 export function NumberField(props: NumberFieldProps): JSX.Element {
@@ -173,29 +188,27 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
     step: props.step,
     min: props.min,
     max: props.max,
+    onCommitBoundary: props.onCommitBoundary,
   };
-  const defer = props.deferCommit === true;
-  const labelScrub = defer ? undefined : scrubHandle(opts);
-  const field = defer ? undefined : fieldScrub(opts);
+  const labelScrub = scrubHandle(opts);
+  const field = fieldScrub(opts);
   const hasUnit = props.suffix !== undefined;
   return (
     <div className={s.row}>
       <span
         className={s.label}
-        style={labelScrub?.style}
-        onPointerDown={labelScrub?.onPointerDown}
-        title={defer ? undefined : 'Drag to adjust'}
+        style={labelScrub.style}
+        onPointerDown={labelScrub.onPointerDown}
+        title="Drag to adjust"
       >
         {props.label}
       </span>
       {/* The whole field scrubs the value (Loopic); click focuses to type.
           With a unit the input sizes to its content so the value+unit cluster
-          on the left, and the diamond is pushed to the right edge. In the
-          multi editor (`deferCommit`) the field is type-to-edit (no scrub). */}
-      <div
-        className={cx('cg-field', !defer && s.scrubSurface)}
-        onPointerDown={field?.onPointerDown}
-      >
+          on the left, and the diamond is pushed to the right edge. The multi
+          editor uses the SAME primitive (D-053) — drag-scrub + live onChange —
+          and just sets a history boundary on commit via `onCommitBoundary`. */}
+      <div className={cx('cg-field', s.scrubSurface)} onPointerDown={field.onPointerDown}>
         <RealtimeNumberInput
           value={props.value}
           onCommit={props.onCommit}
@@ -205,7 +218,7 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
           scrub={false}
           mixed={props.mixed}
           placeholder={props.mixed === true ? '—' : undefined}
-          commitMode={defer ? 'blur' : undefined}
+          onCommitBoundary={props.onCommitBoundary}
           className={cx(hasUnit ? s.inputInnerAuto : s.inputInner, hasUnit && 'cg-num-unit')}
           ariaLabel={props.label}
         />
@@ -307,13 +320,12 @@ interface RealtimeNumberInputProps {
   mixed?: boolean | undefined;
   placeholder?: string | undefined;
   /**
-   * D-050 — when to fire `onCommit`. `'change'` (default) commits live on every
-   * keystroke (single selection, relies on history time-coalescing). `'blur'`
-   * defers: `onChange` updates only the visible buffer, and `onCommit` fires
-   * once on Enter/blur — so a multi-selection edit is ONE history entry per
-   * committed value, not one per keystroke.
+   * D-053 — close the undo group at the edit endpoint. Fired on blur (Enter
+   * blurs) and at the end of the input's own scrub. The multi editor passes
+   * `markHistoryBoundary` so a live edit (whose `onCommit` writes coalesce) is
+   * ONE undo entry; single selection omits it (relies on time-coalescing).
    */
-  commitMode?: 'change' | 'blur' | undefined;
+  onCommitBoundary?: (() => void) | undefined;
 }
 
 /**
@@ -337,9 +349,6 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
   const [editing, setEditing] = useState(false);
   const focused = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  // Set by Escape so the following blur discards the buffer instead of committing it.
-  const discardRef = useRef(false);
-  const deferred = props.commitMode === 'blur';
 
   useEffect(() => {
     if (!focused.current) setBuf(display);
@@ -376,6 +385,7 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
             // A click that never left the dead-zone focuses for typing;
             // onFocus selects the whole value so a keystroke replaces it.
             if (!moved) inputRef.current?.focus();
+            props.onCommitBoundary?.(); // D-053 — close the undo group on release
           },
         });
       }}
@@ -384,23 +394,17 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
         setEditing(true);
         e.currentTarget.select();
       }}
-      onBlur={(e) => {
+      onBlur={() => {
         focused.current = false;
         setEditing(false);
-        // Deferred (multi) commit: fire ONCE on blur with the input's value, so
-        // the whole edit is one history entry — unless Escape asked to discard.
-        if (deferred && !discardRef.current) {
-          const raw = e.target.value;
-          const n = Number(raw);
-          if (raw.trim() !== '' && Number.isFinite(n) && n !== props.value) props.onCommit(n);
-        }
-        discardRef.current = false;
         setBuf(display);
+        // D-053 — commits already fired live on each keystroke; close the undo
+        // group here so the whole typed edit is ONE entry (multi only — single
+        // passes nothing).
+        props.onCommitBoundary?.();
       }}
       onChange={(e) => {
         setBuf(e.target.value);
-        // Deferred mode keeps onChange visual-only (no history); commit on blur.
-        if (deferred) return;
         const n = Number(e.target.value);
         if (Number.isFinite(n) && n !== props.value) props.onCommit(n);
       }}
@@ -410,26 +414,25 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
           return;
         }
         if (e.key === 'Escape') {
-          discardRef.current = true;
+          // Live model: keystrokes already applied; Escape just ends editing and
+          // resyncs the buffer (parity with single — no separate discard). The
+          // ensuing blur closes the undo group; Ctrl+Z reverts the whole edit.
           setBuf(display);
           (e.target as HTMLInputElement).blur();
           return;
         }
         // Arrow up/down step the value by `step` (×10 with Shift), the
         // standard keyboard nudge. Handled explicitly so it clamps to
-        // min/max and keeps the buffer in sync while focused.
+        // min/max and keeps the buffer in sync while focused — commits live
+        // (the nudges coalesce; the blur boundary closes the group).
         if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
           e.preventDefault();
           const inc = (props.step ?? 1) * (e.shiftKey ? 10 : 1);
-          const base = deferred && buf.trim() !== '' ? Number(buf) : props.value;
-          let next = Number((base + (e.key === 'ArrowUp' ? inc : -inc)).toFixed(4));
+          let next = Number((props.value + (e.key === 'ArrowUp' ? inc : -inc)).toFixed(4));
           if (props.min !== undefined) next = Math.max(props.min, next);
           if (props.max !== undefined) next = Math.min(props.max, next);
           if (Number.isNaN(next)) return;
-          // Deferred: nudge the buffer only (commit on blur); live: commit now.
-          if (deferred) {
-            setBuf(formatNumberDisplay(next));
-          } else if (next !== props.value) {
+          if (next !== props.value) {
             props.onCommit(next);
             setBuf(formatNumberDisplay(next));
           }

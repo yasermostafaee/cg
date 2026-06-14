@@ -273,6 +273,32 @@ export class DesignerApp {
       );
   }
 
+  /** Count canvas-preview elements whose computed opacity is below 1 (D-053). */
+  async canvasElementsWithOpacityBelow1(): Promise<number> {
+    return this.canvasFrame
+      .locator('[data-cg-element-id]')
+      .evaluateAll(
+        (els) => els.filter((e) => Number(getComputedStyle(e as HTMLElement).opacity) < 1).length,
+      );
+  }
+
+  /**
+   * D-053 — press-drag a number field (spinbutton) horizontally by `dx` px,
+   * pausing mid-gesture (before pointerup) to run `midDrag` so a test can assert
+   * the LIVE update, then release. Drives the field's own drag-scrub surface.
+   */
+  async scrubField(field: Locator, dx: number, midDrag?: () => Promise<void>): Promise<void> {
+    const box = await field.boundingBox();
+    if (box === null) throw new Error('field not laid out');
+    const cy = box.y + box.height / 2;
+    const startX = box.x + box.width / 2;
+    await this.page.mouse.move(startX, cy);
+    await this.page.mouse.down();
+    await this.page.mouse.move(startX + dx, cy, { steps: 12 });
+    if (midDrag !== undefined) await midDrag();
+    await this.page.mouse.up();
+  }
+
   /** Ctrl/Cmd+Z undo (the app skips this while a text input is focused). */
   async undo(): Promise<void> {
     await this.page.keyboard.press('Control+z');

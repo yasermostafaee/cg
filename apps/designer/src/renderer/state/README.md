@@ -81,14 +81,28 @@ registry** ([`features/inspector/field-registry.ts`](../features/inspector/field
 D-051) — the single source of keyframe-ability + inspector-field presence that the
 single inspector and the timeline also read, so the old "mirror `StyleSection.tsx`
 by hand / keep both in sync" tech debt is gone.
-A group edit fans out over `applySharedProperty(ids, prop, value)` — the
-**keyframe-free** base write (`writeStaticAnimatable`, NOT `commitAnimatable` which
-would keyframe a tracked property) wrapped in `runAsSingleHistoryEntry` so N
-elements collapse to ONE undo entry. The multi number field commits on Enter/blur
-(D-050 — `RealtimeNumberInput commitMode='blur'`), so a typed edit is one entry
-per committed value, not one per keystroke. There is no transaction object: that wrapper
-just brackets the synchronous fan-out with `markHistoryBoundary` (the same
-time-coalescing a drag relies on). Group move/delete reuse the existing
+A group edit fans out over one of two **keyframe-free** base-write paths
+(`writeStaticAnimatable`, NOT `commitAnimatable` which would keyframe a tracked
+property):
+
+- **Discrete commits** (colour pick, gradient apply) use
+  `applySharedProperty(ids, prop, value)` — the fan-out wrapped in
+  `runAsSingleHistoryEntry` (a leading+trailing `markHistoryBoundary`) so the
+  whole one-shot is ONE undo entry.
+- **Continuous gestures** on a number field (drag-scrub / typing) use
+  `applySharedPropertyLive(ids, prop, value)` (D-053) — the SAME fan-out but with
+  NO history boundary, so consecutive live writes time-coalesce into one entry
+  exactly like the single-element drag. The multi number field is now the SAME
+  primitive as single selection (drag-scrub + live `onChange`); it sets ONE
+  boundary at the gesture endpoint via an `onCommitBoundary` callback
+  (`markHistoryBoundary` on drag release / Enter / blur), so the whole burst is one
+  undo entry isolated from the next edit. This supersedes D-050's deferred
+  commit-on-blur (`RealtimeNumberInput commitMode='blur'`, drag removed), which
+  spawned one entry per keystroke when wired through the boundary-wrapped path.
+
+There is no transaction object — history grouping is the `set`/`COALESCE_MS`
+time-coalescing a drag relies on. Group editing stays keyframe-free (diamonds +
+keyframe-aware group move are D-054). Group move/delete reuse the existing
 per-element drag/`deleteSelection` paths.
 
 ## Adding to the store

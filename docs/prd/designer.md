@@ -1423,24 +1423,61 @@ engine silently drops.
   `keyframeable` descriptor addition plus the runtime apply-step change + runtime
   tests + the `template-runtime` engine doc. High-risk (touches the playout engine).
 
-## [ ] D-053 — Multi-select number fields: drag + realtime with single-undo commit ⟨priority: high⟩
+## [~] D-053 — Multi-select number fields: drag + realtime with single-undo commit ⟨priority: high⟩ — change: `openspec/changes/multi-select-realtime-fields/`
 
-**What:** In the multi-select inspector, number fields must behave like single-selection
-— horizontal-drag to scrub AND live (onChange) value updates while editing — while STILL
-recording exactly one undo entry per committed edit (drag drop / Enter / blur). Today's
-multi fields are type-to-edit only (drag removed, no live update): a workaround D-050
-took to make undo deterministic, which the owner rejected.
-**Why:** D-050 fixed the undo-spam by disabling drag + realtime on multi number fields
-(type-to-edit). That diverges from single-selection UX (the owner's original ask was
-"like single selection"). The correct shape is: apply live during drag/typing WITHOUT a
-history boundary (so changes time-coalesce), and set the boundary once on commit — same
-as single selection, just fanned out across the selection.
-**Acceptance to be detailed when scheduled.**
-**Notes:** Follow-up to D-050 (`designer-multi-select`); reverses the type-to-edit
-trade-off recorded in D-050's design.md. Single-selection scrubs via commitAnimatable
-with no history boundary (keystrokes coalesce); the multi path must apply live across the
-selection without a per-tick boundary and commit one runAsSingleHistoryEntry on
-drop/Enter/blur. Stays keyframe-free here (group keyframe-aware editing is D-054).
+**What:** Restore single-selection UX to multi-select number fields: a field
+scrubs by horizontal drag and updates live (onChange) while editing, AND each
+committed edit (drag drop / Enter / blur) is exactly ONE undo entry. Replace the
+D-050 type-to-edit workaround (drag + realtime removed) with the same model
+single-selection uses — apply live without a history boundary so a burst
+coalesces, set the boundary once on commit.
+**Why:** D-050 made multi number-field undo deterministic by disabling drag and
+realtime (commit-on-blur only), diverging from the single-selection feel the
+owner asked for. Now that the cause is understood (applySharedProperty wraps
+each apply in runAsSingleHistoryEntry — a leading+trailing boundary — so per-
+keystroke/tick it spawned one undo each), the fix is to mirror the single drag:
+live writes with no per-tick boundary (time-coalesced), one boundary on commit.
+**Acceptance:**
+
+- WHEN the operator drags a multi-select number field horizontally THEN all
+  selected elements update live during the drag (realtime, like single
+  selection), and the whole drag is ONE undo entry on release
+- WHEN the operator types into a multi-select number field THEN the value
+  updates live on each keystroke (onChange) across the selection, and the whole
+  typed edit is ONE undo entry committed (a history boundary is set) on Enter or
+  blur — exactly as single selection commits, isolated from the next edit
+- WHEN the operator presses Escape while editing a multi-select number field
+  THEN editing ends without a further change (parity with single selection — the
+  last live value stays; Ctrl+Z reverts the whole one-entry edit). NOTE: this
+  supersedes D-050's deferred "Escape discards" semantic, which the live model
+  cannot honour (writes already applied on each keystroke)
+- WHEN a committed multi edit is undone THEN one undo reverts the whole edit
+  across all selected elements (no per-tick/per-keystroke undo spam)
+- WHEN a multi-select number field is shown THEN it uses the SAME input
+  primitive as single selection (drag-scrub enabled), not a type-to-edit-only
+  field
+- WHEN a shared field is "mixed" THEN it still shows the mixed state and edits
+  commit the same single-undo, realtime way
+- WHEN exactly one element is selected THEN its number-field behavior is
+  unchanged (no regression to the single-selection scrub/commit path)
+- WHEN a multi edit is made THEN it stays keyframe-free (this item does not add
+  keyframes — keyframe-aware group editing is D-054)
+  **Notes:** Follow-up to D-050 (`designer-multi-select`); reverses the
+  type-to-edit trade-off in D-050's design.md. Root cause (confirmed in code):
+  `applySharedProperty` (elements.ts) wraps the fan-out in
+  `runAsSingleHistoryEntry` (leading+trailing `markHistoryBoundary`); fired per
+  onChange it isolates every keystroke/tick into its own undo group, so D-050
+  disabled realtime/drag. Fix: add a LIVE multi-apply path that fans
+  `writeStaticAnimatable` over the selected ids WITHOUT a history boundary
+  (writes time-coalesce in `store-core.set`'s COALESCE window, exactly like the
+  single drag), and call `markHistoryBoundary()` once at the gesture/commit
+  endpoint (drag drop / Enter / blur) — mirroring how single-selection drag
+  coalesces ticks and boundaries only on pointerup. Re-enable drag-scrub +
+  onChange-live on the multi number fields (remove D-050's `deferCommit` /
+  `commitMode='blur'` on them); keep `applySharedProperty`'s boundary-wrapped
+  form for discrete/instant commits (e.g. colour pick) that should each be one
+  entry. Keyframe-free (writeStaticAnimatable); diamonds + keyframe-aware group
+  move are D-054. Change: `openspec/changes/multi-select-realtime-fields/`.
 
 ## [ ] D-054 — Keyframe-aware group move + diamonds in multi-select ⟨priority: high⟩
 

@@ -30,10 +30,13 @@ const SECTION_ORDER: readonly SharedSection[] = [
  * `NumberField` / `ColorField` / `FillField`. A field whose selected elements
  * DIFFER shows the neutral "mixed" state through the same primitive.
  *
- * D-050 commit model: each number field commits on Enter/blur (`deferCommit`),
- * so a typed edit is ONE history entry per committed value (not one per
- * keystroke) — `applySharedProperty` runs inside one `runAsSingleHistoryEntry`
- * per commit, keyframe-free. No per-keyframe diamonds.
+ * D-053 commit model: each number field is the SAME primitive as single
+ * selection — drag-scrub + live (onChange) updates. Live values fan out through
+ * `applySharedPropertyLive` (keyframe-free, NO per-tick history boundary, so the
+ * burst time-coalesces); `onCommitBoundary` calls `markHistoryBoundary` once at
+ * the gesture endpoint (drag release / Enter / blur), so the whole edit is ONE
+ * undo entry across the selection. Discrete commits (colour pick / gradient) keep
+ * the boundary-wrapped `applySharedProperty`. No per-keyframe diamonds (D-054).
  */
 export function MultiSelectSection({ elements }: { elements: readonly Element[] }): JSX.Element {
   const shared = sharedEditableProperties(elements);
@@ -46,17 +49,21 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
     const v = byKey.get(key)?.value;
     return typeof v === 'number' ? v : 0;
   };
-  const applyNum =
+  // D-053 — number fields apply LIVE during the gesture (drag-scrub / typing)
+  // with no per-tick boundary, then set ONE history boundary at the commit
+  // endpoint so the whole edit is one undo entry across the selection.
+  const applyNumLive =
     (prop: AnimatableProperty) =>
     (v: number): void =>
-      designerStore.applySharedProperty(ids, prop, v);
+      designerStore.applySharedPropertyLive(ids, prop, v);
+  const commitBoundary = (): void => designerStore.markHistoryBoundary();
 
   // Transform field props (icon-based Seg/SingleField; display via TRANSFORM_FIELD_META),
-  // deferred-commit + mixed-aware.
+  // live-apply + boundary-on-commit + mixed-aware — the SAME primitive as single.
   const tf = (prop: AnimatableProperty) => ({
-    ...transformFieldProps(prop, numOf(prop), applyNum(prop)),
+    ...transformFieldProps(prop, numOf(prop), applyNumLive(prop)),
     mixed: isMixed(prop),
-    deferCommit: true,
+    onCommitBoundary: commitBoundary,
   });
 
   const inSection = (section: SharedSection): SharedProperty[] =>
@@ -109,8 +116,8 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
         max={d.max}
         suffix={d.suffix}
         mixed={sp.mixed}
-        deferCommit
-        onCommit={applyNum(d.prop)}
+        onCommit={applyNumLive(d.prop)}
+        onCommitBoundary={commitBoundary}
       />
     );
   }
