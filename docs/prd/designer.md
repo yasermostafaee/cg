@@ -1327,3 +1327,66 @@ values instead of one entry per committed edit.
   undo and keyframe-aware multi editing are explicitly OUT of scope here —
   they belong to the keyframe-aware item (diamonds + one-undo group drag).
   Change: `openspec/changes/complete-multi-select-shared-props/`.
+
+## [~] D-051 — Central keyframe-ability + inspector-field registry (single source) ⟨priority: high⟩ — change: `openspec/changes/add-keyframe-ability-registry/`
+
+**What:** Introduce ONE central, per-element-kind registry that declares, for
+every property, (1) whether it is keyframe-able (shows a diamond) and (2)
+whether/where it appears in the inspectors — and make all three consumers read
+from it: the right inspector (StyleSection), the timeline-left inspector, and
+the multi-select editor. This replaces today's scattered, hand-written
+per-kind decisions so a NEW element kind or property is defined once and is
+automatically correct everywhere. Pure refactor + correctness pass: behavior
+is unchanged EXCEPT the explicit diamond corrections below. Diamonds present
+on the right inspector for a property MUST also appear for that property in the
+timeline-left inspector (and vice-versa) — the registry guarantees parity.
+**Why:** Keyframe-ability and inspector-field presence are currently decided
+ad-hoc in multiple files (StyleSection hand-writes each kind; the timeline
+panel and multi-select duplicate property knowledge — the D-050 tech-debt
+note). This drift produced wrong diamonds (some properties have a useless
+diamond, some that should animate have none) and right/left-panel
+inconsistency, and it means every new element kind re-introduces the risk.
+**Acceptance:**
+
+- WHEN any property is rendered in the right inspector, the timeline-left
+  inspector, or the multi-select editor THEN its keyframe-ability (diamond)
+  and its presence/section come from ONE central per-kind registry, not
+  per-file hand-written logic
+- WHEN a property shows a keyframe diamond in the right inspector THEN the
+  same property shows a keyframe affordance in the timeline-left inspector,
+  and vice-versa (no panel disagrees with the other)
+- WHEN the clock's `digits` or `mode` is shown THEN it has NO keyframe diamond
+  (discrete settings, not animatable)
+- WHEN border-radius, drop-shadow / text-shadow, or box-padding is shown (on
+  any kind that has them) THEN each IS keyframe-able (diamond present) in both
+  panels
+- WHEN a ticker's, clock's, or sequence's TEXT properties are shown THEN they
+  are keyframe-able EXCEPT font-family, font-weight, and the alignments (which
+  have no diamond), matching the text element's own rule
+- WHEN font-family, font-weight, or any alignment (horizontal/vertical) is
+  shown on any element THEN it has NO keyframe diamond
+- WHEN a NEW element kind or property is added in the future THEN declaring it
+  once in the registry makes its diamonds and inspector presence correct in
+  all three consumers with no per-file edits
+- WHEN scenes authored before this change are loaded, played, previewed, and
+  exported THEN behavior is unchanged (this is a refactor; the only intended
+  user-visible change is the corrected diamond set above)
+- WHEN the existing animation/keyframe behavior is exercised THEN it is
+  unchanged — keyframing, evaluation, the B-005/006/007 read-path fixes, and
+  the D-049/D-050 multi-select rules all still hold
+  **Notes:** Foundation refactor — supersedes the D-050 "short-path
+  duplication" tech debt (the scattered property lists fold into the
+  registry). NO schema change to the data model itself; the registry is a
+  RENDERER/inspector concern (it describes how each kind's existing schema
+  properties are presented + animated), unless recon shows keyframe-ability is
+  better expressed in `@cg/shared-schema` — if so, report before doing it.
+  This is a prerequisite reordered AHEAD of D-042 (per-corner radius) and the
+  pending multi-select drag/realtime fix, so both land on the registry instead
+  of re-introducing scatter. Likely touches: a new registry module (per-kind
+  property descriptors: id, section, keyframeable, panel presence), consumed
+  by StyleSection.tsx, the timeline-left inspector, and MultiSelectSection.tsx
+  / shared-properties.ts (which collapses into reading the registry). High-risk
+  area (touches the keyframe subsystem + the large StyleSection) — must go with
+  thorough regression tests and a behavior-preserving proof (existing suite
+  green BEFORE the diamond corrections are layered on). Change:
+  `openspec/changes/add-keyframe-ability-registry/`.

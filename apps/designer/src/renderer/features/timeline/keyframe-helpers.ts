@@ -7,6 +7,11 @@ import {
   type Track,
   type Transform,
 } from '@cg/shared-schema';
+import {
+  descriptorsForKind,
+  keyframeableDescriptors,
+  type PropertyDescriptor,
+} from '../inspector/field-registry.js';
 
 /**
  * Width of the left label column shared by the ruler row and every track
@@ -43,28 +48,27 @@ export interface TimelineRow {
   readonly factor?: number;
 }
 
-export const TIMELINE_ROWS: readonly TimelineRow[] = [
-  { label: 'Position X', property: 'position.x', read: (el) => el.transform.position.x },
-  { label: 'Position Y', property: 'position.y', read: (el) => el.transform.position.y },
-  {
-    label: 'Scale X',
-    property: 'scale.x',
-    read: (el) => el.transform.scale.x,
-    unit: '%',
-    factor: 100,
-  },
-  {
-    label: 'Scale Y',
-    property: 'scale.y',
-    read: (el) => el.transform.scale.y,
-    unit: '%',
-    factor: 100,
-  },
-  { label: 'Rotation', property: 'rotation', read: (el) => el.transform.rotation, unit: '°' },
-  { label: 'Width', property: 'size.w', read: (el) => el.transform.size.w },
-  { label: 'Height', property: 'size.h', read: (el) => el.transform.size.h },
-  { label: 'Opacity', property: 'opacity', read: (el) => el.opacity, unit: '%', factor: 100 },
-];
+/** Map a central-registry descriptor to a timeline row (timeline label + dim unit/factor). */
+function toTimelineRow(d: PropertyDescriptor): TimelineRow {
+  return {
+    label: d.timelineLabel ?? d.label,
+    property: d.property,
+    read: d.read,
+    ...(d.unit !== undefined ? { unit: d.unit } : {}),
+    ...(d.factor !== undefined ? { factor: d.factor } : {}),
+  };
+}
+
+/**
+ * The eight Transform rows (position/scale/rotation/size/opacity), DERIVED from the
+ * central field registry (D-051) so the timeline, the right inspector, and the multi
+ * editor share one source. Still exported because the right inspector's transform
+ * diamond capture (`togglePropertyKeyframe`) and the Keyframe Inspector's row-label
+ * lookup read it.
+ */
+export const TIMELINE_ROWS: readonly TimelineRow[] = descriptorsForKind('shape')
+  .filter((d) => d.section === 'Transform')
+  .map(toTimelineRow);
 
 /**
  * D-010 — non-animatable display rows for the timeline label column.
@@ -90,163 +94,24 @@ export interface TimelineGroup {
   readonly rows: readonly TimelineRowEntry[];
 }
 
-const TRANSFORM_GROUP: TimelineGroup = {
-  title: 'Transform',
-  rows: TIMELINE_ROWS.map((row) => ({ kind: 'animatable', row })),
-};
-
-function anim(
-  label: string,
-  property: AnimatableProperty,
-  read: (el: Element) => number | string,
-  unit?: string,
-): TimelineRowEntry {
-  return {
-    kind: 'animatable',
-    row: { label, property, read, ...(unit !== undefined ? { unit } : {}) },
-  };
-}
-
-/** Filter group — all 9 properties animatable as numbers (D-010). */
-const FILTER_ROWS: readonly TimelineRowEntry[] = [
-  anim('Blur', 'filter.blur', (el) => el.filter?.blur ?? 0, 'px'),
-  anim('Brightness', 'filter.brightness', (el) => el.filter?.brightness ?? 100, '%'),
-  anim('Contrast', 'filter.contrast', (el) => el.filter?.contrast ?? 100, '%'),
-  anim('Grayscale', 'filter.grayscale', (el) => el.filter?.grayscale ?? 0, '%'),
-  anim('Hue rotate', 'filter.hueRotate', (el) => el.filter?.hueRotate ?? 0, '°'),
-  anim('Invert', 'filter.invert', (el) => el.filter?.invert ?? 0, '%'),
-  anim('Opacity', 'filter.opacity', (el) => el.filter?.opacity ?? 100, '%'),
-  anim('Saturate', 'filter.saturate', (el) => el.filter?.saturate ?? 100, '%'),
-  anim('Sepia', 'filter.sepia', (el) => el.filter?.sepia ?? 0, '%'),
-];
-
-const FILTER_GROUP: TimelineGroup = { title: 'Filter', rows: FILTER_ROWS };
-
-/** Path-style group for shapes — width, dash and colours all animatable. */
-function pathStyleGroup(): TimelineGroup {
-  return {
-    title: 'Path Style',
-    rows: [
-      anim('Fill', 'fill.color', (el) =>
-        el.type === 'shape' && el.fill?.kind === 'solid' ? el.fill.color : '#000000',
-      ),
-      anim('Stroke', 'stroke.color', (el) =>
-        el.type === 'shape' ? (el.stroke?.color ?? '#000000') : '#000000',
-      ),
-      anim('Stroke width', 'stroke.width', (el) =>
-        el.type === 'shape' ? (el.stroke?.width ?? 0) : 0,
-      ),
-      anim('Stroke dasharray', 'stroke.dash', (el) =>
-        el.type === 'shape' ? (el.stroke?.dash?.[0] ?? 0) : 0,
-      ),
-    ],
-  };
-}
-
-/** Border-radius group — single Radius row, animatable. */
-function borderRadiusGroup(): TimelineGroup {
-  return {
-    title: 'Border Radius',
-    rows: [
-      anim('Radius', 'cornerRadius', (el) => {
-        if (el.type === 'shape') {
-          return typeof el.cornerRadius === 'number'
-            ? el.cornerRadius
-            : Array.isArray(el.cornerRadius)
-              ? el.cornerRadius[0]
-              : 0;
-        }
-        if (el.type === 'text') return el.cornerRadius ?? 0;
-        return 0;
-      }),
-    ],
-  };
-}
-
-/** Drop-shadow group — offsets + blur animatable; colour stays display-only. */
-function dropShadowGroup(): TimelineGroup {
-  function shadowOf(
-    el: Element,
-  ): { offsetX: number; offsetY: number; blur: number; color: string } | undefined {
-    if (el.type === 'shape') return el.shadow;
-    if (el.type === 'text') return el.textShadow;
-    return undefined;
-  }
-  return {
-    title: 'Drop Shadow',
-    rows: [
-      anim('Offset X', 'shadow.offsetX', (el) => shadowOf(el)?.offsetX ?? 0, 'px'),
-      anim('Offset Y', 'shadow.offsetY', (el) => shadowOf(el)?.offsetY ?? 0, 'px'),
-      anim('Blur', 'shadow.blur', (el) => shadowOf(el)?.blur ?? 0, 'px'),
-      anim('Color', 'shadow.color', (el) => shadowOf(el)?.color ?? '#000000'),
-    ],
-  };
-}
-
-/** Text group (text element only) — font size / line height / letter
- * spacing animatable; colours stay display-only. */
-function textGroup(): TimelineGroup {
-  return {
-    title: 'Text',
-    rows: [
-      anim('Font size', 'font.size', (el) => (el.type === 'text' ? el.font.size : 0)),
-      anim('Color', 'text.color', (el) => (el.type === 'text' ? el.color : '#000000')),
-      anim('Background color', 'backgroundColor', (el) =>
-        el.type === 'text' ? (el.backgroundColor ?? '#FFFFFF') : '#FFFFFF',
-      ),
-      anim('Line height', 'font.lineHeight', (el) => (el.type === 'text' ? el.font.lineHeight : 0)),
-      anim('Letter spacing', 'font.letterSpacing', (el) =>
-        el.type === 'text' ? el.font.letterSpacing : 0,
-      ),
-    ],
-  };
-}
-
-/** Text-padding group (text element only) — all 4 sides animatable. */
-function textPaddingGroup(): TimelineGroup {
-  return {
-    title: 'Text Padding',
-    rows: [
-      anim('Padding top', 'padding.top', (el) => (el.type === 'text' ? (el.padding?.top ?? 0) : 0)),
-      anim('Padding right', 'padding.right', (el) =>
-        el.type === 'text' ? (el.padding?.right ?? 0) : 0,
-      ),
-      anim('Padding bottom', 'padding.bottom', (el) =>
-        el.type === 'text' ? (el.padding?.bottom ?? 0) : 0,
-      ),
-      anim('Padding left', 'padding.left', (el) =>
-        el.type === 'text' ? (el.padding?.left ?? 0) : 0,
-      ),
-    ],
-  };
-}
-
 /**
- * Per-element-type group list for the timeline label column (D-010).
- * Order mirrors the D-010 reference pics.
+ * Per-element-type group list for the timeline label column (D-010), GENERATED from
+ * the central field registry (D-051) — the same source the right inspector and the
+ * multi editor read, which is what guarantees right/left diamond parity. Each
+ * keyframe-able descriptor for the element instance becomes an `animatable` row;
+ * consecutive descriptors sharing a `section` group under that section's title, in
+ * registry order (Transform · [kind-specific] · Filter). Every emitted row is
+ * keyframe-able, so the timeline shows a diamond for exactly the animatable set.
  */
 export function timelineGroupsFor(el: Element): readonly TimelineGroup[] {
-  if (el.type === 'shape') {
-    return [
-      TRANSFORM_GROUP,
-      pathStyleGroup(),
-      borderRadiusGroup(),
-      dropShadowGroup(),
-      FILTER_GROUP,
-    ];
+  const groups: { title: string; rows: TimelineRowEntry[] }[] = [];
+  for (const d of keyframeableDescriptors(el)) {
+    const entry: TimelineRowEntry = { kind: 'animatable', row: toTimelineRow(d) };
+    const last = groups[groups.length - 1];
+    if (last !== undefined && last.title === d.section) last.rows.push(entry);
+    else groups.push({ title: d.section, rows: [entry] });
   }
-  if (el.type === 'text') {
-    return [
-      TRANSFORM_GROUP,
-      textGroup(),
-      dropShadowGroup(),
-      textPaddingGroup(),
-      borderRadiusGroup(),
-      FILTER_GROUP,
-    ];
-  }
-  // image / placeholder / container — just Transform + Filter for now.
-  return [TRANSFORM_GROUP, FILTER_GROUP];
+  return groups;
 }
 
 /** Look up the track for a property on an element, or undefined. */

@@ -24,12 +24,10 @@ import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import {
-  effectiveAnimatableValue,
   effectiveColorAt as evColor,
   effectiveNumberAt as evNum,
-  hasKeyframeAt,
-  keyframeVariantFor,
 } from '../timeline/keyframe-helpers.js';
+import { KeyframeDot } from './keyframe-diamond.js';
 import { CollapseSection } from './CollapseSection.js';
 import { ColorField, NumberField, SelectField, TextField, VectorField } from './controls.js';
 import { FillField } from './FillPopover.js';
@@ -54,38 +52,6 @@ function pointIcon(label: string): JSX.Element {
         /* intentionally no-op — colour properties not yet animatable */
       }}
       ariaLabel={`${label} — animation not yet supported`}
-    />
-  );
-}
-
-/**
- * Real keyframe indicator for a numeric or colour animatable property.
- * Reads variant from keyframeVariantFor; clicking toggles a keyframe at the
- * current frame. The added keyframe CAPTURES the evaluated value at the playhead
- * (what the field shows and the canvas renders), with `read` as the static
- * fallback when the property isn't yet animated — so adding a keyframe past an
- * existing one holds the animated value instead of reverting it (B-005/B-006).
- */
-function animPointIcon(
-  element: Element,
-  property: AnimatableProperty,
-  currentFrame: number,
-  selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null,
-  read: (el: Element) => number | string,
-): JSX.Element {
-  const variant = keyframeVariantFor(element, property, currentFrame, selectedKeyframe);
-  return (
-    <KeyframeIndicator
-      variant={variant}
-      onClick={() => {
-        if (hasKeyframeAt(element, property, currentFrame)) {
-          designerStore.removeKeyframe(element.id, property, currentFrame);
-        } else {
-          const value = effectiveAnimatableValue(element, property, currentFrame, read(element));
-          designerStore.upsertKeyframe(element.id, property, currentFrame, value);
-        }
-      }}
-      ariaLabel={`Toggle keyframe for ${property} at frame ${String(currentFrame)}`}
     />
   );
 }
@@ -218,12 +184,11 @@ function TextSections({
 //                              SHAPE
 // ────────────────────────────────────────────────────────────────────────
 
-// ⚠️ SYNC WITH shared-properties.ts. The multi-selection editor (D-050) mirrors
-// these shape fields' `prop` ids + read accessors in `BY_KIND.shape` /
-// `UNIVERSAL` to compute the shared-property intersection — there is no central
-// metadata table (a refactor toward one is a separate quality item, parked near
-// D-035). When a shape property here is added/changed, UPDATE shared-properties.ts
-// too. See its header note + the change's design.md (tech debt).
+// D-051 — keyframe-ability + which properties the timeline-left and the
+// multi-select editor expose now come from the central `field-registry.ts`; the
+// diamond here renders via `KeyframeDot` (real iff the registry marks the property
+// keyframe-able). Adding/changing a shape property is a single registry edit — no
+// more hand-mirroring into shared-properties.ts / keyframe-helpers.ts.
 function ShapeSections({
   element,
   currentFrame,
@@ -274,13 +239,7 @@ function ShapeSections({
           }}
           trailing={
             element.fill === undefined || element.fill.kind === 'solid'
-              ? animPointIcon(
-                  element,
-                  'fill.color',
-                  currentFrame,
-                  selectedKeyframe,
-                  () => fillColor,
-                )
+              ? KeyframeDot(element, 'fill.color', currentFrame, selectedKeyframe)
               : pointIcon('fill')
           }
         />
@@ -289,13 +248,7 @@ function ShapeSections({
           value={strokeColor}
           resetKey={id}
           onCommit={(color) => designerStore.commitAnimatable(id, 'stroke.color', color)}
-          trailing={animPointIcon(
-            element,
-            'stroke.color',
-            currentFrame,
-            selectedKeyframe,
-            () => strokeColor,
-          )}
+          trailing={KeyframeDot(element, 'stroke.color', currentFrame, selectedKeyframe)}
         />
         <NumberField
           label="stroke width"
@@ -303,9 +256,7 @@ function ShapeSections({
           step={1}
           min={0}
           onCommit={(width) => designerStore.commitAnimatable(id, 'stroke.width', width)}
-          trailing={animPointIcon(element, 'stroke.width', currentFrame, selectedKeyframe, (el) =>
-            el.type === 'shape' ? (el.stroke?.width ?? 0) : 0,
-          )}
+          trailing={KeyframeDot(element, 'stroke.width', currentFrame, selectedKeyframe)}
         />
         <NumberField
           label="dash array"
@@ -313,9 +264,7 @@ function ShapeSections({
           step={1}
           min={0}
           onCommit={(d) => designerStore.commitAnimatable(id, 'stroke.dash', d)}
-          trailing={animPointIcon(element, 'stroke.dash', currentFrame, selectedKeyframe, (el) =>
-            el.type === 'shape' ? (el.stroke?.dash?.[0] ?? 0) : 0,
-          )}
+          trailing={KeyframeDot(element, 'stroke.dash', currentFrame, selectedKeyframe)}
         />
       </CollapseSection>
 
@@ -1276,13 +1225,7 @@ function DropShadowSection({
             step: 1,
             suffix: 'px',
             onCommit: (v) => designerStore.commitAnimatable(id, 'shadow.offsetX', v),
-            point: animPointIcon(
-              element,
-              'shadow.offsetX',
-              currentFrame,
-              selectedKeyframe,
-              () => s.offsetX,
-            ),
+            point: KeyframeDot(element, 'shadow.offsetX', currentFrame, selectedKeyframe),
           },
           {
             icon: 'Y',
@@ -1291,13 +1234,7 @@ function DropShadowSection({
             step: 1,
             suffix: 'px',
             onCommit: (v) => designerStore.commitAnimatable(id, 'shadow.offsetY', v),
-            point: animPointIcon(
-              element,
-              'shadow.offsetY',
-              currentFrame,
-              selectedKeyframe,
-              () => s.offsetY,
-            ),
+            point: KeyframeDot(element, 'shadow.offsetY', currentFrame, selectedKeyframe),
           },
         ]}
       />
@@ -1308,26 +1245,14 @@ function DropShadowSection({
         min={0}
         suffix="px"
         onCommit={(v) => designerStore.commitAnimatable(id, 'shadow.blur', v)}
-        trailing={animPointIcon(
-          element,
-          'shadow.blur',
-          currentFrame,
-          selectedKeyframe,
-          () => s.blur,
-        )}
+        trailing={KeyframeDot(element, 'shadow.blur', currentFrame, selectedKeyframe)}
       />
       <ColorField
         label="color"
         value={color}
         resetKey={id}
         onCommit={(color) => designerStore.commitAnimatable(id, 'shadow.color', color)}
-        trailing={animPointIcon(
-          element,
-          'shadow.color',
-          currentFrame,
-          selectedKeyframe,
-          () => s.color,
-        )}
+        trailing={KeyframeDot(element, 'shadow.color', currentFrame, selectedKeyframe)}
       />
     </CollapseSection>
   );
@@ -1352,13 +1277,7 @@ function TextPaddingSection({
         step={1}
         min={0}
         onCommit={(v) => designerStore.commitAnimatable(id, 'padding.top', v)}
-        trailing={animPointIcon(
-          element,
-          'padding.top',
-          currentFrame,
-          selectedKeyframe,
-          () => p.top,
-        )}
+        trailing={KeyframeDot(element, 'padding.top', currentFrame, selectedKeyframe)}
       />
       <NumberField
         label="right"
@@ -1366,13 +1285,7 @@ function TextPaddingSection({
         step={1}
         min={0}
         onCommit={(v) => designerStore.commitAnimatable(id, 'padding.right', v)}
-        trailing={animPointIcon(
-          element,
-          'padding.right',
-          currentFrame,
-          selectedKeyframe,
-          () => p.right,
-        )}
+        trailing={KeyframeDot(element, 'padding.right', currentFrame, selectedKeyframe)}
       />
       <NumberField
         label="bottom"
@@ -1380,13 +1293,7 @@ function TextPaddingSection({
         step={1}
         min={0}
         onCommit={(v) => designerStore.commitAnimatable(id, 'padding.bottom', v)}
-        trailing={animPointIcon(
-          element,
-          'padding.bottom',
-          currentFrame,
-          selectedKeyframe,
-          () => p.bottom,
-        )}
+        trailing={KeyframeDot(element, 'padding.bottom', currentFrame, selectedKeyframe)}
       />
       <NumberField
         label="left"
@@ -1394,13 +1301,7 @@ function TextPaddingSection({
         step={1}
         min={0}
         onCommit={(v) => designerStore.commitAnimatable(id, 'padding.left', v)}
-        trailing={animPointIcon(
-          element,
-          'padding.left',
-          currentFrame,
-          selectedKeyframe,
-          () => p.left,
-        )}
+        trailing={KeyframeDot(element, 'padding.left', currentFrame, selectedKeyframe)}
       />
     </CollapseSection>
   );
@@ -1432,13 +1333,7 @@ function BorderRadiusSection({
         step={1}
         min={0}
         onCommit={(v) => designerStore.commitAnimatable(id, 'cornerRadius', v)}
-        trailing={animPointIcon(
-          element,
-          'cornerRadius',
-          currentFrame,
-          selectedKeyframe,
-          () => radius,
-        )}
+        trailing={KeyframeDot(element, 'cornerRadius', currentFrame, selectedKeyframe)}
       />
     </CollapseSection>
   );
@@ -1475,13 +1370,7 @@ function FilterSection({
         {...(max !== undefined ? { max } : {})}
         {...(suffix !== undefined ? { suffix } : {})}
         onCommit={(v) => designerStore.commitAnimatable(id, property, v)}
-        trailing={animPointIcon(
-          element,
-          property,
-          currentFrame,
-          selectedKeyframe,
-          (el) => (el.filter?.[key] ?? fallback) as number,
-        )}
+        trailing={KeyframeDot(element, property, currentFrame, selectedKeyframe)}
       />
     );
   }

@@ -1,13 +1,8 @@
 import type { AnimatableProperty, Element, TextElement } from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
 import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
-import {
-  effectiveAnimatableValue,
-  effectiveColorAt,
-  effectiveNumberAt,
-  hasKeyframeAt,
-  keyframeVariantFor,
-} from '../timeline/keyframe-helpers.js';
+import { effectiveColorAt, effectiveNumberAt } from '../timeline/keyframe-helpers.js';
+import { KeyframeDot } from './keyframe-diamond.js';
 import { CollapseSection } from './CollapseSection.js';
 import { FillField } from './FillPopover.js';
 import { FontFamilySelect } from './FontFamilySelect.js';
@@ -51,31 +46,6 @@ function point(label: string): JSX.Element {
         /* colour properties not yet animatable */
       }}
       ariaLabel={`${label} — animation not yet supported`}
-    />
-  );
-}
-
-function animPoint(
-  element: TextElement,
-  property: AnimatableProperty,
-  currentFrame: number,
-  selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null,
-  read: (el: TextElement) => number | string,
-): JSX.Element {
-  const variant = keyframeVariantFor(element, property, currentFrame, selectedKeyframe);
-  return (
-    <KeyframeIndicator
-      variant={variant}
-      onClick={() => {
-        if (hasKeyframeAt(element, property, currentFrame)) {
-          designerStore.removeKeyframe(element.id, property, currentFrame);
-        } else {
-          // Capture the evaluated value at the playhead (B-005/B-006).
-          const value = effectiveAnimatableValue(element, property, currentFrame, read(element));
-          designerStore.upsertKeyframe(element.id, property, currentFrame, value);
-        }
-      }}
-      ariaLabel={`Toggle keyframe for ${property} at frame ${String(currentFrame)}`}
     />
   );
 }
@@ -184,7 +154,7 @@ export function TextStyleSection({
           }}
           trailing={
             element.colorFill === undefined || element.colorFill.kind === 'solid'
-              ? animPoint(element, 'text.color', currentFrame, selectedKeyframe, (el) => el.color)
+              ? KeyframeDot(element, 'text.color', currentFrame, selectedKeyframe)
               : point('text color')
           }
         />
@@ -206,13 +176,7 @@ export function TextStyleSection({
           }}
           trailing={
             element.backgroundFill === undefined
-              ? animPoint(
-                  element,
-                  'backgroundColor',
-                  currentFrame,
-                  selectedKeyframe,
-                  (el) => el.backgroundColor ?? '#FFFFFF',
-                )
+              ? KeyframeDot(element, 'backgroundColor', currentFrame, selectedKeyframe)
               : point('background')
           }
         />
@@ -243,7 +207,7 @@ export function TextStyleSection({
             }}
             ariaLabel="Font size"
           />
-          {animPoint(element, 'font.size', currentFrame, selectedKeyframe, (el) => el.font.size)}
+          {KeyframeDot(element, 'font.size', currentFrame, selectedKeyframe)}
         </div>
 
         {/* Line height + Letter spacing side-by-side */}
@@ -262,13 +226,7 @@ export function TextStyleSection({
               }}
               ariaLabel="Line height"
             />
-            {animPoint(
-              element,
-              'font.lineHeight',
-              currentFrame,
-              selectedKeyframe,
-              (el) => el.font.lineHeight,
-            )}
+            {KeyframeDot(element, 'font.lineHeight', currentFrame, selectedKeyframe)}
           </div>
           <div className="cg-field">
             <span className={s.chipIcon} aria-hidden title="Letter spacing">
@@ -281,13 +239,7 @@ export function TextStyleSection({
               onCommit={(n) => designerStore.commitAnimatable(id, 'font.letterSpacing', n)}
               ariaLabel="Letter spacing"
             />
-            {animPoint(
-              element,
-              'font.letterSpacing',
-              currentFrame,
-              selectedKeyframe,
-              (el) => el.font.letterSpacing,
-            )}
+            {KeyframeDot(element, 'font.letterSpacing', currentFrame, selectedKeyframe)}
           </div>
         </div>
 
