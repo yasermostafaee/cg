@@ -22,7 +22,6 @@ import {
 import { ListItemsEditor } from '../fields/ListItemsEditor.js';
 import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
-import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import {
   effectiveColorAt as evColor,
   effectiveNumberAt as evNum,
@@ -37,23 +36,6 @@ import { TextStyleSection } from './TextStyleSection.js';
 interface Props {
   element: Element;
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
-}
-
-/**
- * D-010 — empty point icon for property rows that aren't yet in
- * AnimatableProperty (currently colours and the shape "kind" select).
- * Clicking is a no-op.
- */
-function pointIcon(label: string): JSX.Element {
-  return (
-    <KeyframeIndicator
-      variant="empty"
-      onClick={() => {
-        /* intentionally no-op — colour properties not yet animatable */
-      }}
-      ariaLabel={`${label} — animation not yet supported`}
-    />
-  );
 }
 
 /**
@@ -124,7 +106,17 @@ export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element 
         selectedKeyframe={selectedKeyframe}
       />
     );
-  return <></>;
+  // composition / container / lottie / video-placeholder have no kind-specific
+  // style section, but the universal CSS Filter is animatable on every kind — render
+  // it so the right inspector's keyframe-able set matches the timeline-left (D-051
+  // parity). Transform comes from InspectorPanel's TransformSection.
+  return (
+    <FilterSection
+      element={element}
+      currentFrame={currentFrame}
+      selectedKeyframe={selectedKeyframe}
+    />
+  );
 }
 
 interface SectionProps<E extends Element> {
@@ -237,11 +229,7 @@ function ShapeSections({
               designerStore.updateElement(id, { fill: f } as Partial<Element>);
             }
           }}
-          trailing={
-            element.fill === undefined || element.fill.kind === 'solid'
-              ? KeyframeDot(element, 'fill.color', currentFrame, selectedKeyframe)
-              : pointIcon('fill')
-          }
+          trailing={KeyframeDot(element, 'fill.color', currentFrame, selectedKeyframe)}
         />
         <ColorField
           label="stroke"
@@ -308,7 +296,6 @@ function ImageSections({
           value={element.fit}
           options={['contain', 'cover', 'fill', 'none'] as const}
           onCommit={(fit) => designerStore.updateElement(id, { fit } as Partial<Element>)}
-          trailing={pointIcon('fit')}
         />
       </CollapseSection>
       <FilterSection
@@ -347,7 +334,6 @@ function TickerSections({
           onCommit={(direction) =>
             designerStore.updateElement(id, { direction } as Partial<Element>)
           }
-          trailing={pointIcon('direction')}
         />
         <NumberField
           label="speed"
@@ -358,7 +344,6 @@ function TickerSections({
           onCommit={(speed) =>
             designerStore.updateElement(id, { speed: Math.max(1, speed) } as Partial<Element>)
           }
-          trailing={pointIcon('speed')}
         />
         <NumberField
           label="gap"
@@ -369,7 +354,6 @@ function TickerSections({
           onCommit={(gap) =>
             designerStore.updateElement(id, { gap: Math.max(0, gap) } as Partial<Element>)
           }
-          trailing={pointIcon('gap')}
         />
         <TextField
           label="separator"
@@ -584,7 +568,6 @@ function ClockSections({
                 : {}),
             } as Partial<Element>)
           }
-          trailing={pointIcon('mode')}
         />
         <TextField
           label="format"
@@ -603,7 +586,6 @@ function ClockSections({
           value={element.digits}
           options={['persian', 'latin', 'arabic-indic'] as const}
           onCommit={(digits) => designerStore.updateElement(id, { digits } as Partial<Element>)}
-          trailing={pointIcon('digits')}
         />
         {element.mode === 'countdown' && (
           <>

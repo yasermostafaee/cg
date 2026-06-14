@@ -1,6 +1,5 @@
 import type { AnimatableProperty, Element, TextElement } from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
-import { KeyframeIndicator } from '../timeline/KeyframeIndicator.js';
 import { effectiveColorAt, effectiveNumberAt } from '../timeline/keyframe-helpers.js';
 import { KeyframeDot } from './keyframe-diamond.js';
 import { CollapseSection } from './CollapseSection.js';
@@ -27,27 +26,16 @@ import * as s from './TextStyleSection.css.js';
  *   ↕ 1.2  ◇ | VA 0       ◇
  *   [⫷][☰][⫸]   [▭][▭][▭]   ⚙
  *
- * The point icons are empty (◇) on every row — the underlying
- * properties aren't in AnimatableProperty yet, but the visual matches
- * the screenshot.
+ * D-051 — the keyframe diamond on each row comes from the shared `KeyframeDot`,
+ * which renders iff the central field registry marks the property keyframe-able for
+ * this element: text colour / background (solid only), font size, line height, and
+ * letter spacing get a diamond; font-family and the alignment groups never do.
  */
 
 interface Props {
   element: TextElement;
   currentFrame?: number;
   selectedKeyframe?: { elementId: string; property: AnimatableProperty; frame: number } | null;
-}
-
-function point(label: string): JSX.Element {
-  return (
-    <KeyframeIndicator
-      variant="empty"
-      onClick={() => {
-        /* colour properties not yet animatable */
-      }}
-      ariaLabel={`${label} — animation not yet supported`}
-    />
-  );
 }
 
 export function TextStyleSection({
@@ -152,11 +140,7 @@ export function TextStyleSection({
               designerStore.updateElement(id, { colorFill: f } as unknown as Partial<Element>);
             }
           }}
-          trailing={
-            element.colorFill === undefined || element.colorFill.kind === 'solid'
-              ? KeyframeDot(element, 'text.color', currentFrame, selectedKeyframe)
-              : point('text color')
-          }
+          trailing={KeyframeDot(element, 'text.color', currentFrame, selectedKeyframe)}
         />
 
         {/* Background — solid or gradient text-box background. */}
@@ -174,11 +158,7 @@ export function TextStyleSection({
               designerStore.updateElement(id, { backgroundFill: f } as unknown as Partial<Element>);
             }
           }}
-          trailing={
-            element.backgroundFill === undefined
-              ? KeyframeDot(element, 'backgroundColor', currentFrame, selectedKeyframe)
-              : point('background')
-          }
+          trailing={KeyframeDot(element, 'backgroundColor', currentFrame, selectedKeyframe)}
         />
 
         {/* Font family dropdown (shared with the Ticker inspector) */}

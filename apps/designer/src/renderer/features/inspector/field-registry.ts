@@ -231,6 +231,10 @@ const SHAPE_SPECIFIC: readonly PropertyDescriptor[] = [
     read: (el) => (el.type === 'shape' && el.fill?.kind === 'solid' ? el.fill.color : '#000000'),
     // The uniform colour, or null (→ "mixed") for a gradient / non-solid fill.
     multiRead: (el) => (el.type === 'shape' && el.fill?.kind === 'solid' ? el.fill.color : null),
+    // A colour is keyframe-able only while it is a SOLID fill — gradients can't
+    // interpolate, so no diamond (in either panel) when the fill is a gradient.
+    keyframeable: (el) =>
+      el.type === 'shape' && (el.fill === undefined || el.fill.kind === 'solid'),
     multiSelect: true,
   },
   {
@@ -319,6 +323,8 @@ const TEXT_SPECIFIC: readonly PropertyDescriptor[] = [
     label: 'text color',
     timelineLabel: 'Color',
     read: (el) => (el.type === 'text' ? el.color : '#000000'),
+    keyframeable: (el) =>
+      el.type === 'text' && (el.colorFill === undefined || el.colorFill.kind === 'solid'),
     multiSelect: true,
   },
   {
@@ -328,6 +334,7 @@ const TEXT_SPECIFIC: readonly PropertyDescriptor[] = [
     label: 'background',
     timelineLabel: 'Background color',
     read: (el) => (el.type === 'text' ? (el.backgroundColor ?? '#FFFFFF') : '#FFFFFF'),
+    keyframeable: (el) => el.type === 'text' && el.backgroundFill === undefined,
   },
   {
     property: 'font.lineHeight',
