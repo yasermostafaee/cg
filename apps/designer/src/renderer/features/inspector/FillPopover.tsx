@@ -69,7 +69,7 @@ interface FillFieldProps {
   label: string;
   value: Fill | undefined;
   onChange: (fill: Fill) => void;
-  trailing?: JSX.Element;
+  trailing?: JSX.Element | undefined;
   /** Label column width in px (default 74 — matches the shape Path Style rows). */
   labelWidth?: number;
 }

@@ -1,28 +1,24 @@
 import type { AnimatableProperty, Element, Scene } from '@cg/shared-schema';
+import {
+  multiSelectDescriptors,
+  type InspectorSection,
+  type PropertyDescriptor,
+} from './field-registry.js';
 
 /**
- * Shared-property model for multi-selection editing (D-041 / D-049 / D-050).
+ * Shared-property model for multi-selection editing (D-041 / D-049 / D-050 / D-051).
  *
- * Pure, kind-driven, data-driven: each element KIND declares its editable
- * property descriptors; `sharedEditableProperties` intersects those across the
- * selected elements and reports, per shared property, whether the selection
- * AGREES (a common value) or DIFFERS (a neutral "mixed" state). No hardcoded
- * pairwise kind combinations — adding a kind or a property is a table edit.
+ * Pure, kind-driven, data-driven: each element kind's editable descriptors come
+ * from the CENTRAL field registry (`field-registry.ts`); `sharedEditableProperties`
+ * intersects those across the selected elements and reports, per shared property,
+ * whether the selection AGREES (a common value) or DIFFERS (a neutral "mixed"
+ * state). No hardcoded pairwise kind combinations — adding a kind or a property is
+ * a single registry declaration.
  *
- * D-050 widens the per-kind sets to the FULL editable-property set the single
- * inspector exposes (scale, stroke, border-radius, drop-shadow, filter, …), so
- * a multi-selection exposes every property common to its kinds, grouped under
- * the same `section`s as the single inspector.
- *
- * ⚠️ SYNC WITH StyleSection.tsx / TransformSection.tsx. There is no central
- * per-kind property-metadata table in the codebase — the single inspector
- * hand-writes its sections (`ShapeSections`, `TransformSection`, …). These
- * descriptors MIRROR those fields' `prop` ids + read accessors. This is an
- * accepted SHORT-PATH duplication (a central-metadata refactor is a separate
- * quality item, parked near D-035). When a shape property is added/changed in
- * the single inspector, UPDATE BOTH SITES. See the matching note in
- * `StyleSection.tsx` (ShapeSections) and `design.md` of
- * `complete-multi-select-shared-props`.
+ * D-051 retired the previous SHORT-PATH duplication: the per-kind `UNIVERSAL` /
+ * `BY_KIND` tables (which mirrored `StyleSection.tsx` and `keyframe-helpers.ts` and
+ * carried `⚠️ SYNC-WITH` warnings) are gone — these descriptors are derived from the
+ * one registry the single inspector and the timeline also read.
  *
  * Writes go through the keyframe-free base path (`writeStaticAnimatable` /
  * `updateElement`) — `prop` is the animatable-property id that path understands.
@@ -43,7 +39,7 @@ export interface SharedPropertyDescriptor {
   section: SharedSection;
   /** Animatable-property id understood by `writeStaticAnimatable`. */
   prop: AnimatableProperty;
-  /** The element's CURRENT static value (null = no representable value). */
+  /** The element's CURRENT static value (null = no representable value → "mixed"). */
   read: (el: Element) => number | string | null;
   step?: number | undefined;
   min?: number | undefined;
@@ -52,241 +48,48 @@ export interface SharedPropertyDescriptor {
   suffix?: string | undefined;
 }
 
-const FILTER_DEFAULTS: Record<string, number> = {
-  blur: 0,
-  brightness: 100,
-  contrast: 100,
-  grayscale: 0,
-  hueRotate: 0,
-  invert: 0,
-  opacity: 100,
-  saturate: 100,
-  sepia: 0,
-};
+/**
+ * The multi editor groups under a narrower section set than the registry (it has no
+ * dedicated Text / Text Padding headers); map the registry section to the editor's.
+ * Today only `text.color` (registry section "Text") is multi-exposed among the
+ * text-specific properties, and it has always shown under "Path Style".
+ */
+function toSharedSection(section: InspectorSection): SharedSection {
+  switch (section) {
+    case 'Transform':
+      return 'Transform';
+    case 'Border Radius':
+      return 'Border Radius';
+    case 'Drop Shadow':
+      return 'Drop Shadow';
+    case 'Filter':
+      return 'Filter';
+    case 'Path Style':
+    case 'Text':
+    case 'Text Padding':
+      return 'Path Style';
+  }
+}
 
-function filterDesc(
-  key: keyof typeof FILTER_DEFAULTS,
-  label: string,
-  opts: { step: number; min?: number; max?: number; suffix: string },
-): SharedPropertyDescriptor {
-  const prop = `filter.${key}` as AnimatableProperty;
+/** Map a central-registry descriptor to the multi editor's shared-property descriptor. */
+function toShared(d: PropertyDescriptor): SharedPropertyDescriptor {
+  const read = d.multiRead ?? d.read;
   return {
-    key: prop,
-    label,
-    kind: 'number',
-    section: 'Filter',
-    prop,
-    read: (el) => {
-      const f = el.filter as Record<string, number | undefined> | undefined;
-      return f?.[key] ?? FILTER_DEFAULTS[key] ?? 0;
-    },
-    step: opts.step,
-    min: opts.min,
-    max: opts.max,
-    suffix: opts.suffix,
+    key: d.property,
+    label: d.label,
+    kind: d.fieldKind,
+    section: toSharedSection(d.section),
+    prop: d.property,
+    read: (el) => read(el),
+    step: d.step,
+    min: d.min,
+    max: d.max,
+    suffix: d.unit,
   };
 }
 
-/**
- * On every element kind. Transform + opacity live on `ElementBase`; `filter` is
- * also on `ElementBase`, so the Filter section is shared by any selection.
- */
-const UNIVERSAL: readonly SharedPropertyDescriptor[] = [
-  {
-    key: 'position.x',
-    label: 'X',
-    kind: 'number',
-    section: 'Transform',
-    prop: 'position.x',
-    read: (el) => el.transform.position.x,
-    step: 1,
-  },
-  {
-    key: 'position.y',
-    label: 'Y',
-    kind: 'number',
-    section: 'Transform',
-    prop: 'position.y',
-    read: (el) => el.transform.position.y,
-    step: 1,
-  },
-  {
-    key: 'size.w',
-    label: 'W',
-    kind: 'number',
-    section: 'Transform',
-    prop: 'size.w',
-    read: (el) => el.transform.size.w,
-    step: 1,
-    min: 0,
-  },
-  {
-    key: 'size.h',
-    label: 'H',
-    kind: 'number',
-    section: 'Transform',
-    prop: 'size.h',
-    read: (el) => el.transform.size.h,
-    step: 1,
-    min: 0,
-  },
-  {
-    key: 'scale.x',
-    label: 'Scale X',
-    kind: 'number',
-    section: 'Transform',
-    prop: 'scale.x',
-    read: (el) => el.transform.scale.x,
-    step: 1,
-  },
-  {
-    key: 'scale.y',
-    label: 'Scale Y',
-    kind: 'number',
-    section: 'Transform',
-    prop: 'scale.y',
-    read: (el) => el.transform.scale.y,
-    step: 1,
-  },
-  {
-    key: 'rotation',
-    label: 'Rotation',
-    kind: 'number',
-    section: 'Transform',
-    prop: 'rotation',
-    read: (el) => el.transform.rotation,
-    step: 1,
-  },
-  {
-    key: 'opacity',
-    label: 'Opacity',
-    kind: 'number',
-    section: 'Transform',
-    prop: 'opacity',
-    read: (el) => el.opacity,
-    step: 0.05,
-    min: 0,
-    max: 1,
-  },
-  // Filter (CSS filter) — stored value == displayed value (see FilterSection).
-  filterDesc('blur', 'blur', { step: 0.5, min: 0, suffix: 'px' }),
-  filterDesc('brightness', 'brightness', { step: 1, min: 0, suffix: '%' }),
-  filterDesc('contrast', 'contrast', { step: 1, min: 0, suffix: '%' }),
-  filterDesc('grayscale', 'grayscale', { step: 1, min: 0, max: 100, suffix: '%' }),
-  filterDesc('hueRotate', 'hue rotate', { step: 1, suffix: '°' }),
-  filterDesc('invert', 'invert', { step: 1, min: 0, max: 100, suffix: '%' }),
-  filterDesc('opacity', 'opacity', { step: 1, min: 0, max: 100, suffix: '%' }),
-  filterDesc('saturate', 'saturate', { step: 1, min: 0, suffix: '%' }),
-  filterDesc('sepia', 'sepia', { step: 1, min: 0, max: 100, suffix: '%' }),
-];
-
-/** Additional editable descriptors per element kind (mirror StyleSection — keep in sync). */
-const BY_KIND: Partial<Record<Element['type'], readonly SharedPropertyDescriptor[]>> = {
-  shape: [
-    {
-      key: 'fill.color',
-      label: 'fill',
-      kind: 'fill',
-      section: 'Path Style',
-      prop: 'fill.color',
-      read: (el) => (el.type === 'shape' && el.fill?.kind === 'solid' ? el.fill.color : null),
-    },
-    {
-      key: 'stroke.color',
-      label: 'stroke',
-      kind: 'color',
-      section: 'Path Style',
-      prop: 'stroke.color',
-      read: (el) => (el.type === 'shape' ? (el.stroke?.color ?? '#000000') : null),
-    },
-    {
-      key: 'stroke.width',
-      label: 'stroke width',
-      kind: 'number',
-      section: 'Path Style',
-      prop: 'stroke.width',
-      read: (el) => (el.type === 'shape' ? (el.stroke?.width ?? 0) : null),
-      step: 1,
-      min: 0,
-    },
-    {
-      key: 'stroke.dash',
-      label: 'dash array',
-      kind: 'number',
-      section: 'Path Style',
-      prop: 'stroke.dash',
-      read: (el) => (el.type === 'shape' ? (el.stroke?.dash?.[0] ?? 0) : null),
-      step: 1,
-      min: 0,
-    },
-    {
-      key: 'cornerRadius',
-      label: 'radius',
-      kind: 'number',
-      section: 'Border Radius',
-      prop: 'cornerRadius',
-      // cornerRadius may be a single radius or a per-corner tuple (D-042). The
-      // multi editor edits the UNIFORM radius: a scalar reads as itself, unset
-      // reads 0, a per-corner tuple reads null (shows "mixed" until set uniform).
-      read: (el) => {
-        if (el.type !== 'shape') return null;
-        const cr = el.cornerRadius;
-        return typeof cr === 'number' ? cr : cr === undefined ? 0 : null;
-      },
-      step: 1,
-      min: 0,
-    },
-    {
-      key: 'shadow.offsetX',
-      label: 'offset X',
-      kind: 'number',
-      section: 'Drop Shadow',
-      prop: 'shadow.offsetX',
-      read: (el) => (el.type === 'shape' ? (el.shadow?.offsetX ?? 0) : null),
-      step: 1,
-    },
-    {
-      key: 'shadow.offsetY',
-      label: 'offset Y',
-      kind: 'number',
-      section: 'Drop Shadow',
-      prop: 'shadow.offsetY',
-      read: (el) => (el.type === 'shape' ? (el.shadow?.offsetY ?? 0) : null),
-      step: 1,
-    },
-    {
-      key: 'shadow.blur',
-      label: 'blur',
-      kind: 'number',
-      section: 'Drop Shadow',
-      prop: 'shadow.blur',
-      read: (el) => (el.type === 'shape' ? (el.shadow?.blur ?? 0) : null),
-      step: 1,
-      min: 0,
-    },
-    {
-      key: 'shadow.color',
-      label: 'color',
-      kind: 'color',
-      section: 'Drop Shadow',
-      prop: 'shadow.color',
-      read: (el) => (el.type === 'shape' ? (el.shadow?.color ?? '#000000') : null),
-    },
-  ],
-  text: [
-    {
-      key: 'text.color',
-      label: 'text color',
-      kind: 'color',
-      section: 'Path Style',
-      prop: 'text.color',
-      read: (el) => (el.type === 'text' ? el.color : null),
-    },
-  ],
-};
-
 function descriptorsFor(el: Element): readonly SharedPropertyDescriptor[] {
-  return [...UNIVERSAL, ...(BY_KIND[el.type] ?? [])];
+  return multiSelectDescriptors(el).map(toShared);
 }
 
 export interface SharedProperty {

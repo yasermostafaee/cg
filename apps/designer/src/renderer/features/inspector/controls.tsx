@@ -159,7 +159,7 @@ interface NumberFieldProps {
   /** Optional dim unit shown after the value (e.g. "°", "%"). */
   suffix?: string | undefined;
   /** Optional element rendered outside the field border (e.g. KeyframeIndicator). */
-  trailing?: JSX.Element;
+  trailing?: JSX.Element | undefined;
   /** D-049 — multi-selection "mixed" state (values differ; show a placeholder). */
   mixed?: boolean;
   /** D-050 — defer commit to Enter/blur (one undo per edit) + drop drag-scrub. */
@@ -226,7 +226,7 @@ interface VectorAxisProps {
   max?: number;
   suffix?: string;
   /** Keyframe diamond for this axis. */
-  point?: JSX.Element;
+  point?: JSX.Element | undefined;
 }
 
 interface VectorFieldProps {
@@ -449,7 +449,7 @@ interface TextFieldProps {
   value: string;
   onCommit: (s: string) => void;
   /** Optional element rendered in a trailing column (e.g. KeyframeIndicator). */
-  trailing?: JSX.Element;
+  trailing?: JSX.Element | undefined;
   /**
    * Identity of the thing being edited (e.g. the selected element id, or the
    * field id). Folded into the input's React key so the uncontrolled input
@@ -490,7 +490,7 @@ interface SelectFieldProps<T extends string> {
   labels?: readonly string[];
   onCommit: (v: T) => void;
   /** Optional element rendered in a trailing column (e.g. KeyframeIndicator). */
-  trailing?: JSX.Element;
+  trailing?: JSX.Element | undefined;
 }
 
 export function SelectField<T extends string>(props: SelectFieldProps<T>): JSX.Element {
@@ -521,7 +521,7 @@ interface ColorFieldProps {
   value: string;
   onCommit: (hex: string) => void;
   /** Optional element rendered in a trailing column (e.g. KeyframeIndicator). */
-  trailing?: JSX.Element;
+  trailing?: JSX.Element | undefined;
   /** See {@link TextFieldProps.resetKey} — owner identity for the input key (B-009). */
   resetKey?: string;
   /** D-049 — multi-selection "mixed" state: the selected elements differ on this colour. */
