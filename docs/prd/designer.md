@@ -1145,7 +1145,7 @@ a set — the renderer just collapses to "single or nothing" everywhere.
   add/edit, and aligning/distributing the selection. Change:
   `openspec/changes/archive/2026-06-14-add-multi-select-editing/`.
 
-## [~] D-042 — Per-corner border radius + stroke for all background-capable elements ⟨priority: medium⟩ — change: `openspec/changes/box-props-all-elements/`
+## [x] D-042 — Per-corner border radius + stroke for all background-capable elements ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-14-box-props-all-elements/`
 
 **What:** Give every background-capable element (shape, text, ticker, clock,
 sequence — NOT repeater, which has no background) both a **stroke/border** and a
