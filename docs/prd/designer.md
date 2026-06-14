@@ -1073,7 +1073,7 @@ meant to read never existed.
   per-project overrides of a shared image. Change:
   `openspec/changes/add-shared-image-library/`.
 
-## [~] D-041 — Multi-select elements (canvas + layers) + shared-property editing ⟨priority: high⟩ — change: `openspec/changes/add-multi-select-editing/`
+## [x] D-041 — Multi-select elements (canvas + layers) + shared-property editing ⟨priority: high⟩
 
 **What:** Select multiple elements — on the canvas (shift/ctrl-click to
 add/remove; plain click still replaces) and in the timeline layer rows (same
@@ -1143,7 +1143,7 @@ a set — the renderer just collapses to "single or nothing" everywhere.
   value. OUT OF SCOPE v1 (record in design.md): marquee / rubber-band
   selection, group resize/rotate (bounding-box scaling), group keyframe
   add/edit, and aligning/distributing the selection. Change:
-  `openspec/changes/add-multi-select-editing/`.
+  `openspec/changes/archive/2026-06-14-add-multi-select-editing/`.
 
 ## [ ] D-042 — Per-corner border radius (toggle) ⟨priority: medium⟩
 
@@ -1213,7 +1213,7 @@ blue accent button inside the inspector — styles consistent with the propertie
 their final controls). Loopic refs: docs/designer-guide/sample-assets/textalign.png-era
 shots → D-045-align-0/1.png, D-048-textpadding-0.png, D-048-popover-0.png.
 
-## [~] D-049 — Multi-select inspector parity + units + per-shape selection boxes ⟨priority: high⟩ — change: `openspec/changes/fix-multi-select-inspector-parity/`
+## [x] D-049 — Multi-select inspector parity + units + per-shape selection boxes ⟨priority: high⟩
 
 **What:** Fix three follow-up gaps in the D-041 multi-selection editor so it
 matches single-selection UX. (a) Shared properties render with the SAME
@@ -1264,9 +1264,9 @@ knows.
   union bounding box; keep the press-on-member group-drag, remove the
   empty-interior drag region). No schema change. Loopic single-inspector look
   is the reference for the input/unit styling. Change:
-  `openspec/changes/fix-multi-select-inspector-parity/`.
+  `openspec/changes/archive/2026-06-14-fix-multi-select-inspector-parity/`.
 
-## [~] D-050 — Multi-select: complete shared properties + single-undo panel edits + thicker box ⟨priority: high⟩ — change: `openspec/changes/complete-multi-select-shared-props/`
+## [x] D-050 — Multi-select: complete shared properties + single-undo panel edits + thicker box ⟨priority: high⟩
 
 **What:** Finish the D-049 multi-selection editor. (a) Expose ALL properties
 common to the selected kinds — not just the transform subset — so several
@@ -1326,9 +1326,9 @@ values instead of one entry per committed edit.
   bump the `multiBox` border from 1px to 2px in `Gizmo.css.ts`. Group MOVE
   undo and keyframe-aware multi editing are explicitly OUT of scope here —
   they belong to the keyframe-aware item (diamonds + one-undo group drag).
-  Change: `openspec/changes/complete-multi-select-shared-props/`.
+  Change: `openspec/changes/archive/2026-06-14-complete-multi-select-shared-props/`.
 
-## [~] D-051 — Central keyframe-ability + inspector-field registry (single source) ⟨priority: high⟩ — change: `openspec/changes/add-keyframe-ability-registry/`
+## [x] D-051 — Central keyframe-ability + inspector-field registry (single source) ⟨priority: high⟩
 
 **What:** Introduce ONE central, per-element-kind registry that declares, for
 every property, (1) whether it is keyframe-able (shows a diamond) and (2)
@@ -1389,7 +1389,7 @@ inconsistency, and it means every new element kind re-introduces the risk.
   area (touches the keyframe subsystem + the large StyleSection) — must go with
   thorough regression tests and a behavior-preserving proof (existing suite
   green BEFORE the diamond corrections are layered on). Change:
-  `openspec/changes/add-keyframe-ability-registry/`.
+  `openspec/changes/archive/2026-06-14-add-keyframe-ability-registry/`.
 
 ## [ ] D-052 — Keyframe-able styling for time-driven elements (ticker/clock/sequence/repeater) ⟨priority: medium⟩
 
@@ -1423,7 +1423,7 @@ engine silently drops.
   `keyframeable` descriptor addition plus the runtime apply-step change + runtime
   tests + the `template-runtime` engine doc. High-risk (touches the playout engine).
 
-## [~] D-053 — Multi-select number fields: drag + realtime with single-undo commit ⟨priority: high⟩ — change: `openspec/changes/multi-select-realtime-fields/`
+## [x] D-053 — Multi-select number fields: drag + realtime with single-undo commit ⟨priority: high⟩
 
 **What:** Restore single-selection UX to multi-select number fields: a field
 scrubs by horizontal drag and updates live (onChange) while editing, AND each
@@ -1477,9 +1477,9 @@ live writes with no per-tick boundary (time-coalesced), one boundary on commit.
   `commitMode='blur'` on them); keep `applySharedProperty`'s boundary-wrapped
   form for discrete/instant commits (e.g. colour pick) that should each be one
   entry. Keyframe-free (writeStaticAnimatable); diamonds + keyframe-aware group
-  move are D-054. Change: `openspec/changes/multi-select-realtime-fields/`.
+  move are D-054. Change: `openspec/changes/archive/2026-06-14-multi-select-realtime-fields/`.
 
-## [~] D-054 — Keyframe-aware group move + diamonds in multi-select ⟨priority: high⟩ — change: `openspec/changes/keyframe-aware-group-move/`
+## [x] D-054 — Keyframe-aware group move + diamonds in multi-select ⟨priority: high⟩
 
 **What:** Make multi-select behave like single selection, fanned out. (1) Group
 move on canvas is keyframe-aware: a selected member with a track on the moved
@@ -1549,4 +1549,4 @@ inspector — i.e. multi == single, fanned out.
   position-only (resize/rotate group is still out); non-transform shared-prop
   diamonds (stroke/shadow/…) are field-edit-only. Mixed-kind: a property shows a
   diamond only if keyframe-able for every selected kind. Change:
-  `openspec/changes/keyframe-aware-group-move/`.
+  `openspec/changes/archive/2026-06-14-keyframe-aware-group-move/`.
