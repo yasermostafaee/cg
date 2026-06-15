@@ -73,7 +73,7 @@ outside the ellipse still selects it.
   **Notes:** `features/canvas/hit-test.ts`. Modifies the `designer-shapes`
   capability (`## MODIFIED Requirements`).
 
-## [~] D-006 — ⟨priority: high⟩ — change: `openspec/changes/add-animation-timeline-dock/`
+## [x] D-006 — ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-06-15-add-animation-timeline-dock/`
 
 **What:** add layers with framepoint for any shape to make animate
 **Why:** I need to make animate by all shaped and this is the main role of this app.
@@ -92,7 +92,7 @@ outside the ellipse still selects it.
 
 see the files inside the: `docs/designer-guide/sample-assets/D-006-old-codes`. these codes had been written by meself for this a few mounths ago but they are uncompele and raw, you can just see them to get an idea and know whay I whant for frame points
 
-## [~] D-007 — redesign style and elements (priority: high) — change: `openspec/changes/redesign-studio-loopic-style/`
+## [x] D-007 — redesign style and elements (priority: high) — archived: `openspec/changes/archive/2026-06-15-redesign-studio-loopic-style/`
 
 **What:** change the style like a sample website
 **Why:** this website is perfect and finaly we need an app like that with whole the features
@@ -236,7 +236,7 @@ again.
   a new id-based `moveKeyframeById` (no destination delete); diamonds key + fan by
   id. Selection/edit/delete stay frame-based.
 
-## [~] D-015 — View menu: ruler + snapping toggles ⟨priority: medium⟩ — change: `openspec/changes/add-view-menu-ruler-snapping/`
+## [x] D-015 — View menu: ruler + snapping toggles ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-15-add-view-menu-ruler-snapping/`
 
 **What:** Add two toggles to the top **View** menu: **Ruler** (show/hide canvas
 pixel rulers) and **Snapping** (enable/disable snap-to-edges/centers while
@@ -259,7 +259,7 @@ precisely; the View menu was a disabled placeholder.
   `snapGuides`, `guides`); no schema change. Smart-guide snapping + guide snap
   targets in `CanvasOverlay` beginDrag; ruler + draggable guides in `CanvasArea`.
 
-## [~] D-016 — Cubic-bézier keyframe easing editor ⟨priority: high⟩ — change: `openspec/changes/add-bezier-easing/`
+## [x] D-016 — Cubic-bézier keyframe easing editor ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-06-15-add-bezier-easing/`
 
 **What:** Replace the keyframe Easing dropdown with a cubic-bézier interpolation
 editor — a Preset dropdown, a draggable curve graph (PROGRESS × TIME) with two
@@ -282,7 +282,7 @@ curves like the reference tool.
   `EASING_PRESETS` to `@cg/shared-schema`; runtime + designer interpolation honor
   it; new `EasingEditor.tsx`.
 
-## [~] D-017 — Click-to-open + multi-select keyframes ⟨priority: high⟩ — change: `openspec/changes/multi-select-keyframes/`
+## [x] D-017 — Click-to-open + multi-select keyframes ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-06-15-multi-select-keyframes/`
 
 **What:** A single click on a keyframe point (or the segment between two) opens
 the Keyframe Inspector (no double-click). Shift/Ctrl-click adds points to a
@@ -305,7 +305,7 @@ inspector hides frame/value/property and shows only the easing editor + a
   **Notes:** store gains `selectedKeyframes` (multi) + `addKeyframeToSelection`;
   supersedes the old single/double-click split from `add-animation-timeline-dock`.
 
-## [~] D-018 — Dynamic text fields (data binding + live preview) ⟨priority: high⟩
+## [x] D-018 — Dynamic text fields (data binding + live preview) ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-06-15-add-dynamic-text-fields/`
 
 **What:** A text element becomes a runtime data field when it's given a **Data
 key** in the inspector. Setting the key auto-creates/updates a scene-level
@@ -384,7 +384,7 @@ straight into CasparCG, and no GDD for standard CG clients.
   117 = 2.4.x). Leaves the existing `.vcg` exporter unchanged.
   Change: `openspec/changes/add-caspar-single-file-export/`.
 
-## [~] D-020 — Animation lifecycle + playout timing ⟨priority: high⟩
+## [x] D-020 — Animation lifecycle + playout timing ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-06-15-add-animation-lifecycle-timing/`
 
 **What:** Give every composition an explicit **IN / HOLD / OUT** lifecycle and a
 no-code **playout-timing** config, plus the runtime behavior to execute it. The
@@ -433,6 +433,37 @@ this later would mean re-authoring every template and reworking the frame driver
   control layer schedule precise timed auto-out.
   Change: `openspec/changes/add-animation-lifecycle-timing/`.
 
+## [ ] D-021 — Idle loop during hold ⟨priority: high⟩
+
+**What:** بگذار یک composition به‌اختیار **یک تکهٔ انتهایی را حینِ hold لوپ کند**،
+به‌جای یخ‌زدن — تا لوگو نبض بزند، یک bug «نفس بکشد» و... . یک marker اختیاریِ
+`holdLoopStart` داخلِ entrance اضافه می‌شود؛ وقتی ست شد، در فازِ HOLD، playhead
+پیوسته `[holdLoopStart → outPoint]` را لوپ می‌کند (آن segment بخشی از entrance است و
+بارِ اول کامل پخش می‌شود، بعد replay — بدونِ ناحیهٔ مرده). وقتی ست نشد، hold دقیقاً
+مثلِ D-020 روی `outPoint` یخ می‌زند. به‌صورتِ پیش‌فرض خاموش (یک marker).
+توگل/markerها در designer، تست‌پذیر در preview modal.
+**Why:** حرکتِ ظریفِ مداوم وقتی گرافیک روی صفحه نشسته یک نیازِ رایجِ پخش است.
+مدلِ تک-markerِ D-020 hold را یخ می‌زند؛ این، idle loop را به‌صورتِ opt-in اضافه
+می‌کند بدونِ برگرداندنِ ناحیهٔ مردهٔ دو-marker.
+**Acceptance:**
+
+- WHEN `holdLoopStart` ست است و `play()` به hold می‌رسد THEN playhead پیوسته
+  `[holdLoopStart → outPoint]` را لوپ می‌کند به‌جای یخ‌زدن
+- WHEN `holdLoopStart` ست نیست THEN hold روی `outPoint` یخ می‌زند (رفتارِ D-020، بدونِ تغییر)
+- WHEN `holdLoopStart` ست است THEN invariant ِ `activeRange.in ≤ holdLoopStart ≤ outPoint`
+  برقرار است، و segment بارِ اول کامل پخش می‌شود (به‌عنوان بخشی از entrance) قبل از شروعِ لوپ
+- WHEN مود `auto-out` یا `loop-cycle` با idle loop است THEN idle حینِ hold/dwell لوپ می‌کند
+  و خروج (`[outPoint → activeRange.out]`) بعد از `holdMs` عادی پخش می‌شود
+- WHEN `stop()` حینِ idle loop صدا زده شود THEN خروج از `outPoint` تا انتهای active region پخش می‌شود
+- WHEN previewed THEN idle loop دقیقاً مثلِ فایلِ export رفتار می‌کند و designer می‌تواند در preview modal توگل/تستش کند
+
+**Notes:** ADDED requirement روی capabilityِ `designer-playout-lifecycle`؛
+**وابسته به D-020** (markerِ تک `outPoint` + hold). بدونِ ناحیهٔ مرده — segmentِ لوپ
+یک tailِ replay‌شدهٔ entrance است. چون scene از قبل `holdLoopStart` را حمل می‌کند،
+export فقط metadata است. idle segment را به‌صورتِ **چرخهٔ بی‌درز** بنویس
+(حالتِ شروع ≈ حالتِ پایان) تا هر لوپ پرشِ دیداری نداشته باشد.
+Change (جدید، وقتی پیاده شد): `openspec/changes/add-hold-idle-loop/`.
+
 ## [x] D-022 — App-wide button/control consistency (shared Button/Control + states) ⟨priority: medium⟩ — focused fix
 
 **What:** Make hover / active / focus-visible / disabled the DEFAULT for every
@@ -457,7 +488,7 @@ interactive states.
   button styles). `bare` variant = states-only escape hatch for bespoke surfaces
   (menu items, list rows, the keyframe diamond).
 
-## [~] D-023 — Delete key removes the selection (keyframe precedence) ⟨priority: medium⟩ — change: `openspec/changes/add-delete-key-selection/`
+## [x] D-023 — Delete key removes the selection (keyframe precedence) ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-15-add-delete-key-selection/`
 
 **What:** Delete/Backspace removes the current selection from the keyboard.
 **Why:** Layers/shapes could only be removed via the right-click menu; operators
@@ -477,7 +508,7 @@ so the key needs a clear precedence.
   (precedence + multi-delete); the timeline's old keyframe-only Delete handler was
   removed. No schema/runtime change. Change: `openspec/changes/add-delete-key-selection/`.
 
-## [~] D-024 — Double-click to drill into a nested child composition ⟨priority: medium⟩ — change: `openspec/changes/add-drill-into-composition/`
+## [x] D-024 — Double-click to drill into a nested child composition ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-15-add-drill-into-composition/`
 
 **What:** Double-clicking a shape inside a nested composition instance navigates to
 editing that child composition and selects the double-clicked shape (AE/Figma/Loopic
@@ -501,7 +532,7 @@ child, affecting every parent).
   hit-tests the child's shapes; `store.openCompositionAndSelect` does the atomic
   open-child + select. No schema/runtime change. Change: `openspec/changes/add-drill-into-composition/`.
 
-## [~] D-025 — Nested-composition field scoping + instance namespacing ⟨priority: high⟩ — change: `openspec/changes/add-nested-composition-field-scoping/`
+## [x] D-025 — Nested-composition field scoping + instance namespacing ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-06-15-add-nested-composition-field-scoping/`
 
 **What:** Fields are per-composition; nested child instances expose their fields in
 the parent under a per-instance namespace (nested objects), with values routed to
@@ -523,7 +554,7 @@ independently.
   helpers); runtime field-scope tree + `applyScopedFieldValues`; GDD nested objects;
   legacy global fields migrated on load. Change: `openspec/changes/add-nested-composition-field-scoping/`.
 
-## [~] D-026 — Nested-lifecycle cascade + shared project fps ⟨priority: high⟩ — change: `openspec/changes/add-nested-lifecycle-cascade/`
+## [x] D-026 — Nested-lifecycle cascade + shared project fps ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-06-15-add-nested-lifecycle-cascade/`
 
 **What:** `play/stop/pause/resume/remove` cascade recursively to every nested
 composition instance — each runs its OWN intro→hold→outro at its own out-point — by

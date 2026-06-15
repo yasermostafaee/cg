@@ -9,7 +9,7 @@ statuses.
 Copy this block per bug (use `B-` IDs):
 
 ```md
-## [~] B-001 — panels position and design ⟨priority: high⟩ — folded into `openspec/changes/add-animation-timeline-dock/`
+## [x] B-001 — panels position and design ⟨priority: high⟩ — folded into `openspec/changes/archive/2026-06-15-add-animation-timeline-dock/`
 
 **Repro:**
 
@@ -21,7 +21,7 @@ Copy this block per bug (use `B-` IDs):
    in the latest `main`.
    **Notes:** check this website https://app.loopic.io/studio and crawl and see all the codes, i have got those screenshots from this website
 
-## [~] B-002 — point frames action ⟨priority: high⟩ — folded into `openspec/changes/add-animation-timeline-dock/`
+## [x] B-002 — point frames action ⟨priority: high⟩ — folded into `openspec/changes/archive/2026-06-15-add-animation-timeline-dock/`
 
 **Repro:**
 
