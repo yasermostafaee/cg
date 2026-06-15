@@ -1663,7 +1663,7 @@ inspector — i.e. multi == single, fanned out.
 
 **Notes:** کاملاً ظاهری، بدون تغییرِ schema/runtime/spec behavior — focused fix، احتمالاً بدون OpenSpec change. مرجع: `docs/designer-guide/sample-assets/D-042-radius-0.png` (یکنواخت) و `D-042-radius-1.png` (چهارگوشه). وضعیتِ فعلی برای مقایسه: `D-042-radius-3.png` / `D-042-radius-4.png`.
 
-## [~] D-056 — Strip box styling from content-driven element types ⟨priority: high⟩ — change: `openspec/changes/strip-box-styling-content-driven/`
+## [x] D-056 — Strip box styling from content-driven element types ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-06-15-strip-box-styling-content-driven/`
 
 **What:** انواعِ محتوا-محور (ticker/clock/sequence) **جعبه نیستند** — فقط متن/دیتای
 خود را می‌آورند. box-styling (background رنگ+fill، border-radius، box padding،
