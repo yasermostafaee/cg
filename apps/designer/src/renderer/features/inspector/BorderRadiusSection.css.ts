@@ -1,5 +1,4 @@
 import { style } from '@vanilla-extract/css';
-import { colors } from '../../theme.js';
 
 /**
  * D-055 — border-radius control layout: the field area (the labelled uniform field
@@ -18,15 +17,6 @@ export const fields = style({
   minWidth: 0,
 });
 
-export const toggle = style({
-  flex: '0 0 auto',
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  color: colors.textMuted,
-  padding: '2px 4px',
-});
-
 const ICON = 12;
 
 /** Uniform mode — a simple rounded-corner square outline. */
@@ -39,16 +29,21 @@ export const iconUniform = style({
   boxSizing: 'border-box',
 });
 
-const corner = 'linear-gradient(currentColor, currentColor)';
+// Four corner brackets (an L at each corner) — matches the reference's per-corner
+// glyph. Eight background segments: a horizontal + a vertical arm per corner.
+const line = 'linear-gradient(currentColor, currentColor)';
+const ARM = '4px';
+const THICK = '1.5px';
 
-/** Per-corner mode — four independent corner ticks (one per corner). */
+/** Per-corner mode — a square drawn as four corner brackets (⌜⌝⌞⌟). */
 export const iconPerCorner = style({
   display: 'inline-block',
   width: ICON,
   height: ICON,
   boxSizing: 'border-box',
-  backgroundImage: `${corner}, ${corner}, ${corner}, ${corner}`,
-  backgroundSize: '4px 4px',
-  backgroundPosition: '0 0, 100% 0, 0 100%, 100% 100%',
+  backgroundImage: `${line}, ${line}, ${line}, ${line}, ${line}, ${line}, ${line}, ${line}`,
   backgroundRepeat: 'no-repeat',
+  // tl-h, tl-v, tr-h, tr-v, bl-h, bl-v, br-h, br-v
+  backgroundSize: `${ARM} ${THICK}, ${THICK} ${ARM}, ${ARM} ${THICK}, ${THICK} ${ARM}, ${ARM} ${THICK}, ${THICK} ${ARM}, ${ARM} ${THICK}, ${THICK} ${ARM}`,
+  backgroundPosition: '0 0, 0 0, 100% 0, 100% 0, 0 100%, 0 100%, 100% 100%, 100% 100%',
 });

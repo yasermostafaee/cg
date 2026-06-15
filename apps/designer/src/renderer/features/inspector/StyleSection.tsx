@@ -34,7 +34,7 @@ import { ColorField, NumberField, SelectField, TextField, VectorField } from './
 import { FillField } from './FillPopover.js';
 import { FontFamilySelect } from './FontFamilySelect.js';
 import { TextStyleSection } from './TextStyleSection.js';
-import { Button } from '../../ui/Button.js';
+import { Control } from '../../ui/Control.js';
 import * as radiusCss from './BorderRadiusSection.css.js';
 
 interface Props {
@@ -1309,15 +1309,14 @@ function RadiusToggle({
   onClick: () => void;
 }): JSX.Element {
   return (
-    <Button
-      variant="bare"
-      className={radiusCss.toggle}
+    <Control
+      size="sm"
       onClick={onClick}
       aria-label={perCorner ? 'Use a single border radius' : 'Use per-corner border radius'}
       title={perCorner ? 'Single radius' : 'Per-corner radius'}
     >
       <span className={perCorner ? radiusCss.iconPerCorner : radiusCss.iconUniform} aria-hidden />
-    </Button>
+    </Control>
   );
 }
 
