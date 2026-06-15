@@ -52,7 +52,7 @@ under-covered.
   **Notes:** `Exporter`/`Preview` already take `cgJs`/`cgCss` via constructor, so
   they're testable without the `?raw` bundle.
 
-## [~] P-005 — Designer E2E + UI test coverage (Playwright), built to scale ⟨priority: high⟩ — change: `openspec/changes/add-designer-e2e-testing/`
+## [x] P-005 — Designer E2E + UI test coverage (Playwright), built to scale ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-06-15-add-designer-e2e-testing/`
 
 **What:** A Playwright browser-E2E harness for the Designer SPA, built so FUTURE
 features inherit coverage by default. Runs the SAME shipped build in a test mode

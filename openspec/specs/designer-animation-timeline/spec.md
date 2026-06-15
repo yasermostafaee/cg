@@ -352,3 +352,421 @@ consistent with the canvas drag path, which already samples the evaluated value.
 - **THEN** the edit commits a keyframe at that frame AND the colour control's
   displayed value updates to the edited colour, so the control and the rendered
   shape stay in sync
+
+### Requirement: Timeline dock with frame ruler and playhead
+
+The Designer SHALL render an animation timeline dock below the canvas
+whenever a scene is open. The dock SHALL show a frame ruler that spans
+`scene.frameRange.in..frameRange.out` and a draggable playhead indicating
+the current frame. Frame `frameRange.in` (typically frame 0) MUST visually
+align with the left edge of every track row's keyframe lane — never with
+the left edge of the dock — so that a keyframe diamond at frame N sits at
+exactly the x-position the ruler labels as N.
+
+#### Scenario: Dock appears when a scene is open
+
+- **WHEN** a scene is open
+- **THEN** the timeline dock is visible at the bottom of the Designer shell
+  with a frame ruler covering the scene's frame range and the current frame
+  shown at the playhead
+
+#### Scenario: Frame 0 lines up with the keyframe lanes
+
+- **WHEN** the dock is rendered with track rows
+- **THEN** the ruler's `frameRange.in` tick sits at the same x-position as
+  the left edge of every track row's lane (the label column sits to the
+  ruler's left and contains no frame ticks)
+
+#### Scenario: Operator scrubs the playhead
+
+- **WHEN** the operator drags the playhead (or clicks somewhere on the ruler)
+- **THEN** the Designer's current frame updates to the clicked frame and any
+  subsequent "add keyframe" actions use that frame as the authoring position
+
+### Requirement: Element tree with collapsible per-element track groups
+
+The timeline dock SHALL render a tree of every element in the scene.
+Each element SHALL appear as a header row containing a chevron (to
+expand / collapse the element's track group), the element name, small
+visibility / lock indicators, and a colored _lifespan bar_ spanning the
+element's active frame range. Below the header — when expanded — the
+dock SHALL show a nested `▾ TRANSFORM` group that, when also expanded,
+renders eight property TrackRows (Position X, Position Y, Scale X,
+Scale Y, Rotation, Width, Height, Opacity). The element row and its
+TRANSFORM group MUST be independently collapsible.
+
+#### Scenario: Each scene element shows in the timeline tree
+
+- **WHEN** the scene has three elements (a shape, a text, and an image)
+- **THEN** the timeline dock shows three element header rows, in order,
+  each with its own chevron, name, indicators, and lifespan bar
+
+#### Scenario: Expanding an element shows its TRANSFORM group + property tracks
+
+- **WHEN** the operator clicks the chevron on an element header row that
+  was collapsed
+- **THEN** a `▾ TRANSFORM` group appears below it, and inside that group
+  eight property TrackRows render (Position X, Position Y, Scale X,
+  Scale Y, Rotation, Width, Height, Opacity) — each with the row's
+  current value and a keyframe indicator on the left, and the lane
+  with any existing keyframe diamonds on the right
+
+#### Scenario: Clicking an element header selects it
+
+- **WHEN** the operator clicks an element row (not its chevron)
+- **THEN** that element becomes the canvas selection and the right
+  Inspector switches to its Element view
+
+#### Scenario: Existing keyframes render on their tracks
+
+- **WHEN** an element has keyframes on one or more tracks
+- **THEN** each keyframe is drawn as a diamond marker on its track row at
+  the x-position corresponding to its frame
+
+### Requirement: Add a keyframe at the current frame
+
+The Designer SHALL let the operator add a keyframe at the current playhead
+frame on any of the eight animatable properties of the selected element. The
+new keyframe's value SHALL be the element's current value for that property,
+and it SHALL be inserted into `element.animation.tracks[property].keyframes`
+in ascending frame order. If a keyframe already exists at the same frame on
+the same track, the existing keyframe's value SHALL be overwritten with the
+current value (no duplicate keyframes).
+
+#### Scenario: Operator adds a keyframe on a new track
+
+- **WHEN** the operator selects a shape, moves the playhead to frame N, and
+  clicks the add-keyframe button on the Position X row
+- **THEN** the element's `animation.tracks['position.x']` is created with a
+  single keyframe at frame N whose value equals the element's current
+  `transform.position.x`
+
+#### Scenario: Operator adds a keyframe at a frame that already has one
+
+- **WHEN** a track for the property already has a keyframe at the current
+  frame and the operator clicks the add-keyframe button again
+- **THEN** the existing keyframe's value is replaced by the element's current
+  value at that frame (no duplicate is added)
+
+### Requirement: Move and delete keyframes
+
+The Designer SHALL let the operator drag a keyframe along its track to
+change its frame and SHALL let the operator delete the selected keyframe
+with `Delete` or `Backspace`. Deleting the last keyframe in a track SHALL
+remove the track entry from `element.animation.tracks` so empty arrays do
+not persist.
+
+#### Scenario: Operator drags a keyframe to a new frame
+
+- **WHEN** the operator drags a keyframe diamond from frame N to frame M
+- **THEN** the keyframe's `frame` field becomes M and the track's keyframes
+  are kept sorted by ascending `frame`
+
+#### Scenario: Operator deletes the only keyframe on a track
+
+- **WHEN** the operator selects the only keyframe on a track and presses
+  `Delete`
+- **THEN** the keyframe is removed and the property's entry is removed from
+  `element.animation.tracks`
+
+### Requirement: Track-aware editing builds the animation
+
+The Designer SHALL route every value edit on the eight animatable
+properties (made through the Inspector, the canvas Gizmo, or a drag on the
+canvas) based on whether a track already exists for that property on the
+selected element:
+
+- WHEN the property has **no** track yet — the edit SHALL update the
+  element's static value as before; no keyframe is created.
+- WHEN the property already has a track (the operator has added at least
+  one keyframe for it) — the edit SHALL land as a keyframe at the current
+  playhead frame: replacing the keyframe on that frame if one already
+  exists there, or inserting a new keyframe at that frame otherwise. The
+  element's static value SHALL remain unchanged once a track exists.
+
+This rule is what builds the animation: after the operator authors the
+first keyframe by hand, every subsequent edit at a new frame extends the
+track instead of overwriting a single static value.
+
+#### Scenario: First edit on a never-animated property updates the static value
+
+- **WHEN** the playhead is at frame N and the selected element has no
+  track for `position.x`, and the operator edits Position X
+- **THEN** the element's static `transform.position.x` is updated as before
+  and no keyframe is created
+
+#### Scenario: Edit at an existing keyframe replaces that keyframe's value
+
+- **WHEN** the playhead is at frame N, the selected element has a keyframe
+  at frame N on `position.x`, and the operator edits Position X
+- **THEN** that keyframe's `value` is updated to the new number, no
+  keyframe is added or moved, and the element's static
+  `transform.position.x` is unchanged
+
+#### Scenario: Edit at a new frame on an animated property auto-adds a keyframe
+
+- **WHEN** the operator first adds a `position.x` keyframe at frame 10 by
+  clicking the add-keyframe button, then scrubs to frame 30 and drags the
+  shape (or types a new value into Inspector → Position X)
+- **THEN** a new keyframe is inserted at frame 30 on the `position.x`
+  track with the new value, the keyframe at frame 10 is left unchanged,
+  and the element's static `transform.position.x` is unchanged
+
+### Requirement: Single-click vs double-click on a keyframe diamond
+
+A single-click on a keyframe diamond in the timeline lane SHALL select
+the point and scrub the playhead to its frame, but MUST keep the right
+Inspector on the Element view — only the diamond glyph, the matching
+indicator next to the track label, and the matching indicator on the
+right Inspector's row turn yellow. The operator SHALL open the dedicated
+Keyframe Inspector by **double-clicking** the diamond (or by an explicit
+"edit point" action). Closing the Keyframe Inspector SHALL preserve the
+selection so the yellow indicators stay lit.
+
+#### Scenario: Single-click selects without changing the right panel
+
+- **WHEN** the operator single-clicks a keyframe diamond on the Position
+  X row
+- **THEN** the diamond turns yellow, the matching indicator in the
+  TrackRow label column turns yellow, the matching diamond on the right
+  Inspector's Position row turns yellow, the playhead scrubs to that
+  frame, and the right Inspector keeps showing the Element view (the
+  Keyframe Inspector does not open)
+
+#### Scenario: Double-click opens the dedicated Keyframe Inspector
+
+- **WHEN** the operator double-clicks a keyframe diamond
+- **THEN** the right Inspector switches to a Keyframe Inspector for that
+  point, showing the element name, property, frame, value, and easing,
+  and exposing a "back" affordance that closes it without dropping the
+  selection
+
+#### Scenario: Editing the keyframe inspector mutates only that keyframe
+
+- **WHEN** the Keyframe Inspector is shown and the operator types a new
+  value or changes the easing
+- **THEN** only the selected keyframe's `value` / `easing` change; other
+  keyframes on the track are left untouched
+
+#### Scenario: Inspector returns to the Element view on close
+
+- **WHEN** the Keyframe Inspector is open and the operator clicks its
+  back affordance (or removes the keyframe, or selects a different
+  element)
+- **THEN** the Inspector falls back to the Element / Scene view; the
+  selection is preserved when the operator just clicked "back"
+
+### Requirement: Per-property keyframe indicators in the right Inspector
+
+The Element Inspector SHALL render a small diamond indicator next to
+each of the eight animatable rows (Position, Size, Scale, Rotation,
+Opacity). The indicator SHALL reflect the row's track / keyframe state:
+empty outline (no track), filled accent (track exists, no keyframe at
+the current frame), highlighted accent (keyframe at the current frame),
+or yellow (the keyframe at the current frame is the currently-selected
+point). Clicking the indicator SHALL toggle a keyframe at the current
+frame on that property.
+
+#### Scenario: Indicator state mirrors the track
+
+- **WHEN** an element has no track on `opacity`
+- **THEN** the opacity row in the Inspector shows an empty/outlined
+  indicator, and the matching TrackRow label indicator shows the same
+  state
+
+#### Scenario: Indicator turns yellow when its keyframe is selected
+
+- **WHEN** the operator single-clicks a keyframe diamond on the Width
+  track
+- **THEN** the Inspector's Size-row indicator (which covers both Width
+  and Height) renders in the selected-yellow style at the same time as
+  the TrackRow label indicator
+
+#### Scenario: Click the indicator to add a keyframe
+
+- **WHEN** the operator clicks the indicator next to Rotation in the
+  Inspector while the playhead is at frame N and no keyframe is there
+- **THEN** a keyframe is added on `rotation` at frame N with the
+  element's current rotation value, the indicator becomes selected, and
+  a diamond appears on the timeline's Rotation lane at the matching
+  x-position
+
+#### Scenario: Click the indicator on an existing keyframe to remove it
+
+- **WHEN** the operator clicks the indicator next to Rotation while a
+  keyframe for `rotation` sits on the current frame
+- **THEN** that keyframe is removed; if it was the last keyframe on the
+  track, the track is pruned
+
+### Requirement: Transport controls (play, pause, step, stop)
+
+The timeline dock SHALL provide transport controls — play/pause, stop, step
+forward, step back — that advance or rewind the Designer's current frame.
+Play SHALL advance the current frame at the scene's `frameRate` and loop
+back to `frameRange.in` when it reaches `frameRange.out`; Stop SHALL halt
+playback at the current frame.
+
+#### Scenario: Operator plays the animation
+
+- **WHEN** the operator clicks Play
+- **THEN** the Designer's current frame advances at the scene's frame rate,
+  looping at `frameRange.out` back to `frameRange.in`, and the timeline's
+  playhead visibly moves with it
+
+#### Scenario: Operator steps frame-by-frame
+
+- **WHEN** the operator clicks Step Forward
+- **THEN** the current frame advances by exactly 1 (clamped to
+  `frameRange.out`); Step Back decrements by 1 (clamped to `frameRange.in`)
+
+#### Scenario: Operator stops playback
+
+- **WHEN** playback is running and the operator clicks Stop
+- **THEN** the current frame stops advancing and remains at the last value
+  reached
+
+### Requirement: Click to open the Keyframe Inspector
+
+The Designer SHALL open the Keyframe Inspector on a single click of a keyframe
+point or of the interpolation segment between two points (the segment opens its
+start point). A double-click SHALL NOT be required. Clicking a point SHALL also
+scrub the playhead to it.
+
+#### Scenario: Single click opens the inspector
+
+- **WHEN** the operator clicks a keyframe point
+- **THEN** the Keyframe Inspector opens for that point and the playhead scrubs
+  to its frame
+
+#### Scenario: Clicking a segment opens its start point
+
+- **WHEN** the operator clicks the line between two points
+- **THEN** the Keyframe Inspector opens for the segment's start (left) point
+
+### Requirement: Multi-select keyframes for shared easing
+
+The Designer SHALL let the operator select multiple keyframes by Shift/Ctrl/Cmd-
+clicking points (toggling each in the selection), and SHALL highlight every
+selected point on the timeline. When more than one point is selected, the
+Keyframe Inspector SHALL hide the per-point frame, value, and property fields and
+show only the easing editor; applying an easing change SHALL set it on every
+selected point. The remove action SHALL be labelled "Remove keyframes" and SHALL
+remove all of them. Pressing Delete SHALL remove every selected point.
+
+#### Scenario: Shift-click accumulates a multi-selection
+
+- **WHEN** the operator clicks one point, then Shift-clicks another
+- **THEN** both points are selected and highlighted
+
+#### Scenario: Multi-select inspector shows only shared easing
+
+- **WHEN** two or more points are selected
+- **THEN** the inspector hides frame/value/property and shows the easing editor
+  plus a "Remove keyframes" button
+
+#### Scenario: Easing change applies to all selected
+
+- **WHEN** several points are selected and the operator changes the easing curve
+- **THEN** every selected point receives that curve
+
+#### Scenario: Delete removes all selected
+
+- **WHEN** several points are selected and the operator presses Delete
+- **THEN** all of them are removed
+
+#### Scenario: Mixed easings show a warning
+
+- **WHEN** the selected points do not all share the same easing curve
+- **THEN** the inspector shows a warning ("There are multiple different easings
+  selected") and the curve editor shows a neutral line until the operator picks
+  one, which then applies to all
+
+### Requirement: Per-keyframe cubic-bézier easing
+
+The runtime SHALL support an optional custom cubic-bézier easing
+`[x1, y1, x2, y2]` on a keyframe. When set, the runtime and the Designer's
+preview SHALL ease the keyframe's outgoing segment through that curve; when
+absent they SHALL use the keyframe's named `easing` (`step` always snaps). The
+bézier's time components (x1, x2) SHALL be clamped to [0, 1]. Scenes authored
+before this field SHALL remain valid and play unchanged.
+
+#### Scenario: A custom curve drives interpolation
+
+- **WHEN** a keyframe has `bezier = [0.42, 0, 0.58, 1]` and the playhead is in
+  its outgoing segment
+- **THEN** the interpolated value follows that ease-in-out curve, matching the
+  canvas and the exported output
+
+#### Scenario: No bézier falls back to the named easing
+
+- **WHEN** a keyframe has no `bezier`
+- **THEN** interpolation uses its named `easing` exactly as before
+
+### Requirement: Graphical easing editor in the Keyframe Inspector
+
+The Keyframe Inspector SHALL keep the element, property, frame, and value fields,
+and SHALL present the easing as a **Keyframe interpolation** editor: a Preset
+dropdown (Linear, Ease In, Ease Out, Ease In-Out, Sine, Custom), a curve graph
+(progress vs. time) showing the bézier with two draggable control handles, and
+editable P1 and P2 X/Y fields. Choosing a preset SHALL set the curve and control
+points; dragging a handle or editing a P1/P2 field SHALL update the curve and
+SHALL show "Custom" when the curve no longer matches a preset.
+
+#### Scenario: Choosing a preset
+
+- **WHEN** the operator selects the "Sine" preset
+- **THEN** the curve and P1/P2 fields update to the sine control points and the
+  keyframe eases through that curve
+
+#### Scenario: Dragging a control handle
+
+- **WHEN** the operator drags the P1 handle on the curve graph
+- **THEN** the curve and the P1 X/Y fields update, the preset shows "Custom",
+  and the keyframe's easing follows the new curve
+
+#### Scenario: Editing a control-point field
+
+- **WHEN** the operator types a new P2 X value
+- **THEN** the handle and curve move accordingly (the X value clamped to [0, 1])
+
+### Requirement: Delete/Backspace removes the selection (keyframe precedence)
+
+Pressing **Delete** or **Backspace** SHALL remove the current selection, handled
+globally so it works whether focus is on the canvas or the timeline. Because
+clicking a keyframe selects **both** the keyframe and its parent layer/shape, the
+key SHALL apply a precedence: when **any** keyframe is selected it SHALL delete
+**all** selected keyframes and leave the layer/shape; only when **no** keyframe is
+selected SHALL it delete **all** selected layers/shapes. The key SHALL be ignored
+when an editable field is focused (`input` / `textarea` / `select` /
+contentEditable), so typing Delete in a field never deletes a layer. The deletion
+SHALL be undoable as a single step, and SHALL be a no-op when nothing is selected.
+
+#### Scenario: Keyframe selected → the keyframe is deleted, not the layer
+
+- **WHEN** a keyframe is selected (which also selects its parent layer/shape) and
+  the operator presses Delete or Backspace
+- **THEN** the selected keyframe is removed and the parent layer/shape remains
+
+#### Scenario: No keyframe selected → the selected layer/shape is deleted
+
+- **WHEN** a layer/shape is selected, no keyframe is selected, and the operator
+  presses Delete or Backspace
+- **THEN** the selected layer/shape is removed
+
+#### Scenario: Multi-select deletes all of the prioritised kind
+
+- **WHEN** several keyframes are selected and Delete is pressed
+- **THEN** all selected keyframes are removed; **and WHEN** instead several
+  layers/shapes are selected with no keyframe selected
+- **THEN** all selected layers/shapes are removed
+
+#### Scenario: Editable field focused → nothing is deleted
+
+- **WHEN** an `input` / `textarea` / `select` / contentEditable element is focused
+  and the operator presses Delete or Backspace
+- **THEN** no layer/shape or keyframe is deleted (the keypress edits the field)
+
+#### Scenario: Delete is a single undo step
+
+- **WHEN** a Delete removes one or more keyframes (or layers/shapes)
+- **THEN** a single undo restores everything that delete removed
