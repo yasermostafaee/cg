@@ -387,25 +387,16 @@ function buildTicker(element: TickerElement, ctx: BuildCtx): HTMLElement {
   }
   // READING direction (explicit 'rtl' | 'ltr' — no 'auto' for a crawl).
   el.style.direction = element.direction;
-  if (element.backgroundColor) el.style.backgroundColor = element.backgroundColor;
-  if (element.backgroundFill !== undefined) el.style.background = fillToCss(element.backgroundFill);
-  // D-042 — stroke border + uniform-or-per-corner radius (shared box style).
-  applyBoxStyle(el, element);
-
-  // The padded inner viewport. CSS padding on the band would be inert here —
-  // the track/static row are absolutely positioned, and abspos children
-  // resolve against the PADDING box, so padding insets nothing for them.
-  // Instead the viewport div is inset by the padding values and is the clip
-  // + sizing context the crawl actually lives in (the runtime subtracts the
-  // horizontal padding from the driver's viewportWidth to match).
-  const pad = element.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  // D-056 — the ticker carries no box styling: no background / stroke / border-radius /
+  // padding (box styling belongs on a separate shape layer). The crawl viewport is
+  // full-bleed; items start at the band edge.
   const viewport = doc.createElement('div');
   viewport.className = 'cg-ticker-viewport';
   viewport.style.position = 'absolute';
-  viewport.style.top = `${pad.top}px`;
-  viewport.style.right = `${pad.right}px`;
-  viewport.style.bottom = `${pad.bottom}px`;
-  viewport.style.left = `${pad.left}px`;
+  viewport.style.top = '0';
+  viewport.style.right = '0';
+  viewport.style.bottom = '0';
+  viewport.style.left = '0';
   viewport.style.overflow = 'hidden';
 
   // The crawl surface. Items are absolutely positioned from measured offsets
@@ -475,19 +466,8 @@ function buildClock(element: ClockElement, ctx: BuildCtx): HTMLElement {
     const ts = element.textShadow;
     el.style.textShadow = `${ts.offsetX}px ${ts.offsetY}px ${ts.blur}px ${ts.color}`;
   }
-  if (element.backgroundColor) el.style.backgroundColor = element.backgroundColor;
-  if (element.backgroundFill !== undefined) el.style.background = fillToCss(element.backgroundFill);
-  // D-042 — stroke border + uniform-or-per-corner radius (shared box style).
-  applyBoxStyle(el, element);
-  // Unlike the ticker band, the time span is in normal flow (a flex child),
-  // so plain CSS padding works — no inset viewport needed.
-  if (element.padding) {
-    el.style.paddingTop = `${element.padding.top}px`;
-    el.style.paddingRight = `${element.padding.right}px`;
-    el.style.paddingBottom = `${element.padding.bottom}px`;
-    el.style.paddingLeft = `${element.padding.left}px`;
-    el.style.boxSizing = 'border-box';
-  }
+  // D-056 — the clock carries no box styling (no background / stroke / border-radius /
+  // padding); box styling belongs on a separate shape layer.
   // Gradient (or solid) text fill — the text element's convention: a gradient
   // paints through background-clip:text (supersedes a band background on the
   // same element); a solid behaves like `color`.
@@ -552,18 +532,8 @@ function buildSequence(element: SequenceElement, ctx: BuildCtx): HTMLElement {
     const ts = element.textShadow;
     el.style.textShadow = `${ts.offsetX}px ${ts.offsetY}px ${ts.blur}px ${ts.color}`;
   }
-  if (element.backgroundColor) el.style.backgroundColor = element.backgroundColor;
-  if (element.backgroundFill !== undefined) el.style.background = fillToCss(element.backgroundFill);
-  // D-042 — stroke border + uniform-or-per-corner radius (shared box style).
-  applyBoxStyle(el, element);
-  // Items are grid children (normal flow), so plain CSS padding works.
-  if (element.padding) {
-    el.style.paddingTop = `${element.padding.top}px`;
-    el.style.paddingRight = `${element.padding.right}px`;
-    el.style.paddingBottom = `${element.padding.bottom}px`;
-    el.style.paddingLeft = `${element.padding.left}px`;
-    el.style.boxSizing = 'border-box';
-  }
+  // D-056 — the sequence carries no box styling (no background / stroke / border-radius /
+  // padding); box styling belongs on a separate shape layer.
   // Gradient (or solid) text fill — the text/clock convention.
   if (element.colorFill !== undefined) {
     if (element.colorFill.kind === 'solid') {

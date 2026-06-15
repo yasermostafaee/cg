@@ -23,10 +23,11 @@ import type { AnimatableProperty, Element, Shadow, Stroke } from '@cg/shared-sch
  * is a pure leaf module (imports only `@cg/shared-schema` types), so both the
  * inspector and timeline features consume it without an import cycle.
  *
- * Adding a kind/property is ONE declaration here. D-052 enabled styling animation for
- * the time-driven kinds (ticker/clock/sequence — stroke, text colour, background,
- * shadow, and padding on clock/sequence); ticker padding stays deferred (crawl
- * measurement) and repeater has no background, so it stays transform/opacity/filter.
+ * Adding a kind/property is ONE declaration here. D-056 — the content-driven kinds
+ * (ticker/clock/sequence) carry ONLY text: text colour (incl. gradient) + text-shadow.
+ * Box styling (stroke, border-radius, background, padding) was removed from them
+ * (D-042/D-052 reversed for these kinds); shape and text keep the full box set, and
+ * repeater stays transform/opacity/filter.
  */
 
 /** Inspector section a property groups under (the CollapseSection / timeline group title). */
@@ -273,7 +274,7 @@ const STROKE_DESCS: readonly PropertyDescriptor[] = [
     read: (el) => boxStroke(el)?.color ?? '#000000',
     // D-052 — stroke animation on shapes AND the time-driven kinds (ticker/clock/
     // sequence). Text stroke stays static (text is out of the D-052 scope).
-    keyframeable: (el) => el.type === 'shape' || isTimeDriven(el),
+    keyframeable: (el) => el.type === 'shape',
     multiSelect: true,
   },
   {
@@ -283,7 +284,7 @@ const STROKE_DESCS: readonly PropertyDescriptor[] = [
     label: 'stroke width',
     timelineLabel: 'Stroke width',
     read: (el) => boxStroke(el)?.width ?? 0,
-    keyframeable: (el) => el.type === 'shape' || isTimeDriven(el),
+    keyframeable: (el) => el.type === 'shape',
     multiSelect: true,
     step: 1,
     min: 0,
@@ -295,7 +296,7 @@ const STROKE_DESCS: readonly PropertyDescriptor[] = [
     label: 'dash array',
     timelineLabel: 'Stroke dasharray',
     read: (el) => boxStroke(el)?.dash?.[0] ?? 0,
-    keyframeable: (el) => el.type === 'shape' || isTimeDriven(el),
+    keyframeable: (el) => el.type === 'shape',
     multiSelect: true,
     step: 1,
     min: 0,
@@ -406,7 +407,7 @@ const BACKGROUND_COLOR_DESC: PropertyDescriptor = {
   label: 'background',
   timelineLabel: 'Background color',
   read: (el) => (el as ColorBoxLike).backgroundColor ?? '#FFFFFF',
-  keyframeable: (el) => (el.type === 'text' || isTimeDriven(el)) && solidBackground(el),
+  keyframeable: (el) => el.type === 'text' && solidBackground(el),
 };
 
 /** Drop/text-shadow sub-tracks — shared by text AND the time-driven kinds (read `textShadow`). */
@@ -463,15 +464,12 @@ const TEXT_SPECIFIC: readonly PropertyDescriptor[] = [
 ];
 
 /**
- * D-052 — the styling shared with text that the time-driven kinds (ticker/clock/
- * sequence) can now animate: text colour, background colour, and shadow. Padding is
- * added per-kind (clock + sequence only — NOT ticker).
+ * D-056 — the ONLY styling the content-driven kinds (ticker/clock/sequence) keyframe:
+ * text colour (incl. gradient `colorFill`) + text-shadow. Background / border-radius /
+ * stroke / padding were removed (they're not boxes — box styling belongs on a separate
+ * shape layer). `text` and `shape` keep the full box set via their own arrays.
  */
-const TIME_DRIVEN_STYLE: readonly PropertyDescriptor[] = [
-  TEXT_COLOR_DESC,
-  BACKGROUND_COLOR_DESC,
-  ...SHADOW_DESCS,
-];
+const TIME_DRIVEN_STYLE: readonly PropertyDescriptor[] = [TEXT_COLOR_DESC, ...SHADOW_DESCS];
 
 /**
  * Drop-shadow sub-property. Reads the kind's shadow object — shape `shadow`, text
@@ -523,12 +521,8 @@ function paddingDesc(
     fieldKind: 'number',
     label,
     timelineLabel,
-    // text + (D-052) clock/sequence carry `padding`. Ticker padding is on an inner
-    // viewport (crawl-measurement coupling), so it is deferred — not read here.
-    read: (el) =>
-      el.type === 'text' || el.type === 'clock' || el.type === 'sequence'
-        ? ((el as { padding?: Record<typeof side, number> }).padding?.[side] ?? 0)
-        : 0,
+    // D-056 — box padding is text-only again (content-driven kinds carry no box).
+    read: (el) => (el.type === 'text' ? (el.padding?.[side] ?? 0) : 0),
     step: 1,
     min: 0,
   };
@@ -540,7 +534,8 @@ function paddingDesc(
 //
 // Repeater (no background) and the bare kinds (image/composition/lottie/
 // video-placeholder/container) expose only the universal transform + filter. The
-// time-driven kinds (ticker/clock/sequence) keyframe box styling per D-052 (below).
+// content-driven kinds (ticker/clock/sequence) carry only text — text colour +
+// text-shadow (D-056); no box styling.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const UNIVERSAL_ONLY: readonly PropertyDescriptor[] = [...TRANSFORM, ...FILTER];
@@ -556,9 +551,11 @@ export const FIELD_REGISTRY: Record<Element['type'], readonly PropertyDescriptor
   // D-052 — time-driven kinds now keyframe stroke + text colour / background / shadow
   // (TIME_DRIVEN_STYLE); clock + sequence also keyframe padding. Ticker padding stays
   // deferred (inner-viewport / crawl-measurement coupling).
-  ticker: [...TRANSFORM, ...BOX_DESCS, ...TIME_DRIVEN_STYLE, ...FILTER],
-  clock: [...TRANSFORM, ...BOX_DESCS, ...TIME_DRIVEN_STYLE, ...PADDING_DESCS, ...FILTER],
-  sequence: [...TRANSFORM, ...BOX_DESCS, ...TIME_DRIVEN_STYLE, ...PADDING_DESCS, ...FILTER],
+  // D-056 — content-driven kinds carry ONLY text: text colour (incl. gradient) +
+  // text-shadow. No BOX_DESCS (stroke/radius), no background, no padding.
+  ticker: [...TRANSFORM, ...TIME_DRIVEN_STYLE, ...FILTER],
+  clock: [...TRANSFORM, ...TIME_DRIVEN_STYLE, ...FILTER],
+  sequence: [...TRANSFORM, ...TIME_DRIVEN_STYLE, ...FILTER],
   repeater: UNIVERSAL_ONLY,
   composition: UNIVERSAL_ONLY,
   lottie: UNIVERSAL_ONLY,

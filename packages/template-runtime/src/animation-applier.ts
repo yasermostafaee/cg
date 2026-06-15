@@ -73,8 +73,9 @@ export function applyAnimationAtFrame(entry: AnimatedElement, frame: number): vo
     const v = interpolateAtFrame(tracks['text.color'], frame);
     if (typeof v === 'string') entry.node.style.color = v;
   }
-  // D-010 / D-052 — background colour (text + the time-driven kinds; solid only).
-  if (tracks['backgroundColor'] !== undefined && writesTextStyle(entry.source.type)) {
+  // D-010 — text background colour (D-056: text-only again — content-driven kinds
+  // carry no box background).
+  if (tracks['backgroundColor'] !== undefined && entry.source.type === 'text') {
     const v = interpolateAtFrame(tracks['backgroundColor'], frame);
     if (typeof v === 'string') entry.node.style.backgroundColor = v;
   }
@@ -94,19 +95,22 @@ export function applyAnimationAtFrame(entry: AnimatedElement, frame: number): vo
   applyNumeric(tracks, 'font.letterSpacing', frame, (v) => {
     entry.node.style.letterSpacing = `${v}em`;
   });
-  // Padding sub-properties.
-  applyNumeric(tracks, 'padding.top', frame, (v) => {
-    entry.node.style.paddingTop = `${v}px`;
-  });
-  applyNumeric(tracks, 'padding.right', frame, (v) => {
-    entry.node.style.paddingRight = `${v}px`;
-  });
-  applyNumeric(tracks, 'padding.bottom', frame, (v) => {
-    entry.node.style.paddingBottom = `${v}px`;
-  });
-  applyNumeric(tracks, 'padding.left', frame, (v) => {
-    entry.node.style.paddingLeft = `${v}px`;
-  });
+  // Padding sub-properties — D-056: box padding is text/shape only (the content-driven
+  // kinds carry no box, so their padding is never applied).
+  if (!isTimeDriven(entry.source.type)) {
+    applyNumeric(tracks, 'padding.top', frame, (v) => {
+      entry.node.style.paddingTop = `${v}px`;
+    });
+    applyNumeric(tracks, 'padding.right', frame, (v) => {
+      entry.node.style.paddingRight = `${v}px`;
+    });
+    applyNumeric(tracks, 'padding.bottom', frame, (v) => {
+      entry.node.style.paddingBottom = `${v}px`;
+    });
+    applyNumeric(tracks, 'padding.left', frame, (v) => {
+      entry.node.style.paddingLeft = `${v}px`;
+    });
+  }
 
   // Composite shadow + filter — recompose the whole CSS declaration
   // from static + animated components when any track is present.
@@ -115,20 +119,17 @@ export function applyAnimationAtFrame(entry: AnimatedElement, frame: number): vo
 }
 
 /**
- * D-052 — the time-driven kinds (ticker/clock/sequence) whose box styling now
- * animates like a shape/text's. `writesTextStyle` = kinds whose colour/background/
- * shadow paint as text styling (text + the trio); `hasBoxStroke` = kinds with a
- * `stroke` border (shape + the trio). Shape/text behaviour is unchanged — these only
- * ADD the trio.
+ * D-052/D-056 — the content-driven kinds (ticker/clock/sequence) keyframe ONLY text
+ * colour + text-shadow. `writesTextStyle` = kinds whose colour / text-shadow paint as
+ * text styling (text + the trio, kept). `isTimeDriven` gates OUT the box styling
+ * (cornerRadius / padding) that only text/shape keep. Background animation is text-only
+ * and stroke animation is shape-only again (D-056) — handled inline at their callers.
  */
 function isTimeDriven(type: string): boolean {
   return type === 'ticker' || type === 'clock' || type === 'sequence';
 }
 function writesTextStyle(type: string): boolean {
   return type === 'text' || isTimeDriven(type);
-}
-function hasBoxStroke(type: string): boolean {
-  return type === 'shape' || isTimeDriven(type);
 }
 
 function applyNumeric(
@@ -203,15 +204,16 @@ function readStringTrack(
  * sub-track, falling back to the element's static per-corner value. Otherwise a
  * single `cornerRadius` track animates the uniform value. This fixes the
  * previously-broken animated-tuple path (the old code serialised an array into one
- * `px` value) and applies to every background-capable kind (cornerRadius animation
- * is ungated for all of them; stroke/colour/shadow/padding apply to shape/text and —
- * D-052 — the time-driven kinds).
+ * `px` value). Applies to shape and text only — D-056 removed border-radius from the
+ * content-driven kinds (ticker/clock/sequence), which carry no box.
  */
 function applyCornerRadius(
   entry: AnimatedElement,
   tracks: ElementAnimation['tracks'],
   frame: number,
 ): void {
+  // D-056 — content-driven kinds have no box, so no border-radius is applied.
+  if (isTimeDriven(entry.source.type)) return;
   if (CORNER_PROPS.some((p) => tracks[p] !== undefined)) {
     const cr = (entry.source as { cornerRadius?: number | [number, number, number, number] })
       .cornerRadius;
@@ -239,11 +241,10 @@ function applyStroke(
   const hasAny = STROKE_PROPS.some((p) => tracks[p] !== undefined);
   if (!hasAny) return;
   const src = entry.source;
-  // D-052 — stroke animates on shapes AND the time-driven kinds; the border lands on
-  // the element's root node (band / box / stage), where the static stroke renders.
-  if (!hasBoxStroke(src.type)) return;
-  const stroke = (src as { stroke?: { width: number; color: string; dash?: readonly number[] } })
-    .stroke;
+  // D-056 — stroke animation is shape-only again (content-driven kinds carry no box;
+  // text stroke stays static — no track is authored for it).
+  if (src.type !== 'shape') return;
+  const stroke = src.stroke;
   const width = readNumericTrack(tracks, 'stroke.width', frame) ?? stroke?.width ?? 0;
   const color = readStringTrack(tracks, 'stroke.color', frame) ?? stroke?.color ?? '#000000';
   const staticDash = (stroke?.dash?.length ?? 0) > 0;

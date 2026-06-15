@@ -77,21 +77,15 @@ const TEXT_STYLE = [
   'cornerRadius',
 ] as const;
 
-// D-052 — the time-driven kinds' keyframe-able box styling, in registry order
-// (stroke + cornerRadius from BOX_DESCS, then text colour / background / shadow).
+// D-056 — the content-driven kinds keyframe ONLY text colour + text-shadow (no box
+// styling). Registry order: TEXT_COLOR_DESC then the shadow sub-tracks.
 const TIME_DRIVEN_KF = [
-  'stroke.color',
-  'stroke.width',
-  'stroke.dash',
-  'cornerRadius',
   'text.color',
-  'backgroundColor',
   'shadow.offsetX',
   'shadow.offsetY',
   'shadow.blur',
   'shadow.color',
 ] as const;
-const PADDING = ['padding.top', 'padding.right', 'padding.bottom', 'padding.left'] as const;
 
 const LINEAR_GRADIENT: Fill = {
   kind: 'linear',
@@ -121,23 +115,13 @@ describe('field-registry — per-kind keyframe-able truth table (post-D-051)', (
     expect(kf(defaultImage('i', 0, 0, 'asset-1'))).toEqual([...TRANSFORM, ...FILTER]);
   });
 
-  it('time-driven kinds expose stroke + colour/background/shadow + cornerRadius (D-052); clock/sequence also padding; repeater stays transform + filter', () => {
-    // D-052 — ticker/clock/sequence now keyframe their box styling (stroke, text
-    // colour, background, shadow) plus cornerRadius (D-042). Clock + sequence also
-    // keyframe padding; ticker padding stays deferred. Repeater is unchanged.
-    expect(kf(defaultTicker('tk', 0, 0))).toEqual([...TRANSFORM, ...TIME_DRIVEN_KF, ...FILTER]);
-    expect(kf(defaultClock('ck', 0, 0))).toEqual([
-      ...TRANSFORM,
-      ...TIME_DRIVEN_KF,
-      ...PADDING,
-      ...FILTER,
-    ]);
-    expect(kf(defaultSequence('sq', 0, 0))).toEqual([
-      ...TRANSFORM,
-      ...TIME_DRIVEN_KF,
-      ...PADDING,
-      ...FILTER,
-    ]);
+  it('time-driven kinds keyframe ONLY text colour + text-shadow (D-056); repeater stays transform + filter', () => {
+    // D-056 — box styling (stroke / cornerRadius / background / padding) was removed
+    // from ticker/clock/sequence; they carry only text colour + text-shadow.
+    const expected = [...TRANSFORM, ...TIME_DRIVEN_KF, ...FILTER];
+    expect(kf(defaultTicker('tk', 0, 0))).toEqual(expected);
+    expect(kf(defaultClock('ck', 0, 0))).toEqual(expected);
+    expect(kf(defaultSequence('sq', 0, 0))).toEqual(expected);
     expect(kf(defaultRepeater('rp', 0, 0, { id: 'comp-1' }))).toEqual([...TRANSFORM, ...FILTER]);
   });
 });
@@ -160,11 +144,16 @@ describe('field-registry — right/left parity (both derive from the registry)',
 });
 
 describe('field-registry — §2 diamond corrections', () => {
-  it('clock digits/mode are not keyframe-able (no diamond); box styling is (D-052)', () => {
+  it('clock keyframes only text colour + text-shadow; digits/mode and box styling are NOT keyframe-able (D-056)', () => {
     const clockKf = kf(defaultClock('ck', 0, 0));
     expect(clockKf).not.toContain('digits');
     expect(clockKf).not.toContain('mode');
-    expect(clockKf).toEqual([...TRANSFORM, ...TIME_DRIVEN_KF, ...PADDING, ...FILTER]);
+    // D-056 — box styling removed from the content-driven kinds.
+    expect(clockKf).not.toContain('stroke.width');
+    expect(clockKf).not.toContain('cornerRadius');
+    expect(clockKf).not.toContain('backgroundColor');
+    expect(clockKf).not.toContain('padding.top');
+    expect(clockKf).toEqual([...TRANSFORM, ...TIME_DRIVEN_KF, ...FILTER]);
   });
 
   it('border-radius is keyframe-able on shape and text (diamond present in both panels)', () => {

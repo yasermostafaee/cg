@@ -231,15 +231,13 @@ describe('buildClock — static initial render (D-027)', () => {
     expect(span(built).textContent).toBe('00:00');
   });
 
-  it('renders a per-corner border-radius + a static stroke on a non-shape kind (D-042)', () => {
+  it('D-056 — a clock paints NO border-radius or stroke (box styling removed)', () => {
     const built = buildScene(
       clockScene({ cornerRadius: [4, 8, 12, 16], stroke: { width: 3, color: '#00FF00' } }),
     );
     const node = built.elementMap.get('clk')!;
-    expect(node.style.borderRadius).toBe('4px 8px 12px 16px');
-    expect(node.style.border).toContain('3px');
-    expect(node.style.border).toContain('solid');
-    expect(node.style.border.toLowerCase()).toContain('#00ff00');
+    expect(node.style.borderRadius).toBe('');
+    expect(node.style.border).toBe('');
   });
 
   it('the time span is LTR, bidi-isolated, and width-stable (tabular numerals)', () => {
@@ -250,7 +248,7 @@ describe('buildClock — static initial render (D-027)', () => {
     expect(node.style.fontVariantNumeric).toBe('tabular-nums');
   });
 
-  it('the box is flex-aligned per `align` and styled like the band subset', () => {
+  it('the box is flex-aligned per `align`; D-056 — no background / radius / padding painted', () => {
     const built = buildScene(
       clockScene({
         align: 'end',
@@ -262,10 +260,11 @@ describe('buildClock — static initial render (D-027)', () => {
     const box = built.elementMap.get('clk');
     expect(box?.style.display).toBe('flex');
     expect(box?.style.justifyContent).toBe('flex-end');
-    expect(box?.style.backgroundColor).toMatch(/#112233/i);
-    expect(box?.style.borderRadius).toBe('8px');
-    expect(box?.style.paddingLeft).toBe('12px');
     expect(box?.style.fontFamily.startsWith('Vazirmatn,')).toBe(true);
+    // D-056 — box styling is no longer painted for the content-driven kinds.
+    expect(box?.style.backgroundColor).toBe('');
+    expect(box?.style.borderRadius).toBe('');
+    expect(box?.style.paddingLeft).toBe('');
   });
 
   it('built clocks are collected on the scope (driver + content-hold seam)', () => {

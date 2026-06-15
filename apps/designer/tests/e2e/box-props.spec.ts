@@ -94,6 +94,22 @@ test.describe('Box props for all background-capable elements (D-042)', () => {
     await expect(dot).toHaveAttribute('data-variant', 'at-frame');
   });
 
+  test('D-056 — a ticker exposes only text colour + Text Shadow (no box controls)', async ({
+    app,
+  }) => {
+    await app.newProject('D056Ticker');
+    await app.addTicker({ x: 120, y: 260 });
+    const ins = app.inspector;
+    // Box-styling controls are removed for the content-driven kinds.
+    await expect(ins.getByRole('button', { name: 'Toggle Border Radius' })).toHaveCount(0);
+    await expect(ins.getByRole('spinbutton', { name: 'stroke width' })).toHaveCount(0);
+    // The shadow section is renamed "Text Shadow" (not "Drop Shadow").
+    await expect(ins.getByRole('button', { name: 'Toggle Text Shadow' })).toBeVisible();
+    await expect(ins.getByRole('button', { name: 'Toggle Drop Shadow' })).toHaveCount(0);
+    // Text colour is kept — its keyframe diamond renders.
+    await expect(app.inspectorDiamond('text.color')).toBeVisible();
+  });
+
   test('a static stroke set on a text element renders a border in the preview', async ({ app }) => {
     await app.newProject('D042Stroke');
     await app.addTextElement({ x: 220, y: 160 });

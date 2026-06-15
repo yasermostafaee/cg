@@ -467,72 +467,17 @@ function TickerSections({
           onCommit={(color) => designerStore.commitAnimatable(id, 'text.color', color)}
           trailing={KeyframeDot(element, 'text.color', currentFrame, selectedKeyframe)}
         />
-        <FillField
-          label="background"
-          value={
-            element.backgroundFill ?? {
-              kind: 'solid',
-              color: evColor(
-                element,
-                'backgroundColor',
-                currentFrame,
-                element.backgroundColor ?? '#00000000',
-              ),
-            }
-          }
-          onChange={(f) => {
-            // D-052 — a solid edit on an already-solid background keeps keyframe-aware
-            // routing; a gradient switch drops the now-orphaned backgroundColor track (B-014).
-            if (f.kind === 'solid' && element.backgroundFill === undefined) {
-              designerStore.commitAnimatable(id, 'backgroundColor', f.color);
-            } else {
-              applyFillModeChange(element, 'backgroundColor', {
-                backgroundFill: f.kind === 'solid' ? undefined : f,
-                ...(f.kind === 'solid' ? { backgroundColor: f.color } : {}),
-              } as Partial<Element>);
-            }
-          }}
-          trailing={KeyframeDot(element, 'backgroundColor', currentFrame, selectedKeyframe)}
-        />
       </CollapseSection>
 
-      <CollapseSection title="Drop Shadow">
+      {/* D-056 — content-driven kinds carry only text: text-shadow only (no box
+          drop-shadow / background / padding / stroke / border-radius). */}
+      <CollapseSection title="Text Shadow">
         <TickerShadowSection
           element={element}
           currentFrame={currentFrame}
           selectedKeyframe={selectedKeyframe}
         />
       </CollapseSection>
-
-      <CollapseSection title="Band Padding">
-        {(['top', 'right', 'bottom', 'left'] as const).map((side) => (
-          <NumberField
-            key={side}
-            label={side}
-            value={element.padding?.[side] ?? 0}
-            step={1}
-            min={0}
-            suffix="px"
-            onCommit={(v) => {
-              const p = element.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
-              designerStore.updateElement(id, {
-                padding: { ...p, [side]: Math.max(0, v) },
-              } as Partial<Element>);
-            }}
-          />
-        ))}
-      </CollapseSection>
-
-      <StrokeSection
-        element={element}
-        currentFrame={currentFrame}
-        selectedKeyframe={selectedKeyframe}
-      />
-      <BorderRadiusSection
-        element={element}
-        currentFrame={currentFrame}
-        selectedKeyframe={selectedKeyframe}
-      />
 
       <FilterSection
         element={element}
@@ -730,68 +675,17 @@ function ClockSections({
           }}
           trailing={KeyframeDot(element, 'text.color', currentFrame, selectedKeyframe)}
         />
-        <FillField
-          label="background"
-          value={
-            element.backgroundFill ?? {
-              kind: 'solid',
-              color: evColor(
-                element,
-                'backgroundColor',
-                currentFrame,
-                element.backgroundColor ?? '#00000000',
-              ),
-            }
-          }
-          onChange={(f) => {
-            // D-052 — a solid edit on a solid background keyframes; a gradient switch
-            // drops the now-orphaned backgroundColor track (B-014).
-            if (f.kind === 'solid' && element.backgroundFill === undefined) {
-              designerStore.commitAnimatable(id, 'backgroundColor', f.color);
-            } else {
-              applyFillModeChange(element, 'backgroundColor', {
-                backgroundFill: f.kind === 'solid' ? undefined : f,
-                ...(f.kind === 'solid' ? { backgroundColor: f.color } : {}),
-              } as Partial<Element>);
-            }
-          }}
-          trailing={KeyframeDot(element, 'backgroundColor', currentFrame, selectedKeyframe)}
-        />
       </CollapseSection>
 
-      <CollapseSection title="Drop Shadow">
+      {/* D-056 — content-driven kinds carry only text: text-shadow only (no box
+          drop-shadow / background / padding / stroke / border-radius). */}
+      <CollapseSection title="Text Shadow">
         <TickerShadowSection
           element={element}
           currentFrame={currentFrame}
           selectedKeyframe={selectedKeyframe}
         />
       </CollapseSection>
-
-      <CollapseSection title="Box Padding">
-        {(['top', 'right', 'bottom', 'left'] as const).map((side) => (
-          <NumberField
-            key={side}
-            label={side}
-            value={evNum(element, `padding.${side}`, currentFrame, element.padding?.[side] ?? 0)}
-            step={1}
-            min={0}
-            suffix="px"
-            onCommit={(v) => designerStore.commitAnimatable(id, `padding.${side}`, Math.max(0, v))}
-            trailing={KeyframeDot(element, `padding.${side}`, currentFrame, selectedKeyframe)}
-          />
-        ))}
-      </CollapseSection>
-
-      <StrokeSection
-        element={element}
-        currentFrame={currentFrame}
-        selectedKeyframe={selectedKeyframe}
-      />
-      <BorderRadiusSection
-        element={element}
-        currentFrame={currentFrame}
-        selectedKeyframe={selectedKeyframe}
-      />
 
       <FilterSection
         element={element}
@@ -1004,68 +898,17 @@ function SequenceSections({
           }}
           trailing={KeyframeDot(element, 'text.color', currentFrame, selectedKeyframe)}
         />
-        <FillField
-          label="background"
-          value={
-            element.backgroundFill ?? {
-              kind: 'solid',
-              color: evColor(
-                element,
-                'backgroundColor',
-                currentFrame,
-                element.backgroundColor ?? '#00000000',
-              ),
-            }
-          }
-          onChange={(f) => {
-            // D-052 — a solid edit on a solid background keyframes; a gradient switch
-            // drops the now-orphaned backgroundColor track (B-014).
-            if (f.kind === 'solid' && element.backgroundFill === undefined) {
-              designerStore.commitAnimatable(id, 'backgroundColor', f.color);
-            } else {
-              applyFillModeChange(element, 'backgroundColor', {
-                backgroundFill: f.kind === 'solid' ? undefined : f,
-                ...(f.kind === 'solid' ? { backgroundColor: f.color } : {}),
-              } as Partial<Element>);
-            }
-          }}
-          trailing={KeyframeDot(element, 'backgroundColor', currentFrame, selectedKeyframe)}
-        />
       </CollapseSection>
 
-      <CollapseSection title="Drop Shadow">
+      {/* D-056 — content-driven kinds carry only text: text-shadow only (no box
+          drop-shadow / background / padding / stroke / border-radius). */}
+      <CollapseSection title="Text Shadow">
         <TickerShadowSection
           element={element}
           currentFrame={currentFrame}
           selectedKeyframe={selectedKeyframe}
         />
       </CollapseSection>
-
-      <CollapseSection title="Box Padding">
-        {(['top', 'right', 'bottom', 'left'] as const).map((side) => (
-          <NumberField
-            key={side}
-            label={side}
-            value={evNum(element, `padding.${side}`, currentFrame, element.padding?.[side] ?? 0)}
-            step={1}
-            min={0}
-            suffix="px"
-            onCommit={(v) => designerStore.commitAnimatable(id, `padding.${side}`, Math.max(0, v))}
-            trailing={KeyframeDot(element, `padding.${side}`, currentFrame, selectedKeyframe)}
-          />
-        ))}
-      </CollapseSection>
-
-      <StrokeSection
-        element={element}
-        currentFrame={currentFrame}
-        selectedKeyframe={selectedKeyframe}
-      />
-      <BorderRadiusSection
-        element={element}
-        currentFrame={currentFrame}
-        selectedKeyframe={selectedKeyframe}
-      />
 
       <FilterSection
         element={element}
@@ -1183,11 +1026,10 @@ function RepeaterSections({
 }
 
 /**
- * Ticker/clock/sequence text-shadow rows. D-052 — keyframe-able via the shared
- * `shadow.*` tracks (commitAnimatable + diamond), reading/writing `el.textShadow` as
- * the static editing did. The 4-separate-field layout is intentionally KEPT (no swap
- * to the shared DropShadowSection's combined offset row) so static behaviour is
- * unchanged — only diamonds are added.
+ * Ticker/clock/sequence **Text Shadow** rows (D-056 — the only shadow these kinds
+ * carry). Keyframe-able via the shared `shadow.*` tracks (commitAnimatable + diamond),
+ * reading/writing `el.textShadow`. Offset X/Y sit on ONE line (a combined VectorField,
+ * like the text element's Drop Shadow) per the ب/ج layout fix.
  */
 function TickerShadowSection({
   element,
@@ -1202,19 +1044,28 @@ function TickerShadowSection({
   const color = evColor(element, 'shadow.color', currentFrame, s.color);
   return (
     <>
-      <NumberField
-        label="offset X"
-        value={offsetX}
-        step={1}
-        onCommit={(v) => designerStore.commitAnimatable(id, 'shadow.offsetX', v)}
-        trailing={KeyframeDot(element, 'shadow.offsetX', currentFrame, selectedKeyframe)}
-      />
-      <NumberField
-        label="offset Y"
-        value={offsetY}
-        step={1}
-        onCommit={(v) => designerStore.commitAnimatable(id, 'shadow.offsetY', v)}
-        trailing={KeyframeDot(element, 'shadow.offsetY', currentFrame, selectedKeyframe)}
+      <VectorField
+        label="offset"
+        axes={[
+          {
+            icon: 'X',
+            ariaLabel: 'offset X',
+            value: offsetX,
+            step: 1,
+            suffix: 'px',
+            onCommit: (v: number) => designerStore.commitAnimatable(id, 'shadow.offsetX', v),
+            point: KeyframeDot(element, 'shadow.offsetX', currentFrame, selectedKeyframe),
+          },
+          {
+            icon: 'Y',
+            ariaLabel: 'offset Y',
+            value: offsetY,
+            step: 1,
+            suffix: 'px',
+            onCommit: (v: number) => designerStore.commitAnimatable(id, 'shadow.offsetY', v),
+            point: KeyframeDot(element, 'shadow.offsetY', currentFrame, selectedKeyframe),
+          },
+        ]}
       />
       <NumberField
         label="blur"

@@ -428,15 +428,10 @@ export const timelineSlice = {
     // The whole transform / numeric branch only handles numbers — the
     // color cases at the bottom of this switch handle strings.
     const numeric = typeof value === 'number' ? value : 0;
-    // D-042 — the background-capable kinds that carry the shared box style
-    // (stroke + border radius). Static stroke is editable on all of them; stroke
-    // ANIMATION stays shape-only (Option A — the applier is gated, not this write).
-    const boxKind =
-      el.type === 'shape' ||
-      el.type === 'text' ||
-      el.type === 'ticker' ||
-      el.type === 'clock' ||
-      el.type === 'sequence';
+    // D-056 — `stroke` is a box property: shape and text only. The content-driven
+    // kinds (ticker/clock/sequence) carry no box, so a static stroke write is a no-op
+    // for them (strict — prevents writing dead `stroke` data to those kinds).
+    const boxKind = el.type === 'shape' || el.type === 'text';
     switch (property) {
       case 'position.x':
         designerStore.updateTransform(elementId, { position: { ...tx.position, x: numeric } });
@@ -570,8 +565,8 @@ export const timelineSlice = {
       case 'padding.right':
       case 'padding.bottom':
       case 'padding.left': {
-        // D-052 — text + clock/sequence (NOT ticker — its padding is deferred).
-        if (!(el.type === 'text' || el.type === 'clock' || el.type === 'sequence')) return;
+        // D-056 — box padding is text-only again (content-driven kinds carry no box).
+        if (el.type !== 'text') return;
         const key = property.slice('padding.'.length);
         const base = el.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
         const padding = { ...base, [key]: numeric };
@@ -633,17 +628,8 @@ export const timelineSlice = {
         return;
       }
       case 'backgroundColor': {
-        // D-052 — text + the time-driven kinds.
-        if (
-          !(
-            el.type === 'text' ||
-            el.type === 'ticker' ||
-            el.type === 'clock' ||
-            el.type === 'sequence'
-          ) ||
-          typeof value !== 'string'
-        )
-          return;
+        // D-056 — text-only again (content-driven kinds carry no box background).
+        if (el.type !== 'text' || typeof value !== 'string') return;
         designerStore.updateElement(elementId, {
           backgroundColor: value,
         } as unknown as Partial<Element>);

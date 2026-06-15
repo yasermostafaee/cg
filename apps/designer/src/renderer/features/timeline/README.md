@@ -207,10 +207,10 @@ This spans three layers (schema → field registry → runtime applier) — see 
    [template-runtime deep-dive](../../../../../../packages/template-runtime/README.md).
 
 A property declared in the schema + registry but not the applier will animate in the
-dock's value readout but not on air — all three steps are required. (D-052 closed this
-for the time-driven kinds: ticker/clock/sequence now keyframe stroke / text colour /
-background / shadow — and clock/sequence padding — via the registry + the un-gated
-appliers. Ticker padding stays deferred, and repeater has no background.)
+dock's value readout but not on air — all three steps are required. (D-056 — the
+content-driven kinds ticker/clock/sequence carry only text: their registry exposes just
+text colour + text-shadow, no box styling. Box styling lives on shape/text and a
+separate shape layer beneath the content.)
 
 ## Testing
 
