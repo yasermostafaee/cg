@@ -275,3 +275,28 @@ package's clean script. Surfaced while reproducing B-012 from a clean tree.
 **Notes:** apps/designer/src/renderer/features/status/StatusBar.tsx
 
 -->
+
+## [~] B-015 — border-radius keyframes don't migrate on uniform↔per-corner toggle ⟨priority: high⟩
+
+<!-- Change: openspec/changes/migrate-radius-keyframes-on-toggle -->
+
+**Repro:**
+
+1. یک shape با border-radius کلی (uniform) بساز و رویش حداقل یک کیفریم بگذار.
+2. روی toggle بزن تا به حالت ۴تایی (per-corner) برود.
+3. (سناریو ب) در حالت ۴تایی یک کیفریم اضافه کن — کار می‌کند و در پریویو دیده می‌شود.
+4. به حالت uniform برگرد، سپس دوباره به ۴تایی.
+
+**Expected:** کیفریم‌ها هنگام toggle مهاجرت کنند (گزینهٔ ۲):
+
+- uniform→per-corner: مقدار و کیفریم‌های uniform به **هر چهار گوشه** کپی شوند (بدون از-دست-رفتن).
+- per-corner→uniform: اگر هر چهار گوشه یکسان بودند همان مقدار/کیفریم‌ها؛ اگر متفاوت بودند **top-left** نماینده شود و سه گوشهٔ دیگر دور ریخته شوند.
+- toggle هرگز کیفریمِ زنده را بی‌سکوت گم نکند؛ آنچه روی صفحه بود بعد از toggle همان رفتار را بدهد.
+
+**Actual:** uniform و per-corner دو دستهٔ کیفریمِ **جدا**ی غیرمرتبط‌اند و toggle فقط نمایش را عوض می‌کند (هیچ داده‌ای منتقل نمی‌شود):
+
+- uniform دارای کیفریم → ۴تایی: کیفریم‌های uniform دیده نمی‌شوند (مخفی، نه پاک — با toggle برگشت دوباره دیده می‌شوند).
+- در ۴تایی کیفریم اضافه می‌شود و کار می‌کند، ولی بعد از رفت‌وبرگشت uniform↔per-corner، کیفریم‌های چهارگوشه ناپدید می‌شوند (به‌نظر toggle موقعِ جابجایی track را بازنویسی/پاک می‌کند — recon باید روشن کند).
+
+**Env:** Browser / Designer dev؛ روی `main` بازتولید می‌شود.
+**Notes:** Root cause در `BorderRadiusSection` / `toPerCorner` / `toUniform` در `apps/designer/src/renderer/features/inspector/StyleSection.tsx`. keyframe/schema-touching — **دو-فازی (recon-only اول)**. هم‌فایل با D-055؛ **بعد از merge شدنِ D-055** برداشته شود تا تداخلِ branch نشود. تستِ رگرسیون: رفت‌وبرگشتِ toggle با کیفریمِ uniform و per-corner، و موردِ چهار-گوشهٔ-متفاوت→uniform (انتخابِ top-left).

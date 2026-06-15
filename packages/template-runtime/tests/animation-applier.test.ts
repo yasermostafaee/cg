@@ -276,6 +276,44 @@ describe('applyAnimationAtFrame', () => {
     expect(node.style.borderRadius).toBe('1px 2px 33px 4px');
   });
 
+  it('B-015 — migration output renders in the mode its tracks imply (no orphaned track)', () => {
+    // per-corner migration output: tuple value + four sub-tracks, NO uniform track.
+    {
+      const { source, node } = makeShape();
+      const src: ShapeElement = { ...source, cornerRadius: [10, 10, 10, 10] };
+      const entry: AnimatedElement = {
+        id: src.id,
+        node,
+        source: src,
+        animation: {
+          tracks: {
+            'cornerRadius.tl': { keyframes: [{ frame: 10, value: 22, easing: 'linear' }] },
+            'cornerRadius.tr': { keyframes: [{ frame: 10, value: 33, easing: 'linear' }] },
+            'cornerRadius.br': { keyframes: [{ frame: 10, value: 44, easing: 'linear' }] },
+            'cornerRadius.bl': { keyframes: [{ frame: 10, value: 55, easing: 'linear' }] },
+          },
+        },
+      };
+      applyAnimationAtFrame(entry, 10);
+      expect(node.style.borderRadius).toBe('22px 33px 44px 55px'); // four-value
+    }
+    // collapsed (uniform) migration output: number value + single track, NO sub-tracks.
+    {
+      const { source, node } = makeShape();
+      const src: ShapeElement = { ...source, cornerRadius: 8 };
+      const entry: AnimatedElement = {
+        id: src.id,
+        node,
+        source: src,
+        animation: {
+          tracks: { cornerRadius: { keyframes: [{ frame: 10, value: 18, easing: 'linear' }] } },
+        },
+      };
+      applyAnimationAtFrame(entry, 10);
+      expect(node.style.borderRadius).toBe('18px'); // single value
+    }
+  });
+
   it('writes text.color to color only for text elements', () => {
     const { source, node } = makeText();
     const entry: AnimatedElement = {

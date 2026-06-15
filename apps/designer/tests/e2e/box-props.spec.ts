@@ -45,6 +45,41 @@ test.describe('Box props for all background-capable elements (D-042)', () => {
     await expect(app.inspector.getByRole('spinbutton', { name: 'top left radius' })).toHaveCount(0);
   });
 
+  test('B-015 — a uniform keyframe migrates to four corners and survives the round-trip', async ({
+    app,
+  }) => {
+    await app.newProject('B015Radius');
+    await app.addTextElement({ x: 220, y: 160 });
+
+    await app.inspector.getByRole('button', { name: 'Toggle Border Radius' }).click();
+
+    // Add a keyframe on the uniform radius at the playhead.
+    const uniformDot = app.inspector.getByRole('button', {
+      name: /^Toggle keyframe for cornerRadius at frame \d+$/,
+    });
+    await expect(uniformDot).toHaveAttribute('data-variant', 'empty');
+    await uniformDot.click();
+    await expect(uniformDot).toHaveAttribute('data-variant', 'at-frame');
+
+    // Toggle to per-corner → four corner diamonds appear, each carrying the migrated keyframe.
+    await app.inspector.getByRole('button', { name: 'Use per-corner border radius' }).click();
+    for (const c of ['tl', 'tr', 'br', 'bl']) {
+      await expect(
+        app.inspector.getByRole('button', {
+          name: new RegExp(`^Toggle keyframe for cornerRadius\\.${c} at frame \\d+$`),
+        }),
+      ).toHaveAttribute('data-variant', 'at-frame');
+    }
+
+    // Round-trip back to uniform → the keyframe survives (Option-2: top-left representative).
+    await app.inspector.getByRole('button', { name: 'Use a single border radius' }).click();
+    await expect(
+      app.inspector.getByRole('button', {
+        name: /^Toggle keyframe for cornerRadius at frame \d+$/,
+      }),
+    ).toHaveAttribute('data-variant', 'at-frame');
+  });
+
   test('a static stroke set on a text element renders a border in the preview', async ({ app }) => {
     await app.newProject('D042Stroke');
     await app.addTextElement({ x: 220, y: 160 });
