@@ -230,7 +230,8 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
 }
 
 interface VectorAxisProps {
-  icon: string;
+  /** Optional single-letter / glyph axis label. Omit for a clean value-only cell. */
+  icon?: string;
   ariaLabel: string;
   value: number;
   onCommit: (n: number) => void;
@@ -277,9 +278,11 @@ function VectorSeg(props: VectorAxisProps): JSX.Element {
   const hasUnit = props.suffix !== undefined;
   return (
     <div className={cx('cg-seg', s.scrubSurface)} onPointerDown={scrub.onPointerDown}>
-      <span className={s.segIcon} aria-hidden>
-        {props.icon}
-      </span>
+      {props.icon !== undefined && (
+        <span className={s.segIcon} aria-hidden>
+          {props.icon}
+        </span>
+      )}
       <RealtimeNumberInput
         value={props.value}
         onCommit={props.onCommit}

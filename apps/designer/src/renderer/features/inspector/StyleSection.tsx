@@ -35,6 +35,7 @@ import { FillField } from './FillPopover.js';
 import { FontFamilySelect } from './FontFamilySelect.js';
 import { TextStyleSection } from './TextStyleSection.js';
 import { Button } from '../../ui/Button.js';
+import * as radiusCss from './BorderRadiusSection.css.js';
 
 interface Props {
   element: Element;
@@ -1294,7 +1295,12 @@ interface BoxProps {
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
 }
 
-/** D-042 — toggle between a single uniform radius and four independent corners. */
+/**
+ * D-042/D-055 — toggle between a single uniform radius and four independent
+ * corners. ONE right-edge icon button whose shape reflects the CURRENT mode: a
+ * simple rounded square (uniform) or four corner ticks (per-corner). Drawn via
+ * vanilla-extract — no Unicode glyph, no raw button.
+ */
 function RadiusToggle({
   perCorner,
   onClick,
@@ -1305,24 +1311,23 @@ function RadiusToggle({
   return (
     <Button
       variant="bare"
+      className={radiusCss.toggle}
       onClick={onClick}
       aria-label={perCorner ? 'Use a single border radius' : 'Use per-corner border radius'}
       title={perCorner ? 'Single radius' : 'Per-corner radius'}
-      style={{ fontSize: 13, lineHeight: 1, padding: '0 4px', opacity: 0.75 }}
     >
-      {perCorner ? '▣' : '▢'}
+      <span className={perCorner ? radiusCss.iconPerCorner : radiusCss.iconUniform} aria-hidden />
     </Button>
   );
 }
 
 const RADIUS_CORNERS = [
-  { prop: 'cornerRadius.tl', icon: '⌜', label: 'top left radius', i: 0 },
-  { prop: 'cornerRadius.tr', icon: '⌝', label: 'top right radius', i: 1 },
-  { prop: 'cornerRadius.br', icon: '⌟', label: 'bottom right radius', i: 2 },
-  { prop: 'cornerRadius.bl', icon: '⌞', label: 'bottom left radius', i: 3 },
+  { prop: 'cornerRadius.tl', label: 'top left radius', i: 0 },
+  { prop: 'cornerRadius.tr', label: 'top right radius', i: 1 },
+  { prop: 'cornerRadius.br', label: 'bottom right radius', i: 2 },
+  { prop: 'cornerRadius.bl', label: 'bottom left radius', i: 3 },
 ] as const satisfies readonly {
   prop: AnimatableProperty;
-  icon: string;
   label: string;
   i: 0 | 1 | 2 | 3;
 }[];
@@ -1353,37 +1358,33 @@ function BorderRadiusSection({ element, currentFrame, selectedKeyframe }: BoxPro
 
   return (
     <CollapseSection title="Border Radius">
-      {perCorner ? (
-        <>
-          <VectorField
-            label="radius"
-            axes={RADIUS_CORNERS.map((c) => ({
-              icon: c.icon,
-              ariaLabel: c.label,
-              value: evNum(element, c.prop, currentFrame, corners[c.i]),
-              step: 1,
-              min: 0,
-              onCommit: (v: number) => designerStore.commitAnimatable(id, c.prop, Math.max(0, v)),
-              point: KeyframeDot(element, c.prop, currentFrame, selectedKeyframe),
-            }))}
-          />
-          <RadiusToggle perCorner onClick={toUniform} />
-        </>
-      ) : (
-        <NumberField
-          label="radius"
-          value={evNum(element, 'cornerRadius', currentFrame, corners[0])}
-          step={1}
-          min={0}
-          onCommit={(v) => designerStore.commitAnimatable(id, 'cornerRadius', Math.max(0, v))}
-          trailing={
-            <>
-              {KeyframeDot(element, 'cornerRadius', currentFrame, selectedKeyframe)}
-              <RadiusToggle perCorner={false} onClick={toPerCorner} />
-            </>
-          }
-        />
-      )}
+      <div className={radiusCss.row}>
+        <div className={radiusCss.fields}>
+          {perCorner ? (
+            <VectorField
+              label="radius"
+              axes={RADIUS_CORNERS.map((c) => ({
+                ariaLabel: c.label,
+                value: evNum(element, c.prop, currentFrame, corners[c.i]),
+                step: 1,
+                min: 0,
+                onCommit: (v: number) => designerStore.commitAnimatable(id, c.prop, Math.max(0, v)),
+                point: KeyframeDot(element, c.prop, currentFrame, selectedKeyframe),
+              }))}
+            />
+          ) : (
+            <NumberField
+              label="radius"
+              value={evNum(element, 'cornerRadius', currentFrame, corners[0])}
+              step={1}
+              min={0}
+              onCommit={(v) => designerStore.commitAnimatable(id, 'cornerRadius', Math.max(0, v))}
+              trailing={KeyframeDot(element, 'cornerRadius', currentFrame, selectedKeyframe)}
+            />
+          )}
+        </div>
+        <RadiusToggle perCorner={perCorner} onClick={perCorner ? toUniform : toPerCorner} />
+      </div>
     </CollapseSection>
   );
 }

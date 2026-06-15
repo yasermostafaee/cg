@@ -1609,3 +1609,15 @@ inspector — i.e. multi == single, fanned out.
   diamonds (stroke/shadow/…) are field-edit-only. Mixed-kind: a property shows a
   diamond only if keyframe-able for every selected kind. Change:
   `openspec/changes/archive/2026-06-14-keyframe-aware-group-move/`.
+
+## [~] D-055 — border-radius UI visual polish (match Loopic) ⟨priority: medium⟩
+
+**What:** اصلاح ظاهرِ کنترلِ border-radius در inspector تا با تصاویرِ مرجعِ Loopic بخواند. عملکرد (از D-042) درست است؛ این فقط ظاهر/چیدمان است.
+**Why:** کنترلِ فعلی کار می‌کند ولی ظاهرش با مرجع نمی‌خواند: حالتِ چهارگوشه فشرده است، toggle یک نوارِ جدا اضافه کرده، و آیکونِ حالتِ یکنواخت تودرتوست.
+**Acceptance:**
+
+- WHEN per-corner radius فعال است THEN چهار اینپوتِ تمیزِ کنارِ هم با diamond نمایش داده شود (نه فشرده با آیکونِ گوشه‌دارِ داخلِ هر اینپوت)
+- WHEN حالتِ per-corner فعال است THEN toggle همان آیکونِ گوشهٔ راست باشد که شکلش تغییر می‌کند (نه یک نوارِ پهنِ جدا در ردیفِ پایین)
+- WHEN حالتِ uniform فعال است THEN آیکونِ toggle مربعِ گوشه‌گردِ ساده باشد (نه آیکونِ تودرتو)
+
+**Notes:** کاملاً ظاهری، بدون تغییرِ schema/runtime/spec behavior — focused fix، احتمالاً بدون OpenSpec change. مرجع: `docs/designer-guide/sample-assets/D-042-radius-0.png` (یکنواخت) و `D-042-radius-1.png` (چهارگوشه). وضعیتِ فعلی برای مقایسه: `D-042-radius-3.png` / `D-042-radius-4.png`.
