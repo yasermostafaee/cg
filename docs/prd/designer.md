@@ -1481,37 +1481,47 @@ inconsistency, and it means every new element kind re-introduces the risk.
   green BEFORE the diamond corrections are layered on). Change:
   `openspec/changes/archive/2026-06-14-add-keyframe-ability-registry/`.
 
-## [ ] D-052 — Keyframe-able styling for time-driven elements (ticker/clock/sequence/repeater) ⟨priority: medium⟩
+## [~] D-052 — Keyframe-able styling for time-driven elements ⟨priority: high⟩ — change: `openspec/changes/ungate-time-driven-styling/`
 
-**What:** Make the text, drop/text-shadow, box-padding, and border-radius styling of
-the time-driven element kinds (ticker, clock, sequence, repeater) keyframe-able — the
-diamonds D-051 deliberately deferred. Their transform/opacity/filter already animate;
-this extends timeline-driven animation to the box STYLE while the content motion
-(crawl / clock tick / sequence advance) stays time-driven.
-**Why:** D-051 made the inspector-field registry the single source of
-keyframe-ability but kept these kinds' styling non-keyframe-able because the runtime
-apply-step (`@cg/template-runtime/animation-applier.ts`) can't yet apply those
-animated values for them: `text.color` / `backgroundColor` are gated to
-`type==='text'`, shadow is written as `boxShadow` for non-text and never reads their
-`textShadow`, and the ticker's padding lives on an inner viewport div (animating the
-band is inert). Adding diamonds without that runtime work would author keyframes the
-engine silently drops.
+**What:** استایلِ موجودِ ticker/clock/sequence (که امروز فقط ثابت است) را
+**کیفریم‌پذیر** کن — همان الگوی cornerRadius در D-042. این انواع از قبل stroke /
+رنگِ متن / backgroundColor / shadow / padding را به‌صورتِ static رندر می‌کنند؛ گیت
+فقط روی animation است (دو لایه: field-registry که diamond نمی‌دهد، و runtime applier
+که این استایل‌ها را به shape/text محدود می‌کند). D-052 آن گیتِ animation را برای این
+سه نوع باز می‌کند.
+**Why:** نویسنده باید بتواند رنگ/stroke/سایهٔ یک ticker یا clock یا sequence را
+انیمیت کند (مثلِ shape/text)، نه فقط ثابت بگذارد. D-042 مرز را تمیز گذاشت
+(cornerRadius از قبل باز شد)؛ این، بقیهٔ استایل‌ها را باز می‌کند.
 **Acceptance:**
 
-- WHEN a ticker/clock/sequence text property (size, line-height, letter-spacing,
-  colour, background) is keyframed THEN the runtime applies the interpolated value at
-  playout — EXCEPT font-family, font-weight, and alignments, which stay
-  non-animatable (matching the text element's rule)
-- WHEN a ticker/clock/sequence drop/text-shadow or box-padding (including the
-  ticker's inner-viewport padding) is keyframed THEN the runtime applies it at playout
-- WHEN these properties become keyframe-able THEN they are declared ONCE in the
-  D-051 field registry (one descriptor each) and appear correctly in the right
-  inspector, the timeline-left, and the multi editor with no per-file edits
-- WHEN scenes authored before this change are loaded, played, and exported THEN
-  behaviour is unchanged apart from the newly-animatable styling
-  **Notes:** Builds directly on D-051's registry — enabling each property is a single
-  `keyframeable` descriptor addition plus the runtime apply-step change + runtime
-  tests + the `template-runtime` engine doc. High-risk (touches the playout engine).
+- WHEN روی ticker/clock/sequence یک track برای stroke (color/width/dash) اضافه شود
+  THEN diamond در registry ظاهر می‌شود و runtime آن را روی band/box/stage root اعمال
+  می‌کند (مثلِ stroke ثابتِ امروز)
+- WHEN روی این سه نوع رنگِ متن (`color`) کیفریم شود THEN اعمال می‌شود و به items/
+  digit span ارث می‌رسد (همان‌جا که static می‌نشیند)
+- WHEN روی این سه نوع `backgroundColor` کیفریم شود THEN اعمال می‌شود — **فقط وقتی
+  variant ِ solid ست است**؛ روی backgroundFill/colorFill ِ gradient هیچ diamond ظاهر
+  نمی‌شود (gradient interpolate نمی‌شود)، دقیقاً مثلِ قاعدهٔ موجودِ fill.color
+- WHEN روی این سه نوع shadow (offsetX/Y/blur/color) کیفریم شود THEN applier از
+  `el.textShadow` می‌خواند و `text-shadow` می‌نویسد (نه box-shadow)، و اعمال می‌شود
+- WHEN روی **clock یا sequence** padding (top/right/bottom/left) کیفریم شود THEN
+  به‌صورتِ CSS padding روی root اعمال می‌شود
+- WHEN روی **ticker** padding باشد THEN کیفریم‌پذیر **نیست** (معوق — padding ِ ticker
+  روی inner viewport است و `viewportWidth` ِ درایور را تغذیه می‌کند؛ animate کردنش
+  اندازه‌گیریِ crawl را desync می‌کند) — UI نباید diamond بدهد
+- WHEN هرکدام از این استایل‌ها روی shape/text کیفریم شود THEN دقیقاً مثلِ امروز کار
+  می‌کند (un-gating باید **additive** باشد؛ مسیرِ shape/text هرگز برداشته نشود)
+- WHEN previewed و exported THEN رفتار یکسان است (همان runtime)
+
+**Notes:** OpenSpec change با `## MODIFIED` روی دو capability ِ living:
+`designer-inspector-registry` (carve-out پراپرتیهای حالا-فعال، مثلِ کاری که D-042
+برای cornerRadius کرد) و `designer-box-styling` (اجازهٔ stroke animation روی
+ticker/clock/sequence). کارِ runtime در `@cg/template-runtime` (اپلایرها) — بدونِ
+capability ِ جدا؛ رفتار با specهای designer + تست‌های applier پین می‌شود. **پرخطر
+(موتورِ پخش) — فاز ۱ recon انجام شد.** ticker padding عمداً معوق (follow-up). نکتهٔ
+نام‌گذاری: مسیرِ animatable همان `text.color` است ولی روی این سه نوع فیلدِ static
+به‌نامِ `color` است (یک object نیست) — اپلایر صرفاً node color را ست می‌کند.
+Change: `openspec/changes/ungate-time-driven-styling/`.
 
 ## [x] D-053 — Multi-select number fields: drag + realtime with single-undo commit ⟨priority: high⟩
 

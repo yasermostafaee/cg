@@ -80,6 +80,20 @@ test.describe('Box props for all background-capable elements (D-042)', () => {
     ).toHaveAttribute('data-variant', 'at-frame');
   });
 
+  test('D-052 — a clock keyframes its text colour (diamond appears, empty → at-frame)', async ({
+    app,
+  }) => {
+    await app.newProject('D052Clock');
+    await app.addClock({ x: 240, y: 160 });
+
+    // The Clock Text section is expanded by default; its text-colour diamond is the
+    // D-052 un-gate (was static before). Clicking it adds a keyframe at the playhead.
+    const dot = app.inspectorDiamond('text.color');
+    await expect(dot).toHaveAttribute('data-variant', 'empty');
+    await app.toggleInspectorKeyframe('text.color');
+    await expect(dot).toHaveAttribute('data-variant', 'at-frame');
+  });
+
   test('a static stroke set on a text element renders a border in the preview', async ({ app }) => {
     await app.newProject('D042Stroke');
     await app.addTextElement({ x: 220, y: 160 });

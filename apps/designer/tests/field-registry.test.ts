@@ -77,6 +77,22 @@ const TEXT_STYLE = [
   'cornerRadius',
 ] as const;
 
+// D-052 — the time-driven kinds' keyframe-able box styling, in registry order
+// (stroke + cornerRadius from BOX_DESCS, then text colour / background / shadow).
+const TIME_DRIVEN_KF = [
+  'stroke.color',
+  'stroke.width',
+  'stroke.dash',
+  'cornerRadius',
+  'text.color',
+  'backgroundColor',
+  'shadow.offsetX',
+  'shadow.offsetY',
+  'shadow.blur',
+  'shadow.color',
+] as const;
+const PADDING = ['padding.top', 'padding.right', 'padding.bottom', 'padding.left'] as const;
+
 const LINEAR_GRADIENT: Fill = {
   kind: 'linear',
   stops: [
@@ -105,14 +121,23 @@ describe('field-registry — per-kind keyframe-able truth table (post-D-051)', (
     expect(kf(defaultImage('i', 0, 0, 'asset-1'))).toEqual([...TRANSFORM, ...FILTER]);
   });
 
-  it('time-driven kinds expose transform + cornerRadius + filter (D-042); repeater stays transform + filter', () => {
-    // D-042 — ticker/clock/sequence are background-capable, so cornerRadius is now
-    // keyframe-able (stroke is present but static — Option A). The rest of their
-    // styling stays deferred to D-052. Repeater (no background) is unchanged.
-    const withRadius = [...TRANSFORM, 'cornerRadius', ...FILTER];
-    expect(kf(defaultTicker('tk', 0, 0))).toEqual(withRadius);
-    expect(kf(defaultClock('ck', 0, 0))).toEqual(withRadius);
-    expect(kf(defaultSequence('sq', 0, 0))).toEqual(withRadius);
+  it('time-driven kinds expose stroke + colour/background/shadow + cornerRadius (D-052); clock/sequence also padding; repeater stays transform + filter', () => {
+    // D-052 — ticker/clock/sequence now keyframe their box styling (stroke, text
+    // colour, background, shadow) plus cornerRadius (D-042). Clock + sequence also
+    // keyframe padding; ticker padding stays deferred. Repeater is unchanged.
+    expect(kf(defaultTicker('tk', 0, 0))).toEqual([...TRANSFORM, ...TIME_DRIVEN_KF, ...FILTER]);
+    expect(kf(defaultClock('ck', 0, 0))).toEqual([
+      ...TRANSFORM,
+      ...TIME_DRIVEN_KF,
+      ...PADDING,
+      ...FILTER,
+    ]);
+    expect(kf(defaultSequence('sq', 0, 0))).toEqual([
+      ...TRANSFORM,
+      ...TIME_DRIVEN_KF,
+      ...PADDING,
+      ...FILTER,
+    ]);
     expect(kf(defaultRepeater('rp', 0, 0, { id: 'comp-1' }))).toEqual([...TRANSFORM, ...FILTER]);
   });
 });
@@ -135,11 +160,11 @@ describe('field-registry — right/left parity (both derive from the registry)',
 });
 
 describe('field-registry — §2 diamond corrections', () => {
-  it('clock digits/mode are not keyframe-able (no diamond); cornerRadius is (D-042)', () => {
+  it('clock digits/mode are not keyframe-able (no diamond); box styling is (D-052)', () => {
     const clockKf = kf(defaultClock('ck', 0, 0));
     expect(clockKf).not.toContain('digits');
     expect(clockKf).not.toContain('mode');
-    expect(clockKf).toEqual([...TRANSFORM, 'cornerRadius', ...FILTER]);
+    expect(clockKf).toEqual([...TRANSFORM, ...TIME_DRIVEN_KF, ...PADDING, ...FILTER]);
   });
 
   it('border-radius is keyframe-able on shape and text (diamond present in both panels)', () => {

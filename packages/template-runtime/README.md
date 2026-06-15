@@ -405,9 +405,11 @@ or per-corner `cornerRadius` (`scene-builder` emits the four-value `border-radiu
 for a `[tl,tr,br,bl]` tuple). `applyAnimationAtFrame` is tuple-aware: it recomposes
 `border-radius` each frame from the per-corner sub-tracks `cornerRadius.tl/tr/br/bl`
 (each corner falling back to the static tuple), which also fixed the previously
-broken animated-tuple path. Per **Option A**, cornerRadius animation is ungated
-(all kinds), but `applyStroke` stays shape-only — animating stroke/background on the
-time-driven kinds is deferred to D-052.
+broken animated-tuple path. cornerRadius animation is ungated (all background-capable
+kinds). Per **D-052**, `applyStroke` and the colour / background / shadow / padding
+appliers now also run for the time-driven kinds (ticker / clock / sequence) — shadow
+writes `text-shadow` for them (from `el.textShadow`), as text does. Shape and text
+are unchanged; text stroke stays static (out of D-052 scope).
 
 `interpolateAtFrame` contract: `frame ≤ first` → first value (no pre-roll
 extrapolation); `frame ≥ last` → last value; otherwise interpolate between the two

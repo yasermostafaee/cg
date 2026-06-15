@@ -108,17 +108,20 @@ describe('right/left keyframe-diamond parity (D-051) — the rendered inspector 
 });
 
 describe('right inspector — §2 diamond corrections (rendered)', () => {
-  it('a clock renders no diamond for digits/mode/stroke/text-styling, but DOES for cornerRadius (D-042)', () => {
+  it('a clock renders diamonds for box styling (D-052) but NOT for digits/mode/font', () => {
     const c = renderRightInspector(defaultClock('ck', 0, 0));
     const props = rightDiamondProps(c);
+    // Discrete clock settings + font styling stay non-animatable.
     expect(props).not.toContain('digits');
     expect(props).not.toContain('mode');
-    // Text styling stays deferred to D-052 (no font diamond); stroke is STATIC on
-    // the time-driven kinds (Option A — no stroke diamond)...
     expect(props).not.toContain('font.size');
-    expect(props).not.toContain('stroke.width');
-    // ...but cornerRadius IS now keyframe-able on background-capable kinds (D-042).
+    // cornerRadius (D-042) + the D-052 box styling ARE keyframe-able now.
     expect(props).toContain('cornerRadius');
+    expect(props).toContain('stroke.width');
+    expect(props).toContain('text.color');
+    expect(props).toContain('backgroundColor');
+    expect(props).toContain('shadow.blur');
+    expect(props).toContain('padding.top');
   });
 
   it('a shape renders a border-radius diamond in the right inspector (parity with the timeline)', () => {
@@ -146,5 +149,31 @@ describe('right inspector — §2 diamond corrections (rendered)', () => {
     const c = renderRightInspector(solid);
     expect(rightDiamondProps(c)).toContain('fill.color');
     expect(leftDiamondProps(solid)).toContain('fill.color');
+  });
+
+  it('D-052 — backgroundColor diamond is solid-only on the time-driven kinds', () => {
+    // A gradient backgroundFill ⇒ no backgroundColor diamond on either panel.
+    const tkGrad: Element = { ...defaultTicker('tk', 0, 0), backgroundFill: LINEAR_GRADIENT };
+    expect(rightDiamondProps(renderRightInspector(tkGrad))).not.toContain('backgroundColor');
+    expect(leftDiamondProps(tkGrad)).not.toContain('backgroundColor');
+    // A solid ticker ⇒ the diamond appears.
+    expect(rightDiamondProps(renderRightInspector(defaultTicker('tk', 0, 0)))).toContain(
+      'backgroundColor',
+    );
+  });
+
+  it('D-052 — text.color diamond is solid-only on clock/sequence, always on ticker', () => {
+    // clock/sequence carry a gradient-capable colorFill ⇒ a gradient suppresses the diamond.
+    const ckGrad: Element = { ...defaultClock('ck', 0, 0), colorFill: LINEAR_GRADIENT };
+    expect(rightDiamondProps(renderRightInspector(ckGrad))).not.toContain('text.color');
+    expect(leftDiamondProps(ckGrad)).not.toContain('text.color');
+    // ticker has no colorFill ⇒ text colour is always keyframe-able.
+    expect(leftDiamondProps(defaultTicker('tk', 0, 0))).toContain('text.color');
+  });
+
+  it('D-052 — ticker padding is deferred (no diamond); clock/sequence padding is keyframe-able', () => {
+    expect(leftDiamondProps(defaultTicker('tk', 0, 0))).not.toContain('padding.top');
+    expect(leftDiamondProps(defaultClock('ck', 0, 0))).toContain('padding.top');
+    expect(leftDiamondProps(defaultSequence('sq', 0, 0))).toContain('padding.top');
   });
 });
