@@ -4,6 +4,7 @@ import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 import {
   defaultClock,
+  defaultSequence,
   defaultShape,
   defaultText,
   defaultTicker,
@@ -44,12 +45,20 @@ describe('D-042 — box-style registry presence + keyframe-ability', () => {
     }
   });
 
-  it('stroke is keyframe-able only on shapes (Option A); cornerRadius is keyframe-able on all five', () => {
-    expect(isKeyframeable(defaultShape('s', 0, 0), 'stroke.width')).toBe(true);
-    for (const el of [defaultText('t', 0, 0), defaultTicker('k', 0, 0), defaultClock('c', 0, 0)]) {
-      expect(isKeyframeable(el, 'stroke.width')).toBe(false); // static only — D-052
+  it('stroke is keyframe-able on shapes + the time-driven kinds (D-052); text stroke stays static; cornerRadius on all five', () => {
+    // D-052 — shape + ticker/clock/sequence now keyframe stroke.
+    for (const el of [
+      defaultShape('s', 0, 0),
+      defaultTicker('k', 0, 0),
+      defaultClock('c', 0, 0),
+      defaultSequence('q', 0, 0),
+    ]) {
+      expect(isKeyframeable(el, 'stroke.width')).toBe(true);
       expect(isKeyframeable(el, 'cornerRadius')).toBe(true);
     }
+    // Text is NOT a time-driven kind — its stroke stays static; cornerRadius animates.
+    expect(isKeyframeable(defaultText('t', 0, 0), 'stroke.width')).toBe(false);
+    expect(isKeyframeable(defaultText('t', 0, 0), 'cornerRadius')).toBe(true);
   });
 
   it('per-corner sub-tracks are keyframe-able only in per-corner mode; the uniform value only in uniform mode', () => {

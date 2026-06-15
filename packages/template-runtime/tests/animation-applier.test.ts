@@ -62,6 +62,32 @@ function makeText(): { source: TextElement; node: HTMLElement } {
   return { source, node };
 }
 
+/**
+ * D-052 — a minimal time-driven element (ticker/clock/sequence). The applier reads
+ * only `.type` + the style fields, so a loose cast is enough; `extra` supplies the
+ * static `stroke` / `textShadow` / `padding` a given test needs.
+ */
+function makeTimeDriven(
+  type: 'ticker' | 'clock' | 'sequence',
+  extra: Record<string, unknown> = {},
+): { source: ShapeElement; node: HTMLElement } {
+  const source = {
+    id: type,
+    name: type,
+    type,
+    transform: baseTransform,
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+    color: '#FFFFFF',
+    ...extra,
+  } as unknown as ShapeElement;
+  const node = document.createElement('div');
+  document.body.appendChild(node);
+  return { source, node };
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
 });
@@ -333,6 +359,194 @@ describe('applyAnimationAtFrame', () => {
     };
     applyAnimationAtFrame(entry, 10);
     expect(node.style.color.toLowerCase()).toMatch(/0,\s*255,\s*0|#00ff00/);
+  });
+});
+
+describe('D-052 — styling animates on the time-driven kinds (ticker/clock/sequence)', () => {
+  const KINDS = ['ticker', 'clock', 'sequence'] as const;
+
+  for (const kind of KINDS) {
+    it(`${kind}: stroke width animates into the border on the root node`, () => {
+      const { source, node } = makeTimeDriven(kind, { stroke: { width: 1, color: '#3366ff' } });
+      const entry: AnimatedElement = {
+        id: kind,
+        node,
+        source,
+        animation: {
+          tracks: {
+            'stroke.width': {
+              keyframes: [
+                { frame: 0, value: 2, easing: 'linear' },
+                { frame: 10, value: 8, easing: 'linear' },
+              ],
+            },
+          },
+        },
+      };
+      applyAnimationAtFrame(entry, 10);
+      expect(node.style.border).toContain('8px');
+      expect(node.style.border).toContain('solid');
+    });
+
+    it(`${kind}: text colour animates on the node (inherits to items/digits)`, () => {
+      const { source, node } = makeTimeDriven(kind);
+      const entry: AnimatedElement = {
+        id: kind,
+        node,
+        source,
+        animation: {
+          tracks: {
+            'text.color': {
+              keyframes: [
+                { frame: 0, value: '#FF0000', easing: 'linear' },
+                { frame: 10, value: '#00FF00', easing: 'linear' },
+              ],
+            },
+          },
+        },
+      };
+      applyAnimationAtFrame(entry, 10);
+      expect(node.style.color.toLowerCase()).toMatch(/0,\s*255,\s*0|#00ff00/);
+    });
+
+    it(`${kind}: backgroundColor animates on the node`, () => {
+      const { source, node } = makeTimeDriven(kind);
+      const entry: AnimatedElement = {
+        id: kind,
+        node,
+        source,
+        animation: {
+          tracks: {
+            backgroundColor: {
+              keyframes: [
+                { frame: 0, value: '#000000', easing: 'linear' },
+                { frame: 10, value: '#0000FF', easing: 'linear' },
+              ],
+            },
+          },
+        },
+      };
+      applyAnimationAtFrame(entry, 10);
+      expect(node.style.backgroundColor.toLowerCase()).toMatch(/0,\s*0,\s*255|#0000ff/);
+    });
+
+    it(`${kind}: shadow animates as text-shadow, not box-shadow`, () => {
+      const { source, node } = makeTimeDriven(kind, {
+        textShadow: { offsetX: 1, offsetY: 2, blur: 3, color: '#000000' },
+      });
+      const entry: AnimatedElement = {
+        id: kind,
+        node,
+        source,
+        animation: {
+          tracks: {
+            'shadow.blur': {
+              keyframes: [
+                { frame: 0, value: 3, easing: 'linear' },
+                { frame: 10, value: 12, easing: 'linear' },
+              ],
+            },
+          },
+        },
+      };
+      applyAnimationAtFrame(entry, 10);
+      expect(node.style.textShadow).toContain('12px');
+      expect(node.style.boxShadow).toBe('');
+    });
+  }
+
+  for (const kind of ['clock', 'sequence'] as const) {
+    it(`${kind}: padding animates on the root node`, () => {
+      const { source, node } = makeTimeDriven(kind, {
+        padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      });
+      const entry: AnimatedElement = {
+        id: kind,
+        node,
+        source,
+        animation: {
+          tracks: {
+            'padding.top': {
+              keyframes: [
+                { frame: 0, value: 0, easing: 'linear' },
+                { frame: 10, value: 16, easing: 'linear' },
+              ],
+            },
+          },
+        },
+      };
+      applyAnimationAtFrame(entry, 10);
+      expect(node.style.paddingTop).toBe('16px');
+    });
+  }
+
+  it('no-regression: shape shadow stays box-shadow; text shadow stays text-shadow', () => {
+    const { source: shp, node: shpNode } = makeShape();
+    applyAnimationAtFrame(
+      {
+        id: 'shp',
+        node: shpNode,
+        source: { ...shp, shadow: { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' } },
+        animation: {
+          tracks: {
+            'shadow.blur': {
+              keyframes: [
+                { frame: 0, value: 0, easing: 'linear' },
+                { frame: 10, value: 9, easing: 'linear' },
+              ],
+            },
+          },
+        },
+      },
+      10,
+    );
+    expect(shpNode.style.boxShadow).toContain('9px');
+    expect(shpNode.style.textShadow).toBe('');
+
+    const { source: txt, node: txtNode } = makeText();
+    applyAnimationAtFrame(
+      {
+        id: 'txt',
+        node: txtNode,
+        source: { ...txt, textShadow: { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' } },
+        animation: {
+          tracks: {
+            'shadow.blur': {
+              keyframes: [
+                { frame: 0, value: 0, easing: 'linear' },
+                { frame: 10, value: 7, easing: 'linear' },
+              ],
+            },
+          },
+        },
+      },
+      10,
+    );
+    expect(txtNode.style.textShadow).toContain('7px');
+    expect(txtNode.style.boxShadow).toBe('');
+  });
+
+  it('no-regression: shape stroke still animates the border', () => {
+    const { source, node } = makeShape();
+    applyAnimationAtFrame(
+      {
+        id: 's',
+        node,
+        source: { ...source, stroke: { width: 1, color: '#000000' } },
+        animation: {
+          tracks: {
+            'stroke.width': {
+              keyframes: [
+                { frame: 0, value: 1, easing: 'linear' },
+                { frame: 10, value: 5, easing: 'linear' },
+              ],
+            },
+          },
+        },
+      },
+      10,
+    );
+    expect(node.style.border).toContain('5px');
   });
 });
 

@@ -67,20 +67,22 @@ export function applyAnimationAtFrame(entry: AnimatedElement, frame: number): vo
     const v = interpolateAtFrame(tracks['fill.color'], frame);
     if (typeof v === 'string') entry.node.style.background = v;
   }
-  if (tracks['text.color'] !== undefined && entry.source.type === 'text') {
+  // D-052 — text colour animates on text AND the time-driven kinds (it inherits to
+  // the ticker items / clock digit span / sequence items, as the static colour does).
+  if (tracks['text.color'] !== undefined && writesTextStyle(entry.source.type)) {
     const v = interpolateAtFrame(tracks['text.color'], frame);
     if (typeof v === 'string') entry.node.style.color = v;
   }
-  // D-010 — text background colour.
-  if (tracks['backgroundColor'] !== undefined && entry.source.type === 'text') {
+  // D-010 / D-052 — background colour (text + the time-driven kinds; solid only).
+  if (tracks['backgroundColor'] !== undefined && writesTextStyle(entry.source.type)) {
     const v = interpolateAtFrame(tracks['backgroundColor'], frame);
     if (typeof v === 'string') entry.node.style.backgroundColor = v;
   }
 
   // D-042 — tuple-aware border-radius (uniform OR per-corner sub-tracks).
   applyCornerRadius(entry, tracks, frame);
-  // Stroke width / colour — recompose the border declaration (shape-only; D-052
-  // covers stroke animation for the time-driven kinds).
+  // Stroke width / colour — recompose the border declaration (shapes + the
+  // time-driven kinds, D-052; text stroke stays static).
   applyStroke(entry, tracks, frame);
   // Font sub-properties.
   applyNumeric(tracks, 'font.size', frame, (v) => {
@@ -110,6 +112,23 @@ export function applyAnimationAtFrame(entry: AnimatedElement, frame: number): vo
   // from static + animated components when any track is present.
   applyShadow(entry, tracks, frame);
   applyFilter(entry, tracks, frame);
+}
+
+/**
+ * D-052 — the time-driven kinds (ticker/clock/sequence) whose box styling now
+ * animates like a shape/text's. `writesTextStyle` = kinds whose colour/background/
+ * shadow paint as text styling (text + the trio); `hasBoxStroke` = kinds with a
+ * `stroke` border (shape + the trio). Shape/text behaviour is unchanged — these only
+ * ADD the trio.
+ */
+function isTimeDriven(type: string): boolean {
+  return type === 'ticker' || type === 'clock' || type === 'sequence';
+}
+function writesTextStyle(type: string): boolean {
+  return type === 'text' || isTimeDriven(type);
+}
+function hasBoxStroke(type: string): boolean {
+  return type === 'shape' || isTimeDriven(type);
 }
 
 function applyNumeric(
@@ -185,7 +204,8 @@ function readStringTrack(
  * single `cornerRadius` track animates the uniform value. This fixes the
  * previously-broken animated-tuple path (the old code serialised an array into one
  * `px` value) and applies to every background-capable kind (cornerRadius animation
- * is ungated, unlike stroke).
+ * is ungated for all of them; stroke/colour/shadow/padding apply to shape/text and —
+ * D-052 — the time-driven kinds).
  */
 function applyCornerRadius(
   entry: AnimatedElement,
@@ -219,10 +239,14 @@ function applyStroke(
   const hasAny = STROKE_PROPS.some((p) => tracks[p] !== undefined);
   if (!hasAny) return;
   const src = entry.source;
-  if (src.type !== 'shape') return;
-  const width = readNumericTrack(tracks, 'stroke.width', frame) ?? src.stroke?.width ?? 0;
-  const color = readStringTrack(tracks, 'stroke.color', frame) ?? src.stroke?.color ?? '#000000';
-  const staticDash = (src.stroke?.dash?.length ?? 0) > 0;
+  // D-052 — stroke animates on shapes AND the time-driven kinds; the border lands on
+  // the element's root node (band / box / stage), where the static stroke renders.
+  if (!hasBoxStroke(src.type)) return;
+  const stroke = (src as { stroke?: { width: number; color: string; dash?: readonly number[] } })
+    .stroke;
+  const width = readNumericTrack(tracks, 'stroke.width', frame) ?? stroke?.width ?? 0;
+  const color = readStringTrack(tracks, 'stroke.color', frame) ?? stroke?.color ?? '#000000';
+  const staticDash = (stroke?.dash?.length ?? 0) > 0;
   const animatedDash = readNumericTrack(tracks, 'stroke.dash', frame);
   const dashOn = animatedDash !== undefined ? animatedDash > 0 : staticDash;
   entry.node.style.border = `${width}px ${dashOn ? 'dashed' : 'solid'} ${color}`;
@@ -236,14 +260,25 @@ function applyShadow(
   const hasAny = SHADOW_PROPS.some((p) => tracks[p] !== undefined);
   if (!hasAny) return;
   const src = entry.source;
+  // D-052 — shape uses `box-shadow` from `shadow`; text AND the time-driven kinds use
+  // `text-shadow` from `textShadow` (the field they statically render from).
+  const textShadowKind = writesTextStyle(src.type);
   const staticShadow =
-    src.type === 'shape' ? src.shadow : src.type === 'text' ? src.textShadow : undefined;
+    src.type === 'shape'
+      ? src.shadow
+      : textShadowKind
+        ? (
+            src as {
+              textShadow?: { offsetX: number; offsetY: number; blur: number; color: string };
+            }
+          ).textShadow
+        : undefined;
   const offsetX = readNumericTrack(tracks, 'shadow.offsetX', frame) ?? staticShadow?.offsetX ?? 0;
   const offsetY = readNumericTrack(tracks, 'shadow.offsetY', frame) ?? staticShadow?.offsetY ?? 0;
   const blur = readNumericTrack(tracks, 'shadow.blur', frame) ?? staticShadow?.blur ?? 0;
   const color = readStringTrack(tracks, 'shadow.color', frame) ?? staticShadow?.color ?? '#000000';
   const css = `${offsetX}px ${offsetY}px ${blur}px ${color}`;
-  if (src.type === 'text') entry.node.style.textShadow = css;
+  if (textShadowKind) entry.node.style.textShadow = css;
   else entry.node.style.boxShadow = css;
 }
 

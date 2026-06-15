@@ -529,7 +529,13 @@ export const timelineSlice = {
           const base = el.shadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
           const shadow = { ...base, [field]: numeric };
           designerStore.updateElement(elementId, { shadow } as unknown as Partial<Element>);
-        } else if (el.type === 'text') {
+        } else if (
+          // D-052 — text + the time-driven kinds all carry `textShadow`.
+          el.type === 'text' ||
+          el.type === 'ticker' ||
+          el.type === 'clock' ||
+          el.type === 'sequence'
+        ) {
           const base = el.textShadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
           const textShadow = { ...base, [field]: numeric };
           designerStore.updateElement(elementId, { textShadow } as unknown as Partial<Element>);
@@ -564,7 +570,8 @@ export const timelineSlice = {
       case 'padding.right':
       case 'padding.bottom':
       case 'padding.left': {
-        if (el.type !== 'text') return;
+        // D-052 — text + clock/sequence (NOT ticker — its padding is deferred).
+        if (!(el.type === 'text' || el.type === 'clock' || el.type === 'sequence')) return;
         const key = property.slice('padding.'.length);
         const base = el.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
         const padding = { ...base, [key]: numeric };
@@ -596,7 +603,13 @@ export const timelineSlice = {
           designerStore.updateElement(elementId, {
             shadow: { ...base, color: value },
           } as unknown as Partial<Element>);
-        } else if (el.type === 'text') {
+        } else if (
+          // D-052 — text + the time-driven kinds all carry `textShadow`.
+          el.type === 'text' ||
+          el.type === 'ticker' ||
+          el.type === 'clock' ||
+          el.type === 'sequence'
+        ) {
           const base = el.textShadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
           designerStore.updateElement(elementId, {
             textShadow: { ...base, color: value },
@@ -605,12 +618,32 @@ export const timelineSlice = {
         return;
       }
       case 'text.color': {
-        if (el.type !== 'text' || typeof value !== 'string') return;
+        // D-052 — text + the time-driven kinds (the static lives in `el.color`).
+        if (
+          !(
+            el.type === 'text' ||
+            el.type === 'ticker' ||
+            el.type === 'clock' ||
+            el.type === 'sequence'
+          ) ||
+          typeof value !== 'string'
+        )
+          return;
         designerStore.updateElement(elementId, { color: value } as Partial<Element>);
         return;
       }
       case 'backgroundColor': {
-        if (el.type !== 'text' || typeof value !== 'string') return;
+        // D-052 — text + the time-driven kinds.
+        if (
+          !(
+            el.type === 'text' ||
+            el.type === 'ticker' ||
+            el.type === 'clock' ||
+            el.type === 'sequence'
+          ) ||
+          typeof value !== 'string'
+        )
+          return;
         designerStore.updateElement(elementId, {
           backgroundColor: value,
         } as unknown as Partial<Element>);
