@@ -33,32 +33,34 @@ function elById(id: string): Element {
 const props = (type: Element['type']): string[] => descriptorsForKind(type).map((d) => d.property);
 
 describe('D-042 — box-style registry presence + keyframe-ability', () => {
-  it('the five background-capable kinds expose stroke + cornerRadius; repeater/image expose neither', () => {
-    for (const t of ['shape', 'text', 'ticker', 'clock', 'sequence'] as const) {
+  it('only shape + text expose stroke + cornerRadius (D-056); content-driven kinds + repeater/image expose neither', () => {
+    for (const t of ['shape', 'text'] as const) {
       expect(props(t)).toEqual(
         expect.arrayContaining(['stroke.color', 'stroke.width', 'stroke.dash', 'cornerRadius']),
       );
     }
-    for (const t of ['repeater', 'image'] as const) {
+    // D-056 — ticker/clock/sequence no longer carry box styling.
+    for (const t of ['ticker', 'clock', 'sequence', 'repeater', 'image'] as const) {
       expect(props(t)).not.toContain('stroke.width');
       expect(props(t)).not.toContain('cornerRadius');
     }
   });
 
-  it('stroke is keyframe-able on shapes + the time-driven kinds (D-052); text stroke stays static; cornerRadius on all five', () => {
-    // D-052 — shape + ticker/clock/sequence now keyframe stroke.
+  it('stroke + cornerRadius are keyframe-able on shapes only (D-056); text stroke static + radius animates; content-driven kinds expose neither', () => {
+    expect(isKeyframeable(defaultShape('s', 0, 0), 'stroke.width')).toBe(true);
+    expect(isKeyframeable(defaultShape('s', 0, 0), 'cornerRadius')).toBe(true);
+    // Text: stroke stays static; cornerRadius animates (unchanged).
+    expect(isKeyframeable(defaultText('t', 0, 0), 'stroke.width')).toBe(false);
+    expect(isKeyframeable(defaultText('t', 0, 0), 'cornerRadius')).toBe(true);
+    // D-056 — content-driven kinds expose no stroke / cornerRadius at all.
     for (const el of [
-      defaultShape('s', 0, 0),
       defaultTicker('k', 0, 0),
       defaultClock('c', 0, 0),
       defaultSequence('q', 0, 0),
     ]) {
-      expect(isKeyframeable(el, 'stroke.width')).toBe(true);
-      expect(isKeyframeable(el, 'cornerRadius')).toBe(true);
+      expect(isKeyframeable(el, 'stroke.width')).toBe(false);
+      expect(isKeyframeable(el, 'cornerRadius')).toBe(false);
     }
-    // Text is NOT a time-driven kind — its stroke stays static; cornerRadius animates.
-    expect(isKeyframeable(defaultText('t', 0, 0), 'stroke.width')).toBe(false);
-    expect(isKeyframeable(defaultText('t', 0, 0), 'cornerRadius')).toBe(true);
   });
 
   it('per-corner sub-tracks are keyframe-able only in per-corner mode; the uniform value only in uniform mode', () => {
@@ -93,14 +95,22 @@ describe('D-042 — store writes for the box style', () => {
     expect((elById('t') as { cornerRadius?: unknown }).cornerRadius).toEqual([12, 5, 5, 5]);
   });
 
-  it('static stroke writes are ungated for the background-capable kinds (ticker), unlike animation', () => {
+  it('D-056 — a static stroke write is a no-op on the content-driven kinds (boxKind narrowed to shape/text)', () => {
     freshScene();
     designerStore.addElement(defaultTicker('tk', 0, 0));
     designerStore.writeStaticAnimatable('tk', 'stroke.width', 4);
     designerStore.writeStaticAnimatable('tk', 'stroke.color', '#FF0000');
-    const s = (elById('tk') as { stroke?: { width: number; color: string } }).stroke;
-    expect(s?.width).toBe(4);
-    expect(s?.color).toBe('#FF0000');
+    expect((elById('tk') as { stroke?: unknown }).stroke).toBeUndefined();
+  });
+
+  it('regression — static stroke writes still work on shape and text (boxKind keeps shape/text)', () => {
+    freshScene();
+    designerStore.addElement(defaultShape('s', 0, 0));
+    designerStore.writeStaticAnimatable('s', 'stroke.width', 3);
+    expect((elById('s') as { stroke?: { width: number } }).stroke?.width).toBe(3);
+    designerStore.addElement(defaultText('t', 0, 0));
+    designerStore.writeStaticAnimatable('t', 'stroke.color', '#00FF00');
+    expect((elById('t') as { stroke?: { color: string } }).stroke?.color).toBe('#00FF00');
   });
 });
 

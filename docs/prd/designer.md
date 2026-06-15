@@ -1662,3 +1662,45 @@ inspector — i.e. multi == single, fanned out.
 - WHEN حالتِ uniform فعال است THEN آیکونِ toggle مربعِ گوشه‌گردِ ساده باشد (نه آیکونِ تودرتو)
 
 **Notes:** کاملاً ظاهری، بدون تغییرِ schema/runtime/spec behavior — focused fix، احتمالاً بدون OpenSpec change. مرجع: `docs/designer-guide/sample-assets/D-042-radius-0.png` (یکنواخت) و `D-042-radius-1.png` (چهارگوشه). وضعیتِ فعلی برای مقایسه: `D-042-radius-3.png` / `D-042-radius-4.png`.
+
+## [~] D-056 — Strip box styling from content-driven element types ⟨priority: high⟩ — change: `openspec/changes/strip-box-styling-content-driven/`
+
+**What:** انواعِ محتوا-محور (ticker/clock/sequence) **جعبه نیستند** — فقط متن/دیتای
+خود را می‌آورند. box-styling (background رنگ+fill، border-radius، box padding،
+path-style شاملِ stroke، box drop-shadow) را از این انواع بردار؛ اگر پس‌زمینه/سایهٔ
+جعبه لازم است، یک shape ِ جدا زیرشان می‌نشیند (دیزاینر هماهنگ می‌کند). فقط
+**text-shadow + رنگِ متن (شاملِ gradient) + font/text styling** روی این انواع می‌ماند.
+المانِ `text` کاملاً **بدونِ تغییر** است (همه‌چیزش را نگه می‌دارد). repeater از قبل
+box-free است (بدونِ تغییر). این بخشی از D-042/D-052 را برای این سه نوع **برمی‌گرداند**
+— عمدی.
+**Why:** این انواع ذاتاً محتوا-محورند؛ دادنِ box-styling ِ کامل بهشان یعنی تکرارِ کاری
+که shape بهتر می‌کند، به‌علاوهٔ پیچیدگی (مثلِ تداخلِ gradient/background). معماریِ
+لایه‌ای (shape ِ پس‌زمینه + متن رویش) تمیزتر است و با جریانِ Lottie/AF هم سازگار
+(کلِ ظاهر درونِ asset پخته شده).
+**Acceptance:**
+
+- WHEN یک ticker/clock/sequence در inspector باز شود THEN کنترل‌های background،
+  border-radius، box padding، stroke/path-style، و box drop-shadow **نمایش داده
+  نمی‌شوند**؛ فقط رنگِ متن (شاملِ gradient)، Text Shadow، و font/text styling هست
+- WHEN روی این انواع چیزی کیفریم شود THEN فقط transform/opacity/filter + رنگِ متن +
+  shadow (text-shadow) کیفریم‌پذیرند؛ stroke/cornerRadius/background/padding **نه**
+- WHEN این انواع رندر شوند (canvas/preview/export) THEN runtime هیچ background/
+  stroke/border-radius/box-padding برایشان نقاشی نمی‌کند؛ فقط متن + text-shadow +
+  رنگِ متن (شاملِ gradient)
+- WHEN بخشِ سایهٔ این انواع دیده شود THEN عنوانش **"Text Shadow"** است (نه "Drop
+  Shadow")، و offsetX/offsetY در **یک خط** هستند (مثلِ المانِ text) — جذبِ ب/ج
+- WHEN المانِ **text** یا **shape** باز/رندر شود THEN box-styling‌اش دقیقاً مثلِ امروز
+  است (reversionها kind-gated؛ text/shape هرگز لمس نمی‌شوند)
+- WHEN یک stroke به‌صورتِ برنامه‌ای روی این انواع ست شود THEN برای آنها **نوشته
+  نمی‌شود** (boxKind برای stroke به shape/text باریک شده — strict)
+
+**Notes:** OpenSpec change با `## MODIFIED`/`## RENAMED` روی ۵ capability:
+`designer-box-styling` + `designer-inspector-registry` (carve-back) و
+`designer-ticker-element` + `designer-clock-element` + `designer-sequence-element`
+(توصیفِ زیرمجموعهٔ styling). migration = گزینهٔ ب (schema فیلدها را نگه می‌دارد —
+بدونِ تغییرِ breaking؛ دادهٔ مرده بی‌ضرر چون این انواع هنوز جایی استفاده نشده‌اند)،
+**جز** boxKind برای stroke که strict باریک می‌شود. **برمی‌گرداند** D-042 (cornerRadius)
+و D-052 (stroke/text-color/background/shadow/padding) را برای این سه نوع. B-016 برای
+clock/sequence منتفی می‌شود (background رفت)؛ برای text جدا می‌ماند (B-016 ِ باریک).
+repeater دست‌نخورده. **پرخطر (schema/موتورِ پخش/بازگردانیِ specها) — فاز ۱ recon انجام
+شد.** Change: `openspec/changes/strip-box-styling-content-driven/`.

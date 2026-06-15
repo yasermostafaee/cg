@@ -362,121 +362,105 @@ describe('applyAnimationAtFrame', () => {
   });
 });
 
-describe('D-052 — styling animates on the time-driven kinds (ticker/clock/sequence)', () => {
+describe('D-056 — content-driven kinds animate ONLY text colour + text-shadow (ticker/clock/sequence)', () => {
   const KINDS = ['ticker', 'clock', 'sequence'] as const;
 
   for (const kind of KINDS) {
-    it(`${kind}: stroke width animates into the border on the root node`, () => {
-      const { source, node } = makeTimeDriven(kind, { stroke: { width: 1, color: '#3366ff' } });
-      const entry: AnimatedElement = {
-        id: kind,
-        node,
-        source,
-        animation: {
-          tracks: {
-            'stroke.width': {
-              keyframes: [
-                { frame: 0, value: 2, easing: 'linear' },
-                { frame: 10, value: 8, easing: 'linear' },
-              ],
-            },
-          },
-        },
-      };
-      applyAnimationAtFrame(entry, 10);
-      expect(node.style.border).toContain('8px');
-      expect(node.style.border).toContain('solid');
-    });
-
     it(`${kind}: text colour animates on the node (inherits to items/digits)`, () => {
       const { source, node } = makeTimeDriven(kind);
-      const entry: AnimatedElement = {
-        id: kind,
-        node,
-        source,
-        animation: {
-          tracks: {
-            'text.color': {
-              keyframes: [
-                { frame: 0, value: '#FF0000', easing: 'linear' },
-                { frame: 10, value: '#00FF00', easing: 'linear' },
-              ],
+      applyAnimationAtFrame(
+        {
+          id: kind,
+          node,
+          source,
+          animation: {
+            tracks: {
+              'text.color': {
+                keyframes: [
+                  { frame: 0, value: '#FF0000', easing: 'linear' },
+                  { frame: 10, value: '#00FF00', easing: 'linear' },
+                ],
+              },
             },
           },
         },
-      };
-      applyAnimationAtFrame(entry, 10);
+        10,
+      );
       expect(node.style.color.toLowerCase()).toMatch(/0,\s*255,\s*0|#00ff00/);
-    });
-
-    it(`${kind}: backgroundColor animates on the node`, () => {
-      const { source, node } = makeTimeDriven(kind);
-      const entry: AnimatedElement = {
-        id: kind,
-        node,
-        source,
-        animation: {
-          tracks: {
-            backgroundColor: {
-              keyframes: [
-                { frame: 0, value: '#000000', easing: 'linear' },
-                { frame: 10, value: '#0000FF', easing: 'linear' },
-              ],
-            },
-          },
-        },
-      };
-      applyAnimationAtFrame(entry, 10);
-      expect(node.style.backgroundColor.toLowerCase()).toMatch(/0,\s*0,\s*255|#0000ff/);
     });
 
     it(`${kind}: shadow animates as text-shadow, not box-shadow`, () => {
       const { source, node } = makeTimeDriven(kind, {
         textShadow: { offsetX: 1, offsetY: 2, blur: 3, color: '#000000' },
       });
-      const entry: AnimatedElement = {
-        id: kind,
-        node,
-        source,
-        animation: {
-          tracks: {
-            'shadow.blur': {
-              keyframes: [
-                { frame: 0, value: 3, easing: 'linear' },
-                { frame: 10, value: 12, easing: 'linear' },
-              ],
+      applyAnimationAtFrame(
+        {
+          id: kind,
+          node,
+          source,
+          animation: {
+            tracks: {
+              'shadow.blur': {
+                keyframes: [
+                  { frame: 0, value: 3, easing: 'linear' },
+                  { frame: 10, value: 12, easing: 'linear' },
+                ],
+              },
             },
           },
         },
-      };
-      applyAnimationAtFrame(entry, 10);
+        10,
+      );
       expect(node.style.textShadow).toContain('12px');
       expect(node.style.boxShadow).toBe('');
     });
-  }
 
-  for (const kind of ['clock', 'sequence'] as const) {
-    it(`${kind}: padding animates on the root node`, () => {
+    it(`${kind}: D-056 — stroke / background / padding / cornerRadius are NOT applied`, () => {
       const { source, node } = makeTimeDriven(kind, {
+        stroke: { width: 1, color: '#3366ff' },
+        cornerRadius: 8,
         padding: { top: 0, right: 0, bottom: 0, left: 0 },
       });
-      const entry: AnimatedElement = {
-        id: kind,
-        node,
-        source,
-        animation: {
-          tracks: {
-            'padding.top': {
-              keyframes: [
-                { frame: 0, value: 0, easing: 'linear' },
-                { frame: 10, value: 16, easing: 'linear' },
-              ],
+      applyAnimationAtFrame(
+        {
+          id: kind,
+          node,
+          source,
+          animation: {
+            tracks: {
+              'stroke.width': {
+                keyframes: [
+                  { frame: 0, value: 2, easing: 'linear' },
+                  { frame: 10, value: 8, easing: 'linear' },
+                ],
+              },
+              backgroundColor: {
+                keyframes: [
+                  { frame: 0, value: '#000000', easing: 'linear' },
+                  { frame: 10, value: '#0000FF', easing: 'linear' },
+                ],
+              },
+              'padding.top': {
+                keyframes: [
+                  { frame: 0, value: 0, easing: 'linear' },
+                  { frame: 10, value: 16, easing: 'linear' },
+                ],
+              },
+              cornerRadius: {
+                keyframes: [
+                  { frame: 0, value: 0, easing: 'linear' },
+                  { frame: 10, value: 10, easing: 'linear' },
+                ],
+              },
             },
           },
         },
-      };
-      applyAnimationAtFrame(entry, 10);
-      expect(node.style.paddingTop).toBe('16px');
+        10,
+      );
+      expect(node.style.border).toBe('');
+      expect(node.style.backgroundColor).toBe('');
+      expect(node.style.paddingTop).toBe('');
+      expect(node.style.borderRadius).toBe('');
     });
   }
 

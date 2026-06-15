@@ -199,14 +199,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // default can already reconcile into its driver. The node→driver
       // registries are how the bindings applier routes `*-items` values.
       const scopeTickers = scope.tickers.map((t) => {
-        // The crawl lives in the padding-inset viewport div (CSS padding is
-        // inert for the abspos track), so the travel width shrinks with it.
-        const pad = t.element.padding;
-        const horizontalPad = pad === undefined ? 0 : pad.left + pad.right;
+        // D-056 — the ticker has no box padding; the crawl viewport is full-bleed, so
+        // the travel width is the full band width.
         const driver = new TickerDriver({
           band: t.band,
           track: t.track,
-          viewportWidth: Math.max(0, t.element.transform.size.w - horizontalPad),
+          viewportWidth: Math.max(0, t.element.transform.size.w),
           direction: t.element.direction,
           speed: t.element.speed,
           gap: t.element.gap,

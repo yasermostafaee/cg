@@ -501,7 +501,7 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
     expect(track?.style.transform).toBe('translateX(50px)'); // rtl: moves left→right
   });
 
-  it('band padding shrinks the crawl viewport (completion uses the padded width)', async () => {
+  it('D-056 — the ticker is full-bleed: band padding does NOT shrink the crawl viewport', async () => {
     const clock = makeClock();
     const base = tickerScene({
       playout: { mode: 'auto-out', holdSource: 'content-driven' },
@@ -524,8 +524,9 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
     const events: string[] = [];
     runtime.on('stop.end', () => events.push('stop.end'));
     await runtime.play({});
-    // viewport = 400 − 60 = 340 ⇒ one pass ends at d ≥ 310 + 340 = 650 ⇒ 6500ms.
-    await run(clock, 6400);
+    // D-056 — padding is ignored; the viewport is the FULL band width 400 (not 340), so
+    // one pass ends at d ≥ 310 + 400 = 710 ⇒ 7100ms (the padding does not shrink it).
+    await run(clock, 7000);
     expect(events).toEqual([]);
     await run(clock, 200);
     expect(events).toEqual(['stop.end']);
