@@ -1335,7 +1335,14 @@ const RADIUS_CORNERS = [
  * D-042 — border radius for any background-capable kind, with a per-element toggle
  * between a single uniform value and four independent corners (tl/tr/br/bl). The
  * value SHAPE is the toggle: a number is uniform, a 4-tuple is per-corner.
- * Collapsing back to uniform drops the per-corner keyframe tracks in one undo.
+ *
+ * B-015 — toggling MIGRATES the value + keyframes in one undo, it does not drop them.
+ * uniform→per-corner copies the uniform `cornerRadius` keyframes into all four corner
+ * sub-tracks (fresh ids) then clears the uniform track. per-corner→uniform takes the
+ * top-left corner as the representative — its keyframes migrate onto `cornerRadius`,
+ * the other three are dropped (lossless precisely when the four corners are
+ * identical) — then clears the four sub-tracks. Clearing the orphaned track in each
+ * direction keeps the runtime's track-presence mode in sync with the value shape.
  */
 function BorderRadiusSection({ element, currentFrame, selectedKeyframe }: BoxProps): JSX.Element {
   const id = element.id;
@@ -1348,10 +1355,17 @@ function BorderRadiusSection({ element, currentFrame, selectedKeyframe }: BoxPro
       : [0, 0, 0, 0];
 
   const toPerCorner = (): void =>
-    designerStore.updateElement(id, { cornerRadius: corners } as unknown as Partial<Element>);
+    designerStore.runAsSingleHistoryEntry(() => {
+      designerStore.updateElement(id, { cornerRadius: corners } as unknown as Partial<Element>);
+      for (const c of RADIUS_CORNERS) designerStore.copyKeyframeTrack(id, 'cornerRadius', c.prop);
+      designerStore.clearKeyframeTrack(id, 'cornerRadius');
+    });
   const toUniform = (): void =>
     designerStore.runAsSingleHistoryEntry(() => {
       designerStore.updateElement(id, { cornerRadius: corners[0] } as unknown as Partial<Element>);
+      // Top-left is the representative; drop any stale uniform track, then migrate tl.
+      designerStore.clearKeyframeTrack(id, 'cornerRadius');
+      designerStore.copyKeyframeTrack(id, 'cornerRadius.tl', 'cornerRadius');
       for (const c of RADIUS_CORNERS) designerStore.clearKeyframeTrack(id, c.prop);
     });
 

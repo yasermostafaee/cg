@@ -253,6 +253,24 @@ export const timelineSlice = {
   },
 
   /**
+   * Copy an element's ENTIRE keyframe track from one property to another — the
+   * border-radius uniform↔per-corner migration (B-015). Each keyframe is deep-cloned
+   * with a FRESH id (`{ ...k, id: freshKeyframeId() }`) so one source can fan into
+   * several destination tracks without id collisions; frame / value / easing / bezier
+   * survive via the spread. Overwrites any existing `to` track. No-op when `from` has
+   * no keyframes. Wrap in `runAsSingleHistoryEntry` with the value-shape change for
+   * one-undo recovery.
+   */
+  copyKeyframeTrack(elementId: string, from: AnimatableProperty, to: AnimatableProperty): void {
+    mutateAnimation(elementId, (anim) => {
+      const src = anim.tracks[from];
+      if (src === undefined || src.keyframes.length === 0) return anim;
+      const keyframes: Keyframe[] = src.keyframes.map((k) => ({ ...k, id: freshKeyframeId() }));
+      return { ...anim, tracks: { ...anim.tracks, [to]: { keyframes } } };
+    });
+  },
+
+  /**
    * Commit a value for an animatable numeric property. The "track-aware"
    * routing rule (D-006):
    *
