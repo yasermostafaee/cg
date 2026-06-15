@@ -93,37 +93,26 @@ above.
 - **THEN** behaviour is unchanged — keyframing, evaluation, the B-005/B-006/B-007
   read-path fixes, and the D-049/D-050 multi-select rules all still hold
 
-### Requirement: Keyframe-able styling for time-driven elements is deferred
+### Requirement: Keyframe-able styling for time-driven elements
 
-For ticker, clock, and sequence elements the registry SHALL expose as
-keyframe-able the properties whose animated values the runtime already applies —
-transform, opacity, filter, AND `cornerRadius` (including the per-corner sub-tracks
-`cornerRadius.tl/tr/br/bl`, D-042). These three kinds additionally expose a stroke
-section that is STATIC — present but non-keyframe-able. Their text, shadow,
-padding, and background styling — and stroke ANIMATION — SHALL remain
-non-keyframe-able pending the runtime work tracked separately as D-052, and the
-registry SHALL be shaped so enabling each remaining deferred property is a single
-per-property declaration. Repeater (which has no background) SHALL expose only
-transform, opacity, and filter — no stroke or border-radius box styling.
+For ticker, clock, and sequence elements the registry SHALL expose as keyframe-able every styling property whose animated value the runtime applies at playout: transform, opacity, filter, `cornerRadius` (including the per-corner sub-tracks `cornerRadius.tl/tr/br/bl`, D-042), `stroke.*`, `text.color` (the element's `color`), `backgroundColor`, `shadow.*` (the element's `textShadow`), and — for clock and sequence only — `padding.*`. `backgroundColor` SHALL be keyframe-able only when the solid variant is set (no diamond when a gradient `backgroundFill` or `colorFill` is present, mirroring the `fill.color` / `text.color` solid-only rule). Ticker `padding` SHALL remain non-keyframe-able (its inner-viewport padding feeds the crawl-measurement and is deferred). Repeater (no background) SHALL expose only transform, opacity, and filter. Shape and text keyframe-ability SHALL be unchanged, and each property SHALL be a single registry declaration shared across the right inspector, timeline-left, and multi-select editor.
 
-#### Scenario: Time-driven elements keyframe transform/opacity/filter and cornerRadius; the rest is deferred
+#### Scenario: Time-driven kinds keyframe stroke, colour, background, and shadow
 
 - **WHEN** a ticker, clock, or sequence is selected
-- **THEN** its transform, opacity, filter, and `cornerRadius` (including the
-  per-corner `tl/tr/br/bl` sub-tracks) properties show keyframe diamonds; its
-  stroke section is present but shows NO diamond (static); and its text / shadow /
-  padding / background fields show no diamond in either panel (deferred to D-052)
+- **THEN** its `stroke.*`, `text.color`, `backgroundColor` (solid), and `shadow.*` properties show a keyframe diamond in both the right inspector and the timeline-left (alongside the already-animatable transform / opacity / filter / `cornerRadius`)
 
-#### Scenario: Stroke animation is not carved out for the time-driven kinds
+#### Scenario: backgroundColor is solid-only — no diamond on a gradient fill
 
-- **WHEN** a ticker, clock, or sequence exposes its (static) stroke section
-- **THEN** the stroke colour / width / dash fields show no keyframe diamond —
-  only `cornerRadius` keyframing is enabled for these kinds (D-042); stroke
-  animation stays deferred to D-052
+- **WHEN** a ticker, clock, or sequence has a gradient `backgroundFill` (or, for clock/sequence, a gradient `colorFill`) set
+- **THEN** `backgroundColor` shows NO keyframe diamond (a gradient cannot interpolate), exactly as the `fill.color` / `text.color` rule already does
 
-#### Scenario: Repeater exposes only transform/opacity/filter
+#### Scenario: Padding keyframes on clock and sequence but not ticker
 
-- **WHEN** a repeater is selected
-- **THEN** only its transform, opacity, and filter properties show keyframe
-  diamonds; it exposes no stroke or border-radius box styling (it has no
-  background)
+- **WHEN** a clock or a sequence is selected
+- **THEN** its `padding.*` sides show a keyframe diamond; but a ticker's `padding` shows NO diamond (deferred — ticker padding feeds the crawl viewport measurement)
+
+#### Scenario: Repeater, shape, and text are unchanged
+
+- **WHEN** a repeater, shape, or text element is selected
+- **THEN** the repeater exposes only transform / opacity / filter, and the shape and text keyframe-able sets are exactly as before this change (additive un-gating)

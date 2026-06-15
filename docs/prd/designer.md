@@ -1481,7 +1481,7 @@ inconsistency, and it means every new element kind re-introduces the risk.
   green BEFORE the diamond corrections are layered on). Change:
   `openspec/changes/archive/2026-06-14-add-keyframe-ability-registry/`.
 
-## [~] D-052 — Keyframe-able styling for time-driven elements ⟨priority: high⟩ — change: `openspec/changes/ungate-time-driven-styling/`
+## [x] D-052 — Keyframe-able styling for time-driven elements ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-06-15-ungate-time-driven-styling/`
 
 **What:** استایلِ موجودِ ticker/clock/sequence (که امروز فقط ثابت است) را
 **کیفریم‌پذیر** کن — همان الگوی cornerRadius در D-042. این انواع از قبل stroke /
