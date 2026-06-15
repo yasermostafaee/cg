@@ -91,24 +91,6 @@ working unchanged.
 - **THEN** it animates correctly via the per-corner sub-tracks recomposed each
   frame, including the shape per-corner case that was previously broken
 
-### Requirement: Stroke animation stays shape-only
-
-Stroke SHALL remain keyframe-able only for shapes; on text, ticker, clock, and
-sequence the stroke section is static (no keyframe diamond), because animating
-stroke on those kinds is deferred to D-052. Shape stroke animation SHALL be
-unchanged.
-
-#### Scenario: Shape stroke still animates; non-shape stroke is static
-
-- **WHEN** stroke is keyframed on a shape
-- **THEN** it animates as today (unchanged)
-
-#### Scenario: Stroke animation is not offered on the time-driven kinds
-
-- **WHEN** a ticker, clock, or sequence exposes its stroke section
-- **THEN** the stroke fields show no keyframe diamond (static only — stroke
-  animation on these kinds is deferred to D-052)
-
 ### Requirement: Toggling between uniform and per-corner migrates keyframes
 
 Toggling a border-radius control between uniform and per-corner SHALL migrate the value and its keyframes between the uniform `cornerRadius` track and the four per-corner sub-tracks (`cornerRadius.tl/tr/br/bl`) in ONE undo step, never silently dropping a live keyframe, and SHALL leave no orphaned track that drives the runtime into a different mode than the inspector. uniform→per-corner copies the uniform value and keyframes into all four corners (lossless) and clears the uniform track; per-corner→uniform keeps the value and keyframes when all four corners are identical, otherwise takes the top-left corner as the representative and drops the other three.
@@ -142,3 +124,22 @@ Toggling a border-radius control between uniform and per-corner SHALL migrate th
 
 - **WHEN** either toggle completes
 - **THEN** the runtime's track-presence mode (per-corner iff any `cornerRadius.tl/tr/br/bl` track exists, else uniform) matches the inspector's value-shape mode (per-corner iff the stored value is a tuple) — no orphaned track drives the wrong mode
+
+### Requirement: Stroke animation for shapes and time-driven kinds
+
+Stroke SHALL be keyframe-able for shapes AND for the time-driven kinds (ticker, clock, sequence) — when a `stroke.*` track is present the runtime SHALL recompose the animated `border` on the element's root node (the band / box / stage where the static stroke already renders). Shape stroke animation SHALL be unchanged, and the un-gating SHALL be additive (the shape path is never removed). On text the stroke section SHALL remain static (no keyframe diamond) — text is not a time-driven kind and is out of D-052 scope.
+
+#### Scenario: Shape stroke still animates
+
+- **WHEN** stroke is keyframed on a shape
+- **THEN** it animates exactly as before this change (unchanged)
+
+#### Scenario: Stroke animates on the time-driven kinds
+
+- **WHEN** stroke (colour / width / dash) is keyframed on a ticker, clock, or sequence
+- **THEN** the runtime recomposes the animated `border` on the element's band / box / stage root at playout, the same node its static stroke renders on
+
+#### Scenario: Text stroke stays static
+
+- **WHEN** a text element exposes its stroke section
+- **THEN** the stroke fields show NO keyframe diamond (text stroke remains static — out of D-052 scope)
