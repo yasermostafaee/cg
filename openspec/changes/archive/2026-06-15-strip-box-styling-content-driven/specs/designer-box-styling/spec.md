@@ -4,6 +4,8 @@
 
 - FROM: `### Requirement: Stroke animation for shapes and time-driven kinds`
 - TO: `### Requirement: Stroke animation is shape-only`
+- FROM: `### Requirement: The runtime renders static stroke and per-corner radius for every background-capable kind`
+- TO: `### Requirement: The runtime renders static stroke and per-corner radius for shape and text`
 
 ## MODIFIED Requirements
 

@@ -300,3 +300,28 @@ package's clean script. Surfaced while reproducing B-012 from a clean tree.
 
 **Env:** Browser / Designer dev؛ روی `main` بازتولید می‌شود.
 **Notes:** Root cause در `BorderRadiusSection` / `toPerCorner` / `toUniform` در `apps/designer/src/renderer/features/inspector/StyleSection.tsx`. keyframe/schema-touching — **دو-فازی (recon-only اول)**. هم‌فایل با D-055؛ **بعد از merge شدنِ D-055** برداشته شود تا تداخلِ branch نشود. تستِ رگرسیون: رفت‌وبرگشتِ toggle با کیفریمِ uniform و per-corner، و موردِ چهار-گوشهٔ-متفاوت→uniform (انتخابِ top-left).
+
+## [ ] B-016 — gradient text color wipes the box background (text element only) ⟨priority: medium⟩
+
+**Repro:**
+
+1. یک المانِ **text** بساز که هم background داشته باشد (رنگ یا fill) هم رنگِ متن.
+2. رنگِ متن را روی linear/radial gradient بگذار.
+
+**Expected:** متنِ gradient و پس‌زمینهٔ جعبه مستقل رندر شوند — پس‌زمینه نباید
+محو/clip شود.
+**Actual:** پس‌زمینه ترنسپرنت می‌شود و جعبه gradient ِ متن را می‌گیرد. علت: متنِ
+gradient از shorthand ِ `background: <gradient>` + `background-clip: text` روی همان
+node استفاده می‌کند که `background-color`/`background-image` ِ پس‌زمینهٔ واقعی را پاک
+می‌کند، و بعد `background-clip: text` هرچه مانده را به glyph می‌برد.
+**Env:** Browser / Designer dev؛ روی `main`. **فقط المانِ text** — ticker/clock/
+sequence بعد از D-056 دیگر background ندارند (تداخل منتفی)، و ticker اصلاً colorFill
+نداشت.
+**Notes:** Root cause در `buildText` (`scene-builder.ts:328-337`): متنِ gradient و box
+background روی یک node با هم تداخل دارند. `background-clip: text` همهٔ backgroundهای آن
+node را به متن clip می‌کند، پس یک node نمی‌تواند هم متنِ gradient هم پس‌زمینهٔ جعبه
+داشته باشد. **fix: یک node ِ جدا برای متنِ gradient** (یک wrapper ِ داخلیِ
+layout-transparent) — box styling روی el ِ بیرونی می‌ماند. ریسکِ مهم: node ِ جدید نباید
+auto-size/fit/measurement، alignment، RTL/bidi، یا target ِ inline-edit را عوض کند.
+pre-existing (مستقل از D-052/D-056). تستِ رگرسیون: gradient متن + box background روی
+text با هم رندر شوند (background clip نشود). keyframe/render-touching → **دو-فازی**.
