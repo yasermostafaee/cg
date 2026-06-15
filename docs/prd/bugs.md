@@ -276,7 +276,7 @@ package's clean script. Surfaced while reproducing B-012 from a clean tree.
 
 -->
 
-## [~] B-015 — border-radius keyframes don't migrate on uniform↔per-corner toggle ⟨priority: high⟩
+## [x] B-015 — border-radius keyframes don't migrate on uniform↔per-corner toggle ⟨priority: high⟩ — archived: openspec/changes/archive/2026-06-15-migrate-radius-keyframes-on-toggle/
 
 <!-- Change: openspec/changes/migrate-radius-keyframes-on-toggle -->
 
