@@ -166,6 +166,11 @@ export const AnimatablePropertySchema = z.enum([
   'shadow.offsetX',
   'shadow.offsetY',
   'shadow.blur',
+  // D-057 — the text element's BOX shadow (box-shadow), distinct from `shadow.*` (which
+  // is the text-shadow for text / box-shadow for shape) so the two animate independently.
+  'boxShadow.offsetX',
+  'boxShadow.offsetY',
+  'boxShadow.blur',
   'filter.blur',
   'filter.brightness',
   'filter.contrast',
@@ -185,6 +190,7 @@ export const AnimatablePropertySchema = z.enum([
   // D-010 colour properties.
   'stroke.color',
   'shadow.color',
+  'boxShadow.color',
   'backgroundColor',
 ]);
 export type AnimatableProperty = z.infer<typeof AnimatablePropertySchema>;

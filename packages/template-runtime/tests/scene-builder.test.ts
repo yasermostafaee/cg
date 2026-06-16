@@ -106,6 +106,19 @@ describe('buildScene', () => {
     expect(el?.style.background).toMatch(/radial-gradient/);
   });
 
+  it('D-057 — a text element paints BOTH text-shadow (textShadow) and box-shadow (shadow)', () => {
+    const scene = structuredClone(lowerThirdScene);
+    const txt = scene.layers[0]?.children.find((e) => e.id === 'name');
+    if (txt === undefined || txt.type !== 'text') throw new Error('fixture changed');
+    txt.textShadow = { offsetX: 1, offsetY: 1, blur: 2, color: '#111111' };
+    txt.shadow = { offsetX: 3, offsetY: 4, blur: 5, color: '#222222' };
+    const el = buildScene(scene).elementMap.get('name');
+    // text-shadow on the glyphs (from textShadow) AND box-shadow on the box (from shadow).
+    expect(el?.style.textShadow).toContain('2px');
+    expect(el?.style.boxShadow).toContain('5px');
+    expect(el?.style.boxShadow).toContain('3px');
+  });
+
   it('renders a ShapeElement linear-gradient fill', () => {
     const sceneCopy = structuredClone(lowerThirdScene);
     const bg = sceneCopy.layers[0]?.children[0];

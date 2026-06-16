@@ -534,6 +534,99 @@ describe('D-056 — content-driven kinds animate ONLY text colour + text-shadow 
   });
 });
 
+describe('D-057 — text has independent text-shadow and box-shadow', () => {
+  it('a text element animates text-shadow (shadow.*) and box-shadow (boxShadow.*) to DIFFERENT values in one frame', () => {
+    const { source, node } = makeText();
+    applyAnimationAtFrame(
+      {
+        id: 'txt',
+        node,
+        source: {
+          ...source,
+          textShadow: { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' },
+          shadow: { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' },
+        } as unknown as TextElement,
+        animation: {
+          tracks: {
+            // text-shadow track (shadow.*) → blur 9 at frame 10
+            'shadow.blur': {
+              keyframes: [
+                { frame: 0, value: 0, easing: 'linear' },
+                { frame: 10, value: 9, easing: 'linear' },
+              ],
+            },
+            // box-shadow track (boxShadow.*) → blur 22 at frame 10 (a DIFFERENT value)
+            'boxShadow.blur': {
+              keyframes: [
+                { frame: 0, value: 0, easing: 'linear' },
+                { frame: 10, value: 22, easing: 'linear' },
+              ],
+            },
+          },
+        },
+      },
+      10,
+    );
+    // The two are driven by separate track sets — text-shadow blur 9, box-shadow blur 22.
+    expect(node.style.textShadow).toContain('9px');
+    expect(node.style.boxShadow).toContain('22px');
+    expect(node.style.textShadow).not.toContain('22px');
+    expect(node.style.boxShadow).not.toContain('9px');
+  });
+
+  it('a text box-shadow does not touch the text-shadow (and vice-versa)', () => {
+    // Only a boxShadow.* track — text-shadow must stay untouched ('').
+    const { source, node } = makeText();
+    applyAnimationAtFrame(
+      {
+        id: 'txt',
+        node,
+        source: {
+          ...source,
+          shadow: { offsetX: 1, offsetY: 2, blur: 3, color: '#000000' },
+        } as unknown as TextElement,
+        animation: {
+          tracks: {
+            'boxShadow.blur': {
+              keyframes: [
+                { frame: 0, value: 3, easing: 'linear' },
+                { frame: 10, value: 14, easing: 'linear' },
+              ],
+            },
+          },
+        },
+      },
+      10,
+    );
+    expect(node.style.boxShadow).toContain('14px');
+    expect(node.style.textShadow).toBe('');
+  });
+
+  it('shape box-shadow is unchanged — boxShadow.* is text-only (a shape ignores it)', () => {
+    const { source, node } = makeShape();
+    applyAnimationAtFrame(
+      {
+        id: 's',
+        node,
+        source: { ...source, shadow: { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' } },
+        animation: {
+          tracks: {
+            'boxShadow.blur': {
+              keyframes: [
+                { frame: 0, value: 0, easing: 'linear' },
+                { frame: 10, value: 12, easing: 'linear' },
+              ],
+            },
+          },
+        },
+      },
+      10,
+    );
+    // boxShadow.* is text-only; a shape's box shadow stays on shadow.* (no track here → unset).
+    expect(node.style.boxShadow).toBe('');
+  });
+});
+
 describe('collectAnimatedElements', () => {
   it('returns only elements with non-empty tracks', () => {
     const { source: a, node: na } = makeShape();

@@ -37,6 +37,8 @@ export type InspectorSection =
   | 'Text'
   | 'Border Radius'
   | 'Drop Shadow'
+  | 'Text Shadow'
+  | 'Box Shadow'
   | 'Text Padding'
   | 'Filter';
 
@@ -352,7 +354,7 @@ const RADIUS_DESCS: readonly PropertyDescriptor[] = [
 const BOX_DESCS: readonly PropertyDescriptor[] = [...STROKE_DESCS, ...RADIUS_DESCS];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Shape-specific — fill (Path Style) · Drop Shadow (reads el.shadow). Stroke +
+// Shape-specific — fill (Path Style) · Box Shadow (reads el.shadow). Stroke +
 // border-radius now come from the shared BOX_DESCS above.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -372,14 +374,35 @@ const SHAPE_FILL: PropertyDescriptor = {
 };
 
 const SHAPE_SHADOW: readonly PropertyDescriptor[] = [
-  shadowDesc('shadow.offsetX', 'offset X', 'Offset X', { step: 1, unit: 'px', multiSelect: true }),
-  shadowDesc('shadow.offsetY', 'offset Y', 'Offset Y', { step: 1, unit: 'px', multiSelect: true }),
-  shadowDesc('shadow.blur', 'blur', 'Blur', { step: 1, min: 0, unit: 'px', multiSelect: true }),
-  shadowDesc('shadow.color', 'color', 'Color', { color: true, multiSelect: true }),
+  // D-057 — shape's box shadow is grouped/labelled "Box Shadow" (behaviour unchanged).
+  shadowDesc(
+    'shadow.offsetX',
+    'offset X',
+    'Offset X',
+    { step: 1, unit: 'px', multiSelect: true },
+    'Box Shadow',
+  ),
+  shadowDesc(
+    'shadow.offsetY',
+    'offset Y',
+    'Offset Y',
+    { step: 1, unit: 'px', multiSelect: true },
+    'Box Shadow',
+  ),
+  shadowDesc(
+    'shadow.blur',
+    'blur',
+    'Blur',
+    { step: 1, min: 0, unit: 'px', multiSelect: true },
+    'Box Shadow',
+  ),
+  shadowDesc('shadow.color', 'color', 'Color', { color: true, multiSelect: true }, 'Box Shadow'),
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Text-specific — Text · Drop Shadow (reads el.textShadow) · Text Padding · Border Radius.
+// Text-specific — Text · Text Shadow (reads el.textShadow) · Text Padding · Border Radius.
+// D-057 — text ALSO gets a Box Shadow set (BOX_SHADOW_DESCS, reads el.shadow), added in
+// the text registry array below.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -411,11 +434,13 @@ const BACKGROUND_COLOR_DESC: PropertyDescriptor = {
 };
 
 /** Drop/text-shadow sub-tracks — shared by text AND the time-driven kinds (read `textShadow`). */
+// The text-shadow descriptor set (`shadow.*` → `textShadow`), shared by text + the
+// content-driven kinds. D-057 — grouped/labelled "Text Shadow" (was "Drop Shadow").
 const SHADOW_DESCS: readonly PropertyDescriptor[] = [
-  shadowDesc('shadow.offsetX', 'offset X', 'Offset X', { step: 1, unit: 'px' }),
-  shadowDesc('shadow.offsetY', 'offset Y', 'Offset Y', { step: 1, unit: 'px' }),
-  shadowDesc('shadow.blur', 'blur', 'Blur', { step: 1, min: 0, unit: 'px' }),
-  shadowDesc('shadow.color', 'color', 'Color', { color: true }),
+  shadowDesc('shadow.offsetX', 'offset X', 'Offset X', { step: 1, unit: 'px' }, 'Text Shadow'),
+  shadowDesc('shadow.offsetY', 'offset Y', 'Offset Y', { step: 1, unit: 'px' }, 'Text Shadow'),
+  shadowDesc('shadow.blur', 'blur', 'Blur', { step: 1, min: 0, unit: 'px' }, 'Text Shadow'),
+  shadowDesc('shadow.color', 'color', 'Color', { color: true }, 'Text Shadow'),
 ];
 
 /** Box-padding sub-tracks — text + (D-052) clock/sequence; NOT ticker (deferred). */
@@ -481,10 +506,11 @@ function shadowDesc(
   label: string,
   timelineLabel: string,
   opts: { step?: number; min?: number; unit?: string; color?: boolean; multiSelect?: boolean },
+  section: InspectorSection,
 ): PropertyDescriptor {
   const sub = property.slice('shadow.'.length) as 'offsetX' | 'offsetY' | 'blur' | 'color';
   const read = (el: Element): number | string => {
-    // shape → `shadow`; text + (D-052) ticker/clock/sequence → `textShadow`.
+    // shape → `shadow` (box-shadow); text + ticker/clock/sequence → `textShadow`.
     const s =
       el.type === 'shape'
         ? el.shadow
@@ -496,7 +522,7 @@ function shadowDesc(
   };
   return {
     property,
-    section: 'Drop Shadow',
+    section,
     fieldKind: opts.color === true ? 'color' : 'number',
     label,
     timelineLabel,
@@ -507,6 +533,43 @@ function shadowDesc(
     ...(opts.multiSelect === true ? { multiSelect: true } : {}),
   };
 }
+
+/**
+ * D-057 — the text element's BOX shadow sub-property (`boxShadow.*`), reading `el.shadow`
+ * (the box drop-shadow), independent of the `shadow.*` text-shadow. Text-only.
+ */
+function boxShadowDesc(
+  property: AnimatableProperty,
+  label: string,
+  timelineLabel: string,
+  opts: { step?: number; min?: number; unit?: string; color?: boolean },
+): PropertyDescriptor {
+  const sub = property.slice('boxShadow.'.length) as 'offsetX' | 'offsetY' | 'blur' | 'color';
+  const read = (el: Element): number | string => {
+    const s = (el as { shadow?: Shadow }).shadow;
+    if (sub === 'color') return s?.color ?? '#000000';
+    return s?.[sub] ?? 0;
+  };
+  return {
+    property,
+    section: 'Box Shadow',
+    fieldKind: opts.color === true ? 'color' : 'number',
+    label,
+    timelineLabel,
+    read,
+    ...(opts.step !== undefined ? { step: opts.step } : {}),
+    ...(opts.min !== undefined ? { min: opts.min } : {}),
+    ...(opts.unit !== undefined ? { unit: opts.unit } : {}),
+  };
+}
+
+/** D-057 — the text element's box-shadow descriptor set (separate from the text-shadow). */
+const BOX_SHADOW_DESCS: readonly PropertyDescriptor[] = [
+  boxShadowDesc('boxShadow.offsetX', 'offset X', 'Box offset X', { step: 1, unit: 'px' }),
+  boxShadowDesc('boxShadow.offsetY', 'offset Y', 'Box offset Y', { step: 1, unit: 'px' }),
+  boxShadowDesc('boxShadow.blur', 'blur', 'Box blur', { step: 1, min: 0, unit: 'px' }),
+  boxShadowDesc('boxShadow.color', 'color', 'Box color', { color: true }),
+];
 
 /** Text box-padding sub-property. */
 function paddingDesc(
@@ -546,7 +609,9 @@ const UNIVERSAL_ONLY: readonly PropertyDescriptor[] = [...TRANSFORM, ...FILTER];
 // background) and the bare kinds stay transform + filter only.
 export const FIELD_REGISTRY: Record<Element['type'], readonly PropertyDescriptor[]> = {
   shape: [...TRANSFORM, SHAPE_FILL, ...BOX_DESCS, ...SHAPE_SHADOW, ...FILTER],
-  text: [...TRANSFORM, ...TEXT_SPECIFIC, ...BOX_DESCS, ...FILTER],
+  // D-057 — text adds an independent box-shadow set (BOX_SHADOW_DESCS, `boxShadow.*`)
+  // beside its text-shadow (in TEXT_SPECIFIC via SHADOW_DESCS).
+  text: [...TRANSFORM, ...TEXT_SPECIFIC, ...BOX_DESCS, ...BOX_SHADOW_DESCS, ...FILTER],
   image: UNIVERSAL_ONLY,
   // D-052 — time-driven kinds now keyframe stroke + text colour / background / shadow
   // (TIME_DRIVEN_STYLE); clock + sequence also keyframe padding. Ticker padding stays

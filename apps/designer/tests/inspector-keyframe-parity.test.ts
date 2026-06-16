@@ -184,4 +184,15 @@ describe('right inspector — §2 diamond corrections (rendered)', () => {
       expect(leftDiamondProps(el)).not.toContain('padding.top');
     }
   });
+
+  it('D-057 — a text element exposes BOTH text-shadow (shadow.*) and box-shadow (boxShadow.*) diamonds', () => {
+    const props = rightDiamondProps(renderRightInspector(defaultText('t', 0, 0)));
+    expect(props).toContain('shadow.blur'); // Text Shadow
+    expect(props).toContain('boxShadow.blur'); // Box Shadow
+    expect(leftDiamondProps(defaultText('t', 0, 0))).toContain('boxShadow.blur');
+    // A shape exposes only its box shadow on `shadow.*` — no `boxShadow.*` (text-only).
+    const shape = rightDiamondProps(renderRightInspector(defaultShape('s', 0, 0)));
+    expect(shape).toContain('shadow.blur');
+    expect(shape).not.toContain('boxShadow.blur');
+  });
 });

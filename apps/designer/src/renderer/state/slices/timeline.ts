@@ -612,6 +612,32 @@ export const timelineSlice = {
         }
         return;
       }
+      // D-057 — the text element's BOX shadow (box-shadow) writes `el.shadow`, distinct
+      // from the `shadow.*` text-shadow above.
+      case 'boxShadow.offsetX':
+      case 'boxShadow.offsetY':
+      case 'boxShadow.blur': {
+        if (el.type !== 'text') return;
+        const field =
+          property === 'boxShadow.offsetX'
+            ? 'offsetX'
+            : property === 'boxShadow.offsetY'
+              ? 'offsetY'
+              : 'blur';
+        const base = el.shadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
+        designerStore.updateElement(elementId, {
+          shadow: { ...base, [field]: numeric },
+        } as unknown as Partial<Element>);
+        return;
+      }
+      case 'boxShadow.color': {
+        if (el.type !== 'text' || typeof value !== 'string') return;
+        const base = el.shadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
+        designerStore.updateElement(elementId, {
+          shadow: { ...base, color: value },
+        } as unknown as Partial<Element>);
+        return;
+      }
       case 'text.color': {
         // D-052 — text + the time-driven kinds (the static lives in `el.color`).
         if (

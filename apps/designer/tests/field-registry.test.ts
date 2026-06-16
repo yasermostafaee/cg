@@ -75,6 +75,11 @@ const TEXT_STYLE = [
   'padding.bottom',
   'padding.left',
   'cornerRadius',
+  // D-057 — the text element's independent box shadow (after BOX_DESCS, before Filter).
+  'boxShadow.offsetX',
+  'boxShadow.offsetY',
+  'boxShadow.blur',
+  'boxShadow.color',
 ] as const;
 
 // D-056 — the content-driven kinds keyframe ONLY text colour + text-shadow (no box

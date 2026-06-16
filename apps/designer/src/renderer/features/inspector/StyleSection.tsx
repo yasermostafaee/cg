@@ -46,8 +46,8 @@ interface Props {
  * Routes to per-element-type style sections. Each type renders its own
  * stack of CollapseSections matching the D-010 reference screenshots:
  *
- *   Shape  → Path style · Border radius · Drop Shadow · Filter
- *   Text   → Text · Drop Shadow · Text Padding · Border radius · Filter
+ *   Shape  → Path style · Border radius · Box Shadow · Filter
+ *   Text   → Text · Text Shadow · Box Shadow · Text Padding · Border radius · Filter (D-057)
  *   Image  → Image · Filter
  */
 export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element {
@@ -149,10 +149,20 @@ function TextSections({
       />
 
       <DropShadowSection
-        title="Drop Shadow"
+        title="Text Shadow"
         element={element}
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
+      />
+
+      {/* D-057 — the text element's independent box shadow (box-shadow on the box). */}
+      <DropShadowSection
+        title="Box Shadow"
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+        keyPrefix="boxShadow"
+        staticField="shadow"
       />
 
       <TextPaddingSection
@@ -275,7 +285,7 @@ function ShapeSections({
       />
 
       <DropShadowSection
-        title="Drop Shadow"
+        title="Box Shadow"
         element={element}
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
@@ -1029,7 +1039,7 @@ function RepeaterSections({
  * Ticker/clock/sequence **Text Shadow** rows (D-056 — the only shadow these kinds
  * carry). Keyframe-able via the shared `shadow.*` tracks (commitAnimatable + diamond),
  * reading/writing `el.textShadow`. Offset X/Y sit on ONE line (a combined VectorField,
- * like the text element's Drop Shadow) per the ب/ج layout fix.
+ * like the text/shape shadow sections) per the ب/ج layout fix.
  */
 function TickerShadowSection({
   element,
@@ -1090,26 +1100,45 @@ function TickerShadowSection({
 //                       REUSABLE SECTIONS
 // ────────────────────────────────────────────────────────────────────────
 
+/**
+ * Shadow section for shape / text. D-057 — parameterized so the text element can render
+ * TWO independent sections: "Text Shadow" (`keyPrefix='shadow'`, static `textShadow`)
+ * and "Box Shadow" (`keyPrefix='boxShadow'`, static `shadow`). Shape uses the defaults
+ * (`shadow.*` keys + `el.shadow`), relabelled "Box Shadow". Offset X/Y on one line.
+ */
 function DropShadowSection({
   title,
   element,
   currentFrame,
   selectedKeyframe,
+  keyPrefix = 'shadow',
+  staticField,
 }: {
   title: string;
   element: ShapeElement | TextElement;
   currentFrame: number;
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
+  /** Which animatable keys this section drives: `shadow.*` (default) or `boxShadow.*`. */
+  keyPrefix?: 'shadow' | 'boxShadow';
+  /** Element field holding the static shadow (default: shape→`shadow`, text→`textShadow`). */
+  staticField?: 'shadow' | 'textShadow';
 }): JSX.Element {
   const id = element.id;
-  const staticShadow: Shadow | undefined =
-    element.type === 'shape' ? element.shadow : element.textShadow;
+  const field: 'shadow' | 'textShadow' =
+    staticField ?? (element.type === 'shape' ? 'shadow' : 'textShadow');
+  const staticShadow: Shadow | undefined = (element as { shadow?: Shadow; textShadow?: Shadow })[
+    field
+  ];
   const s: Shadow = staticShadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
+  const kx: AnimatableProperty = `${keyPrefix}.offsetX`;
+  const ky: AnimatableProperty = `${keyPrefix}.offsetY`;
+  const kb: AnimatableProperty = `${keyPrefix}.blur`;
+  const kc: AnimatableProperty = `${keyPrefix}.color`;
   // Evaluated-at-playhead values so animated shadow fields track the canvas.
-  const offsetX = evNum(element, 'shadow.offsetX', currentFrame, s.offsetX);
-  const offsetY = evNum(element, 'shadow.offsetY', currentFrame, s.offsetY);
-  const blur = evNum(element, 'shadow.blur', currentFrame, s.blur);
-  const color = evColor(element, 'shadow.color', currentFrame, s.color);
+  const offsetX = evNum(element, kx, currentFrame, s.offsetX);
+  const offsetY = evNum(element, ky, currentFrame, s.offsetY);
+  const blur = evNum(element, kb, currentFrame, s.blur);
+  const color = evColor(element, kc, currentFrame, s.color);
   return (
     <CollapseSection title={title}>
       <VectorField
@@ -1121,8 +1150,8 @@ function DropShadowSection({
             value: offsetX,
             step: 1,
             suffix: 'px',
-            onCommit: (v) => designerStore.commitAnimatable(id, 'shadow.offsetX', v),
-            point: KeyframeDot(element, 'shadow.offsetX', currentFrame, selectedKeyframe),
+            onCommit: (v) => designerStore.commitAnimatable(id, kx, v),
+            point: KeyframeDot(element, kx, currentFrame, selectedKeyframe),
           },
           {
             icon: 'Y',
@@ -1130,8 +1159,8 @@ function DropShadowSection({
             value: offsetY,
             step: 1,
             suffix: 'px',
-            onCommit: (v) => designerStore.commitAnimatable(id, 'shadow.offsetY', v),
-            point: KeyframeDot(element, 'shadow.offsetY', currentFrame, selectedKeyframe),
+            onCommit: (v) => designerStore.commitAnimatable(id, ky, v),
+            point: KeyframeDot(element, ky, currentFrame, selectedKeyframe),
           },
         ]}
       />
@@ -1141,15 +1170,15 @@ function DropShadowSection({
         step={1}
         min={0}
         suffix="px"
-        onCommit={(v) => designerStore.commitAnimatable(id, 'shadow.blur', v)}
-        trailing={KeyframeDot(element, 'shadow.blur', currentFrame, selectedKeyframe)}
+        onCommit={(v) => designerStore.commitAnimatable(id, kb, v)}
+        trailing={KeyframeDot(element, kb, currentFrame, selectedKeyframe)}
       />
       <ColorField
         label="color"
         value={color}
-        resetKey={id}
-        onCommit={(color) => designerStore.commitAnimatable(id, 'shadow.color', color)}
-        trailing={KeyframeDot(element, 'shadow.color', currentFrame, selectedKeyframe)}
+        resetKey={`${id}-${keyPrefix}`}
+        onCommit={(color) => designerStore.commitAnimatable(id, kc, color)}
+        trailing={KeyframeDot(element, kc, currentFrame, selectedKeyframe)}
       />
     </CollapseSection>
   );

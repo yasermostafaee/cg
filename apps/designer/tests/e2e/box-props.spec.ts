@@ -110,6 +110,24 @@ test.describe('Box props for all background-capable elements (D-042)', () => {
     await expect(app.inspectorDiamond('text.color')).toBeVisible();
   });
 
+  test('D-057 — text shows Text Shadow + Box Shadow sections; shape shows Box Shadow', async ({
+    app,
+  }) => {
+    await app.newProject('D057');
+    await app.addTextElement({ x: 220, y: 160 });
+    const ins = app.inspector;
+    // Text: two independent shadow sections (the former "Drop Shadow" → "Text Shadow",
+    // plus the new "Box Shadow"). No "Drop Shadow".
+    await expect(ins.getByRole('button', { name: 'Toggle Text Shadow' })).toBeVisible();
+    await expect(ins.getByRole('button', { name: 'Toggle Box Shadow' })).toBeVisible();
+    await expect(ins.getByRole('button', { name: 'Toggle Drop Shadow' })).toHaveCount(0);
+
+    // Shape: its shadow section is relabelled "Box Shadow" (was "Drop Shadow").
+    await app.addRectangle({ x: 320, y: 220 });
+    await expect(ins.getByRole('button', { name: 'Toggle Box Shadow' })).toBeVisible();
+    await expect(ins.getByRole('button', { name: 'Toggle Drop Shadow' })).toHaveCount(0);
+  });
+
   test('a static stroke set on a text element renders a border in the preview', async ({ app }) => {
     await app.newProject('D042Stroke');
     await app.addTextElement({ x: 220, y: 160 });
