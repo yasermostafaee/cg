@@ -537,6 +537,30 @@ export const timelineSlice = {
         }
         return;
       }
+      // D-043 / B-018 — the box-shadow spread (the CSS 4th length). `shadow.spread` is the
+      // shape's box-shadow spread; `boxShadow.spread` is the text box-shadow spread — BOTH
+      // write `el.shadow.spread` (the text box-shadow lives on `el.shadow`, like the shape's,
+      // distinct from the `el.textShadow` glyph shadow). A NEGATIVE spread (shrink) is valid —
+      // no clamp. (B-018: these cases were missing, so a static Spread edit never wrote.)
+      case 'shadow.spread':
+      case 'boxShadow.spread': {
+        const base = (
+          el as {
+            shadow?: {
+              offsetX: number;
+              offsetY: number;
+              blur: number;
+              color: string;
+              spread?: number;
+              inset?: boolean;
+            };
+          }
+        ).shadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
+        designerStore.updateElement(elementId, {
+          shadow: { ...base, spread: numeric },
+        } as unknown as Partial<Element>);
+        return;
+      }
       case 'filter.blur':
       case 'filter.brightness':
       case 'filter.contrast':

@@ -3,7 +3,7 @@ import type { AnimatableProperty, Element, ShapeElement } from '@cg/shared-schem
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
-import { defaultShape } from '../src/renderer/state/element-defaults.js';
+import { defaultShape, defaultText } from '../src/renderer/state/element-defaults.js';
 import {
   effectiveAnimatableValue,
   effectiveColorAt,
@@ -521,6 +521,37 @@ describe('D-010 — non-Transform properties are animatable', () => {
     designerStore.writeStaticAnimatable('el-1', 'shadow.color', '#123456');
     const shadow = (selected() as unknown as { shadow?: { color: string } }).shadow;
     expect(shadow?.color).toBe('#123456');
+  });
+
+  // B-018 — D-043 shipped a Spread control whose STATIC value couldn't be written:
+  // `writeStaticAnimatable` had no `shadow.spread` / `boxShadow.spread` case, so a Spread
+  // edit with no keyframe fell through. The Spread NumberField commits via commitAnimatable,
+  // which falls back to the static write when no track exists — that path must set el.shadow.
+  it('B-018 — commitAnimatable writes shadow.spread statically on a shape (no keyframe)', () => {
+    designerStore.commitAnimatable('el-1', 'shadow.spread', 7);
+    const el = selected() as unknown as {
+      shadow?: { spread?: number };
+      animation?: { tracks: Record<string, unknown> };
+    };
+    expect(el.shadow?.spread).toBe(7);
+    // The static path was taken — no keyframe track was created.
+    expect(el.animation?.tracks['shadow.spread']).toBeUndefined();
+  });
+
+  it('B-018 — commitAnimatable writes boxShadow.spread statically on a text box (el.shadow.spread)', () => {
+    designerStore.addElement(defaultText('txt-1', 80, 90));
+    designerStore.commitAnimatable('txt-1', 'boxShadow.spread', 12);
+    const el = firstLayerChildren().find((c) => c.id === 'txt-1') as unknown as {
+      shadow?: { spread?: number };
+      animation?: { tracks: Record<string, unknown> };
+    };
+    expect(el.shadow?.spread).toBe(12);
+    expect(el.animation?.tracks['boxShadow.spread']).toBeUndefined();
+  });
+
+  it('B-018 — a negative spread (shrink) is written, not clamped', () => {
+    designerStore.commitAnimatable('el-1', 'shadow.spread', -5);
+    expect((selected() as unknown as { shadow?: { spread?: number } }).shadow?.spread).toBe(-5);
   });
 
   it('commitAnimatable accepts a colour string and upserts a keyframe', () => {

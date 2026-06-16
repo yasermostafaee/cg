@@ -347,3 +347,28 @@ text با هم رندر شوند (background clip نشود). keyframe/render-tou
 `background-clip: text` روی node ِ مشترک‌اند). نامعلوم که pre-existing است یا رگرسیونِ
 D-057 (recon از git روشن کند). احتمالاً یک fix ِ مشترکِ «node ِ جدا برای متنِ گرادیان»
 هر دو B-016 و B-017 را حل می‌کند. render-touching → **دو-فازی، recon مشترک با B-016.**
+
+## [ ] B-018 — Box-shadow Spread static value not writable (writeStaticAnimatable missing shadow.spread / boxShadow.spread cases) ⟨priority: high⟩
+
+**Repro:**
+
+1. Add a **shape** (or a **text** element) and open its **Box Shadow** section.
+2. Type a value into the **Spread** field with no keyframe on it (a plain static edit).
+
+**Expected:** the box-shadow spread (the CSS 4th length) updates — the shadow grows /
+shrinks in the preview and persists.
+**Actual:** nothing happens; `el.shadow.spread` is never written. A KEYFRAMED spread
+already animated correctly — only the STATIC write was broken, on BOTH the shape
+(`shadow.spread`) and the text box (`boxShadow.spread`).
+**Env:** Browser / Designer; both preview and export.
+**Root cause:** `writeStaticAnimatable` (`apps/designer/src/renderer/state/slices/timeline.ts`)
+is a `switch (property)` with cases for `shadow.offsetX/offsetY/blur/color` and
+`boxShadow.offsetX/offsetY/blur/color` but NO case for `shadow.spread` or
+`boxShadow.spread`, so a static Spread edit (`commitAnimatable` → `writeStaticAnimatable`)
+fell through and never wrote `el.shadow.spread`. Introduced by D-043 — the keyframed path
+was tested, the static path was not, so the green gate didn't catch it.
+**Fix:** add a combined `shadow.spread` / `boxShadow.spread` case writing `el.shadow.spread`
+(both kinds' box-shadow lives on `el.shadow`; a NEGATIVE spread / shrink is valid — no
+clamp), plus a store test driving the static write path on a shape AND a text element. NO
+OpenSpec change — the merged D-043 spec already requires Spread to be settable. Branch:
+`fix/B-018-spread-static-write`. Mark `[x]` on merge.
