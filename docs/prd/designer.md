@@ -1245,14 +1245,44 @@ box properties also fixes the broken animated-tuple path.
   extra tracks reuses the B-014 orphan-track clearing approach. Change:
   `openspec/changes/box-props-all-elements/`.
 
-## [ ] D-043 — Extended drop-shadow (outset/inset + spread) + text-shadow section ⟨priority: medium⟩
+## [~] D-043 — Extended box-shadow (spread + inset) ⟨priority: medium⟩
 
-**What:** Drop-shadow gains outset/inset (no keyframe) and spread (keyframable) — the
-full CSS box-shadow model; text elements additionally get a separate text-shadow
-section (like drop-shadow but without outset/inset and spread).
-**Why:** Current shadow is missing inset and spread; text has no dedicated text-shadow.
-**Acceptance to be detailed when scheduled.**
-**Notes:** schema-first (shadow model). New templates will rely on it.
+**What:** The box-shadow gains a keyframable `spread` and a non-keyframable
+`inset` toggle (the full CSS box-shadow model), on the existing "Box Shadow"
+sections (shape + text element). The text-shadow section was delivered by D-057,
+so it is out of scope here; text-shadow keeps no spread/inset (CSS has neither).
+**Why:** box-shadow today is missing spread and inset.
+**Acceptance:**
+
+- WHEN a shape's or the text element's "Box Shadow" section is open THEN it shows
+  a keyframable `Spread` row (px) and a non-keyframable `Inset` (Outset/Inset)
+  toggle (Outset default), beside Offset X / Offset Y / Blur / Color
+- WHEN `Spread` is set/keyframed THEN it renders as the CSS box-shadow spread
+  radius (4th length) and tracks per frame — `shadow.spread` for the shape,
+  `boxShadow.spread` for the text box — independently of the other channels
+- WHEN `Inset` is enabled THEN the `box-shadow` string is prefixed `inset`; it is
+  static-only (no keyframe, no diamond) and persists across play/stop
+- WHEN the "Text Shadow" section (text) or any content-driven kind's "Text Shadow"
+  (ticker/clock/sequence) is open THEN it shows NO Spread and NO Inset; its rows
+  are unchanged
+- WHEN a text element uses a gradient colour (glyph shadow = `filter:drop-shadow`)
+  THEN spread/inset are NOT applied to the drop-shadow; only the box-shadow on the
+  box carries them
+- WHEN a scene authored before D-043 (shadow without spread/inset) is loaded,
+  rendered, or exported THEN it renders identically to today (spread 0, inset
+  false) — non-breaking, no data migration
+- WHEN previewed and exported THEN static and animated box-shadow (incl. spread +
+  inset) match
+
+**Notes:** schema-first; new templates rely on the extended model. Spread
+keyframable, inset not. Render: extend the box-shadow composers ONLY
+(`composeBoxShadow`; the shape + text-box animated paths); leave
+`shadowCss`/`dropShadowFilter` (text-shadow / drop-shadow) untouched. Two-phase
+(render/keyframe/schema) — Phase-1 recon done; the implement prompt carries a
+verify-gate. Capabilities: `designer-box-styling` (MODIFIED) +
+`designer-inspector-registry` (MODIFIED). Change:
+`openspec/changes/add-box-shadow-spread-inset/`.
+«inset is single-select-only (deferred from multi-select), matching the per-corner radius toggle.»
 
 ## [ ] D-044 — Font-weight for plain text ⟨priority: low⟩
 
