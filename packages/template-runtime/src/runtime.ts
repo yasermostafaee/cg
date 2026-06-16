@@ -248,6 +248,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           transitionTiming: s.element.transitionTiming,
           transitionMs: s.element.transitionMs,
           repeat: s.element.repeat,
+          glyphGradientCss: s.glyphGradientCss,
           clock: options.clock,
         });
         registerSequenceDriver(s.host, driver);

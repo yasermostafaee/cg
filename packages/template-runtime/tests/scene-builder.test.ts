@@ -69,22 +69,116 @@ describe('buildScene', () => {
     expect(container.style.background).toMatch(/#000000/i);
   });
 
-  it('renders a gradient text fill via background-clip', () => {
-    const scene = structuredClone(lowerThirdScene);
-    const txt = scene.layers[0]?.children.find((e) => e.id === 'name');
-    if (txt === undefined || txt.type !== 'text') throw new Error('fixture changed');
-    txt.colorFill = {
-      kind: 'linear',
-      angle: 90,
-      stops: [
-        { at: 0, color: '#FF0000' },
-        { at: 1, color: '#0000FF' },
-      ],
-    };
-    const el = buildScene(scene).elementMap.get('name');
-    expect(el?.style.background).toMatch(/linear-gradient/);
-    expect(el?.style.color).toBe('transparent');
-    expect(el?.style.getPropertyValue('background-clip')).toBe('text');
+  describe('B-016/B-017 — gradient text on a dedicated inner node (linear + radial)', () => {
+    const GRADIENTS = {
+      linear: {
+        kind: 'linear',
+        angle: 90,
+        stops: [
+          { at: 0, color: '#FF0000' },
+          { at: 1, color: '#0000FF' },
+        ],
+      },
+      radial: {
+        kind: 'radial',
+        center: { x: 0.5, y: 0.5 },
+        radius: 200,
+        stops: [
+          { at: 0, color: '#FF0000' },
+          { at: 1, color: '#0000FF' },
+        ],
+      },
+    } as const;
+
+    function gradientTextScene(fill: unknown, extra?: Record<string, unknown>): Scene {
+      const scene = structuredClone(lowerThirdScene);
+      const txt = scene.layers[0]?.children.find((e) => e.id === 'name');
+      if (txt === undefined || txt.type !== 'text') throw new Error('fixture changed');
+      Object.assign(txt, { colorFill: fill }, extra);
+      return scene;
+    }
+    const innerOf = (host: HTMLElement | undefined): HTMLElement | null =>
+      host?.querySelector<HTMLElement>('[data-cg-text]') ?? null;
+
+    for (const kind of ['linear', 'radial'] as const) {
+      it(`${kind}: the gradient + clip + text live on the inner node, not the host`, () => {
+        const el = buildScene(gradientTextScene(GRADIENTS[kind])).elementMap.get('name');
+        const inner = innerOf(el);
+        expect(inner).not.toBeNull();
+        expect(inner?.style.background).toMatch(new RegExp(`${kind}-gradient`));
+        expect(inner?.style.color).toBe('transparent');
+        expect(inner?.style.getPropertyValue('background-clip')).toBe('text');
+        expect(inner?.textContent).toBe('{{anchor}}');
+        // The host is NOT clipped and does not carry the transparent text colour.
+        expect(el?.style.getPropertyValue('background-clip')).toBe('');
+        expect(el?.style.color).not.toBe('transparent');
+      });
+
+      it(`${kind}: B-016 — a box background renders independently (not clipped away)`, () => {
+        const el = buildScene(
+          gradientTextScene(GRADIENTS[kind], { backgroundColor: '#0A0A0A' }),
+        ).elementMap.get('name');
+        // Box background survives on the OUTER host…
+        expect(el?.style.backgroundColor).toMatch(/#0A0A0A/i);
+        expect(el?.style.getPropertyValue('background-clip')).toBe('');
+        // …while the gradient text fill is on the inner node.
+        expect(innerOf(el)?.style.background).toMatch(new RegExp(`${kind}-gradient`));
+      });
+
+      it(`${kind}: B-017 — a Text Shadow renders as drop-shadow behind the gradient`, () => {
+        const el = buildScene(
+          gradientTextScene(GRADIENTS[kind], {
+            textShadow: { offsetX: 2, offsetY: 3, blur: 4, color: '#123456' },
+          }),
+        ).elementMap.get('name');
+        const inner = innerOf(el);
+        expect(inner?.style.filter).toContain('drop-shadow(');
+        expect(inner?.style.filter).toContain('4px');
+        expect(inner?.style.filter).toContain('#123456');
+        // NOT a text-shadow (which would paint over the gradient); host untouched.
+        expect(inner?.style.textShadow).toBe('');
+        expect(el?.style.textShadow).toBe('');
+        expect(el?.style.filter).toBe('');
+      });
+
+      it(`${kind}: B-016 — the gradient maps to the TEXT (content-sized inner node), not the box width`, () => {
+        const build = (boxWidth: number): HTMLElement | undefined => {
+          const scene = gradientTextScene(GRADIENTS[kind], { align: 'center' });
+          const txt = scene.layers[0]?.children.find((e) => e.id === 'name');
+          if (txt === undefined || txt.type !== 'text') throw new Error('fixture changed');
+          txt.transform = { ...txt.transform, size: { ...txt.transform.size, w: boxWidth } };
+          return buildScene(scene).elementMap.get('name');
+        };
+        const narrow = build(160);
+        const wide = build(2000);
+        const innerN = innerOf(narrow);
+        const innerW = innerOf(wide);
+        // The inner gradient node is content-sized (capped at the box so long text wraps,
+        // but shrinks to the text otherwise) — its gradient declaration does NOT depend on
+        // the box width, so widening the box can't shift which stop falls on a glyph.
+        expect(innerN?.style.maxWidth).toBe('100%');
+        expect(innerN?.style.background).toBe(innerW?.style.background);
+        // The host content-sizes the inner via flex (align-items from `align`, NOT stretch),
+        // and never carries the gradient/clip itself (which would span the box width).
+        expect(narrow?.style.display).toBe('flex');
+        expect(narrow?.style.alignItems).toBe('center');
+        expect(narrow?.style.getPropertyValue('background-clip')).toBe('');
+      });
+    }
+
+    it('solid text colour is unchanged — host renders colour + text-shadow, no inner node', () => {
+      const el = buildScene(
+        gradientTextScene(
+          { kind: 'solid', color: '#00FF00' },
+          { textShadow: { offsetX: 1, offsetY: 1, blur: 2, color: '#111111' } },
+        ),
+      ).elementMap.get('name');
+      expect(innerOf(el)).toBeNull();
+      expect(el?.style.color).toMatch(/#00FF00/i);
+      expect(el?.style.textShadow).toContain('2px');
+      expect(el?.style.filter).toBe('');
+      expect(el?.textContent).toBe('{{anchor}}');
+    });
   });
 
   it('renders a solid colorFill as the text colour and a gradient text background', () => {
@@ -286,6 +380,64 @@ describe('buildClock — static initial render (D-027)', () => {
     expect(built.scopeTree.clocks[0]?.element.id).toBe('clk');
     expect(built.scopeTree.clocks[0]?.node).toBe(span(built));
   });
+
+  for (const kind of ['linear', 'radial'] as const) {
+    const fill =
+      kind === 'linear'
+        ? {
+            kind: 'linear' as const,
+            angle: 90,
+            stops: [
+              { at: 0, color: '#FF0000' },
+              { at: 1, color: '#0000FF' },
+            ],
+          }
+        : {
+            kind: 'radial' as const,
+            center: { x: 0.5, y: 0.5 },
+            radius: 120,
+            stops: [
+              { at: 0, color: '#FF0000' },
+              { at: 1, color: '#0000FF' },
+            ],
+          };
+
+    it(`B-016/B-017 — ${kind} gradient: clip on the content-sized span, drop-shadow on the host filter`, () => {
+      const built = buildScene(
+        clockScene({
+          colorFill: fill,
+          textShadow: { offsetX: 2, offsetY: 3, blur: 5, color: '#123456' },
+          filter: { blur: 4 },
+        }),
+      );
+      const box = built.elementMap.get('clk')!;
+      const timeSpan = box.querySelector<HTMLElement>('[data-cg-clock-time]')!;
+      // B-016 — the gradient + clip live on the content-sized time span, not the box.
+      expect(timeSpan.style.background).toMatch(new RegExp(`${kind}-gradient`));
+      expect(timeSpan.style.getPropertyValue('background-clip')).toBe('text');
+      expect(timeSpan.style.color).toBe('transparent');
+      expect(box.style.getPropertyValue('background-clip')).toBe('');
+      // B-017 — the glyph shadow is a drop-shadow composed WITH element.filter (blur)
+      // on the host (the node the applier writes) — not a text-shadow.
+      expect(box.style.filter).toContain('blur(4px)');
+      expect(box.style.filter).toContain('drop-shadow(');
+      expect(box.style.filter).toContain('5px');
+      expect(box.style.textShadow).toBe('');
+    });
+  }
+
+  it('B-017 — a SOLID clock keeps text-shadow (no drop-shadow)', () => {
+    const built = buildScene(
+      clockScene({
+        colorFill: { kind: 'solid', color: '#00FF00' },
+        textShadow: { offsetX: 1, offsetY: 1, blur: 2, color: '#111111' },
+      }),
+    );
+    const box = built.elementMap.get('clk')!;
+    expect(box.style.textShadow).toContain('2px');
+    expect(box.style.filter).not.toContain('drop-shadow');
+    expect(box.style.getPropertyValue('background-clip')).toBe('');
+  });
 });
 
 describe('buildSequence — static item-1 render (D-029)', () => {
@@ -397,5 +549,45 @@ describe('buildSequence — static item-1 render (D-029)', () => {
     expect(built.scopeTree.sequences).toHaveLength(1);
     expect(built.scopeTree.sequences[0]?.element.id).toBe('seq');
     expect(built.scopeTree.sequences[0]?.host).toBe(built.elementMap.get('seq'));
+  });
+
+  it('B-016/B-017 — radial-gradient sequence: clip on the content-sized item, drop-shadow on the host', () => {
+    const built = buildScene(
+      sequenceScene({
+        colorFill: {
+          kind: 'radial',
+          center: { x: 0.5, y: 0.5 },
+          radius: 160,
+          stops: [
+            { at: 0, color: '#FF0000' },
+            { at: 1, color: '#0000FF' },
+          ],
+        },
+        textShadow: { offsetX: 2, offsetY: 2, blur: 6, color: '#222222' },
+      }),
+    );
+    const host = built.elementMap.get('seq')!;
+    const item = host.querySelector<HTMLElement>('[data-cg-sequence-item]')!;
+    // B-016 — gradient + clip on the content-sized item node, not the host box.
+    expect(item.style.background).toMatch(/radial-gradient/);
+    expect(item.style.getPropertyValue('background-clip')).toBe('text');
+    expect(item.style.color).toBe('transparent');
+    expect(host.style.getPropertyValue('background-clip')).toBe('');
+    // B-017 — glyph shadow as a drop-shadow on the host (the node the applier writes).
+    expect(host.style.filter).toContain('drop-shadow(');
+    expect(host.style.filter).toContain('6px');
+    expect(host.style.textShadow).toBe('');
+  });
+
+  it('B-017 — a SOLID sequence keeps text-shadow (no drop-shadow)', () => {
+    const built = buildScene(
+      sequenceScene({
+        colorFill: { kind: 'solid', color: '#00FF00' },
+        textShadow: { offsetX: 1, offsetY: 1, blur: 3, color: '#333333' },
+      }),
+    );
+    const host = built.elementMap.get('seq')!;
+    expect(host.style.textShadow).toContain('3px');
+    expect(host.style.filter).not.toContain('drop-shadow');
   });
 });

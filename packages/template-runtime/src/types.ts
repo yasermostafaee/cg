@@ -275,6 +275,8 @@ export interface SequenceEntry {
   element: SequenceElement;
   /** The clipped grid box the driver renders items into (also in the elementMap). */
   host: HTMLElement;
+  /** B-016 — composed `background` for a gradient text colour, applied per item node. */
+  glyphGradientCss?: string | undefined;
 }
 
 /** D-030 — one built repeater: element config + host box + the build-context guards. */

@@ -62,6 +62,8 @@ export interface SequenceDriverOptions {
   transitionMs: number;
   /** Full passes before completion ('infinite' = until stop()). */
   repeat: number | 'infinite';
+  /** B-016 — composed `background` for a gradient text colour, applied per item node. */
+  glyphGradientCss?: string | undefined;
   clock?: RuntimeClock | undefined;
 }
 
@@ -436,7 +438,11 @@ export class SequenceDriver {
    * single-line (`white-space: pre`) like the ticker's items.
    */
   private makeItemNode(): HTMLElement {
-    return makeSequenceItemNode(this.o.host.ownerDocument, this.o.direction);
+    return makeSequenceItemNode(
+      this.o.host.ownerDocument,
+      this.o.direction,
+      this.o.glyphGradientCss,
+    );
   }
 }
 
@@ -444,13 +450,25 @@ export class SequenceDriver {
  * The shared item-node factory — used by the scene-builder (static item-1
  * render) and the driver (live items), so the two can't drift.
  */
-export function makeSequenceItemNode(doc: Document, direction: 'ltr' | 'rtl'): HTMLElement {
+export function makeSequenceItemNode(
+  doc: Document,
+  direction: 'ltr' | 'rtl',
+  glyphGradientCss?: string,
+): HTMLElement {
   const node = doc.createElement('span');
   node.dataset['cgSequenceItem'] = '1';
   node.style.gridArea = '1 / 1';
   node.style.whiteSpace = 'pre';
   node.style.direction = direction;
   node.style.unicodeBidi = 'isolate';
+  // B-016 — a gradient text colour paints on the item (a content-sized grid item),
+  // clipped to its glyphs, so the gradient maps to the item text, not the box width.
+  if (glyphGradientCss !== undefined) {
+    node.style.background = glyphGradientCss;
+    node.style.setProperty('-webkit-background-clip', 'text');
+    node.style.setProperty('background-clip', 'text');
+    node.style.color = 'transparent';
+  }
   return node;
 }
 

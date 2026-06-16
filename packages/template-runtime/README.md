@@ -412,6 +412,32 @@ only their text, text colour (incl. gradient via `colorFill`), and text-shadow (
 shadow appliers write `text-shadow` from `el.textShadow` for them, as text does).
 Shape and text box styling is unchanged; text stroke stays static.
 
+**Gradient text (B-016 / B-017).** A `background-clip: text` gradient fill cannot share a
+node with the box background (it overwrites + clips it, B-016), nor sit under a
+`text-shadow` (which paints over the clipped gradient, B-017), and — because the clip uses
+the node's full background box — it must sit on a node **sized to the text**, or a box
+wider than the text shifts which gradient stop falls on each glyph (B-016, width case). So
+when the text colour is a **gradient** (linear/radial):
+
+- **Text:** the gradient + `background-clip: text` + `color: transparent` + the glyph
+  shadow as `filter: drop-shadow(...)` live on a dedicated **inner node** marked
+  `data-cg-text`, while the box background / border / radius / padding / box-shadow stay on
+  the host. The inner node is **content-sized** (`max-width: 100%`, auto width); the host
+  is a flex column that positions it (`align-items` from `align`, `justify-content` from
+  `verticalAlign`) so its width tracks the text.
+- **Clock / sequence:** no box, so the gradient + clip + transparent colour go on the
+  already content-sized **time span** / **item nodes** (so the gradient maps to the
+  time/item text), and only the glyph `drop-shadow` is composed onto the host `filter`
+  (alongside `element.filter`) — because the animation applier writes the host, and a
+  filter there shadows the composited gradient text.
+
+A **solid** text colour is unchanged — `color` + `text-shadow` on the host.
+`text-render-node.ts`'s `textRenderNode(host)` resolves the text element's glyph node (the
+`data-cg-text` child when gradient, else the host) so the scene builder, the field bindings
+(text / colour writes), and the animation applier (colour + shadow) all target the same
+node — including across a solid↔gradient switch (the inner node is created/removed on
+rebuild and every writer follows it).
+
 `interpolateAtFrame` contract: `frame ≤ first` → first value (no pre-roll
 extrapolation); `frame ≥ last` → last value; otherwise interpolate between the two
 surrounding keyframes using the **earlier** keyframe's outgoing easing (`step`

@@ -627,6 +627,113 @@ describe('D-057 — text has independent text-shadow and box-shadow', () => {
   });
 });
 
+describe('B-016/B-017 — animated glyph shadow over gradient text', () => {
+  const linearFill = {
+    kind: 'linear',
+    angle: 90,
+    stops: [
+      { at: 0, color: '#FF0000' },
+      { at: 1, color: '#0000FF' },
+    ],
+  };
+  // shadow.blur 0 → 12 over frames 0..10.
+  const shadowBlurTrack = {
+    'shadow.blur': {
+      keyframes: [
+        { frame: 0, value: 0, easing: 'linear' as const },
+        { frame: 10, value: 12, easing: 'linear' as const },
+      ],
+    },
+  };
+
+  it('text gradient → animated text-shadow renders as drop-shadow on the inner node, not the host', () => {
+    const { source, node } = makeText();
+    // Mirror buildText's gradient structure: an inner data-cg-text node carries the glyphs.
+    const inner = document.createElement('div');
+    inner.dataset['cgText'] = '1';
+    node.appendChild(inner);
+    applyAnimationAtFrame(
+      {
+        id: 'txt',
+        node,
+        source: { ...source, colorFill: linearFill } as unknown as TextElement,
+        animation: { tracks: shadowBlurTrack },
+      },
+      10,
+    );
+    expect(inner.style.filter).toContain('drop-shadow(');
+    expect(inner.style.filter).toContain('12px');
+    expect(inner.style.textShadow).toBe('');
+    expect(node.style.textShadow).toBe('');
+  });
+
+  it('text SOLID → animated text-shadow stays a text-shadow on the host (unchanged)', () => {
+    const { source, node } = makeText();
+    applyAnimationAtFrame(
+      {
+        id: 'txt',
+        node,
+        source: {
+          ...source,
+          colorFill: { kind: 'solid', color: '#00FF00' },
+        } as unknown as TextElement,
+        animation: { tracks: shadowBlurTrack },
+      },
+      10,
+    );
+    expect(node.style.textShadow).toContain('12px');
+    expect(node.style.filter).not.toContain('drop-shadow');
+  });
+
+  it('clock gradient → animated text-shadow composes a drop-shadow onto the host filter (with element.filter)', () => {
+    const { source, node } = makeTimeDriven('clock', {
+      colorFill: linearFill,
+      filter: { blur: 4 },
+    });
+    applyAnimationAtFrame(
+      { id: 'clock', node, source, animation: { tracks: shadowBlurTrack } },
+      10,
+    );
+    expect(node.style.filter).toContain('blur(4px)');
+    expect(node.style.filter).toContain('drop-shadow(');
+    expect(node.style.filter).toContain('12px');
+    expect(node.style.textShadow).toBe('');
+  });
+
+  it('solid↔gradient switch: the shadow writer follows the current node structure', () => {
+    const { source, node } = makeText();
+    // SOLID build (no inner node) → text-shadow on the host.
+    applyAnimationAtFrame(
+      {
+        id: 'txt',
+        node,
+        source: {
+          ...source,
+          colorFill: { kind: 'solid', color: '#00FF00' },
+        } as unknown as TextElement,
+        animation: { tracks: shadowBlurTrack },
+      },
+      10,
+    );
+    expect(node.style.textShadow).toContain('12px');
+    // Switched to GRADIENT (rebuild adds the inner node) → drop-shadow on the inner node.
+    const inner = document.createElement('div');
+    inner.dataset['cgText'] = '1';
+    node.appendChild(inner);
+    applyAnimationAtFrame(
+      {
+        id: 'txt',
+        node,
+        source: { ...source, colorFill: linearFill } as unknown as TextElement,
+        animation: { tracks: shadowBlurTrack },
+      },
+      10,
+    );
+    expect(inner.style.filter).toContain('drop-shadow(');
+    expect(inner.style.filter).toContain('12px');
+  });
+});
+
 describe('collectAnimatedElements', () => {
   it('returns only elements with non-empty tracks', () => {
     const { source: a, node: na } = makeShape();

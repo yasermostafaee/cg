@@ -20,6 +20,7 @@ import type {
 import type { BuildSceneResult, FieldScope, LifecycleSource } from './types.js';
 import { clockInitialText } from './clock-driver.js';
 import { makeSequenceItemNode } from './sequence-driver.js';
+import { TEXT_NODE_DATASET } from './text-render-node.js';
 import { populateTickerStaticRow } from './ticker-driver.js';
 
 /**
@@ -269,6 +270,82 @@ function fillToCss(fill: Fill): string {
   return `radial-gradient(circle ${String(fill.radius)}px at ${pct(fill.center.x)} ${pct(fill.center.y)}, ${stops})`;
 }
 
+/** A gradient fill (linear / radial) — the non-solid `Fill` members. */
+type GradientFill = Extract<Fill, { kind: 'linear' | 'radial' }>;
+
+/**
+ * B-016 / B-017 — a text colour that paints through `background-clip: text`
+ * (linear OR radial); the solid case is rendered the old way (plain `color`).
+ */
+function isGradientFill(fill: Fill | undefined): fill is GradientFill {
+  return fill !== undefined && fill.kind !== 'solid';
+}
+
+/**
+ * B-017 — the glyph shadow as a `drop-shadow(...)` filter. Unlike `text-shadow`
+ * (which paints OVER a `background-clip: text` gradient), a filter shadows the
+ * composited glyph result, so the shadow sits BEHIND the gradient.
+ */
+function dropShadowFilter(s: Shadow): string {
+  return `drop-shadow(${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.color})`;
+}
+
+/**
+ * B-016 — paint a gradient glyph fill on a CONTENT-SIZED node so the gradient maps
+ * to the TEXT extent, not the (possibly wider) box: `background-clip: text` clips the
+ * gradient to the glyphs, so the node must be sized to the text or a wider box shifts
+ * which gradient stop falls on each glyph. The text inner node and the clock span /
+ * sequence items are all content-sized.
+ */
+function applyGradientGlyph(node: HTMLElement, fill: GradientFill): void {
+  node.style.background = fillToCss(fill);
+  node.style.setProperty('-webkit-background-clip', 'text');
+  node.style.setProperty('background-clip', 'text');
+  node.style.color = 'transparent';
+}
+
+/** Vertical-align enum → flex `justify-content` (the text host is a flex column). */
+function vAlignToFlex(v: 'top' | 'middle' | 'bottom' | undefined): string {
+  return v === 'middle' ? 'center' : v === 'bottom' ? 'flex-end' : 'flex-start';
+}
+/** Text-align enum → flex `align-items` (`justify` stretches so it can justify). */
+function hAlignToFlex(a: 'start' | 'end' | 'center' | 'justify'): string {
+  return a === 'center'
+    ? 'center'
+    : a === 'end'
+      ? 'flex-end'
+      : a === 'justify'
+        ? 'stretch'
+        : 'flex-start';
+}
+
+/**
+ * B-017 — the HOST-level glyph styling for the time-driven kinds (clock / sequence).
+ * They carry no box background, so the gradient itself goes on their content-sized text
+ * node(s) (see {@link applyGradientGlyph}); here we set what stays on the host: a SOLID
+ * colour + `text-shadow` exactly as before, or — for a GRADIENT — the glyph shadow as
+ * `filter: drop-shadow(...)` COMPOSED onto the host filter (which already carries
+ * `element.filter`), so it shadows the composited gradient text from the host (the
+ * single node the animation applier writes) and sits behind the glyphs.
+ */
+function applyTimeDrivenHostStyle(
+  el: HTMLElement,
+  element: { colorFill?: Fill | undefined; textShadow?: Shadow | undefined },
+): void {
+  if (isGradientFill(element.colorFill)) {
+    if (element.textShadow) {
+      const drop = dropShadowFilter(element.textShadow);
+      el.style.filter = el.style.filter ? `${el.style.filter} ${drop}` : drop;
+    }
+    return;
+  }
+  if (element.colorFill !== undefined) el.style.color = element.colorFill.color;
+  if (element.textShadow) {
+    const s = element.textShadow;
+    el.style.textShadow = `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.color}`;
+  }
+}
+
 function composeTransform(t: Transform): string {
   const parts: string[] = [];
   if (t.scale.x !== 1 || t.scale.y !== 1) parts.push(`scale(${t.scale.x}, ${t.scale.y})`);
@@ -301,12 +378,9 @@ function buildText(
   el.style.color = element.color;
   el.style.textAlign = element.align;
   el.style.direction = element.direction === 'auto' ? '' : element.direction;
-  if (element.textShadow) {
-    const s = element.textShadow;
-    el.style.textShadow = `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.color}`;
-  }
   // D-057 — box drop shadow on the text BOX (rendered as box-shadow, like the shape),
-  // independent of the glyph text-shadow above.
+  // independent of the glyph shadow (text-shadow / drop-shadow, painted below by
+  // `renderTextGlyphs`).
   if (element.shadow) {
     el.style.boxShadow = composeBoxShadow(element.shadow);
   }
@@ -322,23 +396,11 @@ function buildText(
     el.style.backgroundColor = element.backgroundColor;
   }
   // Gradient (or solid) text-box background — a normal CSS background, so
-  // linear/radial both render. Overrides the solid backgroundColor above.
+  // linear/radial both render. Overrides the solid backgroundColor above. The box
+  // background stays on the OUTER node (B-016: a gradient text fill no longer
+  // overwrites/clips it — it moves to a dedicated inner node, see renderTextGlyphs).
   if (element.backgroundFill !== undefined) {
     el.style.background = fillToCss(element.backgroundFill);
-  }
-  // Gradient (or solid) text fill. A gradient paints through
-  // `background-clip: text`, which consumes the element's `background` (so it
-  // supersedes a gradient text-background on the same element); a solid just
-  // sets the colour.
-  if (element.colorFill !== undefined) {
-    if (element.colorFill.kind === 'solid') {
-      el.style.color = element.colorFill.color;
-    } else {
-      el.style.background = fillToCss(element.colorFill);
-      el.style.setProperty('-webkit-background-clip', 'text');
-      el.style.setProperty('background-clip', 'text');
-      el.style.color = 'transparent';
-    }
   }
   // D-042 — stroke border + uniform-or-per-corner radius (shared box style).
   applyBoxStyle(el, element);
@@ -357,9 +419,50 @@ function buildText(
           ? 'flex-end'
           : 'flex-start';
   }
-  el.textContent = element.text;
+  renderTextGlyphs(el, element, doc);
   textOriginals.set(element.id, element.text);
   return el;
+}
+
+/**
+ * Render a text element's glyphs (text content + colour + glyph shadow).
+ *
+ * - SOLID colour (or none): exactly as before — `color` + `text-shadow` on the
+ *   host, text content directly on the host.
+ * - GRADIENT colour (linear/radial): a dedicated layout-transparent inner node
+ *   (`data-cg-text`) carries the gradient (`background-clip: text` + transparent
+ *   colour) and the glyph shadow as `filter: drop-shadow(...)`. This keeps the box
+ *   background on the host (B-016) and lets the shadow sit BEHIND the gradient
+ *   (B-017). The inner node sets no box metrics (it inherits font / align /
+ *   direction / white-space) so layout — auto-size, wrap, align, RTL — is unchanged.
+ */
+function renderTextGlyphs(el: HTMLElement, element: TextElement, doc: Document): void {
+  if (isGradientFill(element.colorFill)) {
+    const inner = doc.createElement('div');
+    inner.dataset[TEXT_NODE_DATASET] = '1';
+    applyGradientGlyph(inner, element.colorFill);
+    if (element.textShadow) inner.style.filter = dropShadowFilter(element.textShadow);
+    // B-016 — content-size the inner node so the gradient maps to the text, not the
+    // box. The host is a flex column that positions it (horizontal via `align-items`
+    // from `align`, vertical via `justify-content` from `verticalAlign`); the inner
+    // shrinks to its content (auto width + non-stretch align), capped at the box width
+    // so long text still wraps. `justify` stretches it (text-justify needs full width).
+    inner.style.maxWidth = '100%';
+    el.style.display = 'flex';
+    el.style.flexDirection = 'column';
+    el.style.justifyContent = vAlignToFlex(element.verticalAlign);
+    el.style.alignItems = hAlignToFlex(element.align);
+    inner.textContent = element.text;
+    el.appendChild(inner);
+    return;
+  }
+  // Solid (or no) colour fill — the host renders the glyphs, as before.
+  if (element.colorFill !== undefined) el.style.color = element.colorFill.color;
+  if (element.textShadow) {
+    const s = element.textShadow;
+    el.style.textShadow = `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.color}`;
+  }
+  el.textContent = element.text;
 }
 
 /**
@@ -467,38 +570,27 @@ function buildClock(element: ClockElement, ctx: BuildCtx): HTMLElement {
   el.style.lineHeight = String(element.font.lineHeight);
   el.style.letterSpacing = `${element.font.letterSpacing}em`;
   el.style.color = element.color;
-  if (element.textShadow) {
-    const ts = element.textShadow;
-    el.style.textShadow = `${ts.offsetX}px ${ts.offsetY}px ${ts.blur}px ${ts.color}`;
-  }
   // D-056 — the clock carries no box styling (no background / stroke / border-radius /
-  // padding); box styling belongs on a separate shape layer.
-  // Gradient (or solid) text fill — the text element's convention: a gradient
-  // paints through background-clip:text (supersedes a band background on the
-  // same element); a solid behaves like `color`.
-  if (element.colorFill !== undefined) {
-    if (element.colorFill.kind === 'solid') {
-      el.style.color = element.colorFill.color;
-    } else {
-      el.style.background = fillToCss(element.colorFill);
-      el.style.setProperty('-webkit-background-clip', 'text');
-      el.style.setProperty('background-clip', 'text');
-      el.style.color = 'transparent';
-    }
-  }
+  // padding); box styling belongs on a separate shape layer. Host-level glyph styling:
+  // a SOLID colour + text-shadow, or — for a gradient — the glyph drop-shadow composed
+  // onto the host filter (B-017). The gradient itself goes on the content-sized span.
+  applyTimeDrivenHostStyle(el, element);
   el.style.display = 'flex';
   el.style.alignItems = 'center';
   el.style.justifyContent =
     element.align === 'start' ? 'flex-start' : element.align === 'end' ? 'flex-end' : 'center';
 
   // The time span: kept LTR and bidi-isolated inside RTL layouts, with
-  // tabular numerals so the width is stable as digits tick.
+  // tabular numerals so the width is stable as digits tick. It is content-sized (an
+  // inline-level flex item), so a gradient painted here (B-016) maps to the time text,
+  // not the box width.
   const span = doc.createElement('span');
   span.dataset['cgClockTime'] = '1';
   span.style.direction = 'ltr';
   span.style.unicodeBidi = 'isolate';
   span.style.fontVariantNumeric = 'tabular-nums';
   span.style.whiteSpace = 'pre';
+  if (isGradientFill(element.colorFill)) applyGradientGlyph(span, element.colorFill);
   span.textContent = clockInitialText(
     { mode: element.mode, format: element.format, digits: element.digits, target: element.target },
     Date.now(),
@@ -533,23 +625,15 @@ function buildSequence(element: SequenceElement, ctx: BuildCtx): HTMLElement {
   el.style.lineHeight = String(element.font.lineHeight);
   el.style.letterSpacing = `${element.font.letterSpacing}em`;
   el.style.color = element.color;
-  if (element.textShadow) {
-    const ts = element.textShadow;
-    el.style.textShadow = `${ts.offsetX}px ${ts.offsetY}px ${ts.blur}px ${ts.color}`;
-  }
   // D-056 — the sequence carries no box styling (no background / stroke / border-radius /
-  // padding); box styling belongs on a separate shape layer.
-  // Gradient (or solid) text fill — the text/clock convention.
-  if (element.colorFill !== undefined) {
-    if (element.colorFill.kind === 'solid') {
-      el.style.color = element.colorFill.color;
-    } else {
-      el.style.background = fillToCss(element.colorFill);
-      el.style.setProperty('-webkit-background-clip', 'text');
-      el.style.setProperty('background-clip', 'text');
-      el.style.color = 'transparent';
-    }
-  }
+  // padding); box styling belongs on a separate shape layer. Host-level glyph styling:
+  // a SOLID colour + text-shadow, or — for a gradient — the glyph drop-shadow composed
+  // onto the host filter (B-017). The gradient itself goes on the content-sized item
+  // nodes (B-016), so it maps to each item's text rather than the box width.
+  applyTimeDrivenHostStyle(el, element);
+  const glyphGradientCss = isGradientFill(element.colorFill)
+    ? fillToCss(element.colorFill)
+    : undefined;
   // READING direction on the host so `justify-items: start/end` resolves
   // against the element's own direction (grid alignment is direction-
   // sensitive): a Persian `align: 'start'` places items at the reading start
@@ -568,11 +652,11 @@ function buildSequence(element: SequenceElement, ctx: BuildCtx): HTMLElement {
   // an empty box). The driver re-renders the same markup on reset().
   const first = element.items[0];
   if (first !== undefined) {
-    const node = makeSequenceItemNode(doc, element.direction);
+    const node = makeSequenceItemNode(doc, element.direction, glyphGradientCss);
     node.textContent = first.text;
     el.appendChild(node);
   }
-  ctx.scope.sequences.push({ element, host: el });
+  ctx.scope.sequences.push({ element, host: el, glyphGradientCss });
   return el;
 }
 
