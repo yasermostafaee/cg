@@ -1705,7 +1705,7 @@ clock/sequence منتفی می‌شود (background رفت)؛ برای text جد
 repeater دست‌نخورده. **پرخطر (schema/موتورِ پخش/بازگردانیِ specها) — فاز ۱ recon انجام
 شد.** Change: `openspec/changes/strip-box-styling-content-driven/`.
 
-## [~] D-057 — Separate text-shadow and box-shadow on the text element ⟨priority: medium⟩ — change: `openspec/changes/separate-text-box-shadow/`
+## [x] D-057 — Separate text-shadow and box-shadow on the text element ⟨priority: medium⟩ — change: `openspec/changes/separate-text-box-shadow/` — archived: `openspec/changes/archive/2026-06-16-separate-text-box-shadow/`
 
 **What:** المانِ text باید **دو** بخشِ سایهٔ مجزا داشته باشد: «Text Shadow»
 (`text-shadow`، روی متن) و «Box Shadow» (`box-shadow`، روی جعبه). امروز text فقط یک
