@@ -127,3 +127,31 @@ packaged as skills it loads on demand instead of bloating the always-on context.
   **Notes:** Boundary rule — always-on behavioral rules STAY in CLAUDE.md;
   skills are for situational expertise. Sequenced post-feature-wave; see
   `docs/ROADMAP.md` ("Then — infra/quality").
+
+## [ ] P-008 — Skip heavy CI for docs-only PRs ⟨priority: medium⟩
+
+**What:** وقتی یک PR **فقط** فایل‌های docs/markdown را عوض کرده
+(`openspec/**`, `docs/**`, `**/*.md`)، jobهای سنگینِ CI (`pr.yml` —
+typecheck/lint/test/build/e2e) skip شوند و فقط یک چکِ سبکِ docs (مثلاً
+`openspec validate --all --strict` + `format:check`) بدود. PRهای کد دقیقاً مثلِ
+امروز کلِ gate را می‌دوند.
+**Why:** archiveها و ویرایش‌های docs کد را لمس نمی‌کنند، ولی الان کلِ تست/بیلد/e2e
+را تریگر می‌کنند و merge را معطل می‌گذارند. این بزرگ‌ترین معطلیِ غیرضروری در گردشِ
+کار است.
+**Acceptance:**
+
+- WHEN یک PR فقط `openspec/**` / `docs/**` / `**/*.md` را تغییر داده THEN jobهای
+  سنگین (typecheck/lint/test/build/e2e) skip می‌شوند و فقط چکِ سبکِ docs می‌دود و
+  required سبز می‌شود
+- WHEN یک PR حتی یک فایلِ کد/تست/بیلد را تغییر داده THEN کلِ green gate ِ امروز
+  (typecheck/lint/test/build + e2e) می‌دود — هیچ کدی بی‌تست merge نشود
+- WHEN branch protection چکِ required دارد THEN چکِ docs-only همان نقش را بازی کند
+  (PR ِ docs بدونِ green gate ِ کامل هم mergeable شود)
+
+**Notes:** با `paths`/`paths-ignore` یا یک path-filter در `pr.yml` (یا یک job ِ
+شرطیِ جدا). **ریسکِ ظریف:** filter باید دقیق باشد — اگر کد اشتباهاً در یک PR ِ
+«docs» قاطی شود نباید بی‌تست بگذرد؛ پس شرطِ «هیچ فایلِ غیرdocs تغییر نکرده» را
+محکم بگذار (نه صرفاً «شاملِ docs هست»). به branch protection / required checks ِ
+گیتهاب وابسته است — ممکن است تنظیمِ required check هم لازم باشد تا PR ِ docs بدونِ
+آن jobهای skip‌شده mergeable بماند (این لبهٔ معروفِ «required check که skip شده،
+PR را بلاک می‌کند» را موقعِ پیاده‌سازی بررسی کن). infra/CI — یک‌بار کار.
