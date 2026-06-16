@@ -6,6 +6,7 @@ import { applyFillModeChange } from './fill-commit.js';
 import { CollapseSection } from './CollapseSection.js';
 import { FillField } from './FillPopover.js';
 import { FontFamilySelect } from './FontFamilySelect.js';
+import { AlignButtonGroup, H_ALIGN_OPTIONS, V_ALIGN_OPTIONS } from './AlignButtonGroup.js';
 import { RealtimeNumberInput } from './controls.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
@@ -232,52 +233,24 @@ export function TextStyleSection({
           </div>
         </div>
 
-        {/* Alignment row */}
+        {/* Alignment row — D-045: the shared AlignButtonGroup (this group is the model the
+            ticker / clock / sequence inspectors now reuse). 'justify' stays schema-only and
+            is never exposed here. Both groups are non-keyframable (updateElement, no diamond). */}
         <div className={s.alignmentRow}>
-          {/* Horizontal align (uses existing `align` field) */}
-          <div className={s.alignGroup} role="group" aria-label="Horizontal alignment">
-            {(['start', 'center', 'end'] as const).map((opt) => {
-              const active = element.align === opt;
-              return (
-                <Control
-                  key={opt}
-                  variant="bare"
-                  className={cx(s.alignButton, active && s.alignButtonActive)}
-                  onClick={() =>
-                    designerStore.updateElement(id, { align: opt } as Partial<Element>)
-                  }
-                  aria-label={`Align ${opt}`}
-                  aria-pressed={active}
-                  title={`Align ${opt}`}
-                >
-                  {opt === 'start' ? '⫷' : opt === 'center' ? '☰' : '⫸'}
-                </Control>
-              );
-            })}
-          </div>
-          {/* Vertical align */}
-          <div className={s.alignGroup} role="group" aria-label="Vertical alignment">
-            {(['top', 'middle', 'bottom'] as const).map((opt) => {
-              const active = verticalAlign === opt;
-              return (
-                <Control
-                  key={opt}
-                  variant="bare"
-                  className={cx(s.alignButton, active && s.alignButtonActive)}
-                  onClick={() =>
-                    designerStore.updateElement(id, {
-                      verticalAlign: opt,
-                    } as unknown as Partial<Element>)
-                  }
-                  aria-label={`Vertical ${opt}`}
-                  aria-pressed={active}
-                  title={`Vertical ${opt}`}
-                >
-                  {opt === 'top' ? '⤒' : opt === 'middle' ? '⇳' : '⤓'}
-                </Control>
-              );
-            })}
-          </div>
+          <AlignButtonGroup
+            ariaLabel="Horizontal alignment"
+            current={element.align}
+            options={H_ALIGN_OPTIONS}
+            onChange={(align) => designerStore.updateElement(id, { align } as Partial<Element>)}
+          />
+          <AlignButtonGroup
+            ariaLabel="Vertical alignment"
+            current={verticalAlign}
+            options={V_ALIGN_OPTIONS}
+            onChange={(v) =>
+              designerStore.updateElement(id, { verticalAlign: v } as unknown as Partial<Element>)
+            }
+          />
           <span className={s.alignSpacer} />
           <Control
             variant="bare"

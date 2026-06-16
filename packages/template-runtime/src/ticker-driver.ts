@@ -51,6 +51,12 @@ export interface TickerDriverOptions {
   viewportWidth: number;
   /** READING direction ('rtl' = Persian crawl: layout RTL, motion left→right). */
   direction: 'ltr' | 'rtl';
+  /**
+   * D-045 — vertical placement of each crawl item within the band height. Mirrors the
+   * scene-builder's static authoring row so authoring and the live crawl match. Defaults
+   * to 'middle' (the prior hardcoded centring) when absent.
+   */
+  verticalAlign?: 'top' | 'middle' | 'bottom' | undefined;
   /** Crawl speed, px/s (> 0 by schema). */
   speed: number;
   /** Gap between items, px. */
@@ -81,6 +87,16 @@ export interface TickerDriverOptions {
 const FEED_BUFFER_PX = 256;
 /** Keep exited nodes this many px past the edge before recycling. */
 const RECYCLE_SLACK_PX = 64;
+
+/**
+ * D-045 — vertical-align enum → flex `align-items` for a crawl item node. Mirrors the
+ * scene-builder's `vAlignToFlex` (kept local to avoid a scene-builder→driver import cycle).
+ * Defaults to 'middle' (the prior hardcoded centring) when absent.
+ */
+function tickerVAlignToFlex(v: 'top' | 'middle' | 'bottom' | undefined): string {
+  const a = v ?? 'middle';
+  return a === 'middle' ? 'center' : a === 'bottom' ? 'flex-end' : 'flex-start';
+}
 
 interface FedNode {
   node: HTMLElement;
@@ -553,7 +569,9 @@ export class TickerDriver {
     node.style.top = '0';
     node.style.height = '100%';
     node.style.display = 'flex';
-    node.style.alignItems = 'center';
+    // D-045 — vertical placement of the crawl text, mirroring the scene-builder's static
+    // authoring row. Default 'middle' = the prior hardcoded centring (non-breaking).
+    node.style.alignItems = tickerVAlignToFlex(this.o.verticalAlign);
     node.style.whiteSpace = 'pre';
     node.style.direction = this.o.direction;
     node.style.unicodeBidi = 'isolate';

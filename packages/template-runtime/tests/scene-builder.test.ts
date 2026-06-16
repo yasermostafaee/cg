@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ClockElement, Scene, SequenceElement } from '@cg/shared-schema';
+import type { ClockElement, Scene, SequenceElement, TickerElement } from '@cg/shared-schema';
 import { buildScene } from '../src/scene-builder.js';
 import { lowerThirdScene } from './fixtures.js';
 
@@ -401,6 +401,20 @@ describe('buildClock — static initial render (D-027)', () => {
     expect(span(built).textContent).toBe('00:00');
   });
 
+  it('D-045 — verticalAlign maps to flex align-items (top→flex-start, bottom→flex-end, default centre)', () => {
+    const host = (v: Partial<ClockElement>): HTMLElement => {
+      const el = buildScene(clockScene(v)).elementMap.get('clk');
+      if (el === undefined) throw new Error('clock host not rendered');
+      return el;
+    };
+    // Default (no verticalAlign on the fixture) preserves the prior centring.
+    expect(host({}).style.alignItems).toBe('center');
+    expect(host({ verticalAlign: 'top' }).style.alignItems).toBe('flex-start');
+    expect(host({ verticalAlign: 'bottom' }).style.alignItems).toBe('flex-end');
+    // Horizontal align is unaffected (stays on justifyContent).
+    expect(host({ align: 'end', verticalAlign: 'top' }).style.justifyContent).toBe('flex-end');
+  });
+
   it('D-056 — a clock paints NO border-radius or stroke (box styling removed)', () => {
     const built = buildScene(
       clockScene({ cornerRadius: [4, 8, 12, 16], stroke: { width: 3, color: '#00FF00' } }),
@@ -592,6 +606,20 @@ describe('buildSequence — static item-1 render (D-029)', () => {
     expect(host?.style.fontFamily.startsWith('Vazirmatn,')).toBe(true);
   });
 
+  it('D-045 — verticalAlign maps to GRID align-items (top→start, bottom→end, default centre)', () => {
+    const host = (v: Partial<SequenceElement>): HTMLElement => {
+      const el = buildScene(sequenceScene(v)).elementMap.get('seq');
+      if (el === undefined) throw new Error('sequence host not rendered');
+      return el;
+    };
+    // Grid uses start/center/end — NOT the flex flex-start/flex-end keywords.
+    expect(host({}).style.alignItems).toBe('center'); // default 'middle'
+    expect(host({ verticalAlign: 'top' }).style.alignItems).toBe('start');
+    expect(host({ verticalAlign: 'bottom' }).style.alignItems).toBe('end');
+    // Horizontal align is unaffected (stays on justifyItems).
+    expect(host({ align: 'end', verticalAlign: 'top' }).style.justifyItems).toBe('end');
+  });
+
   it("the host carries the READING direction so `align: 'start'` is the reading start", () => {
     // Grid `justify-items` is direction-sensitive: without this, a Persian
     // `start` would resolve against the inherited LTR and land on the left.
@@ -652,5 +680,74 @@ describe('buildSequence — static item-1 render (D-029)', () => {
     const host = built.elementMap.get('seq')!;
     expect(host.style.textShadow).toContain('3px');
     expect(host.style.filter).not.toContain('drop-shadow');
+  });
+});
+
+describe('buildTicker — vertical align of the static authoring row (D-045)', () => {
+  function tickerScene(ticker: Partial<TickerElement>): Scene {
+    const element: TickerElement = {
+      id: 'tk',
+      name: 'ticker',
+      type: 'ticker',
+      transform: {
+        position: { x: 0, y: 0 },
+        size: { w: 1200, h: 72 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0, y: 0 },
+      },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 0,
+      font: {
+        family: 'Vazirmatn',
+        weight: 500,
+        style: 'normal',
+        size: 36,
+        lineHeight: 1.4,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      direction: 'rtl',
+      verticalAlign: 'middle',
+      speed: 120,
+      repeat: 'infinite',
+      cycleBoundary: 'seamless',
+      gap: 48,
+      items: [{ id: 'i1', text: 'خبر' }],
+    };
+    return {
+      schemaVersion: 1,
+      id: 'scene-ticker',
+      name: 'ticker',
+      templateType: 'custom',
+      resolution: { width: 1920, height: 1080 },
+      frameRate: 50,
+      safeAreas: { title: 10, action: 5 },
+      frameRange: { in: 0, out: 50 },
+      background: 'transparent',
+      layers: [
+        {
+          id: 'l1',
+          name: 'L1',
+          visible: true,
+          locked: false,
+          children: [{ ...element, ...ticker }],
+        },
+      ],
+    };
+  }
+  /** The static authoring row inside the band (the canvas layout, pre-crawl). */
+  function staticRow(s: Partial<TickerElement>): HTMLElement {
+    const band = buildScene(tickerScene(s)).elementMap.get('tk');
+    const row = band?.querySelector<HTMLElement>('[data-cg-ticker-static]');
+    if (row === null || row === undefined) throw new Error('ticker static row not rendered');
+    return row;
+  }
+  it('maps verticalAlign to flex align-items (top→flex-start, bottom→flex-end, default centre)', () => {
+    expect(staticRow({ verticalAlign: 'middle' }).style.alignItems).toBe('center');
+    expect(staticRow({ verticalAlign: 'top' }).style.alignItems).toBe('flex-start');
+    expect(staticRow({ verticalAlign: 'bottom' }).style.alignItems).toBe('flex-end');
   });
 });

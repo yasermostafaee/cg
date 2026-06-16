@@ -1292,15 +1292,36 @@ plain text element.
 **Acceptance to be detailed when scheduled.**
 **Notes:** small schema/UI parity item.
 
-## [ ] D-045 — Unify text alignment + vertical align for ticker/sequence + align is not keyframable ⟨priority: medium⟩
+## [~] D-045 — Unify text alignment + vertical align for ticker/clock/sequence + align not keyframable ⟨priority: medium⟩
 
-**What:** Make alignment consistent across text/ticker/sequence (the text model is the
-target), add vertical align to ticker/sequence, and make alignment (horizontal AND
-vertical) non-keyframable.
-**Why:** Alignment differs per element type today; ticker/sequence lack vertical align.
-**Acceptance to be detailed when scheduled.**
-**Notes:** behavioral; must land before the D-048 visual polish (same controls). Loopic
-refs: docs/designer-guide/sample-assets/D-045-align-0.png / -1.png.
+**What:** Unify the alignment controls onto the text element's button-group, and add
+vertical align to ticker/clock/sequence. Ticker gains VERTICAL only (it is a crawl).
+Clock/sequence keep their 3-value horizontal align. Alignment (H and V) is non-keyframable.
+**Why:** alignment controls differ per kind today; ticker/clock/sequence lack vertical align.
+**Acceptance:**
+
+- WHEN a clock or sequence element is open in the inspector THEN its horizontal align
+  uses the same button-group control as text (start/center/end), replacing the dropdown
+- WHEN a ticker, clock, or sequence element is open THEN it shows a vertical-align
+  button-group (top/middle/bottom) like text; ticker shows ONLY vertical (no horizontal)
+- WHEN vertical align is set on a ticker THEN both the authoring layout AND the running
+  crawl position the text accordingly within the band height
+- WHEN vertical align is set on a clock/sequence THEN the time/items position accordingly
+  (clock via flex, sequence via grid)
+- WHEN a ticker/clock/sequence authored before D-045 is loaded THEN verticalAlign
+  defaults to 'middle' and it renders vertically centered exactly as today (non-breaking)
+- WHEN H or V align is set on ANY element THEN it writes via updateElement and is NOT
+  keyframable (no diamond, not an AnimatableProperty) — text/clock/sequence/ticker
+- WHEN multiple elements are selected THEN alignment is single-select-only (like
+  font-family/weight), not a shared/multi-edit field
+- text is unchanged: keeps its 4-value `align` schema (justify stays schema-only, not
+  exposed in the 3-button control, as today) and its existing verticalAlign
+
+**Notes:** behavioral; must precede D-048 (same controls). justify text-only (schema),
+not added elsewhere; ticker gains vertical only. Two-phase (render + the runtime
+TickerDriver). Capabilities: designer-ticker-element, designer-clock-element,
+designer-sequence-element, designer-inspector (MODIFIED). Change:
+`openspec/changes/unify-align-add-vertical/`.
 
 ## [ ] D-046 — Sizing=auto behavior (modal + squeeze off + no keyframes on text-metrics) ⟨priority: high⟩
 
