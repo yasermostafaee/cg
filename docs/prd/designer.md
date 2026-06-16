@@ -1736,3 +1736,25 @@ UI نمایش داده نمی‌شود و در scene-builder/applier برای te
 (ticker/clock/sequence) از D-056 فقط «Text Shadow» دارند — دست نمی‌خورند.
 render/keyframe-touching → **دو-فازی (recon اول)**. احتمالاً `## MODIFIED` روی
 capabilityِ مربوط به shadow/styling. Change: `openspec/changes/separate-text-box-shadow/`.
+
+## [~] D-058 — Per-corner border-radius two-row layout ⟨priority: medium⟩
+
+**What:** در حالتِ per-corner، چهار اینپوتِ border-radius را در **دو ردیف** بچین:
+ردیفِ بالا گوشه‌های بالا (top-left / top-right)، ردیفِ پایین گوشه‌های پایین
+(bottom-left / bottom-right). امروز چهار اینپوت در یک ردیفِ فشرده‌اند و وقتی مقدار
+۲-۳ رقمی می‌شود کامل دیده نمی‌شود. عملکرد درست است؛ این فقط چیدمان است.
+**Why:** اینپوت‌های یک‌ردیفه برای مقادیرِ ۲-۳ رقمی جا ندارند (مقدار بریده می‌شود)، و
+چیدمانِ دو-ردیفه که با موقعیتِ مکانیِ گوشه‌ها می‌خواند هم خواناتر است هم از نظرِ UX
+شهودی‌تر.
+**Acceptance:**
+
+- WHEN per-corner radius فعال است THEN چهار اینپوت در دو ردیف نمایش داده می‌شوند:
+  بالا = top-left و top-right، پایین = bottom-left و bottom-right
+- WHEN مقدارِ یک گوشه ۲ یا ۳ رقمی شود THEN مقدارِ کامل دیده می‌شود (بریده نمی‌شود)
+- WHEN هر گوشه کیفریم/diamond داشته باشد THEN diamondها مثلِ قبل کار می‌کنند (فقط
+  چیدمان عوض شده، نه رفتار)
+
+**Notes:** کاملاً ظاهری، بدونِ تغییرِ schema/runtime/spec behavior — focused fix،
+احتمالاً بدونِ OpenSpec change (مثلِ D-055). روی shape و text (انواعِ محتوا-محور از
+D-056 دیگر border-radius ندارند). در `BorderRadiusSection` (`StyleSection.tsx`).
+مرجع برای مقایسه: `docs/designer-guide/sample-assets/D-042-radius-1.png` (چهارگوشه).

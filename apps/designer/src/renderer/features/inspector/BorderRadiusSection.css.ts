@@ -17,6 +17,19 @@ export const fields = style({
   minWidth: 0,
 });
 
+/**
+ * D-058 — per-corner mode stacks the four radius inputs as TWO rows (top row =
+ * top-left / top-right, bottom row = bottom-left / bottom-right) so each input
+ * has ~2x the width and shows a full 2-3 digit value without clipping. Each row
+ * is a {@link VectorField}; the two share the label gutter so their inputs align.
+ */
+export const corners = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.15rem',
+  minWidth: 0,
+});
+
 const ICON = 12;
 
 /** Uniform mode — a simple rounded-corner square outline. */
