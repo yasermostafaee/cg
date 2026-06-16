@@ -57,6 +57,16 @@ formatting to CI. Before claiming the gate green ahead of a push, run the test
 task **uncached at least once** (`turbo --force`) — a stale turbo cache has
 produced a false green before.
 
+**Docs-only carve-out (archive).** An OpenSpec **archive** operation — folding a
+merged change into `openspec/specs/` + the PRD status flip to `[x]` — touches only
+`openspec/**` and `docs/**`, never source / tests / build. Its gate is therefore
+ONLY `pnpm openspec validate --all --strict` + `pnpm format:check` (after the
+`pnpm exec prettier --write "openspec/specs/**/*.md"` pass), NOT
+`typecheck`/`lint`/`test`/`build` and NOT a `turbo --force` uncached run — those are
+meaningless for a markdown-only fold. This applies ONLY to a pure archive/docs commit
+where NO source/test/build file changed; any commit that touches code keeps the full
+green gate above.
+
 ## Feature workflow — PRD → OpenSpec → code
 
 Feature requests and bugs live in **`docs/prd/`** (one file per category).
@@ -80,6 +90,9 @@ high-priority designer item"), follow `docs/prd/README.md` exactly. In short:
    `pnpm exec prettier --write "openspec/specs/**/*.md"` (archive output isn't
    prettier-clean; markdown occasionally needs a second `--write` pass) and
    include it in the same commit, then `pnpm format:check` before push.
+   Archiving is **docs-only**: its gate is just `pnpm openspec validate --all
+--strict` + `pnpm format:check`, NOT the full green gate (see the docs-only
+   carve-out above).
 
 ## Spec discipline — when a prompt changes a decision
 
