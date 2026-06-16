@@ -5,6 +5,7 @@ import type {
   Transform,
 } from '@cg/shared-schema';
 import { interpolateAtFrame } from './keyframe-eval.js';
+import { textRenderNode } from './text-render-node.js';
 
 /**
  * Per-animated-element bookkeeping. Holds the static transform/style
@@ -69,9 +70,11 @@ export function applyAnimationAtFrame(entry: AnimatedElement, frame: number): vo
   }
   // D-052 — text colour animates on text AND the time-driven kinds (it inherits to
   // the ticker items / clock digit span / sequence items, as the static colour does).
+  // B-016/B-017 — write the glyph node (the inner gradient node for gradient text, else
+  // the host) so the colour follows the same node as the text content / shadow.
   if (tracks['text.color'] !== undefined && writesTextStyle(entry.source.type)) {
     const v = interpolateAtFrame(tracks['text.color'], frame);
-    if (typeof v === 'string') entry.node.style.color = v;
+    if (typeof v === 'string') textRenderNode(entry.node).style.color = v;
   }
   // D-010 — text background colour (D-056: text-only again — content-driven kinds
   // carry no box background).
@@ -265,6 +268,35 @@ function applyStroke(
   entry.node.style.border = `${width}px ${dashOn ? 'dashed' : 'solid'} ${color}`;
 }
 
+interface ShadowVals {
+  offsetX: number;
+  offsetY: number;
+  blur: number;
+  color: string;
+}
+
+/** A text colour that paints through `background-clip: text` (linear/radial) — not solid. */
+function isGradientText(src: SceneElement): boolean {
+  const cf = (src as { colorFill?: { kind: string } }).colorFill;
+  return cf !== undefined && cf.kind !== 'solid';
+}
+
+/** Resolve `shadow.*` at `frame`, falling back to a static shadow then to zeroes. */
+function resolveShadow(
+  staticShadow: ShadowVals | undefined,
+  tracks: ElementAnimation['tracks'],
+  frame: number,
+): ShadowVals {
+  return {
+    offsetX: readNumericTrack(tracks, 'shadow.offsetX', frame) ?? staticShadow?.offsetX ?? 0,
+    offsetY: readNumericTrack(tracks, 'shadow.offsetY', frame) ?? staticShadow?.offsetY ?? 0,
+    blur: readNumericTrack(tracks, 'shadow.blur', frame) ?? staticShadow?.blur ?? 0,
+    color: readStringTrack(tracks, 'shadow.color', frame) ?? staticShadow?.color ?? '#000000',
+  };
+}
+
+const shadowCss = (s: ShadowVals): string => `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.color}`;
+
 function applyShadow(
   entry: AnimatedElement,
   tracks: ElementAnimation['tracks'],
@@ -273,26 +305,26 @@ function applyShadow(
   const hasAny = SHADOW_PROPS.some((p) => tracks[p] !== undefined);
   if (!hasAny) return;
   const src = entry.source;
-  // D-052 — shape uses `box-shadow` from `shadow`; text AND the time-driven kinds use
-  // `text-shadow` from `textShadow` (the field they statically render from).
-  const textShadowKind = writesTextStyle(src.type);
-  const staticShadow =
-    src.type === 'shape'
-      ? src.shadow
-      : textShadowKind
-        ? (
-            src as {
-              textShadow?: { offsetX: number; offsetY: number; blur: number; color: string };
-            }
-          ).textShadow
-        : undefined;
-  const offsetX = readNumericTrack(tracks, 'shadow.offsetX', frame) ?? staticShadow?.offsetX ?? 0;
-  const offsetY = readNumericTrack(tracks, 'shadow.offsetY', frame) ?? staticShadow?.offsetY ?? 0;
-  const blur = readNumericTrack(tracks, 'shadow.blur', frame) ?? staticShadow?.blur ?? 0;
-  const color = readStringTrack(tracks, 'shadow.color', frame) ?? staticShadow?.color ?? '#000000';
-  const css = `${offsetX}px ${offsetY}px ${blur}px ${color}`;
-  if (textShadowKind) entry.node.style.textShadow = css;
-  else entry.node.style.boxShadow = css;
+  // Shape uses `box-shadow` from `shadow` (unchanged).
+  if (src.type === 'shape') {
+    entry.node.style.boxShadow = shadowCss(resolveShadow(src.shadow, tracks, frame));
+    return;
+  }
+  // text + time-driven kinds render the glyph shadow from `textShadow`.
+  const staticShadow = (src as { textShadow?: ShadowVals }).textShadow;
+  const s = resolveShadow(staticShadow, tracks, frame);
+  // B-017 — over a `background-clip: text` gradient, `text-shadow` paints OVER the glyphs;
+  // render the shadow as a `drop-shadow` filter (behind the gradient) instead.
+  if (isGradientText(src)) {
+    // text → drop-shadow on the inner gradient node; time-driven kinds → composed onto
+    // the host filter by `applyFilter` (they have no box, so it can share the filter).
+    if (src.type === 'text') {
+      textRenderNode(entry.node).style.filter = `drop-shadow(${shadowCss(s)})`;
+    }
+    return;
+  }
+  // Solid colour → `text-shadow` on the glyph node (the host for solid), as before.
+  textRenderNode(entry.node).style.textShadow = shadowCss(s);
 }
 
 /**
@@ -323,13 +355,36 @@ function applyBoxShadow(
   entry.node.style.boxShadow = `${offsetX}px ${offsetY}px ${blur}px ${color}`;
 }
 
+/**
+ * B-017 — for a time-driven gradient kind (clock/sequence) the glyph shadow is a
+ * `drop-shadow` composed into the SAME `filter` as `element.filter` (no box to
+ * mis-shadow). Returns the `drop-shadow(...)` string when one applies (static or
+ * animated shadow present), else `undefined`. Text uses its own inner node instead.
+ */
+function timeDrivenGlyphDrop(
+  src: SceneElement,
+  tracks: ElementAnimation['tracks'],
+  frame: number,
+): string | undefined {
+  if (!isTimeDriven(src.type) || !isGradientText(src)) return undefined;
+  const staticShadow = (src as { textShadow?: ShadowVals }).textShadow;
+  const hasShadowTracks = SHADOW_PROPS.some((p) => tracks[p] !== undefined);
+  if (staticShadow === undefined && !hasShadowTracks) return undefined;
+  return `drop-shadow(${shadowCss(resolveShadow(staticShadow, tracks, frame))})`;
+}
+
 function applyFilter(
   entry: AnimatedElement,
   tracks: ElementAnimation['tracks'],
   frame: number,
 ): void {
-  const hasAny = FILTER_PROPS.some((p) => tracks[p] !== undefined);
-  if (!hasAny) return;
+  const hasFilterTracks = FILTER_PROPS.some((p) => tracks[p] !== undefined);
+  const hasShadowTracks = SHADOW_PROPS.some((p) => tracks[p] !== undefined);
+  const glyphDrop = timeDrivenGlyphDrop(entry.source, tracks, frame);
+  // Recompose only when a relevant track animates; otherwise the static build value
+  // (incl. any static glyph drop-shadow) stands. When shadow animates on a time-driven
+  // gradient kind we must recompose so the drop-shadow tracks each frame.
+  if (!hasFilterTracks && !(glyphDrop !== undefined && hasShadowTracks)) return;
   const f = entry.source.filter ?? {};
   const get = (p: AnimatableProperty, fallback: number | undefined): number | undefined =>
     readNumericTrack(tracks, p, frame) ?? fallback;
@@ -352,6 +407,9 @@ function applyFilter(
   if (opacity !== undefined && opacity !== 100) parts.push(`opacity(${opacity}%)`);
   if (saturate !== undefined && saturate !== 100) parts.push(`saturate(${saturate}%)`);
   if (sepia !== undefined && sepia > 0) parts.push(`sepia(${sepia}%)`);
+  // B-017 — append the time-driven gradient glyph shadow so it composes with
+  // `element.filter` / animated `filter.*` in one declaration (single writer).
+  if (glyphDrop !== undefined) parts.push(glyphDrop);
   entry.node.style.filter = parts.join(' ');
 }
 

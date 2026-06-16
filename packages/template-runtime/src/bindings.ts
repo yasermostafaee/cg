@@ -8,6 +8,7 @@ import type {
 import type { FieldScope } from './types.js';
 import { coerceRepeaterItems, repeaterDriverFor } from './repeater-driver.js';
 import { coerceSequenceItems, sequenceDriverFor } from './sequence-driver.js';
+import { textRenderNode } from './text-render-node.js';
 import { coerceTickerItems, tickerDriverFor } from './ticker-driver.js';
 import { applyTransform, stringifyValue } from './transforms.js';
 
@@ -125,10 +126,13 @@ function applyOne(
         stringValue = [...stringValue].slice(0, maxLength).join('');
       }
       const original = textOriginals.get(target.elementId);
+      // B-016/B-017 — write the glyph node: the dedicated inner node for gradient
+      // text, else the host (solid). Resolved fresh so a solid↔gradient switch follows.
+      const glyph = textRenderNode(el);
       if (target.placeholder && original !== undefined) {
-        el.textContent = original.replaceAll(target.placeholder, stringValue);
+        glyph.textContent = original.replaceAll(target.placeholder, stringValue);
       } else {
-        el.textContent = stringValue;
+        glyph.textContent = stringValue;
       }
       return;
     }
@@ -155,7 +159,8 @@ function applyOne(
           el.style.borderColor = stringValue;
           return;
         case 'text':
-          el.style.color = stringValue;
+          // The glyph node (inner gradient node when gradient, else the host).
+          textRenderNode(el).style.color = stringValue;
           return;
       }
       return;

@@ -16,6 +16,36 @@ describe('applyFieldValues', () => {
     expect(elementMap.get('name')?.textContent).toBe('دکتر سارا نادری');
   });
 
+  it('B-016/B-017 — a text binding writes the INNER gradient node, preserving its clip', () => {
+    const sceneCopy = structuredClone(lowerThirdScene);
+    const txt = sceneCopy.layers[0]?.children.find((e) => e.id === 'name');
+    if (txt === undefined || txt.type !== 'text') throw new Error('fixture changed');
+    txt.colorFill = {
+      kind: 'linear',
+      angle: 90,
+      stops: [
+        { at: 0, color: '#FF0000' },
+        { at: 1, color: '#0000FF' },
+      ],
+    };
+    const { container, elementMap, textOriginals } = buildScene(sceneCopy);
+    applyFieldValues(
+      sceneCopy,
+      { anchor: 'دکتر سارا نادری' },
+      elementMap,
+      textOriginals,
+      container,
+    );
+    const host = elementMap.get('name')!;
+    const inner = host.querySelector<HTMLElement>('[data-cg-text]')!;
+    expect(inner.textContent).toBe('دکتر سارا نادری');
+    // Only textContent changed — the gradient clip survives the binding update.
+    expect(inner.style.getPropertyValue('background-clip')).toBe('text');
+    // The host has no stray direct text node; its text comes from the inner node.
+    expect(host.childNodes.length).toBe(1);
+    expect(host.firstChild).toBe(inner);
+  });
+
   it('falls back to the field default when no value is supplied', () => {
     const { container, elementMap, textOriginals } = buildScene(lowerThirdScene);
     applyFieldValues(lowerThirdScene, {}, elementMap, textOriginals, container);
