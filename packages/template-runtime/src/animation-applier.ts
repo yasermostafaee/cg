@@ -154,6 +154,9 @@ const SHADOW_PROPS = [
   'shadow.offsetX',
   'shadow.offsetY',
   'shadow.blur',
+  // D-043 — the box-shadow spread (shape). Animating it must recompose the box-shadow.
+  // (text-shadow ignores spread; this set only recomposes box-shadow for a shape.)
+  'shadow.spread',
   'shadow.color',
 ] as const satisfies readonly AnimatableProperty[];
 
@@ -163,6 +166,8 @@ const BOX_SHADOW_PROPS = [
   'boxShadow.offsetX',
   'boxShadow.offsetY',
   'boxShadow.blur',
+  // D-043 — the text box-shadow spread.
+  'boxShadow.spread',
   'boxShadow.color',
 ] as const satisfies readonly AnimatableProperty[];
 
@@ -297,6 +302,14 @@ function resolveShadow(
 
 const shadowCss = (s: ShadowVals): string => `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.color}`;
 
+/**
+ * D-043 — the animated BOX-shadow composer: the inset keyword prefix + the spread radius
+ * (the CSS 4th length), used by the shape (`applyShadow`) and text (`applyBoxShadow`)
+ * box-shadow paths only. `text-shadow` / `drop-shadow` keep `shadowCss` (no spread/inset).
+ */
+const boxShadowCss = (s: ShadowVals, spread: number, inset: boolean): string =>
+  `${inset ? 'inset ' : ''}${s.offsetX}px ${s.offsetY}px ${s.blur}px ${spread}px ${s.color}`;
+
 function applyShadow(
   entry: AnimatedElement,
   tracks: ElementAnimation['tracks'],
@@ -305,9 +318,16 @@ function applyShadow(
   const hasAny = SHADOW_PROPS.some((p) => tracks[p] !== undefined);
   if (!hasAny) return;
   const src = entry.source;
-  // Shape uses `box-shadow` from `shadow` (unchanged).
+  // Shape uses `box-shadow` from `shadow`. D-043 — recompose with the spread track + the
+  // static `inset` (inset is never a track). offset/blur/colour come from resolveShadow.
   if (src.type === 'shape') {
-    entry.node.style.boxShadow = shadowCss(resolveShadow(src.shadow, tracks, frame));
+    const spread = readNumericTrack(tracks, 'shadow.spread', frame) ?? src.shadow?.spread ?? 0;
+    const inset = src.shadow?.inset ?? false;
+    entry.node.style.boxShadow = boxShadowCss(
+      resolveShadow(src.shadow, tracks, frame),
+      spread,
+      inset,
+    );
     return;
   }
   // text + time-driven kinds render the glyph shadow from `textShadow`.
@@ -343,16 +363,27 @@ function applyBoxShadow(
   const src = entry.source;
   if (src.type !== 'text') return;
   const staticShadow = (
-    src as { shadow?: { offsetX: number; offsetY: number; blur: number; color: string } }
+    src as {
+      shadow?: {
+        offsetX: number;
+        offsetY: number;
+        blur: number;
+        color: string;
+        spread?: number;
+        inset?: boolean;
+      };
+    }
   ).shadow;
-  const offsetX =
-    readNumericTrack(tracks, 'boxShadow.offsetX', frame) ?? staticShadow?.offsetX ?? 0;
-  const offsetY =
-    readNumericTrack(tracks, 'boxShadow.offsetY', frame) ?? staticShadow?.offsetY ?? 0;
-  const blur = readNumericTrack(tracks, 'boxShadow.blur', frame) ?? staticShadow?.blur ?? 0;
-  const color =
-    readStringTrack(tracks, 'boxShadow.color', frame) ?? staticShadow?.color ?? '#000000';
-  entry.node.style.boxShadow = `${offsetX}px ${offsetY}px ${blur}px ${color}`;
+  // D-043 — recompose with the spread track + the static `inset` (inset is never a track).
+  const vals: ShadowVals = {
+    offsetX: readNumericTrack(tracks, 'boxShadow.offsetX', frame) ?? staticShadow?.offsetX ?? 0,
+    offsetY: readNumericTrack(tracks, 'boxShadow.offsetY', frame) ?? staticShadow?.offsetY ?? 0,
+    blur: readNumericTrack(tracks, 'boxShadow.blur', frame) ?? staticShadow?.blur ?? 0,
+    color: readStringTrack(tracks, 'boxShadow.color', frame) ?? staticShadow?.color ?? '#000000',
+  };
+  const spread = readNumericTrack(tracks, 'boxShadow.spread', frame) ?? staticShadow?.spread ?? 0;
+  const inset = staticShadow?.inset ?? false;
+  entry.node.style.boxShadow = boxShadowCss(vals, spread, inset);
 }
 
 /**

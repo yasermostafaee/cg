@@ -297,7 +297,7 @@ export function TextStyleSection({
 //                          Sub-components
 // ────────────────────────────────────────────────────────────────────────
 
-function TogglePair<T extends string>({
+export function TogglePair<T extends string>({
   value,
   options,
   onChange,

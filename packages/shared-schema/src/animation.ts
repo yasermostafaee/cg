@@ -166,11 +166,17 @@ export const AnimatablePropertySchema = z.enum([
   'shadow.offsetX',
   'shadow.offsetY',
   'shadow.blur',
+  // D-043 — the box-shadow spread radius (the CSS 4th length). `shadow.spread` is the
+  // shape's box-shadow / text's text-shadow spread carrier; only the box-shadow paths
+  // read it (text-shadow ignores spread). `inset` is NOT here — it is not animatable.
+  'shadow.spread',
   // D-057 — the text element's BOX shadow (box-shadow), distinct from `shadow.*` (which
   // is the text-shadow for text / box-shadow for shape) so the two animate independently.
   'boxShadow.offsetX',
   'boxShadow.offsetY',
   'boxShadow.blur',
+  // D-043 — the text box-shadow spread radius (the CSS 4th length).
+  'boxShadow.spread',
   'filter.blur',
   'filter.brightness',
   'filter.contrast',

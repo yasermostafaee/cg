@@ -213,6 +213,69 @@ describe('buildScene', () => {
     expect(el?.style.boxShadow).toContain('3px');
   });
 
+  it('D-043 — the box-shadow emits the spread length + inset prefix for shape AND text', () => {
+    const scene = structuredClone(lowerThirdScene);
+    const shape = scene.layers[0]?.children.find((e) => e.id === 'bg');
+    const txt = scene.layers[0]?.children.find((e) => e.id === 'name');
+    if (shape === undefined || shape.type !== 'shape') throw new Error('fixture changed');
+    if (txt === undefined || txt.type !== 'text') throw new Error('fixture changed');
+    shape.shadow = { offsetX: 1, offsetY: 2, blur: 3, spread: 4, inset: true, color: '#111111' };
+    txt.shadow = { offsetX: 5, offsetY: 6, blur: 7, spread: 8, color: '#222222' };
+    const { elementMap } = buildScene(scene);
+    // Shape: inset prefix + the 4th spread length, from the single composer.
+    expect(elementMap.get('bg')?.style.boxShadow).toBe('inset 1px 2px 3px 4px #111111');
+    // Text box: no inset (false), spread length present.
+    expect(elementMap.get('name')?.style.boxShadow).toBe('5px 6px 7px 8px #222222');
+  });
+
+  it('D-043 — spread/inset never leak onto a text-shadow or a gradient drop-shadow', () => {
+    // The spread/inset fields are structurally allowed on the SHARED Shadow type, so a
+    // textShadow may carry them — but every text-shadow / drop-shadow path must IGNORE them.
+    // Solid text → text-shadow (no spread/inset); gradient text → drop-shadow (no spread/inset).
+    const solid = structuredClone(lowerThirdScene);
+    const solidTxt = solid.layers[0]?.children.find((e) => e.id === 'name');
+    if (solidTxt === undefined || solidTxt.type !== 'text') throw new Error('fixture changed');
+    solidTxt.colorFill = { kind: 'solid', color: '#00FF00' };
+    solidTxt.textShadow = {
+      offsetX: 1,
+      offsetY: 1,
+      blur: 2,
+      spread: 9,
+      inset: true,
+      color: '#111111',
+    };
+    const solidEl = buildScene(solid).elementMap.get('name');
+    expect(solidEl?.style.textShadow).toBe('1px 1px 2px #111111');
+    expect(solidEl?.style.textShadow).not.toContain('inset');
+    expect(solidEl?.style.textShadow).not.toContain('9px');
+
+    const grad = structuredClone(lowerThirdScene);
+    const gradTxt = grad.layers[0]?.children.find((e) => e.id === 'name');
+    if (gradTxt === undefined || gradTxt.type !== 'text') throw new Error('fixture changed');
+    gradTxt.colorFill = {
+      kind: 'linear',
+      angle: 0,
+      stops: [
+        { at: 0, color: '#000000' },
+        { at: 1, color: '#FFFFFF' },
+      ],
+    };
+    gradTxt.textShadow = {
+      offsetX: 2,
+      offsetY: 3,
+      blur: 4,
+      spread: 9,
+      inset: true,
+      color: '#123456',
+    };
+    const inner = buildScene(grad)
+      .elementMap.get('name')
+      ?.querySelector<HTMLElement>('[data-cg-text]');
+    expect(inner?.style.filter).toBe('drop-shadow(2px 3px 4px #123456)');
+    expect(inner?.style.filter).not.toContain('inset');
+    expect(inner?.style.filter).not.toContain('9px');
+  });
+
   it('renders a ShapeElement linear-gradient fill', () => {
     const sceneCopy = structuredClone(lowerThirdScene);
     const bg = sceneCopy.layers[0]?.children[0];

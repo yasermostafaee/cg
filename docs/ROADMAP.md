@@ -36,7 +36,7 @@ the order changes. Strategic / non-engineering notes live in
 _The multi-select chain (D-041 + D-049/050/051/053/054) is done — see Done (recent)._
 
 1. [D-042](./prd/designer.md) — Per-corner border radius (toggle)
-2. [D-043](./prd/designer.md) — Extended drop-shadow (outset/inset + spread) + text-shadow section
+2. [D-043](./prd/designer.md) — Extended box-shadow (spread keyframable + inset toggle)
 3. [D-044](./prd/designer.md) — Font-weight for plain text
 4. [D-045](./prd/designer.md) — Unify text alignment + vertical align (ticker/sequence) + align not keyframable
 5. [D-046](./prd/designer.md) — Sizing=auto behavior (modal + squeeze off + no keyframes on text-metrics)

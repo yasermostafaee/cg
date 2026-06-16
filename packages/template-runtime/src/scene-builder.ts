@@ -250,8 +250,14 @@ function composeFilter(f: Filter): string {
   return parts.join(' ');
 }
 
+/**
+ * The static box-shadow for the shape AND the text box (the sole composer for both).
+ * D-043 — the full CSS box-shadow model: an optional `inset` keyword prefix and the
+ * `spread` radius (the 4th length; absent ⇒ 0, a CSS no-op vs the old 3-length form).
+ * `text-shadow` / `drop-shadow` use their own composers and take neither.
+ */
 function composeBoxShadow(s: Shadow): string {
-  return `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.color}`;
+  return `${s.inset ? 'inset ' : ''}${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.spread ?? 0}px ${s.color}`;
 }
 
 /**

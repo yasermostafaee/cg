@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Element, Fill } from '@cg/shared-schema';
+import { AnimatablePropertySchema } from '@cg/shared-schema';
 import {
+  descriptorFor,
   descriptorsForKind,
   isKeyframeable,
   keyframeableDescriptors,
@@ -57,6 +59,8 @@ const SHAPE_STYLE = [
   'shadow.offsetX',
   'shadow.offsetY',
   'shadow.blur',
+  // D-043 — the keyframable box-shadow spread (after blur, before color).
+  'shadow.spread',
   'shadow.color',
 ] as const;
 
@@ -79,6 +83,8 @@ const TEXT_STYLE = [
   'boxShadow.offsetX',
   'boxShadow.offsetY',
   'boxShadow.blur',
+  // D-043 — the keyframable text box-shadow spread (after blur, before color).
+  'boxShadow.spread',
   'boxShadow.color',
 ] as const;
 
@@ -252,5 +258,50 @@ describe('field-registry — multi-select editable subset (preserved from D-050)
     expect(multiSelectDescriptors(defaultEllipse('e', 0, 0)).map((d) => d.property)).toEqual(
       multiSelectDescriptors(defaultShape('s', 0, 0)).map((d) => d.property),
     );
+  });
+});
+
+describe('field-registry — D-043 box-shadow spread (keyframable) + inset (not a descriptor)', () => {
+  const shape = defaultShape('s', 0, 0);
+  const text = defaultText('t', 0, 0);
+  const clock = defaultClock('ck', 0, 0);
+  const ticker = defaultTicker('tk', 0, 0);
+
+  it('spread is present + keyframe-able on the Box Shadow of shape (shadow.spread) and text (boxShadow.spread)', () => {
+    expect(isKeyframeable(shape, 'shadow.spread')).toBe(true);
+    expect(isKeyframeable(text, 'boxShadow.spread')).toBe(true);
+    // Grouped under "Box Shadow" in both.
+    expect(descriptorFor(shape, 'shadow.spread')?.section).toBe('Box Shadow');
+    expect(descriptorFor(text, 'boxShadow.spread')?.section).toBe('Box Shadow');
+  });
+
+  it('spread is ABSENT on the Text Shadow (text shadow.* set) and on the content-driven Text Shadow', () => {
+    // Text's text-shadow (shadow.*) has NO spread descriptor (CSS text-shadow has none).
+    expect(descriptorFor(text, 'shadow.spread')).toBeUndefined();
+    expect(isKeyframeable(text, 'shadow.spread')).toBe(false);
+    // Content-driven kinds carry only their text-shadow (shadow.*) — no spread of any kind.
+    for (const el of [clock, ticker]) {
+      expect(descriptorFor(el, 'shadow.spread')).toBeUndefined();
+      expect(descriptorFor(el, 'boxShadow.spread')).toBeUndefined();
+    }
+  });
+
+  it('box-shadow spread is text-only on boxShadow.* — a shape has no boxShadow.spread descriptor', () => {
+    expect(descriptorFor(shape, 'boxShadow.spread')).toBeUndefined();
+  });
+
+  it('inset is NOT an AnimatableProperty and has no descriptor anywhere (boolean + non-animatable)', () => {
+    expect(AnimatablePropertySchema.safeParse('shadow.inset').success).toBe(false);
+    expect(AnimatablePropertySchema.safeParse('boxShadow.inset').success).toBe(false);
+    for (const el of [shape, text, clock, ticker]) {
+      const props = descriptorsForKind(el.type).map((d) => d.property as string);
+      expect(props).not.toContain('shadow.inset');
+      expect(props).not.toContain('boxShadow.inset');
+    }
+  });
+
+  it('shape exposes shadow.spread in the multi-select set; text does not expose box-shadow spread', () => {
+    expect(multiSelectDescriptors(shape).map((d) => d.property)).toContain('shadow.spread');
+    expect(multiSelectDescriptors(text).map((d) => d.property)).not.toContain('boxShadow.spread');
   });
 });
