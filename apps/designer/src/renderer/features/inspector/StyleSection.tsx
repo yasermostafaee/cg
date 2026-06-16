@@ -1313,22 +1313,33 @@ function BorderRadiusSection({ element, currentFrame, selectedKeyframe }: BoxPro
       for (const c of RADIUS_CORNERS) designerStore.clearKeyframeTrack(id, c.prop);
     });
 
+  // One axis (input + its diamond) for a corner — same wiring for every corner.
+  const radiusAxis = (c: (typeof RADIUS_CORNERS)[number]) => ({
+    ariaLabel: c.label,
+    value: evNum(element, c.prop, currentFrame, corners[c.i]),
+    step: 1,
+    min: 0,
+    onCommit: (v: number) => designerStore.commitAnimatable(id, c.prop, Math.max(0, v)),
+    point: KeyframeDot(element, c.prop, currentFrame, selectedKeyframe),
+  });
+
   return (
     <CollapseSection title="Border Radius">
       <div className={radiusCss.row}>
         <div className={radiusCss.fields}>
           {perCorner ? (
-            <VectorField
-              label="radius"
-              axes={RADIUS_CORNERS.map((c) => ({
-                ariaLabel: c.label,
-                value: evNum(element, c.prop, currentFrame, corners[c.i]),
-                step: 1,
-                min: 0,
-                onCommit: (v: number) => designerStore.commitAnimatable(id, c.prop, Math.max(0, v)),
-                point: KeyframeDot(element, c.prop, currentFrame, selectedKeyframe),
-              }))}
-            />
+            // D-058 — two rows ordered by spatial position (NOT array order):
+            // top = top-left, top-right; bottom = bottom-left, bottom-right.
+            <div className={radiusCss.corners}>
+              <VectorField
+                label="radius"
+                axes={[radiusAxis(RADIUS_CORNERS[0]), radiusAxis(RADIUS_CORNERS[1])]}
+              />
+              <VectorField
+                label=""
+                axes={[radiusAxis(RADIUS_CORNERS[3]), radiusAxis(RADIUS_CORNERS[2])]}
+              />
+            </div>
           ) : (
             <NumberField
               label="radius"
