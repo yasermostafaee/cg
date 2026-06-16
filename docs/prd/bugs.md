@@ -301,7 +301,7 @@ package's clean script. Surfaced while reproducing B-012 from a clean tree.
 **Env:** Browser / Designer dev؛ روی `main` بازتولید می‌شود.
 **Notes:** Root cause در `BorderRadiusSection` / `toPerCorner` / `toUniform` در `apps/designer/src/renderer/features/inspector/StyleSection.tsx`. keyframe/schema-touching — **دو-فازی (recon-only اول)**. هم‌فایل با D-055؛ **بعد از merge شدنِ D-055** برداشته شود تا تداخلِ branch نشود. تستِ رگرسیون: رفت‌وبرگشتِ toggle با کیفریمِ uniform و per-corner، و موردِ چهار-گوشهٔ-متفاوت→uniform (انتخابِ top-left).
 
-## [~] B-016 — gradient text color wipes the box background (text element only) ⟨priority: medium⟩ — change: `openspec/changes/fix-text-gradient-shadow-rendering/` (shared with B-017)
+## [x] B-016 — gradient text color wipes the box background (text element only) ⟨priority: medium⟩ — fixed: `openspec/changes/archive/2026-06-16-fix-text-gradient-shadow-rendering/` (shared with B-017)
 
 **Repro:**
 
@@ -326,7 +326,7 @@ auto-size/fit/measurement، alignment، RTL/bidi، یا target ِ inline-edit ر
 pre-existing (مستقل از D-052/D-056). تستِ رگرسیون: gradient متن + box background روی
 text با هم رندر شوند (background clip نشود). keyframe/render-touching → **دو-فازی**.
 
-## [~] B-017 — text-shadow lands ON gradient text instead of behind it ⟨priority: high⟩ — change: `openspec/changes/fix-text-gradient-shadow-rendering/` (shared with B-016)
+## [x] B-017 — text-shadow lands ON gradient text instead of behind it ⟨priority: high⟩ — fixed: `openspec/changes/archive/2026-06-16-fix-text-gradient-shadow-rendering/` (shared with B-016)
 
 **Repro:**
 
