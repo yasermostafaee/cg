@@ -128,6 +128,39 @@ test.describe('Box props for all background-capable elements (D-042)', () => {
     await expect(ins.getByRole('button', { name: 'Toggle Drop Shadow' })).toHaveCount(0);
   });
 
+  test('D-043 — Box Shadow exposes Spread + Inset (text & shape); Text Shadow exposes neither', async ({
+    app,
+  }) => {
+    await app.newProject('D043');
+    await app.addTextElement({ x: 220, y: 160 });
+    const ins = app.inspector;
+
+    // Text Shadow: NO Spread row and NO Outset/Inset toggle (CSS text-shadow has neither).
+    await ins.getByRole('button', { name: 'Toggle Text Shadow' }).click();
+    await expect(ins.getByRole('spinbutton', { name: 'spread' })).toHaveCount(0);
+    await expect(ins.getByRole('button', { name: 'Inset', exact: true })).toHaveCount(0);
+    await expect(ins.getByRole('button', { name: 'Outset', exact: true })).toHaveCount(0);
+
+    // Box Shadow (text box): the keyframable Spread row + the Outset/Inset toggle.
+    await ins.getByRole('button', { name: 'Toggle Box Shadow' }).click();
+    await expect(ins.getByRole('spinbutton', { name: 'spread' })).toBeVisible();
+    const inset = ins.getByRole('button', { name: 'Inset', exact: true });
+    const outset = ins.getByRole('button', { name: 'Outset', exact: true });
+    await expect(outset).toBeVisible();
+    await expect(inset).toBeVisible();
+    // Outset is the default (pressed); toggling Inset flips the pressed state (static, no diamond).
+    await expect(outset).toHaveAttribute('aria-pressed', 'true');
+    await expect(inset).toHaveAttribute('aria-pressed', 'false');
+    await inset.click();
+    await expect(inset).toHaveAttribute('aria-pressed', 'true');
+
+    // Shape: its Box Shadow also exposes Spread + the Inset toggle.
+    await app.addRectangle({ x: 320, y: 220 });
+    await ins.getByRole('button', { name: 'Toggle Box Shadow' }).click();
+    await expect(ins.getByRole('spinbutton', { name: 'spread' })).toBeVisible();
+    await expect(ins.getByRole('button', { name: 'Inset', exact: true })).toBeVisible();
+  });
+
   test('a static stroke set on a text element renders a border in the preview', async ({ app }) => {
     await app.newProject('D042Stroke');
     await app.addTextElement({ x: 220, y: 160 });

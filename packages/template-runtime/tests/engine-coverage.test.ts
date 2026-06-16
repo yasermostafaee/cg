@@ -168,7 +168,20 @@ describe('buildScene — element builders + style branches', () => {
       shape: 'rect',
       shadow: { offsetX: 2, offsetY: 3, blur: 4, color: '#000000' },
     } as unknown as Element);
-    expect(node?.style.boxShadow).toBe('2px 3px 4px #000000');
+    // D-043 — the box-shadow now emits the spread 4th length (absent ⇒ 0, a CSS no-op).
+    expect(node?.style.boxShadow).toBe('2px 3px 4px 0px #000000');
+  });
+
+  it('D-043 — renders the box-shadow spread length and the inset prefix on a shape', () => {
+    const node = buildWith({
+      ...baseElProps,
+      id: 'sh',
+      name: 'sh',
+      type: 'shape',
+      shape: 'rect',
+      shadow: { offsetX: 2, offsetY: 3, blur: 4, spread: 6, inset: true, color: '#000000' },
+    } as unknown as Element);
+    expect(node?.style.boxShadow).toBe('inset 2px 3px 4px 6px #000000');
   });
 
   it('renders a per-corner cornerRadius array and a dashed stroke on a rect', () => {
@@ -372,7 +385,8 @@ describe('applyAnimationAtFrame — partial shadow/filter recompose from static'
       },
     };
     applyAnimationAtFrame(entry, 10);
-    expect(entry.node.style.boxShadow).toBe('5px 6px 11px #abcdef');
+    // D-043 — box-shadow keeps the static offsets/colour and emits the spread length (0).
+    expect(entry.node.style.boxShadow).toBe('5px 6px 11px 0px #abcdef');
   });
 
   it('animating one filter sub-property recomposes the whole filter from static values', () => {

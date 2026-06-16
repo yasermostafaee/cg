@@ -170,4 +170,28 @@ describe('ShadowSchema', () => {
   it('rejects negative blur', () => {
     expect(() => ShadowSchema.parse({ offsetX: 0, offsetY: 0, blur: -1, color: '#000' })).toThrow();
   });
+  // D-043 — the full CSS box-shadow model: spread + inset.
+  it('round-trips spread + inset', () => {
+    const s = { offsetX: 2, offsetY: 4, blur: 8, spread: 3, inset: true, color: '#000000' };
+    expect(ShadowSchema.parse(s)).toEqual(s);
+  });
+  it('accepts a negative spread (shrink)', () => {
+    expect(
+      ShadowSchema.parse({ offsetX: 0, offsetY: 0, blur: 0, spread: -4, color: '#000000' }),
+    ).toMatchObject({ spread: -4 });
+  });
+  it('a pre-D-043 shadow (no spread/inset) parses and reads as 0 / false', () => {
+    // Non-breaking: the two fields are optional, so an old shadow validates and the
+    // read-time defaults are spread → 0, inset → false.
+    const parsed = ShadowSchema.parse({ offsetX: 1, offsetY: 2, blur: 3, color: '#112233' });
+    expect(parsed.spread).toBeUndefined();
+    expect(parsed.inset).toBeUndefined();
+    expect(parsed.spread ?? 0).toBe(0);
+    expect(parsed.inset ?? false).toBe(false);
+  });
+  it('rejects a non-boolean inset', () => {
+    expect(() =>
+      ShadowSchema.parse({ offsetX: 0, offsetY: 0, blur: 0, color: '#000000', inset: 'yes' }),
+    ).toThrow();
+  });
 });

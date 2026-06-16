@@ -627,6 +627,87 @@ describe('D-057 — text has independent text-shadow and box-shadow', () => {
   });
 });
 
+describe('D-043 — box-shadow spread (animated) + static inset', () => {
+  it('shape: animating shadow.spread recomposes the box-shadow and keeps the static inset', () => {
+    const { source, node } = makeShape();
+    applyAnimationAtFrame(
+      {
+        id: 's',
+        node,
+        source: {
+          ...source,
+          shadow: { offsetX: 1, offsetY: 2, blur: 3, spread: 0, inset: true, color: '#000000' },
+        },
+        animation: {
+          tracks: {
+            'shadow.spread': {
+              keyframes: [
+                { frame: 0, value: 0, easing: 'linear' },
+                { frame: 10, value: 10, easing: 'linear' },
+              ],
+            },
+          },
+        },
+      },
+      10,
+    );
+    // spread → 10 (animated), offset/blur/colour static, inset prefix preserved (static).
+    expect(node.style.boxShadow).toBe('inset 1px 2px 3px 10px #000000');
+  });
+
+  it('shape: inset is static (never a track) — it persists while an offset animates', () => {
+    const { source, node } = makeShape();
+    applyAnimationAtFrame(
+      {
+        id: 's',
+        node,
+        source: {
+          ...source,
+          shadow: { offsetX: 0, offsetY: 0, blur: 0, spread: 2, inset: true, color: '#000000' },
+        },
+        animation: {
+          tracks: {
+            'shadow.offsetX': {
+              keyframes: [
+                { frame: 0, value: 0, easing: 'linear' },
+                { frame: 10, value: 8, easing: 'linear' },
+              ],
+            },
+          },
+        },
+      },
+      10,
+    );
+    expect(node.style.boxShadow).toBe('inset 8px 0px 0px 2px #000000');
+  });
+
+  it('text: animating boxShadow.spread recomposes the box-shadow from el.shadow', () => {
+    const { source, node } = makeText();
+    applyAnimationAtFrame(
+      {
+        id: 'txt',
+        node,
+        source: {
+          ...source,
+          shadow: { offsetX: 5, offsetY: 6, blur: 7, spread: 0, inset: false, color: '#abcdef' },
+        } as unknown as TextElement,
+        animation: {
+          tracks: {
+            'boxShadow.spread': {
+              keyframes: [
+                { frame: 0, value: 0, easing: 'linear' },
+                { frame: 10, value: 14, easing: 'linear' },
+              ],
+            },
+          },
+        },
+      },
+      10,
+    );
+    expect(node.style.boxShadow).toBe('5px 6px 7px 14px #abcdef');
+  });
+});
+
 describe('B-016/B-017 — animated glyph shadow over gradient text', () => {
   const linearFill = {
     kind: 'linear',

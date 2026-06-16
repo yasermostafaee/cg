@@ -71,12 +71,23 @@ export const TransformSchema = z.object({
 });
 export type Transform = z.infer<typeof TransformSchema>;
 
-/** Drop-shadow on text or shapes. */
+/**
+ * Drop-shadow on text or shapes. Shared by the glyph shadow (`textShadow`) and the
+ * box shadow (`shadow`). D-043 — the box shadow additionally uses the full CSS
+ * box-shadow model: an optional `spread` radius (the 4th length, keyframe-able via
+ * `shadow.spread` / `boxShadow.spread`) and an optional `inset` toggle (the `inset`
+ * keyword, NOT keyframe-able). Read-time defaults are spread → 0 and inset → false, so
+ * a shadow authored before D-043 renders identically. Both fields are structurally
+ * present on `textShadow` too but are IGNORED on every text-shadow / drop-shadow path
+ * (CSS `text-shadow` / `drop-shadow` have neither spread nor inset).
+ */
 export const ShadowSchema = z.object({
   offsetX: z.number(),
   offsetY: z.number(),
   blur: z.number().nonnegative(),
   color: HexColorSchema,
+  spread: z.number().optional(),
+  inset: z.boolean().optional(),
 });
 export type Shadow = z.infer<typeof ShadowSchema>;
 

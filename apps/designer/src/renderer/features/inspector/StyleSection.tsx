@@ -33,9 +33,10 @@ import { CollapseSection } from './CollapseSection.js';
 import { ColorField, NumberField, SelectField, TextField, VectorField } from './controls.js';
 import { FillField } from './FillPopover.js';
 import { FontFamilySelect } from './FontFamilySelect.js';
-import { TextStyleSection } from './TextStyleSection.js';
+import { TextStyleSection, TogglePair } from './TextStyleSection.js';
 import { Control } from '../../ui/Control.js';
 import * as radiusCss from './BorderRadiusSection.css.js';
+import * as fieldCss from './controls.css.js';
 
 interface Props {
   element: Element;
@@ -1130,14 +1131,20 @@ function DropShadowSection({
     field
   ];
   const s: Shadow = staticShadow ?? { offsetX: 0, offsetY: 0, blur: 0, color: '#000000' };
+  // D-043 — the box-shadow sections (field === 'shadow', i.e. shape + text box) carry the
+  // spread row + the inset toggle; the text-shadow section (field === 'textShadow') does NOT
+  // (CSS text-shadow has neither). This is the guard that keeps spread/inset off text-shadow.
+  const isBoxShadow = field === 'shadow';
   const kx: AnimatableProperty = `${keyPrefix}.offsetX`;
   const ky: AnimatableProperty = `${keyPrefix}.offsetY`;
   const kb: AnimatableProperty = `${keyPrefix}.blur`;
+  const ks: AnimatableProperty = `${keyPrefix}.spread`;
   const kc: AnimatableProperty = `${keyPrefix}.color`;
   // Evaluated-at-playhead values so animated shadow fields track the canvas.
   const offsetX = evNum(element, kx, currentFrame, s.offsetX);
   const offsetY = evNum(element, ky, currentFrame, s.offsetY);
   const blur = evNum(element, kb, currentFrame, s.blur);
+  const spread = evNum(element, ks, currentFrame, s.spread ?? 0);
   const color = evColor(element, kc, currentFrame, s.color);
   return (
     <CollapseSection title={title}>
@@ -1173,6 +1180,18 @@ function DropShadowSection({
         onCommit={(v) => designerStore.commitAnimatable(id, kb, v)}
         trailing={KeyframeDot(element, kb, currentFrame, selectedKeyframe)}
       />
+      {/* D-043 — box-shadow spread (keyframable, like Blur); box-shadow sections only.
+          No min: a negative spread (shrink) is valid CSS. */}
+      {isBoxShadow && (
+        <NumberField
+          label="spread"
+          value={spread}
+          step={1}
+          suffix="px"
+          onCommit={(v) => designerStore.commitAnimatable(id, ks, v)}
+          trailing={KeyframeDot(element, ks, currentFrame, selectedKeyframe)}
+        />
+      )}
       <ColorField
         label="color"
         value={color}
@@ -1180,6 +1199,27 @@ function DropShadowSection({
         onCommit={(color) => designerStore.commitAnimatable(id, kc, color)}
         trailing={KeyframeDot(element, kc, currentFrame, selectedKeyframe)}
       />
+      {/* D-043 — the non-keyframable inset toggle (Outset/Inset, Outset default). Box-shadow
+          sections only; NOT a registry descriptor (boolean + non-animatable), so it writes
+          el.shadow.inset directly via updateElement and carries no keyframe diamond. Mirrors
+          the per-corner radius toggle (a direct StyleSection control). */}
+      {isBoxShadow && (
+        <div className={fieldCss.row}>
+          <span className={fieldCss.label}>inset</span>
+          <TogglePair
+            value={s.inset === true ? 'inset' : 'outset'}
+            options={[
+              { value: 'outset', label: 'Outset' },
+              { value: 'inset', label: 'Inset' },
+            ]}
+            onChange={(v) =>
+              designerStore.updateElement(id, {
+                shadow: { ...s, inset: v === 'inset' },
+              } as Partial<Element>)
+            }
+          />
+        </div>
+      )}
     </CollapseSection>
   );
 }

@@ -396,6 +396,14 @@ const SHAPE_SHADOW: readonly PropertyDescriptor[] = [
     { step: 1, min: 0, unit: 'px', multiSelect: true },
     'Box Shadow',
   ),
+  // D-043 — the keyframable box-shadow spread radius (no min: a negative spread is valid).
+  shadowDesc(
+    'shadow.spread',
+    'spread',
+    'Spread',
+    { step: 1, unit: 'px', multiSelect: true },
+    'Box Shadow',
+  ),
   shadowDesc('shadow.color', 'color', 'Color', { color: true, multiSelect: true }, 'Box Shadow'),
 ];
 
@@ -508,7 +516,12 @@ function shadowDesc(
   opts: { step?: number; min?: number; unit?: string; color?: boolean; multiSelect?: boolean },
   section: InspectorSection,
 ): PropertyDescriptor {
-  const sub = property.slice('shadow.'.length) as 'offsetX' | 'offsetY' | 'blur' | 'color';
+  const sub = property.slice('shadow.'.length) as
+    | 'offsetX'
+    | 'offsetY'
+    | 'blur'
+    | 'spread'
+    | 'color';
   const read = (el: Element): number | string => {
     // shape → `shadow` (box-shadow); text + ticker/clock/sequence → `textShadow`.
     const s =
@@ -518,6 +531,7 @@ function shadowDesc(
           ? (el as { textShadow?: Shadow }).textShadow
           : undefined;
     if (sub === 'color') return s?.color ?? '#000000';
+    // D-043 — `spread` reads `s.spread ?? 0` (only the shape box-shadow set declares it).
     return s?.[sub] ?? 0;
   };
   return {
@@ -544,10 +558,16 @@ function boxShadowDesc(
   timelineLabel: string,
   opts: { step?: number; min?: number; unit?: string; color?: boolean },
 ): PropertyDescriptor {
-  const sub = property.slice('boxShadow.'.length) as 'offsetX' | 'offsetY' | 'blur' | 'color';
+  const sub = property.slice('boxShadow.'.length) as
+    | 'offsetX'
+    | 'offsetY'
+    | 'blur'
+    | 'spread'
+    | 'color';
   const read = (el: Element): number | string => {
     const s = (el as { shadow?: Shadow }).shadow;
     if (sub === 'color') return s?.color ?? '#000000';
+    // D-043 — `spread` reads `s.spread ?? 0`.
     return s?.[sub] ?? 0;
   };
   return {
@@ -568,6 +588,8 @@ const BOX_SHADOW_DESCS: readonly PropertyDescriptor[] = [
   boxShadowDesc('boxShadow.offsetX', 'offset X', 'Box offset X', { step: 1, unit: 'px' }),
   boxShadowDesc('boxShadow.offsetY', 'offset Y', 'Box offset Y', { step: 1, unit: 'px' }),
   boxShadowDesc('boxShadow.blur', 'blur', 'Box blur', { step: 1, min: 0, unit: 'px' }),
+  // D-043 — the keyframable box-shadow spread radius (no min: a negative spread is valid).
+  boxShadowDesc('boxShadow.spread', 'spread', 'Box spread', { step: 1, unit: 'px' }),
   boxShadowDesc('boxShadow.color', 'color', 'Box color', { color: true }),
 ];
 
