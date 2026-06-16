@@ -79,7 +79,13 @@ export const TextElementSchema = ElementBaseSchema.extend({
   colorFill: FillSchema.optional(),
   align: z.enum(['start', 'end', 'center', 'justify']),
   direction: TextDirectionSchema,
+  /** Text drop shadow on the glyphs (rendered as `text-shadow`); `shadow.*` keys. */
   textShadow: ShadowSchema.optional(),
+  /**
+   * D-057 — box drop shadow on the text BOX (rendered as `box-shadow`, like the shape's
+   * `shadow`), independent of `textShadow`. Animated by the distinct `boxShadow.*` keys.
+   */
+  shadow: ShadowSchema.optional(),
   maxLines: z.number().int().positive().optional(),
   fitMode: z.enum(['fixed', 'shrink-to-fit', 'autosize']),
   overflow: z.enum(['clip', 'ellipsis', 'shrink']),

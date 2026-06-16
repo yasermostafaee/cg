@@ -115,6 +115,9 @@ export function applyAnimationAtFrame(entry: AnimatedElement, frame: number): vo
   // Composite shadow + filter — recompose the whole CSS declaration
   // from static + animated components when any track is present.
   applyShadow(entry, tracks, frame);
+  // D-057 — the text element's independent BOX shadow (box-shadow), on the distinct
+  // `boxShadow.*` keys (the `shadow.*` set above is text's text-shadow / shape's box-shadow).
+  applyBoxShadow(entry, tracks, frame);
   applyFilter(entry, tracks, frame);
 }
 
@@ -149,6 +152,15 @@ const SHADOW_PROPS = [
   'shadow.offsetY',
   'shadow.blur',
   'shadow.color',
+] as const satisfies readonly AnimatableProperty[];
+
+// D-057 — the text element's box shadow (box-shadow), animated independently of the
+// `shadow.*` text-shadow.
+const BOX_SHADOW_PROPS = [
+  'boxShadow.offsetX',
+  'boxShadow.offsetY',
+  'boxShadow.blur',
+  'boxShadow.color',
 ] as const satisfies readonly AnimatableProperty[];
 
 const STROKE_PROPS = [
@@ -281,6 +293,34 @@ function applyShadow(
   const css = `${offsetX}px ${offsetY}px ${blur}px ${color}`;
   if (textShadowKind) entry.node.style.textShadow = css;
   else entry.node.style.boxShadow = css;
+}
+
+/**
+ * D-057 — the text element's BOX shadow, animated on the distinct `boxShadow.*` keys
+ * (independent of the `shadow.*` text-shadow). Recomposes `box-shadow` from the static
+ * `el.shadow` + any animated `boxShadow.*` tracks. Text-only; shape's box-shadow stays
+ * on `shadow.*` (handled by applyShadow) and the content-driven kinds have no box shadow.
+ */
+function applyBoxShadow(
+  entry: AnimatedElement,
+  tracks: ElementAnimation['tracks'],
+  frame: number,
+): void {
+  const hasAny = BOX_SHADOW_PROPS.some((p) => tracks[p] !== undefined);
+  if (!hasAny) return;
+  const src = entry.source;
+  if (src.type !== 'text') return;
+  const staticShadow = (
+    src as { shadow?: { offsetX: number; offsetY: number; blur: number; color: string } }
+  ).shadow;
+  const offsetX =
+    readNumericTrack(tracks, 'boxShadow.offsetX', frame) ?? staticShadow?.offsetX ?? 0;
+  const offsetY =
+    readNumericTrack(tracks, 'boxShadow.offsetY', frame) ?? staticShadow?.offsetY ?? 0;
+  const blur = readNumericTrack(tracks, 'boxShadow.blur', frame) ?? staticShadow?.blur ?? 0;
+  const color =
+    readStringTrack(tracks, 'boxShadow.color', frame) ?? staticShadow?.color ?? '#000000';
+  entry.node.style.boxShadow = `${offsetX}px ${offsetY}px ${blur}px ${color}`;
 }
 
 function applyFilter(

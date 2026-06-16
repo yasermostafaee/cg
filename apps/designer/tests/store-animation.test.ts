@@ -440,13 +440,14 @@ describe('B-007 — timeline diamond add-keyframe captures the evaluated value (
 });
 
 describe('D-010 — timelineGroupsFor returns the right groups per element type', () => {
-  it('a shape returns Transform · Path style · Border radius · Drop Shadow · Filter', () => {
+  it('a shape returns Transform · Path style · Border radius · Box Shadow · Filter', () => {
     const groups = timelineGroupsFor(selected());
     expect(groups.map((g) => g.title)).toEqual([
       'Transform',
       'Path Style',
       'Border Radius',
-      'Drop Shadow',
+      // D-057 — shape's shadow group is relabelled "Box Shadow" (was "Drop Shadow").
+      'Box Shadow',
       'Filter',
     ]);
   });

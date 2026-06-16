@@ -305,6 +305,11 @@ function buildText(
     const s = element.textShadow;
     el.style.textShadow = `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.color}`;
   }
+  // D-057 — box drop shadow on the text BOX (rendered as box-shadow, like the shape),
+  // independent of the glyph text-shadow above.
+  if (element.shadow) {
+    el.style.boxShadow = composeBoxShadow(element.shadow);
+  }
   // D-010 — text-box padding, background, border-radius.
   if (element.padding) {
     el.style.paddingTop = `${element.padding.top}px`;

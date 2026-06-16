@@ -60,7 +60,10 @@ function toSharedSection(section: InspectorSection): SharedSection {
       return 'Transform';
     case 'Border Radius':
       return 'Border Radius';
+    // D-057 — text/shape shadow sections map to the multi editor's single shadow group.
     case 'Drop Shadow':
+    case 'Text Shadow':
+    case 'Box Shadow':
       return 'Drop Shadow';
     case 'Filter':
       return 'Filter';
