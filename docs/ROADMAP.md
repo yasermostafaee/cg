@@ -47,6 +47,8 @@ _The multi-select chain (D-041 + D-049/050/051/053/054) is done — see Done (re
 **Tail (after D-048):** template cleanup — rebuild/refresh the bundled sample
 templates against the wave's finalized controls (the explicit tail of this wave).
 
+- [D-059](./prd/designer.md) — Friendly validation presets for dynamic text fields (preset dropdown + "Custom (advanced)" regex escape over the existing `pattern`; designer-facing)
+
 ## Then — hardening wave (after features)
 
 No PRD items filed yet — file them when this wave is scheduled.

@@ -59,8 +59,7 @@ that graphics bind to.
 **Why:** Sports is a major use case; a shared state model is the foundation the
 operator app and graphics both consume.
 **Acceptance to be detailed when scheduled.**
-**Notes:** likely a new schema/domain area (`@cg/shared-schema` or a dedicated
-package) feeding bindings; foundation for C-005 + C-006.
+**Notes:** **Notes:** likely a new schema/domain area (`@cg/shared-schema` or a dedicated package) feeding bindings; foundation for C-005 + C-006. Scope it as a **declarative sport-definition** (state schema + allowed operations + default control-surface layout + default template bindings), NOT hardcoded per-sport logic — sports are data, not separate apps. See the "Multi-sport runtime architecture" note in `roadmap.md`.
 
 ## [ ] C-005 — Sports control: operator app ⟨priority: medium⟩
 
@@ -69,7 +68,7 @@ stop clock, fire event graphics) and push to air.
 **Why:** Sports operators need a fast, purpose-built panel rather than editing raw
 fields.
 **Acceptance to be detailed when scheduled.**
-**Notes:** depends on C-004 (state model) + C-002 (rundown/playout control).
+**Notes:** **Notes:** depends on C-004 (state model) + C-002 (rundown/playout control). Render the operator control surface **from C-004's declared operations** (auto-generated buttons), so adding a sport = adding a sport-definition, not a new app. See the "Multi-sport runtime architecture" note in `roadmap.md`.
 
 ## [ ] C-006 — Roster ingestion (manual / file / API) ⟨priority: low⟩
 
