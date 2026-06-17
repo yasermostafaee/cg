@@ -1377,17 +1377,31 @@ already sorts `layer.children` ascending by zIndex. Scoped to one sibling set (n
 cross-layer/cross-parent moves, no multi-select drag, no edge auto-scroll). Capabilities:
 designer-animation-timeline (MODIFIED). Change: `openspec/changes/add-layer-reorder-drag/`.
 
-## [ ] D-048 — Inspector visual polish (align/padding/sizing buttons, text-settings popover, no blue button) ⟨priority: medium⟩
+## [~] D-048 — Inspector visual polish (align/padding/sizing buttons, text-settings popover, no blue button) ⟨priority: medium⟩
 
 **What:** Match Loopic for the align buttons, the padding layout (four inputs side-by-
 side, not one per row), and the sizing(auto/fixed)/auto-squeeze/text-wrap controls;
-a small settings popover for text (font-weight/decoration/transform/variant/style); no
-blue accent button inside the inspector — styles consistent with the properties panel.
+a small settings popover for text (font-weight + style ONLY — decoration/transform/variant
+are not in the schema, out of scope); no blue accent button inside the inspector — styles
+consistent with the properties panel.
 **Why:** Current inspector controls are visually inconsistent with the reference.
-**Acceptance to be detailed when scheduled.**
-**Notes:** appearance only, no behavior change; MUST come after D-045/D-046 (depends on
-their final controls). Loopic refs: docs/designer-guide/sample-assets/textalign.png-era
-shots → D-045-align-0/1.png, D-048-textpadding-0.png, D-048-popover-0.png.
+**Acceptance:**
+
+- WHEN a text element's padding is inspected THEN the four inputs render side-by-side in one
+  row (each with its keyframe diamond), matching D-048-textpadding-0.png
+- WHEN an align button or a sizing/auto-squeeze/text-wrap toggle is active THEN it uses the
+  neutral properties-panel fill (no blue accent), matching D-045-align-0/1.png
+- WHEN the ⚙ "More text options" gear is clicked THEN a popover opens with font weight
+  (100..900) and font style (normal/italic); it closes on outside-click or Escape
+- WHEN weight/style is changed in the popover THEN it writes font.weight/font.style via
+  updateElement (non-keyframable, no diamond), with no schema/render/behavior change
+
+**Notes:** appearance/UI-parity only, no schema/render/keyframe/behavior change; came after
+D-045 (reuses its align controls). The inline weight control (D-044) moved into the popover.
+Capabilities: designer-inspector (ADDED). Change: `openspec/changes/polish-inspector-visuals/`.
+Ref discrepancy: D-048-popover-0.png depicts the D-046 auto-size confirm modal (separate/paused
+item), so the popover matches D-045-align-1.png instead. decoration/transform/variant deferred
+(not in schema).
 
 ## [x] D-049 — Multi-select inspector parity + units + per-shape selection boxes ⟨priority: high⟩
 

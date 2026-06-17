@@ -30,7 +30,16 @@ import {
 import { KeyframeDot } from './keyframe-diamond.js';
 import { applyFillModeChange } from './fill-commit.js';
 import { CollapseSection } from './CollapseSection.js';
-import { ColorField, NumberField, SelectField, TextField, VectorField } from './controls.js';
+import {
+  ColorField,
+  NumberField,
+  RealtimeNumberInput,
+  SelectField,
+  TextField,
+  VectorField,
+} from './controls.js';
+import { cx } from '../../cx.js';
+import * as padCss from './TextPaddingSection.css.js';
 import { FillField } from './FillPopover.js';
 import { FontFamilySelect } from './FontFamilySelect.js';
 import { TextStyleSection, TogglePair } from './TextStyleSection.js';
@@ -1280,40 +1289,33 @@ function TextPaddingSection({
 }): JSX.Element {
   const id = element.id;
   const p: Padding = element.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  // D-048 — four inputs side-by-side in one row (top/right/bottom/left), each a
+  // compact cell with its keyframe diamond. Matches D-048-textpadding-0.png.
+  // Values + commit path (commitAnimatable) + diamonds unchanged from the old
+  // one-per-row layout — appearance only.
+  const cells = [
+    { name: 'top', property: 'padding.top' as const, value: p.top },
+    { name: 'right', property: 'padding.right' as const, value: p.right },
+    { name: 'bottom', property: 'padding.bottom' as const, value: p.bottom },
+    { name: 'left', property: 'padding.left' as const, value: p.left },
+  ];
   return (
     <CollapseSection title="Text Padding">
-      <NumberField
-        label="top"
-        value={evNum(element, 'padding.top', currentFrame, p.top)}
-        step={1}
-        min={0}
-        onCommit={(v) => designerStore.commitAnimatable(id, 'padding.top', v)}
-        trailing={KeyframeDot(element, 'padding.top', currentFrame, selectedKeyframe)}
-      />
-      <NumberField
-        label="right"
-        value={evNum(element, 'padding.right', currentFrame, p.right)}
-        step={1}
-        min={0}
-        onCommit={(v) => designerStore.commitAnimatable(id, 'padding.right', v)}
-        trailing={KeyframeDot(element, 'padding.right', currentFrame, selectedKeyframe)}
-      />
-      <NumberField
-        label="bottom"
-        value={evNum(element, 'padding.bottom', currentFrame, p.bottom)}
-        step={1}
-        min={0}
-        onCommit={(v) => designerStore.commitAnimatable(id, 'padding.bottom', v)}
-        trailing={KeyframeDot(element, 'padding.bottom', currentFrame, selectedKeyframe)}
-      />
-      <NumberField
-        label="left"
-        value={evNum(element, 'padding.left', currentFrame, p.left)}
-        step={1}
-        min={0}
-        onCommit={(v) => designerStore.commitAnimatable(id, 'padding.left', v)}
-        trailing={KeyframeDot(element, 'padding.left', currentFrame, selectedKeyframe)}
-      />
+      <div className={padCss.row}>
+        {cells.map(({ name, property, value }) => (
+          <div key={property} className={cx('cg-field', padCss.cell)}>
+            <RealtimeNumberInput
+              className={padCss.input}
+              value={evNum(element, property, currentFrame, value)}
+              step={1}
+              min={0}
+              onCommit={(v) => designerStore.commitAnimatable(id, property, v)}
+              ariaLabel={`Padding ${name}`}
+            />
+            {KeyframeDot(element, property, currentFrame, selectedKeyframe)}
+          </div>
+        ))}
+      </div>
     </CollapseSection>
   );
 }
