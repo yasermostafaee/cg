@@ -30,6 +30,39 @@ integrations to validate. They live here so the conversation isn't the only reco
   it holds at broadcast frame rates. Pairs with the single-file CEF/`file://` hardening
   item (`C-007`).
 
+- **Multi-sport runtime architecture — one generic app, sports as data (NOT one app per sport).**
+  Decision for the Runtime/sports wave: do **not** build a separate control app per sport
+  (football / basketball / volleyball / …). Build **one generic Runtime** where a sport is a
+  **declarative "sport definition" (data/config)**, plus per-sport template packs and a
+  sport-data connector — exactly how NewBlue Captivate does it (one product + a generic
+  "Sport Data Controller" add-on + named data inputs like Stat Crew statistics/scoreboards and
+  NewTek DataLink + per-sport template collections; the "baseball-ness" of its control surface
+  is configured buttons + baseball templates + a Stat Crew feed, not a baseball binary).
+  Three data/config layers on one app:
+  1. **Sport definition (declarative):** state fields (`score`/`period`/`clock`; baseball
+     `balls`/`strikes`/`innings`/`outs`; basketball `fouls`/`shotClock`/`quarters`; soccer
+     `halves`/`addedTime`/`cards`; tennis `sets`/`games`/`points`) + allowed operations
+     (`+1 score`, `next period`, `start/stop clock`). A "+1 strike" button is just a declared op.
+  2. **Operator panel auto-generated from the sport definition's declared operations** —
+     adding a sport = adding a definition; the panel populates itself. This single decision is
+     what prevents N apps.
+  3. **Per-sport template pack** authored in the Designer (scorebug / lineup / stat-card),
+     bound to the sport's state fields; reusable.
+     Plus a **sport-data connector** ("Sport Data Controller": Stat Crew / Sportzcast / Daktronics /
+     generic JSON·CSV·Sheet) to auto-fill state — it must live in the **host/bridge (C-001)** because
+     browsers can't read serial/TCP/UDP/XML feeds. This is the sports specialization of the broader
+     live-data-source gap (which also unlocks weather / stocks / elections). The only genuinely
+     sport-specific **code** is unusual scoring (tennis deuce/advantage, cricket overs/wickets,
+     volleyball rotation/sets): a small per-sport rules module behind a common interface — a plugin,
+     not an app.
+     **How to honor when scheduled:** scope **C-004** as a declarative sport-definition (state schema
+  - operations + default control-surface layout + default template bindings) rather than hardcoded
+    sport logic; have **C-005** render its control surface from those declared operations; file the
+    **sport-data connector** as a new `caspar.md` item riding on **C-001**; **C-002** sequences
+    per-sport presets on air and **C-006** feeds rosters/lineups. Promote to real PRD items in
+    [`caspar.md`](./caspar.md) when the runtime wave starts; until then this is the design intent
+    C-004/C-005 must follow.
+
 ## Already tracked elsewhere (do not duplicate)
 
 - **End-user product documentation site (Loopic-style).** Tracked as **P-006** in

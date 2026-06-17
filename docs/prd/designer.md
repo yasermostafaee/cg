@@ -1824,3 +1824,23 @@ capabilityِ مربوط به shadow/styling. Change: `openspec/changes/separate-
 احتمالاً بدونِ OpenSpec change (مثلِ D-055). روی shape و text (انواعِ محتوا-محور از
 D-056 دیگر border-radius ندارند). در `BorderRadiusSection` (`StyleSection.tsx`).
 مرجع برای مقایسه: `docs/designer-guide/sample-assets/D-042-radius-1.png` (چهارگوشه).
+
+## [ ] D-059 — Friendly validation presets for dynamic text fields ⟨priority: low⟩
+
+**What:** Replace the raw-regex `pattern` input on text/multiline dynamic fields with a
+named-preset dropdown (e.g. Email, Phone, Digits only, Letters only, Uppercase code,
+Time HH:MM, URL) that writes a vetted regex under the hood, plus a "Custom (advanced)"
+option exposing today's raw regex box. Follows the existing Preset-with-custom-escape
+idiom (EasingEditor / sequence-presets): a stored pattern matching a preset shows that
+preset, otherwise "Custom".
+**Why:** `pattern` is a raw regex source string today — developer-facing, so broadcast
+designers don't know it and can't use it. Presets make the common free-text shapes
+accessible without regex; the advanced escape keeps full power. (Numeric range,
+constrained choice, and length are already covered by the `number` / `select` /
+`boolean` field types + minLength/maxLength, so presets need only cover free-text shapes.)
+**Acceptance to be detailed when scheduled.**
+**Notes:** UI-only layer over the existing `pattern` field — schema/runtime untouched,
+non-breaking (existing custom patterns load as "Custom"). Anchor presets with ^…$ for
+whole-value matches (avoids the unanchored-substring gotcha). Single-phase, low-risk.
+Capabilities: designer-dynamic-fields + designer-inspector. Sequenced after the
+UX-feature wave (D-042→D-048).
