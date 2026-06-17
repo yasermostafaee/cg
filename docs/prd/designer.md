@@ -1904,3 +1904,31 @@ work, not appearance-only).
 **Notes:** decide which kinds get them (text only, or also ticker/clock/sequence). Likely
 non-keyframeable (parity with weight/style). Capabilities: designer-inspector + shared-schema +
 template-runtime.
+
+## [~] D-062 — Render per-project image assets in exported output ⟨priority: high — D-040 prerequisite⟩
+
+**What:** Make per-project image elements actually render in exported `.vcg` and single-file HTML.
+Today the runtime emits `<img data-cg-asset-id>` with NO `src`; only the Designer preview wires it
+(blob-URL map). `.vcg` packages the bytes but the served runtime never sets `src`; the single-file
+HTML inlines fonts but not image bytes. This wires the byte→`src` path: the runtime gains an
+`assetUrls` boot option (sets each image's `src`), the `.vcg` bakes the packaged relative paths, and
+the single-file HTML base64-inlines the bytes. A missing image is reported at export (`.vcg` blocks,
+HTML warns), never silently broken.
+**Why:** surfaced by D-040 Phase-1 recon (the shared image library / draft `add-shared-image-library`):
+exported images don't render at all today, so D-040's "inline like a per-project asset" had no
+per-project baseline to build on. This is that foundational baseline — **a prerequisite for D-040**.
+**Acceptance:**
+
+- WHEN a scene with a per-project image is exported to `.vcg` THEN the bytes are packaged and the
+  served runtime sets the `<img>` `src` from them (renders, no external/`file://` access)
+- WHEN exported to single-file HTML THEN the bytes are base64-inlined and the `<img>` `src` is set
+  (renders offline, self-contained)
+- WHEN an image's bytes don't resolve THEN export reports it (`.vcg` blocks with an error; HTML warns)
+  — never a silent broken export
+- WHILE the Designer preview is unchanged (it keeps wiring `src` host-side)
+
+**Notes:** project source ONLY; the byte resolver is written source-aware-READY so D-040/PR-2 adds the
+shared-library branch in one place (`resolveImageAsset`). Runtime `assetUrls` seam shared by both
+exporters. Known limitation: images stamped into repeater rows at play time aren't re-wired (static
+tree only). Capabilities: designer-image-export (new). Change:
+`openspec/changes/render-image-assets-in-exports/`.

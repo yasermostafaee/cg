@@ -122,6 +122,16 @@ export interface RuntimeBootOptions {
   root?: HTMLElement;
 
   /**
+   * D-062 — image `assetId` → resolved URL. After building the scene the runtime
+   * sets the `src` of each `<img data-cg-asset-id>` whose id is in this map, so
+   * image elements render in exported output (`.vcg`: packaged relative paths;
+   * single-file HTML: base64 data URIs — both exporters bake the map). Absent ⇒
+   * image `src` is left unset, so the Designer preview (which wires `src`
+   * host-side) is unaffected.
+   */
+  assetUrls?: Readonly<Record<string, string>>;
+
+  /**
    * When `false`, the runtime does not install `window.cg` or the
    * CasparCG global adapters. Useful for tests that drive the runtime
    * directly without polluting the global namespace.
