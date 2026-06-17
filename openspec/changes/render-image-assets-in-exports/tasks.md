@@ -45,5 +45,5 @@
       Phase-1 recon). Mark `[~]`.
 - [x] Engine doc-sync if a runtime/export contract changed (`docs/engines/overview.md` +
       `packages/template-runtime/README.md`).
-- [x] Full green gate (uncached) for every touched workspace; `openspec validate
-    render-image-assets-in-exports --strict`.
+- [x] Full green gate (uncached) for every touched workspace; the OpenSpec change validates
+      `--strict`.
