@@ -38,12 +38,18 @@ the order changes. Strategic / non-engineering notes live in
 The owner UX-feature wave (D-042–D-048 + D-052) is complete — see Done (recent). The remaining
 designer backlog, roughly in priority order:
 
-1. [D-060](./prd/designer.md) — Auto-size text rendering (consume `fitMode`) — needs a dedicated
+1. **[D-040](./prd/designer.md) epic — shared image library.** PR-1 in flight:
+   [D-062](./prd/designer.md) — render per-project image assets in exported output (the byte→`src`
+   path: runtime `assetUrls` seam + `.vcg` packaged paths + single-file HTML base64 inline + export
+   missing-asset report). Surfaced by the D-040 Phase-1 recon as its prerequisite; the resolver is
+   written source-aware-ready so D-040/PR-2 adds the `'shared'` source. Then PR-2: the shared
+   device image library + logo (draft design `add-shared-image-library`, PR #128).
+2. [D-060](./prd/designer.md) — Auto-size text rendering (consume `fitMode`) — needs a dedicated
    design pass (sized like C-001). **Unblocks [D-046](./prd/designer.md)** — the sizing=auto guard
    is PARKED until this lands and ships **coupled** with it (no unguarded window).
-2. [D-059](./prd/designer.md) — Friendly validation presets for dynamic text fields (preset
+3. [D-059](./prd/designer.md) — Friendly validation presets for dynamic text fields (preset
    dropdown + "Custom (advanced)" regex escape over the existing `pattern`; designer-facing)
-3. [D-061](./prd/designer.md) — Text decoration / transform / variant controls — the rest of the
+4. [D-061](./prd/designer.md) — Text decoration / transform / variant controls — the rest of the
    font controls the D-048 popover was envisioned with; needs schema + renderer (low priority)
 
 **Wave tail (carried over):** template cleanup — rebuild/refresh the bundled sample templates

@@ -7,6 +7,12 @@ import {
   type PlayoutMetadata,
 } from '@cg/vcg-format';
 import type { AssetStore } from './AssetStore.js';
+import {
+  collectImageElements,
+  imageMimeOf,
+  resolveImageAsset,
+  type ImageRef,
+} from './image-export.js';
 
 export interface SingleFileExportOptions {
   /** IIFE runtime bundle (`var CG = …`) — see `cg-runtime.ts` `cgJsIife`. */
@@ -33,12 +39,13 @@ export interface SingleFileResult {
  * modules — the reason it runs over `file://`), and an embedded GDD schema.
  *
  * Shares the one `@cg/template-runtime` source with the preview and the `.vcg`,
- * so preview behaviour equals on-air behaviour. The existing `.vcg` exporter is
- * untouched (it targets http serving by the project's own Runtime).
+ * so preview behaviour equals on-air behaviour.
  *
- * Scope note: image elements are not yet base64-inlined — the runtime's image
- * resolution is still a stub (static images don't render in the preview/`.vcg`
- * either), so this stays at parity. Image *fields* are flagged in preflight.
+ * D-062 — per-project image elements ARE base64-inlined: their bytes resolve to
+ * `data:` URIs baked into the `assetUrls` map passed to `createRuntime`, which
+ * wires each `<img>` src — so the standalone file renders images offline. An image
+ * whose bytes don't resolve is reported as a preflight warning (the HTML export
+ * never blocks). Image *fields* (dynamic) are still flagged separately.
  */
 export class ExporterSingleFile {
   readonly #cgJsIife: string;
@@ -61,6 +68,17 @@ export class ExporterSingleFile {
     const gdd = buildGddSchema(scene);
     const playout = buildPlayoutMetadata(scene);
     const fontCss = await this.#inlineFonts(scene);
+    // D-062 — resolve + base64-inline each image element's bytes; an unresolved
+    // one is reported (warning — HTML export never blocks), never silently broken.
+    const { assetUrls, missing } = await this.#inlineImages(scene);
+    for (const ref of missing) {
+      issues.push({
+        code: 'missing-asset',
+        severity: 'warning',
+        message: `Image element "${ref.elementId}" references an asset whose bytes could not be resolved; it will not render in the exported HTML.`,
+        elementId: ref.elementId,
+      });
+    }
     const html = buildSingleFileHtml({
       scene,
       gdd,
@@ -68,6 +86,7 @@ export class ExporterSingleFile {
       cgCss: this.#cgCss,
       fontCss,
       cgJsIife: this.#cgJsIife,
+      assetUrls,
     });
     return { html, filename: downloadName(scene.name), issues };
   }
@@ -95,6 +114,37 @@ export class ExporterSingleFile {
       css += `\n@font-face{font-family:"${font.family}";font-display:swap;src:url(${toDataUri('font/woff2', bytes)}) format("woff2")}`;
     }
     return css;
+  }
+
+  /**
+   * D-062 — base64-inline every image element's bytes as a `data:` URI, mirroring
+   * `#inlineFonts`. Returns the `assetId → dataUri` map (baked into `assetUrls` for
+   * `createRuntime`) plus the image elements whose bytes did not resolve (reported
+   * as preflight warnings by `produce`). Resolution goes through the shared
+   * source-aware seam (`resolveImageAsset`) so D-040/PR-2 adds the shared library.
+   */
+  async #inlineImages(scene: Scene): Promise<{
+    assetUrls: Record<string, string>;
+    missing: ImageRef[];
+  }> {
+    const assetUrls: Record<string, string> = {};
+    const failed = new Set<string>();
+    const missing: ImageRef[] = [];
+    for (const ref of collectImageElements(scene)) {
+      if (assetUrls[ref.assetId] !== undefined) continue; // asset already inlined
+      if (failed.has(ref.assetId)) {
+        missing.push(ref);
+        continue;
+      }
+      const resolved = await resolveImageAsset(this.#assets, ref.assetId);
+      if (resolved === null) {
+        failed.add(ref.assetId);
+        missing.push(ref);
+        continue;
+      }
+      assetUrls[ref.assetId] = toDataUri(imageMimeOf(resolved.meta.filename), resolved.bytes);
+    }
+    return { assetUrls, missing };
   }
 }
 
@@ -173,14 +223,17 @@ interface HtmlParts {
   cgCss: string;
   fontCss: string;
   cgJsIife: string;
+  /** D-062 — image `assetId` → base64 `data:` URI, baked for `createRuntime`. */
+  assetUrls: Record<string, string>;
 }
 
 function buildSingleFileHtml(parts: HtmlParts): string {
-  const { scene, gdd, playout, cgCss, fontCss, cgJsIife } = parts;
+  const { scene, gdd, playout, cgCss, fontCss, cgJsIife, assetUrls } = parts;
   // Escape `</` so scene text / GDD strings can't close the <script>/<style>.
   const sceneLiteral = JSON.stringify(scene).replace(/</g, '\\u003c');
   const gddJson = JSON.stringify(gdd).replace(/</g, '\\u003c');
   const playoutJson = JSON.stringify(playout).replace(/</g, '\\u003c');
+  const assetUrlsJson = JSON.stringify(assetUrls).replace(/</g, '\\u003c');
   const w = String(scene.resolution.width);
   const h = String(scene.resolution.height);
   return `<!doctype html>
@@ -214,7 +267,7 @@ ${playoutJson}
     <script>
       (function () {
         var scene = ${sceneLiteral};
-        var runtime = CG.createRuntime(scene);
+        var runtime = CG.createRuntime(scene, { assetUrls: ${assetUrlsJson} });
         CG.installCasparGlobals(runtime);
         // No auto-play — the operator / AMCP drives play(). Mark readiness for
         // hosts that poll for it.
