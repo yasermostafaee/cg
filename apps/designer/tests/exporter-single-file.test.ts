@@ -52,7 +52,7 @@ describe('ExporterSingleFile', () => {
     expect(html).toContain('url(data:font/woff2;base64,');
     // Scene inlined as a JS literal + the IIFE runtime bootstrap.
     expect(html).toContain('var scene =');
-    expect(html).toContain('CG.createRuntime(scene)');
+    expect(html).toContain('CG.createRuntime(scene, { assetUrls:');
     expect(html).toContain('CG.installCasparGlobals');
   });
 
@@ -194,7 +194,7 @@ describe('ExporterSingleFile — D-027 clock is export/GDD-neutral', () => {
     // …and the element ships inside the inlined scene (the bundled runtime
     // carries its driver — no boot wiring in the emitted HTML changes).
     expect(b.html).toContain('"type":"clock"');
-    expect(b.html).toContain('CG.createRuntime(scene)');
+    expect(b.html).toContain('CG.createRuntime(scene, { assetUrls:');
   });
 });
 
@@ -264,7 +264,7 @@ describe('ExporterSingleFile — D-029 sequence rides the existing list/GDD path
     // The element ships inside the inlined scene; the bundled runtime carries
     // its driver and the real next() — no emitted-boot changes.
     expect(html).toContain('"type":"sequence"');
-    expect(html).toContain('CG.createRuntime(scene)');
+    expect(html).toContain('CG.createRuntime(scene, { assetUrls:');
     // The bound list field exports as the SAME typed GDD array D-028 defined.
     const m = /<script name="graphics-data-definition"[^>]*>([\s\S]*?)<\/script>/.exec(html);
     const gdd = JSON.parse((m?.[1] ?? '').trim()) as {

@@ -79,6 +79,16 @@ composition instance owns its **own** `elementMap`, `textOriginals`, container,
 `animated` list, `tickers` + `clocks` + `sequences` lists, and lifecycle
 `source`.
 
+An `image` element builds as `<img data-cg-asset-id>` with **no `src`** — the
+runtime doesn't own asset bytes; the **host** wires `src` (D-062). `createRuntime`
+takes a `RuntimeBootOptions.assetUrls` map (`assetId → url`) and, after build, sets
+each image's `src` from it. The exporters bake the map (`.vcg`: packaged relative
+paths; single-file HTML: base64 `data:` URIs) so exported images render; the
+Designer preview passes no map and wires `src` itself host-side (its
+`applyAssetUrls`). Both exporters resolve bytes through the source-aware
+`resolveImageAsset` seam in `apps/designer/src/platform/image-export.ts` (the
+single spot the shared image library, D-040, will add a `'shared'` source).
+
 A `ticker` element builds as a clipped band + an inner `track` (the driver's
 crawl surface) + a static flex-row authoring layout (so the Designer canvas
 shows the items with zero measurement; the driver removes it when the crawl

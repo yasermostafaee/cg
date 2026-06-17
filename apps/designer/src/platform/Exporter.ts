@@ -2,6 +2,7 @@ import { pack, sha256Hex } from '@cg/vcg-format';
 import type { AssetEntry, BindingTransform, DynamicField, Element, Scene } from '@cg/shared-schema';
 import type { ExportIssue, ExportProgress } from '@cg/shared-ipc';
 import type { AssetStore } from './AssetStore.js';
+import { collectImageElements, resolveImageAsset } from './image-export.js';
 import { Emitter } from './emitter.js';
 
 export interface ExporterOptions {
@@ -166,7 +167,7 @@ export class Exporter {
     const { assetsMap, assetIndex } = await this.#gatherBinaries(scene);
 
     this.progress.emit({ step: 'template', progress: 0.6 });
-    const indexHtml = buildIndexHtml(scene);
+    const indexHtml = buildIndexHtml(scene, assetIndex);
 
     const nowIso = new Date().toISOString();
     this.progress.emit({ step: 'pack', progress: 0.8 });
@@ -213,19 +214,17 @@ export class Exporter {
   async #gatherBinaries(
     scene: Scene,
   ): Promise<{ assetsMap: Map<string, Uint8Array>; assetIndex: AssetEntry[] }> {
-    const used = new Set<string>();
-    for (const layer of scene.layers) {
-      for (const el of layer.children) {
-        if (el.type === 'image') used.add(el.assetId);
-      }
-    }
     const assetsMap = new Map<string, Uint8Array>();
     const assetIndex: AssetEntry[] = [];
-    for (const assetId of used) {
-      const meta = await this.#assets.get(assetId);
-      if (meta === null) continue;
-      const bytes = await this.#assets.bytes(assetId);
-      if (bytes === null) continue;
+    const seen = new Set<string>();
+    // D-062 — every image element, recursing compositions/containers (was
+    // top-level layers only), resolved through the shared source-aware seam.
+    for (const { assetId } of collectImageElements(scene)) {
+      if (seen.has(assetId)) continue;
+      seen.add(assetId);
+      const resolved = await resolveImageAsset(this.#assets, assetId);
+      if (resolved === null) continue;
+      const { meta, bytes } = resolved;
       const ext = meta.filename.slice(meta.filename.lastIndexOf('.'));
       const relativePath = `assets/${meta.kind}/${meta.sha256}${ext}`;
       assetsMap.set(relativePath, bytes);
@@ -262,7 +261,13 @@ function triggerDownload(bytes: Uint8Array, filename: string): void {
   }, 10_000);
 }
 
-function buildIndexHtml(scene: Scene): string {
+function buildIndexHtml(scene: Scene, assetIndex: AssetEntry[]): string {
+  // D-062 — bake the image assetId → packaged relative path map so the served
+  // runtime sets each `<img>` src to its packaged bytes (no external/file:// ref;
+  // the .vcg is http-served, so a relative path resolves to the bundled file).
+  // Escape `<` for safety though sha-based paths never contain it.
+  const assetUrls = Object.fromEntries(assetIndex.map((e) => [e.id, e.path]));
+  const assetUrlsJson = JSON.stringify(assetUrls).replace(/</g, '\\u003c');
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -277,7 +282,7 @@ function buildIndexHtml(scene: Scene): string {
       (async () => {
         const res = await fetch('./template.json');
         const scene = await res.json();
-        const runtime = createRuntime(scene);
+        const runtime = createRuntime(scene, { assetUrls: ${assetUrlsJson} });
         installCasparGlobals(runtime);
         await runtime.ready;
       })();

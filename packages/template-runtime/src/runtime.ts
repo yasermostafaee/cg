@@ -91,6 +91,25 @@ function collectScopeAnimated(scope: FieldScope, out: AnimatedElement[]): void {
 }
 
 /**
+ * D-062 — set `src` on every built `<img data-cg-asset-id>` whose id is in the
+ * host-supplied `assetUrls` map. The single seam both exporters use to render
+ * image elements; the Designer preview passes no map and wires `src` itself.
+ */
+function applyAssetUrls(
+  container: HTMLElement,
+  assetUrls?: Readonly<Record<string, string>>,
+): void {
+  if (assetUrls === undefined) return;
+  const nodes = container.querySelectorAll<HTMLImageElement>('img[data-cg-asset-id]');
+  nodes.forEach((node) => {
+    const id = node.dataset['cgAssetId'];
+    if (id === undefined) return;
+    const url = assetUrls[id];
+    if (url !== undefined && url !== '') node.src = url;
+  });
+}
+
+/**
  * Build the runtime. Caller is responsible for `await`ing
  * `runtime.ready` before the first `runtime.play()`. The CasparCG
  * adapter (installed by `installCasparGlobals`) does this internally.
@@ -104,6 +123,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
   const built = buildScene(scene, doc);
   root.appendChild(built.container);
+
+  // D-062 — wire image `src` from a host-supplied assetId→URL map. The scene
+  // builder emits `<img data-cg-asset-id>` with no `src`; exporters pass the
+  // resolved URLs here (packaged relative paths for `.vcg`, base64 data URIs for
+  // single-file HTML) so images render in exported output. Absent ⇒ no-op, so the
+  // Designer preview keeps wiring `src` host-side, unchanged.
+  applyAssetUrls(built.container, options.assetUrls);
 
   // D-020/D-026 — per-scope, non-persistent overrides (preview session / future
   // rundown) override the stored playout — and the scope's tickers' own
