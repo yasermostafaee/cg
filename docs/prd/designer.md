@@ -1349,13 +1349,33 @@ back to fixed.
 **Notes:** most sensitive behavioral item — touches the keyframe model + schema. Loopic
 ref for the modal: (owner to add).
 
-## [ ] D-047 — Layer reordering via drag (z-index) + drop indicator ⟨priority: medium⟩
+## [~] D-047 — Layer reordering via drag (z-index) + drop indicator ⟨priority: medium⟩
 
 **What:** Reorder layers (z-index) by dragging the layer-row title up/down, with a
 horizontal drop-indicator line shown above/below the cursor at the droppable position.
 **Why:** No way to change layer stacking order today.
-**Acceptance to be detailed when scheduled.**
+**Acceptance:**
+
+- WHEN the user drags a layer row past a small start threshold and releases it over a
+  different gap THEN the element moves to that position in the displayed top→bottom order
+  and the sibling set's zIndex is renumbered so the top row is front-most (highest zIndex);
+  the rendered paint order (ascending-zIndex sort) matches
+- WHILE a reorder drag is active THEN a horizontal drop-indicator line is shown at the
+  target gap (above/below the hovered row), hidden when no drag is active
+- WHEN the press does not pass the start threshold THEN the row's normal click-to-select
+  stands (no reorder)
+- WHEN the row is released at its original position THEN nothing changes (no reorder, no
+  zIndex change, no undo entry)
+- WHEN a reorder has been applied THEN a single undo restores the previous order and zIndex
+- WHEN a drag would land outside the element's own sibling set THEN it is clamped within
+  that set — never moved across layers or in/out of a container
+
 **Notes:** independent of the text chain; touches layer order + timeline interaction.
+Pointer-based (no DnD lib), matching the keyframe/lifespan drags. Store `reorderElement`
+(elements slice) renumbers the sibling set's zIndex (fixes the all-zero default); the runtime
+already sorts `layer.children` ascending by zIndex. Scoped to one sibling set (no
+cross-layer/cross-parent moves, no multi-select drag, no edge auto-scroll). Capabilities:
+designer-animation-timeline (MODIFIED). Change: `openspec/changes/add-layer-reorder-drag/`.
 
 ## [ ] D-048 — Inspector visual polish (align/padding/sizing buttons, text-settings popover, no blue button) ⟨priority: medium⟩
 

@@ -11,10 +11,13 @@ import { LABEL_COL_PX, timelineGroupsFor } from './keyframe-helpers.js';
 import { TrackRow } from './TrackRow.js';
 import {
   deltaFramesFromPx,
+  dropTargetIndex,
   frameSpan,
   frameToPct,
   frameToPctClamped,
+  insertionFromPointer,
   pickStride,
+  type RowSpan,
   stridePeriodPct,
 } from './timeline-geometry.js';
 
@@ -202,6 +205,9 @@ export function TimelineDock({
   const openLayerMenu = (elementId: string, x: number, y: number): void =>
     setLayerMenu({ elementId, x, y });
   const sceneLaneRef = useRef<HTMLDivElement | null>(null);
+  // D-047 — the active layer-reorder drag: which row is held + where the drop
+  // indicator sits (names-column local Y). Null when no reorder drag is in flight.
+  const [reorderDrag, setReorderDrag] = useState<{ id: string; indicatorY: number } | null>(null);
 
   // Newest-first in the timeline: a freshly added shape is appended last in
   // the scene graph (and so paints on top of the canvas), so reversing here
@@ -304,6 +310,70 @@ export function TimelineDock({
     window.addEventListener('pointercancel', onUp);
   }
 
+  // D-047 — pointer-drag a layer row up/down to reorder it (change the z-stack).
+  // Mirrors the lifespan / ruler pointer drags: a small move threshold separates a
+  // reorder from a plain click→select; past it we capture the pointer, track it over
+  // the label rows to place a drop indicator, and on release reorder within the
+  // sibling set (the store no-ops a drop at the origin).
+  function beginRowDrag(elementId: string, e: React.PointerEvent): void {
+    const innerRef = leftBodyInnerRef.current;
+    if (innerRef === null) return;
+    // A non-null-typed const so the nested `measure` closure sees it as non-null.
+    const inner: HTMLDivElement = innerRef;
+    const origin = elements.findIndex((el) => el.id === elementId);
+    if (origin === -1) return;
+    const startY = e.clientY;
+    const pointerId = e.pointerId;
+    const handle = e.currentTarget;
+    let dragging = false;
+    let target = origin;
+
+    // The label rows' vertical spans in names-column local Y (DOM order = top→bottom).
+    function measure(): { spans: RowSpan[]; innerTop: number } {
+      const innerRect = inner.getBoundingClientRect();
+      const spans: RowSpan[] = [];
+      for (const row of inner.querySelectorAll<HTMLElement>('[data-element-id]')) {
+        const r = row.getBoundingClientRect();
+        spans.push({ top: r.top - innerRect.top, height: r.height });
+      }
+      return { spans, innerTop: innerRect.top };
+    }
+
+    function onMove(ev: PointerEvent): void {
+      if (!dragging) {
+        if (Math.abs(ev.clientY - startY) <= 4) return; // below threshold — click stands
+        dragging = true;
+        try {
+          handle.setPointerCapture(pointerId);
+        } catch {
+          /* capture is best-effort */
+        }
+      }
+      ev.preventDefault();
+      const { spans, innerTop } = measure();
+      const { gap, indicatorY } = insertionFromPointer(spans, ev.clientY - innerTop);
+      target = dropTargetIndex(gap, origin);
+      setReorderDrag({ id: elementId, indicatorY });
+    }
+
+    function onUp(): void {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      try {
+        handle.releasePointerCapture(pointerId);
+      } catch {
+        /* already released */
+      }
+      if (dragging && target !== origin) designerStore.reorderElement(elementId, target);
+      setReorderDrag(null);
+    }
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  }
+
   // Position a frame as a percent of the full span (markers + overlays).
   const markerPct = (f: number): number => frameToPctClamped(f, frameIn, frameOut);
 
@@ -355,6 +425,14 @@ export function TimelineDock({
           </div>
           <div className={s.leftBody} ref={leftBodyRef} onClick={clearSelectionOnEmpty}>
             <div className={s.leftBodyInner} ref={leftBodyInnerRef}>
+              {reorderDrag !== null && (
+                <div
+                  className={s.reorderIndicator}
+                  style={{ top: `${String(reorderDrag.indicatorY)}px` }}
+                  data-testid="reorder-drop-indicator"
+                  aria-hidden
+                />
+              )}
               <div className={s.sceneLabel} aria-hidden onClick={clearSelection} />
               {elements.length === 0 ? (
                 <p className={s.empty}>No elements yet. Add a shape, text, or image to start.</p>
@@ -371,6 +449,8 @@ export function TimelineDock({
                         frameRange={scene.frameRange}
                         lifespanColor={el.timelineColor ?? lifespanColorFor(el)}
                         onContextMenu={openLayerMenu}
+                        onReorderPointerDown={beginRowDrag}
+                        isReordering={reorderDrag?.id === el.id}
                         part="label"
                       />
                       {expanded &&

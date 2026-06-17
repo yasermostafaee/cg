@@ -51,7 +51,14 @@ export const name = style({
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
   fontSize: '0.75rem',
+  // D-047 — the name region is the reorder drag handle.
+  cursor: 'grab',
+  userSelect: 'none',
 });
+
+// D-047 — the row currently being dragged to reorder: dim it so the drop
+// indicator (the insertion point) reads as the focus.
+export const rowReordering = style({ opacity: 0.45 });
 
 export const toggleButton = style({
   background: 'transparent',

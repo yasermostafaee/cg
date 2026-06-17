@@ -134,9 +134,33 @@ never divides by zero.
   the point; shift/ctrl-click multi-selects (`isKeyframeSelected` drives the lane
   highlight); the segment line between two points uses `segmentPct`.
 
+### Layer reorder — drag a row to change the z-stack (D-047)
+
+Dragging an element row by its **name region** reorders it in the z-stack. It's
+pointer-based like every other timeline gesture (no DnD lib): `ElementRow`'s label
+delegates `onPointerDown` to `TimelineDock.beginRowDrag`, which applies a ~4px move
+threshold (below it the click→select stands), captures the pointer, and tracks it
+over the measured label-row rects. The pure math is in
+[`timeline-geometry.ts`](timeline-geometry.ts): `insertionFromPointer` returns the
+insertion `gap` + the drop-indicator Y from the rows' vertical spans, and
+`dropTargetIndex` maps that gap to a move-to index (accounting for the dragged row
+being removed first). A thin accent line (`reorderIndicator`) marks the drop gap
+during the drag only.
+
+On release the store's `reorderElement(id, targetVisualIndex)` moves the element
+within its **own sibling set** and renumbers that set's `zIndex` so the displayed
+top→bottom order maps to **descending** `zIndex` (top row = highest = front-most),
+matching the runtime's ascending-`zIndex` paint sort and fixing the all-zero
+default. `targetVisualIndex` is in the timeline's displayed order, so the store
+accounts for the `[...flatten].reverse()` the dock lists rows with. The reorder is
+scoped to the element's parent-layer direct children — never across layers or
+in/out of a container (a non-direct-child drag, or a drop at the origin, is a
+no-op) — and is wrapped in `runAsSingleHistoryEntry` (one undo). It's covered by
+[`tests/store-layer-reorder.test.ts`](../../../../tests/store-layer-reorder.test.ts).
+
 All edits go through the **store** (`upsertKeyframe` / `moveKeyframe[ById]` /
-`removeKeyframe` / `commitAnimatable` / selection) — the components never mutate
-the scene. Those mutations (insert-sorted, move-with-collision, stacking, the
+`removeKeyframe` / `commitAnimatable` / `reorderElement` / selection) — the
+components never mutate the scene. Those mutations (insert-sorted, move-with-collision, stacking, the
 track-aware `commitAnimatable` routing, selection follow/clear) are unit-tested in
 [`tests/store-animation.test.ts`](../../../../tests/store-animation.test.ts); this
 doc doesn't restate them.

@@ -326,6 +326,44 @@ export class DesignerApp {
     await this.page.keyboard.press('Control+z');
   }
 
+  // ── timeline layer rows (D-047 reorder) ──────────────────────────────────────
+
+  /** The timeline names-column element rows, in displayed top→bottom order (ids). */
+  async timelineRowIds(): Promise<string[]> {
+    return this.page
+      .locator('.cg-tl-row[data-element-id]')
+      .evaluateAll((rows) => rows.map((r) => r.getAttribute('data-element-id') ?? ''));
+  }
+
+  /** The drop indicator shown while a layer-reorder drag is active. */
+  get reorderIndicator(): Locator {
+    return this.page.getByTestId('reorder-drop-indicator');
+  }
+
+  /**
+   * D-047 — pointer-drag the layer row `srcId` so it drops just above row `destId`,
+   * reordering the z-stack. Presses over the row's name (past the chevron/icon, clear
+   * of the visibility/lock toggles) and moves in steps so the drag threshold is
+   * crossed; an optional `midDrag` runs before release (e.g. to assert the indicator).
+   */
+  async dragRowAboveRow(
+    srcId: string,
+    destId: string,
+    midDrag?: () => Promise<void>,
+  ): Promise<void> {
+    const src = this.page.locator(`.cg-tl-row[data-element-id="${srcId}"]`);
+    const dest = this.page.locator(`.cg-tl-row[data-element-id="${destId}"]`);
+    const sb = await src.boundingBox();
+    const db = await dest.boundingBox();
+    if (sb === null || db === null) throw new Error('timeline rows not laid out');
+    const x = sb.x + Math.min(sb.width - 40, 60);
+    await this.page.mouse.move(x, sb.y + sb.height / 2);
+    await this.page.mouse.down();
+    await this.page.mouse.move(x, db.y + 2, { steps: 12 });
+    if (midDrag !== undefined) await midDrag();
+    await this.page.mouse.up();
+  }
+
   // ── inspector ────────────────────────────────────────────────────────────────
 
   get inspector(): Locator {
