@@ -39,10 +39,12 @@ export const toggleOption = style({
   textAlign: 'center',
 });
 
+// D-048 — neutral properties-panel active fill (no blue accent), matching
+// D-045-align-0/1.png.
 export const toggleOptionActive = style({
-  background: colors.accent,
-  color: '#000',
-  fontWeight: 700,
+  background: colors.menuHover,
+  color: colors.text,
+  fontWeight: 600,
 });
 
 export const colorRow = style({
@@ -125,14 +127,5 @@ export const alignmentRow = style({
 // control). `alignmentRow` (the row that holds the two groups + the gear) stays here.
 export const alignSpacer = style({ flex: 1 });
 
-export const gearButton = style({
-  width: '22px',
-  height: '22px',
-  background: 'transparent',
-  color: colors.textMuted,
-  border: `1px solid ${colors.border}`,
-  borderRadius: '0.22rem',
-  cursor: 'pointer',
-  fontSize: '0.75rem',
-  padding: 0,
-});
+// D-048 — the gear button + its popover moved to TextSettingsPopover.tsx /
+// TextSettingsPopover.css.ts (the "More text options" control).

@@ -13,6 +13,10 @@ import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
  * D-044 — the plain text inspector exposes a font-weight control (UI parity with
  * ticker/sequence/clock). It is non-keyframable like font-family: it writes
  * `font.weight` via `updateElement` with NO keyframe track, and renders no diamond.
+ *
+ * D-048 — that control moved into the "More text options" popover (portaled to
+ * document.body), so these tests open the popover (click the gear) first. Its
+ * behavioral contract (writes font.weight, non-keyframable) is unchanged.
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -57,12 +61,26 @@ function selectOption(el: HTMLSelectElement, value: string): void {
   });
 }
 
-describe('TextStyleSection — D-044 font-weight control', () => {
+/** D-048 — open the "More text options" popover (where weight/style now live). */
+function openTextSettings(c: HTMLDivElement): void {
+  const gear = c.querySelector<HTMLButtonElement>('button[aria-label="More text options"]')!;
+  act(() => gear.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+}
+
+/** The weight <select> inside the popover (portaled to document.body). */
+function weightSelect(): HTMLSelectElement | null {
+  return document.body.querySelector<HTMLSelectElement>('select[aria-label="weight"]');
+}
+
+describe('TextStyleSection — D-044 font-weight control (in the D-048 popover)', () => {
   it('renders a 100–900 weight select reflecting the element font.weight', () => {
     seedScene();
     designerStore.addElement(defaultText('t1', 0, 0));
     const c = renderStyle(elementById('t1'));
-    const weight = c.querySelector<HTMLSelectElement>('select[aria-label="weight"]');
+    // Closed by default — the control lives in the popover.
+    expect(weightSelect()).toBeNull();
+    openTextSettings(c);
+    const weight = weightSelect();
     expect(weight).not.toBeNull();
     // 9 options, 100..900.
     expect(Array.from(weight!.options).map((o) => o.value)).toEqual([
@@ -86,9 +104,9 @@ describe('TextStyleSection — D-044 font-weight control', () => {
     seedScene();
     designerStore.addElement(defaultText('t2', 0, 0));
     const c = renderStyle(elementById('t2'));
-    const weight = c.querySelector<HTMLSelectElement>('select[aria-label="weight"]')!;
+    openTextSettings(c);
 
-    selectOption(weight, '700');
+    selectOption(weightSelect()!, '700');
 
     const el = elementById('t2') as {
       font: { weight: number };
@@ -103,9 +121,10 @@ describe('TextStyleSection — D-044 font-weight control', () => {
     seedScene();
     designerStore.addElement(defaultText('t3', 0, 0));
     const c = renderStyle(elementById('t3'));
-    // The SelectField has no `trailing`, so the weight row carries no keyframe button.
+    openTextSettings(c);
+    // The popover Select has no `trailing`, so no keyframe button anywhere.
     // (Diamonds render as buttons with a "Toggle keyframe for …" aria-label.)
-    const diamonds = Array.from(c.querySelectorAll('button')).filter((b) =>
+    const diamonds = Array.from(document.body.querySelectorAll('button')).filter((b) =>
       (b.getAttribute('aria-label') ?? '').includes('font.weight'),
     );
     expect(diamonds).toHaveLength(0);

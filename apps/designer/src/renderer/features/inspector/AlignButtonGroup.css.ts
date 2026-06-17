@@ -28,7 +28,10 @@ export const button = style({
   justifyContent: 'center',
 });
 
+// D-048 — active state uses the neutral properties-panel fill (`menuHover` —
+// documented as the active fill matching the Loopic reference), NOT the blue
+// accent. Matches D-045-align-0/1.png.
 export const buttonActive = style({
-  background: colors.accent,
-  color: '#000',
+  background: colors.menuHover,
+  color: colors.text,
 });

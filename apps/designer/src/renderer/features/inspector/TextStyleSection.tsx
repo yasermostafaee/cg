@@ -7,10 +7,10 @@ import { CollapseSection } from './CollapseSection.js';
 import { FillField } from './FillPopover.js';
 import { FontFamilySelect } from './FontFamilySelect.js';
 import { AlignButtonGroup, H_ALIGN_OPTIONS, V_ALIGN_OPTIONS } from './AlignButtonGroup.js';
-import { RealtimeNumberInput, SelectField } from './controls.js';
+import { RealtimeNumberInput } from './controls.js';
+import { TextSettingsButton } from './TextSettingsPopover.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
-import { Control } from '../../ui/Control.js';
 import * as s from './TextStyleSection.css.js';
 
 /**
@@ -182,19 +182,8 @@ export function TextStyleSection({
           }
         />
 
-        {/* D-044 — font-weight (UI parity with ticker / sequence / clock). Non-keyframable
-            like font-family: writes font.weight via updateElement, no KeyframeDot/diamond.
-            Inline beside family/size (NOT the D-048 "More text options" popover). */}
-        <SelectField
-          label="weight"
-          value={String(element.font.weight)}
-          options={['100', '200', '300', '400', '500', '600', '700', '800', '900']}
-          onCommit={(w) =>
-            designerStore.updateElement(id, {
-              font: { ...element.font, weight: Number(w) },
-            } as Partial<Element>)
-          }
-        />
+        {/* D-048 — font-weight moved into the "More text options" popover (with font
+            style), replacing the D-044 inline control. See TextSettingsButton below. */}
 
         {/* Font size (full-width chip with tT icon) */}
         <div className="cg-field">
@@ -266,14 +255,7 @@ export function TextStyleSection({
             }
           />
           <span className={s.alignSpacer} />
-          <Control
-            variant="bare"
-            className={s.gearButton}
-            aria-label="More text options"
-            title="More text options"
-          >
-            ⚙
-          </Control>
+          <TextSettingsButton element={element} />
         </div>
       </div>
     </CollapseSection>
