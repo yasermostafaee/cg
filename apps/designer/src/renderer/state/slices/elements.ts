@@ -29,6 +29,24 @@ function cloneElementWithNewIds(el: Element): Element {
 }
 
 /**
+ * D-047 — flatten the layers' children into one list in the SAME order the
+ * timeline names column derives its rows from (walk each layer, recursing into
+ * container children). The timeline shows `[...this].reverse()` (top row =
+ * front-most), so the reorder maps a displayed top→bottom index back onto this.
+ */
+function flattenLayerChildren(layers: readonly Layer[]): Element[] {
+  const out: Element[] = [];
+  const walk = (children: readonly Element[]): void => {
+    for (const el of children) {
+      out.push(el);
+      if (el.type === 'container') walk(el.children);
+    }
+  };
+  for (const layer of layers) walk(layer.children);
+  return out;
+}
+
+/**
  * Insert `el` into `layerIdx` at array position `pos`, optionally making it
  * the sole selection. No-op when the scene or target layer is missing.
  */
@@ -92,6 +110,48 @@ export const elementsSlice = {
       );
     }
     set({ scene: withActiveLayers(current.scene, nextLayers), selection: new Set([element.id]) });
+  },
+
+  /**
+   * D-047 — reorder an element within its sibling set by dragging its timeline
+   * row. `targetVisualIndex` is the destination in the timeline's displayed
+   * top→bottom order (`[...flatten].reverse()`, so top = front-most). The element
+   * moves only within its OWN parent layer's direct children — never across layers
+   * or into/out of a container — and that sibling set's `zIndex` is renumbered so
+   * the displayed top→bottom order maps to DESCENDING `zIndex` (top = highest =
+   * front-most). Renumbering by array index makes the runtime's ascending-`zIndex`
+   * paint order match the new order and fixes the all-zero default. Wrapped as ONE
+   * undo entry. No-op when the target equals the origin, or when the id is not a
+   * direct layer child (e.g. a nested container child — out of this scope).
+   */
+  reorderElement(elementId: string, targetVisualIndex: number): void {
+    const scene = current.scene;
+    if (scene === null) return;
+    const found = locate(scene, elementId);
+    if (found === null) return; // unknown / nested container child — out of scope
+    // Visual order = timeline rows, front→back (top row first).
+    const visual = flattenLayerChildren(activeLayersOf(scene)).reverse();
+    const origin = visual.findIndex((e) => e.id === elementId);
+    if (origin === -1) return;
+    const target = Math.max(0, Math.min(visual.length - 1, Math.round(targetVisualIndex)));
+    if (target === origin) return; // dropped at the origin — nothing changes
+    // Move in visual (front→back) space, then restrict to the element's own
+    // siblings so a cross-parent drop clamps back into the sibling set.
+    const movedVisual = [...visual];
+    const [item] = movedVisual.splice(origin, 1);
+    if (item === undefined) return;
+    movedVisual.splice(target, 0, item);
+    const siblingIds = new Set(found.layer.children.map((e) => e.id));
+    const newFrontToBack = movedVisual.filter((e) => siblingIds.has(e.id));
+    // Array/paint order is back→front (the reverse of front→back); renumber zIndex
+    // by array index so paint order (ascending) == array order == the new stack.
+    const newChildren = newFrontToBack.reverse().map((el, i) => ({ ...el, zIndex: i }) as Element);
+    const nextLayer: Layer = { ...found.layer, children: newChildren };
+    const nextLayers = [...activeLayersOf(scene)];
+    nextLayers[found.layerIdx] = nextLayer;
+    designerStore.runAsSingleHistoryEntry(() => {
+      set({ scene: withActiveLayers(scene, nextLayers) });
+    });
   },
 
   /** Apply a shallow patch to an element. */

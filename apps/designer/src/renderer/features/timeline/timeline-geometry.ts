@@ -177,6 +177,47 @@ export function stackOffsetPx(index: number, count: number, gap = 5): number {
   return count > 1 ? (index - (count - 1) / 2) * gap : 0;
 }
 
+/** A label row's vertical span (names-column local Y), in visual top→bottom order. */
+export interface RowSpan {
+  readonly top: number;
+  readonly height: number;
+}
+
+/**
+ * D-047 — the reorder drop position for a pointer at `pointerY` (names-column local
+ * Y) over the label rows `rowSpans` (visual top→bottom order). Returns the insertion
+ * `gap` ∈ `[0, n]` (0 = above the first row, n = below the last) and the `indicatorY`
+ * to draw the drop line at. `gap` counts the rows whose vertical midpoint is at or
+ * above the pointer (midpoints increase down the list), so the indicator snaps to the
+ * nearer edge of the hovered row.
+ */
+export function insertionFromPointer(
+  rowSpans: readonly RowSpan[],
+  pointerY: number,
+): { gap: number; indicatorY: number } {
+  const n = rowSpans.length;
+  let gap = 0;
+  for (const span of rowSpans) {
+    if (pointerY >= span.top + span.height / 2) gap += 1;
+  }
+  const last = rowSpans[n - 1];
+  const indicatorY =
+    gap >= n && last !== undefined
+      ? last.top + last.height
+      : (rowSpans[gap]?.top ?? rowSpans[0]?.top ?? 0);
+  return { gap, indicatorY };
+}
+
+/**
+ * D-047 — convert an insertion `gap` ∈ `[0, n]` to a move-to target index for the
+ * store's `reorderElement`, given the dragged row's `origin` index. Removing the
+ * dragged row first shifts the rows below it up by one, so a gap past the origin
+ * loses a slot. A target equal to the origin is the caller's no-op signal.
+ */
+export function dropTargetIndex(gap: number, origin: number): number {
+  return gap > origin ? gap - 1 : gap;
+}
+
 /** A keyframe pointer — element + property + frame (structural subset of the store's `KeyframeRef`). */
 export interface KeyframeRefLike {
   readonly elementId: string;

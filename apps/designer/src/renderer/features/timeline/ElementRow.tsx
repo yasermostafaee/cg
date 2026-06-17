@@ -31,6 +31,13 @@ interface Props {
   part: 'label' | 'lane';
   /** Open the layer right-click menu for this element at the given point. */
   onContextMenu?: (elementId: string, x: number, y: number) => void;
+  /**
+   * D-047 — start a reorder drag from the row's name region (label part only).
+   * The handler applies the click/drag threshold; below it the click→select stands.
+   */
+  onReorderPointerDown?: (elementId: string, e: React.PointerEvent) => void;
+  /** D-047 — true while THIS row is the one being dragged (dims it). */
+  isReordering?: boolean;
 }
 
 /**
@@ -48,7 +55,8 @@ export function ElementRow(props: Props): JSX.Element {
 }
 
 function ElementRowLabel(props: Props): JSX.Element {
-  const { element, expanded, onToggleExpand, isSelected, onContextMenu } = props;
+  const { element, expanded, onToggleExpand, isSelected, onContextMenu, onReorderPointerDown } =
+    props;
   return (
     <div
       className={cx(
@@ -57,8 +65,18 @@ function ElementRowLabel(props: Props): JSX.Element {
         s.labelCell,
         isSelected && s.rowSelected,
         isSelected && s.labelSelectedAccent,
+        props.isReordering === true && s.rowReordering,
       )}
       data-element-id={element.id}
+      // D-047 — pointer-drag the row to reorder it. Skip the interactive controls
+      // (chevron + visibility/lock toggles render as <button>s) so their clicks
+      // still work; the handler applies the move threshold before it grabs.
+      onPointerDown={(e) => {
+        if (onReorderPointerDown === undefined) return;
+        if (e.button !== 0) return;
+        if ((e.target as HTMLElement).closest('button') !== null) return;
+        onReorderPointerDown(element.id, e);
+      }}
       onClick={(e) => {
         if ((e.target as HTMLElement).dataset.role === 'chevron') return;
         selectFromRow(e, element.id);

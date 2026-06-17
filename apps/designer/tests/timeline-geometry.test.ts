@@ -4,12 +4,15 @@ import {
   buildKeyframeStacks,
   clamp01,
   deltaFramesFromPx,
+  dropTargetIndex,
   frameFromClientX,
   frameSpan,
   frameToPct,
   frameToPctClamped,
+  insertionFromPointer,
   isKeyframeSelected,
   pickStride,
+  type RowSpan,
   segmentPct,
   stackOffsetPx,
   stridePeriodPct,
@@ -187,5 +190,51 @@ describe('isKeyframeSelected', () => {
     expect(isKeyframeSelected(sel, 'e1', 'position.y', 10)).toBe(false);
     expect(isKeyframeSelected(sel, 'e1', 'position.x', 11)).toBe(false);
     expect(isKeyframeSelected([], 'e1', 'position.x', 10)).toBe(false);
+  });
+});
+
+describe('insertionFromPointer (D-047 reorder)', () => {
+  // Three contiguous 24px rows at y = 0, 24, 48 (midpoints 12, 36, 60).
+  const rows: RowSpan[] = [
+    { top: 0, height: 24 },
+    { top: 24, height: 24 },
+    { top: 48, height: 24 },
+  ];
+
+  it('gap 0 above the first row, indicator at its top', () => {
+    expect(insertionFromPointer(rows, 0)).toEqual({ gap: 0, indicatorY: 0 });
+    expect(insertionFromPointer(rows, 11)).toEqual({ gap: 0, indicatorY: 0 });
+  });
+
+  it('counts each row whose midpoint is at/above the pointer', () => {
+    expect(insertionFromPointer(rows, 13).gap).toBe(1); // past row 0 midpoint (12)
+    expect(insertionFromPointer(rows, 37).gap).toBe(2); // past rows 0,1 midpoints
+  });
+
+  it('snaps the indicator to the next row top at an interior gap', () => {
+    expect(insertionFromPointer(rows, 13).indicatorY).toBe(24); // top of row 1
+    expect(insertionFromPointer(rows, 37).indicatorY).toBe(48); // top of row 2
+  });
+
+  it('gap n below the last row, indicator at its bottom', () => {
+    const r = insertionFromPointer(rows, 1000);
+    expect(r.gap).toBe(3);
+    expect(r.indicatorY).toBe(72); // 48 + 24
+  });
+
+  it('handles an empty list', () => {
+    expect(insertionFromPointer([], 50)).toEqual({ gap: 0, indicatorY: 0 });
+  });
+});
+
+describe('dropTargetIndex (D-047 reorder)', () => {
+  it('a gap at or below the origin maps to itself', () => {
+    expect(dropTargetIndex(0, 1)).toBe(0);
+    expect(dropTargetIndex(1, 1)).toBe(1); // own gap → equals origin (caller no-ops)
+  });
+  it('a gap past the origin loses one slot (the removed row shifts the rest up)', () => {
+    expect(dropTargetIndex(2, 1)).toBe(1); // adjacent below → equals origin → no-op
+    expect(dropTargetIndex(3, 1)).toBe(2);
+    expect(dropTargetIndex(4, 1)).toBe(3);
   });
 });

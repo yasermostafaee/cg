@@ -62,6 +62,31 @@ export const leftBody = style({
 // scrollTop here.
 export const leftBodyInner = style({
   willChange: 'transform',
+  // D-047 — anchor the absolutely-positioned reorder drop indicator.
+  position: 'relative',
+});
+
+// D-047 — the horizontal drop-indicator line shown while dragging a layer row to
+// reorder it. Positioned at the target gap (top set inline); accent-colored, with a
+// small dot on the left so the insertion point reads at a glance. Pointer-inert.
+export const reorderIndicator = style({
+  position: 'absolute',
+  left: 0,
+  right: 0,
+  height: 0,
+  borderTop: `2px solid ${colors.accent}`,
+  pointerEvents: 'none',
+  zIndex: 5,
+  '::before': {
+    content: '""',
+    position: 'absolute',
+    left: '2px',
+    top: '-3px',
+    width: '5px',
+    height: '5px',
+    borderRadius: '50%',
+    background: colors.accent,
+  },
 });
 
 export const rightCol = style({
