@@ -59,7 +59,14 @@ export function AssetThumb({
       }
     >
       <div className={cx(s.thumb, isList && s.thumbList)}>
-        {isImage && url !== null && <img src={url} alt={asset.filename} className={s.thumbImg} />}
+        {isImage && url !== null && (
+          // draggable={false}: the <img> is natively draggable, which would start a
+          // browser image-drag (no x-cg-asset-id payload → the canvas drop inserts
+          // nothing, ghost = image only). Disabling it makes the cell <div> the SOLE
+          // drag source, so grabbing the thumbnail (like the name) starts the cell
+          // drag → the payload is set and the default ghost is the whole cell.
+          <img src={url} alt={asset.filename} className={s.thumbImg} draggable={false} />
+        )}
         {isFont && (
           <span
             style={{

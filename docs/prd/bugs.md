@@ -263,6 +263,36 @@ package's clean script. Surfaced while reproducing B-012 from a clean tree.
 **Env:** Browser / Designer dev; reproduces on `main` after D-051. PRE-EXISTING (the orphaned track predates D-051; D-051 only corrected the diamond's visibility, which exposed the contradiction). Affects every colour property with a solid↔gradient distinction — `fill` on shapes AND `text.color` / `backgroundColor` on text (same keyframeable-iff-solid rule from D-051's registry).
 **Notes:** Decision (owner): **Option A** — switching to a non-keyframe-able fill/colour mode DELETES that property's keyframes, as ONE undo step (so an accidental switch is recoverable via undo). Fix where the fill/colour MODE is changed (the inspector's solid→gradient switch handler — likely in `FillPopover.tsx` / the colour-field commit path): when the new mode makes the property non-keyframe-able, remove that property's keyframe track in the same store transaction. Use D-051's registry predicate (`keyframeable(el)` — the gradient ⇒ false rule already exists) as the SINGLE source for "is this still keyframe-able", so the delete triggers exactly when the diamond would disappear — no parallel condition. Cover ALL solid↔gradient colour properties (shape `fill`, text `text.color` + `backgroundColor`), not just shape fill. Regression test: keyframe a solid fill → switch to gradient → assert the colour track is gone, the runtime no longer animates the colour, and one undo restores both the solid mode and its keyframes; parametrize over shape-fill + text-colour. (Confirm during repro that the runtime currently DOES still apply the orphaned track — i.e. the colour visibly animates after the switch — and that the value also stops being editable; if the observed symptom differs, report before fixing.) **DONE** — fixed on `main` (PR #97, `10cf6c8`: `clearOrphanColourTrack` in `fill-commit.ts`). No OpenSpec change; the regression tests are B-014's spec — `apps/designer/tests/fill-commit.test.ts` (unit, parametrized over shape-fill + text-colour) and `apps/designer/tests/e2e/regressions.spec.ts` (E2E).
 
+## [~] B-019 — Dragging an image THUMBNAIL doesn't add it to the canvas (native img-drag steals the cell drag) ⟨priority: medium⟩
+
+**Repro:**
+
+1. Open the Project Assets panel with at least one imported image.
+2. Drag the asset by its **thumbnail picture** onto the canvas.
+
+**Expected:** an image element is inserted at the drop point (same as dragging by the asset
+NAME), with a drag ghost showing the whole cell (image + name).
+**Actual:** nothing is inserted, and the drag ghost is the image ONLY. Dragging by the NAME
+works (inserts; ghost = image + name). It looks size-related (a large thumbnail "fails")
+only because a bigger thumbnail fills the cell, so the grab lands on the `<img>`.
+**Env:** Browser / Designer; both grid and list layouts of the assets panel.
+**Root cause:** in `AssetThumb.tsx` the cell `<div>` is `draggable` and its `onDragStart`
+sets `dataTransfer 'application/x-cg-asset-id'` (the key the canvas drop reads —
+`CanvasOverlay.onDrop`). But the thumbnail `<img>` is **natively draggable**, so grabbing
+the picture starts a browser image-drag (no `x-cg-asset-id` payload → the drop sees nothing →
+no insert; ghost = the image). Grabbing the name (a `<span>`, not natively draggable) bubbles
+to the cell drag, which works (default ghost = the whole cell). The `<img>` is the only
+natively-draggable child of the cell.
+**Fix:** set `draggable={false}` on the thumbnail `<img>` so the cell `<div>` is the SOLE drag
+source. Both grab points then start the cell drag → the payload is set (canvas inserts the
+image) AND the default ghost becomes the whole cell (image + name) consistently. No custom
+`setDragImage` — the default cell ghost is already the desired image+name. Code defect, no
+behaviour spec change (the drag-onto-canvas insert is the existing, working name-drag path).
+Test: a component test asserting the thumbnail `<img>` is `draggable={false}` and the cell
+carries `draggable` + an `onDragStart` that sets `application/x-cg-asset-id` to the asset id
+(`apps/designer/tests/asset-thumb-drag.test.ts`). Branch: `fix/asset-thumb-drag`. Mark `[x]`
+on merge.
+
 <!-- Add new open bugs above this line using the format. Example:
 
 ## [ ] B-0NN — Export blocked dialog shows wrong error count
