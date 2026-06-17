@@ -86,6 +86,8 @@ export function defaultTicker(id: string, x: number, y: number): TickerElement {
     // No backgroundColor — a fresh band is TRANSPARENT by design; the operator
     // opts into a bar colour in the inspector.
     direction: 'rtl',
+    // D-045 — vertical placement of the crawl text within the band (default centred).
+    verticalAlign: 'middle',
     speed: 120,
     // INNER repeat loop — a fresh ticker crawls forever by design (no hidden
     // loop default to hunt for); finite passes are an explicit inspector edit.
@@ -128,6 +130,8 @@ export function defaultClock(id: string, x: number, y: number): ClockElement {
     // No backgroundColor — a fresh clock box is TRANSPARENT by design; the
     // operator opts into a bar colour in the inspector.
     align: 'center',
+    // D-045 — vertical placement of the time text within the box (default centred).
+    verticalAlign: 'middle',
     mode: 'wall',
     format: 'HH:mm:ss',
     digits: 'persian',
@@ -161,6 +165,8 @@ export function defaultSequence(id: string, x: number, y: number): SequenceEleme
     color: '#FFFFFF',
     // No backgroundColor — a fresh box is TRANSPARENT by design.
     align: 'start',
+    // D-045 — vertical placement of the item text within the box (default centred).
+    verticalAlign: 'middle',
     direction: 'rtl',
     items: [
       { id: 'item-1', text: 'اکنون: برنامهٔ نخست' },

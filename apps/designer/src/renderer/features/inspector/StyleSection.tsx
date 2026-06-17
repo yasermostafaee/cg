@@ -34,6 +34,7 @@ import { ColorField, NumberField, SelectField, TextField, VectorField } from './
 import { FillField } from './FillPopover.js';
 import { FontFamilySelect } from './FontFamilySelect.js';
 import { TextStyleSection, TogglePair } from './TextStyleSection.js';
+import { AlignButtonGroup, H_ALIGN_OPTIONS, V_ALIGN_OPTIONS } from './AlignButtonGroup.js';
 import { Control } from '../../ui/Control.js';
 import * as radiusCss from './BorderRadiusSection.css.js';
 import * as fieldCss from './controls.css.js';
@@ -128,6 +129,52 @@ interface SectionProps<E extends Element> {
   element: E;
   currentFrame: number;
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
+}
+
+/**
+ * D-045 — a labeled HORIZONTAL-align row using the shared {@link AlignButtonGroup} (the text
+ * group is the model). Clock + sequence (the ticker is a crawl → no horizontal align).
+ * Non-keyframable: writes `element.align` via `updateElement`, no diamond.
+ */
+function HAlignRow({ element }: { element: ClockElement | SequenceElement }): JSX.Element {
+  return (
+    <div className={fieldCss.row}>
+      <span className={fieldCss.label}>align</span>
+      <AlignButtonGroup
+        ariaLabel="Horizontal alignment"
+        current={element.align}
+        options={H_ALIGN_OPTIONS}
+        onChange={(align) => designerStore.updateElement(element.id, { align } as Partial<Element>)}
+      />
+    </div>
+  );
+}
+
+/**
+ * D-045 — a labeled VERTICAL-align row using the shared {@link AlignButtonGroup}. Ticker,
+ * clock, and sequence. `verticalAlign` defaults to 'middle' (the prior centring).
+ * Non-keyframable: writes `element.verticalAlign` via `updateElement`, no diamond.
+ */
+function VAlignRow({
+  element,
+}: {
+  element: TickerElement | ClockElement | SequenceElement;
+}): JSX.Element {
+  return (
+    <div className={fieldCss.row}>
+      <span className={fieldCss.label}>vertical</span>
+      <AlignButtonGroup
+        ariaLabel="Vertical alignment"
+        current={element.verticalAlign ?? 'middle'}
+        options={V_ALIGN_OPTIONS}
+        onChange={(v) =>
+          designerStore.updateElement(element.id, {
+            verticalAlign: v,
+          } as unknown as Partial<Element>)
+        }
+      />
+    </div>
+  );
 }
 
 // ────────────────────────────────────────────────────────────────────────
@@ -478,6 +525,8 @@ function TickerSections({
           onCommit={(color) => designerStore.commitAnimatable(id, 'text.color', color)}
           trailing={KeyframeDot(element, 'text.color', currentFrame, selectedKeyframe)}
         />
+        {/* D-045 — the ticker is a crawl: VERTICAL align only (no horizontal). */}
+        <VAlignRow element={element} />
       </CollapseSection>
 
       {/* D-056 — content-driven kinds carry only text: text-shadow only (no box
@@ -655,12 +704,10 @@ function ClockSections({
               } as Partial<Element>);
           }}
         />
-        <SelectField
-          label="align"
-          value={element.align}
-          options={['start', 'center', 'end'] as const}
-          onCommit={(align) => designerStore.updateElement(id, { align } as Partial<Element>)}
-        />
+        {/* D-045 — the shared horizontal-align button-group (replaces the dropdown) plus a
+            vertical-align group, matching text. Non-keyframable (updateElement, no diamond). */}
+        <HAlignRow element={element} />
+        <VAlignRow element={element} />
         <FillField
           label="text color"
           value={
@@ -878,12 +925,10 @@ function SequenceSections({
               } as Partial<Element>);
           }}
         />
-        <SelectField
-          label="align"
-          value={element.align}
-          options={['start', 'center', 'end'] as const}
-          onCommit={(align) => designerStore.updateElement(id, { align } as Partial<Element>)}
-        />
+        {/* D-045 — the shared horizontal-align button-group (replaces the dropdown) plus a
+            vertical-align group, matching text. Non-keyframable (updateElement, no diamond). */}
+        <HAlignRow element={element} />
+        <VAlignRow element={element} />
         <FillField
           label="text color"
           value={

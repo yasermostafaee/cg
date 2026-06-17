@@ -121,33 +121,8 @@ export const alignmentRow = style({
   paddingTop: '0.15rem',
 });
 
-export const alignGroup = style({
-  display: 'flex',
-  background: colors.panelMuted,
-  border: `1px solid ${colors.border}`,
-  borderRadius: '0.22rem',
-  overflow: 'hidden',
-});
-
-export const alignButton = style({
-  width: '24px',
-  height: '22px',
-  background: 'transparent',
-  color: colors.textMuted,
-  border: 'none',
-  cursor: 'pointer',
-  fontSize: '0.7rem',
-  padding: 0,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-});
-
-export const alignButtonActive = style({
-  background: colors.accent,
-  color: '#000',
-});
-
+// D-045 — the align group/button styles moved to AlignButtonGroup.css.ts (the shared
+// control). `alignmentRow` (the row that holds the two groups + the gear) stays here.
 export const alignSpacer = style({ flex: 1 });
 
 export const gearButton = style({

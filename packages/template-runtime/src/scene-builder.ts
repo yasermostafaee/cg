@@ -314,6 +314,13 @@ function applyGradientGlyph(node: HTMLElement, fill: GradientFill): void {
 function vAlignToFlex(v: 'top' | 'middle' | 'bottom' | undefined): string {
   return v === 'middle' ? 'center' : v === 'bottom' ? 'flex-end' : 'flex-start';
 }
+/**
+ * D-045 — vertical-align enum → GRID `align-items` (the sequence host is a grid; grid
+ * uses start/center/end, NOT the flex `flex-start`/`flex-end` keywords).
+ */
+function vAlignToGrid(v: 'top' | 'middle' | 'bottom' | undefined): string {
+  return v === 'middle' ? 'center' : v === 'bottom' ? 'end' : 'start';
+}
 /** Text-align enum → flex `align-items` (`justify` stretches so it can justify). */
 function hAlignToFlex(a: 'start' | 'end' | 'center' | 'justify'): string {
   return a === 'center'
@@ -538,7 +545,9 @@ function buildTicker(element: TickerElement, ctx: BuildCtx): HTMLElement {
   staticRow.style.bottom = '0';
   staticRow.style.left = '0';
   staticRow.style.display = 'flex';
-  staticRow.style.alignItems = 'center';
+  // D-045 — vertical placement of the crawl text within the band (mirrors the driver's
+  // live item nodes so authoring and runtime match). Default 'middle' = the prior centring.
+  staticRow.style.alignItems = vAlignToFlex(element.verticalAlign ?? 'middle');
   staticRow.style.direction = element.direction;
   populateTickerStaticRow(staticRow, element.items, {
     direction: element.direction,
@@ -582,7 +591,9 @@ function buildClock(element: ClockElement, ctx: BuildCtx): HTMLElement {
   // onto the host filter (B-017). The gradient itself goes on the content-sized span.
   applyTimeDrivenHostStyle(el, element);
   el.style.display = 'flex';
-  el.style.alignItems = 'center';
+  // D-045 — vertical placement via flex `align-items`; horizontal stays `justify-content`.
+  // Default 'middle' = the prior centring (non-breaking).
+  el.style.alignItems = vAlignToFlex(element.verticalAlign ?? 'middle');
   el.style.justifyContent =
     element.align === 'start' ? 'flex-start' : element.align === 'end' ? 'flex-end' : 'center';
 
@@ -651,7 +662,9 @@ function buildSequence(element: SequenceElement, ctx: BuildCtx): HTMLElement {
   // `align` enum 1:1 (grid ships well below the exported single-file's CEF
   // floor — CasparCG 2.2/2.3 = CEF 63/71).
   el.style.display = 'grid';
-  el.style.alignItems = 'center';
+  // D-045 — vertical placement via grid `align-items` (start/center/end); horizontal stays
+  // `justify-items` (the `align` enum maps 1:1). Default 'middle' = the prior centring.
+  el.style.alignItems = vAlignToGrid(element.verticalAlign ?? 'middle');
   el.style.justifyItems = element.align;
 
   // Static initial render: item 1 through the shared factory (empty items ⇒

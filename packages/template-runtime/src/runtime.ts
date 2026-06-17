@@ -206,6 +206,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           track: t.track,
           viewportWidth: Math.max(0, t.element.transform.size.w),
           direction: t.element.direction,
+          // D-045 — vertical placement of crawl items within the band (mirrors authoring).
+          verticalAlign: t.element.verticalAlign,
           speed: t.element.speed,
           gap: t.element.gap,
           separator: t.element.separator,

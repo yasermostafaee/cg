@@ -361,6 +361,7 @@ describe('TickerElement (D-028)', () => {
     color: '#FFFFFF',
     textShadow: { offsetX: 0, offsetY: 2, blur: 6, color: '#000000' },
     direction: 'rtl' as const,
+    verticalAlign: 'middle' as const,
     speed: 120,
     repeat: 'infinite' as const,
     cycleBoundary: 'seamless' as const,
@@ -405,6 +406,17 @@ describe('TickerElement (D-028)', () => {
     const parsed = TickerElementSchema.parse({ ...ticker, repeat: 3, cycleBoundary: 'drain' });
     expect(parsed.repeat).toBe(3);
     expect(parsed.cycleBoundary).toBe('drain');
+  });
+  it("D-045 — defaults verticalAlign to 'middle' (pre-D-045 ticker) and accepts an explicit value", () => {
+    // A pre-D-045 ticker omits verticalAlign → reads 'middle' (centred exactly as today).
+    const { verticalAlign: _va, ...withoutVA } = ticker;
+    expect(TickerElementSchema.parse(withoutVA).verticalAlign).toBe('middle');
+    expect(TickerElementSchema.parse({ ...ticker, verticalAlign: 'top' }).verticalAlign).toBe(
+      'top',
+    );
+    expect(TickerElementSchema.parse({ ...ticker, verticalAlign: 'bottom' }).verticalAlign).toBe(
+      'bottom',
+    );
   });
 });
 
@@ -480,6 +492,12 @@ describe('ClockElement (D-027)', () => {
   it('rejects an empty format string', () => {
     expect(() => ClockElementSchema.parse({ ...clock, format: '' })).toThrow();
   });
+  it("D-045 — defaults verticalAlign to 'middle' (pre-D-045 clock) and accepts an explicit value", () => {
+    expect(ClockElementSchema.parse(clock).verticalAlign).toBe('middle');
+    expect(ClockElementSchema.parse({ ...clock, verticalAlign: 'bottom' }).verticalAlign).toBe(
+      'bottom',
+    );
+  });
 });
 
 describe('SequenceElement (D-029)', () => {
@@ -547,6 +565,12 @@ describe('SequenceElement (D-029)', () => {
     expect(() =>
       SequenceElementSchema.parse({ ...sequence, items: [{ id: '', text: 'x' }] }),
     ).toThrow();
+  });
+  it("D-045 — defaults verticalAlign to 'middle' (pre-D-045 sequence) and accepts an explicit value", () => {
+    expect(SequenceElementSchema.parse(sequence).verticalAlign).toBe('middle');
+    expect(SequenceElementSchema.parse({ ...sequence, verticalAlign: 'top' }).verticalAlign).toBe(
+      'top',
+    );
   });
 });
 

@@ -92,6 +92,30 @@ beforeEach(() => {
   document.body.innerHTML = '';
 });
 
+describe('TickerDriver — vertical align of crawl item nodes (D-045)', () => {
+  /** First VISIBLE fed item node (the hidden measure node is filtered out). */
+  function fedItem(track: HTMLElement): HTMLElement | undefined {
+    return [...track.querySelectorAll<HTMLElement>('[data-cg-ticker-item]')].find(
+      (n) => n.style.visibility !== 'hidden',
+    );
+  }
+  it('item nodes use the element verticalAlign (top → flex-start), not a hardcoded centre', () => {
+    const h = make({ verticalAlign: 'top' });
+    h.driver.start();
+    expect(fedItem(h.track)?.style.alignItems).toBe('flex-start');
+  });
+  it('bottom → flex-end', () => {
+    const h = make({ verticalAlign: 'bottom' });
+    h.driver.start();
+    expect(fedItem(h.track)?.style.alignItems).toBe('flex-end');
+  });
+  it('defaults to centre when verticalAlign is absent (non-breaking, the prior behaviour)', () => {
+    const h = make();
+    h.driver.start();
+    expect(fedItem(h.track)?.style.alignItems).toBe('center');
+  });
+});
+
 describe('TickerDriver — completion (the inner repeat loop, D-028)', () => {
   // Fixture math: items a(100px) + b(200px), gap 10 ⇒ cycle layout
   // a@0, b@110 | a@320, b@430 … Finite repeat 2: feeding stops after the 2nd

@@ -151,8 +151,14 @@ export const TickerElementSchema = ElementBaseSchema.extend({
   backgroundColor: HexColorSchema.optional(),
   /** Optional gradient (or solid) band background; overrides `backgroundColor`. */
   backgroundFill: FillSchema.optional(),
-  /** Inner padding inside the band (items are vertically centred within). */
+  /** Inner padding inside the band. */
   padding: PaddingSchema.optional(),
+  /**
+   * D-045 — vertical placement of the crawl text within the band height. Default
+   * 'middle' preserves the prior hardcoded centring (non-breaking). The ticker has
+   * NO horizontal align (it is a crawl). Non-keyframable.
+   */
+  verticalAlign: z.enum(['top', 'middle', 'bottom']).default('middle'),
   /**
    * READING direction — explicit only (no 'auto': the runtime's auto⇒LTR
    * container fallback is a footgun for a crawl). 'rtl' (Persian default) lays
@@ -237,6 +243,11 @@ export const ClockElementSchema = ElementBaseSchema.extend({
   /** Horizontal placement of the time text inside the box. */
   align: z.enum(['start', 'center', 'end']).default('center'),
   /**
+   * D-045 — vertical placement of the time text inside the box (flex). Default
+   * 'middle' preserves the prior hardcoded centring (non-breaking). Non-keyframable.
+   */
+  verticalAlign: z.enum(['top', 'middle', 'bottom']).default('middle'),
+  /**
    * `wall` = current local time; `countup` = stopwatch from zero per hold
    * entry; `countdown` = to `target` (required — see the refinement).
    */
@@ -316,6 +327,11 @@ export const SequenceElementSchema = ElementBaseSchema.extend({
   padding: PaddingSchema.optional(),
   /** Horizontal placement of the item text inside the box. */
   align: z.enum(['start', 'center', 'end']).default('start'),
+  /**
+   * D-045 — vertical placement of the item text inside the box (grid). Default
+   * 'middle' preserves the prior hardcoded centring (non-breaking). Non-keyframable.
+   */
+  verticalAlign: z.enum(['top', 'middle', 'bottom']).default('middle'),
   /**
    * READING direction — drives per-item bidi isolation only. Transition
    * edges are PHYSICAL and never mirrored (the Persian-natural horizontal
