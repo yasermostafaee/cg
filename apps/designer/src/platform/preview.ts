@@ -176,14 +176,36 @@ export class Preview {
         const loadedFonts = new Map();
         let fontLoadSeq = 0;
 
+        // D-040 — visible placeholder for an image whose bytes don't resolve, so
+        // the operator sees a clear missing-asset frame instead of the browser's
+        // broken-image glyph. The host warns (once) for genuinely-missing ids.
+        var MISSING_IMG =
+          'data:image/svg+xml;utf8,' +
+          encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120" viewBox="0 0 160 120">' +
+              '<rect width="160" height="120" fill="#2a2f45"/>' +
+              '<rect x="8" y="8" width="144" height="104" rx="6" fill="none" stroke="#6b7390" stroke-width="2" stroke-dasharray="6 5"/>' +
+              '<path d="M40 88l28-30 22 24 14-14 22 20" fill="none" stroke="#6b7390" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>' +
+              '<circle cx="58" cy="46" r="8" fill="#6b7390"/>' +
+              '<text x="80" y="112" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#9aa3c0">missing image</text>' +
+              '</svg>',
+          );
+
         function applyAssetUrls() {
           const nodes = document.querySelectorAll('[data-cg-asset-id]');
           nodes.forEach((node) => {
+            if (node.tagName !== 'IMG') return;
             const id = node.dataset && node.dataset.cgAssetId;
             if (!id) return;
             const url = assetUrls[id];
-            if (url && node.tagName === 'IMG' && node.src !== url) {
-              node.src = url;
+            if (url) {
+              if (node.src !== url) node.src = url;
+              node.removeAttribute('data-cg-missing');
+            } else if (node.getAttribute('data-cg-missing') !== '1') {
+              // Unresolved (missing OR not-yet-primed). The host re-posts the map
+              // as URLs resolve, which overwrites this with the real image.
+              node.src = MISSING_IMG;
+              node.setAttribute('data-cg-missing', '1');
             }
           });
         }

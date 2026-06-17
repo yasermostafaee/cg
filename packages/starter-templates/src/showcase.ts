@@ -236,6 +236,7 @@ const logobugChildren: Element[] = [
     locked: false,
     zIndex: 4,
     assetId: 'showcase-emblem',
+    source: 'project',
     fit: 'contain',
     preserveAspect: true,
     animation: anim({
@@ -453,6 +454,7 @@ const backdropChildren: Element[] = [
     locked: false,
     zIndex: 1,
     assetId: 'showcase-texture',
+    source: 'project',
     fit: 'cover',
     preserveAspect: true,
     filter: { contrast: 112, brightness: 88 },

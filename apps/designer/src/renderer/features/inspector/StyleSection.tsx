@@ -21,6 +21,7 @@ import {
   sequencePresetKeyFor,
 } from './sequence-presets.js';
 import { ListItemsEditor } from '../fields/ListItemsEditor.js';
+import { SharedImagePicker } from '../sharedLibrary/SharedImagePicker.js';
 import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import {
@@ -376,6 +377,7 @@ function ImageSections({
           options={['contain', 'cover', 'fill', 'none'] as const}
           onCommit={(fit) => designerStore.updateElement(id, { fit } as Partial<Element>)}
         />
+        <SharedImagePicker element={element} />
       </CollapseSection>
       <FilterSection
         element={element}

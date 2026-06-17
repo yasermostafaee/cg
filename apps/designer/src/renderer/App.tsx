@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DesignerBridge } from '../shared/designer-bridge.js';
 import { ProjectAssetsPanel } from './features/assets/ProjectAssetsPanel.js';
+import { SharedLibraryPanel } from './features/sharedLibrary/SharedLibraryPanel.js';
 import { CompositionsPanel } from './features/compositions/CompositionsPanel.js';
 import { CanvasArea } from './features/canvas/CanvasArea.js';
 import { InspectorPanel } from './features/inspector/InspectorPanel.js';
@@ -12,6 +13,7 @@ import { TransportBar } from './features/shell/TransportBar.js';
 import { StatusBar } from './features/status/StatusBar.js';
 import { TimelineDock } from './features/timeline/TimelineDock.js';
 import { primeAll as primeAllAssets } from './features/assets/assetUrlCache.js';
+import { primeAll as primeAllSharedImages } from './features/sharedLibrary/sharedImageUrlCache.js';
 import { useIssues } from './hooks/useIssues.js';
 import { designerStore, editSceneOf, shallowEqual, useDesignerSelector } from './state/store.js';
 import { colors } from './theme.js';
@@ -71,13 +73,15 @@ function EmptyStage(): JSX.Element {
   );
 }
 
-/** Narrow left icon-rail that switches the adjacent panel (Compositions ↔ Assets). */
+type LeftPanel = 'compositions' | 'assets' | 'sharedLibrary';
+
+/** Narrow left icon-rail that switches the adjacent panel (Compositions / Assets / Shared Library). */
 function LeftRail({
   panel,
   onSelect,
 }: {
-  panel: 'compositions' | 'assets';
-  onSelect: (p: 'compositions' | 'assets') => void;
+  panel: LeftPanel;
+  onSelect: (p: LeftPanel) => void;
 }): JSX.Element {
   return (
     <div className={s.rail} aria-label="Panel switcher">
@@ -126,6 +130,29 @@ function LeftRail({
             strokeWidth="1.4"
             strokeLinejoin="round"
           />
+        </svg>
+      </Control>
+      <Control
+        variant="bare"
+        title="Shared library"
+        aria-label="Shared library"
+        aria-pressed={panel === 'sharedLibrary'}
+        className={cx(s.railBtn, panel === 'sharedLibrary' && s.railBtnActive)}
+        onClick={() => onSelect('sharedLibrary')}
+      >
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="none" aria-hidden>
+          <rect x="2" y="2" width="9" height="9" rx="1.3" stroke="currentColor" strokeWidth="1.4" />
+          <rect
+            x="5"
+            y="5"
+            width="9"
+            height="9"
+            rx="1.3"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            fill={colors.background}
+          />
+          <circle cx="8" cy="8.2" r="1.1" fill="currentColor" />
         </svg>
       </Control>
     </div>
@@ -195,7 +222,7 @@ export function App(): JSX.Element {
   const issues = useIssues(editScene);
   const [timelineH, setTimelineH] = useState(TIMELINE_DEFAULT);
   // Which panel the left icon-rail shows.
-  const [leftPanel, setLeftPanel] = useState<'compositions' | 'assets'>('compositions');
+  const [leftPanel, setLeftPanel] = useState<LeftPanel>('compositions');
 
   // Resolve image/font asset URLs into the shared cache as soon as a project
   // becomes active, so the canvas renders imported / starter-seeded assets even
@@ -205,6 +232,13 @@ export function App(): JSX.Element {
     if (activeSceneId === null) return;
     void primeAllAssets();
   }, [activeSceneId]);
+
+  // D-040 — the shared image library is project-independent, so prime its blob
+  // URLs once on mount; logos then render on the canvas regardless of which
+  // left panel is open. New imports prime themselves (CanvasArea subscribes).
+  useEffect(() => {
+    void primeAllSharedImages();
+  }, []);
 
   // Suppress the native browser context menu app-wide. Our own menus
   // (timeline layer, project assets, keyframe) open from their React
@@ -349,7 +383,13 @@ export function App(): JSX.Element {
       <div className={s.shell}>
         <LeftRail panel={leftPanel} onSelect={setLeftPanel} />
         <div className={s.sidePanel} style={{ width: 244 }}>
-          {leftPanel === 'compositions' ? <CompositionsPanel /> : <ProjectAssetsPanel />}
+          {leftPanel === 'compositions' ? (
+            <CompositionsPanel />
+          ) : leftPanel === 'sharedLibrary' ? (
+            <SharedLibraryPanel />
+          ) : (
+            <ProjectAssetsPanel />
+          )}
         </div>
         {editScene === null ? (
           <EmptyStage />

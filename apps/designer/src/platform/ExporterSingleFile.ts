@@ -9,8 +9,10 @@ import {
 import type { AssetStore } from './AssetStore.js';
 import {
   collectImageElements,
+  compositeImageSource,
   imageMimeOf,
   resolveImageAsset,
+  type ImageAssetLibrary,
   type ImageRef,
 } from './image-export.js';
 
@@ -22,6 +24,11 @@ export interface SingleFileExportOptions {
   /** App `@font-face` CSS (Vazirmatn / Exo 2) with `/fonts/…` URLs to inline. */
   fontsCss: string;
   assets: AssetStore;
+  /**
+   * D-040 — the device-level shared image library. When present, a logo
+   * (`source: 'shared'`) base64-inlines from the library; absent ⇒ project-only.
+   */
+  sharedImages?: ImageAssetLibrary;
   /** Fetch a same-origin URL's bytes (the bundled font files). Defaults to `fetch`. */
   fetchUrl?: (url: string) => Promise<ArrayBuffer>;
 }
@@ -52,6 +59,7 @@ export class ExporterSingleFile {
   readonly #cgCss: string;
   readonly #fontsCss: string;
   readonly #assets: AssetStore;
+  readonly #sharedImages: ImageAssetLibrary | undefined;
   readonly #fetchUrl: (url: string) => Promise<ArrayBuffer>;
 
   constructor(options: SingleFileExportOptions) {
@@ -59,6 +67,7 @@ export class ExporterSingleFile {
     this.#cgCss = options.cgCss;
     this.#fontsCss = options.fontsCss;
     this.#assets = options.assets;
+    this.#sharedImages = options.sharedImages;
     this.#fetchUrl = options.fetchUrl ?? ((url) => fetch(url).then((r) => r.arrayBuffer()));
   }
 
@@ -136,7 +145,10 @@ export class ExporterSingleFile {
         missing.push(ref);
         continue;
       }
-      const resolved = await resolveImageAsset(this.#assets, ref.assetId);
+      // D-040 — resolve from the logo's source-indicated store first, the other
+      // store as a fallback.
+      const imageSource = compositeImageSource(ref.source, this.#sharedImages, this.#assets);
+      const resolved = await resolveImageAsset(imageSource, ref.assetId);
       if (resolved === null) {
         failed.add(ref.assetId);
         missing.push(ref);

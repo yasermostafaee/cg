@@ -265,8 +265,20 @@ export function defaultEllipse(id: string, x: number, y: number): ShapeElement {
  * Image elements need an asset id — the click action creates one only
  * after the operator picks an asset. This factory is for the
  * "after-pick" step.
+ *
+ * D-040 — `opts.source` selects the per-project asset store (`'project'`, the
+ * default, used by the drag-drop-from-assets path) or the device shared library
+ * (`'shared'`, used by the logo tool). `opts.width`/`opts.height` let the logo
+ * tool size the element to the picked image's aspect ratio; both default to a
+ * 320×320 square when unknown.
  */
-export function defaultImage(id: string, x: number, y: number, assetId: string): ImageElement {
+export function defaultImage(
+  id: string,
+  x: number,
+  y: number,
+  assetId: string,
+  opts?: { source?: 'project' | 'shared'; width?: number; height?: number },
+): ImageElement {
   return {
     id,
     name: 'Image',
@@ -275,8 +287,9 @@ export function defaultImage(id: string, x: number, y: number, assetId: string):
     locked: false,
     opacity: 1,
     zIndex: 0,
-    transform: baseTransform(x, y, 320, 320),
+    transform: baseTransform(x, y, opts?.width ?? 320, opts?.height ?? 320),
     assetId,
+    source: opts?.source ?? 'project',
     fit: 'contain',
     preserveAspect: true,
   };

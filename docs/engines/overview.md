@@ -95,6 +95,19 @@ The exported `index.html` calls `createRuntime(scene)` then
 (`play`/`update`/`stop`/`next`/`remove`, JSON **or** legacy XML payloads) to the
 typed runtime.
 
+**Image assets (D-062 + D-040).** The runtime emits `<img data-cg-asset-id>` and
+takes an `assetUrls` boot option that wires each `src`. Image bytes are resolved
+through one seam — `resolveImageAsset` / `collectImageElements` in
+[`apps/designer/src/platform/image-export.ts`](../../apps/designer/src/platform/image-export.ts) —
+and inlined per output (preview: host blob URLs; `.vcg`: packaged relative paths;
+HTML: base64 data URIs). An image element's `source` (`'project' | 'shared'`)
+selects which store its `assetId` resolves from: a per-project `AssetStore` or the
+device-level `SharedImageStore` (the shared image library; a `source: 'shared'`
+image is a "logo"). `compositeImageSource` tries the source-indicated store first
+and the other as a fallback, so the same resolver covers all three outputs; a
+reference that resolves in neither store is reported by `Exporter.preflight`
+(`.vcg` blocks, HTML warns) and renders a placeholder in preview.
+
 ## The editor ↔ schema ↔ runtime triangle
 
 ```

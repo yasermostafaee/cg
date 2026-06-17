@@ -9,6 +9,7 @@ import appFontsCss from '../renderer/fonts.css?inline';
 import { initWorkspace, prefs } from './workspace.js';
 import { ProjectStore } from './ProjectStore.js';
 import { AssetStore } from './AssetStore.js';
+import { SharedImageStore } from './SharedImageStore.js';
 import { Exporter } from './Exporter.js';
 import { ExporterSingleFile } from './ExporterSingleFile.js';
 import { Preview } from './preview.js';
@@ -25,10 +26,24 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
   const ws = await initWorkspace();
   const projects = new ProjectStore(ws, prefs);
   const assets = new AssetStore(ws);
-  const exporter = new Exporter({ assets, cgJs, cgCss });
-  const singleFile = new ExporterSingleFile({ cgJsIife, cgCss, fontsCss: appFontsCss, assets });
+  // D-040 — the shared image library lives ONCE outside any project. Constructed
+  // here and never re-scoped on project change. Both exporters take it so a
+  // `source: 'shared'` logo resolves + inlines exactly like a per-project asset.
+  const sharedImages = new SharedImageStore(ws);
+  const exporter = new Exporter({ assets, sharedImages, cgJs, cgCss });
+  const singleFile = new ExporterSingleFile({
+    cgJsIife,
+    cgCss,
+    fontsCss: appFontsCss,
+    assets,
+    sharedImages,
+  });
   const preview = new Preview({ cgJs, cgCss, fontsCss: appFontsCss });
   const assetUrlCache = new Map<string, string>();
+  // D-040 — shared-library blob URLs. Separate from `assetUrlCache` and NOT
+  // revoked on project change (the library outlives any one project); revoked
+  // only when a library image is removed.
+  const sharedImageUrlCache = new Map<string, string>();
   // Per-scene cache of the native file handle picked the last time the
   // operator hit Save / Save As (for .cg.json) or Export (for .vcg).
   // Lets subsequent Save calls write to the same file silently, without
@@ -208,6 +223,41 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
         const blob = new Blob([ab], { type: mime });
         const url = URL.createObjectURL(blob);
         assetUrlCache.set(assetId, url);
+        return url;
+      },
+    },
+
+    sharedImages: {
+      import: async () => {
+        const file = await pickFile('image');
+        if (file === null) throw new Error('No file selected');
+        return { image: await sharedImages.importFile(file) };
+      },
+      list: () => sharedImages.list(),
+      remove: async (req) => {
+        const cached = sharedImageUrlCache.get(req.assetId);
+        if (cached !== undefined) {
+          URL.revokeObjectURL(cached);
+          sharedImageUrlCache.delete(req.assetId);
+        }
+        return { ok: await sharedImages.remove(req.assetId) };
+      },
+      onImported: (handler) => sharedImages.imported.subscribe(handler),
+      // D-040 — blob URL lookup for the library panel / inspector / preview.
+      // Mirrors `assets.url` but reads the shared store and its own cache.
+      url: async (assetId) => {
+        const cached = sharedImageUrlCache.get(assetId);
+        if (cached !== undefined) return cached;
+        const meta = await sharedImages.get(assetId);
+        if (meta === null) return null;
+        const bytes = await sharedImages.bytes(assetId);
+        if (bytes === null) return null;
+        const mime = mimeOf(meta.kind, meta.filename);
+        const ab = new ArrayBuffer(bytes.byteLength);
+        new Uint8Array(ab).set(bytes);
+        const blob = new Blob([ab], { type: mime });
+        const url = URL.createObjectURL(blob);
+        sharedImageUrlCache.set(assetId, url);
         return url;
       },
     },

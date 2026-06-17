@@ -229,6 +229,7 @@ const logo: Element[] = [
     locked: false,
     zIndex: 1,
     assetId: 'news-emblem',
+    source: 'project',
     fit: 'contain',
     preserveAspect: true,
   } as Element,

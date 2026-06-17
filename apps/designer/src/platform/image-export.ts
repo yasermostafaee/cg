@@ -13,6 +13,8 @@ import type { AssetMeta } from '@cg/shared-ipc';
 export interface ImageRef {
   readonly elementId: string;
   readonly assetId: string;
+  /** D-040 — which store `assetId` lives in (`'project'` for pre-D-040 scenes). */
+  readonly source: 'project' | 'shared';
 }
 
 /**
@@ -29,7 +31,7 @@ export function collectImageElements(scene: Scene): ImageRef[] {
       if (el.type === 'image') {
         if (!seen.has(el.id)) {
           seen.add(el.id);
-          out.push({ elementId: el.id, assetId: el.assetId });
+          out.push({ elementId: el.id, assetId: el.assetId, source: el.source });
         }
       } else if (el.type === 'container') {
         walk(el.children);
@@ -53,13 +55,20 @@ export interface ImageAssetSource {
 }
 
 /**
+ * An image store that can also be enumerated — the project `AssetStore` and the
+ * D-040 `SharedImageStore` both satisfy it. `preflight` lists both to decide
+ * whether an image reference resolves in EITHER store.
+ */
+export interface ImageAssetLibrary extends ImageAssetSource {
+  list(): Promise<AssetMeta[]>;
+}
+
+/**
  * Resolve one image element's bytes + metadata for export. **THE source extension
- * point.** PR-1 resolves from the project source only.
- *
- * D-040 / PR-2 (shared image library) adds the shared-library-first branch HERE and
- * nowhere else: pass a composite `ImageAssetSource` that tries the shared store
- * first, then falls back to the project store. The exporters and the runtime's
- * `assetUrls` seam stay unchanged.
+ * point.** The caller passes the `ImageAssetSource` to resolve from; for D-040 that
+ * is a {@link compositeImageSource} (the element's source-indicated store first,
+ * the other store as a fallback). The exporters and the runtime's `assetUrls` seam
+ * stay unchanged.
  */
 export async function resolveImageAsset(
   source: ImageAssetSource,
@@ -70,6 +79,41 @@ export async function resolveImageAsset(
   const bytes = await source.bytes(assetId);
   if (bytes === null) return null;
   return { meta, bytes };
+}
+
+const NULL_IMAGE_SOURCE: ImageAssetSource = {
+  get: () => Promise.resolve(null),
+  bytes: () => Promise.resolve(null),
+};
+
+/**
+ * D-040 — the two-source resolver. Builds an {@link ImageAssetSource} that tries
+ * the element's source-indicated store FIRST (the shared library for
+ * `source: 'shared'`, the project store otherwise) and the other store as a
+ * tolerant fallback. The two stores have independent uuid id-spaces, so an id
+ * resolves in at most one — the fallback covers a mis-tagged `source` (or a shared
+ * image later localised) and is never ambiguous. `shared` is optional so the
+ * exporters degrade to project-only resolution when no library is wired (e.g.
+ * tests / the runtime contract is unchanged).
+ */
+export function compositeImageSource(
+  source: 'project' | 'shared',
+  shared: ImageAssetSource | undefined,
+  project: ImageAssetSource,
+): ImageAssetSource {
+  const sharedSrc = shared ?? NULL_IMAGE_SOURCE;
+  const primary = source === 'shared' ? sharedSrc : project;
+  const fallback = source === 'shared' ? project : sharedSrc;
+  return {
+    get: async (id) => {
+      const meta = await primary.get(id);
+      return meta ?? (await fallback.get(id));
+    },
+    bytes: async (id) => {
+      const bytes = await primary.bytes(id);
+      return bytes ?? (await fallback.bytes(id));
+    },
+  };
 }
 
 /** Image MIME from a filename's extension (for a base64 `data:` URI). */
