@@ -1284,13 +1284,28 @@ verify-gate. Capabilities: `designer-box-styling` (MODIFIED) +
 `openspec/changes/add-box-shadow-spread-inset/`.
 «inset is single-select-only (deferred from multi-select), matching the per-corner radius toggle.»
 
-## [ ] D-044 — Font-weight for plain text ⟨priority: low⟩
+## [~] D-044 — Font-weight for plain text ⟨priority: low⟩
 
-**What:** Add the font-weight control (already present on ticker/sequence) to the
-plain text element.
-**Why:** Plain text can't set weight today though ticker/sequence can.
-**Acceptance to be detailed when scheduled.**
-**Notes:** small schema/UI parity item.
+**What:** Add the font-weight control (the SelectField ticker/sequence/clock already
+have) to the plain text element's inspector. UI-parity only — `font.weight` already
+exists in the shared font schema and the renderer already applies it for text.
+**Why:** Plain text can't set weight in the UI today though ticker/sequence can.
+**Acceptance:**
+
+- WHEN the text element is open in the inspector THEN it shows a font-weight control
+  (a 100–900 select) inline beside font family / size, matching ticker/sequence
+- WHEN a weight is chosen THEN it writes `font.weight` (via updateElement) and the text
+  renders at that weight (canvas/preview/export); it is NOT keyframable (no diamond),
+  like font-family
+- WHEN a text element authored before D-044 is loaded THEN its existing `font.weight`
+  (already in schema) is shown unchanged — no schema change, no migration
+- WHEN multiple elements are selected THEN font-weight is single-select-only
+  (consistent with font-family and alignment), not offered as a shared/multi-edit field
+
+**Notes:** UI-parity only; non-keyframable; placed inline near font family (the later
+D-048 popover consolidation may relocate it). No schema/render/store change. Single-
+phase (low-risk). Capability: `designer-inspector` (MODIFIED). Change:
+`openspec/changes/add-text-font-weight/`.
 
 ## [~] D-045 — Unify text alignment + vertical align for ticker/clock/sequence + align not keyframable ⟨priority: medium⟩
 

@@ -7,7 +7,7 @@ import { CollapseSection } from './CollapseSection.js';
 import { FillField } from './FillPopover.js';
 import { FontFamilySelect } from './FontFamilySelect.js';
 import { AlignButtonGroup, H_ALIGN_OPTIONS, V_ALIGN_OPTIONS } from './AlignButtonGroup.js';
-import { RealtimeNumberInput } from './controls.js';
+import { RealtimeNumberInput, SelectField } from './controls.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
@@ -178,6 +178,20 @@ export function TextStyleSection({
           onCommit={(family) =>
             designerStore.updateElement(id, {
               font: { ...element.font, family },
+            } as Partial<Element>)
+          }
+        />
+
+        {/* D-044 — font-weight (UI parity with ticker / sequence / clock). Non-keyframable
+            like font-family: writes font.weight via updateElement, no KeyframeDot/diamond.
+            Inline beside family/size (NOT the D-048 "More text options" popover). */}
+        <SelectField
+          label="weight"
+          value={String(element.font.weight)}
+          options={['100', '200', '300', '400', '500', '600', '700', '800', '900']}
+          onCommit={(w) =>
+            designerStore.updateElement(id, {
+              font: { ...element.font, weight: Number(w) },
             } as Partial<Element>)
           }
         />
