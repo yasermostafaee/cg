@@ -1029,10 +1029,7 @@ feeds separator nodes generically, so the work is mostly schema + asset
 resolution + the inspector picker. Relates to the asset pipeline (preview blob
 URLs / export inlining) the image element already uses.
 
-## [~] D-040 — Shared image library + logo element ⟨priority: medium⟩
-
-> **In progress** — `openspec/changes/add-shared-image-library/` (phase 1 design + phase 2
-> implementation). Built on D-062's per-project image render/inline path + its source-aware seam.
+## [x] D-040 — Shared image library + logo element ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-17-add-shared-image-library/`
 
 **What:** A device-level **shared image library** (network logos, persistent
 bugs) that lives ONCE outside any single project, plus the existing canvas
@@ -1908,7 +1905,7 @@ work, not appearance-only).
 non-keyframeable (parity with weight/style). Capabilities: designer-inspector + shared-schema +
 template-runtime.
 
-## [~] D-062 — Render per-project image assets in exported output ⟨priority: high — D-040 prerequisite⟩
+## [x] D-062 — Render per-project image assets in exported output ⟨priority: high — D-040 prerequisite⟩ — archived: `openspec/changes/archive/2026-06-17-render-image-assets-in-exports/`
 
 **What:** Make per-project image elements actually render in exported `.vcg` and single-file HTML.
 Today the runtime emits `<img data-cg-asset-id>` with NO `src`; only the Designer preview wires it
@@ -1933,5 +1930,61 @@ per-project baseline to build on. This is that foundational baseline — **a pre
 **Notes:** project source ONLY; the byte resolver is written source-aware-READY so D-040/PR-2 adds the
 shared-library branch in one place (`resolveImageAsset`). Runtime `assetUrls` seam shared by both
 exporters. Known limitation: images stamped into repeater rows at play time aren't re-wired (static
-tree only). Capabilities: designer-image-export (new). Change:
+tree only) — now filed as D-064. Capabilities: designer-image-export (new). Change:
 `openspec/changes/render-image-assets-in-exports/`.
+
+## [ ] D-063 — Drag a shared-library image onto the canvas ⟨priority: low-medium⟩
+
+**What:** Make Shared Library panel thumbnails draggable onto the canvas to
+place a logo, mirroring the Project Assets panel's drag-drop (D-001). After
+D-040 the library is **click-to-select** (the canvas logo tool stamps the
+selected / first image) plus the inspector combo — there is no drag-drop
+placement. The drop inserts an image element with `source: 'shared'`
+referencing the dragged library image, default-sized to its aspect, at the
+drop point, and selects it.
+**Why:** D-040 shipped the library + logo tool + inspector combo but
+**deferred** drag-drop placement. Operators expect the same drag-from-panel
+gesture the Project Assets panel already offers; this closes that parity gap.
+**Acceptance:**
+
+- WHEN the operator drags a Shared Library thumbnail onto the canvas THEN an
+  image element with `source: 'shared'` referencing that library image is
+  inserted at the drop point (sized to the image's aspect) and selected
+- WHEN dropped THEN it renders in the live preview via the two-source resolver
+  and exports inline its bytes — identical to a logo placed via the tool
+- WHILE the existing Project Assets drag-drop
+  (`application/x-cg-asset-id` → `source: 'project'`) is unchanged — the shared
+  drag uses a DISTINCT dataTransfer type so the drop sets the right `source`
+  **Notes:** Builds on D-040 (`designer-shared-image-library`). Make
+  `SharedImageThumb` draggable (e.g. `application/x-cg-shared-image-id`) and add
+  a `source`-aware branch to `CanvasOverlay.onDrop` reusing `defaultImage(…, {
+source: 'shared', width, height })`. Relates to D-001 (per-project drag,
+  unchanged).
+
+## [ ] D-064 — Re-wire repeater-stamped image `src` at play time ⟨priority: medium⟩
+
+**What:** D-062 wires image `src` for the STATIC element tree only (the
+runtime applies the `assetUrls` map once over the built tree). Images stamped
+into repeater rows AT PLAY TIME (D-030 clones a child composition per data
+row) are produced after that pass, so their `<img data-cg-asset-id>` never get
+a `src` and the image does not render in the exported `.vcg` / single-file
+HTML. Re-apply the `assetUrls` mapping to image nodes created during repeater
+stamping (and any equivalent play-time DOM growth) so images/logos inside
+repeater rows render in export.
+**Why:** Documented D-062 limitation ("images stamped into repeater rows at
+play time aren't re-wired — static tree only"). It is a correctness gap: a
+repeater whose child composition contains an image (per-project or a shared
+logo) exports without that image rendering.
+**Acceptance:**
+
+- WHEN a repeater whose child composition contains an image element is
+  exported (`.vcg` or single-file HTML) and played THEN each stamped row's
+  image gets its `src` from the packaged / inlined bytes and renders (no
+  missing image)
+- WHEN the image is a `source: 'shared'` logo THEN it resolves via the same
+  two-source path (D-040)
+- WHILE the static-tree wiring (D-062) is unchanged
+  **Notes:** Runtime change in `@cg/template-runtime` — re-run the `assetUrls`
+  application after repeater stamping (the play-time DOM mutation), not only on
+  the initial static tree. Relates to D-030 (repeater), D-062 (image export),
+  D-040 (shared source).
