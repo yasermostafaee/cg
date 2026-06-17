@@ -265,7 +265,7 @@ package's clean script. Surfaced while reproducing B-012 from a clean tree.
 
 <!-- Add new open bugs above this line using the format. Example:
 
-## [ ] B-001 — Export blocked dialog shows wrong error count
+## [ ] B-0NN — Export blocked dialog shows wrong error count
 **Repro:**
 1. Open a scene with 2 unbound required fields
 2. Click Export

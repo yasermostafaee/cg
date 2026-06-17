@@ -41,13 +41,18 @@ The Designer SHALL render a keyframe diamond for a property IF AND ONLY IF the r
 
 #### Scenario: Keyframe-able style properties show a diamond in both panels
 
-- **WHEN** a shape or text element exposes border-radius, drop-shadow / text-shadow sub-properties (`shadow.*`), box-padding, or — text only (D-057) — box-shadow sub-properties (`boxShadow.*`)
+- **WHEN** a shape or text element exposes border-radius, drop-shadow / text-shadow sub-properties (`shadow.*`), box-padding, or — text only (D-057) — box-shadow sub-properties (`boxShadow.*`), including the box-shadow `spread` (D-043 — `shadow.spread` for the shape, `boxShadow.spread` for the text box)
 - **THEN** each is keyframe-able and shows a diamond in both the right inspector and the timeline-left inspector
 
 #### Scenario: A text element's text-shadow and box-shadow are separately keyframe-able
 
 - **WHEN** a text element is inspected
-- **THEN** its "Text Shadow" sub-properties (`shadow.*`) AND its "Box Shadow" sub-properties (`boxShadow.*`) each show their own keyframe diamonds, independently; shape exposes only its box shadow (`shadow.*`) and the content-driven kinds only their text-shadow (`shadow.*`)
+- **THEN** its "Text Shadow" sub-properties (`shadow.*`) AND its "Box Shadow" sub-properties (`boxShadow.*`, incl. `boxShadow.spread`) each show their own keyframe diamonds, independently; shape exposes only its box shadow (`shadow.*`, incl. `shadow.spread`) and the content-driven kinds only their text-shadow (`shadow.*`, no spread)
+
+#### Scenario: The box-shadow inset toggle shows no keyframe diamond
+
+- **WHEN** a shape's or text element's "Box Shadow" section shows its `inset` (Outset/Inset) toggle
+- **THEN** no keyframe glyph renders next to it — `inset` is a static boolean and not a member of `AnimatablePropertySchema`, so it has no registry descriptor and cannot be keyframed
 
 #### Scenario: Discrete clock settings have no diamond
 
@@ -61,7 +66,7 @@ The Designer SHALL render a keyframe diamond for a property IF AND ONLY IF the r
 
 #### Scenario: Non-animatable controls render no placeholder diamond
 
-- **WHEN** a non-keyframe-able control is shown (an image's `fit`, a ticker's `direction` / `speed` / `gap`, or any other config-only field)
+- **WHEN** a non-keyframe-able control is shown (an image's `fit`, a ticker's `direction` / `speed` / `gap`, the box-shadow `inset` toggle, or any other config-only field)
 - **THEN** no keyframe glyph renders next to it
 
 #### Scenario: A gradient fill, text colour, or background shows no diamond on either panel

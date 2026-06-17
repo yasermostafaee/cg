@@ -8,6 +8,13 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Owner UX-feature wave ([D-042](./prd/designer.md) → [D-048](./prd/designer.md) + [D-052](./prd/designer.md)) —
+  complete. The final batch ([D-043](./prd/designer.md) box-shadow spread+inset, [D-044](./prd/designer.md)
+  font-weight, [D-045](./prd/designer.md) unified alignment + vertical align, [D-047](./prd/designer.md)
+  layer-reorder drag, [D-048](./prd/designer.md) inspector visual polish, + the [B-018](./prd/bugs.md)
+  spread static-write fix) merged & archived (2026-06-17); D-042 and D-052 landed earlier. Only
+  [D-046](./prd/designer.md) (sizing=auto guard) is NOT done — PARKED, blocked on the new D-060
+  (auto-size rendering); see Next.
 - Multi-select chain ([D-041](./prd/designer.md) + follow-ups D-049 / D-050 /
   D-051 / D-053 / D-054 + [B-014](./prd/bugs.md)) — merged & archived
   (2026-06-14); multi-select editing now reaches single-selection parity "fanned
@@ -28,26 +35,19 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Next — feature wave (in this order)
 
-1. Owner UX-feature wave (remaining: [D-042](./prd/designer.md) → [D-048](./prd/designer.md), + [D-052](./prd/designer.md)) —
-   see the subsection below
+The owner UX-feature wave (D-042–D-048 + D-052) is complete — see Done (recent). The remaining
+designer backlog, roughly in priority order:
 
-### Owner UX-feature wave (remaining, in this order)
+1. [D-060](./prd/designer.md) — Auto-size text rendering (consume `fitMode`) — needs a dedicated
+   design pass (sized like C-001). **Unblocks [D-046](./prd/designer.md)** — the sizing=auto guard
+   is PARKED until this lands and ships **coupled** with it (no unguarded window).
+2. [D-059](./prd/designer.md) — Friendly validation presets for dynamic text fields (preset
+   dropdown + "Custom (advanced)" regex escape over the existing `pattern`; designer-facing)
+3. [D-061](./prd/designer.md) — Text decoration / transform / variant controls — the rest of the
+   font controls the D-048 popover was envisioned with; needs schema + renderer (low priority)
 
-_The multi-select chain (D-041 + D-049/050/051/053/054) is done — see Done (recent)._
-
-1. [D-042](./prd/designer.md) — Per-corner border radius (toggle)
-2. [D-043](./prd/designer.md) — Extended box-shadow (spread keyframable + inset toggle)
-3. [D-044](./prd/designer.md) — Font-weight for plain text
-4. [D-045](./prd/designer.md) — Unify text alignment + vertical align (ticker/sequence) + align not keyframable
-5. [D-046](./prd/designer.md) — Sizing=auto behavior (modal + squeeze off + no keyframes on text-metrics)
-6. [D-047](./prd/designer.md) — Layer reordering via drag (z-index) + drop indicator
-7. [D-048](./prd/designer.md) — Inspector visual polish (align/padding/sizing buttons, text-settings popover, no blue button)
-8. [D-052](./prd/designer.md) — Keyframe-able styling for time-driven elements (ticker/clock/sequence/repeater) — runtime-gated follow-up to D-051
-
-**Tail (after D-048):** template cleanup — rebuild/refresh the bundled sample
-templates against the wave's finalized controls (the explicit tail of this wave).
-
-- [D-059](./prd/designer.md) — Friendly validation presets for dynamic text fields (preset dropdown + "Custom (advanced)" regex escape over the existing `pattern`; designer-facing)
+**Wave tail (carried over):** template cleanup — rebuild/refresh the bundled sample templates
+against the UX wave's finalized controls.
 
 ## Then — hardening wave (after features)
 

@@ -1245,7 +1245,7 @@ box properties also fixes the broken animated-tuple path.
   extra tracks reuses the B-014 orphan-track clearing approach. Change:
   `openspec/changes/box-props-all-elements/`.
 
-## [~] D-043 — Extended box-shadow (spread + inset) ⟨priority: medium⟩
+## [x] D-043 — Extended box-shadow (spread + inset) ⟨priority: medium⟩
 
 **What:** The box-shadow gains a keyframable `spread` and a non-keyframable
 `inset` toggle (the full CSS box-shadow model), on the existing "Box Shadow"
@@ -1284,7 +1284,7 @@ verify-gate. Capabilities: `designer-box-styling` (MODIFIED) +
 `openspec/changes/add-box-shadow-spread-inset/`.
 «inset is single-select-only (deferred from multi-select), matching the per-corner radius toggle.»
 
-## [~] D-044 — Font-weight for plain text ⟨priority: low⟩
+## [x] D-044 — Font-weight for plain text ⟨priority: low⟩
 
 **What:** Add the font-weight control (the SelectField ticker/sequence/clock already
 have) to the plain text element's inspector. UI-parity only — `font.weight` already
@@ -1307,7 +1307,7 @@ D-048 popover consolidation may relocate it). No schema/render/store change. Sin
 phase (low-risk). Capability: `designer-inspector` (MODIFIED). Change:
 `openspec/changes/add-text-font-weight/`.
 
-## [~] D-045 — Unify text alignment + vertical align for ticker/clock/sequence + align not keyframable ⟨priority: medium⟩
+## [x] D-045 — Unify text alignment + vertical align for ticker/clock/sequence + align not keyframable ⟨priority: medium⟩
 
 **What:** Unify the alignment controls onto the text element's button-group, and add
 vertical align to ticker/clock/sequence. Ticker gains VERTICAL only (it is a crawl).
@@ -1338,18 +1338,19 @@ TickerDriver). Capabilities: designer-ticker-element, designer-clock-element,
 designer-sequence-element, designer-inspector (MODIFIED). Change:
 `openspec/changes/unify-align-add-vertical/`.
 
-## [ ] D-046 — Sizing=auto behavior (modal + squeeze off + no keyframes on text-metrics) ⟨priority: high⟩
+## [ ] D-046 — Sizing=auto guard (confirm modal + squeeze off + no keyframes on text metrics) ⟨priority: high — PARKED⟩
 
-**What:** Setting sizing to auto shows a confirm modal, disables auto-squeeze (set to
-no), and forbids keyframes on font-size / font / letter-spacing / line-height —
-existing keyframes on those four are removed and new ones blocked until sizing is set
-back to fixed.
-**Why:** auto sizing conflicts with keyframed text metrics; today it's unguarded.
-**Acceptance to be detailed when scheduled.**
-**Notes:** most sensitive behavioral item — touches the keyframe model + schema. Loopic
-ref for the modal: (owner to add).
+**Status:** PARKED — no target yet. Recon found auto sizing does not exist: fitMode and autoSqueeze
+are stored-but-unread (the renderer always sizes from transform.size; fitMode is read nowhere in
+template-runtime), so the Auto/Fixed toggle is a no-op. This guard must follow the new "auto-size
+rendering" item (D-060) and ship coupled with it (no unguarded window).
+**What (for when it lands):** switching Sizing to Auto shows a confirm modal, forces Auto Squeeze
+off, and clears/blocks keyframes on font.size / font.lineHeight / font.letterSpacing ("font" in the
+original brief maps to no keyframeable property). Reuses clearKeyframeTrack (B-014) + conditional
+keyframeable(el) (B-014/B-015) + a Modal.tsx confirm (SaveBeforeSwitchModal pattern).
+**Why:** auto sizing conflicts with keyframed text metrics.
 
-## [~] D-047 — Layer reordering via drag (z-index) + drop indicator ⟨priority: medium⟩
+## [x] D-047 — Layer reordering via drag (z-index) + drop indicator ⟨priority: medium⟩
 
 **What:** Reorder layers (z-index) by dragging the layer-row title up/down, with a
 horizontal drop-indicator line shown above/below the cursor at the droppable position.
@@ -1377,7 +1378,7 @@ already sorts `layer.children` ascending by zIndex. Scoped to one sibling set (n
 cross-layer/cross-parent moves, no multi-select drag, no edge auto-scroll). Capabilities:
 designer-animation-timeline (MODIFIED). Change: `openspec/changes/add-layer-reorder-drag/`.
 
-## [~] D-048 — Inspector visual polish (align/padding/sizing buttons, text-settings popover, no blue button) ⟨priority: medium⟩
+## [x] D-048 — Inspector visual polish (align/padding/sizing buttons, text-settings popover, no blue button) ⟨priority: medium⟩
 
 **What:** Match Loopic for the align buttons, the padding layout (four inputs side-by-
 side, not one per row), and the sizing(auto/fixed)/auto-squeeze/text-wrap controls;
@@ -1878,3 +1879,28 @@ non-breaking (existing custom patterns load as "Custom"). Anchor presets with ^�
 whole-value matches (avoids the unanchored-substring gotcha). Single-phase, low-risk.
 Capabilities: designer-dynamic-fields + designer-inspector. Sequenced after the
 UX-feature wave (D-042→D-048).
+
+## [ ] D-060 — Auto-size text rendering (consume fitMode) ⟨priority: medium; needs dedicated design⟩
+
+**What:** Make the text element's Sizing actually work — when fitMode=auto the box hugs its text
+content instead of using transform.size (today fitMode/autoSqueeze are stored but never read).
+Define the auto semantics (auto-width vs auto-height vs both), the transform/gizmo interaction (size
+handles on a content-sized box), wrap, the D-045 align/vertical-align interaction, and deterministic
+runtime sizing.
+**Why:** the Auto/Fixed toggle has no visible effect; auto sizing is half-built (schema + UI scaffold
+exist, rendering does not).
+**Acceptance to be detailed in a dedicated design session.**
+**Notes:** prerequisite for D-046 (the guard); ship D-046 coupled with it. Touches
+layout/transform/gizmo + align/wrap. Sized like C-001 — its own design pass.
+
+## [ ] D-061 — Text decoration / transform / variant controls ⟨priority: low⟩
+
+**What:** Add font-decoration (underline/line-through), text-transform (uppercase/lowercase/
+capitalize), and font-variant (small-caps) to the text element — schema + renderer + controls in the
+D-048 text-settings popover. D-048 left these out (they don't exist yet, so adding them is feature
+work, not appearance-only).
+**Why:** the D-048 popover was envisioned with five font controls; only weight + style exist.
+**Acceptance to be detailed when scheduled.**
+**Notes:** decide which kinds get them (text only, or also ticker/clock/sequence). Likely
+non-keyframeable (parity with weight/style). Capabilities: designer-inspector + shared-schema +
+template-runtime.
