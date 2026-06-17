@@ -1988,3 +1988,51 @@ logo) exports without that image rendering.
   application after repeater stamping (the play-time DOM mutation), not only on
   the initial static tree. Relates to D-030 (repeater), D-062 (image export),
   D-040 (shared source).
+
+## [ ] D-065 — Shared library: keyboard-Delete to remove a selected library image ⟨priority: low⟩
+
+**What:** In the Shared Library panel, selecting a library image (clicking a
+thumbnail) currently only marks it as the canvas logo tool's target — there is
+no keyboard affordance to act on it. Support removing the selected library
+image via the keyboard **Delete** key, so the panel selection has a useful
+direct action (removal already exists via the right-click context menu →
+"Remove from library").
+**Why:** Selecting a thumbnail today has no Delete-key action; the only removal
+path is the context menu. A Delete shortcut matches the canvas / timeline
+delete-selection muscle memory and makes the panel selection meaningful.
+**Acceptance:**
+
+- WHEN a Shared Library image is selected and the operator presses Delete (with
+  panel focus, not a text field) THEN that library image is removed — the same
+  flow as the context-menu "Remove from library" (usage warning included) — and
+  any still-open logo referencing it falls back to a placeholder (never a crash)
+- WHILE Delete with a CANVAS element selected still deletes the element (the
+  existing `App.tsx` behavior) — the two Delete targets must not conflict
+  **Notes:** **Confirm the exact Delete target at scheduling** — the Shared
+  Library PANEL item vs the canvas LOGO element (the canvas Delete handler
+  already deletes the selected element; scope the panel's Delete to panel focus
+  so they don't collide). Builds on D-040 (`designer-shared-image-library`).
+
+## [ ] D-066 — Relocate shared-library management out of the per-project UI ⟨priority: low⟩
+
+**What:** The shared image library is DEVICE-LEVEL (shared across every
+project), but its management panel currently lives inside a single project's
+left-rail (alongside Compositions / Project Assets). Move it to a
+project-independent location — the project picker / home screen, or a dedicated
+app-level library area — so its placement matches its scope. **Placement only;
+functionality unchanged** (add / list / remove, the canvas logo tool, and the
+inspector combo all stay as-is).
+**Why:** Putting a device-wide library inside one project's chrome is
+misleading — it reads as project-scoped. Surfacing it at an app / home level
+makes the "shared across projects" model obvious and keeps the per-project
+left-rail focused on project content.
+**Acceptance:**
+
+- WHEN the operator manages the shared library THEN it is reachable from a
+  project-independent location (project picker / home, or an app-level library
+  area), not only from inside an open project's left-rail
+- WHILE the library's behavior is unchanged — the same device store, the canvas
+  logo tool, and the inspector combo continue to work
+  **Notes:** Placement / information-architecture change only; no schema or
+  resolver change. Decide the exact home (landing view vs an app-level area) at
+  scheduling. Builds on D-040 (`designer-shared-image-library`).

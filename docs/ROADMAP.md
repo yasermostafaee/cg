@@ -60,6 +60,12 @@ designer backlog, roughly in priority order:
 5. [D-063](./prd/designer.md) — Drag a Shared Library image onto the canvas — D-040 parity follow-up
    (today click-to-select + logo tool / inspector only; add drag-drop like the Project Assets panel;
    low-medium).
+6. [D-065](./prd/designer.md) — Shared library: keyboard-Delete to remove the selected library image
+   (the panel selection has no Delete action today; confirm the panel-item vs canvas-logo target at
+   scheduling; low).
+7. [D-066](./prd/designer.md) — Relocate shared-library management out of the per-project left-rail to
+   a project-independent home (device-level library shouldn't live inside one project; placement only;
+   low).
 
 **Wave tail (carried over):** template cleanup — rebuild/refresh the bundled sample templates
 against the UX wave's finalized controls.
