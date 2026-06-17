@@ -1029,7 +1029,10 @@ feeds separator nodes generically, so the work is mostly schema + asset
 resolution + the inspector picker. Relates to the asset pipeline (preview blob
 URLs / export inlining) the image element already uses.
 
-## [ ] D-040 — Shared image library + logo element ⟨priority: medium⟩
+## [~] D-040 — Shared image library + logo element ⟨priority: medium⟩
+
+> **In progress** — `openspec/changes/add-shared-image-library/` (phase 1 design + phase 2
+> implementation). Built on D-062's per-project image render/inline path + its source-aware seam.
 
 **What:** A device-level **shared image library** (network logos, persistent
 bugs) that lives ONCE outside any single project, plus the existing canvas

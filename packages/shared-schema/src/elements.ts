@@ -398,10 +398,20 @@ export const RepeaterElementSchema = ElementBaseSchema.extend({
 });
 export type RepeaterElement = z.infer<typeof RepeaterElementSchema>;
 
-/** Image element. References an asset by id. */
+/**
+ * Image element. References an asset by id.
+ *
+ * D-040 — `source` says WHICH store `assetId` lives in: a per-project asset
+ * (`'project'`, the default) or a device-level shared-library image
+ * (`'shared'`). A "logo" is simply an image with `source: 'shared'`; there is
+ * one image element kind and one renderer. `source` defaults to `'project'`, so
+ * scenes authored before D-040 (no `source`) parse and render exactly as before.
+ * It's a structural reference (like `assetId`/`font.family`), never keyframed.
+ */
 export const ImageElementSchema = ElementBaseSchema.extend({
   type: z.literal('image'),
   assetId: IdSchema,
+  source: z.enum(['project', 'shared']).default('project'),
   fit: z.enum(['contain', 'cover', 'fill', 'none']),
   preserveAspect: z.boolean(),
   tint: HexColorSchema.optional(),
@@ -486,7 +496,7 @@ export type ElementInput =
   | z.input<typeof ClockElementSchema>
   | z.input<typeof SequenceElementSchema>
   | z.input<typeof RepeaterElementSchema>
-  | ImageElement
+  | z.input<typeof ImageElementSchema>
   | ShapeElement
   | LottieElement
   | VideoPlaceholderElement

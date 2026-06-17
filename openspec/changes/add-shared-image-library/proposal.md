@@ -1,8 +1,10 @@
-# Shared image library + logo element (D-040) — design only
+# Shared image library + logo element (D-040)
 
-> **PHASE 1 of 2 — RECON + DESIGN ONLY.** This change folder is for owner review. No app/package
-> source is modified by this change. Implementation (phase 2) follows owner sign-off on the schema
-> choice, the two-source resolver plan, and the scope note below.
+> **Phase 1 (design) + phase 2 (implementation) — both landed in this change.** Phase 1 was reviewed
+> and signed off; the coupled render/inline risk flagged below was retired by **D-062** (merged,
+> PR #129), which completed the per-project image render/inline path on `.vcg` + HTML and left the
+> source-aware seam (`resolveImageAsset` / `ImageAssetSource` in `image-export.ts`). Phase 2 is the
+> "second source" addition through that seam — see `tasks.md` for the per-task status.
 
 ## Why
 
@@ -32,19 +34,17 @@ played file stays self-contained (CasparCG CEF on `file://` cannot reach the lib
   sized to the picked image's aspect, with an insertion guard mirroring D-030 (empty library ⇒
   hint, no silent insert); an inspector combo box (thumbnail + name) to re-point the selection.
 
-## ⚠ Scope finding for owner review (the real risk — see design.md §2)
+## ✅ Scope finding (resolved by D-062 before phase 2)
 
-D-040 says "inline the bytes **exactly like a per-project asset**, so the exported file renders the
-logo." Recon found that per-project image **rendering in exported output does not exist yet on any
-path**: the runtime emits `<img data-cg-asset-id>` with **no `src`**, and only the Designer
-**preview** wires a `src` (from a blob-URL map). The `.vcg` exporter packages image bytes into the
-zip but the served runtime never sets the `src` (image resolution is a documented stub); the
-single-file HTML exporter does **not** inline image bytes at all (only fonts). So meeting D-040's
-acceptance ("the exported file renders the logo") requires phase 2 to **also complete the image
-byte→`src` render/inline path on `.vcg` + HTML for the project source too** — not merely add a
-second source. design.md recommends D-040 own that completion (the shared-vs-project axis is
-orthogonal; one resolver refactor covers both). **This enlarges phase-2 scope beyond a pure "second
-source" — owner please confirm before implementation.**
+The phase-1 recon flagged that per-project image **rendering in exported output did not exist yet**:
+the runtime emitted `<img data-cg-asset-id>` with **no `src`**, only the Designer preview wired a
+`src`, the `.vcg` packaged bytes without wiring them, and the single-file HTML inlined only fonts. So
+"the exported file renders the logo" depended on first completing the project-source render/inline
+path. **D-062 (merged, PR #129) did exactly that** — the runtime gained an `assetUrls` boot option,
+the `.vcg` bakes the packaged paths, the HTML base64-inlines the bytes, and it left the single
+source-aware seam `resolveImageAsset(source, assetId)` / `ImageAssetSource` in `image-export.ts`.
+Phase 2 therefore adds the shared-vs-project axis **in that one place** (a per-element
+`compositeImageSource`) and unions both stores in `Exporter.preflight` — no render-path work remained.
 
 ## Capabilities
 

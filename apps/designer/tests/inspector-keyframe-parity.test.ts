@@ -21,6 +21,19 @@ import { timelineGroupsFor } from '../src/renderer/features/timeline/keyframe-he
 // React's act() needs this flag set for createRoot rendering under Vitest.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+// D-040 — the image inspector mounts the Shared Library picker, which reads the
+// `window.cg.sharedImages` bridge on mount. Stub a minimal, empty library so the
+// inspector renders without a real bridge.
+(window as unknown as { cg: unknown }).cg = {
+  sharedImages: {
+    list: () => Promise.resolve([]),
+    url: () => Promise.resolve(null),
+    onImported: () => () => {
+      /* no unsubscribe needed in tests */
+    },
+  },
+};
+
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 

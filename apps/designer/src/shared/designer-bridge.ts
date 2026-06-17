@@ -12,6 +12,9 @@ import type {
   AssetsImportChannel,
   AssetsListChannel,
   AssetsRemoveChannel,
+  SharedImagesImportChannel,
+  SharedImagesListChannel,
+  SharedImagesRemoveChannel,
   ExportPreflightChannel,
   ExportProgress,
   ExportRunChannel,
@@ -89,6 +92,24 @@ export interface DesignerBridge {
      */
     onCleared(handler: () => void): Unsubscribe;
     /** D-011 — resolve an assetId to a cached blob URL for previews. */
+    url(assetId: string): Promise<string | null>;
+  };
+
+  /**
+   * D-040 — the device-level shared image library, project-independent and
+   * image-only. Mirrors `assets` (import / list / remove / onImported / url) but
+   * persists across project switches; there is no `onCleared` (the library
+   * outlives any one project).
+   */
+  sharedImages: {
+    /** Pick an image file and import it into the shared library. */
+    import(): Promise<ChannelResponse<typeof SharedImagesImportChannel>>;
+    list(): Promise<ChannelResponse<typeof SharedImagesListChannel>>;
+    remove(
+      req: ChannelRequest<typeof SharedImagesRemoveChannel>,
+    ): Promise<ChannelResponse<typeof SharedImagesRemoveChannel>>;
+    onImported(handler: (image: AssetMeta) => void): Unsubscribe;
+    /** D-040 — resolve a shared-library imageId to a cached blob URL for previews. */
     url(assetId: string): Promise<string | null>;
   };
 

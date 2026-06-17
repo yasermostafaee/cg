@@ -129,6 +129,15 @@ to grab. The `size === 1` path keeps the full `Gizmo` above, untouched.
 [`state/element-defaults.ts`](../../state/element-defaults.ts) at the click point
 and snap back to `cursor`.
 
+D-040 — the `image` (logo) tool stamps a `source: 'shared'` image from the device
+**shared library** ([`features/sharedLibrary`](../sharedLibrary)): the operator's
+selected library thumbnail (`activeSharedImage`), else the first, sized to the
+image's aspect; an empty library surfaces a `showNotice` hint and inserts nothing
+(the D-030 guard). The `asset-urls` postMessage map that fixes up `<img>` `src` in
+the preview iframe is the **merge of the project asset cache and the shared image
+cache** (disjoint id-spaces); an unresolved reference renders a placeholder + a
+one-time warning, never a crash.
+
 ## Contracts / invariants
 
 - The overlay reasons in **scene coords** and at the **effective (animated)

@@ -107,9 +107,64 @@ export class DesignerApp {
       | 'Repeater'
       | 'Rectangle'
       | 'Ellipse'
+      | 'Image (logo)'
       | 'Hand (pan)',
   ): Promise<void> {
     await this.page.getByRole('button', { name: label, exact: true }).click();
+  }
+
+  // ── shared image library (D-040) ───────────────────────────────────────────
+
+  /** A 1×1 transparent PNG — a valid image the browser can decode + render. */
+  static readonly PNG_1X1 = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64',
+  );
+
+  /** Show the Shared Library panel in the left rail. */
+  async showSharedLibrary(): Promise<void> {
+    await this.page.getByRole('button', { name: 'Shared library', exact: true }).click();
+  }
+
+  /** The Shared Library panel's thumbnail grid (or empty-state wrapper). */
+  get sharedLibraryGrid(): Locator {
+    return this.page.locator('[data-role="shared-library-grid"]');
+  }
+
+  /**
+   * Add an image to the shared library via the panel's "+" (drives the real
+   * file-chooser the bridge opens). Defaults to a 1×1 PNG with the filename
+   * appended (trailing bytes after IEND still decode) so distinct filenames get
+   * distinct sha256s and don't collapse under the store's dedupe.
+   */
+  async addSharedImage(filename = 'logo.png', bytes?: Buffer): Promise<void> {
+    const data = bytes ?? Buffer.concat([DesignerApp.PNG_1X1, Buffer.from(filename)]);
+    await this.showSharedLibrary();
+    const chooser = this.page.waitForEvent('filechooser');
+    await this.page.getByRole('button', { name: 'Add library image', exact: true }).click();
+    await (await chooser).setFiles({ name: filename, mimeType: 'image/png', buffer: data });
+    // The new thumbnail (button with the file's display name) appears once imported.
+    await expect(
+      this.sharedLibraryGrid.getByRole('button', {
+        name: new RegExp(filename.replace(/\.[^.]+$/, '')),
+      }),
+    ).toBeVisible();
+  }
+
+  /** Click a shared-library thumbnail to make it the logo tool's active image. */
+  async selectSharedImage(displayName: string): Promise<void> {
+    await this.sharedLibraryGrid.getByRole('button', { name: new RegExp(displayName) }).click();
+  }
+
+  /** Place the logo tool on the canvas (stamps the active/first library image). */
+  async placeLogo(pos: { x: number; y: number } = { x: 240, y: 200 }): Promise<void> {
+    await this.selectTool('Image (logo)');
+    await this.canvas.click({ position: pos });
+  }
+
+  /** Count image elements rendered in the canvas preview iframe. */
+  async canvasImageCount(): Promise<number> {
+    return this.canvasFrame.locator('img[data-cg-element-id]').count();
   }
 
   /**

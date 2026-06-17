@@ -10,7 +10,7 @@ import { definePublishChannel } from '../publish.js';
 
 const AssetKindSchema = z.enum(['image', 'font', 'lottie', 'video']);
 
-const AssetMetaSchema = z.object({
+export const AssetMetaSchema = z.object({
   assetId: z.string().min(1),
   kind: AssetKindSchema,
   filename: z.string().min(1),

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { Element, Scene, TextElement } from '@cg/shared-schema';
+import type { AssetMeta } from '@cg/shared-ipc';
 import {
   designerStore,
   editSceneOf,
@@ -17,6 +18,7 @@ import {
   defaultTicker,
 } from '../../state/element-defaults.js';
 import { COMPOSITION_DND_TYPE } from '../compositions/CompositionsPanel.js';
+import { getActiveSharedImage } from '../sharedLibrary/activeSharedImage.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
 import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
@@ -40,6 +42,42 @@ const ARROW_SVG =
   '<path d="M5 3L5 18.5L9 14.8L14.6 14.8Z" filter="url(#cgsh)" ' +
   'fill="#0B0E16" stroke="#fff" stroke-width="0.9" stroke-linejoin="round"/></svg>';
 export const ARROW_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(ARROW_SVG)}") 7 4, default`;
+
+/** Initial size for a stamped logo: the image's aspect, longest side ≤ 320px. */
+function logoSize(image: AssetMeta): { width: number; height: number } {
+  const { width: w, height: h } = image;
+  if (w === undefined || h === undefined || w <= 0 || h <= 0) return { width: 320, height: 320 };
+  const scale = 320 / Math.max(w, h);
+  return { width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) };
+}
+
+/**
+ * D-040 — insert the canvas logo tool's target as a `source: 'shared'` image:
+ * the operator's selected library image, else the first in the library. With an
+ * empty library, surface a hint and insert nothing (the D-030 guard).
+ */
+async function insertSharedLogo(scenePoint: { x: number; y: number }): Promise<void> {
+  const active = getActiveSharedImage();
+  const image = active ?? (await window.cg.sharedImages.list())[0] ?? null;
+  if (image === null) {
+    designerStore.showNotice(
+      'Add an image to the Shared Library (left panel) first, then use the logo tool.',
+    );
+    designerStore.setTool('cursor');
+    return;
+  }
+  const { width, height } = logoSize(image);
+  const id = `el-${String(Date.now())}`;
+  designerStore.addElement(
+    defaultImage(id, scenePoint.x, scenePoint.y, image.assetId, {
+      source: 'shared',
+      width,
+      height,
+    }),
+  );
+  designerStore.setSelection([id]);
+  designerStore.setTool('cursor');
+}
 
 interface Props {
   scene: Scene;
@@ -246,9 +284,10 @@ export function CanvasOverlay({
       return;
     }
     if (tool === 'image') {
-      // Image needs an asset — for M6.4 we surface a hint; the asset
-      // pick flow lands with M6.6 / asset library polish.
-      window.alert('Import an image asset via the Library first (M6.4 placeholder).');
+      // D-040 — stamp the selected Shared Library image as a `source: 'shared'`
+      // logo. Empty library ⇒ a hint, never a silent insert (mirrors D-030).
+      void insertSharedLogo(scenePoint);
+      return;
     }
   }
 

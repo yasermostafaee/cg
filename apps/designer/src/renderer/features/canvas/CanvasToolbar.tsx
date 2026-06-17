@@ -33,8 +33,9 @@ const TOOLS: readonly ToolEntry[] = [
   { id: 'repeater', label: 'Repeater', icon: '▤' },
   { id: 'shape', label: 'Rectangle', icon: '▭' },
   { id: 'ellipse', label: 'Ellipse', icon: '○' },
-  // Image tool hidden for now — placement/upload flow needs rework before it
-  // ships. Re-add `{ id: 'image', label: 'Image', icon: '▦' }` when fixed.
+  // D-040 — the logo/image tool stamps the selected Shared Library image (the
+  // shared source it needed now exists); empty library ⇒ a hint, no silent insert.
+  { id: 'image', label: 'Image (logo)', icon: '▦' },
 ];
 
 /**

@@ -1,10 +1,16 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { Scene } from '@cg/shared-schema';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { Element, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import {
   getAll as assetUrlGetAll,
   subscribe as assetUrlSubscribe,
 } from '../assets/assetUrlCache.js';
+import {
+  getAll as sharedUrlGetAll,
+  subscribe as sharedUrlSubscribe,
+  prime as primeSharedImage,
+  primeAll as primeAllSharedImages,
+} from '../sharedLibrary/sharedImageUrlCache.js';
 import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
 import { clampZoom as clampZoomPure, fitZoom, screenToScene } from './geometry.js';
@@ -41,6 +47,31 @@ const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 4;
 const ZOOM_STEP = 1.1; // multiplicative step per click / wheel notch
 const ZOOM_DEFAULT = 0.5;
+
+/**
+ * D-040 — the assetId → blob URL map posted to the preview iframe, merged across
+ * the per-project asset cache AND the shared image library cache so a
+ * `source: 'shared'` logo renders alongside project images. The two stores have
+ * disjoint uuid id-spaces, so the merge is unambiguous.
+ */
+function mergedAssetUrls(): Record<string, string> {
+  return { ...assetUrlGetAll(), ...sharedUrlGetAll() };
+}
+
+/** Every image element's assetId in a scene (main + comps, recursing containers). */
+function collectSceneImageIds(scene: Scene): string[] {
+  const ids = new Set<string>();
+  const walk = (children: readonly Element[]): void => {
+    for (const el of children) {
+      if (el.type === 'image') ids.add(el.assetId);
+      else if (el.type === 'container') walk(el.children);
+    }
+  };
+  for (const layer of scene.layers) walk(layer.children);
+  for (const comp of scene.compositions ?? [])
+    for (const layer of comp.layers) walk(layer.children);
+  return [...ids];
+}
 
 /**
  * Canvas work area with the cgpreview iframe + transparent input
@@ -123,7 +154,7 @@ export function CanvasArea({
           kind: 'cg-preview',
           action: 'scene-replace',
           scene: sceneToSend,
-          assetUrls: assetUrlGetAll(),
+          assetUrls: mergedAssetUrls(),
         },
         '*',
       );
@@ -136,17 +167,68 @@ export function CanvasArea({
     };
   }, [scene]);
 
-  // D-011 — push a fresh asset URL map to the iframe whenever a newly
-  // imported image resolves, so a freshly-dropped picture appears
-  // without waiting for the next scene mutation.
+  // D-011 / D-040 — push a fresh asset URL map to the iframe whenever a newly
+  // resolved project asset OR shared-library image lands, so a freshly-dropped
+  // picture or logo appears without waiting for the next scene mutation.
   useEffect(() => {
-    return assetUrlSubscribe(() => {
+    function repost(): void {
       iframeRef.current?.contentWindow?.postMessage(
-        { kind: 'cg-preview', action: 'asset-urls', assetUrls: assetUrlGetAll() },
+        { kind: 'cg-preview', action: 'asset-urls', assetUrls: mergedAssetUrls() },
         '*',
       );
+    }
+    const offAssets = assetUrlSubscribe(repost);
+    const offShared = sharedUrlSubscribe(repost);
+    return () => {
+      offAssets();
+      offShared();
+    };
+  }, []);
+
+  // D-040 — prime the shared library's blob URLs (project-independent, so once
+  // on mount) and keep priming as images are added, so logos render in the
+  // canvas even before the Shared Library panel is opened.
+  useEffect(() => {
+    void primeAllSharedImages();
+    return window.cg.sharedImages.onImported((image) => {
+      void primeSharedImage(image);
     });
   }, []);
+
+  // D-040 — surface a one-time warning when a logo (or image) reference resolves
+  // in NEITHER store (truly missing, not merely un-primed: the bridge `url`
+  // calls read the stores directly). The iframe renders a visible placeholder;
+  // this tells the operator why. Keyed on the set of image ids, not the scene
+  // object, so a drag doesn't re-check every frame.
+  const warnedMissingRef = useRef<Set<string>>(new Set());
+  const imageIdsKey = useMemo(
+    () => (scene === null ? '' : collectSceneImageIds(scene).sort().join(',')),
+    [scene],
+  );
+  useEffect(() => {
+    const current = latestSceneRef.current;
+    if (current === null) return;
+    let cancelled = false;
+    void (async () => {
+      for (const id of collectSceneImageIds(current)) {
+        if (warnedMissingRef.current.has(id)) continue;
+        const [proj, shared] = await Promise.all([
+          window.cg.assets.url(id),
+          window.cg.sharedImages.url(id),
+        ]);
+        if (cancelled) return;
+        if (proj === null && shared === null) {
+          warnedMissingRef.current.add(id);
+          designerStore.showNotice(
+            'A logo references an image that is no longer available — showing a placeholder. Re-point it from the inspector or re-add it to the Shared Library.',
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [imageIdsKey]);
 
   // Mirror the inline TextEditor's open/close state into the iframe
   // so the iframe can hide its rendered text node while the operator
@@ -181,7 +263,7 @@ export function CanvasArea({
         // canvas with broken-image icons until the next scene
         // mutation. See the project-re-open regression.
         cw.postMessage(
-          { kind: 'cg-preview', action: 'asset-urls', assetUrls: assetUrlGetAll() },
+          { kind: 'cg-preview', action: 'asset-urls', assetUrls: mergedAssetUrls() },
           '*',
         );
       }

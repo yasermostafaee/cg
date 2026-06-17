@@ -2,11 +2,23 @@ import { pack, sha256Hex } from '@cg/vcg-format';
 import type { AssetEntry, BindingTransform, DynamicField, Element, Scene } from '@cg/shared-schema';
 import type { ExportIssue, ExportProgress } from '@cg/shared-ipc';
 import type { AssetStore } from './AssetStore.js';
-import { collectImageElements, resolveImageAsset } from './image-export.js';
+import {
+  collectImageElements,
+  compositeImageSource,
+  resolveImageAsset,
+  type ImageAssetLibrary,
+} from './image-export.js';
 import { Emitter } from './emitter.js';
 
 export interface ExporterOptions {
   assets: AssetStore;
+  /**
+   * D-040 — the device-level shared image library. When present, an image
+   * element's bytes resolve from its source-indicated store first (shared for
+   * `source: 'shared'`) and the other store as a fallback. Optional so callers /
+   * tests without a library resolve from the project store only.
+   */
+  sharedImages?: ImageAssetLibrary;
   /** Bundled @cg/template-runtime JS injected as cg.js. */
   cgJs: string;
   /** Runtime baseline stylesheet injected as cg.css. */
@@ -22,11 +34,13 @@ export interface ExporterOptions {
 export class Exporter {
   readonly progress = new Emitter<ExportProgress>();
   readonly #assets: AssetStore;
+  readonly #sharedImages: ImageAssetLibrary | undefined;
   readonly #cgJs: string;
   readonly #cgCss: string;
 
   constructor(options: ExporterOptions) {
     this.#assets = options.assets;
+    this.#sharedImages = options.sharedImages;
     this.#cgJs = options.cgJs;
     this.#cgCss = options.cgCss;
   }
@@ -43,7 +57,13 @@ export class Exporter {
       });
     }
 
+    // D-040 — an image reference is "known" if it resolves in EITHER the project
+    // store OR the shared library, so a `source: 'shared'` logo isn't falsely
+    // flagged missing and blocked.
     const knownAssetIds = new Set((await this.#assets.list()).map((a) => a.assetId));
+    if (this.#sharedImages !== undefined) {
+      for (const a of await this.#sharedImages.list()) knownAssetIds.add(a.assetId);
+    }
     // Collect every element across the whole project — the main scene AND every
     // composition, recursing into containers — so binding targets resolve no
     // matter which composition is currently open (bindings are scene-level but
@@ -219,10 +239,13 @@ export class Exporter {
     const seen = new Set<string>();
     // D-062 — every image element, recursing compositions/containers (was
     // top-level layers only), resolved through the shared source-aware seam.
-    for (const { assetId } of collectImageElements(scene)) {
+    // D-040 — each image resolves from its source-indicated store first (shared
+    // library for a logo) and the other store as a fallback.
+    for (const { assetId, source } of collectImageElements(scene)) {
       if (seen.has(assetId)) continue;
       seen.add(assetId);
-      const resolved = await resolveImageAsset(this.#assets, assetId);
+      const imageSource = compositeImageSource(source, this.#sharedImages, this.#assets);
+      const resolved = await resolveImageAsset(imageSource, assetId);
       if (resolved === null) continue;
       const { meta, bytes } = resolved;
       const ext = meta.filename.slice(meta.filename.lastIndexOf('.'));

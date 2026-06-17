@@ -121,7 +121,45 @@ describe('ImageElement', () => {
       fit: 'contain' as const,
       preserveAspect: true,
     };
-    expect(ImageElementSchema.parse(i)).toEqual(i);
+    // D-040 — `source` defaults to 'project', so a pre-D-040 image (no source)
+    // parses unchanged except for the back-compat default.
+    expect(ImageElementSchema.parse(i)).toEqual({ ...i, source: 'project' });
+  });
+
+  it('D-040 — defaults source to "project" when absent (back-compat)', () => {
+    const parsed = ImageElementSchema.parse({
+      ...baseProps,
+      type: 'image',
+      assetId: 'a',
+      fit: 'contain',
+      preserveAspect: true,
+    });
+    expect(parsed.source).toBe('project');
+  });
+
+  it('D-040 — round-trips source: "shared" (a logo)', () => {
+    const logo = {
+      ...baseProps,
+      type: 'image' as const,
+      assetId: 'lib-logo',
+      source: 'shared' as const,
+      fit: 'contain' as const,
+      preserveAspect: true,
+    };
+    expect(ImageElementSchema.parse(logo)).toEqual(logo);
+  });
+
+  it('D-040 — rejects an unknown source', () => {
+    expect(() =>
+      ImageElementSchema.parse({
+        ...baseProps,
+        type: 'image',
+        assetId: 'a',
+        source: 'cloud',
+        fit: 'contain',
+        preserveAspect: true,
+      }),
+    ).toThrow();
   });
 });
 
