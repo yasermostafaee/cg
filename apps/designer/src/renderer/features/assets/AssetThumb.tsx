@@ -96,13 +96,13 @@ function stripExt(filename: string): string {
   return dot === -1 ? filename : filename.slice(0, dot);
 }
 
-function fileExt(filename: string): string {
+export function fileExt(filename: string): string {
   const dot = filename.lastIndexOf('.');
   return dot === -1 ? '' : filename.slice(dot + 1).toLowerCase();
 }
 
 /** Human-readable byte size, e.g. 2.1 KB / 80.2 KB / 1.4 MB. */
-function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${String(bytes)} B`;
   const units = ['KB', 'MB', 'GB'];
   let value = bytes / 1024;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { AssetMeta } from '@cg/shared-ipc';
 import type { Element } from '@cg/shared-schema';
 import { useDesignerSelector } from '../../state/store.js';
@@ -6,6 +6,8 @@ import { Modal, ModalButton } from '../shell/Modal.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
+import { GridIcon, ListIcon } from '../assets/ProjectAssetsPanel.js';
+import { fileExt, formatBytes } from '../assets/AssetThumb.js';
 import { emitSharedImageRemoved, useSharedImages, useSharedImageUrl } from './useSharedImages.js';
 import { revoke as revokeSharedUrl } from './sharedImageUrlCache.js';
 import {
@@ -17,11 +19,26 @@ import * as ps from '../assets/ProjectAssetsPanel.css.js';
 import * as ts from '../assets/AssetThumb.css.js';
 import * as s from './SharedLibraryPanel.css.js';
 
+/** Persisted grid/list preference for the Shared Library panel (independent of Project Assets). */
+const SHARED_VIEW_KEY = 'cg.designer.sharedLibraryView';
+
+/** Case-insensitive filename substring filter; an empty query returns every image. */
+export function filterImagesByFilename(
+  images: readonly AssetMeta[],
+  query: string,
+): readonly AssetMeta[] {
+  const q = query.trim().toLowerCase();
+  if (q === '') return images;
+  return images.filter((image) => image.filename.toLowerCase().includes(q));
+}
+
 /**
  * D-040 — left-side Shared Library panel. The device-level image library
  * (channel logos / persistent bugs) that lives ONCE outside any project. Add an
  * image (file picker → shared store), see the library as thumbnails, click one
  * to make it the canvas logo tool's target, and remove via the context menu.
+ * D-068 — a filename search + a persisted grid/list view toggle, at parity with
+ * the Project Assets panel (its `GridIcon`/`ListIcon`, styles, and idiom reused).
  *
  * Mirrors {@link ../assets/ProjectAssetsPanel ProjectAssetsPanel} but is
  * project-independent and image-only. Removing a library image does NOT touch
@@ -34,6 +51,23 @@ export function SharedLibraryPanel(): JSX.Element {
   const activeId = useActiveSharedImageId();
   const [ctxMenu, setCtxMenu] = useState<{ image: AssetMeta; x: number; y: number } | null>(null);
   const [confirm, setConfirm] = useState<{ image: AssetMeta; uses: number } | null>(null);
+  // D-068 — search + grid/list view, mirroring ProjectAssetsPanel (its own
+  // localStorage key so the two panels' view choices are independent).
+  const [query, setQuery] = useState('');
+  const [libraryView, setLibraryView] = useState<'grid' | 'list'>(() =>
+    typeof localStorage !== 'undefined' && localStorage.getItem(SHARED_VIEW_KEY) === 'list'
+      ? 'list'
+      : 'grid',
+  );
+  function changeLibraryView(next: 'grid' | 'list'): void {
+    setLibraryView(next);
+    try {
+      localStorage.setItem(SHARED_VIEW_KEY, next);
+    } catch {
+      /* storage unavailable (private mode) — keep the choice in memory only */
+    }
+  }
+  const visible = useMemo(() => filterImagesByFilename(images, query), [images, query]);
 
   useEffect(() => {
     if (ctxMenu === null) return;
@@ -86,6 +120,17 @@ export function SharedLibraryPanel(): JSX.Element {
         <Control
           variant="bare"
           className={ps.iconButton}
+          aria-label={libraryView === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
+          title={libraryView === 'grid' ? 'List view' : 'Grid view'}
+          aria-pressed={libraryView === 'list'}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => changeLibraryView(libraryView === 'grid' ? 'list' : 'grid')}
+        >
+          {libraryView === 'grid' ? <ListIcon /> : <GridIcon />}
+        </Control>
+        <Control
+          variant="bare"
+          className={ps.iconButton}
           aria-label="Add library image"
           title="Add library image"
           onPointerDown={(e) => {
@@ -96,20 +141,37 @@ export function SharedLibraryPanel(): JSX.Element {
           +
         </Control>
       </div>
-      {images.length === 0 ? (
+      <div className={ps.searchWrap}>
+        <input
+          className={ps.search}
+          type="search"
+          placeholder="Search…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search library images"
+        />
+      </div>
+      {visible.length === 0 ? (
         <div className={ps.emptyWrap} data-role="shared-library-grid">
           <p className={ps.empty}>
-            No library images yet.
-            <br />
-            Click + to add a logo or bug used across projects.
+            {images.length === 0 ? (
+              <>
+                No library images yet.
+                <br />
+                Click + to add a logo or bug used across projects.
+              </>
+            ) : (
+              'No images match your search.'
+            )}
           </p>
         </div>
       ) : (
-        <div className={ps.grid} data-role="shared-library-grid">
-          {images.map((image) => (
+        <div className={libraryView === 'list' ? ps.list : ps.grid} data-role="shared-library-grid">
+          {visible.map((image) => (
             <SharedImageThumb
               key={image.assetId}
               image={image}
+              layout={libraryView}
               active={image.assetId === activeId}
               onSelect={() => setActiveSharedImage(image)}
               onContextMenu={(x, y) => {
@@ -150,19 +212,22 @@ export function SharedLibraryPanel(): JSX.Element {
 
 function SharedImageThumb({
   image,
+  layout,
   active,
   onSelect,
   onContextMenu,
 }: {
   image: AssetMeta;
+  layout: 'grid' | 'list';
   active: boolean;
   onSelect: () => void;
   onContextMenu: (clientX: number, clientY: number) => void;
 }): JSX.Element {
   const url = useSharedImageUrl(image.assetId);
+  const isList = layout === 'list';
   return (
     <div
-      className={cx(ts.cell, s.clickable)}
+      className={cx(isList ? ts.cellList : ts.cell, s.clickable)}
       role="button"
       tabIndex={0}
       aria-pressed={active}
@@ -179,12 +244,18 @@ function SharedImageThumb({
         onContextMenu(e.clientX, e.clientY);
       }}
     >
-      <div className={cx(ts.thumb, active && s.thumbActive)}>
+      <div className={cx(isList ? ts.thumbList : ts.thumb, active && s.thumbActive)}>
         {url !== null && (
           <img src={url} alt={image.filename} className={ts.thumbImg} draggable={false} />
         )}
       </div>
-      <span className={ts.caption}>{stripExt(image.filename)}</span>
+      <span className={isList ? ts.captionList : ts.caption}>{stripExt(image.filename)}</span>
+      {isList && (
+        <>
+          <span className={ts.metaType}>{fileExt(image.filename) || 'image'}</span>
+          <span className={ts.metaSize}>{formatBytes(image.byteSize)}</span>
+        </>
+      )}
     </div>
   );
 }
