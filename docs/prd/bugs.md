@@ -293,6 +293,39 @@ carries `draggable` + an `onDragStart` that sets `application/x-cg-asset-id` to 
 (`apps/designer/tests/asset-thumb-drag.test.ts`). Branch: `fix/asset-thumb-drag`. Mark `[x]`
 on merge.
 
+## [~] B-020 — adding an image fails intermittently (picker focus-timer races the change event) ⟨priority: high⟩ — focused fix
+
+**Repro:**
+
+1. In the Designer, open the Project Assets panel (or the Shared Library panel) and
+   click **Add** → pick a single image in the OS file dialog.
+2. Repeat several times.
+
+**Expected:** every pick adds the image — reliably, no retries.
+**Actual:** the import fails "most of the time" and only succeeds after a few tries —
+the picked file is silently dropped (no loading tile, nothing imported). Intermittent
+= a timing race.
+**Env:** Browser / Designer dev (Chrome 149); regression on
+`feature/D-067-image-import-loading`, introduced by the D-069 freeze fix.
+**Root cause:** the D-069 cancel-hang fix added an **unconditional** 400ms
+window-`focus` fallback to `pickFiles` (`apps/designer/src/platform/createDesignerBridge.ts`)
+to detect a cancelled dialog. But on a **real selection** the dialog's close fires
+`focus` too, arming that timer; when its 400ms elapsed before the input's slightly-later
+`change` event, the fallback resolved `[]` (a false cancel) and the real selection was
+dropped. When `change` happened to beat the timer it worked — hence "try several times".
+**Fix:** the host fires the input `cancel` event (Chrome 149; Baseline since
+Chromium 113 / Firefox 91 / Safari 16.4 — the app's whole support matrix, incl. the
+Firefox File-System-Access fallback path), so cancellation is detected by `cancel`
+**alone** and the racing focus-timer fallback is **removed** — nothing pre-empts
+`change`. Cancel still resolves `[]` via `cancel` (the D-069 freeze/leak stays fixed) and
+a real selection settles via `change` unimpeded. `pickFiles` extracted to its own module
+(`apps/designer/src/platform/pickFiles.ts`) for the regression test. No spec-level
+behavior change (the D-069 freeze fix touched no OpenSpec spec) → focused fix, no OpenSpec
+change. Regression test: `apps/designer/tests/pick-files.test.ts` (focus-then-late-`change`
+delivers the selection; ×10 reliability; multi-select; cancel resolves `[]`). Branch:
+`feature/D-067-image-import-loading` (same branch as the open D-067 PR, per request — do
+not merge yet). Mark `[x]` on merge.
+
 <!-- Add new open bugs above this line using the format. Example:
 
 ## [ ] B-0NN — Export blocked dialog shows wrong error count
