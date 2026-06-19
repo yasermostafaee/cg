@@ -355,14 +355,15 @@ MIME per kind, mirroring the store's `KIND_BY_EXT`) drives BOTH the picker `acce
 / `isSupportedFile`, by extension primarily, MIME as a fallback). Both panels
 (`SharedLibraryPanel.addImage` for image; `ProjectAssetsPanel.importKind` for image AND
 font) now split the picked files: unsupported ones are dropped before any `begin()`/tile
-or `store` and reported via a shared non-blocking `Callout` notice
-(`useImportSkips`/`ImportSkipsNotice`, `role="status"`, auto-dismiss + manual dismiss);
-valid ones still import + prepend. Mixed batch → valid import, rest noticed;
-all-invalid → just the notice. No bridge/schema change (renderer-side gate) → focused
-fix, no OpenSpec change. Regression tests: `apps/designer/tests/import-loading.test.ts`
+or `store` and reported through the app's EXISTING toast (`designerStore.showNotice` →
+the bottom-centre `<Toast>` in `App.tsx`, auto-dismiss + close), with a concise message
+(`skippedFilesMessage` — count + first few names for a large batch); valid ones still
+import + prepend. Mixed batch → valid import, rest noticed; all-invalid → just the toast.
+No bridge/schema change (renderer-side gate) → focused fix, no OpenSpec change.
+Regression tests: `apps/designer/tests/import-loading.test.ts`
 ("post-pick file-type validation (B-021)" — shared all-invalid, shared mixed,
 project-assets Image…+pdf, project-assets Font…+non-font; asserting no store call, no
-tile, the valid file still imports, and the skip notice). Branch:
+tile, the valid file still imports, and the toast message via `designerStore`). Branch:
 `feature/D-067-image-import-loading` (same branch as the open D-067 PR, per request — do
 not merge yet). Mark `[x]` on merge.
 

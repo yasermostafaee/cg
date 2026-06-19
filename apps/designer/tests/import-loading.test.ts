@@ -107,10 +107,9 @@ function buttonByText(text: string): HTMLElement {
   return el;
 }
 const tiles = (): number => container!.querySelectorAll('[data-role="importing-thumb"]').length;
-/** Text of the non-blocking skipped-files notice (Callout role="status"), or null. */
+/** Current app toast message (where the skipped-files notice is routed), or null. */
 function noticeText(): string | null {
-  const el = container!.querySelector('[role="status"]');
-  return el === null ? null : (el.textContent ?? '');
+  return designerStore.get().notice;
 }
 /** Visible thumbnail filenames in DOM order (the real thumbs carry title=filename). */
 function thumbTitles(role: 'shared' | 'assets'): string[] {
@@ -295,8 +294,9 @@ describe('ProjectAssetsPanel import (D-067)', () => {
 /**
  * B-021 — `accept` is a bypassable picker hint ("All files" lets the operator pick a
  * pdf/mp3/mp4), so the SELECTION is validated after pick(): unsupported files are
- * rejected BEFORE store (no store call, no tile, no broken thumbnail) and reported in a
- * non-blocking notice; valid files in the same batch still import + prepend.
+ * rejected BEFORE store (no store call, no tile, no broken thumbnail) and reported via
+ * the app's existing toast (`designerStore.showNotice` → `notice`); valid files in the
+ * same batch still import + prepend.
  */
 describe('post-pick file-type validation (B-021)', () => {
   it('shared library: all-unsupported selection → no store, no tile, only a notice', async () => {

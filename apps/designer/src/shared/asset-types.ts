@@ -66,6 +66,20 @@ export function isSupportedFile(kind: PickKind, file: { name: string; type?: str
   return file.type !== undefined && file.type !== '' && spec.mimes.includes(file.type);
 }
 
+/**
+ * Concise message for files rejected by {@link partitionSupported}, for the app's
+ * toast. Lists up to the first few names; for a larger batch it leads with the count and
+ * appends "+N more" so the toast stays short.
+ */
+export function skippedFilesMessage(names: readonly string[]): string {
+  const MAX = 3;
+  const noun = names.length === 1 ? 'file' : 'files';
+  const count = names.length > MAX ? `${String(names.length)} ` : '';
+  const shown = names.slice(0, MAX).join(', ');
+  const more = names.length > MAX ? `, +${String(names.length - MAX)} more` : '';
+  return `Skipped ${count}unsupported ${noun}: ${shown}${more}`;
+}
+
 /** Split picked files into the ones this context accepts and the ones to skip. */
 export function partitionSupported<T extends { name: string; type?: string }>(
   kind: PickKind,
