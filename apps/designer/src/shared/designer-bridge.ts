@@ -92,6 +92,14 @@ export interface DesignerBridge {
       needsPicker: boolean;
     }>;
     recent(): Promise<ChannelResponse<typeof ProjectsRecentChannel>>;
+    /**
+     * D-093 — remove one Recent entry. NON-DESTRUCTIVE: drops the list entry and, for a
+     * handle-backed entry, forgets the persisted handle + permission (`forgetFileHandle`).
+     * Never deletes/modifies the underlying file. Matched by `projectId` (legacy by `path`).
+     */
+    forgetRecent(req: { projectId?: string; handleKey?: string; path?: string }): Promise<void>;
+    /** D-093 — empty Recent and forget every cached handle. Same non-destructive rules. */
+    clearRecent(): Promise<void>;
     starters(): Promise<ChannelResponse<typeof ProjectsStartersChannel>>;
     starter(
       req: ChannelRequest<typeof ProjectsStarterChannel>,

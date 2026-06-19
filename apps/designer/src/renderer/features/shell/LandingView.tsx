@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { RecentProject, StarterEntry } from '@cg/shared-ipc';
 import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
 import { Button } from '../../ui/Button.js';
+import { Control } from '../../ui/Control.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
 import * as s from './LandingView.css.js';
@@ -83,6 +84,25 @@ export function LandingView(): JSX.Element {
     }
   }
 
+  /**
+   * D-093 — remove a Recent entry. NON-DESTRUCTIVE: drops only the list entry (and forgets a
+   * handle-backed entry's handle/permission); the underlying file is untouched and re-openable.
+   */
+  async function removeRecent(entry: RecentProject): Promise<void> {
+    await window.cg.projects.forgetRecent({
+      ...(entry.projectId !== undefined ? { projectId: entry.projectId } : {}),
+      ...(entry.handleKey !== undefined ? { handleKey: entry.handleKey } : {}),
+      ...(entry.path !== undefined ? { path: entry.path } : {}),
+    });
+    const key = entry.projectId ?? entry.path ?? entry.name;
+    setRecent((prev) => prev.filter((e) => (e.projectId ?? e.path ?? e.name) !== key));
+  }
+
+  async function clearAllRecent(): Promise<void> {
+    await window.cg.projects.clearRecent();
+    setRecent([]);
+  }
+
   return (
     <div className={s.page} aria-label="Designer landing">
       <div>
@@ -136,23 +156,39 @@ export function LandingView(): JSX.Element {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
           {recent.slice(0, 12).map((r) => (
-            <Button
-              key={r.projectId ?? r.path ?? r.name}
-              variant="bare"
-              className={s.recentRow}
-              onClick={() => guardedSwitch(r.name, () => openRecent(r))}
-            >
-              <span>
-                <strong>{r.name}</strong>
-                {r.templateType !== undefined && (
-                  <span className={s.recentMeta}> · {r.templateType}</span>
-                )}
-              </span>
-              <span className={s.recentMeta}>
-                {formatWhen(r.lastSavedAt ?? r.lastOpenedAt ?? '')}
-              </span>
-            </Button>
+            <div key={r.projectId ?? r.path ?? r.name} className={s.recentRowWrap}>
+              <Button
+                variant="bare"
+                className={s.recentRow}
+                onClick={() => guardedSwitch(r.name, () => openRecent(r))}
+              >
+                <span>
+                  <strong>{r.name}</strong>
+                  {r.templateType !== undefined && (
+                    <span className={s.recentMeta}> · {r.templateType}</span>
+                  )}
+                </span>
+                <span className={s.recentMeta}>
+                  {formatWhen(r.lastSavedAt ?? r.lastOpenedAt ?? '')}
+                </span>
+              </Button>
+              <Control
+                variant="bare"
+                className={s.recentRemove}
+                aria-label={`Remove ${r.name} from recent`}
+                title="Remove from recent"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void removeRecent(r);
+                }}
+              >
+                ×
+              </Control>
+            </div>
           ))}
+          <Button variant="bare" className={s.clearRecent} onClick={() => void clearAllRecent()}>
+            Clear all recent
+          </Button>
         </div>
       )}
 

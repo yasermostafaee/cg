@@ -7,7 +7,7 @@ import {
 } from '@cg/shared-schema';
 import type { RecentProject, StarterEntry } from '@cg/shared-ipc';
 import { getStarter, STARTER_TEMPLATES } from '@cg/starter-templates';
-import type { KeyValueStore, Workspace } from '@cg/storage';
+import { forgetFileHandle, type KeyValueStore, type Workspace } from '@cg/storage';
 import { Emitter } from './emitter.js';
 import { uuid } from './uuid.js';
 
@@ -159,6 +159,49 @@ export class ProjectStore {
       templateType: scene.templateType,
       lastSavedAt: new Date().toISOString(),
     });
+  }
+
+  /**
+   * D-093 — remove a Recent entry. NON-DESTRUCTIVE: drops only the list entry and, for a
+   * handle-backed entry, forgets the persisted `FileSystemFileHandle` + its granted
+   * permission (`forgetFileHandle`). The underlying file (real disk or OPFS
+   * `projects/*.cg.json`) is NEVER deleted or modified — re-opening it via Open / the OPFS
+   * path works normally. Matched by project id (legacy entries by path).
+   */
+  async forgetRecent(ref: {
+    projectId?: string;
+    handleKey?: string;
+    path?: string;
+  }): Promise<void> {
+    const key = ref.projectId ?? ref.path;
+    if (key !== undefined) {
+      this.#kv.set(
+        RECENT_KEY,
+        this.recent().filter((e) => (e.projectId ?? e.path) !== key),
+      );
+    }
+    if (ref.handleKey !== undefined) {
+      try {
+        await forgetFileHandle(ref.handleKey);
+      } catch {
+        /* best-effort — a stale handle that can't be forgotten is harmless */
+      }
+    }
+  }
+
+  /** D-093 — empty Recent and forget every cached handle. Same non-destructive rules. */
+  async clearRecent(): Promise<void> {
+    const handleKeys = this.recent()
+      .map((e) => e.handleKey)
+      .filter((k): k is string => k !== undefined);
+    this.#kv.set(RECENT_KEY, []);
+    for (const k of handleKeys) {
+      try {
+        await forgetFileHandle(k);
+      } catch {
+        /* best-effort */
+      }
+    }
   }
 
   #setActive(scene: Scene, path: string | null): void {

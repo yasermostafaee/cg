@@ -270,6 +270,10 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
         return { scene: null, handleKey: null, needsPicker: true };
       },
       recent: () => Promise.resolve(projects.recent()),
+      // D-093 — remove a Recent entry (non-destructive: drops the entry + forgets the
+      // handle/permission, never the file) / empty the whole list.
+      forgetRecent: (req) => projects.forgetRecent(req),
+      clearRecent: () => projects.clearRecent(),
       starters: () => Promise.resolve(projects.starters()),
       starter: async (req) => {
         const result = projects.loadStarter(req.starterId);

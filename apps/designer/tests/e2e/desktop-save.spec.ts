@@ -64,4 +64,35 @@ test.describe('Desktop-style Save (D-088 + D-089)', () => {
     await expect(guard).toHaveCount(0);
     await expect(page.getByRole('dialog', { name: 'New project' })).toBeVisible();
   });
+
+  // D-093 — Remove from Recent. (MemoryKv resets on reload in E2E, so reload-persistence
+  // is covered by the ProjectStore unit test; here we verify the list mutation + the rest
+  // remaining.)
+  test('remove a Recent entry — it goes, the rest remain (non-destructive list action)', async ({
+    app,
+    page,
+  }) => {
+    const save = page.getByRole('button', { name: 'SAVE', exact: true });
+    const home = page.getByRole('button', { name: 'Home', exact: true });
+    const newProjectBtn = page.getByRole('button', { name: 'New project' });
+
+    // Seed two Recent entries: create → edit → Save (records it) → Home (clean ⇒ no guard).
+    for (const name of ['Alpha', 'Beta']) {
+      await app.newProject(name);
+      await app.addRectangle();
+      await save.click();
+      await expect(save).toBeDisabled(); // saved ⇒ clean
+      await home.click();
+      await expect(newProjectBtn).toBeVisible(); // back on the landing/picker
+    }
+
+    const removeButtons = page.getByRole('button', { name: /Remove .+ from recent/ });
+    await expect(removeButtons).toHaveCount(2);
+
+    // Remove Alpha → it's gone, Beta remains. (The file is never touched.)
+    await page.getByRole('button', { name: 'Remove Alpha from recent' }).click();
+    await expect(removeButtons).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Remove Beta from recent' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Remove Alpha from recent' })).toHaveCount(0);
+  });
 });

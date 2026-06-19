@@ -468,3 +468,18 @@ Run in a File-System-Access browser (Chromium/Edge) with a real on-disk file:
    "That file is unavailable — choose it again." notice (no crash).
 6. **Open…** a `.cg.json` via the picker → edit → **Save** writes back to that opened file.
 7. Edit, then **close the tab / refresh** → the browser's generic unsaved-changes prompt fires.
+
+## 8. D-093 — Remove from Recent (ships in this PR)
+
+Completes the Recent CRUD this change reshaped and is the first caller of `forgetFileHandle`.
+`ProjectStore.forgetRecent({ projectId?, handleKey?, path? })` drops the prefs entry (matched
+by project id, legacy by path) and, for a handle-backed entry, calls
+`forgetFileHandle(handleKey)`; `clearRecent()` empties the list and forgets every cached
+handle. Both are NON-DESTRUCTIVE — the underlying file (disk or OPFS `projects/*.cg.json`) is
+never touched, so a removed project re-opens normally via Open / the OPFS path. Exposed as
+plain bridge methods (`projects.forgetRecent` / `projects.clearRecent`, no IPC channel).
+`LandingView` renders a muted per-row "Remove from recent" (×) control — a list action, a
+sibling of the open button (never a destructive file action) — plus a "Clear all recent".
+Tests: `tests/project-store-recent.test.ts` (drops entry + forgets handle, OPFS file intact,
+persists in the KV, clear-all) and the E2E remove case in `tests/e2e/desktop-save.spec.ts`
+(reload-persistence is unit-covered — E2E `MemoryKv` resets on reload).

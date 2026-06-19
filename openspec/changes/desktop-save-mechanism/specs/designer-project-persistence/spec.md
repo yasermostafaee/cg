@@ -189,6 +189,36 @@ path-keyed entries still open and upgrade to a handle on next save.
 - **WHEN** the operator clicks a legacy path-keyed Recent entry
 - **THEN** it still opens (via the OPFS path-model) and upgrades to a handle on next save
 
+### Requirement: Remove from Recent is non-destructive
+
+The Designer SHALL let the operator remove a Recent entry (and optionally clear all). Removal
+drops only the list entry and, for a handle-backed entry, forgets the persisted handle +
+granted permission (`forgetFileHandle`); it MUST NOT delete or modify the underlying file
+(real disk or OPFS `projects/*.cg.json`). The change persists across reload.
+
+#### Scenario: Remove one Recent entry
+
+- **WHEN** the operator removes a Recent entry ("Remove from recent")
+- **THEN** it disappears from the list and the other entries remain
+- **AND** the underlying file is untouched and re-openable via Open / the OPFS path
+- **AND** a handle-backed entry's persisted handle + permission are forgotten
+
+#### Scenario: Removal persists across reload
+
+- **WHEN** a Recent entry is removed and the app reloads
+- **THEN** the removed entry stays gone and the others remain
+
+#### Scenario: Removed project re-opens normally
+
+- **WHEN** the operator later re-opens a removed project (Open → `showOpenFilePicker`, or the
+  OPFS path)
+- **THEN** it opens normally — removal is reversible / non-destructive
+
+#### Scenario: Clear all Recent
+
+- **WHEN** the operator clears all Recent
+- **THEN** the list is emptied and every cached handle is forgotten, with no file deleted
+
 ### Requirement: Stable file format
 
 The Designer SHALL keep the `.cg.json` extension, a JSON payload, and `schemaVersion` `1`.
