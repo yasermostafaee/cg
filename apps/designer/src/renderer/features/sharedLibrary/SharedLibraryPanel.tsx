@@ -6,6 +6,8 @@ import { Modal, ModalButton } from '../shell/Modal.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
+import { ImportingThumb } from '../assets/ImportingThumb.js';
+import { useImportPending } from '../assets/useImportPending.js';
 import { emitSharedImageRemoved, useSharedImages, useSharedImageUrl } from './useSharedImages.js';
 import { revoke as revokeSharedUrl } from './sharedImageUrlCache.js';
 import {
@@ -32,6 +34,8 @@ export function SharedLibraryPanel(): JSX.Element {
   const images = useSharedImages();
   const scene = useDesignerSelector((st) => st.scene);
   const activeId = useActiveSharedImageId();
+  // D-067 — pending import count drives the in-grid loading tile(s).
+  const { pending: importing, track } = useImportPending();
   const [ctxMenu, setCtxMenu] = useState<{ image: AssetMeta; x: number; y: number } | null>(null);
   const [confirm, setConfirm] = useState<{ image: AssetMeta; uses: number } | null>(null);
 
@@ -53,9 +57,11 @@ export function SharedLibraryPanel(): JSX.Element {
 
   async function addImage(): Promise<void> {
     try {
-      await window.cg.sharedImages.import();
+      // D-067 — `track` shows a loading tile while the import runs and clears it
+      // on resolve OR reject (cancel/error), so there's never a stuck spinner.
+      await track(window.cg.sharedImages.import());
     } catch {
-      /* operator cancelled — ignore */
+      /* operator cancelled / failed — the tile is cleared by `track` regardless */
     }
   }
 
@@ -96,7 +102,7 @@ export function SharedLibraryPanel(): JSX.Element {
           +
         </Control>
       </div>
-      {images.length === 0 ? (
+      {images.length === 0 && importing === 0 ? (
         <div className={ps.emptyWrap} data-role="shared-library-grid">
           <p className={ps.empty}>
             No library images yet.
@@ -106,6 +112,9 @@ export function SharedLibraryPanel(): JSX.Element {
         </div>
       ) : (
         <div className={ps.grid} data-role="shared-library-grid">
+          {Array.from({ length: importing }, (_, i) => (
+            <ImportingThumb key={`importing-${String(i)}`} />
+          ))}
           {images.map((image) => (
             <SharedImageThumb
               key={image.assetId}

@@ -3,6 +3,8 @@ import type { AssetMeta } from '@cg/shared-ipc';
 import type { Element } from '@cg/shared-schema';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { AssetThumb } from './AssetThumb.js';
+import { ImportingThumb } from './ImportingThumb.js';
+import { useImportPending } from './useImportPending.js';
 import { emitAssetRemoved, useAssets } from './useAssets.js';
 import { clearAll as clearAllAssetUrls, revoke as revokeAssetUrl } from './assetUrlCache.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
@@ -58,6 +60,8 @@ function ListIcon(): JSX.Element {
 export function ProjectAssetsPanel(): JSX.Element {
   const assets = useAssets();
   const scene = useDesignerSelector((s) => s.scene);
+  // D-067 — pending import count drives the in-grid loading tile(s).
+  const { pending: importing, track } = useImportPending();
   const [query, setQuery] = useState('');
   const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ asset: AssetMeta; x: number; y: number } | null>(null);
@@ -166,9 +170,11 @@ export function ProjectAssetsPanel(): JSX.Element {
   async function importKind(kind: 'image' | 'font'): Promise<void> {
     setAddMenu(null);
     try {
-      await window.cg.assets.import({ sourcePath: '', kind });
+      // D-067 — `track` surfaces a loading tile while the import runs and clears
+      // it on resolve OR reject (cancel/error), so there's never a stuck spinner.
+      await track(window.cg.assets.import({ sourcePath: '', kind }));
     } catch {
-      /* operator cancelled — ignore */
+      /* operator cancelled / failed — the tile is cleared by `track` regardless */
     }
   }
 
@@ -247,7 +253,7 @@ export function ProjectAssetsPanel(): JSX.Element {
           aria-label="Search assets"
         />
       </div>
-      {visible.length === 0 ? (
+      {visible.length === 0 && importing === 0 ? (
         <div className={s.emptyWrap} data-role="assets-grid">
           <p className={s.empty}>
             No assets yet.
@@ -257,6 +263,9 @@ export function ProjectAssetsPanel(): JSX.Element {
         </div>
       ) : (
         <div className={assetView === 'list' ? s.list : s.grid} data-role="assets-grid">
+          {Array.from({ length: importing }, (_, i) => (
+            <ImportingThumb key={`importing-${String(i)}`} layout={assetView} />
+          ))}
           {visible.map((a) => (
             <AssetThumb
               key={a.assetId}
