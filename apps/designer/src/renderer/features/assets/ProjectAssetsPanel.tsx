@@ -5,6 +5,7 @@ import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { AssetThumb } from './AssetThumb.js';
 import { ImportingThumb } from './ImportingThumb.js';
 import { useImportPending } from './useImportPending.js';
+import { partitionSupported, skippedFilesMessage } from '../../../shared/asset-types.js';
 import { emitAssetRemoved, useAssets } from './useAssets.js';
 import { clearAll as clearAllAssetUrls, revoke as revokeAssetUrl } from './assetUrlCache.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
@@ -171,11 +172,20 @@ export function ProjectAssetsPanel(): JSX.Element {
     setAddMenu(null);
     const files = await window.cg.assets.pick(kind);
     if (files.length === 0) return; // cancelled — no tiles shown
-    // One loading tile per picked file (shown only after a real selection). Import
+    // B-021 — `accept` is a bypassable hint, so validate the SELECTION against the
+    // chosen kind: reject the wrong type (e.g. a pdf/mp3 picked into Image…, or a
+    // non-font into Font…) BEFORE store so it never becomes a broken tile, and report
+    // it in a non-blocking notice. Valid files of the chosen kind still import.
+    const { valid, rejected } = partitionSupported(kind, files);
+    if (rejected.length > 0) {
+      designerStore.showNotice(skippedFilesMessage(rejected.map((file) => file.name)));
+    }
+    if (valid.length === 0) return; // every pick was unsupported — only the notice
+    // One loading tile per VALID file (shown only after a real selection). Import
     // in REVERSE selection order so the prepend (newest on top) lands the batch in
     // selection order; each file is independent — a failure clears only its own tile
     // and the rest still import.
-    const items = files.map((file) => ({ file, end: begin() }));
+    const items = valid.map((file) => ({ file, end: begin() }));
     for (const { file, end } of [...items].reverse()) {
       try {
         await window.cg.assets.store(file, kind);

@@ -46,8 +46,12 @@ let failNames = new Set<string>();
 // When true, store() stays pending forever — lets a test observe the loading tiles
 // mid-import (the sequential loop holds on the first pending store).
 let holdStores = false;
+// Every filename store() is CALLED with — lets a test assert that type-rejected files
+// (B-021) never reach store at all.
+let storedNames: string[] = [];
 
 function storeImpl(panel: 'assets' | 'shared', file: File): Promise<unknown> {
+  storedNames.push(file.name);
   if (failNames.has(file.name)) return Promise.reject(new Error(`fail ${file.name}`));
   if (holdStores) return new Promise<never>(() => undefined);
   const m = meta(file.name);
@@ -103,6 +107,10 @@ function buttonByText(text: string): HTMLElement {
   return el;
 }
 const tiles = (): number => container!.querySelectorAll('[data-role="importing-thumb"]').length;
+/** Current app toast message (where the skipped-files notice is routed), or null. */
+function noticeText(): string | null {
+  return designerStore.get().notice;
+}
 /** Visible thumbnail filenames in DOM order (the real thumbs carry title=filename). */
 function thumbTitles(role: 'shared' | 'assets'): string[] {
   const sel = role === 'shared' ? '[data-role="shared-library-grid"]' : '[data-role="assets-grid"]';
@@ -130,6 +138,7 @@ afterEach(() => {
   sharedPick = () => Promise.resolve([]);
   failNames = new Set<string>();
   holdStores = false;
+  storedNames = [];
   designerStore._reset();
 });
 
@@ -279,5 +288,76 @@ describe('ProjectAssetsPanel import (D-067)', () => {
     pickKind('Font…');
     await settle();
     expect(tiles()).toBe(1);
+  });
+});
+
+/**
+ * B-021 — `accept` is a bypassable picker hint ("All files" lets the operator pick a
+ * pdf/mp3/mp4), so the SELECTION is validated after pick(): unsupported files are
+ * rejected BEFORE store (no store call, no tile, no broken thumbnail) and reported via
+ * the app's existing toast (`designerStore.showNotice` → `notice`); valid files in the
+ * same batch still import + prepend.
+ */
+describe('post-pick file-type validation (B-021)', () => {
+  it('shared library: all-unsupported selection → no store, no tile, only a notice', async () => {
+    installBridge();
+    sharedPick = () =>
+      Promise.resolve([fileNamed('a.pdf'), fileNamed('b.mp3'), fileNamed('c.mp4')]);
+    render(SharedLibraryPanel);
+    await settle();
+    act(() => byLabel('Add library image').click());
+    await settle();
+    expect(storedNames).toEqual([]); // nothing reached the store
+    expect(tiles()).toBe(0); // no loading/broken tiles
+    const notice = noticeText();
+    expect(notice).toContain('a.pdf');
+    expect(notice).toContain('b.mp3');
+    expect(notice).toContain('c.mp4');
+  });
+
+  it('shared library: mixed batch → valid imports + prepends, unsupported skipped + noticed', async () => {
+    installBridge();
+    sharedList = [meta('old.png')];
+    sharedPick = () =>
+      Promise.resolve([fileNamed('logo.png'), fileNamed('doc.pdf'), fileNamed('song.mp3')]);
+    render(SharedLibraryPanel);
+    await settle();
+    act(() => byLabel('Add library image').click());
+    await settle();
+    expect(storedNames).toEqual(['logo.png']); // only the image was stored
+    expect(tiles()).toBe(0);
+    expect(thumbTitles('shared')).toEqual(['logo.png', 'old.png']); // valid prepended, no broken tile
+    const notice = noticeText();
+    expect(notice).toContain('doc.pdf');
+    expect(notice).toContain('song.mp3');
+    expect(notice).not.toContain('logo.png'); // the valid file is not in the skip notice
+  });
+
+  it('project assets, Image…: a pdf alongside an image is skipped + noticed', async () => {
+    installBridge();
+    assetsPick = () => Promise.resolve([fileNamed('pic.png'), fileNamed('manual.pdf')]);
+    render(ProjectAssetsPanel);
+    await settle();
+    act(() => byLabel('Add asset').dispatchEvent(new Event('pointerdown', { bubbles: true })));
+    act(() => buttonByText('Image…').click());
+    await settle();
+    expect(storedNames).toEqual(['pic.png']);
+    expect(tiles()).toBe(0);
+    expect(thumbTitles('assets')[0]).toBe('pic.png');
+    expect(noticeText()).toContain('manual.pdf');
+  });
+
+  it('project assets, Font…: a non-font is skipped + noticed, the font still imports', async () => {
+    installBridge();
+    assetsPick = () => Promise.resolve([fileNamed('brand.ttf'), fileNamed('evil.exe')]);
+    render(ProjectAssetsPanel);
+    await settle();
+    act(() => byLabel('Add asset').dispatchEvent(new Event('pointerdown', { bubbles: true })));
+    act(() => buttonByText('Font…').click());
+    await settle();
+    expect(storedNames).toEqual(['brand.ttf']);
+    expect(tiles()).toBe(0);
+    expect(noticeText()).toContain('evil.exe');
+    expect(noticeText()).not.toContain('brand.ttf');
   });
 });

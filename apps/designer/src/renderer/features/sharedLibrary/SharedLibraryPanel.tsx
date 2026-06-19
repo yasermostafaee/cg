@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AssetMeta } from '@cg/shared-ipc';
 import type { Element } from '@cg/shared-schema';
-import { useDesignerSelector } from '../../state/store.js';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
 import { ImportingThumb } from '../assets/ImportingThumb.js';
 import { useImportPending } from '../assets/useImportPending.js';
+import { partitionSupported, skippedFilesMessage } from '../../../shared/asset-types.js';
 import { GridIcon, ListIcon } from '../assets/ProjectAssetsPanel.js';
 import { fileExt, formatBytes } from '../assets/AssetThumb.js';
 import { emitSharedImageRemoved, useSharedImages, useSharedImageUrl } from './useSharedImages.js';
@@ -92,10 +93,18 @@ export function SharedLibraryPanel(): JSX.Element {
   async function addImage(): Promise<void> {
     const files = await window.cg.sharedImages.pick();
     if (files.length === 0) return; // cancelled — no tiles shown
-    // One tile per picked file; import in reverse selection order so the prepend
+    // B-021 — `accept` is a bypassable hint, so validate the SELECTION: reject
+    // non-images (pdf/mp3/mp4 from "All files") BEFORE store so they never become a
+    // broken tile, and report them in a non-blocking notice. Valid files still import.
+    const { valid, rejected } = partitionSupported('image', files);
+    if (rejected.length > 0) {
+      designerStore.showNotice(skippedFilesMessage(rejected.map((file) => file.name)));
+    }
+    if (valid.length === 0) return; // every pick was unsupported — only the notice
+    // One tile per VALID file; import in reverse selection order so the prepend
     // lands the batch selection-order at the top; each file is independent — a
     // failure clears only its own tile and the rest still import.
-    const items = files.map((file) => ({ file, end: begin() }));
+    const items = valid.map((file) => ({ file, end: begin() }));
     for (const { file, end } of [...items].reverse()) {
       try {
         await window.cg.sharedImages.store(file);

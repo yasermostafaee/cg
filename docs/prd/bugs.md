@@ -293,6 +293,80 @@ carries `draggable` + an `onDragStart` that sets `application/x-cg-asset-id` to 
 (`apps/designer/tests/asset-thumb-drag.test.ts`). Branch: `fix/asset-thumb-drag`. Mark `[x]`
 on merge.
 
+## [~] B-020 — adding an image fails intermittently (picker focus-timer races the change event) ⟨priority: high⟩ — focused fix
+
+**Repro:**
+
+1. In the Designer, open the Project Assets panel (or the Shared Library panel) and
+   click **Add** → pick a single image in the OS file dialog.
+2. Repeat several times.
+
+**Expected:** every pick adds the image — reliably, no retries.
+**Actual:** the import fails "most of the time" and only succeeds after a few tries —
+the picked file is silently dropped (no loading tile, nothing imported). Intermittent
+= a timing race.
+**Env:** Browser / Designer dev (Chrome 149); regression on
+`feature/D-067-image-import-loading`, introduced by the D-069 freeze fix.
+**Root cause:** the D-069 cancel-hang fix added an **unconditional** 400ms
+window-`focus` fallback to `pickFiles` (`apps/designer/src/platform/createDesignerBridge.ts`)
+to detect a cancelled dialog. But on a **real selection** the dialog's close fires
+`focus` too, arming that timer; when its 400ms elapsed before the input's slightly-later
+`change` event, the fallback resolved `[]` (a false cancel) and the real selection was
+dropped. When `change` happened to beat the timer it worked — hence "try several times".
+**Fix:** the host fires the input `cancel` event (Chrome 149; Baseline since
+Chromium 113 / Firefox 91 / Safari 16.4 — the app's whole support matrix, incl. the
+Firefox File-System-Access fallback path), so cancellation is detected by `cancel`
+**alone** and the racing focus-timer fallback is **removed** — nothing pre-empts
+`change`. Cancel still resolves `[]` via `cancel` (the D-069 freeze/leak stays fixed) and
+a real selection settles via `change` unimpeded. `pickFiles` extracted to its own module
+(`apps/designer/src/platform/pickFiles.ts`) for the regression test. No spec-level
+behavior change (the D-069 freeze fix touched no OpenSpec spec) → focused fix, no OpenSpec
+change. Regression test: `apps/designer/tests/pick-files.test.ts` (focus-then-late-`change`
+delivers the selection; ×10 reliability; multi-select; cancel resolves `[]`). Branch:
+`feature/D-067-image-import-loading` (same branch as the open D-067 PR, per request — do
+not merge yet). Mark `[x]` on merge.
+
+## [~] B-021 — non-image/font files import as broken tiles (picker `accept` is a bypassable hint) ⟨priority: high⟩ — focused fix
+
+**Repro:**
+
+1. In the Designer, open the Project Assets panel (or Shared Library) and click
+   **Add** → **Image…** (or **Add library image**).
+2. In the OS dialog switch the file-type filter to **All files** (the picker opens on
+   images, but with "All files" set you can navigate and select any format).
+3. Select a **pdf / mp3 / mp4**.
+
+**Expected:** unsupported files are rejected — not imported, no tile — and a
+non-blocking notice says which were skipped; any valid image(s) in the same selection
+still import.
+**Actual:** the pdf/mp3/mp4 is added with a **broken thumbnail**. The `<input accept>`
+attribute only _hints_ the dialog; it does not constrain what the user can actually
+select, and the store imported whatever it was given (`AssetStore.importFile` falls back
+to `kind: 'image'` for any extension; `SharedImageStore` is always `image`), so the
+broken tile rendered.
+**Env:** Browser / Designer; both Project Assets (image + font) and Shared Library.
+Reproduces on `feature/D-067-image-import-loading`.
+**Root cause:** `accept` is a UI hint, trivially bypassed via "All files". The selection
+was never validated after the picker returned, and the stores accept any bytes.
+**Fix:** validate the SELECTION after `pick()` returns, before `store`. New single
+source of truth `apps/designer/src/shared/asset-types.ts` (allowed extensions + canonical
+MIME per kind, mirroring the store's `KIND_BY_EXT`) drives BOTH the picker `accept` hint
+(`acceptAttr`, now consumed by `pickFiles`) and the post-pick gate (`partitionSupported`
+/ `isSupportedFile`, by extension primarily, MIME as a fallback). Both panels
+(`SharedLibraryPanel.addImage` for image; `ProjectAssetsPanel.importKind` for image AND
+font) now split the picked files: unsupported ones are dropped before any `begin()`/tile
+or `store` and reported through the app's EXISTING toast (`designerStore.showNotice` →
+the bottom-centre `<Toast>` in `App.tsx`, auto-dismiss + close), with a concise message
+(`skippedFilesMessage` — count + first few names for a large batch); valid ones still
+import + prepend. Mixed batch → valid import, rest noticed; all-invalid → just the toast.
+No bridge/schema change (renderer-side gate) → focused fix, no OpenSpec change.
+Regression tests: `apps/designer/tests/import-loading.test.ts`
+("post-pick file-type validation (B-021)" — shared all-invalid, shared mixed,
+project-assets Image…+pdf, project-assets Font…+non-font; asserting no store call, no
+tile, the valid file still imports, and the toast message via `designerStore`). Branch:
+`feature/D-067-image-import-loading` (same branch as the open D-067 PR, per request — do
+not merge yet). Mark `[x]` on merge.
+
 <!-- Add new open bugs above this line using the format. Example:
 
 ## [ ] B-0NN — Export blocked dialog shows wrong error count
