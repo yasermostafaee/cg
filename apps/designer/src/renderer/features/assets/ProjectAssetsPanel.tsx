@@ -3,6 +3,8 @@ import type { AssetMeta } from '@cg/shared-ipc';
 import type { Element } from '@cg/shared-schema';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { AssetThumb } from './AssetThumb.js';
+import { ImportingThumb } from './ImportingThumb.js';
+import { useImportPending } from './useImportPending.js';
 import { emitAssetRemoved, useAssets } from './useAssets.js';
 import { clearAll as clearAllAssetUrls, revoke as revokeAssetUrl } from './assetUrlCache.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
@@ -58,6 +60,8 @@ export function ListIcon(): JSX.Element {
 export function ProjectAssetsPanel(): JSX.Element {
   const assets = useAssets();
   const scene = useDesignerSelector((s) => s.scene);
+  // D-067 — pending import count drives the in-grid loading tile(s).
+  const { pending: importing, begin } = useImportPending();
   const [query, setQuery] = useState('');
   const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ asset: AssetMeta; x: number; y: number } | null>(null);
@@ -165,10 +169,18 @@ export function ProjectAssetsPanel(): JSX.Element {
 
   async function importKind(kind: 'image' | 'font'): Promise<void> {
     setAddMenu(null);
+    let end: (() => void) | undefined;
     try {
-      await window.cg.assets.import({ sourcePath: '', kind });
+      // D-067 — show the loading tile only once a file is actually picked (onPicked),
+      // not while the file dialog is open; clear it on resolve OR error. A cancelled
+      // picker never fires onPicked, so the tile never shows.
+      await window.cg.assets.import({ sourcePath: '', kind }, () => {
+        end = begin();
+      });
     } catch {
-      /* operator cancelled — ignore */
+      /* cancelled (no file) or failed */
+    } finally {
+      end?.();
     }
   }
 
@@ -247,7 +259,7 @@ export function ProjectAssetsPanel(): JSX.Element {
           aria-label="Search assets"
         />
       </div>
-      {visible.length === 0 ? (
+      {visible.length === 0 && importing === 0 ? (
         <div className={s.emptyWrap} data-role="assets-grid">
           <p className={s.empty}>
             No assets yet.
@@ -257,6 +269,9 @@ export function ProjectAssetsPanel(): JSX.Element {
         </div>
       ) : (
         <div className={assetView === 'list' ? s.list : s.grid} data-role="assets-grid">
+          {Array.from({ length: importing }, (_, i) => (
+            <ImportingThumb key={`importing-${String(i)}`} layout={assetView} />
+          ))}
           {visible.map((a) => (
             <AssetThumb
               key={a.assetId}

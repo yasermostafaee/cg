@@ -2037,6 +2037,32 @@ left-rail focused on project content.
   resolver change. Decide the exact home (landing view vs an app-level area) at
   scheduling. Builds on D-040 (`designer-shared-image-library`).
 
+## [~] D-067 — Image-import loading indicator (both asset panels) ⟨priority: low-medium⟩
+
+> **In progress** — `openspec/changes/add-image-import-loading/`.
+
+**What:** Importing an image — especially a large one — takes a moment to
+decode / store / thumbnail with no feedback today. Show a lightweight loading
+state (a spinner tile for the in-progress item) in BOTH asset panels (Project
+Assets and Shared Library) while an import runs, cleared when the asset is ready
+(replaced by the real thumbnail) or on error / cancel.
+**Why:** After the file dialog closes the panel sits unchanged until the
+thumbnail appears; for a large image that dead gap looks like nothing happened.
+**Acceptance:**
+
+- WHEN an image import is in progress THEN the panel shows a loading indicator
+  for the pending item
+- WHEN the import resolves THEN the indicator is replaced by the real thumbnail
+- WHEN the import is cancelled or errors THEN the indicator is cleared (no stuck
+  spinner)
+- WHILE the import logic itself is unchanged (only pending state is surfaced)
+  **Notes:** The panels don't share an import path (separate bridge methods /
+  stores / hooks), so the shared mechanism is a `useImportPending` hook + a
+  shared `ImportingThumb` tile used by both. Capabilities:
+  `designer-shared-image-library` (MODIFIED) + `designer-project-assets`
+  (net-new — the Project Assets panel had no living capability). Change:
+  `openspec/changes/add-image-import-loading/`.
+
 ## [~] D-068 — Shared Library: search + grid/list view toggle (parity with Project Assets) ⟨priority: low-medium⟩
 
 > **In progress** — `openspec/changes/add-shared-library-search-view-toggle/`.

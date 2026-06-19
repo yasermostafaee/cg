@@ -196,9 +196,12 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
     },
 
     assets: {
-      import: async (req) => {
+      import: async (req, onPicked) => {
         const file = await pickFile(req.kind);
         if (file === null) throw new Error('No file selected');
+        // D-067 — a file was actually selected; signal the caller right before the
+        // decode/store work so it can show a loading indicator (cancel never reaches here).
+        onPicked?.();
         return { asset: await assets.importFile(file, req.kind) };
       },
       list: () => assets.list(),
@@ -228,9 +231,11 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
     },
 
     sharedImages: {
-      import: async () => {
+      import: async (onPicked) => {
         const file = await pickFile('image');
         if (file === null) throw new Error('No file selected');
+        // D-067 — signal once a file is actually selected (before decode/store).
+        onPicked?.();
         return { image: await sharedImages.importFile(file) };
       },
       list: () => sharedImages.list(),

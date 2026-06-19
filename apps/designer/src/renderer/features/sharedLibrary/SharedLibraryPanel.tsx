@@ -6,6 +6,8 @@ import { Modal, ModalButton } from '../shell/Modal.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
+import { ImportingThumb } from '../assets/ImportingThumb.js';
+import { useImportPending } from '../assets/useImportPending.js';
 import { GridIcon, ListIcon } from '../assets/ProjectAssetsPanel.js';
 import { fileExt, formatBytes } from '../assets/AssetThumb.js';
 import { emitSharedImageRemoved, useSharedImages, useSharedImageUrl } from './useSharedImages.js';
@@ -49,6 +51,8 @@ export function SharedLibraryPanel(): JSX.Element {
   const images = useSharedImages();
   const scene = useDesignerSelector((st) => st.scene);
   const activeId = useActiveSharedImageId();
+  // D-067 — pending import count drives the in-grid loading tile(s).
+  const { pending: importing, begin } = useImportPending();
   const [ctxMenu, setCtxMenu] = useState<{ image: AssetMeta; x: number; y: number } | null>(null);
   const [confirm, setConfirm] = useState<{ image: AssetMeta; uses: number } | null>(null);
   // D-068 — search + grid/list view, mirroring ProjectAssetsPanel (its own
@@ -86,10 +90,18 @@ export function SharedLibraryPanel(): JSX.Element {
   }, [ctxMenu]);
 
   async function addImage(): Promise<void> {
+    let end: (() => void) | undefined;
     try {
-      await window.cg.sharedImages.import();
+      // D-067 — show the loading tile only once a file is actually picked (onPicked),
+      // not while the file dialog is open; clear it on resolve OR error. A cancelled
+      // picker never fires onPicked, so the tile never shows.
+      await window.cg.sharedImages.import(() => {
+        end = begin();
+      });
     } catch {
-      /* operator cancelled — ignore */
+      /* cancelled (no file) or failed */
+    } finally {
+      end?.();
     }
   }
 
@@ -151,7 +163,7 @@ export function SharedLibraryPanel(): JSX.Element {
           aria-label="Search library images"
         />
       </div>
-      {visible.length === 0 ? (
+      {visible.length === 0 && importing === 0 ? (
         <div className={ps.emptyWrap} data-role="shared-library-grid">
           <p className={ps.empty}>
             {images.length === 0 ? (
@@ -167,6 +179,9 @@ export function SharedLibraryPanel(): JSX.Element {
         </div>
       ) : (
         <div className={libraryView === 'list' ? ps.list : ps.grid} data-role="shared-library-grid">
+          {Array.from({ length: importing }, (_, i) => (
+            <ImportingThumb key={`importing-${String(i)}`} layout={libraryView} />
+          ))}
           {visible.map((image) => (
             <SharedImageThumb
               key={image.assetId}
