@@ -35,8 +35,10 @@ export function useAssets(): readonly AssetMeta[] {
 
     void refresh();
     const offImported = window.cg.assets.onImported((asset) => {
-      // D-067 — prepend so a freshly imported asset appears at the top of the list.
-      setList((prev) => (prev.some((a) => a.assetId === asset.assetId) ? prev : [asset, ...prev]));
+      // D-067 — prepend so a freshly imported asset is at the top; re-importing an
+      // existing one (sha dedup returns the same asset) MOVES it to the top rather
+      // than leaving it in place.
+      setList((prev) => [asset, ...prev.filter((a) => a.assetId !== asset.assetId)]);
       void prime(asset);
     });
     // Project switch — the previous list belongs to a different

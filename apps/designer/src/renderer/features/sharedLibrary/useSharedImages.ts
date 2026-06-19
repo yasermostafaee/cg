@@ -36,8 +36,9 @@ export function useSharedImages(): readonly AssetMeta[] {
 
     void refresh();
     const offImported = window.cg.sharedImages.onImported((image) => {
-      // D-067 — prepend so a freshly imported image appears at the top.
-      setList((prev) => (prev.some((a) => a.assetId === image.assetId) ? prev : [image, ...prev]));
+      // D-067 — prepend so a freshly imported image is at the top; re-importing an
+      // existing one (sha dedup returns the same image) MOVES it to the top.
+      setList((prev) => [image, ...prev.filter((a) => a.assetId !== image.assetId)]);
       void prime(image);
     });
     const onRemoved: RemovedHandler = (assetId) => {

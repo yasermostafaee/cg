@@ -58,7 +58,11 @@ function logoSize(image: AssetMeta): { width: number; height: number } {
  */
 async function insertSharedLogo(scenePoint: { x: number; y: number }): Promise<void> {
   const active = getActiveSharedImage();
-  const image = active ?? (await window.cg.sharedImages.list())[0] ?? null;
+  // Stamp the operator's selection, else the NEWEST library image. The store's
+  // `list()` is oldest→newest but the panel shows newest-first (D-070), so the
+  // panel's top item is the LAST entry — `list[length-1]`, not `list[0]` (oldest).
+  const list = await window.cg.sharedImages.list();
+  const image = active ?? list[list.length - 1] ?? null;
   if (image === null) {
     designerStore.showNotice(
       'Add an image to the Shared Library (left panel) first, then use the logo tool.',

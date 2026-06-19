@@ -216,6 +216,19 @@ describe('SharedLibraryPanel import (D-067 multiselect + prepend)', () => {
     await settle();
     expect(thumbTitles('shared')).toEqual(['new.png', 'old.png']); // newest on top
   });
+
+  it('re-importing an existing image moves it to the top (not skipped)', async () => {
+    installBridge();
+    sharedList = [meta('a.png'), meta('b.png')]; // store oldest→newest
+    sharedPick = () => Promise.resolve([fileNamed('a.png')]); // re-pick the older one
+    render(SharedLibraryPanel);
+    await settle();
+    expect(thumbTitles('shared')).toEqual(['b.png', 'a.png']); // newest-first display
+
+    act(() => byLabel('Add library image').click());
+    await settle();
+    expect(thumbTitles('shared')).toEqual(['a.png', 'b.png']); // re-imported 'a' moved to top
+  });
 });
 
 describe('ProjectAssetsPanel import (D-067)', () => {

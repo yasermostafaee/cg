@@ -314,7 +314,17 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
   };
 }
 
-/** D-067 — open a multi-select file picker; resolves to the chosen files ([] if cancelled). */
+/**
+ * D-067 — open a multi-select file picker; resolves to the chosen files, or `[]`
+ * when cancelled.
+ *
+ * Cancellation must settle the promise. `change` does NOT fire when the OS dialog
+ * is dismissed, so without a cancel path `pick()` would hang forever and the
+ * detached `<input>` (plus its listener + the dangling promise) would leak on every
+ * open+cancel. We resolve `[]` on the `cancel` event (Chromium 113+), with a
+ * one-shot window-focus fallback for engines without it; all listeners are
+ * `{ once: true }` and torn down on settle so cancel is a cheap no-op.
+ */
 function pickFiles(kind?: 'image' | 'font' | 'lottie' | 'video'): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
@@ -325,9 +335,29 @@ function pickFiles(kind?: 'image' | 'font' | 'lottie' | 'video'): Promise<File[]
       input.accept = '.ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2';
     else if (kind === 'lottie') input.accept = 'application/json,.json';
     else if (kind === 'video') input.accept = 'video/*';
-    input.onchange = () => {
-      resolve(input.files !== null ? Array.from(input.files) : []);
+
+    let settled = false;
+    let focusTimer = 0;
+    const onFocus = (): void => {
+      // The dialog closed and focus returned; if `change`/`cancel` didn't settle us
+      // shortly after, treat it as a cancel (fallback for engines without `cancel`).
+      focusTimer = window.setTimeout(() => settle([]), 400);
     };
+    function settle(files: File[]): void {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(focusTimer);
+      window.removeEventListener('focus', onFocus);
+      resolve(files);
+    }
+
+    input.addEventListener(
+      'change',
+      () => settle(input.files !== null ? Array.from(input.files) : []),
+      { once: true },
+    );
+    input.addEventListener('cancel', () => settle([]), { once: true });
+    window.addEventListener('focus', onFocus, { once: true });
     input.click();
   });
 }
