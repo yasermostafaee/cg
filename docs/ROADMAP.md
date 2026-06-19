@@ -68,6 +68,8 @@ designer backlog, roughly in priority order:
    low).
 8. [D-067](./prd/designer.md) — Image-import loading indicator in both asset panels (spinner tile while
    an import decodes/stores, cleared on ready or error; lightweight, no import-logic change; low-medium).
+9. [D-068](./prd/designer.md) — Shared Library: search + grid/list view toggle, at parity with the
+   Project Assets panel (reuses its controls/styles/idiom; low-medium).
 
 **Wave tail (carried over):** template cleanup — rebuild/refresh the bundled sample templates
 against the UX wave's finalized controls.
