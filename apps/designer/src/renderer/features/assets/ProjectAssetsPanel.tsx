@@ -61,7 +61,7 @@ export function ProjectAssetsPanel(): JSX.Element {
   const assets = useAssets();
   const scene = useDesignerSelector((s) => s.scene);
   // D-067 — pending import count drives the in-grid loading tile(s).
-  const { pending: importing, track } = useImportPending();
+  const { pending: importing, begin } = useImportPending();
   const [query, setQuery] = useState('');
   const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ asset: AssetMeta; x: number; y: number } | null>(null);
@@ -169,12 +169,18 @@ export function ProjectAssetsPanel(): JSX.Element {
 
   async function importKind(kind: 'image' | 'font'): Promise<void> {
     setAddMenu(null);
+    let end: (() => void) | undefined;
     try {
-      // D-067 — `track` surfaces a loading tile while the import runs and clears
-      // it on resolve OR reject (cancel/error), so there's never a stuck spinner.
-      await track(window.cg.assets.import({ sourcePath: '', kind }));
+      // D-067 — show the loading tile only once a file is actually picked (onPicked),
+      // not while the file dialog is open; clear it on resolve OR error. A cancelled
+      // picker never fires onPicked, so the tile never shows.
+      await window.cg.assets.import({ sourcePath: '', kind }, () => {
+        end = begin();
+      });
     } catch {
-      /* operator cancelled / failed — the tile is cleared by `track` regardless */
+      /* cancelled (no file) or failed */
+    } finally {
+      end?.();
     }
   }
 

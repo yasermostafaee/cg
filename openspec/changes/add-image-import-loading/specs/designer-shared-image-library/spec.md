@@ -4,11 +4,11 @@
 
 ### Requirement: Shared library import shows a loading indicator
 
-While an image import into the shared library is in progress, the Shared Library panel SHALL show a loading indicator (a spinner tile) for the in-progress import, cleared when the import resolves (the real thumbnail replaces it via the library refresh) or rejects (cancel or error). This gives feedback during the decode/store gap and never leaves a stuck spinner. The import logic itself is unchanged.
+Once a file is actually selected (not while the file picker is open), the Shared Library panel SHALL show a loading indicator (a spinner tile) during the import, cleared when the import resolves (the real thumbnail replaces it via the library refresh) or errors. Cancelling the picker — or selecting nothing — shows no indicator at all. This gives feedback during the decode/store gap and never leaves a stuck spinner. The import logic itself is unchanged.
 
-#### Scenario: Indicator shown while a shared-library import is pending
+#### Scenario: Indicator shown after a file is selected
 
-- **WHEN** the operator adds an image to the shared library and the import is in progress
+- **WHEN** the operator picks a file to add to the shared library and the import (decode/store) is in progress
 - **THEN** the panel shows a loading indicator for the pending import
 
 #### Scenario: Indicator replaced by the thumbnail on success
@@ -16,7 +16,12 @@ While an image import into the shared library is in progress, the Shared Library
 - **WHEN** a pending shared-library import resolves
 - **THEN** the loading indicator is cleared and the imported image appears as a thumbnail
 
-#### Scenario: Indicator cleared on cancel or error
+#### Scenario: No indicator when the picker is cancelled
 
-- **WHEN** a pending shared-library import rejects (the operator cancels the file dialog, or the import errors)
+- **WHEN** the operator opens the file picker for the shared library but cancels it or selects nothing
+- **THEN** no loading indicator is shown
+
+#### Scenario: Indicator cleared on error
+
+- **WHEN** a selected file's shared-library import errors
 - **THEN** the loading indicator is cleared — no stuck spinner

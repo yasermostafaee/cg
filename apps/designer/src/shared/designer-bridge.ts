@@ -76,8 +76,15 @@ export interface DesignerBridge {
   };
 
   assets: {
+    /**
+     * Pick a file and import it. `onPicked` (D-067) fires once a file is actually
+     * selected — i.e. right before decode/store starts — so callers can show a
+     * loading indicator only for a real import, not while the picker is open (a
+     * cancel never fires it).
+     */
     import(
       req: ChannelRequest<typeof AssetsImportChannel>,
+      onPicked?: () => void,
     ): Promise<ChannelResponse<typeof AssetsImportChannel>>;
     list(): Promise<ChannelResponse<typeof AssetsListChannel>>;
     remove(
@@ -102,8 +109,12 @@ export interface DesignerBridge {
    * outlives any one project).
    */
   sharedImages: {
-    /** Pick an image file and import it into the shared library. */
-    import(): Promise<ChannelResponse<typeof SharedImagesImportChannel>>;
+    /**
+     * Pick an image file and import it into the shared library. `onPicked` (D-067)
+     * fires once a file is actually selected (before decode/store), so callers show
+     * a loading indicator only for a real import, never on a cancelled picker.
+     */
+    import(onPicked?: () => void): Promise<ChannelResponse<typeof SharedImagesImportChannel>>;
     list(): Promise<ChannelResponse<typeof SharedImagesListChannel>>;
     remove(
       req: ChannelRequest<typeof SharedImagesRemoveChannel>,

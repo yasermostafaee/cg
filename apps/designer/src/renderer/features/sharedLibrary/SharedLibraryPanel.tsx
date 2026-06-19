@@ -35,7 +35,7 @@ export function SharedLibraryPanel(): JSX.Element {
   const scene = useDesignerSelector((st) => st.scene);
   const activeId = useActiveSharedImageId();
   // D-067 — pending import count drives the in-grid loading tile(s).
-  const { pending: importing, track } = useImportPending();
+  const { pending: importing, begin } = useImportPending();
   const [ctxMenu, setCtxMenu] = useState<{ image: AssetMeta; x: number; y: number } | null>(null);
   const [confirm, setConfirm] = useState<{ image: AssetMeta; uses: number } | null>(null);
 
@@ -56,12 +56,18 @@ export function SharedLibraryPanel(): JSX.Element {
   }, [ctxMenu]);
 
   async function addImage(): Promise<void> {
+    let end: (() => void) | undefined;
     try {
-      // D-067 — `track` shows a loading tile while the import runs and clears it
-      // on resolve OR reject (cancel/error), so there's never a stuck spinner.
-      await track(window.cg.sharedImages.import());
+      // D-067 — show the loading tile only once a file is actually picked (onPicked),
+      // not while the file dialog is open; clear it on resolve OR error. A cancelled
+      // picker never fires onPicked, so the tile never shows.
+      await window.cg.sharedImages.import(() => {
+        end = begin();
+      });
     } catch {
-      /* operator cancelled / failed — the tile is cleared by `track` regardless */
+      /* cancelled (no file) or failed */
+    } finally {
+      end?.();
     }
   }
 

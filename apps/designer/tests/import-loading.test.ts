@@ -9,10 +9,11 @@ import { SharedLibraryPanel } from '../src/renderer/features/sharedLibrary/Share
 import { designerStore } from '../src/renderer/state/store.js';
 
 /**
- * D-067 — image-import loading indicator. Verifies the shared `useImportPending`
- * mechanism (clears on resolve AND reject) and that BOTH asset panels show the
- * loading tile while an import is pending, replaced by the real thumbnail on
- * success and cleared on error.
+ * D-067 — image-import loading indicator. The tile shows only once a file is
+ * actually selected (the bridge's `onPicked`), so a cancelled picker shows
+ * nothing; it clears on success (replaced by the thumbnail) and on error. Covers
+ * the shared `useImportPending` mechanism and BOTH panels (project image + font,
+ * and shared image).
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -33,10 +34,10 @@ function deferred<T>(): {
   return { promise, resolve, reject };
 }
 
-function meta(filename: string): AssetMeta {
+function meta(filename: string, kind: AssetMeta['kind'] = 'image'): AssetMeta {
   return {
     assetId: filename,
-    kind: 'image',
+    kind,
     filename,
     sha256: 'a'.repeat(64),
     byteSize: 4,
@@ -48,8 +49,12 @@ let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 let onAssetsImported: ((m: AssetMeta) => void) | null = null;
 let onSharedImported: ((m: AssetMeta) => void) | null = null;
-let assetsImport: () => Promise<{ asset: AssetMeta }> = () => Promise.resolve({ asset: meta('x') });
-let sharedImport: () => Promise<{ image: AssetMeta }> = () => Promise.resolve({ image: meta('x') });
+// Each import stub receives the bridge's `onPicked`; call it to simulate "a file
+// was selected", omit it to simulate a cancelled picker.
+let assetsImport: (onPicked?: () => void) => Promise<{ asset: AssetMeta }> = () =>
+  Promise.resolve({ asset: meta('x') });
+let sharedImport: (onPicked?: () => void) => Promise<{ image: AssetMeta }> = () =>
+  Promise.resolve({ image: meta('x') });
 
 function installBridge(): void {
   (window as unknown as { cg: unknown }).cg = {
@@ -61,7 +66,7 @@ function installBridge(): void {
       },
       onCleared: () => noop,
       url: () => Promise.resolve(null),
-      import: () => assetsImport(),
+      import: (_req: unknown, onPicked?: () => void) => assetsImport(onPicked),
       remove: () => Promise.resolve({ ok: true }),
     },
     sharedImages: {
@@ -71,7 +76,7 @@ function installBridge(): void {
         return noop;
       },
       url: () => Promise.resolve(null),
-      import: () => sharedImport(),
+      import: (onPicked?: () => void) => sharedImport(onPicked),
       remove: () => Promise.resolve({ ok: true }),
     },
   };
@@ -96,13 +101,18 @@ function buttonByText(text: string): HTMLElement {
   return el;
 }
 
-const importingTiles = (): number =>
-  container!.querySelectorAll('[data-role="importing-thumb"]').length;
+const tiles = (): number => container!.querySelectorAll('[data-role="importing-thumb"]').length;
 const flush = async (): Promise<void> => {
   await act(async () => {
     await Promise.resolve();
   });
 };
+
+/** Open the Project Assets add menu (opens on pointerdown) and pick a kind. */
+function pickProjectKind(label: 'Image…' | 'Font…'): void {
+  act(() => byLabel('Add asset').dispatchEvent(new Event('pointerdown', { bubbles: true })));
+  act(() => buttonByText(label).click());
+}
 
 afterEach(() => {
   if (root !== null) act(() => root!.unmount());
@@ -123,115 +133,148 @@ describe('useImportPending (D-067)', () => {
     return null;
   }
 
-  it('pending goes 1 then 0 on resolve, and 1 then 0 on reject (no stuck spinner)', async () => {
+  it('begin() increments; end() decrements and is idempotent', () => {
     render(Probe);
     expect(latest!.pending).toBe(0);
-
-    const ok = deferred<number>();
-    let tracked!: Promise<number>;
+    let end!: () => void;
     act(() => {
-      tracked = latest!.track(ok.promise);
+      end = latest!.begin();
     });
     expect(latest!.pending).toBe(1);
-    await act(async () => {
-      ok.resolve(1);
-      await tracked;
-    });
+    act(() => end());
     expect(latest!.pending).toBe(0);
-
-    const bad = deferred<number>();
-    let trackedBad!: Promise<number>;
-    act(() => {
-      trackedBad = latest!.track(bad.promise);
-    });
-    expect(latest!.pending).toBe(1);
-    await act(async () => {
-      bad.reject(new Error('cancelled'));
-      await trackedBad.catch(() => undefined);
-    });
+    act(() => end()); // idempotent — no underflow
     expect(latest!.pending).toBe(0);
     latest = null;
   });
 });
 
 describe('SharedLibraryPanel import indicator (D-067)', () => {
-  it('shows the tile while pending, replaced by the thumbnail on success', async () => {
+  it('shows the tile after a file is selected, replaced by the thumbnail on success', async () => {
     installBridge();
     const d = deferred<{ image: AssetMeta }>();
-    sharedImport = () => d.promise;
+    sharedImport = (onPicked) => {
+      onPicked?.();
+      return d.promise;
+    };
     render(SharedLibraryPanel);
     await flush();
-    expect(importingTiles()).toBe(0);
+    expect(tiles()).toBe(0);
 
     act(() => byLabel('Add library image').click());
-    expect(importingTiles()).toBe(1);
+    expect(tiles()).toBe(1);
 
     await act(async () => {
       d.resolve({ image: meta('logo.png') });
       onSharedImported?.(meta('logo.png'));
       await Promise.resolve();
     });
-    expect(importingTiles()).toBe(0);
-    // The real thumbnail (a button titled with the filename) has taken over.
+    expect(tiles()).toBe(0);
     expect(container!.querySelector('[title="logo.png"]')).not.toBeNull();
+  });
+
+  it('shows NO tile when the picker is cancelled (no file selected)', async () => {
+    installBridge();
+    sharedImport = () => Promise.reject(new Error('No file selected')); // onPicked never fires
+    render(SharedLibraryPanel);
+    await flush();
+
+    act(() => byLabel('Add library image').click());
+    await flush();
+    expect(tiles()).toBe(0);
   });
 
   it('clears the tile on error (no stuck spinner)', async () => {
     installBridge();
     const d = deferred<{ image: AssetMeta }>();
-    sharedImport = () => d.promise;
+    sharedImport = (onPicked) => {
+      onPicked?.();
+      return d.promise;
+    };
     render(SharedLibraryPanel);
     await flush();
 
     act(() => byLabel('Add library image').click());
-    expect(importingTiles()).toBe(1);
-
+    expect(tiles()).toBe(1);
     await act(async () => {
-      d.reject(new Error('cancelled'));
+      d.reject(new Error('decode failed'));
       await Promise.resolve();
     });
-    expect(importingTiles()).toBe(0);
+    expect(tiles()).toBe(0);
   });
 });
 
 describe('ProjectAssetsPanel import indicator (D-067)', () => {
-  it('shows the tile while pending, replaced by the thumbnail on success', async () => {
+  it('image path: tile shows after selecting, replaced by the thumbnail on success', async () => {
     installBridge();
     const d = deferred<{ asset: AssetMeta }>();
-    assetsImport = () => d.promise;
+    assetsImport = (onPicked) => {
+      onPicked?.();
+      return d.promise;
+    };
     render(ProjectAssetsPanel);
     await flush();
-    expect(importingTiles()).toBe(0);
+    expect(tiles()).toBe(0);
 
-    // Open the add menu (opens on pointerdown), then choose "Image…".
-    act(() => byLabel('Add asset').dispatchEvent(new Event('pointerdown', { bubbles: true })));
-    act(() => buttonByText('Image…').click());
-    expect(importingTiles()).toBe(1);
+    pickProjectKind('Image…');
+    expect(tiles()).toBe(1);
 
     await act(async () => {
       d.resolve({ asset: meta('pic.png') });
       onAssetsImported?.(meta('pic.png'));
       await Promise.resolve();
     });
-    expect(importingTiles()).toBe(0);
+    expect(tiles()).toBe(0);
     expect(container!.querySelector('[title="pic.png"]')).not.toBeNull();
+  });
+
+  it('font path: tile shows after selecting, cleared on success', async () => {
+    installBridge();
+    const d = deferred<{ asset: AssetMeta }>();
+    assetsImport = (onPicked) => {
+      onPicked?.();
+      return d.promise;
+    };
+    render(ProjectAssetsPanel);
+    await flush();
+
+    pickProjectKind('Font…');
+    expect(tiles()).toBe(1);
+
+    await act(async () => {
+      d.resolve({ asset: meta('brand.ttf', 'font') });
+      await Promise.resolve();
+    });
+    expect(tiles()).toBe(0);
+  });
+
+  it('shows NO tile when the picker is cancelled (no file selected)', async () => {
+    installBridge();
+    assetsImport = () => Promise.reject(new Error('No file selected')); // onPicked never fires
+    render(ProjectAssetsPanel);
+    await flush();
+
+    pickProjectKind('Image…');
+    await flush();
+    expect(tiles()).toBe(0);
   });
 
   it('clears the tile on error (no stuck spinner)', async () => {
     installBridge();
     const d = deferred<{ asset: AssetMeta }>();
-    assetsImport = () => d.promise;
+    assetsImport = (onPicked) => {
+      onPicked?.();
+      return d.promise;
+    };
     render(ProjectAssetsPanel);
     await flush();
 
-    act(() => byLabel('Add asset').dispatchEvent(new Event('pointerdown', { bubbles: true })));
-    act(() => buttonByText('Image…').click());
-    expect(importingTiles()).toBe(1);
-
+    pickProjectKind('Image…');
+    expect(tiles()).toBe(1);
     await act(async () => {
-      d.reject(new Error('cancelled'));
+      d.reject(new Error('decode failed'));
       await Promise.resolve();
     });
-    expect(importingTiles()).toBe(0);
+    expect(tiles()).toBe(0);
   });
 });
