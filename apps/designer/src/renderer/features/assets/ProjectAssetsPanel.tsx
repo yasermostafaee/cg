@@ -22,7 +22,7 @@ const fontFaces = new Map<string, FontFace>();
 /** Persisted grid/list preference for the assets panel. */
 const ASSET_VIEW_KEY = 'cg.designer.assetsView';
 
-function GridIcon(): JSX.Element {
+export function GridIcon(): JSX.Element {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden>
       <rect x="0" y="0" width="6" height="6" rx="1" />
@@ -33,7 +33,7 @@ function GridIcon(): JSX.Element {
   );
 }
 
-function ListIcon(): JSX.Element {
+export function ListIcon(): JSX.Element {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden>
       <rect x="0" y="1" width="3" height="3" rx="0.7" />

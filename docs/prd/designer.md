@@ -2036,3 +2036,31 @@ left-rail focused on project content.
   **Notes:** Placement / information-architecture change only; no schema or
   resolver change. Decide the exact home (landing view vs an app-level area) at
   scheduling. Builds on D-040 (`designer-shared-image-library`).
+
+## [~] D-068 — Shared Library: search + grid/list view toggle (parity with Project Assets) ⟨priority: low-medium⟩
+
+> **In progress** — `openspec/changes/add-shared-library-search-view-toggle/`.
+
+**What:** The Project Assets panel has a filename search field and a grid/list
+view toggle; the Shared Library panel (D-040) was mirrored only partially and
+lacks both. Add a **search** field (case-insensitive filename filter; empty
+query shows all) and a **grid/list view toggle** (persisted, default grid) to
+the Shared Library panel, reusing the existing Project Assets controls / styles
+/ idiom — no new pattern.
+**Why:** A growing device library is hard to scan without search or a compact
+list view; the per-project assets panel already offers both, so the Shared
+Library should match for consistency.
+**Acceptance:**
+
+- WHEN the operator types in the Shared Library search field THEN the list shows
+  only images whose filename contains the query (case-insensitive); an empty
+  query shows every image
+- WHEN the operator toggles the view THEN the thumbnails switch between grid and
+  list (the `AssetThumb` layout) and the choice persists across the session,
+  independently of the Project Assets view setting
+  **Notes:** UI only — no schema / store / bridge / resolver change. Reuse
+  `ProjectAssetsPanel`'s `GridIcon` / `ListIcon` + the `ProjectAssetsPanel` /
+  `AssetThumb` styles; `SharedImageThumb` gains a `layout` prop; its own
+  `localStorage` key (`cg.designer.sharedLibraryView`). Builds on D-040
+  (`designer-shared-image-library`). Change:
+  `openspec/changes/add-shared-library-search-view-toggle/`.
