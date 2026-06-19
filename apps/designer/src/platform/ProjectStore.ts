@@ -147,22 +147,40 @@ export class ProjectStore {
     return this.#kv.get<RecentProject[]>(RECENT_KEY) ?? [];
   }
 
+  /**
+   * D-088 — record a project saved/opened via a native file handle. Keyed by project id;
+   * `handleKey` points at the IndexedDB-persisted `FileSystemFileHandle`.
+   */
+  recordRecentHandle(scene: Scene): void {
+    this.#pushRecent({
+      projectId: scene.id,
+      name: scene.name,
+      handleKey: scene.id,
+      templateType: scene.templateType,
+      lastSavedAt: new Date().toISOString(),
+    });
+  }
+
   #setActive(scene: Scene, path: string | null): void {
     this.#active = { scene, path };
     this.activeChanged.emit({ scene, path });
   }
 
+  /** OPFS-path (fallback / legacy) Recent entry. */
   #recordRecent(scene: Scene, path: string): void {
-    const filtered = this.recent().filter((e) => e.path !== path);
-    const next: RecentProject[] = [
-      {
-        path,
-        name: scene.name,
-        templateType: scene.templateType,
-        lastOpenedAt: new Date().toISOString(),
-      },
-      ...filtered,
-    ].slice(0, RECENT_CAP);
-    this.#kv.set(RECENT_KEY, next);
+    this.#pushRecent({
+      projectId: scene.id,
+      name: scene.name,
+      path,
+      templateType: scene.templateType,
+      lastSavedAt: new Date().toISOString(),
+    });
+  }
+
+  /** Upsert a Recent entry, deduped by project id (falling back to path for legacy ones). */
+  #pushRecent(entry: RecentProject): void {
+    const key = entry.projectId ?? entry.path;
+    const filtered = this.recent().filter((e) => (e.projectId ?? e.path) !== key);
+    this.#kv.set(RECENT_KEY, [entry, ...filtered].slice(0, RECENT_CAP));
   }
 }

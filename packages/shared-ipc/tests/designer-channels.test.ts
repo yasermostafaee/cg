@@ -65,6 +65,22 @@ describe('projects.* channel schemas', () => {
     expect(ProjectsRecentChannel.response.parse([])).toEqual([]);
   });
 
+  it('projects.recent accepts both handle-keyed (D-088) and legacy path entries', () => {
+    const handleEntry = {
+      name: 'Demo',
+      projectId: 'p1',
+      handleKey: 'p1',
+      lastSavedAt: '2026-06-19T12:00:00.000Z',
+    };
+    const legacyEntry = {
+      name: 'Old',
+      path: 'projects/old.cg.json',
+      templateType: 'lower-third',
+      lastOpenedAt: '2026-06-18T09:00:00.000Z',
+    };
+    expect(ProjectsRecentChannel.response.parse([handleEntry, legacyEntry])).toHaveLength(2);
+  });
+
   it('projects.active-changed accepts a null scene (no active project)', () => {
     expect(ProjectsActiveChangedChannel.payload.parse({ scene: null, path: null })).toBeTruthy();
   });

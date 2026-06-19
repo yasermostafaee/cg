@@ -1,4 +1,5 @@
 import type { AnimatableProperty, Element, Scene } from '@cg/shared-schema';
+import { hashScene } from './scene-hash.js';
 
 /**
  * Designer store ENGINE — the hand-rolled pub/sub core the domain slices are
@@ -205,6 +206,15 @@ let lastSnapshotAt = -Infinity;
  * object, so an identity check is enough.
  */
 let savedScene: Scene | null = null;
+/**
+ * D-088 — content hashes for the authoritative dirty signal. `savedHash` is the hash of
+ * the scene at the last load/save; `currentHash` is recomputed lazily by `reconcileDirty`
+ * (on a history boundary / markSaved), NOT per mutation. `dirty` is `savedHash !==
+ * currentHash` once reconciled; between reconciles `set()` keeps an optimistic identity
+ * value. See `state/README.md`.
+ */
+let savedHash: number | null = null;
+let currentHash: number | null = null;
 
 /**
  * In-memory element clipboard for the layer right-click Copy / Cut / Paste
@@ -245,13 +255,25 @@ export function set(patch: Partial<DesignerStoreState>): void {
     lastSnapshotAt = t;
   }
   const nextScene = patch.scene !== undefined ? patch.scene : current.scene;
+  const sceneChanged = patch.scene !== undefined && patch.scene !== current.scene;
   current = {
     ...current,
     ...patch,
     canUndo: past.length > 0,
     canRedo: future.length > 0,
-    dirty: nextScene !== null && nextScene !== savedScene,
+    // D-088 — OPTIMISTIC dirty: a scene edit toggles dirty by identity (so undo back to
+    // the saved object clears it instantly); a non-scene patch (selection, zoom, …)
+    // preserves dirty. The authoritative content-hash reconcile runs on a history
+    // boundary / markSaved (`reconcileDirty`), so a drag never hashes per tick.
+    dirty: sceneChanged ? nextScene !== null && nextScene !== savedScene : current.dirty,
   };
+  for (const l of listeners) l(current);
+}
+
+/** Write `dirty` directly (authoritative) and notify only when it actually changes. */
+function writeDirty(d: boolean): void {
+  if (current.dirty === d) return;
+  current = { ...current, dirty: d };
   for (const l of listeners) l(current);
 }
 
@@ -323,6 +345,10 @@ export function redo(): void {
  */
 export function markHistoryBoundary(): void {
   lastSnapshotAt = -Infinity;
+  // D-088 — authoritative dirty reconcile at edit/gesture boundaries. Only hash when
+  // optimistically dirty: a project that `set()` left clean is clean by identity, so an
+  // idle pointerup never pays for a hash.
+  if (current.dirty) reconcileDirty();
 }
 
 /**
@@ -351,8 +377,8 @@ export function runAsSingleHistoryEntry(fn: () => void): void {
  * edit.
  */
 export function markSaved(): void {
-  savedScene = current.scene;
-  set({});
+  setSavedBaseline(current.scene);
+  writeDirty(false);
 }
 
 /**
@@ -369,9 +395,31 @@ export function setSuppressHistory(v: boolean): void {
   suppressHistory = v;
 }
 
-/** Set the "last saved" scene baseline that the `dirty` flag compares against. */
-export function setSavedScene(s: Scene | null): void {
-  savedScene = s;
+/**
+ * Set the "last saved" baseline the `dirty` flag compares against — both the scene
+ * reference (identity fast-path) and its content hash (`savedHash`/`currentHash`). Call on
+ * load and save. D-088.
+ */
+export function setSavedBaseline(scene: Scene | null): void {
+  savedScene = scene;
+  savedHash = scene === null ? null : hashScene(scene);
+  currentHash = savedHash;
+}
+
+/**
+ * Authoritatively reconcile `dirty` from the document CONTENT hash (D-088): recompute
+ * `currentHash` and set `dirty = savedHash !== currentHash`. This is what clears dirty when
+ * the operator edits then reverts to byte-identical content (a fresh scene object whose
+ * hash matches the baseline). Called from `markHistoryBoundary` and `markSaved`.
+ */
+export function reconcileDirty(): void {
+  if (current.scene === null) {
+    currentHash = null;
+    writeDirty(false);
+    return;
+  }
+  currentHash = hashScene(current.scene);
+  writeDirty(savedScene !== null && savedHash !== currentHash);
 }
 
 // ── Clipboard (elements-domain state, kept here for simplicity) ────────────
@@ -399,6 +447,9 @@ export function _resetCore(): void {
   past = [];
   future = [];
   clipboardElement = null;
+  savedScene = null;
+  savedHash = null;
+  currentHash = null;
   if (noticeTimer !== null) {
     clearTimeout(noticeTimer);
     noticeTimer = null;

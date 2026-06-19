@@ -417,3 +417,49 @@ projectId, handleKey }`); add `projects.openDisk()` (handle-carrying open); upda
 6. **`structuredClone` of `FileSystemFileHandle` into IndexedDB.** Confirmed cloneable, but verify on the
    target Chromium and across OPFS-vs-real-FS handle origins.
 7. **beforeunload UX.** Generic, non-customizable browser prompt; arm only when `isDirty` to avoid nagging.
+
+---
+
+## 7. STEP-1 implementation notes — the five clarifications (as built)
+
+1. **Delete-then-save.** When a Save through the cached handle throws `NotFoundError` /
+   `NotReadableError` (`isMissingFileError` in `createDesignerBridge.ts`), `saveDisk` does NOT
+   recreate — it returns `{ ok: false, reason: 'moved-or-deleted' }`. The renderer
+   (`TopToolbar.save` and `SaveBeforeSwitchModal.save`) then shows the notice "File was moved
+   or deleted — choose where to save." and retries as Save As.
+2. **No-FS-Access fallback tier.** `saveDisk` is: `showSaveFilePicker` handle → else
+   `isOpfsSupported()` ⇒ `ProjectStore.save` (OPFS path-model, reopenable via Recent) → else a
+   download (insecure / in-memory). This replaced the old always-download fallback.
+3. **Dirty-writer contract.** `set()` sets `dirty` optimistically by scene identity
+   (`nextScene !== savedScene`; non-scene patches preserve it); `reconcileDirty()` is
+   authoritative (`savedHash !== currentHash`) and runs on `markHistoryBoundary` and `markSaved`.
+   `setSavedBaseline(scene)` sets BOTH `savedScene` and `savedHash = currentHash` on load/save. No
+   per-tick hashing during a drag (the boundary only hashes when optimistically dirty).
+4. **Hash.** `state/scene-hash.ts` — FNV-1a over a recursively sorted-key canonical serialization
+   of `Scene` with `metadata.updatedAt` removed. Unit-tested for key-order stability and
+   updatedAt-exclusion (`tests/scene-hash.test.ts`).
+5. **Test split.** E2E in MemoryWorkspace mode (`tests/e2e/desktop-save.spec.ts`) covers the
+   title asterisk, SAVE enabled/disabled + the amber `border-top`, the SaveBeforeSwitch guard on
+   Home, and the duplicate-modal regression. Unit covers `handle-store` round-trip + permission
+   gating (`packages/storage/tests/handle-store.test.ts`, via an in-memory IndexedDB shim — see
+   note below), `scene-hash`, and the dirty signal (`tests/store-dirty.test.ts`).
+
+**Deviation from the recon:** the handle-store unit test uses a small **in-memory IndexedDB shim**
+rather than `fake-indexeddb` — the latter is not a dependency and adding it (network + lockfile
+churn) was avoided to keep the gate self-contained. The shim exercises the same
+save/load/forget/namespacing surface; permission gating is tested against a mocked handle.
+
+### Manual checklist — native-picker paths (NOT automatable in Playwright)
+
+Run in a File-System-Access browser (Chromium/Edge) with a real on-disk file:
+
+1. **Save As** a new project → choose a `.cg.json` location → file is written; title loses `*`.
+2. **Save** again → writes silently to the same file (no picker); title stays clean.
+3. Edit → **reload the tab** → reopen the project from **Recent** → a permission prompt may
+   appear (grant) → **Save** writes back to the same file with no new picker.
+4. With the project saved, **move or delete** the file on disk, then **Save** → notice "File was
+   moved or deleted — choose where to save." + Save As dialog (no silent recreate).
+5. **Recent** with a denied/removed handle → clicking it falls back to the open picker with the
+   "That file is unavailable — choose it again." notice (no crash).
+6. **Open…** a `.cg.json` via the picker → edit → **Save** writes back to that opened file.
+7. Edit, then **close the tab / refresh** → the browser's generic unsaved-changes prompt fires.

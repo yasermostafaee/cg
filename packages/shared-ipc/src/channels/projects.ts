@@ -12,11 +12,18 @@ import { definePublishChannel } from '../publish.js';
  */
 
 const RecentEntrySchema = z.object({
-  path: z.string().min(1),
   name: z.string().min(1),
-  templateType: z.string().min(1),
-  /** Last-opened wall-clock time (ISO8601). */
-  lastOpenedAt: z.string().datetime(),
+  /** D-088 — project id; present for handle-keyed entries, absent in legacy ones. */
+  projectId: z.string().min(1).optional(),
+  /** D-088 — IndexedDB key of the project's persisted `FileSystemFileHandle`. */
+  handleKey: z.string().min(1).optional(),
+  /** D-088 — last-saved wall-clock time (ISO8601). */
+  lastSavedAt: z.string().datetime().optional(),
+  /** Legacy (pre-D-088) — workspace-relative OPFS path; still openable, upgraded on next save. */
+  path: z.string().min(1).optional(),
+  templateType: z.string().min(1).optional(),
+  /** Legacy (pre-D-088) — last-opened wall-clock time (ISO8601). */
+  lastOpenedAt: z.string().datetime().optional(),
 });
 
 export type RecentProject = z.infer<typeof RecentEntrySchema>;

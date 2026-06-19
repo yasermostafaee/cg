@@ -61,10 +61,34 @@ export interface DesignerBridge {
      * name (no path — browsers don't expose the absolute disk path).
      * Returns `{ ok: false }` when the operator cancels the dialog.
      */
-    saveDisk(req: {
-      scene: Scene;
-      askPath: boolean;
-    }): Promise<{ ok: boolean; filename: string | null }>;
+    saveDisk(req: { scene: Scene; askPath: boolean }): Promise<{
+      ok: boolean;
+      filename: string | null;
+      /** D-088 — IndexedDB key of the persisted file handle when saved via a handle. */
+      handleKey?: string;
+      /**
+       * D-088 — set when the cached handle's file was moved/deleted: the caller should
+       * notice "File was moved or deleted — choose where to save." and retry as Save As.
+       */
+      reason?: 'moved-or-deleted';
+    }>;
+    /**
+     * D-088 — open a project through `showOpenFilePicker` so the opened file carries a
+     * writable handle (a later Save writes back to it). Falls back to a hidden input (a
+     * `File`, no handle) when File System Access is unavailable. `scene` is null on cancel.
+     */
+    openDisk(): Promise<{ scene: Scene | null; handleKey: string | null }>;
+    /**
+     * D-088 — reopen a Recent entry. A handle entry re-acquires write permission in the
+     * click and opens; a legacy `path` entry opens via the OPFS path-model. When the handle
+     * is denied / stale / its file is gone, returns `needsPicker: true` so the caller falls
+     * back to `openDisk()` with a notice.
+     */
+    openRecent(req: { projectId?: string; handleKey?: string; path?: string }): Promise<{
+      scene: Scene | null;
+      handleKey: string | null;
+      needsPicker: boolean;
+    }>;
     recent(): Promise<ChannelResponse<typeof ProjectsRecentChannel>>;
     starters(): Promise<ChannelResponse<typeof ProjectsStartersChannel>>;
     starter(

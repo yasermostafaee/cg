@@ -108,3 +108,9 @@ export const dropdownDivider = style({
 
 // Leading checkmark slot for the View toggle items.
 export const checkSlot = style({ display: 'inline-block', width: '14px' });
+
+// D-089 — the SAVE control reflects unsaved state. It is NOT the blue primary variant;
+// a transparent top border reserves space so toggling to the unsaved colour never shifts
+// layout. When dirty, the top border turns the unsaved-amber `#ffdd40`.
+export const saveCtl = style({ borderTop: '2px solid transparent' });
+export const saveCtlDirty = style({ borderTop: '2px solid #ffdd40' });

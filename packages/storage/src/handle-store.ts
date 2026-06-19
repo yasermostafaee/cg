@@ -48,12 +48,41 @@ export async function forgetDirectoryHandle(id: string): Promise<void> {
   await tx('readwrite', (store) => store.delete(id));
 }
 
+// D-088 — per-project FILE handles (the project's `.cg.json` on disk). Keyed in the
+// SAME object store as directory handles but namespaced so the two never collide.
+// FileSystemFileHandle is structured-cloneable exactly like a directory handle, so it
+// is stored directly; permission re-acquisition is still the caller's job (gesture).
+const FILE_KEY_PREFIX = 'project-file:';
+
+export async function saveFileHandle(
+  projectId: string,
+  handle: FileSystemFileHandle,
+): Promise<void> {
+  await tx('readwrite', (store) => store.put(handle, FILE_KEY_PREFIX + projectId));
+}
+
+export async function loadFileHandle(projectId: string): Promise<FileSystemFileHandle | null> {
+  const result = await tx<unknown>('readonly', (store) => store.get(FILE_KEY_PREFIX + projectId));
+  return (result as FileSystemFileHandle | undefined) ?? null;
+}
+
+export async function forgetFileHandle(projectId: string): Promise<void> {
+  await tx('readwrite', (store) => store.delete(FILE_KEY_PREFIX + projectId));
+}
+
+/** A handle that may carry the File System Access permission methods (file OR directory). */
+type PermissionedHandle = FileSystemHandle & {
+  queryPermission?: (d: FileSystemHandlePermissionDescriptor) => Promise<PermissionState>;
+  requestPermission?: (d: FileSystemHandlePermissionDescriptor) => Promise<PermissionState>;
+};
+
 /**
- * Re-acquire read/write permission for a previously stored handle. Browsers
- * drop the permission grant between sessions; this re-prompts (or silently
- * succeeds if already granted). Returns true when usable.
+ * Re-acquire read/write permission for a previously stored handle (file or directory).
+ * Browsers drop the permission grant between sessions; this re-prompts (or silently
+ * succeeds if already granted). MUST be called from a user gesture when a prompt is
+ * possible. Returns true when usable.
  */
-export async function ensureHandlePermission(handle: FileSystemDirectoryHandle): Promise<boolean> {
+export async function ensureHandlePermission(handle: PermissionedHandle): Promise<boolean> {
   const opts: FileSystemHandlePermissionDescriptor = { mode: 'readwrite' };
   // OPFS handles have no permission gate; treat the absence of the methods
   // as "already usable".
