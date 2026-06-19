@@ -90,18 +90,20 @@ export function SharedLibraryPanel(): JSX.Element {
   }, [ctxMenu]);
 
   async function addImage(): Promise<void> {
-    let end: (() => void) | undefined;
-    try {
-      // D-067 — show the loading tile only once a file is actually picked (onPicked),
-      // not while the file dialog is open; clear it on resolve OR error. A cancelled
-      // picker never fires onPicked, so the tile never shows.
-      await window.cg.sharedImages.import(() => {
-        end = begin();
-      });
-    } catch {
-      /* cancelled (no file) or failed */
-    } finally {
-      end?.();
+    const files = await window.cg.sharedImages.pick();
+    if (files.length === 0) return; // cancelled — no tiles shown
+    // One tile per picked file; import in reverse selection order so the prepend
+    // lands the batch selection-order at the top; each file is independent — a
+    // failure clears only its own tile and the rest still import.
+    const items = files.map((file) => ({ file, end: begin() }));
+    for (const { file, end } of [...items].reverse()) {
+      try {
+        await window.cg.sharedImages.store(file);
+      } catch {
+        /* this file failed — skip it; the others still import */
+      } finally {
+        end();
+      }
     }
   }
 

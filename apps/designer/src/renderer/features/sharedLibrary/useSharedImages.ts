@@ -28,13 +28,16 @@ export function useSharedImages(): readonly AssetMeta[] {
     async function refresh(): Promise<void> {
       const initial = await window.cg.sharedImages.list();
       if (cancelled) return;
-      setList(initial);
+      // D-067 — newest first (reverse the oldest→newest store index) so a freshly
+      // imported image (prepended below) sits at the TOP of the library.
+      setList([...initial].reverse());
       for (const image of initial) await prime(image);
     }
 
     void refresh();
     const offImported = window.cg.sharedImages.onImported((image) => {
-      setList((prev) => (prev.some((a) => a.assetId === image.assetId) ? prev : [...prev, image]));
+      // D-067 — prepend so a freshly imported image appears at the top.
+      setList((prev) => (prev.some((a) => a.assetId === image.assetId) ? prev : [image, ...prev]));
       void prime(image);
     });
     const onRemoved: RemovedHandler = (assetId) => {

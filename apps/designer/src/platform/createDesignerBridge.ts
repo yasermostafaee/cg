@@ -196,14 +196,10 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
     },
 
     assets: {
-      import: async (req, onPicked) => {
-        const file = await pickFile(req.kind);
-        if (file === null) throw new Error('No file selected');
-        // D-067 — a file was actually selected; signal the caller right before the
-        // decode/store work so it can show a loading indicator (cancel never reaches here).
-        onPicked?.();
-        return { asset: await assets.importFile(file, req.kind) };
-      },
+      // D-067 — split pick + store so the caller drives multi-file imports: pick
+      // returns the chosen files (one tile each), store imports one independently.
+      pick: (kind) => pickFiles(kind),
+      store: async (file, kind) => ({ asset: await assets.importFile(file, kind) }),
       list: () => assets.list(),
       remove: async (req) => ({ ok: await assets.remove(req.assetId) }),
       onImported: (handler) => assets.imported.subscribe(handler),
@@ -231,13 +227,9 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
     },
 
     sharedImages: {
-      import: async (onPicked) => {
-        const file = await pickFile('image');
-        if (file === null) throw new Error('No file selected');
-        // D-067 — signal once a file is actually selected (before decode/store).
-        onPicked?.();
-        return { image: await sharedImages.importFile(file) };
-      },
+      // D-067 — split pick + store (mirrors assets) for multi-file imports.
+      pick: () => pickFiles('image'),
+      store: async (file) => ({ image: await sharedImages.importFile(file) }),
       list: () => sharedImages.list(),
       remove: async (req) => {
         const cached = sharedImageUrlCache.get(req.assetId);
@@ -322,17 +314,19 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
   };
 }
 
-function pickFile(kind?: 'image' | 'font' | 'lottie' | 'video'): Promise<File | null> {
+/** D-067 — open a multi-select file picker; resolves to the chosen files ([] if cancelled). */
+function pickFiles(kind?: 'image' | 'font' | 'lottie' | 'video'): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
+    input.multiple = true;
     if (kind === 'image') input.accept = 'image/*';
     else if (kind === 'font')
       input.accept = '.ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2';
     else if (kind === 'lottie') input.accept = 'application/json,.json';
     else if (kind === 'video') input.accept = 'video/*';
     input.onchange = () => {
-      resolve(input.files?.[0] ?? null);
+      resolve(input.files !== null ? Array.from(input.files) : []);
     };
     input.click();
   });

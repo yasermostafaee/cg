@@ -169,18 +169,21 @@ export function ProjectAssetsPanel(): JSX.Element {
 
   async function importKind(kind: 'image' | 'font'): Promise<void> {
     setAddMenu(null);
-    let end: (() => void) | undefined;
-    try {
-      // D-067 — show the loading tile only once a file is actually picked (onPicked),
-      // not while the file dialog is open; clear it on resolve OR error. A cancelled
-      // picker never fires onPicked, so the tile never shows.
-      await window.cg.assets.import({ sourcePath: '', kind }, () => {
-        end = begin();
-      });
-    } catch {
-      /* cancelled (no file) or failed */
-    } finally {
-      end?.();
+    const files = await window.cg.assets.pick(kind);
+    if (files.length === 0) return; // cancelled — no tiles shown
+    // One loading tile per picked file (shown only after a real selection). Import
+    // in REVERSE selection order so the prepend (newest on top) lands the batch in
+    // selection order; each file is independent — a failure clears only its own tile
+    // and the rest still import.
+    const items = files.map((file) => ({ file, end: begin() }));
+    for (const { file, end } of [...items].reverse()) {
+      try {
+        await window.cg.assets.store(file, kind);
+      } catch {
+        /* this file failed — skip it; the others still import */
+      } finally {
+        end();
+      }
     }
   }
 
