@@ -447,7 +447,8 @@ describe('group delete + accessor parity (D-041)', () => {
     designerStore.setSelection(['el-1', 'el-2', 'el-3']);
     designerStore.markHistoryBoundary();
     designerStore.deleteSelection();
-    expect(layers()[0]!.children).toHaveLength(0);
+    // D-088 — deleting every child of the auto-created scaffold layer prunes it.
+    expect(layers()).toHaveLength(0);
     designerStore.undo();
     expect(layers()[0]!.children).toHaveLength(3);
   });

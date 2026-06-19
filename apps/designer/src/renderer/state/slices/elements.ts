@@ -47,6 +47,23 @@ function flattenLayerChildren(layers: readonly Layer[]): Element[] {
 }
 
 /**
+ * D-088 — is `layer` the UNTOUCHED scaffold that {@link addElement} auto-creates when a
+ * composition has none? (Auto id `L<digits>`, the default name/props, not locked.) Used by
+ * `removeElement` to prune the orphaned empty layer when its last child is deleted, so
+ * add→delete returns the document to its pre-add form. A layer the operator customized
+ * (renamed / blend mode / locked) or that still has children is NEVER a scaffold.
+ */
+function isAutoScaffoldLayer(layer: Layer): boolean {
+  return (
+    /^L\d+$/.test(layer.id) &&
+    layer.name === 'Layer 1' &&
+    layer.visible === true &&
+    layer.locked === false &&
+    layer.blendMode === 'normal'
+  );
+}
+
+/**
  * Insert `el` into `layerIdx` at array position `pos`, optionally making it
  * the sole selection. No-op when the scene or target layer is missing.
  */
@@ -325,9 +342,15 @@ export const elementsSlice = {
     if (found === null) return;
     const { layer, layerIdx, elIdx } = found;
     const nextChildren = layer.children.filter((_, i) => i !== elIdx);
-    const nextLayer: Layer = { ...layer, children: nextChildren };
     const nextLayers = [...activeLayersOf(current.scene)];
-    nextLayers[layerIdx] = nextLayer;
+    // D-088 — if this removal empties an UNTOUCHED auto-created scaffold layer, prune it so
+    // add→delete undoes `addElement`'s layer side-effect (no orphaned empty "Layer 1"). A
+    // customized or still-populated layer is kept.
+    if (nextChildren.length === 0 && isAutoScaffoldLayer(layer)) {
+      nextLayers.splice(layerIdx, 1);
+    } else {
+      nextLayers[layerIdx] = { ...layer, children: nextChildren };
+    }
     const nextSelection = new Set(current.selection);
     nextSelection.delete(elementId);
     const keepKey =

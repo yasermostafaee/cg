@@ -20,7 +20,13 @@ function canonical(value: unknown): string {
   if (t === 'object') {
     const obj = value as Record<string, unknown>;
     const keys = Object.keys(obj)
-      .filter((k) => obj[k] !== undefined)
+      // Drop `undefined` AND empty arrays so an absent optional array (e.g. a
+      // composition's `fields`/`bindings`, schema-default `[]`) hashes identically to a
+      // materialized `[]` — the document model is the same either way (D-088).
+      .filter((k) => {
+        const v = obj[k];
+        return v !== undefined && !(Array.isArray(v) && v.length === 0);
+      })
       .sort();
     return `{${keys.map((k) => `${JSON.stringify(k)}:${canonical(obj[k])}`).join(',')}}`;
   }

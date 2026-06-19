@@ -46,6 +46,10 @@ function firstLayerChildren(): readonly Element[] {
   const state = designerStore.get();
   return editSceneOf(state.scene, state.activeCompositionId)!.layers[0]!.children;
 }
+function activeLayers() {
+  const state = designerStore.get();
+  return editSceneOf(state.scene, state.activeCompositionId)!.layers;
+}
 
 beforeEach(() => {
   freshSceneWithShape();
@@ -708,7 +712,8 @@ describe('designerStore — deleteSelection (Delete/Backspace precedence)', () =
 
     designerStore.deleteSelection();
 
-    expect(firstLayerChildren()).toHaveLength(0);
+    // D-088 — el-1 was the only child of the auto scaffold layer, so the layer is pruned.
+    expect(activeLayers()).toHaveLength(0);
   });
 
   it('multi-select: deletes ALL selected keyframes (layer kept)', () => {
@@ -731,7 +736,8 @@ describe('designerStore — deleteSelection (Delete/Backspace precedence)', () =
 
     designerStore.deleteSelection();
 
-    expect(firstLayerChildren()).toHaveLength(0);
+    // D-088 — both children removed empties the scaffold layer → pruned.
+    expect(activeLayers()).toHaveLength(0);
   });
 
   it('nothing selected → no-op', () => {
@@ -746,9 +752,9 @@ describe('designerStore — deleteSelection (Delete/Backspace precedence)', () =
 
     designerStore.markHistoryBoundary();
     designerStore.deleteSelection();
-    expect(firstLayerChildren()).toHaveLength(0);
+    expect(activeLayers()).toHaveLength(0); // scaffold pruned after its last child goes
 
     designerStore.undo();
-    expect(firstLayerChildren()).toHaveLength(2);
+    expect(firstLayerChildren()).toHaveLength(2); // one undo restores the layer + both shapes
   });
 });

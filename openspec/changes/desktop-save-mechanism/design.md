@@ -483,3 +483,30 @@ sibling of the open button (never a destructive file action) — plus a "Clear a
 Tests: `tests/project-store-recent.test.ts` (drops entry + forgets handle, OPFS file intact,
 persists in the KV, clear-all) and the E2E remove case in `tests/e2e/desktop-save.spec.ts`
 (reload-persistence is unit-covered — E2E `MemoryKv` resets on reload).
+
+## 9. Edit-then-revert dirty fix (Case B — add shape → delete it)
+
+Diagnosed empirically: after `add shape → delete it`, `dirty` stayed true because the scene
+was NOT byte-identical to the saved baseline — `reconcileDirty` ran correctly, the hashes
+genuinely differed. Two pre-existing `removeElement` behaviors D-088's content-hash surfaced:
+(1) `addElement` auto-creates a scaffold `Layer 1` for an empty composition and `removeElement`
+left it **orphaned** (empty, with a volatile `L<timestamp>` id); (2) `removeElement` materialized
+empty `fields:[]` / `bindings:[]` on the composition (absent before).
+
+Fix = delete-restores-canonical-form, two durable parts:
+
+- **Hash normalization** (`scene-hash.ts`): the canonical serialization now drops empty arrays,
+  so an absent optional array (e.g. a comp's `fields`/`bindings`) hashes identically to a
+  materialized `[]`. Covers ANY code path, not just `removeElement`.
+- **Scaffold prune** (`removeElement`): when a removal empties an **untouched auto-created
+  scaffold** layer (`isAutoScaffoldLayer`: auto id `L<digits>`, default name/props, not locked,
+  no remaining children), the layer is pruned — folded into the SAME `set()` as the removal, so
+  delete+prune is ONE atomic undo step. A renamed / customized / still-populated layer is never
+  pruned.
+
+`undo()`/`redo()` now also call `reconcileDirty()` so dirty is authoritative after history
+navigation (e.g. redo back to the pruned-empty state reads clean). Regression + guard tests:
+`tests/store-dirty-revert.test.ts` (add→delete ⇒ clean & hash-matches & scaffold gone; renamed
+layer not pruned; sibling layers intact; delete+prune is one undo step that restores shape+layer,
+redo re-prunes). The spec's "Editing then reverting to byte-identical content is clean" scenario
+is now satisfied by this fix.

@@ -312,6 +312,10 @@ export function undo(): void {
   } finally {
     suppressHistory = false;
   }
+  // D-088 — history nav lands on a different scene OBJECT than the baseline even when its
+  // content equals it (e.g. redo back to a reverted/pruned state). Reconcile by content
+  // hash so dirty is authoritative after undo/redo, not just identity-optimistic.
+  reconcileDirty();
 }
 
 /**
@@ -335,6 +339,8 @@ export function redo(): void {
   } finally {
     suppressHistory = false;
   }
+  // D-088 — see undo(): reconcile dirty by content hash after redo too.
+  reconcileDirty();
 }
 
 /**
