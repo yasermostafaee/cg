@@ -77,14 +77,16 @@ export interface DesignerBridge {
 
   assets: {
     /**
-     * Pick a file and import it. `onPicked` (D-067) fires once a file is actually
-     * selected — i.e. right before decode/store starts — so callers can show a
-     * loading indicator only for a real import, not while the picker is open (a
-     * cancel never fires it).
+     * D-067 — open a (multi-select) file picker and return the chosen files (empty
+     * if cancelled). Split from the old single-shot `import()` so the caller drives
+     * picking: it shows a loading tile per file only after a real selection (a cancel
+     * returns `[]`), then `store()`s each file independently.
      */
-    import(
-      req: ChannelRequest<typeof AssetsImportChannel>,
-      onPicked?: () => void,
+    pick(kind?: AssetMeta['kind']): Promise<File[]>;
+    /** D-067 — import one already-picked file (decode / store / dedupe by sha256). */
+    store(
+      file: File,
+      kind?: AssetMeta['kind'],
     ): Promise<ChannelResponse<typeof AssetsImportChannel>>;
     list(): Promise<ChannelResponse<typeof AssetsListChannel>>;
     remove(
@@ -110,11 +112,12 @@ export interface DesignerBridge {
    */
   sharedImages: {
     /**
-     * Pick an image file and import it into the shared library. `onPicked` (D-067)
-     * fires once a file is actually selected (before decode/store), so callers show
-     * a loading indicator only for a real import, never on a cancelled picker.
+     * D-067 — open a (multi-select) image picker; returns the chosen files (empty
+     * if cancelled). The caller shows a tile per file then `store()`s each.
      */
-    import(onPicked?: () => void): Promise<ChannelResponse<typeof SharedImagesImportChannel>>;
+    pick(): Promise<File[]>;
+    /** D-067 — import one already-picked image into the shared library. */
+    store(file: File): Promise<ChannelResponse<typeof SharedImagesImportChannel>>;
     list(): Promise<ChannelResponse<typeof SharedImagesListChannel>>;
     remove(
       req: ChannelRequest<typeof SharedImagesRemoveChannel>,

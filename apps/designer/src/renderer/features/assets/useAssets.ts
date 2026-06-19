@@ -27,13 +27,18 @@ export function useAssets(): readonly AssetMeta[] {
     async function refresh(): Promise<void> {
       const initial = await window.cg.assets.list();
       if (cancelled) return;
-      setList(initial);
+      // D-067 — newest first: the store's index is oldest→newest, so reverse it so
+      // a freshly imported asset (prepended below) sits at the TOP of the panel.
+      setList([...initial].reverse());
       for (const a of initial) await prime(a);
     }
 
     void refresh();
     const offImported = window.cg.assets.onImported((asset) => {
-      setList((prev) => (prev.some((a) => a.assetId === asset.assetId) ? prev : [...prev, asset]));
+      // D-067 — prepend so a freshly imported asset is at the top; re-importing an
+      // existing one (sha dedup returns the same asset) MOVES it to the top rather
+      // than leaving it in place.
+      setList((prev) => [asset, ...prev.filter((a) => a.assetId !== asset.assetId)]);
       void prime(asset);
     });
     // Project switch — the previous list belongs to a different
