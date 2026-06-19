@@ -43,12 +43,20 @@ Save SHALL behave as Save As.
 - **THEN** if permission is still granted the scene is written to the same file with no
   new picker
 
-#### Scenario: The cached file was moved or deleted
+#### Scenario: A write to the saved file throws
 
-- **WHEN** writing to the cached handle throws a not-found / moved-or-deleted error
-- **THEN** the Designer does NOT silently recreate the file
-- **AND** it falls back to Save As and shows the notice "File was moved or deleted — choose
-  where to save."
+- **WHEN** writing to the cached handle THROWS (permission revoked, a disk error, or an
+  invalid handle)
+- **THEN** the Designer does not crash the save
+- **AND** it falls back to Save As and shows the notice "Couldn't write to the file —
+  choose where to save."
+
+#### Scenario: The saved file was deleted on disk
+
+- **WHEN** the saved file is deleted on disk and the operator triggers Save while the
+  handle is still valid
+- **THEN** the browser recreates the file at the same handle location (the write does not
+  throw) and the scene is written — with no Save As prompt
 
 ### Requirement: Open carries a writable handle with a no-FS-Access fallback
 

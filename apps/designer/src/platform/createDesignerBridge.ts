@@ -168,13 +168,12 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
                 sceneSaveHandles.set(scene.id, cached);
                 projects.recordRecentHandle(scene);
                 return { ok: true, filename: cached.name, handleKey: scene.id };
-              } catch (err) {
-                // Delete-then-save: the file was moved/deleted. Do NOT silently recreate —
-                // tell the renderer to notice and retry as Save As.
-                if (isMissingFileError(err)) {
-                  return { ok: false, filename: null, reason: 'moved-or-deleted' };
-                }
-                throw err;
+              } catch {
+                // The write THREW — permission revoked, disk error, or an otherwise
+                // invalid handle. Don't crash the save: tell the renderer to notice and
+                // retry as Save As. (A merely deleted file does NOT land here — the
+                // browser silently recreates it at the same handle location.)
+                return { ok: false, filename: null, reason: 'write-failed' };
               }
             }
             // No usable handle (none, or permission denied) → fall through to Save As.
@@ -437,13 +436,6 @@ async function writeSceneToHandle(handle: FileSystemFileHandle, scene: Scene): P
 async function readSceneFromHandle(handle: FileSystemFileHandle): Promise<Scene> {
   const file = await handle.getFile();
   return SceneSchema.parse(JSON.parse(await file.text()));
-}
-
-/** D-088 — the handle's backing file was moved or deleted (vs. a permission failure). */
-function isMissingFileError(err: unknown): boolean {
-  return (
-    err instanceof DOMException && (err.name === 'NotFoundError' || err.name === 'NotReadableError')
-  );
 }
 
 /** File-system-safe slug — lower-case, ascii, hyphens, no extension. */

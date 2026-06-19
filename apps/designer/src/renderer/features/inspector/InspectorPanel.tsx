@@ -24,7 +24,6 @@ import * as s from './InspectorPanel.css.js';
 
 interface Props {
   scene: Scene | null;
-  projectPath: string | null;
   selection: ReadonlySet<string>;
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
   selectedKeyframes: readonly {
@@ -42,7 +41,6 @@ interface Props {
  */
 export function InspectorPanel({
   scene,
-  projectPath,
   selection,
   selectedKeyframe,
   selectedKeyframes,
@@ -71,18 +69,12 @@ export function InspectorPanel({
     if (selection.size > 1) {
       return <MultiSelectSection elements={selectedElements(scene, selection)} />;
     }
-    return <SceneInspector scene={scene} projectPath={projectPath} />;
+    return <SceneInspector scene={scene} />;
   }
   return <ElementInspector element={selected} scene={scene} selectedKeyframe={selectedKeyframe} />;
 }
 
-function SceneInspector({
-  scene,
-  projectPath,
-}: {
-  scene: Scene;
-  projectPath: string | null;
-}): JSX.Element {
+function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
   const bindModeFieldId = useDesignerSelector((s) => s.bindModeFieldId);
   return (
     <aside className={s.panel} aria-label="Inspector">
@@ -92,7 +84,6 @@ function SceneInspector({
       <DurationRow scene={scene} />
       <FrameRateRow scene={scene} />
       <Row label="elements" value={String(countElements(scene))} />
-      <Row label="path" value={projectPath ?? '(unsaved)'} />
       <BackgroundControl background={scene.background} variant="full" />
       <PlayoutSection scene={scene} />
       {(scene.fields.length > 0 || compositionInstancesOf(scene).length > 0) && (

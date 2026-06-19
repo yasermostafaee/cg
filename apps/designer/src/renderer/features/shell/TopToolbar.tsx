@@ -77,9 +77,10 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
       designerStore.markSaved();
       return;
     }
-    // D-088 — the cached file was moved/deleted: notice + retry as Save As (don't recreate).
-    if (res.reason === 'moved-or-deleted') {
-      designerStore.showNotice('File was moved or deleted — choose where to save.');
+    // D-088 — the write to the saved file threw (permission/disk/invalid handle):
+    // notice + retry as Save As.
+    if (res.reason === 'write-failed') {
+      designerStore.showNotice("Couldn't write to the file — choose where to save.");
       await saveAs();
     }
   }

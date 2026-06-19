@@ -45,9 +45,9 @@ export function SaveBeforeSwitchModal({
     setError(null);
     try {
       let res = await window.cg.projects.saveDisk({ scene, askPath: false });
-      // D-088 — cached file moved/deleted: notice + retry as Save As (don't recreate).
-      if (!res.ok && res.reason === 'moved-or-deleted') {
-        designerStore.showNotice('File was moved or deleted — choose where to save.');
+      // D-088 — the write threw (permission/disk/invalid handle): notice + retry as Save As.
+      if (!res.ok && res.reason === 'write-failed') {
+        designerStore.showNotice("Couldn't write to the file — choose where to save.");
         res = await window.cg.projects.saveDisk({ scene, askPath: true });
       }
       if (!res.ok) {

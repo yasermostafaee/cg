@@ -433,7 +433,6 @@ export function App(): JSX.Element {
             <div className={s.sidePanel} style={{ width: INSPECTOR_DEFAULT }}>
               <InspectorPanel
                 scene={editScene}
-                projectPath={projectPath}
                 selection={selection}
                 selectedKeyframe={selectedKeyframe}
                 selectedKeyframes={selectedKeyframes}

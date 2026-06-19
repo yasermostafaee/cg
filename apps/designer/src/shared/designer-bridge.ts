@@ -67,10 +67,12 @@ export interface DesignerBridge {
       /** D-088 — IndexedDB key of the persisted file handle when saved via a handle. */
       handleKey?: string;
       /**
-       * D-088 — set when the cached handle's file was moved/deleted: the caller should
-       * notice "File was moved or deleted — choose where to save." and retry as Save As.
+       * D-088 — set when the write to the cached handle THREW (permission revoked, disk
+       * error, invalid handle): the caller should notice "Couldn't write to the file —
+       * choose where to save." and retry as Save As. (A merely deleted file does not throw
+       * — the browser recreates it at the same handle location.)
        */
-      reason?: 'moved-or-deleted';
+      reason?: 'write-failed';
     }>;
     /**
      * D-088 — open a project through `showOpenFilePicker` so the opened file carries a

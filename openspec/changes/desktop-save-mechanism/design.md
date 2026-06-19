@@ -422,11 +422,14 @@ projectId, handleKey }`); add `projects.openDisk()` (handle-carrying open); upda
 
 ## 7. STEP-1 implementation notes — the five clarifications (as built)
 
-1. **Delete-then-save.** When a Save through the cached handle throws `NotFoundError` /
-   `NotReadableError` (`isMissingFileError` in `createDesignerBridge.ts`), `saveDisk` does NOT
-   recreate — it returns `{ ok: false, reason: 'moved-or-deleted' }`. The renderer
-   (`TopToolbar.save` and `SaveBeforeSwitchModal.save`) then shows the notice "File was moved
-   or deleted — choose where to save." and retries as Save As.
+1. **Write-failure fallback (revised — observed delete-then-save = recreate).** On Chromium,
+   deleting the saved file then Save does NOT throw: the browser recreates the file at the same
+   handle location (acceptable/expected). The try/catch around the cached-handle write is therefore
+   the ERROR path for a write that THROWS — permission revoked, disk error, or an invalid handle:
+   `saveDisk` returns `{ ok: false, reason: 'write-failed' }` (catches any throw; the
+   `isMissingFileError` NotFound filter was removed so a non-NotFound throw can't escape unhandled),
+   and the renderer (`TopToolbar.save` and `SaveBeforeSwitchModal.save`) shows "Couldn't write to
+   the file — choose where to save." and retries as Save As.
 2. **No-FS-Access fallback tier.** `saveDisk` is: `showSaveFilePicker` handle → else
    `isOpfsSupported()` ⇒ `ProjectStore.save` (OPFS path-model, reopenable via Recent) → else a
    download (insecure / in-memory). This replaced the old always-download fallback.
@@ -457,8 +460,10 @@ Run in a File-System-Access browser (Chromium/Edge) with a real on-disk file:
 2. **Save** again → writes silently to the same file (no picker); title stays clean.
 3. Edit → **reload the tab** → reopen the project from **Recent** → a permission prompt may
    appear (grant) → **Save** writes back to the same file with no new picker.
-4. With the project saved, **move or delete** the file on disk, then **Save** → notice "File was
-   moved or deleted — choose where to save." + Save As dialog (no silent recreate).
+4. With the project saved, **delete** the file on disk, then **Save** → the browser **recreates**
+   it at the same location and writes the scene (no prompt — expected). To exercise the error path,
+   make the write THROW (revoke permission, or a read-only / disconnected location) → notice
+   "Couldn't write to the file — choose where to save." + Save As dialog.
 5. **Recent** with a denied/removed handle → clicking it falls back to the open picker with the
    "That file is unavailable — choose it again." notice (no crash).
 6. **Open…** a `.cg.json` via the picker → edit → **Save** writes back to that opened file.
