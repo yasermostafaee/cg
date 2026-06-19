@@ -326,6 +326,46 @@ delivers the selection; ×10 reliability; multi-select; cancel resolves `[]`). B
 `feature/D-067-image-import-loading` (same branch as the open D-067 PR, per request — do
 not merge yet). Mark `[x]` on merge.
 
+## [~] B-021 — non-image/font files import as broken tiles (picker `accept` is a bypassable hint) ⟨priority: high⟩ — focused fix
+
+**Repro:**
+
+1. In the Designer, open the Project Assets panel (or Shared Library) and click
+   **Add** → **Image…** (or **Add library image**).
+2. In the OS dialog switch the file-type filter to **All files** (the picker opens on
+   images, but with "All files" set you can navigate and select any format).
+3. Select a **pdf / mp3 / mp4**.
+
+**Expected:** unsupported files are rejected — not imported, no tile — and a
+non-blocking notice says which were skipped; any valid image(s) in the same selection
+still import.
+**Actual:** the pdf/mp3/mp4 is added with a **broken thumbnail**. The `<input accept>`
+attribute only _hints_ the dialog; it does not constrain what the user can actually
+select, and the store imported whatever it was given (`AssetStore.importFile` falls back
+to `kind: 'image'` for any extension; `SharedImageStore` is always `image`), so the
+broken tile rendered.
+**Env:** Browser / Designer; both Project Assets (image + font) and Shared Library.
+Reproduces on `feature/D-067-image-import-loading`.
+**Root cause:** `accept` is a UI hint, trivially bypassed via "All files". The selection
+was never validated after the picker returned, and the stores accept any bytes.
+**Fix:** validate the SELECTION after `pick()` returns, before `store`. New single
+source of truth `apps/designer/src/shared/asset-types.ts` (allowed extensions + canonical
+MIME per kind, mirroring the store's `KIND_BY_EXT`) drives BOTH the picker `accept` hint
+(`acceptAttr`, now consumed by `pickFiles`) and the post-pick gate (`partitionSupported`
+/ `isSupportedFile`, by extension primarily, MIME as a fallback). Both panels
+(`SharedLibraryPanel.addImage` for image; `ProjectAssetsPanel.importKind` for image AND
+font) now split the picked files: unsupported ones are dropped before any `begin()`/tile
+or `store` and reported via a shared non-blocking `Callout` notice
+(`useImportSkips`/`ImportSkipsNotice`, `role="status"`, auto-dismiss + manual dismiss);
+valid ones still import + prepend. Mixed batch → valid import, rest noticed;
+all-invalid → just the notice. No bridge/schema change (renderer-side gate) → focused
+fix, no OpenSpec change. Regression tests: `apps/designer/tests/import-loading.test.ts`
+("post-pick file-type validation (B-021)" — shared all-invalid, shared mixed,
+project-assets Image…+pdf, project-assets Font…+non-font; asserting no store call, no
+tile, the valid file still imports, and the skip notice). Branch:
+`feature/D-067-image-import-loading` (same branch as the open D-067 PR, per request — do
+not merge yet). Mark `[x]` on merge.
+
 <!-- Add new open bugs above this line using the format. Example:
 
 ## [ ] B-0NN — Export blocked dialog shows wrong error count

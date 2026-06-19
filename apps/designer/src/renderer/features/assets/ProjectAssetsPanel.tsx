@@ -5,6 +5,8 @@ import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { AssetThumb } from './AssetThumb.js';
 import { ImportingThumb } from './ImportingThumb.js';
 import { useImportPending } from './useImportPending.js';
+import { ImportSkipsNotice, useImportSkips } from './useImportSkips.js';
+import { partitionSupported } from '../../../shared/asset-types.js';
 import { emitAssetRemoved, useAssets } from './useAssets.js';
 import { clearAll as clearAllAssetUrls, revoke as revokeAssetUrl } from './assetUrlCache.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
@@ -62,6 +64,8 @@ export function ProjectAssetsPanel(): JSX.Element {
   const scene = useDesignerSelector((s) => s.scene);
   // D-067 — pending import count drives the in-grid loading tile(s).
   const { pending: importing, begin } = useImportPending();
+  // B-021 — files rejected by post-pick type validation, surfaced as a notice.
+  const { skipped, report: reportSkips, dismiss: dismissSkips } = useImportSkips();
   const [query, setQuery] = useState('');
   const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ asset: AssetMeta; x: number; y: number } | null>(null);
@@ -171,11 +175,18 @@ export function ProjectAssetsPanel(): JSX.Element {
     setAddMenu(null);
     const files = await window.cg.assets.pick(kind);
     if (files.length === 0) return; // cancelled — no tiles shown
-    // One loading tile per picked file (shown only after a real selection). Import
+    // B-021 — `accept` is a bypassable hint, so validate the SELECTION against the
+    // chosen kind: reject the wrong type (e.g. a pdf/mp3 picked into Image…, or a
+    // non-font into Font…) BEFORE store so it never becomes a broken tile, and report
+    // it in a non-blocking notice. Valid files of the chosen kind still import.
+    const { valid, rejected } = partitionSupported(kind, files);
+    reportSkips(rejected.map((file) => file.name));
+    if (valid.length === 0) return; // every pick was unsupported — only the notice
+    // One loading tile per VALID file (shown only after a real selection). Import
     // in REVERSE selection order so the prepend (newest on top) lands the batch in
     // selection order; each file is independent — a failure clears only its own tile
     // and the rest still import.
-    const items = files.map((file) => ({ file, end: begin() }));
+    const items = valid.map((file) => ({ file, end: begin() }));
     for (const { file, end } of [...items].reverse()) {
       try {
         await window.cg.assets.store(file, kind);
@@ -262,6 +273,7 @@ export function ProjectAssetsPanel(): JSX.Element {
           aria-label="Search assets"
         />
       </div>
+      <ImportSkipsNotice skipped={skipped} onDismiss={dismissSkips} />
       {visible.length === 0 && importing === 0 ? (
         <div className={s.emptyWrap} data-role="assets-grid">
           <p className={s.empty}>

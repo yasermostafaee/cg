@@ -1,3 +1,5 @@
+import { acceptAttr, type PickKind } from '../shared/asset-types.js';
+
 /**
  * D-067 / B-020 — open a multi-select file picker; resolves to the chosen files,
  * or `[]` when the picker is dismissed.
@@ -18,16 +20,14 @@
  * `cancel` handling dismissal there is nothing left to detect by timing, so the
  * race source is removed entirely: nothing pre-empts `change`.
  */
-export function pickFiles(kind?: 'image' | 'font' | 'lottie' | 'video'): Promise<File[]> {
+export function pickFiles(kind?: PickKind): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.multiple = true;
-    if (kind === 'image') input.accept = 'image/*';
-    else if (kind === 'font')
-      input.accept = '.ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2';
-    else if (kind === 'lottie') input.accept = 'application/json,.json';
-    else if (kind === 'video') input.accept = 'video/*';
+    // `accept` is only a hint — bypassable via "All files". The selection is enforced
+    // after the fact against the SAME source of truth (see partitionSupported, B-021).
+    if (kind !== undefined) input.accept = acceptAttr(kind);
 
     let settled = false;
     function settle(files: File[]): void {

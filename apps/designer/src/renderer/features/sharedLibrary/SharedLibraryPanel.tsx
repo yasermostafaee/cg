@@ -8,6 +8,8 @@ import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
 import { ImportingThumb } from '../assets/ImportingThumb.js';
 import { useImportPending } from '../assets/useImportPending.js';
+import { ImportSkipsNotice, useImportSkips } from '../assets/useImportSkips.js';
+import { partitionSupported } from '../../../shared/asset-types.js';
 import { GridIcon, ListIcon } from '../assets/ProjectAssetsPanel.js';
 import { fileExt, formatBytes } from '../assets/AssetThumb.js';
 import { emitSharedImageRemoved, useSharedImages, useSharedImageUrl } from './useSharedImages.js';
@@ -53,6 +55,8 @@ export function SharedLibraryPanel(): JSX.Element {
   const activeId = useActiveSharedImageId();
   // D-067 — pending import count drives the in-grid loading tile(s).
   const { pending: importing, begin } = useImportPending();
+  // B-021 — files rejected by post-pick type validation, surfaced as a notice.
+  const { skipped, report: reportSkips, dismiss: dismissSkips } = useImportSkips();
   const [ctxMenu, setCtxMenu] = useState<{ image: AssetMeta; x: number; y: number } | null>(null);
   const [confirm, setConfirm] = useState<{ image: AssetMeta; uses: number } | null>(null);
   // D-068 — search + grid/list view, mirroring ProjectAssetsPanel (its own
@@ -92,10 +96,16 @@ export function SharedLibraryPanel(): JSX.Element {
   async function addImage(): Promise<void> {
     const files = await window.cg.sharedImages.pick();
     if (files.length === 0) return; // cancelled — no tiles shown
-    // One tile per picked file; import in reverse selection order so the prepend
+    // B-021 — `accept` is a bypassable hint, so validate the SELECTION: reject
+    // non-images (pdf/mp3/mp4 from "All files") BEFORE store so they never become a
+    // broken tile, and report them in a non-blocking notice. Valid files still import.
+    const { valid, rejected } = partitionSupported('image', files);
+    reportSkips(rejected.map((file) => file.name));
+    if (valid.length === 0) return; // every pick was unsupported — only the notice
+    // One tile per VALID file; import in reverse selection order so the prepend
     // lands the batch selection-order at the top; each file is independent — a
     // failure clears only its own tile and the rest still import.
-    const items = files.map((file) => ({ file, end: begin() }));
+    const items = valid.map((file) => ({ file, end: begin() }));
     for (const { file, end } of [...items].reverse()) {
       try {
         await window.cg.sharedImages.store(file);
@@ -165,6 +175,7 @@ export function SharedLibraryPanel(): JSX.Element {
           aria-label="Search library images"
         />
       </div>
+      <ImportSkipsNotice skipped={skipped} onDismiss={dismissSkips} />
       {visible.length === 0 && importing === 0 ? (
         <div className={ps.emptyWrap} data-role="shared-library-grid">
           <p className={ps.empty}>
