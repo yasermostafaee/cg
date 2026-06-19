@@ -50,5 +50,11 @@ test.describe('D-068 — Shared Library search + view toggle', () => {
       localStorage.getItem('cg.designer.sharedLibraryView'),
     );
     expect(stored).toBe('list');
+
+    // Independent of the Project Assets view setting (separate key, never toggled here).
+    const assetsView = await app.page.evaluate(() =>
+      localStorage.getItem('cg.designer.assetsView'),
+    );
+    expect(assetsView).toBeNull();
   });
 });

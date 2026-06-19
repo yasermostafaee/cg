@@ -227,7 +227,8 @@ function SharedImageThumb({
   const isList = layout === 'list';
   return (
     <div
-      className={cx(isList ? ts.cellList : ts.cell, s.clickable)}
+      // List rows reuse AssetThumb's row class for the same hover affordance (Project Assets parity).
+      className={cx(isList ? ts.cellList : ts.cell, s.clickable, isList && 'cg-asset-row')}
       role="button"
       tabIndex={0}
       aria-pressed={active}
@@ -244,7 +245,9 @@ function SharedImageThumb({
         onContextMenu(e.clientX, e.clientY);
       }}
     >
-      <div className={cx(isList ? ts.thumbList : ts.thumb, active && s.thumbActive)}>
+      {/* `thumb` carries the frame (bg/border/overflow/centering); `thumbList` only overrides
+          the size — stack both in list mode, exactly like AssetThumb. */}
+      <div className={cx(ts.thumb, isList && ts.thumbList, active && s.thumbActive)}>
         {url !== null && (
           <img src={url} alt={image.filename} className={ts.thumbImg} draggable={false} />
         )}
