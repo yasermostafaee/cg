@@ -94,3 +94,74 @@ The Designer SHALL provide a shared library affordance to manage the device libr
 
 - **WHEN** a logo element is selected
 - **THEN** its inspector shows a combo box listing the shared library (thumbnail + name), and changing the selection re-points the element to that image
+
+### Requirement: Shared library import shows a loading indicator
+
+Once a file is actually selected (not while the file picker is open), the Shared Library panel SHALL show a loading indicator (a spinner tile) during the import, cleared when the import resolves (the real thumbnail replaces it via the library refresh) or errors. Cancelling the picker — or selecting nothing — shows no indicator at all. This gives feedback during the decode/store gap and never leaves a stuck spinner. The import logic itself is unchanged.
+
+#### Scenario: Indicator shown after a file is selected
+
+- **WHEN** the operator picks a file to add to the shared library and the import (decode/store) is in progress
+- **THEN** the panel shows a loading indicator for the pending import
+
+#### Scenario: Indicator replaced by the thumbnail on success
+
+- **WHEN** a pending shared-library import resolves
+- **THEN** the loading indicator is cleared and the imported image appears as a thumbnail
+
+#### Scenario: No indicator when the picker is cancelled
+
+- **WHEN** the operator opens the file picker for the shared library but cancels it or selects nothing
+- **THEN** no loading indicator is shown
+
+#### Scenario: Indicator cleared on error
+
+- **WHEN** a selected file's shared-library import errors
+- **THEN** the loading indicator is cleared — no stuck spinner
+
+### Requirement: Multi-file shared-library import with per-file indicators
+
+The Shared Library SHALL support importing multiple images at once. Picking N files shows N loading tiles; each image is imported independently — one failing clears only its own tile while the rest still import — and the batch is added at the top of the library in selection order (newest batch on top). Cancelling the picker (selecting nothing) shows no indicator at all.
+
+#### Scenario: Multiple files show per-file tiles, then appear in selection order
+
+- **WHEN** the operator picks N image files for the shared library
+- **THEN** N loading tiles appear, and as the imports complete the images appear at the top of the library in selection order
+
+#### Scenario: One failing import does not block the others
+
+- **WHEN** one of the picked files fails to import
+- **THEN** its loading tile is cleared and the remaining files still import
+
+#### Scenario: Cancelling the picker shows nothing
+
+- **WHEN** the operator opens the picker but selects no file
+- **THEN** no loading tile is shown
+
+### Requirement: Freshly imported library image appears at the top
+
+A freshly imported shared image SHALL appear at the TOP of the library list (newest first), and the Shared Library search SHALL still filter correctly.
+
+#### Scenario: A new import is prepended
+
+- **WHEN** the operator imports an image into a non-empty library
+- **THEN** the new image appears at the top, above the existing images
+
+#### Scenario: Search still filters after prepend
+
+- **WHEN** a search query is active
+- **THEN** the library shows only images whose filename matches the query, in newest-first order
+
+### Requirement: Shared library search and grid/list view toggle
+
+The Shared Library panel SHALL provide a filename search and a grid/list view toggle at parity with the Project Assets panel, reusing the same controls and idiom. The search filters the listed images by filename as a case-insensitive substring match; an empty query shows every image. The view toggle switches the thumbnail layout between grid and list and persists the choice across the session, independently of the Project Assets view setting.
+
+#### Scenario: Searching filters the library by filename
+
+- **WHEN** the operator types a query into the Shared Library search field
+- **THEN** the list shows only images whose filename contains the query (case-insensitive), and an empty query shows every image
+
+#### Scenario: Toggling the view switches and persists the layout
+
+- **WHEN** the operator toggles the Shared Library view between grid and list
+- **THEN** the thumbnails re-render in the chosen layout, and the choice persists across the session (and a panel re-mount), independently of the Project Assets view setting

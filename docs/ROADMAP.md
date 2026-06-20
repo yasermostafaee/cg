@@ -8,6 +8,17 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Desktop-style Save epic ([D-088](./prd/designer.md) + folded [D-089](./prd/designer.md)
+  Save-button unsaved visual + [D-093](./prd/designer.md) non-destructive Remove-from-Recent) —
+  merged & archived (2026-06-20, PR #139). Native `FileSystemFileHandle` persisted in IndexedDB
+  (survives reload, permission re-acquired in the click gesture), content-hash dirty +
+  tab-title / `beforeunload` guards, Home-closes-project, handle-keyed Recent + tiered
+  OPFS/download fallback. Absorbs D-002 / D-003. Living spec: `designer-project-persistence`.
+- Asset-import polish ([D-067](./prd/designer.md) loading indicator + the headerless D-069/D-070
+  multi-select + prepend sub-labels + the [B-019](./prd/bugs.md) / [B-020](./prd/bugs.md) /
+  [B-021](./prd/bugs.md) fixes, and [D-068](./prd/designer.md) Shared Library search + grid/list
+  view toggle) — merged & archived (2026-06-20, PRs #138 / #137 / #134 / #130). Living specs:
+  `designer-project-assets` (net-new), `designer-shared-image-library`.
 - Shared image library epic ([D-040](./prd/designer.md) + [D-062](./prd/designer.md)) — archived
   (2026-06-17). [D-062](./prd/designer.md) (merged) wired the per-project image byte→`src`
   render/inline path (runtime `assetUrls` seam + `.vcg` packaged paths + single-file HTML base64
@@ -42,36 +53,32 @@ the order changes. Strategic / non-engineering notes live in
   child-composition instance per data-list row, reuses the D-028 extensible
   list field
 
-## Next — feature wave (in this order)
+## Next — agreed order
 
-The owner UX-feature wave (D-042–D-048 + D-052) is complete — see Done (recent). The remaining
-designer backlog, roughly in priority order:
+The shipped save + import-polish work (D-088 / D-089 / D-093, D-067 / D-068) is archived — see
+Done (recent). The agreed upcoming order (one line each; **full PRD entries authored per-item when
+started** — most of these IDs are not yet filed):
 
-1. [D-060](./prd/designer.md) — Auto-size text rendering (consume `fitMode`) — needs a dedicated
-   design pass (sized like C-001). **Unblocks [D-046](./prd/designer.md)** — the sizing=auto guard
-   is PARKED until this lands and ships **coupled** with it (no unguarded window).
-2. [D-059](./prd/designer.md) — Friendly validation presets for dynamic text fields (preset
-   dropdown + "Custom (advanced)" regex escape over the existing `pattern`; designer-facing)
-3. [D-064](./prd/designer.md) — Re-wire repeater-stamped image `src` at play time — a D-062
-   correctness follow-up: D-062 wired the static tree only, so images stamped into repeater rows at
-   playout don't render in export (medium).
-4. [D-061](./prd/designer.md) — Text decoration / transform / variant controls — the rest of the
-   font controls the D-048 popover was envisioned with; needs schema + renderer (low priority)
-5. [D-063](./prd/designer.md) — Drag a Shared Library image onto the canvas — D-040 parity follow-up
-   (today click-to-select + logo tool / inspector only; add drag-drop like the Project Assets panel;
-   low-medium).
-6. [D-065](./prd/designer.md) — Shared library: keyboard-Delete to remove the selected library image
-   (the panel selection has no Delete action today; confirm the panel-item vs canvas-logo target at
-   scheduling; low).
-7. [D-066](./prd/designer.md) — Relocate shared-library management out of the per-project left-rail to
-   a project-independent home (device-level library shouldn't live inside one project; placement only;
-   low).
-8. [D-067](./prd/designer.md) — Image-import loading indicator in both asset panels (spinner tile while
-   an import decodes/stores, cleared on ready or error; lightweight, no import-logic change; low-medium).
-9. [D-068](./prd/designer.md) — Shared Library: search + grid/list view toggle, at parity with the
-   Project Assets panel (reuses its controls/styles/idiom; low-medium).
+1. [B-022](./prd/bugs.md) — scale + rotate selection bug
+2. [D-094](./prd/designer.md) — global button restyle (no default border + colors)
+3. [D-095](./prd/designer.md) — project name centered + Save adjacent
+4. [D-086](./prd/designer.md) **[DESIGN]** — per-composition Preview / Export / HTML sticky bar +
+   playout combo (`.vcg` per-composition, Save on top)
+5. [D-087](./prd/designer.md) — preview blank-until-play
+6. [D-085](./prd/designer.md) **[DESIGN]** — stop / close = CLEARED terminal state
+7. [D-071](./prd/designer.md) / D-072 / D-073 — canvas
+8. [D-092](./prd/designer.md) — icon-pack
+9. [D-074](./prd/designer.md)–D-080 — timeline / layers
+10. [D-039](./prd/designer.md) (ext) / D-081 / D-082 / D-083 / D-084 — sequence / clock
+11. [D-090](./prd/designer.md) / D-091 — chrome
+12. [B-023](./prd/bugs.md) — negative guard
 
-**Wave tail (carried over):** template cleanup — rebuild/refresh the bundled sample templates
+> **Ordering note:** D-092 (icon-pack) precedes D-075 / D-078 / D-080 / D-084.
+
+Previously-listed designer items not in this order — D-059, D-060 (unblocks the parked
+[D-046](./prd/designer.md)), D-061, D-063, D-064, D-065, D-066 — remain **queued** in the PRD but
+are deprioritized below the above.
+**Wave tail (carried over):** template cleanup — rebuild / refresh the bundled sample templates
 against the UX wave's finalized controls.
 
 ## Then — hardening wave (after features)

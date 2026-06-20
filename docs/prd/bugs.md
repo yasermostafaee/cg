@@ -263,7 +263,7 @@ package's clean script. Surfaced while reproducing B-012 from a clean tree.
 **Env:** Browser / Designer dev; reproduces on `main` after D-051. PRE-EXISTING (the orphaned track predates D-051; D-051 only corrected the diamond's visibility, which exposed the contradiction). Affects every colour property with a solid↔gradient distinction — `fill` on shapes AND `text.color` / `backgroundColor` on text (same keyframeable-iff-solid rule from D-051's registry).
 **Notes:** Decision (owner): **Option A** — switching to a non-keyframe-able fill/colour mode DELETES that property's keyframes, as ONE undo step (so an accidental switch is recoverable via undo). Fix where the fill/colour MODE is changed (the inspector's solid→gradient switch handler — likely in `FillPopover.tsx` / the colour-field commit path): when the new mode makes the property non-keyframe-able, remove that property's keyframe track in the same store transaction. Use D-051's registry predicate (`keyframeable(el)` — the gradient ⇒ false rule already exists) as the SINGLE source for "is this still keyframe-able", so the delete triggers exactly when the diamond would disappear — no parallel condition. Cover ALL solid↔gradient colour properties (shape `fill`, text `text.color` + `backgroundColor`), not just shape fill. Regression test: keyframe a solid fill → switch to gradient → assert the colour track is gone, the runtime no longer animates the colour, and one undo restores both the solid mode and its keyframes; parametrize over shape-fill + text-colour. (Confirm during repro that the runtime currently DOES still apply the orphaned track — i.e. the colour visibly animates after the switch — and that the value also stops being editable; if the observed symptom differs, report before fixing.) **DONE** — fixed on `main` (PR #97, `10cf6c8`: `clearOrphanColourTrack` in `fill-commit.ts`). No OpenSpec change; the regression tests are B-014's spec — `apps/designer/tests/fill-commit.test.ts` (unit, parametrized over shape-fill + text-colour) and `apps/designer/tests/e2e/regressions.spec.ts` (E2E).
 
-## [~] B-019 — Dragging an image THUMBNAIL doesn't add it to the canvas (native img-drag steals the cell drag) ⟨priority: medium⟩
+## [x] B-019 — Dragging an image THUMBNAIL doesn't add it to the canvas (native img-drag steals the cell drag) ⟨priority: medium⟩
 
 **Repro:**
 
@@ -290,10 +290,10 @@ image) AND the default ghost becomes the whole cell (image + name) consistently.
 behaviour spec change (the drag-onto-canvas insert is the existing, working name-drag path).
 Test: a component test asserting the thumbnail `<img>` is `draggable={false}` and the cell
 carries `draggable` + an `onDragStart` that sets `application/x-cg-asset-id` to the asset id
-(`apps/designer/tests/asset-thumb-drag.test.ts`). Branch: `fix/asset-thumb-drag`. Mark `[x]`
-on merge.
+(`apps/designer/tests/asset-thumb-drag.test.ts`). Branch: `fix/asset-thumb-drag`.
+**DONE** — merged on `main` (PR #130, `adaac87`).
 
-## [~] B-020 — adding an image fails intermittently (picker focus-timer races the change event) ⟨priority: high⟩ — focused fix
+## [x] B-020 — adding an image fails intermittently (picker focus-timer races the change event) ⟨priority: high⟩ — focused fix
 
 **Repro:**
 
@@ -323,10 +323,10 @@ a real selection settles via `change` unimpeded. `pickFiles` extracted to its ow
 behavior change (the D-069 freeze fix touched no OpenSpec spec) → focused fix, no OpenSpec
 change. Regression test: `apps/designer/tests/pick-files.test.ts` (focus-then-late-`change`
 delivers the selection; ×10 reliability; multi-select; cancel resolves `[]`). Branch:
-`feature/D-067-image-import-loading` (same branch as the open D-067 PR, per request — do
-not merge yet). Mark `[x]` on merge.
+`feature/D-067-image-import-loading` (same branch as the D-067 PR).
+**DONE** — merged on `main` with D-067 (PR #138, `21d9174`).
 
-## [~] B-021 — non-image/font files import as broken tiles (picker `accept` is a bypassable hint) ⟨priority: high⟩ — focused fix
+## [x] B-021 — non-image/font files import as broken tiles (picker `accept` is a bypassable hint) ⟨priority: high⟩ — focused fix
 
 **Repro:**
 
@@ -364,8 +364,8 @@ Regression tests: `apps/designer/tests/import-loading.test.ts`
 ("post-pick file-type validation (B-021)" — shared all-invalid, shared mixed,
 project-assets Image…+pdf, project-assets Font…+non-font; asserting no store call, no
 tile, the valid file still imports, and the toast message via `designerStore`). Branch:
-`feature/D-067-image-import-loading` (same branch as the open D-067 PR, per request — do
-not merge yet). Mark `[x]` on merge.
+`feature/D-067-image-import-loading` (same branch as the D-067 PR).
+**DONE** — merged on `main` with D-067 (PR #138, `21d9174`).
 
 <!-- Add new open bugs above this line using the format. Example:
 
