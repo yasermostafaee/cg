@@ -1,7 +1,8 @@
 /** @vitest-environment jsdom */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Layer, Scene } from '@cg/shared-schema';
 import { designerStore } from '../src/renderer/state/store.js';
+import { set } from '../src/renderer/state/store-core.js';
 import { hashScene } from '../src/renderer/state/scene-hash.js';
 import { defaultShape } from '../src/renderer/state/element-defaults.js';
 
@@ -72,6 +73,7 @@ function loadWithLayers(layers: Layer[]): void {
 }
 
 beforeEach(() => designerStore._reset());
+afterEach(() => vi.useRealTimers());
 
 describe('D-088 dirty clears on add → delete revert (content hash)', () => {
   it('empty comp → save → add shape → delete ⇒ clean AND hash matches the saved scene', () => {
@@ -140,6 +142,23 @@ describe('D-088 dirty clears on add → delete revert (content hash)', () => {
     // REDO once returns to the pruned-empty state, clean again (content == saved).
     designerStore.redo();
     expect(activeLayers()).toHaveLength(0);
+    expect(designerStore.get().dirty).toBe(false);
+  });
+
+  it('a manual revert clears dirty after the settle debounce — no boundary / further interaction', async () => {
+    vi.useFakeTimers();
+    designerStore.setScene(newProjectScene(), null);
+    designerStore.markSaved();
+    const saved = designerStore.get().scene as Scene;
+
+    // Bare scene edits with NO markHistoryBoundary — mimics an inspector commit (keyboard/
+    // blur) that produces no canvas pointerup.
+    set({ scene: { ...saved, name: 'Edited' } });
+    expect(designerStore.get().dirty).toBe(true);
+    set({ scene: { ...saved } }); // revert: fresh object, content identical to the saved scene
+    expect(designerStore.get().dirty).toBe(true); // optimistic, not yet reconciled
+
+    await vi.advanceTimersByTimeAsync(80); // the settle debounce fires — no click/boundary
     expect(designerStore.get().dirty).toBe(false);
   });
 });

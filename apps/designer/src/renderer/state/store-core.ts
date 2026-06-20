@@ -215,6 +215,15 @@ let savedScene: Scene | null = null;
  */
 let savedHash: number | null = null;
 let currentHash: number | null = null;
+/**
+ * D-088 — trailing reconcile timer. A scene edit marks dirty optimistically; this fires once
+ * after the edit burst SETTLES (so a manual revert clears the indicator promptly without
+ * needing a follow-up interaction). It's a debounce: each scene-changing `set()` reschedules
+ * it, so a drag (sets every frame) never reconciles mid-gesture — no per-tick hashing — and
+ * `markHistoryBoundary` (pointer-gesture end) cancels it and reconciles synchronously.
+ */
+let reconcileTimer: ReturnType<typeof setTimeout> | null = null;
+const RECONCILE_SETTLE_MS = 50;
 
 /**
  * In-memory element clipboard for the layer right-click Copy / Cut / Paste
@@ -268,6 +277,10 @@ export function set(patch: Partial<DesignerStoreState>): void {
     dirty: sceneChanged ? nextScene !== null && nextScene !== savedScene : current.dirty,
   };
   for (const l of listeners) l(current);
+  // D-088 — after the scene settles, authoritatively reconcile dirty by content hash, so a
+  // manual revert clears the indicator on its own (no follow-up click). Skipped during
+  // undo/redo (they reconcile synchronously themselves).
+  if (sceneChanged && current.dirty && !suppressHistory) scheduleTrailingReconcile();
 }
 
 /** Write `dirty` directly (authoritative) and notify only when it actually changes. */
@@ -275,6 +288,23 @@ function writeDirty(d: boolean): void {
   if (current.dirty === d) return;
   current = { ...current, dirty: d };
   for (const l of listeners) l(current);
+}
+
+/** Debounced trailing reconcile — fires once after the edit burst settles. */
+function scheduleTrailingReconcile(): void {
+  if (typeof setTimeout === 'undefined') return; // no timers → markHistoryBoundary covers it
+  if (reconcileTimer !== null) clearTimeout(reconcileTimer);
+  reconcileTimer = setTimeout(() => {
+    reconcileTimer = null;
+    reconcileDirty();
+  }, RECONCILE_SETTLE_MS);
+}
+
+function cancelTrailingReconcile(): void {
+  if (reconcileTimer !== null) {
+    clearTimeout(reconcileTimer);
+    reconcileTimer = null;
+  }
 }
 
 /** Subscribe to every state change; returns an unsubscribe fn. */
@@ -315,6 +345,7 @@ export function undo(): void {
   // D-088 — history nav lands on a different scene OBJECT than the baseline even when its
   // content equals it (e.g. redo back to a reverted/pruned state). Reconcile by content
   // hash so dirty is authoritative after undo/redo, not just identity-optimistic.
+  cancelTrailingReconcile();
   reconcileDirty();
 }
 
@@ -340,6 +371,7 @@ export function redo(): void {
     suppressHistory = false;
   }
   // D-088 — see undo(): reconcile dirty by content hash after redo too.
+  cancelTrailingReconcile();
   reconcileDirty();
 }
 
@@ -351,9 +383,11 @@ export function redo(): void {
  */
 export function markHistoryBoundary(): void {
   lastSnapshotAt = -Infinity;
-  // D-088 — authoritative dirty reconcile at edit/gesture boundaries. Only hash when
-  // optimistically dirty: a project that `set()` left clean is clean by identity, so an
-  // idle pointerup never pays for a hash.
+  // D-088 — a real gesture boundary (e.g. pointerup) reconciles synchronously; cancel any
+  // pending trailing reconcile since we're handling it now. Only hash when optimistically
+  // dirty: a project that `set()` left clean is clean by identity, so an idle pointerup
+  // never pays for a hash.
+  cancelTrailingReconcile();
   if (current.dirty) reconcileDirty();
 }
 
@@ -456,6 +490,7 @@ export function _resetCore(): void {
   savedScene = null;
   savedHash = null;
   currentHash = null;
+  cancelTrailingReconcile();
   if (noticeTimer !== null) {
     clearTimeout(noticeTimer);
     noticeTimer = null;

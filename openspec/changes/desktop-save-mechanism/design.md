@@ -510,3 +510,20 @@ navigation (e.g. redo back to the pruned-empty state reads clean). Regression + 
 layer not pruned; sibling layers intact; delete+prune is one undo step that restores shape+layer,
 redo re-prunes). The spec's "Editing then reverting to byte-identical content is clean" scenario
 is now satisfied by this fix.
+
+## 10. Prompt dirty reconcile after a manual revert (indicator timing)
+
+Follow-up to §9: the amber Save border + `*` lingered after a manual revert until the next
+canvas click. `reconcileDirty` only ran at `markHistoryBoundary` (pointer-gesture end), `undo`,
+or `redo` — so an edit committed without a canvas pointerup (e.g. an inspector field on
+Enter/blur) stayed optimistically dirty until the _next_ interaction.
+
+Fix (hybrid kept; option b): a scene-changing `set()` now schedules a debounced trailing
+`reconcileDirty()` (`RECONCILE_SETTLE_MS = 50`) that fires once after the edit burst settles —
+so a revert clears the indicator on its own, with no follow-up interaction. It's a debounce:
+each scene-changing set reschedules it, so a drag (a set per frame) never reconciles
+mid-gesture (no per-tick hashing); `markHistoryBoundary` (and undo/redo) cancel the pending
+timer and reconcile synchronously, and `_resetCore` clears it. Skipped during undo/redo (they
+reconcile immediately). Regression: `store-dirty-revert.test.ts` ("a manual revert clears dirty
+after the settle debounce — no boundary / further interaction", fake timers) and the E2E
+"reverting a value clears the dirty indicator without a further click".

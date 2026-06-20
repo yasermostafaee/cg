@@ -95,4 +95,35 @@ test.describe('Desktop-style Save (D-088 + D-089)', () => {
     await expect(page.getByRole('button', { name: 'Remove Beta from recent' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Remove Alpha from recent' })).toHaveCount(0);
   });
+
+  // D-088 — reverting a value to its original must clear the dirty indicator on its own
+  // (the settle-debounce reconcile), NOT only on the next canvas click. Edits via the
+  // inspector (keyboard commit) produce no canvas pointerup, which is the failure case.
+  test('reverting a value clears the dirty indicator without a further click', async ({
+    app,
+    page,
+  }) => {
+    await app.newProject('RevertTest');
+    const save = page.getByRole('button', { name: 'SAVE', exact: true });
+    await app.addRectangle(); // creates + selects a shape
+    const name = page.getByRole('textbox', { name: 'Element name' });
+
+    // Establish a saved baseline with a known element name.
+    await name.fill('Base');
+    await name.press('Enter');
+    await save.click();
+    await expect(save).toBeDisabled();
+
+    // Edit the value → dirty (no canvas interaction).
+    await name.fill('Changed');
+    await name.press('Enter');
+    await expect(save).toBeEnabled();
+    await expect(page).toHaveTitle('* RevertTest');
+
+    // Revert to the original — and do NOTHING else. The indicator must clear on its own.
+    await name.fill('Base');
+    await name.press('Enter');
+    await expect(save).toBeDisabled();
+    await expect(page).toHaveTitle('RevertTest');
+  });
 });
