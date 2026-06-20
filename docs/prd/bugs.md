@@ -477,10 +477,11 @@ clamp), plus a store test driving the static write path on a shape AND a text el
 OpenSpec change — the merged D-043 spec already requires Spread to be settable. Branch:
 `fix/B-018-spread-static-write`. Mark `[x]` on merge.
 
-## [~] B-022 — scaleX/scaleY detaches the selection box, then rotate spins wrong ⟨priority: medium⟩
+## [x] B-022 — scaleX/scaleY detaches the selection box, then rotate spins wrong ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-20-fix-selection-overlay-scale-rotate/`
 
-> **In progress** — `openspec/changes/fix-selection-overlay-scale-rotate/`. Sibling of
-> the fixed [B-004](#) (rotation handle position) — same selection-overlay transform module.
+> **Done** — merged (PR #141), archived
+> `openspec/changes/archive/2026-06-20-fix-selection-overlay-scale-rotate/`. Sibling of the
+> fixed [B-004](#) (rotation handle position) — same selection-overlay transform module.
 
 **Repro:**
 
@@ -523,4 +524,5 @@ fix intact.
 under non-uniform scale + rotation, and that `computeResize` keeps the fixed corner glued
 under scale; a component/E2E test that scales then rotates and asserts the box tracks the
 shape; re-confirm B-004 (rotate updates handle position) still passes. Capability:
-`designer-shapes` (MODIFIED — the selection-gizmo requirement). Mark `[x]` on merge.
+`designer-shapes` (MODIFIED — the selection-gizmo requirement). **DONE** — merged on `main`
+(PR #141, `bc0aa4f`), archived `openspec/changes/archive/2026-06-20-fix-selection-overlay-scale-rotate/`.

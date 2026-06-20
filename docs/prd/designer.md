@@ -2174,13 +2174,13 @@ touching the underlying files.
   **Notes:** Covered by the `designer-project-persistence` "Remove from Recent is
   non-destructive" requirement; shipped in the D-088 PR (#139).
 
-## [~] D-094 — Global button restyle: no default border + refined colors at the shared recipe ⟨priority: high⟩
+## [x] D-094 — Global button restyle: no default border + refined colors at the shared recipe ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-06-20-restyle-buttons/`
 
-> **In progress** — `openspec/changes/restyle-buttons/`. Implemented: `box` `border: none`
-> (also suppresses the UA `<button>` border), non-border fills for secondary / danger /
-> selected, and the accent refined to **Teal** (`#2DD4BF`, owner pick) via a new `onAccent`
-> token. D-089's amber SAVE indicator preserved. Regression:
-> `apps/designer/tests/e2e/button-restyle.spec.ts`.
+> **Done** — merged (PR #142), archived `openspec/changes/archive/2026-06-20-restyle-buttons/`.
+> `box` `border: none` (also suppresses the UA `<button>` border), non-border fills for
+> secondary / danger / selected, and the accent refined to **Teal** (`#2DD4BF`, owner pick)
+> via a new `onAccent` token. D-089's amber SAVE indicator preserved. New capability
+> `designer-controls`. Regression: `apps/designer/tests/e2e/button-restyle.spec.ts`.
 
 **What:** Fix the recurring "every new button has a thick border + the colors aren't
 nice" at the SOURCE — the shared `Button`/`Control` recipe
