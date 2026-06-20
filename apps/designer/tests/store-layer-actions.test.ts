@@ -16,6 +16,10 @@ function children(): readonly Element[] {
   const st = designerStore.get();
   return editSceneOf(st.scene, st.activeCompositionId)!.layers[0]!.children;
 }
+function activeLayers() {
+  const st = designerStore.get();
+  return editSceneOf(st.scene, st.activeCompositionId)!.layers;
+}
 function first(): Element {
   return children()[0]!;
 }
@@ -65,9 +69,10 @@ describe('designerStore — layer context-menu actions', () => {
 
   it('cut copies the element and removes it from the scene', () => {
     designerStore.cutElement('el-1');
-    expect(children()).toHaveLength(0);
+    // D-088 — cutting the lone child empties + prunes the auto scaffold layer.
+    expect(activeLayers()).toHaveLength(0);
     expect(designerStore.hasClipboardElement()).toBe(true);
-    // It can be pasted back.
+    // It can be pasted back (paste re-creates a scaffold layer for the clone).
     designerStore.pasteElement();
     expect(children()).toHaveLength(1);
     expect(children()[0]!.id).not.toBe('el-1');

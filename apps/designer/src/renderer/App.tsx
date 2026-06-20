@@ -188,6 +188,7 @@ export function App(): JSX.Element {
     selectedKeyframe,
     selectedKeyframes,
     keyframeInspectorOpen,
+    dirty,
   } = useDesignerSelector(
     (s) => ({
       view: s.view,
@@ -202,9 +203,30 @@ export function App(): JSX.Element {
       selectedKeyframe: s.selectedKeyframe,
       selectedKeyframes: s.selectedKeyframes,
       keyframeInspectorOpen: s.keyframeInspectorOpen,
+      dirty: s.dirty,
     }),
     shallowEqual,
   );
+
+  // D-088 — the tab title reflects the open project + dirty state: `* name` dirty,
+  // `name` clean, `cg Designer` when nothing is open.
+  const projectName = scene?.name ?? null;
+  useEffect(() => {
+    document.title =
+      projectName === null ? 'cg Designer' : dirty ? `* ${projectName}` : projectName;
+  }, [projectName, dirty]);
+
+  // D-088 — warn on tab-close / refresh while there are unsaved changes. The browser shows
+  // a generic prompt (custom text is ignored); arm the handler only when dirty.
+  useEffect(() => {
+    if (!dirty) return;
+    function onBeforeUnload(e: BeforeUnloadEvent): void {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
   // The editing surface is the open composition (its own size / duration /
   // layers); null when nothing is open (→ empty state). Issues validate the
   // open composition, not the now-layerless project root.
@@ -411,7 +433,6 @@ export function App(): JSX.Element {
             <div className={s.sidePanel} style={{ width: INSPECTOR_DEFAULT }}>
               <InspectorPanel
                 scene={editScene}
-                projectPath={projectPath}
                 selection={selection}
                 selectedKeyframe={selectedKeyframe}
                 selectedKeyframes={selectedKeyframes}

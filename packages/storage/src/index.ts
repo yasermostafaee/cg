@@ -24,5 +24,8 @@ export {
   saveDirectoryHandle,
   loadDirectoryHandle,
   forgetDirectoryHandle,
+  saveFileHandle,
+  loadFileHandle,
+  forgetFileHandle,
   ensureHandlePermission,
 } from './handle-store.js';

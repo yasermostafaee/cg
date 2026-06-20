@@ -6,6 +6,12 @@ import { cgCss, cgJs, cgJsIife } from './cg-runtime.js';
 // injected into the preview iframe so built-in fonts render on the canvas — the
 // iframe is srcdoc (same origin), so its `/fonts/…` URLs resolve like the host.
 import appFontsCss from '../renderer/fonts.css?inline';
+import {
+  isOpfsSupported,
+  saveFileHandle,
+  loadFileHandle,
+  ensureHandlePermission,
+} from '@cg/storage';
 import { initWorkspace, prefs } from './workspace.js';
 import { ProjectStore } from './ProjectStore.js';
 import { AssetStore } from './AssetStore.js';
@@ -144,18 +150,36 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
         return { scene, path };
       },
       save: (req) => projects.save(req.scene, req.path ?? req.scene.name),
+      // D-088 — desktop document Save / Save As. The chosen FileSystemFileHandle is the
+      // project's file, persisted in IndexedDB keyed by project id so Save keeps writing to
+      // the same on-disk file across reloads. Tiered fallback: handle → OPFS (reopenable via
+      // Recent) → download.
       saveDisk: async (req) => {
         const { scene, askPath } = req;
-        let handle = askPath ? null : (sceneSaveHandles.get(scene.id) ?? null);
-        if (handle === null) {
-          const sfp = window.showSaveFilePicker;
-          if (sfp === undefined) {
-            // Fallback for browsers without File System Access (Firefox).
-            // Trigger the browser's "save" download mechanism instead.
-            const filename = `${slugifyName(scene.name) || 'untitled'}.cg.json`;
-            triggerJsonDownload(scene, filename);
-            return { ok: true, filename };
+        const sfp = window.showSaveFilePicker;
+
+        if (sfp !== undefined) {
+          // Save (not Save As): reuse the project's persisted handle when usable.
+          if (!askPath) {
+            const cached = sceneSaveHandles.get(scene.id) ?? (await loadFileHandle(scene.id));
+            if (cached !== null && (await ensureHandlePermission(cached))) {
+              try {
+                await writeSceneToHandle(cached, scene);
+                sceneSaveHandles.set(scene.id, cached);
+                projects.recordRecentHandle(scene);
+                return { ok: true, filename: cached.name, handleKey: scene.id };
+              } catch {
+                // The write THREW — permission revoked, disk error, or an otherwise
+                // invalid handle. Don't crash the save: tell the renderer to notice and
+                // retry as Save As. (A merely deleted file does NOT land here — the
+                // browser silently recreates it at the same handle location.)
+                return { ok: false, filename: null, reason: 'write-failed' };
+              }
+            }
+            // No usable handle (none, or permission denied) → fall through to Save As.
           }
+          // Save As: pick a new file, persist its handle.
+          let handle: FileSystemFileHandle;
           try {
             handle = await sfp({
               suggestedName: `${slugifyName(scene.name) || 'untitled'}.cg.json`,
@@ -172,16 +196,84 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
             }
             throw err;
           }
+          await writeSceneToHandle(handle, scene);
           sceneSaveHandles.set(scene.id, handle);
+          await saveFileHandle(scene.id, handle);
+          projects.recordRecentHandle(scene);
+          return { ok: true, filename: handle.name, handleKey: scene.id };
         }
-        const writable = await handle.createWritable();
-        await writable.write(
-          new Blob([JSON.stringify(scene, null, 2)], { type: 'application/json' }),
-        );
-        await writable.close();
-        return { ok: true, filename: handle.name };
+
+        // No File System Access → OPFS path-model (reopenable via Recent) → download.
+        if (isOpfsSupported()) {
+          const { path } = await projects.save(scene, scene.name);
+          return { ok: true, filename: path };
+        }
+        const filename = `${slugifyName(scene.name) || 'untitled'}.cg.json`;
+        triggerJsonDownload(scene, filename);
+        return { ok: true, filename };
+      },
+      // D-088 — open via showOpenFilePicker so the file carries a writable handle.
+      openDisk: async () => {
+        const sop = window.showOpenFilePicker;
+        if (sop === undefined) {
+          // No File System Access — hidden input yields a File with no handle.
+          const picked = await pickJsonFile();
+          if (picked === null) return { scene: null, handleKey: null };
+          return { scene: SceneSchema.parse(JSON.parse(picked.text)), handleKey: null };
+        }
+        let handles: FileSystemFileHandle[];
+        try {
+          handles = await sop({
+            multiple: false,
+            types: [
+              {
+                description: 'cg Designer scene',
+                accept: { 'application/json': ['.json', '.cg.json'] },
+              },
+            ],
+          });
+        } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') {
+            return { scene: null, handleKey: null };
+          }
+          throw err;
+        }
+        const handle = handles[0];
+        if (handle === undefined) return { scene: null, handleKey: null };
+        const scene = await readSceneFromHandle(handle);
+        sceneSaveHandles.set(scene.id, handle);
+        await saveFileHandle(scene.id, handle);
+        projects.recordRecentHandle(scene);
+        return { scene, handleKey: scene.id };
+      },
+      // D-088 — reopen a Recent entry: re-acquire permission in the click, else needsPicker.
+      openRecent: async (req) => {
+        if (req.handleKey !== undefined) {
+          const handle = await loadFileHandle(req.handleKey);
+          if (handle !== null && (await ensureHandlePermission(handle))) {
+            try {
+              const scene = await readSceneFromHandle(handle);
+              sceneSaveHandles.set(scene.id, handle);
+              projects.recordRecentHandle(scene);
+              return { scene, handleKey: scene.id, needsPicker: false };
+            } catch {
+              /* file moved / deleted / unreadable — fall back to the picker */
+            }
+          }
+          return { scene: null, handleKey: null, needsPicker: true };
+        }
+        if (req.path !== undefined) {
+          // Legacy path-keyed entry → OPFS path-model (upgrades to a handle on next save).
+          const result = await projects.open(req.path);
+          return { scene: result.scene, handleKey: null, needsPicker: false };
+        }
+        return { scene: null, handleKey: null, needsPicker: true };
       },
       recent: () => Promise.resolve(projects.recent()),
+      // D-093 — remove a Recent entry (non-destructive: drops the entry + forgets the
+      // handle/permission, never the file) / empty the whole list.
+      forgetRecent: (req) => projects.forgetRecent(req),
+      clearRecent: () => projects.clearRecent(),
       starters: () => Promise.resolve(projects.starters()),
       starter: async (req) => {
         const result = projects.loadStarter(req.starterId);
@@ -335,6 +427,19 @@ function mimeOf(kind: 'image' | 'font' | 'lottie' | 'video', filename: string): 
   if (kind === 'lottie') return 'application/json';
   if (kind === 'video') return ext === 'webm' ? 'video/webm' : 'video/mp4';
   return 'application/octet-stream';
+}
+
+/** D-088 — write a scene JSON payload to an open file handle. */
+async function writeSceneToHandle(handle: FileSystemFileHandle, scene: Scene): Promise<void> {
+  const writable = await handle.createWritable();
+  await writable.write(new Blob([JSON.stringify(scene, null, 2)], { type: 'application/json' }));
+  await writable.close();
+}
+
+/** D-088 — read + parse a scene from an open file handle. */
+async function readSceneFromHandle(handle: FileSystemFileHandle): Promise<Scene> {
+  const file = await handle.getFile();
+  return SceneSchema.parse(JSON.parse(await file.text()));
 }
 
 /** File-system-safe slug — lower-case, ascii, hyphens, no extension. */

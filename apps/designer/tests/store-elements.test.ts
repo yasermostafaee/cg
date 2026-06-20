@@ -71,7 +71,8 @@ describe('designerStore — element mutations', () => {
     freshScene();
     designerStore.addElement(defaultText('el-1', 0, 0));
     designerStore.removeElement('el-1');
-    expect(layers()[0]!.children).toHaveLength(0);
+    // D-088 — removing the last child of the auto-created scaffold layer prunes the layer.
+    expect(layers()).toHaveLength(0);
     expect(designerStore.get().selection.has('el-1')).toBe(false);
   });
 

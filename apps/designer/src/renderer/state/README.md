@@ -54,8 +54,31 @@ one file. That's why the method bodies are byte-for-byte unchanged.
   load), the per-slice unit gate + E2E catch it immediately.
 - **Singleton reassignment from a slice** (which an imported binding can't do —
   you can only reassign in the owning module) goes through core mutators:
-  `resetHistory` / `setSuppressHistory` / `setSavedScene` (used by `setScene`),
+  `resetHistory` / `setSuppressHistory` / `setSavedBaseline` (used by `setScene`),
   `getClipboard` / `setClipboard`, `getNoticeTimer` / `setNoticeTimer`.
+
+### Note: dirty is a content hash (D-088)
+
+`dirty` answers "does the document model differ from the last save?" — over the
+`Scene` only (UI/transient state lives outside `scene`, so it's excluded by
+construction), and excluding `metadata.updatedAt` (bumped by saving, not editing).
+
+- **Hash** — [`scene-hash.ts`](scene-hash.ts): FNV-1a over a canonical (recursively
+  sorted-key) serialization of `Scene` with `metadata.updatedAt` removed (raw
+  `JSON.stringify` key order isn't stable for spread-built / re-parsed scenes).
+- **Baseline** — `setSavedBaseline(scene)` records BOTH `savedScene` (identity) and
+  `savedHash`/`currentHash`; called on load (`setScene`) and save (`markSaved`).
+- **Two-tier signal** — `set()` is OPTIMISTIC: a scene edit toggles `dirty` by
+  identity (so undo back to the saved object clears it instantly), a non-scene patch
+  preserves it. `reconcileDirty()` is AUTHORITATIVE (`savedHash !== currentHash`) and
+  runs on `markHistoryBoundary` (gesture/edit boundary) and `markSaved`. That's what
+  clears dirty after **edit-then-revert to identical content** (a fresh object whose
+  hash matches the baseline) — without hashing per mutation during a drag.
+
+The on-disk **file handle** is NOT in the store: it lives in the platform bridge
+(`createDesignerBridge`) keyed by project id, persisted in IndexedDB (`@cg/storage`
+`handle-store`). `closeProject` (Home / Close) resets scene + baseline + hashes via
+`setScene(null, null)`; the persisted handle is kept so the project reopens from Recent.
 
 ### Note: clipboard lives in the engine
 

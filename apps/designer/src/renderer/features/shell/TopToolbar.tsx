@@ -28,12 +28,13 @@ interface Props {
  * status bar so the operator's primary actions stay in the chrome).
  */
 export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
-  const { canUndo, canRedo, rulerVisible, snappingEnabled } = useDesignerSelector(
+  const { canUndo, canRedo, rulerVisible, snappingEnabled, dirty } = useDesignerSelector(
     (s) => ({
       canUndo: s.canUndo,
       canRedo: s.canRedo,
       rulerVisible: s.rulerVisible,
       snappingEnabled: s.snappingEnabled,
+      dirty: s.dirty,
     }),
     shallowEqual,
   );
@@ -72,7 +73,16 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
   async function save(): Promise<void> {
     if (scene === null) return;
     const res = await window.cg.projects.saveDisk({ scene, askPath: false });
-    if (res.ok) designerStore.markSaved();
+    if (res.ok) {
+      designerStore.markSaved();
+      return;
+    }
+    // D-088 — the write to the saved file threw (permission/disk/invalid handle):
+    // notice + retry as Save As.
+    if (res.reason === 'write-failed') {
+      designerStore.showNotice("Couldn't write to the file — choose where to save.");
+      await saveAs();
+    }
   }
 
   async function saveAs(): Promise<void> {
@@ -89,12 +99,13 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
   }
 
   async function openProject(): Promise<void> {
-    const result = await window.cg.projects.open({});
-    if (result.scene !== null) designerStore.setScene(result.scene, result.path);
+    // D-088 — open via the handle-carrying picker so a later Save writes back to the file.
+    const result = await window.cg.projects.openDisk();
+    if (result.scene !== null) designerStore.setScene(result.scene, null);
   }
 
   function closeProject(): void {
-    designerStore.setScene(null, null);
+    designerStore.closeProject();
   }
 
   /**
@@ -213,7 +224,7 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
         <Button
           variant="bare"
           className={navClass('home')}
-          onClick={() => guardedSwitch(() => designerStore.setView('landing'))}
+          onClick={() => guardedSwitch(() => designerStore.closeProject())}
           onMouseEnter={() => setHoverNav('home')}
           onMouseLeave={() => setHoverNav(null)}
           title="Home"
@@ -382,7 +393,13 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
       >
         HTML
       </Button>
-      <Button size="sm" variant="primary" disabled={scene === null} onClick={() => void save()}>
+      <Button
+        size="sm"
+        className={cx(s.saveCtl, dirty && s.saveCtlDirty)}
+        disabled={scene === null || !dirty}
+        onClick={() => void save()}
+        title={dirty ? 'Save changes' : 'No unsaved changes'}
+      >
         SAVE
       </Button>
       {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}

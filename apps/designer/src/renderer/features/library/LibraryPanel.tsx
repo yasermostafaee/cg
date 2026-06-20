@@ -34,7 +34,9 @@ export function LibraryPanel(): JSX.Element {
 
   async function refresh(): Promise<void> {
     const list = await window.cg.projects.recent();
-    setRecent(list.map((r) => ({ path: r.path, name: r.name })));
+    // D-088 — Recent is now handle-keyed; this (legacy, unmounted) panel only handles
+    // path entries, so keep just those.
+    setRecent(list.flatMap((r) => (r.path !== undefined ? [{ path: r.path, name: r.name }] : [])));
   }
 
   async function createNew(): Promise<void> {

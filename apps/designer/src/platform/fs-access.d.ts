@@ -20,6 +20,24 @@ interface SaveFilePickerOptions {
   excludeAcceptAllOption?: boolean;
 }
 
+interface OpenFilePickerOptions {
+  multiple?: boolean;
+  startIn?:
+    | FileSystemHandle
+    | 'desktop'
+    | 'documents'
+    | 'downloads'
+    | 'music'
+    | 'pictures'
+    | 'videos';
+  types?: readonly {
+    description?: string;
+    accept: Record<string, readonly string[]>;
+  }[];
+  excludeAcceptAllOption?: boolean;
+}
+
 interface Window {
   showSaveFilePicker?: (options?: SaveFilePickerOptions) => Promise<FileSystemFileHandle>;
+  showOpenFilePicker?: (options?: OpenFilePickerOptions) => Promise<FileSystemFileHandle[]>;
 }

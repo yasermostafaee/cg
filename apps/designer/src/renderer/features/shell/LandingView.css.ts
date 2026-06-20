@@ -127,7 +127,16 @@ export const cardLabel = style({ fontWeight: 700 });
 
 export const cardDesc = style({ color: colors.textMuted, fontSize: '0.76rem', lineHeight: 1.35 });
 
+// D-093 — a Recent row is the open button (the card) plus a sibling remove (×) control.
+export const recentRowWrap = style({
+  display: 'flex',
+  alignItems: 'stretch',
+  gap: '0.4rem',
+});
+
 export const recentRow = style({
+  flexGrow: 1,
+  minWidth: 0,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
@@ -138,6 +147,31 @@ export const recentRow = style({
   cursor: 'pointer',
   color: colors.text,
   fontSize: '0.85rem',
+});
+
+// D-093 — "Remove from recent" (a list action, NOT a destructive file action). Muted until
+// the row is hovered/focused so it never reads as primary or invites a mis-tap as Open.
+export const recentRemove = style({
+  flexShrink: 0,
+  opacity: 0.35,
+  fontSize: '1.05rem',
+  lineHeight: 1,
+  padding: '0 0.6rem',
+  color: colors.textMuted,
+  selectors: {
+    [`${recentRowWrap}:hover &`]: { opacity: 1 },
+    '&:hover': { opacity: 1, color: colors.danger },
+  },
+});
+
+export const clearRecent = style({
+  alignSelf: 'flex-start',
+  marginTop: '0.3rem',
+  color: colors.textMuted,
+  fontSize: '0.76rem',
+  selectors: {
+    '&:hover': { color: colors.danger },
+  },
 });
 
 export const recentMeta = style({

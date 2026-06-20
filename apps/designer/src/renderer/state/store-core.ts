@@ -1,4 +1,5 @@
 import type { AnimatableProperty, Element, Scene } from '@cg/shared-schema';
+import { hashScene } from './scene-hash.js';
 
 /**
  * Designer store ENGINE — the hand-rolled pub/sub core the domain slices are
@@ -205,6 +206,24 @@ let lastSnapshotAt = -Infinity;
  * object, so an identity check is enough.
  */
 let savedScene: Scene | null = null;
+/**
+ * D-088 — content hashes for the authoritative dirty signal. `savedHash` is the hash of
+ * the scene at the last load/save; `currentHash` is recomputed lazily by `reconcileDirty`
+ * (on a history boundary / markSaved), NOT per mutation. `dirty` is `savedHash !==
+ * currentHash` once reconciled; between reconciles `set()` keeps an optimistic identity
+ * value. See `state/README.md`.
+ */
+let savedHash: number | null = null;
+let currentHash: number | null = null;
+/**
+ * D-088 — trailing reconcile timer. A scene edit marks dirty optimistically; this fires once
+ * after the edit burst SETTLES (so a manual revert clears the indicator promptly without
+ * needing a follow-up interaction). It's a debounce: each scene-changing `set()` reschedules
+ * it, so a drag (sets every frame) never reconciles mid-gesture — no per-tick hashing — and
+ * `markHistoryBoundary` (pointer-gesture end) cancels it and reconciles synchronously.
+ */
+let reconcileTimer: ReturnType<typeof setTimeout> | null = null;
+const RECONCILE_SETTLE_MS = 50;
 
 /**
  * In-memory element clipboard for the layer right-click Copy / Cut / Paste
@@ -245,14 +264,47 @@ export function set(patch: Partial<DesignerStoreState>): void {
     lastSnapshotAt = t;
   }
   const nextScene = patch.scene !== undefined ? patch.scene : current.scene;
+  const sceneChanged = patch.scene !== undefined && patch.scene !== current.scene;
   current = {
     ...current,
     ...patch,
     canUndo: past.length > 0,
     canRedo: future.length > 0,
-    dirty: nextScene !== null && nextScene !== savedScene,
+    // D-088 — OPTIMISTIC dirty: a scene edit toggles dirty by identity (so undo back to
+    // the saved object clears it instantly); a non-scene patch (selection, zoom, …)
+    // preserves dirty. The authoritative content-hash reconcile runs on a history
+    // boundary / markSaved (`reconcileDirty`), so a drag never hashes per tick.
+    dirty: sceneChanged ? nextScene !== null && nextScene !== savedScene : current.dirty,
   };
   for (const l of listeners) l(current);
+  // D-088 — after the scene settles, authoritatively reconcile dirty by content hash, so a
+  // manual revert clears the indicator on its own (no follow-up click). Skipped during
+  // undo/redo (they reconcile synchronously themselves).
+  if (sceneChanged && current.dirty && !suppressHistory) scheduleTrailingReconcile();
+}
+
+/** Write `dirty` directly (authoritative) and notify only when it actually changes. */
+function writeDirty(d: boolean): void {
+  if (current.dirty === d) return;
+  current = { ...current, dirty: d };
+  for (const l of listeners) l(current);
+}
+
+/** Debounced trailing reconcile — fires once after the edit burst settles. */
+function scheduleTrailingReconcile(): void {
+  if (typeof setTimeout === 'undefined') return; // no timers → markHistoryBoundary covers it
+  if (reconcileTimer !== null) clearTimeout(reconcileTimer);
+  reconcileTimer = setTimeout(() => {
+    reconcileTimer = null;
+    reconcileDirty();
+  }, RECONCILE_SETTLE_MS);
+}
+
+function cancelTrailingReconcile(): void {
+  if (reconcileTimer !== null) {
+    clearTimeout(reconcileTimer);
+    reconcileTimer = null;
+  }
 }
 
 /** Subscribe to every state change; returns an unsubscribe fn. */
@@ -290,6 +342,11 @@ export function undo(): void {
   } finally {
     suppressHistory = false;
   }
+  // D-088 — history nav lands on a different scene OBJECT than the baseline even when its
+  // content equals it (e.g. redo back to a reverted/pruned state). Reconcile by content
+  // hash so dirty is authoritative after undo/redo, not just identity-optimistic.
+  cancelTrailingReconcile();
+  reconcileDirty();
 }
 
 /**
@@ -313,6 +370,9 @@ export function redo(): void {
   } finally {
     suppressHistory = false;
   }
+  // D-088 — see undo(): reconcile dirty by content hash after redo too.
+  cancelTrailingReconcile();
+  reconcileDirty();
 }
 
 /**
@@ -323,6 +383,12 @@ export function redo(): void {
  */
 export function markHistoryBoundary(): void {
   lastSnapshotAt = -Infinity;
+  // D-088 — a real gesture boundary (e.g. pointerup) reconciles synchronously; cancel any
+  // pending trailing reconcile since we're handling it now. Only hash when optimistically
+  // dirty: a project that `set()` left clean is clean by identity, so an idle pointerup
+  // never pays for a hash.
+  cancelTrailingReconcile();
+  if (current.dirty) reconcileDirty();
 }
 
 /**
@@ -351,8 +417,8 @@ export function runAsSingleHistoryEntry(fn: () => void): void {
  * edit.
  */
 export function markSaved(): void {
-  savedScene = current.scene;
-  set({});
+  setSavedBaseline(current.scene);
+  writeDirty(false);
 }
 
 /**
@@ -369,9 +435,31 @@ export function setSuppressHistory(v: boolean): void {
   suppressHistory = v;
 }
 
-/** Set the "last saved" scene baseline that the `dirty` flag compares against. */
-export function setSavedScene(s: Scene | null): void {
-  savedScene = s;
+/**
+ * Set the "last saved" baseline the `dirty` flag compares against — both the scene
+ * reference (identity fast-path) and its content hash (`savedHash`/`currentHash`). Call on
+ * load and save. D-088.
+ */
+export function setSavedBaseline(scene: Scene | null): void {
+  savedScene = scene;
+  savedHash = scene === null ? null : hashScene(scene);
+  currentHash = savedHash;
+}
+
+/**
+ * Authoritatively reconcile `dirty` from the document CONTENT hash (D-088): recompute
+ * `currentHash` and set `dirty = savedHash !== currentHash`. This is what clears dirty when
+ * the operator edits then reverts to byte-identical content (a fresh scene object whose
+ * hash matches the baseline). Called from `markHistoryBoundary` and `markSaved`.
+ */
+export function reconcileDirty(): void {
+  if (current.scene === null) {
+    currentHash = null;
+    writeDirty(false);
+    return;
+  }
+  currentHash = hashScene(current.scene);
+  writeDirty(savedScene !== null && savedHash !== currentHash);
 }
 
 // ── Clipboard (elements-domain state, kept here for simplicity) ────────────
@@ -399,6 +487,10 @@ export function _resetCore(): void {
   past = [];
   future = [];
   clipboardElement = null;
+  savedScene = null;
+  savedHash = null;
+  currentHash = null;
+  cancelTrailingReconcile();
   if (noticeTimer !== null) {
     clearTimeout(noticeTimer);
     noticeTimer = null;

@@ -7,7 +7,7 @@ import {
   set,
   setClipboard,
   setNoticeTimer,
-  setSavedScene,
+  setSavedBaseline,
   setSuppressHistory,
   type DesignerView,
 } from '../store-core.js';
@@ -41,8 +41,9 @@ export const documentSlice = {
       normalized = ensured.scene;
       activeId = ensured.activeId;
     }
-    // A freshly loaded/closed project starts clean — nothing to save yet.
-    setSavedScene(normalized);
+    // A freshly loaded/closed project starts clean — nothing to save yet. Baseline both
+    // the scene reference AND its content hash (D-088).
+    setSavedBaseline(normalized);
     try {
       set({
         scene: normalized,
@@ -66,6 +67,18 @@ export const documentSlice = {
   setView(view: DesignerView): void {
     if (view === current.view) return;
     set({ view });
+  },
+
+  /**
+   * D-088 — fully CLOSE the active project: clears the scene, the saved baseline + content
+   * hashes, the project path, and history, and returns to the landing view (via `setScene`).
+   * Home and "Close project" use this so the landing page holds no dirty project and the
+   * unsaved-changes guard cannot re-fire there (fixes the duplicate-modal bug). The on-disk
+   * file handle is keyed by project id in the bridge/IndexedDB and is intentionally kept so
+   * the project reopens from Recent; closing just drops the in-editor reference.
+   */
+  closeProject(): void {
+    documentSlice.setScene(null, null);
   },
 
   /** Show a transient toast notice (auto-clears). Replaces any current one. */
