@@ -72,12 +72,28 @@ child from `scene.compositions`). So a per-composition `.vcg` MUST lift the root
 into `scene.layers` (the projection) — passing the raw layerless root renders a blank frame.
 That is the concrete reason `.vcg` switches from the raw scene to the scoped+projected scene.
 
-## Phase B (not implemented here)
+## Phase B — chrome relocation (implemented)
 
-The chrome relocation (slim global bar + centered project name + per-composition sticky bar,
-project-level export removed) is the follow-up. The handlers (`exportVcg` / `exportHtml` /
-`openPreview`) already read the active composition from the store, so Phase B is a relocation
-plus a new `scene.name` read plus a playout-target combo — no further export-engine change.
-The playout-target's natural home is the `Composition` schema (sibling to the existing
-per-comp `playout` / `lifecycle`), so it persists with the comp; that schema field is deferred
-to Phase B.
+Because Phase A made the handlers (`exportVcg` / `exportHtml` / `openPreview`) read the active
+composition from the store, Phase B is a pure relocation plus a centered `scene.name` read — no
+further export-engine change. The handlers (and the Preview modal state) move into a new
+`CompositionActionBar`, rendered as the first child of `CanvasArea`'s wrap (above the zoom
+header); the global `TopToolbar` loses Preview / Export / HTML and the File→Export item, and
+gains a centered project-name + adjacent Save (absolutely centered so it's independent of the
+menu group's width). The only export/preview entry points are now the per-composition bar.
+
+### Playout-target — field only, combo deferred (owner decision)
+
+The playout-target's natural home is the `Composition` schema (sibling to `playout` /
+`lifecycle`), so it persists with the comp and travels into the `.vcg`. For now CasparCG is the
+only target, so a visible selector would be a one-option dropdown — dead-weight UI. Per the
+owner's pick we land the **persisted field only** (`PlayoutTargetSchema = z.enum(['casparcg'])`,
+optional, absent ⇒ default `casparcg`); the visible selector is pure presentation deferred to a
+real 2nd target (C-001).
+
+Export-time scope note: a NESTED comp keeps its `playoutTarget` in `scene.compositions` (it
+travels into `template.json`). The ROOT comp is projected to the top-level scene by
+`editSceneOf`, and `Scene` has no target field, so the root's export-time target is not yet
+emitted into the package — consistent with "seam only, no behavior branch": nothing consumes a
+target until a 2nd one exists, at which point it is emitted via a manifest/Scene field. The
+persisted per-comp field (project save/reload) is the deliverable now.

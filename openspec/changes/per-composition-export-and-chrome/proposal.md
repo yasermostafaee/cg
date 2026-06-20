@@ -43,19 +43,25 @@ the risky correctness core; doing it first de-risks the chrome relocation that f
 - The bridge/channel and the `@cg/vcg-format` packager are UNCHANGED — filtering is upstream
   in the renderer, exactly as HTML/Preview already did.
 
-**Phase B — chrome (follow-up; tasks listed unchecked):**
+**Phase B — chrome (implemented):**
 
 - Slim the GLOBAL top bar to menus + a centered project name + Save (D-089 amber kept);
   remove Preview / Export .vcg / Export HTML from it (absorbs D-095 — centered name + Save).
-- Add a per-composition sticky bar above the canvas: Preview, Export .vcg, Export HTML, and a
-  playout-target combo (CasparCG-only for now). Remove the project-level export entirely.
+- Add a per-composition action bar above the canvas (`CompositionActionBar`): Preview, Export
+  .vcg, Export HTML. Remove the project-level export entirely.
+- Add an optional persisted `Composition.playoutTarget` (CasparCG-only). The visible selector
+  is deferred (owner pick — a one-option dropdown is dead weight); the field is the seam, the
+  combo lands with a 2nd target (C-001).
 
 ## Impact
 
-- Affected specs: **designer-composition-export** (new capability — Phase A);
-  **designer-repeater-element** (MODIFIED Cycle guarding — Phase A). Phase B will add chrome
-  scenarios to **designer-shell**.
+- Affected specs: **designer-composition-export** (new capability — Phase A; Phase B adds the
+  per-composition action-bar + `playoutTarget` requirements); **designer-repeater-element**
+  (MODIFIED Cycle guarding — Phase A); **designer-shell** (Phase B global-bar chrome).
 - Affected code (Phase A): `@cg/shared-schema` (`composition-fields.ts`), `@cg/designer`
   (`state/scene-doc.ts`, `state/slices/composition.ts`, `state/store.ts`,
-  `features/shell/TopToolbar.tsx`). `@cg/vcg-format` untouched.
-- Risk is concentrated in the closure walker and the cycle guard; both are unit-pinned.
+  `features/shell/TopToolbar.tsx`). Phase B: `@cg/shared-schema` (`scene.ts` —
+  `playoutTarget`), `@cg/designer` (`TopToolbar` + `.css`, new `CompositionActionBar` +
+  `.css`, `CanvasArea`, `App`). `@cg/vcg-format` untouched throughout.
+- Risk is concentrated in the closure walker and the cycle guard (Phase A); both are
+  unit-pinned. Phase B is lower-risk UI relocation over the already-per-composition engine.

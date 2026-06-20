@@ -189,8 +189,10 @@ export class DesignerApp {
     await this.canvas.click({ position: pos });
   }
 
-  /** D-028 — add a ticker band by placing the Ticker tool (auto-selected). */
-  async addTicker(pos: { x: number; y: number } = { x: 120, y: 260 }): Promise<void> {
+  /** D-028 — add a ticker band by placing the Ticker tool (auto-selected). The default
+   *  drop point sits within the canvas at the test's auto-fit zoom (D-086 added a
+   *  per-composition bar above the canvas, so the viewport is slightly shorter). */
+  async addTicker(pos: { x: number; y: number } = { x: 120, y: 160 }): Promise<void> {
     await this.selectTool('Ticker');
     await this.canvas.click({ position: pos });
   }
@@ -545,9 +547,14 @@ export class DesignerApp {
 
   // ── preview modal ─────────────────────────────────────────────────────────────
 
-  /** Open the Preview modal from the toolbar. */
+  /** The per-composition action bar above the canvas (D-086 Phase B). */
+  get compositionActionBar(): Locator {
+    return this.page.getByTestId('composition-action-bar');
+  }
+
+  /** Open the Preview modal from the per-composition action bar. */
   async openPreviewModal(): Promise<void> {
-    await this.page.getByRole('button', { name: 'PREVIEW', exact: true }).click();
+    await this.compositionActionBar.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(this.previewDialog).toBeVisible();
   }
 
@@ -621,10 +628,12 @@ export class DesignerApp {
 
   // ── export ─────────────────────────────────────────────────────────────────
 
-  /** Click "HTML" and capture the single-file HTML download. Returns the file text. */
+  /** Click "Export HTML" (per-composition bar) and capture the single-file HTML download. */
   async exportHtml(): Promise<{ filename: string; html: string }> {
     const downloadPromise = this.page.waitForEvent('download');
-    await this.page.getByRole('button', { name: 'HTML', exact: true }).click();
+    await this.compositionActionBar
+      .getByRole('button', { name: 'Export HTML', exact: true })
+      .click();
     const download: Download = await downloadPromise;
     const stream = await download.createReadStream();
     const chunks: Buffer[] = [];

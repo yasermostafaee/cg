@@ -400,7 +400,7 @@ export function App(): JSX.Element {
   return (
     <main className={s.page}>
       <div className={s.studioTop}>
-        <TopToolbar scene={scene} projectPath={projectPath} issues={issues} />
+        <TopToolbar scene={scene} projectPath={projectPath} />
       </div>
       <div className={s.shell}>
         <LeftRail panel={leftPanel} onSelect={setLeftPanel} />
@@ -426,6 +426,7 @@ export function App(): JSX.Element {
                   editingTextId={editingTextId}
                   bindModeFieldId={bindModeFieldId}
                   showToolbar
+                  issues={issues}
                 />
               </div>
               <TransportBar scene={editScene} />

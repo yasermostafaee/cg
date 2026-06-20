@@ -2,6 +2,7 @@ import { style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
 
 export const bar = style({
+  position: 'relative',
   display: 'flex',
   alignItems: 'center',
   gap: '0.4rem',
@@ -9,6 +10,30 @@ export const bar = style({
   background: colors.panel,
   border: `1px solid ${colors.border}`,
   borderRadius: '0.25rem',
+});
+
+// D-095/D-086 — the centered project-name + adjacent Save cluster. Absolutely
+// centered in the bar so it's independent of the left menu group's width; the
+// menu group stays in normal flow on the left and the right side is empty.
+export const centerCluster = style({
+  position: 'absolute',
+  left: '50%',
+  top: '50%',
+  transform: 'translate(-50%, -50%)',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.5rem',
+  maxWidth: '60%',
+});
+
+export const projectName = style({
+  fontSize: '0.8rem',
+  fontWeight: 600,
+  color: colors.text,
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  maxWidth: '24rem',
 });
 
 export const group = style({

@@ -11,7 +11,7 @@ import { test, expect } from './fixtures/designer.js';
 test.describe('Ticker / crawler (D-028)', () => {
   test('author a ticker → edit items → data key → live preview update → crawl', async ({ app }) => {
     await app.newProject('Ticker');
-    await app.addTicker({ x: 120, y: 260 });
+    await app.addTicker({ x: 120, y: 160 });
 
     // The inspector shows the ticker config + its items editor (3 sample items).
     await expect(app.inspector.getByText('Time-driven', { exact: false })).toBeVisible();

@@ -1,16 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
-import type { ExportIssue } from '@cg/shared-ipc';
-import {
-  designerStore,
-  scopeSceneToComposition,
-  shallowEqual,
-  useDesignerSelector,
-} from '../../state/store.js';
+import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
 import { NewProjectModal } from './NewProjectModal.js';
-import { PreviewModal } from '../fields/PreviewModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
 import { ShortcutsModal } from './ShortcutsModal.js';
 import * as s from './TopToolbar.css.js';
@@ -18,16 +11,16 @@ import * as s from './TopToolbar.css.js';
 interface Props {
   scene: Scene | null;
   projectPath: string | null;
-  issues: readonly ExportIssue[];
 }
 
 /**
  * D-008 top menu bar — Home / File / Edit / View / Help. Home returns
  * to the landing/project picker; the other items are placeholders for
- * future menus. SAVE / EXPORT live on the right side (moved from the
- * status bar so the operator's primary actions stay in the chrome).
+ * future menus. D-095/D-086 — the centered project name + adjacent SAVE sit in
+ * the middle; Preview / Export moved to the per-composition bar above the canvas
+ * (`CompositionActionBar`), since the export engine is now per-composition.
  */
-export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
+export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
   const { canUndo, canRedo, rulerVisible, snappingEnabled, dirty } = useDesignerSelector(
     (s) => ({
       canUndo: s.canUndo,
@@ -38,14 +31,10 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
     }),
     shallowEqual,
   );
-  const errorCount = issues.filter((i) => i.severity === 'error').length;
-  const exportBlocked = scene === null || errorCount > 0;
   const [openMenu, setOpenMenu] = useState<'file' | 'edit' | 'view' | 'help' | null>(null);
   const [hoverNav, setHoverNav] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [newModalOpen, setNewModalOpen] = useState(false);
-  // Snapshot of the open composition driven by the Preview modal (null = closed).
-  const [previewScene, setPreviewScene] = useState<Scene | null>(null);
   // Queues a switch action (Close / New / Open) when there's already a
   // scene loaded — the SaveBeforeSwitchModal runs first and only then
   // does the action proceed. `() => () => Promise<void>` is React's
@@ -126,41 +115,10 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
     });
   }
 
-  async function exportVcg(): Promise<void> {
-    const st = designerStore.get();
-    // D-086 — the .vcg packages the OPEN composition scoped to its nested closure.
-    // The runtime's only play-entry is `scene.layers`, so the projection lifts the
-    // root comp's layers up (a raw, layerless root would render a blank frame).
-    const target = scopeSceneToComposition(st.scene, st.activeCompositionId);
-    if (target === null) return;
-    if (errorCount > 0) {
-      window.alert(`Export blocked: ${String(errorCount)} validation error(s) in Issues panel.`);
-      return;
-    }
-    await window.cg.export.runDisk({ scene: target });
-  }
-
-  /** D-019/D-086 — download a single self-contained CasparCG `.html` for the active
-   *  comp, scoped to its nested closure (no sibling-comp assets inlined). */
-  async function exportHtml(): Promise<void> {
-    const st = designerStore.get();
-    const target = scopeSceneToComposition(st.scene, st.activeCompositionId);
-    if (target === null) return;
-    if (errorCount > 0) {
-      window.alert(`Export blocked: ${String(errorCount)} validation error(s) in Issues panel.`);
-      return;
-    }
-    const { warnings } = await window.cg.export.runSingleFileHtml({ scene: target });
-    if (warnings.length > 0) designerStore.showNotice(warnings.join('\n'));
-  }
-
-  /** Open the Preview modal on a snapshot of the open composition (D-086 — the same
-   *  closure-scoped projection the exports use, so preview and export render alike). */
-  function openPreview(): void {
-    const st = designerStore.get();
-    const target = scopeSceneToComposition(st.scene, st.activeCompositionId);
-    if (target !== null) setPreviewScene(target);
-  }
+  // D-086 Phase B — Preview / Export (.vcg + HTML) moved OUT of the global bar to
+  // the per-composition action bar above the canvas (`CompositionActionBar`). The
+  // export engine is already per-composition (Phase A); the global bar keeps only
+  // the project-wide menus + Save.
 
   function runFileAction(fn: () => void | Promise<void>): void {
     setOpenMenu(null);
@@ -268,12 +226,6 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
               />
               <div className={s.dropdownDivider} aria-hidden />
               <FileMenuItem
-                label="Export…"
-                disabled={exportBlocked}
-                onClick={() => runFileAction(exportVcg)}
-              />
-              <div className={s.dropdownDivider} aria-hidden />
-              <FileMenuItem
                 label="Close project"
                 disabled={scene === null}
                 onClick={() => runFileSwitch(closeProject)}
@@ -370,49 +322,26 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
           )}
         </div>
       </div>
-      <span className={s.spacer} />
-      <Button
-        size="sm"
-        disabled={scene === null}
-        onClick={openPreview}
-        title="Preview the composition with live data (simulated CasparCG output)"
-      >
-        PREVIEW
-      </Button>
-      <Button
-        size="sm"
-        disabled={exportBlocked}
-        onClick={() => void exportVcg()}
-        title={errorCount > 0 ? 'Resolve validation errors first' : 'Export to .vcg'}
-      >
-        EXPORT
-      </Button>
-      <Button
-        size="sm"
-        disabled={exportBlocked}
-        onClick={() => void exportHtml()}
-        title={
-          errorCount > 0
-            ? 'Resolve validation errors first'
-            : 'Download a single self-contained CasparCG .html (with embedded GDD)'
-        }
-      >
-        HTML
-      </Button>
-      <Button
-        size="sm"
-        className={cx(s.saveCtl, dirty && s.saveCtlDirty)}
-        disabled={scene === null || !dirty}
-        onClick={() => void save()}
-        title={dirty ? 'Save changes' : 'No unsaved changes'}
-      >
-        SAVE
-      </Button>
+      {/* D-095/D-086 — centered project name with Save adjacent. Preview/Export
+          moved to the per-composition bar; the right side is otherwise empty. */}
+      <div className={s.centerCluster}>
+        {scene !== null && (
+          <span className={s.projectName} title={scene.name} data-testid="project-name">
+            {scene.name}
+          </span>
+        )}
+        <Button
+          size="sm"
+          className={cx(s.saveCtl, dirty && s.saveCtlDirty)}
+          disabled={scene === null || !dirty}
+          onClick={() => void save()}
+          title={dirty ? 'Save changes' : 'No unsaved changes'}
+        >
+          SAVE
+        </Button>
+      </div>
       {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
       {newModalOpen && <NewProjectModal onClose={() => setNewModalOpen(false)} />}
-      {previewScene !== null && (
-        <PreviewModal scene={previewScene} onClose={() => setPreviewScene(null)} />
-      )}
       {pendingSwitch !== null && scene !== null && (
         <SaveBeforeSwitchModal
           scene={scene}
