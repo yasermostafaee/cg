@@ -21,8 +21,12 @@ export const colors = {
   border: '#2e3247',
   text: _sharedFallback.text,
   textMuted: _sharedFallback.textMuted,
-  accent: '#38BDF8',
-  accentMuted: '#0EA5E9',
+  // D-094 — accent refined away from the saturated sky-blue to a fresh teal (owner pick).
+  accent: '#2DD4BF',
+  accentMuted: '#14B8A6',
+  /** Label/glyph colour that sits ON an accent fill (the primary button). Pairs with
+   *  `accent`; a light accent (teal) takes a dark on-accent, a deep accent a light one. */
+  onAccent: '#06121F',
   /** Solid hover/active fill for menu rows (matches the Loopic reference). */
   menuHover: '#2e3346',
   /** Warning/locked accent — a soft red that reads on the dark chrome. */

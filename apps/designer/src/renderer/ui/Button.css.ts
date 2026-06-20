@@ -28,13 +28,20 @@ export const base = style({
   },
 });
 
-/** Chrome skeleton for ordinary labelled / icon buttons (everything but `bare`). */
+/**
+ * Chrome skeleton for ordinary labelled / icon buttons (everything but `bare`).
+ * D-094 — NO default border: the recipe draws no resting outline; each variant's
+ * affordance is its background fill / tint, not an edge. The focus-visible ring is the
+ * `box-shadow` on `base` (unaffected). The SAVE control's amber unsaved `border-top`
+ * (D-089) is an independent override applied on top, so it is unaffected.
+ */
 export const box = style({
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
   gap: '0.32rem',
-  border: '1px solid transparent',
+  // Explicit `none` (not just omitted) so the user-agent `<button>` border is suppressed.
+  border: 'none',
   borderRadius: '0.25rem',
   fontFamily: 'inherit',
   fontWeight: 600,
@@ -44,48 +51,41 @@ export const box = style({
 });
 
 export const variant = styleVariants({
-  /** Outlined chip — the default action look (toolbar, dialogs, most controls). */
+  /** Default action — a raised neutral surface (no outline); the fill IS the affordance. */
   secondary: {
-    background: colors.panelMuted,
-    borderColor: colors.border,
+    background: colors.border,
     selectors: {
-      '&:hover:not(:disabled)': { background: colors.menuHover, borderColor: '#3a3f59' },
-      '&:active:not(:disabled)': { background: colors.border, borderColor: '#3a3f59' },
+      '&:hover:not(:disabled)': { background: '#3a3f59' },
+      '&:active:not(:disabled)': { background: colors.panelMuted },
     },
   },
   /** Accent fill — the primary call-to-action. Momentary, never a pressed toggle. */
   primary: {
     background: colors.accent,
-    color: '#06121F',
-    borderColor: colors.accentMuted,
+    color: colors.onAccent,
     fontWeight: 700,
     selectors: {
       '&:hover:not(:disabled)': { filter: 'brightness(1.08)' },
       '&:active:not(:disabled)': { filter: 'brightness(0.9)' },
-      '&:disabled': { background: colors.accent, borderColor: colors.accentMuted },
+      '&:disabled': { background: colors.accent },
     },
   },
   /** Quiet, borderless — icon buttons, toolbar glyphs, low-emphasis actions. */
   ghost: {
     background: 'transparent',
-    borderColor: 'transparent',
     color: colors.textMuted,
     selectors: {
       '&:hover:not(:disabled)': { background: colors.menuHover, color: colors.text },
       '&:active:not(:disabled)': { background: colors.border, color: colors.text },
     },
   },
-  /** Destructive — rose tint derived from the existing danger colour. */
+  /** Destructive — a faint rose fill + danger label (no outline), tinted up on hover. */
   danger: {
-    background: 'transparent',
-    borderColor: colors.border,
+    background: 'rgba(248, 113, 113, 0.12)',
     color: colors.danger,
     selectors: {
-      '&:hover:not(:disabled)': { background: 'rgba(248, 113, 113, 0.14)', borderColor: '#3a3f59' },
-      '&:active:not(:disabled)': {
-        background: 'rgba(248, 113, 113, 0.24)',
-        borderColor: colors.danger,
-      },
+      '&:hover:not(:disabled)': { background: 'rgba(248, 113, 113, 0.20)' },
+      '&:active:not(:disabled)': { background: 'rgba(248, 113, 113, 0.28)' },
     },
   },
   /**
@@ -132,10 +132,10 @@ export const icon = styleVariants({
 
 /**
  * Pressed / selected state for toggles & segmented controls (aria-pressed). Defined
- * after `variant` so it wins the resting look; `:hover` still paints over it.
+ * after `variant` so it wins the resting look; `:hover` still paints over it. D-094 —
+ * a raised fill + an ACCENT-coloured label/glyph signals "pressed" (no accent ring).
  */
 export const selected = style({
-  background: colors.menuHover,
-  borderColor: colors.accent,
-  color: colors.text,
+  background: '#3a3f59',
+  color: colors.accent,
 });
