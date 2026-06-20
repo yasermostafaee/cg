@@ -2173,3 +2173,43 @@ touching the underlying files.
   on-disk files are untouched)
   **Notes:** Covered by the `designer-project-persistence` "Remove from Recent is
   non-destructive" requirement; shipped in the D-088 PR (#139).
+
+## [~] D-094 — Global button restyle: no default border + refined colors at the shared recipe ⟨priority: high⟩
+
+> **In progress** — `openspec/changes/restyle-buttons/`. Implemented: `box` `border: none`
+> (also suppresses the UA `<button>` border), non-border fills for secondary / danger /
+> selected, and the accent refined to **Teal** (`#2DD4BF`, owner pick) via a new `onAccent`
+> token. D-089's amber SAVE indicator preserved. Regression:
+> `apps/designer/tests/e2e/button-restyle.spec.ts`.
+
+**What:** Fix the recurring "every new button has a thick border + the colors aren't
+nice" at the SOURCE — the shared `Button`/`Control` recipe
+(`apps/designer/src/renderer/ui/Button.css.ts` on `renderer/theme.ts`) — so all current
+and future buttons inherit the fix. Systemic, not per-button: remove the default
+(visible) border from the base recipe, give a non-border affordance to the variants that
+relied on it (`secondary`, `danger`, the `selected` toggle), and refine the colours away
+from the saturated sky-blue primary (anti-blue direction) using the existing dark / RTL
+theme tokens.
+**Why:** The recipe's `secondary` (default) and `danger` variants draw a `colors.border`
+outline as their main affordance, and the `selected` toggle relies on an accent-coloured
+border ring; the `box` skeleton carries a `1px` border on every button. Combined with the
+saturated `accent` (`#38BDF8`) primary fill, every button reads as bordered and the
+palette feels loud — and because it's per-recipe, it repeats on every new button.
+**Acceptance:**
+
+- WHEN any button renders THEN it has no visible default border (the recipe draws none),
+  while keeping hover / active / focus-visible / disabled states
+- WHEN a `secondary` / `danger` / `selected` button renders (the variants that relied on
+  the border) THEN it stays clearly visible via a non-border affordance (background tint /
+  hover / subtle elevation), not an outline
+- WHEN the SAVE control is unsaved THEN its amber `border-top: 2px #ffdd40` (D-089)
+  indicator is unchanged — that deliberate signal is preserved, not the offending border
+- WHEN the primary action renders THEN its colour is refined away from the saturated
+  sky-blue (the owner picks the final direction from 1–2 proposed cohesive options)
+  **Notes:** Source: `apps/designer/src/renderer/ui/Button.css.ts` (`base` / `box` /
+  `variant` / `selected`) + `renderer/theme.ts` tokens. Has a **visual-approval step**:
+  produce before/after screenshots of the main button surfaces (TopToolbar, inspector,
+  dialogs, landing) per colour option and STOP for the owner to pick the colour direction
+  before finalising; the no-border + affordance work can land first. Preserve D-089's amber
+  SAVE indicator (`TopToolbar.css.ts` `saveCtl` / `saveCtlDirty`). Change:
+  `openspec/changes/restyle-buttons/`.
