@@ -526,3 +526,32 @@ under scale; a component/E2E test that scales then rotates and asserts the box t
 shape; re-confirm B-004 (rotate updates handle position) still passes. Capability:
 `designer-shapes` (MODIFIED — the selection-gizmo requirement). **DONE** — merged on `main`
 (PR #141, `bc0aa4f`), archived `openspec/changes/archive/2026-06-20-fix-selection-overlay-scale-rotate/`.
+
+## [~] B-023 — repeater-mediated nesting cycle slips past the author-time guard ⟨priority: medium⟩ — fixed in D-086
+
+> **Fixed (Phase A of D-086)** on `feat/D-086`, change
+> `openspec/changes/per-composition-export-and-chrome/`. Surfaced by the D-086 export-scoping
+> recon (`docs/recon/d-086-export-scoping.md`).
+
+**Repro:**
+
+1. Composition A contains a **repeater** whose child composition is B (A → B via a repeater
+   edge).
+2. Try to nest an instance of A inside B (or point B's repeater at A).
+
+**Expected:** refused — A already reaches B, so nesting would close an infinite playout loop.
+**Actual (pre-fix):** allowed. The author-time guard (`canNestComposition` →
+`collectCompRefs`) only followed `composition` instance edges; a `repeater` also references a
+child composition (`RepeaterElementSchema.compositionId`) but that edge was invisible to the
+walker, so a repeater-mediated cycle passed the check and the runtime would recurse until its
+depth cap.
+**Root cause:** two ref-collectors had drifted — the field-aggregation collector
+(`composition`-only, correct for fields) and the cycle-guard collector (also `composition`-only,
+WRONG for reachability, since repeaters pull in a child composition's template + assets).
+**Fix:** one shared, repeater-aware ref-collector in `@cg/shared-schema`
+(`collectChildCompositionRefs` → `compositionClosure`), reused by the cycle guard. Field
+aggregation deliberately keeps the `composition`-only collector (repeater rows don't form field
+namespaces). **Regression:** `apps/designer/tests/composition-cycle-guard.test.ts` (repeater
+cycle blocked, composition cycle still blocked, safe nesting allowed) +
+`packages/shared-schema/tests/composition-fields.test.ts` (`compositionClosure` follows both
+edge kinds). Capability: `designer-compositions` (MODIFIED — the cycle-guard requirement).

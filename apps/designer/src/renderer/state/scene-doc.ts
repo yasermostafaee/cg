@@ -12,7 +12,7 @@ import type {
   Resolution,
   Scene,
 } from '@cg/shared-schema';
-import { migrateGlobalFieldsToCompositions } from '@cg/shared-schema';
+import { compositionClosure, migrateGlobalFieldsToCompositions } from '@cg/shared-schema';
 import { current } from './store-core.js';
 
 /**
@@ -137,6 +137,30 @@ export function editSceneOf(scene: Scene | null, id: string | null): Scene | nul
     // root so nested instances resolve and aggregate.
     fields: c.fields ?? [],
     bindings: c.bindings ?? [],
+  };
+}
+
+/**
+ * D-086 — project a composition for EXPORT: {@link editSceneOf}'s layer projection
+ * (so the root comp renders as `scene.layers` — the runtime's only play-entry) PLUS
+ * filter `scene.compositions` to `rootId`'s transitive nested CLOSURE, so sibling
+ * compositions — and their images/fonts/assets — are excluded from the package, and
+ * the exporter's preflight (which walks `scene.compositions`) auto-scopes to the
+ * closure too. Project-level fields (fonts, metadata) are preserved. Returns null
+ * when no comp is open / the id is stale (same contract as `editSceneOf`).
+ *
+ * The closure follows BOTH `composition` and `repeater` child refs, so a comp pulled
+ * in only by a repeater is still packaged (the runtime resolves a repeater's child
+ * from `scene.compositions`). The root comp itself is NOT left in `compositions`
+ * (its layers are now the top-level doc; nothing reachable references it).
+ */
+export function scopeSceneToComposition(scene: Scene | null, id: string | null): Scene | null {
+  const projected = editSceneOf(scene, id);
+  if (projected === null || scene === null || id === null) return null;
+  const closure = compositionClosure(scene, id);
+  return {
+    ...projected,
+    compositions: (scene.compositions ?? []).filter((c) => closure.has(c.id)),
   };
 }
 

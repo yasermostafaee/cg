@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   aggregateCompositionFields,
+  compositionClosure,
   defaultNestedValues,
   migrateGlobalFieldsToCompositions,
   uniqueInstanceName,
@@ -102,6 +103,57 @@ describe('aggregateCompositionFields (D-025)', () => {
     const scene = { compositions: [leaf, mid, root] } as Pick<Scene, 'compositions'>;
     const data = defaultNestedValues(aggregateCompositionFields(scene, root));
     expect(data).toEqual({ outer: { inner: { v: '' } } });
+  });
+});
+
+describe('compositionClosure (D-086)', () => {
+  // Minimal STRUCTURAL scenes — compositionClosure walks the ref graph by type +
+  // compositionId; it does not schema-validate (mirrors collectImageElements' test).
+  const inst = (compositionId: string): unknown => ({ type: 'composition', compositionId });
+  const rep = (compositionId: string): unknown => ({ type: 'repeater', compositionId });
+  const box = (children: unknown[]): unknown => ({ type: 'container', children });
+  const compOf = (id: string, children: unknown[]): unknown => ({ id, layers: [{ children }] });
+
+  it('includes children reached via BOTH a composition instance AND a repeater', () => {
+    const scene = {
+      compositions: [
+        compOf('root', [inst('childA'), rep('childB')]),
+        compOf('childA', []),
+        compOf('childB', []),
+        compOf('sibling', []), // never referenced by root
+      ],
+    } as unknown as Scene;
+    const closure = compositionClosure(scene, 'root');
+    expect([...closure].sort()).toEqual(['childA', 'childB']);
+    expect(closure.has('sibling')).toBe(false);
+  });
+
+  it('follows refs transitively + recurses containers, and excludes the (acyclic) root', () => {
+    const scene = {
+      compositions: [
+        compOf('root', [box([inst('mid')])]), // ref nested inside a container
+        compOf('mid', [rep('leaf')]), // repeater one level down
+        compOf('leaf', []),
+        compOf('sibling', [inst('root')]), // points back at root but is unreachable from it
+      ],
+    } as unknown as Scene;
+    const closure = compositionClosure(scene, 'root');
+    expect([...closure].sort()).toEqual(['leaf', 'mid']);
+    expect(closure.has('root')).toBe(false);
+    expect(closure.has('sibling')).toBe(false);
+  });
+
+  it('returns an empty set for an unknown / standalone root', () => {
+    const scene = { compositions: [compOf('solo', [])] } as unknown as Scene;
+    expect(compositionClosure(scene, 'solo').size).toBe(0);
+    expect(compositionClosure(scene, 'ghost').size).toBe(0);
+  });
+
+  it('terminates on a malformed cyclic scene (visited-set guard)', () => {
+    const scene = {
+      compositions: [compOf('a', [inst('b')]), compOf('b', [rep('a')])], // a → b → a
+    } as unknown as Scene;
+    expect([...compositionClosure(scene, 'a')].sort()).toEqual(['a', 'b']);
   });
 });
 

@@ -60,6 +60,68 @@ export function compositionInstancesOf(
 }
 
 /**
+ * Collect the child-composition ids DIRECTLY referenced within a layer tree —
+ * BOTH `composition` instance elements AND `repeater` elements (each stamps a
+ * child composition per row) — recursing into containers. The ONE ref-collector
+ * shared by {@link compositionClosure} and the author-time cycle guard, so the two
+ * can never disagree on which element kinds reference a composition.
+ *
+ * NB this is deliberately NOT used for field aggregation: a repeater's rows never
+ * form a field namespace (the single bound `list` is its data surface), so
+ * {@link compositionInstancesOf} — `composition`-only — is the right collector
+ * there. Reference closure (export, cycle detection) is the opposite: a repeater
+ * DOES pull its child composition's template + assets into the package, so it must
+ * be followed here.
+ */
+export function collectChildCompositionRefs(
+  children: readonly Element[],
+  out: Set<string>,
+): Set<string> {
+  for (const el of children) {
+    if (el.type === 'composition' || el.type === 'repeater') {
+      out.add(el.compositionId);
+    } else if (el.type === 'container') {
+      collectChildCompositionRefs(el.children, out);
+    }
+  }
+  return out;
+}
+
+/** The child-composition ids a single doc (scene or composition) directly references. */
+export function directCompositionRefs(doc: Pick<FieldDoc, 'layers'>): Set<string> {
+  const out = new Set<string>();
+  for (const layer of doc.layers) collectChildCompositionRefs(layer.children, out);
+  return out;
+}
+
+/**
+ * The transitive nested CLOSURE of composition `rootId`: every composition reachable
+ * from it by following child-composition references (`composition` + `repeater`), at
+ * any depth. Does NOT include `rootId` itself (cycles are forbidden, so a comp never
+ * reaches itself). This is exactly the set of compositions a per-composition export
+ * must package alongside the root — sibling comps unreachable from the root are
+ * excluded. A visited-set keeps it terminating even on a malformed cyclic scene.
+ */
+export function compositionClosure(
+  scene: Pick<Scene, 'compositions'>,
+  rootId: string,
+): Set<string> {
+  const byId = new Map((scene.compositions ?? []).map((c) => [c.id, c]));
+  const closure = new Set<string>();
+  const root = byId.get(rootId);
+  if (root === undefined) return closure;
+  const queue = [...directCompositionRefs(root)];
+  while (queue.length > 0) {
+    const id = queue.shift();
+    if (id === undefined || closure.has(id)) continue;
+    closure.add(id);
+    const child = byId.get(id);
+    if (child !== undefined) for (const ref of directCompositionRefs(child)) queue.push(ref);
+  }
+  return closure;
+}
+
+/**
  * Aggregate a composition's fields: its own flat fields plus, for each nested
  * child instance, that child's aggregate under the instance's namespace. A
  * standalone composition (no instances) returns just its flat fields with no

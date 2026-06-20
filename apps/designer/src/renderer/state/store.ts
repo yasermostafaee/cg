@@ -13,7 +13,7 @@ import {
   type DesignerView,
   type KeyframeRef,
 } from './store-core.js';
-import { editSceneOf } from './scene-doc.js';
+import { editSceneOf, scopeSceneToComposition } from './scene-doc.js';
 import { compositionSlice } from './slices/composition.js';
 import { documentSlice } from './slices/document.js';
 import { elementsSlice } from './slices/elements.js';
@@ -25,7 +25,7 @@ import { viewSlice } from './slices/view.js';
 // Re-export the public types + `editSceneOf` so the `state/store` entry surface
 // is byte-identical for every consumer (no import-path or symbol changes).
 export type { DesignerStoreState, DesignerTool, DesignerView, ElementFieldMetaPatch, KeyframeRef };
-export { editSceneOf };
+export { editSceneOf, scopeSceneToComposition };
 
 /**
  * Designer renderer state — small pub-sub store with a JSON-patch-ish

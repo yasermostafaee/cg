@@ -1,5 +1,5 @@
 import type { Composition, Element, Layer, Scene } from '@cg/shared-schema';
-import { compositionInstancesOf, uniqueInstanceName } from '@cg/shared-schema';
+import { compositionClosure, compositionInstancesOf, uniqueInstanceName } from '@cg/shared-schema';
 import { current, set } from '../store-core.js';
 import {
   activeLayersOf,
@@ -9,46 +9,24 @@ import {
 } from '../scene-doc.js';
 import { designerStore } from '../store.js';
 
-/** Collect the composition ids referenced by `composition` elements in a layer tree. */
-function collectCompRefs(children: readonly Element[], out: Set<string>): void {
-  for (const el of children) {
-    if (el.type === 'composition') out.add(el.compositionId);
-    else if (el.type === 'container') collectCompRefs(el.children, out);
-  }
-}
-
-/** Direct composition references made by a given composition id (or the main scene when null). */
-function directRefsOf(scene: Scene, compId: string | null): Set<string> {
-  const out = new Set<string>();
-  const layers =
-    compId === null
-      ? scene.layers
-      : (scene.compositions?.find((c) => c.id === compId)?.layers ?? []);
-  for (const layer of layers) collectCompRefs(layer.children, out);
-  return out;
-}
-
 /**
  * Whether placing an instance of `childId` inside `parentId` (null = main
  * scene) is allowed — i.e. it would NOT create a cycle. A cycle exists if the
  * child is the parent itself, or the child can already reach the parent through
  * the composition-reference graph. (Loopic permits this and loops forever; we
  * forbid it.)
+ *
+ * D-086 — the reachability test reuses the shared {@link compositionClosure}, which
+ * follows BOTH `composition` and `repeater` child references. The previous local
+ * walker only followed `composition` edges, so a repeater-mediated cycle (A
+ * instances B while B repeats A) slipped through; routing through the shared
+ * collector closes that hole.
  */
 function canNestComposition(scene: Scene, parentId: string | null, childId: string): boolean {
   if (childId === parentId) return false;
   if (parentId === null) return true; // the main scene is never referenced by anyone
-  // BFS from the child following its references; reaching the parent = cycle.
-  const seen = new Set<string>();
-  const queue = [childId];
-  while (queue.length > 0) {
-    const cur = queue.shift();
-    if (cur === undefined || seen.has(cur)) continue;
-    seen.add(cur);
-    if (cur === parentId) return false;
-    for (const ref of directRefsOf(scene, cur)) queue.push(ref);
-  }
-  return true;
+  // The child can already reach the parent ⇒ nesting it under the parent closes a loop.
+  return !compositionClosure(scene, childId).has(parentId);
 }
 
 /**
