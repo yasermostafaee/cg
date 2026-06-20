@@ -453,6 +453,27 @@ export class DesignerApp {
   }
 
   /**
+   * Set a numeric inspector field by its aria-label (e.g. 'Scale X', 'Scale Y',
+   * 'Rotation', 'Width'). Scale/opacity fields display as a percentage (200 = 2×);
+   * rotation in degrees. Commits with Enter.
+   */
+  async setInspectorNumber(label: string, value: number): Promise<void> {
+    const field = this.inspector.getByRole('spinbutton', { name: label, exact: true });
+    await field.fill(String(value));
+    await field.press('Enter');
+  }
+
+  /** B-022 — the single-selection gizmo frame outline (the projected parallelogram). */
+  get gizmoFrame(): Locator {
+    return this.page.getByTestId('gizmo-frame');
+  }
+
+  /** The first rendered element box inside the canvas preview iframe (its screen rect). */
+  get firstCanvasElement(): Locator {
+    return this.canvasFrame.locator('[data-cg-element-id]').first();
+  }
+
+  /**
    * Set the open composition's playout mode in the inspector (non-preview). The
    * Playout section lives in the COMPOSITION inspector, so deselect first.
    */
