@@ -3,7 +3,7 @@ import type { Scene } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
 import {
   designerStore,
-  editSceneOf,
+  scopeSceneToComposition,
   shallowEqual,
   useDesignerSelector,
 } from '../../state/store.js';
@@ -127,19 +127,24 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
   }
 
   async function exportVcg(): Promise<void> {
-    if (scene === null) return;
+    const st = designerStore.get();
+    // D-086 — the .vcg packages the OPEN composition scoped to its nested closure.
+    // The runtime's only play-entry is `scene.layers`, so the projection lifts the
+    // root comp's layers up (a raw, layerless root would render a blank frame).
+    const target = scopeSceneToComposition(st.scene, st.activeCompositionId);
+    if (target === null) return;
     if (errorCount > 0) {
       window.alert(`Export blocked: ${String(errorCount)} validation error(s) in Issues panel.`);
       return;
     }
-    await window.cg.export.runDisk({ scene });
+    await window.cg.export.runDisk({ scene: target });
   }
 
-  /** D-019 — download a single self-contained CasparCG `.html` for the active comp. */
+  /** D-019/D-086 — download a single self-contained CasparCG `.html` for the active
+   *  comp, scoped to its nested closure (no sibling-comp assets inlined). */
   async function exportHtml(): Promise<void> {
     const st = designerStore.get();
-    // Export the open composition (what's on the canvas), not the layerless root.
-    const target = editSceneOf(st.scene, st.activeCompositionId) ?? scene;
+    const target = scopeSceneToComposition(st.scene, st.activeCompositionId);
     if (target === null) return;
     if (errorCount > 0) {
       window.alert(`Export blocked: ${String(errorCount)} validation error(s) in Issues panel.`);
@@ -149,10 +154,11 @@ export function TopToolbar({ scene, projectPath, issues }: Props): JSX.Element {
     if (warnings.length > 0) designerStore.showNotice(warnings.join('\n'));
   }
 
-  /** Open the Preview modal on a snapshot of the open composition. */
+  /** Open the Preview modal on a snapshot of the open composition (D-086 — the same
+   *  closure-scoped projection the exports use, so preview and export render alike). */
   function openPreview(): void {
     const st = designerStore.get();
-    const target = editSceneOf(st.scene, st.activeCompositionId) ?? scene;
+    const target = scopeSceneToComposition(st.scene, st.activeCompositionId);
     if (target !== null) setPreviewScene(target);
   }
 

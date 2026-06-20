@@ -2213,3 +2213,64 @@ palette feels loud — and because it's per-recipe, it repeats on every new butt
   before finalising; the no-border + affordance work can land first. Preserve D-089's amber
   SAVE indicator (`TopToolbar.css.ts` `saveCtl` / `saveCtlDirty`). Change:
   `openspec/changes/restyle-buttons/`.
+
+## [~] D-086 — Per-composition export + top-chrome relocation ⟨priority: high⟩ — ABSORBS D-095
+
+> **Phase A (engine) landed** on `feat/D-086` — change
+> `openspec/changes/per-composition-export-and-chrome/`. The risky correctness core:
+> exports are now scoped to the OPEN composition + its transitive nested **closure**
+> (children reached via a `composition` instance OR a `repeater`), never the whole
+> project. **Phase B (chrome)** — the slim global bar + centered project name + the new
+> per-composition sticky bar — is the follow-up; its tasks are listed unchecked in the
+> change's `tasks.md`.
+
+This item **absorbs D-095** (centered project name in the global bar, adjacent to Save) —
+that chrome is delivered as part of this item's Phase B, exactly as **D-088 absorbed
+D-002/D-003**.
+
+**What:**
+
+- _Export becomes per-composition._ `.vcg` and single-file HTML export the **open**
+  composition as the package root, lifting its layers up to the runtime's only play-entry
+  (`scene.layers`) and including only its nested **closure** of compositions + their
+  assets. The project-level "export the whole scene" path is **removed**. (Phase A.)
+- _Top chrome relocation._ Slim the GLOBAL top bar to menus + a **centered project name** +
+  the Save control (D-089 amber kept); **remove** Preview / Export .vcg / Export HTML from
+  it. Add a new **per-composition sticky bar** above the canvas carrying Preview, Export
+  .vcg, Export HTML, and a playout-target combo (CasparCG-only for now — it just selects
+  the export target). (Phase B.)
+
+**Why:** Post-D-024 there is no "main scene" — the root is layerless and all content lives
+in `scene.compositions`. The whole-project `.vcg` export passes that layerless root, so the
+runtime (which renders `scene.layers`) produces a **blank frame**; and the single-file HTML
+export over-gathers images from sibling compositions because the projected scene retained
+the full `compositions` array. Export must be scoped to one composition + its closure. Two
+latent correctness bugs surfaced and are fixed here (Phase A): the export over-gather, and a
+**repeater-mediated nesting cycle** the author-time guard missed (it only followed
+`composition` edges, not `repeater` ones) — see `docs/recon/d-086-export-scoping.md` and
+bugs.md **B-023**.
+
+**Acceptance:**
+
+- WHEN a composition is exported (`.vcg` or HTML) THEN the package renders THAT composition
+  (its layers lifted to the play-entry) and contains only its nested closure — sibling
+  compositions and their assets are excluded
+- WHEN a composition nests a child via a `composition` instance AND via a `repeater` THEN
+  BOTH children (and their transitive children) are in the export closure; a composition
+  unreachable from the root is not
+- WHEN a sibling composition has a validation error (e.g. a missing asset) THEN it does NOT
+  block a valid root composition's export (preflight auto-scopes to the closure)
+- WHEN the operator would nest composition A into B while A already reaches B through a
+  `repeater` THEN the author-time guard refuses it (no infinite playout loop), and existing
+  `composition`-instance cycle detection is unchanged
+- _(Phase B)_ WHEN the editor is open THEN the global bar shows menus + the centered project
+  name + Save (amber-on-unsaved), and a per-composition sticky bar above the canvas carries
+  Preview / Export .vcg / Export HTML / playout-target; the project-level export entry is
+  gone
+
+**Notes:** Engine seam — new `compositionClosure(scene, rootId)` in `@cg/shared-schema`
+(one shared ref-collector covering `composition` + `repeater`), reused by the author-time
+cycle guard; `scopeSceneToComposition(scene, rootId)` renderer helper routes both exports +
+preview. Bridge/channel + `@cg/vcg-format` packager UNCHANGED (filtering is upstream in the
+renderer, as HTML/Preview already did). Recon: `docs/recon/d-086-export-scoping.md`. Change:
+`openspec/changes/per-composition-export-and-chrome/`.
