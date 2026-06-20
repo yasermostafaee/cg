@@ -35,4 +35,26 @@ describe('pivotClientFromGrab', () => {
     expect(p.x).toBeCloseTo(100 + 10);
     expect(p.y).toBeCloseTo(100 + 6);
   });
+
+  // B-022 — the corner offset is scaled by the element's scaleX/scaleY (the renderer's
+  // Scale·Rotate) before the zoom, so the pivot lands on the anchor under a prior scale.
+  it('applies the element scale to the offset (non-uniform)', () => {
+    // offset (40,30) at rotation 0, zoom 1, element scale (2, 1) → screen offset (80, 30).
+    const p = pivotClientFromGrab(150, 120, 40, 30, 0, 1, 2, 1);
+    expect(p.x).toBeCloseTo(150 - 80);
+    expect(p.y).toBeCloseTo(120 - 30);
+  });
+
+  it('composes element scale with rotation and zoom', () => {
+    // offset (10,0) rotated 90° → (0,10); ×scale(2,3) → (0,30); ×zoom 0.5 → (0,15).
+    const p = pivotClientFromGrab(100, 100, 10, 0, 90, 0.5, 2, 3);
+    expect(p.x).toBeCloseTo(100 - 0);
+    expect(p.y).toBeCloseTo(100 - 15);
+  });
+
+  it('defaults element scale to 1 (back-compatible 6-arg call)', () => {
+    const p = pivotClientFromGrab(150, 120, 40, 30, 0, 1);
+    expect(p.x).toBeCloseTo(110);
+    expect(p.y).toBeCloseTo(90);
+  });
 });

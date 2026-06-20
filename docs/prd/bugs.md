@@ -263,7 +263,7 @@ package's clean script. Surfaced while reproducing B-012 from a clean tree.
 **Env:** Browser / Designer dev; reproduces on `main` after D-051. PRE-EXISTING (the orphaned track predates D-051; D-051 only corrected the diamond's visibility, which exposed the contradiction). Affects every colour property with a solid↔gradient distinction — `fill` on shapes AND `text.color` / `backgroundColor` on text (same keyframeable-iff-solid rule from D-051's registry).
 **Notes:** Decision (owner): **Option A** — switching to a non-keyframe-able fill/colour mode DELETES that property's keyframes, as ONE undo step (so an accidental switch is recoverable via undo). Fix where the fill/colour MODE is changed (the inspector's solid→gradient switch handler — likely in `FillPopover.tsx` / the colour-field commit path): when the new mode makes the property non-keyframe-able, remove that property's keyframe track in the same store transaction. Use D-051's registry predicate (`keyframeable(el)` — the gradient ⇒ false rule already exists) as the SINGLE source for "is this still keyframe-able", so the delete triggers exactly when the diamond would disappear — no parallel condition. Cover ALL solid↔gradient colour properties (shape `fill`, text `text.color` + `backgroundColor`), not just shape fill. Regression test: keyframe a solid fill → switch to gradient → assert the colour track is gone, the runtime no longer animates the colour, and one undo restores both the solid mode and its keyframes; parametrize over shape-fill + text-colour. (Confirm during repro that the runtime currently DOES still apply the orphaned track — i.e. the colour visibly animates after the switch — and that the value also stops being editable; if the observed symptom differs, report before fixing.) **DONE** — fixed on `main` (PR #97, `10cf6c8`: `clearOrphanColourTrack` in `fill-commit.ts`). No OpenSpec change; the regression tests are B-014's spec — `apps/designer/tests/fill-commit.test.ts` (unit, parametrized over shape-fill + text-colour) and `apps/designer/tests/e2e/regressions.spec.ts` (E2E).
 
-## [~] B-019 — Dragging an image THUMBNAIL doesn't add it to the canvas (native img-drag steals the cell drag) ⟨priority: medium⟩
+## [x] B-019 — Dragging an image THUMBNAIL doesn't add it to the canvas (native img-drag steals the cell drag) ⟨priority: medium⟩
 
 **Repro:**
 
@@ -290,10 +290,10 @@ image) AND the default ghost becomes the whole cell (image + name) consistently.
 behaviour spec change (the drag-onto-canvas insert is the existing, working name-drag path).
 Test: a component test asserting the thumbnail `<img>` is `draggable={false}` and the cell
 carries `draggable` + an `onDragStart` that sets `application/x-cg-asset-id` to the asset id
-(`apps/designer/tests/asset-thumb-drag.test.ts`). Branch: `fix/asset-thumb-drag`. Mark `[x]`
-on merge.
+(`apps/designer/tests/asset-thumb-drag.test.ts`). Branch: `fix/asset-thumb-drag`.
+**DONE** — merged on `main` (PR #130, `adaac87`).
 
-## [~] B-020 — adding an image fails intermittently (picker focus-timer races the change event) ⟨priority: high⟩ — focused fix
+## [x] B-020 — adding an image fails intermittently (picker focus-timer races the change event) ⟨priority: high⟩ — focused fix
 
 **Repro:**
 
@@ -323,10 +323,10 @@ a real selection settles via `change` unimpeded. `pickFiles` extracted to its ow
 behavior change (the D-069 freeze fix touched no OpenSpec spec) → focused fix, no OpenSpec
 change. Regression test: `apps/designer/tests/pick-files.test.ts` (focus-then-late-`change`
 delivers the selection; ×10 reliability; multi-select; cancel resolves `[]`). Branch:
-`feature/D-067-image-import-loading` (same branch as the open D-067 PR, per request — do
-not merge yet). Mark `[x]` on merge.
+`feature/D-067-image-import-loading` (same branch as the D-067 PR).
+**DONE** — merged on `main` with D-067 (PR #138, `21d9174`).
 
-## [~] B-021 — non-image/font files import as broken tiles (picker `accept` is a bypassable hint) ⟨priority: high⟩ — focused fix
+## [x] B-021 — non-image/font files import as broken tiles (picker `accept` is a bypassable hint) ⟨priority: high⟩ — focused fix
 
 **Repro:**
 
@@ -364,8 +364,8 @@ Regression tests: `apps/designer/tests/import-loading.test.ts`
 ("post-pick file-type validation (B-021)" — shared all-invalid, shared mixed,
 project-assets Image…+pdf, project-assets Font…+non-font; asserting no store call, no
 tile, the valid file still imports, and the toast message via `designerStore`). Branch:
-`feature/D-067-image-import-loading` (same branch as the open D-067 PR, per request — do
-not merge yet). Mark `[x]` on merge.
+`feature/D-067-image-import-loading` (same branch as the D-067 PR).
+**DONE** — merged on `main` with D-067 (PR #138, `21d9174`).
 
 <!-- Add new open bugs above this line using the format. Example:
 
@@ -476,3 +476,51 @@ was tested, the static path was not, so the green gate didn't catch it.
 clamp), plus a store test driving the static write path on a shape AND a text element. NO
 OpenSpec change — the merged D-043 spec already requires Spread to be settable. Branch:
 `fix/B-018-spread-static-write`. Mark `[x]` on merge.
+
+## [~] B-022 — scaleX/scaleY detaches the selection box, then rotate spins wrong ⟨priority: medium⟩
+
+> **In progress** — `openspec/changes/fix-selection-overlay-scale-rotate/`. Sibling of
+> the fixed [B-004](#) (rotation handle position) — same selection-overlay transform module.
+
+**Repro:**
+
+1. Select a shape (or text).
+2. In the Inspector set a NON-UNIFORM scale (e.g. Scale X = 2, Scale Y = 1) — ideally
+   with a non-top-left anchor, and/or a rotation already applied.
+3. Then rotate the shape via the corner rotate gesture.
+
+**Expected:** the selection border + handles stay glued to the shape under ANY scale
+(uniform or not), and rotation pivots about the shape's anchor correctly regardless of
+the prior scale.
+**Actual:** under non-uniform scale the selection border/handles drift off the shape;
+rotating afterwards pivots/spins about the wrong point. The overlay draws a rotated
+RECTANGLE of the scaled size, while the renderer applies `scale(sx,sy) rotate(deg)` about
+the anchor — i.e. a PARALLELOGRAM (scale applied AFTER rotation, in scene axes). The two
+only agree when the scale is uniform _and_ the anchor is top-left.
+**Env:** Browser / Designer dev; reproduces on `main`. The authoring shapes are rendered
+by the real `@cg/template-runtime` (`scene-builder.ts` → `composeTransform`) in the
+`cgpreview` iframe, so the gizmo must match that exact transform.
+**Root cause:** the selection overlay composes the transform differently from the renderer
+and the hit-test:
+
+- `apps/designer/src/renderer/features/canvas/Gizmo.tsx` — the visual box bakes scale into
+  width/height (`w = size.w * t.scale.x`) with the top-left pinned at `position`, then
+  rotates a RECTANGLE about `anchor%` of the SCALED box. Scale-before-rotate ≠ the
+  renderer's scale-after-rotate; a rotated rectangle can never trace the renderer's
+  parallelogram when `scaleX ≠ scaleY`.
+- `apps/designer/src/renderer/features/canvas/geometry.ts` — `localToScene` (the resize /
+  rotate math, line ~84) **omits scale entirely**, so resize grab points and the rotate
+  pivot (`pivotClientFromGrab`) are computed as if scale = 1. Compare the authoritative
+  inverse in `hit-test.ts` (`inverseToLocal`), which DOES invert `Scale·Rotate` about the
+  anchor.
+
+**Fix:** align the overlay's transform composition (and the rotate pivot/origin) with the
+renderer/hit-test `Scale·Rotate`-about-anchor map: make `geometry.ts`'s forward map and
+resize/rotate math scale-aware, and render the gizmo frame + handles at the projected
+parallelogram corners (screen-sized handles, not a scaled box). Keep B-004's rotate-handle
+fix intact.
+**Regression:** unit-test the pure forward map round-trips against `hit-test.inverseToLocal`
+under non-uniform scale + rotation, and that `computeResize` keeps the fixed corner glued
+under scale; a component/E2E test that scales then rotates and asserts the box tracks the
+shape; re-confirm B-004 (rotate updates handle position) still passes. Capability:
+`designer-shapes` (MODIFIED — the selection-gizmo requirement). Mark `[x]` on merge.

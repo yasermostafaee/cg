@@ -20,6 +20,9 @@ export interface BoxTransform {
   rotation: number;
   /** 0..1 fraction of the unscaled box — the rotate/scale pivot (CSS transform-origin). */
   anchor: { x: number; y: number };
+  /** Element scale (CSS `scale(x,y)`), applied AFTER rotation about the anchor — matches
+   *  the renderer (`scene-builder` `composeTransform`) and `hit-test.inverseToLocal`. */
+  scale: { x: number; y: number };
 }
 
 export type Corner = 'tl' | 'tr' | 'bl' | 'br';
@@ -78,16 +81,22 @@ export function handleLocal(handle: Handle, w: number, h: number): { x: number; 
 }
 
 /**
- * Map an element-local point to scene coords using the element's `Scale·Rotate`
- * (scale omitted — the gizmo resizes the unscaled box) about its `anchor` pivot.
+ * Map an element-local point (in the unscaled box) to scene coords using the element's
+ * forward transform `Scale·Rotate about anchor`: rotate about the anchor, THEN scale in
+ * scene axes. This is the exact inverse of `hit-test.inverseToLocal` and matches the
+ * renderer (`scene-builder` emits `transform: scale(sx,sy) rotate(deg)` about
+ * `transform-origin: anchor%`). Non-uniform scale of a rotated box yields a parallelogram.
  */
 export function localToScene(t: BoxTransform, lx: number, ly: number): { x: number; y: number } {
-  const { position, size, rotation, anchor } = t;
+  const { position, size, rotation, anchor, scale } = t;
   const rad = (rotation * Math.PI) / 180;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
   const o = rot(lx - anchor.x * size.w, ly - anchor.y * size.h, cos, sin);
-  return { x: position.x + anchor.x * size.w + o.x, y: position.y + anchor.y * size.h + o.y };
+  return {
+    x: position.x + anchor.x * size.w + scale.x * o.x,
+    y: position.y + anchor.y * size.h + scale.y * o.y,
+  };
 }
 
 /**
@@ -102,7 +111,7 @@ export function computeResize(
   handle: Handle,
   pointerScene: { x: number; y: number },
 ): { position: { x: number; y: number }; size: { w: number; h: number } } {
-  const { size, rotation, anchor } = t;
+  const { size, rotation, anchor, scale } = t;
   const w0 = size.w;
   const h0 = size.h;
   const rad = (rotation * Math.PI) / 180;
@@ -114,25 +123,33 @@ export function computeResize(
   // Element-local unit axes expressed in scene space.
   const ux = { x: cos, y: sin };
   const uy = { x: -sin, y: cos };
-  const vx = pointerScene.x - fixedScene.x;
-  const vy = pointerScene.y - fixedScene.y;
+  // Undo the element scale (scene axes) before projecting onto the local axes, so the
+  // size delta is measured in the element's OWN units — `Δscene = Scale·Rotate·Δlocal`.
+  const vx = (pointerScene.x - fixedScene.x) / scale.x;
+  const vy = (pointerScene.y - fixedScene.y) / scale.y;
   const wNew = cfg.freeW ? Math.max(MIN_SIZE, Math.abs(vx * ux.x + vy * ux.y)) : w0;
   const hNew = cfg.freeH ? Math.max(MIN_SIZE, Math.abs(vx * uy.x + vy * uy.y)) : h0;
-  // Keep the fixed corner anchored: solve for the top-left given the new size.
+  // Keep the fixed corner anchored: solve for the top-left given the new size. The
+  // re-anchoring offset is rotated THEN scaled (scene axes), mirroring `localToScene`.
   const qf = cornerLocal(cfg.fixed, wNew, hNew);
   const pvx = anchor.x * wNew;
   const pvy = anchor.y * hNew;
   const ro = rot(qf.x - pvx, qf.y - pvy, cos, sin);
   return {
-    position: { x: fixedScene.x - pvx - ro.x, y: fixedScene.y - pvy - ro.y },
+    position: {
+      x: fixedScene.x - pvx - scale.x * ro.x,
+      y: fixedScene.y - pvy - scale.y * ro.y,
+    },
     size: { w: wNew, h: hNew },
   };
 }
 
 /**
  * Recover the rotation pivot's client position from the grabbed handle's client
- * position and the handle's element-local offset from the pivot (pre-zoom). The
- * offset is rotated by the element angle and scaled by the zoom, then subtracted.
+ * position and the handle's element-local offset from the pivot (pre-zoom). The offset is
+ * rotated by the element angle, scaled by the element's `scaleX`/`scaleY` (scene axes —
+ * matching the renderer's `Scale·Rotate`), then by the `zoom`, and subtracted. `scaleX` /
+ * `scaleY` default to 1 so an unscaled element behaves exactly as before.
  */
 export function pivotClientFromGrab(
   grabX: number,
@@ -140,13 +157,56 @@ export function pivotClientFromGrab(
   offLocalX: number,
   offLocalY: number,
   rotationDeg: number,
-  scale: number,
+  zoom: number,
+  scaleX = 1,
+  scaleY = 1,
 ): { x: number; y: number } {
   const rad = (rotationDeg * Math.PI) / 180;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
   const o = rot(offLocalX, offLocalY, cos, sin);
-  return { x: grabX - scale * o.x, y: grabY - scale * o.y };
+  return { x: grabX - zoom * scaleX * o.x, y: grabY - zoom * scaleY * o.y };
+}
+
+/** A screen-space point (overlay coords = scene × zoom). */
+export interface ScreenPoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * Project the element's selection-box geometry into screen space (overlay coords, i.e.
+ * `scene × zoom`) using the same `Scale·Rotate about anchor` map as the renderer. Returns
+ * the four corners + the centre of the rendered box — a PARALLELOGRAM under non-uniform
+ * scale — so the gizmo can draw a frame and place screen-sized handles that stay glued to
+ * the shape. Corners are named by their UNSCALED-local position (`tl` = local (0,0), etc.).
+ */
+export function gizmoCorners(
+  t: BoxTransform,
+  zoom: number,
+): { tl: ScreenPoint; tr: ScreenPoint; bl: ScreenPoint; br: ScreenPoint; center: ScreenPoint } {
+  const { w, h } = t.size;
+  const at = (lx: number, ly: number): ScreenPoint => {
+    const p = localToScene(t, lx, ly);
+    return { x: p.x * zoom, y: p.y * zoom };
+  };
+  return {
+    tl: at(0, 0),
+    tr: at(w, 0),
+    bl: at(0, h),
+    br: at(w, h),
+    center: at(w / 2, h / 2),
+  };
+}
+
+/** Angle (deg) of the vector `from → to`, for orienting cursors / edge strips. */
+export function screenAngleDeg(from: ScreenPoint, to: ScreenPoint): number {
+  return (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI;
+}
+
+/** Euclidean distance between two screen points (edge-strip length). */
+export function screenDistance(a: ScreenPoint, b: ScreenPoint): number {
+  return Math.hypot(b.x - a.x, b.y - a.y);
 }
 
 /**

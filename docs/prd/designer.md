@@ -2037,9 +2037,15 @@ left-rail focused on project content.
   resolver change. Decide the exact home (landing view vs an app-level area) at
   scheduling. Builds on D-040 (`designer-shared-image-library`).
 
-## [~] D-067 — Image-import loading indicator (both asset panels) ⟨priority: low-medium⟩
+## [x] D-067 — Image-import loading indicator (both asset panels) ⟨priority: low-medium⟩ — archived: `openspec/changes/archive/2026-06-20-add-image-import-loading/`
 
-> **In progress** — `openspec/changes/add-image-import-loading/`.
+> **Done** — archived `openspec/changes/archive/2026-06-20-add-image-import-loading/`.
+> The multi-select + prepend follow-up archived
+> `openspec/changes/archive/2026-06-20-add-import-multiselect-prepend/`; its two
+> sub-features — **D-069** (pick cancel-hang / freeze fix on the pick→store seam)
+> and **D-070** (multi-select import + prepend) — are **headerless import
+> sub-labels** (no own `##` entry; IDs reserved, not reused). B-020/B-021 were
+> fixed on the same branch.
 
 **What:** Importing an image — especially a large one — takes a moment to
 decode / store / thumbnail with no feedback today. Show a lightweight loading
@@ -2061,11 +2067,11 @@ thumbnail appears; for a large image that dead gap looks like nothing happened.
   shared `ImportingThumb` tile used by both. Capabilities:
   `designer-shared-image-library` (MODIFIED) + `designer-project-assets`
   (net-new — the Project Assets panel had no living capability). Change:
-  `openspec/changes/add-image-import-loading/`.
+  `openspec/changes/archive/2026-06-20-add-image-import-loading/`.
 
-## [~] D-068 — Shared Library: search + grid/list view toggle (parity with Project Assets) ⟨priority: low-medium⟩
+## [x] D-068 — Shared Library: search + grid/list view toggle (parity with Project Assets) ⟨priority: low-medium⟩ — archived: `openspec/changes/archive/2026-06-20-add-shared-library-search-view-toggle/`
 
-> **In progress** — `openspec/changes/add-shared-library-search-view-toggle/`.
+> **Done** — archived `openspec/changes/archive/2026-06-20-add-shared-library-search-view-toggle/`.
 
 **What:** The Project Assets panel has a filename search field and a grid/list
 view toggle; the Shared Library panel (D-040) was mirrored only partially and
@@ -2089,7 +2095,84 @@ Library should match for consistency.
   `AssetThumb` styles; `SharedImageThumb` gains a `layout` prop; its own
   `localStorage` key (`cg.designer.sharedLibraryView`). Builds on D-040
   (`designer-shared-image-library`). Change:
-  `openspec/changes/add-shared-library-search-view-toggle/`.
+  `openspec/changes/archive/2026-06-20-add-shared-library-search-view-toggle/`.
+
+## [x] D-088 — Desktop-style save mechanism ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-06-20-desktop-save-mechanism/`
+
+> **Backfilled (shipped, PR #139)** — absorbs **D-002** (connect a real on-disk
+> folder) and **D-003** (real save/export dialogs, no `window.prompt`).
+
+**What:** Make the Designer a real desktop document editor (VS Code / Figma
+Desktop model): one on-disk file per project reached through a native
+`FileSystemFileHandle` that **survives reload** — persisted in **IndexedDB keyed
+by project id**, with write permission re-acquired in the click gesture. Save As →
+`showSaveFilePicker`; Save writes through the handle with no picker; Open →
+`showOpenFilePicker` carrying a handle. Dirty is a **content hash** of the document
+model (`scene-hash.ts`, FNV-1a over a canonical recursively sorted-key `Scene`
+serialization, excluding `metadata.updatedAt`, absent ≡ `[]` normalised),
+reconciled at the history boundary + `markSaved` and on gesture-end — no per-tick
+hashing on drag. `document.title` marks dirty (`* <name>` / `<name>` /
+`cg Designer`). Guards: `beforeunload` while dirty; New / Open / Close / **Home
+(now CLOSES the project)** route through the SaveBeforeSwitch modal. Tiered
+fallback: FS-Access handle → OPFS path-model (reopenable via Recent) → download
+(insecure / in-memory), incl. delete-then-save & no-FSA fallback tiers and
+add→delete scaffold-prune. Recent is **handle-keyed**
+(`{ projectId, name, lastSavedAt, handleKey }`) with a legacy path-keyed fallback.
+**Why:** Persistence was split and lossy — the in-memory handle was lost on reload
+and never recorded in Recent, Open re-copied into OPFS so Save never wrote back the
+opened file, dirty was an identity check that missed edit-then-revert, and there
+was no tab-title or unsaved-changes guard.
+**Acceptance:**
+
+- WHEN the operator Saves As THEN the chosen `FileSystemFileHandle` is persisted
+  (IndexedDB, keyed by project id) and Save thereafter writes to it with no picker;
+  after reload, opening the project re-acquires write permission in the click
+  gesture and Save reuses the same file
+- WHEN the document model changes vs the saved baseline THEN the content hash
+  differs, the tab title shows `* <name>`, and the Save control enables; an
+  edit-then-revert back to the saved state clears dirty
+- WHEN the operator triggers New / Open / Close / Home with unsaved changes THEN
+  the SaveBeforeSwitch modal intercepts; Home closes the project (scene + saved
+  baseline + handle + hashes reset); `beforeunload` prompts on tab-close/refresh
+  while dirty
+- WHEN FS-Access is unavailable THEN the tiered fallback (OPFS path-model →
+  download) applies and Recent re-keys handle entries, with legacy path-keyed
+  entries still opening and upgrading to a handle on next save
+  **Notes:** New capability `designer-project-persistence`; `.cg.json` / JSON
+  payload / `schemaVersion 1` unchanged. Storage `handle-store`
+  (`saveFileHandle` / `loadFileHandle` / `forgetFileHandle`), `RecentEntrySchema`
+  re-keyed to the handle model. Absorbs D-002 / D-003.
+
+## [x] D-089 — SAVE button unsaved visual ⟨priority: medium⟩ — folded into D-088 — archived: `openspec/changes/archive/2026-06-20-desktop-save-mechanism/`
+
+**What:** The Save control is no longer the always-blue primary variant; it is
+enabled only when dirty and shows `border-top: 2px solid #ffdd40` (amber) when
+there are unsaved changes.
+**Why:** The Save button gave no at-a-glance unsaved signal; this binds it to the
+same `isDirty` hash signal as the tab title.
+**Acceptance:**
+
+- WHEN the document is dirty THEN the Save control is enabled and shows the amber
+  `border-top` (2px `#ffdd40`); WHEN clean THEN it is not the blue/primary variant
+  and not emphasised
+  **Notes:** Purely the visual binding of D-088's `isDirty` signal — folded into
+  the D-088 change (`TopToolbar` + `TopToolbar.css`), not a separate change dir.
+
+## [x] D-093 — Remove from Recent (+ Clear all), non-destructive ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-20-desktop-save-mechanism/`
+
+**What:** Let the operator remove a single Recent entry ("Remove from recent") and
+optionally **Clear all**. Removal only forgets the Recent pointer (and its stored
+handle key) — it never deletes the on-disk file.
+**Why:** Recent accumulated stale entries with no way to prune them without
+touching the underlying files.
+**Acceptance:**
+
+- WHEN the operator removes a Recent entry THEN it disappears from the list and
+  stays gone across reload, and the on-disk file is untouched
+- WHEN the operator chooses Clear all THEN every Recent entry is removed (the
+  on-disk files are untouched)
+  **Notes:** Covered by the `designer-project-persistence` "Remove from Recent is
+  non-destructive" requirement; shipped in the D-088 PR (#139).
 
 ## [~] D-094 — Global button restyle: no default border + refined colors at the shared recipe ⟨priority: high⟩
 

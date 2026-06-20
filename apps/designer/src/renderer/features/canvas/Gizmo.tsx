@@ -6,14 +6,19 @@ import {
   cornerLocal,
   computeResize,
   computeRotationAngle,
+  gizmoCorners,
   handleLocal,
   localToScene,
   pivotClientFromGrab,
+  screenAngleDeg,
+  screenDistance,
   snapValue,
   RESIZE_CFG,
   type Corner,
   type Handle,
+  type ScreenPoint,
 } from './geometry.js';
+import { colors } from '../../theme.js';
 import * as s from './Gizmo.css.js';
 
 interface Props {
@@ -22,17 +27,28 @@ interface Props {
   currentFrame: number;
 }
 
-/** Visible corner square (screen px). */
-const HANDLE = 8;
-/** Corner *resize* hover/hit area (also the visible hover highlight), larger
- *  than the white square. */
-const CORNER_HIT = 18;
+// Handle / hit-area pixel sizes are baked into the shared Gizmo.css.js classes
+// (`s.handle` 8px, `s.cornerHit` 18px); the gizmo only positions them on the
+// projected corners. ROT_ZONE/EDGE are needed here for placement + strip thickness.
 /** Rotation hover area around each corner (screen px) — outside the resize hit. */
 const ROT_ZONE = 18;
 /** Edge resize strips this thick (screen px) — also their hover highlight. */
 const EDGE = 6;
 /** Resize snap threshold (screen px). Rotation's degree threshold lives in geometry. */
 const SNAP_PX = 7;
+
+/** Midpoint of two screen points (edge-strip centre). */
+function mid(a: ScreenPoint, b: ScreenPoint): ScreenPoint {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+/** Push `p` away from `center` by `dist` screen px — places a rotate zone just outside a corner. */
+function outward(center: ScreenPoint, p: ScreenPoint, dist: number): ScreenPoint {
+  const dx = p.x - center.x;
+  const dy = p.y - center.y;
+  const len = Math.hypot(dx, dy) || 1;
+  return { x: p.x + (dx / len) * dist, y: p.y + (dy / len) * dist };
+}
 
 /**
  * Custom cursors matching the reference recording: a black double-headed
@@ -107,21 +123,6 @@ export function lockCursor(cursor: string): () => void {
   return () => style.remove();
 }
 
-/** Base screen angle of each resize handle's arrow (before element rotation). */
-const RESIZE_ANGLE: Record<Handle, number> = {
-  r: 0,
-  l: 0,
-  t: 90,
-  b: 90,
-  br: 45,
-  tl: 45,
-  tr: 135,
-  bl: 135,
-};
-
-/** Base angle of each corner's rotate cursor (faces outward), before rotation. */
-const ROTATE_ANGLE: Record<Corner, number> = { br: 45, bl: 135, tl: 225, tr: 315 };
-
 /**
  * Selection gizmo (the Loopic pattern). A thin accent frame with four
  * outlined corner handles, four edge strips, and a centre pivot dot — all
@@ -134,34 +135,15 @@ const ROTATE_ANGLE: Record<Corner, number> = { br: 45, bl: 135, tl: 225, tr: 315
  */
 export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   const t = effectiveTransformAt(element, currentFrame);
-  const { position, size, rotation, anchor } = t;
-  const w = size.w * t.scale.x * scale;
-  const h = size.h * t.scale.y * scale;
-  const x = position.x * scale;
-  const y = position.y * scale;
+  // Project the element's RENDERED box (`Scale·Rotate` about the anchor — a parallelogram
+  // under non-uniform scale) into overlay/screen space, so the frame + handles trace the
+  // SAME geometry the renderer draws (matches `hit-test.inverseToLocal`). Fixes B-022,
+  // where the old box baked scale into width/height and rotated a rectangle instead.
+  const c = gizmoCorners(t, scale);
+  const center = c.center;
 
-  // The renderer rotates each element about its `anchor` (CSS transform-origin);
-  // match it so the frame + handles track a rotated element.
-  const rotateOrigin = `${String(anchor.x * 100)}% ${String(anchor.y * 100)}%`;
-  const rotateTransform = rotation === 0 ? undefined : `rotate(${String(rotation)}deg)`;
-
-  const box = (extra: React.CSSProperties): React.CSSProperties => ({
-    position: 'absolute',
-    left: x,
-    top: y,
-    width: w,
-    height: h,
-    transform: rotateTransform,
-    transformOrigin: rotateOrigin,
-    ...extra,
-  });
-
-  const corners: { c: Corner; cx: number; cy: number }[] = [
-    { c: 'tl', cx: 0, cy: 0 },
-    { c: 'tr', cx: w, cy: 0 },
-    { c: 'bl', cx: 0, cy: h },
-    { c: 'br', cx: w, cy: h },
-  ];
+  /** Resize cursor for a handle: the double-arrow points along centre→handle. */
+  const resizeCur = (p: ScreenPoint): string => resizeCursor(screenAngleDeg(center, p));
 
   const down =
     (handle: Handle, kind: 'resize' | 'rotate') => (e: React.PointerEvent<HTMLDivElement>) => {
@@ -172,95 +154,103 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
       else beginResize(element, handle, scale, currentFrame, e.nativeEvent);
     };
 
+  // Edges as corner→corner segments (single-axis resize); corners (two-axis resize).
+  const edges: { h: Handle; a: ScreenPoint; b: ScreenPoint }[] = [
+    { h: 't', a: c.tl, b: c.tr },
+    { h: 'r', a: c.tr, b: c.br },
+    { h: 'b', a: c.br, b: c.bl },
+    { h: 'l', a: c.bl, b: c.tl },
+  ];
+  const cornerPts: { h: Corner; p: ScreenPoint }[] = [
+    { h: 'tl', p: c.tl },
+    { h: 'tr', p: c.tr },
+    { h: 'bl', p: c.bl },
+    { h: 'br', p: c.br },
+  ];
+
+  /** A fixed screen-size piece centred on a projected point. */
+  const at = (p: ScreenPoint, extra?: React.CSSProperties): React.CSSProperties => ({
+    left: p.x,
+    top: p.y,
+    transform: 'translate(-50%, -50%)',
+    ...extra,
+  });
+
   return (
     <>
-      <div className={s.frame} style={box({})} />
-      <div style={box({ pointerEvents: 'none' })}>
-        {/* Rotation zones — placed in each corner's OUTER quadrant only, so
-            rotation is offered just outside the shape, never inside it. */}
-        {corners.map(({ c, cx, cy }) => (
+      {/* Frame outline — the true parallelogram through the four projected corners. */}
+      <svg
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          overflow: 'visible',
+          pointerEvents: 'none',
+        }}
+        width={0}
+        height={0}
+        aria-hidden
+      >
+        <polygon
+          data-testid="gizmo-frame"
+          points={`${String(c.tl.x)},${String(c.tl.y)} ${String(c.tr.x)},${String(c.tr.y)} ${String(c.br.x)},${String(c.br.y)} ${String(c.bl.x)},${String(c.bl.y)}`}
+          fill="none"
+          stroke={colors.accent}
+          strokeWidth={1}
+        />
+      </svg>
+
+      {/* Rotation zones — just OUTSIDE each corner along the centre→corner diagonal, so
+          rotation is offered beyond the shape while the corner hit owns the exact corner. */}
+      {cornerPts.map(({ h, p }) => (
+        <div
+          key={`rot-${h}`}
+          className={s.rotZone}
+          style={at(outward(center, p, ROT_ZONE / 2), {
+            cursor: rotateCursor(screenAngleDeg(center, p) + 90),
+          })}
+          onPointerDown={down(h, 'rotate')}
+        />
+      ))}
+
+      {/* Edge strips (single-axis resize) — a strip laid along each parallelogram side so
+          the hover highlight (.cg-gizmo-edge) covers it; corner hits sit on top. */}
+      {edges.map(({ h, a, b }) => {
+        const m = mid(a, b);
+        return (
           <div
-            key={`rot-${c}`}
-            className={s.rotZone}
+            key={`edge-${h}`}
+            className={cx('cg-gizmo-edge', s.edge)}
             style={{
-              left: c === 'tl' || c === 'bl' ? cx - ROT_ZONE : cx,
-              top: c === 'tl' || c === 'tr' ? cy - ROT_ZONE : cy,
-              cursor: rotateCursor(ROTATE_ANGLE[c] + rotation + 90),
+              left: m.x,
+              top: m.y,
+              width: screenDistance(a, b),
+              height: EDGE,
+              transform: `translate(-50%, -50%) rotate(${String(screenAngleDeg(a, b))}deg)`,
+              cursor: resizeCur(m),
             }}
-            onPointerDown={down(c, 'rotate')}
+            onPointerDown={down(h, 'resize')}
           />
-        ))}
-        {/* Edge strips (single-axis width/height resize) span the full side so
-            the hover highlight (.cg-gizmo-edge) covers it end to end; the corner
-            hit areas sit on top, so grabbing near a corner still resizes both. */}
+        );
+      })}
+
+      {/* Corner resize hit areas (larger than the visible square). */}
+      {cornerPts.map(({ h, p }) => (
         <div
-          className={cx('cg-gizmo-edge', s.edge)}
-          style={{
-            left: 0,
-            top: -EDGE / 2,
-            width: w,
-            height: EDGE,
-            cursor: resizeCursor(RESIZE_ANGLE.t + rotation),
-          }}
-          onPointerDown={down('t', 'resize')}
+          key={`hit-${h}`}
+          className={`cg-gizmo-corner ${s.cornerHit}`}
+          style={at(p, { cursor: resizeCur(p) })}
+          onPointerDown={down(h, 'resize')}
         />
-        <div
-          className={cx('cg-gizmo-edge', s.edge)}
-          style={{
-            left: 0,
-            top: h - EDGE / 2,
-            width: w,
-            height: EDGE,
-            cursor: resizeCursor(RESIZE_ANGLE.b + rotation),
-          }}
-          onPointerDown={down('b', 'resize')}
-        />
-        <div
-          className={cx('cg-gizmo-edge', s.edge)}
-          style={{
-            left: -EDGE / 2,
-            top: 0,
-            width: EDGE,
-            height: h,
-            cursor: resizeCursor(RESIZE_ANGLE.l + rotation),
-          }}
-          onPointerDown={down('l', 'resize')}
-        />
-        <div
-          className={cx('cg-gizmo-edge', s.edge)}
-          style={{
-            left: w - EDGE / 2,
-            top: 0,
-            width: EDGE,
-            height: h,
-            cursor: resizeCursor(RESIZE_ANGLE.r + rotation),
-          }}
-          onPointerDown={down('r', 'resize')}
-        />
-        {/* Corner resize hover areas (larger than the visible square). A light
-            rounded highlight appears on hover (see .cg-gizmo-corner in CSS). */}
-        {corners.map(({ c, cx, cy }) => (
-          <div
-            key={`hit-${c}`}
-            className={`cg-gizmo-corner ${s.cornerHit}`}
-            style={{
-              left: cx - CORNER_HIT / 2,
-              top: cy - CORNER_HIT / 2,
-              cursor: resizeCursor(RESIZE_ANGLE[c] + rotation),
-            }}
-            onPointerDown={down(c, 'resize')}
-          />
-        ))}
-        {/* Visible corner squares (decoration only). */}
-        {corners.map(({ c, cx, cy }) => (
-          <div
-            key={`rs-${c}`}
-            className={s.handle}
-            style={{ left: cx - HANDLE / 2, top: cy - HANDLE / 2 }}
-          />
-        ))}
-        <div className={s.pivot} style={{ left: w / 2 - 3.5, top: h / 2 - 3.5 }} />
-      </div>
+      ))}
+
+      {/* Visible corner squares (decoration only). */}
+      {cornerPts.map(({ h, p }) => (
+        <div key={`rs-${h}`} className={s.handle} style={at(p)} />
+      ))}
+
+      {/* Centre pivot indicator (visual only). */}
+      <div className={s.pivot} style={at(center)} />
     </>
   );
 }
@@ -349,10 +339,12 @@ function beginResize(
   // added to this each move, then `computeResize` does the rotated-frame math.
   const grab = handleLocal(handle, t0.size.w, t0.size.h);
   const grabScene = localToScene(t0, grab.x, grab.y);
+  const centerScene = localToScene(t0, t0.size.w / 2, t0.size.h / 2);
   const startX = ev.clientX;
   const startY = ev.clientY;
-  // Hold this handle's cursor for the whole gesture (don't flip over others).
-  const unlock = lockCursor(resizeCursor(RESIZE_ANGLE[handle] + t0.rotation));
+  // Hold this handle's cursor for the whole gesture (don't flip over others). The arrow
+  // points along centre→handle in the element's actual (scaled, rotated) screen frame.
+  const unlock = lockCursor(resizeCursor(screenAngleDeg(centerScene, grabScene)));
   // Snap the moving edge to other elements / canvas / guides — only when the
   // element is axis-aligned (snapping to H/V lines is undefined when rotated).
   const snapping = designerStore.get().snappingEnabled && t0.rotation === 0;
@@ -415,6 +407,9 @@ function beginRotate(
   const t0 = effectiveTransformAt(element, currentFrame);
   const startAngle = t0.rotation;
   const cl = cornerLocal(corner, t0.size.w, t0.size.h);
+  // Recover the anchor's client position from the grabbed corner — the corner's offset is
+  // rotated AND scaled (the renderer's `Scale·Rotate`) before the zoom, so the pivot lands
+  // on the anchor regardless of a prior non-uniform scale.
   const pivot = pivotClientFromGrab(
     ev.clientX,
     ev.clientY,
@@ -422,9 +417,13 @@ function beginRotate(
     cl.y - t0.anchor.y * t0.size.h,
     startAngle,
     scale,
+    t0.scale.x,
+    t0.scale.y,
   );
   const startCursor = Math.atan2(ev.clientY - pivot.y, ev.clientX - pivot.x) * (180 / Math.PI);
-  const unlock = lockCursor(rotateCursor(ROTATE_ANGLE[corner] + startAngle + 90));
+  const cornerScene = localToScene(t0, cl.x, cl.y);
+  const centerScene = localToScene(t0, t0.size.w / 2, t0.size.h / 2);
+  const unlock = lockCursor(rotateCursor(screenAngleDeg(centerScene, cornerScene) + 90));
   const snapping = designerStore.get().snappingEnabled;
 
   const onMove = (e: PointerEvent): void => {

@@ -69,20 +69,25 @@ them, not at their static base.
 
 ## The gizmo (handles + transform math)
 
-`Gizmo.tsx` renders the selection frame: four corner squares, four edge strips,
-four outer rotation zones, and a centre pivot — all rotated with the element. The
+`Gizmo.tsx` renders the selection frame: an SVG outline plus four corner squares,
+four edge strips, four outer rotation zones, and a centre pivot — each positioned at
+the element's **projected corners** (`gizmoCorners`), so the frame traces the
+renderer's `Scale·Rotate`-about-anchor box exactly: a **parallelogram** under
+non-uniform scale, not a rotated rectangle (B-022). The handles are fixed
+screen-size; only the outline (an SVG `<polygon>`) follows the parallelogram. The
 pointer gestures live in `Gizmo.tsx` (they read the store and run the
 `pointermove`/`up` loop); the **math is pure in `geometry.ts`**:
 
 - **Resize** — `computeResize(t, handle, pointerScene)`. The opposite corner is
-  fixed (`RESIZE_CFG`); the new size is the pointer→fixed-corner vector **projected
-  onto the element's local axes** (so resize works correctly when rotated), clamped
-  to `MIN_SIZE`; the top-left is then recomputed so the fixed corner doesn't move.
-  Edge handles free one axis only.
-- **Rotate** — `pivotClientFromGrab` recovers the pivot's client position from the
-  grabbed corner; `computeRotationAngle` adds the change in cursor angle (`atan2`
-  about the pivot) to the start angle, snapping to the nearest 15° within `SNAP_DEG`
-  (Shift = free).
+  fixed (`RESIZE_CFG`); the new size is the pointer→fixed-corner vector — **undone by
+  the element scale, then projected onto the local axes** (so resize works correctly
+  when rotated AND scaled), clamped to `MIN_SIZE`; the top-left is then recomputed
+  (rotate then scale) so the fixed corner stays glued. Edge handles free one axis only.
+- **Rotate** — `pivotClientFromGrab` recovers the pivot (the `anchor`) from the
+  grabbed corner, applying the element's `Scale·Rotate` to the corner offset so the
+  pivot is correct under a prior (non-uniform) scale; `computeRotationAngle` adds the
+  change in cursor angle (`atan2` about the pivot) to the start angle, snapping to the
+  nearest 15° within `SNAP_DEG` (Shift = free).
 - Resize/rotate commit via `designerStore.commitAnimatable(...)` (writes a keyframe
   when the property is animated, else the static value) and call
   `markHistoryBoundary()` on pointer-up for a single undo step.
@@ -168,8 +173,8 @@ one-time warning, never a crash.
 
 ### Add a new gizmo handle / interaction
 
-1. Render the handle in `Gizmo.tsx` (position it in the rotated `box(...)` frame;
-   wire `onPointerDown` to a `begin…` gesture).
+1. Render the handle in `Gizmo.tsx` (position it at a projected point from
+   `gizmoCorners(...)` in screen space; wire `onPointerDown` to a `begin…` gesture).
 2. Put the **pure math** in `geometry.ts` (a `compute…` that takes the start
    transform + pointer scene point and returns the new transform fields) and
    unit-test it; keep the store/`pointermove` plumbing in `Gizmo.tsx`.
