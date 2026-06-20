@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import type { Element } from '@cg/shared-schema';
 import {
   clampZoom,
   computeResize,
   computeRotationAngle,
   cornerLocal,
   fitZoom,
+  gizmoCorners,
   handleLocal,
   localToScene,
   rot,
@@ -13,6 +15,7 @@ import {
   snapValue,
   type BoxTransform,
 } from '../src/renderer/features/canvas/geometry.js';
+import { inverseToLocal } from '../src/renderer/features/canvas/hit-test.js';
 
 /**
  * Pure canvas-editor geometry: the gizmo resize/rotate math, snapping, and the
@@ -25,6 +28,7 @@ const box = (over: Partial<BoxTransform> = {}): BoxTransform => ({
   size: { w: 100, h: 100 },
   rotation: 0,
   anchor: { x: 0, y: 0 },
+  scale: { x: 1, y: 1 },
   ...over,
 });
 
@@ -101,6 +105,93 @@ describe('computeResize', () => {
     expect(r.size.h).toBeCloseTo(150);
     expect(r.position.x).toBeCloseTo(0);
     expect(r.position.y).toBeCloseTo(0);
+  });
+});
+
+// ── B-022: the overlay must compose Scale·Rotate-about-anchor like the renderer ──
+
+describe('localToScene is scale-aware (matches the renderer / hit-test)', () => {
+  it('applies scale AFTER rotation, about the anchor', () => {
+    // Centre anchor, non-uniform scale, no rotation → the box expands about the centre.
+    const t = box({ anchor: { x: 0.5, y: 0.5 }, scale: { x: 2, y: 1 } });
+    // local tl (0,0): pivot (50,50); rel (-50,-50); scaled (2·-50, 1·-50) → (-50, 0).
+    expect(localToScene(t, 0, 0)).toEqual({ x: -50, y: 0 });
+    // local br (100,100): rel (50,50); scaled (100,50) → (150,100).
+    expect(localToScene(t, 100, 100)).toEqual({ x: 150, y: 100 });
+  });
+
+  it('round-trips against hit-test.inverseToLocal under non-uniform scale + rotation', () => {
+    const t = box({
+      position: { x: 30, y: -10 },
+      size: { w: 120, h: 60 },
+      rotation: 37,
+      anchor: { x: 0.5, y: 0.5 },
+      scale: { x: 2.5, y: 0.5 },
+    });
+    const el = { transform: t } as unknown as Element;
+    for (const [lx, ly] of [
+      [0, 0],
+      [120, 0],
+      [0, 60],
+      [120, 60],
+      [60, 30],
+    ] as const) {
+      const scene = localToScene(t, lx, ly);
+      const back = inverseToLocal(el, scene);
+      if (back === null) throw new Error('expected a local point');
+      expect(back.x).toBeCloseTo(lx);
+      expect(back.y).toBeCloseTo(ly);
+    }
+  });
+});
+
+describe('computeResize keeps the fixed corner glued under scale', () => {
+  it('br drag with scaleX=2 leaves the top-left glued and the br on the pointer', () => {
+    const t = box({ scale: { x: 2, y: 1 } }); // anchor (0,0) → visual tl at scene (0,0)
+    const r = computeResize(t, 'br', { x: 300, y: 150 });
+    expect(r.size).toEqual({ w: 150, h: 150 });
+    expect(r.position.x).toBeCloseTo(0);
+    expect(r.position.y).toBeCloseTo(0);
+    // The resized br maps back to the pointer under the SAME scaled transform.
+    const br = localToScene({ ...t, ...r }, r.size.w, r.size.h);
+    expect(br.x).toBeCloseTo(300);
+    expect(br.y).toBeCloseTo(150);
+  });
+
+  it('keeps the fixed corner put with a centred anchor + scale', () => {
+    const t = box({ anchor: { x: 0.5, y: 0.5 }, scale: { x: 2, y: 1 } });
+    const fixedBefore = localToScene(t, 0, 0); // tl is the fixed corner for a br drag
+    const r = computeResize(t, 'br', { x: 250, y: 150 });
+    const fixedAfter = localToScene({ ...t, ...r }, 0, 0);
+    expect(fixedAfter.x).toBeCloseTo(fixedBefore.x);
+    expect(fixedAfter.y).toBeCloseTo(fixedBefore.y);
+  });
+});
+
+describe('gizmoCorners', () => {
+  it('projects the rendered parallelogram (scale after rotate, × zoom)', () => {
+    const g = gizmoCorners(
+      box({ size: { w: 100, h: 50 }, rotation: 90, scale: { x: 2, y: 1 } }),
+      1,
+    );
+    expect(g.tl.x).toBeCloseTo(0);
+    expect(g.tl.y).toBeCloseTo(0);
+    expect(g.tr.x).toBeCloseTo(0);
+    expect(g.tr.y).toBeCloseTo(100);
+    expect(g.bl.x).toBeCloseTo(-100);
+    expect(g.bl.y).toBeCloseTo(0);
+    expect(g.br.x).toBeCloseTo(-100);
+    expect(g.br.y).toBeCloseTo(100);
+    expect(g.center.x).toBeCloseTo(-50);
+    expect(g.center.y).toBeCloseTo(50);
+  });
+
+  it('scales every corner by the zoom factor', () => {
+    const g = gizmoCorners(box({ size: { w: 100, h: 50 }, scale: { x: 2, y: 1 } }), 2);
+    // rotation 0, anchor (0,0): br local (100,50) → scene (200,50) → ×2 = (400,100).
+    expect(g.tl).toEqual({ x: 0, y: 0 });
+    expect(g.br.x).toBeCloseTo(400);
+    expect(g.br.y).toBeCloseTo(100);
   });
 });
 

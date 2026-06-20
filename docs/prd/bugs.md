@@ -476,3 +476,51 @@ was tested, the static path was not, so the green gate didn't catch it.
 clamp), plus a store test driving the static write path on a shape AND a text element. NO
 OpenSpec change — the merged D-043 spec already requires Spread to be settable. Branch:
 `fix/B-018-spread-static-write`. Mark `[x]` on merge.
+
+## [~] B-022 — scaleX/scaleY detaches the selection box, then rotate spins wrong ⟨priority: medium⟩
+
+> **In progress** — `openspec/changes/fix-selection-overlay-scale-rotate/`. Sibling of
+> the fixed [B-004](#) (rotation handle position) — same selection-overlay transform module.
+
+**Repro:**
+
+1. Select a shape (or text).
+2. In the Inspector set a NON-UNIFORM scale (e.g. Scale X = 2, Scale Y = 1) — ideally
+   with a non-top-left anchor, and/or a rotation already applied.
+3. Then rotate the shape via the corner rotate gesture.
+
+**Expected:** the selection border + handles stay glued to the shape under ANY scale
+(uniform or not), and rotation pivots about the shape's anchor correctly regardless of
+the prior scale.
+**Actual:** under non-uniform scale the selection border/handles drift off the shape;
+rotating afterwards pivots/spins about the wrong point. The overlay draws a rotated
+RECTANGLE of the scaled size, while the renderer applies `scale(sx,sy) rotate(deg)` about
+the anchor — i.e. a PARALLELOGRAM (scale applied AFTER rotation, in scene axes). The two
+only agree when the scale is uniform _and_ the anchor is top-left.
+**Env:** Browser / Designer dev; reproduces on `main`. The authoring shapes are rendered
+by the real `@cg/template-runtime` (`scene-builder.ts` → `composeTransform`) in the
+`cgpreview` iframe, so the gizmo must match that exact transform.
+**Root cause:** the selection overlay composes the transform differently from the renderer
+and the hit-test:
+
+- `apps/designer/src/renderer/features/canvas/Gizmo.tsx` — the visual box bakes scale into
+  width/height (`w = size.w * t.scale.x`) with the top-left pinned at `position`, then
+  rotates a RECTANGLE about `anchor%` of the SCALED box. Scale-before-rotate ≠ the
+  renderer's scale-after-rotate; a rotated rectangle can never trace the renderer's
+  parallelogram when `scaleX ≠ scaleY`.
+- `apps/designer/src/renderer/features/canvas/geometry.ts` — `localToScene` (the resize /
+  rotate math, line ~84) **omits scale entirely**, so resize grab points and the rotate
+  pivot (`pivotClientFromGrab`) are computed as if scale = 1. Compare the authoritative
+  inverse in `hit-test.ts` (`inverseToLocal`), which DOES invert `Scale·Rotate` about the
+  anchor.
+
+**Fix:** align the overlay's transform composition (and the rotate pivot/origin) with the
+renderer/hit-test `Scale·Rotate`-about-anchor map: make `geometry.ts`'s forward map and
+resize/rotate math scale-aware, and render the gizmo frame + handles at the projected
+parallelogram corners (screen-sized handles, not a scaled box). Keep B-004's rotate-handle
+fix intact.
+**Regression:** unit-test the pure forward map round-trips against `hit-test.inverseToLocal`
+under non-uniform scale + rotation, and that `computeResize` keeps the fixed corner glued
+under scale; a component/E2E test that scales then rotates and asserts the box tracks the
+shape; re-confirm B-004 (rotate updates handle position) still passes. Capability:
+`designer-shapes` (MODIFIED — the selection-gizmo requirement). Mark `[x]` on merge.
