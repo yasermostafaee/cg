@@ -68,6 +68,34 @@ test.describe('B-022 — selection overlay under scale + rotation', () => {
       .toBeLessThanOrEqual(base.centerGap + TOL);
   });
 
+  test('the selection frame is actually painted — non-zero SVG + real stroke (B-025)', async ({
+    app,
+  }) => {
+    await app.newProject();
+    await app.addRectangle({ x: 240, y: 200 });
+
+    // The frame polygon must live in a REAL-sized SVG: a 0×0 SVG paints the polygon
+    // only as overflow, which an ancestor `overflow:hidden` clips → the stroke never
+    // shows (the B-025 bug). Assert the owner SVG is sized AND the stroke is a real
+    // colour at a non-zero width.
+    const probe = await app.gizmoFrame.evaluate((poly) => {
+      const svg = (poly as unknown as SVGPolygonElement).ownerSVGElement;
+      const r = svg?.getBoundingClientRect();
+      const cs = getComputedStyle(poly as unknown as Element);
+      return {
+        svgW: r?.width ?? 0,
+        svgH: r?.height ?? 0,
+        stroke: cs.stroke,
+        strokeWidth: cs.strokeWidth,
+      };
+    });
+    expect(probe.svgW).toBeGreaterThan(0);
+    expect(probe.svgH).toBeGreaterThan(0);
+    expect(probe.stroke).not.toBe('none');
+    expect(probe.stroke).toMatch(/^rgb/);
+    expect(parseFloat(probe.strokeWidth)).toBeGreaterThan(0);
+  });
+
   test('rotate updates the gizmo handle position (B-004 regression)', async ({ app }) => {
     await app.newProject();
     await app.addRectangle({ x: 240, y: 200 });
