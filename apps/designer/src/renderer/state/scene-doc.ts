@@ -14,6 +14,7 @@ import type {
 } from '@cg/shared-schema';
 import { compositionClosure, migrateGlobalFieldsToCompositions } from '@cg/shared-schema';
 import { current } from './store-core.js';
+import { dropFullyOffFrameForExport } from './off-frame.js';
 
 /**
  * The "active document" layer shared by every domain slice. The editor edits
@@ -158,10 +159,15 @@ export function scopeSceneToComposition(scene: Scene | null, id: string | null):
   const projected = editSceneOf(scene, id);
   if (projected === null || scene === null || id === null) return null;
   const closure = compositionClosure(scene, id);
-  return {
+  const scoped: Scene = {
     ...projected,
     compositions: (scene.compositions ?? []).filter((c) => closure.has(c.id)),
   };
+  // D-071 Phase A — EXPORT-ONLY: drop fully-off-frame STATIC elements so they don't
+  // bloat the package. Output is unchanged (they were already clipped invisible by
+  // the runtime's `.cg-stage { overflow: hidden }`). `editSceneOf` (the canvas
+  // projection) and Save are NOT routed through here, so staging shapes persist.
+  return dropFullyOffFrameForExport(scene, scoped);
 }
 
 /** Find the layer + index of an element. Used by every mutation. */
