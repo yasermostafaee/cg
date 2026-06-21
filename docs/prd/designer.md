@@ -2320,3 +2320,42 @@ request) threaded into `Preview.#buildHtml`. `broadcast: true` (the modal) skips
 `cg-pending` CSS override and the boot-time reveal so the runtime keeps its native pending
 state until `play()`; the canvas omits it (unchanged). On-air/export runtime untouched.
 Change: `openspec/changes/preview-blank-until-play/`.
+
+## [~] D-085 — Stop/close terminal = CLEARED ⟨priority: medium⟩
+
+**What:** Lock the broadcast STOP semantics: when the operator Stops a composition, it plays its
+OUT/outro and then SETTLES into a CLEARED terminal state — the stage is hidden and every
+content-driven element (ticker / clock / sequence / repeater) and nested child goes away with it,
+WITHOUT manual per-element opacity-out keyframes. With no outro the clear is immediate. The clear
+is by VISIBILITY (hide + halt the drivers), NOT destruction — the nodes stay mounted; re-play
+restarts cleanly. No default fade-out (deferred); per-element opacity keyframes stay for fine
+control.
+
+**Why:** The runtime already provides this (the root settle adds `body.cg-pending` →
+`.cg-stage { visibility: hidden }` and `onRootSettled` cancels every driver's animation frame;
+nested children cascade) — and D-087 made it observable in the preview (the broadcast modal no
+longer lifts `cg-pending`). But it is **not pinned**: a future driver/lifecycle change could
+silently regress it (a new content driver whose `stop()` forgets to cancel its loop would keep
+ticking under the hidden stage; a refactor could revert to a frozen-last-frame hold). This item
+LOCKS the contract with a spec requirement + per-driver-kind behaviour tests. Mechanism =
+visibility-clear (CG STOP), NOT unmount (CG REMOVE / `remove()`, which is left untouched).
+
+**Acceptance:**
+
+- WHEN a playing composition with a content-driven element is Stopped THEN after the outro the
+  stage is hidden AND the element's driver is halted (no further frame), so the content-driven
+  element is no longer shown — no per-element opacity-out required
+- WHEN the composition has no outro THEN the clear is immediate on Stop
+- WHEN a parent nests a child with a content-driven element AND the parent is Stopped THEN the
+  nested child is hidden and its driver halted too (cascade)
+- WHEN Play is pressed after a Stop THEN `cg-pending` clears, the drivers re-init, and the
+  composition runs its intro again (clean re-play)
+- WHEN cleared THEN the element nodes stay MOUNTED (a visibility clear, not a CG REMOVE unmount)
+
+**Notes:** Recon (`design.md`) confirmed Decision A = keep the VISIBILITY clear; no
+true-unmount-on-stop. The per-driver-kind unit tests confirmed every driver's `stop()` already
+cancels its loop, so **no `runtime.ts` change was needed** — this is spec + tests + docs.
+Tests: `@cg/template-runtime` `tests/stop-cleared.test.ts` (per-kind + nested + re-play + outro
+timing) and `apps/designer/tests/e2e/stop-cleared.spec.ts`. Doc-sync:
+`packages/template-runtime/README.md` (terminal model). Change:
+`openspec/changes/stop-clears-composition/`.
