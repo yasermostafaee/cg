@@ -50,12 +50,20 @@ export class Preview {
    * D-071 Phase B — `authoring` turns on the off-frame PASTEBOARD for the CANVAS
    * iframe only: lift `.cg-stage { overflow: hidden }` + a dark margin so off-frame
    * shapes paint beyond the frame (the iframe element size — the pasteboard extent —
-   * comes from CanvasArea, with a `device-width` viewport). INDEPENDENT of
-   * `broadcast` — the modal/export leave it off (native clip, UNCHANGED).
+   * comes from CanvasArea, with a `device-width` viewport). `frameOffset` (scene px)
+   * insets the frame into the symmetric pasteboard, so off-frame content is visible on
+   * ALL sides (left/top too); scene (0,0) sits at that offset, matching the canvas
+   * overlay. INDEPENDENT of `broadcast` — the modal/export leave it off (native clip,
+   * UNCHANGED).
    */
-  load(scene: Scene, broadcast = false, authoring = false): { src: string; html: string } {
+  load(
+    scene: Scene,
+    broadcast = false,
+    authoring = false,
+    frameOffset: { x: number; y: number } = { x: 0, y: 0 },
+  ): { src: string; html: string } {
     if (this.#docUrl !== null) URL.revokeObjectURL(this.#docUrl);
-    const html = this.#buildHtml(scene, broadcast, authoring);
+    const html = this.#buildHtml(scene, broadcast, authoring, frameOffset);
     this.#docUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
     return { src: this.#docUrl, html };
   }
@@ -80,7 +88,12 @@ export class Preview {
     return { ok: true };
   }
 
-  #buildHtml(scene: Scene, broadcast: boolean, authoring: boolean): string {
+  #buildHtml(
+    scene: Scene,
+    broadcast: boolean,
+    authoring: boolean,
+    frameOffset: { x: number; y: number },
+  ): string {
     const cgJsUrl = this.#cgJsUrl ?? '';
     // Escape `<` so scene text containing "</script>" can't break out.
     const sceneJson = JSON.stringify(scene).replace(/</g, '\\u003c');
@@ -103,6 +116,11 @@ export class Preview {
     const pasteboard = authoring;
     const w = scene.resolution.width;
     const h = scene.resolution.height;
+    // The frame is inset into the symmetric pasteboard by this scene-px offset, so
+    // off-frame content paints into the dark margin on every side. scene (0,0) sits
+    // here — the canvas overlay measures from the same offset.
+    const ox = Math.round(frameOffset.x);
+    const oy = Math.round(frameOffset.y);
     const checkerImage =
       `linear-gradient(45deg, #5b6075 25%, transparent 25%),` +
       `linear-gradient(-45deg, #5b6075 25%, transparent 25%),` +
@@ -115,8 +133,8 @@ export class Preview {
       html, body { background: #161927 !important; }
       .cg-stage {
         position: absolute !important;
-        top: 0 !important;
-        left: 0 !important;
+        top: ${String(oy)}px !important;
+        left: ${String(ox)}px !important;
         width: ${String(w)}px !important;
         height: ${String(h)}px !important;
         overflow: visible !important;

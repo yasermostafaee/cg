@@ -85,6 +85,13 @@ interface Props {
   editingTextId: string | null;
   bindModeFieldId: string | null;
   scale: number;
+  /**
+   * D-071 Phase B — the frame's offset (scene px) into the symmetric pasteboard. The
+   * pointer layer covers the WHOLE pasteboard (off-frame shapes stay selectable), but
+   * scene (0,0) is the FRAME top-left — so the gizmos / `canvas-surface` are anchored
+   * in an inner box at this offset and click→scene is measured from there.
+   */
+  frameOffset: { x: number; y: number };
   currentFrame: number;
   /** Hand-tool drag delta callback (deltaX, deltaY in scene pixels). */
   onPan?: (dx: number, dy: number) => void;
@@ -106,10 +113,15 @@ export function CanvasOverlay({
   editingTextId,
   bindModeFieldId,
   scale,
+  frameOffset,
   currentFrame,
   onPan,
 }: Props): JSX.Element {
   const layerRef = useRef<HTMLDivElement>(null);
+  // The frame-origin box (scene 0,0). The pointer LAYER spans the whole pasteboard;
+  // this inner box is inset by `frameOffset`, so its rect is the scene origin used by
+  // both the gizmo/`canvas-surface` positioning and click→scene mapping.
+  const frameRef = useRef<HTMLDivElement>(null);
 
   const allElements: Element[] = [];
   for (const layer of scene.layers) {
@@ -158,7 +170,9 @@ export function CanvasOverlay({
   }, [bindModeFieldId, editingTextId, selection]);
 
   function viewportToScene(clientX: number, clientY: number): { x: number; y: number } {
-    const rect = layerRef.current?.getBoundingClientRect();
+    // Measure from the FRAME origin (scene 0,0) — inset into the pasteboard — not the
+    // pointer layer's top-left (the stage/pasteboard origin).
+    const rect = frameRef.current?.getBoundingClientRect();
     if (rect === undefined) return { x: 0, y: 0 };
     return screenToScene(clientX, clientY, rect, scale);
   }
@@ -367,38 +381,43 @@ export function CanvasOverlay({
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
-      {/* D-071 Phase B — the FRAME region marker. The pointer-handling layer
-          (above) covers the whole pasteboard so off-frame shapes are selectable,
-          but the `canvas-surface` testid + its boundingBox stay the FRAME, so the
-          existing fraction-based positioning (e.g. multi-select) is unchanged. No
-          handler of its own — clicks bubble to the layer. */}
+      {/* D-071 Phase B — the FRAME box (scene 0,0), INSET into the pasteboard by
+          `frameOffset`. The pointer-handling layer (parent) covers the whole pasteboard
+          so off-frame shapes are selectable, but the gizmos are anchored HERE so they
+          track scene coords (the gizmo SVG sizes to this box — keeping it FRAME-sized,
+          not 0×0, keeps the B-025 stroke painted). Off-frame gizmos paint as SVG
+          overflow (the layer doesn't clip; the stage clips only at the pasteboard
+          edge). This box doubles as the `canvas-surface` hook, so `canvas.boundingBox()`
+          stays the FRAME; no handler of its own — clicks bubble to the layer. */}
       <div
+        ref={frameRef}
         data-testid="canvas-surface"
         style={{
           position: 'absolute',
-          top: 0,
-          left: 0,
+          top: frameOffset.y * scale,
+          left: frameOffset.x * scale,
           width: scene.resolution.width * scale,
           height: scene.resolution.height * scale,
         }}
-      />
-      {selectedEl !== null &&
-        selectedEl.visible &&
-        !selectedEl.locked &&
-        editingEl === null &&
-        bindModeFieldId === null && (
-          <Gizmo element={selectedEl} scale={scale} currentFrame={currentFrame} />
+      >
+        {selectedEl !== null &&
+          selectedEl.visible &&
+          !selectedEl.locked &&
+          editingEl === null &&
+          bindModeFieldId === null && (
+            <Gizmo element={selectedEl} scale={scale} currentFrame={currentFrame} />
+          )}
+        {selectedEls.length > 1 && editingEl === null && bindModeFieldId === null && (
+          <MultiGizmo elements={selectedEls} scale={scale} currentFrame={currentFrame} />
         )}
-      {selectedEls.length > 1 && editingEl === null && bindModeFieldId === null && (
-        <MultiGizmo elements={selectedEls} scale={scale} currentFrame={currentFrame} />
-      )}
-      {editingEl !== null && editingEl.type === 'text' && (
-        <TextEditor
-          element={editingEl as TextElement}
-          scale={scale}
-          onCommit={() => designerStore.setEditingText(null)}
-        />
-      )}
+        {editingEl !== null && editingEl.type === 'text' && (
+          <TextEditor
+            element={editingEl as TextElement}
+            scale={scale}
+            onCommit={() => designerStore.setEditingText(null)}
+          />
+        )}
+      </div>
       {bindModeFieldId !== null && (
         <div className={s.toolHint}>BIND → {bindModeFieldId} (Esc to cancel)</div>
       )}

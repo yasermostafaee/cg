@@ -1,11 +1,12 @@
 import { test, expect } from './fixtures/designer.js';
 
 /**
- * D-071 Phase B — the editor PASTEBOARD: a dark area beyond the frame (to the
- * right/bottom) where the author parks/sees/moves shapes. They render + are
- * selectable in authoring and persist in save, but are EXCLUDED from the broadcast
- * preview + export (Phase A still drops them, through the new authoring flag). On-
- * frame editing is unchanged; the broadcast modal still blanks-until-play (D-087).
+ * D-071 Phase B — the editor PASTEBOARD: a FIXED, SYMMETRIC dark area around the frame
+ * (a margin on EVERY side) where the author parks/sees/moves shapes. Off-frame shapes
+ * render + are selectable on all sides (left/top too) and persist in save, but are
+ * EXCLUDED from the broadcast preview + export (Phase A still drops them, through the
+ * authoring flag). The dark area is resolution-driven, so dragging never resizes it
+ * (only zoom does). On-frame editing is unchanged; the modal still blanks-until-play.
  */
 test.describe('Editor pasteboard (D-071 Phase B)', () => {
   test('an off-frame shape is dropped from the broadcast preview + export but kept on the canvas; the modal still blanks-until-play', async ({
@@ -112,5 +113,71 @@ test.describe('Editor pasteboard (D-071 Phase B)', () => {
     expect(lineBox.height).toBeGreaterThan(frame.height);
     expect(Math.abs(lineBox.height - viewport.height)).toBeLessThan(8);
     await app.page.mouse.up();
+  });
+
+  test('a shape parked off the LEFT/TOP of the frame stays visible on the pasteboard', async ({
+    app,
+  }) => {
+    await app.newProject('OffLeftTop');
+    await app.addRectangle({ x: 240, y: 200 });
+    const shape = app.page
+      .frameLocator('iframe[title="cgpreview"]')
+      .locator('[data-cg-element-id]');
+
+    // Park it fully off the TOP-LEFT (negative scene coords; the default rect is
+    // 320×120, so -500/-300 clears the frame on both axes while staying inside the
+    // 960×540 margin). With the OLD right/bottom-only pasteboard this fell outside the
+    // stage and was clipped away; the symmetric pasteboard keeps it painted.
+    const xField = app.inspector.getByRole('spinbutton', { name: 'X position' });
+    const yField = app.inspector.getByRole('spinbutton', { name: 'Y position' });
+    await xField.fill('-500');
+    await xField.press('Enter');
+    await yField.fill('-300');
+    await yField.press('Enter');
+
+    // Scroll to the pasteboard's top-left so the off-frame margin is in view.
+    const viewport = app.page.getByTestId('canvas-viewport');
+    await viewport.evaluate((el) => {
+      el.scrollLeft = 0;
+      el.scrollTop = 0;
+    });
+
+    // The shape paints in the dark margin — fully ABOVE-LEFT of the frame, and inside
+    // the visible viewport (not clipped off).
+    await expect(shape).toBeAttached();
+    const vp = (await viewport.boundingBox())!;
+    const frame = (await app.canvas.boundingBox())!;
+    const box = (await shape.boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(frame.x + 2); // left of the frame
+    expect(box.y + box.height).toBeLessThanOrEqual(frame.y + 2); // above the frame
+    expect(box.x).toBeGreaterThan(vp.x); // visible, not clipped past the left edge
+    expect(box.y).toBeGreaterThan(vp.y); // visible, not clipped past the top edge
+  });
+
+  test('the ruler stays pinned to the viewport when zoomed in and scrolled', async ({ app }) => {
+    await app.newProject('ScrollRuler');
+
+    // Show the ruler (View ▸ Ruler). `exact` so 'View' doesn't also match 'Preview'.
+    await app.page.getByRole('button', { name: 'View', exact: true }).click();
+    await app.page.getByRole('menuitemcheckbox', { name: 'Ruler (R)' }).click();
+    const rulerTop = app.page.getByTestId('ruler-top');
+    await expect(rulerTop).toBeVisible();
+
+    // Zoom to 100% so the 1920×1080 frame overflows the canvas viewport, then
+    // scroll. The rulers live in a NON-scrolling overlay, so the top bar must stay
+    // pinned to the viewport top — before the fix it scrolled away with the content
+    // (it was absolutely positioned inside the overflow:auto scroll container).
+    await app.page.getByRole('button', { name: 'Reset zoom to 100%' }).click();
+    const viewport = app.page.getByTestId('canvas-viewport');
+    await viewport.evaluate((el) => {
+      el.scrollTop = 200;
+      el.scrollLeft = 200;
+    });
+
+    const vp = (await viewport.boundingBox())!;
+    const ruler = (await rulerTop.boundingBox())!;
+    // Pinned to the top edge (not scrolled up by ~200px) and spanning the width.
+    expect(Math.abs(ruler.y - vp.y)).toBeLessThan(3);
+    expect(ruler.width).toBeGreaterThan(vp.width - 4);
   });
 });

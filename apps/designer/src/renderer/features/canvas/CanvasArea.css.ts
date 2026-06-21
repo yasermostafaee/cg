@@ -50,14 +50,37 @@ export const zoomReadout = style({
 
 export const spacer = style({ flex: 1 });
 
+// The viewport wraps the scroll container + a NON-scrolling overlay (rulers +
+// guides). The overlay must not live inside `outer` — absolutely-positioned
+// children of a scroll container scroll WITH the content, so the rulers would
+// slide out of view and the guide ticks would drift on scroll. Keeping them in
+// this sibling layer pins them to the visible area while `rulerOrigin` tracks
+// the scrolling stage.
+export const viewport = style({
+  position: 'relative',
+  flex: 1,
+  minHeight: 0,
+  minWidth: 0,
+  display: 'flex',
+  width: '100%',
+  boxSizing: 'border-box',
+});
+
 export const outer = style({
   flex: 1,
-  background: '#161927',
+  // Darker than the #161927 pasteboard so the workspace edge is VISIBLE: beyond the
+  // pasteboard (where shapes are NOT rendered) reads as a distinct void, not a
+  // same-colour area that silently clips a shape dragged into it.
+  background: '#080a10',
   border: `1px solid ${colors.border}`,
   borderRadius: '0.25rem',
   minHeight: 0,
   minWidth: 0,
   overflow: 'auto',
+  // No DEFAULT scrollbars: the pasteboard overflows the viewport (the frame is fit
+  // large), but the bars are hidden — the operator pans with the hand tool / wheel /
+  // Ctrl-wheel zoom instead of dragging a scrollbar. Scroll stays programmatic.
+  scrollbarWidth: 'none', // Firefox
   display: 'flex',
   alignItems: 'flex-start',
   justifyContent: 'flex-start',
@@ -65,6 +88,25 @@ export const outer = style({
   width: '100%',
   boxSizing: 'border-box',
   position: 'relative',
+  // Establish a stacking context so the whole scrolling canvas subtree paints
+  // BELOW the ruler/guide overlay (which is a sibling with a higher z-index).
+  zIndex: 0,
+  selectors: {
+    '&::-webkit-scrollbar': { display: 'none' }, // Chromium / WebKit
+  },
+});
+
+// Non-scrolling overlay aligned to the scroll viewport's border box (= `outer`).
+// Rulers + guides draw here at viewport-relative coordinates; `overflow:hidden`
+// clips anything past the visible edges. `pointerEvents:none` lets canvas
+// interaction through — interactive children (ruler bars, guide handles) opt
+// back in with `pointerEvents:'auto'`.
+export const overlay = style({
+  position: 'absolute',
+  inset: 0,
+  overflow: 'hidden',
+  pointerEvents: 'none',
+  zIndex: 1,
 });
 
 export const centerWrap = style({

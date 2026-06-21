@@ -31,6 +31,13 @@ export const PreviewLoadChannel = defineChannel(
      * — UNCHANGED).
      */
     authoring: z.boolean().optional(),
+    /**
+     * D-071 Phase B — the frame's offset (scene px) into the SYMMETRIC pasteboard,
+     * so the authoring `.cg-stage` is inset and off-frame content is visible on every
+     * side (left/top too). scene (0,0) sits here, matching the canvas overlay. Absent
+     * (modal/export) ⇒ the frame stays at the iframe origin (no inset).
+     */
+    frameOffset: z.object({ x: z.number(), y: z.number() }).optional(),
   }),
   z.object({
     /** Blob/cgpreview URL — fallback for callers that can't use srcdoc. */

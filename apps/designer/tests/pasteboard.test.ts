@@ -1,19 +1,21 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { Element, Scene } from '@cg/shared-schema';
+import type { Scene } from '@cg/shared-schema';
 import { Preview } from '../src/platform/preview.js';
 import {
   fitZoom,
-  pasteboardExtent,
+  pasteboardLayout,
   screenToScene,
 } from '../src/renderer/features/canvas/geometry.js';
 
 /**
  * D-071 Phase B — the editor pasteboard. The `#buildHtml` `authoring` flag lifts the
- * `.cg-stage { overflow: hidden }` clip so off-frame shapes paint beyond the frame —
- * for the CANVAS iframe ONLY, INDEPENDENT of D-087's `broadcast`. The broadcast modal
- * + exports keep the native clip (UNCHANGED). The canvas STAGE extent (= the frame
- * for an empty doc; grown only by off-frame content) drives the centered-fit layout.
- * The visible centering / ruler / guides are pinned by the E2E `pasteboard.spec.ts`.
+ * `.cg-stage { overflow: hidden }` clip so off-frame shapes paint beyond the frame, and
+ * `frameOffset` insets the frame into a FIXED, SYMMETRIC pasteboard (margin on every
+ * side) so off-frame content shows on all sides — for the CANVAS iframe ONLY,
+ * INDEPENDENT of D-087's `broadcast`. The broadcast modal + exports keep the native
+ * clip (UNCHANGED). `pasteboardLayout` is a pure function of the resolution, so the dark
+ * area never resizes on drag (only zoom scales it). The visible centering / ruler /
+ * guides / off-frame visibility are pinned by the E2E `pasteboard.spec.ts`.
  */
 
 const urlGlobals = URL as unknown as {
@@ -46,12 +48,17 @@ describe('D-071 Phase B — pasteboard authoring document', () => {
     preview = new Preview({ cgJs: 'export const noop = 1;', cgCss: '.cg-stage{}', fontsCss: '' });
   });
 
-  it('authoring:true lifts the .cg-stage clip; the viewport is device-width (size set by the canvas)', () => {
-    const { html } = preview.load(SCENE, false, true);
+  it('authoring:true lifts the .cg-stage clip + insets the frame into the symmetric pasteboard; device-width', () => {
+    const { frame } = pasteboardLayout(SCENE.resolution);
+    const { html } = preview.load(SCENE, false, true, frame);
     expect(html).toContain(CLIP_LIFT); // the clip is lifted so off-frame paints
-    expect(html).toContain('width: 1920px !important'); // the frame keeps its size (top-left)
+    expect(html).toContain('width: 1920px !important'); // the frame keeps its size
+    // The frame is inset by the pasteboard margin (960×540), so off-frame content is
+    // visible on EVERY side — not pinned to the iframe origin.
+    expect(html).toContain('left: 960px !important');
+    expect(html).toContain('top: 540px !important');
     expect(html).toContain('#161927'); // dark pasteboard margin
-    // device-width lets the iframe's (changing) element size drive the layout, no stretch.
+    // device-width lets the iframe's element size drive the layout, no stretch.
     expect(html).toContain('width=device-width');
   });
 
@@ -66,46 +73,27 @@ describe('D-071 Phase B — pasteboard authoring document', () => {
   });
 });
 
-function shape(id: string, x: number, y: number, w = 100, h = 100): Element {
-  return {
-    id,
-    name: id,
-    type: 'shape',
-    shape: 'rect',
-    transform: {
-      position: { x, y },
-      size: { w, h },
-      scale: { x: 1, y: 1 },
-      rotation: 0,
-      anchor: { x: 0, y: 0 },
-    },
-    opacity: 1,
-    visible: true,
-    locked: false,
-    zIndex: 0,
-  } as unknown as Element;
-}
-
-function doc(children: Element[]): {
-  layers: { children: Element[] }[];
-  resolution: { width: number; height: number };
-} {
-  return { layers: [{ children }], resolution: { width: 1920, height: 1080 } };
-}
-
-describe('pasteboardExtent', () => {
-  it('an empty / on-frame doc returns the FRAME (so the stage centers + fits as before)', () => {
-    expect(pasteboardExtent(doc([]))).toEqual({ width: 1920, height: 1080 });
-    expect(pasteboardExtent(doc([shape('on', 100, 100)]))).toEqual({ width: 1920, height: 1080 });
+describe('pasteboardLayout — fixed, symmetric pasteboard (resolution-driven)', () => {
+  it('extends a margin on ALL sides; the frame is inset + centered (off-frame shows on every side)', () => {
+    // 1920×1080 → 50% margin each side: 960×540 → stage 3840×2160, frame inset at (960,540).
+    expect(pasteboardLayout({ width: 1920, height: 1080 })).toEqual({
+      width: 3840,
+      height: 2160,
+      frame: { x: 960, y: 540 },
+    });
+    expect(pasteboardLayout({ width: 1280, height: 720 })).toEqual({
+      width: 2560,
+      height: 1440,
+      frame: { x: 640, y: 360 },
+    });
   });
 
-  it('off-frame content grows the extent right/bottom (frame + content + margin)', () => {
-    // A shape parked off the right edge: right = 2000 + 100 = 2100 (> 1920) → +80 margin.
-    expect(pasteboardExtent(doc([shape('off', 2000, 100)]))).toEqual({ width: 2180, height: 1080 });
-    expect(pasteboardExtent(doc([shape('below', 100, 1200)]))).toEqual({
-      width: 1920,
-      height: 1380,
-    });
+  it('is a pure function of the RESOLUTION — element positions never enter it (no drag-resize)', () => {
+    // The signature takes only the resolution: there is NO doc/element argument, so a
+    // shape dragged off-frame cannot change the stage size (only zoom scales it).
+    const a = pasteboardLayout({ width: 1920, height: 1080 });
+    const b = pasteboardLayout({ width: 1920, height: 1080 });
+    expect(a).toEqual(b);
   });
 });
 

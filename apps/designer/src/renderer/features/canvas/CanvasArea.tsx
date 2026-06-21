@@ -17,7 +17,7 @@ import { PreviewHost } from './PreviewHost.js';
 import {
   clampZoom as clampZoomPure,
   fitZoom,
-  pasteboardExtent,
+  pasteboardLayout,
   screenToScene,
 } from './geometry.js';
 import { Control } from '../../ui/Control.js';
@@ -100,6 +100,10 @@ export function CanvasArea({
   const stageRef = useRef<HTMLDivElement>(null);
   const [html, setHtml] = useState<string | null>(null);
   const [zoom, setZoom] = useState<number>(ZOOM_DEFAULT);
+  // Live mirror of `zoom` so the (once-bound) wheel listener + the zoom helpers read
+  // the current value without re-subscribing.
+  const zoomRef = useRef<number>(zoom);
+  zoomRef.current = zoom;
   const { rulerVisible, guides, snapGuides, currentFrame } = useDesignerSelector(
     (s) => ({
       rulerVisible: s.rulerVisible,
@@ -138,12 +142,17 @@ export function CanvasArea({
     let cancelled = false;
     // D-071 Phase B — the canvas iframe renders in AUTHORING mode (off-frame
     // pasteboard: clip lifted). Its element size (the pasteboard extent) is set by
-    // CanvasArea + a `device-width` viewport, so the document needs no `pad`. The
-    // broadcast modal + exports omit `authoring` (native clip — UNCHANGED).
-    void window.cg.preview.load({ scene: current, authoring: true }).then((res) => {
-      if (cancelled) return;
-      setHtml(res.html);
-    });
+    // CanvasArea + a `device-width` viewport; `frameOffset` insets the frame into the
+    // SYMMETRIC pasteboard so off-frame content shows on every side (left/top too) and
+    // scene (0,0) matches the overlay. The broadcast modal + exports omit `authoring`
+    // (native clip — UNCHANGED).
+    const offset = pasteboardLayout(current.resolution).frame;
+    void window.cg.preview
+      .load({ scene: current, authoring: true, frameOffset: offset })
+      .then((res) => {
+        if (cancelled) return;
+        setHtml(res.html);
+      });
     return () => {
       cancelled = true;
     };
@@ -297,42 +306,83 @@ export function CanvasArea({
     );
   }, [currentFrame]);
 
-  // Ctrl + wheel over the canvas zooms; plain wheel keeps the default
-  // overflow:auto behaviour. We use a non-passive listener so we can
-  // preventDefault on the Ctrl-wheel and not trigger the browser's
-  // page-zoom or page-scroll.
+  // Zoom by `factor`, keeping the scene point under (clientX, clientY) pinned there —
+  // so Ctrl+wheel zooms toward the CURSOR and the +/−/1× buttons toward the viewport
+  // centre (instead of growing from the stage's top-left corner). Measure the scene
+  // point pre-zoom, then after the stage relays out, scroll so it lands back under the
+  // anchor. Falls back to a plain set when the refs aren't ready.
+  function zoomAt(factor: number, clientX: number, clientY: number): void {
+    const el = outerRef.current;
+    const stage = stageRef.current;
+    const oldZoom = zoomRef.current;
+    const newZoom = clampZoom(oldZoom * factor);
+    if (newZoom === oldZoom) return;
+    if (el === null || stage === null) {
+      setZoom(newZoom);
+      return;
+    }
+    const srect = stage.getBoundingClientRect();
+    const px = (clientX - srect.left) / oldZoom;
+    const py = (clientY - srect.top) / oldZoom;
+    setZoom(newZoom);
+    requestAnimationFrame(() => {
+      const el2 = outerRef.current;
+      const stage2 = stageRef.current;
+      if (el2 === null || stage2 === null) return;
+      const r2 = stage2.getBoundingClientRect();
+      el2.scrollLeft += r2.left + px * newZoom - clientX;
+      el2.scrollTop += r2.top + py * newZoom - clientY;
+    });
+  }
+  // Buttons have no pointer position — anchor on the viewport centre.
+  function zoomAtCenter(factor: number): void {
+    const el = outerRef.current;
+    if (el === null) {
+      setZoom((z) => clampZoom(z * factor));
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    zoomAt(factor, r.left + r.width / 2, r.top + r.height / 2);
+  }
+  const zoomAtRef = useRef(zoomAt);
+  zoomAtRef.current = zoomAt;
+
+  // Ctrl + wheel over the canvas zooms toward the cursor; plain wheel keeps the default
+  // overflow:auto scroll. A non-passive listener so we can preventDefault on the
+  // Ctrl-wheel and not trigger the browser's page-zoom or page-scroll.
   useEffect(() => {
     const el = outerRef.current;
     if (el === null) return;
     function onWheel(e: WheelEvent): void {
       if (!e.ctrlKey) return; // let native scroll happen
       e.preventDefault();
-      setZoom((z) => clampZoom(e.deltaY < 0 ? z * ZOOM_STEP : z / ZOOM_STEP));
+      zoomAtRef.current(e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP, e.clientX, e.clientY);
     }
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
-  // D-071 Phase B — scroll so the FRAME (not the pasteboard extent) is centered in
-  // the viewport at the given zoom. The frame sits at the stage's top-left (scene
-  // 0,0); the pasteboard extends right/bottom, so without this an off-frame-grown
-  // stage would pin the frame to the corner.
+  // D-071 Phase B — scroll so the FRAME is centered in the viewport at the given
+  // zoom. The frame is INSET into the symmetric pasteboard by `frame` (scene px), so
+  // its top-left in content = the stage top-left + that offset × zoom.
   function centerFrameInView(z: number): void {
     const el = outerRef.current;
     const s = stageRef.current;
     const sc = latestSceneRef.current;
     if (el === null || s === null || sc === null) return;
+    const { frame } = pasteboardLayout(sc.resolution);
     const srect = s.getBoundingClientRect();
     const orect = el.getBoundingClientRect();
-    const frameLeftInContent = srect.left - orect.left + el.scrollLeft;
-    const frameTopInContent = srect.top - orect.top + el.scrollTop;
+    const frameLeftInContent = srect.left - orect.left + el.scrollLeft + frame.x * z;
+    const frameTopInContent = srect.top - orect.top + el.scrollTop + frame.y * z;
     el.scrollLeft = frameLeftInContent + (sc.resolution.width * z) / 2 - el.clientWidth / 2;
     el.scrollTop = frameTopInContent + (sc.resolution.height * z) / 2 - el.clientHeight / 2;
   }
 
-  // Fit the FRAME inside the scroll viewport (small margin) so it's fully visible,
-  // then CENTER it — the same zoom + centering the ⛶ button applies. Fit-zoom is
-  // computed from the FRAME bounds (not the enlarged pasteboard extent).
+  // Fit the FRAME inside the scroll viewport (small margin) so it's large + fully
+  // visible, then CENTER it. The pasteboard extends beyond and is reachable by
+  // scrolling/panning — the scrollbars are hidden (see `s.outer`), so there are no
+  // default scrollbars even though the dark workspace overflows the viewport.
   function fitToViewport(): void {
     const el = outerRef.current;
     const s = latestSceneRef.current;
@@ -377,14 +427,20 @@ export function CanvasArea({
     function measure(): void {
       const o = outerRef.current;
       const s = stageRef.current;
-      if (o === null || s === null) return;
+      const sc = latestSceneRef.current;
+      if (o === null || s === null || sc === null) return;
+      const { frame } = pasteboardLayout(sc.resolution);
       const orect = o.getBoundingClientRect();
       const srect = s.getBoundingClientRect();
-      // D-071 Phase B — the frame is at the stage's top-left (the pasteboard
-      // extends right/bottom only), so scene (0,0) is the stage top-left as before.
+      // D-071 Phase B — scene (0,0) is the FRAME top-left, which is INSET into the
+      // pasteboard by `frame` (scene px) → `frame × zoom` screen px from the stage
+      // top-left. The rulers/guides live in the NON-scrolling overlay aligned to
+      // `outer`'s border box (orect), so the origin is measured from there — and
+      // because `srect` reflects the live scroll, the ticks/guides follow the stage
+      // as it scrolls under the pinned overlay.
       setRulerOrigin({
-        x: srect.left - orect.left - o.clientLeft,
-        y: srect.top - orect.top - o.clientTop,
+        x: srect.left - orect.left + frame.x * zoom,
+        y: srect.top - orect.top + frame.y * zoom,
       });
       setViewport({ w: o.clientWidth, h: o.clientHeight });
     }
@@ -413,10 +469,13 @@ export function CanvasArea({
     );
   }
 
-  // D-071 Phase B — the stage extent (frame ∪ off-frame content). Equals the frame
-  // for an empty/on-frame doc (so it centers + fits as before); grows right/bottom
-  // only for off-frame content. The frame stays at the stage origin (0,0).
-  const extent = pasteboardExtent(scene);
+  // D-071 Phase B — the FIXED, SYMMETRIC pasteboard. The stage extent is a pure
+  // function of the resolution (frame + a margin on all sides), so dragging a shape
+  // NEVER resizes the dark area — only zoom does. `frameOffset` (scene px) insets the
+  // frame so off-frame content shows on every side; scene (0,0) sits at that offset.
+  const layout = pasteboardLayout(scene.resolution);
+  const extent = { width: layout.width, height: layout.height };
+  const frameOffset = layout.frame;
   const zoomPct = Math.round(zoom * 100);
   // Use the active tool's cursor across the whole scroll area, not just over
   // the canvas, so the dark margin around the scene shows the same cursor.
@@ -429,13 +488,19 @@ export function CanvasArea({
           ? 'grab'
           : 'crosshair';
 
-  // Scene coordinates under a viewport point, via the live stage rect. D-071
-  // Phase B — the frame stays at the stage's top-left (scene 0,0); the pasteboard
-  // extends to the RIGHT/BOTTOM only, so this mapping is unchanged.
+  // Scene coordinates under a viewport point. D-071 Phase B — scene (0,0) is the
+  // FRAME top-left, which is INSET into the pasteboard by `frameOffset` (scene px), so
+  // measure from the stage top-left + that offset × zoom (the frame's screen origin).
   function sceneFromClient(clientX: number, clientY: number): { x: number; y: number } {
     const s = stageRef.current;
     if (s === null) return { x: 0, y: 0 };
-    return screenToScene(clientX, clientY, s.getBoundingClientRect(), zoom);
+    const r = s.getBoundingClientRect();
+    return screenToScene(
+      clientX,
+      clientY,
+      { left: r.left + frameOffset.x * zoom, top: r.top + frameOffset.y * zoom },
+      zoom,
+    );
   }
 
   // Drag a guide (existing or freshly created). Guides can sit anywhere in the
@@ -487,7 +552,7 @@ export function CanvasArea({
         <Control
           variant="bare"
           className={s.headerButton}
-          onClick={() => setZoom(1)}
+          onClick={() => zoomAtCenter(1 / zoomRef.current)}
           aria-label="Reset zoom to 100%"
           title="Reset to 100%"
         >
@@ -496,7 +561,7 @@ export function CanvasArea({
         <Control
           variant="bare"
           className={s.headerButton}
-          onClick={() => setZoom((z) => clampZoom(z * ZOOM_STEP))}
+          onClick={() => zoomAtCenter(ZOOM_STEP)}
           aria-label="Zoom in"
           title="Zoom in"
         >
@@ -505,178 +570,187 @@ export function CanvasArea({
         <Control
           variant="bare"
           className={s.headerButton}
-          onClick={() => setZoom((z) => clampZoom(z / ZOOM_STEP))}
+          onClick={() => zoomAtCenter(1 / ZOOM_STEP)}
           aria-label="Zoom out"
           title="Zoom out"
         >
           −
         </Control>
       </div>
-      <div
-        className={s.outer}
-        style={{ cursor: outerCursor }}
-        ref={outerRef}
-        data-testid="canvas-viewport"
-      >
-        {html !== null && (
-          <div className={s.centerWrap}>
-            <div
-              ref={stageRef}
-              className={s.stage}
-              style={{
-                // D-071 Phase B — the stage is the PASTEBOARD: the content extent
-                // (frame for an empty doc; grown right/bottom by off-frame content).
-                // The frame stays at the top-left so click→scene mapping is unchanged.
-                width: extent.width * zoom,
-                height: extent.height * zoom,
-              }}
-            >
-              <iframe
-                ref={iframeRef}
-                srcDoc={html}
-                title="cgpreview"
-                className={s.iframe}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  // Sized to the pasteboard extent; the runtime's authoring CSS lifts
-                  // the `.cg-stage` clip so off-frame shapes paint into the margin. A
-                  // `device-width` viewport means the content fills this (changing)
-                  // element size with no stretch; the frame stays at (0,0).
-                  width: extent.width,
-                  height: extent.height,
-                  transform: `scale(${String(zoom)})`,
-                  transformOrigin: 'top left',
-                }}
-                // sandbox intentionally omitted — see Preview class
-                // comment. The combination "iframe srcDoc + ES module
-                // import from a blob URL" only works without sandbox
-                // in current Chromium.
-              />
-              <CanvasOverlay
-                scene={scene}
-                tool={tool}
-                selection={selection}
-                editingTextId={editingTextId}
-                bindModeFieldId={bindModeFieldId}
-                scale={zoom}
-                currentFrame={currentFrame}
-                onPan={applyPan}
-              />
-            </div>
-          </div>
-        )}
-        {rulerVisible && rulerOrigin !== null && html !== null && (
-          <CanvasRuler
-            originX={rulerOrigin.x}
-            originY={rulerOrigin.y}
-            zoom={zoom}
-            viewW={viewport.w}
-            viewH={viewport.h}
-            onCreateGuide={createGuideFromRuler}
-          />
-        )}
-        {rulerOrigin !== null && (guides.x.length > 0 || guides.y.length > 0) && (
-          <div
-            style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }}
-            aria-hidden
-          >
-            {guides.x.map((gx, i) => (
+      <div className={s.viewport}>
+        <div
+          className={s.outer}
+          style={{ cursor: outerCursor }}
+          ref={outerRef}
+          data-testid="canvas-viewport"
+        >
+          {html !== null && (
+            <div className={s.centerWrap}>
               <div
-                key={`gx-${String(i)}`}
+                ref={stageRef}
+                className={s.stage}
                 style={{
-                  position: 'absolute',
-                  top: 0,
-                  bottom: 0,
-                  left: rulerOrigin.x + gx * zoom - 3,
-                  width: 7,
-                  cursor: 'ew-resize',
-                  pointerEvents: 'auto',
+                  // D-071 Phase B — the stage is the FIXED, SYMMETRIC pasteboard: a
+                  // resolution-driven extent (frame + margin on all sides), so it never
+                  // resizes on drag — only zoom scales it. The frame is inset by
+                  // `frameOffset`, so off-frame content shows on every side.
+                  width: extent.width * zoom,
+                  height: extent.height * zoom,
                 }}
-                title="Drag to move · double-click to remove"
-                onPointerDown={(e) => dragGuide('x', i, e.nativeEvent)}
-                onDoubleClick={() => designerStore.removeGuide('x', i)}
               >
-                <div
+                <iframe
+                  ref={iframeRef}
+                  srcDoc={html}
+                  title="cgpreview"
+                  className={s.iframe}
                   style={{
                     position: 'absolute',
-                    left: 3,
+                    top: 0,
+                    left: 0,
+                    // Sized to the pasteboard extent; the runtime's authoring CSS lifts
+                    // the `.cg-stage` clip so off-frame shapes paint into the margin and
+                    // insets the frame by `frameOffset`. A `device-width` viewport means
+                    // the content fills this element size with no stretch.
+                    width: extent.width,
+                    height: extent.height,
+                    transform: `scale(${String(zoom)})`,
+                    transformOrigin: 'top left',
+                  }}
+                  // sandbox intentionally omitted — see Preview class
+                  // comment. The combination "iframe srcDoc + ES module
+                  // import from a blob URL" only works without sandbox
+                  // in current Chromium.
+                />
+                <CanvasOverlay
+                  scene={scene}
+                  tool={tool}
+                  selection={selection}
+                  editingTextId={editingTextId}
+                  bindModeFieldId={bindModeFieldId}
+                  scale={zoom}
+                  frameOffset={frameOffset}
+                  currentFrame={currentFrame}
+                  onPan={applyPan}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+        {/* Non-scrolling overlay over the scroll viewport: the rulers + guides
+            stay pinned to the visible area while `rulerOrigin` tracks the
+            scrolling stage (so they no longer slide away on zoom + scroll). */}
+        <div className={s.overlay}>
+          {rulerVisible && rulerOrigin !== null && html !== null && (
+            <CanvasRuler
+              originX={rulerOrigin.x}
+              originY={rulerOrigin.y}
+              zoom={zoom}
+              viewW={viewport.w}
+              viewH={viewport.h}
+              onCreateGuide={createGuideFromRuler}
+            />
+          )}
+          {rulerOrigin !== null && (guides.x.length > 0 || guides.y.length > 0) && (
+            <div
+              style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }}
+              aria-hidden
+            >
+              {guides.x.map((gx, i) => (
+                <div
+                  key={`gx-${String(i)}`}
+                  style={{
+                    position: 'absolute',
                     top: 0,
                     bottom: 0,
-                    width: 1,
-                    background: '#F472B6',
+                    left: rulerOrigin.x + gx * zoom - 3,
+                    width: 7,
+                    cursor: 'ew-resize',
+                    pointerEvents: 'auto',
                   }}
-                />
-              </div>
-            ))}
-            {guides.y.map((gy, i) => (
-              <div
-                key={`gy-${String(i)}`}
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  top: rulerOrigin.y + gy * zoom - 3,
-                  height: 7,
-                  cursor: 'ns-resize',
-                  pointerEvents: 'auto',
-                }}
-                title="Drag to move · double-click to remove"
-                onPointerDown={(e) => dragGuide('y', i, e.nativeEvent)}
-                onDoubleClick={() => designerStore.removeGuide('y', i)}
-              >
+                  title="Drag to move · double-click to remove"
+                  onPointerDown={(e) => dragGuide('x', i, e.nativeEvent)}
+                  onDoubleClick={() => designerStore.removeGuide('x', i)}
+                >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 3,
+                      top: 0,
+                      bottom: 0,
+                      width: 1,
+                      background: '#F472B6',
+                    }}
+                  />
+                </div>
+              ))}
+              {guides.y.map((gy, i) => (
                 <div
+                  key={`gy-${String(i)}`}
                   style={{
                     position: 'absolute',
-                    top: 3,
                     left: 0,
                     right: 0,
-                    height: 1,
-                    background: '#F472B6',
+                    top: rulerOrigin.y + gy * zoom - 3,
+                    height: 7,
+                    cursor: 'ns-resize',
+                    pointerEvents: 'auto',
                   }}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-        {/* D-071 Phase B — alignment/snap guides (shown while dragging) span the
+                  title="Drag to move · double-click to remove"
+                  onPointerDown={(e) => dragGuide('y', i, e.nativeEvent)}
+                  onDoubleClick={() => designerStore.removeGuide('y', i)}
+                >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 3,
+                      left: 0,
+                      right: 0,
+                      height: 1,
+                      background: '#F472B6',
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          {/* D-071 Phase B — alignment/snap guides (shown while dragging) span the
             FULL visible canvas (the dark pasteboard), not the frame: drawn over the
             scroll viewport at the scene position (rulerOrigin tracks scroll/zoom). */}
-        {rulerOrigin !== null && (snapGuides.x.length > 0 || snapGuides.y.length > 0) && (
-          <div
-            data-testid="snap-guides"
-            style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5 }}
-            aria-hidden
-          >
-            {snapGuides.x.map((gx) => (
-              <div
-                key={`sgx-${String(gx)}`}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  bottom: 0,
-                  left: rulerOrigin.x + gx * zoom,
-                  width: 1,
-                  background: '#FF3DAE',
-                }}
-              />
-            ))}
-            {snapGuides.y.map((gy) => (
-              <div
-                key={`sgy-${String(gy)}`}
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  top: rulerOrigin.y + gy * zoom,
-                  height: 1,
-                  background: '#FF3DAE',
-                }}
-              />
-            ))}
-          </div>
-        )}
+          {rulerOrigin !== null && (snapGuides.x.length > 0 || snapGuides.y.length > 0) && (
+            <div
+              data-testid="snap-guides"
+              style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5 }}
+              aria-hidden
+            >
+              {snapGuides.x.map((gx) => (
+                <div
+                  key={`sgx-${String(gx)}`}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    left: rulerOrigin.x + gx * zoom,
+                    width: 1,
+                    background: '#FF3DAE',
+                  }}
+                />
+              ))}
+              {snapGuides.y.map((gy) => (
+                <div
+                  key={`sgy-${String(gy)}`}
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    top: rulerOrigin.y + gy * zoom,
+                    height: 1,
+                    background: '#FF3DAE',
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
