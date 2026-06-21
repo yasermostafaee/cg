@@ -555,3 +555,33 @@ namespaces). **Regression:** `apps/designer/tests/composition-cycle-guard.test.t
 cycle blocked, composition cycle still blocked, safe nesting allowed) +
 `packages/shared-schema/tests/composition-fields.test.ts` (`compositionClosure` follows both
 edge kinds). Capability: `designer-compositions` (MODIFIED — the cycle-guard requirement).
+
+## [~] B-025 — selection box (gizmo frame) doesn't render ⟨priority: high⟩ — fixed on `fix/B-025-selection-box-accent` (B-024 reserved in ROADMAP for the negative guard)
+
+> **Fixed** — the gizmo frame is painted again; the teal accent is reverted to blue as a
+> separate D-094 follow-up (see designer.md D-094).
+
+**Repro:**
+
+1. Select any shape on the canvas.
+
+**Expected:** the selection frame (B-022's parallelogram outline) is visible around the shape,
+on any background.
+**Actual:** the corner handles render but the FRAME outline is invisible — the stroke is
+absent/clipped, not teal-on-dark.
+**Diagnosis (NOT a colour / D-094 token issue):** the frame's stroke reads `colors.accent`
+(`Gizmo.tsx:198`, `strokeWidth={1}` at `:199`), which is a VALID token — at runtime the computed
+stroke is `rgb(45,212,191)` (the teal). The frame is invisible because B-022 (`bc0aa4f`) draws
+the polygon inside an SVG with `width={0} height={0}` (`Gizmo.tsx:190-191`) relying on
+`overflow:'visible'` to paint outside its zero-size box; an ANCESTOR with `overflow:hidden`
+clips that overflow paint, so the stroke never shows. The handles (separate absolutely-positioned
+divs) are unaffected and render. **D-094 did NOT cause this** — D-094 (`5afc2f9`) changed only
+`theme.ts` (accent value blue→teal + new `onAccent`) and `Button.css.ts`; it did not remove/rename
+`accent` nor touch `Gizmo.tsx`. The invisibility predates and is independent of D-094.
+**Root cause:** a zero-size SVG whose overflow paint is clipped by an ancestor `overflow:hidden`.
+**Fix:** give the gizmo SVG a real size (`width/height: 100%`, covering the overlay) so the
+polygon paints inside the viewport instead of as clipped overflow; `pointer-events:none` keeps the
+handles on top and interactive. **Regression:**
+`apps/designer/tests/e2e/selection-overlay-scale-rotate.spec.ts` — a new test asserts the frame's
+owner SVG is non-zero-sized with a real, non-zero-width stroke; B-022's tracking + B-004 tests
+still pass. Capability: `designer-shapes` (the selection-gizmo requirement — bug fix, no spec change).

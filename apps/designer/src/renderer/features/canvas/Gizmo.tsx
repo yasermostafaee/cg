@@ -178,17 +178,21 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
 
   return (
     <>
-      {/* Frame outline — the true parallelogram through the four projected corners. */}
+      {/* Frame outline — the true parallelogram through the four projected corners.
+          B-025 — the SVG must have a REAL size (it covers the overlay): a `width=0
+          height=0` SVG paints its polygon only as OVERFLOW, which an ancestor's
+          `overflow:hidden` then clips, so the stroke never showed. Sized to the
+          overlay, the polygon (overlay-relative coords) paints inside the viewport.
+          `pointer-events:none` keeps the handles/edges (drawn on top) interactive. */}
       <svg
         style={{
           position: 'absolute',
-          left: 0,
-          top: 0,
+          inset: 0,
+          width: '100%',
+          height: '100%',
           overflow: 'visible',
           pointerEvents: 'none',
         }}
-        width={0}
-        height={0}
         aria-hidden
       >
         <polygon
