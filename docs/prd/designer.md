@@ -2359,3 +2359,44 @@ Tests: `@cg/template-runtime` `tests/stop-cleared.test.ts` (per-kind + nested + 
 timing) and `apps/designer/tests/e2e/stop-cleared.spec.ts`. Doc-sync:
 `packages/template-runtime/README.md` (terminal model). Change:
 `openspec/changes/stop-clears-composition/`.
+
+## [~] D-071 — Off-frame pasteboard, export-excluded (Phase A: export filter) ⟨priority: medium⟩
+
+> **Phase A (export filter) landed** on `feat/D-071a-export-filter` — change
+> `openspec/changes/off-frame-export-filter/`. **Phase B (editor pasteboard)** — showing the dark
+> area, placing/moving shapes off-frame, relaxing the stage clip, extending the overlay hit-test —
+> is a separate, later change/PR (two-phase split mirrors D-086).
+
+**What:** A "dark area" (pasteboard) OUTSIDE the frame where the author parks/stages shapes. They
+stay visible + editable in the editor and PERSIST in the saved `.cg.json`, but are EXCLUDED from
+the broadcast export (`.vcg` / HTML / preview output) when FULLY off-frame. On-frame and
+partially-off content is unaffected (partially-off is clipped to the frame as today). _Phase A_
+delivers the export-side filter only; _Phase B_ delivers the editor pasteboard UI.
+
+**Why:** A staging/scratch surface (Figma/AE pasteboard) + a leaner single-file export
+(fully-off-frame shapes don't bloat the bytes). Off-frame content is already clipped invisible on
+air by the runtime's `.cg-stage { overflow: hidden }`, so Phase A's filter leaves the rendered
+output IDENTICAL — it only stops dead-weight bytes (an off-frame image's asset is never gathered)
+from shipping. Authors can already place elements off-frame (`position` is unclamped), so the win
+is real even before the pasteboard UI.
+
+**Acceptance (Phase A):**
+
+- WHEN a composition is exported (`.vcg` / HTML) or previewed (broadcast) AND it contains a STATIC
+  element whose AABB is FULLY outside the frame THEN that element is absent from the output and its
+  image asset is not gathered/packaged
+- WHEN the same scene is projected for editing (`editSceneOf`) or written by Save THEN the off-frame
+  element is present and unchanged (export-only; staging shapes persist)
+- WHEN an off-frame element has a transform keyframe (could slide on-frame), is partially-on, sits
+  under an animated container, or is inside a repeater template THEN it is KEPT (conservative)
+- WHEN a static element is rotated/scaled THEN the decision uses its rotated AABB (4 transformed
+  corners), not a naive position check
+
+**Notes:** Conservative "keep when in doubt" rule in `dropFullyOffFrameForExport`
+(`renderer/state/off-frame.ts`), called inside `scopeSceneToComposition` AFTER the D-086 closure
+scope — the single projection `.vcg`/HTML/preview share, upstream of image collection + `pack()`.
+No exporter/packager/runtime/schema change. Recon (umbrella): `design.md` in
+`openspec/changes/pasteboard-editing-export-excluded/`. Tests:
+`apps/designer/tests/off-frame-export-filter.test.ts` (drop + every keep + boundary) +
+`apps/designer/tests/e2e/off-frame-export.spec.ts`. Change:
+`openspec/changes/off-frame-export-filter/`.
