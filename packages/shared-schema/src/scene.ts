@@ -126,6 +126,16 @@ export type Layer = z.infer<typeof LayerSchema>;
  * or placed inside another composition as a `composition` element. The project
  * keeps these in `Scene.compositions`; the main scene is the `Scene` itself.
  */
+
+/**
+ * D-086 — the playout target a composition exports for. A single member for now
+ * (CasparCG is the only target); the enum is the extensible seam so a real 2nd
+ * target (C-001) is a one-line addition. The visible per-composition selector is
+ * deferred until then — this is the persisted field only.
+ */
+export const PlayoutTargetSchema = z.enum(['casparcg']);
+export type PlayoutTarget = z.infer<typeof PlayoutTargetSchema>;
+
 export const CompositionSchema = z
   .object({
     id: IdSchema,
@@ -142,6 +152,13 @@ export const CompositionSchema = z
     lifecycle: LifecycleSchema.optional(),
     /** D-020 no-code playout timing (optional; absent = `manual`). */
     playout: PlayoutSchema.optional(),
+    /**
+     * D-086 — the playout target this composition exports for (CasparCG-only for
+     * now). Optional + backward-compatible: absent ⇒ the default `casparcg`. It
+     * persists into the `.vcg` and travels with the composition; the visible
+     * selector is deferred to a 2nd target (C-001).
+     */
+    playoutTarget: PlayoutTargetSchema.optional(),
     background: z.union([z.literal('transparent'), HexColorSchema]),
     layers: z.array(LayerSchema),
     /**

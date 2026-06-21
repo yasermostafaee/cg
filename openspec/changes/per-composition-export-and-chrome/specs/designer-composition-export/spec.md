@@ -29,3 +29,26 @@ Export preflight SHALL validate only the open composition and its nested closure
 
 - **WHEN** a sibling composition outside the root's closure has a validation error (for example a missing image asset) and the root composition is exported
 - **THEN** the export is not blocked by the sibling's error and produces the package for the root and its closure
+
+### Requirement: Per-composition Preview and Export live on a dedicated action bar
+
+The Designer SHALL present Preview, Export `.vcg`, and Export HTML for the OPEN composition on a dedicated per-composition action bar (pinned at the foot of the left rail, off the canvas), and these SHALL be the only entry points for preview/export (the global top bar no longer carries them, and there is no project-level "export the whole scene" action). The Export actions block when the open composition has an error-severity validation issue.
+
+#### Scenario: The action bar previews and exports the open composition
+
+- **WHEN** a composition is open and the operator triggers Preview or Export from the per-composition action bar
+- **THEN** the action targets the open composition (its nested closure), with no global-bar or project-level export entry point present
+
+#### Scenario: Export is blocked while the open composition has errors
+
+- **WHEN** the open composition has an error-severity validation issue
+- **THEN** the bar's Export `.vcg` and Export HTML actions are disabled (Preview remains available)
+
+### Requirement: A composition carries a persisted playout target
+
+A composition SHALL carry an optional `playoutTarget` that persists with it (into the project and the `.vcg`) and is backward-compatible — a composition without it loads unchanged, treated as the default `casparcg` target. The visible per-composition target selector is deferred until a second target exists; this is the persisted seam only.
+
+#### Scenario: The playout target round-trips and defaults when absent
+
+- **WHEN** a composition with `playoutTarget: 'casparcg'` is saved and reloaded, and another composition omits the field
+- **THEN** the first reloads with its target preserved and the second loads unchanged (absent ⇒ the default `casparcg`), with no visible selector required

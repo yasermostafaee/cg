@@ -71,7 +71,7 @@ started** — most of these IDs are not yet filed):
 9. [D-074](./prd/designer.md)–D-080 — timeline / layers
 10. [D-039](./prd/designer.md) (ext) / D-081 / D-082 / D-083 / D-084 — sequence / clock
 11. [D-090](./prd/designer.md) / D-091 — chrome
-12. [B-023](./prd/bugs.md) — negative guard
+12. [B-024](./prd/bugs.md) — negative guard
 
 > **Ordering note:** D-092 (icon-pack) precedes D-075 / D-078 / D-080 / D-084.
 

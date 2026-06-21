@@ -42,7 +42,10 @@ gestures into **store mutations**, which flow back to the iframe as a
 `scene-replace` postMessage (rAF-throttled so a 60 Hz drag never floods it).
 
 `CanvasArea` owns the zoom (0.1–4×, Ctrl+wheel + buttons + auto-fit), hand-pan
-(scrolls the container), and the pinned rulers + draggable guides.
+(scrolls the container), and the pinned rulers + draggable guides. It stays
+edit-surface only — the per-composition Preview / Export triggers (D-086 Phase B)
+live OFF the canvas, pinned at the foot of the left rail (`CompositionActionBar`),
+so the canvas keeps full height.
 
 ## Coordinate spaces
 

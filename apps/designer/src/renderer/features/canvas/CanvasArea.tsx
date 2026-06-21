@@ -13,6 +13,7 @@ import {
 } from '../sharedLibrary/sharedImageUrlCache.js';
 import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
+import { PreviewHost } from './PreviewHost.js';
 import { clampZoom as clampZoomPure, fitZoom, screenToScene } from './geometry.js';
 import { Control } from '../../ui/Control.js';
 import * as s from './CanvasArea.css.js';
@@ -425,6 +426,7 @@ export function CanvasArea({
 
   return (
     <div className={s.wrap}>
+      <PreviewHost />
       <div className={s.header} aria-label="Canvas header">
         {showToolbar && <CanvasToolbar tool={tool} />}
         <span className={s.spacer} />

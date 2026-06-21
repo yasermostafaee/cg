@@ -545,9 +545,14 @@ export class DesignerApp {
 
   // ── preview modal ─────────────────────────────────────────────────────────────
 
-  /** Open the Preview modal from the toolbar. */
+  /** The per-composition action bar above the canvas (D-086 Phase B). */
+  get compositionActionBar(): Locator {
+    return this.page.getByTestId('composition-action-bar');
+  }
+
+  /** Open the Preview modal from the per-composition action bar. */
   async openPreviewModal(): Promise<void> {
-    await this.page.getByRole('button', { name: 'PREVIEW', exact: true }).click();
+    await this.compositionActionBar.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(this.previewDialog).toBeVisible();
   }
 
@@ -555,9 +560,10 @@ export class DesignerApp {
     return this.page.getByRole('dialog', { name: 'Composition preview' });
   }
 
-  /** The preview's runtime iframe (same-origin srcDoc — readable). */
+  /** The preview's runtime iframe (same-origin srcDoc — readable), scoped to the
+   *  preview dialog so it's robust to the iframe's title attribute. */
   get previewFrame(): FrameLocator {
-    return this.page.frameLocator('iframe[title="cgpreview-modal"]');
+    return this.previewDialog.frameLocator('iframe');
   }
 
   /** A rendered element inside the preview, by the runtime's `data-cg-element-id`. */
@@ -621,10 +627,12 @@ export class DesignerApp {
 
   // ── export ─────────────────────────────────────────────────────────────────
 
-  /** Click "HTML" and capture the single-file HTML download. Returns the file text. */
+  /** Click "Export HTML" (per-composition bar) and capture the single-file HTML download. */
   async exportHtml(): Promise<{ filename: string; html: string }> {
     const downloadPromise = this.page.waitForEvent('download');
-    await this.page.getByRole('button', { name: 'HTML', exact: true }).click();
+    await this.compositionActionBar
+      .getByRole('button', { name: 'Export HTML', exact: true })
+      .click();
     const download: Download = await downloadPromise;
     const stream = await download.createReadStream();
     const chunks: Buffer[] = [];

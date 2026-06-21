@@ -54,6 +54,15 @@ export interface DesignerStoreState {
    */
   notice: string | null;
   /**
+   * D-086 Phase B — the composition snapshot the Preview modal is open on (`null` =
+   * closed). Session-only UI state (NOT saved / undone). It lives in the store — not
+   * a component — so the rail-footer action bar can OPEN the preview while the modal
+   * itself renders inside the canvas subtree (where the preview iframe works): only
+   * the small in-canvas preview host subscribes to this, so opening never re-renders
+   * the rest of the tree.
+   */
+  previewScene: Scene | null;
+  /**
    * Top-level routing: the Designer starts at the Landing screen
    * (starter picker / recent / new) and flips to the Studio whenever
    * a scene becomes active. Clearing the scene flips it back.
@@ -142,6 +151,7 @@ export const initialState: DesignerStoreState = {
   projectPath: null,
   activeCompositionId: null,
   notice: null,
+  previewScene: null,
   view: 'landing',
   tool: 'cursor',
   selection: new Set<string>(),

@@ -27,16 +27,21 @@
      export/composition tests still pass; `openspec validate per-composition-export-and-chrome
 --strict`.
 
-## Phase B — top-chrome relocation (follow-up, not implemented here)
+## Phase B — top-chrome relocation
 
-- [ ] 10. Slim the global `TopToolbar`: menus + centered project name (`scene.name`) + Save
+- [x] 10. Slim the global `TopToolbar`: menus + centered project name (`scene.name`) + Save
       (D-089 amber preserved); remove Preview / Export .vcg / Export HTML.
-- [ ] 11. New per-composition sticky bar above the canvas (insertion point: first child of
-      `CanvasArea` `s.wrap`, before the zoom header) carrying Preview / Export .vcg / Export
-      HTML / playout-target combo.
-- [ ] 12. Add an optional per-composition `playoutTarget` to the `Composition` schema
-      (sibling to `playout`); the combo reads/writes it (CasparCG-only for now).
-- [ ] 13. Remove the project-level export path entirely.
-- [ ] 14. E2E: export/preview triggered from the per-composition bar; global bar shows the
-      centered project name + Save; project-level export entry is gone.
-- [ ] 15. Engine doc-sync for the shell/canvas chrome if the structure changes.
+- [x] 11. New per-composition action bar (`CompositionActionBar`) pinned at the FOOT of the
+      LEFT RAIL (off the canvas, so the editing surface keeps full height) carrying Preview /
+      Export .vcg / Export HTML — compact buttons that share the rail width. (Playout-target
+      SELECTOR deferred — owner pick: a one-option dropdown is dead-weight; the persisted
+      field below is the seam, the visible combo lands with a 2nd target / C-001.)
+- [x] 12. Add an optional per-composition `playoutTarget` to the `Composition` schema
+      (sibling to `playout`); persisted + backward-compatible (absent ⇒ `casparcg`). No
+      visible combo yet (see task 11).
+- [x] 13. Remove the project-level export path entirely (File→Export item + the global-bar
+      Export/HTML/Preview buttons; the only export/preview triggers are now the per-comp bar).
+- [x] 14. E2E: `top-chrome.spec.ts` (global bar has the centered name + Save, no Preview /
+      Export / HTML, no File→Export; per-comp bar renders + exports the active comp). Existing
+      preview/export specs now exercise the per-comp bar via the updated page objects.
+- [x] 15. Engine doc-sync: note the per-composition action bar in the canvas engine README.
