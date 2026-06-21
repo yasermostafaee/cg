@@ -70,4 +70,47 @@ test.describe('Editor pasteboard (D-071 Phase B)', () => {
     await expect(shape).toBeAttached();
     await expect(app.gizmoFrame).toBeAttached();
   });
+
+  test('on open the frame is fit + CENTERED in the viewport (no off-center scroll)', async ({
+    app,
+  }) => {
+    await app.newProject('Centered');
+    // The frame (canvas-surface) is centred in the canvas viewport — its centre
+    // matches the viewport centre, not pinned to a corner of the pasteboard.
+    const offset = async (): Promise<{ dx: number; dy: number }> => {
+      const v = (await app.page.getByTestId('canvas-viewport').boundingBox())!;
+      const f = (await app.canvas.boundingBox())!;
+      return {
+        dx: Math.abs(f.x + f.width / 2 - (v.x + v.width / 2)),
+        dy: Math.abs(f.y + f.height / 2 - (v.y + v.height / 2)),
+      };
+    };
+    await expect.poll(async () => (await offset()).dx).toBeLessThan(10);
+    await expect.poll(async () => (await offset()).dy).toBeLessThan(10);
+  });
+
+  test('alignment guides span the full canvas (pasteboard), not the frame', async ({ app }) => {
+    await app.newProject('Guides');
+    await app.addRectangle({ x: 240, y: 200 });
+    const viewport = (await app.page.getByTestId('canvas-viewport').boundingBox())!;
+    const frame = (await app.canvas.boundingBox())!;
+    const shapeBox = (await app.page
+      .frameLocator('iframe[title="cgpreview"]')
+      .locator('[data-cg-element-id]')
+      .boundingBox())!;
+
+    // Drag the shape so its centre meets the frame centre → centre snap guides show.
+    await app.page.mouse.move(shapeBox.x + shapeBox.width / 2, shapeBox.y + shapeBox.height / 2);
+    await app.page.mouse.down();
+    await app.page.mouse.move(frame.x + frame.width / 2, frame.y + frame.height / 2, { steps: 12 });
+
+    // Mid-drag: a guide is drawn across the FULL visible canvas (≈ the viewport
+    // height), NOT just the frame — the regression was a half (frame-height) guide.
+    const guideLine = app.page.getByTestId('snap-guides').locator('div').first();
+    await expect(guideLine).toBeVisible();
+    const lineBox = (await guideLine.boundingBox())!;
+    expect(lineBox.height).toBeGreaterThan(frame.height);
+    expect(Math.abs(lineBox.height - viewport.height)).toBeLessThan(8);
+    await app.page.mouse.up();
+  });
 });

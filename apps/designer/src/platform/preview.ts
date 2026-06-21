@@ -47,15 +47,15 @@ export class Preview {
    * Play); the editor canvas omits it (`false` — keep the static authoring
    * frame visible for editing).
    *
-   * D-071 Phase B — `authoring` + `pad` turn on the off-frame PASTEBOARD for the
-   * CANVAS iframe only: lift `.cg-stage { overflow: hidden }` and add a `pad` scene-px
-   * dark margin to the right/bottom (the frame stays at the top-left), so off-frame
-   * shapes paint into the pasteboard. INDEPENDENT of `broadcast` — the modal/export
-   * leave it off (native clip, UNCHANGED).
+   * D-071 Phase B — `authoring` turns on the off-frame PASTEBOARD for the CANVAS
+   * iframe only: lift `.cg-stage { overflow: hidden }` + a dark margin so off-frame
+   * shapes paint beyond the frame (the iframe element size — the pasteboard extent —
+   * comes from CanvasArea, with a `device-width` viewport). INDEPENDENT of
+   * `broadcast` — the modal/export leave it off (native clip, UNCHANGED).
    */
-  load(scene: Scene, broadcast = false, authoring = false, pad = 0): { src: string; html: string } {
+  load(scene: Scene, broadcast = false, authoring = false): { src: string; html: string } {
     if (this.#docUrl !== null) URL.revokeObjectURL(this.#docUrl);
-    const html = this.#buildHtml(scene, broadcast, authoring, pad);
+    const html = this.#buildHtml(scene, broadcast, authoring);
     this.#docUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
     return { src: this.#docUrl, html };
   }
@@ -80,7 +80,7 @@ export class Preview {
     return { ok: true };
   }
 
-  #buildHtml(scene: Scene, broadcast: boolean, authoring: boolean, pad: number): string {
+  #buildHtml(scene: Scene, broadcast: boolean, authoring: boolean): string {
     const cgJsUrl = this.#cgJsUrl ?? '';
     // Escape `<` so scene text containing "</script>" can't break out.
     const sceneJson = JSON.stringify(scene).replace(/</g, '\\u003c');
@@ -93,17 +93,16 @@ export class Preview {
       .cg-pending .cg-stage { visibility: visible !important; }`
       : `/* D-087 — broadcast preview: the stage stays blank (cg-pending) until play(). */`;
     // D-071 Phase B — the off-frame PASTEBOARD (CANVAS iframe only). When on, the
-    // iframe is sized to the frame + `pad` right/bottom; the frame (`.cg-stage`) stays
-    // at the top-left with its clip lifted (`overflow: visible`) so off-frame shapes
-    // paint into the dark margin, and outlined so the author sees frame (exports) vs
-    // pasteboard (won't export). The broadcast modal / export pass `authoring:false`
-    // (pad 0) → the native clip + Phase A filter, UNCHANGED.
-    const pasteboard = authoring && pad > 0;
+    // frame (`.cg-stage`) stays at the iframe top-left with its clip lifted
+    // (`overflow: visible`) so off-frame shapes paint into the dark margin, and
+    // outlined so the author sees frame (exports) vs pasteboard (won't export). The
+    // iframe ELEMENT size is the pasteboard extent (set by CanvasArea) and a
+    // `device-width` viewport (below) makes the content fill that changing size with
+    // no stretch. The broadcast modal / export omit `authoring` → native clip + the
+    // Phase-A filter, UNCHANGED.
+    const pasteboard = authoring;
     const w = scene.resolution.width;
     const h = scene.resolution.height;
-    // Right/bottom pasteboard: the frame stays at the iframe top-left, the margin
-    // is added to the right + bottom, so the layout viewport widens by `pad`.
-    const viewportW = w + (pasteboard ? pad : 0);
     const checkerImage =
       `linear-gradient(45deg, #5b6075 25%, transparent 25%),` +
       `linear-gradient(-45deg, #5b6075 25%, transparent 25%),` +
@@ -139,7 +138,7 @@ export class Preview {
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=${String(viewportW)}, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(scene.name)}</title>
     <!-- App-bundled fonts (Vazirmatn / Exo 2). The srcdoc iframe is same-origin
          as the host, so these /fonts/… URLs resolve exactly as they do in the

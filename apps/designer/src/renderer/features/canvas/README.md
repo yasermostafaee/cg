@@ -72,10 +72,20 @@ them, not at their static base.
 
 ## Off-frame pasteboard (D-071 Phase B)
 
-The stage is a **pasteboard**: the frame plus a `pasteboardPad(resolution)` margin to the
-**right/bottom** (`CanvasArea` sizes the stage + iframe to `frame + pad`). The frame stays at the
-**surface origin** (scene 0,0), so `screenToScene` / placement / on-frame hit-testing are
-**unchanged** — the margin is extra room to **park staging shapes off-frame**.
+The stage is a **pasteboard**: its size is `pasteboardExtent(doc)` — the bounding box of the
+frame ∪ all element boxes, grown right/bottom (plus a small margin) **only by off-frame content**.
+An empty / on-frame doc returns the **frame itself**, so the stage `margin:auto`-centers and fits
+**exactly as before the pasteboard**; off-frame content extends it (scroll to reach). The frame
+stays at the **stage origin** (scene 0,0), so `screenToScene` / placement / on-frame hit-testing
+are **unchanged**.
+
+The iframe element is sized to the (changing) extent; a **`device-width` viewport** means the
+runtime content fills that size with **no stretch** when it grows. `fitToViewport` computes the
+fit-zoom from the **frame** bounds (not the extent) and then `centerFrameInView` scrolls so the
+frame is **centered** (the ⛶ button and project-open both do this). The pinned rulers place scene
+0 at the frame top-left (`rulerOrigin`, which tracks scroll/zoom); the alignment/snap guides are
+drawn in `CanvasArea` over the **scroll viewport** (`inset:0`) so they span the **whole visible
+canvas**, not just the frame.
 
 Two INDEPENDENT preview-document flags decide what the iframe shows (`Preview.#buildHtml`):
 

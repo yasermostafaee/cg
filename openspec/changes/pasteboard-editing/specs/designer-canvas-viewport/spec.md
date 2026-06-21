@@ -17,7 +17,12 @@ preview document that is INDEPENDENT of the broadcast flag: the broadcast previe
 exports SHALL keep the native clip (off-frame content stays invisible) and the modal SHALL still
 open blank-until-play. Save SHALL persist off-frame shapes in the project (`.cg.json`), while the
 broadcast preview + export SHALL still EXCLUDE fully-off-frame static shapes (the Phase-A export
-filter, unchanged, applied to the modal/export scene).
+filter, unchanged, applied to the modal/export scene). Adding the pasteboard SHALL NOT regress the
+canvas layout: the stage extent SHALL collapse to the FRAME for an empty / on-frame document (so it
+fits + centers as before, growing only when off-frame content is parked); the fit action and
+project-open SHALL fit the zoom from the FRAME bounds and then CENTER the frame in the viewport; the
+rulers SHALL place scene (0,0) at the frame top-left and track scroll + zoom; and the alignment /
+snap guides SHALL span the FULL visible canvas (the scroll viewport), not the frame dimensions.
 
 #### Scenario: A shape parked off-frame renders on the pasteboard and stays editable
 
@@ -41,3 +46,21 @@ filter, unchanged, applied to the modal/export scene).
 - **WHEN** the project is saved
 - **THEN** the off-frame staging shape is persisted in the `.cg.json` (the exclusion is
   export-only)
+
+#### Scenario: On open / fit, the frame is fit and centered (empty doc unchanged)
+
+- **WHEN** a project (with an empty or on-frame composition) is opened, or the fit action is invoked
+- **THEN** the stage extent equals the frame, the zoom is fit from the frame bounds, and the frame
+  is centered in the canvas viewport (no off-center scroll)
+
+#### Scenario: The rulers track scroll and zoom from the frame origin
+
+- **WHEN** the canvas is scrolled or zoomed
+- **THEN** the rulers read scene 0 at the frame top-left and scene (W/2, H/2) at the frame center,
+  for the current scroll + zoom
+
+#### Scenario: Alignment guides span the full visible canvas
+
+- **WHEN** a drag raises an alignment / snap guide
+- **THEN** the guide spans the full visible canvas (the scroll viewport), not just the frame
+  dimensions

@@ -14,7 +14,12 @@ import {
 import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
 import { PreviewHost } from './PreviewHost.js';
-import { clampZoom as clampZoomPure, fitZoom, pasteboardPad, screenToScene } from './geometry.js';
+import {
+  clampZoom as clampZoomPure,
+  fitZoom,
+  pasteboardExtent,
+  screenToScene,
+} from './geometry.js';
 import { Control } from '../../ui/Control.js';
 import * as s from './CanvasArea.css.js';
 import {
@@ -95,8 +100,13 @@ export function CanvasArea({
   const stageRef = useRef<HTMLDivElement>(null);
   const [html, setHtml] = useState<string | null>(null);
   const [zoom, setZoom] = useState<number>(ZOOM_DEFAULT);
-  const { rulerVisible, guides, currentFrame } = useDesignerSelector(
-    (s) => ({ rulerVisible: s.rulerVisible, guides: s.guides, currentFrame: s.currentFrame }),
+  const { rulerVisible, guides, snapGuides, currentFrame } = useDesignerSelector(
+    (s) => ({
+      rulerVisible: s.rulerVisible,
+      guides: s.guides,
+      snapGuides: s.snapGuides,
+      currentFrame: s.currentFrame,
+    }),
     shallowEqual,
   );
   // Screen offset (within the scroll viewport) of the scene's (0,0), so the
@@ -126,14 +136,14 @@ export function CanvasArea({
       return;
     }
     let cancelled = false;
-    // D-071 Phase B — the canvas iframe renders in AUTHORING mode with the
-    // off-frame pasteboard; the broadcast modal + exports do not (UNCHANGED).
-    void window.cg.preview
-      .load({ scene: current, authoring: true, pad: pasteboardPad(current.resolution) })
-      .then((res) => {
-        if (cancelled) return;
-        setHtml(res.html);
-      });
+    // D-071 Phase B — the canvas iframe renders in AUTHORING mode (off-frame
+    // pasteboard: clip lifted). Its element size (the pasteboard extent) is set by
+    // CanvasArea + a `device-width` viewport, so the document needs no `pad`. The
+    // broadcast modal + exports omit `authoring` (native clip — UNCHANGED).
+    void window.cg.preview.load({ scene: current, authoring: true }).then((res) => {
+      if (cancelled) return;
+      setHtml(res.html);
+    });
     return () => {
       cancelled = true;
     };
@@ -303,8 +313,26 @@ export function CanvasArea({
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
-  // Fit the whole scene inside the scroll viewport so it's fully visible
-  // without scrolling — the same zoom the ⛶ button applies.
+  // D-071 Phase B — scroll so the FRAME (not the pasteboard extent) is centered in
+  // the viewport at the given zoom. The frame sits at the stage's top-left (scene
+  // 0,0); the pasteboard extends right/bottom, so without this an off-frame-grown
+  // stage would pin the frame to the corner.
+  function centerFrameInView(z: number): void {
+    const el = outerRef.current;
+    const s = stageRef.current;
+    const sc = latestSceneRef.current;
+    if (el === null || s === null || sc === null) return;
+    const srect = s.getBoundingClientRect();
+    const orect = el.getBoundingClientRect();
+    const frameLeftInContent = srect.left - orect.left + el.scrollLeft;
+    const frameTopInContent = srect.top - orect.top + el.scrollTop;
+    el.scrollLeft = frameLeftInContent + (sc.resolution.width * z) / 2 - el.clientWidth / 2;
+    el.scrollTop = frameTopInContent + (sc.resolution.height * z) / 2 - el.clientHeight / 2;
+  }
+
+  // Fit the FRAME inside the scroll viewport (small margin) so it's fully visible,
+  // then CENTER it — the same zoom + centering the ⛶ button applies. Fit-zoom is
+  // computed from the FRAME bounds (not the enlarged pasteboard extent).
   function fitToViewport(): void {
     const el = outerRef.current;
     const s = latestSceneRef.current;
@@ -317,7 +345,12 @@ export function CanvasArea({
       s.resolution.height,
       margin,
     );
-    if (z !== null) setZoom(clampZoom(z));
+    if (z !== null) {
+      const cz = clampZoom(z);
+      setZoom(cz);
+      // Center after the new zoom lays out (the stage size depends on it).
+      requestAnimationFrame(() => centerFrameInView(cz));
+    }
   }
 
   // Auto-fit on load / project (or composition size) switch. Runs in a layout
@@ -380,9 +413,10 @@ export function CanvasArea({
     );
   }
 
-  const { width, height } = scene.resolution;
-  // D-071 Phase B — pasteboard margin (scene px) on each side of the frame.
-  const pad = pasteboardPad(scene.resolution);
+  // D-071 Phase B — the stage extent (frame ∪ off-frame content). Equals the frame
+  // for an empty/on-frame doc (so it centers + fits as before); grows right/bottom
+  // only for off-frame content. The frame stays at the stage origin (0,0).
+  const extent = pasteboardExtent(scene);
   const zoomPct = Math.round(zoom * 100);
   // Use the active tool's cursor across the whole scroll area, not just over
   // the canvas, so the dark margin around the scene shows the same cursor.
@@ -478,19 +512,23 @@ export function CanvasArea({
           −
         </Control>
       </div>
-      <div className={s.outer} style={{ cursor: outerCursor }} ref={outerRef}>
+      <div
+        className={s.outer}
+        style={{ cursor: outerCursor }}
+        ref={outerRef}
+        data-testid="canvas-viewport"
+      >
         {html !== null && (
           <div className={s.centerWrap}>
             <div
               ref={stageRef}
               className={s.stage}
               style={{
-                // D-071 Phase B — the stage is the PASTEBOARD: the frame plus a
-                // `pad` margin to the RIGHT and BOTTOM (the frame stays at the
-                // top-left so click→scene mapping is unchanged), giving room to
-                // park shapes off-frame.
-                width: (width + pad) * zoom,
-                height: (height + pad) * zoom,
+                // D-071 Phase B — the stage is the PASTEBOARD: the content extent
+                // (frame for an empty doc; grown right/bottom by off-frame content).
+                // The frame stays at the top-left so click→scene mapping is unchanged.
+                width: extent.width * zoom,
+                height: extent.height * zoom,
               }}
             >
               <iframe
@@ -502,11 +540,12 @@ export function CanvasArea({
                   position: 'absolute',
                   top: 0,
                   left: 0,
-                  // Sized to the pasteboard (frame + `pad` right/bottom); the
-                  // runtime's authoring CSS lifts the `.cg-stage` clip so off-frame
-                  // shapes paint into that margin. The frame stays at (0,0).
-                  width: width + pad,
-                  height: height + pad,
+                  // Sized to the pasteboard extent; the runtime's authoring CSS lifts
+                  // the `.cg-stage` clip so off-frame shapes paint into the margin. A
+                  // `device-width` viewport means the content fills this (changing)
+                  // element size with no stretch; the frame stays at (0,0).
+                  width: extent.width,
+                  height: extent.height,
                   transform: `scale(${String(zoom)})`,
                   transformOrigin: 'top left',
                 }}
@@ -601,6 +640,43 @@ export function CanvasArea({
             ))}
           </div>
         )}
+        {/* D-071 Phase B — alignment/snap guides (shown while dragging) span the
+            FULL visible canvas (the dark pasteboard), not the frame: drawn over the
+            scroll viewport at the scene position (rulerOrigin tracks scroll/zoom). */}
+        {rulerOrigin !== null && (snapGuides.x.length > 0 || snapGuides.y.length > 0) && (
+          <div
+            data-testid="snap-guides"
+            style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5 }}
+            aria-hidden
+          >
+            {snapGuides.x.map((gx) => (
+              <div
+                key={`sgx-${String(gx)}`}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  bottom: 0,
+                  left: rulerOrigin.x + gx * zoom,
+                  width: 1,
+                  background: '#FF3DAE',
+                }}
+              />
+            ))}
+            {snapGuides.y.map((gy) => (
+              <div
+                key={`sgy-${String(gy)}`}
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  top: rulerOrigin.y + gy * zoom,
+                  height: 1,
+                  background: '#FF3DAE',
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -664,6 +740,7 @@ function CanvasRuler({
           pointerEvents: 'auto',
           cursor: 'ns-resize',
         }}
+        data-testid="ruler-top"
         title="Drag down for a horizontal guide"
         onPointerDown={(e) => onCreateGuide('y', e)}
       >

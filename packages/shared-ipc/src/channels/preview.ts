@@ -24,14 +24,13 @@ export const PreviewLoadChannel = defineChannel(
     broadcast: z.boolean().optional(),
     /**
      * D-071 Phase B — authoring PASTEBOARD: lift the `.cg-stage { overflow:
-     * hidden }` clip and inset the frame by `pad` scene px within a dark margin,
-     * so off-frame shapes paint into the pasteboard. INDEPENDENT of `broadcast`:
-     * the editor canvas sets `authoring: true` (+ a `pad`); the broadcast modal
-     * and exports leave it absent (native clip — UNCHANGED).
+     * hidden }` clip + a dark margin so off-frame shapes paint beyond the frame
+     * (the iframe element size — the pasteboard extent — is set by the canvas, with
+     * a `device-width` viewport). INDEPENDENT of `broadcast`: the editor canvas sets
+     * `authoring: true`; the broadcast modal + exports leave it absent (native clip
+     * — UNCHANGED).
      */
     authoring: z.boolean().optional(),
-    /** D-071 Phase B — pasteboard margin in scene px (each side); 0/absent = none. */
-    pad: z.number().nonnegative().optional(),
   }),
   z.object({
     /** Blob/cgpreview URL — fallback for callers that can't use srcdoc. */

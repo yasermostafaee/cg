@@ -10,9 +10,14 @@ outlined so "exports vs won't-export" is obvious.
 
 ## What Changes
 
-- **Pasteboard surface.** The canvas stage + iframe extend beyond the frame (to the right/bottom),
-  giving room to park shapes; the dark margin is the pasteboard. The frame keeps its checkerboard +
-  a drawn outline.
+- **Pasteboard surface.** The canvas stage + iframe size to `pasteboardExtent(doc)` — the frame ∪
+  all element boxes — so the dark area extends right/bottom ONLY when shapes are parked off-frame;
+  an empty / on-frame doc collapses the extent to the FRAME (centers + fits exactly as before). The
+  frame keeps its checkerboard + a drawn outline.
+- **No layout regression.** The fit action and project-open fit the zoom from the FRAME bounds and
+  CENTER the frame in the viewport; the iframe uses a `device-width` viewport so its changing size
+  never stretches the content; the rulers pin scene (0,0) to the frame top-left (tracking
+  scroll/zoom); and the alignment guides span the full visible canvas (the scroll viewport).
 - **Lift the authoring clip.** A NEW `authoring` flag on `preview.load` / `Preview.#buildHtml`
   (INDEPENDENT of D-087's `broadcast`) lifts `.cg-stage { overflow: hidden }` for the CANVAS iframe
   only, so off-frame shapes paint into the pasteboard. The two flags compose:
@@ -30,11 +35,12 @@ outlined so "exports vs won't-export" is obvious.
 ## Impact
 
 - Affected specs: **designer-canvas-viewport** (ADDED requirement — the off-frame pasteboard).
-- Affected code: `@cg/shared-ipc` (`channels/preview.ts` — `authoring` + `pad` on the load request);
-  `@cg/designer` (`renderer/features/canvas/geometry.ts` `pasteboardPad`; `platform/preview.ts`
-  `#buildHtml` authoring CSS; `platform/createDesignerBridge.ts`; `renderer/features/canvas/`
-  `CanvasArea.tsx` + `.css.ts` stage/iframe sizing; `CanvasOverlay.tsx` frame-sized test hook). No
-  runtime/exporter/schema change.
+- Affected code: `@cg/shared-ipc` (`channels/preview.ts` — `authoring` on the load request);
+  `@cg/designer` (`renderer/features/canvas/geometry.ts` `pasteboardExtent`; `platform/preview.ts`
+  `#buildHtml` authoring CSS + `device-width` viewport; `platform/createDesignerBridge.ts`;
+  `renderer/features/canvas/` `CanvasArea.tsx` + `.css.ts` extent sizing + `centerFrameInView` +
+  viewport-spanning guides; `CanvasOverlay.tsx` frame-sized test hook). No runtime/exporter/schema
+  change.
 - Scope note: the pasteboard extends to the RIGHT/BOTTOM (the frame stays at the origin). This is
   the low-risk choice — a symmetric (all-direction) pasteboard would shift the surface→scene click
   mapping and relocate every existing fixture click; an all-direction pasteboard can extend this

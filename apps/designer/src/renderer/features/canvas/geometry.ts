@@ -272,16 +272,48 @@ export function screenToScene(
   return { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale };
 }
 
+/** Minimal structural element shape the extent walk needs (avoids a schema import,
+ *  keeping this module pure). `@cg/shared-schema`'s `Element` is assignable. */
+interface ExtentElement {
+  transform: {
+    position: { x: number; y: number };
+    size: { w: number; h: number };
+    scale: { x: number; y: number };
+  };
+  type: string;
+  children?: readonly ExtentElement[];
+}
+
+/** Extra breathing room (scene px) added beyond off-frame content. */
+export const PASTEBOARD_MARGIN = 80;
+
 /**
- * D-071 Phase B — the off-frame PASTEBOARD margin (in scene px) added on EACH side
- * of the frame so the author can park/see shapes outside it. A quarter of the
- * frame's longer edge gives generous room without dwarfing the frame. The SAME
- * value is used by the canvas stage/iframe sizing, the ruler origin, the overlay
- * coordinate shift, and the preview-iframe authoring CSS — one source of truth so
- * scene⇄screen stays consistent. EXPORT/preview-modal use pad 0 (no pasteboard).
+ * D-071 Phase B — the canvas STAGE extent (scene px): the bounding box of the frame
+ * and all on/off-frame element boxes, extended by {@link PASTEBOARD_MARGIN} beyond
+ * any OFF-frame content (right/bottom) so a parked shape has breathing room. An
+ * empty / fully on-frame doc returns the frame itself — so the stage equals the
+ * frame and `margin:auto`-centers + fits EXACTLY as before the pasteboard; only
+ * off-frame content grows it. The frame stays at the stage origin (0,0), so the
+ * scene⇄screen click mapping is unchanged.
  */
-export function pasteboardPad(res: { width: number; height: number }): number {
-  return Math.round(Math.max(res.width, res.height) * 0.25);
+export function pasteboardExtent(doc: {
+  layers: readonly { children: readonly ExtentElement[] }[];
+  resolution: { width: number; height: number };
+}): { width: number; height: number } {
+  let right = doc.resolution.width;
+  let bottom = doc.resolution.height;
+  const visit = (els: readonly ExtentElement[]): void => {
+    for (const el of els) {
+      const t = el.transform;
+      const r = t.position.x + Math.abs(t.size.w * t.scale.x);
+      const b = t.position.y + Math.abs(t.size.h * t.scale.y);
+      if (r > doc.resolution.width) right = Math.max(right, r + PASTEBOARD_MARGIN);
+      if (b > doc.resolution.height) bottom = Math.max(bottom, b + PASTEBOARD_MARGIN);
+      if (el.children !== undefined) visit(el.children);
+    }
+  };
+  for (const layer of doc.layers) visit(layer.children);
+  return { width: Math.round(right), height: Math.round(bottom) };
 }
 
 /** Clamp a zoom factor to `[min, max]`; non-finite input falls back to `fallback`. */
