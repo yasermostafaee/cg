@@ -2321,7 +2321,7 @@ request) threaded into `Preview.#buildHtml`. `broadcast: true` (the modal) skips
 state until `play()`; the canvas omits it (unchanged). On-air/export runtime untouched.
 Change: `openspec/changes/preview-blank-until-play/`.
 
-## [~] D-085 — Stop/close terminal = CLEARED ⟨priority: medium⟩
+## [x] D-085 — Stop/close terminal = CLEARED ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-21-stop-clears-composition/`
 
 **What:** Lock the broadcast STOP semantics: when the operator Stops a composition, it plays its
 OUT/outro and then SETTLES into a CLEARED terminal state — the stage is hidden and every
