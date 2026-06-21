@@ -27,25 +27,27 @@ test.describe('Ticker / crawler (D-028)', () => {
     await expect(app.dataKeyInput).toHaveValue('headlines');
 
     // The preview's data form renders the same items editor for the bound list
-    // field, seeded from the authored items, and edits live-update the stage.
+    // field, seeded from the authored items. D-087 — the stage is blank until
+    // Play, so the live edits are verified on the running crawl after Play.
     await app.openPreviewModal();
     await expect(app.tickerItemInput('headlines', 1, app.previewDialog)).toHaveValue(
       'سرخط نخست E2E',
     );
     await app.tickerItemInput('headlines', 1, app.previewDialog).fill('خبر فوری — Brand X');
-    await expect(app.previewFrame.getByText('خبر فوری — Brand X')).toBeVisible();
 
-    // Append an item through the preview form and confirm it reaches the stage.
+    // Append an item through the preview form.
     await app.addTickerItem(app.previewDialog);
     await app.tickerItemInput('headlines', 4, app.previewDialog).fill('آیتم تازه');
-    await expect(app.previewFrame.getByText('آیتم تازه')).toBeVisible();
 
     // Play: the crawl starts — the static authoring row is replaced by the
-    // treadmill's fed item spans, and the band keeps rendering the items.
+    // treadmill's fed item spans, carrying BOTH the edited and the appended item.
     await app.play();
     await expect(app.previewFrame.locator('[data-cg-ticker-static]')).toHaveCount(0);
     await expect(
       app.previewFrame.locator('[data-cg-ticker-item]', { hasText: 'خبر فوری — Brand X' }).first(),
+    ).toBeAttached();
+    await expect(
+      app.previewFrame.locator('[data-cg-ticker-item]', { hasText: 'آیتم تازه' }).first(),
     ).toBeAttached();
     await app.stop();
   });

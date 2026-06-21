@@ -15,17 +15,18 @@ test.describe('Designer critical flow', () => {
     await app.setDataKey('headline');
     await expect(app.dataKeyInput).toHaveValue('headline');
 
-    // Preview reflects the bound value, and a live field edit updates the stage.
+    // D-087 — the preview opens loaded-but-unpainted (blank until Play). Play
+    // paints the bound value, and a live field edit updates the (visible) stage.
     await app.openPreviewModal();
+    await expect(app.previewFrame.getByText('New text')).toBeHidden();
+    await app.play();
     await expect(app.previewFrame.getByText('New text')).toBeVisible();
     await app.setPreviewField('headline', 'Hello E2E');
     await expect(app.previewFrame.getByText('Hello E2E')).toBeVisible();
 
-    // Transport commands run without error and the content persists.
-    await app.play();
-    await expect(app.previewFrame.getByText('Hello E2E')).toBeVisible();
+    // Stop runs the outro and settles the stage blank again.
     await app.stop();
-    await expect(app.previewFrame.getByText('Hello E2E')).toBeVisible();
+    await expect(app.previewFrame.getByText('Hello E2E')).toBeHidden();
 
     // Close the preview and export a single-file HTML (captured via the download).
     await app.previewDialog.getByRole('button', { name: 'Close' }).click();
