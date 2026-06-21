@@ -2286,7 +2286,7 @@ preview. Bridge/channel + `@cg/vcg-format` packager UNCHANGED (filtering is upst
 renderer, as HTML/Preview already did). Recon: `docs/recon/d-086-export-scoping.md`. Change:
 `openspec/changes/per-composition-export-and-chrome/`.
 
-## [ ] D-087 — Preview blank until Play ⟨priority: medium⟩
+## [x] D-087 — Preview blank until Play ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-21-preview-blank-until-play/`
 
 **What:** The Preview modal SHALL open **loaded but unpainted** — nothing on the stage —
 exactly like CasparCG after `CG ADD` and before `CG PLAY`. The composition is built, fonts
