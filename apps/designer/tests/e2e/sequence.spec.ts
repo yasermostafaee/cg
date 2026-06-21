@@ -106,7 +106,10 @@ test.describe('Sequence / now-next element (D-029)', () => {
     ).toBeVisible();
 
     // Editing the CURRENT item corrects it in place on the stage (never yanked).
+    // D-087 — the stage is blank until Play; play reveals item 1 carrying the edit.
     await firstItem.fill('اکنون: خبر ویژه');
+    await app.play();
     await expect(app.previewFrame.getByText('اکنون: خبر ویژه')).toBeVisible();
+    await app.stop();
   });
 });

@@ -2284,3 +2284,38 @@ cycle guard; `scopeSceneToComposition(scene, rootId)` renderer helper routes bot
 preview. Bridge/channel + `@cg/vcg-format` packager UNCHANGED (filtering is upstream in the
 renderer, as HTML/Preview already did). Recon: `docs/recon/d-086-export-scoping.md`. Change:
 `openspec/changes/per-composition-export-and-chrome/`.
+
+## [ ] D-087 — Preview blank until Play ⟨priority: medium⟩
+
+**What:** The Preview modal SHALL open **loaded but unpainted** — nothing on the stage —
+exactly like CasparCG after `CG ADD` and before `CG PLAY`. The composition is built, fonts
+are loaded, fields are seeded, but no frame is shown until the operator presses **Play**,
+which then runs the normal intro → hold → outro lifecycle. Today the preview lifts the
+runtime's `cg-pending` blank state on boot and renders frame 0, so it opens already painted.
+
+**Why:** The runtime already models "blank until play" natively (`createRuntime` sets
+`body.cg-pending`, `play()` clears it, settle re-adds it) — the exported `.vcg`/HTML behave
+this way on air. The preview deliberately defeats it (a CSS `!important` override that lifts
+`.cg-pending`, plus `applyScene` removing `cg-pending` + `tick(0)` on boot) so the operator
+sees frame 0 while editing. That makes the preview **diverge** from the on-air/export
+pre-play state. The Preview modal should mirror broadcast: blank on open, painted only on
+Play. The **editor canvas** (which shares the same `preview.ts` harness) MUST stay visible
+for editing — so the change is scoped to the modal only.
+
+**Acceptance:**
+
+- WHEN the Preview modal opens THEN the stage is blank (the runtime is in its `cg-pending`
+  pre-play state and no graphic is painted), with the composition loaded underneath
+- WHEN the operator presses Play THEN the stage reveals and runs the intro → hold lifecycle,
+  and the painted result matches the exported composition once playing
+- WHEN the operator presses Stop THEN the outro runs and the stage settles blank again
+- WHEN the editor canvas renders a composition THEN it is UNCHANGED — it still shows the
+  static authoring frame (the blank-until-play behaviour is the Preview modal's only)
+- WHEN a composition is previewed and then exported THEN the pre-play (blank) and post-play
+  (painted) states are identical between preview and the on-air/export runtime
+
+**Notes:** Seam — a `broadcast?: boolean` flag on `preview.load` (the `PreviewLoadChannel`
+request) threaded into `Preview.#buildHtml`. `broadcast: true` (the modal) skips both the
+`cg-pending` CSS override and the boot-time reveal so the runtime keeps its native pending
+state until `play()`; the canvas omits it (unchanged). On-air/export runtime untouched.
+Change: `openspec/changes/preview-blank-until-play/`.

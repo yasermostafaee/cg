@@ -168,7 +168,10 @@ export function PreviewModal({
     let alive = true;
     setOverrides({});
     setPaused(false);
-    void window.cg.preview.load({ scene }).then((res) => {
+    // D-087 — the modal mirrors broadcast: open loaded-but-unpainted (blank)
+    // and paint only on Play. The editor canvas omits this flag (stays visible
+    // for editing).
+    void window.cg.preview.load({ scene, broadcast: true }).then((res) => {
       if (alive) setHtml(res.html);
     });
     return () => {

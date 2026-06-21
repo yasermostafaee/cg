@@ -12,7 +12,17 @@ import { definePublishChannel } from '../publish.js';
 
 export const PreviewLoadChannel = defineChannel(
   'preview.load',
-  z.object({ scene: SceneSchema }),
+  z.object({
+    scene: SceneSchema,
+    /**
+     * D-087 — render like the on-air/export runtime: keep the runtime's native
+     * `cg-pending` state (stage blank) until `play()`, instead of revealing
+     * frame 0 on load. The Preview modal sets this so it opens loaded-but-
+     * unpainted (CG ADD before CG PLAY); the editor canvas omits it (absent =
+     * today's authoring reveal, so the canvas stays visible for editing).
+     */
+    broadcast: z.boolean().optional(),
+  }),
   z.object({
     /** Blob/cgpreview URL — fallback for callers that can't use srcdoc. */
     src: z.string().url(),

@@ -40,10 +40,16 @@ export class Preview {
    * (for `iframe srcdoc`, which avoids blob-URL/cross-document quirks)
    * and a Blob URL fallback (still useful for export paths). Callers
    * prefer `html` when they can set it on srcdoc.
+   *
+   * D-087 — `broadcast` renders like the on-air/export runtime: the stage
+   * stays in its native `cg-pending` (blank) state until `play()`, instead of
+   * revealing frame 0 on load. The Preview modal sets it (open blank, paint on
+   * Play); the editor canvas omits it (`false` — keep the static authoring
+   * frame visible for editing).
    */
-  load(scene: Scene): { src: string; html: string } {
+  load(scene: Scene, broadcast = false): { src: string; html: string } {
     if (this.#docUrl !== null) URL.revokeObjectURL(this.#docUrl);
-    const html = this.#buildHtml(scene);
+    const html = this.#buildHtml(scene, broadcast);
     this.#docUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
     return { src: this.#docUrl, html };
   }
@@ -68,10 +74,18 @@ export class Preview {
     return { ok: true };
   }
 
-  #buildHtml(scene: Scene): string {
+  #buildHtml(scene: Scene, broadcast: boolean): string {
     const cgJsUrl = this.#cgJsUrl ?? '';
     // Escape `<` so scene text containing "</script>" can't break out.
     const sceneJson = JSON.stringify(scene).replace(/</g, '\\u003c');
+    // D-087 — one flag drives both the CSS override and the boot-time reveal.
+    // Authoring (canvas): reveal frame 0 on load. Broadcast (Preview modal):
+    // keep the runtime's native `cg-pending` (blank) state until play().
+    const revealOnLoad = !broadcast;
+    const pendingOverrideCss = revealOnLoad
+      ? `.cg-pending { opacity: 1 !important; }
+      .cg-pending .cg-stage { visibility: visible !important; }`
+      : `/* D-087 — broadcast preview: the stage stays blank (cg-pending) until play(). */`;
     return `<!doctype html>
 <html lang="en">
   <head>
@@ -86,15 +100,15 @@ export class Preview {
     <!--
       Authoring override: the broadcast runtime hides the stage while
       \`body.cg-pending\` is set (.cg-pending{opacity:0} and
-      .cg-pending .cg-stage{visibility:hidden}). In the Designer the
+      .cg-pending .cg-stage{visibility:hidden}). On the editor CANVAS the
       operator must see what they're building before play() is ever
-      called, so we lift those rules with !important. The exported
-      .vcg keeps the original CSS — this override lives only in the
-      preview document.
+      called, so we lift those rules with !important. D-087 — the Preview
+      MODAL passes broadcast=true and OMITS this lift, so it opens blank
+      (loaded but unpainted) and paints only on play(), matching the
+      exported .vcg (which keeps the original CSS).
     -->
     <style>
-      .cg-pending { opacity: 1 !important; }
-      .cg-pending .cg-stage { visibility: visible !important; }
+      ${pendingOverrideCss}
       /* The 'scene-replace' path calls runtime.remove() then
          createRuntime(newScene). remove() leaves body marked
          cg-removed, which the baseline CSS turns into
@@ -146,6 +160,12 @@ export class Preview {
     <script type="module">
       import { createRuntime, installCasparGlobals } from '${cgJsUrl}';
       (async () => {
+        // D-087 — false in a broadcast (Preview-modal) document: keep the
+        // runtime's native cg-pending (blank) state on load and reveal only on
+        // play(). True on the editor canvas: reveal frame 0 immediately so the
+        // operator can edit. createRuntime always sets cg-pending; this only
+        // decides whether applyScene clears it on load.
+        const REVEAL_ON_LOAD = ${String(revealOnLoad)};
         // Mutable bookkeeping — the iframe document stays alive across
         // edits; only the runtime (its DOM tree) is rebuilt by
         // applyScene(). This avoids reloading the whole HTML on every
@@ -304,7 +324,9 @@ export class Preview {
             });
             installCasparGlobals(runtime);
             await runtime.ready;
-            document.body.classList.remove('cg-pending');
+            // D-087 — a broadcast preview leaves cg-pending in place so the
+            // stage stays blank until play(); the canvas reveals frame 0 now.
+            if (REVEAL_ON_LOAD) document.body.classList.remove('cg-pending');
             await runtime.update(currentFields);
             runtime.tick(currentFrame);
             applyAssetUrls();

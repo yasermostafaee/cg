@@ -64,12 +64,13 @@ test.describe('Repeater / data-driven layout (D-030)', () => {
     });
     await expect(nameCell.first()).toBeVisible();
     await nameCell.first().fill('تیم نخست');
-    await expect(app.previewFrame.getByText('تیم نخست').first()).toBeVisible();
 
-    // Rows run the child lifecycle: play holds at the child's out-point;
-    // stop exits and the stage settles hidden.
+    // Rows run the child lifecycle: D-087 — the stage is blank until Play; play
+    // stamps + reveals the rows (the edited cell among them) and holds at the
+    // child's out-point; stop exits and the stage settles hidden.
     await app.play();
     await expect(app.previewFrame.locator('[data-cg-repeater-row]')).toHaveCount(3);
+    await expect(app.previewFrame.getByText('تیم نخست').first()).toBeVisible();
     // Mid-run GROWTH defers: adding a 4th row leaves 3 stamped…
     await app.previewDialog.getByRole('button', { name: 'Add item' }).first().click();
     await expect(
