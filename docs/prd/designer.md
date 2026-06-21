@@ -2220,7 +2220,7 @@ palette feels loud — and because it's per-recipe, it repeats on every new butt
   SAVE indicator (`TopToolbar.css.ts` `saveCtl` / `saveCtlDirty`). Change:
   `openspec/changes/restyle-buttons/`.
 
-## [~] D-086 — Per-composition export + top-chrome relocation ⟨priority: high⟩ — ABSORBS D-095
+## [x] D-086 — Per-composition export + top-chrome relocation ⟨priority: high⟩ — ABSORBS D-095 — archived: `openspec/changes/archive/2026-06-21-per-composition-export-and-chrome/`
 
 > **Phase A (engine) landed** (PR #144, merged) — change
 > `openspec/changes/per-composition-export-and-chrome/`. The risky correctness core:
@@ -2232,7 +2232,8 @@ palette feels loud — and because it's per-recipe, it repeats on every new butt
 > left rail (off the canvas, so the editing surface keeps full height); the
 > project-level export path is removed, and `Composition.playoutTarget` is added as the
 > persisted target seam (the visible selector is deferred to a 2nd target / C-001).
-> Both phases done — ready to archive.
+> Both phases done — archived `openspec/changes/archive/2026-06-21-per-composition-export-and-chrome/`
+> (living specs: `designer-composition-export` created, `designer-shell` + `designer-repeater-element` updated).
 
 This item **absorbs D-095** (centered project name in the global bar, adjacent to Save) —
 that chrome is delivered as part of this item's Phase B, exactly as **D-088 absorbed
