@@ -3,8 +3,8 @@ import { test, expect } from './fixtures/designer.js';
 /**
  * D-086 Phase B — top-chrome relocation. The global bar keeps the project-wide
  * menus + a centered project name + Save; Preview / Export (.vcg + HTML) move to the
- * per-composition action bar above the canvas (the export engine is already
- * per-composition from Phase A).
+ * per-composition action bar pinned at the foot of the left rail (off the canvas;
+ * the export engine is already per-composition from Phase A).
  */
 test.describe('D-086 Phase B — top-chrome relocation', () => {
   test('global bar shows the project name + Save and no Preview / Export / HTML', async ({
@@ -30,7 +30,7 @@ test.describe('D-086 Phase B — top-chrome relocation', () => {
     await expect(menu.getByText('Export…')).toHaveCount(0);
   });
 
-  test('per-composition bar renders above the canvas and exports the active comp', async ({
+  test('per-composition bar renders in the left rail and exports the active comp', async ({
     app,
   }) => {
     await app.newProject('Bar E2E');

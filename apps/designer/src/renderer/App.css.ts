@@ -34,6 +34,24 @@ export const sidePanel = style({
   minHeight: 0,
 });
 
+// D-086 Phase B — the LEFT rail column: the active panel (Compositions / Project
+// Assets / Shared Library) fills `leftPanelBody` and scrolls, while the
+// per-composition action footer below stays pinned (flex-shrink:0). Distinct from
+// `sidePanel` (reused by the right-hand Inspector, which stays a plain flex box).
+export const leftRail = style({
+  flexShrink: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  minHeight: 0,
+});
+
+export const leftPanelBody = style({
+  flex: 1,
+  minHeight: 0,
+  minWidth: 0,
+  display: 'flex',
+});
+
 export const centerCol = style({
   display: 'flex',
   flexDirection: 'column',

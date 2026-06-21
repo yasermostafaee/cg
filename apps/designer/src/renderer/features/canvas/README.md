@@ -42,13 +42,10 @@ gestures into **store mutations**, which flow back to the iframe as a
 `scene-replace` postMessage (rAF-throttled so a 60 Hz drag never floods it).
 
 `CanvasArea` owns the zoom (0.1–4×, Ctrl+wheel + buttons + auto-fit), hand-pan
-(scrolls the container), and the pinned rulers + draggable guides.
-
-Above the zoom header it renders the **`CompositionActionBar`** (D-086 Phase B) —
-the per-composition Preview / Export `.vcg` / Export HTML triggers. These are the
-**only** export/preview entry points (the global top bar carries just menus + the
-project name + Save); each action runs against the OPEN composition scoped to its
-nested closure via `scopeSceneToComposition` (the export engine is per-composition).
+(scrolls the container), and the pinned rulers + draggable guides. It stays
+edit-surface only — the per-composition Preview / Export triggers (D-086 Phase B)
+live OFF the canvas, pinned at the foot of the left rail (`CompositionActionBar`),
+so the canvas keeps full height.
 
 ## Coordinate spaces
 

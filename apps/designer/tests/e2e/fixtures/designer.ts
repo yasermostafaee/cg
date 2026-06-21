@@ -189,10 +189,8 @@ export class DesignerApp {
     await this.canvas.click({ position: pos });
   }
 
-  /** D-028 — add a ticker band by placing the Ticker tool (auto-selected). The default
-   *  drop point sits within the canvas at the test's auto-fit zoom (D-086 added a
-   *  per-composition bar above the canvas, so the viewport is slightly shorter). */
-  async addTicker(pos: { x: number; y: number } = { x: 120, y: 160 }): Promise<void> {
+  /** D-028 — add a ticker band by placing the Ticker tool (auto-selected). */
+  async addTicker(pos: { x: number; y: number } = { x: 120, y: 260 }): Promise<void> {
     await this.selectTool('Ticker');
     await this.canvas.click({ position: pos });
   }
@@ -562,9 +560,10 @@ export class DesignerApp {
     return this.page.getByRole('dialog', { name: 'Composition preview' });
   }
 
-  /** The preview's runtime iframe (same-origin srcDoc — readable). */
+  /** The preview's runtime iframe (same-origin srcDoc — readable), scoped to the
+   *  preview dialog so it's robust to the iframe's title attribute. */
   get previewFrame(): FrameLocator {
-    return this.page.frameLocator('iframe[title="cgpreview-modal"]');
+    return this.previewDialog.frameLocator('iframe');
   }
 
   /** A rendered element inside the preview, by the runtime's `data-cg-element-id`. */

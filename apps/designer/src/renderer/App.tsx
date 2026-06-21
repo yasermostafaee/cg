@@ -3,6 +3,7 @@ import type { DesignerBridge } from '../shared/designer-bridge.js';
 import { ProjectAssetsPanel } from './features/assets/ProjectAssetsPanel.js';
 import { SharedLibraryPanel } from './features/sharedLibrary/SharedLibraryPanel.js';
 import { CompositionsPanel } from './features/compositions/CompositionsPanel.js';
+import { CompositionActionBar } from './features/compositions/CompositionActionBar.js';
 import { CanvasArea } from './features/canvas/CanvasArea.js';
 import { InspectorPanel } from './features/inspector/InspectorPanel.js';
 import { InputTooltip } from './features/shell/InputTooltip.js';
@@ -404,14 +405,20 @@ export function App(): JSX.Element {
       </div>
       <div className={s.shell}>
         <LeftRail panel={leftPanel} onSelect={setLeftPanel} />
-        <div className={s.sidePanel} style={{ width: 244 }}>
-          {leftPanel === 'compositions' ? (
-            <CompositionsPanel />
-          ) : leftPanel === 'sharedLibrary' ? (
-            <SharedLibraryPanel />
-          ) : (
-            <ProjectAssetsPanel />
-          )}
+        <div className={s.leftRail} style={{ width: 244 }}>
+          <div className={s.leftPanelBody}>
+            {leftPanel === 'compositions' ? (
+              <CompositionsPanel />
+            ) : leftPanel === 'sharedLibrary' ? (
+              <SharedLibraryPanel />
+            ) : (
+              <ProjectAssetsPanel />
+            )}
+          </div>
+          {/* D-086 Phase B — per-composition Preview / Export pinned at the rail's
+              foot, off the canvas (the editing surface keeps full height). Preview is
+              rendered by the in-canvas PreviewHost off the store; this bar triggers it. */}
+          <CompositionActionBar issues={issues} />
         </div>
         {editScene === null ? (
           <EmptyStage />
@@ -426,7 +433,6 @@ export function App(): JSX.Element {
                   editingTextId={editingTextId}
                   bindModeFieldId={bindModeFieldId}
                   showToolbar
-                  issues={issues}
                 />
               </div>
               <TransportBar scene={editScene} />

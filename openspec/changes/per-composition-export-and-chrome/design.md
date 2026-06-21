@@ -76,11 +76,23 @@ That is the concrete reason `.vcg` switches from the raw scene to the scoped+pro
 
 Because Phase A made the handlers (`exportVcg` / `exportHtml` / `openPreview`) read the active
 composition from the store, Phase B is a pure relocation plus a centered `scene.name` read — no
-further export-engine change. The handlers (and the Preview modal state) move into a new
-`CompositionActionBar`, rendered as the first child of `CanvasArea`'s wrap (above the zoom
-header); the global `TopToolbar` loses Preview / Export / HTML and the File→Export item, and
-gains a centered project-name + adjacent Save (absolutely centered so it's independent of the
-menu group's width). The only export/preview entry points are now the per-composition bar.
+further export-engine change. The Export handlers move into a new `CompositionActionBar` pinned
+at the FOOT of the LEFT RAIL — the rail's panels (Compositions / Project Assets / Shared
+Library) scroll in a `flex:1` body while the footer stays put (`flex-shrink:0`). Keeping it OFF
+the canvas means the editing surface keeps full height (an earlier above-the-canvas mount
+shortened the canvas, dropping the auto-fit zoom).
+
+The PREVIEW modal must mount inside the canvas subtree (the preview iframe's live field /
+transport updates only work there). So the open/closed state is a session-only store field
+(`previewScene`): the rail footer triggers it (`designerStore.setPreviewScene`), and a tiny
+`PreviewHost` inside `CanvasArea` subscribes to JUST that field and renders the modal. Opening
+therefore re-renders only the host, not the editor. (E2E note: the modal iframe's `title`
+attribute is unreliable when the iframe is re-created in this path, so the page object locates
+the preview iframe by the dialog scope rather than the title — more robust regardless.)
+
+The global `TopToolbar` loses Preview / Export / HTML and the File→Export item, and gains a
+centered project-name + adjacent Save (absolutely centered so it's independent of the menu
+group's width). The only export/preview entry points are now the per-composition footer.
 
 ### Playout-target — field only, combo deferred (owner decision)
 

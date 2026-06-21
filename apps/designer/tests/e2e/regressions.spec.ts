@@ -18,7 +18,7 @@ test.describe('Regressions', () => {
     await app.dataKeyInput.fill('draftA');
 
     // Select element B (auto-selected on add). The inspector must re-init the input.
-    await app.addTextElement({ x: 200, y: 160 });
+    await app.addTextElement({ x: 200, y: 260 });
     await expect(app.dataKeyInput).toHaveValue(''); // B's own value, not A's draft
   });
 

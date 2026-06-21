@@ -98,7 +98,7 @@ test.describe('Box props for all background-capable elements (D-042)', () => {
     app,
   }) => {
     await app.newProject('D056Ticker');
-    await app.addTicker({ x: 120, y: 160 });
+    await app.addTicker({ x: 120, y: 260 });
     const ins = app.inspector;
     // Box-styling controls are removed for the content-driven kinds.
     await expect(ins.getByRole('button', { name: 'Toggle Border Radius' })).toHaveCount(0);

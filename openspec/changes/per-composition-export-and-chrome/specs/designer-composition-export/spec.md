@@ -30,9 +30,9 @@ Export preflight SHALL validate only the open composition and its nested closure
 - **WHEN** a sibling composition outside the root's closure has a validation error (for example a missing image asset) and the root composition is exported
 - **THEN** the export is not blocked by the sibling's error and produces the package for the root and its closure
 
-### Requirement: Per-composition Preview and Export live on a bar above the canvas
+### Requirement: Per-composition Preview and Export live on a dedicated action bar
 
-The Designer SHALL present Preview, Export `.vcg`, and Export HTML for the OPEN composition on a per-composition action bar above the canvas, and these SHALL be the only entry points for preview/export (the global top bar no longer carries them, and there is no project-level "export the whole scene" action). The Export actions block when the open composition has an error-severity validation issue.
+The Designer SHALL present Preview, Export `.vcg`, and Export HTML for the OPEN composition on a dedicated per-composition action bar (pinned at the foot of the left rail, off the canvas), and these SHALL be the only entry points for preview/export (the global top bar no longer carries them, and there is no project-level "export the whole scene" action). The Export actions block when the open composition has an error-severity validation issue.
 
 #### Scenario: The action bar previews and exports the open composition
 

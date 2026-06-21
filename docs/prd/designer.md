@@ -2222,7 +2222,8 @@ palette feels loud — and because it's per-recipe, it repeats on every new butt
 > (children reached via a `composition` instance OR a `repeater`), never the whole
 > project. **Phase B (chrome) landed** on `feat/D-086-chrome`: the slim global bar
 > (menus + centered project name + Save) and a new per-composition action bar
-> (`CompositionActionBar` — Preview / Export .vcg / Export HTML) above the canvas; the
+> (`CompositionActionBar` — Preview / Export .vcg / Export HTML) pinned at the foot of the
+> left rail (off the canvas, so the editing surface keeps full height); the
 > project-level export path is removed, and `Composition.playoutTarget` is added as the
 > persisted target seam (the visible selector is deferred to a 2nd target / C-001).
 > Both phases done — ready to archive.

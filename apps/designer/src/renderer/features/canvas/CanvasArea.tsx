@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Element, Scene } from '@cg/shared-schema';
-import type { ExportIssue } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import {
   getAll as assetUrlGetAll,
@@ -14,7 +13,7 @@ import {
 } from '../sharedLibrary/sharedImageUrlCache.js';
 import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
-import { CompositionActionBar } from './CompositionActionBar.js';
+import { PreviewHost } from './PreviewHost.js';
 import { clampZoom as clampZoomPure, fitZoom, screenToScene } from './geometry.js';
 import { Control } from '../../ui/Control.js';
 import * as s from './CanvasArea.css.js';
@@ -43,11 +42,6 @@ interface Props {
    * single header row reads:  [tools] ……… [zoom controls].
    */
   showToolbar?: boolean;
-  /**
-   * D-086 Phase B — validation issues for the open composition, forwarded to the
-   * per-composition action bar so its Export actions block on error-severity issues.
-   */
-  issues?: readonly ExportIssue[];
 }
 
 const ZOOM_MIN = 0.1;
@@ -95,7 +89,6 @@ export function CanvasArea({
   editingTextId,
   bindModeFieldId,
   showToolbar = false,
-  issues = [],
 }: Props): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
@@ -433,7 +426,7 @@ export function CanvasArea({
 
   return (
     <div className={s.wrap}>
-      <CompositionActionBar issues={issues} />
+      <PreviewHost />
       <div className={s.header} aria-label="Canvas header">
         {showToolbar && <CanvasToolbar tool={tool} />}
         <span className={s.spacer} />

@@ -59,6 +59,15 @@ export const compositionSlice = {
   },
 
   /**
+   * D-086 Phase B — open (non-null) / close (null) the Preview modal on a composition
+   * snapshot. Session-only: the in-canvas preview host renders the modal off this, so
+   * the left-rail action bar can trigger it without re-rendering the editor tree.
+   */
+  setPreviewScene(scene: Scene | null): void {
+    set({ previewScene: scene });
+  },
+
+  /**
    * D-024 — drill into a nested child composition AND select a shape inside it, in
    * one atomic step (double-click on a composition instance). Exactly equivalent to
    * opening `childId` from the compositions list (`setActiveComposition`) plus

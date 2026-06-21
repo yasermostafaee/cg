@@ -47,8 +47,9 @@ the risky correctness core; doing it first de-risks the chrome relocation that f
 
 - Slim the GLOBAL top bar to menus + a centered project name + Save (D-089 amber kept);
   remove Preview / Export .vcg / Export HTML from it (absorbs D-095 — centered name + Save).
-- Add a per-composition action bar above the canvas (`CompositionActionBar`): Preview, Export
-  .vcg, Export HTML. Remove the project-level export entirely.
+- Add a per-composition action bar pinned at the foot of the left rail
+  (`CompositionActionBar`, off the canvas so the editing surface keeps full height): Preview,
+  Export .vcg, Export HTML. Remove the project-level export entirely.
 - Add an optional persisted `Composition.playoutTarget` (CasparCG-only). The visible selector
   is deferred (owner pick — a one-option dropdown is dead weight); the field is the seam, the
   combo lands with a 2nd target (C-001).

@@ -40,7 +40,7 @@ test.describe('D-051 — keyframe-ability registry', () => {
 
   test('a ticker’s text styling is NOT keyframe-able yet (deferred to D-052)', async ({ app }) => {
     await app.newProject('KFTicker');
-    await app.addTicker({ x: 120, y: 160 });
+    await app.addTicker({ x: 120, y: 260 });
     // The ticker is a time-driven kind: its text/shadow/padding styling is not
     // keyframe-able in D-051 (runtime support is tracked by D-052). So no font-size
     // diamond exists in either panel — only transform + filter are animatable.
