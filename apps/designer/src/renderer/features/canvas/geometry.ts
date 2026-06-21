@@ -272,6 +272,18 @@ export function screenToScene(
   return { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale };
 }
 
+/**
+ * D-071 Phase B — the off-frame PASTEBOARD margin (in scene px) added on EACH side
+ * of the frame so the author can park/see shapes outside it. A quarter of the
+ * frame's longer edge gives generous room without dwarfing the frame. The SAME
+ * value is used by the canvas stage/iframe sizing, the ruler origin, the overlay
+ * coordinate shift, and the preview-iframe authoring CSS — one source of truth so
+ * scene⇄screen stays consistent. EXPORT/preview-modal use pad 0 (no pasteboard).
+ */
+export function pasteboardPad(res: { width: number; height: number }): number {
+  return Math.round(Math.max(res.width, res.height) * 0.25);
+}
+
 /** Clamp a zoom factor to `[min, max]`; non-finite input falls back to `fallback`. */
 export function clampZoom(z: number, min: number, max: number, fallback: number): number {
   if (!Number.isFinite(z)) return fallback;

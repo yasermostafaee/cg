@@ -74,19 +74,14 @@ export const centerWrap = style({
 
 // Stage occupies the scaled footprint so layout reserves the right space and
 // the overlay's hit-test math sees matching bounding-rect dimensions. Its
-// width/height (scene × zoom) are applied inline. D-011: the checkerboard
-// surfaces the scene's transparency.
+// width/height (scene × zoom) are applied inline. D-071 Phase B — the stage is
+// the off-frame PASTEBOARD: a dark surface that the authoring iframe (sized to
+// the same footprint) fills. The FRAME's checkerboard + outline + card shadow are
+// drawn by the iframe's authoring `.cg-stage` (inset by `pad`); the dark margin
+// here is the pasteboard the author parks shapes on (won't export).
 export const stage = style({
   position: 'relative',
-  backgroundColor: '#3d4253',
-  backgroundImage:
-    'linear-gradient(45deg, #5b6075 25%, transparent 25%),' +
-    'linear-gradient(-45deg, #5b6075 25%, transparent 25%),' +
-    'linear-gradient(45deg, transparent 75%, #5b6075 75%),' +
-    'linear-gradient(-45deg, transparent 75%, #5b6075 75%)',
-  backgroundSize: '48px 48px',
-  backgroundPosition: '0 0, 0 24px, 24px -24px, -24px 0',
-  boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+  backgroundColor: '#161927',
   overflow: 'hidden',
 });
 

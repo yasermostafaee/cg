@@ -14,7 +14,7 @@ import {
 import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
 import { PreviewHost } from './PreviewHost.js';
-import { clampZoom as clampZoomPure, fitZoom, screenToScene } from './geometry.js';
+import { clampZoom as clampZoomPure, fitZoom, pasteboardPad, screenToScene } from './geometry.js';
 import { Control } from '../../ui/Control.js';
 import * as s from './CanvasArea.css.js';
 import {
@@ -126,10 +126,14 @@ export function CanvasArea({
       return;
     }
     let cancelled = false;
-    void window.cg.preview.load({ scene: current }).then((res) => {
-      if (cancelled) return;
-      setHtml(res.html);
-    });
+    // D-071 Phase B — the canvas iframe renders in AUTHORING mode with the
+    // off-frame pasteboard; the broadcast modal + exports do not (UNCHANGED).
+    void window.cg.preview
+      .load({ scene: current, authoring: true, pad: pasteboardPad(current.resolution) })
+      .then((res) => {
+        if (cancelled) return;
+        setHtml(res.html);
+      });
     return () => {
       cancelled = true;
     };
@@ -343,6 +347,8 @@ export function CanvasArea({
       if (o === null || s === null) return;
       const orect = o.getBoundingClientRect();
       const srect = s.getBoundingClientRect();
+      // D-071 Phase B — the frame is at the stage's top-left (the pasteboard
+      // extends right/bottom only), so scene (0,0) is the stage top-left as before.
       setRulerOrigin({
         x: srect.left - orect.left - o.clientLeft,
         y: srect.top - orect.top - o.clientTop,
@@ -375,6 +381,8 @@ export function CanvasArea({
   }
 
   const { width, height } = scene.resolution;
+  // D-071 Phase B — pasteboard margin (scene px) on each side of the frame.
+  const pad = pasteboardPad(scene.resolution);
   const zoomPct = Math.round(zoom * 100);
   // Use the active tool's cursor across the whole scroll area, not just over
   // the canvas, so the dark margin around the scene shows the same cursor.
@@ -387,7 +395,9 @@ export function CanvasArea({
           ? 'grab'
           : 'crosshair';
 
-  // Scene coordinates under a viewport point, via the live stage rect.
+  // Scene coordinates under a viewport point, via the live stage rect. D-071
+  // Phase B — the frame stays at the stage's top-left (scene 0,0); the pasteboard
+  // extends to the RIGHT/BOTTOM only, so this mapping is unchanged.
   function sceneFromClient(clientX: number, clientY: number): { x: number; y: number } {
     const s = stageRef.current;
     if (s === null) return { x: 0, y: 0 };
@@ -475,8 +485,12 @@ export function CanvasArea({
               ref={stageRef}
               className={s.stage}
               style={{
-                width: width * zoom,
-                height: height * zoom,
+                // D-071 Phase B — the stage is the PASTEBOARD: the frame plus a
+                // `pad` margin to the RIGHT and BOTTOM (the frame stays at the
+                // top-left so click→scene mapping is unchanged), giving room to
+                // park shapes off-frame.
+                width: (width + pad) * zoom,
+                height: (height + pad) * zoom,
               }}
             >
               <iframe
@@ -488,8 +502,11 @@ export function CanvasArea({
                   position: 'absolute',
                   top: 0,
                   left: 0,
-                  width,
-                  height,
+                  // Sized to the pasteboard (frame + `pad` right/bottom); the
+                  // runtime's authoring CSS lifts the `.cg-stage` clip so off-frame
+                  // shapes paint into that margin. The frame stays at (0,0).
+                  width: width + pad,
+                  height: height + pad,
                   transform: `scale(${String(zoom)})`,
                   transformOrigin: 'top left',
                 }}

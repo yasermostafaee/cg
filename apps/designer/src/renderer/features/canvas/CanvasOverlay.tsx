@@ -367,16 +367,27 @@ export function CanvasOverlay({
     <div
       ref={layerRef}
       className={s.layer}
-      // Stable hook for E2E: the interactive canvas surface (pointer placement /
-      // selection / drag). It's a bespoke overlay div with no inherent role, so a
-      // test id is the least-ambiguous target.
-      data-testid="canvas-surface"
       style={{ cursor: cursorStyle }}
       onPointerDown={onPointerDown}
       onDoubleClick={onDoubleClick}
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
+      {/* D-071 Phase B — the FRAME region marker. The pointer-handling layer
+          (above) covers the whole pasteboard so off-frame shapes are selectable,
+          but the `canvas-surface` testid + its boundingBox stay the FRAME, so the
+          existing fraction-based positioning (e.g. multi-select) is unchanged. No
+          handler of its own — clicks bubble to the layer. */}
+      <div
+        data-testid="canvas-surface"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: scene.resolution.width * scale,
+          height: scene.resolution.height * scale,
+        }}
+      />
       {selectedEl !== null &&
         selectedEl.visible &&
         !selectedEl.locked &&

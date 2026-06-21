@@ -70,6 +70,26 @@ Everything hit-tests at the **visually-effective transform for the current frame
 (`effectiveTransformAt`), so animated elements are picked where the operator sees
 them, not at their static base.
 
+## Off-frame pasteboard (D-071 Phase B)
+
+The stage is a **pasteboard**: the frame plus a `pasteboardPad(resolution)` margin to the
+**right/bottom** (`CanvasArea` sizes the stage + iframe to `frame + pad`). The frame stays at the
+**surface origin** (scene 0,0), so `screenToScene` / placement / on-frame hit-testing are
+**unchanged** — the margin is extra room to **park staging shapes off-frame**.
+
+Two INDEPENDENT preview-document flags decide what the iframe shows (`Preview.#buildHtml`):
+
+| Surface            | `broadcast` | `authoring` | `.cg-stage` clip       | result                                             |
+| ------------------ | ----------- | ----------- | ---------------------- | -------------------------------------------------- |
+| Canvas iframe      | `false`     | `true`      | **lifted** (`visible`) | painted + **off-frame paints** into the pasteboard |
+| Broadcast modal    | `true`      | `false`     | native (`hidden`)      | blank-until-play (D-087) + clipped                 |
+| Export (.vcg/HTML) | —           | —           | native (`hidden`)      | clipped + the Phase-A off-frame filter             |
+
+So off-frame shapes are **visible + selectable/draggable** while authoring (the overlay's
+pointer/hit-test layer covers the whole pasteboard), **persist in save**, but are **excluded from
+the broadcast preview + export** (Phase A drops fully-off-frame static ones). The `canvas-surface`
+test hook is a FRAME-sized child of the pointer layer, so `canvas.boundingBox()` stays the frame.
+
 ## The gizmo (handles + transform math)
 
 `Gizmo.tsx` renders the selection frame: an SVG outline plus four corner squares,
