@@ -172,6 +172,18 @@ Owns the `FrameDriver` and the hold timer for **one scope**. Default is
 An **absent `outPoint`** is the last active frame — so a composition with no marker
 plays its whole timeline once and holds the last frame; **it does not loop**.
 
+**Terminal model — Stop = CLEARED, Remove = destroy (D-085).** `stop()` plays the OUT
+then settles into a **cleared** state: the runtime adds `body.cg-pending`
+(`.cg-stage { visibility: hidden }`) and the root settle (`onRootSettled`) **halts every
+driver** — ticker / clock / sequence / repeater — by cancelling its animation frame, and
+hides every nested child via the body class. So content-driven elements (which carry no
+opacity-out) **go away with the composition** rather than lingering frozen on the last
+frame; an empty outro clears immediately. This is a **visibility** clear (hide + halt) —
+the element nodes stay **mounted**, so `play()` re-reveals (`cg-pending` removed) and
+re-inits the drivers from a fresh state. `remove()` is the separate **destroy** path: it
+tears every subtree down and unmounts the stage (`cg-removed`). It mirrors CasparCG **CG
+STOP** (out + cleared, re-playable) vs **CG REMOVE** (gone).
+
 Playout **modes** (`scene.playout.mode`):
 
 | Mode                 | Behaviour after the intro reaches `outPoint`                        |
