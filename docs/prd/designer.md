@@ -2181,6 +2181,12 @@ touching the underlying files.
 > secondary / danger / selected, and the accent refined to **Teal** (`#2DD4BF`, owner pick)
 > via a new `onAccent` token. D-089's amber SAVE indicator preserved. New capability
 > `designer-controls`. Regression: `apps/designer/tests/e2e/button-restyle.spec.ts`.
+>
+> **Follow-up (B-025) — accent reverted Teal → Blue.** Owner reverted the accent to the prior
+> sky-blue (`accent #38BDF8`, `accentMuted #0EA5E9`); the no-border base + secondary/danger/
+> selected affordances are KEPT. `onAccent` stays `#06121F` (dark) — it's legible (8.9:1) on the
+> light sky-blue, so the primary-button label reverts cleanly. Done on
+> `fix/B-025-selection-box-accent` alongside the [B-025](./bugs.md) selection-frame fix.
 
 **What:** Fix the recurring "every new button has a thick border + the colors aren't
 nice" at the SOURCE — the shared `Button`/`Control` recipe
