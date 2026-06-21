@@ -46,10 +46,16 @@ export class Preview {
    * revealing frame 0 on load. The Preview modal sets it (open blank, paint on
    * Play); the editor canvas omits it (`false` — keep the static authoring
    * frame visible for editing).
+   *
+   * D-071 Phase B — `authoring` turns on the off-frame PASTEBOARD for the CANVAS
+   * iframe only: lift `.cg-stage { overflow: hidden }` + a dark margin so off-frame
+   * shapes paint beyond the frame (the iframe element size — the pasteboard extent —
+   * comes from CanvasArea, with a `device-width` viewport). INDEPENDENT of
+   * `broadcast` — the modal/export leave it off (native clip, UNCHANGED).
    */
-  load(scene: Scene, broadcast = false): { src: string; html: string } {
+  load(scene: Scene, broadcast = false, authoring = false): { src: string; html: string } {
     if (this.#docUrl !== null) URL.revokeObjectURL(this.#docUrl);
-    const html = this.#buildHtml(scene, broadcast);
+    const html = this.#buildHtml(scene, broadcast, authoring);
     this.#docUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
     return { src: this.#docUrl, html };
   }
@@ -74,7 +80,7 @@ export class Preview {
     return { ok: true };
   }
 
-  #buildHtml(scene: Scene, broadcast: boolean): string {
+  #buildHtml(scene: Scene, broadcast: boolean, authoring: boolean): string {
     const cgJsUrl = this.#cgJsUrl ?? '';
     // Escape `<` so scene text containing "</script>" can't break out.
     const sceneJson = JSON.stringify(scene).replace(/</g, '\\u003c');
@@ -86,11 +92,53 @@ export class Preview {
       ? `.cg-pending { opacity: 1 !important; }
       .cg-pending .cg-stage { visibility: visible !important; }`
       : `/* D-087 — broadcast preview: the stage stays blank (cg-pending) until play(). */`;
+    // D-071 Phase B — the off-frame PASTEBOARD (CANVAS iframe only). When on, the
+    // frame (`.cg-stage`) stays at the iframe top-left with its clip lifted
+    // (`overflow: visible`) so off-frame shapes paint into the dark margin, and
+    // outlined so the author sees frame (exports) vs pasteboard (won't export). The
+    // iframe ELEMENT size is the pasteboard extent (set by CanvasArea) and a
+    // `device-width` viewport (below) makes the content fill that changing size with
+    // no stretch. The broadcast modal / export omit `authoring` → native clip + the
+    // Phase-A filter, UNCHANGED.
+    const pasteboard = authoring;
+    const w = scene.resolution.width;
+    const h = scene.resolution.height;
+    const checkerImage =
+      `linear-gradient(45deg, #5b6075 25%, transparent 25%),` +
+      `linear-gradient(-45deg, #5b6075 25%, transparent 25%),` +
+      `linear-gradient(45deg, transparent 75%, #5b6075 75%),` +
+      `linear-gradient(-45deg, transparent 75%, #5b6075 75%)`;
+    const checkerPos = `0 0, 0 24px, 24px -24px, -24px 0`;
+    const surfaceCss = pasteboard
+      ? `/* D-071 Phase B — authoring pasteboard: dark margin, the frame inset + outlined,
+         off-frame paint revealed (overflow lifted). */
+      html, body { background: #161927 !important; }
+      .cg-stage {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: ${String(w)}px !important;
+        height: ${String(h)}px !important;
+        overflow: visible !important;
+        background-color: #3d4253;
+        background-image: ${checkerImage};
+        background-size: 48px 48px;
+        background-position: ${checkerPos};
+        box-shadow: 0 0 0 1px rgba(120,170,255,0.5), 0 10px 36px rgba(0,0,0,0.55);
+      }`
+      : `/* D-011 — transparency checkerboard (broadcast modal). Authoring-only; the
+         exported .vcg uses the baseline cgCss (transparent) without it. */
+      html, body {
+        background-color: #3d4253 !important;
+        background-image: ${checkerImage} !important;
+        background-size: 48px 48px !important;
+        background-position: ${checkerPos} !important;
+      }`;
     return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=${String(scene.resolution.width)}, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(scene.name)}</title>
     <!-- App-bundled fonts (Vazirmatn / Exo 2). The srcdoc iframe is same-origin
          as the host, so these /fonts/… URLs resolve exactly as they do in the
@@ -115,20 +163,7 @@ export class Preview {
          display:none on the new stage. Keep the stage visible
          across that tear-down/rebuild. */
       .cg-removed .cg-stage { display: block !important; }
-      /* D-011 — transparency checkerboard inside the preview iframe so
-         the operator can see "transparent" as a pattern, not as a flat
-         colour. Authoring-only: the exported .vcg uses the baseline
-         cgCss (html,body { background: transparent }) without this. */
-      html, body {
-        background-color: #3d4253 !important;
-        background-image:
-          linear-gradient(45deg, #5b6075 25%, transparent 25%),
-          linear-gradient(-45deg, #5b6075 25%, transparent 25%),
-          linear-gradient(45deg, transparent 75%, #5b6075 75%),
-          linear-gradient(-45deg, transparent 75%, #5b6075 75%) !important;
-        background-size: 48px 48px !important;
-        background-position: 0 0, 0 24px, 24px -24px, -24px 0 !important;
-      }
+      ${surfaceCss}
     </style>
   </head>
   <body>

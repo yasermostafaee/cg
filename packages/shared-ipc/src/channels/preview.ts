@@ -22,6 +22,15 @@ export const PreviewLoadChannel = defineChannel(
      * today's authoring reveal, so the canvas stays visible for editing).
      */
     broadcast: z.boolean().optional(),
+    /**
+     * D-071 Phase B — authoring PASTEBOARD: lift the `.cg-stage { overflow:
+     * hidden }` clip + a dark margin so off-frame shapes paint beyond the frame
+     * (the iframe element size — the pasteboard extent — is set by the canvas, with
+     * a `device-width` viewport). INDEPENDENT of `broadcast`: the editor canvas sets
+     * `authoring: true`; the broadcast modal + exports leave it absent (native clip
+     * — UNCHANGED).
+     */
+    authoring: z.boolean().optional(),
   }),
   z.object({
     /** Blob/cgpreview URL — fallback for callers that can't use srcdoc. */

@@ -1,12 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Element, Scene, TextElement } from '@cg/shared-schema';
 import type { AssetMeta } from '@cg/shared-ipc';
-import {
-  designerStore,
-  editSceneOf,
-  useDesignerSelector,
-  type DesignerTool,
-} from '../../state/store.js';
+import { designerStore, editSceneOf, type DesignerTool } from '../../state/store.js';
 import {
   defaultClock,
   defaultEllipse,
@@ -115,7 +110,6 @@ export function CanvasOverlay({
   onPan,
 }: Props): JSX.Element {
   const layerRef = useRef<HTMLDivElement>(null);
-  const snapGuides = useDesignerSelector((s) => s.snapGuides);
 
   const allElements: Element[] = [];
   for (const layer of scene.layers) {
@@ -367,16 +361,27 @@ export function CanvasOverlay({
     <div
       ref={layerRef}
       className={s.layer}
-      // Stable hook for E2E: the interactive canvas surface (pointer placement /
-      // selection / drag). It's a bespoke overlay div with no inherent role, so a
-      // test id is the least-ambiguous target.
-      data-testid="canvas-surface"
       style={{ cursor: cursorStyle }}
       onPointerDown={onPointerDown}
       onDoubleClick={onDoubleClick}
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
+      {/* D-071 Phase B — the FRAME region marker. The pointer-handling layer
+          (above) covers the whole pasteboard so off-frame shapes are selectable,
+          but the `canvas-surface` testid + its boundingBox stay the FRAME, so the
+          existing fraction-based positioning (e.g. multi-select) is unchanged. No
+          handler of its own — clicks bubble to the layer. */}
+      <div
+        data-testid="canvas-surface"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: scene.resolution.width * scale,
+          height: scene.resolution.height * scale,
+        }}
+      />
       {selectedEl !== null &&
         selectedEl.visible &&
         !selectedEl.locked &&
@@ -397,22 +402,8 @@ export function CanvasOverlay({
       {bindModeFieldId !== null && (
         <div className={s.toolHint}>BIND → {bindModeFieldId} (Esc to cancel)</div>
       )}
-      {snapGuides.x.map((gx) => (
-        <div
-          key={`gx-${String(gx)}`}
-          className={s.snapGuide}
-          style={{ top: 0, bottom: 0, left: gx * scale, width: 1 }}
-          aria-hidden
-        />
-      ))}
-      {snapGuides.y.map((gy) => (
-        <div
-          key={`gy-${String(gy)}`}
-          className={s.snapGuide}
-          style={{ left: 0, right: 0, top: gy * scale, height: 1 }}
-          aria-hidden
-        />
-      ))}
+      {/* D-071 Phase B — the snap/alignment guides moved to CanvasArea so they span
+          the full visible canvas (the pasteboard), not just this frame-bound stage. */}
     </div>
   );
 }

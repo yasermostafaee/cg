@@ -2363,10 +2363,15 @@ timing) and `apps/designer/tests/e2e/stop-cleared.spec.ts`. Doc-sync:
 ## [~] D-071 — Off-frame pasteboard, export-excluded (Phase A: export filter) ⟨priority: medium⟩
 
 > **Phase A (export filter) — done**, merged (PR #153) and archived:
-> `openspec/changes/archive/2026-06-21-off-frame-export-filter/`. **Phase B (editor pasteboard)** —
-> showing the dark area, placing/moving shapes off-frame, relaxing the stage clip, extending the
-> overlay hit-test — is still PENDING (a separate, later change/PR; two-phase split mirrors D-086).
-> The item stays `[~]` until Phase B lands.
+> `openspec/changes/archive/2026-06-21-off-frame-export-filter/`. **Phase B (editor pasteboard) —
+> implemented** on `feat/D-071b-pasteboard` (change `openspec/changes/pasteboard-editing/`): a dark
+> pasteboard to the right/bottom of the frame where the author parks/sees/moves shapes; the
+> authoring `.cg-stage` clip is lifted (a new `authoring` flag on `preview.load`, independent of
+> D-087's `broadcast`) so off-frame shapes paint + are selectable, while the broadcast modal +
+> export keep the native clip + the Phase-A filter. _Scope:_ the pasteboard extends RIGHT/BOTTOM
+> (the frame stays at the surface origin so on-frame editing + click mapping are unchanged); an
+> all-direction pasteboard can extend this later. **The item stays `[~]` until Phase B archives**
+> (the final archive of the two-phase item).
 
 **What:** A "dark area" (pasteboard) OUTSIDE the frame where the author parks/stages shapes. They
 stay visible + editable in the editor and PERSIST in the saved `.cg.json`, but are EXCLUDED from
