@@ -272,48 +272,53 @@ export function screenToScene(
   return { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale };
 }
 
-/** Minimal structural element shape the extent walk needs (avoids a schema import,
- *  keeping this module pure). `@cg/shared-schema`'s `Element` is assignable. */
-interface ExtentElement {
-  transform: {
-    position: { x: number; y: number };
-    size: { w: number; h: number };
-    scale: { x: number; y: number };
-  };
-  type: string;
-  children?: readonly ExtentElement[];
-}
-
-/** Extra breathing room (scene px) added beyond off-frame content. */
-export const PASTEBOARD_MARGIN = 80;
+/** The pasteboard margin on EACH side, as a fraction of the frame dimension. */
+export const PASTEBOARD_MARGIN_RATIO = 0.5;
 
 /**
- * D-071 Phase B — the canvas STAGE extent (scene px): the bounding box of the frame
- * and all on/off-frame element boxes, extended by {@link PASTEBOARD_MARGIN} beyond
- * any OFF-frame content (right/bottom) so a parked shape has breathing room. An
- * empty / fully on-frame doc returns the frame itself — so the stage equals the
- * frame and `margin:auto`-centers + fits EXACTLY as before the pasteboard; only
- * off-frame content grows it. The frame stays at the stage origin (0,0), so the
- * scene⇄screen click mapping is unchanged.
+ * D-071 Phase B — the canvas STAGE layout (scene px): a FIXED, SYMMETRIC pasteboard.
+ * The frame is centered in a dark area that extends a margin (a fraction of the frame,
+ * {@link PASTEBOARD_MARGIN_RATIO}) on ALL FOUR sides. The extent is a pure function of
+ * the RESOLUTION, so:
+ *   - dragging a shape NEVER resizes the dark area — only zoom scales it on screen;
+ *   - the margin is symmetric, so off-frame shapes are visible on EVERY side
+ *     (left/top too), not just right/bottom.
+ * `frame.{x,y}` is the frame's offset (scene px) into the stage: scene (0,0) sits
+ * THERE, not at the stage origin — so the canvas overlay measures coordinates from the
+ * frame, and the iframe paints the frame at that offset (off-frame content fills the
+ * surrounding margin).
  */
-export function pasteboardExtent(doc: {
-  layers: readonly { children: readonly ExtentElement[] }[];
-  resolution: { width: number; height: number };
-}): { width: number; height: number } {
-  let right = doc.resolution.width;
-  let bottom = doc.resolution.height;
-  const visit = (els: readonly ExtentElement[]): void => {
-    for (const el of els) {
-      const t = el.transform;
-      const r = t.position.x + Math.abs(t.size.w * t.scale.x);
-      const b = t.position.y + Math.abs(t.size.h * t.scale.y);
-      if (r > doc.resolution.width) right = Math.max(right, r + PASTEBOARD_MARGIN);
-      if (b > doc.resolution.height) bottom = Math.max(bottom, b + PASTEBOARD_MARGIN);
-      if (el.children !== undefined) visit(el.children);
-    }
+export function pasteboardLayout(resolution: { width: number; height: number }): {
+  width: number;
+  height: number;
+  frame: { x: number; y: number };
+} {
+  const marginX = Math.round(resolution.width * PASTEBOARD_MARGIN_RATIO);
+  const marginY = Math.round(resolution.height * PASTEBOARD_MARGIN_RATIO);
+  return {
+    width: resolution.width + marginX * 2,
+    height: resolution.height + marginY * 2,
+    frame: { x: marginX, y: marginY },
   };
-  for (const layer of doc.layers) visit(layer.children);
-  return { width: Math.round(right), height: Math.round(bottom) };
+}
+
+/**
+ * Cursor-anchored zoom: the new scroll offset (one axis) that keeps a scene point fixed
+ * under the cursor across a zoom. `scenePoint` is the scene coordinate that was under the
+ * cursor, captured BEFORE the zoom (`= (client − stageScreenBefore) / oldZoom`);
+ * `stageScreen` is the stage's screen origin (this axis) AFTER the zoom relayout but
+ * BEFORE this correction; `scroll` is the current scroll offset. After the relayout the
+ * point sits at `stageScreen + scenePoint·newZoom`; scrolling by the difference from
+ * `client` lands it back under the cursor — so the zoom doesn't jump.
+ */
+export function zoomAnchorScroll(
+  scroll: number,
+  stageScreen: number,
+  scenePoint: number,
+  newZoom: number,
+  client: number,
+): number {
+  return scroll + stageScreen + scenePoint * newZoom - client;
 }
 
 /** Clamp a zoom factor to `[min, max]`; non-finite input falls back to `fallback`. */

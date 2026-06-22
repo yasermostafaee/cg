@@ -72,20 +72,51 @@ them, not at their static base.
 
 ## Off-frame pasteboard (D-071 Phase B)
 
-The stage is a **pasteboard**: its size is `pasteboardExtent(doc)` — the bounding box of the
-frame ∪ all element boxes, grown right/bottom (plus a small margin) **only by off-frame content**.
-An empty / on-frame doc returns the **frame itself**, so the stage `margin:auto`-centers and fits
-**exactly as before the pasteboard**; off-frame content extends it (scroll to reach). The frame
-stays at the **stage origin** (scene 0,0), so `screenToScene` / placement / on-frame hit-testing
-are **unchanged**.
+The stage is a **fixed, symmetric pasteboard**: its size is `pasteboardLayout(resolution)` — the
+frame plus a margin (`PASTEBOARD_MARGIN_RATIO`, a fraction of the frame) on **all four sides**.
+It is a **pure function of the resolution**, so:
 
-The iframe element is sized to the (changing) extent; a **`device-width` viewport** means the
-runtime content fills that size with **no stretch** when it grows. `fitToViewport` computes the
-fit-zoom from the **frame** bounds (not the extent) and then `centerFrameInView` scrolls so the
-frame is **centered** (the ⛶ button and project-open both do this). The pinned rulers place scene
-0 at the frame top-left (`rulerOrigin`, which tracks scroll/zoom); the alignment/snap guides are
-drawn in `CanvasArea` over the **scroll viewport** (`inset:0`) so they span the **whole visible
-canvas**, not just the frame.
+- dragging a shape **never resizes** the dark area — only zoom scales it (the user-visible
+  requirement; the extent is _not_ content-driven);
+- the margin is **symmetric**, so off-frame shapes are visible on **every** side (left/top too),
+  not just right/bottom.
+
+`layout.frame` is the frame's **offset** (scene px) into the stage: **scene (0,0) sits there**, not
+at the stage origin. Three places consume that offset so they agree: the iframe (`frameOffset`
+positions `.cg-stage` inside it — see below), the overlay (`CanvasOverlay`'s frame box is inset by
+`frameOffset × scale`, so the gizmos/`canvas-surface` and click→scene measure from the frame), and
+the rulers (`rulerOrigin = stageRect − outerRect + frame × zoom`).
+
+The iframe element is sized to the extent; a **`device-width` viewport** means the runtime content
+fills that size with **no stretch**. `fitToViewport` fits the zoom from the **frame** bounds (so the
+frame is large) and `centerFrameInView` scrolls so the frame is **centered** (⛶ + project-open).
+The pasteboard overflows the viewport, but **the scrollbars are hidden** (`s.outer`) — there are no
+default scrollbars; the operator pans with the hand tool / wheel and zooms with Ctrl+wheel.
+
+**Two-tone dark, by region.** The **surround** (everything beyond the frame — `s.outer` _and_ the
+iframe `html, body`) is the lighter **`#161927`**. The **frame-sized page backdrop** is the darker
+**`#080a10`** — it is `.cg-stage`'s **`background-color`**, so CSS paints it _behind_ the
+checkerboard (`background-image`, unchanged) and the shapes (children). Every shape — on-frame over
+the `#080a10` page _or_ off-frame over the `#161927` surround — paints **on top** of both backdrops
+and stays visible + selectable; because `#080a10` is a `background-color` it is a **backdrop, never
+an overlay** (it cannot occlude a shape).
+
+**Zoom toward a point.** `zoomAt(factor, clientX, clientY)` measures the scene point under the
+anchor pre-zoom and stashes it; a **`useLayoutEffect` keyed on `zoom`** then applies the scroll
+correction (`zoomAnchorScroll`) **synchronously after the relayout but BEFORE paint**, so the point
+lands back under the anchor with **no jump** (doing it in a `requestAnimationFrame` painted the
+resized-but-unscrolled frame first — a one-frame jerk per wheel notch). Ctrl+wheel anchors on the
+**cursor**, the +/−/1× buttons on the **viewport centre** (not the stage's top-left corner). The
+fit/centre path has no stashed anchor, so the layout effect no-ops there — wheel-zoom never
+recenters (auto-fit is keyed on `sceneId` + resolution, never on `zoom`).
+
+The rulers + guides live in a **non-scrolling overlay** (`s.overlay`) that is a **sibling** of the
+scroll container (`s.outer`), not a child of it — absolutely-positioned children of an
+`overflow:auto` element scroll **with** the content, which would slide the rulers out of view and
+drift the guides on zoom+scroll. The overlay is pinned to the visible viewport; `rulerOrigin`
+(re-measured on every scroll / zoom / resize) places scene 0 at the frame top-left and tracks the
+stage as it scrolls **under** the overlay. So the rulers stay pinned and the alignment/snap guides
+span the **whole visible canvas** (`inset:0`), not just the frame.
 
 Two INDEPENDENT preview-document flags decide what the iframe shows (`Preview.#buildHtml`):
 
