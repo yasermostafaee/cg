@@ -586,13 +586,14 @@ handles on top and interactive. **Regression:**
 owner SVG is non-zero-sized with a real, non-zero-width stroke; B-022's tracking + B-004 tests
 still pass. Capability: `designer-shapes` (the selection-gizmo requirement — bug fix, no spec change).
 
-## [~] B-026 — pasteboard extent clips shapes parked far off-frame ⟨priority: high⟩ — fixed on `fix/pasteboard-extent-fits-content`
+## [x] B-026 — pasteboard extent clips shapes parked far off-frame ⟨priority: high⟩ — shipped (#157) + archived `openspec/changes/archive/…-pasteboard-extent-fits-content/`
 
-> **Fixed (pending manual re-test).** D-071 follow-up: the fixed 2× pasteboard extent grows to
-> contain off-frame content. Recon/design: `openspec/changes/pasteboard-extent-fits-content/`
-> (`design.md` documents the seam + the locked Q1–Q5 decisions). Change dir:
-> `openspec/changes/pasteboard-extent-fits-content/` (capability `designer-canvas-viewport`,
-> MODIFIED). Keep `[~]` until the user confirms the manual grow/shrink/scroll test, then archive → `[x]`.
+> **Shipped + archived.** D-071 follow-up: the fixed 2× pasteboard extent now grows to contain
+> off-frame content (grow-to-fit, Q1 = B). Merged on `main` (PR #157) and verified working (shapes
+> park off-frame, stay visible/editable, export-excluded); the change `pasteboard-extent-fits-content`
+> (capability `designer-canvas-viewport`, MODIFIED) is archived into `openspec/specs/`.
+> **One deferred follow-up:** the whole-canvas jitter while dragging a shape FAR past the 2× boundary
+> (a during-drag transient that settles correctly on drop) is filed as **B-027** [DEFERRED].
 
 **Repro:**
 
@@ -623,3 +624,47 @@ export + broadcast (frame offset `{0,0}`) untouched. **Regression:**
 clamp, scroll-comp Δ) + `apps/designer/tests/e2e/pasteboard-extent.spec.ts` (far off all 4 sides
 stays visible/selectable, within-2× no growth, left-growth no jump, shrink-to-2×, clamp).
 Capability: `designer-canvas-viewport` (MODIFIED — the off-frame pasteboard requirement).
+
+## [DEFERRED] B-027 — dragging a shape far off-frame jitters the whole canvas during the drag ⟨priority: medium⟩
+
+> **DEFERRED follow-up to [[B-026]] / #157.** Grow-to-fit shipped and works; this is its one
+> remaining rough edge. A during-drag COSMETIC transient only — it settles correctly on pointer-up,
+> nothing is lost or mispositioned. Recommended fix below is decided; not yet scheduled.
+
+**Repro:**
+
+1. Open the Designer, add a shape, and drag it with the pointer FAR past the 2× pasteboard boundary
+   (for a 1920×1080 frame the boundary is scene x∈[−960,2880], y∈[−540,1620]) — i.e. far enough that
+   the extent grows and, on the LEFT/TOP, the frame origin shifts.
+
+**Expected:** only the dragged shape follows the cursor; the frame and every other element stay put
+(the dark area STRETCHING as the extent grows is expected and fine).
+**Actual:** DURING the drag the WHOLE canvas (frame + other content) jitters/drifts per pointer-move,
+then SETTLES CORRECTLY on pointer-up. Within-2× drags (no origin shift) are unaffected.
+**Env:** Browser + Designer (authoring canvas only — export/broadcast unaffected; the grow-to-fit
+extent + scroll-comp math are correct, this is purely a paint-timing artifact).
+**Root cause:** cross-document SUB-FRAME timing. The host-side origin-shift scroll-comp
+(`useLayoutEffect` on `frameOffset` → `offsetShiftScroll`, `CanvasArea.tsx`) runs SYNCHRONOUSLY per
+pointer-move, but the thing it compensates for — the iframe `.cg-stage` inset (`--cg-frame-x/-y`) — is
+applied ASYNCHRONOUSLY (it rides the rAF-throttled `scene-replace` postMessage, and each move also
+does a full runtime rebuild via `await applyScene`). So the host scroll and the iframe inset don't
+land in the same paint: for the lagging frame the content drifts by the per-move delta, then snaps
+back. The shape-drag cursor→scene map is NOT involved (it's a pure pointer-client delta,
+`startPos + (client − start)/scale`, origin-independent — confirmed, no feedback loop).
+**NOT auto-testable (important):** the drift is a SUB-FRAME transient that self-corrects after each
+frame, so Playwright cannot sample it — a prior fix attempt (PR #158, now closed) passed a new E2E
+drag suite while the bug remained. Do NOT trust a green gate as proof this is fixed; verify by hand
+(drag a shape far off-frame and watch the frame/other content during the gesture).
+**Recommended fix (decided):** switch the pasteboard to a GENEROUS FIXED extent — drift-free by
+construction. No dynamic origin shift, so: remove Seam 2 (the origin-shift scroll-comp), remove Seam
+1's per-move inset postMessage (bake the inset once at load), and drop the `contentBounds`-driven
+layout. Accept clipping only at extreme parking distances; the fixed margin is tunable (e.g. ~2× the
+frame each side — i.e. roughly today's 2× baseline made permanent). This trades the grow-to-fit reach
+for guaranteed smoothness. **Alternative** (only if grow-to-fit is ever wanted back): properly solve
+the cross-document sync — force the iframe to flush layout synchronously right after the host writes
+the inset, AND stop doing a full per-move runtime rebuild (re-inset without `applyScene`) so the inset
+and scroll land in one paint.
+**Touch points:** `apps/designer/src/renderer/features/canvas/CanvasArea.tsx` (the `frameOffset`
+`useLayoutEffect` + the `scene-replace` rAF effect), `geometry.ts` (`pasteboardLayout` /
+`offsetShiftScroll` / `contentBounds`), `apps/designer/src/platform/preview.ts` (the `--cg-frame-x/-y`
+CSS-var inset + the scene-replace `frameOffset`). Capability: `designer-canvas-viewport`.

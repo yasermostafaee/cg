@@ -2097,6 +2097,193 @@ Library should match for consistency.
   (`designer-shared-image-library`). Change:
   `openspec/changes/archive/2026-06-20-add-shared-library-search-view-toggle/`.
 
+## [x] D-071 — Off-frame pasteboard, export-excluded (Phase A: export filter + Phase B: editor) ⟨priority: medium⟩
+
+> **Both phases shipped + archived.** **Phase A (export filter)** — merged (PR #153), archived
+> `openspec/changes/archive/2026-06-21-off-frame-export-filter/`. **Phase B (editor pasteboard)** —
+> merged (PR #155/#156), archived `openspec/changes/archive/…-pasteboard-editing/`: a symmetric dark
+> pasteboard around the frame where the author parks/sees/moves shapes; the authoring `.cg-stage`
+> clip is lifted (a new `authoring` flag on `preview.load`, independent of D-087's `broadcast`) so
+> off-frame shapes paint + are selectable, while the broadcast modal + export keep the native clip +
+> the Phase-A filter. A follow-up (B-026, PR #157, archived
+> `openspec/changes/archive/…-pasteboard-extent-fits-content/`) made the extent **grow-to-fit** so a
+> shape parked far off-frame stays visible/selectable. **Deferred:** the during-drag whole-canvas
+> jitter at extreme parking distances is filed as **B-027** [DEFERRED] (see `docs/prd/bugs.md`).
+
+**What:** A "dark area" (pasteboard) OUTSIDE the frame where the author parks/stages shapes. They
+stay visible + editable in the editor and PERSIST in the saved `.cg.json`, but are EXCLUDED from
+the broadcast export (`.vcg` / HTML / preview output) when FULLY off-frame. On-frame and
+partially-off content is unaffected (partially-off is clipped to the frame as today). _Phase A_
+delivers the export-side filter only; _Phase B_ delivers the editor pasteboard UI.
+
+**Why:** A staging/scratch surface (Figma/AE pasteboard) + a leaner single-file export
+(fully-off-frame shapes don't bloat the bytes). Off-frame content is already clipped invisible on
+air by the runtime's `.cg-stage { overflow: hidden }`, so Phase A's filter leaves the rendered
+output IDENTICAL — it only stops dead-weight bytes (an off-frame image's asset is never gathered)
+from shipping. Authors can already place elements off-frame (`position` is unclamped), so the win
+is real even before the pasteboard UI.
+
+**Acceptance (Phase A):**
+
+- WHEN a composition is exported (`.vcg` / HTML) or previewed (broadcast) AND it contains a STATIC
+  element whose AABB is FULLY outside the frame THEN that element is absent from the output and its
+  image asset is not gathered/packaged
+- WHEN the same scene is projected for editing (`editSceneOf`) or written by Save THEN the off-frame
+  element is present and unchanged (export-only; staging shapes persist)
+- WHEN an off-frame element has a transform keyframe (could slide on-frame), is partially-on, sits
+  under an animated container, or is inside a repeater template THEN it is KEPT (conservative)
+- WHEN a static element is rotated/scaled THEN the decision uses its rotated AABB (4 transformed
+  corners), not a naive position check
+
+**Notes:** Conservative "keep when in doubt" rule in `dropFullyOffFrameForExport`
+(`renderer/state/off-frame.ts`), called inside `scopeSceneToComposition` AFTER the D-086 closure
+scope — the single projection `.vcg`/HTML/preview share, upstream of image collection + `pack()`.
+No exporter/packager/runtime/schema change. Recon (umbrella): `design.md` in
+`openspec/changes/pasteboard-editing-export-excluded/`. Tests:
+`apps/designer/tests/off-frame-export-filter.test.ts` (drop + every keep + boundary) +
+`apps/designer/tests/e2e/off-frame-export.spec.ts`. Change:
+`openspec/changes/off-frame-export-filter/`.
+
+## [x] D-085 — Stop/close terminal = CLEARED ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-21-stop-clears-composition/`
+
+**What:** Lock the broadcast STOP semantics: when the operator Stops a composition, it plays its
+OUT/outro and then SETTLES into a CLEARED terminal state — the stage is hidden and every
+content-driven element (ticker / clock / sequence / repeater) and nested child goes away with it,
+WITHOUT manual per-element opacity-out keyframes. With no outro the clear is immediate. The clear
+is by VISIBILITY (hide + halt the drivers), NOT destruction — the nodes stay mounted; re-play
+restarts cleanly. No default fade-out (deferred); per-element opacity keyframes stay for fine
+control.
+
+**Why:** The runtime already provides this (the root settle adds `body.cg-pending` →
+`.cg-stage { visibility: hidden }` and `onRootSettled` cancels every driver's animation frame;
+nested children cascade) — and D-087 made it observable in the preview (the broadcast modal no
+longer lifts `cg-pending`). But it is **not pinned**: a future driver/lifecycle change could
+silently regress it (a new content driver whose `stop()` forgets to cancel its loop would keep
+ticking under the hidden stage; a refactor could revert to a frozen-last-frame hold). This item
+LOCKS the contract with a spec requirement + per-driver-kind behaviour tests. Mechanism =
+visibility-clear (CG STOP), NOT unmount (CG REMOVE / `remove()`, which is left untouched).
+
+**Acceptance:**
+
+- WHEN a playing composition with a content-driven element is Stopped THEN after the outro the
+  stage is hidden AND the element's driver is halted (no further frame), so the content-driven
+  element is no longer shown — no per-element opacity-out required
+- WHEN the composition has no outro THEN the clear is immediate on Stop
+- WHEN a parent nests a child with a content-driven element AND the parent is Stopped THEN the
+  nested child is hidden and its driver halted too (cascade)
+- WHEN Play is pressed after a Stop THEN `cg-pending` clears, the drivers re-init, and the
+  composition runs its intro again (clean re-play)
+- WHEN cleared THEN the element nodes stay MOUNTED (a visibility clear, not a CG REMOVE unmount)
+
+**Notes:** Recon (`design.md`) confirmed Decision A = keep the VISIBILITY clear; no
+true-unmount-on-stop. The per-driver-kind unit tests confirmed every driver's `stop()` already
+cancels its loop, so **no `runtime.ts` change was needed** — this is spec + tests + docs.
+Tests: `@cg/template-runtime` `tests/stop-cleared.test.ts` (per-kind + nested + re-play + outro
+timing) and `apps/designer/tests/e2e/stop-cleared.spec.ts`. Doc-sync:
+`packages/template-runtime/README.md` (terminal model). Change:
+`openspec/changes/stop-clears-composition/`.
+
+## [x] D-086 — Per-composition export + top-chrome relocation ⟨priority: high⟩ — ABSORBS D-095 — archived: `openspec/changes/archive/2026-06-21-per-composition-export-and-chrome/`
+
+> **Phase A (engine) landed** (PR #144, merged) — change
+> `openspec/changes/per-composition-export-and-chrome/`. The risky correctness core:
+> exports are now scoped to the OPEN composition + its transitive nested **closure**
+> (children reached via a `composition` instance OR a `repeater`), never the whole
+> project. **Phase B (chrome) landed** on `feat/D-086-chrome`: the slim global bar
+> (menus + centered project name + Save) and a new per-composition action bar
+> (`CompositionActionBar` — Preview / Export .vcg / Export HTML) pinned at the foot of the
+> left rail (off the canvas, so the editing surface keeps full height); the
+> project-level export path is removed, and `Composition.playoutTarget` is added as the
+> persisted target seam (the visible selector is deferred to a 2nd target / C-001).
+> Both phases done — archived `openspec/changes/archive/2026-06-21-per-composition-export-and-chrome/`
+> (living specs: `designer-composition-export` created, `designer-shell` + `designer-repeater-element` updated).
+
+This item **absorbs D-095** (centered project name in the global bar, adjacent to Save) —
+that chrome is delivered as part of this item's Phase B, exactly as **D-088 absorbed
+D-002/D-003**.
+
+**What:**
+
+- _Export becomes per-composition._ `.vcg` and single-file HTML export the **open**
+  composition as the package root, lifting its layers up to the runtime's only play-entry
+  (`scene.layers`) and including only its nested **closure** of compositions + their
+  assets. The project-level "export the whole scene" path is **removed**. (Phase A.)
+- _Top chrome relocation._ Slim the GLOBAL top bar to menus + a **centered project name** +
+  the Save control (D-089 amber kept); **remove** Preview / Export .vcg / Export HTML from
+  it. Add a new **per-composition sticky bar** above the canvas carrying Preview, Export
+  .vcg, Export HTML, and a playout-target combo (CasparCG-only for now — it just selects
+  the export target). (Phase B.)
+
+**Why:** Post-D-024 there is no "main scene" — the root is layerless and all content lives
+in `scene.compositions`. The whole-project `.vcg` export passes that layerless root, so the
+runtime (which renders `scene.layers`) produces a **blank frame**; and the single-file HTML
+export over-gathers images from sibling compositions because the projected scene retained
+the full `compositions` array. Export must be scoped to one composition + its closure. Two
+latent correctness bugs surfaced and are fixed here (Phase A): the export over-gather, and a
+**repeater-mediated nesting cycle** the author-time guard missed (it only followed
+`composition` edges, not `repeater` ones) — see `docs/recon/d-086-export-scoping.md` and
+bugs.md **B-023**.
+
+**Acceptance:**
+
+- WHEN a composition is exported (`.vcg` or HTML) THEN the package renders THAT composition
+  (its layers lifted to the play-entry) and contains only its nested closure — sibling
+  compositions and their assets are excluded
+- WHEN a composition nests a child via a `composition` instance AND via a `repeater` THEN
+  BOTH children (and their transitive children) are in the export closure; a composition
+  unreachable from the root is not
+- WHEN a sibling composition has a validation error (e.g. a missing asset) THEN it does NOT
+  block a valid root composition's export (preflight auto-scopes to the closure)
+- WHEN the operator would nest composition A into B while A already reaches B through a
+  `repeater` THEN the author-time guard refuses it (no infinite playout loop), and existing
+  `composition`-instance cycle detection is unchanged
+- _(Phase B)_ WHEN the editor is open THEN the global bar shows menus + the centered project
+  name + Save (amber-on-unsaved), and a per-composition sticky bar above the canvas carries
+  Preview / Export .vcg / Export HTML / playout-target; the project-level export entry is
+  gone
+
+**Notes:** Engine seam — new `compositionClosure(scene, rootId)` in `@cg/shared-schema`
+(one shared ref-collector covering `composition` + `repeater`), reused by the author-time
+cycle guard; `scopeSceneToComposition(scene, rootId)` renderer helper routes both exports +
+preview. Bridge/channel + `@cg/vcg-format` packager UNCHANGED (filtering is upstream in the
+renderer, as HTML/Preview already did). Recon: `docs/recon/d-086-export-scoping.md`. Change:
+`openspec/changes/per-composition-export-and-chrome/`.
+
+## [x] D-087 — Preview blank until Play ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-21-preview-blank-until-play/`
+
+**What:** The Preview modal SHALL open **loaded but unpainted** — nothing on the stage —
+exactly like CasparCG after `CG ADD` and before `CG PLAY`. The composition is built, fonts
+are loaded, fields are seeded, but no frame is shown until the operator presses **Play**,
+which then runs the normal intro → hold → outro lifecycle. Today the preview lifts the
+runtime's `cg-pending` blank state on boot and renders frame 0, so it opens already painted.
+
+**Why:** The runtime already models "blank until play" natively (`createRuntime` sets
+`body.cg-pending`, `play()` clears it, settle re-adds it) — the exported `.vcg`/HTML behave
+this way on air. The preview deliberately defeats it (a CSS `!important` override that lifts
+`.cg-pending`, plus `applyScene` removing `cg-pending` + `tick(0)` on boot) so the operator
+sees frame 0 while editing. That makes the preview **diverge** from the on-air/export
+pre-play state. The Preview modal should mirror broadcast: blank on open, painted only on
+Play. The **editor canvas** (which shares the same `preview.ts` harness) MUST stay visible
+for editing — so the change is scoped to the modal only.
+
+**Acceptance:**
+
+- WHEN the Preview modal opens THEN the stage is blank (the runtime is in its `cg-pending`
+  pre-play state and no graphic is painted), with the composition loaded underneath
+- WHEN the operator presses Play THEN the stage reveals and runs the intro → hold lifecycle,
+  and the painted result matches the exported composition once playing
+- WHEN the operator presses Stop THEN the outro runs and the stage settles blank again
+- WHEN the editor canvas renders a composition THEN it is UNCHANGED — it still shows the
+  static authoring frame (the blank-until-play behaviour is the Preview modal's only)
+- WHEN a composition is previewed and then exported THEN the pre-play (blank) and post-play
+  (painted) states are identical between preview and the on-air/export runtime
+
+**Notes:** Seam — a `broadcast?: boolean` flag on `preview.load` (the `PreviewLoadChannel`
+request) threaded into `Preview.#buildHtml`. `broadcast: true` (the modal) skips both the
+`cg-pending` CSS override and the boot-time reveal so the runtime keeps its native pending
+state until `play()`; the canvas omits it (unchanged). On-air/export runtime untouched.
+Change: `openspec/changes/preview-blank-until-play/`.
+
 ## [x] D-088 — Desktop-style save mechanism ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-06-20-desktop-save-mechanism/`
 
 > **Backfilled (shipped, PR #139)** — absorbs **D-002** (connect a real on-disk
@@ -2219,190 +2406,3 @@ palette feels loud — and because it's per-recipe, it repeats on every new butt
   before finalising; the no-border + affordance work can land first. Preserve D-089's amber
   SAVE indicator (`TopToolbar.css.ts` `saveCtl` / `saveCtlDirty`). Change:
   `openspec/changes/restyle-buttons/`.
-
-## [x] D-086 — Per-composition export + top-chrome relocation ⟨priority: high⟩ — ABSORBS D-095 — archived: `openspec/changes/archive/2026-06-21-per-composition-export-and-chrome/`
-
-> **Phase A (engine) landed** (PR #144, merged) — change
-> `openspec/changes/per-composition-export-and-chrome/`. The risky correctness core:
-> exports are now scoped to the OPEN composition + its transitive nested **closure**
-> (children reached via a `composition` instance OR a `repeater`), never the whole
-> project. **Phase B (chrome) landed** on `feat/D-086-chrome`: the slim global bar
-> (menus + centered project name + Save) and a new per-composition action bar
-> (`CompositionActionBar` — Preview / Export .vcg / Export HTML) pinned at the foot of the
-> left rail (off the canvas, so the editing surface keeps full height); the
-> project-level export path is removed, and `Composition.playoutTarget` is added as the
-> persisted target seam (the visible selector is deferred to a 2nd target / C-001).
-> Both phases done — archived `openspec/changes/archive/2026-06-21-per-composition-export-and-chrome/`
-> (living specs: `designer-composition-export` created, `designer-shell` + `designer-repeater-element` updated).
-
-This item **absorbs D-095** (centered project name in the global bar, adjacent to Save) —
-that chrome is delivered as part of this item's Phase B, exactly as **D-088 absorbed
-D-002/D-003**.
-
-**What:**
-
-- _Export becomes per-composition._ `.vcg` and single-file HTML export the **open**
-  composition as the package root, lifting its layers up to the runtime's only play-entry
-  (`scene.layers`) and including only its nested **closure** of compositions + their
-  assets. The project-level "export the whole scene" path is **removed**. (Phase A.)
-- _Top chrome relocation._ Slim the GLOBAL top bar to menus + a **centered project name** +
-  the Save control (D-089 amber kept); **remove** Preview / Export .vcg / Export HTML from
-  it. Add a new **per-composition sticky bar** above the canvas carrying Preview, Export
-  .vcg, Export HTML, and a playout-target combo (CasparCG-only for now — it just selects
-  the export target). (Phase B.)
-
-**Why:** Post-D-024 there is no "main scene" — the root is layerless and all content lives
-in `scene.compositions`. The whole-project `.vcg` export passes that layerless root, so the
-runtime (which renders `scene.layers`) produces a **blank frame**; and the single-file HTML
-export over-gathers images from sibling compositions because the projected scene retained
-the full `compositions` array. Export must be scoped to one composition + its closure. Two
-latent correctness bugs surfaced and are fixed here (Phase A): the export over-gather, and a
-**repeater-mediated nesting cycle** the author-time guard missed (it only followed
-`composition` edges, not `repeater` ones) — see `docs/recon/d-086-export-scoping.md` and
-bugs.md **B-023**.
-
-**Acceptance:**
-
-- WHEN a composition is exported (`.vcg` or HTML) THEN the package renders THAT composition
-  (its layers lifted to the play-entry) and contains only its nested closure — sibling
-  compositions and their assets are excluded
-- WHEN a composition nests a child via a `composition` instance AND via a `repeater` THEN
-  BOTH children (and their transitive children) are in the export closure; a composition
-  unreachable from the root is not
-- WHEN a sibling composition has a validation error (e.g. a missing asset) THEN it does NOT
-  block a valid root composition's export (preflight auto-scopes to the closure)
-- WHEN the operator would nest composition A into B while A already reaches B through a
-  `repeater` THEN the author-time guard refuses it (no infinite playout loop), and existing
-  `composition`-instance cycle detection is unchanged
-- _(Phase B)_ WHEN the editor is open THEN the global bar shows menus + the centered project
-  name + Save (amber-on-unsaved), and a per-composition sticky bar above the canvas carries
-  Preview / Export .vcg / Export HTML / playout-target; the project-level export entry is
-  gone
-
-**Notes:** Engine seam — new `compositionClosure(scene, rootId)` in `@cg/shared-schema`
-(one shared ref-collector covering `composition` + `repeater`), reused by the author-time
-cycle guard; `scopeSceneToComposition(scene, rootId)` renderer helper routes both exports +
-preview. Bridge/channel + `@cg/vcg-format` packager UNCHANGED (filtering is upstream in the
-renderer, as HTML/Preview already did). Recon: `docs/recon/d-086-export-scoping.md`. Change:
-`openspec/changes/per-composition-export-and-chrome/`.
-
-## [x] D-087 — Preview blank until Play ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-21-preview-blank-until-play/`
-
-**What:** The Preview modal SHALL open **loaded but unpainted** — nothing on the stage —
-exactly like CasparCG after `CG ADD` and before `CG PLAY`. The composition is built, fonts
-are loaded, fields are seeded, but no frame is shown until the operator presses **Play**,
-which then runs the normal intro → hold → outro lifecycle. Today the preview lifts the
-runtime's `cg-pending` blank state on boot and renders frame 0, so it opens already painted.
-
-**Why:** The runtime already models "blank until play" natively (`createRuntime` sets
-`body.cg-pending`, `play()` clears it, settle re-adds it) — the exported `.vcg`/HTML behave
-this way on air. The preview deliberately defeats it (a CSS `!important` override that lifts
-`.cg-pending`, plus `applyScene` removing `cg-pending` + `tick(0)` on boot) so the operator
-sees frame 0 while editing. That makes the preview **diverge** from the on-air/export
-pre-play state. The Preview modal should mirror broadcast: blank on open, painted only on
-Play. The **editor canvas** (which shares the same `preview.ts` harness) MUST stay visible
-for editing — so the change is scoped to the modal only.
-
-**Acceptance:**
-
-- WHEN the Preview modal opens THEN the stage is blank (the runtime is in its `cg-pending`
-  pre-play state and no graphic is painted), with the composition loaded underneath
-- WHEN the operator presses Play THEN the stage reveals and runs the intro → hold lifecycle,
-  and the painted result matches the exported composition once playing
-- WHEN the operator presses Stop THEN the outro runs and the stage settles blank again
-- WHEN the editor canvas renders a composition THEN it is UNCHANGED — it still shows the
-  static authoring frame (the blank-until-play behaviour is the Preview modal's only)
-- WHEN a composition is previewed and then exported THEN the pre-play (blank) and post-play
-  (painted) states are identical between preview and the on-air/export runtime
-
-**Notes:** Seam — a `broadcast?: boolean` flag on `preview.load` (the `PreviewLoadChannel`
-request) threaded into `Preview.#buildHtml`. `broadcast: true` (the modal) skips both the
-`cg-pending` CSS override and the boot-time reveal so the runtime keeps its native pending
-state until `play()`; the canvas omits it (unchanged). On-air/export runtime untouched.
-Change: `openspec/changes/preview-blank-until-play/`.
-
-## [x] D-085 — Stop/close terminal = CLEARED ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-21-stop-clears-composition/`
-
-**What:** Lock the broadcast STOP semantics: when the operator Stops a composition, it plays its
-OUT/outro and then SETTLES into a CLEARED terminal state — the stage is hidden and every
-content-driven element (ticker / clock / sequence / repeater) and nested child goes away with it,
-WITHOUT manual per-element opacity-out keyframes. With no outro the clear is immediate. The clear
-is by VISIBILITY (hide + halt the drivers), NOT destruction — the nodes stay mounted; re-play
-restarts cleanly. No default fade-out (deferred); per-element opacity keyframes stay for fine
-control.
-
-**Why:** The runtime already provides this (the root settle adds `body.cg-pending` →
-`.cg-stage { visibility: hidden }` and `onRootSettled` cancels every driver's animation frame;
-nested children cascade) — and D-087 made it observable in the preview (the broadcast modal no
-longer lifts `cg-pending`). But it is **not pinned**: a future driver/lifecycle change could
-silently regress it (a new content driver whose `stop()` forgets to cancel its loop would keep
-ticking under the hidden stage; a refactor could revert to a frozen-last-frame hold). This item
-LOCKS the contract with a spec requirement + per-driver-kind behaviour tests. Mechanism =
-visibility-clear (CG STOP), NOT unmount (CG REMOVE / `remove()`, which is left untouched).
-
-**Acceptance:**
-
-- WHEN a playing composition with a content-driven element is Stopped THEN after the outro the
-  stage is hidden AND the element's driver is halted (no further frame), so the content-driven
-  element is no longer shown — no per-element opacity-out required
-- WHEN the composition has no outro THEN the clear is immediate on Stop
-- WHEN a parent nests a child with a content-driven element AND the parent is Stopped THEN the
-  nested child is hidden and its driver halted too (cascade)
-- WHEN Play is pressed after a Stop THEN `cg-pending` clears, the drivers re-init, and the
-  composition runs its intro again (clean re-play)
-- WHEN cleared THEN the element nodes stay MOUNTED (a visibility clear, not a CG REMOVE unmount)
-
-**Notes:** Recon (`design.md`) confirmed Decision A = keep the VISIBILITY clear; no
-true-unmount-on-stop. The per-driver-kind unit tests confirmed every driver's `stop()` already
-cancels its loop, so **no `runtime.ts` change was needed** — this is spec + tests + docs.
-Tests: `@cg/template-runtime` `tests/stop-cleared.test.ts` (per-kind + nested + re-play + outro
-timing) and `apps/designer/tests/e2e/stop-cleared.spec.ts`. Doc-sync:
-`packages/template-runtime/README.md` (terminal model). Change:
-`openspec/changes/stop-clears-composition/`.
-
-## [~] D-071 — Off-frame pasteboard, export-excluded (Phase A: export filter) ⟨priority: medium⟩
-
-> **Phase A (export filter) — done**, merged (PR #153) and archived:
-> `openspec/changes/archive/2026-06-21-off-frame-export-filter/`. **Phase B (editor pasteboard) —
-> implemented** on `feat/D-071b-pasteboard` (change `openspec/changes/pasteboard-editing/`): a dark
-> pasteboard to the right/bottom of the frame where the author parks/sees/moves shapes; the
-> authoring `.cg-stage` clip is lifted (a new `authoring` flag on `preview.load`, independent of
-> D-087's `broadcast`) so off-frame shapes paint + are selectable, while the broadcast modal +
-> export keep the native clip + the Phase-A filter. _Scope:_ the pasteboard extends RIGHT/BOTTOM
-> (the frame stays at the surface origin so on-frame editing + click mapping are unchanged); an
-> all-direction pasteboard can extend this later. **The item stays `[~]` until Phase B archives**
-> (the final archive of the two-phase item).
-
-**What:** A "dark area" (pasteboard) OUTSIDE the frame where the author parks/stages shapes. They
-stay visible + editable in the editor and PERSIST in the saved `.cg.json`, but are EXCLUDED from
-the broadcast export (`.vcg` / HTML / preview output) when FULLY off-frame. On-frame and
-partially-off content is unaffected (partially-off is clipped to the frame as today). _Phase A_
-delivers the export-side filter only; _Phase B_ delivers the editor pasteboard UI.
-
-**Why:** A staging/scratch surface (Figma/AE pasteboard) + a leaner single-file export
-(fully-off-frame shapes don't bloat the bytes). Off-frame content is already clipped invisible on
-air by the runtime's `.cg-stage { overflow: hidden }`, so Phase A's filter leaves the rendered
-output IDENTICAL — it only stops dead-weight bytes (an off-frame image's asset is never gathered)
-from shipping. Authors can already place elements off-frame (`position` is unclamped), so the win
-is real even before the pasteboard UI.
-
-**Acceptance (Phase A):**
-
-- WHEN a composition is exported (`.vcg` / HTML) or previewed (broadcast) AND it contains a STATIC
-  element whose AABB is FULLY outside the frame THEN that element is absent from the output and its
-  image asset is not gathered/packaged
-- WHEN the same scene is projected for editing (`editSceneOf`) or written by Save THEN the off-frame
-  element is present and unchanged (export-only; staging shapes persist)
-- WHEN an off-frame element has a transform keyframe (could slide on-frame), is partially-on, sits
-  under an animated container, or is inside a repeater template THEN it is KEPT (conservative)
-- WHEN a static element is rotated/scaled THEN the decision uses its rotated AABB (4 transformed
-  corners), not a naive position check
-
-**Notes:** Conservative "keep when in doubt" rule in `dropFullyOffFrameForExport`
-(`renderer/state/off-frame.ts`), called inside `scopeSceneToComposition` AFTER the D-086 closure
-scope — the single projection `.vcg`/HTML/preview share, upstream of image collection + `pack()`.
-No exporter/packager/runtime/schema change. Recon (umbrella): `design.md` in
-`openspec/changes/pasteboard-editing-export-excluded/`. Tests:
-`apps/designer/tests/off-frame-export-filter.test.ts` (drop + every keep + boundary) +
-`apps/designer/tests/e2e/off-frame-export.spec.ts`. Change:
-`openspec/changes/off-frame-export-filter/`.
