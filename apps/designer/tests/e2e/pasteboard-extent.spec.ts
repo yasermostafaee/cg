@@ -106,3 +106,131 @@ test.describe('Pasteboard extent grows to fit off-frame content', () => {
     expect(await extentW(app)).toBeLessThan(30_000);
   });
 });
+
+/**
+ * B-026 — dragging a shape FAR off-frame must move ONLY the dragged shape; the frame and
+ * every other (stationary) element must stay put. The bug was a TIMING decoupling: the
+ * host-side origin-shift scroll-comp ran synchronously per pointer-move, but the iframe's
+ * `.cg-stage` inset (which the scroll compensates for) was applied a frame LATER via the
+ * async scene-replace postMessage — so the frame + content drifted/jittered with the drag.
+ * The fix writes the inset CSS var synchronously (same-origin srcDoc) in the same layout
+ * effect as the scroll, so they land together. These specs assert the invariant via a real
+ * pointer drag (the `beginDrag` move listener is on `window`, so the drag tracks the mouse
+ * even past the canvas viewport edge — enough travel to cross the 2× boundary).
+ */
+test.describe('Pasteboard: dragging a shape does not drag/jitter the canvas (B-026)', () => {
+  const frame = (app: DesignerApp) => app.page.frameLocator('iframe[title="cgpreview"]');
+  const idBox = (app: DesignerApp, id: string): Promise<{ x: number; y: number } | null> =>
+    frame(app).locator(`[data-cg-element-id="${id}"]`).boundingBox();
+  const elementIds = (app: DesignerApp): Promise<string[]> =>
+    frame(app)
+      .locator('[data-cg-element-id]')
+      .evaluateAll((els) => els.map((e) => e.getAttribute('data-cg-element-id') ?? ''));
+  const extentW = (app: DesignerApp): Promise<number> =>
+    app.page.locator('iframe[title="cgpreview"]').evaluate((el) => (el as HTMLElement).offsetWidth);
+  const extentH = (app: DesignerApp): Promise<number> =>
+    app.page
+      .locator('iframe[title="cgpreview"]')
+      .evaluate((el) => (el as HTMLElement).offsetHeight);
+  async function zoomOut(app: DesignerApp, n: number): Promise<void> {
+    for (let i = 0; i < n; i += 1) {
+      // "Zoom out" (canvas) vs "Zoom out timeline" — exact so it's unambiguous.
+      await app.page.getByRole('button', { name: 'Zoom out', exact: true }).click();
+    }
+  }
+
+  // Each direction: where (canvas-relative %) to drop the DRAG shape near that frame edge,
+  // the page-edge the mouse is dragged toward (to overshoot the 2× boundary), and which
+  // extent axis must grow once the boundary is crossed.
+  const DIRS = [
+    { dir: 'left', place: { fx: 0.08, fy: 0.5 }, axis: 'w' },
+    { dir: 'right', place: { fx: 0.92, fy: 0.5 }, axis: 'w' },
+    { dir: 'up', place: { fx: 0.5, fy: 0.08 }, axis: 'h' },
+    { dir: 'down', place: { fx: 0.5, fy: 0.92 }, axis: 'h' },
+  ] as const;
+
+  for (const { dir, place, axis } of DIRS) {
+    test(`drag far ${dir}: the frame + other content stay put, only the dragged shape moves`, async ({
+      app,
+    }) => {
+      await app.newProject(`Drift-${dir}`);
+      // A STATIONARY reference shape at the frame centre, then the DRAG shape near the
+      // relevant edge (so a single in-window drag crosses that 2× boundary).
+      const cbox = (await app.canvas.boundingBox())!;
+      await app.addRectangle({ x: cbox.width * 0.5, y: cbox.height * 0.5 });
+      const refId = (await elementIds(app))[0]!;
+      await app.addRectangle({ x: cbox.width * place.fx, y: cbox.height * place.fy });
+      const dragId = (await elementIds(app)).find((id) => id !== refId)!;
+
+      // Zoom out so the whole 2× pasteboard OVERFLOWS the viewport (so the scroll-comp is
+      // the active mechanism, not centering) yet a modest drag still crosses the boundary.
+      await zoomOut(app, 3);
+
+      const baseExtent = axis === 'w' ? await extentW(app) : await extentH(app);
+      const refStart = (await idBox(app, refId))!;
+      const dragStart = (await idBox(app, dragId))!;
+      const frameStart = (await app.canvas.boundingBox())!;
+      const g = (await app.gizmoFrame.boundingBox())!; // the selected DRAG shape's gizmo
+
+      // Grab the drag shape and drag toward the page edge (the `window` move listener keeps
+      // the drag live past the canvas), crossing the 2× boundary so the extent grows.
+      const vp = app.page.viewportSize()!;
+      const target = {
+        left: { x: 2, y: g.y + g.height / 2 },
+        right: { x: vp.width - 2, y: g.y + g.height / 2 },
+        up: { x: g.x + g.width / 2, y: 2 },
+        down: { x: g.x + g.width / 2, y: vp.height - 2 },
+      }[dir];
+      await app.page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+      await app.page.mouse.down();
+      await app.page.mouse.move(target.x, target.y, { steps: 24 });
+
+      // Mid-drag (mouse still DOWN): the extent has grown (we crossed the boundary)…
+      await expect
+        .poll(() => (axis === 'w' ? extentW(app) : extentH(app)), { timeout: 4000 })
+        .toBeGreaterThan(baseExtent + 100);
+      // …the frame (host overlay) has NOT drifted…
+      const frameMid = (await app.canvas.boundingBox())!;
+      expect(Math.abs(frameMid.x - frameStart.x), `${dir} frame x`).toBeLessThan(6);
+      expect(Math.abs(frameMid.y - frameStart.y), `${dir} frame y`).toBeLessThan(6);
+      // …the STATIONARY reference shape (rendered IN the iframe) has NOT drifted…
+      const refMid = (await idBox(app, refId))!;
+      expect(Math.abs(refMid.x - refStart.x), `${dir} ref x`).toBeLessThan(6);
+      expect(Math.abs(refMid.y - refStart.y), `${dir} ref y`).toBeLessThan(6);
+      // …while the DRAGGED shape DID follow the cursor (moved well off its start).
+      const dragMid = (await idBox(app, dragId))!;
+      const moved = Math.abs(dragMid.x - dragStart.x) + Math.abs(dragMid.y - dragStart.y);
+      expect(moved, `${dir} dragged moved`).toBeGreaterThan(50);
+
+      await app.page.mouse.up();
+      await expect(app.gizmoFrame, dir).toBeAttached(); // still selected/selectable
+    });
+  }
+
+  test('a within-2× drag does NOT move the canvas or change the extent (B containment)', async ({
+    app,
+  }) => {
+    await app.newProject('DriftWithin');
+    const cbox = (await app.canvas.boundingBox())!;
+    await app.addRectangle({ x: cbox.width * 0.5, y: cbox.height * 0.5 });
+    const refId = (await elementIds(app))[0]!;
+    await app.addRectangle({ x: cbox.width * 0.4, y: cbox.height * 0.5 }); // the (selected) drag shape
+    await zoomOut(app, 3);
+
+    const baseW = await extentW(app);
+    const refStart = (await idBox(app, refId))!;
+    const frameStart = (await app.canvas.boundingBox())!;
+    const g = (await app.gizmoFrame.boundingBox())!;
+
+    // A SMALL drag that keeps the shape within the 2× boundary — no growth, no origin shift.
+    await app.page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+    await app.page.mouse.down();
+    await app.page.mouse.move(g.x + g.width / 2 - 30, g.y + g.height / 2, { steps: 10 });
+    expect(await extentW(app)).toBe(baseW); // no growth
+    const frameMid = (await app.canvas.boundingBox())!;
+    const refMid = (await idBox(app, refId))!;
+    expect(Math.abs(frameMid.x - frameStart.x)).toBeLessThan(6);
+    expect(Math.abs(refMid.x - refStart.x)).toBeLessThan(6);
+    await app.page.mouse.up();
+  });
+});

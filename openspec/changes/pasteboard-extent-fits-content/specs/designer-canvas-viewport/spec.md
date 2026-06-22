@@ -17,7 +17,11 @@ element (the same boxes the overlay hit-tests / the runtime renders); a nested c
 contributes only its OWN box (instances render `overflow: hidden`, so nested children that overflow
 the instance box are already clipped — bounding the instance box is exact). When the extent grows on
 the LEFT/TOP the frame origin shifts; the canvas SHALL scroll-compensate (`Δoffset × zoom`) so the
-visible content stays STATIONARY (no jump), on growth AND on inward shrink. The frame SHALL be clearly
+visible content stays STATIONARY (no jump), on growth AND on inward shrink — INCLUDING during a live
+shape drag, where ONLY the dragged shape SHALL follow the cursor while the frame and every other
+element stay put. To hold that invariant the scroll-compensation and the frame-inset update SHALL be
+applied TOGETHER in the same paint (the inset written synchronously host-side, not only via the async
+re-render message), so the canvas does not drift/jitter as a shape is dragged past the boundary. The frame SHALL be clearly
 OUTLINED so the author distinguishes the frame (what exports) from the pasteboard (what does not). In
 authoring the editor SHALL lift the stage clip (the canvas iframe renders with
 `.cg-stage { overflow: visible }`) so a fully off-frame shape PAINTS into the pasteboard on ANY side
@@ -79,6 +83,14 @@ scroll viewport), not the frame dimensions.
 - **WHEN** the extent grows on the LEFT or TOP (the frame origin shifts right/down)
 - **THEN** the canvas scrolls by `Δoffset × zoom` so the visible content (the frame) stays STATIONARY
   on screen — no jump — and the inset updates live with no iframe reload
+
+#### Scenario: Dragging a shape far off-frame moves only that shape — the canvas does not drift
+
+- **WHEN** the author drags a shape far past the 2× boundary in any direction (a live drag that grows
+  the extent and, on the left/top, shifts the origin every pointer-move)
+- **THEN** ONLY the dragged shape follows the cursor; the frame and every other (stationary) element
+  stay put — no drift or jitter — because the scroll-compensation and the frame-inset update land in
+  the SAME paint (the inset written synchronously, not a frame behind the scroll)
 
 #### Scenario: The canvas is two-tone and a shape over the page is not occluded
 

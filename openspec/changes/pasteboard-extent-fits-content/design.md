@@ -10,6 +10,18 @@
 > the locked decision is **B** (the §3 math/examples describe the union form — the shipped
 > `pasteboardLayout` implements B: within the 2× boundaries it is byte-identical to today, growing
 > only past them). The change scaffold (proposal/tasks/spec delta) and gate are part of STEP-1.
+>
+> **STEP-2 FIX (B-026 drag-drift).** A follow-up: dragging a shape far off-frame jittered the WHOLE
+> canvas. Confirmed cause (not the §3 math, which is byte-identical within the 2× boundary): the seam-2
+> scroll-comp (`useLayoutEffect`) runs **synchronously** per pointer-move, but the seam-1 `.cg-stage`
+> inset it compensates for arrived a frame LATER via the **async** `scene-replace` postMessage (rAF +
+> cross-document `await applyScene`) — so each move the host scrolled while the iframe inset lagged,
+> drifting the frame + non-dragged content, then snapping back. Ruled out the secondary hypothesis: the
+> shape-drag cursor→scene map (`beginDrag.onMove`) is a pure pointer-client delta (`startPos + (client −
+start)/scale`), origin-independent, so there is no feedback loop. **Fix:** write the inset CSS vars
+> **synchronously host-side** in the same scroll-comp layout effect (the iframe is a same-origin
+> srcDoc), so inset + scroll land in one paint; the dragged shape keeps its existing ~1-frame
+> `scene-replace`/gizmo-tracked render lag.
 
 ## Problem
 

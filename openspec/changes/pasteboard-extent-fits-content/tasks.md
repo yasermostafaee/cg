@@ -35,6 +35,12 @@
       that scrolls by `offsetShiftScroll(scroll, Δoffset, zoom)` to hold visible content stationary on
       left/up growth AND inward shrink. Independent of the zoom-anchor effect (disjoint keys);
       `prevOffsetRef` reset on `sceneId` so fit-on-open isn't fought.
+- [x] 4.2 B-026 drag-drift fix — the scroll-comp ran synchronously but the `.cg-stage` inset it
+      compensates for arrived a frame later via the async `scene-replace` message, so a far drag made
+      the frame + non-dragged content drift/jitter. Write the `--cg-frame-x/-y` vars SYNCHRONOUSLY in
+      the same scroll-comp layout effect (same-origin srcDoc `contentDocument`), so the inset + scroll
+      land in one paint. STEP-1 confirmed: the shape-drag cursor→scene mapping is already a pure
+      pointer-client delta (origin-independent) — no feedback loop, secondary hypothesis ruled out.
 
 ## 5. Thread content-aware extent/offset through every consumer
 
@@ -60,6 +66,12 @@
       rendered + selectable (extent grew); a within-50% off-frame shape does NOT grow (B containment);
       left growth is scroll-compensated (frame doesn't jump); far content dragged back returns the
       extent to the 2× baseline (never smaller); an absurd coordinate is CAPPED at the clamp.
+- [x] 6.4 E2E (B-026 drag-drift): a real pointer drag far off-frame in each of the 4 directions — only
+      the dragged shape moves; the frame (host `canvas-surface`) AND a stationary reference shape
+      rendered IN the iframe stay put; a within-2× drag moves nothing + doesn't grow. (Verified the
+      guard has teeth: removing the scroll-comp makes the left/up cases fail with a ~138px frame drift.
+      The pure sub-frame inset transient self-corrects post-settle, so it isn't deterministically
+      sample-able in Playwright — the sync inset write addresses it structurally.)
 
 ## 7. Docs
 

@@ -623,3 +623,16 @@ export + broadcast (frame offset `{0,0}`) untouched. **Regression:**
 clamp, scroll-comp Δ) + `apps/designer/tests/e2e/pasteboard-extent.spec.ts` (far off all 4 sides
 stays visible/selectable, within-2× no growth, left-growth no jump, shrink-to-2×, clamp).
 Capability: `designer-canvas-viewport` (MODIFIED — the off-frame pasteboard requirement).
+
+**Follow-up (same fix, B-026 drag-drift):** dragging a shape far off-frame jittered the WHOLE canvas
+(frame + other content), not just the dragged shape. Cause was a timing decoupling in the new
+origin-shift path: the host-side scroll-comp (`useLayoutEffect`) runs synchronously per pointer-move,
+but the iframe `.cg-stage` inset it compensates for arrived a frame later via the async
+`scene-replace` postMessage — so each move the scroll moved while the inset lagged, drifting the frame
+then snapping back. The shape-drag cursor→scene mapping was confirmed NOT at fault (a pure
+pointer-client delta, origin-independent — no feedback). **Fix:** write the `--cg-frame-x/-y` vars
+synchronously host-side in the same scroll-comp layout effect (same-origin srcDoc `contentDocument`),
+so inset + scroll land in one paint; the dragged shape keeps its existing ~1-frame `scene-replace`
+render lag. **Regression:** `pasteboard-extent.spec.ts` adds a 4-direction pointer-drag suite
+asserting only the dragged shape moves while the frame + a stationary in-iframe reference stay put
+(guard verified: removing the scroll-comp fails the left/up cases).

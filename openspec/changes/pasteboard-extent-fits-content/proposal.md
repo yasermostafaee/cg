@@ -37,7 +37,11 @@ the existing 2× margin behave **byte-identically** to today.
   offset rides the live preview messages (the rAF-throttled `scene-replace` **and** the `scrub`
   message — the offset is current-frame derived, so it moves as the playhead animates a shape
   off-frame) and updates the variables via a shared `applyFrameOffset` helper, so a growing offset
-  re-insets the frame **live** with no srcDoc rebuild.
+  re-insets the frame **live** with no srcDoc rebuild. **B-026 drag-drift:** because those messages are
+  async (rAF + cross-document `await applyScene`), the inset lagged the synchronous scroll-comp (seam 2) by ≥1 frame during a live drag, so the frame + non-dragged content drifted/jittered; the inset is
+  therefore ALSO written **synchronously host-side** in the scroll-comp layout effect (same-origin
+  srcDoc `contentDocument`), so the inset and the scroll land in the same paint (the messages remain as
+  the load + async backstop, same value, idempotent).
 
 - **Seam 2 — origin-shift scroll compensation.** A new `useLayoutEffect` keyed on `frameOffset` adds
   `Δoffset × zoom` to `scrollLeft/Top` so the visible content stays **stationary** when the offset

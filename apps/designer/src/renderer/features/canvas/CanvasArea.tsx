@@ -426,6 +426,22 @@ export function CanvasArea({
     if (el === null) return;
     el.scrollLeft = offsetShiftScroll(el.scrollLeft, dx, zoomRef.current);
     el.scrollTop = offsetShiftScroll(el.scrollTop, dy, zoomRef.current);
+    // Drag-drift fix (B-026): the frame inset lives INSIDE the iframe (`.cg-stage` reads
+    // the `--cg-frame-x/-y` CSS vars). The scene-replace postMessage that carries the
+    // grown offset is rAF-throttled + cross-document (`await applyScene` rebuilds the
+    // runtime), so it lands ≥1 frame AFTER this synchronous scroll — for that gap the
+    // frame + all non-dragged content drift by the per-move delta (scroll moved, inset
+    // hadn't) and snap back, reading as the whole canvas jittering during a far drag.
+    // Write the vars SYNCHRONOUSLY here (same-origin srcDoc, the cheap re-inset,
+    // independent of the async applyScene) so the inset and the scroll land in the SAME
+    // paint. The dragged shape itself still re-renders via scene-replace (its ~1-frame lag
+    // is the existing, gizmo-tracked path). The scene-replace/scrub messages still carry
+    // the offset (for load + as a backstop) — the same value, so it's idempotent.
+    const idoc = iframeRef.current?.contentDocument;
+    if (idoc !== null && idoc !== undefined) {
+      idoc.documentElement.style.setProperty('--cg-frame-x', `${String(frameOffset.x)}px`);
+      idoc.documentElement.style.setProperty('--cg-frame-y', `${String(frameOffset.y)}px`);
+    }
     // Keyed on the offset only (zoom read via `zoomRef`), so a zoom never triggers it.
   }, [frameOffset.x, frameOffset.y, sceneId]);
 

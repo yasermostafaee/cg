@@ -102,16 +102,24 @@ the rulers (`rulerOrigin = stageRect − outerRect + frame × zoom`; `measure` i
 Because the offset can move at runtime, two seams keep it live:
 
 - **Live `.cg-stage` inset** — the baked `.cg-stage { top/left }` is a **CSS variable** on `:root`
-  (`--cg-frame-x/-y`) that `createRuntime` never recreates; the grown offset rides the existing
-  rAF-throttled `scene-replace` postMessage (and the `scrub` message — the offset is **current-frame
-  derived**, so an animated shape flying off-frame shifts it as the playhead moves) and updates the
-  variables via a shared `applyFrameOffset` helper, so the frame re-insets **live** with no iframe
-  reload/flash (the baked value is only the load-time fallback).
+  (`--cg-frame-x/-y`) that `createRuntime` never recreates. The grown offset reaches it two ways:
+  (1) it rides the rAF-throttled `scene-replace` postMessage (and the `scrub` message — the offset is
+  **current-frame derived**, so an animated shape flying off-frame shifts it as the playhead moves),
+  updating the var via a shared `applyFrameOffset` helper — the load fallback + async backstop; and
+  (2) **synchronously, host-side, in the scroll-comp layout effect** (below), which sets the var
+  directly on the same-origin srcDoc `contentDocument` so the inset and the scroll land in the SAME
+  paint (the baked value is only the load-time fallback).
 - **Origin-shift scroll-comp** — a `useLayoutEffect` keyed on `frameOffset` scrolls by
   `offsetShiftScroll(scroll, Δoffset, zoom)` so the visible content stays **stationary** when the
   origin shifts (left/up growth **and** inward shrink). It is **independent** of the zoom-anchor
   effect (disjoint keys: `frameOffset` vs `zoom` — a drag moves the offset not the zoom, a zoom the
-  reverse), and `prevOffsetRef` resets on `sceneId` so fit-on-open isn't fought.
+  reverse), and `prevOffsetRef` resets on `sceneId` so fit-on-open isn't fought. **B-026 drag-drift:**
+  this effect runs **synchronously** (pre-paint), but the `.cg-stage` inset it compensates for used to
+  arrive only via the **async** `scene-replace` message (≥1 frame later, after the `await applyScene`
+  rebuild) — so every off-frame drag-move the frame + all non-dragged content drifted by the per-move
+  delta and snapped back (whole-canvas jitter). The fix writes the inset var **in this same effect**
+  (the cheap re-inset, decoupled from the async rebuild), so scroll + inset move together. The dragged
+  shape itself still re-renders via `scene-replace` (its ~1-frame lag is gizmo-tracked, unchanged).
 
 The iframe element is sized to the extent; a **`device-width` viewport** means the runtime content
 fills that size with **no stretch**. `fitToViewport` fits the zoom from the **frame** bounds — the
