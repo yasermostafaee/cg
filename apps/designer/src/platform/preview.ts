@@ -140,8 +140,11 @@ export class Preview {
       html, body { background: #161927 !important; }
       .cg-stage {
         position: absolute !important;
-        top: ${String(oy)}px !important;
-        left: ${String(ox)}px !important;
+        /* D-071 — the frame inset is a CSS VARIABLE on :root (which createRuntime never
+           recreates), so a content-grown offset updates LIVE via postMessage without an
+           iframe reload; the baked value is the load-time fallback. */
+        top: var(--cg-frame-y, ${String(oy)}px) !important;
+        left: var(--cg-frame-x, ${String(ox)}px) !important;
         width: ${String(w)}px !important;
         height: ${String(h)}px !important;
         overflow: visible !important;
@@ -403,12 +406,26 @@ export class Preview {
 
         await applyScene(${sceneJson});
 
+        // D-071 — the content-grown frame inset is a CSS variable on :root (which
+        // createRuntime never recreates), so a moving offset re-insets .cg-stage live.
+        function applyFrameOffset(o) {
+          if (o && typeof o === 'object') {
+            var root = document.documentElement;
+            root.style.setProperty('--cg-frame-x', (o.x || 0) + 'px');
+            root.style.setProperty('--cg-frame-y', (o.y || 0) + 'px');
+          }
+        }
+
         window.addEventListener('message', (evt) => {
           const msg = evt.data;
           if (!msg || typeof msg !== 'object' || msg.kind !== 'cg-preview') return;
           (async () => {
             try {
               if (msg.action === 'scene-replace' && msg.scene) {
+                // D-071 — the content-grown frame inset rides the scene-replace message
+                // (same rAF-throttled channel); update the CSS vars on :root so the
+                // recreated .cg-stage picks up the new offset with no reload.
+                applyFrameOffset(msg.frameOffset);
                 if (msg.assetUrls && typeof msg.assetUrls === 'object') {
                   assetUrls = msg.assetUrls;
                 }
@@ -439,6 +456,9 @@ export class Preview {
                 window.update(JSON.stringify(currentFields));
                 if (runtime) runtime.tick(currentFrame);
               } else if (msg.action === 'scrub' && typeof msg.frame === 'number') {
+                // D-071 — the offset is current-frame derived, so it can shift as the
+                // playhead moves an animated shape off-frame; re-inset .cg-stage live.
+                applyFrameOffset(msg.frameOffset);
                 currentFrame = msg.frame;
                 if (runtime) runtime.tick(currentFrame);
               } else if (msg.action === 'play' && typeof window.play === 'function') {

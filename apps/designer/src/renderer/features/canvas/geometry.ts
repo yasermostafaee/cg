@@ -276,30 +276,65 @@ export function screenToScene(
 export const PASTEBOARD_MARGIN_RATIO = 0.5;
 
 /**
- * D-071 Phase B — the canvas STAGE layout (scene px): a FIXED, SYMMETRIC pasteboard.
- * The frame is centered in a dark area that extends a margin (a fraction of the frame,
- * {@link PASTEBOARD_MARGIN_RATIO}) on ALL FOUR sides. The extent is a pure function of
- * the RESOLUTION, so:
- *   - dragging a shape NEVER resizes the dark area — only zoom scales it on screen;
- *   - the margin is symmetric, so off-frame shapes are visible on EVERY side
- *     (left/top too), not just right/bottom.
- * `frame.{x,y}` is the frame's offset (scene px) into the stage: scene (0,0) sits
- * THERE, not at the stage origin — so the canvas overlay measures coordinates from the
- * frame, and the iframe paints the frame at that offset (off-frame content fills the
- * surrounding margin).
+ * Hard cap on the content-grown extent: at most this many × the frame on EACH axis, so a
+ * stray far coordinate (bad import / fat-finger drag) can't blow the iframe up.
  */
-export function pasteboardLayout(resolution: { width: number; height: number }): {
-  width: number;
-  height: number;
-  frame: { x: number; y: number };
-} {
-  const marginX = Math.round(resolution.width * PASTEBOARD_MARGIN_RATIO);
-  const marginY = Math.round(resolution.height * PASTEBOARD_MARGIN_RATIO);
-  return {
-    width: resolution.width + marginX * 2,
-    height: resolution.height + marginY * 2,
-    frame: { x: marginX, y: marginY },
+export const MAX_EXTENT_RATIO = 12;
+
+/** A scene-coordinate AABB (frame-relative; scene 0,0 = frame top-left). */
+export interface SceneAabb {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/**
+ * D-071 — the canvas STAGE layout (scene px): a symmetric pasteboard that GROWS to fit
+ * off-frame content. The base is the FIXED 2× extent — the frame plus a margin (a
+ * fraction of the frame, {@link PASTEBOARD_MARGIN_RATIO}) on ALL FOUR sides — covering
+ * scene `[−margin, size+margin]` per axis. Given a `content` AABB, each axis GROWS
+ * **only when content crosses a 2× boundary**, and then gives a FULL margin of headroom
+ * past the content (Q1 = B). When content stays within the 2× boundaries the result is
+ * BYTE-IDENTICAL to the fixed 2× (everyday off-frame drags don't move the origin). The
+ * extent shrinks back toward 2× as far content returns inward, but NEVER below 2×, and
+ * is clamped at {@link MAX_EXTENT_RATIO}× the frame per axis. `frame.{x,y}` is the
+ * frame's offset (scene px) into the stage — scene (0,0) sits there — grown so off-frame
+ * left/up content lands at positive iframe coords (`offset ≥ margin`). With no `content`
+ * the bounds default to the frame, so nothing grows (the original 2×, back-compat).
+ */
+export function pasteboardLayout(
+  resolution: { width: number; height: number },
+  content?: SceneAabb | null,
+): { width: number; height: number; frame: { x: number; y: number } } {
+  const axis = (size: number, cMin: number, cMax: number): { offset: number; extent: number } => {
+    const margin = Math.round(size * PASTEBOARD_MARGIN_RATIO);
+    const baseLo = -margin; // today's 2× boundaries (scene coords)
+    const baseHi = size + margin;
+    // Q1 = B — grow ONLY past a 2× boundary; then a FULL margin of headroom past content.
+    let lo = cMin < baseLo ? cMin - margin : baseLo;
+    let hi = cMax > baseHi ? cMax + margin : baseHi;
+    // Q4 — clamp each side so the total extent ≤ MAX_EXTENT_RATIO × the frame.
+    const maxSide = ((MAX_EXTENT_RATIO - 1) / 2) * size;
+    lo = Math.max(lo, -maxSide);
+    hi = Math.min(hi, size + maxSide);
+    return { offset: Math.round(-lo), extent: Math.round(hi - lo) };
   };
+  const c = content ?? { minX: 0, minY: 0, maxX: resolution.width, maxY: resolution.height };
+  const x = axis(resolution.width, c.minX, c.maxX);
+  const y = axis(resolution.height, c.minY, c.maxY);
+  return { width: x.extent, height: y.extent, frame: { x: x.offset, y: y.offset } };
+}
+
+/**
+ * Origin-shift scroll compensation: the new scroll offset (one axis) that holds the
+ * visible content STATIONARY when the frame offset shifts by `deltaOffset` (scene px) at
+ * the current `zoom`. Mirrors {@link zoomAnchorScroll} for content-driven origin growth
+ * / shrink (left/up content extending the pasteboard moves scene (0,0); scrolling by the
+ * shift keeps everything put).
+ */
+export function offsetShiftScroll(scroll: number, deltaOffset: number, zoom: number): number {
+  return scroll + deltaOffset * zoom;
 }
 
 /**
