@@ -12,6 +12,7 @@ import {
   withActiveLayers,
 } from '../scene-doc.js';
 import { designerStore } from '../store.js';
+import { collectGroupMoveTargets } from '../../features/canvas/group-move.js';
 
 /**
  * Deep-clone an element, assigning a fresh id to it and (recursively) to
@@ -480,6 +481,36 @@ export const elementsSlice = {
     designerStore.runAsSingleHistoryEntry(() => {
       for (const id of ids) designerStore.commitAnimatable(id, property, value);
     });
+  },
+
+  /**
+   * D-073 — move the current selection by `(dx, dy)` scene px (arrow-key nudge). MIRRORS
+   * the `beginGroupDrag` move path: resolve the MOVABLE members (selected, visible,
+   * unlocked, evaluated at the playhead) via `collectGroupMoveTargets`, then loop the SAME
+   * keyframe-aware `commitAnimatable('position.x'/'position.y', start + delta)` — a member
+   * with a track on the axis keyframes at the playhead (B-005-safe), others write static.
+   * No snapping (anchor/snap targets are unused). Like `applySharedPropertyLiveKeyframed`
+   * it sets NO history boundary: the caller (the App.tsx keydown) sets ONE per key-run so a
+   * held key (auto-repeat) coalesces into one undo step.
+   */
+  nudgeSelection(dx: number, dy: number): void {
+    if (current.scene === null) return;
+    const selection = current.selection;
+    if (selection.size === 0) return;
+    const { resolution } = activeDocOf(current.scene);
+    const layers = activeLayersOf(current.scene);
+    const anchorId = [...selection][0]!; // movers don't depend on the anchor — any selected id
+    const { movers } = collectGroupMoveTargets(
+      layers,
+      selection,
+      anchorId,
+      current.currentFrame,
+      resolution,
+    );
+    for (const m of movers) {
+      designerStore.commitAnimatable(m.id, 'position.x', m.x + dx);
+      designerStore.commitAnimatable(m.id, 'position.y', m.y + dy);
+    }
   },
 
   /**

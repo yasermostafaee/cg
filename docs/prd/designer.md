@@ -2406,3 +2406,58 @@ palette feels loud — and because it's per-recipe, it repeats on every new butt
   before finalising; the no-border + affordance work can land first. Preserve D-089's amber
   SAVE indicator (`TopToolbar.css.ts` `saveCtl` / `saveCtlDirty`). Change:
   `openspec/changes/restyle-buttons/`.
+
+## [~] D-072 — Guide coordinate readout on hover / drag ⟨priority: low⟩ — implemented on `feat/D-072-073-guide-readout-nudge`; change `openspec/changes/guide-coordinate-readout/`
+
+**What:** When the operator hovers a persistent ruler guide OR is dragging one, show a small
+badge with that guide's scene coordinate in px (`x: 960` for a vertical guide, `y: 540` for a
+horizontal one). Updates live while dragging. Applies to the operator's draggable ruler guides
+(`state.guides`), NOT the transient snap/alignment guides.
+
+**Why:** Today a guide can be placed/dragged but its exact position is invisible — the author
+has to eyeball it. A coordinate badge (Figma/AE behaviour) makes guides precise without opening
+any panel. Pure editing affordance; no effect on render/export/playout.
+
+**Acceptance:**
+
+- WHEN the pointer is over a persistent ruler guide THEN a badge shows that guide's scene
+  coordinate in px (vertical guide → `x: <n>`, horizontal → `y: <n>`)
+- WHEN a guide is being dragged THEN the badge stays shown and its value updates live as the
+  guide moves (the badge persists for the whole drag even if the pointer leaves the strip)
+- WHEN neither hovering nor dragging a guide THEN no badge is shown
+- WHEN the canvas is zoomed or scrolled THEN the badge tracks the guide's screen position and
+  stays within the visible viewport
+
+**Notes:** Overlay-only — a styled, non-interactive (`pointerEvents:none`) badge in the
+non-scrolling overlay in `CanvasArea.tsx`; active guide = hovered OR dragging (dragging wins).
+Transient view state lives in the component (do NOT add it to the store). No schema/store/render
+change. Coordinate is scene px (scene 0,0 = frame top-left, per the pasteboard offset).
+Change: `openspec/changes/guide-coordinate-readout/`.
+
+## [~] D-073 — Arrow-key nudge for the selection (Shift = larger step) ⟨priority: low⟩ — implemented on `feat/D-072-073-guide-readout-nudge`; change `openspec/changes/arrow-key-nudge/`
+
+**What:** With one or more elements selected and no editable field focused, the arrow keys move
+the selection by 1px (scene px); holding **Shift** moves by 10px. Keyframe-aware (same path as a
+drag), respects locked/hidden members, single undo step per key-press run.
+
+**Why:** Pixel-precise positioning without dragging — standard editor behaviour. Reuses the
+existing keyframe-aware group-move commit path, so animated and multi-selected elements behave
+exactly as they do when dragged.
+
+**Acceptance:**
+
+- WHEN an element is selected and an arrow key is pressed THEN it moves 1px in that screen
+  direction (Left = −x, Right = +x, Up = −y, Down = +y) — spatial, independent of RTL
+- WHEN Shift is held with an arrow key THEN the step is 10px
+- WHEN multiple elements are selected THEN every movable (visible + unlocked) member moves by
+  the same delta; locked/hidden members do not move
+- WHEN the moved element/axis is animated THEN the nudge writes a keyframe at the playhead
+  (start value + delta), matching drag behaviour; otherwise it writes the static value
+- WHEN an arrow key is held (auto-repeat) THEN the whole repeat run collapses to ONE undo step
+- WHEN nothing is selected, OR the focus is in an input/textarea/select/contentEditable THEN the
+  arrow keys do nothing (no nudge, default behaviour preserved)
+
+**Notes:** New keydown effect in `App.tsx` cloned from the Delete/Backspace handler; new store
+action `nudgeSelection(dx, dy)` mirroring `beginGroupDrag`'s `commitAnimatable` path (no
+snapping). One `markHistoryBoundary()` on the first event of a run (`!e.repeat`). Ripple:
+`ShortcutsModal.tsx`. No schema/render/export change. Change: `openspec/changes/arrow-key-nudge/`.

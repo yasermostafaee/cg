@@ -131,6 +131,12 @@ export function CanvasArea({
   // Visible viewport size, so the rulers can tick across the whole dark area
   // (including negative scene coords and past the canvas edges), not just 0..w.
   const [viewport, setViewport] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  // D-072 — the persistent ruler guide whose coordinate badge is shown: the HOVERED
+  // guide, or (winning) the one being dragged. Transient view state (not in the store).
+  // `guideDraggingRef` keeps the badge through a drag even when the window-level
+  // pointer-move takes the pointer off the thin strip (so `onPointerLeave` must no-op).
+  const [activeGuide, setActiveGuide] = useState<{ axis: 'x' | 'y'; index: number } | null>(null);
+  const guideDraggingRef = useRef(false);
 
   // Only rebuild the iframe document when the *scene id* changes
   // (e.g. project switch). For mutations within the same scene we
@@ -585,6 +591,10 @@ export function CanvasArea({
   // position isn't clamped to the canvas; double-click removes a guide.
   function dragGuide(axis: 'x' | 'y', index: number, ev: PointerEvent): void {
     ev.preventDefault();
+    // D-072 — keep the coordinate badge pinned to THIS guide for the whole drag
+    // (drag wins over hover; the window-level pointer-move leaves the thin strip).
+    guideDraggingRef.current = true;
+    setActiveGuide({ axis, index });
     const posOf = (e: PointerEvent): number => {
       const sc = sceneFromClient(e.clientX, e.clientY);
       return Math.round(axis === 'x' ? sc.x : sc.y);
@@ -595,6 +605,8 @@ export function CanvasArea({
     const onUp = (): void => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      guideDraggingRef.current = false;
+      setActiveGuide(null);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -746,6 +758,10 @@ export function CanvasArea({
                   }}
                   title="Drag to move · double-click to remove"
                   onPointerDown={(e) => dragGuide('x', i, e.nativeEvent)}
+                  onPointerEnter={() => setActiveGuide({ axis: 'x', index: i })}
+                  onPointerLeave={() => {
+                    if (!guideDraggingRef.current) setActiveGuide(null);
+                  }}
                   onDoubleClick={() => designerStore.removeGuide('x', i)}
                 >
                   <div
@@ -774,6 +790,10 @@ export function CanvasArea({
                   }}
                   title="Drag to move · double-click to remove"
                   onPointerDown={(e) => dragGuide('y', i, e.nativeEvent)}
+                  onPointerEnter={() => setActiveGuide({ axis: 'y', index: i })}
+                  onPointerLeave={() => {
+                    if (!guideDraggingRef.current) setActiveGuide(null);
+                  }}
                   onDoubleClick={() => designerStore.removeGuide('y', i)}
                 >
                   <div
@@ -827,6 +847,47 @@ export function CanvasArea({
               ))}
             </div>
           )}
+          {/* D-072 — coordinate badge for the active (hovered/dragged) persistent guide.
+              Display-only (pointerEvents:none), positioned at the guide's screen coord near
+              the ruler edge and clamped to the viewport; `direction:ltr` keeps `x: 960`
+              readable under RTL. */}
+          {activeGuide !== null &&
+            rulerOrigin !== null &&
+            (() => {
+              const onX = activeGuide.axis === 'x';
+              const pos = (onX ? guides.x : guides.y)[activeGuide.index];
+              if (pos === undefined) return null; // guide removed mid-interaction
+              const left = onX
+                ? Math.max(2, Math.min(viewport.w - 64, rulerOrigin.x + pos * zoom + 5))
+                : 5;
+              const top = onX
+                ? 5
+                : Math.max(2, Math.min(viewport.h - 22, rulerOrigin.y + pos * zoom + 5));
+              return (
+                <div
+                  data-testid="guide-badge"
+                  style={{
+                    position: 'absolute',
+                    left,
+                    top,
+                    zIndex: 6,
+                    pointerEvents: 'none',
+                    direction: 'ltr',
+                    background: 'rgba(11,14,22,0.92)',
+                    color: '#F472B6',
+                    border: '1px solid #F472B6',
+                    borderRadius: 3,
+                    padding: '1px 5px',
+                    fontSize: 11,
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                    fontVariantNumeric: 'tabular-nums',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {onX ? 'x' : 'y'}: {Math.round(pos)}
+                </div>
+              );
+            })()}
         </div>
       </div>
     </div>
