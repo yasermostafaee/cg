@@ -154,6 +154,48 @@ test.describe('Editor pasteboard (D-071 Phase B)', () => {
     expect(box.y).toBeGreaterThan(vp.y); // visible, not clipped past the top edge
   });
 
+  test('two-tone canvas — #161927 surround + #080a10 frame page — on-frame shapes stay visible (not occluded)', async ({
+    app,
+  }) => {
+    await app.newProject('TwoTone');
+    await app.addRectangle({ x: 240, y: 200 });
+    const canvasFrame = app.page.frameLocator('iframe[title="cgpreview"]');
+    const shape = canvasFrame.locator('[data-cg-element-id]').first();
+    await expect(shape).toBeVisible();
+
+    // SURROUND = the lighter #161927: the scroll viewport (s.outer) AND the iframe
+    // body (the area beyond the frame, where off-frame shapes park).
+    const surround = await app.page
+      .getByTestId('canvas-viewport')
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(surround).toBe('rgb(22, 25, 39)'); // #161927
+    const bodyBg = await canvasFrame
+      .locator('body')
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(bodyBg).toBe('rgb(22, 25, 39)'); // #161927
+
+    // FRAME-SIZED page backdrop (.cg-stage) = the darker #080a10 — a background-color,
+    // so it paints BEHIND the checkerboard + shapes.
+    const pageBg = await canvasFrame
+      .locator('.cg-stage')
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(pageBg).toBe('rgb(8, 10, 16)'); // #080a10
+
+    // The on-frame shape over the #080a10 page is NOT occluded: at its centre the
+    // topmost painted node belongs to the shape's own subtree (or an ancestor it paints
+    // over) — never a sibling overlay. A #080a10 painted in FRONT would fail this.
+    const topIsShape = await shape.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const top = el.ownerDocument.elementFromPoint(
+        Math.round(r.left + r.width / 2),
+        Math.round(r.top + r.height / 2),
+      );
+      return top !== null && (el === top || el.contains(top) || top.contains(el));
+    });
+    expect(topIsShape).toBe(true);
+    await expect(app.gizmoFrame).toBeVisible(); // selectable
+  });
+
   test('the ruler stays pinned to the viewport when zoomed in and scrolled', async ({ app }) => {
     await app.newProject('ScrollRuler');
 

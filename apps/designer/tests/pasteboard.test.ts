@@ -57,7 +57,11 @@ describe('D-071 Phase B — pasteboard authoring document', () => {
     // visible on EVERY side — not pinned to the iframe origin.
     expect(html).toContain('left: 960px !important');
     expect(html).toContain('top: 540px !important');
-    expect(html).toContain('#161927'); // dark pasteboard margin
+    // Two-tone by region: the surround (html/body) is the lighter #161927; the
+    // frame-sized page backdrop (.cg-stage background-color) is the darker #080a10,
+    // BEHIND the checkerboard + shapes.
+    expect(html).toContain('html, body { background: #161927 !important; }');
+    expect(html).toContain('background-color: #080a10');
     // device-width lets the iframe's element size drive the layout, no stretch.
     expect(html).toContain('width=device-width');
   });

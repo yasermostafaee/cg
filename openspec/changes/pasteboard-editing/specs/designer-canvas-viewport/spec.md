@@ -12,8 +12,13 @@ OUTLINED so the author distinguishes the frame (what exports) from the pasteboar
 In authoring the editor SHALL lift the stage clip (the canvas iframe renders with
 `.cg-stage { overflow: visible }`) so a fully off-frame shape PAINTS into the pasteboard on ANY side
 (left/top as well as right/bottom) instead of being clipped, and such a shape SHALL remain
-selectable and draggable on the canvas (the pointer/hit-test layer covers the whole pasteboard).
-On-frame editing SHALL be UNCHANGED — scene (0,0) is the frame's top-left (inset into the
+selectable and draggable on the canvas (the pointer/hit-test layer covers the whole pasteboard). The
+canvas SHALL be TWO-TONE by region: the SURROUND (everything beyond the frame — the scroll container
+and the iframe body) is the lighter `#161927`, and a FRAME-SIZED page backdrop is the darker
+`#080a10` drawn as the frame's `background-color` (BEHIND the checkerboard and the shapes), so every
+shape — on-frame over the page or off-frame over the surround — paints ON TOP and stays visible
+(the `#080a10` is a backdrop, never an overlay that occludes a shape). On-frame editing SHALL be
+UNCHANGED — scene (0,0) is the frame's top-left (inset into the
 pasteboard), and every consumer (iframe, overlay, rulers) measures from that offset, so click→scene
 placement and on-frame hit-testing are identical to before. The pasteboard is an AUTHORING
 affordance only, driven by an `authoring` flag on the preview document that is INDEPENDENT of the
@@ -41,6 +46,12 @@ frame dimensions.
 - **WHEN** the author drags a shape around the canvas, including far off-frame
 - **THEN** the pasteboard (dark area) keeps its size — only zooming (Ctrl+wheel or the zoom buttons)
   changes the dark area's on-screen size
+
+#### Scenario: The canvas is two-tone and a shape over the page is not occluded
+
+- **WHEN** the author places a shape on the frame (over the darker `#080a10` page)
+- **THEN** the surround reads `#161927` and the frame-sized page backdrop reads `#080a10`, and the
+  shape paints ON TOP of the page (visible + selectable, not occluded by the `#080a10` backdrop)
 
 #### Scenario: On-frame editing is unchanged
 

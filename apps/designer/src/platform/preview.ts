@@ -128,8 +128,15 @@ export class Preview {
       `linear-gradient(-45deg, transparent 75%, #5b6075 75%)`;
     const checkerPos = `0 0, 0 24px, 24px -24px, -24px 0`;
     const surfaceCss = pasteboard
-      ? `/* D-071 Phase B — authoring pasteboard: dark margin, the frame inset + outlined,
-         off-frame paint revealed (overflow lifted). */
+      ? `/* D-071 Phase B — authoring pasteboard, TWO-TONE by region:
+           - the SURROUND (html/body, the scrollable area beyond the frame) is the
+             lighter #161927 — matches CanvasArea's \`s.outer\`;
+           - the FRAME-SIZED PAGE backdrop is the darker #080a10 (\`.cg-stage\`'s
+             background-color), inset by the frame offset + outlined.
+           CSS paints background-color (#080a10 page) → background-image (the
+           checkerboard, UNCHANGED) → children (shapes), so the #080a10 is a BACKDROP
+           behind every shape — on-frame shapes over the page paint on top and stay
+           visible; off-frame shapes over the #161927 surround likewise (clip lifted). */
       html, body { background: #161927 !important; }
       .cg-stage {
         position: absolute !important;
@@ -138,7 +145,7 @@ export class Preview {
         width: ${String(w)}px !important;
         height: ${String(h)}px !important;
         overflow: visible !important;
-        background-color: #3d4253;
+        background-color: #080a10;
         background-image: ${checkerImage};
         background-size: 48px 48px;
         background-position: ${checkerPos};

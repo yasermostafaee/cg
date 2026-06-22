@@ -6,7 +6,7 @@
       `PASTEBOARD_MARGIN_RATIO` margin on all four sides; a pure function of the resolution (never
       content-driven, so dragging never resizes it). Returns the extent + the frame's inset `frame`.
 - [x] 1.2 `CanvasArea.tsx` — stage + iframe sized to the extent; the frame inset by `layout.frame`;
-      `CanvasArea.css.ts` — the stage is the dark pasteboard, scrollbars hidden, a darker void beyond.
+      `CanvasArea.css.ts` — the surround (`s.outer`) is the lighter `#161927`, scrollbars hidden.
 - [x] 1.3 `preview.ts` `#buildHtml(scene, broadcast, authoring, frameOffset)` — when `authoring`,
       lift `.cg-stage` overflow + outline + dark margin and INSET `.cg-stage` by `frameOffset` (so
       off-frame paints on every side); a `device-width` viewport drives the layout with no stretch.
@@ -25,15 +25,17 @@
 ## 3. Tests
 
 - [x] 3.1 Unit (`tests/pasteboard.test.ts`): `#buildHtml` `authoring:true` lifts the clip + insets
-      `.cg-stage` by the offset + is `device-width`; `authoring:false` (default) and the broadcast
-      modal keep the clip; `pasteboardLayout` (symmetric margin all sides; pure function of the
-      resolution); `fitZoom` from the FRAME; the ruler scene→pixel mapping (scroll + zoom aware).
+      `.cg-stage` by the offset + the two-tone (`html, body` `#161927` surround + `.cg-stage`
+      `background-color: #080a10` page) + is `device-width`; `authoring:false` (default) and the
+      broadcast modal keep the clip; `pasteboardLayout` (symmetric margin all sides; pure function of
+      the resolution); `fitZoom` from the FRAME; the ruler scene→pixel mapping (scroll + zoom aware).
 - [x] 3.2 E2E (`tests/e2e/pasteboard.spec.ts`): an off-frame shape is dropped from the broadcast
       preview + export but kept on the canvas, and the modal still blanks-until-play; the pasteboard
       lifts the clip so an off-frame shape renders + stays selected (gizmo tracks it), with on-frame
-      drag unchanged; a shape parked off the LEFT/TOP stays visible; on open the frame is fit +
-      CENTERED; the alignment guides span the full canvas; the ruler stays pinned when zoomed +
-      scrolled.
+      drag unchanged; a shape parked off the LEFT/TOP stays visible; the canvas is two-tone (`#161927`
+      surround + `#080a10` page) and an on-frame shape over the page is NOT occluded (`elementFromPoint`
+      at its centre belongs to the shape's subtree); on open the frame is fit + CENTERED; the
+      alignment guides span the full canvas; the ruler stays pinned when zoomed + scrolled.
 
 ## 4. Layout (fit + center, ruler, guides, zoom, scrollbars) — no regression
 
@@ -48,21 +50,22 @@
       a SIBLING of the scroll container (`s.outer`), not a child — so on zoom+scroll they stay pinned
       to the visible viewport (an abs child of `overflow:auto` scrolls WITH the content). Guides span
       the FULL visible canvas (`inset:0`, `data-testid="snap-guides"`), not the frame.
-- [x] 4.5 `s.outer` paints a DARKER void beyond the pasteboard so the workspace edge is VISIBLE (not
-      an invisible same-colour clip).
+- [x] 4.5 TWO-TONE by region: the SURROUND (`s.outer` + the iframe body) is the lighter `#161927`;
+      the FRAME-SIZED page backdrop is the darker `#080a10` (`.cg-stage` `background-color`), painted
+      BEHIND the checkerboard + shapes — so it can never occlude an on-frame shape.
 
 ## 5. Docs
 
 - [x] 5.1 Canvas README — the pasteboard (`pasteboardLayout` symmetric/fixed + `frameOffset` +
-      `device-width` + centered fit + hidden scrollbars + darker void + zoom-to-cursor +
-      viewport-spanning guides) + the authoring-vs-broadcast clip model.
+      `device-width` + centered fit + hidden scrollbars + two-tone `#161927`/`#080a10` by region +
+      zoom-to-cursor + viewport-spanning guides) + the authoring-vs-broadcast clip model.
 - [x] 5.2 PRD: keep D-071 `[~]` (Phase B in progress; flips to `[x]` when Phase B archives).
 
 ## 6. Gate
 
 - [x] 6.1 Full green gate (turbo + unit) for `@cg/designer` + `@cg/shared-ipc` — 17/17 tasks
       (`--force`).
-- [x] 6.2 `pnpm test:e2e` green — 68 passed (62 existing, no regression + 6 pasteboard specs).
+- [x] 6.2 `pnpm test:e2e` green — 69 passed (62 existing, no regression + 7 pasteboard specs).
 - [x] 6.3 `pnpm openspec validate --all --strict` valid (24/24); `pnpm format:check` clean.
 - [x] 6.4 Conventional commit on `feat/D-071b-pasteboard`; push + PR (NOT merged — manual layout
       re-test first).

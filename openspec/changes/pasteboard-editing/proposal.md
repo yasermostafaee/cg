@@ -15,15 +15,20 @@ outlined so "exports vs won't-export" is obvious.
   the resolution. Dragging a shape NEVER resizes the dark area (only zoom does), and off-frame shapes
   are visible on every side (left/top too). `layout.frame` insets the frame; scene (0,0) sits there.
   The frame keeps its checkerboard + a drawn outline.
+- **Two-tone dark, by region.** The SURROUND (everything beyond the frame — the scroll container
+  `s.outer` AND the iframe `html, body`) is the lighter `#161927`; the FRAME-SIZED page backdrop is
+  the darker `#080a10` (`.cg-stage`'s `background-color`), painted BEHIND the checkerboard
+  (`background-image`, unchanged) and the shapes (children). Every shape — on-frame over the page or
+  off-frame over the surround — paints ON TOP and stays visible; `#080a10` is a `background-color`,
+  so it is a backdrop, never an overlay (it cannot occlude a shape).
 - **No layout regression.** The fit action and project-open fit the zoom from the FRAME bounds and
   CENTER the frame; the pasteboard overflows but the scrollbars are HIDDEN (no default scrollbars —
-  pan via hand tool / wheel, zoom via Ctrl+wheel). Beyond the pasteboard, the scroll container paints
-  a DARKER void so the workspace edge is visible (not an invisible same-colour clip). Ctrl+wheel
-  zooms toward the CURSOR and the +/−/1× buttons toward the viewport centre (`zoomAt`). The iframe
-  uses a `device-width` viewport so it never stretches. The rulers + guides live in a NON-scrolling
-  overlay (a sibling of the scroll container, not a child — an abs child of `overflow:auto` scrolls
-  with the content), pinned to the visible viewport; `rulerOrigin` places scene (0,0) at the frame
-  top-left and tracks scroll/zoom, and the alignment guides span the full visible canvas.
+  pan via hand tool / wheel, zoom via Ctrl+wheel). Ctrl+wheel zooms toward the CURSOR and the +/−/1×
+  buttons toward the viewport centre (`zoomAt`). The iframe uses a `device-width` viewport so it
+  never stretches. The rulers + guides live in a NON-scrolling overlay (a sibling of the scroll
+  container, not a child — an abs child of `overflow:auto` scrolls with the content), pinned to the
+  visible viewport; `rulerOrigin` places scene (0,0) at the frame top-left and tracks scroll/zoom,
+  and the alignment guides span the full visible canvas.
 - **Lift the authoring clip.** A NEW `authoring` flag on `preview.load` / `Preview.#buildHtml`
   (INDEPENDENT of D-087's `broadcast`) lifts `.cg-stage { overflow: hidden }` for the CANVAS iframe
   only, so off-frame shapes paint into the pasteboard. The two flags compose:
@@ -45,7 +50,8 @@ outlined so "exports vs won't-export" is obvious.
   request); `@cg/designer` (`renderer/features/canvas/geometry.ts` `pasteboardLayout`;
   `platform/preview.ts` `#buildHtml` authoring CSS + `device-width` + the `frameOffset`-inset
   `.cg-stage`; `platform/createDesignerBridge.ts`; `renderer/features/canvas/` `CanvasArea.tsx` +
-  `.css.ts` extent sizing + `centerFrameInView` + `zoomAt` + hidden scrollbars + darker void +
+  `.css.ts` extent sizing + `centerFrameInView` + `zoomAt` + hidden scrollbars + the `#161927`
+  surround; `platform/preview.ts` the `#080a10` page backdrop (`.cg-stage` background-color) +
   viewport-spanning guides; `CanvasOverlay.tsx` frame-offset box anchoring the gizmos/`canvas-surface`
   hook). No runtime/exporter/schema change.
 - Scope note: the pasteboard is SYMMETRIC (margin on all sides) and FIXED (resolution-driven, never

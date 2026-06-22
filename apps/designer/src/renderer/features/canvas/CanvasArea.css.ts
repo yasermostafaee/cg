@@ -68,10 +68,12 @@ export const viewport = style({
 
 export const outer = style({
   flex: 1,
-  // Darker than the #161927 pasteboard so the workspace edge is VISIBLE: beyond the
-  // pasteboard (where shapes are NOT rendered) reads as a distinct void, not a
-  // same-colour area that silently clips a shape dragged into it.
-  background: '#080a10',
+  // The PASTEBOARD SURROUND — the lighter dark tone (#161927). The whole scrollable
+  // area beyond the frame reads as this one tone; the darker tone (#080a10) is the
+  // FRAME-SIZED page backdrop drawn INSIDE the iframe (`.cg-stage` background-color),
+  // so the two-tone is by REGION (lighter surround, darker page) and every shape paints
+  // on top of both backdrops.
+  background: '#161927',
   border: `1px solid ${colors.border}`,
   borderRadius: '0.25rem',
   minHeight: 0,

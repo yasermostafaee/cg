@@ -91,9 +91,15 @@ The iframe element is sized to the extent; a **`device-width` viewport** means t
 fills that size with **no stretch**. `fitToViewport` fits the zoom from the **frame** bounds (so the
 frame is large) and `centerFrameInView` scrolls so the frame is **centered** (⛶ + project-open).
 The pasteboard overflows the viewport, but **the scrollbars are hidden** (`s.outer`) — there are no
-default scrollbars; the operator pans with the hand tool / wheel and zooms with Ctrl+wheel. Beyond
-the pasteboard, `s.outer` paints a **darker void** so the workspace edge is visible (a shape dragged
-past the pasteboard is clipped, but the boundary is no longer an invisible same-colour layer).
+default scrollbars; the operator pans with the hand tool / wheel and zooms with Ctrl+wheel.
+
+**Two-tone dark, by region.** The **surround** (everything beyond the frame — `s.outer` _and_ the
+iframe `html, body`) is the lighter **`#161927`**. The **frame-sized page backdrop** is the darker
+**`#080a10`** — it is `.cg-stage`'s **`background-color`**, so CSS paints it _behind_ the
+checkerboard (`background-image`, unchanged) and the shapes (children). Every shape — on-frame over
+the `#080a10` page _or_ off-frame over the `#161927` surround — paints **on top** of both backdrops
+and stays visible + selectable; because `#080a10` is a `background-color` it is a **backdrop, never
+an overlay** (it cannot occlude a shape).
 
 **Zoom toward a point.** `zoomAt(factor, clientX, clientY)` measures the scene point under the
 anchor pre-zoom, then scrolls after relayout so it lands back under the anchor: Ctrl+wheel anchors
