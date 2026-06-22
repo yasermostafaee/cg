@@ -50,7 +50,8 @@ outlined so "exports vs won't-export" is obvious.
   request); `@cg/designer` (`renderer/features/canvas/geometry.ts` `pasteboardLayout`;
   `platform/preview.ts` `#buildHtml` authoring CSS + `device-width` + the `frameOffset`-inset
   `.cg-stage`; `platform/createDesignerBridge.ts`; `renderer/features/canvas/` `CanvasArea.tsx` +
-  `.css.ts` extent sizing + `centerFrameInView` + `zoomAt` + hidden scrollbars + the `#161927`
+  `.css.ts` extent sizing + `centerFrameInView` + `zoomAt`/`zoomAnchorScroll` (cursor-anchored zoom,
+  corrected in a layout effect so it doesn't jump) + hidden scrollbars + the `#161927`
   surround; `platform/preview.ts` the `#080a10` page backdrop (`.cg-stage` background-color) +
   viewport-spanning guides; `CanvasOverlay.tsx` frame-offset box anchoring the gizmos/`canvas-surface`
   hook). No runtime/exporter/schema change.

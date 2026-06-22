@@ -77,11 +77,12 @@ frame dimensions.
   off-center scroll), and NO scrollbars are shown by default (the overflowing pasteboard is pannable
   but its scrollbars are hidden)
 
-#### Scenario: Ctrl+wheel zooms toward the cursor
+#### Scenario: Ctrl+wheel zooms toward the cursor, smoothly
 
 - **WHEN** the author Ctrl+wheels over the canvas to zoom
-- **THEN** the scene point under the cursor stays under the cursor (the zoom is anchored on the
-  pointer, not the stage's top-left corner)
+- **THEN** the scene point under the cursor stays under the cursor — the zoom is anchored on the
+  pointer (not the stage's top-left corner) and does NOT jump/recenter (the scroll correction is
+  applied before paint)
 
 #### Scenario: The rulers track scroll and zoom from the frame origin
 

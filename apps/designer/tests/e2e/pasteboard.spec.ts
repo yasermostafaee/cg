@@ -196,6 +196,35 @@ test.describe('Editor pasteboard (D-071 Phase B)', () => {
     await expect(app.gizmoFrame).toBeVisible(); // selectable
   });
 
+  test('Ctrl+wheel zoom is anchored at the cursor — the point under the pointer does not jump', async ({
+    app,
+  }) => {
+    await app.newProject('ZoomAnchor');
+    await app.addRectangle({ x: 240, y: 200 });
+    const shape = app.page
+      .frameLocator('iframe[title="cgpreview"]')
+      .locator('[data-cg-element-id]');
+    await expect(shape).toBeVisible();
+
+    // Put the cursor exactly on the shape's centre, then Ctrl+wheel to zoom in. The
+    // shape's centre IS the scene point under the cursor, so a cursor-anchored zoom must
+    // keep it at the SAME viewport pixel (no recenter, no drift) while the shape grows.
+    const before = (await shape.boundingBox())!;
+    const cx = before.x + before.width / 2;
+    const cy = before.y + before.height / 2;
+    await app.page.mouse.move(cx, cy);
+    await app.page.keyboard.down('Control');
+    await app.page.mouse.wheel(0, -120); // deltaY < 0 → zoom in one step
+    await app.page.keyboard.up('Control');
+
+    await expect
+      .poll(async () => (await shape.boundingBox())!.width)
+      .toBeGreaterThan(before.width + 1); // zoomed in (the shape grew)
+    const after = (await shape.boundingBox())!;
+    expect(Math.abs(after.x + after.width / 2 - cx)).toBeLessThan(6); // centre stayed under cursor
+    expect(Math.abs(after.y + after.height / 2 - cy)).toBeLessThan(6);
+  });
+
   test('the ruler stays pinned to the viewport when zoomed in and scrolled', async ({ app }) => {
     await app.newProject('ScrollRuler');
 

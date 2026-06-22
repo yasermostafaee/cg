@@ -19,6 +19,7 @@ import {
   fitZoom,
   pasteboardLayout,
   screenToScene,
+  zoomAnchorScroll,
 } from './geometry.js';
 import { Control } from '../../ui/Control.js';
 import * as s from './CanvasArea.css.js';
@@ -104,6 +105,14 @@ export function CanvasArea({
   // the current value without re-subscribing.
   const zoomRef = useRef<number>(zoom);
   zoomRef.current = zoom;
+  // A cursor-anchored zoom stashes the scene point under the pointer here; a layout
+  // effect (post-zoom, pre-paint) consumes it to scroll the point back under the cursor.
+  const pendingZoomAnchorRef = useRef<{
+    px: number;
+    py: number;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
   const { rulerVisible, guides, snapGuides, currentFrame } = useDesignerSelector(
     (s) => ({
       rulerVisible: s.rulerVisible,
@@ -308,9 +317,10 @@ export function CanvasArea({
 
   // Zoom by `factor`, keeping the scene point under (clientX, clientY) pinned there —
   // so Ctrl+wheel zooms toward the CURSOR and the +/−/1× buttons toward the viewport
-  // centre (instead of growing from the stage's top-left corner). Measure the scene
-  // point pre-zoom, then after the stage relays out, scroll so it lands back under the
-  // anchor. Falls back to a plain set when the refs aren't ready.
+  // centre (instead of growing from the stage's top-left corner). Capture the scene
+  // point pre-zoom and stash it; the scroll correction is applied in a LAYOUT effect
+  // (below) — synchronously after the stage relays out but BEFORE paint, so the canvas
+  // never flashes the resized-but-unscrolled frame (that one-frame gap was the "jump").
   function zoomAt(factor: number, clientX: number, clientY: number): void {
     const el = outerRef.current;
     const stage = stageRef.current;
@@ -322,17 +332,13 @@ export function CanvasArea({
       return;
     }
     const srect = stage.getBoundingClientRect();
-    const px = (clientX - srect.left) / oldZoom;
-    const py = (clientY - srect.top) / oldZoom;
+    pendingZoomAnchorRef.current = {
+      px: (clientX - srect.left) / oldZoom,
+      py: (clientY - srect.top) / oldZoom,
+      clientX,
+      clientY,
+    };
     setZoom(newZoom);
-    requestAnimationFrame(() => {
-      const el2 = outerRef.current;
-      const stage2 = stageRef.current;
-      if (el2 === null || stage2 === null) return;
-      const r2 = stage2.getBoundingClientRect();
-      el2.scrollLeft += r2.left + px * newZoom - clientX;
-      el2.scrollTop += r2.top + py * newZoom - clientY;
-    });
   }
   // Buttons have no pointer position — anchor on the viewport centre.
   function zoomAtCenter(factor: number): void {
@@ -346,6 +352,22 @@ export function CanvasArea({
   }
   const zoomAtRef = useRef(zoomAt);
   zoomAtRef.current = zoomAt;
+
+  // Apply a cursor-anchored zoom's scroll correction SYNCHRONOUSLY after the zoom
+  // relayout but before paint, so the canvas point under the cursor stays put (no jump).
+  // Runs on every `zoom` change but no-ops unless a zoom gesture stashed an anchor
+  // (so the fit/center path, which has no anchor, is untouched).
+  useLayoutEffect(() => {
+    const anchor = pendingZoomAnchorRef.current;
+    if (anchor === null) return;
+    pendingZoomAnchorRef.current = null;
+    const el = outerRef.current;
+    const stage = stageRef.current;
+    if (el === null || stage === null) return;
+    const r = stage.getBoundingClientRect();
+    el.scrollLeft = zoomAnchorScroll(el.scrollLeft, r.left, anchor.px, zoom, anchor.clientX);
+    el.scrollTop = zoomAnchorScroll(el.scrollTop, r.top, anchor.py, zoom, anchor.clientY);
+  }, [zoom]);
 
   // Ctrl + wheel over the canvas zooms toward the cursor; plain wheel keeps the default
   // overflow:auto scroll. A non-passive listener so we can preventDefault on the

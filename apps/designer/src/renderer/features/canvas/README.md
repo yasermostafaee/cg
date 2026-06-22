@@ -102,8 +102,13 @@ and stays visible + selectable; because `#080a10` is a `background-color` it is 
 an overlay** (it cannot occlude a shape).
 
 **Zoom toward a point.** `zoomAt(factor, clientX, clientY)` measures the scene point under the
-anchor pre-zoom, then scrolls after relayout so it lands back under the anchor: Ctrl+wheel anchors
-on the **cursor**, the +/−/1× buttons on the **viewport centre** (not the stage's top-left corner).
+anchor pre-zoom and stashes it; a **`useLayoutEffect` keyed on `zoom`** then applies the scroll
+correction (`zoomAnchorScroll`) **synchronously after the relayout but BEFORE paint**, so the point
+lands back under the anchor with **no jump** (doing it in a `requestAnimationFrame` painted the
+resized-but-unscrolled frame first — a one-frame jerk per wheel notch). Ctrl+wheel anchors on the
+**cursor**, the +/−/1× buttons on the **viewport centre** (not the stage's top-left corner). The
+fit/centre path has no stashed anchor, so the layout effect no-ops there — wheel-zoom never
+recenters (auto-fit is keyed on `sceneId` + resolution, never on `zoom`).
 
 The rulers + guides live in a **non-scrolling overlay** (`s.overlay`) that is a **sibling** of the
 scroll container (`s.outer`), not a child of it — absolutely-positioned children of an

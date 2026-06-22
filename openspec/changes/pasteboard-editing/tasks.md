@@ -28,13 +28,15 @@
       `.cg-stage` by the offset + the two-tone (`html, body` `#161927` surround + `.cg-stage`
       `background-color: #080a10` page) + is `device-width`; `authoring:false` (default) and the
       broadcast modal keep the clip; `pasteboardLayout` (symmetric margin all sides; pure function of
-      the resolution); `fitZoom` from the FRAME; the ruler scene→pixel mapping (scroll + zoom aware).
+      the resolution); `fitZoom` from the FRAME; the ruler scene→pixel mapping (scroll + zoom aware);
+      `zoomAnchorScroll` (the cursor-anchored zoom math preserves the scene point under the cursor).
 - [x] 3.2 E2E (`tests/e2e/pasteboard.spec.ts`): an off-frame shape is dropped from the broadcast
       preview + export but kept on the canvas, and the modal still blanks-until-play; the pasteboard
       lifts the clip so an off-frame shape renders + stays selected (gizmo tracks it), with on-frame
       drag unchanged; a shape parked off the LEFT/TOP stays visible; the canvas is two-tone (`#161927`
       surround + `#080a10` page) and an on-frame shape over the page is NOT occluded (`elementFromPoint`
       at its centre belongs to the shape's subtree); on open the frame is fit + CENTERED; the
+      Ctrl+wheel zoom is anchored at the cursor (the point under the pointer doesn't move); the
       alignment guides span the full canvas; the ruler stays pinned when zoomed + scrolled.
 
 ## 4. Layout (fit + center, ruler, guides, zoom, scrollbars) — no regression
@@ -43,7 +45,9 @@
       the frame is CENTERED; project-open does the same. Scrollbars are HIDDEN (`s.outer`) so the
       overflowing pasteboard shows no default scrollbars (pan via hand tool / wheel).
 - [x] 4.2 `zoomAt(factor, clientX, clientY)` keeps the scene point under the anchor pinned: Ctrl+wheel
-      anchors on the CURSOR, the +/−/1× buttons on the viewport CENTRE (not the top-left corner).
+      anchors on the CURSOR, the +/−/1× buttons on the viewport CENTRE (not the top-left corner). The
+      scroll correction (`zoomAnchorScroll`) runs in a `useLayoutEffect` (post-zoom, PRE-paint) so the
+      zoom is SMOOTH — no one-frame jump — and the fit/centre path (no anchor) is untouched.
 - [x] 4.3 `rulerOrigin` (= `stageRect − outerRect + frame × zoom`, re-measured on scroll/zoom/resize)
       places scene (0,0) at the frame top-left and tracks scroll + zoom.
 - [x] 4.4 The rulers + alignment/snap guides render in a NON-scrolling overlay (`s.overlay`) that is
@@ -65,7 +69,7 @@
 
 - [x] 6.1 Full green gate (turbo + unit) for `@cg/designer` + `@cg/shared-ipc` — 17/17 tasks
       (`--force`).
-- [x] 6.2 `pnpm test:e2e` green — 69 passed (62 existing, no regression + 7 pasteboard specs).
+- [x] 6.2 `pnpm test:e2e` green — 70 passed (62 existing, no regression + 8 pasteboard specs).
 - [x] 6.3 `pnpm openspec validate --all --strict` valid (24/24); `pnpm format:check` clean.
 - [x] 6.4 Conventional commit on `feat/D-071b-pasteboard`; push + PR (NOT merged — manual layout
       re-test first).

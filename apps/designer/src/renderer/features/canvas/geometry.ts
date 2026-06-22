@@ -302,6 +302,25 @@ export function pasteboardLayout(resolution: { width: number; height: number }):
   };
 }
 
+/**
+ * Cursor-anchored zoom: the new scroll offset (one axis) that keeps a scene point fixed
+ * under the cursor across a zoom. `scenePoint` is the scene coordinate that was under the
+ * cursor, captured BEFORE the zoom (`= (client − stageScreenBefore) / oldZoom`);
+ * `stageScreen` is the stage's screen origin (this axis) AFTER the zoom relayout but
+ * BEFORE this correction; `scroll` is the current scroll offset. After the relayout the
+ * point sits at `stageScreen + scenePoint·newZoom`; scrolling by the difference from
+ * `client` lands it back under the cursor — so the zoom doesn't jump.
+ */
+export function zoomAnchorScroll(
+  scroll: number,
+  stageScreen: number,
+  scenePoint: number,
+  newZoom: number,
+  client: number,
+): number {
+  return scroll + stageScreen + scenePoint * newZoom - client;
+}
+
 /** Clamp a zoom factor to `[min, max]`; non-finite input falls back to `fallback`. */
 export function clampZoom(z: number, min: number, max: number, fallback: number): number {
   if (!Number.isFinite(z)) return fallback;

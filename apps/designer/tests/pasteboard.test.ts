@@ -5,6 +5,7 @@ import {
   fitZoom,
   pasteboardLayout,
   screenToScene,
+  zoomAnchorScroll,
 } from '../src/renderer/features/canvas/geometry.js';
 
 /**
@@ -120,5 +121,30 @@ describe('ruler / canvas coord→pixel mapping (scroll + zoom aware)', () => {
     const rect = { left: origin, top: 0 };
     expect(screenToScene(origin, 0, rect, zoom).x).toBe(0);
     expect(screenToScene(origin + (W / 2) * zoom, 0, rect, zoom).x).toBeCloseTo(W / 2, 5);
+  });
+});
+
+describe('zoomAnchorScroll — cursor-anchored zoom keeps the point fixed (no jump)', () => {
+  it('preserves the scene point under the cursor across a zoom delta', () => {
+    // Pre-zoom: stage origin at screen 100, zoom 0.5, scroll 40; cursor at client 300.
+    const stageBefore = 100;
+    const oldZoom = 0.5;
+    const scrollBefore = 40;
+    const client = 300;
+    const scenePoint = (client - stageBefore) / oldZoom; // the scene coord under the cursor
+    // Zoom to 1.0; after relayout the stage origin (pre-correction) is at screen 80.
+    const newZoom = 1.0;
+    const stageAfter = 80;
+    const newScroll = zoomAnchorScroll(scrollBefore, stageAfter, scenePoint, newZoom, client);
+    // Applying the new scroll shifts the stage origin by −(newScroll − scrollBefore); the
+    // scene point must then sit back EXACTLY under the cursor (no jump).
+    const stageOriginCorrected = stageAfter - (newScroll - scrollBefore);
+    expect(stageOriginCorrected + scenePoint * newZoom).toBeCloseTo(client, 6);
+  });
+
+  it('is a no-op when the zoom does not change (same scroll back)', () => {
+    // newZoom == oldZoom and the stage origin unchanged ⇒ scroll is unchanged.
+    const scenePoint = (300 - 100) / 0.5;
+    expect(zoomAnchorScroll(40, 100, scenePoint, 0.5, 300)).toBeCloseTo(40, 6);
   });
 });
