@@ -585,3 +585,41 @@ handles on top and interactive. **Regression:**
 `apps/designer/tests/e2e/selection-overlay-scale-rotate.spec.ts` — a new test asserts the frame's
 owner SVG is non-zero-sized with a real, non-zero-width stroke; B-022's tracking + B-004 tests
 still pass. Capability: `designer-shapes` (the selection-gizmo requirement — bug fix, no spec change).
+
+## [~] B-026 — pasteboard extent clips shapes parked far off-frame ⟨priority: high⟩ — fixed on `fix/pasteboard-extent-fits-content`
+
+> **Fixed (pending manual re-test).** D-071 follow-up: the fixed 2× pasteboard extent grows to
+> contain off-frame content. Recon/design: `openspec/changes/pasteboard-extent-fits-content/`
+> (`design.md` documents the seam + the locked Q1–Q5 decisions). Change dir:
+> `openspec/changes/pasteboard-extent-fits-content/` (capability `designer-canvas-viewport`,
+> MODIFIED). Keep `[~]` until the user confirms the manual grow/shrink/scroll test, then archive → `[x]`.
+
+**Repro:**
+
+1. Open the Designer, add a rectangle to the canvas.
+2. Set its X position far off-frame — e.g. `x = 4000` (past the right pasteboard margin) or
+   `x = -3000` (past the left margin) for a 1920×1080 frame.
+
+**Expected:** the parked shape stays visible on the pasteboard and remains selectable/draggable so
+the author can grab it back.
+**Actual:** the shape leaves the iframe (which is sized to the FIXED 2× extent, scene
+x∈[−960,2880]) and is **clipped — invisible and unselectable**. Parking a shape beyond ~50% of the
+frame loses it.
+**Env:** Browser + Designer (the authoring canvas only — export/broadcast unaffected).
+**Diagnosis:** `geometry.pasteboardLayout(resolution)` (D-071 Phase B) is a pure function of the
+resolution — `frame + PASTEBOARD_MARGIN_RATIO (0.5) × frame` per side — ignoring element positions.
+The authoring iframe is sized to that extent and clips to its own element box, so content past the
+margin is clipped away.
+**Root cause:** a fixed, content-independent extent for a surface whose purpose is parking content
+off-frame.
+**Fix:** make the extent **grow-to-fit** (Q1 = B): a new `contentBounds(layers, currentFrame)` AABB
+feeds `pasteboardLayout(resolution, content?)`, which grows the extent + frame offset only **past**
+the 2× boundary (within it, byte-identical to today), shrinks back to the 2× floor (never below),
+and clamps at `MAX_EXTENT_RATIO` (12×). The frame inset updates **live** via a `:root` CSS variable
+on the existing `scene-replace` message (no reload), and an origin-shift `useLayoutEffect`
+scroll-compensates so the visible content never jumps. `fitToViewport` still fits the FRAME;
+export + broadcast (frame offset `{0,0}`) untouched. **Regression:**
+`apps/designer/tests/content-bounds.test.ts` + `pasteboard.test.ts` (the B invariant, grow, shrink,
+clamp, scroll-comp Δ) + `apps/designer/tests/e2e/pasteboard-extent.spec.ts` (far off all 4 sides
+stays visible/selectable, within-2× no growth, left-growth no jump, shrink-to-2×, clamp).
+Capability: `designer-canvas-viewport` (MODIFIED — the off-frame pasteboard requirement).

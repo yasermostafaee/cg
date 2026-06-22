@@ -17,10 +17,12 @@ import { PreviewHost } from './PreviewHost.js';
 import {
   clampZoom as clampZoomPure,
   fitZoom,
+  offsetShiftScroll,
   pasteboardLayout,
   screenToScene,
   zoomAnchorScroll,
 } from './geometry.js';
+import { contentBounds } from './content-bounds.js';
 import { Control } from '../../ui/Control.js';
 import * as s from './CanvasArea.css.js';
 import {
@@ -142,6 +144,25 @@ export function CanvasArea({
   const latestSceneRef = useRef<Scene | null>(scene);
   latestSceneRef.current = scene;
   const sceneId = scene?.id ?? null;
+
+  // D-071 — the content-aware pasteboard. `contentBounds` is the scene-coord AABB of all
+  // on-canvas elements at the CURRENT frame; `pasteboardLayout` grows the extent + frame
+  // offset to contain it (only past the 2× boundary — within it this is the fixed 2×).
+  // Recomputed every render (so it grows/shrinks live as a shape is dragged off-frame).
+  // Computed BEFORE the effects/early-return so the rulers + scroll-comp can read it.
+  const contentBox = useMemo(
+    () => (scene === null ? null : contentBounds(scene.layers, currentFrame)),
+    [scene, currentFrame],
+  );
+  const layout = useMemo(
+    () => (scene === null ? null : pasteboardLayout(scene.resolution, contentBox)),
+    [scene, contentBox],
+  );
+  const frameOffset = layout?.frame ?? { x: 0, y: 0 };
+  const extent = { width: layout?.width ?? 0, height: layout?.height ?? 0 };
+  // Latest content-aware offset for the (deps-limited) load + scene-replace effects.
+  const frameOffsetRef = useRef(frameOffset);
+  frameOffsetRef.current = frameOffset;
   useEffect(() => {
     const current = latestSceneRef.current;
     if (current === null) {
@@ -155,7 +176,10 @@ export function CanvasArea({
     // SYMMETRIC pasteboard so off-frame content shows on every side (left/top too) and
     // scene (0,0) matches the overlay. The broadcast modal + exports omit `authoring`
     // (native clip — UNCHANGED).
-    const offset = pasteboardLayout(current.resolution).frame;
+    // The load-time offset is the baked FALLBACK for the `.cg-stage` CSS var; the live
+    // value then rides each scene-replace (below). Use the content-aware offset so the
+    // first paint already insets the frame correctly for off-frame content.
+    const offset = frameOffsetRef.current;
     void window.cg.preview
       .load({ scene: current, authoring: true, frameOffset: offset })
       .then((res) => {
@@ -188,6 +212,9 @@ export function CanvasArea({
           action: 'scene-replace',
           scene: sceneToSend,
           assetUrls: mergedAssetUrls(),
+          // D-071 — the content-grown frame inset travels with the scene so the iframe
+          // re-insets `.cg-stage` (CSS var) without a reload.
+          frameOffset: frameOffsetRef.current,
         },
         '*',
       );
@@ -310,7 +337,15 @@ export function CanvasArea({
 
   useEffect(() => {
     iframeRef.current?.contentWindow?.postMessage(
-      { kind: 'cg-preview', action: 'scrub', frame: currentFrame },
+      // D-071 — the offset is CURRENT-FRAME derived (Q2), so an animated shape that flies
+      // off-frame shifts it as the playhead moves; carry it on the scrub message too so the
+      // iframe `.cg-stage` inset stays aligned during scrub (not only on scene edits).
+      {
+        kind: 'cg-preview',
+        action: 'scrub',
+        frame: currentFrame,
+        frameOffset: frameOffsetRef.current,
+      },
       '*',
     );
   }, [currentFrame]);
@@ -369,6 +404,31 @@ export function CanvasArea({
     el.scrollTop = zoomAnchorScroll(el.scrollTop, r.top, anchor.py, zoom, anchor.clientY);
   }, [zoom]);
 
+  // D-071 — origin-shift scroll compensation. When the content-grown frame offset shifts
+  // (a shape dragged past the left/up boundary grows the pasteboard, OR returns inward),
+  // scene (0,0) moves; scroll by `Δoffset × zoom` to hold the visible content STATIONARY.
+  // Keyed on the OFFSET (not `zoom`), so it is independent of the zoom-anchor effect —
+  // a zoom changes `zoom` but not the offset, a drag the offset but not `zoom`, so the
+  // two never fight. `prevOffsetRef` resets on `sceneId` so fit-on-open isn't fought.
+  const prevOffsetRef = useRef(frameOffset);
+  const offsetSceneRef = useRef<string | null>(sceneId);
+  useLayoutEffect(() => {
+    if (offsetSceneRef.current !== sceneId) {
+      offsetSceneRef.current = sceneId;
+      prevOffsetRef.current = frameOffset;
+      return; // project/comp switch — fit/center places it, don't compensate
+    }
+    const dx = frameOffset.x - prevOffsetRef.current.x;
+    const dy = frameOffset.y - prevOffsetRef.current.y;
+    prevOffsetRef.current = frameOffset;
+    if (dx === 0 && dy === 0) return;
+    const el = outerRef.current;
+    if (el === null) return;
+    el.scrollLeft = offsetShiftScroll(el.scrollLeft, dx, zoomRef.current);
+    el.scrollTop = offsetShiftScroll(el.scrollTop, dy, zoomRef.current);
+    // Keyed on the offset only (zoom read via `zoomRef`), so a zoom never triggers it.
+  }, [frameOffset.x, frameOffset.y, sceneId]);
+
   // Ctrl + wheel over the canvas zooms toward the cursor; plain wheel keeps the default
   // overflow:auto scroll. A non-passive listener so we can preventDefault on the
   // Ctrl-wheel and not trigger the browser's page-zoom or page-scroll.
@@ -392,7 +452,7 @@ export function CanvasArea({
     const s = stageRef.current;
     const sc = latestSceneRef.current;
     if (el === null || s === null || sc === null) return;
-    const { frame } = pasteboardLayout(sc.resolution);
+    const frame = frameOffsetRef.current; // content-aware inset
     const srect = s.getBoundingClientRect();
     const orect = el.getBoundingClientRect();
     const frameLeftInContent = srect.left - orect.left + el.scrollLeft + frame.x * z;
@@ -449,9 +509,8 @@ export function CanvasArea({
     function measure(): void {
       const o = outerRef.current;
       const s = stageRef.current;
-      const sc = latestSceneRef.current;
-      if (o === null || s === null || sc === null) return;
-      const { frame } = pasteboardLayout(sc.resolution);
+      if (o === null || s === null) return;
+      const frame = frameOffsetRef.current; // content-aware inset (Q5: re-keyed below)
       const orect = o.getBoundingClientRect();
       const srect = s.getBoundingClientRect();
       // D-071 Phase B — scene (0,0) is the FRAME top-left, which is INSET into the
@@ -477,7 +536,8 @@ export function CanvasArea({
       outer.removeEventListener('scroll', measure);
       window.removeEventListener('resize', measure);
     };
-  }, [zoom, sceneId, html]);
+    // Q5 — re-measure when the content-aware offset shifts, not only on scroll/zoom.
+  }, [zoom, sceneId, html, frameOffset.x, frameOffset.y]);
 
   if (scene === null) {
     return (
@@ -491,13 +551,8 @@ export function CanvasArea({
     );
   }
 
-  // D-071 Phase B — the FIXED, SYMMETRIC pasteboard. The stage extent is a pure
-  // function of the resolution (frame + a margin on all sides), so dragging a shape
-  // NEVER resizes the dark area — only zoom does. `frameOffset` (scene px) insets the
-  // frame so off-frame content shows on every side; scene (0,0) sits at that offset.
-  const layout = pasteboardLayout(scene.resolution);
-  const extent = { width: layout.width, height: layout.height };
-  const frameOffset = layout.frame;
+  // `extent` + `frameOffset` (the content-aware pasteboard) are computed up-top so the
+  // effects can read them; here we only need the zoom readout.
   const zoomPct = Math.round(zoom * 100);
   // Use the active tool's cursor across the whole scroll area, not just over
   // the canvas, so the dark margin around the scene shows the same cursor.
@@ -612,10 +667,10 @@ export function CanvasArea({
                 ref={stageRef}
                 className={s.stage}
                 style={{
-                  // D-071 Phase B — the stage is the FIXED, SYMMETRIC pasteboard: a
-                  // resolution-driven extent (frame + margin on all sides), so it never
-                  // resizes on drag — only zoom scales it. The frame is inset by
-                  // `frameOffset`, so off-frame content shows on every side.
+                  // D-071 — the stage is the content-aware pasteboard: the 2× extent,
+                  // GROWN to contain any off-frame content (past the 2× boundary). The
+                  // frame is inset by `frameOffset`, so off-frame content shows on every
+                  // side; an origin shift is compensated by the scroll-comp effect.
                   width: extent.width * zoom,
                   height: extent.height * zoom,
                 }}
