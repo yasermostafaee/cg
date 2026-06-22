@@ -470,3 +470,54 @@ describe('group delete + accessor parity (D-041)', () => {
     expect(selectedElements(doc(), designerStore.get().selection)).toHaveLength(0);
   });
 });
+
+describe('nudgeSelection — arrow-key nudge (D-073)', () => {
+  it('moves a single selected element by the delta', () => {
+    freshScene();
+    designerStore.addElement(defaultShape('el-1', 100, 100));
+    designerStore.setSelection(['el-1']);
+    designerStore.nudgeSelection(1, 0); // ArrowRight
+    expect(elById('el-1')!.transform.position).toEqual({ x: 101, y: 100 });
+    designerStore.nudgeSelection(0, 10); // Shift+ArrowDown
+    expect(elById('el-1')!.transform.position).toEqual({ x: 101, y: 110 });
+  });
+
+  it('moves every movable member of a multi-selection by the same delta; locked/hidden do not move', () => {
+    freshScene();
+    designerStore.addElement(defaultShape('el-1', 100, 100));
+    designerStore.addElement(defaultShape('el-2', 200, 150));
+    designerStore.addElement(defaultShape('el-3', 300, 100));
+    designerStore.addElement(defaultShape('el-4', 400, 100));
+    designerStore.updateElement('el-3', { locked: true });
+    designerStore.updateElement('el-4', { visible: false });
+    designerStore.setSelection(['el-1', 'el-2', 'el-3', 'el-4']);
+    designerStore.nudgeSelection(-10, 5);
+    expect(elById('el-1')!.transform.position).toEqual({ x: 90, y: 105 });
+    expect(elById('el-2')!.transform.position).toEqual({ x: 190, y: 155 });
+    expect(elById('el-3')!.transform.position).toEqual({ x: 300, y: 100 }); // locked — unmoved
+    expect(elById('el-4')!.transform.position).toEqual({ x: 400, y: 100 }); // hidden — unmoved
+  });
+
+  it('keyframes an animated element at the playhead (mirrors drag); an un-animated one writes static', () => {
+    freshScene();
+    designerStore.addElement(defaultShape('el-1', 100, 0));
+    designerStore.addElement(defaultShape('el-2', 200, 0));
+    designerStore.setSelection(['el-1', 'el-2']);
+    const f = designerStore.get().currentFrame;
+    designerStore.upsertKeyframe('el-1', 'position.x', f, 100); // el-1 animated on position.x
+    designerStore.nudgeSelection(5, 0);
+    // el-1 keyframes at the playhead → 105; el-2 writes its static base → 205, no track.
+    expect(effectiveAnimatableValue(elById('el-1')!, 'position.x', f, 0)).toBe(105);
+    expect(hasKeyframeAt(elById('el-1')!, 'position.x', f)).toBe(true);
+    expect(elById('el-2')!.transform.position.x).toBe(205);
+    expect(elById('el-2')!.animation).toBeUndefined();
+  });
+
+  it('does nothing when the selection is empty', () => {
+    freshScene();
+    designerStore.addElement(defaultShape('el-1', 100, 100));
+    designerStore.setSelection([]);
+    designerStore.nudgeSelection(5, 5);
+    expect(elById('el-1')!.transform.position).toEqual({ x: 100, y: 100 });
+  });
+});

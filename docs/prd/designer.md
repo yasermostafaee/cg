@@ -2434,7 +2434,7 @@ Transient view state lives in the component (do NOT add it to the store). No sch
 change. Coordinate is scene px (scene 0,0 = frame top-left, per the pasteboard offset).
 Change: `openspec/changes/guide-coordinate-readout/`.
 
-## [ ] D-073 — Arrow-key nudge for the selection (Shift = larger step) ⟨priority: low⟩
+## [~] D-073 — Arrow-key nudge for the selection (Shift = larger step) ⟨priority: low⟩ — implemented on `feat/D-072-073-guide-readout-nudge`; change `openspec/changes/arrow-key-nudge/`
 
 **What:** With one or more elements selected and no editable field focused, the arrow keys move
 the selection by 1px (scene px); holding **Shift** moves by 10px. Keyframe-aware (same path as a

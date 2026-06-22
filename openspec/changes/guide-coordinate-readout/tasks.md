@@ -2,15 +2,15 @@
 
 ## 1. Active-guide view state
 
-- [ ] 1.1 `CanvasArea.tsx` — transient component state `activeGuide: { axis: 'x' | 'y'; index:
-    number } | null`. Set on `onPointerEnter` of a guide strip, cleared on `onPointerLeave`
+- [x] 1.1 `CanvasArea.tsx` — transient component state `activeGuide: { axis: 'x' | 'y'; index:
+number } | null`. Set on `onPointerEnter` of a guide strip, cleared on `onPointerLeave`
       (hover); set on `dragGuide` start and kept until pointer-up (drag wins over hover, and the
       window-level pointer-move keeps it set even when the pointer leaves the strip). NOT in the
       store.
 
 ## 2. Badge render
 
-- [ ] 2.1 `CanvasArea.tsx` — render a styled, non-interactive (`pointerEvents: none`) pill in the
+- [x] 2.1 `CanvasArea.tsx` — render a styled, non-interactive (`pointerEvents: none`) pill in the
       non-scrolling overlay, above the guide layer, ONLY when `activeGuide !== null`. Read the live
       coordinate from `guides.x[i]` / `guides.y[i]`. Position at the guide's screen coordinate
       (`rulerOrigin.x + gx·zoom` for an x-guide, `rulerOrigin.y + gy·zoom` for a y-guide) near the
@@ -19,7 +19,7 @@
 
 ## 3. Tests
 
-- [ ] 3.1 E2E (`tests/e2e/`): hovering a guide shows `guide-badge` with its coordinate; dragging
+- [x] 3.1 E2E (`tests/e2e/`): hovering a guide shows `guide-badge` with its coordinate; dragging
       the guide updates the badge value; moving the pointer off (no drag) removes it.
 
 ## 4. Gate (batched with D-073 at the end)
