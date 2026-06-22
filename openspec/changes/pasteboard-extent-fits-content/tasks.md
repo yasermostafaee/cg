@@ -71,9 +71,9 @@
 
 ## 8. Gate
 
-- [ ] 8.1 Full green gate for `@cg/designer` (`format:check` + typecheck + lint + test + build;
-      uncached `--force` once before push).
-- [ ] 8.2 `pnpm test:e2e` green (no regression + the new pasteboard-extent specs).
-- [ ] 8.3 `pnpm openspec validate --all --strict` valid; `pnpm format:check` clean.
-- [ ] 8.4 Conventional commit on `fix/pasteboard-extent-fits-content`; push + PR (NOT merged — manual
-      grow/shrink/scroll re-test first).
+- [x] 8.1 Full green gate for `@cg/designer` (`format:check` + typecheck + lint + test + build;
+      uncached `--force` once before push — 14 tasks, 528 unit tests).
+- [x] 8.2 `pnpm test:e2e` green — 75 passed (no regression + the 5 new pasteboard-extent specs).
+- [x] 8.3 `pnpm openspec validate --all --strict` valid (25/25); `pnpm format:check` clean.
+- [x] 8.4 Conventional commit on `fix/pasteboard-extent-fits-content` (`dc7d00c`); pushed + PR #157
+      opened (NOT merged — manual grow/shrink/scroll re-test first).
