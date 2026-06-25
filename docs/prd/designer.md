@@ -2461,3 +2461,46 @@ exactly as they do when dragged.
 action `nudgeSelection(dx, dy)` mirroring `beginGroupDrag`'s `commitAnimatable` path (no
 snapping). One `markHistoryBoundary()` on the first event of a run (`!e.repeat`). Ripple:
 `ShortcutsModal.tsx`. No schema/render/export change. Change: `openspec/changes/arrow-key-nudge/`.
+
+## [ ] D-092 — Unified icon pack (single `<Icon>` source, migrate inline SVGs) ⟨priority: medium⟩
+
+**What:** Replace the ~30+ inline `<svg>` icons scattered across the renderer with ONE source of
+truth: a curated local icon set (`renderer/ui/icons/`) exposed through a shared
+`<Icon name=… size=… />` component in `renderer/ui/`. Every feature surface that draws an icon
+uses `<Icon>`; no inline `<svg>` icons remain in feature components. Icons inherit `currentColor`
+and a single size scale, and directional icons mirror under RTL. No new runtime dependency.
+
+**Why:** Today there is no icon system — icons are inline `<svg>` duplicated and drifting across
+~8 files (`features/timeline/ElementRow.tsx` alone has 18; plus `App.tsx`, `Gizmo.tsx`,
+`features/assets/ProjectAssetsPanel.tsx`, `features/timeline/TrackRow.tsx`,
+`features/shell/TransportBar.tsx`, `features/inspector/EasingEditor.tsx`,
+`features/canvas/CanvasOverlay.tsx`). There is no shared sizing, stroke, color, or RTL handling,
+and lint can't enforce consistency. A single curated set gives one visual language, consistent
+size/stroke via `currentColor`, RTL mirroring, and one place to add or swap a glyph — and fits the
+design-system rule that interactive-control building blocks live in `renderer/ui/`. Curated-local
+(not a bundled library) keeps full control of the broadcast/RTL visual identity and adds no dep or
+bundle weight.
+
+**Acceptance:**
+
+- WHEN a renderer surface needs an icon THEN it renders `<Icon name=… />` from `renderer/ui/`
+  (the single source); a grep for inline `<svg` in `features/**` returns only genuinely bespoke
+  graphics (e.g. the gizmo selection outline), not glyph icons
+- WHEN an icon is rendered THEN it inherits `currentColor` and takes a `size` prop, so stroke and
+  size are consistent across the app
+- WHEN a directional icon (back/forward, expand/collapse chevron) is shown AND the app is in RTL
+  THEN it mirrors appropriately
+- WHEN a needed glyph is missing THEN it is added to the central set, not inlined ad hoc
+- WHEN the migration is complete THEN the app's icons render identically-or-better at every
+  existing call site (no visual regression in the E2E surfaces; the element-type glyphs in
+  `ElementRow` still read clearly per type)
+
+**Notes:** Option (b) curated-local chosen over bundling lucide/phosphor (control of the RTL
+visual identity, zero dependency). Build the central set + `<Icon>` first, then migrate call
+sites — start with the 18 element-type glyphs in `ElementRow.tsx`, then the rest. Keep truly
+bespoke vector graphics (gizmo outline, easing-curve preview) as-is — they are not icons. After
+migration, consider a lint rule forbidding raw `<svg>` glyph icons in `features/**` (mirroring the
+no-raw-`<button>` rule) so the seam can't erode. Doc-sync: note the `<Icon>` source in the canvas
+/ timeline READMEs only if an icon contract is referenced there. Own branch + PR (split from the
+D-072/D-073 batch); does NOT touch schema / render / export / runtime — presentational only.
+Change: `openspec/changes/unified-icon-pack/`.
