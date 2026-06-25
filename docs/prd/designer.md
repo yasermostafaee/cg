@@ -2505,3 +2505,37 @@ shell/NewProjectModal.tsx, fields/PreviewTransport.tsx, fields/PreviewFieldForm.
 inspector/KeyframeInspector.tsx, ui/Callout.tsx. Already-SVG icons that are NOT
 glyphs (ElementRow Eye/Lock, keyframe-diamond) may optionally be routed through
 `Icon` for consistency but that is not required.
+
+## [ ] D-096 — Animate position via CSS transform (GPU compositor path) instead of left/top ⟨priority: low-medium; needs dedicated design⟩
+
+**What:** In `@cg/template-runtime`'s animation applier, move element position
+(position.x / position.y) off `left` / `top` and into the composed CSS `transform`
+as a `translate(...)`, combined with the existing `scale()` / `rotate()`, so position
+animation rides the GPU compositor path instead of triggering layout/reflow every
+frame. On-screen output must stay pixel-identical across all three outputs (Designer
+preview, `.vcg`, single-file HTML).
+**Why:** Today position animates via `left` / `top` (animation-applier.ts), which forces
+a layout/reflow on every animation frame — the most expensive render path and NOT
+GPU-accelerated; only `transform` / `opacity` are compositor-friendly, and scale/rotation
+already use `transform`. Routing position through `translate()` removes per-frame layout
+for moving elements, improving smoothness and headroom on constrained playout hardware
+(old CEF on CasparCG). Ties to the parked "frame-accuracy validation on target hardware"
+note and the hardening-wave perf guardrails.
+**Acceptance:**
+
+- WHEN an element's position (position.x/y) is animated THEN the runtime writes it into the element's composed CSS `transform` as `translate(x,y)` (no longer to `left` / `top`), composed with any animated `scale()` / `rotate()`
+- WHEN the same scene is rendered before and after this change THEN the result is visually identical at every frame — a static element, a moved element, and a moved+scaled+rotated element all match — across preview, `.vcg`, and single-file HTML
+- WHEN a moving element animates THEN the position change triggers no layout/reflow each frame (it rides the compositor path like `transform` / `opacity`)
+- WHEN an element combines position with scale and/or rotation THEN the transform compose order + `transform-origin` produce the same geometry as the prior `left` / `top` + `transform` model
+- WHEN the Designer canvas gizmo / selection box / hit-testing interacts with a positioned, scaled, or rotated element THEN it still aligns correctly (B-004 / B-022 behaviour preserved)
+
+**Notes:** Engine-heart change in `@cg/template-runtime` (`animation-applier.ts` —
+`composeTransform` + the `posDirty` `left`/`top` write; `.cg-element` already has
+`transform-origin: top left`). Compose order is load-bearing: with a top-left origin and
+the box at `left:0; top:0`, `transform: translate(x,y) scale() rotate()` should equal
+today's `left:x; top:y; transform: scale() rotate()` — verify and lock it with a
+visual-equivalence test. Keep the STATIC (non-animated) position write path consistent
+(scene-builder may set initial left/top). Re-verify the B-004 (rotation gizmo) and B-022
+(scale+rotate selection box) regressions. Consider `will-change: transform` for animated
+movers (the ticker track already uses it). Needs a dedicated design pass like D-060
+before implementation — do later, not in the current feature queue.
