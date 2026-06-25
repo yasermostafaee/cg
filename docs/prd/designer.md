@@ -2540,7 +2540,7 @@ visual-equivalence test. Keep the STATIC (non-animated) position write path cons
 movers (the ticker track already uses it). Needs a dedicated design pass like D-060
 before implementation — do later, not in the current feature queue.
 
-## [ ] D-074 — Remove the border on the timeline zoom slider ⟨priority: low⟩
+## [~] D-074 — Remove the border on the timeline zoom slider ⟨priority: low⟩ — implemented on `fix/timeline-layers-polish`
 
 **What:** The timeline zoom range slider (StatusBar) shows a visible border/box (the
 native `<input type=range>` chrome). Remove it so the slider reads as a clean track.

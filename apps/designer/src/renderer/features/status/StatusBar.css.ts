@@ -1,4 +1,4 @@
-import { style } from '@vanilla-extract/css';
+import { globalStyle, style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
 
 export const bar = style({
@@ -32,10 +32,48 @@ export const zoomWrap = style({
   color: colors.textMuted,
 });
 
+// D-074 — strip the native range chrome (the boxy track outline) and draw a clean,
+// borderless track + thumb. `appearance: none` removes the box; the element's own
+// background is the track and the vendor pseudo-elements below draw the thumb.
 export const zoomSlider = style({
+  appearance: 'none',
+  WebkitAppearance: 'none',
   width: '140px',
+  height: '4px',
+  background: colors.border,
+  borderRadius: '9999px',
+  border: 'none',
+  margin: 0,
   accentColor: colors.accent,
   cursor: 'pointer',
+});
+
+globalStyle(`${zoomSlider}::-webkit-slider-thumb`, {
+  WebkitAppearance: 'none',
+  appearance: 'none',
+  width: '12px',
+  height: '12px',
+  marginTop: '-4px', // centre the 12px thumb on the 4px track
+  borderRadius: '50%',
+  background: colors.accent,
+  border: 'none',
+  cursor: 'pointer',
+});
+
+globalStyle(`${zoomSlider}::-moz-range-thumb`, {
+  width: '12px',
+  height: '12px',
+  borderRadius: '50%',
+  background: colors.accent,
+  border: 'none',
+  cursor: 'pointer',
+});
+
+globalStyle(`${zoomSlider}::-moz-range-track`, {
+  height: '4px',
+  background: colors.border,
+  borderRadius: '9999px',
+  border: 'none',
 });
 
 export const zoomReadout = style({
