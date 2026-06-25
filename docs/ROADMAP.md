@@ -8,6 +8,37 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Pasteboard editing epic ([D-071](./prd/designer.md) Phase A off-frame export
+  filter + Phase B editor + [B-026](./prd/bugs.md) grow-to-fit extent) — merged &
+  archived (2026-06-21 / 2026-06-22, PRs #153 / #154 · #155 / #156 · #157). An
+  off-frame staging area outside the frame, excluded from export / `.vcg` /
+  single-file HTML, with the pasteboard extent growing to contain content parked
+  far off-frame. [B-027](./prd/bugs.md) (during-drag drift) filed **DEFERRED**.
+  Archives: `2026-06-21-off-frame-export-filter`, `2026-06-22-pasteboard-editing`,
+  `2026-06-22-pasteboard-extent-fits-content`. Living spec: `designer-canvas-viewport`.
+- Per-composition export + top-chrome relocation ([D-086](./prd/designer.md),
+  **absorbs [D-095](./prd/designer.md)**) — merged & archived (2026-06-21, PRs
+  #144 / #145 / #147). Phase A scopes `.vcg` / HTML export to the open
+  composition plus its nested closure; Phase B relocated the global chrome (slim
+  top bar, centered project name adjacent to Save) and added the per-composition
+  Preview / Export / HTML bar. Also fixed [B-023](./prd/bugs.md)
+  (repeater-mediated nesting cycle slipping past the author-time guard). Archive:
+  `2026-06-21-per-composition-export-and-chrome`. Living specs:
+  `designer-composition-export` (net-new), `designer-shell`, `designer-repeater-element`.
+- Stop/close = CLEARED terminal state ([D-085](./prd/designer.md)) — merged &
+  archived (2026-06-21, PRs #150 / #151). Stop and close now resolve to a CLEARED
+  terminal state. Archive: `2026-06-21-stop-clears-composition`.
+- Preview blank-until-play ([D-087](./prd/designer.md)) — merged & archived
+  (2026-06-21, PRs #148 / #149). The preview opens blank until Play. Archive:
+  `2026-06-21-preview-blank-until-play`.
+- Global button restyle ([D-094](./prd/designer.md)) — merged & archived
+  (2026-06-20, PRs #142 / #143). No default border + refined accent colors at the
+  shared button recipe; the [B-025](./prd/bugs.md) gizmo-frame render fix
+  (selection box renders again) rode alongside (#146). Archive:
+  `2026-06-20-restyle-buttons`.
+- Selection-overlay scale + rotate fix ([B-022](./prd/bugs.md)) — merged &
+  archived (2026-06-20, PRs #141 / #143). The selection overlay now tracks the
+  shape under scale + rotation. Archive: `2026-06-20-fix-selection-overlay-scale-rotate`.
 - Desktop-style Save epic ([D-088](./prd/designer.md) + folded [D-089](./prd/designer.md)
   Save-button unsaved visual + [D-093](./prd/designer.md) non-destructive Remove-from-Recent) —
   merged & archived (2026-06-20, PR #139). Native `FileSystemFileHandle` persisted in IndexedDB
@@ -55,25 +86,27 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Next — agreed order
 
-The shipped save + import-polish work (D-088 / D-089 / D-093, D-067 / D-068) is archived — see
-Done (recent). The agreed upcoming order (one line each; **full PRD entries authored per-item when
+The save + import-polish, button-restyle, per-composition export + chrome,
+stop-clears, preview-blank, and pasteboard work is archived — see Done (recent).
+The agreed upcoming order (one line each; **full PRD entries authored per-item when
 started** — most of these IDs are not yet filed):
 
-1. [B-022](./prd/bugs.md) — scale + rotate selection bug
-2. [D-094](./prd/designer.md) — global button restyle (no default border + colors)
-3. [D-095](./prd/designer.md) — project name centered + Save adjacent
-4. [D-086](./prd/designer.md) **[DESIGN]** — per-composition Preview / Export / HTML sticky bar +
-   playout combo (`.vcg` per-composition, Save on top)
-5. [D-087](./prd/designer.md) — preview blank-until-play
-6. [D-085](./prd/designer.md) **[DESIGN]** — stop / close = CLEARED terminal state
-7. [D-071](./prd/designer.md) / D-072 / D-073 — canvas
-8. [D-092](./prd/designer.md) — icon-pack
-9. [D-074](./prd/designer.md)–D-080 — timeline / layers
-10. [D-039](./prd/designer.md) (ext) / D-081 / D-082 / D-083 / D-084 — sequence / clock
-11. [D-090](./prd/designer.md) / D-091 — chrome
-12. [B-024](./prd/bugs.md) — negative guard
+1. [D-072](./prd/designer.md) / [D-073](./prd/designer.md) — guide coordinate
+   readout + arrow-key nudge. **IN REVIEW:** both implemented + tested on
+   `feat/D-072-073-guide-readout-nudge` (changes
+   `openspec/changes/guide-coordinate-readout/` +
+   `openspec/changes/arrow-key-nudge/`); only the batched green gate + E2E and the
+   merge/archive remain.
+2. [D-092](./prd/designer.md) — icon-pack (replace the ad-hoc Unicode-glyph
+   tool/UI icons with a consistent SVG icon set)
+3. [D-074](./prd/designer.md)–D-080 — timeline / layers
+4. [D-039](./prd/designer.md) (ext) / D-081 / D-082 / D-083 / D-084 — sequence / clock
+5. [D-090](./prd/designer.md) / D-091 — chrome (additional polish beyond D-086
+   Phase B; confirm scope vs. what D-086 delivered when filing)
+6. [B-024](./prd/bugs.md) — negative guard
 
-> **Ordering note:** D-092 (icon-pack) precedes D-075 / D-078 / D-080 / D-084.
+> **Ordering note:** D-092 (icon-pack) precedes D-075 / D-078 / D-080 / D-084
+> because those add new buttons that should consume the new icon set.
 
 Previously-listed designer items not in this order — D-059, D-060 (unblocks the parked
 [D-046](./prd/designer.md)), D-061, D-063, D-064, D-065, D-066 — remain **queued** in the PRD but
