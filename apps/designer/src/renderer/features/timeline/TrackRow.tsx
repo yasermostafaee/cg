@@ -6,6 +6,7 @@ import { RealtimeNumberInput } from '../inspector/controls.js';
 import { ColorPicker } from '../inspector/ColorPopover.js';
 import { KeyframeIndicator } from './KeyframeIndicator.js';
 import { cx } from '../../cx.js';
+import { normalizeHexColor } from '../../color.js';
 import { Button } from '../../ui/Button.js';
 import * as s from './TrackRow.css.js';
 import {
@@ -375,7 +376,11 @@ function ValueCell({
           key={hexLabel}
           className={cx('cg-timeline-num', s.valueHexInput)}
           aria-label={ariaLabel}
-          onBlur={(e) => commitHex(e.target.value, onCommit)}
+          onBlur={(e) => {
+            const next = normalizeHexColor(e.target.value);
+            if (next !== null) onCommit(next);
+            else e.currentTarget.value = hexLabel; // invalid → revert to the previous value
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
           }}
@@ -414,10 +419,4 @@ function toDisplay(v: number | string, factor: number | undefined): number | str
 }
 function fromDisplay(v: number, factor: number | undefined): number {
   return Number((v / (factor ?? 1)).toFixed(6));
-}
-
-function commitHex(raw: string, onCommit: (next: string) => void): void {
-  const v = raw.trim();
-  const next = v.startsWith('#') ? v : `#${v}`;
-  if (/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(next)) onCommit(next.toUpperCase());
 }
