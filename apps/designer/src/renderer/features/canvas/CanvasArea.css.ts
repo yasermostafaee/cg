@@ -40,6 +40,29 @@ export const headerButton = style({
   justifyContent: 'center',
 });
 
+// Text variant of `headerButton` for the "100%" zoom-reset label: a self-contained
+// style (not a class override) that keeps the 22px height + the shared look but
+// grows in width to fit the text, so the hover background wraps the whole label
+// instead of clipping it to a 22×22 square. Hover/active come from the bare
+// `Control` recipe (same as the icon header buttons), so it stays consistent.
+export const zoomResetButton = style({
+  minWidth: '22px',
+  width: 'auto',
+  height: '22px',
+  background: 'transparent',
+  color: colors.textMuted,
+  border: `1px solid ${colors.border}`,
+  borderRadius: '0.2rem',
+  fontSize: '0.78rem',
+  lineHeight: 1,
+  cursor: 'pointer',
+  padding: '0 6px',
+  whiteSpace: 'nowrap',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+});
+
 export const zoomReadout = style({
   minWidth: '40px',
   textAlign: 'center',
@@ -68,10 +91,10 @@ export const viewport = style({
 
 export const outer = style({
   flex: 1,
-  // The PASTEBOARD SURROUND — the lighter dark tone (#161927). The whole scrollable
-  // area beyond the frame reads as this one tone; the darker tone (#080a10) is the
+  // The PASTEBOARD SURROUND — the DARK tone (#161927). The whole scrollable area
+  // beyond the frame reads as this one tone; the LIGHT tone (#a7a7a7) is the
   // FRAME-SIZED page backdrop drawn INSIDE the iframe (`.cg-stage` background-color),
-  // so the two-tone is by REGION (lighter surround, darker page) and every shape paints
+  // so the two-tone is by REGION (dark surround, light page) and every shape paints
   // on top of both backdrops.
   background: '#161927',
   border: `1px solid ${colors.border}`,

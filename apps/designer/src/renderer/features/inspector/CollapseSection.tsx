@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import * as s from './CollapseSection.css.js';
 
 interface Props {
@@ -44,7 +46,13 @@ export function CollapseSection({
           aria-expanded={open}
           aria-label={`Toggle ${title}`}
         >
-          <span className={s.chevron}>{open ? '▾' : '▸'}</span>
+          <span className={s.chevron}>
+            {open ? (
+              <Icon icon={ChevronDown} size={14} />
+            ) : (
+              <Icon icon={ChevronRight} size={14} flipRtl />
+            )}
+          </span>
           <span>{title}</span>
           {trailing !== undefined && <span className={s.trailing}>{trailing}</span>}
         </Button>

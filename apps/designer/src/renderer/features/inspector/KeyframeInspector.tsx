@@ -5,8 +5,10 @@ import {
   type Keyframe,
   type Scene,
 } from '@cg/shared-schema';
+import { ArrowLeft, TriangleAlert } from 'lucide-react';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import { designerStore, type KeyframeRef } from '../../state/store.js';
 import { TIMELINE_ROWS } from '../timeline/keyframe-helpers.js';
 import { NumberField } from './controls.js';
@@ -32,7 +34,7 @@ function BackButton(): JSX.Element {
       onClick={() => designerStore.closeKeyframeInspector()}
       aria-label="Back to element inspector"
     >
-      ← back
+      <Icon icon={ArrowLeft} size={14} flipRtl /> back
     </Button>
   );
 }
@@ -176,7 +178,7 @@ function MultiKeyframeView({
       </div>
       {mixed && (
         <div className={s.mixedWarn} role="status">
-          <span aria-hidden>⚠</span>
+          <Icon icon={TriangleAlert} size={14} />
           <span>There are multiple different easings selected</span>
         </div>
       )}

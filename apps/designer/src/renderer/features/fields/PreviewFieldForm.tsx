@@ -5,8 +5,10 @@ import type {
   ListItem,
   NestedFieldValues,
 } from '@cg/shared-schema';
+import { TriangleAlert } from 'lucide-react';
 import { cx } from '../../cx.js';
 import { Callout } from '../../ui/Callout.js';
+import { Icon } from '../../ui/Icon.js';
 import { Select } from '../../ui/Select.js';
 import { ListItemsEditor } from './ListItemsEditor.js';
 import type { ListItemColumn } from './repeater-columns.js';
@@ -187,7 +189,7 @@ function FieldRow({
       {renderInput(field, value, onChange, error !== null, showDwell === true, columns)}
       {error !== null && (
         <span className={s.error} role="alert">
-          <span aria-hidden>⚠</span>
+          <Icon icon={TriangleAlert} size={14} />
           {error}
         </span>
       )}

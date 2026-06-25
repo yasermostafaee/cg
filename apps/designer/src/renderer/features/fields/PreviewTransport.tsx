@@ -1,4 +1,6 @@
+import { Pause, Play, RotateCcw, SkipForward, Square } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import * as s from './PreviewTransport.css.js';
 
 /**
@@ -38,13 +40,16 @@ export function PreviewTransport({
       <span className={s.groupLabel}>Playout commands</span>
       <div className={s.commands} role="group" aria-label="Playout commands">
         <Button variant="primary" className={s.command} onClick={onPlay}>
-          {paused ? '▶ Resume' : '▶ Play'}
+          <Icon icon={Play} size={16} />
+          {paused ? 'Resume' : 'Play'}
         </Button>
         <Button className={s.command} onClick={onPause} aria-disabled={paused} disabled={paused}>
-          ⏸ Pause
+          <Icon icon={Pause} size={16} />
+          Pause
         </Button>
         <Button className={s.command} onClick={onStop}>
-          ■ Stop
+          <Icon icon={Square} size={16} />
+          Stop
         </Button>
         <Button
           className={s.command}
@@ -52,12 +57,14 @@ export function PreviewTransport({
           disabled={!canStep}
           title={canStep ? undefined : 'Single-step template — nothing to advance to'}
         >
-          ⏭ Next
+          <Icon icon={SkipForward} size={16} />
+          Next
         </Button>
       </div>
       <div className={s.utilities}>
         <Button variant="ghost" size="sm" onClick={onReset} title="Re-seed the form to defaults">
-          ↺ Reset
+          <Icon icon={RotateCcw} size={14} />
+          Reset
         </Button>
       </div>
     </div>

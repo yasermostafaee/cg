@@ -38,7 +38,6 @@ export const iconButton = style({
   border: '1px solid transparent',
   borderRadius: '0.22rem',
   cursor: 'pointer',
-  fontSize: '0.85rem',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',

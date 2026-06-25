@@ -1,6 +1,9 @@
+import type { ReactNode } from 'react';
+import { Contrast, MoveHorizontal, MoveVertical, RotateCw } from 'lucide-react';
 import type { AnimatableProperty } from '@cg/shared-schema';
 import { RealtimeNumberInput, fieldScrub } from './controls.js';
 import { cx } from '../../cx.js';
+import { Icon } from '../../ui/Icon.js';
 import * as s from './TransformSection.css.js';
 
 /**
@@ -16,7 +19,8 @@ import * as s from './TransformSection.css.js';
  */
 
 export interface FieldMeta {
-  icon: string;
+  /** A textual axis label (e.g. `X` / `W`) or an `<Icon>` for the pictographic glyphs. */
+  icon: ReactNode;
   ariaLabel: string;
   /** Dim unit shown after the value (e.g. "%", "°"). */
   suffix?: string;
@@ -56,7 +60,7 @@ export const TRANSFORM_FIELD_META: Partial<Record<AnimatableProperty, FieldMeta>
   'size.w': { icon: 'W', ariaLabel: 'Width', step: 1, toDisplay: identity, fromDisplay: identity },
   'size.h': { icon: 'H', ariaLabel: 'Height', step: 1, toDisplay: identity, fromDisplay: identity },
   'scale.x': {
-    icon: '↔',
+    icon: <Icon icon={MoveHorizontal} size={14} />,
     ariaLabel: 'Scale X',
     suffix: '%',
     step: 1,
@@ -64,7 +68,7 @@ export const TRANSFORM_FIELD_META: Partial<Record<AnimatableProperty, FieldMeta>
     fromDisplay: fromPercent,
   },
   'scale.y': {
-    icon: '↕',
+    icon: <Icon icon={MoveVertical} size={14} />,
     ariaLabel: 'Scale Y',
     suffix: '%',
     step: 1,
@@ -72,7 +76,7 @@ export const TRANSFORM_FIELD_META: Partial<Record<AnimatableProperty, FieldMeta>
     fromDisplay: fromPercent,
   },
   rotation: {
-    icon: '↻',
+    icon: <Icon icon={RotateCw} size={14} />,
     ariaLabel: 'Rotation',
     suffix: '°',
     step: 1,
@@ -80,7 +84,7 @@ export const TRANSFORM_FIELD_META: Partial<Record<AnimatableProperty, FieldMeta>
     fromDisplay: identity,
   },
   opacity: {
-    icon: '◑',
+    icon: <Icon icon={Contrast} size={14} />,
     ariaLabel: 'Opacity',
     suffix: '%',
     step: 1,
@@ -92,7 +96,7 @@ export const TRANSFORM_FIELD_META: Partial<Record<AnimatableProperty, FieldMeta>
 };
 
 export interface FieldProps {
-  icon: string;
+  icon: ReactNode;
   ariaLabel: string;
   value: number;
   step?: number | undefined;

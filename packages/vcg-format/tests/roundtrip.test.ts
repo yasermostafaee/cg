@@ -27,7 +27,9 @@ describe('pack → unpack round-trip', () => {
   });
 
   it('D-042 — round-trips a per-corner cornerRadius + a stroke on a non-shape element', async () => {
-    const children = fixtureScene.layers[0]!.children.map((c, j) =>
+    const baseLayer = fixtureScene.layers[0];
+    if (!baseLayer) throw new Error('fixture missing layer 0');
+    const children = baseLayer.children.map((c, j) =>
       j === 0
         ? ({
             ...c,
@@ -38,7 +40,7 @@ describe('pack → unpack round-trip', () => {
     );
     const scene: Scene = {
       ...fixtureScene,
-      layers: [{ ...fixtureScene.layers[0]!, children }, ...fixtureScene.layers.slice(1)],
+      layers: [{ ...baseLayer, children }, ...fixtureScene.layers.slice(1)],
     };
     const buf = await pack({
       scene,
@@ -48,7 +50,10 @@ describe('pack → unpack round-trip', () => {
       cgCss: fixtureCgCss,
     });
     const out = (await unpack(buf)).scene;
-    const el = out.layers[0]!.children[0]! as { cornerRadius?: unknown; stroke?: unknown };
+    const outLayer = out.layers[0];
+    const outChild = outLayer?.children[0];
+    if (!outChild) throw new Error('unpacked scene missing layer 0 child 0');
+    const el = outChild as { cornerRadius?: unknown; stroke?: unknown };
     expect(el.cornerRadius).toEqual([4, 8, 12, 16]);
     expect(el.stroke).toEqual({ width: 3, color: '#00FF00' });
   });

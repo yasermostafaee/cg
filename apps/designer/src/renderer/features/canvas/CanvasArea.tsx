@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ScanSearch, ZoomIn, ZoomOut } from 'lucide-react';
 import type { Element, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import {
@@ -24,6 +25,7 @@ import {
 } from './geometry.js';
 import { contentBounds } from './content-bounds.js';
 import { Control } from '../../ui/Control.js';
+import { Icon } from '../../ui/Icon.js';
 import * as s from './CanvasArea.css.js';
 import {
   designerStore,
@@ -628,6 +630,7 @@ export function CanvasArea({
       <div className={s.header} aria-label="Canvas header">
         {showToolbar && <CanvasToolbar tool={tool} />}
         <span className={s.spacer} />
+        <span className={s.zoomReadout}>{zoomPct}%</span>
         <Control
           variant="bare"
           className={s.headerButton}
@@ -635,17 +638,16 @@ export function CanvasArea({
           aria-label="Fit"
           title="Fit canvas"
         >
-          ⛶
+          <Icon icon={ScanSearch} size={16} />
         </Control>
-        <span className={s.zoomReadout}>{zoomPct}%</span>
         <Control
           variant="bare"
-          className={s.headerButton}
+          className={s.zoomResetButton}
           onClick={() => zoomAtCenter(1 / zoomRef.current)}
           aria-label="Reset zoom to 100%"
           title="Reset to 100%"
         >
-          1×
+          100%
         </Control>
         <Control
           variant="bare"
@@ -654,7 +656,7 @@ export function CanvasArea({
           aria-label="Zoom in"
           title="Zoom in"
         >
-          +
+          <Icon icon={ZoomIn} size={16} />
         </Control>
         <Control
           variant="bare"
@@ -663,7 +665,7 @@ export function CanvasArea({
           aria-label="Zoom out"
           title="Zoom out"
         >
-          −
+          <Icon icon={ZoomOut} size={16} />
         </Control>
       </div>
       <div className={s.viewport}>

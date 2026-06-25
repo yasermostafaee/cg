@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import { Check } from 'lucide-react';
 import type { Scene } from '@cg/shared-schema';
 import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
 import { ShortcutsModal } from './ShortcutsModal.js';
@@ -409,7 +411,7 @@ function ToggleMenuItem({
       onClick={onClick}
     >
       <span className={s.checkSlot} aria-hidden>
-        {checked ? '✓' : ''}
+        {checked ? <Icon icon={Check} size={14} /> : ''}
       </span>
       {label}
     </Button>

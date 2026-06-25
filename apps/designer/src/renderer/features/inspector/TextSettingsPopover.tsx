@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Settings2 } from 'lucide-react';
 import type { Element, TextElement } from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
 import { cx } from '../../cx.js';
 import { Control } from '../../ui/Control.js';
+import { Icon } from '../../ui/Icon.js';
 import { Select } from '../../ui/Select.js';
 import * as s from './TextSettingsPopover.css.js';
 
@@ -22,7 +24,7 @@ const WEIGHT_LABELS = [
 ] as const;
 
 /**
- * D-048 — the "⚙ More text options" gear and its popover.
+ * D-048 — the "More text options" gear (lucide `Settings2`) and its popover.
  *
  * Appearance / UI-parity only. The popover houses ONLY existing font props —
  * font weight (100..900) and font style (normal / italic) — styled like the
@@ -46,7 +48,7 @@ export function TextSettingsButton({ element }: { element: TextElement }): JSX.E
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        ⚙
+        <Icon icon={Settings2} size={16} />
       </Control>
       {open && (
         <TextSettingsPopover

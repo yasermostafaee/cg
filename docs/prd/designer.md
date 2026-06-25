@@ -2462,45 +2462,46 @@ action `nudgeSelection(dx, dy)` mirroring `beginGroupDrag`'s `commitAnimatable` 
 snapping). One `markHistoryBoundary()` on the first event of a run (`!e.repeat`). Ripple:
 `ShortcutsModal.tsx`. No schema/render/export change. Change: `openspec/changes/arrow-key-nudge/`.
 
-## [ ] D-092 — Unified icon pack (single `<Icon>` source, migrate inline SVGs) ⟨priority: medium⟩
+## [~] D-092 — Icon pack: replace Unicode-glyph icons with a shared vector Icon component ⟨priority: medium⟩ — implemented; change `openspec/changes/replace-glyph-icons/`
 
-**What:** Replace the ~30+ inline `<svg>` icons scattered across the renderer with ONE source of
-truth: a curated local icon set (`renderer/ui/icons/`) exposed through a shared
-`<Icon name=… size=… />` component in `renderer/ui/`. Every feature surface that draws an icon
-uses `<Icon>`; no inline `<svg>` icons remain in feature components. Icons inherit `currentColor`
-and a single size scale, and directional icons mirror under RTL. No new runtime dependency.
-
-**Why:** Today there is no icon system — icons are inline `<svg>` duplicated and drifting across
-~8 files (`features/timeline/ElementRow.tsx` alone has 18; plus `App.tsx`, `Gizmo.tsx`,
-`features/assets/ProjectAssetsPanel.tsx`, `features/timeline/TrackRow.tsx`,
-`features/shell/TransportBar.tsx`, `features/inspector/EasingEditor.tsx`,
-`features/canvas/CanvasOverlay.tsx`). There is no shared sizing, stroke, color, or RTL handling,
-and lint can't enforce consistency. A single curated set gives one visual language, consistent
-size/stroke via `currentColor`, RTL mirroring, and one place to add or swap a glyph — and fits the
-design-system rule that interactive-control building blocks live in `renderer/ui/`. Curated-local
-(not a bundled library) keeps full control of the broadcast/RTL visual identity and adds no dep or
-bundle weight.
-
+**What:** Add a single shared `Icon` component (in apps/designer/src/renderer/ui/)
+backed by `lucide-react`, and replace ALL ad-hoc Unicode-glyph icons across the
+Designer UI with it, so icons are consistent, theme-driven, and RTL-correct. This
+is foundational for the upcoming timeline/layers items (D-075/D-078/D-080/D-084),
+which add new buttons that consume this icon set.
+**Why:** Tool/inspector/timeline/shell controls currently use Unicode glyphs
+(e.g. ↖ ⇇ ◷ ⇉ ▤ ▭ ○ ▦ in the toolbars; ⫷ ☰ ⫸ ⤒ ⇳ ⤓ in align; ↔ ↕ ↻ ◑ in
+transform; ▾ ▸ ▶ chevrons; ✕ × close; ✓ menu check; ▶ ⏸ ■ preview transport; ⚠
+warnings). They render inconsistently (size/weight vary), depend on the OS glyph
+font, and look unprofessional. A library + one wrapper fixes consistency and lets
+new buttons reuse named icons instead of drawing SVG each time.
 **Acceptance:**
 
-- WHEN a renderer surface needs an icon THEN it renders `<Icon name=… />` from `renderer/ui/`
-  (the single source); a grep for inline `<svg` in `features/**` returns only genuinely bespoke
-  graphics (e.g. the gizmo selection outline), not glyph icons
-- WHEN an icon is rendered THEN it inherits `currentColor` and takes a `size` prop, so stroke and
-  size are consistent across the app
-- WHEN a directional icon (back/forward, expand/collapse chevron) is shown AND the app is in RTL
-  THEN it mirrors appropriately
-- WHEN a needed glyph is missing THEN it is added to the central set, not inlined ad hoc
-- WHEN the migration is complete THEN the app's icons render identically-or-better at every
-  existing call site (no visual regression in the E2E surfaces; the element-type glyphs in
-  `ElementRow` still read clearly per type)
+- WHEN any Designer control that previously used a Unicode-glyph icon renders THEN it renders a `lucide-react` vector icon via the shared `Icon` component, and no glyph-string icon remains in the migrated files
+- WHEN an `Icon` renders THEN it inherits the current text color (uses `currentColor`), is `aria-hidden` by default (decorative; interactive parents keep their own `aria-label`/`title`), and takes a single `size` prop — preserving the monochrome / CSS-`color` behavior the glyphs relied on
+- WHEN a directional icon's call site sets `flipRtl` THEN the icon mirrors horizontally under RTL; by default an `Icon` does NOT mirror (preserving today's deliberate behavior)
+- WHEN the keyboard-shortcut key labels (`⌘` / `Ctrl` in ShortcutsModal) and the mixed-value `—` placeholder (controls.tsx / transform-fields.tsx) render THEN they are UNCHANGED — they are text, not icons, and are explicitly out of scope
+- WHEN the transport Play/Pause icons render THEN they go through the same `Icon`/lucide path (the local `ic()` SVG helper in TransportBar.tsx is removed/absorbed) so there is exactly one icon mechanism
+- WHEN `lucide-react` is added THEN it is imported per-icon (tree-shaken), and a third-party attribution entry for lucide (ISC/MIT) is added to THIRD_PARTY_LICENSES.md
+- WHEN the Designer runs in RTL THEN no icon's meaning breaks
+- WHEN the canvas tool palette renders THEN its tools are ordered drawing-first (cursor, hand, text, rectangle, ellipse, image) then the dynamic elements (ticker, sequence, clock, repeater); the ticker uses a horizontal double-arrow (`MoveHorizontal`) and the sequence a vertical double-arrow (`ArrowDownUp`), neither RTL-mirrored
+- WHEN the Project Assets / Shared Library grid↔list toggle renders THEN it uses the shared `Icon` (`LayoutGrid` / `List`) and the local `GridIcon` / `ListIcon` SVG functions are removed
+- WHEN the timeline (StatusBar) or canvas (CanvasArea) zoom controls render THEN zoom-out / zoom-in use the SAME `ZoomOut` / `ZoomIn` icons via the shared `Icon`; the canvas group also has a `ScanSearch` Fit and a plain-text `100%` reset (not an icon), ordered readout → Fit → reset → in → out, the `100%` reset using a dedicated auto-width style so it does not overflow the square icon-button box
+- WHEN the Project Assets / Compositions / Shared Library "add" (`+`) buttons render THEN each shows one shared `Icon` `Plus` at a single size, with the panels' `iconButton` boxes matched
+- WHEN the border-radius single/per-corner toggle renders THEN it shows the shared `Icon` (`Square` for uniform, `Maximize` for per-corner) and the old vanilla-extract `iconUniform` / `iconPerCorner` styles are removed
+- WHEN a timeline layer row renders its per-kind type icon THEN it uses the shared `Icon` and matches the canvas-toolbar tool icon for the shared kinds (text/shape/ellipse/image/ticker/clock/sequence/repeater), tinted with the layer's timeline colour
+- WHEN the "More text options" gear renders THEN it shows the shared `Icon` lucide `Settings2` (no `⚙` glyph)
+- WHEN a shared `Select` dropdown renders THEN its down-chevron is a REAL lucide `ChevronDown` element overlaid at the right edge via the shared `Icon` (not a CSS background-image, so a per-site `background` override can't wipe it), with clicks falling through to the select
 
-**Notes:** Option (b) curated-local chosen over bundling lucide/phosphor (control of the RTL
-visual identity, zero dependency). Build the central set + `<Icon>` first, then migrate call
-sites — start with the 18 element-type glyphs in `ElementRow.tsx`, then the rest. Keep truly
-bespoke vector graphics (gizmo outline, easing-curve preview) as-is — they are not icons. After
-migration, consider a lint rule forbidding raw `<svg>` glyph icons in `features/**` (mirroring the
-no-raw-`<button>` rule) so the seam can't erode. Doc-sync: note the `<Icon>` source in the canvas
-/ timeline READMEs only if an icon contract is referenced there. Own branch + PR (split from the
-D-072/D-073 batch); does NOT touch schema / render / export / runtime — presentational only.
-Change: `openspec/changes/unified-icon-pack/`.
+**Notes:** Capability: extend **designer-controls** (ADDED requirements — the
+shared `Icon` primitive + the glyph→vector migration), since it is the shared
+UI-control-primitive spec alongside Button/Control. `@cg/ui` stays tokens-only —
+`Icon` lives app-local in renderer/ui/. Migration inventory (the glyph files):
+canvas/CanvasToolbar.tsx (+ the HAND_ICON const), tools/ToolRail.tsx,
+inspector/AlignButtonGroup.tsx, inspector/transform-fields.tsx,
+inspector/CollapseSection.tsx, timeline/ElementRow.tsx, timeline/TimelineDock.tsx,
+timeline/LayerContextMenu.tsx, shell/TopToolbar.tsx, shell/Modal.tsx,
+shell/NewProjectModal.tsx, fields/PreviewTransport.tsx, fields/PreviewFieldForm.tsx,
+inspector/KeyframeInspector.tsx, ui/Callout.tsx. Already-SVG icons that are NOT
+glyphs (ElementRow Eye/Lock, keyframe-diamond) may optionally be routed through
+`Icon` for consistency but that is not required.

@@ -30,33 +30,7 @@ export const corners = style({
   minWidth: 0,
 });
 
-const ICON = 12;
-
-/** Uniform mode — a simple rounded-corner square outline. */
-export const iconUniform = style({
-  display: 'inline-block',
-  width: ICON,
-  height: ICON,
-  border: '1.5px solid currentColor',
-  borderRadius: 3,
-  boxSizing: 'border-box',
-});
-
-// Four corner brackets (an L at each corner) — matches the reference's per-corner
-// glyph. Eight background segments: a horizontal + a vertical arm per corner.
-const line = 'linear-gradient(currentColor, currentColor)';
-const ARM = '4px';
-const THICK = '1.5px';
-
-/** Per-corner mode — a square drawn as four corner brackets (⌜⌝⌞⌟). */
-export const iconPerCorner = style({
-  display: 'inline-block',
-  width: ICON,
-  height: ICON,
-  boxSizing: 'border-box',
-  backgroundImage: `${line}, ${line}, ${line}, ${line}, ${line}, ${line}, ${line}, ${line}`,
-  backgroundRepeat: 'no-repeat',
-  // tl-h, tl-v, tr-h, tr-v, bl-h, bl-v, br-h, br-v
-  backgroundSize: `${ARM} ${THICK}, ${THICK} ${ARM}, ${ARM} ${THICK}, ${THICK} ${ARM}, ${ARM} ${THICK}, ${THICK} ${ARM}, ${ARM} ${THICK}, ${THICK} ${ARM}`,
-  backgroundPosition: '0 0, 0 0, 100% 0, 100% 0, 0 100%, 0 100%, 100% 100%, 100% 100%',
-});
+// D-092 — the uniform / per-corner toggle icons moved to the shared lucide `Icon`
+// (`Square` / `Maximize`) in StyleSection's RadiusToggle; the old vanilla-extract
+// `iconUniform` / `iconPerCorner` styles (and their ICON / line / ARM / THICK
+// constants) were removed as dead code.

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { LayoutGrid, List, Plus } from 'lucide-react';
 import type { AssetMeta } from '@cg/shared-ipc';
 import type { Element } from '@cg/shared-schema';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
@@ -6,10 +7,10 @@ import { Modal, ModalButton } from '../shell/Modal.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
+import { Icon } from '../../ui/Icon.js';
 import { ImportingThumb } from '../assets/ImportingThumb.js';
 import { useImportPending } from '../assets/useImportPending.js';
 import { partitionSupported, skippedFilesMessage } from '../../../shared/asset-types.js';
-import { GridIcon, ListIcon } from '../assets/ProjectAssetsPanel.js';
 import { fileExt, formatBytes } from '../assets/AssetThumb.js';
 import { emitSharedImageRemoved, useSharedImages, useSharedImageUrl } from './useSharedImages.js';
 import { revoke as revokeSharedUrl } from './sharedImageUrlCache.js';
@@ -41,7 +42,7 @@ export function filterImagesByFilename(
  * image (file picker → shared store), see the library as thumbnails, click one
  * to make it the canvas logo tool's target, and remove via the context menu.
  * D-068 — a filename search + a persisted grid/list view toggle, at parity with
- * the Project Assets panel (its `GridIcon`/`ListIcon`, styles, and idiom reused).
+ * the Project Assets panel (the shared `Icon`, styles, and idiom reused).
  *
  * Mirrors {@link ../assets/ProjectAssetsPanel ProjectAssetsPanel} but is
  * project-independent and image-only. Removing a library image does NOT touch
@@ -149,7 +150,11 @@ export function SharedLibraryPanel(): JSX.Element {
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => changeLibraryView(libraryView === 'grid' ? 'list' : 'grid')}
         >
-          {libraryView === 'grid' ? <ListIcon /> : <GridIcon />}
+          {libraryView === 'grid' ? (
+            <Icon icon={List} size={14} />
+          ) : (
+            <Icon icon={LayoutGrid} size={14} />
+          )}
         </Control>
         <Control
           variant="bare"
@@ -161,7 +166,7 @@ export function SharedLibraryPanel(): JSX.Element {
           }}
           onClick={() => void addImage()}
         >
-          +
+          <Icon icon={Plus} size={16} />
         </Control>
       </div>
       <div className={ps.searchWrap}>

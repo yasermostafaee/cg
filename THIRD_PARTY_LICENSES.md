@@ -16,12 +16,17 @@ The Designer's preview iframe + the broadcast template runtime fall back to thes
 
 ## Runtime libraries
 
-| Package      | Version | License | Source                               |
-| ------------ | ------- | ------- | ------------------------------------ |
-| `lottie-web` | ^5.12.2 | MIT     | https://github.com/airbnb/lottie-web |
-| `zod`        | ^3.23.8 | MIT     | https://github.com/colinhacks/zod    |
-| `react`      | ^18.3.1 | MIT     | https://github.com/facebook/react    |
-| `react-dom`  | ^18.3.1 | MIT     | https://github.com/facebook/react    |
+| Package        | Version | License | Source                                 |
+| -------------- | ------- | ------- | -------------------------------------- |
+| `lottie-web`   | ^5.12.2 | MIT     | https://github.com/airbnb/lottie-web   |
+| `zod`          | ^3.23.8 | MIT     | https://github.com/colinhacks/zod      |
+| `react`        | ^18.3.1 | MIT     | https://github.com/facebook/react      |
+| `react-dom`    | ^18.3.1 | MIT     | https://github.com/facebook/react      |
+| `lucide-react` | ^1.21.0 | ISC     | https://github.com/lucide-icons/lucide |
+
+`lucide-react` ships only inside the Designer SPA (the editor UI's icons); it is
+imported per-icon (tree-shaken) and is not embedded in `@cg/template-runtime` or
+any exported `.vcg` / single-file HTML.
 
 ## Electron + build tooling (shipped inside the installers)
 

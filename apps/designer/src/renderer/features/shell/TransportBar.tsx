@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import { ArrowLeftRight, Pause, Play, Repeat, SkipBack, StepBack, StepForward } from 'lucide-react';
 import { activeRangeOf, type Scene } from '@cg/shared-schema';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import * as s from './TransportBar.css.js';
 
 interface Props {
@@ -10,70 +12,6 @@ interface Props {
 }
 
 type LoopMode = 'off' | 'loop' | 'bounce';
-
-/**
- * One consistent, monochrome transport icon set drawn inline as SVG so they all
- * share a single style and inherit the button colour via `currentColor` (no
- * font-emoji glyphs, which render coloured / mismatched). 24×24 viewBox.
- */
-function ic(children: JSX.Element, size = 17): JSX.Element {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
-      aria-hidden
-      focusable="false"
-      className={s.icon}
-    >
-      {children}
-    </svg>
-  );
-}
-const IconStart = ic(
-  <>
-    <rect x="4" y="5" width="2.4" height="14" rx="0.6" fill="currentColor" />
-    <path d="M14 5v14l-7-7z" fill="currentColor" />
-    <path d="M21 5v14l-7-7z" fill="currentColor" />
-  </>,
-);
-const IconStepBack = ic(
-  <>
-    <rect x="5" y="5" width="2.6" height="14" rx="0.6" fill="currentColor" />
-    <path d="M20 5v14l-10.5-7z" fill="currentColor" />
-  </>,
-);
-// Play / pause render a touch larger so the primary control stands out.
-const IconPlay = ic(<path d="M8 5v14l11-7z" fill="currentColor" />, 22);
-const IconPause = ic(
-  <>
-    <rect x="7" y="5" width="3.4" height="14" rx="1" fill="currentColor" />
-    <rect x="13.6" y="5" width="3.4" height="14" rx="1" fill="currentColor" />
-  </>,
-  22,
-);
-const IconStepFwd = ic(
-  <>
-    <path d="M5 5v14l10-7z" fill="currentColor" />
-    <rect x="16.4" y="5" width="2.6" height="14" rx="0.6" fill="currentColor" />
-  </>,
-);
-const IconLoop = ic(
-  <path
-    d="M7 8a4 4 0 1 0 0 8c2 0 3-1.5 5-4s3-4 5-4a4 4 0 1 1 0 8c-2 0-3-1.5-5-4s-3-4-5-4z"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  />,
-);
-const IconBounce = ic(
-  <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M4 9h14M15 6l3 3-3 3" />
-    <path d="M20 15H6M9 12l-3 3 3 3" />
-  </g>,
-);
 
 /**
  * Bottom-of-canvas-column transport bar — go-to-start / step back /
@@ -248,7 +186,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
           aria-label="Go to start"
           title="Go to start"
         >
-          {IconStart}
+          <Icon icon={SkipBack} size={17} className={s.icon} />
         </Button>
         <Button
           variant="bare"
@@ -258,7 +196,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
           aria-label="Step back"
           title="Step back one frame"
         >
-          {IconStepBack}
+          <Icon icon={StepBack} size={17} className={s.icon} />
         </Button>
         <Button
           variant="bare"
@@ -271,7 +209,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
           aria-label={playing ? 'Pause' : 'Play'}
           title={playing ? 'Pause' : 'Play'}
         >
-          {playing ? IconPause : IconPlay}
+          <Icon icon={playing ? Pause : Play} size={22} className={s.icon} />
         </Button>
         <Button
           variant="bare"
@@ -281,7 +219,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
           aria-label="Step forward"
           title="Step forward one frame"
         >
-          {IconStepFwd}
+          <Icon icon={StepForward} size={17} className={s.icon} />
         </Button>
         <span className={s.groupDivider} aria-hidden />
         <Button
@@ -293,7 +231,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
           aria-label="Loop"
           title="Loop — wrap to start at the end"
         >
-          {IconLoop}
+          <Icon icon={Repeat} size={17} className={s.icon} />
         </Button>
         <Button
           variant="bare"
@@ -304,7 +242,7 @@ export function TransportBar({ scene }: Props): JSX.Element {
           aria-label="Ping-pong"
           title="Ping-pong — reverse direction at each boundary"
         >
-          {IconBounce}
+          <Icon icon={ArrowLeftRight} size={17} className={s.icon} />
         </Button>
       </div>
       <span className={s.frameReadout} aria-label="Current frame">

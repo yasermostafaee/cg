@@ -1,12 +1,14 @@
 import type { ReactNode } from 'react';
+import { Info, TriangleAlert } from 'lucide-react';
 import { cx } from '../cx.js';
+import { Icon } from './Icon.js';
 import * as s from './Callout.css.js';
 
 export type CalloutVariant = keyof typeof s.variant;
 
-const DEFAULT_ICON: Record<CalloutVariant, string> = {
-  info: 'ℹ',
-  danger: '⚠',
+const DEFAULT_ICON: Record<CalloutVariant, ReactNode> = {
+  info: <Icon icon={Info} size={16} />,
+  danger: <Icon icon={TriangleAlert} size={16} />,
 };
 
 /**

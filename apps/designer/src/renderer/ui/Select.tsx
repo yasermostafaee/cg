@@ -1,5 +1,7 @@
 import { forwardRef, type SelectHTMLAttributes } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { cx } from '../cx.js';
+import { Icon } from './Icon.js';
 import * as s from './Select.css.js';
 
 /**
@@ -9,6 +11,10 @@ import * as s from './Select.css.js';
  * theme), token colours, and hover / focus-visible / disabled states.
  * Per-site `className` may EXTEND the resting look (width, font), never
  * redefine the interaction states.
+ *
+ * The `<select>` is wrapped so a REAL lucide chevron can be overlaid at its right
+ * edge (a `background-image` chevron kept getting wiped by per-site `background`
+ * overrides). `pointer-events: none` on the chevron lets clicks reach the select.
  */
 export type SelectProps = SelectHTMLAttributes<HTMLSelectElement>;
 
@@ -17,8 +23,11 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   ref,
 ): JSX.Element {
   return (
-    <select ref={ref} className={cx(s.select, className)} {...rest}>
-      {children}
-    </select>
+    <span className={s.wrap}>
+      <select ref={ref} className={cx(s.select, className)} {...rest}>
+        {children}
+      </select>
+      <Icon icon={ChevronDown} size={14} className={s.chevron} />
+    </span>
   );
 });

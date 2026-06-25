@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { X } from 'lucide-react';
 import type { DesignerBridge } from '../shared/designer-bridge.js';
 import { ProjectAssetsPanel } from './features/assets/ProjectAssetsPanel.js';
 import { SharedLibraryPanel } from './features/sharedLibrary/SharedLibraryPanel.js';
@@ -21,6 +22,7 @@ import { colors } from './theme.js';
 import { cx } from './cx.js';
 import { Button } from './ui/Button.js';
 import { Control } from './ui/Control.js';
+import { Icon } from './ui/Icon.js';
 import * as s from './App.css.js';
 
 declare global {
@@ -48,7 +50,7 @@ function Toast({ message }: { message: string }): JSX.Element {
         onClick={() => designerStore.dismissNotice()}
         className={s.toastClose}
       >
-        ✕
+        <Icon icon={X} size={16} />
       </Control>
     </div>
   );

@@ -1,8 +1,27 @@
 import { useRef } from 'react';
+import {
+  ArrowDownUp,
+  ChevronDown,
+  ChevronRight,
+  Circle,
+  Clock,
+  Component,
+  Film,
+  Group,
+  Image,
+  MoveHorizontal,
+  Rows3,
+  Spline,
+  Square,
+  Triangle,
+  Type,
+  type LucideIcon,
+} from 'lucide-react';
 import type { Element, FrameRange, ShapeElement } from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
 import { cx } from '../../cx.js';
 import { Control } from '../../ui/Control.js';
+import { Icon } from '../../ui/Icon.js';
 import * as s from './ElementRow.css.js';
 
 export { ELEMENT_ROW_HEIGHT } from './metrics.js';
@@ -103,7 +122,11 @@ function ElementRowLabel(props: Props): JSX.Element {
         aria-expanded={expanded}
         aria-label={`Toggle ${element.name} tracks`}
       >
-        {expanded ? '▾' : '▸'}
+        {expanded ? (
+          <Icon icon={ChevronDown} size={14} />
+        ) : (
+          <Icon icon={ChevronRight} size={14} flipRtl />
+        )}
       </Control>
       <span className={s.typeIcon}>
         <LayerTypeIcon
@@ -147,144 +170,55 @@ function ElementRowLabel(props: Props): JSX.Element {
 }
 
 /**
- * Tiny per-kind glyph shown before the layer name, tinted with the layer's
- * timeline color: a square for rectangles, a circle for ellipses, an "A" for
- * text, a picture for images, a play triangle for video/lottie, etc.
+ * The lucide icon for a layer's kind — matches the canvas-toolbar tool icons for
+ * the shared kinds (text / shape / ellipse / image / ticker / clock / sequence /
+ * repeater); kinds with no toolbar tool get a sensible lucide equivalent.
+ */
+function layerTypeIcon(element: Element): LucideIcon {
+  switch (element.type) {
+    case 'text':
+      return Type;
+    case 'image':
+      return Image;
+    case 'ticker':
+      return MoveHorizontal;
+    case 'clock':
+      return Clock;
+    case 'sequence':
+      return ArrowDownUp;
+    case 'repeater':
+      return Rows3;
+    case 'lottie':
+    case 'video-placeholder':
+      return Film;
+    case 'container':
+      return Group;
+    case 'composition':
+      return Component;
+    case 'shape':
+      switch (element.shape) {
+        case 'ellipse':
+          return Circle;
+        case 'polygon':
+          return Triangle;
+        case 'path':
+          return Spline;
+        default:
+          // 'rect' / 'rounded-rect' → the toolbar rectangle icon.
+          return Square;
+      }
+    default:
+      return Square;
+  }
+}
+
+/**
+ * Tiny per-kind icon shown before the layer name, tinted with the layer's timeline
+ * colour. Renders the shared lucide `Icon` (matching the canvas toolbar for shared
+ * kinds); the per-layer `color` rides through `currentColor` via the inline style.
  */
 function LayerTypeIcon({ element, color }: { element: Element; color: string }): JSX.Element {
-  const svg = {
-    width: 12,
-    height: 12,
-    viewBox: '0 0 16 16',
-    style: { color, display: 'block' } as React.CSSProperties,
-    'aria-hidden': true,
-  };
-  const stroke = {
-    stroke: 'currentColor',
-    strokeWidth: 1.6,
-    fill: 'none',
-    strokeLinejoin: 'round' as const,
-    strokeLinecap: 'round' as const,
-  };
-  if (element.type === 'text') {
-    return (
-      <svg {...svg}>
-        <text
-          x="8"
-          y="13"
-          textAnchor="middle"
-          fontSize="14"
-          fontWeight={700}
-          fontFamily="sans-serif"
-          fill="currentColor"
-        >
-          A
-        </text>
-      </svg>
-    );
-  }
-  if (element.type === 'image') {
-    return (
-      <svg {...svg}>
-        <rect x="2.5" y="3.5" width="11" height="9" rx="1.5" {...stroke} />
-        <circle cx="6" cy="6.5" r="1.1" fill="currentColor" stroke="none" />
-        <path d="M3 12 l3.5-3 2.2 1.8 2.3-2.6 2.5 2.8" {...stroke} />
-      </svg>
-    );
-  }
-  if (element.type === 'lottie' || element.type === 'video-placeholder') {
-    return (
-      <svg {...svg}>
-        <polygon points="5,3.5 13,8 5,12.5" {...stroke} />
-      </svg>
-    );
-  }
-  if (element.type === 'container') {
-    return (
-      <svg {...svg}>
-        <path d="M2.5 5 h3.4 l1.2 1.4 h6.4 v6 h-11 z" {...stroke} />
-      </svg>
-    );
-  }
-  if (element.type === 'composition') {
-    // Stacked frames — a nested-composition instance.
-    return (
-      <svg {...svg}>
-        <rect x="2" y="4.5" width="8" height="7" rx="1" {...stroke} />
-        <rect x="6" y="2.5" width="8" height="7" rx="1" {...stroke} />
-      </svg>
-    );
-  }
-  if (element.type === 'ticker') {
-    // A clipped band with motion dashes — the crawl.
-    return (
-      <svg {...svg}>
-        <rect x="2" y="5" width="12" height="6" rx="1" {...stroke} />
-        <path d="M4.5 8 h2 M8 8 h2 M11.5 8 h1.5" {...stroke} />
-      </svg>
-    );
-  }
-  if (element.type === 'clock') {
-    // A clock face with hands — the time-driven element (D-027).
-    return (
-      <svg {...svg}>
-        <circle cx="8" cy="8" r="5.2" {...stroke} />
-        <path d="M8 5.2 v2.8 l2.2 1.4" {...stroke} />
-      </svg>
-    );
-  }
-  if (element.type === 'sequence') {
-    // Stacked lines with an advance arrow — one item at a time (D-029).
-    return (
-      <svg {...svg}>
-        <path d="M3 5 h7 M3 8 h7 M3 11 h7" {...stroke} />
-        <path d="M11.5 8 h2.5 M12.5 6.5 L14 8 l-1.5 1.5" {...stroke} />
-      </svg>
-    );
-  }
-  if (element.type === 'repeater') {
-    // Stacked row cells — one child instance per data row (D-030).
-    return (
-      <svg {...svg}>
-        <rect x="2.5" y="3" width="11" height="3" rx="0.8" {...stroke} />
-        <rect x="2.5" y="7" width="11" height="3" rx="0.8" {...stroke} />
-        <rect x="2.5" y="11" width="11" height="3" rx="0.8" {...stroke} />
-      </svg>
-    );
-  }
-  // shape kinds
-  switch (element.shape) {
-    case 'ellipse':
-      return (
-        <svg {...svg}>
-          <circle cx="8" cy="8" r="5.2" {...stroke} />
-        </svg>
-      );
-    case 'polygon':
-      return (
-        <svg {...svg}>
-          <polygon points="8,3 13,13 3,13" {...stroke} />
-        </svg>
-      );
-    case 'path':
-      return (
-        <svg {...svg}>
-          <path d="M3 11 C 6 3.5, 10 12.5, 13 5" {...stroke} />
-        </svg>
-      );
-    case 'rounded-rect':
-      return (
-        <svg {...svg}>
-          <rect x="3" y="4" width="10" height="8" rx="3" {...stroke} />
-        </svg>
-      );
-    default:
-      return (
-        <svg {...svg}>
-          <rect x="3" y="4" width="10" height="8" rx="1" {...stroke} />
-        </svg>
-      );
-  }
+  return <Icon icon={layerTypeIcon(element)} size={12} style={{ color, display: 'block' }} />;
 }
 
 function EyeOpenIcon(): JSX.Element {
