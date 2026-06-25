@@ -3,6 +3,10 @@ import { colors } from '../../theme.js';
 
 export const panel = style({
   background: colors.panel,
+  // Match the Project Assets / Shared Library panels so switching the left-rail
+  // slot keeps the bordered rounded-card look.
+  border: `1px solid ${colors.border}`,
+  borderRadius: '0.25rem',
   display: 'flex',
   flexDirection: 'column',
   minHeight: 0,
