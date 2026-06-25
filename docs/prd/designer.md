@@ -2584,7 +2584,7 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 **Notes:** apps/designer/src/renderer/App.tsx — a new keydown effect cloned from the Delete/Backspace handler; calls the D-076 multi-select clipboard ops. Add the rows to ShortcutsModal. Shares its core (clipboard + ops) with D-076. Change: `openspec/changes/multi-select-clipboard/` (branch `feat/multi-select-clipboard`).
 
-## [ ] D-078 — Pin the scene/root row while scrolling layers ⟨priority: medium⟩
+## [~] D-078 — Pin the scene/root row while scrolling layers ⟨priority: medium⟩
 
 **What:** The top scene/root row in the layers panel stays pinned (sticky) at the top while the element rows below scroll vertically.
 **Why:** Today the scene row scrolls away with the list; it should remain a fixed header.
@@ -2592,7 +2592,7 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 - WHEN the layers list is scrolled vertically THEN the scene/root row stays fixed at the top of the layers panel (and its lane row stays aligned), while the element rows scroll under it
 
-**Notes:** apps/designer/src/renderer/features/timeline/TimelineDock.tsx — the `sceneLabel` row currently lives inside the translateY-scrolled `leftBodyInner`; lift it out so it's fixed, and keep the right-side lane in sync (the left column is scrolled via translateY mirroring the lane's scrollTop). Needs care with the synced-scroll model.
+**Notes:** apps/designer/src/renderer/features/timeline/TimelineDock.tsx + TimelineDock.css.ts. RIGHT lane: `sceneLane` is `position: sticky; top: 0` in the native-scroll `rightBody`, with a solid bg + z-index above the lanes. LEFT label: `sceneLabel` stays inside `leftBodyInner` but counteracts its imperative `translateY(-scrollTop)` with its own `translateY(+scrollTop)` (set in `syncScroll`) + solid bg + z-index — the synced-scroll model is preserved (no switch to native `scrollTop`). Change: `openspec/changes/pin-scene-row/` (branch `feat/pin-scene-row`).
 
 ## [~] D-079 — Widen the inline color hex input ⟨priority: low⟩ — implemented on `fix/timeline-layers-polish`
 
