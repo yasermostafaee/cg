@@ -2539,3 +2539,67 @@ visual-equivalence test. Keep the STATIC (non-animated) position write path cons
 (scale+rotate selection box) regressions. Consider `will-change: transform` for animated
 movers (the ticker track already uses it). Needs a dedicated design pass like D-060
 before implementation — do later, not in the current feature queue.
+
+## [ ] D-074 — Remove the border on the timeline zoom slider ⟨priority: low⟩
+
+**What:** The timeline zoom range slider (StatusBar) shows a visible border/box (the
+native `<input type=range>` chrome). Remove it so the slider reads as a clean track.
+**Why:** Visual inconsistency with the rest of the restyled controls.
+**Acceptance:**
+
+- WHEN the timeline zoom slider renders THEN it shows no border/box around it (the track + thumb only)
+
+**Notes:** apps/designer/src/renderer/features/status/StatusBar.css.ts `zoomSlider` — add `appearance: 'none'` (+ `WebkitAppearance`) and ensure no border; keep `accentColor`/width/cursor. Don't change the +/- buttons.
+
+## [ ] D-075 — New default timeline colors per element type ⟨priority: low⟩
+
+**What:** Change the default per-type timeline colors to: sequence = red, clock = dark purple, ticker = orange, text = yellow.
+**Why:** The current defaults (sequence lime, clock cyan, ticker yellow, text amber) don't match the desired scheme.
+**Acceptance:**
+
+- WHEN a text/ticker/clock/sequence element has no custom `timelineColor` THEN its layer icon + lifespan bar use: text `#FACC15` (yellow), ticker `#F97316` (orange), clock `#7E22CE` (dark purple), sequence `#EF4444` (red)
+
+**Notes:** apps/designer/src/renderer/features/timeline/ElementRow.tsx `TYPE_COLORS`. These overlap container (`#F97316`) and video-placeholder (`#EF4444`) — acceptable; leave the other types as-is.
+
+## [ ] D-076 — Multi-select layer context-menu actions ⟨priority: medium⟩
+
+**What:** The layer right-click menu's actions — copy, cut, duplicate, delete, and fit (fit lifespan to the active range) — operate on ALL currently-selected layers, not just the clicked one.
+**Why:** Today these ops are single-element; multi-selecting layers and right-clicking only affects one.
+**Acceptance:**
+
+- WHEN 2+ layers are selected AND the user right-clicks one and chooses copy/cut/duplicate/delete/fit THEN the action applies to EVERY selected layer (one undo step)
+- WHEN the right-clicked layer is NOT in the current selection THEN it becomes the operation's target (matching standard editors)
+- WHEN paste runs THEN all copied/cut layers are pasted as fresh clones
+
+**Notes:** apps/designer/src/renderer/features/timeline/LayerContextMenu.tsx + the store ops in state/slices/elements.ts (copyElement/cutElement/duplicateElement/remove/fitElementLifespanToActiveRange) — make them selection-aware (accept/iterate the selection set). Shares its core with D-077.
+
+## [ ] D-077 — Copy / cut / paste keyboard shortcuts ⟨priority: medium⟩
+
+**What:** Ctrl/Cmd+C copies, Ctrl/Cmd+X cuts, Ctrl/Cmd+V pastes the selected element(s), reusing the same multi-select clipboard ops as D-076.
+**Why:** No keyboard clipboard exists today (only the context menu).
+**Acceptance:**
+
+- WHEN one or more elements are selected and no editable field is focused AND the user presses Ctrl/Cmd+C / +X / +V THEN copy / cut / paste runs on the whole selection (one undo step), and the keydown is consumed
+- WHEN an input/textarea/select/contentEditable is focused THEN the shortcut does NOT fire (native text clipboard wins)
+
+**Notes:** apps/designer/src/renderer/App.tsx — a new keydown effect cloned from the Delete/Backspace handler; calls the D-076 multi-select clipboard ops. Add the rows to ShortcutsModal.
+
+## [ ] D-078 — Pin the scene/root row while scrolling layers ⟨priority: medium⟩
+
+**What:** The top scene/root row in the layers panel stays pinned (sticky) at the top while the element rows below scroll vertically.
+**Why:** Today the scene row scrolls away with the list; it should remain a fixed header.
+**Acceptance:**
+
+- WHEN the layers list is scrolled vertically THEN the scene/root row stays fixed at the top of the layers panel (and its lane row stays aligned), while the element rows scroll under it
+
+**Notes:** apps/designer/src/renderer/features/timeline/TimelineDock.tsx — the `sceneLabel` row currently lives inside the translateY-scrolled `leftBodyInner`; lift it out so it's fixed, and keep the right-side lane in sync (the left column is scrolled via translateY mirroring the lane's scrollTop). Needs care with the synced-scroll model.
+
+## [ ] D-079 — Widen the inline color hex input ⟨priority: low⟩
+
+**What:** The inline color value (hex) input in the inspector is too narrow — the full value (#RRGGBB / #RRGGBBAA) is clipped. Give it enough width to show the whole value.
+**Why:** `hexInput` is `width:100%; minWidth:0` inside a shared `.cg-field`, so it collapses and clips.
+**Acceptance:**
+
+- WHEN a color field shows its hex value THEN the full value (6 or 8 hex chars) is visible without clipping
+
+**Notes:** apps/designer/src/renderer/features/inspector/controls.css.ts `hexInput` — set a `minWidth` that fits 8 chars (e.g. ~`8ch`/`64px`) so it doesn't collapse inside `.cg-field`; keep it from overlapping the trailing keyframe dot.
