@@ -8,6 +8,16 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Icon pack — shared vector `Icon` (lucide-react) replacing the ad-hoc Unicode-glyph
+  icons across the Designer ([D-092](./prd/designer.md)) — merged & archived
+  (2026-06-25, PR #163). App-local `Icon` (`currentColor` / `aria-hidden` / one
+  `size` / opt-in `flipRtl`) across tools, alignment, transform, chevrons, transport,
+  callouts, the timeline layer-type icons, and the panel grid/list + zoom + add +
+  radius controls; the Select dropdown chevron is a real lucide element; tool palette
+  reordered drawing-first → dynamic. `lucide-react` (ISC) imported per-icon +
+  recorded in `THIRD_PARTY_LICENSES.md`. Living spec: `designer-controls`. Archive:
+  `2026-06-25-replace-glyph-icons`. (Standalone fixes rode the same branch: canvas
+  checkerboard contrast, Compositions panel border, a vcg-format lint fix.)
 - Pasteboard editing epic ([D-071](./prd/designer.md) Phase A off-frame export
   filter + Phase B editor + [B-026](./prd/bugs.md) grow-to-fit extent) — merged &
   archived (2026-06-21 / 2026-06-22, PRs #153 / #154 · #155 / #156 · #157). An
@@ -87,9 +97,9 @@ the order changes. Strategic / non-engineering notes live in
 ## Next — agreed order
 
 The save + import-polish, button-restyle, per-composition export + chrome,
-stop-clears, preview-blank, and pasteboard work is archived — see Done (recent).
-The agreed upcoming order (one line each; **full PRD entries authored per-item when
-started** — most of these IDs are not yet filed):
+stop-clears, preview-blank, pasteboard, and icon-pack work is archived — see Done
+(recent). The agreed upcoming order (one line each; **full PRD entries authored
+per-item when started** — most of these IDs are not yet filed):
 
 1. [D-072](./prd/designer.md) / [D-073](./prd/designer.md) — guide coordinate
    readout + arrow-key nudge. **IN REVIEW:** both implemented + tested on
@@ -97,16 +107,14 @@ started** — most of these IDs are not yet filed):
    `openspec/changes/guide-coordinate-readout/` +
    `openspec/changes/arrow-key-nudge/`); only the batched green gate + E2E and the
    merge/archive remain.
-2. [D-092](./prd/designer.md) — icon-pack (replace the ad-hoc Unicode-glyph
-   tool/UI icons with a consistent SVG icon set)
-3. [D-074](./prd/designer.md)–D-080 — timeline / layers
-4. [D-039](./prd/designer.md) (ext) / D-081 / D-082 / D-083 / D-084 — sequence / clock
-5. [D-090](./prd/designer.md) / D-091 — chrome (additional polish beyond D-086
+2. [D-074](./prd/designer.md)–D-080 — timeline / layers
+3. [D-039](./prd/designer.md) (ext) / D-081 / D-082 / D-083 / D-084 — sequence / clock
+4. [D-090](./prd/designer.md) / D-091 — chrome (additional polish beyond D-086
    Phase B; confirm scope vs. what D-086 delivered when filing)
-6. [B-024](./prd/bugs.md) — negative guard
+5. [B-024](./prd/bugs.md) — negative guard
 
-> **Ordering note:** D-092 (icon-pack) precedes D-075 / D-078 / D-080 / D-084
-> because those add new buttons that should consume the new icon set.
+> **Ordering note:** the icon-pack (D-092) is done — the shared `Icon` set now
+> exists, so the new buttons added by D-075 / D-078 / D-080 / D-084 reuse it.
 
 Previously-listed designer items not in this order — D-059, D-060 (unblocks the parked
 [D-046](./prd/designer.md)), D-061, D-063, D-064, D-065, D-066 — remain **queued** in the PRD but

@@ -51,4 +51,4 @@
 
 ## 6. Gate
 
-- [ ] 6.1 `@cg/designer` green gate — `format:check` + `typecheck` + `lint` + `test` + `build` — and run the E2E (`pnpm test:e2e`).
+- [x] 6.1 `@cg/designer` green gate — `format:check` + `typecheck` + `lint` + `test` + `build` — and the E2E (`pnpm test:e2e`, 88 passing). Merged in PR #163.
