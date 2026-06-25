@@ -106,7 +106,12 @@ function ElementRowLabel(props: Props): JSX.Element {
           : (e) => {
               e.preventDefault();
               e.stopPropagation();
-              designerStore.setSelection([element.id]);
+              // D-076 — standard-editor target normalization: right-clicking a row that is
+              // already part of the multi-selection keeps the WHOLE selection (so the menu
+              // acts on all); right-clicking one outside it retargets to just that row.
+              if (!designerStore.get().selection.has(element.id)) {
+                designerStore.setSelection([element.id]);
+              }
               onContextMenu(element.id, e.clientX, e.clientY);
             }
       }
@@ -379,7 +384,12 @@ function ElementRowLane(props: Props): JSX.Element {
           : (e) => {
               e.preventDefault();
               e.stopPropagation();
-              designerStore.setSelection([element.id]);
+              // D-076 — standard-editor target normalization: right-clicking a row that is
+              // already part of the multi-selection keeps the WHOLE selection (so the menu
+              // acts on all); right-clicking one outside it retargets to just that row.
+              if (!designerStore.get().selection.has(element.id)) {
+                designerStore.setSelection([element.id]);
+              }
               onContextMenu(element.id, e.clientX, e.clientY);
             }
       }

@@ -2561,19 +2561,19 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 **Notes:** apps/designer/src/renderer/features/timeline/ElementRow.tsx `TYPE_COLORS`. These overlap container (`#F97316`) and video-placeholder (`#EF4444`) — acceptable; leave the other types as-is.
 
-## [ ] D-076 — Multi-select layer context-menu actions ⟨priority: medium⟩
+## [~] D-076 — Multi-select layer context-menu actions ⟨priority: medium⟩
 
-**What:** The layer right-click menu's actions — copy, cut, duplicate, delete, and fit (fit lifespan to the active range) — operate on ALL currently-selected layers, not just the clicked one.
+**What:** The layer right-click menu's actions — color, copy, cut, duplicate, delete, and fit (fit lifespan to the active range) — operate on ALL currently-selected layers, not just the clicked one.
 **Why:** Today these ops are single-element; multi-selecting layers and right-clicking only affects one.
 **Acceptance:**
 
-- WHEN 2+ layers are selected AND the user right-clicks one and chooses copy/cut/duplicate/delete/fit THEN the action applies to EVERY selected layer (one undo step)
+- WHEN 2+ layers are selected AND the user right-clicks one and chooses color/copy/cut/duplicate/delete/fit THEN the action applies to EVERY selected layer (one undo step)
 - WHEN the right-clicked layer is NOT in the current selection THEN it becomes the operation's target (matching standard editors)
 - WHEN paste runs THEN all copied/cut layers are pasted as fresh clones
 
-**Notes:** apps/designer/src/renderer/features/timeline/LayerContextMenu.tsx + the store ops in state/slices/elements.ts (copyElement/cutElement/duplicateElement/remove/fitElementLifespanToActiveRange) — make them selection-aware (accept/iterate the selection set). Shares its core with D-077.
+**Notes:** apps/designer/src/renderer/features/timeline/LayerContextMenu.tsx (target normalized at the row's `onContextMenu` in ElementRow.tsx) + the selection-aware store ops in state/slices/elements.ts (copySelection/cutSelection/duplicateSelection/pasteElements/fitSelectionLifespanToActiveRange/setSelectionTimelineColor; clipboard is `Element[]`). Shares its core with D-077. Change: `openspec/changes/multi-select-clipboard/` (branch `feat/multi-select-clipboard`).
 
-## [ ] D-077 — Copy / cut / paste keyboard shortcuts ⟨priority: medium⟩
+## [~] D-077 — Copy / cut / paste keyboard shortcuts ⟨priority: medium⟩
 
 **What:** Ctrl/Cmd+C copies, Ctrl/Cmd+X cuts, Ctrl/Cmd+V pastes the selected element(s), reusing the same multi-select clipboard ops as D-076.
 **Why:** No keyboard clipboard exists today (only the context menu).
@@ -2582,7 +2582,7 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 - WHEN one or more elements are selected and no editable field is focused AND the user presses Ctrl/Cmd+C / +X / +V THEN copy / cut / paste runs on the whole selection (one undo step), and the keydown is consumed
 - WHEN an input/textarea/select/contentEditable is focused THEN the shortcut does NOT fire (native text clipboard wins)
 
-**Notes:** apps/designer/src/renderer/App.tsx — a new keydown effect cloned from the Delete/Backspace handler; calls the D-076 multi-select clipboard ops. Add the rows to ShortcutsModal.
+**Notes:** apps/designer/src/renderer/App.tsx — a new keydown effect cloned from the Delete/Backspace handler; calls the D-076 multi-select clipboard ops. Add the rows to ShortcutsModal. Shares its core (clipboard + ops) with D-076. Change: `openspec/changes/multi-select-clipboard/` (branch `feat/multi-select-clipboard`).
 
 ## [~] D-078 — Pin the scene/root row while scrolling layers ⟨priority: medium⟩
 

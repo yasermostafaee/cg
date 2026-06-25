@@ -30,7 +30,7 @@ import {
 export const documentSlice = {
   setScene(scene: Scene | null, projectPath: string | null): void {
     resetHistory();
-    setClipboard(null);
+    setClipboard([]);
     setSuppressHistory(true);
     // Normalise to the composition model (migrate legacy root layers → a comp)
     // and open the first composition, if any.

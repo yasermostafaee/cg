@@ -7,6 +7,7 @@ import {
 } from 'react';
 import { ColorPicker } from './ColorPopover.js';
 import { cx } from '../../cx.js';
+import { normalizeHexColor } from '../../color.js';
 import { Select } from '../../ui/Select.js';
 import * as s from './controls.css.js';
 
@@ -553,9 +554,9 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
           placeholder={mixed ? 'mixed' : undefined}
           onFocus={(e) => e.currentTarget.select()}
           onBlur={(e) => {
-            const v = e.target.value.trim();
-            const next = v.startsWith('#') ? v : `#${v}`;
-            if (/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(next)) props.onCommit(next.toUpperCase());
+            const next = normalizeHexColor(e.target.value);
+            if (next !== null) props.onCommit(next);
+            else e.currentTarget.value = hex; // invalid → revert to the previous value
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();

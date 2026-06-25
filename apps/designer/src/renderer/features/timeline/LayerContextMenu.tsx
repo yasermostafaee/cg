@@ -9,6 +9,11 @@ import * as s from './LayerContextMenu.css.js';
 const HOVER_BG: React.CSSProperties = { background: 'rgba(56,189,248,0.16)' };
 
 interface Props {
+  /**
+   * The right-clicked element. The opener (ElementRow) uses it to normalize the
+   * selection before the menu opens (D-076); the menu itself acts on the whole
+   * selection via the selection-aware store ops, so it doesn't read this directly.
+   */
   elementId: string;
   /** Viewport coordinates of the right-click. */
   x: number;
@@ -57,10 +62,16 @@ const EDGE = 8;
  * Duplicate, Delete. "Move to nested composition" is intentionally
  * deferred until nested compositions exist.
  *
+ * D-076 — every action (Color, Fit, Copy / Cut / Paste, Duplicate, Delete)
+ * operates on the WHOLE current selection (the selection-aware store ops). The
+ * right-clicked row is normalized into the selection at the row's `onContextMenu`
+ * (ElementRow): a row already in the multi-selection keeps it, one outside it
+ * retargets to just that row — so the menu always acts on the intended set.
+ *
  * Rendered into a fixed full-viewport backdrop so a click (or Escape)
  * anywhere outside closes it; the menu clamps itself into the viewport.
  */
-export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Element {
+export function LayerContextMenu({ x, y, onClose }: Props): JSX.Element {
   const [hover, setHover] = useState<string | null>(null);
   const [colorOpen, setColorOpen] = useState(false);
   const canPaste = designerStore.hasClipboardElement();
@@ -130,7 +141,7 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
             setColorOpen(false);
           }}
           onMouseLeave={() => setHover(null)}
-          onClick={() => run(() => designerStore.fitElementLifespanToActiveRange(elementId))}
+          onClick={() => run(() => designerStore.fitSelectionLifespanToActiveRange())}
         >
           <span>Fit workspace</span>
         </div>
@@ -146,7 +157,7 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
             setColorOpen(false);
           }}
           onMouseLeave={() => setHover(null)}
-          onClick={() => run(() => designerStore.copyElement(elementId))}
+          onClick={() => run(() => designerStore.copySelection())}
         >
           <span>Copy</span>
         </div>
@@ -159,7 +170,7 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
             setColorOpen(false);
           }}
           onMouseLeave={() => setHover(null)}
-          onClick={() => run(() => designerStore.cutElement(elementId))}
+          onClick={() => run(() => designerStore.cutSelection())}
         >
           <span>Cut</span>
         </div>
@@ -174,7 +185,7 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
           }}
           onMouseLeave={() => setHover(null)}
           onClick={() => {
-            if (canPaste) run(() => designerStore.pasteElement());
+            if (canPaste) run(() => designerStore.pasteElements());
           }}
         >
           <span>Paste</span>
@@ -188,7 +199,7 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
             setColorOpen(false);
           }}
           onMouseLeave={() => setHover(null)}
-          onClick={() => run(() => designerStore.duplicateElement(elementId))}
+          onClick={() => run(() => designerStore.duplicateSelection())}
         >
           <span>Duplicate</span>
         </div>
@@ -201,7 +212,7 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
             setColorOpen(false);
           }}
           onMouseLeave={() => setHover(null)}
-          onClick={() => run(() => designerStore.removeElement(elementId))}
+          onClick={() => run(() => designerStore.deleteSelection())}
         >
           <span>Delete</span>
         </div>
@@ -230,7 +241,7 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
               aria-checked={false}
               onMouseEnter={() => setHover(c.hex)}
               onMouseLeave={() => setHover(null)}
-              onClick={() => run(() => designerStore.setElementTimelineColor(elementId, c.hex))}
+              onClick={() => run(() => designerStore.setSelectionTimelineColor(c.hex))}
             >
               <span className={s.swatch} style={{ background: c.hex }} aria-hidden />
               <span>{c.label}</span>

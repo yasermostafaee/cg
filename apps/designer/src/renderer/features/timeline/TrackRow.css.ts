@@ -86,7 +86,10 @@ export const colorValue = style({
 
 export const valueHexInput = style({
   flex: '1 1 0',
-  minWidth: 0,
+  // D-079 — was minWidth:0, which let the input collapse inside the colorValue cell and
+  // clip the value. A 7.5ch floor (the label drops the leading #) keeps it readable; the
+  // flex-grow still expands it to fit a full #RRGGBBAA in the 300px label column.
+  minWidth: '7.5ch',
   background: 'transparent',
   color: colors.text,
   border: '1px solid transparent',
