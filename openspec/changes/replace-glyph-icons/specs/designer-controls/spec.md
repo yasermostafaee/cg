@@ -147,7 +147,7 @@ SHALL NOT be RTL-mirrored.
 
 The canvas header's zoom group SHALL read left→right as: the live percent readout,
 then Fit, then a reset control, then zoom-in, then zoom-out. The Fit / zoom-in /
-zoom-out controls SHALL render `lucide-react` icons (`Maximize` / `ZoomIn` /
+zoom-out controls SHALL render `lucide-react` icons (`ScanSearch` / `ZoomIn` /
 `ZoomOut`) via the shared `Icon`, while the reset control SHALL show the plain TEXT
 `100%` (not an icon). Each control keeps its existing `onClick` / `aria-label` /
 `title`. Both the canvas viewport zoom and the status-bar TIMELINE zoom use the
@@ -181,17 +181,18 @@ SHALL match (no divergent `fontSize`). Each control keeps its existing
 - **THEN** it shows the shared `Icon` `Plus` at the same size as the others, and
   the asset / compositions `iconButton` boxes are identical
 
-### Requirement: The shared Select chevron uses lucide geometry
+### Requirement: The shared Select chevron is a real lucide icon
 
-The shared `Select` dropdown's down-chevron SHALL be a clear lucide chevron-down,
-drawn as a right-aligned `background-image` data-URI on a legible token stroke. A
-native `<select>` cannot host a React node, so this is the ONE icon NOT rendered
-through the `Icon` component; it uses lucide's `chevron-down` path geometry so it
-matches the rest of the icon set, and it SHALL survive hover (the
-`backgroundColor`-not-shorthand hover keeps the background image).
+The shared `Select` dropdown's down-chevron SHALL be a REAL lucide `ChevronDown`
+rendered through the shared `Icon`, overlaid (absolutely positioned,
+`pointer-events: none`) at the right edge inside the `Select` wrapper — NOT a
+`background-image` data-URI (a per-site `background` shorthand override kept wiping
+the data-URI). It SHALL appear on every dropdown, be immune to per-site background
+overrides, and let clicks fall through to the `<select>`.
 
-#### Scenario: Dropdown shows a clear lucide chevron
+#### Scenario: Dropdown shows a real lucide chevron element
 
-- **WHEN** a shared `Select` renders (and on hover)
-- **THEN** its down-chevron uses lucide `chevron-down` geometry at a legible size
-  and a brighter stroke than before, and remains visible on hover
+- **WHEN** a shared `Select` renders
+- **THEN** a lucide `ChevronDown` `<svg>` element is overlaid at its right edge
+  (not a CSS background), the value text does not run under it, and clicking the
+  control still opens the list

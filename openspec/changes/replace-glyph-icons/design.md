@@ -73,7 +73,7 @@ keyframe-inspector **back** arrow (`ArrowLeft`). Everything else stays unmirrore
 | Radius toggle uniform / per-corner          | CSS `iconUniform`/`iconPerCorner` | `Square` / `Maximize`                                           | —              |
 | Timeline layer-type icons (custom SVG)      | per-kind SVG switch               | toolbar parity + `Film`/`Group`/`Component`/`Triangle`/`Spline` | —              |
 | "More text options" gear                    | `⚙`                               | `Settings2`                                                     | —              |
-| Select dropdown chevron (native, data-URI)  | custom SVG path                   | lucide `chevron-down` geometry (not the `Icon` component)       | —              |
+| Select dropdown chevron (overlaid element)  | custom SVG path                   | real lucide `ChevronDown` via shared `Icon`, overlaid           | —              |
 
 ## Explicitly NOT migrated (text, not icons)
 

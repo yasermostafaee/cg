@@ -2491,7 +2491,7 @@ new buttons reuse named icons instead of drawing SVG each time.
 - WHEN the border-radius single/per-corner toggle renders THEN it shows the shared `Icon` (`Square` for uniform, `Maximize` for per-corner) and the old vanilla-extract `iconUniform` / `iconPerCorner` styles are removed
 - WHEN a timeline layer row renders its per-kind type icon THEN it uses the shared `Icon` and matches the canvas-toolbar tool icon for the shared kinds (text/shape/ellipse/image/ticker/clock/sequence/repeater), tinted with the layer's timeline colour
 - WHEN the "More text options" gear renders THEN it shows the shared `Icon` lucide `Settings2` (no `⚙` glyph)
-- WHEN a shared `Select` dropdown renders THEN its down-chevron uses lucide `chevron-down` geometry (a right-aligned data-URI, the one icon a native `<select>` can't render via the `Icon` component), legible and surviving hover
+- WHEN a shared `Select` dropdown renders THEN its down-chevron is a REAL lucide `ChevronDown` element overlaid at the right edge via the shared `Icon` (not a CSS background-image, so a per-site `background` override can't wipe it), with clicks falling through to the select
 
 **Notes:** Capability: extend **designer-controls** (ADDED requirements — the
 shared `Icon` primitive + the glyph→vector migration), since it is the shared

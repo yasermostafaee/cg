@@ -108,4 +108,18 @@ test.describe('D-092 — shared vector Icon', () => {
     // type icon carries the lucide-type class).
     await expect(app.page.locator('.cg-tl-row[data-element-id] svg.lucide-type')).toHaveCount(1);
   });
+
+  test('the shared Select renders a real lucide chevron element (not a background)', async ({
+    app,
+  }) => {
+    // The New Project modal hosts shared Selects (Resolution preset, Frame rate).
+    await app.page.getByRole('button', { name: 'New project' }).click();
+    const dialog = app.page.getByRole('dialog', { name: 'New project' });
+    const resolution = dialog.getByRole('combobox', { name: 'Resolution preset' });
+    await expect(resolution).toBeVisible();
+    // The chevron is a REAL lucide svg element overlaid inside the Select wrapper
+    // (the select's parent), not a CSS background-image.
+    const wrap = resolution.locator('xpath=..');
+    await expect(wrap.locator('svg.lucide-chevron-down')).toHaveCount(1);
+  });
 });

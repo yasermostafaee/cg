@@ -44,9 +44,10 @@
 - [x] 5.6 Reset-button overflow: dedicated `zoomResetButton` text style in `CanvasArea.css.ts` (auto width, 22px tall) so `100%` fits; `headerButton` unchanged for the icon buttons.
 - [x] 5.7 Radius toggle + Fit icon (supersedes Fit=`Maximize`): canvas Fit → `ScanSearch`; the border-radius single/per-corner toggle (`StyleSection` `RadiusToggle`) → shared `Icon` `Square` (uniform) / `Maximize` (per-corner) at `size={12}`; remove the dead `iconUniform` / `iconPerCorner` styles (+ `ICON` / `line` / `ARM` / `THICK`) from `BorderRadiusSection.css.ts`. Also fixed a stale `CanvasToolbar` function JSDoc (D-008 reference) flagged in review.
 - [x] 5.8 Timeline layer-type icons: replace the `LayerTypeIcon` custom-SVG switch (`ElementRow.tsx`) with the shared `Icon` (`size={12}`, tint via `style.color`), matching the toolbar for shared kinds; lottie/video → `Film`, container → `Group`, composition → `Component`, polygon → `Triangle`, path → `Spline`. Added a `style` passthrough to the `Icon` component.
-- [x] 5.9 Shared `Select` chevron (`Select.css.ts`): lucide `chevron-down` geometry (`m6 9 6 6 6-6`) data-URI at 12×12 on `colors.textMuted` (brighter), surviving hover.
+- [x] 5.9 Shared `Select` chevron: render a REAL lucide `ChevronDown` via the shared `Icon`, overlaid inside a `Select` wrapper (`Select.tsx` + `Select.css.ts` `wrap`/`chevron`), `pointer-events: none`. Supersedes the earlier `background-image` data-URI, which a per-site `background` override kept wiping.
 - [x] 5.10 "More text options" gear (`TextSettingsPopover.tsx`): `⚙` → shared `Icon` `Settings2`.
 - [x] 5.11 CLAUDE.md "Design system" convention: all icons go through the shared `Icon` (lucide); no new Unicode-glyph or ad-hoc inline-SVG icons in the renderer.
+- [x] 5.12 Review fix: corrected the stale `Maximize` → `ScanSearch` in the "Canvas zoom controls" requirement body (spec.md). E2E asserts a shared `Select` renders a real `svg.lucide-chevron-down` element.
 
 ## 6. Gate
 
