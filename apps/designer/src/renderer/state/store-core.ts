@@ -236,15 +236,17 @@ let reconcileTimer: ReturnType<typeof setTimeout> | null = null;
 const RECONCILE_SETTLE_MS = 50;
 
 /**
- * In-memory element clipboard for the layer right-click Copy / Cut / Paste
- * actions. Module-level (not part of the scene or undo history) — the menu
- * reads `hasClipboardElement()` when it opens to enable/disable Paste.
+ * In-memory element clipboard for the layer Copy / Cut / Paste actions (the
+ * right-click menu and the Ctrl/Cmd+C/X/V shortcuts). Holds the WHOLE copied
+ * selection (D-076/D-077), in stack order; an empty array means nothing to
+ * paste. Module-level (not part of the scene or undo history) — the menu reads
+ * `hasClipboardElement()` when it opens to enable/disable Paste.
  *
  * NOTE: clipboard is logically an *elements*-domain concern, but it lives here
  * in the engine for simplicity (the `_resetCore` test hook clears it alongside
  * the history). See `state/README.md`.
  */
-let clipboardElement: Element | null = null;
+let clipboardElements: Element[] = [];
 
 /** Timer handle for the auto-dismissing toast notice. */
 let noticeTimer: number | null = null;
@@ -474,12 +476,12 @@ export function reconcileDirty(): void {
 
 // ── Clipboard (elements-domain state, kept here for simplicity) ────────────
 
-export function getClipboard(): Element | null {
-  return clipboardElement;
+export function getClipboard(): readonly Element[] {
+  return clipboardElements;
 }
 
-export function setClipboard(el: Element | null): void {
-  clipboardElement = el;
+export function setClipboard(els: Element[]): void {
+  clipboardElements = els;
 }
 
 // ── Toast-notice timer ─────────────────────────────────────────────────────
@@ -496,7 +498,7 @@ export function setNoticeTimer(t: number | null): void {
 export function _resetCore(): void {
   past = [];
   future = [];
-  clipboardElement = null;
+  clipboardElements = [];
   savedScene = null;
   savedHash = null;
   currentHash = null;

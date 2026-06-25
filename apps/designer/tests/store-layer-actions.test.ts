@@ -23,6 +23,12 @@ function activeLayers() {
 function first(): Element {
   return children()[0]!;
 }
+function addSecondShape(): void {
+  designerStore.addElement(defaultShape('el-2', 80, 90));
+}
+function ids(): string[] {
+  return children().map((c) => c.id);
+}
 
 beforeEach(() => {
   freshSceneWithShape();
@@ -91,5 +97,105 @@ describe('designerStore — layer context-menu actions', () => {
     expect(designerStore.hasClipboardElement()).toBe(true);
     freshSceneWithShape();
     expect(designerStore.hasClipboardElement()).toBe(false);
+  });
+});
+
+describe('designerStore — selection-aware clipboard / ops (D-076 / D-077)', () => {
+  it('copySelection + pasteElements clones every selected element and selects the pasted set', () => {
+    addSecondShape();
+    designerStore.setSelection(['el-1', 'el-2']);
+    designerStore.copySelection();
+    expect(designerStore.hasClipboardElement()).toBe(true);
+    designerStore.pasteElements();
+    expect(children()).toHaveLength(4); // 2 originals + 2 clones
+    expect(ids().filter((id) => id !== 'el-1' && id !== 'el-2')).toHaveLength(2);
+    // the pasted clones become the selection
+    const sel = [...designerStore.get().selection];
+    expect(sel).toHaveLength(2);
+    expect(sel).not.toContain('el-1');
+    expect(sel).not.toContain('el-2');
+  });
+
+  it('copySelection captures stack order; pasteElements preserves it after the selected element', () => {
+    addSecondShape(); // layer order: el-1, el-2
+    designerStore.setSelection(['el-1', 'el-2']);
+    designerStore.copySelection(); // clipboard: [clone(el-1), clone(el-2)]
+    designerStore.setSelection(['el-1']); // paste right after el-1
+    designerStore.pasteElements();
+    const order = ids();
+    expect(order).toHaveLength(4);
+    expect(order[0]).toBe('el-1'); // original
+    expect(order[3]).toBe('el-2'); // original, still last
+    expect(order[1]).not.toBe('el-1'); // clone of el-1
+    expect(order[2]).not.toBe('el-2'); // then clone of el-2 — clipboard order kept
+  });
+
+  it('cutSelection copies the whole selection then removes it (one undo step)', () => {
+    addSecondShape();
+    designerStore.setSelection(['el-1', 'el-2']);
+    designerStore.cutSelection();
+    expect(designerStore.hasClipboardElement()).toBe(true);
+    // both removed; D-088 prunes the now-empty scaffold layer
+    expect(activeLayers()).toHaveLength(0);
+    // a single undo restores both
+    designerStore.undo();
+    expect(ids()).toEqual(['el-1', 'el-2']);
+  });
+
+  it('cutSelection removes the layer even when one of its keyframes is selected (regression)', () => {
+    // Bug state: the element is selected AND one of its keyframes is selected.
+    // `deleteSelection` has keyframe-first precedence, so cutSelection must NOT route
+    // through it — it must remove the ELEMENT it copied, not delete the keyframe and
+    // leave the layer behind.
+    designerStore.upsertKeyframe('el-1', 'opacity', 0, 1);
+    designerStore.setSelection(['el-1']);
+    designerStore.openKeyframeInspector({ elementId: 'el-1', property: 'opacity', frame: 0 });
+    expect(designerStore.get().selectedKeyframes).toHaveLength(1);
+
+    designerStore.cutSelection();
+    expect(designerStore.hasClipboardElement()).toBe(true);
+    expect(activeLayers()).toHaveLength(0); // el-1 actually removed (lone child → scaffold pruned)
+  });
+
+  it('duplicateSelection inserts a clone after each original and selects the clones', () => {
+    addSecondShape();
+    designerStore.setSelection(['el-1', 'el-2']);
+    designerStore.duplicateSelection();
+    const order = ids();
+    expect(order).toHaveLength(4);
+    expect(order[0]).toBe('el-1');
+    expect(order[1]).not.toBe('el-1'); // clone of el-1, right after it
+    expect(order[2]).toBe('el-2');
+    expect(order[3]).not.toBe('el-2'); // clone of el-2, right after it
+    expect([...designerStore.get().selection]).toHaveLength(2);
+    // one undo removes all clones
+    designerStore.undo();
+    expect(ids()).toEqual(['el-1', 'el-2']);
+  });
+
+  it('fitSelectionLifespanToActiveRange fits every selected element in one undo step', () => {
+    addSecondShape();
+    designerStore.setSceneActiveOut(20);
+    designerStore.setSelection(['el-1', 'el-2']);
+    designerStore.fitSelectionLifespanToActiveRange();
+    for (const el of children()) expect(el.lifespan).toEqual({ in: 0, out: 20 });
+    designerStore.undo();
+    for (const el of children()) expect(el.lifespan).not.toEqual({ in: 0, out: 20 });
+  });
+
+  it('setSelectionTimelineColor colors every selected element in one undo step', () => {
+    addSecondShape();
+    designerStore.setSelection(['el-1', 'el-2']);
+    designerStore.setSelectionTimelineColor('#EF4444');
+    for (const el of children()) expect(el.timelineColor).toBe('#EF4444');
+    designerStore.undo();
+    for (const el of children()) expect(el.timelineColor).not.toBe('#EF4444');
+  });
+
+  it('copySelection with nothing selected leaves the clipboard untouched', () => {
+    designerStore.copyElement('el-1'); // clipboard holds one
+    designerStore.setSelection([]);
+    designerStore.copySelection(); // no-op — must not clobber
+    expect(designerStore.hasClipboardElement()).toBe(true);
   });
 });

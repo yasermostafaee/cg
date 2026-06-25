@@ -522,6 +522,20 @@ export const elementsSlice = {
   },
 
   /**
+   * Set the timeline lifespan-bar colour for EVERY selected element — the
+   * selection-aware counterpart of {@link setElementTimelineColor}, applied as
+   * ONE undo step (D-076). No-op when nothing is selected.
+   */
+  setSelectionTimelineColor(color: string): void {
+    if (current.scene === null) return;
+    const ids = [...current.selection];
+    if (ids.length === 0) return;
+    designerStore.runAsSingleHistoryEntry(() => {
+      for (const id of ids) designerStore.setElementTimelineColor(id, color);
+    });
+  },
+
+  /**
    * "Fit workspace" — set the element's lifespan to span the scene's active
    * region (the resized play window), so the layer bar fills the played area.
    */
@@ -538,7 +552,7 @@ export const elementsSlice = {
     if (found === null) return;
     const el = found.layer.children[found.elIdx];
     if (el === undefined) return;
-    setClipboard(structuredClone(el));
+    setClipboard([structuredClone(el)]);
   },
 
   /** Copy an element to the clipboard, then remove it from the scene. */
@@ -547,9 +561,9 @@ export const elementsSlice = {
     designerStore.removeElement(elementId);
   },
 
-  /** True when there is a clipboard element available to paste. */
+  /** True when there is at least one clipboard element available to paste. */
   hasClipboardElement(): boolean {
-    return getClipboard() !== null;
+    return getClipboard().length > 0;
   },
 
   /**
@@ -566,25 +580,125 @@ export const elementsSlice = {
   },
 
   /**
-   * Paste the clipboard element as a fresh clone. It lands just after the
-   * currently selected element (same layer) when there is a selection,
-   * otherwise it is appended to the first layer. No-op with an empty clipboard.
+   * Paste the clipboard as fresh clone(s) — a thin alias for the selection-aware
+   * {@link pasteElements}, kept for existing callers. Pastes whatever is on the
+   * clipboard (one element or many). No-op with an empty clipboard.
    */
   pasteElement(): void {
-    const clip = getClipboard();
-    if (current.scene === null || clip === null) return;
-    const clone = cloneElementWithNewIds(clip);
-    const layers = activeLayersOf(current.scene);
-    if (layers.length === 0) {
-      designerStore.addElement(clone);
-      return;
-    }
-    const selId = [...current.selection][0];
-    const sel = selId === undefined ? null : locate(current.scene, selId);
-    const layerIdx = sel?.layerIdx ?? 0;
-    const layer = layers[layerIdx];
-    const pos = sel !== null ? sel.elIdx + 1 : (layer?.children.length ?? 0);
-    insertElementAt(layerIdx, pos, clone, true);
+    designerStore.pasteElements();
+  },
+
+  // ── Selection-aware clipboard / ops (D-076 / D-077) ───────────────────────
+  // Whole-selection counterparts of the single-element ops above. The layer
+  // context menu and the Ctrl/Cmd+C/X/V shortcuts route here so one action
+  // covers every selected layer. Each scene-mutating op is wrapped in
+  // `runAsSingleHistoryEntry` so a fan-out over N elements is ONE undo step;
+  // copy/paste select the affected set in a trailing selection-only `set`
+  // (no scene change → no extra undo entry).
+
+  /**
+   * Copy EVERY selected element into the clipboard, in stack order. No-op (leaves
+   * the clipboard untouched) when nothing is selected, so an empty Copy never
+   * clobbers a prior one.
+   */
+  copySelection(): void {
+    if (current.scene === null) return;
+    const els = designerStore.allElements().filter((el) => current.selection.has(el.id));
+    if (els.length === 0) return;
+    setClipboard(els.map((el) => structuredClone(el)));
+  },
+
+  /**
+   * Copy the whole selection to the clipboard, then remove exactly those elements —
+   * as one undo step. Removes ELEMENTS unconditionally via a direct `removeElement`
+   * loop, NOT `deleteSelection`: the latter has keyframe-first precedence and would
+   * delete a co-selected keyframe (e.g. an element with one of its keyframes also
+   * selected) instead of the element, so Cut would copy a layer it never removed.
+   * Ids are snapshotted because `removeElement` mutates the selection set; it also
+   * clears any now-dangling keyframe selection. Symmetric with `copySelection`.
+   */
+  cutSelection(): void {
+    if (current.scene === null || current.selection.size === 0) return;
+    designerStore.copySelection();
+    const ids = [...current.selection];
+    designerStore.runAsSingleHistoryEntry(() => {
+      for (const id of ids) designerStore.removeElement(id);
+    });
+  },
+
+  /**
+   * Duplicate every selected element in place — each a deep clone with fresh ids
+   * inserted directly after its original. Originals are re-located by id on each
+   * step so a same-layer insert doesn't shift the next target. The whole clone set
+   * becomes the selection. One undo step; no-op when nothing is selected.
+   */
+  duplicateSelection(): void {
+    if (current.scene === null) return;
+    const ids = designerStore
+      .allElements()
+      .filter((el) => current.selection.has(el.id))
+      .map((el) => el.id);
+    if (ids.length === 0) return;
+    const cloneIds: string[] = [];
+    designerStore.runAsSingleHistoryEntry(() => {
+      for (const id of ids) {
+        if (current.scene === null) continue;
+        const found = locate(current.scene, id);
+        if (found === null) continue;
+        const el = found.layer.children[found.elIdx];
+        if (el === undefined) continue;
+        const clone = cloneElementWithNewIds(el);
+        cloneIds.push(clone.id);
+        insertElementAt(found.layerIdx, found.elIdx + 1, clone, false);
+      }
+      if (cloneIds.length > 0) set({ selection: new Set(cloneIds) });
+    });
+  },
+
+  /**
+   * Paste ALL clipboard elements as fresh clones, in clipboard order, landing
+   * after the currently selected element in its layer (else appended to the first
+   * layer, or a fresh scaffold when the doc has no layers). The pasted set becomes
+   * the selection. One undo step; no-op with an empty clipboard.
+   */
+  pasteElements(): void {
+    if (current.scene === null) return;
+    const clips = getClipboard();
+    if (clips.length === 0) return;
+    const pastedIds: string[] = [];
+    designerStore.runAsSingleHistoryEntry(() => {
+      if (current.scene === null) return;
+      const layers = activeLayersOf(current.scene);
+      if (layers.length === 0) {
+        for (const clip of clips) {
+          const clone = cloneElementWithNewIds(clip);
+          designerStore.addElement(clone);
+          pastedIds.push(clone.id);
+        }
+      } else {
+        const selId = [...current.selection][0];
+        const sel = selId === undefined ? null : locate(current.scene, selId);
+        const layerIdx = sel?.layerIdx ?? 0;
+        let pos = sel !== null ? sel.elIdx + 1 : (layers[layerIdx]?.children.length ?? 0);
+        for (const clip of clips) {
+          const clone = cloneElementWithNewIds(clip);
+          insertElementAt(layerIdx, pos, clone, false);
+          pastedIds.push(clone.id);
+          pos += 1; // next clip lands right after the one just inserted (preserve order)
+        }
+      }
+      if (pastedIds.length > 0) set({ selection: new Set(pastedIds) });
+    });
+  },
+
+  /** Fit every selected element's lifespan to the active range — one undo step. */
+  fitSelectionLifespanToActiveRange(): void {
+    if (current.scene === null) return;
+    const ids = [...current.selection];
+    if (ids.length === 0) return;
+    designerStore.runAsSingleHistoryEntry(() => {
+      for (const id of ids) designerStore.fitElementLifespanToActiveRange(id);
+    });
   },
 
   /** All elements across all layers, top-of-stack first (last layer index = topmost). */
