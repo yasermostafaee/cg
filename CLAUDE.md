@@ -178,6 +178,14 @@ specs; engine docs cover "how it's built".
   `currentColor`, is `aria-hidden` by default, takes one `size`, and opts into RTL
   mirroring via `flipRtl`). Purpose-built custom SVG icons are allowed ONLY where
   lucide has no adequate equivalent, and should be the rare exception.
+- **Keyboard shortcuts — match the PHYSICAL key, not the character.** A
+  letter/digit shortcut handler MUST match on `e.code` (the physical key, e.g.
+  `KeyC` / `KeyV` / `Digit0`), never the printable `e.key`, so the shortcut is
+  independent of the keyboard layout/language (on a Persian layout the `c` key
+  reports `e.key: 'ع'` but still `e.code: 'KeyC'`). Use the shared
+  `comboKey(e, 'KeyC')` helper (`renderer/keyboard.ts`) for Ctrl/Cmd combos. Only
+  match on `e.key` for keys whose value is already layout-stable — `Delete`,
+  `Backspace`, `Arrow*`, `Enter`, `Escape`.
 
 ## Key references
 

@@ -19,6 +19,7 @@ import { primeAll as primeAllSharedImages } from './features/sharedLibrary/share
 import { useIssues } from './hooks/useIssues.js';
 import { designerStore, editSceneOf, shallowEqual, useDesignerSelector } from './state/store.js';
 import { colors } from './theme.js';
+import { comboKey } from './keyboard.js';
 import { cx } from './cx.js';
 import { Button } from './ui/Button.js';
 import { Control } from './ui/Control.js';
@@ -397,11 +398,17 @@ export function App(): JSX.Element {
   // on (empty selection for C/X, empty clipboard for V) so the browser default still
   // applies. On a real action: preventDefault + one markHistoryBoundary, then the
   // selection-aware op (each op is itself isolated as one undo step).
+  //
+  // Keys are matched by PHYSICAL code (KeyC/KeyX/KeyV) via `comboKey`, NOT the printable
+  // `e.key`, so the shortcuts fire regardless of the keyboard layout/language (e.g. a
+  // Persian layout) — see CLAUDE.md's keyboard-shortcut convention.
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
-      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
-      const key = e.key.toLowerCase();
-      if (key !== 'c' && key !== 'x' && key !== 'v') return;
+      if (e.altKey || e.shiftKey) return;
+      const isCopy = comboKey(e, 'KeyC');
+      const isCut = comboKey(e, 'KeyX');
+      const isPaste = comboKey(e, 'KeyV');
+      if (!isCopy && !isCut && !isPaste) return;
       const t = e.target;
       if (
         t instanceof HTMLElement &&
@@ -412,18 +419,18 @@ export function App(): JSX.Element {
       ) {
         return; // let the focused field's native clipboard handle it
       }
-      if (key === 'v') {
+      if (isPaste) {
         if (!designerStore.hasClipboardElement()) return; // empty clipboard → default
         e.preventDefault();
         designerStore.markHistoryBoundary();
         designerStore.pasteElements();
         return;
       }
-      // C / X act on the current selection
+      // Copy / Cut act on the current selection
       if (designerStore.get().selection.size === 0) return; // nothing selected → default
       e.preventDefault();
       designerStore.markHistoryBoundary();
-      if (key === 'c') designerStore.copySelection();
+      if (isCopy) designerStore.copySelection();
       else designerStore.cutSelection();
     }
     window.addEventListener('keydown', onKey);
