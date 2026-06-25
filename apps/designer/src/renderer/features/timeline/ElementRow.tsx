@@ -1,8 +1,10 @@
 import { useRef } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { Element, FrameRange, ShapeElement } from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
 import { cx } from '../../cx.js';
 import { Control } from '../../ui/Control.js';
+import { Icon } from '../../ui/Icon.js';
 import * as s from './ElementRow.css.js';
 
 export { ELEMENT_ROW_HEIGHT } from './metrics.js';
@@ -103,7 +105,11 @@ function ElementRowLabel(props: Props): JSX.Element {
         aria-expanded={expanded}
         aria-label={`Toggle ${element.name} tracks`}
       >
-        {expanded ? '▾' : '▸'}
+        {expanded ? (
+          <Icon icon={ChevronDown} size={14} />
+        ) : (
+          <Icon icon={ChevronRight} size={14} flipRtl />
+        )}
       </Control>
       <span className={s.typeIcon}>
         <LayerTypeIcon

@@ -1,7 +1,21 @@
 import { useState } from 'react';
+import {
+  ChevronsLeft,
+  ChevronsRight,
+  Circle,
+  Clock,
+  Hand,
+  Image,
+  MousePointer2,
+  Rows3,
+  Square,
+  Type,
+  type LucideIcon,
+} from 'lucide-react';
 import { designerStore, type DesignerTool } from '../../state/store.js';
 import { cx } from '../../cx.js';
 import { Control } from '../../ui/Control.js';
+import { Icon } from '../../ui/Icon.js';
 import * as s from './CanvasToolbar.css.js';
 
 interface Props {
@@ -11,31 +25,25 @@ interface Props {
 interface ToolEntry {
   id: DesignerTool;
   label: string;
-  icon: string;
+  icon: LucideIcon;
 }
 
 // Order per the D-008 reference pic: cursor, hand, text, rectangle,
 // ellipse, image. (The pic also includes a thin diagonal "line" tool;
 // the underlying schema has no line element yet, so it stays out.)
-// The hand uses U+270B (RAISED HAND) followed by U+FE0E (VARIATION
-// SELECTOR-15). VS15 asks the renderer for the text presentation, so
-// the glyph is monochrome and follows the CSS `color` rule instead of
-// the OS's colour-emoji font — matches the rest of the tool icons.
-const HAND_ICON = '✋︎';
-
 const TOOLS: readonly ToolEntry[] = [
-  { id: 'cursor', label: 'Select', icon: '↖' },
-  { id: 'hand', label: 'Hand (pan)', icon: HAND_ICON },
-  { id: 'text', label: 'Text', icon: 'T' },
-  { id: 'ticker', label: 'Ticker', icon: '⇇' },
-  { id: 'clock', label: 'Clock', icon: '◷' },
-  { id: 'sequence', label: 'Sequence', icon: '⇉' },
-  { id: 'repeater', label: 'Repeater', icon: '▤' },
-  { id: 'shape', label: 'Rectangle', icon: '▭' },
-  { id: 'ellipse', label: 'Ellipse', icon: '○' },
+  { id: 'cursor', label: 'Select', icon: MousePointer2 },
+  { id: 'hand', label: 'Hand (pan)', icon: Hand },
+  { id: 'text', label: 'Text', icon: Type },
+  { id: 'ticker', label: 'Ticker', icon: ChevronsLeft },
+  { id: 'clock', label: 'Clock', icon: Clock },
+  { id: 'sequence', label: 'Sequence', icon: ChevronsRight },
+  { id: 'repeater', label: 'Repeater', icon: Rows3 },
+  { id: 'shape', label: 'Rectangle', icon: Square },
+  { id: 'ellipse', label: 'Ellipse', icon: Circle },
   // D-040 — the logo/image tool stamps the selected Shared Library image (the
   // shared source it needed now exists); empty library ⇒ a hint, no silent insert.
-  { id: 'image', label: 'Image (logo)', icon: '▦' },
+  { id: 'image', label: 'Image (logo)', icon: Image },
 ];
 
 /**
@@ -65,7 +73,7 @@ export function CanvasToolbar({ tool }: Props): JSX.Element {
             aria-label={t.label}
             aria-pressed={active}
           >
-            {t.icon}
+            <Icon icon={t.icon} size={18} />
           </Control>
         );
       })}

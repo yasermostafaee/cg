@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { AnimatableProperty, Element, Scene } from '@cg/shared-schema';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { Control } from '../../ui/Control.js';
+import { Icon } from '../../ui/Icon.js';
 import * as s from './TimelineDock.css.js';
 import { DisplayRow } from './DisplayRow.js';
 import { ElementRow, lifespanColorFor } from './ElementRow.js';
@@ -467,7 +469,11 @@ export function TimelineDock({
                                   aria-expanded={groupExpanded}
                                   aria-label={`Toggle ${group.title.toLowerCase()} tracks`}
                                 >
-                                  {groupExpanded ? '▾' : '▸'}
+                                  {groupExpanded ? (
+                                    <Icon icon={ChevronDown} size={14} />
+                                  ) : (
+                                    <Icon icon={ChevronRight} size={14} flipRtl />
+                                  )}
                                 </Control>
                                 <span>{group.title}</span>
                               </div>

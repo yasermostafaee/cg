@@ -1,11 +1,21 @@
+import {
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
+  AlignVerticalJustifyStart,
+  TextAlignCenter,
+  TextAlignEnd,
+  TextAlignStart,
+  type LucideIcon,
+} from 'lucide-react';
 import { cx } from '../../cx.js';
 import { Control } from '../../ui/Control.js';
+import { Icon } from '../../ui/Icon.js';
 import * as s from './AlignButtonGroup.css.js';
 
-/** One alignment option — its stored value, its glyph, and its accessible label. */
+/** One alignment option — its stored value, its icon, and its accessible label. */
 export interface AlignOption<T extends string> {
   readonly value: T;
-  readonly icon: string;
+  readonly icon: LucideIcon;
   readonly label: string;
 }
 
@@ -46,7 +56,7 @@ export function AlignButtonGroup<T extends string>({
             aria-pressed={active}
             title={opt.label}
           >
-            {opt.icon}
+            <Icon icon={opt.icon} size={16} />
           </Control>
         );
       })}
@@ -60,14 +70,14 @@ export function AlignButtonGroup<T extends string>({
  * and the other kinds don't have it). Used by text, clock, and sequence.
  */
 export const H_ALIGN_OPTIONS = [
-  { value: 'start', icon: '⫷', label: 'Align start' },
-  { value: 'center', icon: '☰', label: 'Align center' },
-  { value: 'end', icon: '⫸', label: 'Align end' },
+  { value: 'start', icon: TextAlignStart, label: 'Align start' },
+  { value: 'center', icon: TextAlignCenter, label: 'Align center' },
+  { value: 'end', icon: TextAlignEnd, label: 'Align end' },
 ] as const satisfies readonly AlignOption<'start' | 'center' | 'end'>[];
 
 /** Vertical alignment (top / middle / bottom) — used by text, ticker, clock, and sequence. */
 export const V_ALIGN_OPTIONS = [
-  { value: 'top', icon: '⤒', label: 'Vertical top' },
-  { value: 'middle', icon: '⇳', label: 'Vertical middle' },
-  { value: 'bottom', icon: '⤓', label: 'Vertical bottom' },
+  { value: 'top', icon: AlignVerticalJustifyStart, label: 'Vertical top' },
+  { value: 'middle', icon: AlignVerticalJustifyCenter, label: 'Vertical middle' },
+  { value: 'bottom', icon: AlignVerticalJustifyEnd, label: 'Vertical bottom' },
 ] as const satisfies readonly AlignOption<'top' | 'middle' | 'bottom'>[];

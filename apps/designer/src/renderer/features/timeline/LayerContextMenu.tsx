@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { ChevronRight } from 'lucide-react';
 import { designerStore } from '../../state/store.js';
 import { cx } from '../../cx.js';
+import { Icon } from '../../ui/Icon.js';
 import * as s from './LayerContextMenu.css.js';
 
 // JS-state hover highlight (these menus track hover in React state, not :hover).
@@ -115,7 +117,9 @@ export function LayerContextMenu({ elementId, x, y, onClose }: Props): JSX.Eleme
           onMouseLeave={() => setHover(null)}
         >
           <span>Color</span>
-          <span className={s.chevron}>▶</span>
+          <span className={s.chevron}>
+            <Icon icon={ChevronRight} size={14} flipRtl />
+          </span>
         </div>
         <div
           className={rowClass()}

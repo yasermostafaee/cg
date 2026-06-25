@@ -1,7 +1,9 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { X } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
+import { Icon } from '../../ui/Icon.js';
 import * as s from './Modal.css.js';
 
 const FOCUSABLE =
@@ -116,7 +118,7 @@ export function Modal({
             aria-label="Close"
             title="Close"
           >
-            ✕
+            <Icon icon={X} size={16} />
           </Control>
         </div>
         <div
