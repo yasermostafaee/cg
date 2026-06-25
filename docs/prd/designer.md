@@ -2551,7 +2551,7 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 **Notes:** apps/designer/src/renderer/features/status/StatusBar.css.ts `zoomSlider` — add `appearance: 'none'` (+ `WebkitAppearance`) and ensure no border; keep `accentColor`/width/cursor. Don't change the +/- buttons.
 
-## [ ] D-075 — New default timeline colors per element type ⟨priority: low⟩
+## [~] D-075 — New default timeline colors per element type ⟨priority: low⟩ — implemented on `fix/timeline-layers-polish`
 
 **What:** Change the default per-type timeline colors to: sequence = red, clock = dark purple, ticker = orange, text = yellow.
 **Why:** The current defaults (sequence lime, clock cyan, ticker yellow, text amber) don't match the desired scheme.
