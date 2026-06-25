@@ -88,7 +88,9 @@ export const hexInput = style({
   padding: '0.05rem 0',
   fontSize: '0.74rem',
   width: '100%',
-  minWidth: 0,
+  // D-079 — was `minWidth: 0`, which let the input collapse inside `.cg-field` and
+  // clip the value. Fit the full hex (#RRGGBBAA = 9 chars) so it always shows.
+  minWidth: '9ch',
   boxSizing: 'border-box',
   fontVariantNumeric: 'tabular-nums',
 });

@@ -424,10 +424,10 @@ const SHAPE_COLORS: Record<ShapeElement['shape'], string> = {
 };
 
 const TYPE_COLORS: Record<Exclude<Element['type'], 'shape'>, string> = {
-  text: '#F59E0B', // amber
-  ticker: '#EAB308', // yellow — crawl band
-  clock: '#06B6D4', // cyan — time-driven clock
-  sequence: '#84CC16', // lime — now/next rotation
+  text: '#FACC15', // yellow (D-075)
+  ticker: '#F97316', // orange (D-075; shares container's orange — acceptable)
+  clock: '#7E22CE', // dark purple (D-075)
+  sequence: '#EF4444', // red (D-075; shares video-placeholder's red — acceptable)
   repeater: '#10B981', // emerald — data-driven rows
   image: '#EC4899', // pink
   lottie: '#A78BFA', // violet
