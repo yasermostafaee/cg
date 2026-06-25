@@ -117,8 +117,9 @@ per-item when started** — most of these IDs are not yet filed):
 > exists, so the new buttons added by D-075 / D-078 / D-080 / D-084 reuse it.
 
 Previously-listed designer items not in this order — D-059, D-060 (unblocks the parked
-[D-046](./prd/designer.md)), D-061, D-063, D-064, D-065, D-066 — remain **queued** in the PRD but
-are deprioritized below the above.
+[D-046](./prd/designer.md)), D-061, D-063, D-064, D-065, D-066, [D-096](./prd/designer.md)
+(perf — animate position via CSS transform; belongs to the hardening wave) — remain **queued**
+in the PRD but are deprioritized below the above.
 **Wave tail (carried over):** template cleanup — rebuild / refresh the bundled sample templates
 against the UX wave's finalized controls.
 
