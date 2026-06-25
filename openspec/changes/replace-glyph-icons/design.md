@@ -36,8 +36,9 @@ Only **navigational / directional** icons opt in: the collapse / expand chevron
 (`ChevronRight`), the layer context-menu submenu arrow (`ChevronRight`), and the
 keyframe-inspector **back** arrow (`ArrowLeft`). Everything else stays unmirrored:
 
-- **Tool identity icons** (ticker `ChevronsLeft`, sequence `ChevronsRight`, …) are
-  element-type identities, not navigation — mirroring would change their meaning.
+- **Tool identity icons** (ticker `MoveHorizontal`, sequence `ArrowDownUp`, …) are
+  element-type identities, not navigation — and are symmetric double-arrows, so
+  there is nothing to mirror.
 - **Media transport** (`SkipBack` / `StepBack` / `Play` / `StepForward` …) follow
   the universal convention that transport controls do not mirror.
 - **Alignment** icons use lucide's text-align set (`TextAlignStart/Center/End`)
@@ -46,24 +47,30 @@ keyframe-inspector **back** arrow (`ArrowLeft`). Everything else stays unmirrore
 
 ## Glyph → lucide mapping (validated against `lucide-react@1.21.0`)
 
-| Surface                                     | Old glyph                      | lucide                                                    | flipRtl        |
-| ------------------------------------------- | ------------------------------ | --------------------------------------------------------- | -------------- |
-| Tools: cursor / hand / text                 | `↖` / `✋︎` / `T`               | `MousePointer2` / `Hand` / `Type`                         | —              |
-| Tools: ticker / clock / sequence            | `⇇` / `◷` / `⇉`                | `ChevronsLeft` / `Clock` / `ChevronsRight`                | —              |
-| Tools: repeater / rect / ellipse / image    | `▤` / `▭` / `○` / `▦`          | `Rows3` / `Square` / `Circle` / `Image`                   | —              |
-| H-align start / center / end                | `⫷` / `☰` / `⫸`               | `TextAlignStart` / `TextAlignCenter` / `TextAlignEnd`     | —              |
-| V-align top / middle / bottom               | `⤒` / `⇳` / `⤓`                | `AlignVerticalJustifyStart` / `…Center` / `…End`          | —              |
-| Transform scale.x / scale.y                 | `↔` / `↕`                      | `MoveHorizontal` / `MoveVertical`                         | —              |
-| Transform rotation / opacity                | `↻` / `◑`                      | `RotateCw` / `Contrast`                                   | —              |
-| Chevron expanded / collapsed                | `▾` / `▸`                      | `ChevronDown` / `ChevronRight`                            | collapsed: yes |
-| Layer-menu submenu                          | `▶`                            | `ChevronRight`                                            | yes            |
-| Modal close                                 | `✕`                            | `X`                                                       | —              |
-| View-menu check                             | `✓`                            | `Check`                                                   | —              |
-| Keyframe-inspector back                     | `←`                            | `ArrowLeft`                                               | yes            |
-| Warning / info                              | `⚠` / `ℹ`                      | `TriangleAlert` / `Info`                                  | —              |
-| Transport: start / step-back / play / pause | `▶▶`/`◀`/`▶`/`❚❚` (inline SVG) | `SkipBack` / `StepBack` / `Play` / `Pause`                | —              |
-| Transport: step-fwd / loop / bounce         | (inline SVG)                   | `StepForward` / `Repeat` / `ArrowLeftRight`               | —              |
-| Preview: play / pause / stop / next / reset | `▶` / `⏸` / `■` / `⏭` / `↺`   | `Play` / `Pause` / `Square` / `SkipForward` / `RotateCcw` | —              |
+| Surface                                     | Old glyph                         | lucide                                                    | flipRtl        |
+| ------------------------------------------- | --------------------------------- | --------------------------------------------------------- | -------------- |
+| Tools: cursor / hand / text                 | `↖` / `✋︎` / `T`                  | `MousePointer2` / `Hand` / `Type`                         | —              |
+| Tools: ticker / clock / sequence            | `⇇` / `◷` / `⇉`                   | `MoveHorizontal` / `Clock` / `ArrowDownUp`                | —              |
+| Tools: repeater / rect / ellipse / image    | `▤` / `▭` / `○` / `▦`             | `Rows3` / `Square` / `Circle` / `Image`                   | —              |
+| H-align start / center / end                | `⫷` / `☰` / `⫸`                  | `TextAlignStart` / `TextAlignCenter` / `TextAlignEnd`     | —              |
+| V-align top / middle / bottom               | `⤒` / `⇳` / `⤓`                   | `AlignVerticalJustifyStart` / `…Center` / `…End`          | —              |
+| Transform scale.x / scale.y                 | `↔` / `↕`                         | `MoveHorizontal` / `MoveVertical`                         | —              |
+| Transform rotation / opacity                | `↻` / `◑`                         | `RotateCw` / `Contrast`                                   | —              |
+| Chevron expanded / collapsed                | `▾` / `▸`                         | `ChevronDown` / `ChevronRight`                            | collapsed: yes |
+| Layer-menu submenu                          | `▶`                               | `ChevronRight`                                            | yes            |
+| Modal close                                 | `✕`                               | `X`                                                       | —              |
+| View-menu check                             | `✓`                               | `Check`                                                   | —              |
+| Keyframe-inspector back                     | `←`                               | `ArrowLeft`                                               | yes            |
+| Warning / info                              | `⚠` / `ℹ`                         | `TriangleAlert` / `Info`                                  | —              |
+| Transport: start / step-back / play / pause | `▶▶`/`◀`/`▶`/`❚❚` (inline SVG)    | `SkipBack` / `StepBack` / `Play` / `Pause`                | —              |
+| Transport: step-fwd / loop / bounce         | (inline SVG)                      | `StepForward` / `Repeat` / `ArrowLeftRight`               | —              |
+| Preview: play / pause / stop / next / reset | `▶` / `⏸` / `■` / `⏭` / `↺`      | `Play` / `Pause` / `Square` / `SkipForward` / `RotateCcw` | —              |
+| Asset grid / list toggle (local SVG fns)    | `GridIcon` / `ListIcon`           | `LayoutGrid` / `List`                                     | —              |
+| Timeline zoom out / in (StatusBar)          | `−` / `+`                         | `ZoomOut` / `ZoomIn`                                      | —              |
+| Canvas zoom fit / in / out (CanvasArea)     | `⛶` / `+` / `−`                   | `ScanSearch` / `ZoomIn` / `ZoomOut`                       | —              |
+| Canvas zoom reset → text                    | `1×`                              | text `100%` (not an icon)                                 | —              |
+| Panel add buttons (assets/comps/library)    | `+`                               | `Plus` (shared, `size={16}`)                              | —              |
+| Radius toggle uniform / per-corner          | CSS `iconUniform`/`iconPerCorner` | `Square` / `Maximize`                                     | —              |
 
 ## Explicitly NOT migrated (text, not icons)
 
@@ -81,21 +88,33 @@ keyframe-inspector **back** arrow (`ArrowLeft`). Everything else stays unmirrore
 
 ## Beyond the PRD inventory
 
-A repo-wide glyph sweep found a few rendered glyph icons outside the 15-file
-inventory:
+A repo-wide glyph sweep found rendered glyph icons outside the original 15-file
+inventory. Follow-up amendments pulled most of them into scope:
 
-- **Migrated** — `App.tsx`'s notice/toast close `✕` → `X`. "Close" is an
-  enumerated glyph in the PRD's Why, so this is squarely in intent and the icon
-  choice is unambiguous.
-- **Left as-is (reported for a possible follow-up)** — `canvas/CanvasArea.tsx`
-  `⛶` (Fit), `compositions/CompositionActionBar.tsx` `▷` (Preview; its Export
-  `⤓` spans are already commented out / non-rendered), and
-  `inspector/TextStyleSection.tsx`'s `tT` / `↕` / `VA` typographic chip set.
-  These are NOT in the PRD's enumerated glyph list, and the TextStyleSection
-  chips are an intentional text-abbreviation cluster (same class as the
-  out-of-scope `X` / `Y` / `W` / `H` axis letters), so they are deliberately not
-  swapped here to avoid scope-creeping into unlisted files with non-obvious icon
-  choices.
+- **Migrated** — `App.tsx`'s notice/toast close `✕` → `X`; the Project-Assets /
+  Shared-Library **grid/list toggle** (the local `GridIcon` / `ListIcon` SVG
+  functions, now removed) → `LayoutGrid` / `List`; the **timeline** zoom −/+
+  (`StatusBar.tsx`) and the **canvas** zoom group (`CanvasArea.tsx`) → the SAME
+  `ZoomOut` / `ZoomIn` pair, the canvas Fit → `ScanSearch`, the canvas reset
+  relabelled from the `1×` glyph to the plain text `100%`, and the canvas group
+  reordered to readout → Fit → reset → in → out; and the three panel `+` add
+  buttons (Project Assets / Compositions / Shared Library) → `Plus` at one size
+  (`size={16}`), with the asset / compositions `iconButton` boxes aligned (the now
+  dead `fontSize` dropped). The canvas reset uses a dedicated `zoomResetButton`
+  text style so `100%` grows to fit (the shared 22×22 `headerButton` is unchanged
+  and still used by Fit / zoom-in / zoom-out). Finally, the border-radius
+  single/per-corner toggle (`StyleSection.tsx` `RadiusToggle`) moves off its
+  vanilla-extract CSS-drawn icon to the shared `Icon` — `Square` (uniform) /
+  `Maximize` (per-corner) at `size={12}` — and the now-dead `iconUniform` /
+  `iconPerCorner` styles (+ their `ICON` / `line` / `ARM` / `THICK` constants) are
+  removed from `BorderRadiusSection.css.ts`.
+- **Still left as-is (reported for a possible follow-up)** —
+  `compositions/CompositionActionBar.tsx` `▷` (Preview; its Export `⤓` spans are
+  already commented out / non-rendered), `inspector/TextStyleSection.tsx`'s
+  `tT` / `↕` / `VA` typographic chip set (an intentional text-abbreviation cluster,
+  same class as the out-of-scope `X` / `Y` / `W` / `H` axis letters), and the
+  glyph icons in non-D-092 files `fields/ListItemsEditor.tsx` (`↑` / `↓` / `×`) and
+  `fields/FieldsPanel.tsx` (`×`), which are outside this change's scope.
 
 ## Risk
 

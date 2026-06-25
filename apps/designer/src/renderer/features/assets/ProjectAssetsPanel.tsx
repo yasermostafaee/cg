@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { LayoutGrid, List, Plus } from 'lucide-react';
 import type { AssetMeta } from '@cg/shared-ipc';
 import type { Element } from '@cg/shared-schema';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
@@ -12,6 +13,7 @@ import { Modal, ModalButton } from '../shell/Modal.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
+import { Icon } from '../../ui/Icon.js';
 import * as s from './ProjectAssetsPanel.css.js';
 
 /**
@@ -24,30 +26,6 @@ const fontFaces = new Map<string, FontFace>();
 
 /** Persisted grid/list preference for the assets panel. */
 const ASSET_VIEW_KEY = 'cg.designer.assetsView';
-
-export function GridIcon(): JSX.Element {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden>
-      <rect x="0" y="0" width="6" height="6" rx="1" />
-      <rect x="8" y="0" width="6" height="6" rx="1" />
-      <rect x="0" y="8" width="6" height="6" rx="1" />
-      <rect x="8" y="8" width="6" height="6" rx="1" />
-    </svg>
-  );
-}
-
-export function ListIcon(): JSX.Element {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden>
-      <rect x="0" y="1" width="3" height="3" rx="0.7" />
-      <rect x="5" y="1.75" width="9" height="1.5" rx="0.75" />
-      <rect x="0" y="5.5" width="3" height="3" rx="0.7" />
-      <rect x="5" y="6.25" width="9" height="1.5" rx="0.75" />
-      <rect x="0" y="10" width="3" height="3" rx="0.7" />
-      <rect x="5" y="10.75" width="9" height="1.5" rx="0.75" />
-    </svg>
-  );
-}
 
 /**
  * D-011 — left-side Project Assets panel. Title + add menu (image / font)
@@ -245,7 +223,11 @@ export function ProjectAssetsPanel(): JSX.Element {
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => changeAssetView(assetView === 'grid' ? 'list' : 'grid')}
         >
-          {assetView === 'grid' ? <ListIcon /> : <GridIcon />}
+          {assetView === 'grid' ? (
+            <Icon icon={List} size={14} />
+          ) : (
+            <Icon icon={LayoutGrid} size={14} />
+          )}
         </Control>
         <Control
           ref={addBtnRef}
@@ -259,7 +241,7 @@ export function ProjectAssetsPanel(): JSX.Element {
             setAddMenu({ x: r.left, y: r.bottom + 4 });
           }}
         >
-          +
+          <Icon icon={Plus} size={16} />
         </Control>
       </div>
       <div className={s.searchWrap}>

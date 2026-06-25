@@ -28,12 +28,22 @@
 - [x] 3.14 `ui/Callout.tsx` — default icons ℹ → Info, ⚠ → TriangleAlert.
 - [x] 3.15 `shell/TransportBar.tsx` — remove the `ic()` helper + inline-SVG consts; render SkipBack / StepBack / Play / Pause / StepForward / Repeat / ArrowLeftRight via `<Icon>`.
 - [x] 3.16 `shell/NewProjectModal.tsx` — verified `×` / `≈` are math text (no icon), left unchanged.
-- [x] 3.17 `App.tsx` (beyond the inventory) — toast close ✕ → X (the enumerated "close" glyph). `CanvasArea` ⛶ / `CompositionActionBar` ▷ / `TextStyleSection` tT/↕/VA reported but left as-is (see design.md).
+- [x] 3.17 `App.tsx` (beyond the inventory) — toast close ✕ → X. (`CompositionActionBar` ▷ and `TextStyleSection` tT/↕/VA remain — see design.md.)
 
 ## 4. Tests
 
-- [x] 4.1 E2E (`tests/e2e/icon-pack.spec.ts`): a migrated toolbar button contains an `<svg>` and no longer its old glyph text; the icon inherits colour (`stroke="currentColor"`); a `flipRtl` icon mirrors under `[dir="rtl"]` while a default icon does not.
+- [x] 4.1 E2E (`tests/e2e/icon-pack.spec.ts`): a migrated toolbar button contains an `<svg>` and no longer its old glyph text; the icon inherits colour (`stroke="currentColor"`); a `flipRtl` icon mirrors under `[dir="rtl"]` while a default icon does not; the canvas tool order is drawing-first → dynamic; the canvas zoom group is icons + a `100%` text reset; the panel add buttons render the shared `Plus` icon.
 
-## 5. Gate
+## 5. Post-review amendments
 
-- [ ] 5.1 `@cg/designer` green gate — `format:check` + `typecheck` + `lint` + `test` + `build` — and run the E2E (`pnpm test:e2e`).
+- [x] 5.1 Tool icons: ticker → `MoveHorizontal`, sequence → `ArrowDownUp` (symmetric, no flipRtl) in `CanvasToolbar` + `ToolRail`.
+- [x] 5.2 Reorder the canvas tools (drawing-first → dynamic) in `CanvasToolbar` + `ToolRail`; update the D-008 comment. No test asserted tool order before; E2E now covers it.
+- [x] 5.3 Asset grid/list toggle: remove the local `GridIcon` / `ListIcon` SVG functions, render `Icon` `LayoutGrid` / `List` in `ProjectAssetsPanel` + `SharedLibraryPanel`; drop the dead cross-import.
+- [x] 5.4 Zoom controls: canvas (`CanvasArea`) Fit → `Maximize`, in/out → `ZoomIn` / `ZoomOut`, reset → text `100%`, group reordered readout → Fit → reset → in → out; timeline (`StatusBar`) in/out → `ZoomIn` / `ZoomOut` — one unified pair (supersedes the earlier `Plus` / `Minus`).
+- [x] 5.5 Panel add buttons: `+` → shared `Icon` `Plus` (`size={16}`) in `ProjectAssetsPanel` / `CompositionsPanel` / `SharedLibraryPanel`; align the two `iconButton` CSS boxes (drop the dead `fontSize`).
+- [x] 5.6 Reset-button overflow: dedicated `zoomResetButton` text style in `CanvasArea.css.ts` (auto width, 22px tall) so `100%` fits; `headerButton` unchanged for the icon buttons.
+- [x] 5.7 Radius toggle + Fit icon (supersedes Fit=`Maximize`): canvas Fit → `ScanSearch`; the border-radius single/per-corner toggle (`StyleSection` `RadiusToggle`) → shared `Icon` `Square` (uniform) / `Maximize` (per-corner) at `size={12}`; remove the dead `iconUniform` / `iconPerCorner` styles (+ `ICON` / `line` / `ARM` / `THICK`) from `BorderRadiusSection.css.ts`. Also fixed a stale `CanvasToolbar` function JSDoc (D-008 reference) flagged in review.
+
+## 6. Gate
+
+- [ ] 6.1 `@cg/designer` green gate — `format:check` + `typecheck` + `lint` + `test` + `build` — and run the E2E (`pnpm test:e2e`).

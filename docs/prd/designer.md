@@ -2484,6 +2484,11 @@ new buttons reuse named icons instead of drawing SVG each time.
 - WHEN the transport Play/Pause icons render THEN they go through the same `Icon`/lucide path (the local `ic()` SVG helper in TransportBar.tsx is removed/absorbed) so there is exactly one icon mechanism
 - WHEN `lucide-react` is added THEN it is imported per-icon (tree-shaken), and a third-party attribution entry for lucide (ISC/MIT) is added to THIRD_PARTY_LICENSES.md
 - WHEN the Designer runs in RTL THEN no icon's meaning breaks
+- WHEN the canvas tool palette renders THEN its tools are ordered drawing-first (cursor, hand, text, rectangle, ellipse, image) then the dynamic elements (ticker, sequence, clock, repeater); the ticker uses a horizontal double-arrow (`MoveHorizontal`) and the sequence a vertical double-arrow (`ArrowDownUp`), neither RTL-mirrored
+- WHEN the Project Assets / Shared Library grid↔list toggle renders THEN it uses the shared `Icon` (`LayoutGrid` / `List`) and the local `GridIcon` / `ListIcon` SVG functions are removed
+- WHEN the timeline (StatusBar) or canvas (CanvasArea) zoom controls render THEN zoom-out / zoom-in use the SAME `ZoomOut` / `ZoomIn` icons via the shared `Icon`; the canvas group also has a `ScanSearch` Fit and a plain-text `100%` reset (not an icon), ordered readout → Fit → reset → in → out, the `100%` reset using a dedicated auto-width style so it does not overflow the square icon-button box
+- WHEN the Project Assets / Compositions / Shared Library "add" (`+`) buttons render THEN each shows one shared `Icon` `Plus` at a single size, with the panels' `iconButton` boxes matched
+- WHEN the border-radius single/per-corner toggle renders THEN it shows the shared `Icon` (`Square` for uniform, `Maximize` for per-corner) and the old vanilla-extract `iconUniform` / `iconPerCorner` styles are removed
 
 **Notes:** Capability: extend **designer-controls** (ADDED requirements — the
 shared `Icon` primitive + the glyph→vector migration), since it is the shared

@@ -50,4 +50,49 @@ test.describe('D-092 — shared vector Icon', () => {
 
     await app.page.evaluate(() => document.documentElement.removeAttribute('dir'));
   });
+
+  test('canvas tools are ordered drawing-first, then dynamic', async ({ app }) => {
+    await app.newProject('Icons E2E');
+    const toolbar = app.page.getByRole('toolbar', { name: 'Canvas tools' });
+    const labels = await toolbar
+      .getByRole('button')
+      .evaluateAll((btns) => btns.map((b) => b.getAttribute('aria-label')));
+    expect(labels).toEqual([
+      'Select',
+      'Hand (pan)',
+      'Text',
+      'Rectangle',
+      'Ellipse',
+      'Image (logo)',
+      'Ticker',
+      'Sequence',
+      'Clock',
+      'Repeater',
+    ]);
+  });
+
+  test('the canvas zoom group is icons with a plain-text 100% reset', async ({ app }) => {
+    await app.newProject('Icons E2E');
+    await expect(
+      app.page.getByRole('button', { name: 'Fit', exact: true }).locator('svg'),
+    ).toHaveCount(1);
+    await expect(
+      app.page.getByRole('button', { name: 'Zoom in', exact: true }).locator('svg'),
+    ).toHaveCount(1);
+    await expect(
+      app.page.getByRole('button', { name: 'Zoom out', exact: true }).locator('svg'),
+    ).toHaveCount(1);
+    // The reset is plain text "100%", not an icon.
+    const reset = app.page.getByRole('button', { name: 'Reset zoom to 100%' });
+    await expect(reset).toHaveText('100%');
+    await expect(reset.locator('svg')).toHaveCount(0);
+  });
+
+  test('panel add buttons render the shared Plus icon', async ({ app }) => {
+    await app.newProject('Icons E2E');
+    await app.showCompositions();
+    const addComp = app.page.getByRole('button', { name: 'New composition' });
+    await expect(addComp.locator('svg')).toHaveCount(1);
+    await expect(addComp).not.toContainText('+');
+  });
 });

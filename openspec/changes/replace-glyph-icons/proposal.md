@@ -23,6 +23,22 @@ named icons instead of drawing SVG each time.
   across the migration inventory (canvas / tools / inspector / timeline / shell /
   fields / callout). The transport bar's local `ic()` inline-SVG helper is removed
   so there is exactly **one** icon mechanism.
+- Post-review amendments folded in: the ticker / sequence tool icons use symmetric
+  double-arrows (`MoveHorizontal` / `ArrowDownUp`); the canvas tool palette is
+  reordered (drawing tools first — cursor, hand, text, rectangle, ellipse, image —
+  then the dynamic elements ticker, sequence, clock, repeater); the asset
+  grid/list toggle (the local `GridIcon` / `ListIcon` SVG functions) and both
+  zoom controls (timeline `StatusBar` + canvas `CanvasArea`) migrate to `Icon`
+  (`LayoutGrid` / `List`; the same `ZoomIn` / `ZoomOut` pair in both zoom areas;
+  canvas Fit → `ScanSearch`), and the canvas zoom reset is relabelled from the
+  `1×` glyph to the plain text `100%` with the group reordered to
+  readout → Fit → reset → in → out. The three panel `+` add buttons (Project
+  Assets / Compositions / Shared Library) become one shared `Plus` icon (with the
+  two `iconButton` CSS boxes aligned), and the `100%` reset gets a dedicated
+  auto-width `zoomResetButton` style so its text doesn't overflow the square
+  icon-button box. The border-radius single/per-corner toggle moves off its
+  vanilla-extract CSS-drawn icon to the shared `Icon` (`Square` / `Maximize`),
+  and the now-dead radius-icon styles are removed.
 - Out of scope (these are TEXT, not icons, and stay unchanged): the
   keyboard-shortcut key labels (`⌘` / `Ctrl`), the mixed-value `—` placeholder
   (`controls.tsx` / `transform-fields.tsx`), the transform axis letters

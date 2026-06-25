@@ -1,3 +1,4 @@
+import { Maximize, Square } from 'lucide-react';
 import type {
   AnimatableProperty,
   ClockElement,
@@ -46,6 +47,7 @@ import { FontFamilySelect } from './FontFamilySelect.js';
 import { TextStyleSection, TogglePair } from './TextStyleSection.js';
 import { AlignButtonGroup, H_ALIGN_OPTIONS, V_ALIGN_OPTIONS } from './AlignButtonGroup.js';
 import { Control } from '../../ui/Control.js';
+import { Icon } from '../../ui/Icon.js';
 import * as radiusCss from './BorderRadiusSection.css.js';
 import * as fieldCss from './controls.css.js';
 
@@ -1330,9 +1332,9 @@ interface BoxProps {
 
 /**
  * D-042/D-055 — toggle between a single uniform radius and four independent
- * corners. ONE right-edge icon button whose shape reflects the CURRENT mode: a
- * simple rounded square (uniform) or four corner ticks (per-corner). Drawn via
- * vanilla-extract — no Unicode glyph, no raw button.
+ * corners. ONE right-edge icon button whose icon reflects the CURRENT mode: a
+ * rounded square (uniform → lucide `Square`) or the four-corners glyph
+ * (per-corner → lucide `Maximize`), via the shared `Icon`. No raw button.
  */
 function RadiusToggle({
   perCorner,
@@ -1348,7 +1350,7 @@ function RadiusToggle({
       aria-label={perCorner ? 'Use a single border radius' : 'Use per-corner border radius'}
       title={perCorner ? 'Single radius' : 'Per-corner radius'}
     >
-      <span className={perCorner ? radiusCss.iconPerCorner : radiusCss.iconUniform} aria-hidden />
+      <Icon icon={perCorner ? Maximize : Square} size={12} />
     </Control>
   );
 }

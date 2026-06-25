@@ -1,10 +1,10 @@
 import {
-  ChevronsLeft,
-  ChevronsRight,
+  ArrowDownUp,
   Circle,
   Clock,
   Image,
   MousePointer2,
+  MoveHorizontal,
   Rows3,
   Square,
   Type,
@@ -20,16 +20,18 @@ interface Props {
   tool: DesignerTool;
 }
 
+// D-092 order — drawing tools first, then the dynamic / data-driven elements
+// (matches CanvasToolbar; this rail has no hand/pan tool).
 const tools: { id: DesignerTool; label: string; icon: LucideIcon }[] = [
   { id: 'cursor', label: 'Select', icon: MousePointer2 },
   { id: 'text', label: 'Text', icon: Type },
-  { id: 'ticker', label: 'Ticker', icon: ChevronsLeft },
-  { id: 'clock', label: 'Clock', icon: Clock },
-  { id: 'sequence', label: 'Sequence', icon: ChevronsRight },
-  { id: 'repeater', label: 'Repeater', icon: Rows3 },
   { id: 'shape', label: 'Rectangle', icon: Square },
   { id: 'ellipse', label: 'Ellipse', icon: Circle },
   { id: 'image', label: 'Image', icon: Image },
+  { id: 'ticker', label: 'Ticker', icon: MoveHorizontal },
+  { id: 'sequence', label: 'Sequence', icon: ArrowDownUp },
+  { id: 'clock', label: 'Clock', icon: Clock },
+  { id: 'repeater', label: 'Repeater', icon: Rows3 },
 ];
 
 /**

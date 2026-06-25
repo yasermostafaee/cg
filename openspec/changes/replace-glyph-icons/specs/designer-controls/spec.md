@@ -33,12 +33,14 @@ horizontally only when it is inside an `[dir="rtl"]` subtree.
 
 ### Requirement: Designer UI icons are vector icons, not glyphs
 
-Every Designer control that previously rendered a Unicode-glyph icon SHALL render
-a `lucide-react` vector icon through the shared `Icon` component, and no
-glyph-string icon SHALL remain in the migrated files. There SHALL be exactly one
-icon mechanism: the transport bar's local inline-SVG helper (`ic()` in
-`TransportBar.tsx`) is removed and its icons go through `Icon`. The Designer's
-meaning SHALL be preserved under RTL (no icon's meaning breaks).
+Every migrated Designer control SHALL render its icon through the shared `Icon`
+component as a `lucide-react` vector icon — replacing both Unicode-glyph icons and
+local ad-hoc inline-`<svg>` icon helpers — and no glyph-string icon SHALL remain
+in the migrated files. There SHALL be exactly one icon mechanism: the transport bar's
+local inline-SVG helper (`ic()` in `TransportBar.tsx`) and the asset panels' local
+`GridIcon` / `ListIcon` SVG functions are removed and their icons go through
+`Icon`. The Designer's meaning SHALL be preserved under RTL (no icon's meaning
+breaks).
 
 #### Scenario: A migrated control renders a vector icon
 
@@ -52,6 +54,29 @@ meaning SHALL be preserved under RTL (no icon's meaning breaks).
   render
 - **THEN** they render through the shared `Icon` / lucide path and the local
   `ic()` SVG helper no longer exists
+
+#### Scenario: Asset grid/list toggle uses the shared Icon
+
+- **WHEN** the Project Assets or Shared Library panel's grid/list view toggle
+  renders
+- **THEN** it shows a `lucide-react` `LayoutGrid` / `List` vector icon via the
+  shared `Icon`, and the local `GridIcon` / `ListIcon` SVG functions no longer
+  exist
+
+#### Scenario: Border-radius toggle uses the shared Icon
+
+- **WHEN** the border-radius single / per-corner toggle renders
+- **THEN** it shows the shared `Icon` — `Square` (uniform) or `Maximize`
+  (per-corner) at `size={12}` — and the old vanilla-extract `iconUniform` /
+  `iconPerCorner` styles are removed
+
+#### Scenario: Zoom controls use the shared Icon
+
+- **WHEN** the timeline zoom controls (status bar) or the canvas zoom controls
+  (canvas header) render
+- **THEN** the zoom-out control shows `ZoomOut` and the zoom-in control shows
+  `ZoomIn` — the SAME pair in both areas — via the shared `Icon` (no `−` / `+`
+  glyph text), keeping their existing aria-label / title / disabled behaviour
 
 #### Scenario: RTL meaning is preserved
 
@@ -84,3 +109,61 @@ attribution entry for lucide (ISC) SHALL be recorded in
 - **WHEN** the Designer imports a lucide icon
 - **THEN** it uses a per-icon named import (so only used icons are bundled), AND
   `THIRD_PARTY_LICENSES.md` lists lucide-react with its ISC license
+
+### Requirement: Canvas tool palette order
+
+The canvas tool palette SHALL list the drawing tools first — cursor, hand, text,
+rectangle, ellipse, image — then the dynamic / data-driven elements — ticker,
+sequence, clock, repeater. The ticker tool SHALL use a horizontal double-arrow
+icon and the sequence tool a vertical double-arrow icon; both are symmetric and
+SHALL NOT be RTL-mirrored.
+
+#### Scenario: Tools are ordered drawing-first, then dynamic
+
+- **WHEN** the canvas toolbar renders
+- **THEN** its tools appear in order: cursor, hand, text, rectangle, ellipse,
+  image, ticker, sequence, clock, repeater
+
+#### Scenario: Ticker and sequence use symmetric double-arrow icons
+
+- **WHEN** the ticker and sequence tools render
+- **THEN** the ticker shows a horizontal double-arrow icon and the sequence a
+  vertical double-arrow icon, neither mirrored under RTL
+
+### Requirement: Canvas zoom controls
+
+The canvas header's zoom group SHALL read left→right as: the live percent readout,
+then Fit, then a reset control, then zoom-in, then zoom-out. The Fit / zoom-in /
+zoom-out controls SHALL render `lucide-react` icons (`Maximize` / `ZoomIn` /
+`ZoomOut`) via the shared `Icon`, while the reset control SHALL show the plain TEXT
+`100%` (not an icon). Each control keeps its existing `onClick` / `aria-label` /
+`title`. Both the canvas viewport zoom and the status-bar TIMELINE zoom use the
+SAME `ZoomIn` / `ZoomOut` pair.
+
+#### Scenario: Canvas zoom group order and icons
+
+- **WHEN** the canvas header renders
+- **THEN** the zoom group is ordered percent-readout → Fit → reset → zoom-in →
+  zoom-out, with Fit / zoom-in / zoom-out as `ScanSearch` / `ZoomIn` / `ZoomOut`
+  vector icons
+
+#### Scenario: Reset zoom is the text 100%
+
+- **WHEN** the canvas zoom reset control renders
+- **THEN** it shows the text `100%` (not a glyph or icon), keeping its
+  `aria-label` "Reset zoom to 100%"
+
+### Requirement: Panel add buttons use one shared Plus icon
+
+Each of the three panel "add" buttons SHALL render the `lucide-react` `Plus` icon
+via the shared `Icon` at ONE consistent size, replacing the per-panel `+` glyph
+text — these are the Project Assets "Add asset", Compositions "New composition",
+and Shared Library "Add library image" controls — and their `iconButton` boxes
+SHALL match (no divergent `fontSize`). Each control keeps its existing
+`aria-label` / `title` / handlers.
+
+#### Scenario: Add buttons render one consistent Plus icon
+
+- **WHEN** any of the three panel add buttons renders
+- **THEN** it shows the shared `Icon` `Plus` at the same size as the others, and
+  the asset / compositions `iconButton` boxes are identical

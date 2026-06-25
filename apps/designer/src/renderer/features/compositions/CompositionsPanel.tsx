@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { colors } from '../../theme.js';
 import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
+import { Icon } from '../../ui/Icon.js';
 import * as s from './CompositionsPanel.css.js';
 
 /** MIME-ish key used when dragging a composition onto the canvas. */
@@ -65,7 +67,7 @@ export function CompositionsPanel(): JSX.Element {
             if (id !== null) setRenaming(id);
           }}
         >
-          +
+          <Icon icon={Plus} size={16} />
         </Control>
       </div>
       <div className={s.list}>

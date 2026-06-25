@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { ZoomIn, ZoomOut } from 'lucide-react';
 import type { Scene } from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import * as s from './StatusBar.css.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
+import { Icon } from '../../ui/Icon.js';
 import { IssuesPanel } from '../issues/IssuesPanel.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
 
@@ -79,7 +81,7 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
           aria-label="Zoom out timeline"
           title="Zoom out timeline"
         >
-          −
+          <Icon icon={ZoomOut} size={14} />
         </Control>
         <input
           type="range"
@@ -100,7 +102,7 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
           aria-label="Zoom in timeline"
           title="Zoom in timeline"
         >
-          +
+          <Icon icon={ZoomIn} size={14} />
         </Control>
         <span className={s.zoomReadout}>{timelineZoom}×</span>
       </div>

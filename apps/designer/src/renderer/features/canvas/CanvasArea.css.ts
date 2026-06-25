@@ -40,6 +40,29 @@ export const headerButton = style({
   justifyContent: 'center',
 });
 
+// Text variant of `headerButton` for the "100%" zoom-reset label: a self-contained
+// style (not a class override) that keeps the 22px height + the shared look but
+// grows in width to fit the text, so the hover background wraps the whole label
+// instead of clipping it to a 22×22 square. Hover/active come from the bare
+// `Control` recipe (same as the icon header buttons), so it stays consistent.
+export const zoomResetButton = style({
+  minWidth: '22px',
+  width: 'auto',
+  height: '22px',
+  background: 'transparent',
+  color: colors.textMuted,
+  border: `1px solid ${colors.border}`,
+  borderRadius: '0.2rem',
+  fontSize: '0.78rem',
+  lineHeight: 1,
+  cursor: 'pointer',
+  padding: '0 6px',
+  whiteSpace: 'nowrap',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+});
+
 export const zoomReadout = style({
   minWidth: '40px',
   textAlign: 'center',
