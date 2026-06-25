@@ -154,7 +154,7 @@ test.describe('Editor pasteboard (D-071 Phase B)', () => {
     expect(box.y).toBeGreaterThan(vp.y); // visible, not clipped past the top edge
   });
 
-  test('two-tone canvas — #161927 surround + #080a10 frame page — on-frame shapes stay visible (not occluded)', async ({
+  test('two-tone canvas — #161927 surround + #c4c4ca frame page — on-frame shapes stay visible (not occluded)', async ({
     app,
   }) => {
     await app.newProject('TwoTone');
@@ -174,16 +174,16 @@ test.describe('Editor pasteboard (D-071 Phase B)', () => {
       .evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(bodyBg).toBe('rgb(22, 25, 39)'); // #161927
 
-    // FRAME-SIZED page backdrop (.cg-stage) = the darker #080a10 — a background-color,
-    // so it paints BEHIND the checkerboard + shapes.
+    // FRAME-SIZED page backdrop (.cg-stage) = a light gray #c4c4ca — a
+    // background-color, so it paints BEHIND the near-white checkerboard + shapes.
     const pageBg = await canvasFrame
       .locator('.cg-stage')
       .evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(pageBg).toBe('rgb(8, 10, 16)'); // #080a10
+    expect(pageBg).toBe('rgb(196, 196, 202)'); // #c4c4ca
 
-    // The on-frame shape over the #080a10 page is NOT occluded: at its centre the
+    // The on-frame shape over the #c4c4ca page is NOT occluded: at its centre the
     // topmost painted node belongs to the shape's own subtree (or an ancestor it paints
-    // over) — never a sibling overlay. A #080a10 painted in FRONT would fail this.
+    // over) — never a sibling overlay. A #c4c4ca painted in FRONT would fail this.
     const topIsShape = await shape.evaluate((el) => {
       const r = el.getBoundingClientRect();
       const top = el.ownerDocument.elementFromPoint(

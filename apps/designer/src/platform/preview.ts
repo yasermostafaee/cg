@@ -127,16 +127,25 @@ export class Preview {
       `linear-gradient(45deg, transparent 75%, #5b6075 75%),` +
       `linear-gradient(-45deg, transparent 75%, #5b6075 75%)`;
     const checkerPos = `0 0, 0 24px, 24px -24px, -24px 0`;
+    // The authoring canvas uses its OWN LIGHT two-tone checker (near-white squares on
+    // a light-gray page) so black text reads easily on the editing surface; the
+    // broadcast modal keeps the darker `checkerImage` above.
+    const authoringCheckerImage =
+      `linear-gradient(45deg, #ececef 25%, transparent 25%),` +
+      `linear-gradient(-45deg, #ececef 25%, transparent 25%),` +
+      `linear-gradient(45deg, transparent 75%, #ececef 75%),` +
+      `linear-gradient(-45deg, transparent 75%, #ececef 75%)`;
     const surfaceCss = pasteboard
       ? `/* D-071 Phase B — authoring pasteboard, TWO-TONE by region:
            - the SURROUND (html/body, the scrollable area beyond the frame) is the
              lighter #161927 — matches CanvasArea's \`s.outer\`;
-           - the FRAME-SIZED PAGE backdrop is the darker #080a10 (\`.cg-stage\`'s
-             background-color), inset by the frame offset + outlined.
-           CSS paints background-color (#080a10 page) → background-image (the
-           checkerboard, UNCHANGED) → children (shapes), so the #080a10 is a BACKDROP
-           behind every shape — on-frame shapes over the page paint on top and stay
-           visible; off-frame shapes over the #161927 surround likewise (clip lifted). */
+           - the FRAME-SIZED PAGE backdrop is a neutral mid-gray #7c7f87 (\`.cg-stage\`'s
+             background-color) with its own lighter checker, inset by the frame offset +
+             outlined, so black AND white text both read on the editing surface.
+           CSS paints background-color (#7c7f87 page) → background-image (the
+           checkerboard) → children (shapes), so the page is a BACKDROP behind every
+           shape — on-frame shapes over the page paint on top and stay visible;
+           off-frame shapes over the #161927 surround likewise (clip lifted). */
       html, body { background: #161927 !important; }
       .cg-stage {
         position: absolute !important;
@@ -148,8 +157,8 @@ export class Preview {
         width: ${String(w)}px !important;
         height: ${String(h)}px !important;
         overflow: visible !important;
-        background-color: #080a10;
-        background-image: ${checkerImage};
+        background-color: #7c7f87;
+        background-image: ${authoringCheckerImage};
         background-size: 48px 48px;
         background-position: ${checkerPos};
         box-shadow: 0 0 0 1px rgba(120,170,255,0.5), 0 10px 36px rgba(0,0,0,0.55);
