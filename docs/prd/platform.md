@@ -128,7 +128,7 @@ packaged as skills it loads on demand instead of bloating the always-on context.
   skills are for situational expertise. Sequenced post-feature-wave; see
   `docs/ROADMAP.md` ("Then — infra/quality").
 
-## [ ] P-008 — Skip heavy CI for docs-only PRs ⟨priority: medium⟩
+## [~] P-008 — Skip heavy CI for docs-only PRs ⟨priority: medium⟩ — implemented; change `openspec/changes/skip-ci-for-docs-only/`
 
 **What:** وقتی یک PR **فقط** فایل‌های docs/markdown را عوض کرده
 (`openspec/**`, `docs/**`, `**/*.md`)، jobهای سنگینِ CI (`pr.yml` —
