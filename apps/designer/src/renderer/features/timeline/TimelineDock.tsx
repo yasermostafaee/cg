@@ -88,6 +88,9 @@ export function TimelineDock({
   const leftBodyRef = useRef<HTMLDivElement | null>(null);
   const leftBodyInnerRef = useRef<HTMLDivElement | null>(null);
   const topScrollRef = useRef<HTMLDivElement | null>(null);
+  // D-078 — the pinned scene row's LEFT label; `syncScroll` counter-transforms it so it
+  // stays at the top while `leftBodyInner` (and the element rows) scroll under it.
+  const sceneLabelRef = useRef<HTMLDivElement | null>(null);
   const zoomRef = useRef(timelineZoom);
   zoomRef.current = timelineZoom;
 
@@ -107,6 +110,11 @@ export function TimelineDock({
     if (rb === null) return;
     if (leftBodyInnerRef.current !== null)
       leftBodyInnerRef.current.style.transform = `translateY(${String(-rb.scrollTop)}px)`;
+    // D-078 — keep the scene label pinned: cancel leftBodyInner's translateY so the row
+    // visually stays at the top while the element rows below it scroll (the lane side
+    // uses position:sticky for the same effect).
+    if (sceneLabelRef.current !== null)
+      sceneLabelRef.current.style.transform = `translateY(${String(rb.scrollTop)}px)`;
     if (topScrollRef.current !== null) topScrollRef.current.scrollLeft = rb.scrollLeft;
   }
 
@@ -435,7 +443,13 @@ export function TimelineDock({
                   aria-hidden
                 />
               )}
-              <div className={s.sceneLabel} aria-hidden onClick={clearSelection} />
+              <div
+                className={s.sceneLabel}
+                ref={sceneLabelRef}
+                data-testid="scene-row-label"
+                aria-hidden
+                onClick={clearSelection}
+              />
               {elements.length === 0 ? (
                 <p className={s.empty}>No elements yet. Add a shape, text, or image to start.</p>
               ) : (
@@ -520,7 +534,12 @@ export function TimelineDock({
               />
             </div>
           </div>
-          <div className={s.rightBody} ref={rightBodyRef} onScroll={syncScroll}>
+          <div
+            className={s.rightBody}
+            ref={rightBodyRef}
+            data-testid="timeline-lane-body"
+            onScroll={syncScroll}
+          >
             <div
               onClick={clearSelectionOnEmpty}
               className={s.rightBodyInner}
@@ -545,6 +564,9 @@ export function TimelineDock({
               <div
                 className={s.sceneLane}
                 ref={sceneLaneRef}
+                // D-078 — solid bg so element lanes don't show through the pinned scene row.
+                style={{ background: TIMELINE_BG }}
+                data-testid="scene-row-lane"
                 aria-label="Scene active region"
                 onClick={clearSelection}
               >
@@ -583,7 +605,7 @@ export function TimelineDock({
                 elements.map((el) => {
                   const expanded = !isCollapsed(el.id);
                   return (
-                    <div key={el.id}>
+                    <div key={el.id} data-lane-id={el.id}>
                       <ElementRow
                         element={el}
                         expanded={expanded}
