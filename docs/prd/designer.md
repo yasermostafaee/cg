@@ -2594,7 +2594,7 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 **Notes:** apps/designer/src/renderer/features/timeline/TimelineDock.tsx — the `sceneLabel` row currently lives inside the translateY-scrolled `leftBodyInner`; lift it out so it's fixed, and keep the right-side lane in sync (the left column is scrolled via translateY mirroring the lane's scrollTop). Needs care with the synced-scroll model.
 
-## [ ] D-079 — Widen the inline color hex input ⟨priority: low⟩
+## [~] D-079 — Widen the inline color hex input ⟨priority: low⟩ — implemented on `fix/timeline-layers-polish`
 
 **What:** The inline color value (hex) input in the inspector is too narrow — the full value (#RRGGBB / #RRGGBBAA) is clipped. Give it enough width to show the whole value.
 **Why:** `hexInput` is `width:100%; minWidth:0` inside a shared `.cg-field`, so it collapses and clips.
