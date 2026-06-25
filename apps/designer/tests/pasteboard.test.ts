@@ -62,9 +62,9 @@ describe('D-071 Phase B — pasteboard authoring document', () => {
     expect(html).toContain('top: var(--cg-frame-y, 540px) !important');
     // Two-tone by region: the surround (html/body) is the lighter #161927; the
     // frame-sized page backdrop (.cg-stage background-color) is a light gray
-    // #c4c4ca, BEHIND the near-white checkerboard + shapes.
+    // #a7a7a7, BEHIND the near-white checkerboard + shapes.
     expect(html).toContain('html, body { background: #161927 !important; }');
-    expect(html).toContain('background-color: #c4c4ca');
+    expect(html).toContain('background-color: #a7a7a7');
     // device-width lets the iframe's element size drive the layout, no stretch.
     expect(html).toContain('width=device-width');
   });

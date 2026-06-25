@@ -120,13 +120,13 @@ frame is **centered** (⛶ + project-open). The pasteboard overflows the viewpor
 are hidden** (`s.outer`) — there are no default scrollbars; the operator pans with the hand tool /
 wheel and zooms with Ctrl+wheel.
 
-**Two-tone dark, by region.** The **surround** (everything beyond the frame — `s.outer` _and_ the
-iframe `html, body`) is the lighter **`#161927`**. The **frame-sized page backdrop** is the darker
-**`#080a10`** — it is `.cg-stage`'s **`background-color`**, so CSS paints it _behind_ the
-checkerboard (`background-image`, unchanged) and the shapes (children). Every shape — on-frame over
-the `#080a10` page _or_ off-frame over the `#161927` surround — paints **on top** of both backdrops
-and stays visible + selectable; because `#080a10` is a `background-color` it is a **backdrop, never
-an overlay** (it cannot occlude a shape).
+**Two-tone, by region.** The **surround** (everything beyond the frame — `s.outer` _and_ the
+iframe `html, body`) is the dark **`#161927`**. The **frame-sized page backdrop** is a light gray
+**`#a7a7a7`** (with a near-white **`#f5f5f5`** checker) — it is `.cg-stage`'s **`background-color`**,
+so CSS paints it _behind_ the checkerboard (`background-image`) and the shapes (children). Every
+shape — on-frame over the `#a7a7a7` page _or_ off-frame over the `#161927` surround — paints **on
+top** of both backdrops and stays visible + selectable; because `#a7a7a7` is a `background-color` it
+is a **backdrop, never an overlay** (it cannot occlude a shape).
 
 **Zoom toward a point.** `zoomAt(factor, clientX, clientY)` measures the scene point under the
 anchor pre-zoom and stashes it; a **`useLayoutEffect` keyed on `zoom`** then applies the scroll

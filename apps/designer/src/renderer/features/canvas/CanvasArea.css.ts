@@ -91,10 +91,10 @@ export const viewport = style({
 
 export const outer = style({
   flex: 1,
-  // The PASTEBOARD SURROUND — the lighter dark tone (#161927). The whole scrollable
-  // area beyond the frame reads as this one tone; the darker tone (#080a10) is the
+  // The PASTEBOARD SURROUND — the DARK tone (#161927). The whole scrollable area
+  // beyond the frame reads as this one tone; the LIGHT tone (#a7a7a7) is the
   // FRAME-SIZED page backdrop drawn INSIDE the iframe (`.cg-stage` background-color),
-  // so the two-tone is by REGION (lighter surround, darker page) and every shape paints
+  // so the two-tone is by REGION (dark surround, light page) and every shape paints
   // on top of both backdrops.
   background: '#161927',
   border: `1px solid ${colors.border}`,
