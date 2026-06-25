@@ -70,6 +70,19 @@ breaks).
   (per-corner) at `size={12}` — and the old vanilla-extract `iconUniform` /
   `iconPerCorner` styles are removed
 
+#### Scenario: Timeline layer-type icons match the toolbar
+
+- **WHEN** a timeline layer row renders its per-kind type icon
+- **THEN** it uses the shared `Icon` and matches the canvas-toolbar tool icon for
+  the shared kinds (text / shape / ellipse / image / ticker / clock / sequence /
+  repeater), tinted with the layer's timeline colour via `currentColor`
+
+#### Scenario: The More text options gear uses the shared Icon
+
+- **WHEN** the "More text options" trigger renders
+- **THEN** it shows the shared `Icon` lucide `Settings2` (no `⚙` glyph), keeping
+  its `aria-label` / `title`
+
 #### Scenario: Zoom controls use the shared Icon
 
 - **WHEN** the timeline zoom controls (status bar) or the canvas zoom controls
@@ -167,3 +180,18 @@ SHALL match (no divergent `fontSize`). Each control keeps its existing
 - **WHEN** any of the three panel add buttons renders
 - **THEN** it shows the shared `Icon` `Plus` at the same size as the others, and
   the asset / compositions `iconButton` boxes are identical
+
+### Requirement: The shared Select chevron uses lucide geometry
+
+The shared `Select` dropdown's down-chevron SHALL be a clear lucide chevron-down,
+drawn as a right-aligned `background-image` data-URI on a legible token stroke. A
+native `<select>` cannot host a React node, so this is the ONE icon NOT rendered
+through the `Icon` component; it uses lucide's `chevron-down` path geometry so it
+matches the rest of the icon set, and it SHALL survive hover (the
+`backgroundColor`-not-shorthand hover keeps the background image).
+
+#### Scenario: Dropdown shows a clear lucide chevron
+
+- **WHEN** a shared `Select` renders (and on hover)
+- **THEN** its down-chevron uses lucide `chevron-down` geometry at a legible size
+  and a brighter stroke than before, and remains visible on hover

@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { cx } from '../cx.js';
 import * as s from './Icon.css.js';
@@ -19,6 +20,11 @@ export interface IconProps {
    */
   flipRtl?: boolean;
   className?: string;
+  /**
+   * Inline style passthrough to the `<svg>`. Mainly for per-instance `color` (the
+   * icon strokes with `currentColor`, e.g. the timeline layer-type tint).
+   */
+  style?: CSSProperties;
 }
 
 /**
@@ -37,6 +43,7 @@ export function Icon({
   strokeWidth,
   flipRtl = false,
   className,
+  style,
 }: IconProps): JSX.Element {
   return (
     <LucideComponent
@@ -44,6 +51,7 @@ export function Icon({
       strokeWidth={strokeWidth}
       aria-hidden
       className={cx(flipRtl && s.flipRtl, className)}
+      style={style}
     />
   );
 }

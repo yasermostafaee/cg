@@ -47,30 +47,33 @@ keyframe-inspector **back** arrow (`ArrowLeft`). Everything else stays unmirrore
 
 ## Glyph → lucide mapping (validated against `lucide-react@1.21.0`)
 
-| Surface                                     | Old glyph                         | lucide                                                    | flipRtl        |
-| ------------------------------------------- | --------------------------------- | --------------------------------------------------------- | -------------- |
-| Tools: cursor / hand / text                 | `↖` / `✋︎` / `T`                  | `MousePointer2` / `Hand` / `Type`                         | —              |
-| Tools: ticker / clock / sequence            | `⇇` / `◷` / `⇉`                   | `MoveHorizontal` / `Clock` / `ArrowDownUp`                | —              |
-| Tools: repeater / rect / ellipse / image    | `▤` / `▭` / `○` / `▦`             | `Rows3` / `Square` / `Circle` / `Image`                   | —              |
-| H-align start / center / end                | `⫷` / `☰` / `⫸`                  | `TextAlignStart` / `TextAlignCenter` / `TextAlignEnd`     | —              |
-| V-align top / middle / bottom               | `⤒` / `⇳` / `⤓`                   | `AlignVerticalJustifyStart` / `…Center` / `…End`          | —              |
-| Transform scale.x / scale.y                 | `↔` / `↕`                         | `MoveHorizontal` / `MoveVertical`                         | —              |
-| Transform rotation / opacity                | `↻` / `◑`                         | `RotateCw` / `Contrast`                                   | —              |
-| Chevron expanded / collapsed                | `▾` / `▸`                         | `ChevronDown` / `ChevronRight`                            | collapsed: yes |
-| Layer-menu submenu                          | `▶`                               | `ChevronRight`                                            | yes            |
-| Modal close                                 | `✕`                               | `X`                                                       | —              |
-| View-menu check                             | `✓`                               | `Check`                                                   | —              |
-| Keyframe-inspector back                     | `←`                               | `ArrowLeft`                                               | yes            |
-| Warning / info                              | `⚠` / `ℹ`                         | `TriangleAlert` / `Info`                                  | —              |
-| Transport: start / step-back / play / pause | `▶▶`/`◀`/`▶`/`❚❚` (inline SVG)    | `SkipBack` / `StepBack` / `Play` / `Pause`                | —              |
-| Transport: step-fwd / loop / bounce         | (inline SVG)                      | `StepForward` / `Repeat` / `ArrowLeftRight`               | —              |
-| Preview: play / pause / stop / next / reset | `▶` / `⏸` / `■` / `⏭` / `↺`      | `Play` / `Pause` / `Square` / `SkipForward` / `RotateCcw` | —              |
-| Asset grid / list toggle (local SVG fns)    | `GridIcon` / `ListIcon`           | `LayoutGrid` / `List`                                     | —              |
-| Timeline zoom out / in (StatusBar)          | `−` / `+`                         | `ZoomOut` / `ZoomIn`                                      | —              |
-| Canvas zoom fit / in / out (CanvasArea)     | `⛶` / `+` / `−`                   | `ScanSearch` / `ZoomIn` / `ZoomOut`                       | —              |
-| Canvas zoom reset → text                    | `1×`                              | text `100%` (not an icon)                                 | —              |
-| Panel add buttons (assets/comps/library)    | `+`                               | `Plus` (shared, `size={16}`)                              | —              |
-| Radius toggle uniform / per-corner          | CSS `iconUniform`/`iconPerCorner` | `Square` / `Maximize`                                     | —              |
+| Surface                                     | Old glyph                         | lucide                                                          | flipRtl        |
+| ------------------------------------------- | --------------------------------- | --------------------------------------------------------------- | -------------- |
+| Tools: cursor / hand / text                 | `↖` / `✋︎` / `T`                  | `MousePointer2` / `Hand` / `Type`                               | —              |
+| Tools: ticker / clock / sequence            | `⇇` / `◷` / `⇉`                   | `MoveHorizontal` / `Clock` / `ArrowDownUp`                      | —              |
+| Tools: repeater / rect / ellipse / image    | `▤` / `▭` / `○` / `▦`             | `Rows3` / `Square` / `Circle` / `Image`                         | —              |
+| H-align start / center / end                | `⫷` / `☰` / `⫸`                  | `TextAlignStart` / `TextAlignCenter` / `TextAlignEnd`           | —              |
+| V-align top / middle / bottom               | `⤒` / `⇳` / `⤓`                   | `AlignVerticalJustifyStart` / `…Center` / `…End`                | —              |
+| Transform scale.x / scale.y                 | `↔` / `↕`                         | `MoveHorizontal` / `MoveVertical`                               | —              |
+| Transform rotation / opacity                | `↻` / `◑`                         | `RotateCw` / `Contrast`                                         | —              |
+| Chevron expanded / collapsed                | `▾` / `▸`                         | `ChevronDown` / `ChevronRight`                                  | collapsed: yes |
+| Layer-menu submenu                          | `▶`                               | `ChevronRight`                                                  | yes            |
+| Modal close                                 | `✕`                               | `X`                                                             | —              |
+| View-menu check                             | `✓`                               | `Check`                                                         | —              |
+| Keyframe-inspector back                     | `←`                               | `ArrowLeft`                                                     | yes            |
+| Warning / info                              | `⚠` / `ℹ`                         | `TriangleAlert` / `Info`                                        | —              |
+| Transport: start / step-back / play / pause | `▶▶`/`◀`/`▶`/`❚❚` (inline SVG)    | `SkipBack` / `StepBack` / `Play` / `Pause`                      | —              |
+| Transport: step-fwd / loop / bounce         | (inline SVG)                      | `StepForward` / `Repeat` / `ArrowLeftRight`                     | —              |
+| Preview: play / pause / stop / next / reset | `▶` / `⏸` / `■` / `⏭` / `↺`      | `Play` / `Pause` / `Square` / `SkipForward` / `RotateCcw`       | —              |
+| Asset grid / list toggle (local SVG fns)    | `GridIcon` / `ListIcon`           | `LayoutGrid` / `List`                                           | —              |
+| Timeline zoom out / in (StatusBar)          | `−` / `+`                         | `ZoomOut` / `ZoomIn`                                            | —              |
+| Canvas zoom fit / in / out (CanvasArea)     | `⛶` / `+` / `−`                   | `ScanSearch` / `ZoomIn` / `ZoomOut`                             | —              |
+| Canvas zoom reset → text                    | `1×`                              | text `100%` (not an icon)                                       | —              |
+| Panel add buttons (assets/comps/library)    | `+`                               | `Plus` (shared, `size={16}`)                                    | —              |
+| Radius toggle uniform / per-corner          | CSS `iconUniform`/`iconPerCorner` | `Square` / `Maximize`                                           | —              |
+| Timeline layer-type icons (custom SVG)      | per-kind SVG switch               | toolbar parity + `Film`/`Group`/`Component`/`Triangle`/`Spline` | —              |
+| "More text options" gear                    | `⚙`                               | `Settings2`                                                     | —              |
+| Select dropdown chevron (native, data-URI)  | custom SVG path                   | lucide `chevron-down` geometry (not the `Icon` component)       | —              |
 
 ## Explicitly NOT migrated (text, not icons)
 

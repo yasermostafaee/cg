@@ -10,6 +10,10 @@ import { colors } from '../theme.js';
  * matter how the closed control is styled. The rest is the design-system
  * resting look + the standard interaction states.
  */
+// A lucide chevron-down rendered as a background-image data-URI (a native
+// `<select>` can't host a React node); `%23` is the URL-encoded `#` of the stroke.
+const chevronStroke = colors.textMuted.replace('#', '%23');
+
 export const select = style({
   colorScheme: 'dark',
   appearance: 'none',
@@ -23,9 +27,9 @@ export const select = style({
   lineHeight: 1.2,
   cursor: 'pointer',
   transition: 'background 90ms ease, border-color 90ms ease, color 90ms ease',
-  // An inline chevron so `appearance: none` doesn't leave the control naked.
-  backgroundImage:
-    "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='6'><path d='M1 1l3 3 3-3' stroke='%238b90ad' stroke-width='1.4' fill='none' stroke-linecap='round'/></svg>\")",
+  // lucide chevron-down (m6 9 6 6 6-6) at 12×12 on a brighter token stroke, so
+  // `appearance: none` isn't naked and the chevron reads clearly.
+  backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='${chevronStroke}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>")`,
   backgroundRepeat: 'no-repeat',
   backgroundPosition: 'right 0.4rem center',
   selectors: {

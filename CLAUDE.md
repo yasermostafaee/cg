@@ -171,6 +171,13 @@ specs; engine docs cover "how it's built".
   variant**, each tuned to that variant's colors. No raw `<button>`/`<select>`
   or ad-hoc control styling in the renderer — lint rules enforce this; new
   controls inherit the states by default.
+- ALL icons go through the shared **`Icon`** component
+  (`apps/designer/src/renderer/ui/Icon.tsx`, backed by `lucide-react`). Do NOT
+  introduce new Unicode-glyph icons or new ad-hoc inline-`<svg>` icons in the
+  renderer — new controls reuse `Icon` + a lucide name (the icon inherits
+  `currentColor`, is `aria-hidden` by default, takes one `size`, and opts into RTL
+  mirroring via `flipRtl`). Purpose-built custom SVG icons are allowed ONLY where
+  lucide has no adequate equivalent, and should be the rare exception.
 
 ## Key references
 

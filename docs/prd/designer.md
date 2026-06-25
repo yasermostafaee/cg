@@ -2489,6 +2489,9 @@ new buttons reuse named icons instead of drawing SVG each time.
 - WHEN the timeline (StatusBar) or canvas (CanvasArea) zoom controls render THEN zoom-out / zoom-in use the SAME `ZoomOut` / `ZoomIn` icons via the shared `Icon`; the canvas group also has a `ScanSearch` Fit and a plain-text `100%` reset (not an icon), ordered readout → Fit → reset → in → out, the `100%` reset using a dedicated auto-width style so it does not overflow the square icon-button box
 - WHEN the Project Assets / Compositions / Shared Library "add" (`+`) buttons render THEN each shows one shared `Icon` `Plus` at a single size, with the panels' `iconButton` boxes matched
 - WHEN the border-radius single/per-corner toggle renders THEN it shows the shared `Icon` (`Square` for uniform, `Maximize` for per-corner) and the old vanilla-extract `iconUniform` / `iconPerCorner` styles are removed
+- WHEN a timeline layer row renders its per-kind type icon THEN it uses the shared `Icon` and matches the canvas-toolbar tool icon for the shared kinds (text/shape/ellipse/image/ticker/clock/sequence/repeater), tinted with the layer's timeline colour
+- WHEN the "More text options" gear renders THEN it shows the shared `Icon` lucide `Settings2` (no `⚙` glyph)
+- WHEN a shared `Select` dropdown renders THEN its down-chevron uses lucide `chevron-down` geometry (a right-aligned data-URI, the one icon a native `<select>` can't render via the `Icon` component), legible and surviving hover
 
 **Notes:** Capability: extend **designer-controls** (ADDED requirements — the
 shared `Icon` primitive + the glyph→vector migration), since it is the shared

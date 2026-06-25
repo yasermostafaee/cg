@@ -95,4 +95,17 @@ test.describe('D-092 — shared vector Icon', () => {
     await expect(addComp.locator('svg')).toHaveCount(1);
     await expect(addComp).not.toContainText('+');
   });
+
+  test('a text layer-row icon matches the text tool icon (both lucide Type)', async ({ app }) => {
+    await app.newProject('Icons E2E');
+    await app.addTextElement();
+    // The canvas Text tool renders lucide `Type` …
+    await expect(
+      app.page.getByRole('button', { name: 'Text', exact: true }).locator('svg'),
+    ).toHaveClass(/lucide-type/);
+    // … and so does the new text layer's per-kind icon in the timeline row
+    // (the chevron is lucide-chevron-*, the eye/lock are bespoke SVGs — only the
+    // type icon carries the lucide-type class).
+    await expect(app.page.locator('.cg-tl-row[data-element-id] svg.lucide-type')).toHaveCount(1);
+  });
 });
