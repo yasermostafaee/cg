@@ -141,14 +141,28 @@ export const bodyPlayhead = style({
 });
 
 // Top-of-body "Scene" row — a single bar covering the active scene range.
+// D-078 — pinned at the top of the layers panel so the element rows scroll UNDER it.
+// LEFT: `leftBodyInner` is scrolled by an imperative `translateY(-scrollTop)`, so the
+// scene label can't use `position: sticky`; instead it counteracts the parent transform
+// with its own `translateY(+scrollTop)` (set in `syncScroll`). The opaque background +
+// z-index keep the element rows from showing through as they pass under it.
 export const sceneLabel = style({
   height: SCENE_ROW,
   boxSizing: 'border-box',
   background: colors.panel,
+  position: 'relative',
+  zIndex: 3,
+  willChange: 'transform',
 });
 
+// RIGHT: the lanes live in a NATIVE scroll container (`rightBody`), so `position: sticky`
+// pins the scene lane vertically while it still scrolls horizontally with the lanes (it
+// spans the zoomed width). The solid background (applied inline as TIMELINE_BG) + z-index
+// keep the element lanes from showing through.
 export const sceneLane = style({
-  position: 'relative',
+  position: 'sticky',
+  top: 0,
+  zIndex: 3,
   height: SCENE_ROW,
   boxSizing: 'border-box',
 });
