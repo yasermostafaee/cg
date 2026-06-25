@@ -2462,7 +2462,7 @@ action `nudgeSelection(dx, dy)` mirroring `beginGroupDrag`'s `commitAnimatable` 
 snapping). One `markHistoryBoundary()` on the first event of a run (`!e.repeat`). Ripple:
 `ShortcutsModal.tsx`. No schema/render/export change. Change: `openspec/changes/arrow-key-nudge/`.
 
-## [~] D-092 — Icon pack: replace Unicode-glyph icons with a shared vector Icon component ⟨priority: medium⟩ — implemented; change `openspec/changes/replace-glyph-icons/`
+## [x] D-092 — Icon pack: replace Unicode-glyph icons with a shared vector Icon component ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-25-replace-glyph-icons/`
 
 **What:** Add a single shared `Icon` component (in apps/designer/src/renderer/ui/)
 backed by `lucide-react`, and replace ALL ad-hoc Unicode-glyph icons across the
