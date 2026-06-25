@@ -419,6 +419,40 @@ export class DesignerApp {
     await this.page.mouse.up();
   }
 
+  // ── layer rows / context menu (D-076 / D-077) ───────────────────────────────
+
+  /** Count of timeline element ("layer") rows currently shown. */
+  async rowCount(): Promise<number> {
+    return this.page.locator('.cg-tl-row[data-element-id]').count();
+  }
+
+  /** Count of selected (highlighted) timeline rows. */
+  async selectedRowCount(): Promise<number> {
+    return this.page.locator('.cg-tl-row.cg-tl-selected').count();
+  }
+
+  /** The layer right-click menu (D-076). */
+  get layerMenu(): Locator {
+    return this.page.getByRole('menu', { name: 'Layer actions' });
+  }
+
+  /** A layer-menu item by its visible label (Copy / Cut / Paste / Duplicate / Delete / Fit workspace / Color). */
+  layerMenuItem(name: string): Locator {
+    return this.layerMenu.getByRole('menuitem', { name, exact: true });
+  }
+
+  /** Right-click the first SELECTED layer row to open the layer menu (keeps the whole selection). */
+  async openMenuOnSelectedRow(): Promise<void> {
+    await this.page.locator('.cg-tl-row.cg-tl-selected').first().click({ button: 'right' });
+    await expect(this.layerMenu).toBeVisible();
+  }
+
+  /** Right-click the (single) UNSELECTED layer row — D-076 retargets the menu to just it. */
+  async openMenuOnUnselectedRow(): Promise<void> {
+    await this.page.locator('.cg-tl-row:not(.cg-tl-selected)').first().click({ button: 'right' });
+    await expect(this.layerMenu).toBeVisible();
+  }
+
   // ── inspector ────────────────────────────────────────────────────────────────
 
   get inspector(): Locator {

@@ -391,6 +391,45 @@ export function App(): JSX.Element {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // D-077 — Copy / Cut / Paste shortcuts for the layer selection. Cloned from the
+  // Delete handler: bail while an editable field is focused so the native text
+  // clipboard wins, and do nothing (NO preventDefault) when there's nothing to act
+  // on (empty selection for C/X, empty clipboard for V) so the browser default still
+  // applies. On a real action: preventDefault + one markHistoryBoundary, then the
+  // selection-aware op (each op is itself isolated as one undo step).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+      const key = e.key.toLowerCase();
+      if (key !== 'c' && key !== 'x' && key !== 'v') return;
+      const t = e.target;
+      if (
+        t instanceof HTMLElement &&
+        (t.tagName === 'INPUT' ||
+          t.tagName === 'TEXTAREA' ||
+          t.tagName === 'SELECT' ||
+          t.isContentEditable)
+      ) {
+        return; // let the focused field's native clipboard handle it
+      }
+      if (key === 'v') {
+        if (!designerStore.hasClipboardElement()) return; // empty clipboard → default
+        e.preventDefault();
+        designerStore.markHistoryBoundary();
+        designerStore.pasteElements();
+        return;
+      }
+      // C / X act on the current selection
+      if (designerStore.get().selection.size === 0) return; // nothing selected → default
+      e.preventDefault();
+      designerStore.markHistoryBoundary();
+      if (key === 'c') designerStore.copySelection();
+      else designerStore.cutSelection();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // D-073 — arrow-key nudge: move the selection 1px (Shift = 10px) in SPATIAL screen
   // directions (Left = −x … independent of RTL). Cloned from the Delete handler: bail on
   // a non-Shift modifier or an editable focus; do nothing (and DON'T preventDefault) when
