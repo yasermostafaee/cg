@@ -14,8 +14,40 @@ env:
   CI: 'true'
 
 jobs:
+  # P-008 — detect whether any NON-docs file changed. The `code` filter matches
+  # everything and then un-matches the docs paths (last-match-wins picomatch), so
+  # `code` is 'true' iff at least one changed file is OUTSIDE docs. This is the
+  # STRICT condition ("no non-docs file changed"), so code accidentally bundled
+  # into a docs PR is NOT skipped.
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # paths-filter needs git history to diff push events; PRs use the API.
+          fetch-depth: 0
+
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            code:
+              - '**'
+              - '!openspec/**'
+              - '!docs/**'
+              - '!**/*.md'
+
   ci:
     name: Lint • Typecheck • Test • Build
+    # P-008 — heavy gate runs only when a non-docs file changed (skips docs-only).
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     # Browser SPAs build + test cross-platform; no Electron means no Windows
     # requirement, so CI runs on Linux (faster + cheaper).
     runs-on: ubuntu-latest
@@ -69,6 +101,9 @@ jobs:
   # no native dialogs); Playwright serves the built app via `vite preview`.
   e2e:
     name: E2E (Playwright)
+    # P-008 — same skip-on-docs-only condition as the unit gate.
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -133,3 +168,68 @@ jobs:
           name: playwright-report
           path: apps/designer/playwright-report/
           retention-days: 7
+
+  # P-008 — the LIGHT docs gate. Cheap; runs every PR (it's the only required work
+  # on a docs-only PR, and a useful spec/format sanity check on code PRs too).
+  docs-check:
+    name: Docs check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: OpenSpec validate
+        run: pnpm openspec validate --all --strict
+
+      - name: Format check
+        run: pnpm format:check
+
+  # P-008 — the SINGLE required status check. Always runs and itself decides
+  # pass/fail, so a heavy job that was SKIPPED on a docs-only PR can't leave a
+  # required check pending and block merge. Branch protection should require THIS
+  # job (`required`) and drop the direct requirements on `ci` / `e2e`.
+  required:
+    name: required
+    needs: [changes, ci, e2e, docs-check]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Aggregate results
+        run: |
+          code='${{ needs.changes.outputs.code }}'
+          ci='${{ needs.ci.result }}'
+          e2e='${{ needs.e2e.result }}'
+          docs='${{ needs.docs-check.result }}'
+          echo "code=$code | ci=$ci | e2e=$e2e | docs-check=$docs"
+          if [ "$code" = 'false' ]; then
+            if [ "$docs" = 'success' ]; then
+              echo 'Docs-only change: docs-check passed → required OK.'
+              exit 0
+            fi
+            echo 'Docs-only change: docs-check did not pass → required FAIL.'
+            exit 1
+          fi
+          if [ "$ci" = 'success' ] && [ "$e2e" = 'success' ]; then
+            echo 'Code change: ci + e2e passed → required OK.'
+            exit 0
+          fi
+          echo 'Code change: ci or e2e did not pass → required FAIL.'
+          exit 1
