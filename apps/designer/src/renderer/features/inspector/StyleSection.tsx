@@ -23,6 +23,7 @@ import {
 } from './sequence-presets.js';
 import { ListItemsEditor } from '../fields/ListItemsEditor.js';
 import { SharedImagePicker } from '../sharedLibrary/SharedImagePicker.js';
+import { TickerSeparatorControl } from './TickerSeparatorControl.js';
 import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import {
@@ -438,16 +439,8 @@ function TickerSections({
             designerStore.updateElement(id, { gap: Math.max(0, gap) } as Partial<Element>)
           }
         />
-        <TextField
-          label="separator"
-          value={element.separator ?? ''}
-          resetKey={id}
-          onCommit={(separator) =>
-            designerStore.updateElement(id, {
-              separator: separator === '' ? undefined : separator,
-            } as Partial<Element>)
-          }
-        />
+        {/* D-039ext — separator is a text glyph OR an image/logo (project or shared). */}
+        <TickerSeparatorControl element={element} />
         {/* D-028 — the ticker's INNER repeat loop. A fresh ticker is infinite
             by design; finite passes complete cleanly (the last item fully
             exits) and signal the composition's content-driven hold. */}
@@ -584,6 +577,28 @@ function isoToLocalInput(iso: string): string {
  * padding are keyframe-able (the clock tick stays time-driven, only the box STYLE
  * animates on the timeline).
  */
+/**
+ * D-084 — curated IANA zones for the wall-clock picker. 'Local' is the sentinel
+ * for "no timezone" (machine-local time). A stored zone outside this list (a
+ * hand-edited file) is surfaced as an extra leading option so it stays editable.
+ */
+const CLOCK_TIMEZONES: readonly string[] = [
+  'Local',
+  'UTC',
+  'America/Los_Angeles',
+  'America/New_York',
+  'America/Sao_Paulo',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Moscow',
+  'Asia/Tehran',
+  'Asia/Dubai',
+  'Asia/Kolkata',
+  'Asia/Shanghai',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+];
+
 function ClockSections({
   element,
   currentFrame,
@@ -627,6 +642,48 @@ function ClockSections({
           options={['persian', 'latin', 'arabic-indic'] as const}
           onCommit={(digits) => designerStore.updateElement(id, { digits } as Partial<Element>)}
         />
+        {/* D-084 — wall mode can render a chosen IANA zone; 'Local' clears it. The
+            count modes ignore a time zone, so the picker only shows for wall. */}
+        {element.mode === 'wall' && (
+          <SelectField
+            label="time zone"
+            value={element.timezone ?? 'Local'}
+            options={
+              element.timezone !== undefined && !CLOCK_TIMEZONES.includes(element.timezone)
+                ? [element.timezone, ...CLOCK_TIMEZONES]
+                : CLOCK_TIMEZONES
+            }
+            onCommit={(tz) =>
+              designerStore.updateElement(id, {
+                timezone: tz === 'Local' ? undefined : tz,
+              } as Partial<Element>)
+            }
+          />
+        )}
+        {/* D-103 — blink the colon separator(s) on/off + an adjustable rate. Applies to every
+            clock mode; off by default (steady colons). */}
+        <SelectField
+          label="blink colon"
+          value={element.blinkColon === true ? 'on' : 'off'}
+          options={['off', 'on'] as const}
+          onCommit={(v) =>
+            designerStore.updateElement(id, { blinkColon: v === 'on' } as Partial<Element>)
+          }
+        />
+        {element.blinkColon === true && (
+          <NumberField
+            label="blink rate"
+            value={element.blinkPeriodMs ?? 1000}
+            step={100}
+            min={100}
+            suffix="ms"
+            onCommit={(ms) =>
+              designerStore.updateElement(id, {
+                blinkPeriodMs: Math.max(100, Math.round(ms)),
+              } as Partial<Element>)
+            }
+          />
+        )}
         {element.mode === 'countdown' && (
           <>
             <SelectField

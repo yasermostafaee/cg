@@ -276,3 +276,56 @@ describe('ClockDriver (D-027)', () => {
     expect(wall).toBe(String(new Date(5000).getSeconds()).padStart(2, '0'));
   });
 });
+
+describe('ClockDriver — blinking colon (D-103)', () => {
+  const colon = (node: HTMLElement): HTMLElement | null =>
+    node.querySelector<HTMLElement>('[data-cg-clock-colon]');
+
+  it('renders colon spans and toggles ONLY their opacity at the period', () => {
+    const h = make({ mode: 'countup', format: 'HH:mm:ss', blinkColon: true, blinkPeriodMs: 1000 });
+    h.driver.start(); // now=0 → floor(0/1000)%2=0 → visible
+    const colons = h.node.querySelectorAll<HTMLElement>('[data-cg-clock-colon]');
+    expect(colons.length).toBe(2); // HH:mm:ss has two colons
+    expect(colons[0]?.style.opacity).toBe('1');
+    expect(colons[1]?.style.opacity).toBe('1');
+
+    h.clock.advance(1000); // now=1000 → floor=1 → hidden
+    expect(colon(h.node)?.style.opacity).toBe('0');
+    h.clock.advance(1000); // now=2000 → floor=2%2=0 → visible again
+    expect(colon(h.node)?.style.opacity).toBe('1');
+    h.driver.stop();
+  });
+
+  it('only the opacity toggles — the digits do not change or reflow within a second', () => {
+    const h = make({ mode: 'countup', format: 'HH:mm:ss', blinkColon: true, blinkPeriodMs: 500 });
+    h.driver.start(); // now=0 → "00:00:00", colon visible
+    const text0 = h.node.textContent;
+    expect(colon(h.node)?.style.opacity).toBe('1');
+
+    h.clock.advance(500); // now=500 → same second, colon now hidden
+    expect(h.node.textContent).toBe(text0); // digit text unchanged — only opacity differs
+    expect(colon(h.node)?.style.opacity).toBe('0');
+    h.driver.stop();
+  });
+
+  it('the rate (period) sets the cadence', () => {
+    const fast = make({ mode: 'countup', format: 'mm:ss', blinkColon: true, blinkPeriodMs: 500 });
+    const slow = make({ mode: 'countup', format: 'mm:ss', blinkColon: true, blinkPeriodMs: 1000 });
+    fast.driver.start();
+    slow.driver.start();
+    fast.clock.advance(500); // floor(500/500)%2=1 → hidden
+    slow.clock.advance(500); // floor(500/1000)%2=0 → still visible
+    expect(colon(fast.node)?.style.opacity).toBe('0');
+    expect(colon(slow.node)?.style.opacity).toBe('1');
+    fast.driver.stop();
+    slow.driver.stop();
+  });
+
+  it('off (default) keeps steady colons — plain textContent, no colon spans', () => {
+    const h = make({ mode: 'countup', format: 'HH:mm:ss' });
+    h.driver.start();
+    expect(h.node.querySelector('[data-cg-clock-colon]')).toBeNull();
+    expect(h.node.textContent).toBe('00:00:00');
+    h.driver.stop();
+  });
+});

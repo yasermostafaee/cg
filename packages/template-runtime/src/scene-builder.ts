@@ -609,7 +609,13 @@ function buildClock(element: ClockElement, ctx: BuildCtx): HTMLElement {
   span.style.whiteSpace = 'pre';
   if (isGradientFill(element.colorFill)) applyGradientGlyph(span, element.colorFill);
   span.textContent = clockInitialText(
-    { mode: element.mode, format: element.format, digits: element.digits, target: element.target },
+    {
+      mode: element.mode,
+      format: element.format,
+      digits: element.digits,
+      target: element.target,
+      timezone: element.timezone,
+    },
     Date.now(),
   );
   el.appendChild(span);

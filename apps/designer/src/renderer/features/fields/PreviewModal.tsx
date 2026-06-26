@@ -8,6 +8,7 @@ import {
   type Scene,
 } from '@cg/shared-schema';
 import { getAll as assetUrlGetAll } from '../assets/assetUrlCache.js';
+import { getAll as sharedUrlGetAll } from '../sharedLibrary/sharedImageUrlCache.js';
 import { Modal } from '../shell/Modal.js';
 import { PreviewFieldForm, type PreviewDispatch } from './PreviewFieldForm.js';
 import { columnsForFields, type ListItemColumn } from './repeater-columns.js';
@@ -253,7 +254,9 @@ export function PreviewModal({
     post({
       action: 'scene-replace',
       scene,
-      assetUrls: assetUrlGetAll(),
+      // D-039ext / D-040 — merge project + shared caches so a shared image (logo element
+      // OR ticker image separator) resolves in the preview, as it does on the canvas.
+      assetUrls: { ...assetUrlGetAll(), ...sharedUrlGetAll() },
       playoutOverride: overrides[''],
       scopeOverrides: overrides,
     });
@@ -268,7 +271,7 @@ export function PreviewModal({
       // D-028 — the iframe boots with an empty assetUrls map; without this
       // push, operator-imported (asset-*) fonts could never load here and the
       // play-path font await would be a no-op on the only surface that plays.
-      post({ action: 'asset-urls', assetUrls: assetUrlGetAll() });
+      post({ action: 'asset-urls', assetUrls: { ...assetUrlGetAll(), ...sharedUrlGetAll() } });
       post({ action: 'scrub', frame: 0 });
       post({ action: 'update', fields: defaultNestedValues(aggregate) });
     }

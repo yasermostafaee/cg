@@ -39,6 +39,25 @@ export interface TickerDriverItem {
   text: string;
 }
 
+/**
+ * D-039ext — a resolved image/logo separator for the driver: the schema's image
+ * separator shape (`assetId`/`source`/`size`) plus the host-resolved `url`
+ * (src). `url` may be absent — the node still carries `data-cg-asset-id` /
+ * `data-cg-asset-source` so a host re-walk (the Designer preview / exporter's
+ * `assetUrls` seam) can wire `src`. `size` is an explicit `w`×`h` box so the
+ * treadmill knows the separator's width with no asynchronous image measurement.
+ */
+export interface TickerSeparatorImage {
+  kind: 'image';
+  assetId: string;
+  source: 'project' | 'shared';
+  size: { w: number; h: number };
+  url?: string | undefined;
+}
+
+/** Either a bidi-neutral text glyph or an image/logo (D-039ext). */
+export type TickerSeparator = string | TickerSeparatorImage;
+
 export interface TickerDriverOptions {
   /** The clipped band element (the viewport). */
   band: HTMLElement;
@@ -61,8 +80,12 @@ export interface TickerDriverOptions {
   speed: number;
   /** Gap between items, px. */
   gap: number;
-  /** Optional separator text rendered between items as its own neutral span. */
-  separator?: string | undefined;
+  /**
+   * Optional separator between items, as its own node (never trailing — D-081).
+   * A bidi-neutral text glyph, OR — D-039ext — a resolved image/logo
+   * ({@link TickerSeparatorImage}).
+   */
+  separator?: TickerSeparator | undefined;
   /** Initial logical items (authored defaults; a bound list field replaces them). */
   items: TickerDriverItem[];
   /**
@@ -136,6 +159,12 @@ export class TickerDriver {
 
   private fed: FedNode[] = [];
   private readonly pool: HTMLElement[] = [];
+  /**
+   * D-039ext — a SEPARATE recycle pool for image-separator `<img>` nodes. They
+   * must never re-enter the span `pool` (an item `acquire()` would then get an
+   * `<img>` instead of a text span), so `release` routes by tag name.
+   */
+  private readonly imgPool: HTMLImageElement[] = [];
   /** Index into `logical` of the next item to feed. */
   private nextIdx = 0;
   /** Abstract offset where the next fed node begins. */
@@ -462,12 +491,50 @@ export class TickerDriver {
     // empties the band, get no leading separator — so a separator never trails the final item
     // (drain seam, finite-run end). A 'seamless' loop keeps its seam separator: the next item
     // follows it immediately, so it reads as a between-items separator across the loop.
-    const sep = this.o.separator;
-    if (this.hasFed && !drainBoundary && sep !== undefined && sep !== '') {
-      this.placeFed(sep, '', true);
+    if (this.hasFed && !drainBoundary && this.hasSeparator()) {
+      this.placeSeparator();
     }
     this.hasFed = true;
     this.placeFed(item.text, item.id, false);
+  }
+
+  /** Whether a non-empty separator (text or image) is configured. */
+  private hasSeparator(): boolean {
+    const sep = this.o.separator;
+    if (sep === undefined) return false;
+    return typeof sep === 'string' ? sep !== '' : true;
+  }
+
+  /** The separator's width in px (text → measured; image → its authored `size.w`). */
+  private separatorWidth(): number {
+    const sep = this.o.separator;
+    if (sep === undefined) return 0;
+    if (typeof sep === 'string') return sep === '' ? 0 : this.measureText(sep);
+    return sep.size.w;
+  }
+
+  /** Feed one separator node (text span or image), gluing it to the previous item. */
+  private placeSeparator(): void {
+    const sep = this.o.separator;
+    if (sep === undefined) return;
+    if (typeof sep === 'string') {
+      this.placeFed(sep, '', true);
+      return;
+    }
+    // D-039ext — image separator: a known width (`size.w`) so no measure is
+    // needed; an <img> node from the image pool, vertically centred.
+    const node = this.acquireImage(sep);
+    const fedNode: FedNode = {
+      node,
+      o: this.nextOffset,
+      w: sep.size.w,
+      id: '',
+      text: '',
+      isSep: true,
+    };
+    this.position(fedNode);
+    this.fed.push(fedNode);
+    this.nextOffset += sep.size.w + this.o.gap;
   }
 
   private placeFed(text: string, id: string, isSep: boolean): void {
@@ -517,8 +584,8 @@ export class TickerDriver {
   /** One full content cycle's width with the CURRENT items (incl. gaps/separators). */
   private cycleWidth(): number {
     if (this.cycleWidthCache !== null) return this.cycleWidthCache;
-    const sep = this.o.separator;
-    const sepBlock = sep !== undefined && sep !== '' ? this.measureText(sep) + this.o.gap : 0;
+    const sepW = this.separatorWidth();
+    const sepBlock = sepW > 0 ? sepW + this.o.gap : 0;
     let total = 0;
     for (const item of this.logical) {
       total += this.measureText(item.text) + this.o.gap + sepBlock;
@@ -565,7 +632,40 @@ export class TickerDriver {
 
   private release(node: HTMLElement): void {
     node.remove();
-    this.pool.push(node);
+    // D-039ext — image-separator <img> nodes recycle into their OWN pool; only
+    // text spans return to the span pool (else an item acquire() gets an <img>).
+    if (node.tagName === 'IMG') this.imgPool.push(node as HTMLImageElement);
+    else this.pool.push(node);
+  }
+
+  /** Acquire an image-separator <img> (from the image pool or freshly made), (re)applied. */
+  private acquireImage(sep: TickerSeparatorImage): HTMLImageElement {
+    const node = this.imgPool.pop() ?? this.makeImageSepNode();
+    applyImageSeparator(node, sep);
+    this.o.track.appendChild(node);
+    return node;
+  }
+
+  /**
+   * An image-separator <img>: absolutely positioned (its `left` set by `position()` like an
+   * item). Its VERTICAL placement follows the ticker's `verticalAlign` (top / middle /
+   * bottom) — like the item nodes — so the logo aligns with the crawl text, not a hardcoded
+   * centre. `object-fit: contain` fits the logo within the authored `size` box.
+   */
+  private makeImageSepNode(): HTMLImageElement {
+    const doc = this.o.track.ownerDocument;
+    const img = doc.createElement('img');
+    img.style.position = 'absolute';
+    const v = this.o.verticalAlign ?? 'middle';
+    if (v === 'top') {
+      img.style.top = '0';
+    } else if (v === 'bottom') {
+      img.style.bottom = '0';
+    } else {
+      img.style.top = '50%';
+      img.style.transform = 'translateY(-50%)';
+    }
+    return img;
   }
 
   /**
@@ -604,10 +704,16 @@ export class TickerDriver {
 export function populateTickerStaticRow(
   row: HTMLElement,
   items: readonly TickerDriverItem[],
-  opts: { direction: 'ltr' | 'rtl'; gap: number; separator?: string | undefined },
+  opts: { direction: 'ltr' | 'rtl'; gap: number; separator?: TickerSeparator | undefined },
 ): void {
   const doc = row.ownerDocument;
   while (row.firstChild !== null) row.removeChild(row.firstChild);
+  const gapMargin = (el: HTMLElement): void => {
+    // The gap faces the PREVIOUS item: in an rtl row the next item sits to the
+    // left, so its gap is its right margin; ltr is the mirror.
+    if (opts.direction === 'rtl') el.style.marginRight = `${opts.gap}px`;
+    else el.style.marginLeft = `${opts.gap}px`;
+  };
   const addSpan = (text: string, first: boolean, isSep: boolean): void => {
     const span = doc.createElement('span');
     span.style.whiteSpace = 'pre';
@@ -615,27 +721,55 @@ export function populateTickerStaticRow(
     span.style.unicodeBidi = 'isolate';
     span.style.flexShrink = '0';
     if (isSep) {
-      // Centre high-riding separator glyphs ('*', '•') in the band regardless
-      // of baseline: shrink the line box to the glyph and let the row's flex
-      // centring place it.
+      // Shrink the separator's line box to the glyph (high-riding '*'/'•') so the row's
+      // flex alignment places it cleanly. D-045 follow-up — DON'T pin `alignSelf: center`:
+      // let the text separator follow the row's verticalAlign like the items do (and like
+      // the live driver's separator nodes), so the static canvas matches the crawl/preview.
       span.style.lineHeight = '1';
-      span.style.alignSelf = 'center';
     }
-    if (!first) {
-      // The gap faces the PREVIOUS item: in an rtl row the next item sits to
-      // the left, so its gap is its right margin; ltr is the mirror.
-      if (opts.direction === 'rtl') span.style.marginRight = `${opts.gap}px`;
-      else span.style.marginLeft = `${opts.gap}px`;
-    }
+    if (!first) gapMargin(span);
     span.textContent = text;
     row.appendChild(span);
   };
+  // D-039ext — an IMAGE separator: a flex <img> child at the authored size. It carries
+  // `data-cg-asset-id`/`-source` so the host `assetUrls` walk wires `src` (exactly like an
+  // image element), so no `url` is needed here. NO pinned alignSelf — it follows the row's
+  // verticalAlign (like the items + the live driver's separator) so the canvas matches.
+  const addImageSep = (sep: TickerSeparatorImage): void => {
+    const img = doc.createElement('img');
+    img.style.flexShrink = '0';
+    gapMargin(img);
+    applyImageSeparator(img, sep);
+    row.appendChild(img);
+  };
+  const sep = opts.separator;
+  const hasSep = sep !== undefined && (typeof sep === 'string' ? sep !== '' : true);
   items.forEach((item, i) => {
-    if (i > 0 && opts.separator !== undefined && opts.separator !== '') {
-      addSpan(opts.separator, false, true);
+    if (i > 0 && hasSep && sep !== undefined) {
+      if (typeof sep === 'string') addSpan(sep, false, true);
+      else addImageSep(sep);
     }
     addSpan(item.text, i === 0, false);
   });
+}
+
+/**
+ * D-039ext — stamp an `<img>` as a ticker image separator: the authored size
+ * box, `object-fit: contain`, and `data-cg-asset-id` / `data-cg-asset-source`
+ * (so the host `assetUrls` walk wires `src`, exactly like an image element).
+ * When the driver already resolved a `url`, it is set as `src` directly (the
+ * export path, where the one-time walk can't reach driver-fed nodes). Shared by
+ * the static authoring row and the live driver so the two can't drift.
+ */
+function applyImageSeparator(img: HTMLImageElement, sep: TickerSeparatorImage): void {
+  img.dataset['cgTickerSep'] = '1';
+  img.alt = '';
+  img.style.width = `${sep.size.w}px`;
+  img.style.height = `${sep.size.h}px`;
+  img.style.objectFit = 'contain';
+  img.dataset['cgAssetId'] = sep.assetId;
+  img.dataset['cgAssetSource'] = sep.source;
+  if (sep.url !== undefined && sep.url !== '') img.src = sep.url;
 }
 
 /**

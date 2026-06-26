@@ -49,7 +49,7 @@ import {
   type RepeaterRowHandle,
 } from './repeater-driver.js';
 import { SequenceDriver, registerSequenceDriver } from './sequence-driver.js';
-import { TickerDriver, registerTickerDriver } from './ticker-driver.js';
+import { TickerDriver, registerTickerDriver, type TickerSeparatorImage } from './ticker-driver.js';
 import type {
   FieldScope,
   PlayOptions,
@@ -236,7 +236,17 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           verticalAlign: t.element.verticalAlign,
           speed: t.element.speed,
           gap: t.element.gap,
-          separator: t.element.separator,
+          // D-039ext — pass a text separator through; for an image separator, attach the
+          // host-resolved `url` from `assetUrls` so the driver can set `src` on the nodes it
+          // FEEDS (the one-time applyAssetUrls walk can't reach driver-created nodes). The node
+          // also carries data-cg-asset-id/-source for a host re-walk when no url is known yet.
+          separator:
+            t.element.separator === undefined || typeof t.element.separator === 'string'
+              ? t.element.separator
+              : ({
+                  ...t.element.separator,
+                  url: options.assetUrls?.[t.element.separator.assetId],
+                } satisfies TickerSeparatorImage),
           items: t.element.items,
           // D-028 inner loop — the element's authored repeat/boundary, session-
           // overridable per scope (the same layering as holdMs/repeat).
@@ -257,6 +267,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           format: c.element.format,
           digits: c.element.digits,
           target: c.element.target,
+          timezone: c.element.timezone,
+          blinkColon: c.element.blinkColon,
+          blinkPeriodMs: c.element.blinkPeriodMs,
           clock: options.clock,
         });
         clocks.push(driver);

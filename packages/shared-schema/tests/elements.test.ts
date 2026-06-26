@@ -434,6 +434,36 @@ describe('TickerElement (D-028)', () => {
   it('accepts an empty items list (authored later / field-driven)', () => {
     expect(TickerElementSchema.parse({ ...ticker, items: [] }).items).toEqual([]);
   });
+  it('D-039ext — separator is a backward-compatible string | image union', () => {
+    // OLD: a string separator still parses unchanged (the widening is non-breaking).
+    expect(TickerElementSchema.parse(ticker).separator).toBe(' • ');
+    // NEW: an image/logo separator parses and preserves every field.
+    const imageSep = {
+      kind: 'image' as const,
+      assetId: 'logo-1',
+      source: 'shared' as const,
+      size: { w: 30, h: 24 },
+    };
+    const parsed = TickerElementSchema.parse({ ...ticker, separator: imageSep });
+    expect(parsed.separator).toEqual(imageSep);
+    // Round-trips through the Element union too.
+    const viaUnion = ElementSchema.parse({ ...ticker, separator: imageSep });
+    expect((viaUnion as { separator?: unknown }).separator).toEqual(imageSep);
+  });
+  it('D-039ext — rejects a malformed image separator (missing assetId / non-positive size)', () => {
+    expect(() =>
+      TickerElementSchema.parse({
+        ...ticker,
+        separator: { kind: 'image', assetId: '', source: 'shared', size: { w: 30, h: 24 } },
+      }),
+    ).toThrow();
+    expect(() =>
+      TickerElementSchema.parse({
+        ...ticker,
+        separator: { kind: 'image', assetId: 'logo-1', source: 'shared', size: { w: 0, h: 24 } },
+      }),
+    ).toThrow();
+  });
   it("defaults repeat to 'infinite' and cycleBoundary to 'seamless' (additive)", () => {
     const { repeat: _r, cycleBoundary: _c, ...withoutLoop } = ticker;
     const parsed = TickerElementSchema.parse(withoutLoop);
@@ -485,6 +515,28 @@ describe('ClockElement (D-027)', () => {
   });
   it('accepts a countup clock without a target', () => {
     expect(ClockElementSchema.parse({ ...clock, mode: 'countup' }).mode).toBe('countup');
+  });
+  it('D-084 — timezone is an optional, backward-compatible field', () => {
+    // An OLD clock (no timezone) parses unchanged: the field stays absent.
+    expect(ClockElementSchema.parse(clock).timezone).toBeUndefined();
+    // A NEW clock preserves a set IANA zone, and round-trips through the union.
+    expect(ClockElementSchema.parse({ ...clock, timezone: 'Europe/London' }).timezone).toBe(
+      'Europe/London',
+    );
+    const viaUnion = ElementSchema.parse({ ...clock, timezone: 'Asia/Tokyo' });
+    expect((viaUnion as { timezone?: string }).timezone).toBe('Asia/Tokyo');
+  });
+  it('D-103 — blinkColon + blinkPeriodMs are optional, backward-compatible fields', () => {
+    // An OLD clock has neither field.
+    const old = ClockElementSchema.parse(clock);
+    expect(old.blinkColon).toBeUndefined();
+    expect(old.blinkPeriodMs).toBeUndefined();
+    // A NEW clock preserves both.
+    const blink = ClockElementSchema.parse({ ...clock, blinkColon: true, blinkPeriodMs: 500 });
+    expect(blink.blinkColon).toBe(true);
+    expect(blink.blinkPeriodMs).toBe(500);
+    // A non-positive period is rejected.
+    expect(() => ClockElementSchema.parse({ ...clock, blinkPeriodMs: 0 })).toThrow();
   });
   it('accepts a countdown to a duration', () => {
     const parsed = ClockElementSchema.parse({

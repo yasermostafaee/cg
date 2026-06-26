@@ -128,6 +128,23 @@ export const TickerItemSchema = z.object({
 export type TickerItem = z.infer<typeof TickerItemSchema>;
 
 /**
+ * D-039ext — an image/logo separator between ticker items (a branded crawl
+ * "channel bug"). Rendered BETWEEN items only (never trailing — D-081),
+ * vertically centred, at the authored `size`. `size` is an explicit `w`×`h`
+ * box (not a single dimension) so the treadmill has a deterministic separator
+ * width with no asynchronous image measurement. The asset is resolved via the
+ * same two-source resolver as image elements (`source` chooses project vs the
+ * shared library).
+ */
+export const TickerImageSeparatorSchema = z.object({
+  kind: z.literal('image'),
+  assetId: IdSchema,
+  source: z.enum(['project', 'shared']),
+  size: z.object({ w: z.number().positive(), h: z.number().positive() }),
+});
+export type TickerImageSeparator = z.infer<typeof TickerImageSeparatorSchema>;
+
+/**
  * Ticker / crawler element (D-028) — a clipped horizontal band that scrolls
  * its items continuously. Geometry comes from the base `transform` (the band
  * is the box; the runtime clips it). The scroll duration is content-driven:
@@ -186,11 +203,14 @@ export const TickerElementSchema = ElementBaseSchema.extend({
   /** Horizontal gap between items (px). */
   gap: z.number().nonnegative(),
   /**
-   * Optional separator rendered between items as its own bidi-neutral span
-   * (e.g. ' • '). Never concatenated into item text — keeps reconcile and
-   * bidi isolation per item intact.
+   * Optional separator rendered between items as its own node (never
+   * concatenated into item text — keeps reconcile and bidi isolation per item
+   * intact). A bidi-neutral text glyph (e.g. ' • '), OR — D-039ext — an
+   * image/logo ({@link TickerImageSeparatorSchema}). Widening the old `string`
+   * to `string | image` is backward-compatible (every existing string
+   * separator stays valid), so no schema-version bump is needed.
    */
-  separator: z.string().optional(),
+  separator: z.union([z.string(), TickerImageSeparatorSchema]).optional(),
   /** Authored default items; a bound `list` field replaces them at playout. */
   items: z.array(TickerItemSchema),
 }).merge(BoxStyleSchema);
@@ -262,6 +282,25 @@ export const ClockElementSchema = ElementBaseSchema.extend({
   digits: z.enum(['latin', 'persian', 'arabic-indic']).default('persian'),
   /** Countdown target; ignored by `wall`/`countup`. */
   target: ClockTargetSchema.optional(),
+  /**
+   * D-084 — optional IANA time-zone name (e.g. 'Europe/London'). When set,
+   * `wall` mode renders that zone's current time (via Intl.DateTimeFormat);
+   * absent ⇒ the machine's local zone (the prior behaviour). `countup`/
+   * `countdown` ignore it. Additive + backward-compatible — no schema-version
+   * bump: a clock authored without it parses and renders unchanged.
+   */
+  timezone: z.string().optional(),
+  /**
+   * D-103 — blink the colon separator(s) on/off. Off/absent by default (steady colons —
+   * the unchanged render). Additive + backward-compatible: no schema-version bump.
+   */
+  blinkColon: z.boolean().optional(),
+  /**
+   * D-103 — the colon blink half-period in ms: the colon toggles every `blinkPeriodMs`
+   * (phase = `Math.floor(now / blinkPeriodMs) % 2`). Absent ⇒ 1000. Ignored unless
+   * `blinkColon` is on.
+   */
+  blinkPeriodMs: z.number().int().positive().optional(),
 })
   .merge(BoxStyleSchema)
   .superRefine((el, ctx) => {

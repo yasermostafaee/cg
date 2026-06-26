@@ -58,6 +58,55 @@ test.describe('Clock element (D-027)', () => {
     });
   });
 
+  test('a wall clock renders the selected IANA time zone (D-084)', async ({ app }) => {
+    await app.newProject('ClockTz');
+    await app.addClock();
+
+    const clockTime = app.page
+      .frameLocator('iframe[title="cgpreview"]')
+      .locator('[data-cg-clock-time]');
+    await expect(clockTime).toHaveText(PERSIAN_TIME);
+
+    const tz = app.inspector.getByRole('combobox', { name: 'time zone' });
+    await expect(tz).toHaveValue('Local'); // default = machine-local
+
+    // Two zones 16–17h apart can NEVER show the same hour, so the displayed time
+    // must change with the zone — proving the timezone reaches the render (the
+    // per-zone formatting correctness is covered by the clock-format unit tests).
+    await tz.selectOption('Asia/Tokyo');
+    await expect(tz).toHaveValue('Asia/Tokyo');
+    await expect(clockTime).toHaveText(PERSIAN_TIME);
+    const tokyoHour = ((await clockTime.textContent()) ?? '').slice(0, 2);
+
+    await tz.selectOption('America/Los_Angeles');
+    await expect(tz).toHaveValue('America/Los_Angeles');
+    // Poll past the canvas rebuild: the hour must differ from Tokyo's.
+    await expect
+      .poll(async () => ((await clockTime.textContent()) ?? '').slice(0, 2))
+      .not.toBe(tokyoHour);
+    await expect(clockTime).toHaveText(PERSIAN_TIME);
+  });
+
+  test('a blinking colon renders its own (blinking) colon span in the preview (D-103)', async ({
+    app,
+  }) => {
+    await app.newProject('ClockBlink');
+    await app.addClock();
+
+    // Enable the blink in the inspector; the rate control then appears.
+    await app.inspector.getByRole('combobox', { name: 'blink colon' }).selectOption('on');
+    await expect(app.inspector.getByLabel('blink rate', { exact: true })).toBeVisible();
+
+    // The authoring canvas is static (no blink); on Play the preview's driver renders the
+    // colon(s) as their own span(s) and pulses their opacity (the per-period toggle is the
+    // clock-driver unit tests' job — here we assert the integrated blink render reaches the
+    // preview).
+    await app.openPreviewModal();
+    await app.play();
+    await expect(app.previewFrame.locator('[data-cg-clock-colon]').first()).toBeAttached();
+    await app.stop();
+  });
+
   test('the exported single-file HTML carries the clock with an unchanged GDD', async ({ app }) => {
     await app.newProject('ClockExport');
     await app.addClock();
