@@ -194,8 +194,17 @@ export interface RuntimeBootOptions {
 }
 
 /**
+ * D-102 Phase 1 — a single ticker's session-only timing override, addressed by the ticker
+ * element's id. Absent fields fall back to the element's authored `repeat` / `cycleBoundary`.
+ */
+export interface TickerTimingOverride {
+  repeat?: number | 'infinite';
+  cycleBoundary?: 'seamless' | 'drain';
+}
+
+/**
  * D-020/D-028 — overridable playout knobs (non-persistent). They override the
- * stored `scene.playout` (and the scope's ticker elements' own repeat/boundary)
+ * stored `scene.playout` (and, per element, each ticker's own repeat/boundary)
  * for this run only. There is no continuous-loop flag: a looping playout is
  * `mode: 'loop-cycle'` with `repeat: 'infinite'`.
  */
@@ -204,9 +213,12 @@ export interface PlayoutOverride {
   holdSource?: HoldSource;
   holdMs?: number;
   repeat?: number | 'infinite';
-  /** D-028 — overrides EVERY ticker in the scope (session-only). */
-  tickerRepeat?: number | 'infinite';
-  tickerBoundary?: 'seamless' | 'drain';
+  /**
+   * D-102 Phase 1 — PER-ELEMENT ticker timing, keyed by the ticker element's id (replaces the
+   * old per-scope `tickerRepeat`/`tickerBoundary`, which could only address one ticker per
+   * scope). Each ticker's override applies to its OWN driver. Session-only.
+   */
+  tickers?: Record<string, TickerTimingOverride>;
 }
 
 /** Injectable rAF + timer clock for deterministic lifecycle/timing tests. */

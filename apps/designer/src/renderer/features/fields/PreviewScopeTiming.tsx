@@ -1,9 +1,10 @@
 import { compositionInstancesOf, type Element, type Scene } from '@cg/shared-schema';
 import {
   effectiveMode,
+  PreviewTickerTimingRow,
   PreviewTimingControls,
   TIMING_RELEVANT_MODES,
-  type TickerTimingDefaults,
+  type TickerTimingOverride,
   type TimingOverride,
   type TimingSource,
 } from './PreviewTimingControls.js';
@@ -21,32 +22,37 @@ export interface TimingScopeNode {
   label: string;
   source: TimingSource;
   depth: number;
-  /** D-028 — the scope's first ticker's authored repeat/boundary (resting UI values). */
-  tickerDefaults: TickerTimingDefaults | null;
+  /** D-102 Phase 1 — EVERY ticker in the scope (recursing containers); each is tuned on its own row. */
+  tickers: TickerInfo[];
   /** D-027/D-029 — whether the scope contains a non-ticker content source
    *  (a countdown clock or a sequence). */
   hasOtherContent: boolean;
 }
 
+/** D-102 Phase 1 — a ticker in a scope: element id + name + authored resting repeat/boundary. */
+export interface TickerInfo {
+  id: string;
+  name: string;
+  repeat: number | 'infinite';
+  cycleBoundary: 'seamless' | 'drain';
+}
+
 const MAX_DEPTH = 8;
 
-/** D-028 — the scope's first ticker element (recursing containers), if any. */
-function firstTickerOf(doc: { layers: Scene['layers'] }): TickerTimingDefaults | null {
-  const walk = (children: readonly Element[]): TickerTimingDefaults | null => {
+/** D-102 Phase 1 — every ticker element of a doc (recursing containers), in document order. */
+function tickersOf(doc: { layers: Scene['layers'] }): TickerInfo[] {
+  const out: TickerInfo[] = [];
+  const walk = (children: readonly Element[]): void => {
     for (const el of children) {
-      if (el.type === 'ticker') return { repeat: el.repeat, boundary: el.cycleBoundary };
-      if (el.type === 'container') {
-        const found = walk(el.children);
-        if (found !== null) return found;
+      if (el.type === 'ticker') {
+        out.push({ id: el.id, name: el.name, repeat: el.repeat, cycleBoundary: el.cycleBoundary });
+      } else if (el.type === 'container') {
+        walk(el.children);
       }
     }
-    return null;
   };
-  for (const layer of doc.layers) {
-    const found = walk(layer.children);
-    if (found !== null) return found;
-  }
-  return null;
+  for (const layer of doc.layers) walk(layer.children);
+  return out;
 }
 
 /** D-027/D-029 — does the scope contain a countdown clock or a sequence? */
@@ -73,7 +79,7 @@ export function timingScopeList(scene: Scene): TimingScopeNode[] {
       label: scene.name,
       source: scene,
       depth: 0,
-      tickerDefaults: firstTickerOf(scene),
+      tickers: tickersOf(scene),
       hasOtherContent: hasOtherContentIn(scene),
     },
   ];
@@ -94,7 +100,7 @@ export function timingScopeList(scene: Scene): TimingScopeNode[] {
         label: inst.name,
         source: comp,
         depth,
-        tickerDefaults: firstTickerOf(comp),
+        tickers: tickersOf(comp),
         hasOtherContent: hasOtherContentIn(comp),
       });
       walk(comp, path, depth + 1, new Set([...visited, inst.compositionId]));
@@ -105,13 +111,13 @@ export function timingScopeList(scene: Scene): TimingScopeNode[] {
 }
 
 /**
- * D-026 — PER-SCOPE session-only timing controls, grouped by the composition-
- * instance tree (parent + each nested child, by instance name). Each scope gets
- * its own mode / holdMs / repeat override, applied to the preview run only (stored
- * defaults untouched), so a parent can independently test each child's timing
- * (e.g. `home` loops 3×, `away` loops infinitely). The active composition (root) is
- * always shown; a NESTED scope is shown only when its mode is timing-relevant
- * (auto-out / loop-cycle / content-driven), to keep the panel uncluttered.
+ * D-026 / D-102 — PER-SCOPE session-only timing controls, grouped by the
+ * composition-instance tree. Each scope gets its own LIFECYCLE override (mode /
+ * holdMs / repeat); D-102 Phase 1 — EVERY ticker of a scope gets its OWN repeat +
+ * cycle-seam row, nested under the scope's lifecycle controls, addressed by the
+ * ticker's element id, so two tickers in one composition are tuned independently.
+ * All session-only (stored defaults untouched). The active composition (root) is
+ * always shown; a NESTED scope is shown only when its mode is timing-relevant.
  */
 export function PreviewScopeTiming({
   scene,
@@ -130,21 +136,42 @@ export function PreviewScopeTiming({
   );
   return (
     <>
-      {visible.map((node, i) => (
-        <div key={node.path} style={node.depth > 0 ? { marginLeft: node.depth * 12 } : undefined}>
-          <PreviewTimingControls
-            source={node.source}
-            title={node.path === '' ? 'Timing (session)' : `Timing — ${node.label}`}
-            defaultExpanded={node.path === ''}
-            showFooter={i === visible.length - 1}
-            hasTicker={node.tickerDefaults !== null}
-            hasContent={node.tickerDefaults !== null || node.hasOtherContent}
-            tickerDefaults={node.tickerDefaults}
-            override={overrides[node.path] ?? {}}
-            onChange={(patch) => onChange(node.path, patch)}
-          />
-        </div>
-      ))}
+      {visible.map((node, i) => {
+        const scopeOverride = overrides[node.path] ?? {};
+        // D-102 Phase 1 — deep-merge a per-ticker patch into the scope override's `tickers` map so
+        // editing ticker B never clobbers ticker A; the modal's per-scope shallow merge carries it.
+        const setTickerOverride = (tickerId: string, patch: TickerTimingOverride): void => {
+          onChange(node.path, {
+            tickers: {
+              ...(scopeOverride.tickers ?? {}),
+              [tickerId]: { ...(scopeOverride.tickers?.[tickerId] ?? {}), ...patch },
+            },
+          });
+        };
+        return (
+          <div key={node.path} style={node.depth > 0 ? { marginLeft: node.depth * 12 } : undefined}>
+            <PreviewTimingControls
+              source={node.source}
+              title={node.path === '' ? 'Timing (session)' : `Timing — ${node.label}`}
+              defaultExpanded={node.path === ''}
+              showFooter={i === visible.length - 1}
+              hasContent={node.tickers.length > 0 || node.hasOtherContent}
+              override={scopeOverride}
+              onChange={(patch) => onChange(node.path, patch)}
+            >
+              {node.tickers.map((tk) => (
+                <PreviewTickerTimingRow
+                  key={tk.id}
+                  name={tk.name}
+                  defaults={{ repeat: tk.repeat, cycleBoundary: tk.cycleBoundary }}
+                  override={scopeOverride.tickers?.[tk.id] ?? {}}
+                  onChange={(patch) => setTickerOverride(tk.id, patch)}
+                />
+              ))}
+            </PreviewTimingControls>
+          </div>
+        );
+      })}
     </>
   );
 }

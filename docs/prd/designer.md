@@ -2654,6 +2654,29 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 **Notes:** Add an optional `timezone` (IANA name, e.g. 'Europe/London') to ClockElementSchema; the runtime clock formatter uses Intl.DateTimeFormat({ timeZone }); the inspector adds a time-zone picker.
 
+## [~] D-102 — Per-element timing overrides in preview ⟨priority: medium⟩ — implementing Phase 1 on `feat/per-element-preview-timing` (`openspec/changes/per-element-preview-timing`)
+
+**What:** The preview's session-only timing panel can override timing PER ELEMENT, not just per
+scope. **Phase 1 (tickers only):** each ticker in a composition gets its OWN repeat + cycle-seam
+override, addressed by `elementId`, so two tickers in one scope can be tuned independently. (Phase 2
+— sequences + countdown clocks — is a later change.)
+**Why:** The override model is per-scope today — one `tickerRepeat`/`tickerBoundary` per scope,
+applied to the scope's FIRST ticker only — so two tickers in one composition share one slot and
+can't be set separately.
+**Acceptance:**
+
+- WHEN a scope contains two (or more) tickers THEN the preview timing panel shows one row per ticker (by name), each with its own repeat + cycle-seam override, nested under its scope (the scope's lifecycle controls stay above)
+- WHEN ticker A is set to one repeat/seam and ticker B to another THEN each ticker's own driver honors its own override independently
+- WHEN a scope has exactly one ticker THEN it behaves as today (no regression)
+- WHEN overrides are set THEN they are session-only — the stored template is never changed
+
+**Notes:** Phase 1 (tickers). Move ticker timing from per-scope to per-element, keyed by `elementId`:
+`PlayoutOverride`/`TimingOverride` gain a `tickers: Record<elementId, { repeat?, cycleBoundary? }>`
+map (replacing the per-scope `tickerRepeat`/`tickerBoundary`); the runtime resolves `elementId` → its
+own `TickerDriver` (the `WiredSubtree` already holds per-element drivers); `PreviewScopeTiming`
+enumerates every ticker of a scope (recursing containers). Session-only; stored template untouched.
+Phase 2 (sequences + countdown) is a later change.
+
 ## [x] D-103 — Clock: blinking colon separator at an adjustable rate ⟨priority: low⟩ — archived: `openspec/changes/archive/2026-06-26-clock-blink-colon/`
 
 **What:** The colon(s) between HH:MM:SS in a clock can blink (pulse on/off) at an adjustable

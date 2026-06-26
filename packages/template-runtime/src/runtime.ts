@@ -225,6 +225,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // default can already reconcile into its driver. The node→driver
       // registries are how the bindings applier routes `*-items` values.
       const scopeTickers = scope.tickers.map((t) => {
+        // D-028 inner loop — the element's authored repeat/boundary. D-102 Phase 1 — the session
+        // override is PER-ELEMENT (keyed by the ticker's element id), so two tickers in one scope
+        // are tuned independently; each maps to its OWN driver here.
+        const tickerOverride = scopeOverride?.tickers?.[t.element.id];
+        const effRepeat = tickerOverride?.repeat ?? t.element.repeat;
+        const effBoundary = tickerOverride?.cycleBoundary ?? t.element.cycleBoundary;
         // D-056 — the ticker has no box padding; the crawl viewport is full-bleed, so
         // the travel width is the full band width.
         const driver = new TickerDriver({
@@ -248,14 +254,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
                   url: options.assetUrls?.[t.element.separator.assetId],
                 } satisfies TickerSeparatorImage),
           items: t.element.items,
-          // D-028 inner loop — the element's authored repeat/boundary, session-
-          // overridable per scope (the same layering as holdMs/repeat).
-          repeat: scopeOverride?.tickerRepeat ?? t.element.repeat,
-          cycleBoundary: scopeOverride?.tickerBoundary ?? t.element.cycleBoundary,
+          repeat: effRepeat,
+          cycleBoundary: effBoundary,
           clock: options.clock,
           measure: options.tickerMeasure,
         });
         registerTickerDriver(t.band, driver);
+        // D-102 Phase 1 — stamp the EFFECTIVE (post-override) timing on the band so the operator
+        // (and tests) can see which repeat/seam each ticker is actually running this session.
+        t.band.dataset['cgTickerRepeat'] = String(effRepeat);
+        t.band.dataset['cgTickerBoundary'] = effBoundary;
         tickers.push(driver);
         return driver;
       });

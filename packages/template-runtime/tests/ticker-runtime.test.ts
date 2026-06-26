@@ -533,3 +533,77 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
     expect(bandEl().querySelector('.cg-ticker-viewport')).not.toBeNull();
   });
 });
+
+describe('createRuntime — per-element ticker timing overrides (D-102 Phase 1)', () => {
+  /** A scene with TWO tickers (distinct ids) in one scope, both authored seamless/∞. */
+  function twoTickerScene(): Scene {
+    return {
+      ...tickerScene({}),
+      layers: [
+        {
+          id: 'L1',
+          name: 'band',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [
+            { ...tickerElement, id: 'tickerA', name: 'A' },
+            { ...tickerElement, id: 'tickerB', name: 'B' },
+          ],
+        },
+      ],
+    };
+  }
+  function band(id: string): HTMLElement {
+    const el = document.querySelector<HTMLElement>(`[data-cg-element-id="${id}"]`);
+    if (el === null) throw new Error(`band ${id} not rendered`);
+    return el;
+  }
+
+  it('applies each ticker its OWN repeat/boundary — two independent drivers', () => {
+    const scene = twoTickerScene();
+    createRuntime(scene, {
+      skipFontLoad: true,
+      clock: makeClock(),
+      tickerMeasure,
+      scopeOverrides: {
+        '': {
+          tickers: {
+            tickerA: { repeat: 3, cycleBoundary: 'seamless' },
+            tickerB: { repeat: 'infinite', cycleBoundary: 'drain' },
+          },
+        },
+      },
+    });
+    // Each band carries its OWN effective timing — A ≠ B.
+    expect(band('tickerA').dataset['cgTickerRepeat']).toBe('3');
+    expect(band('tickerA').dataset['cgTickerBoundary']).toBe('seamless');
+    expect(band('tickerB').dataset['cgTickerRepeat']).toBe('infinite');
+    expect(band('tickerB').dataset['cgTickerBoundary']).toBe('drain');
+    // Session-only — the stored scene is untouched.
+    const els = scene.layers[0]!.children;
+    expect((els[0] as { repeat: unknown }).repeat).toBe('infinite');
+    expect((els[1] as { cycleBoundary: unknown }).cycleBoundary).toBe('seamless');
+  });
+
+  it('an override on ONE ticker leaves the other at its authored values (no regression)', () => {
+    createRuntime(twoTickerScene(), {
+      skipFontLoad: true,
+      clock: makeClock(),
+      tickerMeasure,
+      scopeOverrides: { '': { tickers: { tickerA: { cycleBoundary: 'drain' } } } },
+    });
+    expect(band('tickerA').dataset['cgTickerBoundary']).toBe('drain');
+    // B keeps its authored seamless / ∞.
+    expect(band('tickerB').dataset['cgTickerBoundary']).toBe('seamless');
+    expect(band('tickerB').dataset['cgTickerRepeat']).toBe('infinite');
+  });
+
+  it('no override → both tickers run their authored timing (parity with single-ticker)', () => {
+    createRuntime(twoTickerScene(), { skipFontLoad: true, clock: makeClock(), tickerMeasure });
+    for (const id of ['tickerA', 'tickerB']) {
+      expect(band(id).dataset['cgTickerRepeat']).toBe('infinite');
+      expect(band(id).dataset['cgTickerBoundary']).toBe('seamless');
+    }
+  });
+});

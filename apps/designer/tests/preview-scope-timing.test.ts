@@ -145,3 +145,62 @@ describe('D-026 — per-scope preview timing tree', () => {
     expect(TIMING_RELEVANT_MODES.has(effectiveMode(away.source, {}))).toBe(true);
   });
 });
+
+describe('D-102 Phase 1 — per-element ticker enumeration', () => {
+  function ticker(
+    id: string,
+    name: string,
+    over: { repeat?: number | 'infinite'; cycleBoundary?: 'seamless' | 'drain' } = {},
+  ): Element {
+    return {
+      id,
+      name,
+      type: 'ticker',
+      transform: baseTransform,
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 0,
+      font: {
+        family: 'Vazirmatn',
+        weight: 500,
+        style: 'normal',
+        size: 36,
+        lineHeight: 1.4,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      direction: 'rtl',
+      speed: 100,
+      gap: 10,
+      repeat: over.repeat ?? 'infinite',
+      cycleBoundary: over.cycleBoundary ?? 'seamless',
+      items: [],
+    } as unknown as Element;
+  }
+  function sceneWithTickers(children: Element[]): Scene {
+    return {
+      ...parentScene(),
+      layers: [
+        { id: 'pl', name: 'main', visible: true, locked: false, blendMode: 'normal', children },
+      ],
+    } as unknown as Scene;
+  }
+
+  it('the root scope enumerates EVERY ticker (id + name + authored timing), not just the first', () => {
+    const scene = sceneWithTickers([
+      ticker('tk-a', 'Crawl A', { repeat: 3, cycleBoundary: 'seamless' }),
+      ticker('tk-b', 'Crawl B', { repeat: 'infinite', cycleBoundary: 'drain' }),
+    ]);
+    const root = timingScopeList(scene).find((n) => n.path === '')!;
+    expect(root.tickers).toEqual([
+      { id: 'tk-a', name: 'Crawl A', repeat: 3, cycleBoundary: 'seamless' },
+      { id: 'tk-b', name: 'Crawl B', repeat: 'infinite', cycleBoundary: 'drain' },
+    ]);
+  });
+
+  it('a scope with no ticker has an empty ticker list', () => {
+    const root = timingScopeList(parentScene()).find((n) => n.path === '')!;
+    expect(root.tickers).toEqual([]);
+  });
+});
