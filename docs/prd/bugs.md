@@ -728,3 +728,44 @@ first-paint fallback.
 **Touch points:** `apps/designer/src/platform/preview.ts` (authoring `.cg-stage` width/height →
 `--cg-frame-w/-h` vars + `applyFrameSize` on load/scene-replace). Regression E2E:
 `apps/designer/tests/e2e/scene-size-vs-pasteboard.spec.ts`. Capability: `designer-canvas-viewport`.
+
+## [x] B-029 — trimming a clock/ticker/sequence's START on the timeline drops it from play/export ⟨priority: high⟩ — focused fix
+
+> A content element trimmed at its START edge (lifespan.in > 0) disappears entirely from the preview
+> playout + export — it never plays. scene.resolution / geometry are untouched; this is a lifespan-vs-
+> playback bug.
+
+**Repro:**
+
+1. Add a clock (or ticker, or sequence) to a composition.
+2. On the timeline, drag its START edge right by even one frame (giving it `lifespan.in > 0`).
+3. Open the preview modal and Play (or export the single-file HTML and play it).
+
+**Expected:** the element simply appears at its in-point and plays normally; its content-driven
+behavior respects its lifespan (a content element that starts at frame N participates from frame N).
+**Actual:** the element is hidden for the ENTIRE playout — it never appears, as if dropped. (On the
+authoring canvas, scrubbing past the in-point still shows it, so it looks fine until you Play/export.)
+**Env:** Browser + Designer (preview modal + exported single-file HTML).
+**Root cause:** the per-element lifespan gate (`runtime.ts` `collectLifespanGates` →
+`frame ∈ [in,out] ? naturalDisplay : 'none'`) was applied ONLY in `tick(frame)` — the designer
+scrubber. The PlayoutController's per-frame `applyFrame` callback applied animation but NOT the
+lifespan gate. So during PLAYBACK the gate was never re-evaluated: the preview modal's open-time
+scrub to frame 0 (< in) hid the element, and Play never restored it (it stayed `display:none` the
+whole playout). The element is never pruned from the scene/HTML — it's stuck hidden. (The export's
+own off-frame prune is spatial-only and was never involved.)
+**Fix:** evaluate the lifespan gate during playback too — the root scope's controller `applyFrame`
+now calls the same `applyLifespanGatesAtFrame(frame)` helper as `tick`, so a start-trimmed element
+appears at/after its in-point and plays, and lifespan is honored during play (not just scrubbing).
+**Acceptance:**
+
+#### Scenario: A start-trimmed content element plays instead of being dropped
+
+- **WHEN** a clock / ticker / sequence is trimmed at its start (`lifespan.in > 0`) and the scene is
+  played or exported
+- **THEN** the element is present in the output and becomes visible at/after its in-point and plays
+  normally (it is NOT hidden for the whole playout)
+
+**Touch points:** `packages/template-runtime/src/runtime.ts` (`applyLifespanGatesAtFrame` shared by
+`tick` + the root controller's `applyFrame`). Regression tests:
+`packages/template-runtime/tests/runtime.test.ts` (B-029) +
+`apps/designer/tests/e2e/trimmed-content-start.spec.ts`. Capability: `designer-playout-lifecycle`.

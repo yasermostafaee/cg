@@ -419,6 +419,24 @@ export class DesignerApp {
     await this.page.mouse.up();
   }
 
+  /**
+   * B-029 — trim an element's START edge on the timeline by dragging its lifespan
+   * resize-left gripper right by `dxPx` screen pixels, giving it `lifespan.in > 0`.
+   * Any positive drag is enough to reproduce the start-trim; the exact frame count
+   * depends on the lane width.
+   */
+  async trimElementStart(elementId: string, dxPx = 60): Promise<void> {
+    const handle = this.page.getByTestId(`lifespan-trim-start-${elementId}`);
+    const box = await handle.boundingBox();
+    if (box === null) throw new Error('lifespan trim handle not laid out');
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    await this.page.mouse.move(cx, cy);
+    await this.page.mouse.down();
+    await this.page.mouse.move(cx + dxPx, cy, { steps: 10 });
+    await this.page.mouse.up();
+  }
+
   // ── layer rows / context menu (D-076 / D-077) ───────────────────────────────
 
   /** Count of timeline element ("layer") rows currently shown. */

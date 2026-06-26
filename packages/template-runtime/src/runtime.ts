@@ -187,6 +187,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     ...(scene.compositions ?? []).flatMap((c) => [...listBoundSequenceIds(c)]),
   ]);
 
+  // B-029 — per-element lifespan visibility, evaluated at a given frame. Late-bound: the
+  // gates are collected after the scene builds (below), but the ROOT controller's
+  // per-frame `applyFrame` (wired before that) calls this so lifespan is honored during
+  // PLAYBACK too (not only the designer scrubber's `tick`). Without it, a frame trimmed to
+  // `lifespan.in > 0` is hidden by an open-time scrub and never restored on play (dropped),
+  // and the export ignores lifespan entirely.
+  let applyLifespanGatesAtFrame: (frame: number) => void = () => undefined;
+
   const ready: Promise<void> = options.skipFontLoad ? Promise.resolve() : waitForFonts(doc);
   void ready.then(() => bus.emit('ready'));
 
@@ -463,6 +471,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         hasAnimation: scope.animated.length > 0,
         applyFrame: (frame: number): void => {
           for (const entry of scope.animated) applyAnimationAtFrame(entry, frame);
+          // B-029 — honor per-element lifespan during PLAYBACK, not only the scrubber, so a
+          // start-trimmed (lifespan.in > 0) element appears at its in-point + plays instead
+          // of staying hidden / being dropped. Root-scene gates ride the root playhead.
+          if (isGlobalRoot) applyLifespanGatesAtFrame(frame);
         },
         onExitStart: isGlobalRoot ? rootOnExitStart : noop,
         onSettle: isGlobalRoot
@@ -600,6 +612,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // remember the prior display value so the toggle restores the
   // element's own visibility instead of forcing `display: block`.
   const lifespanGates = collectLifespanGates(scene, built.elementMap);
+  // B-029 — now the gates exist, bind the frame evaluator the scrubber (`tick`) AND the
+  // root controller's per-frame `applyFrame` (playback/export) both call.
+  applyLifespanGatesAtFrame = (frame: number): void => {
+    for (const gate of lifespanGates) {
+      const inside = frame >= gate.lifespan.in && frame <= gate.lifespan.out;
+      gate.node.style.display = inside ? gate.naturalDisplay : 'none';
+    }
+  };
 
   // Apply an operation to every controller in the tree (parent first), so
   // play/stop/pause/remove cascade to every nested instance.
@@ -771,10 +791,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           for (const row of r.stampedRows) row.applyFrame(frame);
         }
       }
-      for (const gate of lifespanGates) {
-        const inside = frame >= gate.lifespan.in && frame <= gate.lifespan.out;
-        gate.node.style.display = inside ? gate.naturalDisplay : 'none';
-      }
+      applyLifespanGatesAtFrame(frame);
     },
 
     on(event, listener) {

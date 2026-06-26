@@ -429,12 +429,14 @@ function ElementRowLane(props: Props): JSX.Element {
           className={s.resizeHandle}
           style={{ left: 0 }}
           onPointerDown={(e) => startDrag('resize-left', e)}
+          data-testid={`lifespan-trim-start-${element.id}`}
           aria-hidden
         />
         <div
           className={s.resizeHandle}
           style={{ right: 0 }}
           onPointerDown={(e) => startDrag('resize-right', e)}
+          data-testid={`lifespan-trim-end-${element.id}`}
           aria-hidden
         />
       </div>
