@@ -101,6 +101,12 @@ export interface SequenceDriverOptions {
    * Absent ⇒ composition items render as an empty box (text-only runtimes / tests).
    */
   renderComposition?: SequenceCompositionRenderer | undefined;
+  /**
+   * D-083 — the operator's per-item TEXT override for a non-list-bound sequence: returns
+   * the field value for a TEXT item's id (else undefined ⇒ the authored item text). Lets
+   * the operator edit each text item in the preview form, parallel to composition items.
+   */
+  textValueFor?: ((itemId: string) => string | undefined) | undefined;
   clock?: RuntimeClock | undefined;
 }
 
@@ -523,8 +529,16 @@ export class SequenceDriver {
       return this.o.renderComposition({ id: item.id, compositionId: item.compositionId });
     }
     const node = this.makeItemNode();
-    if (item.kind !== 'composition') node.textContent = item.text;
-    return { node, show: NOOP, pause: NOOP, resume: NOOP, hide: NOOP };
+    // D-083 — a TEXT item shows the operator's per-item field value (non-bound sequence)
+    // when present, else its current text. `item.text` is read LIVE (not captured): a
+    // LIST-BOUND reconcile mutates this snapshot in place via setItems, so on a bound
+    // update `applyText` keeps the reconciled text instead of resetting a stale one.
+    const applyText = (): void => {
+      node.textContent =
+        this.o.textValueFor?.(item.id) ?? (item.kind === 'composition' ? '' : item.text);
+    };
+    applyText();
+    return { node, show: NOOP, pause: NOOP, resume: NOOP, hide: NOOP, applyFields: applyText };
   }
 
   /**

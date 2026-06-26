@@ -145,34 +145,80 @@ describe('aggregateCompositionFields (D-025)', () => {
     expect(data).toEqual({ outer: { inner: { v: '' } } });
   });
 
-  it('(D-083) a sequence COMPOSITION item exposes its comp fields under a per-item namespace', () => {
+  it('(D-083) a non-bound mixed sequence exposes a TEXT item as a flat field + a COMPOSITION item as a group', () => {
     const card = comp({ id: 'card', fields: [textField('label', 'City')] });
     const seq = sequenceEl('seq', 'Now/Next', [
-      { id: 't1', text: 'Headline' }, // a TEXT item contributes NO namespace
-      { id: 'c1', kind: 'composition', compositionId: 'card' },
+      { id: 't1', text: 'Headline' }, // TEXT item → a flat per-item text field
+      { id: 'c1', kind: 'composition', compositionId: 'card' }, // COMPOSITION item → a group
     ]);
     const parent = comp({ id: 'parent', layers: [layer([seq])] });
     const scene = { compositions: [card, parent] } as Pick<Scene, 'compositions'>;
     const agg = aggregateCompositionFields(scene, parent);
-    // Exactly one group — for the composition item at index 1. The value KEY is the stable
-    // id-based name; the friendly `<seq name>[<index>]` is the display LABEL.
+    // The TEXT item is a flat field (stable id-based key, friendly label, seeded with its text).
+    const textField0 = agg.fields.find((f) => f.id === 'seq:t1');
+    expect(textField0?.type).toBe('text');
+    expect(textField0?.label).toBe('Now/Next[0]');
+    expect(textField0 && 'default' in textField0 ? textField0.default : null).toBe('Headline');
+    // The COMPOSITION item is a group (id-based key, friendly label, its comp's fields).
     expect(agg.groups).toHaveLength(1);
     expect(agg.groups[0]?.name).toBe('seq:c1');
-    expect(agg.groups[0]?.instanceId).toBe('seq:c1');
     expect(agg.groups[0]?.label).toBe('Now/Next[1]');
     expect(agg.groups[0]?.aggregate.fields.map((f) => f.id)).toEqual(['label']);
-    // The nested default value object is keyed by the stable id-based namespace.
-    expect(defaultNestedValues(agg)).toEqual({ 'seq:c1': { label: 'City' } });
+    // The value object carries the text item (scalar) AND the comp item (nested).
+    expect(defaultNestedValues(agg)).toEqual({
+      'seq:t1': 'Headline',
+      'seq:c1': { label: 'City' },
+    });
   });
 
-  it('(D-083) text-only sequence items contribute NO field namespace', () => {
+  it('(D-083) a NON-bound text-only sequence exposes one flat TEXT field per item', () => {
     const seq = sequenceEl('seq', 'Rundown', [
       { id: 'a', text: 'one' },
       { id: 'b', text: 'two' },
     ]);
     const parent = comp({ id: 'parent', layers: [layer([seq])] });
     const scene = { compositions: [parent] } as Pick<Scene, 'compositions'>;
-    expect(aggregateCompositionFields(scene, parent).groups).toEqual([]);
+    const agg = aggregateCompositionFields(scene, parent);
+    expect(agg.groups).toEqual([]); // text items are flat fields, not groups
+    expect(agg.fields.map((f) => [f.id, f.label])).toEqual([
+      ['seq:a', 'Rundown[0]'],
+      ['seq:b', 'Rundown[1]'],
+    ]);
+    expect(defaultNestedValues(agg)).toEqual({ 'seq:a': 'one', 'seq:b': 'two' });
+  });
+
+  it('(D-083) a LIST-BOUND sequence exposes NO per-item fields (the list owns the items)', () => {
+    const seq = sequenceEl('seq', 'Rundown', [
+      { id: 'a', text: 'one' },
+      { id: 'b', text: 'two' },
+    ]);
+    const parent = comp({
+      id: 'parent',
+      layers: [layer([seq])],
+      fields: [
+        {
+          id: 'rundown',
+          type: 'list',
+          label: 'Rundown',
+          required: false,
+          default: [
+            { id: 'a', text: 'one' },
+            { id: 'b', text: 'two' },
+          ],
+        } as DynamicField,
+      ],
+      bindings: [
+        {
+          fieldId: 'rundown',
+          target: { kind: 'sequence-items', elementId: 'seq' },
+        } as FieldBinding,
+      ],
+    });
+    const scene = { compositions: [parent] } as Pick<Scene, 'compositions'>;
+    const agg = aggregateCompositionFields(scene, parent);
+    // Only the bound list field — no synthetic per-item fields, no groups (no double-exposure).
+    expect(agg.fields.map((f) => f.id)).toEqual(['rundown']);
+    expect(agg.groups).toEqual([]);
   });
 
   it('(D-083) TWO same-named sequences get DISTINCT stable keys (no collision/collapse)', () => {
