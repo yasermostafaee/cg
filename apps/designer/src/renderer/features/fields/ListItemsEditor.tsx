@@ -1,6 +1,8 @@
+import { Link2 } from 'lucide-react';
 import type { ListItem } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
+import { Icon } from '../../ui/Icon.js';
 import { Select } from '../../ui/Select.js';
 import type { ListItemColumn } from './repeater-columns.js';
 import * as s from './ListItemsEditor.css.js';
@@ -47,6 +49,15 @@ interface Props {
    * ticker / preview-form behaviour, unchanged).
    */
   compositions?: readonly CompositionChoice[] | undefined;
+  /**
+   * D-083 follow-up — the explicit per-item TEXT bind affordance (INSPECTOR sequence
+   * context only). `itemDataKey` returns an item's current data key ('' = unbound);
+   * `onItemDataKey` sets/renames/clears it (returns false if rejected, e.g. a key already
+   * owned). When `onItemDataKey` is absent (preview form / ticker), text items show NO bind
+   * control — operator-editability requires the designer to bind explicitly.
+   */
+  itemDataKey?: (itemId: string) => string;
+  onItemDataKey?: (itemId: string, key: string) => boolean;
 }
 
 /** D-083 — the item's kind ('text' default for back-compat). */
@@ -130,6 +141,8 @@ export function ListItemsEditor({
   showDwell = false,
   columns,
   compositions,
+  itemDataKey,
+  onItemDataKey,
 }: Props): JSX.Element {
   const move = (from: number, to: number): void => {
     if (to < 0 || to >= items.length) return;
@@ -252,6 +265,35 @@ export function ListItemsEditor({
                     onChange(items.map((it, j) => (j === i ? { ...it, text: e.target.value } : it)))
                   }
                 />
+              )}
+              {/* D-083 follow-up — EXPLICIT per-item bind: a text item is operator-editable
+                  ONLY when the designer gives it a data key here (empty = static). Mirrors
+                  the element Data-key control; uncontrolled (`key` resets on commit). */}
+              {onItemDataKey !== undefined && kindOf(item) === 'text' && (
+                <div className={s.seqBindRow} title="Bind this item to a data field">
+                  <Icon icon={Link2} size={12} />
+                  <input
+                    className={s.seqBindKey}
+                    type="text"
+                    placeholder="data key — bind for operator editing (optional)"
+                    title="Bind this text item to a field so the operator can edit it (empty = static design-time text)"
+                    defaultValue={itemDataKey?.(item.id) ?? ''}
+                    key={`itemdk-${item.id}-${itemDataKey?.(item.id) ?? ''}`}
+                    aria-label={`${label} item ${String(i + 1)} data key`}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onBlur={(e) => {
+                      const ok = onItemDataKey(item.id, e.target.value);
+                      if (!ok) e.target.value = itemDataKey?.(item.id) ?? '';
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                      if (e.key === 'Escape') {
+                        (e.target as HTMLInputElement).value = itemDataKey?.(item.id) ?? '';
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
+                  />
+                </div>
               )}
             </div>
           );

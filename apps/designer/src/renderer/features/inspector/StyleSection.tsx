@@ -26,6 +26,7 @@ import { SharedImagePicker } from '../sharedLibrary/SharedImagePicker.js';
 import { TickerSeparatorControl } from './TickerSeparatorControl.js';
 import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
+import { activeFieldData } from '../../state/scene-doc.js';
 import {
   effectiveColorAt as evColor,
   effectiveNumberAt as evNum,
@@ -865,6 +866,20 @@ function SequenceSections({
     ...compChoices,
     ...missingRefs.map((cid) => ({ id: cid, name: '(missing composition)' })),
   ];
+  // D-083 follow-up — per-item TEXT bind: the active doc's bindings tell us each item's
+  // current data key (the `sequence-item-text` binding's fieldId, '' = unbound). Read from
+  // the ACTIVE composition's field data (not the root scene), matching where setSequence…
+  // writes them.
+  const docBindings = scene !== null ? activeFieldData(scene).bindings : [];
+  const itemDataKey = (itemId: string): string => {
+    const b = docBindings.find(
+      (bd) =>
+        bd.target.kind === 'sequence-item-text' &&
+        bd.target.elementId === id &&
+        bd.target.itemId === itemId,
+    );
+    return b?.fieldId ?? '';
+  };
   return (
     <>
       <CollapseSection title="Sequence" pinned>
@@ -979,10 +994,13 @@ function SequenceSections({
           showDwell
           compositions={compChoicesAll}
           onChange={(items) => designerStore.setSequenceItems(id, items)}
+          itemDataKey={itemDataKey}
+          onItemDataKey={(itemId, key) => designerStore.setSequenceItemDataKey(id, itemId, key)}
         />
         <p className={dds.hint}>
           A composition item rotates a one-element clock/logo or a composed layout through the
-          sequence’s transitions; its live content (a clock) keeps ticking.
+          sequence’s transitions; its live content (a clock) keeps ticking. Give a text item a data
+          key to make it operator-editable; without one it’s static design-time text.
         </p>
       </CollapseSection>
 

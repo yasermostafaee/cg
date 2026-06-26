@@ -77,6 +77,31 @@ export const seqValue = style({
   outline: 'none',
 });
 
+/**
+ * D-083 follow-up — the optional per-item "data key" bind control on a TEXT item's
+ * third line. Dashed + muted so it reads as an OPTIONAL bind affordance, distinct from
+ * the solid value input above it. Empty = static; a key = operator-editable.
+ */
+export const seqBindRow = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.25rem',
+  color: colors.textMuted,
+});
+
+export const seqBindKey = style({
+  flex: 1,
+  minWidth: 0,
+  boxSizing: 'border-box',
+  background: 'transparent',
+  color: colors.text,
+  border: `1px dashed ${colors.border}`,
+  borderRadius: '0.2rem',
+  padding: '0.15rem 0.35rem',
+  fontSize: '0.68rem',
+  outline: 'none',
+});
+
 export const addRow = style({
   marginTop: '0.3rem',
 });

@@ -151,8 +151,9 @@ export function DynamicDataSection({
       {compositionLocked ? (
         <p className={s.hint}>
           The item list can’t be data-bound while this sequence has a composition item (list binding
-          is text-only). You can still edit each item’s text, and bind fields inside composition
-          items from the data form.
+          is text-only). You can still edit each item’s text, bind an individual text item to a
+          field via its data key in the Items list above, and bind fields inside composition items
+          from the data form.
         </p>
       ) : field === undefined ? (
         <p className={s.hint}>

@@ -214,6 +214,20 @@ export class DesignerApp {
     await dwell.press('Enter');
   }
 
+  /**
+   * D-083 follow-up — EXPLICITLY bind a sequence TEXT item to a data key via its per-item
+   * "data key" control in the inspector Items editor (`itemIndex` is 1-based). An empty key
+   * unbinds it (back to static). Mirrors the element-level {@link setDataKey} pattern.
+   */
+  async setSequenceItemDataKey(itemIndex: number, key: string): Promise<void> {
+    const input = this.inspector.getByRole('textbox', {
+      name: `Sequence item ${String(itemIndex)} data key`,
+      exact: true,
+    });
+    await input.fill(key);
+    await input.press('Enter');
+  }
+
   /** D-030 — add a repeater by placing the Repeater tool (guard-gated insert). */
   async addRepeater(pos: { x: number; y: number } = { x: 200, y: 120 }): Promise<void> {
     await this.selectTool('Repeater');
@@ -479,7 +493,9 @@ export class DesignerApp {
   }
 
   get dataKeyInput(): Locator {
-    return this.page.getByRole('textbox', { name: 'Data key' });
+    // `exact` so this element-level "Data key" input is not confused with the per-item
+    // "Sequence item N data key" inputs (D-083 follow-up), whose names contain "data key".
+    return this.page.getByRole('textbox', { name: 'Data key', exact: true });
   }
 
   get elementNameInput(): Locator {

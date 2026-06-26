@@ -3,6 +3,7 @@ import {
   listBoundSequenceIds,
   playoutOf,
   sequenceItemInstanceId,
+  sequenceItemTextFieldIds,
   type Element,
   type FrameRange,
   type ListItem,
@@ -186,6 +187,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     ...listBoundSequenceIds(scene),
     ...(scene.compositions ?? []).flatMap((c) => [...listBoundSequenceIds(c)]),
   ]);
+  // D-083 follow-up — EXPLICIT per-item TEXT bindings across the scene + every comp, as
+  // `sequence elementId → (item id → bound field id)`. A text item is operator-editable ONLY
+  // when present here; unbound items stay static. Element ids are globally unique, so one
+  // merged map serves every scope (each sequence reads its own entry by element id).
+  const seqItemTextFields = sequenceItemTextFieldIds(scene);
+  for (const c of scene.compositions ?? []) {
+    for (const [elId, m] of sequenceItemTextFieldIds(c)) seqItemTextFields.set(elId, m);
+  }
 
   // B-029 — per-element lifespan visibility, evaluated at a given frame. Late-bound: the
   // gates are collected after the scene builds (below), but the ROOT controller's
@@ -415,17 +424,23 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           repeat: s.element.repeat,
           glyphGradientCss: s.glyphGradientCss,
           renderComposition,
-          // D-083 — per-item TEXT override for a NON-list-bound sequence: the operator edits
-          // each text item in the preview form. Suppressed when the item-list is bound (the
-          // bound list owns the items). Read at the sequence's OWN scope path (nesting-safe).
-          textValueFor: listBoundSeqIds.has(s.element.id)
-            ? undefined
-            : (itemId: string): string | undefined => {
-                const v = resolveScopeValues(currentValues, path)[
-                  sequenceItemInstanceId(s.element.id, itemId)
-                ];
-                return typeof v === 'string' ? v : undefined;
-              },
+          // D-083 follow-up — per-item TEXT override is EXPLICIT: an item is operator-editable
+          // only when the designer bound it (a `sequence-item-text` binding → a `text` field).
+          // Map each bound itemId to its field id from THIS doc's bindings; unbound items
+          // return undefined and stay static (the driver falls back to `item.text`). Suppressed
+          // entirely when the item-list is bound (the bound list owns the items). Read at the
+          // sequence's OWN scope path (nesting-safe), keyed by the bound field id.
+          textValueFor: ((): ((itemId: string) => string | undefined) | undefined => {
+            if (listBoundSeqIds.has(s.element.id)) return undefined;
+            const itemFieldIds = seqItemTextFields.get(s.element.id);
+            if (itemFieldIds === undefined || itemFieldIds.size === 0) return undefined;
+            return (itemId: string): string | undefined => {
+              const fieldId = itemFieldIds.get(itemId);
+              if (fieldId === undefined) return undefined;
+              const v = resolveScopeValues(currentValues, path)[fieldId];
+              return typeof v === 'string' ? v : undefined;
+            };
+          })(),
           clock: options.clock,
         });
         registerSequenceDriver(s.host, driver);

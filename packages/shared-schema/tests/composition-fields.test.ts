@@ -145,33 +145,27 @@ describe('aggregateCompositionFields (D-025)', () => {
     expect(data).toEqual({ outer: { inner: { v: '' } } });
   });
 
-  it('(D-083) a non-bound mixed sequence exposes a TEXT item as a flat field + a COMPOSITION item as a group', () => {
+  it('(D-083 follow-up) a non-bound MIXED sequence: an UNBOUND text item is NOT exposed; a composition item still is', () => {
     const card = comp({ id: 'card', fields: [textField('label', 'City')] });
     const seq = sequenceEl('seq', 'Now/Next', [
-      { id: 't1', text: 'Headline' }, // TEXT item → a flat per-item text field
-      { id: 'c1', kind: 'composition', compositionId: 'card' }, // COMPOSITION item → a group
+      { id: 't1', text: 'Headline' }, // UNBOUND text item → NOT auto-exposed (static)
+      { id: 'c1', kind: 'composition', compositionId: 'card' }, // COMPOSITION item → a group (kept)
     ]);
     const parent = comp({ id: 'parent', layers: [layer([seq])] });
     const scene = { compositions: [card, parent] } as Pick<Scene, 'compositions'>;
     const agg = aggregateCompositionFields(scene, parent);
-    // The TEXT item is a flat field (stable id-based key, friendly label, seeded with its text).
-    const textField0 = agg.fields.find((f) => f.id === 'seq:t1');
-    expect(textField0?.type).toBe('text');
-    expect(textField0?.label).toBe('Now/Next[0]');
-    expect(textField0 && 'default' in textField0 ? textField0.default : null).toBe('Headline');
-    // The COMPOSITION item is a group (id-based key, friendly label, its comp's fields).
+    // The unbound text item contributes NO field — sequences never auto-expose their items.
+    expect(agg.fields).toEqual([]);
+    // The COMPOSITION item is still a group (id-based key, friendly label, its comp's fields).
     expect(agg.groups).toHaveLength(1);
     expect(agg.groups[0]?.name).toBe('seq:c1');
     expect(agg.groups[0]?.label).toBe('Now/Next[1]');
     expect(agg.groups[0]?.aggregate.fields.map((f) => f.id)).toEqual(['label']);
-    // The value object carries the text item (scalar) AND the comp item (nested).
-    expect(defaultNestedValues(agg)).toEqual({
-      'seq:t1': 'Headline',
-      'seq:c1': { label: 'City' },
-    });
+    // The value object carries ONLY the comp item (no scalar for the unbound text item).
+    expect(defaultNestedValues(agg)).toEqual({ 'seq:c1': { label: 'City' } });
   });
 
-  it('(D-083) a NON-bound text-only sequence exposes one flat TEXT field per item', () => {
+  it('(D-083 follow-up) a non-bound text-only sequence exposes NOTHING (text is static unless explicitly bound)', () => {
     const seq = sequenceEl('seq', 'Rundown', [
       { id: 'a', text: 'one' },
       { id: 'b', text: 'two' },
@@ -179,12 +173,41 @@ describe('aggregateCompositionFields (D-025)', () => {
     const parent = comp({ id: 'parent', layers: [layer([seq])] });
     const scene = { compositions: [parent] } as Pick<Scene, 'compositions'>;
     const agg = aggregateCompositionFields(scene, parent);
-    expect(agg.groups).toEqual([]); // text items are flat fields, not groups
-    expect(agg.fields.map((f) => [f.id, f.label])).toEqual([
-      ['seq:a', 'Rundown[0]'],
-      ['seq:b', 'Rundown[1]'],
+    expect(agg.fields).toEqual([]);
+    expect(agg.groups).toEqual([]);
+    expect(defaultNestedValues(agg)).toEqual({});
+  });
+
+  it('(D-083 follow-up) an EXPLICITLY-bound text item surfaces its field; an unbound sibling does not', () => {
+    const seq = sequenceEl('seq', 'Rundown', [
+      { id: 'a', text: 'one' }, // explicitly bound to the 'headline' field
+      { id: 'b', text: 'two' }, // unbound → stays static, not exposed
     ]);
-    expect(defaultNestedValues(agg)).toEqual({ 'seq:a': 'one', 'seq:b': 'two' });
+    const parent = comp({
+      id: 'parent',
+      layers: [layer([seq])],
+      fields: [
+        {
+          id: 'headline',
+          type: 'text',
+          label: 'Headline',
+          required: false,
+          default: 'one',
+        } as DynamicField,
+      ],
+      bindings: [
+        {
+          fieldId: 'headline',
+          target: { kind: 'sequence-item-text', elementId: 'seq', itemId: 'a' },
+        } as FieldBinding,
+      ],
+    });
+    const scene = { compositions: [parent] } as Pick<Scene, 'compositions'>;
+    const agg = aggregateCompositionFields(scene, parent);
+    // The bound text item's field surfaces as a normal doc field; the unbound sibling 'b' does not.
+    expect(agg.fields.map((f) => f.id)).toEqual(['headline']);
+    expect(agg.groups).toEqual([]);
+    expect(defaultNestedValues(agg)).toEqual({ headline: 'one' });
   });
 
   it('(D-083) a LIST-BOUND sequence exposes NO per-item fields (the list owns the items)', () => {
