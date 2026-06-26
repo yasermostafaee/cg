@@ -143,4 +143,32 @@ test.describe('D-077 — copy / cut / paste keyboard shortcuts', () => {
     await app.page.keyboard.press('Control+v');
     await expect.poll(() => app.rowCount()).toBe(3);
   });
+
+  test('the shortcut fires by physical key code even with a non-Latin (Persian) key value', async ({
+    app,
+  }) => {
+    const { inA, inB } = await threeRects(app);
+    await selectTwo(app, inA, inB);
+
+    // Simulate a Persian-layout Ctrl+C then Ctrl+V: the printable `key` is a Persian
+    // character but the physical `code` is KeyC / KeyV — the handler must match the code.
+    const persianCombo = (code: string, key: string): Promise<unknown> =>
+      app.page.evaluate(
+        ([c, k]) =>
+          window.dispatchEvent(
+            new KeyboardEvent('keydown', {
+              key: k,
+              code: c,
+              ctrlKey: true,
+              bubbles: true,
+              cancelable: true,
+            }),
+          ),
+        [code, key],
+      );
+
+    await persianCombo('KeyC', 'ع'); // copy
+    await persianCombo('KeyV', 'ر'); // paste
+    await expect.poll(() => app.rowCount()).toBe(5); // copy fired despite the non-Latin key
+  });
 });
