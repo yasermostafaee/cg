@@ -80,6 +80,26 @@ test.describe('Ticker / crawler (D-028)', () => {
     });
   });
 
+  test('an image/logo separator renders between ticker items (D-039ext)', async ({ app }) => {
+    await app.newProject('TickerImageSep');
+    await app.addSharedImage('bug.png'); // a shared-library logo to use as the separator
+    await app.addTicker({ x: 120, y: 260 });
+
+    // Switch the separator to Image, then pick the shared-library logo.
+    await app.inspector.getByRole('combobox', { name: 'separator' }).selectOption('image');
+    await app.inspector
+      .getByRole('combobox', { name: 'image' })
+      .selectOption({ label: 'bug (shared)' });
+
+    // The size box appears once an image separator is committed.
+    await expect(app.inspector.getByLabel('width', { exact: true })).toBeVisible();
+    await expect(app.inspector.getByLabel('height', { exact: true })).toBeVisible();
+
+    // The authoring canvas renders the logo as an <img> BETWEEN the 3 default items
+    // (exactly 2 gaps) — never leading, never trailing (D-081).
+    await expect(app.canvasFrame.locator('img[data-cg-ticker-sep]')).toHaveCount(2);
+  });
+
   test('the exported single-file HTML carries the ticker and the GDD list field', async ({
     app,
   }) => {

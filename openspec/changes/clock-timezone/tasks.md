@@ -34,5 +34,6 @@
 
 ## 5. Gate
 
-- [ ] 5.1 Combined green gate (batched with D-039ext): `@cg/shared-schema` + `@cg/template-runtime` +
-      `@cg/designer` `format:check` + `typecheck` + `lint` + `test` + `build` (turbo `--force`).
+- [x] 5.1 Combined green gate (batched with D-039ext): `@cg/shared-schema` + `@cg/template-runtime` +
+      `@cg/designer` `format:check` + `typecheck` + `lint` + `test` + `build` (turbo `--force`) — green
+      (20/20 tasks; 223 + 393 + 547 unit tests; clock + ticker E2E pass).

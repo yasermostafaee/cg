@@ -23,6 +23,7 @@ import {
 } from './sequence-presets.js';
 import { ListItemsEditor } from '../fields/ListItemsEditor.js';
 import { SharedImagePicker } from '../sharedLibrary/SharedImagePicker.js';
+import { TickerSeparatorControl } from './TickerSeparatorControl.js';
 import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import {
@@ -438,16 +439,8 @@ function TickerSections({
             designerStore.updateElement(id, { gap: Math.max(0, gap) } as Partial<Element>)
           }
         />
-        <TextField
-          label="separator"
-          value={element.separator ?? ''}
-          resetKey={id}
-          onCommit={(separator) =>
-            designerStore.updateElement(id, {
-              separator: separator === '' ? undefined : separator,
-            } as Partial<Element>)
-          }
-        />
+        {/* D-039ext — separator is a text glyph OR an image/logo (project or shared). */}
+        <TickerSeparatorControl element={element} />
         {/* D-028 — the ticker's INNER repeat loop. A fresh ticker is infinite
             by design; finite passes complete cleanly (the last item fully
             exits) and signal the composition's content-driven hold. */}

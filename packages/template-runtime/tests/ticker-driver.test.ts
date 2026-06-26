@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   TickerDriver,
   coerceTickerItems,
+  populateTickerStaticRow,
   type TickerDriverItem,
   type TickerDriverOptions,
+  type TickerSeparatorImage,
 } from '../src/ticker-driver.js';
 
 /** Fake rAF + timer clock (same pattern as the playout-controller tests). */
@@ -113,6 +115,109 @@ describe('TickerDriver — vertical align of crawl item nodes (D-045)', () => {
     const h = make();
     h.driver.start();
     expect(fedItem(h.track)?.style.alignItems).toBe('center');
+  });
+});
+
+describe('TickerDriver — image separator (D-039ext)', () => {
+  const imageSep: TickerSeparatorImage = {
+    kind: 'image',
+    assetId: 'logo-1',
+    source: 'shared',
+    size: { w: 30, h: 24 },
+    url: 'blob:fake-logo',
+  };
+
+  /** The driver-fed image-separator `<img>` nodes. */
+  function fedSeps(track: HTMLElement): HTMLImageElement[] {
+    return [...track.querySelectorAll<HTMLImageElement>('img[data-cg-ticker-sep]')];
+  }
+  /** Fed nodes in DOM (= feed) order, items as their text and image seps as 'SEP'. */
+  function fedSequence(track: HTMLElement): string[] {
+    return [...track.children]
+      .filter((n) => (n as HTMLElement).style.visibility !== 'hidden') // drop the hidden measure node
+      .map((n) => (n.tagName === 'IMG' ? 'SEP' : (n.textContent ?? '')));
+  }
+
+  it('feeds an <img> separator with the resolved src, the size box, and asset attrs', () => {
+    const h = make({ separator: imageSep });
+    h.driver.start();
+    const seps = fedSeps(h.track);
+    expect(seps.length).toBeGreaterThan(0);
+    const img = seps[0]!;
+    expect(img.getAttribute('src')).toBe('blob:fake-logo');
+    expect(img.style.width).toBe('30px');
+    expect(img.style.height).toBe('24px');
+    expect(img.style.objectFit).toBe('contain');
+    expect(img.dataset['cgAssetId']).toBe('logo-1');
+    expect(img.dataset['cgAssetSource']).toBe('shared');
+  });
+
+  it('places the image separator BETWEEN items — never leading, never doubled', () => {
+    const h = make({ separator: imageSep });
+    h.driver.start();
+    const seq = fedSequence(h.track);
+    expect(seq.length).toBeGreaterThanOrEqual(3);
+    expect(seq[0]).not.toBe('SEP'); // no leading separator
+    for (let i = 0; i < seq.length - 1; i += 1) {
+      const bothSeps = seq[i] === 'SEP' && seq[i + 1] === 'SEP';
+      const bothItems = seq[i] !== 'SEP' && seq[i + 1] !== 'SEP';
+      expect(bothSeps || bothItems).toBe(false); // strictly alternating item/separator
+    }
+  });
+
+  it('never trails the final item of a finite drain run (D-081 holds for images)', () => {
+    const h = make({ separator: imageSep, repeat: 1, cycleBoundary: 'drain' });
+    h.driver.start();
+    expect(fedSequence(h.track).at(-1)).not.toBe('SEP');
+  });
+
+  it('without a resolved url the <img> still carries data-cg-asset-id for a host walk', () => {
+    const h = make({ separator: { ...imageSep, url: undefined } });
+    h.driver.start();
+    const img = fedSeps(h.track)[0]!;
+    expect(img.getAttribute('src')).toBeNull();
+    expect(img.dataset['cgAssetId']).toBe('logo-1');
+    expect(img.dataset['cgAssetSource']).toBe('shared');
+  });
+
+  it('recycled image separators never pollute the item span pool', () => {
+    const h = make({ separator: imageSep });
+    h.driver.start();
+    h.clock.advance(40_000); // sweep well past several recycle cycles
+    // Items stay <span>s (no <img> ever re-entered the span pool) and still render…
+    for (const n of h.track.querySelectorAll<HTMLElement>('[data-cg-ticker-item]')) {
+      expect(n.tagName).toBe('SPAN');
+    }
+    expect(fedTexts(h.track).length).toBeGreaterThan(0);
+    // …and every separator node is still an <img>.
+    for (const n of fedSeps(h.track)) expect(n.tagName).toBe('IMG');
+  });
+});
+
+describe('populateTickerStaticRow — image separator (D-039ext)', () => {
+  const imageSep: TickerSeparatorImage = {
+    kind: 'image',
+    assetId: 'logo-1',
+    source: 'project',
+    size: { w: 30, h: 24 },
+  };
+
+  it('renders an <img data-cg-asset-id> between items (no leading, no trailing)', () => {
+    const row = document.createElement('div');
+    populateTickerStaticRow(row, [itemA, itemB], {
+      direction: 'rtl',
+      gap: 10,
+      separator: imageSep,
+    });
+    const kinds = [...row.children].map((n) => (n.tagName === 'IMG' ? 'SEP' : 'ITEM'));
+    expect(kinds).toEqual(['ITEM', 'SEP', 'ITEM']); // between only
+    const img = row.querySelector<HTMLImageElement>('img[data-cg-asset-id]')!;
+    expect(img.dataset['cgAssetId']).toBe('logo-1');
+    expect(img.dataset['cgAssetSource']).toBe('project');
+    expect(img.style.width).toBe('30px');
+    expect(img.style.height).toBe('24px');
+    // No url given → the host assetUrls walk wires src later (no src yet).
+    expect(img.getAttribute('src')).toBeNull();
   });
 });
 

@@ -21,16 +21,24 @@ import { timelineGroupsFor } from '../src/renderer/features/timeline/keyframe-he
 // React's act() needs this flag set for createRoot rendering under Vitest.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-// D-040 — the image inspector mounts the Shared Library picker, which reads the
-// `window.cg.sharedImages` bridge on mount. Stub a minimal, empty library so the
+// D-040 / D-039ext — the image inspector mounts the Shared Library picker and the
+// ticker inspector mounts the separator picker, which read the `window.cg.sharedImages`
+// and `window.cg.assets` bridges on mount. Stub minimal, empty libraries so the
 // inspector renders without a real bridge.
+const noUnsub = (): void => {
+  /* no unsubscribe needed in tests */
+};
 (window as unknown as { cg: unknown }).cg = {
+  assets: {
+    list: () => Promise.resolve([]),
+    url: () => Promise.resolve(null),
+    onImported: () => noUnsub,
+    onCleared: () => noUnsub,
+  },
   sharedImages: {
     list: () => Promise.resolve([]),
     url: () => Promise.resolve(null),
-    onImported: () => () => {
-      /* no unsubscribe needed in tests */
-    },
+    onImported: () => noUnsub,
   },
 };
 

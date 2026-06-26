@@ -24,6 +24,26 @@ import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+// D-039ext — the ticker inspector mounts the separator picker, which reads the
+// `window.cg.assets` + `window.cg.sharedImages` bridges on mount. Stub minimal,
+// empty libraries so the inspector renders without a real bridge.
+const noUnsub = (): void => {
+  /* no unsubscribe needed in tests */
+};
+(window as unknown as { cg: unknown }).cg = {
+  assets: {
+    list: () => Promise.resolve([]),
+    url: () => Promise.resolve(null),
+    onImported: () => noUnsub,
+    onCleared: () => noUnsub,
+  },
+  sharedImages: {
+    list: () => Promise.resolve([]),
+    url: () => Promise.resolve(null),
+    onImported: () => noUnsub,
+  },
+};
+
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 

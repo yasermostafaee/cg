@@ -393,6 +393,10 @@ export class Preview {
             runtime = createRuntime(scene, {
               playoutOverride: playoutOverride,
               scopeOverrides: scopeOverrides,
+              // D-039ext — give the runtime the current asset URLs so the ticker driver can
+              // resolve an image separator's src on the nodes it FEEDS during the live crawl
+              // (the host DOM walk below still wires the static tree + late-arriving URLs).
+              assetUrls: assetUrls,
             });
             installCasparGlobals(runtime);
             await runtime.ready;

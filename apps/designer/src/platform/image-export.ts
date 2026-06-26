@@ -33,6 +33,22 @@ export function collectImageElements(scene: Scene): ImageRef[] {
           seen.add(el.id);
           out.push({ elementId: el.id, assetId: el.assetId, source: el.source });
         }
+      } else if (
+        el.type === 'ticker' &&
+        typeof el.separator === 'object' &&
+        el.separator !== null
+      ) {
+        // D-039ext — an image/logo ticker separator needs the same export inlining +
+        // preflight as an image element. Keyed by `${id}:sep` (one separator per ticker).
+        const key = `${el.id}:sep`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          out.push({
+            elementId: el.id,
+            assetId: el.separator.assetId,
+            source: el.separator.source,
+          });
+        }
       } else if (el.type === 'container') {
         walk(el.children);
       }
