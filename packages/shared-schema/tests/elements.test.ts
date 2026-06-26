@@ -3,6 +3,7 @@ import {
   ClockElementSchema,
   RepeaterElementSchema,
   SequenceElementSchema,
+  SequenceItemSchema,
   ContainerElementSchema,
   ElementBaseSchema,
   ElementSchema,
@@ -661,6 +662,68 @@ describe('SequenceElement (D-029)', () => {
     expect(SequenceElementSchema.parse({ ...sequence, verticalAlign: 'top' }).verticalAlign).toBe(
       'top',
     );
+  });
+
+  // D-083 — a sequence item is a discriminated union: text | composition.
+  it('D-083 — accepts a composition item and a mixed text/composition list, round-tripping', () => {
+    const parsed = SequenceElementSchema.parse({
+      ...sequence,
+      items: [
+        { id: 'a', text: 'Headline' },
+        { id: 'b', kind: 'composition', compositionId: 'clock-card' },
+        { id: 'c', kind: 'composition', compositionId: 'logo-card', dwellMs: 3000 },
+      ],
+    });
+    expect(parsed.items).toHaveLength(3);
+    expect(parsed.items[1]).toEqual({ id: 'b', kind: 'composition', compositionId: 'clock-card' });
+    expect(parsed.items[2]).toEqual({
+      id: 'c',
+      kind: 'composition',
+      compositionId: 'logo-card',
+      dwellMs: 3000,
+    });
+    // Round-trip: parsing the parsed value is identity.
+    expect(SequenceElementSchema.parse(parsed)).toEqual(parsed);
+  });
+  it('D-083 — a composition item rejects a missing/empty compositionId', () => {
+    expect(() =>
+      SequenceElementSchema.parse({
+        ...sequence,
+        items: [{ id: 'b', kind: 'composition' }],
+      }),
+    ).toThrow();
+    expect(() =>
+      SequenceElementSchema.parse({
+        ...sequence,
+        items: [{ id: 'b', kind: 'composition', compositionId: '' }],
+      }),
+    ).toThrow();
+  });
+});
+
+describe('SequenceItem typed union — non-breaking widening (D-083)', () => {
+  it('parses a pre-D-083 text item {id,text} UNCHANGED — no `kind` injected', () => {
+    const parsed = SequenceItemSchema.parse({ id: 'a', text: 'now' });
+    expect(parsed).toEqual({ id: 'a', text: 'now' });
+    expect('kind' in parsed).toBe(false);
+  });
+  it('accepts an explicit text kind and a per-item dwell', () => {
+    expect(SequenceItemSchema.parse({ id: 'a', kind: 'text', text: 'now', dwellMs: 2000 })).toEqual(
+      {
+        id: 'a',
+        kind: 'text',
+        text: 'now',
+        dwellMs: 2000,
+      },
+    );
+  });
+  it('parses a composition item by its compositionId discriminant', () => {
+    expect(
+      SequenceItemSchema.parse({ id: 'c', kind: 'composition', compositionId: 'card' }),
+    ).toEqual({ id: 'c', kind: 'composition', compositionId: 'card' });
+  });
+  it('rejects an item that is neither (no text, no compositionId)', () => {
+    expect(() => SequenceItemSchema.parse({ id: 'x' })).toThrow();
   });
 });
 

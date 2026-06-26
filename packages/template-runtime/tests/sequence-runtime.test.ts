@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { Scene, SequenceElement } from '@cg/shared-schema';
+import type { Composition, Scene, SequenceElement } from '@cg/shared-schema';
 import { createRuntime } from '../src/runtime.js';
+import { SequenceDriver } from '../src/sequence-driver.js';
 
 /** Fake rAF + timer clock (same pattern as the ticker/clock-runtime tests). */
 function makeClock() {
@@ -429,5 +430,179 @@ describe('createRuntime — sequence content source + next() dispatch (D-029)', 
     await runtime.next?.();
     await run(clock, 400);
     expect(visibleItems()).toEqual(['بعد: سه']);
+  });
+});
+
+describe('createRuntime — D-083 composition sequence items (text | composition)', () => {
+  /** A one-element composition: a countdown clock (deterministic with the fake clock). */
+  function clockComp(): Composition {
+    return {
+      id: 'comp-clock',
+      name: 'Clock card',
+      resolution: { width: 400, height: 60 },
+      frameRange: { in: 0, out: 50 },
+      background: 'transparent',
+      layers: [
+        {
+          id: 'cl',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          // A long countdown so it ticks throughout the test without completing.
+          children: [{ ...clockElement, target: { kind: 'duration', ms: 600_000 } }],
+        },
+      ],
+      fields: [],
+      bindings: [],
+    } as unknown as Composition;
+  }
+
+  function compScene(seq: Partial<SequenceElement>): Scene {
+    return {
+      schemaVersion: 1,
+      id: 'scene-seq-comp',
+      name: 'rotating-title',
+      templateType: 'custom',
+      resolution: { width: 1920, height: 1080 },
+      frameRate: 50,
+      safeAreas: { title: 10, action: 5 },
+      frameRange: { in: 0, out: 50 },
+      background: 'transparent',
+      playout: { mode: 'manual' },
+      layers: [
+        {
+          id: 'L1',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [sequenceElement(seq)],
+        },
+      ],
+      fields: [],
+      bindings: [],
+      fonts: [],
+      compositions: [clockComp()],
+      metadata: { createdAt: '2026-06-11T00:00:00.000Z', updatedAt: '2026-06-11T00:00:00.000Z' },
+    } as unknown as Scene;
+  }
+
+  /** The clock time inside the sequence host (null when no composition item is on stage). */
+  function clockText(): string | null {
+    return (
+      document.querySelector<HTMLElement>('[data-cg-element-id="seq"] [data-cg-clock-time]')
+        ?.textContent ?? null
+    );
+  }
+
+  it('renders the referenced composition content with a LIVE ticking clock', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      compScene({
+        advance: 'manual',
+        repeat: 'infinite',
+        items: [
+          { kind: 'composition', id: 'c1', compositionId: 'comp-clock' },
+          { id: 't1', text: 'NEXT' },
+        ],
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await runtime.play({});
+    // Item 1 is the composition: its clock is on stage at its initial value.
+    const t0 = clockText();
+    expect(t0).not.toBeNull();
+    expect(t0).toBe('10:00');
+    // The inner clock TICKS — the whole point of the live wiring (D-084 timezone /
+    // D-103 blink ride along the existing clock engine).
+    await run(clock, 3000);
+    expect(clockText()).toBe('09:57');
+    expect(clockText()).not.toBe(t0);
+  });
+
+  it('advancing away tears down the composition item (its clock is gone)', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      compScene({
+        advance: 'manual',
+        repeat: 'infinite',
+        transitionMs: 100,
+        items: [
+          { kind: 'composition', id: 'c1', compositionId: 'comp-clock' },
+          { id: 't1', text: 'NEXT' },
+        ],
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await runtime.play({});
+    expect(clockText()).not.toBeNull();
+    await runtime.next?.();
+    await run(clock, 300); // the transition completes; the old comp item is removed
+    expect(visibleItems()).toEqual(['NEXT']);
+    expect(clockText()).toBeNull(); // the comp clock subtree was torn down
+  });
+
+  it('pause() freezes the composition item clock in lockstep', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      compScene({
+        advance: 'manual',
+        repeat: 'infinite',
+        items: [{ kind: 'composition', id: 'c1', compositionId: 'comp-clock' }],
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await runtime.play({});
+    await run(clock, 2000);
+    const frozen = clockText();
+    runtime.pause();
+    await run(clock, 30_000, 1000);
+    expect(clockText()).toBe(frozen); // the inner clock froze with the sequence
+    runtime.resume();
+    await run(clock, 3000);
+    expect(clockText()).not.toBe(frozen); // and resumed
+  });
+
+  it('destroy() tears down a composition item subtree (no leaked inner drivers)', () => {
+    let live = 0;
+    const host = document.createElement('div');
+    host.style.width = '400px';
+    host.style.height = '60px';
+    document.body.appendChild(host);
+    const driver = new SequenceDriver({
+      host,
+      direction: 'ltr',
+      items: [{ kind: 'composition', id: 'c1', compositionId: 'x' }],
+      defaultDwellMs: 1000,
+      advance: 'manual',
+      transitionIn: 'bottom',
+      transitionOut: 'top',
+      transitionTiming: 'simultaneous',
+      transitionMs: 100,
+      repeat: 'infinite',
+      // Stand-in for the runtime's wired comp subtree: build increments, hide (idempotent)
+      // decrements — so `live` is exactly the count of un-torn-down subtrees.
+      renderComposition: () => {
+        live += 1;
+        let down = false;
+        return {
+          node: document.createElement('div'),
+          show: () => undefined,
+          pause: () => undefined,
+          resume: () => undefined,
+          hide: () => {
+            if (!down) {
+              down = true;
+              live -= 1;
+            }
+          },
+        };
+      },
+    });
+    driver.start(); // builds + shows item 1
+    expect(live).toBe(1);
+    driver.destroy(); // must tear it down — NOT rebuild a stranded subtree
+    expect(live).toBe(0);
   });
 });

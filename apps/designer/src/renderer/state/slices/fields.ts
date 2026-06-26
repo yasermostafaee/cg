@@ -427,14 +427,22 @@ export const fieldsSlice = {
    */
   setSequenceItems(elementId: string, items: ListItem[]): void {
     if (current.scene === null) return;
-    // The sequence element stores what it renders: {id, text, dwellMs?}. The
-    // bound field's default keeps the FULL open item shape (extras survive).
+    // D-083 — the sequence stores a discriminated union of what it renders: a TEXT
+    // item {id,text,dwellMs?} (kind defaults to 'text') or a COMPOSITION item
+    // {id,kind:'composition',compositionId,dwellMs?}. The bound field's default keeps
+    // the FULL open item shape (extras survive); only a text-only sequence is bindable.
     const authored = items.map((i) => {
       const o = i as Record<string, unknown>;
-      const text = typeof o['text'] === 'string' ? o['text'] : '';
       const dwell = o['dwellMs'];
       const dwellMs =
         typeof dwell === 'number' && Number.isInteger(dwell) && dwell > 0 ? dwell : undefined;
+      if (o['kind'] === 'composition') {
+        const compositionId = typeof o['compositionId'] === 'string' ? o['compositionId'] : '';
+        return dwellMs === undefined
+          ? { id: i.id, kind: 'composition', compositionId }
+          : { id: i.id, kind: 'composition', compositionId, dwellMs };
+      }
+      const text = typeof o['text'] === 'string' ? o['text'] : '';
       return dwellMs === undefined ? { id: i.id, text } : { id: i.id, text, dwellMs };
     });
     designerStore.updateElement(elementId, { items: authored } as Partial<Element>);
@@ -443,6 +451,15 @@ export const fieldsSlice = {
       (b) => b.target.kind === 'sequence-items' && b.target.elementId === elementId,
     );
     if (conv === undefined) return;
+    // D-083 — binding is TEXT-ONLY: once a composition item is present the sequence
+    // can't be data-bound, so DROP the now-illegal convenience binding + its list field
+    // rather than syncing a composition into the field default (which the runtime would
+    // coerce back to empty text, erasing the composition). Mirrors the clear path of
+    // setElementDataKey, which the disabled Data-key input can no longer reach.
+    if (authored.some((i) => (i as Record<string, unknown>)['kind'] === 'composition')) {
+      designerStore.removeField(conv.fieldId);
+      return;
+    }
     const field = doc.fields.find((f) => f.id === conv.fieldId);
     if (field === undefined || field.type !== 'list') return;
     designerStore.updateField(field.id, { default: items.map((i) => ({ ...i })) });

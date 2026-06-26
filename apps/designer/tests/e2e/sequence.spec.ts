@@ -114,3 +114,60 @@ test.describe('Sequence / now-next element (D-029)', () => {
     await app.stop();
   });
 });
+
+/**
+ * D-083 — a sequence item is text | composition. A composition item rotates a
+ * referenced composition (e.g. a one-element clock card) through the SAME
+ * transitions/dwell as a text item, with its live content (a clock) ticking;
+ * a sequence holding a composition item is NOT text-bindable (Phase 1).
+ */
+test.describe('Sequence — typed items: text | composition (D-083)', () => {
+  test('a composition item rotates a referenced clock card alongside the text items', async ({
+    app,
+  }) => {
+    await app.newProject('RotatingTitle');
+    // A one-element clock composition — the "card" a composition item rotates.
+    await app.newComposition('ClockCard');
+    await app.openComposition('ClockCard');
+    await app.addClock();
+    await app.openComposition('comp1');
+
+    // Add the sequence; make item 1 a composition item referencing ClockCard.
+    await app.addSequence();
+    await app.inspector
+      .getByRole('combobox', { name: 'Sequence item 1 type', exact: true })
+      .selectOption('composition');
+    await app.inspector
+      .getByRole('combobox', { name: 'Sequence item 1 composition', exact: true })
+      .selectOption({ label: 'ClockCard' });
+
+    // Play: item 1 (composition) renders the clock card live; the transport's Next
+    // advances to text item 2 — both ride the one rotation mechanism.
+    await app.openPreviewModal();
+    await app.play();
+    await expect(app.previewFrame.locator('[data-cg-clock-time]')).toBeVisible({ timeout: 5000 });
+    await app.next();
+    await expect(app.previewFrame.getByText(ITEM_2)).toBeVisible({ timeout: 5000 });
+    await app.stop();
+  });
+
+  test('a sequence holding a composition item cannot be text-bound (binding disabled)', async ({
+    app,
+  }) => {
+    await app.newProject('RotatingBind');
+    await app.newComposition('LogoCard');
+    await app.openComposition('LogoCard');
+    await app.addClock();
+    await app.openComposition('comp1');
+
+    await app.addSequence();
+    await app.inspector
+      .getByRole('combobox', { name: 'Sequence item 1 type', exact: true })
+      .selectOption('composition');
+
+    // The Data key is disabled and a text-only hint explains why.
+    await app.expandDynamicData();
+    await expect(app.dataKeyInput).toBeDisabled();
+    await expect(app.inspector.getByText(/binding is disabled/i)).toBeVisible();
+  });
+});

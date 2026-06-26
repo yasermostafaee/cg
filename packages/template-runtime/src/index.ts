@@ -36,6 +36,8 @@ export {
   sequenceDriverFor,
   type SequenceDriverItem,
   type SequenceDriverOptions,
+  type RenderedSequenceItem,
+  type SequenceCompositionRenderer,
 } from './sequence-driver.js';
 export {
   edgeOffset,
@@ -52,7 +54,13 @@ export {
   type RepeaterDriverOptions,
   type RepeaterRowHandle,
 } from './repeater-driver.js';
-export { buildRepeaterRows, clampRowCount, repeaterItemValues } from './scene-builder.js';
+export {
+  buildRepeaterRows,
+  buildSequenceCompositionItem,
+  clampRowCount,
+  repeaterItemValues,
+  type SequenceCompositionItemBuild,
+} from './scene-builder.js';
 export {
   applyAnimationAtFrame,
   collectAnimatedElements,

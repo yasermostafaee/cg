@@ -844,6 +844,27 @@ function SequenceSections({
 }: SectionProps<SequenceElement>): JSX.Element {
   const id = element.id;
   const presetKey = sequencePresetKeyFor(element);
+  // D-083 — composition items pick from the scene's compositions: the nestable
+  // ones (the author-time cycle guard) plus any already referenced (so a momentarily
+  // invalid choice doesn't vanish from its picker).
+  const scene = useDesignerSelector((sel) => sel.scene);
+  const comps = scene?.compositions ?? [];
+  const referenced = new Set(
+    element.items.filter((it) => it.kind === 'composition').map((it) => it.compositionId),
+  );
+  const compChoices = comps
+    .filter((c) => referenced.has(c.id) || designerStore.canNestCompositionInActive(c.id))
+    .map((c) => ({ id: c.id, name: c.name }));
+  // A referenced composition that no longer exists (deleted) stays visible as
+  // "(missing composition)" so the picker shows the real (broken) wiring instead of
+  // silently displaying the first option — matching the clock-timezone / repeater pickers.
+  const missingRefs = [...referenced].filter(
+    (cid) => cid !== '' && !compChoices.some((c) => c.id === cid),
+  );
+  const compChoicesAll = [
+    ...compChoices,
+    ...missingRefs.map((cid) => ({ id: cid, name: '(missing composition)' })),
+  ];
   return (
     <>
       <CollapseSection title="Sequence" pinned>
@@ -956,8 +977,13 @@ function SequenceSections({
           items={element.items}
           label={element.name || 'Sequence'}
           showDwell
+          compositions={compChoicesAll}
           onChange={(items) => designerStore.setSequenceItems(id, items)}
         />
+        <p className={dds.hint}>
+          A composition item rotates a one-element clock/logo or a composed layout through the
+          sequence’s transitions; its live content (a clock) keeps ticking.
+        </p>
       </CollapseSection>
 
       {/* Style parity with the ticker/clock text sections. D-052 — colour /

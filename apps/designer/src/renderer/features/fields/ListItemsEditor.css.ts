@@ -39,6 +39,13 @@ export const dwellInput = style({
   outline: 'none',
 });
 
+/** D-083 — the narrow per-item KIND picker (Text / Composition) for sequences. */
+export const kindSelect = style({
+  width: '6rem',
+  flex: 'none',
+  fontSize: '0.74rem',
+});
+
 export const addRow = style({
   marginTop: '0.3rem',
 });

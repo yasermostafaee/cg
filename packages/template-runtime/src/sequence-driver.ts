@@ -37,12 +37,37 @@ import {
  * (no mid-motion restarts) — both documented out-of-scope seams.
  */
 
-/** A normalized sequence item — the reconcile unit. */
-export interface SequenceDriverItem {
-  id: string;
-  text: string;
-  dwellMs?: number | undefined;
+/**
+ * A normalized sequence item — the reconcile unit. D-083 — TEXT items carry `text`
+ * (the bindable kind); COMPOSITION items carry `compositionId` (rendered by the
+ * injected `renderComposition` factory). `kind` is optional and defaults to 'text'
+ * for back-compat.
+ */
+export type SequenceDriverItem =
+  | { kind?: 'text' | undefined; id: string; text: string; dwellMs?: number | undefined }
+  | { kind: 'composition'; id: string; compositionId: string; dwellMs?: number | undefined };
+
+/**
+ * D-083 — a rendered sequence item: its DOM node + lifecycle hooks for any inner
+ * drivers (a composition item's clock/ticker). The driver calls `show` when the item
+ * enters the stage, `pause`/`resume` in lockstep with the sequence, and `hide` when it
+ * leaves (teardown). For a TEXT item every hook is a no-op.
+ */
+export interface RenderedSequenceItem {
+  node: HTMLElement;
+  show(): void;
+  pause(): void;
+  resume(): void;
+  hide(): void;
 }
+
+/** D-083 — builds the node + inner-driver lifecycle for a COMPOSITION item. */
+export type SequenceCompositionRenderer = (item: {
+  id: string;
+  compositionId: string;
+}) => RenderedSequenceItem;
+
+const NOOP = (): void => undefined;
 
 export interface SequenceDriverOptions {
   /** The clipped box (the element node) the driver renders items into. */
@@ -64,6 +89,12 @@ export interface SequenceDriverOptions {
   repeat: number | 'infinite';
   /** B-016 — composed `background` for a gradient text colour, applied per item node. */
   glyphGradientCss?: string | undefined;
+  /**
+   * D-083 — factory for COMPOSITION items: builds the referenced composition's content
+   * node + the lifecycle hooks for its inner drivers (a clock ticks, a ticker crawls).
+   * Absent ⇒ composition items render as an empty box (text-only runtimes / tests).
+   */
+  renderComposition?: SequenceCompositionRenderer | undefined;
   clock?: RuntimeClock | undefined;
 }
 
@@ -83,11 +114,14 @@ export class SequenceDriver {
   /** What's on screen — a snapshot, so a removed current keeps displaying. */
   private current: SequenceDriverItem | null = null;
   private currentNode: HTMLElement | null = null;
+  /** D-083 — the on-screen item's inner-driver lifecycle (composition items). */
+  private currentHooks: RenderedSequenceItem | null = null;
   /** Where advance resumes when the current item was removed from the list. */
   private resumeIdx = 0;
   /** Mid-transition state. */
   private incoming: SequenceDriverItem | null = null;
   private incomingNode: HTMLElement | null = null;
+  private incomingHooks: RenderedSequenceItem | null = null;
   /** Passes STARTED this run (1-based once the run starts). */
   private passesStarted = 1;
 
@@ -138,6 +172,8 @@ export class SequenceDriver {
     this.paused = false;
     // The run owns the stage: render item 1 (or adopt what reset() drew).
     if (this.currentNode === null) this.renderCurrentStatic();
+    // D-083 — start the on-screen item's inner drivers (a composition item's clock ticks).
+    this.currentHooks?.show();
     if (this.logical.length === 0) {
       // Nothing to advance through — complete by definition (zero-length
       // content, the ticker's empty parity), regardless of `repeat`.
@@ -176,6 +212,9 @@ export class SequenceDriver {
     this.paused = true;
     this.pausedAt = this.clock.now();
     this.cancelFrame();
+    // D-083 — freeze the on-screen item's inner drivers (a composition item's clock) in lockstep.
+    this.currentHooks?.pause();
+    this.incomingHooks?.pause();
   }
 
   /** Continue dwell/transition from exactly the frozen point — no jump. */
@@ -183,6 +222,8 @@ export class SequenceDriver {
     if (!this.running || !this.paused) return;
     this.phasePausedAccum += this.clock.now() - this.pausedAt;
     this.paused = false;
+    this.currentHooks?.resume(); // D-083 — continue inner drivers in lockstep
+    this.incomingHooks?.resume();
     if (this.phase === 'transition') this.paintTransition();
     this.scheduleIfNeeded();
   }
@@ -192,6 +233,9 @@ export class SequenceDriver {
     this.running = false;
     this.paused = false;
     this.cancelFrame();
+    // D-083 — tear down the on-screen item's inner drivers (a composition item's clock stops).
+    this.currentHooks?.hide();
+    this.incomingHooks?.hide();
   }
 
   /**
@@ -216,8 +260,12 @@ export class SequenceDriver {
   }
 
   destroy(): void {
-    this.reset();
+    // D-083 — mark destroyed FIRST so reset()'s trailing renderCurrentStatic() no-ops:
+    // reset()→stop() already tears the live composition itemSub down (its hooks.hide()),
+    // and rebuilding item-1 here would strand a fresh, never-shown subtree (start() now
+    // early-returns on `destroyed`, so its hide() could never fire) — a driver/DOM leak.
     this.destroyed = true;
+    this.reset();
   }
 
   /**
@@ -241,8 +289,12 @@ export class SequenceDriver {
       if (shown === null) return;
       const replacement = this.logical.find((i) => i.id === shown.id);
       if (replacement !== undefined) {
-        if (replacement.text !== shown.text && node !== null) node.textContent = replacement.text;
-        shown.text = replacement.text;
+        // D-083 — text edit in place only for TEXT items (the bindable kind). A composition item's
+        // content is static (its id is stable), so there's nothing to reconcile beyond `dwellMs`.
+        if (shown.kind !== 'composition' && replacement.kind !== 'composition') {
+          if (replacement.text !== shown.text && node !== null) node.textContent = replacement.text;
+          shown.text = replacement.text;
+        }
         shown.dwellMs = replacement.dwellMs;
         return;
       }
@@ -338,9 +390,11 @@ export class SequenceDriver {
     const target = this.logical[toIdx];
     if (target === undefined) return;
     this.incoming = { ...target };
-    this.incomingNode = this.makeItemNode();
-    this.incomingNode.textContent = target.text;
-    this.o.host.appendChild(this.incomingNode);
+    const r = this.renderItem(this.incoming);
+    this.incomingHooks = r;
+    this.incomingNode = r.node;
+    this.o.host.appendChild(r.node);
+    r.show(); // D-083 — the incoming item's inner drivers run as it enters
     this.enterPhase('transition');
     this.paintTransition();
     this.scheduleIfNeeded();
@@ -356,11 +410,14 @@ export class SequenceDriver {
   }
 
   private finishTransition(): void {
+    this.currentHooks?.hide(); // D-083 — teardown the outgoing item's inner drivers
     this.currentNode?.remove();
     this.currentNode = this.incomingNode;
     this.current = this.incoming;
+    this.currentHooks = this.incomingHooks;
     this.incomingNode = null;
     this.incoming = null;
+    this.incomingHooks = null;
     if (this.currentNode !== null) {
       this.currentNode.style.transform = '';
       this.currentNode.style.visibility = '';
@@ -415,20 +472,42 @@ export class SequenceDriver {
     this.resolveComplete?.();
   }
 
-  /** Render the resting state: item 1 (or the empty box) — no motion. */
+  /** Render the resting state: item 1 (or the empty box) — no motion, no inner drivers started. */
   private renderCurrentStatic(): void {
+    // D-083 — never rebuild after destroy(): reset() (which calls this) runs during destroy,
+    // and a fresh composition itemSub built here could never be torn down (see destroy()).
+    if (this.destroyed) return;
+    // Tear down any prior item's inner drivers (a composition item's clock) before wiping.
+    this.currentHooks?.hide();
+    this.incomingHooks?.hide();
     while (this.o.host.firstChild !== null) this.o.host.removeChild(this.o.host.firstChild);
     this.incoming = null;
     this.incomingNode = null;
+    this.incomingHooks = null;
     const first = this.logical[0];
     if (this.current === null) this.current = first === undefined ? null : { ...first };
     if (this.current === null) {
       this.currentNode = null;
+      this.currentHooks = null;
       return;
     }
-    this.currentNode = this.makeItemNode();
-    this.currentNode.textContent = this.current.text;
-    this.o.host.appendChild(this.currentNode);
+    const r = this.renderItem(this.current);
+    this.currentHooks = r;
+    this.currentNode = r.node;
+    this.o.host.appendChild(r.node);
+  }
+
+  /**
+   * D-083 — build an item's node + inner-driver lifecycle: a COMPOSITION item via the injected
+   * `renderComposition` factory (its clock/ticker drivers), else a TEXT span (no-op hooks).
+   */
+  private renderItem(item: SequenceDriverItem): RenderedSequenceItem {
+    if (item.kind === 'composition' && this.o.renderComposition !== undefined) {
+      return this.o.renderComposition({ id: item.id, compositionId: item.compositionId });
+    }
+    const node = this.makeItemNode();
+    if (item.kind !== 'composition') node.textContent = item.text;
+    return { node, show: NOOP, pause: NOOP, resume: NOOP, hide: NOOP };
   }
 
   /**
@@ -489,7 +568,10 @@ export function sequenceDriverFor(host: HTMLElement): SequenceDriver | undefined
 /**
  * Normalize a `list` field value (or a bare string array — degraded
  * positional-id fallback) into driver items. Reads the fields the sequence
- * knows (`text`, `dwellMs`); unknown fields stay on the FIELD value.
+ * knows (`text`, `dwellMs`, D-083 `kind`/`compositionId`); unknown fields stay
+ * on the FIELD value. D-083 — a composition item is PRESERVED (not flattened to
+ * empty text): the designer never binds a composition-bearing sequence (text-only
+ * gate), but a hand-authored `.vcg` could carry one, so the seam stays kind-aware.
  */
 export function coerceSequenceItems(raw: readonly unknown[]): SequenceDriverItem[] {
   return raw.map((v, i) => {
@@ -497,10 +579,16 @@ export function coerceSequenceItems(raw: readonly unknown[]): SequenceDriverItem
     if (v !== null && typeof v === 'object') {
       const o = v as Record<string, unknown>;
       const id = typeof o['id'] === 'string' && o['id'] !== '' ? o['id'] : `item-${String(i)}`;
-      const text = typeof o['text'] === 'string' ? o['text'] : '';
       const dwell = o['dwellMs'];
       const dwellMs =
         typeof dwell === 'number' && Number.isInteger(dwell) && dwell > 0 ? dwell : undefined;
+      if (o['kind'] === 'composition' && typeof o['compositionId'] === 'string') {
+        const compositionId = o['compositionId'];
+        return dwellMs === undefined
+          ? { kind: 'composition', id, compositionId }
+          : { kind: 'composition', id, compositionId, dwellMs };
+      }
+      const text = typeof o['text'] === 'string' ? o['text'] : '';
       return dwellMs === undefined ? { id, text } : { id, text, dwellMs };
     }
     return { id: `item-${String(i)}`, text: '' };

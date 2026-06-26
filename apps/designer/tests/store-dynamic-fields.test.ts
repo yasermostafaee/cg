@@ -387,6 +387,44 @@ describe('designerStore — D-029 sequence Data key + items', () => {
     expect(f?.type).toBe('list');
     if (f?.type === 'list') expect(f.default).toEqual(next);
   });
+
+  it('D-083 — adding a composition item to a BOUND sequence drops the text-only binding + field', () => {
+    freshScene();
+    addSequence('sq-1');
+    expect(designerStore.setElementDataKey('sq-1', 'rundown')).toBe(true);
+    expect(
+      bindings().some((b) => b.target.kind === 'sequence-items' && b.target.elementId === 'sq-1'),
+    ).toBe(true);
+    // A composition item makes the sequence non-bindable (text-only): the now-illegal
+    // binding AND its seeded list field are dropped rather than carrying a composition
+    // into the field default (which the runtime would coerce back to empty text).
+    designerStore.setSequenceItems('sq-1', [
+      { id: 'c1', kind: 'composition', compositionId: 'card' },
+      { id: 't1', text: 'still text' },
+    ]);
+    expect(
+      bindings().some((b) => b.target.kind === 'sequence-items' && b.target.elementId === 'sq-1'),
+    ).toBe(false);
+    expect(fields().some((x) => x.id === 'rundown')).toBe(false);
+    // The composition item survived on the element (the typed union is preserved).
+    expect(sequenceItemsOf('sq-1') as unknown).toEqual([
+      { id: 'c1', kind: 'composition', compositionId: 'card' },
+      { id: 't1', text: 'still text' },
+    ]);
+  });
+
+  it('D-083 — setSequenceItems preserves the text|composition union on the element', () => {
+    freshScene();
+    addSequence('sq-2');
+    designerStore.setSequenceItems('sq-2', [
+      { id: 'a', text: 'Headline' },
+      { id: 'b', kind: 'composition', compositionId: 'clock-card', dwellMs: 3000 },
+    ]);
+    expect(sequenceItemsOf('sq-2') as unknown).toEqual([
+      { id: 'a', text: 'Headline' },
+      { id: 'b', kind: 'composition', compositionId: 'clock-card', dwellMs: 3000 },
+    ]);
+  });
 });
 
 /** A ticker for cross-kind conflict tests (avoids shadowing the D-028 helper). */
