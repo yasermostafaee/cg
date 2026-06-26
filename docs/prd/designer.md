@@ -1017,17 +1017,24 @@ safety net for D-035.
 ## [ ] D-039 — Ticker image/logo separators ⟨priority: low⟩
 
 **What:** Let the ticker's `separator` be an image/logo instead of (or alongside)
-a text glyph: the operator picks a logo from the project's asset/logo list and the
-runtime renders it between items, sized to the band and vertically centred —
-design TBD when scheduled.
+a text glyph: the operator picks a logo from the SHARED LIBRARY (logo) OR the
+project's assets, and the runtime renders it small BETWEEN items (never trailing —
+see D-081), vertically centred, at an OPERATOR-ADJUSTABLE size.
 **Why:** Branded crawls (channel bug between headlines) are a common broadcast
 look; a text-only separator can't express it.
-**Acceptance to be detailed when scheduled.**
-**Notes:** extends the D-028 ticker (`TickerElement.separator` would widen to a
-union, e.g. `string | { assetId }`); the treadmill driver already measures and
-feeds separator nodes generically, so the work is mostly schema + asset
-resolution + the inspector picker. Relates to the asset pipeline (preview blob
-URLs / export inlining) the image element already uses.
+**Acceptance:**
+
+- WHEN the operator sets the ticker separator to an image THEN they pick it from the shared library OR project assets
+- WHEN an image separator is set THEN it renders between items (never trailing), vertically centered, at an adjustable size
+
+**Notes:** extends the D-028 ticker — `separator` becomes
+`string | { kind:'image', assetId, source:'project'|'shared', size }` (schema +
+runtime + inspector); the treadmill driver already measures and feeds separator
+nodes generically, so the work is mostly schema + asset resolution (shared/project,
+reusing the D-040 two-source resolver) + the inspector picker + a size control.
+Relates to the asset pipeline (preview blob URLs / export inlining) the image
+element already uses. Pairs with D-081 (no trailing separator). This is the
+roadmap's "D-039 (ext)".
 
 ## [x] D-040 — Shared image library + logo element ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-17-add-shared-image-library/`
 
@@ -2603,3 +2610,99 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 - WHEN a color field shows its hex value THEN the full value (6 or 8 hex chars) is visible without clipping
 
 **Notes:** apps/designer/src/renderer/features/inspector/controls.css.ts `hexInput` — set a `minWidth` that fits 8 chars (e.g. ~`8ch`/`64px`) so it doesn't collapse inside `.cg-field`; keep it from overlapping the trailing keyframe dot.
+
+## [ ] D-081 — Ticker: no trailing separator ⟨priority: low⟩
+
+**What:** The ticker must render its `separator` only BETWEEN items, never after the last item (incl. across the loop seam).
+**Why:** A trailing separator (e.g. "…headline •" with nothing after) looks broken.
+**Acceptance:**
+
+- WHEN a ticker with a separator renders THEN the separator appears between consecutive items only — none trails the final item, and the seam between the last and first item (per `cycleBoundary`) reads correctly
+
+**Notes:** template-runtime ticker rendering (scene-builder / runtime crawl). The separator is a between-items span; ensure none is emitted after the last item. Mind 'seamless' vs 'drain'. Pairs with D-039.
+
+## [ ] D-082 — English default item text for ticker/sequence ⟨priority: low⟩
+
+**What:** New ticker and sequence elements get English placeholder item text (like the text element's "New text"), not Persian.
+**Why:** Defaults should match the text element; today ticker/seq seed Persian sample text.
+**Acceptance:**
+
+- WHEN a new ticker is created THEN its default items use English placeholder text
+- WHEN a new sequence is created THEN its default items use English placeholder text
+
+**Notes:** apps/designer/src/renderer/state/element-defaults.ts — ticker items (currently 'خبر نخست — متن نمونه' …) and sequence items (currently 'اکنون: برنامهٔ نخست' …) → English (e.g. 'First headline — sample', 'Now: first item', 'Then: second item').
+
+## [ ] D-083 — Sequence: logo and clock items (not just text) ⟨priority: medium; needs design⟩
+
+**What:** A sequence item can be a text, a logo (shared/asset image), OR a clock — not only text.
+**Why:** Now/next rotators commonly cycle mixed content (headline, channel logo, a clock), each with the same in/out transitions and dwell.
+**Acceptance:**
+
+- WHEN building a sequence THEN each item's type can be text, logo, or clock
+- WHEN the sequence advances THEN each item type renders correctly under the existing transitionIn/Out/timing and dwell
+
+**Notes:** Significant. Extend SequenceItemSchema (shared-schema) from `{id,text,dwellMs}` to a discriminated union (text | logo | clock); the runtime sequence renderer renders each kind; the items editor lets the operator pick the item type. Design TBD when scheduled.
+
+## [ ] D-084 — Clock: selectable time zone ⟨priority: medium⟩
+
+**What:** A clock element can be assigned a time zone so `wall` mode shows that zone's current time (different countries/cities).
+**Why:** Broadcast frequently shows clocks for multiple locations.
+**Acceptance:**
+
+- WHEN a clock's time zone is set THEN `wall` mode renders the current time in that IANA zone
+- WHEN unset THEN it uses local time (current behavior); countup/countdown unaffected
+
+**Notes:** Add an optional `timezone` (IANA name, e.g. 'Europe/London') to ClockElementSchema; the runtime clock formatter uses Intl.DateTimeFormat({ timeZone }); the inspector adds a time-zone picker.
+
+## [ ] D-097 — Distinct timeline icon + color for shared/logo images vs asset images ⟨priority: low⟩
+
+**What:** In the timeline layer row, a `source:'shared'` image (logo) gets a different LayerTypeIcon and color from a `source:'project'` image (asset).
+**Why:** Both are `type:'image'` and render identically today; operators can't tell a logo/shared image from a project-asset image at a glance.
+**Acceptance:**
+
+- WHEN a layer is an image with `source:'shared'` THEN its timeline type-icon AND lifespan color differ from an image with `source:'project'`
+
+**Notes:** ElementRow.tsx LayerTypeIcon + the color resolver (lifespanColorFor / TYPE_COLORS) branch on `element.source` for type 'image'. Asset image keeps `Image`; pick a distinct lucide for the shared/logo variant (e.g. `Stamp` or `Images`) + a distinct color (exact icon/color to confirm).
+
+## [ ] D-098 — Key icon on bound (data-keyed) layers ⟨priority: low⟩
+
+**What:** Prefix a bound layer (one with a data key / a field binding targeting it) with a small key icon before its name in the timeline left list.
+**Why:** Operators can't tell which layers are bound/dynamic at a glance.
+**Acceptance:**
+
+- WHEN a layer's element has a data key / a field binding whose target is that element THEN a small key icon appears before its name in the layer row
+- WHEN the layer is not bound THEN no key icon shows
+
+**Notes:** ElementRow.tsx name cell; detect "bound" via the fields/bindings slice (a binding with target.elementId === el.id, or the element's data key). lucide `Key`, small, before the name.
+
+## [ ] D-099 — Minimum-window-size gate ⟨priority: medium⟩
+
+**What:** When the window is below a minimum usable size, replace the editor with a centered "screen too small" message; restore the editor when resized back up.
+**Why:** On very small windows/monitors the panels + canvas don't render usably.
+**Acceptance:**
+
+- WHEN the window inner width/height is below the threshold THEN the app shows only a centered message and hides the editor
+- WHEN the window is resized at/above the threshold THEN the editor reappears
+
+**Notes:** Top-level gate in App.tsx (or a shell wrapper) via a resize listener / matchMedia. Pick a sensible threshold (e.g. ~1024×640 — confirm). RTL message.
+
+## [ ] D-100 — Menubar: hover-to-open after first click ⟨priority: low⟩
+
+**What:** Once a top menu is open (by click), moving the pointer onto another top-menu button opens it (no click); standard menubar behavior.
+**Why:** Today hover only highlights; each menu needs its own click.
+**Acceptance:**
+
+- WHEN a top menu is open AND the pointer enters another top-menu button THEN that menu opens and the previous closes
+- WHEN no menu is open THEN hover only highlights (a click is still required to open the first)
+
+**Notes:** apps/designer/src/renderer/features/shell/TopToolbar.tsx — when `openMenu !== null`, the buttons' onMouseEnter sets `setOpenMenu(key)`.
+
+## [ ] D-101 — Remove-bind icon: red + match the row remove-item button ⟨priority: low⟩
+
+**What:** The remove-bind (unbind) control is red and matches the list-items remove-item button in size and style.
+**Why:** Inconsistent — `bindRemove` is muted gray; the row remove-item is a different size/style.
+**Acceptance:**
+
+- WHEN the remove-bind control renders THEN it uses the danger/red color and the same size + style as the ListItemsEditor remove-item button
+
+**Notes:** InspectorPanel.css.ts `bindRemove` + features/fields/ListItemsEditor.tsx remove button — unify (red, same dimensions/icon). Match whatever icon D-092 left the row remove-item as.
