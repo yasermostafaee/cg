@@ -678,3 +678,53 @@ and scroll land in one paint.
 `useLayoutEffect` + the `scene-replace` rAF effect), `geometry.ts` (`pasteboardLayout` /
 `offsetShiftScroll` / `contentBounds`), `apps/designer/src/platform/preview.ts` (the `--cg-frame-x/-y`
 CSS-var inset + the scene-replace `frameOffset`). Capability: `designer-canvas-viewport`.
+
+## [x] B-028 — changing the scene size doesn't resize the canvas frame page; Fit breaks ⟨priority: high⟩ — focused fix
+
+> Regression introduced by the pasteboard work ([[B-026]] / D-071 Phase B). The off-frame
+> grow-to-fit invariant itself is fine — this is a frame-PAGE-vs-resolution sync bug on the
+> scene-size-change path. Confirmed: dragging a shape does NOT change scene.resolution; the
+> visible checkered page just stops matching the (new) scene size.
+
+**Repro:**
+
+1. Open the Designer (default 1920×1080).
+2. In the composition inspector, change the size (e.g. W 1280, H 720).
+
+**Expected:** the checkered FRAME page resizes to the new resolution and Fit re-fits/centers it; only
+the dark surrounding pasteboard grows/shrinks with off-frame content (the frame page never grows from
+dragging a shape).
+**Actual:** the checkered frame page STAYS at the load-time resolution (1920×1080) — it no longer
+matches the scene size, so it looks oversized ("the visible page grew"), and **Fit is broken after a
+size change** (it fits the new resolution but the actual frame is the stale size). scene.resolution is
+correct (the inspector W/H are right); only the rendered frame page is stale.
+**Env:** Browser + Designer (authoring canvas; broadcast/export reload per scene so they were
+unaffected).
+**Root cause:** the authoring `.cg-stage` (frame page) `width`/`height` were baked as `!important`
+LITERALS into the iframe srcDoc at LOAD time (`preview.ts` `#buildHtml`). A scene-size change does NOT
+reload the iframe (the load effect is keyed on `sceneId` only) — it rides the no-reload
+`scene-replace` postMessage, which rebuilds the runtime so the runtime sets a fresh INLINE
+`.cg-stage` width from the new resolution — but the stale baked `!important` rule overrides that
+inline. The frame OFFSET already avoided this by using live CSS vars (`--cg-frame-x/-y`); the
+width/height did not.
+**Fix:** make the frame SIZE live CSS vars too — `width: var(--cg-frame-w, <load>px) !important;
+height: var(--cg-frame-h, <load>px) !important;` — and set `--cg-frame-w/-h` from `scene.resolution`
+on load and on every `scene-replace` (mirrors `applyFrameOffset`). The baked value stays the
+first-paint fallback.
+**Acceptance:**
+
+#### Scenario: Drag off-frame grows the pasteboard, not the frame page
+
+- **WHEN** a shape is dragged far off the right/bottom of the frame
+- **THEN** the dark pasteboard (iframe extent) grows to contain it, the checkered frame page stays
+  `scene.resolution`-sized, scene.resolution is unchanged, and Fit still fits the original frame
+
+#### Scenario: A scene-size change resizes the frame page and Fit re-centers it
+
+- **WHEN** the composition width/height is changed in the inspector
+- **THEN** the checkered frame page resizes to the new resolution and Fit fits + centers the
+  resolution-sized frame (not the pasteboard extent)
+
+**Touch points:** `apps/designer/src/platform/preview.ts` (authoring `.cg-stage` width/height →
+`--cg-frame-w/-h` vars + `applyFrameSize` on load/scene-replace). Regression E2E:
+`apps/designer/tests/e2e/scene-size-vs-pasteboard.spec.ts`. Capability: `designer-canvas-viewport`.
