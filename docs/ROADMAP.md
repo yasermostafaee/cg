@@ -8,6 +8,15 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Timeline/layers wave ([D-074](./prd/designer.md)–[D-079](./prd/designer.md)) — merged &
+  archived (2026-06-26, PRs #167–#171). D-074 (zoom-slider border removed), D-075 (new default
+  per-type layer colors), D-076 (multi-select layer context menu), D-077 (copy/cut/paste
+  shortcuts — physical-key / Persian-safe), D-078 (pinned scene row), D-079 (inline color hex
+  input widen + shorthand normalize). D-076/D-077 and D-078 carry living-spec deltas
+  (`designer-multi-select`, `designer-animation-timeline`); D-074/D-075/D-079 were focused fixes
+  (no change dir). Archives: `2026-06-26-multi-select-clipboard`, `2026-06-26-pin-scene-row`.
+  D-080 was reserved but unused. (Follow-up `fix/playhead-above-scene-row` — keep the index line
+  above the pinned scene row — PR open.)
 - Icon pack — shared vector `Icon` (lucide-react) replacing the ad-hoc Unicode-glyph
   icons across the Designer ([D-092](./prd/designer.md)) — merged & archived
   (2026-06-25, PR #163). App-local `Icon` (`currentColor` / `aria-hidden` / one
@@ -97,9 +106,9 @@ the order changes. Strategic / non-engineering notes live in
 ## Next — agreed order
 
 The save + import-polish, button-restyle, per-composition export + chrome,
-stop-clears, preview-blank, pasteboard, and icon-pack work is archived — see Done
-(recent). The agreed upcoming order (one line each; **full PRD entries authored
-per-item when started** — most of these IDs are not yet filed):
+stop-clears, preview-blank, pasteboard, icon-pack, and timeline/layers work is
+archived — see Done (recent). The agreed upcoming order (one line each; **full PRD
+entries authored per-item when started** — most of these IDs are not yet filed):
 
 1. [D-072](./prd/designer.md) / [D-073](./prd/designer.md) — guide coordinate
    readout + arrow-key nudge. **IN REVIEW:** both implemented + tested on
@@ -107,14 +116,13 @@ per-item when started** — most of these IDs are not yet filed):
    `openspec/changes/guide-coordinate-readout/` +
    `openspec/changes/arrow-key-nudge/`); only the batched green gate + E2E and the
    merge/archive remain.
-2. [D-074](./prd/designer.md)–D-080 — timeline / layers
-3. [D-039](./prd/designer.md) (ext) / D-081 / D-082 / D-083 / D-084 — sequence / clock
-4. [D-090](./prd/designer.md) / D-091 — chrome (additional polish beyond D-086
+2. [D-039](./prd/designer.md) (ext) / D-081 / D-082 / D-083 / D-084 — sequence / clock
+3. [D-090](./prd/designer.md) / D-091 — chrome (additional polish beyond D-086
    Phase B; confirm scope vs. what D-086 delivered when filing)
-5. [B-024](./prd/bugs.md) — negative guard
+4. [B-024](./prd/bugs.md) — negative guard
 
 > **Ordering note:** the icon-pack (D-092) is done — the shared `Icon` set now
-> exists, so the new buttons added by D-075 / D-078 / D-080 / D-084 reuse it.
+> exists, so new control-bearing items (e.g. D-084) reuse it.
 
 Previously-listed designer items not in this order — D-059, D-060 (unblocks the parked
 [D-046](./prd/designer.md)), D-061, D-063, D-064, D-065, D-066, [D-096](./prd/designer.md)
