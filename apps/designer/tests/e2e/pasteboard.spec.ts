@@ -230,7 +230,7 @@ test.describe('Editor pasteboard (D-071 Phase B)', () => {
 
     // Show the ruler (View ▸ Ruler). `exact` so 'View' doesn't also match 'Preview'.
     await app.page.getByRole('button', { name: 'View', exact: true }).click();
-    await app.page.getByRole('menuitemcheckbox', { name: 'Ruler (R)' }).click();
+    await app.page.getByRole('menuitemcheckbox', { name: /Ruler/ }).click();
     const rulerTop = app.page.getByTestId('ruler-top');
     await expect(rulerTop).toBeVisible();
 
