@@ -132,6 +132,39 @@ describe('createRuntime — lifecycle', () => {
     runtime.tick(25);
     expect(node.style.display).toBe('none');
   });
+
+  // B-029 — a start-trimmed element (lifespan.in > 0) was DROPPED on play: the lifespan
+  // gate was applied only by the scrubber `tick`, so once an open-time scrub to frame 0
+  // hid it, PLAY never restored it. Now the gate is evaluated during playback too.
+  function withBgLifespan(lifespan: { in: number; out: number }): typeof lowerThirdScene {
+    return {
+      ...lowerThirdScene,
+      layers: lowerThirdScene.layers.map((layer) => ({
+        ...layer,
+        children: layer.children.map((c) => (c.id === 'bg' ? { ...c, lifespan } : c)),
+      })),
+    };
+  }
+
+  it('B-029 — a start-trimmed element is RESTORED on play (not dropped)', async () => {
+    const runtime = createRuntime(withBgLifespan({ in: 5, out: 50 }), { skipFontLoad: true });
+    const node = document.querySelector<HTMLElement>('[data-cg-element-id="bg"]');
+    expect(node).toBeTruthy();
+    if (node === null) return;
+    runtime.tick(0); // the preview-modal open-scrub at frame 0 (< in) hides it
+    expect(node.style.display).toBe('none');
+    await runtime.play({}); // play must restore it — the played frame is within [5,50]
+    expect(node.style.display).not.toBe('none');
+  });
+
+  it('B-029 — play HONORS lifespan (an element past its lifespan.out is hidden), not only tick', async () => {
+    const runtime = createRuntime(withBgLifespan({ in: 0, out: 3 }), { skipFontLoad: true });
+    const node = document.querySelector<HTMLElement>('[data-cg-element-id="bg"]');
+    expect(node).toBeTruthy();
+    if (node === null) return;
+    await runtime.play({}); // the played out-frame is past [0,3] → hidden during play (lifespan respected)
+    expect(node.style.display).toBe('none');
+  });
 });
 
 /** Minimal injectable timer clock for lifecycle timing. */

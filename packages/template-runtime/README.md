@@ -248,6 +248,12 @@ override) on its **own** timeline.
   crawl, the clock, and the sequence are wall-clock-driven and have no
   representation in `tick()`** — scrubbing moves none of them (by design;
   D-028/D-027/D-029).
+- **Per-element lifespan visibility** (a `lifespan {in,out}` from a timeline start/end
+  trim) is evaluated by `applyLifespanGatesAtFrame(frame)`, called from BOTH `tick` (the
+  scrubber) AND the root scope's per-frame `applyFrame` (on-air playback). So a
+  start-trimmed clock/ticker/sequence (`lifespan.in > 0`) appears at/after its in-point
+  and plays — it is **not** dropped just because it is absent at the open-time scrub frame
+  (B-029). The gate restores each node to the `display` it had when the scene was built.
 
 ### TickerDriver — the crawler treadmill + content completion (D-028)
 

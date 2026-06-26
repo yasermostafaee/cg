@@ -512,7 +512,11 @@ export class Preview {
                 // final glyphs (no-op when already loaded).
                 await applyFontFaces().catch(() => {});
                 window.play(JSON.stringify(currentFields));
-                if (runtime) runtime.tick(currentFrame);
+                // B-029 — do NOT re-tick currentFrame here. During playback the
+                // controller owns the frame (its per-frame applyFrame now drives the
+                // lifespan gate too); a static re-tick at the scrubbed frame could
+                // re-hide a start-trimmed (lifespan.in > 0) element at frame 0 just
+                // before play restores it. The prior scrub already painted currentFrame.
               } else if (msg.action === 'stop' && typeof window.stop === 'function') {
                 window.stop();
               } else if (msg.action === 'next' && typeof window.next === 'function') {
