@@ -116,7 +116,10 @@ entries authored per-item when started** — most of these IDs are not yet filed
    `openspec/changes/guide-coordinate-readout/` +
    `openspec/changes/arrow-key-nudge/`); only the batched green gate + E2E and the
    merge/archive remain.
-2. [D-039](./prd/designer.md) (ext) / D-081 / D-082 / D-083 / D-084 — sequence / clock
+2. [D-039](./prd/designer.md) (ext) + [D-081](./prd/designer.md) / [D-082](./prd/designer.md) /
+   [D-083](./prd/designer.md) / [D-084](./prd/designer.md) — sequence / clock wave (now filed):
+   D-039(ext) image/shared-logo separators, D-081 no-trailing-separator, D-082 English default
+   item text, D-083 logo/clock sequence items, D-084 clock time zone
 3. [D-090](./prd/designer.md) / D-091 — chrome (additional polish beyond D-086
    Phase B; confirm scope vs. what D-086 delivered when filing)
 4. [B-024](./prd/bugs.md) — negative guard
@@ -126,8 +129,12 @@ entries authored per-item when started** — most of these IDs are not yet filed
 
 Previously-listed designer items not in this order — D-059, D-060 (unblocks the parked
 [D-046](./prd/designer.md)), D-061, D-063, D-064, D-065, D-066, [D-096](./prd/designer.md)
-(perf — animate position via CSS transform; belongs to the hardening wave) — remain **queued**
-in the PRD but are deprioritized below the above.
+(perf — animate position via CSS transform; belongs to the hardening wave),
+[D-097](./prd/designer.md) / [D-098](./prd/designer.md) (timeline glanceability — shared-image
+icon, bound-layer key icon), [D-099](./prd/designer.md) (min-window-size gate),
+[D-100](./prd/designer.md) (menubar hover-to-open), [D-101](./prd/designer.md) (red unbind icon
+matching the row remove button) — remain **queued** in the PRD but are deprioritized below the
+above.
 **Wave tail (carried over):** template cleanup — rebuild / refresh the bundled sample templates
 against the UX wave's finalized controls.
 

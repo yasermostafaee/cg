@@ -556,6 +556,16 @@ cycle blocked, composition cycle still blocked, safe nesting allowed) +
 `packages/shared-schema/tests/composition-fields.test.ts` (`compositionClosure` follows both
 edge kinds). Capability: `designer-compositions` (MODIFIED — the cycle-guard requirement).
 
+## [ ] B-024 — Width / height / scale must reject negative values ⟨priority: medium⟩
+
+**What:** The width, height, and scale inputs must not accept negative values.
+**Why:** Negative width/height/scale produce broken/invalid geometry.
+**Acceptance:**
+
+- WHEN the operator enters a negative value in width / height / scale THEN it is clamped to a non-negative value (or reverted) and no negative is committed
+
+**Notes:** apps/designer/src/renderer/features/inspector/transform-fields.tsx (scale.x/scale.y) + the width/height size fields — add non-negative (min 0) clamping at commit.
+
 ## [~] B-025 — selection box (gizmo frame) doesn't render ⟨priority: high⟩ — fixed on `fix/B-025-selection-box-accent` (B-024 reserved in ROADMAP for the negative guard)
 
 > **Fixed** — the gizmo frame is painted again; the teal accent is reverted to blue as a
