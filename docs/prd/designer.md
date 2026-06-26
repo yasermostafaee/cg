@@ -2654,7 +2654,7 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 **Notes:** Add an optional `timezone` (IANA name, e.g. 'Europe/London') to ClockElementSchema; the runtime clock formatter uses Intl.DateTimeFormat({ timeZone }); the inspector adds a time-zone picker.
 
-## [~] D-102 — Per-element timing overrides in preview ⟨priority: medium⟩ — implementing Phase 1 on `feat/per-element-preview-timing` (`openspec/changes/per-element-preview-timing`)
+## [x] D-102 — Per-element timing overrides in preview ⟨priority: medium⟩ — Phase 1 (tickers) archived: `openspec/changes/archive/2026-06-26-per-element-preview-timing/`. PHASE 2 (sequences + countdown clocks) + the repeater-stamped-ticker gap (the timing tree only walks authored composition instances) remain OPEN.
 
 **What:** The preview's session-only timing panel can override timing PER ELEMENT, not just per
 scope. **Phase 1 (tickers only):** each ticker in a composition gets its OWN repeat + cycle-seam

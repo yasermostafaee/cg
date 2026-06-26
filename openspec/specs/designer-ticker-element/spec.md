@@ -53,8 +53,9 @@ mid-scroll — then signals completion to its scope's playout (the
 `designer-playout-lifecycle` content-driven hold). WITHIN one hold the
 treadmill rolls continuously; each composition open/close cycle restarts the
 crawl from its entering edge. These are designer-set defaults and
-session-overridable per scope (`tickerRepeat` / `tickerBoundary`), the same
-layering as `holdMs`/`repeat`. `pause()` SHALL freeze the crawl and
+session-overridable PER TICKER in the preview (each ticker's own `repeat` /
+`cycleBoundary`, addressed by `elementId` — D-102 Phase 1), the same layering
+as `holdMs`/`repeat`. `pause()` SHALL freeze the crawl and
 `resume()` SHALL continue it, in lockstep with the playout controller's hold
 timing.
 
@@ -144,7 +145,7 @@ CasparCG XML payload path cannot carry them).
 
 ### Requirement: Designer authoring and live preview editing
 
-The Designer SHALL provide a ticker tool that inserts a ticker element, and an inspector section editing `direction`, `speed`, `gap`, `separator`, the inner loop (`repeat` — a fresh ticker shows `'infinite'` by design — and `cycleBoundary`), text styling (font family/weight/size, colour incl. gradient `colorFill`, and a **Text Shadow** section with offset X/Y on one line) — and NO band background, box padding, border-radius, or stroke/path-style controls (D-056 — the ticker carries only its text; box styling belongs on a separate shape layer) — and the items (add / remove / reorder / edit text). The composition inspector and the preview's per-scope timing SHALL expose the hold-source select and the session-only `tickerRepeat`/`tickerBoundary` overrides ONLY when the scope actually contains a ticker (no dead controls). Assigning a data key to a ticker SHALL seed a `list` field from the element's authored items and bind it via `ticker-items`; the preview field form SHALL render a `list` field as the same items editor, live-updating the crawl. The UI SHALL state that the ticker is time-driven: timeline scrubbing does not move it.
+The Designer SHALL provide a ticker tool that inserts a ticker element, and an inspector section editing `direction`, `speed`, `gap`, `separator`, the inner loop (`repeat` — a fresh ticker shows `'infinite'` by design — and `cycleBoundary`), text styling (font family/weight/size, colour incl. gradient `colorFill`, and a **Text Shadow** section with offset X/Y on one line) — and NO band background, box padding, border-radius, or stroke/path-style controls (D-056 — the ticker carries only its text; box styling belongs on a separate shape layer) — and the items (add / remove / reorder / edit text). The composition inspector and the preview's per-scope timing SHALL expose the hold-source select ONLY when the scope contains a content source, and the preview SHALL show a session-only per-TICKER repeat + cycle-seam override — one row per ticker, by name (D-102 Phase 1) — for each ticker the scope contains (no dead controls). Assigning a data key to a ticker SHALL seed a `list` field from the element's authored items and bind it via `ticker-items`; the preview field form SHALL render a `list` field as the same items editor, live-updating the crawl. The UI SHALL state that the ticker is time-driven: timeline scrubbing does not move it.
 
 #### Scenario: Author → bind → live-edit flow
 

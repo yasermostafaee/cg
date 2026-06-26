@@ -8,6 +8,13 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Per-element preview timing — Phase 1 ([D-102](./prd/designer.md)) — merged & archived
+  (2026-06-26, PR #180). Ticker timing in the preview moved from per-scope to PER-ELEMENT (keyed by
+  element id), so two tickers in one composition are tuned independently — each ticker's own
+  repeat / cycle-seam applies to its OWN driver; the timing panel shows one row per ticker
+  (duplicate names disambiguated) and scrolls; session-only (the stored template is untouched).
+  Archive: `openspec/changes/archive/2026-06-26-per-element-preview-timing/`. Phase 2 (sequences +
+  countdown clocks) + the repeater-stamped-ticker gap remain OPEN (see Next).
 - Sequence/clock wave ([D-084](./prd/designer.md), [D-039](./prd/designer.md) ext,
   [D-103](./prd/designer.md)) — merged & archived (2026-06-26, PR #177). D-084 clock selectable
   IANA time zone (wall mode via `Intl`, Persian digits preserved; invalid zone degrades to local),
@@ -144,8 +151,11 @@ Previously-listed designer items not in this order — D-059, D-060 (unblocks th
 [D-046](./prd/designer.md)), D-061, D-063, D-064, D-065, D-066, [D-083](./prd/designer.md)
 (logo/clock sequence items — the remaining sequence/clock-wave piece; D-039 ext / D-084 / D-103
 shipped, see Done), [D-096](./prd/designer.md) (perf — animate position via CSS transform; belongs
-to the hardening wave) — remain **queued** in the PRD but are deprioritized below the above.
-(D-097–D-101 shipped in Group A — see Done.)
+to the hardening wave), and [D-102](./prd/designer.md) **Phase 2** (per-element preview timing for
+SEQUENCES + COUNTDOWN clocks, plus surfacing repeater-stamped tickers in the timing tree — which
+currently walks only authored composition instances; Phase 1 tickers shipped, see Done) — remain
+**queued** in the PRD but are deprioritized below the above. (D-097–D-101 shipped in Group A — see
+Done.)
 **Wave tail (carried over):** template cleanup — rebuild / refresh the bundled sample templates
 against the UX wave's finalized controls.
 
