@@ -526,6 +526,18 @@ describe('ClockElement (D-027)', () => {
     const viaUnion = ElementSchema.parse({ ...clock, timezone: 'Asia/Tokyo' });
     expect((viaUnion as { timezone?: string }).timezone).toBe('Asia/Tokyo');
   });
+  it('D-103 — blinkColon + blinkPeriodMs are optional, backward-compatible fields', () => {
+    // An OLD clock has neither field.
+    const old = ClockElementSchema.parse(clock);
+    expect(old.blinkColon).toBeUndefined();
+    expect(old.blinkPeriodMs).toBeUndefined();
+    // A NEW clock preserves both.
+    const blink = ClockElementSchema.parse({ ...clock, blinkColon: true, blinkPeriodMs: 500 });
+    expect(blink.blinkColon).toBe(true);
+    expect(blink.blinkPeriodMs).toBe(500);
+    // A non-positive period is rejected.
+    expect(() => ClockElementSchema.parse({ ...clock, blinkPeriodMs: 0 })).toThrow();
+  });
   it('accepts a countdown to a duration', () => {
     const parsed = ClockElementSchema.parse({
       ...clock,

@@ -268,6 +268,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           digits: c.element.digits,
           target: c.element.target,
           timezone: c.element.timezone,
+          blinkColon: c.element.blinkColon,
+          blinkPeriodMs: c.element.blinkPeriodMs,
           clock: options.clock,
         });
         clocks.push(driver);

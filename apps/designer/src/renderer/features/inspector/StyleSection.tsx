@@ -660,6 +660,30 @@ function ClockSections({
             }
           />
         )}
+        {/* D-103 — blink the colon separator(s) on/off + an adjustable rate. Applies to every
+            clock mode; off by default (steady colons). */}
+        <SelectField
+          label="blink colon"
+          value={element.blinkColon === true ? 'on' : 'off'}
+          options={['off', 'on'] as const}
+          onCommit={(v) =>
+            designerStore.updateElement(id, { blinkColon: v === 'on' } as Partial<Element>)
+          }
+        />
+        {element.blinkColon === true && (
+          <NumberField
+            label="blink rate"
+            value={element.blinkPeriodMs ?? 1000}
+            step={100}
+            min={100}
+            suffix="ms"
+            onCommit={(ms) =>
+              designerStore.updateElement(id, {
+                blinkPeriodMs: Math.max(100, Math.round(ms)),
+              } as Partial<Element>)
+            }
+          />
+        )}
         {element.mode === 'countdown' && (
           <>
             <SelectField

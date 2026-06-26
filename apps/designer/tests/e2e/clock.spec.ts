@@ -87,6 +87,26 @@ test.describe('Clock element (D-027)', () => {
     await expect(clockTime).toHaveText(PERSIAN_TIME);
   });
 
+  test('a blinking colon renders its own (blinking) colon span in the preview (D-103)', async ({
+    app,
+  }) => {
+    await app.newProject('ClockBlink');
+    await app.addClock();
+
+    // Enable the blink in the inspector; the rate control then appears.
+    await app.inspector.getByRole('combobox', { name: 'blink colon' }).selectOption('on');
+    await expect(app.inspector.getByLabel('blink rate', { exact: true })).toBeVisible();
+
+    // The authoring canvas is static (no blink); on Play the preview's driver renders the
+    // colon(s) as their own span(s) and pulses their opacity (the per-period toggle is the
+    // clock-driver unit tests' job — here we assert the integrated blink render reaches the
+    // preview).
+    await app.openPreviewModal();
+    await app.play();
+    await expect(app.previewFrame.locator('[data-cg-clock-colon]').first()).toBeAttached();
+    await app.stop();
+  });
+
   test('the exported single-file HTML carries the clock with an unchanged GDD', async ({ app }) => {
     await app.newProject('ClockExport');
     await app.addClock();

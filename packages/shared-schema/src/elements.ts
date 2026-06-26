@@ -290,6 +290,17 @@ export const ClockElementSchema = ElementBaseSchema.extend({
    * bump: a clock authored without it parses and renders unchanged.
    */
   timezone: z.string().optional(),
+  /**
+   * D-103 — blink the colon separator(s) on/off. Off/absent by default (steady colons —
+   * the unchanged render). Additive + backward-compatible: no schema-version bump.
+   */
+  blinkColon: z.boolean().optional(),
+  /**
+   * D-103 — the colon blink half-period in ms: the colon toggles every `blinkPeriodMs`
+   * (phase = `Math.floor(now / blinkPeriodMs) % 2`). Absent ⇒ 1000. Ignored unless
+   * `blinkColon` is on.
+   */
+  blinkPeriodMs: z.number().int().positive().optional(),
 })
   .merge(BoxStyleSchema)
   .superRefine((el, ctx) => {

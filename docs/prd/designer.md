@@ -2654,6 +2654,26 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 **Notes:** Add an optional `timezone` (IANA name, e.g. 'Europe/London') to ClockElementSchema; the runtime clock formatter uses Intl.DateTimeFormat({ timeZone }); the inspector adds a time-zone picker.
 
+## [~] D-103 — Clock: blinking colon separator at an adjustable rate ⟨priority: low⟩ — implementing on `feat/clock-tz-ticker-img-sep` (`openspec/changes/clock-blink-colon`)
+
+**What:** The colon(s) between HH:MM:SS in a clock can blink (pulse on/off) at an adjustable
+rate. Optional; off by default (steady colons = current behavior).
+**Why:** A blinking separator is a classic broadcast/digital-clock cue (seconds passing / "live").
+**Acceptance:**
+
+- WHEN a clock has the blink enabled THEN its colon separator(s) pulse on/off at the configured rate; WHEN disabled THEN the colons stay steady (unchanged)
+- WHEN blinking THEN only the colon's opacity toggles — no digit reflow / layout shift
+- WHEN the rate is changed THEN the blink speed updates accordingly
+- WHEN previewing AND in the exported single-file HTML THEN the blink runs the same (driven by the clock's time source), and Persian digits are unaffected
+
+**Notes:** NON-BREAKING → no version bump (same as D-084): add OPTIONAL fields to
+ClockElementSchema, e.g. `blinkColon?: boolean` + `blinkPeriodMs?: number` (default 1000 = 1 Hz,
+synced to seconds). clock-format.ts: tokenize the formatted output so the colon char(s) render in
+their OWN span(s) (separate from digit spans). clock-driver.ts: derive the blink phase from the
+time source (e.g. `Math.floor(now / period) % 2`) and toggle the colon span(s)' OPACITY (not
+display) — no separate setInterval. Applies to wall/countup/countdown. Inspector clock section:
+a blink toggle + a rate control (period ms or Hz).
+
 ## [x] D-097 — Distinct timeline icon + color for shared/logo images vs asset images ⟨priority: low⟩ — focused fix, merged (#175)
 
 **What:** In the timeline layer row, a `source:'shared'` image (logo) gets a different LayerTypeIcon and color from a `source:'project'` image (asset).

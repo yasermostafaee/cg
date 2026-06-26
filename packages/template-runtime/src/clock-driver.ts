@@ -45,6 +45,14 @@ export interface ClockDriverOptions {
    * Absent ⇒ machine-local time. `countup`/`countdown` ignore it.
    */
   timezone?: string | undefined;
+  /**
+   * D-103 — when true, the colon separator(s) blink: the formatted time is rendered as
+   * segment spans and ONLY the colon spans' opacity toggles (no reflow). Off ⇒ the prior
+   * single-`textContent` render. Applies to all modes.
+   */
+  blinkColon?: boolean | undefined;
+  /** D-103 — colon blink half-period in ms (phase = `floor(now / period) % 2`). Absent ⇒ 1000. */
+  blinkPeriodMs?: number | undefined;
   clock?: RuntimeClock | undefined;
 }
 
@@ -90,6 +98,12 @@ export class ClockDriver {
 
   /** Last text written — the repaint-only-on-change gate. */
   private lastText: string | null = null;
+
+  /** D-103 — colon-blink state: the current colon spans + the last opacity phase written. */
+  private colonSpans: HTMLElement[] = [];
+  private lastColonVisible: boolean | null = null;
+  /** Whether the node currently holds the blink SEGMENT spans (vs a plain `textContent`). */
+  private blinkBuilt = false;
 
   private completed = false;
   private resolveComplete: (() => void) | null = null;
@@ -192,6 +206,11 @@ export class ClockDriver {
     const text = clockInitialText(this.o, this.clock.now());
     this.o.node.textContent = text;
     this.lastText = text;
+    // D-103 — back to a steady single-`textContent` value; the run's first paint re-segments
+    // for the blink if `blinkColon` is on.
+    this.blinkBuilt = false;
+    this.colonSpans = [];
+    this.lastColonVisible = null;
   }
 
   destroy(): void {
@@ -228,10 +247,12 @@ export class ClockDriver {
     return formatCountClock(Math.ceil(Math.max(0, this.remainingMs()) / 1000), o.format, o.digits);
   }
 
-  /** One step: write the DOM only when the formatted string changed. */
+  /** One step: write the DOM only when the formatted string changed (or the colon phase flips). */
   private paint(): void {
     const next = this.currentText();
-    if (next !== this.lastText) {
+    if (this.o.blinkColon === true) {
+      this.paintBlink(next);
+    } else if (next !== this.lastText) {
       this.o.node.textContent = next;
       this.lastText = next;
     }
@@ -249,6 +270,52 @@ export class ClockDriver {
     if (this.completed) return;
     this.completed = true;
     this.resolveComplete?.();
+  }
+
+  /**
+   * D-103 — render the time as colon / non-colon segment spans and toggle ONLY the colon
+   * spans' OPACITY from the time source. Rebuild the segments when the text changes (the
+   * digits tick) or the node isn't segmented yet; flip opacity when the blink phase changes.
+   */
+  private paintBlink(next: string): void {
+    if (!this.blinkBuilt || next !== this.lastText) {
+      this.renderColonSegments(next);
+      this.lastText = next;
+      this.blinkBuilt = true;
+      this.lastColonVisible = null; // force the opacity (re)apply below
+    }
+    const visible = Math.floor(this.clock.now() / (this.o.blinkPeriodMs ?? 1000)) % 2 === 0;
+    if (visible !== this.lastColonVisible) {
+      for (const span of this.colonSpans) span.style.opacity = visible ? '1' : '0';
+      this.lastColonVisible = visible;
+    }
+  }
+
+  /**
+   * Split `text` into runs of `:` (colon spans — the ones that blink) and non-`:` (digit
+   * spans), all inside the time node. The colon char is never a mapped digit, so this works
+   * for Persian/Arabic-Indic output unchanged. Only the OPACITY of the colon spans toggles, so
+   * the digit boxes never reflow.
+   */
+  private renderColonSegments(text: string): void {
+    const node = this.o.node;
+    const doc = node.ownerDocument;
+    node.textContent = '';
+    this.colonSpans = [];
+    let i = 0;
+    while (i < text.length) {
+      const isColon = text[i] === ':';
+      let j = i + 1;
+      while (j < text.length && (text[j] === ':') === isColon) j += 1;
+      const span = doc.createElement('span');
+      span.textContent = text.slice(i, j);
+      if (isColon) {
+        span.dataset['cgClockColon'] = '1';
+        this.colonSpans.push(span);
+      }
+      node.appendChild(span);
+      i = j;
+    }
   }
 
   private scheduleFrame(): void {
