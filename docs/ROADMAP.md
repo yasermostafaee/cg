@@ -8,6 +8,15 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Group A quick-wins ([D-081](./prd/designer.md), [D-082](./prd/designer.md),
+  [D-097](./prd/designer.md), [D-098](./prd/designer.md), [D-099](./prd/designer.md),
+  [D-100](./prd/designer.md), [D-101](./prd/designer.md) + [B-024](./prd/bugs.md)) — merged
+  (2026-06-26, PR #175; filed in #174). D-081 no-trailing ticker separator, D-082 English
+  ticker/sequence defaults (+ LTR direction & white default text), D-097 distinct shared-image
+  timeline icon/color, D-098 bound-layer key icon, D-099 minimum-window-size gate, D-100 menubar
+  hover-to-switch, D-101 red unbind control matching the row remove, B-024 non-negative
+  width/height/scale. All FOCUSED FIXES (no living-spec change to archive); the batch also added
+  Ctrl+O / Ctrl+S / Ctrl+Shift+S file shortcuts + right-aligned menu shortcut hints. PRD → [x].
 - Timeline/layers wave ([D-074](./prd/designer.md)–[D-079](./prd/designer.md)) — merged &
   archived (2026-06-26, PRs #167–#171). D-074 (zoom-slider border removed), D-075 (new default
   per-type layer colors), D-076 (multi-select layer context menu), D-077 (copy/cut/paste
@@ -116,25 +125,20 @@ entries authored per-item when started** — most of these IDs are not yet filed
    `openspec/changes/guide-coordinate-readout/` +
    `openspec/changes/arrow-key-nudge/`); only the batched green gate + E2E and the
    merge/archive remain.
-2. [D-039](./prd/designer.md) (ext) + [D-081](./prd/designer.md) / [D-082](./prd/designer.md) /
-   [D-083](./prd/designer.md) / [D-084](./prd/designer.md) — sequence / clock wave (now filed):
-   D-039(ext) image/shared-logo separators, D-081 no-trailing-separator, D-082 English default
-   item text, D-083 logo/clock sequence items, D-084 clock time zone
+2. [D-039](./prd/designer.md) (ext) + [D-083](./prd/designer.md) / [D-084](./prd/designer.md) —
+   sequence / clock wave (remaining): D-039(ext) image/shared-logo separators, D-083 logo/clock
+   sequence items, D-084 clock time zone. (D-081 no-trailing-separator + D-082 English defaults
+   shipped in Group A — see Done.)
 3. [D-090](./prd/designer.md) / D-091 — chrome (additional polish beyond D-086
    Phase B; confirm scope vs. what D-086 delivered when filing)
-4. [B-024](./prd/bugs.md) — negative guard
 
 > **Ordering note:** the icon-pack (D-092) is done — the shared `Icon` set now
 > exists, so new control-bearing items (e.g. D-084) reuse it.
 
 Previously-listed designer items not in this order — D-059, D-060 (unblocks the parked
 [D-046](./prd/designer.md)), D-061, D-063, D-064, D-065, D-066, [D-096](./prd/designer.md)
-(perf — animate position via CSS transform; belongs to the hardening wave),
-[D-097](./prd/designer.md) / [D-098](./prd/designer.md) (timeline glanceability — shared-image
-icon, bound-layer key icon), [D-099](./prd/designer.md) (min-window-size gate),
-[D-100](./prd/designer.md) (menubar hover-to-open), [D-101](./prd/designer.md) (red unbind icon
-matching the row remove button) — remain **queued** in the PRD but are deprioritized below the
-above.
+(perf — animate position via CSS transform; belongs to the hardening wave) — remain **queued**
+in the PRD but are deprioritized below the above. (D-097–D-101 shipped in Group A — see Done.)
 **Wave tail (carried over):** template cleanup — rebuild / refresh the bundled sample templates
 against the UX wave's finalized controls.
 
