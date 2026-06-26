@@ -80,7 +80,8 @@ function ElementRowLabel(props: Props): JSX.Element {
   const { element, expanded, onToggleExpand, isSelected, onContextMenu, onReorderPointerDown } =
     props;
   // D-098 — a layer bound to data (a field binding in the active composition targets it) gets a
-  // small key icon before its name. Stable boolean → no per-frame re-render.
+  // small key icon AFTER its name (kept visible even when the name ellipsizes). Stable boolean →
+  // no per-frame re-render.
   const bound = useDesignerSelector(
     (st) =>
       st.scene !== null &&
@@ -152,20 +153,11 @@ function ElementRowLabel(props: Props): JSX.Element {
           color={element.timelineColor ?? lifespanColorFor(element)}
         />
       </span>
-      <span className={cx(s.name, isSelected && s.nameSelected)}>
-        {element.name}
+      <span className={s.name}>
+        <span className={cx(s.nameText, isSelected && s.nameSelected)}>{element.name}</span>
         {bound && (
-          <span title="Bound to data" aria-label="bound to data">
-            <Icon
-              icon={Key}
-              size={11}
-              style={{
-                display: 'inline-block',
-                verticalAlign: 'middle',
-                marginInlineStart: '0.3rem',
-                opacity: 0.7,
-              }}
-            />
+          <span className={s.boundKey} title="Bound to data" aria-label="bound to data">
+            <Icon icon={Key} size={11} style={{ display: 'block' }} />
           </span>
         )}
       </span>

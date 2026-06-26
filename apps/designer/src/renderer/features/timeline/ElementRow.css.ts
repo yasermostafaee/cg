@@ -45,15 +45,37 @@ export const typeIcon = style({
   height: '16px',
 });
 
+// The 1fr name cell — a flex row so a trailing indicator (the D-098 bound-layer key) stays
+// visible while the name itself ellipsizes.
 export const name = style({
-  color: '#bcc2e0',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.25rem',
   overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
+  minWidth: 0,
   fontSize: '0.75rem',
   // D-047 — the name region is the reorder drag handle.
   cursor: 'grab',
   userSelect: 'none',
+});
+
+// The layer name text — ellipsizes within the flex cell.
+export const nameText = style({
+  color: '#bcc2e0',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  minWidth: 0,
+});
+
+// D-098 — the bound-layer key indicator; never shrinks, so it stays visible after a long
+// (ellipsized) name.
+export const boundKey = style({
+  flexShrink: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  color: colors.textMuted,
+  opacity: 0.8,
 });
 
 // D-047 — the row currently being dragged to reorder: dim it so the drop
