@@ -429,6 +429,7 @@ export class TickerDriver {
     const item = this.logical[idx];
     if (item === undefined) return;
     // The feeder is at the list head — a new content cycle would begin here.
+    let drainBoundary = false;
     if (idx === 0) {
       // Finite repeat: refuse the (N+1)th cycle — the run ends cleanly once
       // the already-fed tail has fully exited (see step()).
@@ -442,17 +443,27 @@ export class TickerDriver {
         // 'drain': the next cycle's head may only enter once the previous
         // cycle's tail has fully exited — a viewport-width spacer guarantees
         // an empty band at the seam.
-        if (this.o.cycleBoundary === 'drain') this.nextOffset += this.o.viewportWidth;
+        if (this.o.cycleBoundary === 'drain') {
+          this.nextOffset += this.o.viewportWidth;
+          drainBoundary = true;
+        }
         this.cycleSeams.push(this.nextOffset);
       }
       this.cyclesStarted += 1;
     }
     this.nextIdx = (idx + 1) % this.logical.length;
-    this.hasFed = true;
 
-    this.placeFed(item.text, item.id, false);
+    // D-081 — the separator goes BETWEEN items, so emit it BEFORE this item (gluing it to the
+    // previous one), never AFTER. The very first item, and the first item after a 'drain'
+    // empties the band, get no leading separator — so a separator never trails the final item
+    // (drain seam, finite-run end). A 'seamless' loop keeps its seam separator: the next item
+    // follows it immediately, so it reads as a between-items separator across the loop.
     const sep = this.o.separator;
-    if (sep !== undefined && sep !== '') this.placeFed(sep, '', true);
+    if (this.hasFed && !drainBoundary && sep !== undefined && sep !== '') {
+      this.placeFed(sep, '', true);
+    }
+    this.hasFed = true;
+    this.placeFed(item.text, item.id, false);
   }
 
   private placeFed(text: string, id: string, isSep: boolean): void {

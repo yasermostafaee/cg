@@ -159,6 +159,18 @@ describe('TickerDriver — completion (the inner repeat loop, D-028)', () => {
     expect(fedTexts(h.track)).toEqual([]); // everything recycled, nothing re-fed
   });
 
+  // D-081 — the separator goes BETWEEN items, never after the last.
+  it('emits the separator only BETWEEN items, never trailing the finite run (D-081)', () => {
+    const h = make({ repeat: 1, separator: '•' });
+    h.driver.start();
+    // The single finite cycle feeds "A • B" and then refuses cycle 2 — so the stream ends on
+    // an item, with exactly one separator BETWEEN the two items (none trailing).
+    const texts = fedTexts(h.track);
+    expect(texts.length).toBeGreaterThan(0);
+    expect(texts.at(-1)).not.toBe('•');
+    expect(texts.filter((t) => t === '•')).toHaveLength(1);
+  });
+
   it("'infinite' never completes (the scope holds until stop())", async () => {
     const h = make({ repeat: 'infinite' });
     const done = completionFlag(h.driver);
