@@ -121,6 +121,8 @@ export function describeBinding(binding: FieldBinding, nameOf?: (id: string) => 
       return `ticker items ${on(t.elementId)}`;
     case 'sequence-items':
       return `sequence items ${on(t.elementId)}`;
+    case 'sequence-item-text':
+      return `sequence item text ${on(t.elementId)}`;
     case 'repeater-items':
       return `repeater rows ${on(t.elementId)}`;
   }

@@ -226,6 +226,13 @@ function applyOne(
       sequenceDriverFor(el)?.setItems(coerceSequenceItems(raw));
       return;
     }
+    case 'sequence-item-text': {
+      // D-083 follow-up — a single sequence TEXT item's value is NOT applied via this
+      // DOM walk: the item's span is built by the SequenceDriver (not in `elementMap`).
+      // It flows through the driver's `textValueFor` seam (see runtime.ts), keyed to this
+      // explicit binding, so the value reaches the live item on play + every update().
+      return;
+    }
     case 'repeater-items': {
       // D-030 — route a list value to the repeater driver: positional live
       // VALUES into the stamped rows mid-run (shorter hides surplus rows,

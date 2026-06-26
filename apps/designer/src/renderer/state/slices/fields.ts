@@ -292,10 +292,15 @@ export const fieldsSlice = {
     if (trimmed === currentKey) return true; // unchanged
 
     // Reject only when *another* element already owns this key via a
-    // convenience binding (of either kind — one key, one owner). An
+    // convenience binding (of either kind — one key, one owner), OR a sequence
+    // TEXT ITEM owns it via a per-item `sequence-item-text` binding (D-083
+    // follow-up — per-item keys share the one-key-one-owner rule). An
     // existing-but-orphaned field (no such binding) is re-adopted.
     const ownedElsewhere = bindings.some(
-      (b) => b.fieldId === trimmed && isConvBinding(b) && convElementId(b) !== elementId,
+      (b) =>
+        b.fieldId === trimmed &&
+        ((isConvBinding(b) && convElementId(b) !== elementId) ||
+          b.target.kind === 'sequence-item-text'),
     );
     if (ownedElsewhere) return false;
 
@@ -395,6 +400,106 @@ export const fieldsSlice = {
   },
 
   /**
+   * D-083 follow-up — make a sequence TEXT ITEM operator-editable by giving it an
+   * EXPLICIT Data key (parallel to {@link setElementDataKey}, scoped to one item). The key
+   * auto-syncs a `text` field (`id = key`, seeded from the item's authored text) + a
+   * `sequence-item-text` binding `{elementId, itemId}`, so `fields[]`/`bindings[]` stay the
+   * single source of truth. Setting it the first time creates the field+binding; changing it
+   * renames; clearing removes them (the item goes back to STATIC design-time content). An
+   * unbound text item is never exposed — sequences never auto-expose their items.
+   *
+   * Returns `false` (changing nothing) when `key` is already owned by another element OR
+   * another sequence item (one key, one owner), when the field shape doesn't match, or when
+   * the item is missing / a composition item (which has no bindable text). An orphaned field
+   * (no binding) is re-adopted, like {@link setElementDataKey}.
+   */
+  setSequenceItemDataKey(elementId: string, itemId: string, key: string): boolean {
+    if (current.scene === null) return false;
+    const trimmed = key.trim();
+    const doc = activeFieldData(current.scene);
+    const bindings = doc.bindings;
+    const isThisItem = (b: FieldBinding): boolean =>
+      b.target.kind === 'sequence-item-text' &&
+      b.target.elementId === elementId &&
+      b.target.itemId === itemId;
+    const convIdx = bindings.findIndex(isThisItem);
+    const currentKey = convIdx === -1 ? null : (bindings[convIdx]?.fieldId ?? null);
+
+    // Cleared → the item becomes static again.
+    if (trimmed === '') {
+      if (currentKey !== null) designerStore.removeField(currentKey);
+      return true;
+    }
+    if (trimmed === currentKey) return true; // unchanged
+
+    // One key, one owner: reject a key already owned by ANOTHER element (a convenience
+    // binding) or ANOTHER sequence item (a per-item text binding). An orphaned field is
+    // re-adopted below.
+    const ownedElsewhere = bindings.some(
+      (b) =>
+        b.fieldId === trimmed &&
+        !isThisItem(b) &&
+        (isConvBinding(b) || b.target.kind === 'sequence-item-text'),
+    );
+    if (ownedElsewhere) return false;
+
+    // Resolve the item; only a TEXT item has bindable text.
+    const found = locate(current.scene, elementId);
+    const el = found === null ? undefined : found.layer.children[found.elIdx];
+    const item =
+      el !== undefined && el.type === 'sequence'
+        ? el.items.find((it) => it.id === itemId)
+        : undefined;
+    if (item === undefined || item.kind === 'composition') return false;
+    const seedText = item.text;
+
+    const existing = doc.fields.find((f) => f.id === trimmed);
+    // A text item can only adopt a text-shaped field.
+    if (existing !== undefined && existing.type !== 'text' && existing.type !== 'multiline') {
+      return false;
+    }
+
+    if (currentKey === null) {
+      const binding: FieldBinding = {
+        fieldId: trimmed,
+        target: { kind: 'sequence-item-text', elementId, itemId },
+      };
+      // Re-adopt an orphaned field (keep its config); else create a fresh one seeded from
+      // the item's authored text.
+      if (existing !== undefined) {
+        set({ scene: withActiveFieldData(current.scene, { bindings: [...bindings, binding] }) });
+        return true;
+      }
+      const field: DynamicField = {
+        id: trimmed,
+        type: 'text',
+        label: trimmed,
+        required: false,
+        default: seedText,
+        maxLength: DEFAULT_DATA_FIELD_MAX_LENGTH,
+      };
+      set({
+        scene: withActiveFieldData(current.scene, {
+          fields: [...doc.fields, field],
+          bindings: [...bindings, binding],
+        }),
+      });
+      return true;
+    }
+
+    // Rename. If an (orphaned) field already owns the new id, don't fork the id space.
+    if (existing !== undefined) return false;
+    const fields = doc.fields.map((f) =>
+      f.id === currentKey ? ({ ...f, id: trimmed } as DynamicField) : f,
+    );
+    const nextBindings = bindings.map((b) =>
+      b.fieldId === currentKey ? { ...b, fieldId: trimmed } : b,
+    );
+    set({ scene: withActiveFieldData(current.scene, { fields, bindings: nextBindings }) });
+    return true;
+  },
+
+  /**
    * D-028 — edit a ticker's items as ONE intent: updates the element's
    * authored items and, when a `list` field is bound via the element's Data
    * key, keeps that field's default in lockstep (the same canvas ↔ field
@@ -446,23 +551,42 @@ export const fieldsSlice = {
       return dwellMs === undefined ? { id: i.id, text } : { id: i.id, text, dwellMs };
     });
     designerStore.updateElement(elementId, { items: authored } as Partial<Element>);
-    const doc = activeFieldData(current.scene);
-    const conv = doc.bindings.find(
+
+    // (A) LIST binding (`sequence-items`): keep its default in lockstep, or — once a
+    // composition item is present — DROP the now-illegal binding + list field (the binding
+    // is TEXT-ONLY; syncing a composition into a list default would be coerced back to empty
+    // text, erasing the composition). Mirrors the clear path of setElementDataKey.
+    const listDoc = activeFieldData(current.scene);
+    const conv = listDoc.bindings.find(
       (b) => b.target.kind === 'sequence-items' && b.target.elementId === elementId,
     );
-    if (conv === undefined) return;
-    // D-083 — binding is TEXT-ONLY: once a composition item is present the sequence
-    // can't be data-bound, so DROP the now-illegal convenience binding + its list field
-    // rather than syncing a composition into the field default (which the runtime would
-    // coerce back to empty text, erasing the composition). Mirrors the clear path of
-    // setElementDataKey, which the disabled Data-key input can no longer reach.
-    if (authored.some((i) => (i as Record<string, unknown>)['kind'] === 'composition')) {
-      designerStore.removeField(conv.fieldId);
-      return;
+    if (conv !== undefined) {
+      if (authored.some((i) => (i as Record<string, unknown>)['kind'] === 'composition')) {
+        designerStore.removeField(conv.fieldId);
+      } else {
+        const field = listDoc.fields.find((f) => f.id === conv.fieldId);
+        if (field !== undefined && field.type === 'list') {
+          designerStore.updateField(field.id, { default: items.map((i) => ({ ...i })) });
+        }
+      }
     }
-    const field = doc.fields.find((f) => f.id === conv.fieldId);
-    if (field === undefined || field.type !== 'list') return;
-    designerStore.updateField(field.id, { default: items.map((i) => ({ ...i })) });
+
+    // (B) D-083 follow-up — per-item TEXT bindings: drop a binding whose item was removed or
+    // switched to a composition item; keep each bound text item's field default in lockstep
+    // with its authored text (the same canvas ↔ default coupling as the list/element layers).
+    const itemDoc = activeFieldData(current.scene); // fresh — (A) may have removed a field
+    for (const b of itemDoc.bindings) {
+      const tgt = b.target;
+      if (tgt.kind !== 'sequence-item-text' || tgt.elementId !== elementId) continue;
+      const item = authored.find((i) => i.id === tgt.itemId) as Record<string, unknown> | undefined;
+      if (item === undefined || item['kind'] === 'composition') {
+        designerStore.removeField(b.fieldId);
+      } else {
+        designerStore.updateField(b.fieldId, {
+          default: typeof item['text'] === 'string' ? item['text'] : '',
+        });
+      }
+    }
   },
 
   /**

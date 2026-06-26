@@ -121,6 +121,26 @@ export function listBoundSequenceIds(doc: Pick<FieldDoc, 'bindings'>): Set<strin
 }
 
 /**
+ * D-083 follow-up — the EXPLICIT per-item TEXT bindings in a doc, as
+ * `sequence elementId → (item id → bound field id)`. The field aggregation + the runtime
+ * read this the SAME way so an item is operator-editable ONLY when the designer bound it;
+ * unbound text items contribute nothing (sequences never auto-expose their items).
+ */
+export function sequenceItemTextFieldIds(
+  doc: Pick<FieldDoc, 'bindings'>,
+): Map<string, Map<string, string>> {
+  const out = new Map<string, Map<string, string>>();
+  for (const b of doc.bindings ?? []) {
+    if (b.target.kind === 'sequence-item-text') {
+      const inner = out.get(b.target.elementId) ?? new Map<string, string>();
+      inner.set(b.target.itemId, b.fieldId);
+      out.set(b.target.elementId, inner);
+    }
+  }
+  return out;
+}
+
+/**
  * D-083 — the friendly DISPLAY label for a composition sequence item's field group: the
  * sequence element's name plus the item's position, e.g. `Now/Next[1]`. This is shown in
  * the designer form + GDD; the stable value KEY is {@link sequenceItemInstanceId} (so two
@@ -220,7 +240,10 @@ export function aggregateCompositionFields(
   depth = 0,
 ): AggregatedFields {
   const groups: CompositionFieldGroup[] = [];
-  // The doc's own authored fields, plus the synthetic per-item TEXT fields below.
+  // The doc's own authored fields. A sequence TEXT item that the designer explicitly
+  // bound (a `sequence-item-text` binding → a `text` field) is among these, exactly like
+  // a bound text element — so it surfaces here with NO special handling. UNBOUND text
+  // items contribute nothing (D-083 follow-up: sequences never auto-expose their items).
   const fields: DynamicField[] = [...(doc.fields ?? [])];
   if (depth < MAX_DEPTH) {
     for (const inst of compositionInstancesOf(doc)) {
@@ -233,32 +256,25 @@ export function aggregateCompositionFields(
         aggregate: aggregateCompositionFields(scene, child, depth + 1),
       });
     }
-    // D-083 — per-item operator fields for a sequence whose ITEM-LIST is NOT data-bound
-    // (a bound list owns the items; a composition item makes the list non-bindable, and an
-    // all-text sequence the designer hasn't list-bound is editable per item too). Each
-    // item contributes, namespaced per item (`<sequence name>[<index>]` display, id-based
-    // KEY so same-named sequences don't collide): a COMPOSITION item → its composition's
-    // fields (a group); a TEXT item → a single flat text field (its text). A LIST-BOUND
-    // sequence exposes NOTHING here (the list editor owns its items) — no double-exposure.
+    // D-083 — a sequence COMPOSITION item exposes its composition's fields as a group,
+    // namespaced per item (`<sequence name>[<index>]` display, id-based KEY so same-named
+    // sequences don't collide). A LIST-BOUND sequence exposes NOTHING (the list editor
+    // owns its items). TEXT items are NOT auto-exposed — operator-editability requires an
+    // explicit per-item binding (above), consistent with the rest of the app.
     const bound = listBoundSequenceIds(doc);
     for (const seq of sequencesOf(doc)) {
       if (bound.has(seq.id)) continue;
       seq.items.forEach((item, index) => {
-        const key = sequenceItemInstanceId(seq.id, item.id);
-        const label = sequenceItemNamespace(seq.name, index);
-        if (item.kind === 'composition') {
-          const child = scene.compositions?.find((c) => c.id === item.compositionId);
-          if (child === undefined) return;
-          groups.push({
-            instanceId: key,
-            name: key,
-            label,
-            compositionId: child.id,
-            aggregate: aggregateCompositionFields(scene, child, depth + 1),
-          });
-        } else {
-          fields.push({ id: key, type: 'text', label, required: false, default: item.text });
-        }
+        if (item.kind !== 'composition') return;
+        const child = scene.compositions?.find((c) => c.id === item.compositionId);
+        if (child === undefined) return;
+        groups.push({
+          instanceId: sequenceItemInstanceId(seq.id, item.id),
+          name: sequenceItemInstanceId(seq.id, item.id),
+          label: sequenceItemNamespace(seq.name, index),
+          compositionId: child.id,
+          aggregate: aggregateCompositionFields(scene, child, depth + 1),
+        });
       });
     }
   }

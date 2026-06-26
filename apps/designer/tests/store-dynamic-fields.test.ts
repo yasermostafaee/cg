@@ -427,6 +427,88 @@ describe('designerStore — D-029 sequence Data key + items', () => {
   });
 });
 
+describe('designerStore — D-083 follow-up: EXPLICIT per-item TEXT binding', () => {
+  function addSequence(id: string): void {
+    designerStore.addElement(defaultSequence(id, 0, 0));
+  }
+  function seqItems(id: string): { id: string; text?: string; kind?: string }[] {
+    const st = designerStore.get();
+    const scene = editSceneOf(st.scene, st.activeCompositionId)!;
+    for (const layer of scene.layers) {
+      for (const el of layer.children) {
+        if (el.id === id && el.type === 'sequence') {
+          return el.items as unknown as { id: string; text?: string; kind?: string }[];
+        }
+      }
+    }
+    return [];
+  }
+
+  it('setSequenceItemDataKey creates a text field (seeded from the item) + a sequence-item-text binding', () => {
+    freshScene();
+    addSequence('sq-1');
+    const item0 = seqItems('sq-1')[0]!;
+    expect(designerStore.setSequenceItemDataKey('sq-1', item0.id, 'headline')).toBe(true);
+    const f = fields().find((x) => x.id === 'headline');
+    expect(f?.type).toBe('text');
+    if (f?.type === 'text') expect(f.default).toBe(item0.text);
+    expect(bindings()).toContainEqual({
+      fieldId: 'headline',
+      target: { kind: 'sequence-item-text', elementId: 'sq-1', itemId: item0.id },
+    });
+  });
+
+  it('clearing the per-item key removes the field + binding (the item goes static)', () => {
+    freshScene();
+    addSequence('sq-1');
+    const id0 = seqItems('sq-1')[0]!.id;
+    designerStore.setSequenceItemDataKey('sq-1', id0, 'headline');
+    designerStore.setSequenceItemDataKey('sq-1', id0, '');
+    expect(fields().some((x) => x.id === 'headline')).toBe(false);
+    expect(bindings().some((b) => b.target.kind === 'sequence-item-text')).toBe(false);
+  });
+
+  it('one key, one owner — across element data keys AND per-item bindings', () => {
+    freshScene();
+    designerScene_addText('el-1');
+    addSequence('sq-1');
+    const id0 = seqItems('sq-1')[0]!.id;
+    // An element owns 'shared' → a per-item key can't take it.
+    designerStore.setElementDataKey('el-1', 'shared');
+    expect(designerStore.setSequenceItemDataKey('sq-1', id0, 'shared')).toBe(false);
+    // …and the reverse: a per-item binding owns 'mine' → an element can't take it.
+    expect(designerStore.setSequenceItemDataKey('sq-1', id0, 'mine')).toBe(true);
+    expect(designerStore.setElementDataKey('el-1', 'mine')).toBe(false);
+  });
+
+  it('setSequenceItems keeps a bound item field default in lockstep, and drops it on kind-switch', () => {
+    freshScene();
+    addSequence('sq-1');
+    const id0 = seqItems('sq-1')[0]!.id;
+    designerStore.setSequenceItemDataKey('sq-1', id0, 'headline');
+    // Editing the item's text moves the bound field default in lockstep.
+    designerStore.setSequenceItems('sq-1', [{ id: id0, text: 'Edited' }]);
+    const f = fields().find((x) => x.id === 'headline');
+    if (f?.type === 'text') expect(f.default).toBe('Edited');
+    // Switching the bound item to a composition item drops its now-invalid text binding+field.
+    designerStore.setSequenceItems('sq-1', [
+      { id: id0, kind: 'composition', compositionId: 'card' },
+    ]);
+    expect(fields().some((x) => x.id === 'headline')).toBe(false);
+    expect(bindings().some((b) => b.target.kind === 'sequence-item-text')).toBe(false);
+  });
+
+  it('removing a bound item drops its per-item binding + field', () => {
+    freshScene();
+    addSequence('sq-1');
+    const id0 = seqItems('sq-1')[0]!.id;
+    designerStore.setSequenceItemDataKey('sq-1', id0, 'headline');
+    designerStore.setSequenceItems('sq-1', [{ id: 'other', text: 'kept' }]); // id0 removed
+    expect(fields().some((x) => x.id === 'headline')).toBe(false);
+    expect(bindings().some((b) => b.target.kind === 'sequence-item-text')).toBe(false);
+  });
+});
+
 /** A ticker for cross-kind conflict tests (avoids shadowing the D-028 helper). */
 function addTickerForConflict(id: string): void {
   designerStore.addElement(defaultTicker(id, 0, 0));

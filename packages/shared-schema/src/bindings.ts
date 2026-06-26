@@ -58,6 +58,18 @@ const BindingTargetSchema = z.discriminatedUnion('kind', [
     kind: z.literal('sequence-items'),
     elementId: IdSchema,
   }),
+  /**
+   * D-083 follow-up — a `text` field drives a SINGLE sequence TEXT item's text,
+   * addressed by the sequence element + the item's stable id. This is how a plain
+   * text item becomes operator-editable: ONLY when the designer explicitly binds it
+   * (parallel to the per-element `text` binding, scoped to one item). Unbound text
+   * items stay static design-time content — sequences never auto-expose their items.
+   */
+  z.object({
+    kind: z.literal('sequence-item-text'),
+    elementId: IdSchema,
+    itemId: z.string().min(1),
+  }),
   /** D-030 — a `list` field drives a repeater element's rows. */
   z.object({
     kind: z.literal('repeater-items'),

@@ -514,7 +514,11 @@ describe('createRuntime — D-083 composition sequence items (text | composition
     } as unknown as Composition;
   }
 
-  function compScene(seq: Partial<SequenceElement>, comps: Composition[] = [clockComp()]): Scene {
+  function compScene(
+    seq: Partial<SequenceElement>,
+    comps: Composition[] = [clockComp()],
+    extras: { fields?: Scene['fields']; bindings?: Scene['bindings'] } = {},
+  ): Scene {
     return {
       schemaVersion: 1,
       id: 'scene-seq-comp',
@@ -536,8 +540,8 @@ describe('createRuntime — D-083 composition sequence items (text | composition
           children: [sequenceElement(seq)],
         },
       ],
-      fields: [],
-      bindings: [],
+      fields: extras.fields ?? [],
+      bindings: extras.bindings ?? [],
       fonts: [],
       compositions: comps,
       metadata: { createdAt: '2026-06-11T00:00:00.000Z', updatedAt: '2026-06-11T00:00:00.000Z' },
@@ -581,7 +585,7 @@ describe('createRuntime — D-083 composition sequence items (text | composition
     expect(hostText()).toContain('Tehran');
   });
 
-  it('applies a per-item TEXT field to a non-bound text item (operator-editable)', async () => {
+  it('(D-083 follow-up) an UNBOUND text item stays STATIC — no per-item key overrides it', async () => {
     const clock = makeClock();
     const runtime = createRuntime(
       compScene(
@@ -591,9 +595,44 @@ describe('createRuntime — D-083 composition sequence items (text | composition
       { skipFontLoad: true, clock },
     );
     await runtime.play({});
-    expect(visibleItems()).toEqual(['authored']); // no field value yet → the authored text
-    // The operator's per-item TEXT field (keyed by the stable id-based namespace) overrides it.
+    expect(visibleItems()).toEqual(['authored']);
+    // An UNBOUND text item is design-time content: a stray per-item key must NOT override it
+    // (sequences no longer auto-expose their items — operator-editing requires explicit binding).
     await runtime.update({ 'seq:a': 'Operator text' });
+    expect(visibleItems()).toEqual(['authored']);
+  });
+
+  it('(D-083 follow-up) an EXPLICITLY-bound text item IS operator-editable via its field', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      compScene(
+        { advance: 'manual', repeat: 'infinite', items: [{ id: 'a', text: 'authored' }] },
+        [],
+        {
+          // The designer bound item 'a' to the 'headline' field (a `sequence-item-text` binding).
+          fields: [
+            {
+              id: 'headline',
+              type: 'text',
+              label: 'Headline',
+              required: false,
+              default: 'authored',
+            },
+          ],
+          bindings: [
+            {
+              fieldId: 'headline',
+              target: { kind: 'sequence-item-text', elementId: 'seq', itemId: 'a' },
+            },
+          ],
+        },
+      ),
+      { skipFontLoad: true, clock },
+    );
+    await runtime.play({});
+    expect(visibleItems()).toEqual(['authored']); // field default flows to the item
+    // The operator edits the BOUND field (by its id, not the instance namespace) → the item updates.
+    await runtime.update({ headline: 'Operator text' });
     expect(visibleItems()).toEqual(['Operator text']);
   });
 
