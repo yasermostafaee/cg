@@ -3,6 +3,7 @@ import { Check } from 'lucide-react';
 import type { Scene } from '@cg/shared-schema';
 import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
 import { cx } from '../../cx.js';
+import { comboKey } from '../../keyboard.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { NewProjectModal } from './NewProjectModal.js';
@@ -43,6 +44,14 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
   // "store a function in state" pattern.
   const [pendingSwitch, setPendingSwitch] = useState<(() => Promise<void>) | null>(null);
   const fileBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // D-100 — once a top menu is open (by click), hovering another top-menu button switches to it
+  // (standard menubar behavior). When none is open, hover only highlights — a click still opens
+  // the first menu.
+  const onNavHover = (key: 'file' | 'edit' | 'view' | 'help'): void => {
+    setHoverNav(key);
+    setOpenMenu((m) => (m === null ? null : key));
+  };
 
   // Close the dropdown on outside click / Escape.
   useEffect(() => {
@@ -132,6 +141,35 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
     guardedSwitch(fn);
   }
 
+  // File keyboard shortcuts: Ctrl/Cmd+O open, Ctrl/Cmd+S save, Ctrl/Cmd+Shift+S save-as. Matched
+  // by physical code (comboKey — CLAUDE.md convention). A ref keeps the handler current without
+  // re-subscribing each render. These are global file ops, so they fire even with a field focused
+  // (the browser's own Ctrl+S is already neutralized in App.tsx).
+  const fileShortcutsRef = useRef({
+    scene,
+    save,
+    saveAs,
+    openProject,
+    runFileAction,
+    runFileSwitch,
+  });
+  fileShortcutsRef.current = { scene, save, saveAs, openProject, runFileAction, runFileSwitch };
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if (e.altKey) return;
+      const a = fileShortcutsRef.current;
+      if (comboKey(e, 'KeyO') && !e.shiftKey) {
+        e.preventDefault();
+        a.runFileSwitch(a.openProject);
+      } else if (comboKey(e, 'KeyS')) {
+        e.preventDefault();
+        if (a.scene !== null) a.runFileAction(e.shiftKey ? a.saveAs : a.save);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // Top-level menu button style — tinted when its dropdown is open or
   // the pointer is over it.
   function navClass(key: string): string {
@@ -204,7 +242,7 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
             variant="bare"
             className={navClass('file')}
             onClick={() => setOpenMenu((m) => (m === 'file' ? null : 'file'))}
-            onMouseEnter={() => setHoverNav('file')}
+            onMouseEnter={() => onNavHover('file')}
             onMouseLeave={() => setHoverNav(null)}
             aria-haspopup="menu"
             aria-expanded={openMenu === 'file'}
@@ -214,15 +252,21 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
           {openMenu === 'file' && (
             <div className={s.dropdown} role="menu">
               <FileMenuItem label="New" onClick={() => runFileSwitch(newProject)} />
-              <FileMenuItem label="Open…" onClick={() => runFileSwitch(openProject)} />
+              <FileMenuItem
+                label="Open"
+                shortcut={isMac() ? '⌘O' : 'Ctrl+O'}
+                onClick={() => runFileSwitch(openProject)}
+              />
               <div className={s.dropdownDivider} aria-hidden />
               <FileMenuItem
                 label="Save"
+                shortcut={isMac() ? '⌘S' : 'Ctrl+S'}
                 disabled={scene === null}
                 onClick={() => runFileAction(save)}
               />
               <FileMenuItem
-                label="Save As…"
+                label="Save As"
+                shortcut={isMac() ? '⇧⌘S' : 'Ctrl+Shift+S'}
                 disabled={scene === null}
                 onClick={() => runFileAction(saveAs)}
               />
@@ -240,7 +284,7 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
             variant="bare"
             className={navClass('edit')}
             onClick={() => setOpenMenu((m) => (m === 'edit' ? null : 'edit'))}
-            onMouseEnter={() => setHoverNav('edit')}
+            onMouseEnter={() => onNavHover('edit')}
             onMouseLeave={() => setHoverNav(null)}
             aria-haspopup="menu"
             aria-expanded={openMenu === 'edit'}
@@ -250,12 +294,14 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
           {openMenu === 'edit' && (
             <div className={s.dropdown} role="menu">
               <FileMenuItem
-                label={isMac() ? 'Undo  ⌘Z' : 'Undo  Ctrl+Z'}
+                label="Undo"
+                shortcut={isMac() ? '⌘Z' : 'Ctrl+Z'}
                 disabled={!canUndo}
                 onClick={() => runFileAction(() => designerStore.undo())}
               />
               <FileMenuItem
-                label={isMac() ? 'Redo  ⇧⌘Z' : 'Redo  Ctrl+Shift+Z'}
+                label="Redo"
+                shortcut={isMac() ? '⇧⌘Z' : 'Ctrl+Shift+Z'}
                 disabled={!canRedo}
                 onClick={() => runFileAction(() => designerStore.redo())}
               />
@@ -267,7 +313,7 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
             variant="bare"
             className={navClass('view')}
             onClick={() => setOpenMenu((m) => (m === 'view' ? null : 'view'))}
-            onMouseEnter={() => setHoverNav('view')}
+            onMouseEnter={() => onNavHover('view')}
             onMouseLeave={() => setHoverNav(null)}
             aria-haspopup="menu"
             aria-expanded={openMenu === 'view'}
@@ -277,7 +323,8 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
           {openMenu === 'view' && (
             <div className={s.dropdown} role="menu">
               <ToggleMenuItem
-                label="Ruler (R)"
+                label="Ruler"
+                shortcut="R"
                 checked={rulerVisible}
                 onClick={() => {
                   setOpenMenu(null);
@@ -300,7 +347,7 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
             variant="bare"
             className={navClass('help')}
             onClick={() => setOpenMenu((m) => (m === 'help' ? null : 'help'))}
-            onMouseEnter={() => setHoverNav('help')}
+            onMouseEnter={() => onNavHover('help')}
             onMouseLeave={() => setHoverNav(null)}
             aria-haspopup="menu"
             aria-expanded={openMenu === 'help'}
@@ -362,10 +409,13 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
 
 function FileMenuItem({
   label,
+  shortcut,
   onClick,
   disabled = false,
 }: {
   label: string;
+  /** Optional keyboard-shortcut hint, shown in parentheses (smaller, muted gray). */
+  shortcut?: string;
   onClick: () => void;
   disabled?: boolean;
 }): JSX.Element {
@@ -385,6 +435,7 @@ function FileMenuItem({
       onClick={onClick}
     >
       {label}
+      {shortcut !== undefined && <span className={s.menuShortcut}>({shortcut})</span>}
     </Button>
   );
 }
@@ -392,10 +443,13 @@ function FileMenuItem({
 /** Dropdown item with a leading checkmark for on/off View options. */
 function ToggleMenuItem({
   label,
+  shortcut,
   checked,
   onClick,
 }: {
   label: string;
+  /** Optional keyboard-shortcut hint, shown in parentheses (smaller, muted gray). */
+  shortcut?: string;
   checked: boolean;
   onClick: () => void;
 }): JSX.Element {
@@ -414,6 +468,7 @@ function ToggleMenuItem({
         {checked ? <Icon icon={Check} size={14} /> : ''}
       </span>
       {label}
+      {shortcut !== undefined && <span className={s.menuShortcut}>({shortcut})</span>}
     </Button>
   );
 }

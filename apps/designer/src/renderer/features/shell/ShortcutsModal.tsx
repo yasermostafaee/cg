@@ -14,6 +14,9 @@ const MOD = isMac ? '⌘' : 'Ctrl';
  * TimelineDock).
  */
 const SHORTCUTS: readonly { keys: string; label: string }[] = [
+  { keys: `${MOD} + O`, label: 'Open project' },
+  { keys: `${MOD} + S`, label: 'Save' },
+  { keys: `${MOD} + Shift + S`, label: 'Save as' },
   { keys: `${MOD} + Z`, label: 'Undo' },
   { keys: `${MOD} + Shift + Z`, label: 'Redo' },
   { keys: `${MOD} + Y`, label: 'Redo (alternate)' },

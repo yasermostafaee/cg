@@ -308,11 +308,15 @@ export class TickerDriver {
       return;
     }
     const d = this.distance();
-    // Split the fed stream at the entering edge: keep everything that has
-    // started entering (o < d); a separator glued to a kept item stays too.
+    // Split the fed stream at the entering edge: keep everything that has started entering
+    // (o < d) and re-feed the rest from the new list. D-081 — separators now PRECEDE their item,
+    // so a separator at (or at the end of) the kept range is dangling (the item it leads is being
+    // dropped/re-fed); trim trailing separators off the kept range so the re-fed item supplies the
+    // single between-items separator instead of doubling it.
     let k = this.fed.findIndex((f) => f.o >= d);
-    if (k >= 0 && this.fed[k]?.isSep === true) k += 1;
-    if (k >= 0 && k < this.fed.length) {
+    if (k < 0) k = this.fed.length;
+    while (k > 0 && this.fed[k - 1]?.isSep === true) k -= 1;
+    if (k < this.fed.length) {
       const dropped = this.fed.splice(k);
       for (const f of dropped) this.release(f.node);
       const firstDropped = dropped[0];
@@ -429,6 +433,7 @@ export class TickerDriver {
     const item = this.logical[idx];
     if (item === undefined) return;
     // The feeder is at the list head — a new content cycle would begin here.
+    let drainBoundary = false;
     if (idx === 0) {
       // Finite repeat: refuse the (N+1)th cycle — the run ends cleanly once
       // the already-fed tail has fully exited (see step()).
@@ -442,17 +447,27 @@ export class TickerDriver {
         // 'drain': the next cycle's head may only enter once the previous
         // cycle's tail has fully exited — a viewport-width spacer guarantees
         // an empty band at the seam.
-        if (this.o.cycleBoundary === 'drain') this.nextOffset += this.o.viewportWidth;
+        if (this.o.cycleBoundary === 'drain') {
+          this.nextOffset += this.o.viewportWidth;
+          drainBoundary = true;
+        }
         this.cycleSeams.push(this.nextOffset);
       }
       this.cyclesStarted += 1;
     }
     this.nextIdx = (idx + 1) % this.logical.length;
-    this.hasFed = true;
 
-    this.placeFed(item.text, item.id, false);
+    // D-081 — the separator goes BETWEEN items, so emit it BEFORE this item (gluing it to the
+    // previous one), never AFTER. The very first item, and the first item after a 'drain'
+    // empties the band, get no leading separator — so a separator never trails the final item
+    // (drain seam, finite-run end). A 'seamless' loop keeps its seam separator: the next item
+    // follows it immediately, so it reads as a between-items separator across the loop.
     const sep = this.o.separator;
-    if (sep !== undefined && sep !== '') this.placeFed(sep, '', true);
+    if (this.hasFed && !drainBoundary && sep !== undefined && sep !== '') {
+      this.placeFed(sep, '', true);
+    }
+    this.hasFed = true;
+    this.placeFed(item.text, item.id, false);
   }
 
   private placeFed(text: string, id: string, isSep: boolean): void {

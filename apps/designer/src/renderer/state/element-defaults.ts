@@ -50,7 +50,7 @@ export function defaultText(id: string, x: number, y: number): TextElement {
       lineHeight: 1.15,
       letterSpacing: 0,
     },
-    color: '#000000',
+    color: '#FFFFFF',
     align: 'start',
     direction: 'auto',
     fitMode: 'fixed',
@@ -59,8 +59,8 @@ export function defaultText(id: string, x: number, y: number): TextElement {
 }
 
 /**
- * Ticker / crawler band (D-028). Persian-first defaults: reading direction
- * `rtl` (the crawl moves visually left→right), Vazirmatn, sample Persian
+ * Ticker / crawler band (D-028). English defaults (D-082): reading direction
+ * `ltr` (the crawl moves visually right→left), Vazirmatn, English placeholder
  * items. The crawl duration is content-driven (measured width ÷ speed) —
  * there is deliberately no duration knob anywhere.
  */
@@ -85,7 +85,7 @@ export function defaultTicker(id: string, x: number, y: number): TickerElement {
     color: '#FFFFFF',
     // No backgroundColor — a fresh band is TRANSPARENT by design; the operator
     // opts into a bar colour in the inspector.
-    direction: 'rtl',
+    direction: 'ltr',
     // D-045 — vertical placement of the crawl text within the band (default centred).
     verticalAlign: 'middle',
     speed: 120,
@@ -96,9 +96,9 @@ export function defaultTicker(id: string, x: number, y: number): TickerElement {
     gap: 48,
     separator: ' • ',
     items: [
-      { id: 'item-1', text: 'خبر نخست — متن نمونه' },
-      { id: 'item-2', text: 'خبر دوم — متن نمونه' },
-      { id: 'item-3', text: 'خبر سوم — متن نمونه' },
+      { id: 'item-1', text: 'First headline — sample' },
+      { id: 'item-2', text: 'Second headline — sample' },
+      { id: 'item-3', text: 'Third headline — sample' },
     ],
   };
 }
@@ -139,7 +139,7 @@ export function defaultClock(id: string, x: number, y: number): ClockElement {
 }
 
 /**
- * Sequence / now-next (D-029). Persian-first defaults: `rtl`, Vazirmatn,
+ * Sequence / now-next (D-029). English defaults (D-082): `ltr`, Vazirmatn,
  * three sample now/next items, the "Push up" transition (in from the bottom,
  * out through the top, simultaneous), auto-advance every 5s, infinite passes.
  * Time-driven like the ticker/clock — scrubbing never moves it.
@@ -167,11 +167,11 @@ export function defaultSequence(id: string, x: number, y: number): SequenceEleme
     align: 'start',
     // D-045 — vertical placement of the item text within the box (default centred).
     verticalAlign: 'middle',
-    direction: 'rtl',
+    direction: 'ltr',
     items: [
-      { id: 'item-1', text: 'اکنون: برنامهٔ نخست' },
-      { id: 'item-2', text: 'سپس: برنامهٔ دوم' },
-      { id: 'item-3', text: 'بعد: برنامهٔ سوم' },
+      { id: 'item-1', text: 'Now: first item' },
+      { id: 'item-2', text: 'Then: second item' },
+      { id: 'item-3', text: 'Next: third item' },
     ],
     defaultDwellMs: 5000,
     advance: 'auto',

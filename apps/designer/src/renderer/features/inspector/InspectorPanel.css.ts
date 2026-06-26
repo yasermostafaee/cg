@@ -65,16 +65,6 @@ export const bindRow = style({
   gap: '0.4rem',
 });
 
-export const bindRemove = style({
-  background: 'transparent',
-  color: colors.textMuted,
-  border: `1px solid ${colors.border}`,
-  padding: '0.08rem 0.3rem',
-  borderRadius: '0.18rem',
-  cursor: 'pointer',
-  fontSize: '0.68rem',
-});
-
 export const keyRow = style({
   display: 'grid',
   gridTemplateColumns: '36px 1fr',

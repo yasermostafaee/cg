@@ -98,8 +98,8 @@ export const dropdown = style({
   top: '100%',
   left: 0,
   marginTop: '2px',
-  minWidth: '160px',
-  background: colors.panel,
+  minWidth: '190px',
+  background: '#1c1f2d',
   border: `1px solid ${colors.border}`,
   borderRadius: '0.25rem',
   boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
@@ -108,7 +108,9 @@ export const dropdown = style({
 });
 
 export const dropdownItem = style({
-  display: 'block',
+  // Flex so a shortcut hint can sit at the trailing edge (label left, shortcut right).
+  display: 'flex',
+  alignItems: 'center',
   width: '100%',
   background: 'transparent',
   color: colors.text,
@@ -123,6 +125,15 @@ export const dropdownItem = style({
 export const dropdownItemDisabled = style({
   color: colors.textMuted,
   cursor: 'default',
+});
+
+// Keyboard-shortcut hint pushed to the menu item's TRAILING edge (margin-inline-start:auto) —
+// in parentheses, smaller, muted gray; padding keeps a min gap from the label.
+export const menuShortcut = style({
+  fontSize: '0.85em',
+  color: '#9CA3AF',
+  marginInlineStart: 'auto',
+  paddingInlineStart: '1.5rem',
 });
 
 export const dropdownDivider = style({

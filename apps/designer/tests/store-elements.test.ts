@@ -137,11 +137,11 @@ describe('element-defaults', () => {
     expect(ClockElementSchema.parse(c)).toEqual(c);
   });
 
-  it('defaultSequence produces a schema-valid Persian now/next — the Push-up preset (D-029)', () => {
+  it('defaultSequence produces a schema-valid English now/next — the Push-up preset (D-029, D-082)', () => {
     const q = defaultSequence('el-1', 11, 12);
     expect(q.type).toBe('sequence');
     expect(q.transform.position).toEqual({ x: 11, y: 12 });
-    expect(q.direction).toBe('rtl');
+    expect(q.direction).toBe('ltr'); // D-082 — English defaults ⇒ LTR
     expect(q.advance).toBe('auto');
     expect(q.defaultDwellMs).toBe(5000);
     expect(q.transitionIn).toBe('bottom');

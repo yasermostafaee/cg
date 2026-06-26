@@ -11,7 +11,7 @@ test.describe('Guide coordinate readout (D-072)', () => {
     await app.newProject('GuideBadge');
     // Show the rulers (View ▸ Ruler) so guides can be pulled from them.
     await app.page.getByRole('button', { name: 'View', exact: true }).click();
-    await app.page.getByRole('menuitemcheckbox', { name: 'Ruler (R)' }).click();
+    await app.page.getByRole('menuitemcheckbox', { name: /Ruler/ }).click();
     const rulerTop = app.page.getByTestId('ruler-top');
     await expect(rulerTop).toBeVisible();
 

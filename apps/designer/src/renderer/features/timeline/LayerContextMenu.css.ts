@@ -37,6 +37,13 @@ export const itemDisabled = style({
   cursor: 'default',
 });
 
+// Keyboard-shortcut hint at the row's trailing edge (flex space-between) — in parentheses,
+// smaller, muted gray.
+export const shortcut = style({
+  fontSize: '0.85em',
+  color: '#9CA3AF',
+});
+
 export const divider = style({
   height: '1px',
   background: colors.border,

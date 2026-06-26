@@ -38,6 +38,9 @@ const INSPECTOR_DEFAULT = 320;
 const TIMELINE_DEFAULT = 260;
 const TIMELINE_MIN = 140;
 const TIMELINE_MAX = 600;
+// D-099 — below this the panels + canvas can't render usably; show a "too small" gate instead.
+const MIN_APP_WIDTH = 1024;
+const MIN_APP_HEIGHT = 640;
 
 /** Transient bottom-centre toast for user-facing notices (auto-dismiss + close). */
 function Toast({ message }: { message: string }): JSX.Element {
@@ -472,6 +475,48 @@ export function App(): JSX.Element {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  // D-099 — below a minimum usable size, replace the whole app with a centered RTL message;
+  // it restores automatically when the window is enlarged past the threshold.
+  const [tooSmall, setTooSmall] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      (window.innerWidth < MIN_APP_WIDTH || window.innerHeight < MIN_APP_HEIGHT),
+  );
+  useEffect(() => {
+    function check(): void {
+      setTooSmall(window.innerWidth < MIN_APP_WIDTH || window.innerHeight < MIN_APP_HEIGHT);
+    }
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  if (tooSmall) {
+    return (
+      <main className={s.page} dir="rtl">
+        <div
+          data-testid="screen-too-small"
+          style={{
+            height: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.6rem',
+            padding: '2rem',
+            textAlign: 'center',
+            color: colors.text,
+          }}
+        >
+          <div style={{ fontSize: '1.05rem', fontWeight: 600 }}>پنجره خیلی کوچک است</div>
+          <div style={{ fontSize: '0.85rem', color: colors.textMuted }}>
+            برای استفاده از ویرایشگر، پنجره را بزرگ‌تر کنید (حداقل ۱۰۲۴×۶۴۰).
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   if (view === 'landing' || scene === null) {
     return (

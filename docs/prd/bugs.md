@@ -556,7 +556,7 @@ cycle blocked, composition cycle still blocked, safe nesting allowed) +
 `packages/shared-schema/tests/composition-fields.test.ts` (`compositionClosure` follows both
 edge kinds). Capability: `designer-compositions` (MODIFIED — the cycle-guard requirement).
 
-## [ ] B-024 — Width / height / scale must reject negative values ⟨priority: medium⟩
+## [~] B-024 — Width / height / scale must reject negative values ⟨priority: medium⟩ — implemented on `feat/quick-wins-batch`
 
 **What:** The width, height, and scale inputs must not accept negative values.
 **Why:** Negative width/height/scale produce broken/invalid geometry.

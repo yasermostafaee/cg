@@ -8,6 +8,10 @@ import * as s from './LayerContextMenu.css.js';
 // JS-state hover highlight (these menus track hover in React state, not :hover).
 const HOVER_BG: React.CSSProperties = { background: 'rgba(56,189,248,0.16)' };
 
+// Shortcut hints shown after the menu labels (D-076/D-077). Platform-aware modifier.
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+const MOD = IS_MAC ? '⌘' : 'Ctrl+';
+
 interface Props {
   /**
    * The right-clicked element. The opener (ElementRow) uses it to normalize the
@@ -160,6 +164,7 @@ export function LayerContextMenu({ x, y, onClose }: Props): JSX.Element {
           onClick={() => run(() => designerStore.copySelection())}
         >
           <span>Copy</span>
+          <span className={s.shortcut}>({MOD}C)</span>
         </div>
         <div
           className={rowClass()}
@@ -173,6 +178,7 @@ export function LayerContextMenu({ x, y, onClose }: Props): JSX.Element {
           onClick={() => run(() => designerStore.cutSelection())}
         >
           <span>Cut</span>
+          <span className={s.shortcut}>({MOD}X)</span>
         </div>
         <div
           className={rowClass(!canPaste)}
@@ -189,6 +195,7 @@ export function LayerContextMenu({ x, y, onClose }: Props): JSX.Element {
           }}
         >
           <span>Paste</span>
+          <span className={s.shortcut}>({MOD}V)</span>
         </div>
         <div
           className={rowClass()}
@@ -215,6 +222,7 @@ export function LayerContextMenu({ x, y, onClose }: Props): JSX.Element {
           onClick={() => run(() => designerStore.deleteSelection())}
         >
           <span>Delete</span>
+          <span className={s.shortcut}>(Del)</span>
         </div>
       </div>
 

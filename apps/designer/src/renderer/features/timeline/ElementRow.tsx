@@ -9,16 +9,19 @@ import {
   Film,
   Group,
   Image,
+  Key,
   MoveHorizontal,
   Rows3,
   Spline,
   Square,
+  Stamp,
   Triangle,
   Type,
   type LucideIcon,
 } from 'lucide-react';
 import type { Element, FrameRange, ShapeElement } from '@cg/shared-schema';
-import { designerStore } from '../../state/store.js';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
+import { activeFieldData } from '../../state/scene-doc.js';
 import { cx } from '../../cx.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
@@ -76,6 +79,17 @@ export function ElementRow(props: Props): JSX.Element {
 function ElementRowLabel(props: Props): JSX.Element {
   const { element, expanded, onToggleExpand, isSelected, onContextMenu, onReorderPointerDown } =
     props;
+  // D-098 — a layer bound to data (a field binding in the active composition targets it) gets a
+  // small key icon AFTER its name (kept visible even when the name ellipsizes). Stable boolean →
+  // no per-frame re-render.
+  const bound = useDesignerSelector(
+    (st) =>
+      st.scene !== null &&
+      activeFieldData(st.scene).bindings.some((b) => {
+        const t = b.target;
+        return t.kind !== 'scene-background' && t.elementId === element.id;
+      }),
+  );
   return (
     <div
       className={cx(
@@ -139,7 +153,14 @@ function ElementRowLabel(props: Props): JSX.Element {
           color={element.timelineColor ?? lifespanColorFor(element)}
         />
       </span>
-      <span className={cx(s.name, isSelected && s.nameSelected)}>{element.name}</span>
+      <span className={s.name}>
+        <span className={cx(s.nameText, isSelected && s.nameSelected)}>{element.name}</span>
+        {bound && (
+          <span className={s.boundKey} title="Bound to data" aria-label="bound to data">
+            <Icon icon={Key} size={11} style={{ display: 'block' }} />
+          </span>
+        )}
+      </span>
       <Control
         variant="bare"
         className={cx('cg-tl-toggle', s.toggleButton, element.visible && s.toggleButtonActive)}
@@ -184,7 +205,8 @@ function layerTypeIcon(element: Element): LucideIcon {
     case 'text':
       return Type;
     case 'image':
-      return Image;
+      // D-097 — a shared-library logo reads distinctly from a project-asset image.
+      return element.source === 'shared' ? Stamp : Image;
     case 'ticker':
       return MoveHorizontal;
     case 'clock':
@@ -450,5 +472,7 @@ const FALLBACK_COLOR = '#38BDF8';
 
 export function lifespanColorFor(element: Element): string {
   if (element.type === 'shape') return SHAPE_COLORS[element.shape] ?? FALLBACK_COLOR;
+  // D-097 — a shared/logo image gets a distinct teal vs the asset image's pink.
+  if (element.type === 'image' && element.source === 'shared') return '#14B8A6';
   return TYPE_COLORS[element.type] ?? FALLBACK_COLOR;
 }
