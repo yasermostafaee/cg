@@ -55,11 +55,18 @@ describe('D-071 Phase B — pasteboard authoring document', () => {
     const { frame } = pasteboardLayout(SCENE.resolution);
     const { html } = preview.load(SCENE, false, true, frame);
     expect(html).toContain(CLIP_LIFT); // the clip is lifted so off-frame paints
-    expect(html).toContain('width: 1920px !important'); // the frame keeps its size
+    // B-028 — the frame SIZE is a CSS VARIABLE too (like the offset), so a scene-size change
+    // resizes the frame page live on the no-reload scene-replace path; the baked resolution
+    // (1920×1080) is the first-paint fallback.
+    expect(html).toContain('width: var(--cg-frame-w, 1920px) !important');
+    expect(html).toContain('height: var(--cg-frame-h, 1080px) !important');
     // The frame inset is a CSS VARIABLE (so a content-grown offset updates live without a
     // reload); the baked margin (960×540) is the fallback so the FIRST paint is correct.
     expect(html).toContain('left: var(--cg-frame-x, 960px) !important');
     expect(html).toContain('top: var(--cg-frame-y, 540px) !important');
+    // B-028 — the boot script primes the size vars from the scene resolution (so the var is
+    // set even before the first scene-replace), mirroring the offset.
+    expect(html).toContain('applyFrameSize({ width: 1920, height: 1080 })');
     // Two-tone by region: the surround (html/body) is #161927; the frame-sized page
     // backdrop (.cg-stage background-color) is #3d4253 BEHIND the #5b6075 broadcast
     // checker + shapes — the authoring surface now matches the preview modal (D-039ext
