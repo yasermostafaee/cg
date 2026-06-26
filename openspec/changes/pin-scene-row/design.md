@@ -46,7 +46,10 @@ rows are unchanged.
 
 ## Risks / trade-offs
 
-- Making `sceneLane` a stacking context (sticky + z-index) means the body playhead / inactive-tail
-  overlays no longer paint over the top ~22px scene row; the active-range bar (the scene row's main
-  content) and the ruler's playhead remain visible, so this is acceptable.
+- Making `sceneLane` a sticky stacking context (z-index 3) traps its children's z-indexes, so the
+  body playhead is lifted ABOVE it (z-index 6) to keep the index line visible ON the scene row;
+  it is `pointer-events: none`, so drawing over the scene row's resize handle / out-point marker
+  doesn't block their clicks.
+- The inactive-tail dim (z-index 2) sits below the opaque scene lane, so the trailing region is not
+  dimmed within the 22px scene row — a negligible cosmetic trade-off.
 - `willChange: transform` is set on both scene rows to keep the per-scroll transform cheap.
