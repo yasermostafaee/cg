@@ -44,6 +44,14 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
   const [pendingSwitch, setPendingSwitch] = useState<(() => Promise<void>) | null>(null);
   const fileBtnRef = useRef<HTMLButtonElement | null>(null);
 
+  // D-100 — once a top menu is open (by click), hovering another top-menu button switches to it
+  // (standard menubar behavior). When none is open, hover only highlights — a click still opens
+  // the first menu.
+  const onNavHover = (key: 'file' | 'edit' | 'view' | 'help'): void => {
+    setHoverNav(key);
+    setOpenMenu((m) => (m === null ? null : key));
+  };
+
   // Close the dropdown on outside click / Escape.
   useEffect(() => {
     if (openMenu === null) return;
@@ -204,7 +212,7 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
             variant="bare"
             className={navClass('file')}
             onClick={() => setOpenMenu((m) => (m === 'file' ? null : 'file'))}
-            onMouseEnter={() => setHoverNav('file')}
+            onMouseEnter={() => onNavHover('file')}
             onMouseLeave={() => setHoverNav(null)}
             aria-haspopup="menu"
             aria-expanded={openMenu === 'file'}
@@ -240,7 +248,7 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
             variant="bare"
             className={navClass('edit')}
             onClick={() => setOpenMenu((m) => (m === 'edit' ? null : 'edit'))}
-            onMouseEnter={() => setHoverNav('edit')}
+            onMouseEnter={() => onNavHover('edit')}
             onMouseLeave={() => setHoverNav(null)}
             aria-haspopup="menu"
             aria-expanded={openMenu === 'edit'}
@@ -267,7 +275,7 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
             variant="bare"
             className={navClass('view')}
             onClick={() => setOpenMenu((m) => (m === 'view' ? null : 'view'))}
-            onMouseEnter={() => setHoverNav('view')}
+            onMouseEnter={() => onNavHover('view')}
             onMouseLeave={() => setHoverNav(null)}
             aria-haspopup="menu"
             aria-expanded={openMenu === 'view'}
@@ -300,7 +308,7 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
             variant="bare"
             className={navClass('help')}
             onClick={() => setOpenMenu((m) => (m === 'help' ? null : 'help'))}
-            onMouseEnter={() => setHoverNav('help')}
+            onMouseEnter={() => onNavHover('help')}
             onMouseLeave={() => setHoverNav(null)}
             aria-haspopup="menu"
             aria-expanded={openMenu === 'help'}
