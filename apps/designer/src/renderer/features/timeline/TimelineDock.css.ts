@@ -137,7 +137,11 @@ export const bodyPlayhead = style({
   width: 0,
   borderLeft: `1.5px solid ${colors.accent}`,
   pointerEvents: 'none',
-  zIndex: 3,
+  // D-078 — above the pinned scene lane (a sticky z-index:3 stacking context) so the
+  // playhead/index line stays visible ON the scene row, not hidden under it. It is
+  // pointer-events:none, so drawing over the scene lane's resize handle / out-point
+  // marker doesn't block their clicks.
+  zIndex: 6,
 });
 
 // Top-of-body "Scene" row — a single bar covering the active scene range.
