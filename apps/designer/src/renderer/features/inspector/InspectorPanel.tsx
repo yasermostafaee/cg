@@ -6,7 +6,7 @@ import {
   type Scene,
 } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { Button } from '../../ui/Button.js';
+import { Control } from '../../ui/Control.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { BackgroundControl } from '../canvas/BackgroundControl.js';
 import { describeBinding, elementNameResolver } from '../fields/bind-resolver.js';
@@ -187,15 +187,15 @@ function ElementBindings({
           <span style={{ color: colors.text, fontSize: '0.8rem' }}>
             <strong>{b.fieldId}</strong> → {describeBinding(b, nameOf)}
           </span>
-          <Button
-            variant="bare"
-            className={s.bindRemove}
+          <Control
+            variant="danger"
+            size="sm"
             title="Unbind (keeps the field)"
             aria-label="Unbind"
             onClick={() => designerStore.removeBindingAt(idx)}
           >
             ×
-          </Button>
+          </Control>
         </div>
       ))}
     </div>
