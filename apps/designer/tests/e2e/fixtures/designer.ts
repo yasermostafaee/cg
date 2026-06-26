@@ -436,9 +436,10 @@ export class DesignerApp {
     return this.page.getByRole('menu', { name: 'Layer actions' });
   }
 
-  /** A layer-menu item by its visible label (Copy / Cut / Paste / Duplicate / Delete / Fit workspace / Color). */
+  /** A layer-menu item by its visible label (Copy / Cut / Paste / Duplicate / Delete / Fit workspace / Color).
+   *  Non-exact: items may carry a trailing shortcut hint, e.g. "Copy (Ctrl+C)". */
   layerMenuItem(name: string): Locator {
-    return this.layerMenu.getByRole('menuitem', { name, exact: true });
+    return this.layerMenu.getByRole('menuitem', { name });
   }
 
   /** Right-click the first SELECTED layer row to open the layer menu (keeps the whole selection). */
