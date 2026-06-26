@@ -3,6 +3,7 @@ import { Check } from 'lucide-react';
 import type { Scene } from '@cg/shared-schema';
 import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
 import { cx } from '../../cx.js';
+import { comboKey } from '../../keyboard.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { NewProjectModal } from './NewProjectModal.js';
@@ -140,6 +141,35 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
     guardedSwitch(fn);
   }
 
+  // File keyboard shortcuts: Ctrl/Cmd+O open, Ctrl/Cmd+S save, Ctrl/Cmd+Shift+S save-as. Matched
+  // by physical code (comboKey — CLAUDE.md convention). A ref keeps the handler current without
+  // re-subscribing each render. These are global file ops, so they fire even with a field focused
+  // (the browser's own Ctrl+S is already neutralized in App.tsx).
+  const fileShortcutsRef = useRef({
+    scene,
+    save,
+    saveAs,
+    openProject,
+    runFileAction,
+    runFileSwitch,
+  });
+  fileShortcutsRef.current = { scene, save, saveAs, openProject, runFileAction, runFileSwitch };
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if (e.altKey) return;
+      const a = fileShortcutsRef.current;
+      if (comboKey(e, 'KeyO') && !e.shiftKey) {
+        e.preventDefault();
+        a.runFileSwitch(a.openProject);
+      } else if (comboKey(e, 'KeyS')) {
+        e.preventDefault();
+        if (a.scene !== null) a.runFileAction(e.shiftKey ? a.saveAs : a.save);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // Top-level menu button style — tinted when its dropdown is open or
   // the pointer is over it.
   function navClass(key: string): string {
@@ -222,15 +252,21 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
           {openMenu === 'file' && (
             <div className={s.dropdown} role="menu">
               <FileMenuItem label="New" onClick={() => runFileSwitch(newProject)} />
-              <FileMenuItem label="Open…" onClick={() => runFileSwitch(openProject)} />
+              <FileMenuItem
+                label="Open"
+                shortcut={isMac() ? '⌘O' : 'Ctrl+O'}
+                onClick={() => runFileSwitch(openProject)}
+              />
               <div className={s.dropdownDivider} aria-hidden />
               <FileMenuItem
                 label="Save"
+                shortcut={isMac() ? '⌘S' : 'Ctrl+S'}
                 disabled={scene === null}
                 onClick={() => runFileAction(save)}
               />
               <FileMenuItem
-                label="Save As…"
+                label="Save As"
+                shortcut={isMac() ? '⇧⌘S' : 'Ctrl+Shift+S'}
                 disabled={scene === null}
                 onClick={() => runFileAction(saveAs)}
               />
