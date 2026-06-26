@@ -41,17 +41,25 @@ export function TickerSeparatorControl({ element }: { element: TickerElement }):
     setMode(hasImage ? 'image' : 'text');
   }, [hasImage]);
 
-  const options = [
+  const baseOptions = [
     '',
     ...project.map((a) => `project:${a.assetId}`),
     ...shared.map((a) => `shared:${a.assetId}`),
   ];
-  const labels = [
+  const baseLabels = [
     '— choose an image —',
     ...project.map((a) => `${stripExt(a.filename)} (project)`),
     ...shared.map((a) => `${stripExt(a.filename)} (shared)`),
   ];
   const currentValue = imageSep === null ? '' : `${imageSep.source}:${imageSep.assetId}`;
+  // A stored image whose asset is gone from both lists (deleted, or an externally-authored
+  // scene) is surfaced as an extra leading option so the Select shows it (not a blank,
+  // which would mismatch the committed value) and stays editable — mirrors the time-zone picker.
+  const missing = currentValue !== '' && !baseOptions.includes(currentValue);
+  const options = missing ? [currentValue, ...baseOptions] : baseOptions;
+  const labels = missing
+    ? [imageSep === null ? currentValue : `${imageSep.assetId} (missing)`, ...baseLabels]
+    : baseLabels;
   const noAssets = project.length === 0 && shared.length === 0;
 
   const pickImage = (encoded: string): void => {

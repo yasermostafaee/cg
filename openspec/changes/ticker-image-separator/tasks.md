@@ -49,3 +49,25 @@
 - [x] 6.1 Combined green gate (batched with D-084): `@cg/shared-schema` + `@cg/template-runtime` +
       `@cg/designer` `format:check` + `typecheck` + `lint` + `test` + `build` (turbo `--force`) —
       green (20/20 tasks; 223 + 393 + 547 unit tests; ticker + clock E2E pass).
+
+## 7. Review + UX follow-ups
+
+- [x] 7.1 `Exporter.ts` (.vcg) preflight — flag a ticker image separator that references an unknown
+      asset (error, exactly like an image element); test added (the single-file exporter already
+      warned, so this closes the asymmetry).
+- [x] 7.2 `PreviewModal.tsx` — post the MERGED project + shared asset URLs so a shared image
+      separator (and shared logos) resolve in the preview, not just on the canvas; E2E extended.
+- [x] 7.3 `TickerSeparatorControl.tsx` — surface a stored-but-missing separator asset as an extra
+      Select option (no blank / mismatched select), mirroring the time-zone picker.
+- [x] 7.4 `ticker-driver.ts` — BOTH a text AND an image separator follow the ticker's
+      `verticalAlign` (top/middle/bottom): the static row (`populateTickerStaticRow`) drops the
+      pinned `alignSelf: center` and the live crawl positions the separator `<img>`
+      (`makeImageSepNode`) per verticalAlign, so the canvas matches the crawl/preview at every
+      alignment (previously the separator stayed centred at top/bottom). Tests added.
+- [x] 7.5 `preview.ts` — the authoring frame checker now reuses the broadcast checker
+      (`#5b6075` on `#3d4253`) so the canvas surface matches the preview (the prior near-white
+      checker read too bright).
+- [x] 7.6 `preview.ts` — a MutationObserver re-runs the asset-URL walk (rAF-coalesced) when nodes
+      are added, so driver-fed images (a ticker image separator, repeater rows) resolve their
+      `src` during the live crawl in the preview (the srcDoc `createRuntime` boots with an empty
+      map and the one-time walk can't reach nodes fed later).

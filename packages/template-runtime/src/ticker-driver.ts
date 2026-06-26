@@ -647,17 +647,24 @@ export class TickerDriver {
   }
 
   /**
-   * An image-separator <img>: absolutely positioned (its `left` set by
-   * `position()` like an item) and vertically centred in the band via
-   * `top: 50%` + `translateY(-50%)`. `object-fit: contain` fits the logo within
-   * the authored `size` box.
+   * An image-separator <img>: absolutely positioned (its `left` set by `position()` like an
+   * item). Its VERTICAL placement follows the ticker's `verticalAlign` (top / middle /
+   * bottom) — like the item nodes — so the logo aligns with the crawl text, not a hardcoded
+   * centre. `object-fit: contain` fits the logo within the authored `size` box.
    */
   private makeImageSepNode(): HTMLImageElement {
     const doc = this.o.track.ownerDocument;
     const img = doc.createElement('img');
     img.style.position = 'absolute';
-    img.style.top = '50%';
-    img.style.transform = 'translateY(-50%)';
+    const v = this.o.verticalAlign ?? 'middle';
+    if (v === 'top') {
+      img.style.top = '0';
+    } else if (v === 'bottom') {
+      img.style.bottom = '0';
+    } else {
+      img.style.top = '50%';
+      img.style.transform = 'translateY(-50%)';
+    }
     return img;
   }
 
@@ -714,23 +721,23 @@ export function populateTickerStaticRow(
     span.style.unicodeBidi = 'isolate';
     span.style.flexShrink = '0';
     if (isSep) {
-      // Centre high-riding separator glyphs ('*', '•') in the band regardless
-      // of baseline: shrink the line box to the glyph and let the row's flex
-      // centring place it.
+      // Shrink the separator's line box to the glyph (high-riding '*'/'•') so the row's
+      // flex alignment places it cleanly. D-045 follow-up — DON'T pin `alignSelf: center`:
+      // let the text separator follow the row's verticalAlign like the items do (and like
+      // the live driver's separator nodes), so the static canvas matches the crawl/preview.
       span.style.lineHeight = '1';
-      span.style.alignSelf = 'center';
     }
     if (!first) gapMargin(span);
     span.textContent = text;
     row.appendChild(span);
   };
-  // D-039ext — an IMAGE separator: a flex <img> child, vertically centred, at the
-  // authored size. It carries `data-cg-asset-id`/`-source` so the host `assetUrls`
-  // walk wires `src` (exactly like an image element), so no `url` is needed here.
+  // D-039ext — an IMAGE separator: a flex <img> child at the authored size. It carries
+  // `data-cg-asset-id`/`-source` so the host `assetUrls` walk wires `src` (exactly like an
+  // image element), so no `url` is needed here. NO pinned alignSelf — it follows the row's
+  // verticalAlign (like the items + the live driver's separator) so the canvas matches.
   const addImageSep = (sep: TickerSeparatorImage): void => {
     const img = doc.createElement('img');
     img.style.flexShrink = '0';
-    img.style.alignSelf = 'center';
     gapMargin(img);
     applyImageSeparator(img, sep);
     row.appendChild(img);

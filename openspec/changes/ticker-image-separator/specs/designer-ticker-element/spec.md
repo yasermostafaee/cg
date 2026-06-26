@@ -9,9 +9,10 @@ The ticker's `separator` SHALL accept an image/logo as well as a text glyph: the
 (still optional). This SHALL be a backward-compatible widening — every existing string separator
 stays valid — so it needs NO schema-version bump and NO migration. The runtime SHALL render an image
 separator as its own `<img>` node placed BETWEEN items only (never trailing the final item — the
-D-081 rule holds for images too), vertically centred in the band, at the authored `size` (an
-explicit `w`×`h` box, so the treadmill has a deterministic separator width with no asynchronous
-image measurement; `object-fit: contain` fits the logo within the box). The image `src` SHALL
+D-081 rule holds for images too), vertically aligned to the ticker's `verticalAlign` (centred by
+default) like the crawl items, at the authored `size` (an explicit `w`×`h` box, so the treadmill
+has a deterministic separator width with no asynchronous image measurement; `object-fit: contain`
+fits the logo within the box). The image `src` SHALL
 resolve through the same two-source (`project` vs the shared library) asset seam as image elements:
 the node SHALL carry `data-cg-asset-id` / `data-cg-asset-source` for the host `assetUrls` walk
 (static authoring row + export), and the driver SHALL also set `src` from the resolved URL on the
@@ -29,9 +30,10 @@ project's assets OR the shared library, with an adjustable size.
 #### Scenario: Image separator renders between items, never trailing
 
 - **WHEN** a ticker with an image separator crawls
-- **THEN** the logo renders as an `<img>` between consecutive items — vertically centred at the
-  authored size — and never after the last item (the drain seam / a finite run's end), exactly as
-  the text separator does (D-081)
+- **THEN** the logo renders as an `<img>` between consecutive items — vertically aligned with the
+  items per the ticker's `verticalAlign` (centred by default), at the authored size — and never
+  after the last item (the drain seam / a finite run's end), exactly as the text separator does
+  (D-081)
 
 #### Scenario: A string separator is unchanged (backward compatible)
 

@@ -98,6 +98,22 @@ test.describe('Ticker / crawler (D-028)', () => {
     // The authoring canvas renders the logo as an <img> BETWEEN the 3 default items
     // (exactly 2 gaps) — never leading, never trailing (D-081).
     await expect(app.canvasFrame.locator('img[data-cg-ticker-sep]')).toHaveCount(2);
+
+    // The separator image ALSO resolves in the PREVIEW modal — its src is wired from the
+    // merged project+shared asset map (a shared image was previously absent from the
+    // preview's asset URLs, so the logo showed as a broken/placeholder image there).
+    // D-087 — the preview stage is blank until Play, so the crawl must run to feed it.
+    await app.openPreviewModal();
+    await app.play();
+    const previewSep = app.previewFrame.locator('img[data-cg-ticker-sep]').first();
+    await expect(previewSep).toBeAttached();
+    await expect
+      .poll(async () => {
+        const src = (await previewSep.getAttribute('src')) ?? '';
+        return src !== '' && !src.includes('missing');
+      })
+      .toBe(true);
+    await app.stop();
   });
 
   test('the exported single-file HTML carries the ticker and the GDD list field', async ({

@@ -18,6 +18,9 @@
       wall formatter in `clockInitialText` and `currentText`. `countup`/`countdown` untouched.
 - [x] 2.4 `runtime.ts` + `scene-builder.ts` — pass `element.timezone` into the driver and the static
       initial render.
+- [x] 2.5 `clock-format.ts` — an invalid/unknown IANA zone degrades to LOCAL time (try/catch around
+      the Intl call), never throwing during scene-build or the paint loop. Unit test added (review
+      follow-up: the schema does not validate IANA names, so a hand-edited scene must not crash).
 
 ## 3. Inspector
 

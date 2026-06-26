@@ -60,11 +60,12 @@ describe('D-071 Phase B — pasteboard authoring document', () => {
     // reload); the baked margin (960×540) is the fallback so the FIRST paint is correct.
     expect(html).toContain('left: var(--cg-frame-x, 960px) !important');
     expect(html).toContain('top: var(--cg-frame-y, 540px) !important');
-    // Two-tone by region: the surround (html/body) is the lighter #161927; the
-    // frame-sized page backdrop (.cg-stage background-color) is a light gray
-    // #a7a7a7, BEHIND the near-white checkerboard + shapes.
+    // Two-tone by region: the surround (html/body) is #161927; the frame-sized page
+    // backdrop (.cg-stage background-color) is #3d4253 BEHIND the #5b6075 broadcast
+    // checker + shapes — the authoring surface now matches the preview modal (D-039ext
+    // follow-up; the prior near-white #a7a7a7/#f5f5f5 checker read too bright).
     expect(html).toContain('html, body { background: #161927 !important; }');
-    expect(html).toContain('background-color: #a7a7a7');
+    expect(html).toContain('background-color: #3d4253');
     // device-width lets the iframe's element size drive the layout, no stretch.
     expect(html).toContain('width=device-width');
   });

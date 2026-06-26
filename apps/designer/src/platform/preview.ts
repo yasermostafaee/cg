@@ -127,21 +127,16 @@ export class Preview {
       `linear-gradient(45deg, transparent 75%, #5b6075 75%),` +
       `linear-gradient(-45deg, transparent 75%, #5b6075 75%)`;
     const checkerPos = `0 0, 0 24px, 24px -24px, -24px 0`;
-    // The authoring canvas uses its OWN LIGHT two-tone checker (near-white #f5f5f5
-    // squares on a light-gray #a7a7a7 page) so black text reads easily on the editing
-    // surface; the broadcast modal keeps the darker `checkerImage` above.
-    const authoringCheckerImage =
-      `linear-gradient(45deg, #f5f5f5 25%, transparent 25%),` +
-      `linear-gradient(-45deg, #f5f5f5 25%, transparent 25%),` +
-      `linear-gradient(45deg, transparent 75%, #f5f5f5 75%),` +
-      `linear-gradient(-45deg, transparent 75%, #f5f5f5 75%)`;
+    // The authoring frame page reuses the SAME checker as the broadcast modal (darker
+    // #5b6075 squares on a #3d4253 page) so the editing surface matches the preview
+    // exactly — the prior near-white authoring checker read too bright (operator request).
     const surfaceCss = pasteboard
       ? `/* D-071 Phase B — authoring pasteboard, TWO-TONE by region:
            - the SURROUND (html/body, the scrollable area beyond the frame) is the
              dark #161927 — matches CanvasArea's \`s.outer\`;
-           - the FRAME-SIZED PAGE backdrop is a light gray #a7a7a7 (\`.cg-stage\`'s
-             background-color) with a near-white checker, inset by the frame offset +
-             outlined, so black text reads easily on the editing surface.
+           - the FRAME-SIZED PAGE backdrop is #3d4253 (\`.cg-stage\`'s background-color)
+             with the #5b6075 broadcast checker, inset by the frame offset + outlined, so
+             the editing surface matches the preview modal exactly.
            CSS paints background-color (#a7a7a7 page) → background-image (the
            checkerboard) → children (shapes), so the page is a BACKDROP behind every
            shape — on-frame shapes over the page paint on top and stay visible;
@@ -157,8 +152,8 @@ export class Preview {
         width: ${String(w)}px !important;
         height: ${String(h)}px !important;
         overflow: visible !important;
-        background-color: #a7a7a7;
-        background-image: ${authoringCheckerImage};
+        background-color: #3d4253;
+        background-image: ${checkerImage};
         background-size: 48px 48px;
         background-position: ${checkerPos};
         box-shadow: 0 0 0 1px rgba(120,170,255,0.5), 0 10px 36px rgba(0,0,0,0.55);
@@ -301,6 +296,22 @@ export class Preview {
             }
           });
         }
+
+        // D-039ext — image nodes created DURING playback (a ticker image separator the
+        // crawl feeds, repeater rows) are added AFTER the one-time walk, and the host only
+        // re-posts asset-urls on its own events — so a freshly-fed <img data-cg-asset-id>
+        // would stay unresolved. Re-run applyAssetUrls when nodes are added (rAF-coalesced,
+        // so a busy crawl can't thrash); the assetUrls map already merges project + shared.
+        let assetWalkScheduled = false;
+        const assetObserver = new MutationObserver(() => {
+          if (assetWalkScheduled) return;
+          assetWalkScheduled = true;
+          requestAnimationFrame(() => {
+            assetWalkScheduled = false;
+            applyAssetUrls();
+          });
+        });
+        assetObserver.observe(document.body, { childList: true, subtree: true });
 
         // Fetch the parent's blob URL, hand the bytes to a FontFace
         // built inside the iframe document, then add it to that

@@ -68,6 +68,14 @@ describe('formatWallClock — time zone (D-084)', () => {
     expect(formatWallClock(local, 'HH:mm:ss', 'latin', '')).toBe(noArg);
     expect(noArg).toBe('13:05:09');
   });
+
+  it('falls back to LOCAL time for an invalid IANA zone instead of throwing', () => {
+    // A hand-edited / external scene can carry a bad zone (the schema does not validate
+    // it); Intl.DateTimeFormat would throw RangeError — the formatter must degrade, not crash.
+    const local = at(13, 5, 9);
+    expect(() => formatWallClock(local, 'HH:mm:ss', 'latin', 'Not/AZone')).not.toThrow();
+    expect(formatWallClock(local, 'HH:mm:ss', 'latin', 'Not/AZone')).toBe('13:05:09');
+  });
 });
 
 describe('formatCountClock (D-027)', () => {

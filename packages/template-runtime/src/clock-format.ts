@@ -71,23 +71,32 @@ function wallComponents(
   date: Date,
   timezone: string | undefined,
 ): { h24: number; minutes: number; seconds: number } {
-  if (timezone === undefined || timezone === '') {
-    return { h24: date.getHours(), minutes: date.getMinutes(), seconds: date.getSeconds() };
+  const local = (): { h24: number; minutes: number; seconds: number } => ({
+    h24: date.getHours(),
+    minutes: date.getMinutes(),
+    seconds: date.getSeconds(),
+  });
+  if (timezone === undefined || timezone === '') return local();
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }).formatToParts(date);
+    const part = (type: string): number => {
+      const found = parts.find((p) => p.type === type)?.value ?? '0';
+      return Number.parseInt(found, 10) || 0;
+    };
+    // `hour12: false` can emit '24' for midnight in some engines — normalise to 0.
+    return { h24: part('hour') % 24, minutes: part('minute'), seconds: part('second') };
+  } catch {
+    // An invalid IANA name (a hand-edited / externally-produced scene — the schema does
+    // not validate the zone) makes `Intl.DateTimeFormat` throw a RangeError. Degrade to
+    // local time rather than crash scene-build or the per-frame paint loop.
+    return local();
   }
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    hour12: false,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).formatToParts(date);
-  const part = (type: string): number => {
-    const found = parts.find((p) => p.type === type)?.value ?? '0';
-    return Number.parseInt(found, 10) || 0;
-  };
-  // `hour12: false` can emit '24' for midnight in some engines — normalise to 0.
-  const h24 = part('hour') % 24;
-  return { h24, minutes: part('minute'), seconds: part('second') };
 }
 
 /**

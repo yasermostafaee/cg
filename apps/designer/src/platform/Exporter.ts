@@ -89,6 +89,21 @@ export class Exporter {
           elementId: el.id,
         });
       }
+      // D-039ext — a ticker IMAGE separator needs the same missing-asset check as an
+      // image element (collectImageElements already inlines it), else it silently drops.
+      if (
+        el.type === 'ticker' &&
+        typeof el.separator === 'object' &&
+        el.separator !== null &&
+        !knownAssetIds.has(el.separator.assetId)
+      ) {
+        issues.push({
+          severity: 'error',
+          code: 'missing-asset',
+          message: `Ticker separator references unknown asset ${el.separator.assetId}.`,
+          elementId: el.id,
+        });
+      }
     }
 
     for (const font of scene.fonts) {

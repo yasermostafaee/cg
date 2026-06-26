@@ -192,6 +192,20 @@ describe('TickerDriver — image separator (D-039ext)', () => {
     // …and every separator node is still an <img>.
     for (const n of fedSeps(h.track)) expect(n.tagName).toBe('IMG');
   });
+
+  it('the image separator follows the ticker verticalAlign (not a hardcoded centre)', () => {
+    const top = make({ separator: imageSep, verticalAlign: 'top' });
+    top.driver.start();
+    expect(fedSeps(top.track)[0]?.style.top).toBe('0px');
+
+    const bottom = make({ separator: imageSep, verticalAlign: 'bottom' });
+    bottom.driver.start();
+    expect(fedSeps(bottom.track)[0]?.style.bottom).toBe('0px');
+
+    const middle = make({ separator: imageSep }); // default 'middle'
+    middle.driver.start();
+    expect(fedSeps(middle.track)[0]?.style.top).toBe('50%');
+  });
 });
 
 describe('populateTickerStaticRow — image separator (D-039ext)', () => {
@@ -218,6 +232,17 @@ describe('populateTickerStaticRow — image separator (D-039ext)', () => {
     expect(img.style.height).toBe('24px');
     // No url given → the host assetUrls walk wires src later (no src yet).
     expect(img.getAttribute('src')).toBeNull();
+    // No pinned alignSelf → it follows the row's verticalAlign (like the items).
+    expect(img.style.alignSelf).toBe('');
+  });
+
+  it('a TEXT separator does NOT pin alignSelf, so it follows the row verticalAlign (D-045 parity)', () => {
+    const row = document.createElement('div');
+    populateTickerStaticRow(row, [itemA, itemB], { direction: 'rtl', gap: 10, separator: ' • ' });
+    const sep = [...row.children].find((n) => n.textContent === ' • ') as HTMLElement | undefined;
+    expect(sep).toBeDefined();
+    expect(sep?.style.alignSelf).toBe(''); // not pinned to centre → inherits the row's verticalAlign
+    expect(sep?.style.lineHeight).toBe('1'); // glyph line box still tight
   });
 });
 

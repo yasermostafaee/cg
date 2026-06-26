@@ -24,6 +24,15 @@ wall-only); wall uses the machine's local time (`HH` 24-hour, `hh` 12-hour) —
 or, when `timezone` is set, the current time in that IANA zone. The optional
 `timezone` SHALL be additive and backward-compatible: a clock authored without
 it parses and renders exactly as before (no schema-version bump, no migration).
+An invalid or unknown `timezone` (a hand-edited or externally-produced scene —
+the schema does not validate IANA names) SHALL degrade to local time, never
+throw: scene-build and the per-frame paint must not crash on a bad zone.
+
+#### Scenario: An unknown time zone degrades to local time
+
+- **WHEN** a clock carries a `timezone` that is not a valid IANA name
+- **THEN** the wall clock renders the machine's local time instead, and neither
+  the authoring canvas build nor the live paint loop throws
 
 #### Scenario: Clock tool inserts a live clock
 
