@@ -171,6 +171,52 @@ describe('TickerDriver — completion (the inner repeat loop, D-028)', () => {
     expect(texts.filter((t) => t === '•')).toHaveLength(1);
   });
 
+  // D-081 — a SEAMLESS loop keeps a separator at the cycle seam (between the last item of one
+  // cycle and the first of the next); the stream alternates item/separator with none leading.
+  it('seamless loop puts exactly one separator at the cycle seam (D-081)', () => {
+    const h = make({ repeat: 2, separator: '•' });
+    h.driver.start();
+    const texts = fedTexts(h.track);
+    expect(texts.filter((t) => t !== '•').length).toBeGreaterThanOrEqual(3); // into cycle 2
+    expect(texts[0]).not.toBe('•'); // no leading separator
+    for (let i = 0; i < texts.length - 1; i += 1) {
+      const bothItems = texts[i] !== '•' && texts[i + 1] !== '•';
+      const bothSeps = texts[i] === '•' && texts[i + 1] === '•';
+      expect(bothItems || bothSeps).toBe(false); // strictly alternating ⇒ a seam separator exists
+    }
+  });
+
+  // D-081 — a DRAIN seam empties the band, so NO separator sits at the cycle boundary (two items
+  // end up adjacent across the seam).
+  it('drain loop puts NO separator at the cycle seam (D-081)', () => {
+    const h = make({ repeat: 2, cycleBoundary: 'drain', separator: '•' });
+    h.driver.start();
+    const texts = fedTexts(h.track);
+    expect(texts.filter((t) => t !== '•').length).toBeGreaterThanOrEqual(3); // into cycle 2
+    for (let i = 0; i < texts.length - 1; i += 1) {
+      expect(texts[i] === '•' && texts[i + 1] === '•').toBe(false); // never two separators
+    }
+    const itemItemAdjacency = texts.some(
+      (t, i) => i < texts.length - 1 && t !== '•' && texts[i + 1] !== '•',
+    );
+    expect(itemItemAdjacency).toBe(true); // the drain boundary has no separator
+  });
+
+  // D-081 — a live bound-list update (setItems mid-run) must not orphan a separator: the
+  // reconcile split trims dangling separators so the re-fed item supplies the single one.
+  it('setItems mid-run never produces two adjacent separators (D-081)', () => {
+    const h = make({ separator: '•' });
+    h.driver.start();
+    for (let step = 0; step < 10; step += 1) {
+      h.clock.advance(50);
+      h.driver.setItems([itemA, itemB]);
+      const texts = fedTexts(h.track);
+      for (let i = 0; i < texts.length - 1; i += 1) {
+        expect(texts[i] === '•' && texts[i + 1] === '•').toBe(false);
+      }
+    }
+  });
+
   it("'infinite' never completes (the scope holds until stop())", async () => {
     const h = make({ repeat: 'infinite' });
     const done = completionFlag(h.driver);

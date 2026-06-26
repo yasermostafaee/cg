@@ -308,11 +308,15 @@ export class TickerDriver {
       return;
     }
     const d = this.distance();
-    // Split the fed stream at the entering edge: keep everything that has
-    // started entering (o < d); a separator glued to a kept item stays too.
+    // Split the fed stream at the entering edge: keep everything that has started entering
+    // (o < d) and re-feed the rest from the new list. D-081 — separators now PRECEDE their item,
+    // so a separator at (or at the end of) the kept range is dangling (the item it leads is being
+    // dropped/re-fed); trim trailing separators off the kept range so the re-fed item supplies the
+    // single between-items separator instead of doubling it.
     let k = this.fed.findIndex((f) => f.o >= d);
-    if (k >= 0 && this.fed[k]?.isSep === true) k += 1;
-    if (k >= 0 && k < this.fed.length) {
+    if (k < 0) k = this.fed.length;
+    while (k > 0 && this.fed[k - 1]?.isSep === true) k -= 1;
+    if (k < this.fed.length) {
       const dropped = this.fed.splice(k);
       for (const f of dropped) this.release(f.node);
       const firstDropped = dropped[0];
