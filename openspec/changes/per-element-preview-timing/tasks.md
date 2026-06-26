@@ -27,6 +27,11 @@
       the existing per-scope shallow merge carries it; `scopeOverrides` is sent as today).
 - [x] 3.3 `preview.ts` — no change (forwards `scopeOverrides` verbatim; the `tickers` map rides
       along). Confirmed.
+- [x] 3.4 Duplicate ticker names (no element-rename UI yet — two fresh tickers both read "Ticker")
+      are suffixed "(1)" / "(2)" in the rows so the operator can tell them apart; unique names are
+      untouched (`disambiguateNames`, unit-tested). The override stays keyed by element id.
+- [x] 3.5 `PreviewModal.css.ts` / `.tsx` — the fixed timing bar is capped and its timing region
+      scrolls, so a scope with many ticker rows can't push controls out of the modal.
 
 ## 4. Tests + E2E
 

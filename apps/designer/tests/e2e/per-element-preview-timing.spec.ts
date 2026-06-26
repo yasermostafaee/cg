@@ -24,10 +24,9 @@ test.describe('Per-element ticker timing overrides (D-102 Phase 1)', () => {
 
     await app.openPreviewModal();
 
-    // The preview timing panel shows ONE cycle-seam row per ticker (not one shared per-scope slot).
-    const seam = app.previewDialog.getByRole('combobox', {
-      name: 'Preview Ticker ticker cycle boundary',
-    });
+    // The preview timing panel shows ONE cycle-seam row per ticker (not one shared per-scope slot);
+    // the two same-named tickers are disambiguated ("Ticker (1)" / "Ticker (2)").
+    const seam = app.previewDialog.getByRole('combobox', { name: /ticker cycle boundary/ });
     await expect(seam).toHaveCount(2);
     await seam.first().selectOption('drain'); // ticker A → drain
     await seam.nth(1).selectOption('seamless'); // ticker B → seamless (explicit)

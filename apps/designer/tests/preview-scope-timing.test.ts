@@ -4,7 +4,10 @@ import {
   effectiveMode,
   TIMING_RELEVANT_MODES,
 } from '../src/renderer/features/fields/PreviewTimingControls.js';
-import { timingScopeList } from '../src/renderer/features/fields/PreviewScopeTiming.js';
+import {
+  disambiguateNames,
+  timingScopeList,
+} from '../src/renderer/features/fields/PreviewScopeTiming.js';
 
 const baseTransform = {
   position: { x: 0, y: 0 },
@@ -202,5 +205,16 @@ describe('D-102 Phase 1 — per-element ticker enumeration', () => {
   it('a scope with no ticker has an empty ticker list', () => {
     const root = timingScopeList(parentScene()).find((n) => n.path === '')!;
     expect(root.tickers).toEqual([]);
+  });
+
+  it('disambiguates DUPLICATE ticker names (no rename UI yet) but leaves unique names', () => {
+    // Two fresh tickers both default to "Ticker" — make the rows distinguishable.
+    expect(disambiguateNames(['Ticker', 'Ticker'])).toEqual(['Ticker (1)', 'Ticker (2)']);
+    expect(disambiguateNames(['Ticker', 'News', 'Ticker'])).toEqual([
+      'Ticker (1)',
+      'News',
+      'Ticker (2)',
+    ]);
+    expect(disambiguateNames(['Crawl A', 'Crawl B'])).toEqual(['Crawl A', 'Crawl B']);
   });
 });

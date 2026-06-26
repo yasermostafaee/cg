@@ -39,6 +39,24 @@ export interface TickerInfo {
 
 const MAX_DEPTH = 8;
 
+/**
+ * D-102 Phase 1 — suffix DUPLICATE ticker names so each per-ticker row is distinguishable. There
+ * is no element-rename UI yet, so two fresh tickers both read "Ticker"; without this the operator
+ * couldn't tell the two timing rows apart (the whole point of per-ticker control). Unique names
+ * are left untouched.
+ */
+export function disambiguateNames(names: readonly string[]): string[] {
+  const counts = new Map<string, number>();
+  for (const n of names) counts.set(n, (counts.get(n) ?? 0) + 1);
+  const seen = new Map<string, number>();
+  return names.map((n) => {
+    if ((counts.get(n) ?? 0) <= 1) return n;
+    const k = (seen.get(n) ?? 0) + 1;
+    seen.set(n, k);
+    return `${n} (${k})`;
+  });
+}
+
 /** D-102 Phase 1 — every ticker element of a doc (recursing containers), in document order. */
 function tickersOf(doc: { layers: Scene['layers'] }): TickerInfo[] {
   const out: TickerInfo[] = [];
@@ -138,6 +156,8 @@ export function PreviewScopeTiming({
     <>
       {visible.map((node, i) => {
         const scopeOverride = overrides[node.path] ?? {};
+        // Display labels only — the override is always keyed by the ticker's element id below.
+        const tickerLabels = disambiguateNames(node.tickers.map((tk) => tk.name));
         // D-102 Phase 1 — deep-merge a per-ticker patch into the scope override's `tickers` map so
         // editing ticker B never clobbers ticker A; the modal's per-scope shallow merge carries it.
         const setTickerOverride = (tickerId: string, patch: TickerTimingOverride): void => {
@@ -159,10 +179,10 @@ export function PreviewScopeTiming({
               override={scopeOverride}
               onChange={(patch) => onChange(node.path, patch)}
             >
-              {node.tickers.map((tk) => (
+              {node.tickers.map((tk, ti) => (
                 <PreviewTickerTimingRow
                   key={tk.id}
-                  name={tk.name}
+                  name={tickerLabels[ti] ?? tk.name}
                   defaults={{ repeat: tk.repeat, cycleBoundary: tk.cycleBoundary }}
                   override={scopeOverride.tickers?.[tk.id] ?? {}}
                   onChange={(patch) => setTickerOverride(tk.id, patch)}
