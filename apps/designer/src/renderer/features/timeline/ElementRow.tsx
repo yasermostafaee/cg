@@ -153,6 +153,7 @@ function ElementRowLabel(props: Props): JSX.Element {
         />
       </span>
       <span className={cx(s.name, isSelected && s.nameSelected)}>
+        {element.name}
         {bound && (
           <span title="Bound to data" aria-label="bound to data">
             <Icon
@@ -161,13 +162,12 @@ function ElementRowLabel(props: Props): JSX.Element {
               style={{
                 display: 'inline-block',
                 verticalAlign: 'middle',
-                marginInlineEnd: '0.25rem',
+                marginInlineStart: '0.3rem',
                 opacity: 0.7,
               }}
             />
           </span>
         )}
-        {element.name}
       </span>
       <Control
         variant="bare"
