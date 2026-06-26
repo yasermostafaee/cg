@@ -50,7 +50,7 @@ export function defaultText(id: string, x: number, y: number): TextElement {
       lineHeight: 1.15,
       letterSpacing: 0,
     },
-    color: '#000000',
+    color: '#FFFFFF',
     align: 'start',
     direction: 'auto',
     fitMode: 'fixed',
