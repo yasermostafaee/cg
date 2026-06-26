@@ -330,13 +330,15 @@ export function PreviewModal({
               onNext={onNext}
               onReset={onReset}
             />
-            <PreviewScopeTiming
-              scene={scene}
-              overrides={overrides}
-              onChange={(path, patch) =>
-                setOverrides((prev) => ({ ...prev, [path]: { ...prev[path], ...patch } }))
-              }
-            />
+            <div className={s.timingScroll}>
+              <PreviewScopeTiming
+                scene={scene}
+                overrides={overrides}
+                onChange={(path, patch) =>
+                  setOverrides((prev) => ({ ...prev, [path]: { ...prev[path], ...patch } }))
+                }
+              />
+            </div>
           </div>
         </div>
       </div>

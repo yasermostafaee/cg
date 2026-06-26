@@ -74,4 +74,5 @@ export type {
   BuildSceneResult,
   RuntimeClock,
   PlayoutOverride,
+  TickerTimingOverride,
 } from './types.js';

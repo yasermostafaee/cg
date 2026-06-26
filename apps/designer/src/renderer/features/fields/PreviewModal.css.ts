@@ -52,13 +52,25 @@ export const fieldsScroll = style({
   paddingRight: '0.2rem',
 });
 
-// Fixed, always-visible bar: the playout transport + the session timing overrides.
+// Fixed, always-visible bar: the playout transport (pinned) + the session timing overrides.
+// D-102 Phase 1 — per-element ticker rows can make the timing section tall (one row per ticker),
+// so the bar is capped and its timing region scrolls; the transport stays reachable above it.
 export const fixedBar = style({
   flexShrink: 0,
+  minHeight: 0,
+  maxHeight: '65%',
   marginTop: '0.5rem',
   paddingTop: '0.55rem',
   borderTop: `1px solid ${colors.border}`,
   display: 'flex',
   flexDirection: 'column',
   gap: '0.55rem',
+});
+
+// D-102 Phase 1 — the timing overrides scroll within the capped fixed bar (the transport above
+// stays pinned), so a scope with many tickers can't push controls out of the modal.
+export const timingScroll = style({
+  flex: 1,
+  minHeight: 0,
+  overflowY: 'auto',
 });
