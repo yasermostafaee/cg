@@ -42,3 +42,15 @@
 - [x] PRD D-083 → `[~]` with the revised text|composition design.
 - [x] Combined green gate (turbo --force) across `@cg/shared-schema` + `@cg/template-runtime` + `@cg/designer`; lint 0 errors; format clean; E2E 6/6.
 - [x] `pnpm openspec validate sequence-typed-items --strict`.
+
+## 8. Correction — surface composition-item fields + narrow the item-list guard
+
+The original guard conflated (A) the item-LIST `sequence-items` binding (text-only, correctly
+disabled) with (B) per-ELEMENT field binding/editing (must never be blocked), and a composition
+sequence item didn't expose its fields, so the operator couldn't edit e.g. the city label next to a
+clock.
+
+- [x] Schema: `sequenceCompositionItemsOf` + shared `sequenceItemNamespace`/`sequenceItemInstanceId`; `aggregateCompositionFields` emits a `CompositionFieldGroup` per composition item (namespace `<seq name>[<index>]`); `compositionInstancesOf` stays composition-only. Aggregation tests added.
+- [x] Runtime: each composition item applies its namespaced field values to its dynamic scope after `wireScopeSubtree` (build-time + re-applied on `update()` via a new `applyFields` hook + `applyFieldsToCurrent`). Runtime test added (default applied, then live update).
+- [x] Guard: reword the message to scope it to the item list only ("the item list can't be data-bound … you can still edit each item's text and bind fields inside composition items"); confirm per-element binding/static-text editing remain available (structurally already independent).
+- [x] E2E: a composition item's text field is exposed in the operator form + setting it updates the preview; the item-list guard message is scoped + a text item stays typeable.

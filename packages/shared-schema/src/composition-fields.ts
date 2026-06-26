@@ -25,8 +25,15 @@ export interface FieldDoc {
 export interface CompositionFieldGroup {
   /** The `composition` element id (unique within the parent). */
   instanceId: string;
-  /** Namespace key = the instance's (user-editable, parent-unique) name. */
+  /**
+   * Namespace KEY in the nested value object — parent-unique + STABLE. For a `composition`
+   * instance it's the instance's name; for a D-083 sequence composition item it's an
+   * id-based key (`<seq id>:<item id>`) so two same-named sequences never collide and a
+   * rename never orphans values. UI/GDD display the {@link label} (falling back to this).
+   */
   name: string;
+  /** Friendly display label (defaults to {@link name} when absent). */
+  label?: string;
   /** The referenced child composition id. */
   compositionId: string;
   /** The child's own aggregate (recursive — arbitrary depth). */
@@ -57,6 +64,58 @@ export function compositionInstancesOf(
     }
   }
   return out;
+}
+
+/** One sequence COMPOSITION item (D-083): the host sequence, its index, and the item. */
+export interface SequenceCompositionItemRef {
+  sequence: Extract<Element, { type: 'sequence' }>;
+  index: number;
+  itemId: string;
+  compositionId: string;
+}
+
+/**
+ * D-083 — the COMPOSITION items inside `sequence` elements directly placed in a doc's
+ * layers. Each is a static reference to a child composition (like a `composition`
+ * instance), so it contributes a field namespace — distinct from the bindable text
+ * items. (Text items carry their own text + the optional `sequence-items` list binding,
+ * NOT a field namespace.)
+ */
+export function sequenceCompositionItemsOf(
+  doc: Pick<FieldDoc, 'layers'>,
+): SequenceCompositionItemRef[] {
+  const out: SequenceCompositionItemRef[] = [];
+  for (const layer of doc.layers) {
+    for (const el of layer.children) {
+      if (el.type !== 'sequence') continue;
+      el.items.forEach((item, index) => {
+        if (item.kind === 'composition') {
+          out.push({ sequence: el, index, itemId: item.id, compositionId: item.compositionId });
+        }
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * D-083 — the friendly DISPLAY label for a composition sequence item's field group: the
+ * sequence element's name plus the item's position, e.g. `Now/Next[1]`. This is shown in
+ * the designer form + GDD; the stable value KEY is {@link sequenceItemInstanceId} (so two
+ * same-named sequences can't collide and a rename never orphans values).
+ */
+export function sequenceItemNamespace(sequenceName: string, index: number): string {
+  return `${sequenceName}[${String(index)}]`;
+}
+
+/**
+ * D-083 — the stable, parent-unique KEY for a composition sequence item's field group +
+ * value namespace: `<sequence id>:<item id>`. The ONE place this string is formed, shared
+ * by the field aggregation (designer form / GDD) and the runtime value application, so the
+ * two can't drift; id-based so it survives renames + same-named sequences.
+ */
+export function sequenceItemInstanceId(sequenceId: string, itemId: string): string {
+  return `${sequenceId}:${itemId}`;
 }
 
 /**
@@ -146,6 +205,22 @@ export function aggregateCompositionFields(
       groups.push({
         instanceId: inst.id,
         name: inst.name,
+        compositionId: child.id,
+        aggregate: aggregateCompositionFields(scene, child, depth + 1),
+      });
+    }
+    // D-083 — a composition SEQUENCE ITEM contributes a field namespace too (so the
+    // operator can edit e.g. the city label next to a clock inside the item). Reuses
+    // the D-025 instance-namespacing; the namespace is `<sequence name>[<index>]`.
+    for (const ref of sequenceCompositionItemsOf(doc)) {
+      const child = scene.compositions?.find((c) => c.id === ref.compositionId);
+      if (child === undefined) continue;
+      groups.push({
+        instanceId: sequenceItemInstanceId(ref.sequence.id, ref.itemId),
+        // KEY: id-based so two same-named sequences don't collide + a rename can't orphan.
+        name: sequenceItemInstanceId(ref.sequence.id, ref.itemId),
+        // DISPLAY: the friendly `<sequence name>[<index>]`.
+        label: sequenceItemNamespace(ref.sequence.name, ref.index),
         compositionId: child.id,
         aggregate: aggregateCompositionFields(scene, child, depth + 1),
       });

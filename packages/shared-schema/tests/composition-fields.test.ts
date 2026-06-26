@@ -48,6 +48,46 @@ function instance(id: string, compositionId: string, name: string): Element {
   };
 }
 
+/** D-083 — a sequence element with the given items (text and/or composition). */
+function sequenceEl(id: string, name: string, items: unknown[]): Element {
+  return {
+    id,
+    name,
+    type: 'sequence',
+    transform: {
+      position: { x: 0, y: 0 },
+      size: { w: 100, h: 50 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      anchor: { x: 0, y: 0 },
+    },
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+    font: {
+      family: 'X',
+      weight: 400,
+      style: 'normal',
+      size: 16,
+      lineHeight: 1.2,
+      letterSpacing: 0,
+    },
+    color: '#FFFFFF',
+    align: 'start',
+    verticalAlign: 'middle',
+    direction: 'ltr',
+    items,
+    defaultDwellMs: 5000,
+    advance: 'auto',
+    transitionIn: 'bottom',
+    transitionOut: 'top',
+    transitionTiming: 'simultaneous',
+    transitionMs: 400,
+    repeat: 'infinite',
+  } as unknown as Element;
+}
+
 function comp(over: Partial<Composition> & { id: string }): Composition {
   return {
     name: over.id,
@@ -103,6 +143,74 @@ describe('aggregateCompositionFields (D-025)', () => {
     const scene = { compositions: [leaf, mid, root] } as Pick<Scene, 'compositions'>;
     const data = defaultNestedValues(aggregateCompositionFields(scene, root));
     expect(data).toEqual({ outer: { inner: { v: '' } } });
+  });
+
+  it('(D-083) a sequence COMPOSITION item exposes its comp fields under a per-item namespace', () => {
+    const card = comp({ id: 'card', fields: [textField('label', 'City')] });
+    const seq = sequenceEl('seq', 'Now/Next', [
+      { id: 't1', text: 'Headline' }, // a TEXT item contributes NO namespace
+      { id: 'c1', kind: 'composition', compositionId: 'card' },
+    ]);
+    const parent = comp({ id: 'parent', layers: [layer([seq])] });
+    const scene = { compositions: [card, parent] } as Pick<Scene, 'compositions'>;
+    const agg = aggregateCompositionFields(scene, parent);
+    // Exactly one group — for the composition item at index 1. The value KEY is the stable
+    // id-based name; the friendly `<seq name>[<index>]` is the display LABEL.
+    expect(agg.groups).toHaveLength(1);
+    expect(agg.groups[0]?.name).toBe('seq:c1');
+    expect(agg.groups[0]?.instanceId).toBe('seq:c1');
+    expect(agg.groups[0]?.label).toBe('Now/Next[1]');
+    expect(agg.groups[0]?.aggregate.fields.map((f) => f.id)).toEqual(['label']);
+    // The nested default value object is keyed by the stable id-based namespace.
+    expect(defaultNestedValues(agg)).toEqual({ 'seq:c1': { label: 'City' } });
+  });
+
+  it('(D-083) text-only sequence items contribute NO field namespace', () => {
+    const seq = sequenceEl('seq', 'Rundown', [
+      { id: 'a', text: 'one' },
+      { id: 'b', text: 'two' },
+    ]);
+    const parent = comp({ id: 'parent', layers: [layer([seq])] });
+    const scene = { compositions: [parent] } as Pick<Scene, 'compositions'>;
+    expect(aggregateCompositionFields(scene, parent).groups).toEqual([]);
+  });
+
+  it('(D-083) TWO same-named sequences get DISTINCT stable keys (no collision/collapse)', () => {
+    const card = comp({ id: 'card', fields: [textField('label')] });
+    const s1 = sequenceEl('s1', 'Sequence', [
+      { id: 'a', kind: 'composition', compositionId: 'card' },
+    ]);
+    const s2 = sequenceEl('s2', 'Sequence', [
+      { id: 'b', kind: 'composition', compositionId: 'card' },
+    ]);
+    const parent = comp({ id: 'parent', layers: [layer([s1, s2])] });
+    const scene = { compositions: [card, parent] } as Pick<Scene, 'compositions'>;
+    const agg = aggregateCompositionFields(scene, parent);
+    // Distinct id-based KEYS even though both sequences share the default name 'Sequence'…
+    expect(agg.groups.map((g) => g.name)).toEqual(['s1:a', 's2:b']);
+    // …with the same friendly DISPLAY label (the operator disambiguates by element).
+    expect(agg.groups.map((g) => g.label)).toEqual(['Sequence[0]', 'Sequence[0]']);
+    // No collapse: both namespaces survive in the value object.
+    expect(Object.keys(defaultNestedValues(agg))).toEqual(['s1:a', 's2:b']);
+  });
+
+  it('(D-083) a sequence comp item inside a composition instance nests under the instance namespace', () => {
+    const card = comp({ id: 'card', fields: [textField('label')] });
+    const mid = comp({
+      id: 'mid',
+      layers: [
+        layer([
+          sequenceEl('sq', 'Seq', [{ id: 'c1', kind: 'composition', compositionId: 'card' }]),
+        ]),
+      ],
+    });
+    const root = comp({ id: 'root', layers: [layer([instance('i1', 'mid', 'home')])] });
+    const scene = { compositions: [card, mid, root] } as Pick<Scene, 'compositions'>;
+    // The comp item's values nest under the parent instance namespace ('home'), keyed by
+    // the stable id-based item key — the runtime reads the same parent-scoped path.
+    expect(defaultNestedValues(aggregateCompositionFields(scene, root))).toEqual({
+      home: { 'sq:c1': { label: '' } },
+    });
   });
 });
 

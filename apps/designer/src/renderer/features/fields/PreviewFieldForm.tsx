@@ -140,7 +140,7 @@ function AggregateSection({
           values={namespaceAt(values, g.name)}
           path={[...path, g.name]}
           onChange={onChange}
-          title={g.name}
+          title={g.label ?? g.name}
           depth={depth + 1}
           dwellFieldIds={dwellFieldIds}
           columnsByFieldId={columnsByFieldId}

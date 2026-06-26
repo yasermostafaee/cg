@@ -93,13 +93,18 @@ target and the inspector disables the Data key with a hint, since a bound
 - **THEN** the shared items editor exposes an optional per-item dwell, and
   unknown item fields are preserved (the existing editor invariant)
 
-#### Scenario: A composition item disables text binding
+#### Scenario: A composition item disables the ITEM-LIST binding only
 
 - **WHEN** a sequence holds at least one composition item
-- **THEN** its Data key is disabled with a hint and no `sequence-items`
-  binding remains — none is created, and a prior text binding (with its seeded
-  list field) is DROPPED when a composition item is added (binding is text-only
-  in Phase 1); removing the composition items re-enables binding
+- **THEN** ONLY the item-LIST (rundown) `sequence-items` binding is disabled —
+  the sequence's own Data key is disabled with a hint scoped to the item list
+  ("the item list can't be data-bound … you can still edit each item's text and
+  bind fields inside composition items"), none is created, and a prior text
+  binding (with its seeded list field) is DROPPED when a composition item is
+  added (the item-list binding is text-only in Phase 1); removing the
+  composition items re-enables it. Per-ELEMENT field binding/editing (a text
+  element's Data key, "Bind from canvas", and a text item's static text) is
+  NEVER blocked by this guard.
 
 ## ADDED Requirements
 
@@ -151,3 +156,33 @@ the item.
 - **THEN** that composition's template and assets are packaged and the
   bundled runtime renders the item (reusing composition asset resolution and
   the clock driver)
+
+### Requirement: Composition sequence items expose their fields to the operator (namespaced per item)
+
+A composition sequence item SHALL contribute its referenced composition's
+fields to the operator's data form, NAMESPACED per item, reusing the D-025
+instance-namespacing (no new data model). The namespace is DISPLAYED as
+`<sequence name>[<index>]` but KEYED by a stable, parent-unique id-based value
+(so two same-named sequences never collide and a rename never orphans values),
+and the value lives under the item's own scope path (a sequence nested in a
+composition instance reads its correctly-scoped sub-object). This is independent
+of the item-LIST binding: a text item next to a clock inside a composition item
+is editable even though the rundown itself is not data-bindable. Setting such a
+field SHALL update that item's content via the existing composition-field
+mechanism — applied to the item's content when it renders and re-applied live on
+`update()`. A TEXT sequence item contributes NO field namespace (it carries its
+own text + the optional item-list binding).
+
+#### Scenario: A composition item's fields appear in the data form, namespaced per item
+
+- **WHEN** a sequence has a composition item whose composition has fields
+- **THEN** the operator's field form shows those fields under a per-item
+  namespace displayed as `<sequence name>[<index>]` (keyed stably so same-named
+  sequences don't collide); a text-only item contributes none
+
+#### Scenario: Setting a composition-item field updates its content
+
+- **WHEN** the operator sets a composition item's field in the data form
+- **THEN** that item's content updates accordingly (e.g. the city label next to
+  a clock), via the existing composition-field mechanism — at render and live on
+  `update()`

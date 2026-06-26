@@ -458,7 +458,63 @@ describe('createRuntime — D-083 composition sequence items (text | composition
     } as unknown as Composition;
   }
 
-  function compScene(seq: Partial<SequenceElement>): Scene {
+  /** A one-text composition whose text is bound to a field 'label' (default 'DefaultCity'). */
+  function labelComp(): Composition {
+    return {
+      id: 'comp-label',
+      name: 'Label card',
+      resolution: { width: 400, height: 60 },
+      frameRange: { in: 0, out: 50 },
+      background: 'transparent',
+      layers: [
+        {
+          id: 'cl',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [
+            {
+              id: 'lbl',
+              name: 'label',
+              type: 'text',
+              text: 'authored',
+              transform: {
+                position: { x: 0, y: 0 },
+                size: { w: 400, h: 60 },
+                scale: { x: 1, y: 1 },
+                rotation: 0,
+                anchor: { x: 0, y: 0 },
+              },
+              opacity: 1,
+              visible: true,
+              locked: false,
+              zIndex: 0,
+              font: {
+                family: 'Vazirmatn',
+                weight: 400,
+                style: 'normal',
+                size: 24,
+                lineHeight: 1.2,
+                letterSpacing: 0,
+              },
+              color: '#FFFFFF',
+              align: 'start',
+              direction: 'ltr',
+              fitMode: 'autosize',
+              overflow: 'ellipsis',
+            },
+          ],
+        },
+      ],
+      fields: [
+        { id: 'label', label: 'Label', required: false, type: 'text', default: 'DefaultCity' },
+      ],
+      bindings: [{ fieldId: 'label', target: { kind: 'text', elementId: 'lbl' } }],
+    } as unknown as Composition;
+  }
+
+  function compScene(seq: Partial<SequenceElement>, comps: Composition[] = [clockComp()]): Scene {
     return {
       schemaVersion: 1,
       id: 'scene-seq-comp',
@@ -483,7 +539,7 @@ describe('createRuntime — D-083 composition sequence items (text | composition
       fields: [],
       bindings: [],
       fonts: [],
-      compositions: [clockComp()],
+      compositions: comps,
       metadata: { createdAt: '2026-06-11T00:00:00.000Z', updatedAt: '2026-06-11T00:00:00.000Z' },
     } as unknown as Scene;
   }
@@ -495,6 +551,35 @@ describe('createRuntime — D-083 composition sequence items (text | composition
         ?.textContent ?? null
     );
   }
+
+  /** The full text inside the sequence host (the on-screen composition item's content). */
+  function hostText(): string {
+    return document.querySelector<HTMLElement>('[data-cg-element-id="seq"]')?.textContent ?? '';
+  }
+
+  it('applies a composition item field value (namespaced per item) to the inner content', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      compScene(
+        {
+          advance: 'manual',
+          repeat: 'infinite',
+          items: [{ kind: 'composition', id: 'c1', compositionId: 'comp-label' }],
+        },
+        [labelComp()],
+      ),
+      { skipFontLoad: true, clock },
+    );
+    await runtime.play({});
+    // Item 1 (composition) shows the comp's FIELD DEFAULT (its binding applied), not the
+    // authored text — the comp's own field mechanism runs inside the sequence item.
+    expect(hostText()).toContain('DefaultCity');
+    expect(hostText()).not.toContain('authored');
+    // The operator sets the per-item field → the inner text updates live. The value KEY is
+    // the stable id-based namespace `<sequence id>:<item id>` (here the seq is 'seq', item 'c1').
+    await runtime.update({ 'seq:c1': { label: 'Tehran' } });
+    expect(hostText()).toContain('Tehran');
+  });
 
   it('renders the referenced composition content with a LIVE ticking clock', async () => {
     const clock = makeClock();

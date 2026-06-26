@@ -79,7 +79,7 @@ function NamespaceGroup({ group }: { group: CompositionFieldGroup }): JSX.Elemen
   const { fields, groups } = group.aggregate;
   return (
     <div className={s.nsGroup}>
-      <div className={s.nsTitle}>{group.name}</div>
+      <div className={s.nsTitle}>{group.label ?? group.name}</div>
       {fields.map((f) => (
         <div key={f.id} className={s.nsItem}>
           {f.label || f.id} <span className={s.nsType}>{f.type}</span>

@@ -165,9 +165,10 @@ test.describe('Sequence — typed items: text | composition (D-083)', () => {
       .getByRole('combobox', { name: 'Sequence item 1 type', exact: true })
       .selectOption('composition');
 
-    // The Data key is disabled and a text-only hint explains why.
+    // The item-LIST Data key is disabled, and the hint is scoped to the rundown (D-083
+    // correction) — it clarifies per-item text + composition-item fields stay editable.
     await app.expandDynamicData();
     await expect(app.dataKeyInput).toBeDisabled();
-    await expect(app.inspector.getByText(/binding is disabled/i)).toBeVisible();
+    await expect(app.inspector.getByText(/item list can.t be data-bound/i)).toBeVisible();
   });
 });
