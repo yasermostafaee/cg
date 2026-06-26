@@ -258,12 +258,14 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
           {openMenu === 'edit' && (
             <div className={s.dropdown} role="menu">
               <FileMenuItem
-                label={isMac() ? 'Undo  ⌘Z' : 'Undo  Ctrl+Z'}
+                label="Undo"
+                shortcut={isMac() ? '⌘Z' : 'Ctrl+Z'}
                 disabled={!canUndo}
                 onClick={() => runFileAction(() => designerStore.undo())}
               />
               <FileMenuItem
-                label={isMac() ? 'Redo  ⇧⌘Z' : 'Redo  Ctrl+Shift+Z'}
+                label="Redo"
+                shortcut={isMac() ? '⇧⌘Z' : 'Ctrl+Shift+Z'}
                 disabled={!canRedo}
                 onClick={() => runFileAction(() => designerStore.redo())}
               />
@@ -370,10 +372,13 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
 
 function FileMenuItem({
   label,
+  shortcut,
   onClick,
   disabled = false,
 }: {
   label: string;
+  /** Optional keyboard-shortcut hint, shown in parentheses (smaller, muted gray). */
+  shortcut?: string;
   onClick: () => void;
   disabled?: boolean;
 }): JSX.Element {
@@ -393,6 +398,7 @@ function FileMenuItem({
       onClick={onClick}
     >
       {label}
+      {shortcut !== undefined && <span className={s.menuShortcut}>({shortcut})</span>}
     </Button>
   );
 }

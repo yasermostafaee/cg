@@ -125,6 +125,13 @@ export const dropdownItemDisabled = style({
   cursor: 'default',
 });
 
+// Keyboard-shortcut hint after a menu item's label — in parentheses, smaller, muted gray.
+export const menuShortcut = style({
+  fontSize: '0.85em',
+  color: '#9CA3AF',
+  marginInlineStart: '0.5rem',
+});
+
 export const dropdownDivider = style({
   height: '1px',
   background: colors.border,
