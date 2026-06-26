@@ -9,9 +9,10 @@ import { test, expect } from './fixtures/designer.js';
  * content-driven hold → data key → live preview items (with dwell).
  */
 
-const ITEM_1 = 'اکنون: برنامهٔ نخست';
-const ITEM_2 = 'سپس: برنامهٔ دوم';
-const ITEM_3 = 'بعد: برنامهٔ سوم';
+// D-082 — the default sequence items are English (see element-defaults.ts defaultSequence).
+const ITEM_1 = 'Now: first item';
+const ITEM_2 = 'Then: second item';
+const ITEM_3 = 'Next: third item';
 
 test.describe('Sequence / now-next element (D-029)', () => {
   test('author → item 1 on canvas → auto-advance in the preview → Next advances immediately', async ({
@@ -107,9 +108,9 @@ test.describe('Sequence / now-next element (D-029)', () => {
 
     // Editing the CURRENT item corrects it in place on the stage (never yanked).
     // D-087 — the stage is blank until Play; play reveals item 1 carrying the edit.
-    await firstItem.fill('اکنون: خبر ویژه');
+    await firstItem.fill('Now: breaking news');
     await app.play();
-    await expect(app.previewFrame.getByText('اکنون: خبر ویژه')).toBeVisible();
+    await expect(app.previewFrame.getByText('Now: breaking news')).toBeVisible();
     await app.stop();
   });
 });
