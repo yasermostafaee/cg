@@ -581,6 +581,51 @@ describe('createRuntime — D-083 composition sequence items (text | composition
     expect(hostText()).toContain('Tehran');
   });
 
+  it('applies a per-item TEXT field to a non-bound text item (operator-editable)', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      compScene(
+        { advance: 'manual', repeat: 'infinite', items: [{ id: 'a', text: 'authored' }] },
+        [],
+      ),
+      { skipFontLoad: true, clock },
+    );
+    await runtime.play({});
+    expect(visibleItems()).toEqual(['authored']); // no field value yet → the authored text
+    // The operator's per-item TEXT field (keyed by the stable id-based namespace) overrides it.
+    await runtime.update({ 'seq:a': 'Operator text' });
+    expect(visibleItems()).toEqual(['Operator text']);
+  });
+
+  it('a LIST-BOUND sequence ignores per-item text keys (the bound list owns the items)', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      sequenceScene({
+        playout: { mode: 'manual' },
+        sequence: { advance: 'manual', repeat: 'infinite' },
+        fields: [
+          {
+            id: 'rundown',
+            label: 'Rundown',
+            required: false,
+            type: 'list',
+            default: [
+              { id: 'a', text: 'bound A' },
+              { id: 'b', text: 'bound B' },
+            ],
+          },
+        ],
+        bindings: [{ fieldId: 'rundown', target: { kind: 'sequence-items', elementId: 'seq' } }],
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await runtime.play({});
+    expect(visibleItems()).toEqual(['bound A']);
+    // A stale per-item key must NOT override the bound list (no double-drive).
+    await runtime.update({ 'seq:a': 'STALE' });
+    expect(visibleItems()).toEqual(['bound A']);
+  });
+
   it('renders the referenced composition content with a LIVE ticking clock', async () => {
     const clock = makeClock();
     const runtime = createRuntime(

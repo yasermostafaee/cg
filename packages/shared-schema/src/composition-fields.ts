@@ -98,6 +98,28 @@ export function sequenceCompositionItemsOf(
   return out;
 }
 
+/** The `sequence` elements directly placed in a doc's layers. */
+export function sequencesOf(
+  doc: Pick<FieldDoc, 'layers'>,
+): Extract<Element, { type: 'sequence' }>[] {
+  const out: Extract<Element, { type: 'sequence' }>[] = [];
+  for (const layer of doc.layers) {
+    for (const el of layer.children) {
+      if (el.type === 'sequence') out.push(el);
+    }
+  }
+  return out;
+}
+
+/** The element ids of sequences whose ITEM-LIST is data-bound (a `sequence-items` binding). */
+export function listBoundSequenceIds(doc: Pick<FieldDoc, 'bindings'>): Set<string> {
+  const out = new Set<string>();
+  for (const b of doc.bindings ?? []) {
+    if (b.target.kind === 'sequence-items' && 'elementId' in b.target) out.add(b.target.elementId);
+  }
+  return out;
+}
+
 /**
  * D-083 — the friendly DISPLAY label for a composition sequence item's field group: the
  * sequence element's name plus the item's position, e.g. `Now/Next[1]`. This is shown in
@@ -198,6 +220,8 @@ export function aggregateCompositionFields(
   depth = 0,
 ): AggregatedFields {
   const groups: CompositionFieldGroup[] = [];
+  // The doc's own authored fields, plus the synthetic per-item TEXT fields below.
+  const fields: DynamicField[] = [...(doc.fields ?? [])];
   if (depth < MAX_DEPTH) {
     for (const inst of compositionInstancesOf(doc)) {
       const child = scene.compositions?.find((c) => c.id === inst.compositionId);
@@ -209,24 +233,36 @@ export function aggregateCompositionFields(
         aggregate: aggregateCompositionFields(scene, child, depth + 1),
       });
     }
-    // D-083 — a composition SEQUENCE ITEM contributes a field namespace too (so the
-    // operator can edit e.g. the city label next to a clock inside the item). Reuses
-    // the D-025 instance-namespacing; the namespace is `<sequence name>[<index>]`.
-    for (const ref of sequenceCompositionItemsOf(doc)) {
-      const child = scene.compositions?.find((c) => c.id === ref.compositionId);
-      if (child === undefined) continue;
-      groups.push({
-        instanceId: sequenceItemInstanceId(ref.sequence.id, ref.itemId),
-        // KEY: id-based so two same-named sequences don't collide + a rename can't orphan.
-        name: sequenceItemInstanceId(ref.sequence.id, ref.itemId),
-        // DISPLAY: the friendly `<sequence name>[<index>]`.
-        label: sequenceItemNamespace(ref.sequence.name, ref.index),
-        compositionId: child.id,
-        aggregate: aggregateCompositionFields(scene, child, depth + 1),
+    // D-083 — per-item operator fields for a sequence whose ITEM-LIST is NOT data-bound
+    // (a bound list owns the items; a composition item makes the list non-bindable, and an
+    // all-text sequence the designer hasn't list-bound is editable per item too). Each
+    // item contributes, namespaced per item (`<sequence name>[<index>]` display, id-based
+    // KEY so same-named sequences don't collide): a COMPOSITION item → its composition's
+    // fields (a group); a TEXT item → a single flat text field (its text). A LIST-BOUND
+    // sequence exposes NOTHING here (the list editor owns its items) — no double-exposure.
+    const bound = listBoundSequenceIds(doc);
+    for (const seq of sequencesOf(doc)) {
+      if (bound.has(seq.id)) continue;
+      seq.items.forEach((item, index) => {
+        const key = sequenceItemInstanceId(seq.id, item.id);
+        const label = sequenceItemNamespace(seq.name, index);
+        if (item.kind === 'composition') {
+          const child = scene.compositions?.find((c) => c.id === item.compositionId);
+          if (child === undefined) return;
+          groups.push({
+            instanceId: key,
+            name: key,
+            label,
+            compositionId: child.id,
+            aggregate: aggregateCompositionFields(scene, child, depth + 1),
+          });
+        } else {
+          fields.push({ id: key, type: 'text', label, required: false, default: item.text });
+        }
       });
     }
   }
-  return { fields: doc.fields ?? [], groups };
+  return { fields, groups };
 }
 
 /** The seed value for a single field (mirrors the preview's `seedDefaults`). */

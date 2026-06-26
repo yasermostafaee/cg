@@ -54,3 +54,13 @@ clock.
 - [x] Runtime: each composition item applies its namespaced field values to its dynamic scope after `wireScopeSubtree` (build-time + re-applied on `update()` via a new `applyFields` hook + `applyFieldsToCurrent`). Runtime test added (default applied, then live update).
 - [x] Guard: reword the message to scope it to the item list only ("the item list can't be data-bound … you can still edit each item's text and bind fields inside composition items"); confirm per-element binding/static-text editing remain available (structurally already independent).
 - [x] E2E: a composition item's text field is exposed in the operator form + setting it updates the preview; the item-list guard message is scoped + a text item stays typeable.
+
+## 9. Correction — per-item editing symmetry (TEXT items too)
+
+Composition items exposed fields, but plain TEXT items exposed nothing, so a mixed sequence wasn't
+fully operator-editable without wrapping text in a composition. Make TEXT items operator-editable
+per-item, parallel to composition items, when the item-list is NOT bound.
+
+- [x] Schema: `aggregateCompositionFields` (for a NON-list-bound sequence) exposes EVERY item — a TEXT item as a flat per-item text field (seeded with its text), a COMPOSITION item as a group; a LIST-BOUND sequence exposes nothing (no double-exposure). New helpers `sequencesOf` + `listBoundSequenceIds`. Tests: mixed (flat field + group), text-only (flat fields), bound (none).
+- [x] Runtime: a TEXT item's text comes from its per-item field (`textValueFor`, gated to non-bound sequences) read at the item's own scope path; re-applied live on `update()` via the existing `applyFields`. `item.text` is read LIVE so a bound reconcile (setItems) still wins. Tests: non-bound text item shows + updates; a bound sequence ignores stale per-item keys.
+- [x] E2E: a non-bound MIXED sequence (text item + clock+text composition item) exposes BOTH fields; editing each updates the right slide in the preview.

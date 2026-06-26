@@ -1,5 +1,6 @@
 import {
   activeRangeOf,
+  listBoundSequenceIds,
   playoutOf,
   sequenceItemInstanceId,
   type Element,
@@ -37,6 +38,25 @@ function mergeNestedValues(base: NestedFieldValues, patch: NestedFieldValues): N
     }
   }
   return out;
+}
+
+/**
+ * D-083 — navigate a nested value object to the sub-object at a dotted scope path
+ * (`''` = root). Used to read a sequence item's per-item values at the sequence's OWN
+ * scope (so a sequence nested in a composition instance reads its scoped sub-object,
+ * not a root-level one).
+ */
+function resolveScopeValues(values: NestedFieldValues, path: string): NestedFieldValues {
+  if (path === '') return values;
+  let cur: NestedFieldValues = values;
+  for (const seg of path.split('.')) {
+    const next = cur[seg];
+    cur =
+      next !== null && typeof next === 'object' && !Array.isArray(next)
+        ? (next as NestedFieldValues)
+        : {};
+  }
+  return cur;
 }
 import { ensureBaselineCss } from './css.js';
 import { EventBus } from './event-bus.js';
@@ -157,6 +177,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // Nested so namespaced child-instance values (e.g. { home: { teamName } }) route
   // by namespace; a flat scene just uses top-level keys.
   let currentValues: NestedFieldValues = {};
+
+  // D-083 — sequences whose ITEM-LIST is data-bound (across the scene + every comp): the
+  // bound list owns their items, so the per-item operator TEXT override is suppressed for
+  // them (no double-drive) — matching the field aggregation, which exposes per-item fields
+  // only for NON-bound sequences.
+  const listBoundSeqIds = new Set<string>([
+    ...listBoundSequenceIds(scene),
+    ...(scene.compositions ?? []).flatMap((c) => [...listBoundSequenceIds(c)]),
+  ]);
 
   const ready: Promise<void> = options.skipFontLoad ? Promise.resolve() : waitForFonts(doc);
   void ready.then(() => bus.emit('ready'));
@@ -333,17 +362,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           const namespace = sequenceItemInstanceId(s.element.id, item.id);
           const applyFields = (values: Record<string, unknown>): void => {
             if (childComp === undefined) return;
-            let scoped: Record<string, unknown> = values;
-            if (path !== '') {
-              for (const seg of path.split('.')) {
-                const next = scoped[seg];
-                scoped =
-                  next !== null && typeof next === 'object'
-                    ? (next as Record<string, unknown>)
-                    : {};
-              }
-            }
-            const sub = scoped[namespace];
+            const sub = resolveScopeValues(values as NestedFieldValues, path)[namespace];
             const itemValues =
               sub !== null && typeof sub === 'object' ? (sub as NestedFieldValues) : {};
             applyScopedFieldValues(scene, childComp, itemValues, built.scope);
@@ -388,6 +407,17 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           repeat: s.element.repeat,
           glyphGradientCss: s.glyphGradientCss,
           renderComposition,
+          // D-083 — per-item TEXT override for a NON-list-bound sequence: the operator edits
+          // each text item in the preview form. Suppressed when the item-list is bound (the
+          // bound list owns the items). Read at the sequence's OWN scope path (nesting-safe).
+          textValueFor: listBoundSeqIds.has(s.element.id)
+            ? undefined
+            : (itemId: string): string | undefined => {
+                const v = resolveScopeValues(currentValues, path)[
+                  sequenceItemInstanceId(s.element.id, itemId)
+                ];
+                return typeof v === 'string' ? v : undefined;
+              },
           clock: options.clock,
         });
         registerSequenceDriver(s.host, driver);
@@ -603,11 +633,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     }
   };
 
-  // D-083 — re-apply the operator's field values to any on-screen COMPOSITION sequence
-  // items. Their scopes are built dynamically by the sequence driver (NOT in the static
-  // scope tree applyScopedFieldValues walks), so a plain field update misses them; this
-  // routes the FULL value object to each driver, which extracts each item's namespace.
-  const reapplyCompositionItemFields = (): void => {
+  // D-083 — re-apply the operator's per-item field values to any on-screen sequence items
+  // (a COMPOSITION item's inner fields AND a TEXT item's text). Their nodes are built
+  // dynamically by the sequence driver (NOT in the static scope tree applyScopedFieldValues
+  // walks), so a plain field update misses them; this routes the FULL value object to each
+  // driver, which extracts each item's namespace.
+  const reapplySequenceItemFields = (): void => {
     for (const sub of subtrees)
       for (const s of sub.sequences) s.applyFieldsToCurrent(currentValues);
   };
@@ -626,7 +657,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // longer matters (D-018/D-019 acceptance).
       currentValues = mergeNestedValues(currentValues, data as NestedFieldValues);
       applyScopedFieldValues(scene, scene, currentValues, built.scopeTree);
-      reapplyCompositionItemFields();
+      reapplySequenceItemFields();
       machine.transition('playing');
       bus.emit('play.start');
       doc.body.classList.remove('cg-pending');
@@ -677,7 +708,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         currentValues = mergeNestedValues(currentValues, data as NestedFieldValues);
       }
       applyScopedFieldValues(scene, scene, currentValues, built.scopeTree);
-      reapplyCompositionItemFields();
+      reapplySequenceItemFields();
       bus.emit('update');
     },
 

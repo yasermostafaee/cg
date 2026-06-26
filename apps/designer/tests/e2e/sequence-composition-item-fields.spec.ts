@@ -72,4 +72,47 @@ test.describe('Sequence composition-item fields (D-083 correction)', () => {
     await item2.fill('Edited headline');
     await expect(item2).toHaveValue('Edited headline');
   });
+
+  test('a non-bound MIXED sequence exposes BOTH a text item field and a composition item field; editing each updates the right slide', async ({
+    app,
+  }) => {
+    await app.newProject('MixedSeq');
+    // A clock+text composition card; its text element is bound to a field 'city'.
+    await app.newComposition('ClockCard');
+    await app.openComposition('ClockCard');
+    await app.addClock();
+    await app.addTextElement({ x: 120, y: 200 });
+    await app.setDataKey('city');
+    await app.openComposition('comp1');
+
+    // A sequence: item 1 = text (the default), item 2 = the composition card. NOT list-bound.
+    await app.addSequence();
+    await app.setSequenceDwell(30); // keep each slide on screen long enough to assert
+    await app.inspector
+      .getByRole('combobox', { name: 'Sequence item 2 type', exact: true })
+      .selectOption('composition');
+    await app.inspector
+      .getByRole('combobox', { name: 'Sequence item 2 composition', exact: true })
+      .selectOption({ label: 'ClockCard' });
+
+    await app.openPreviewModal();
+    // The operator's form exposes BOTH the text item's per-item field (a flat field labeled
+    // "Sequence[0]") AND the composition item's field (under the "Sequence[1]" group).
+    const textField = app.previewDialog.getByLabel('Sequence[0]');
+    await expect(textField).toBeVisible();
+    await expect(app.previewDialog.getByText('Sequence[1]')).toBeVisible();
+    const cityField = app.previewDialog.getByLabel('city');
+    await expect(cityField).toBeVisible();
+
+    await textField.fill('Edited headline');
+    await cityField.fill('Tehran');
+
+    // Play → item 1 (text) shows the edited headline; advancing reaches item 2 (the
+    // composition card) showing 'Tehran' — each edit landed on the right slide.
+    await app.play();
+    await expect(app.previewFrame.getByText('Edited headline')).toBeVisible({ timeout: 5000 });
+    await app.next();
+    await expect(app.previewFrame.getByText('Tehran')).toBeVisible({ timeout: 5000 });
+    await app.stop();
+  });
 });

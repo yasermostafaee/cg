@@ -157,32 +157,42 @@ the item.
   bundled runtime renders the item (reusing composition asset resolution and
   the clock driver)
 
-### Requirement: Composition sequence items expose their fields to the operator (namespaced per item)
+### Requirement: A non-list-bound sequence exposes per-item operator fields (text AND composition)
 
-A composition sequence item SHALL contribute its referenced composition's
-fields to the operator's data form, NAMESPACED per item, reusing the D-025
-instance-namespacing (no new data model). The namespace is DISPLAYED as
+When a sequence's ITEM-LIST is NOT data-bound, EVERY item SHALL contribute
+operator-editable field(s) to the data form, NAMESPACED per item, reusing the
+D-025 instance-namespacing (no new data model) — so a non-bound sequence
+(including a mixed clock+text/logo rotator) is FULLY operator-editable in the
+preview with NO need to wrap plain text in a composition. A TEXT item
+contributes a single flat TEXT field (its text); a COMPOSITION item contributes
+its referenced composition's fields (a group). Each is DISPLAYED as
 `<sequence name>[<index>]` but KEYED by a stable, parent-unique id-based value
 (so two same-named sequences never collide and a rename never orphans values),
-and the value lives under the item's own scope path (a sequence nested in a
-composition instance reads its correctly-scoped sub-object). This is independent
-of the item-LIST binding: a text item next to a clock inside a composition item
-is editable even though the rundown itself is not data-bindable. Setting such a
-field SHALL update that item's content via the existing composition-field
-mechanism — applied to the item's content when it renders and re-applied live on
-`update()`. A TEXT sequence item contributes NO field namespace (it carries its
-own text + the optional item-list binding).
+and lives under the item's own scope path (a sequence nested in a composition
+instance reads its correctly-scoped sub-object). Setting a field SHALL update
+that item in the preview — a text item's text directly, a composition item's
+content via the existing composition-field mechanism — applied when the item
+renders and re-applied live on `update()`. To avoid double-exposure, a
+LIST-BOUND sequence SHALL expose NO per-item fields (the bound list owns the
+items; the list editor with the dwell column is unchanged).
 
-#### Scenario: A composition item's fields appear in the data form, namespaced per item
+#### Scenario: A non-bound mixed sequence exposes every item's field
 
-- **WHEN** a sequence has a composition item whose composition has fields
-- **THEN** the operator's field form shows those fields under a per-item
-  namespace displayed as `<sequence name>[<index>]` (keyed stably so same-named
-  sequences don't collide); a text-only item contributes none
+- **WHEN** a sequence is NOT list-bound and has a plain text item and a
+  composition item
+- **THEN** the data form shows the text item as a flat per-item field AND the
+  composition item's fields under its group, each displayed `<sequence
+name>[<index>]` (keyed stably so same-named sequences don't collide)
 
-#### Scenario: Setting a composition-item field updates its content
+#### Scenario: Setting a per-item field updates the right item
 
-- **WHEN** the operator sets a composition item's field in the data form
-- **THEN** that item's content updates accordingly (e.g. the city label next to
-  a clock), via the existing composition-field mechanism — at render and live on
-  `update()`
+- **WHEN** the operator sets a text item's field or a composition item's field
+- **THEN** that item updates in the preview — the text item's text directly, the
+  composition item's content via the composition-field mechanism — at render and
+  live on `update()`
+
+#### Scenario: A list-bound sequence exposes no per-item fields
+
+- **WHEN** a sequence's item-list IS data-bound
+- **THEN** no per-item fields are exposed (the bound list drives the items via
+  the existing list editor); per-item exposure resumes if the binding is removed
