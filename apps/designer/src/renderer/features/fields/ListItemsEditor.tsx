@@ -143,51 +143,88 @@ export function ListItemsEditor({
   return (
     <div className={s.list}>
       {items.length === 0 && <p className={s.empty}>No items yet — add the first one.</p>}
-      {items.map((item, i) => (
-        <div key={item.id} className={s.itemRow}>
-          {columns !== undefined && columns.length > 0 ? (
-            // D-030 — one input per child-composition field (column).
-            columns.map((col) => (
-              <input
-                key={col.key}
-                className={s.itemInput}
-                type={col.kind === 'number' ? 'number' : 'text'}
-                placeholder={col.label}
-                title={col.label}
-                value={cellOf(item, col.key)}
-                aria-label={`${label} item ${String(i + 1)} ${col.label}`}
-                onChange={(e) =>
-                  onChange(items.map((it, j) => (j === i ? withCell(it, col, e.target.value) : it)))
-                }
-              />
-            ))
-          ) : compositions !== undefined ? (
-            // D-083 — sequence: a KIND picker, then a text input OR a composition picker.
-            <>
-              <Select
-                className={s.kindSelect}
-                value={kindOf(item)}
-                aria-label={`${label} item ${String(i + 1)} type`}
-                onChange={(e) =>
-                  onChange(
-                    items.map((it, j) =>
-                      j === i
-                        ? withKind(
-                            it,
-                            e.target.value === 'composition' ? 'composition' : 'text',
-                            compositions[0]?.id ?? '',
-                          )
-                        : it,
-                    ),
-                  )
-                }
-              >
-                <option value="text">Text</option>
-                <option value="composition">Composition</option>
-              </Select>
+      {items.map((item, i) => {
+        const dwellInput = showDwell ? (
+          <input
+            className={s.dwellInput}
+            type="number"
+            min={0.1}
+            step={0.5}
+            placeholder="dwell"
+            title="Per-item dwell in seconds (blank = the element's default dwell)"
+            value={dwellSecondsOf(item)}
+            aria-label={`${label} item ${String(i + 1)} dwell`}
+            onChange={(e) =>
+              onChange(items.map((it, j) => (j === i ? withDwell(it, e.target.value) : it)))
+            }
+          />
+        ) : null;
+        const controls = (
+          <>
+            <Control
+              size="sm"
+              title="Move up"
+              aria-label={`Move ${label} item ${String(i + 1)} up`}
+              disabled={i === 0}
+              onClick={() => move(i, i - 1)}
+            >
+              ↑
+            </Control>
+            <Control
+              size="sm"
+              title="Move down"
+              aria-label={`Move ${label} item ${String(i + 1)} down`}
+              disabled={i === items.length - 1}
+              onClick={() => move(i, i + 1)}
+            >
+              ↓
+            </Control>
+            <Control
+              variant="danger"
+              size="sm"
+              title="Remove item"
+              aria-label={`Remove ${label} item ${String(i + 1)}`}
+              onClick={() => onChange(items.filter((_, j) => j !== i))}
+            >
+              ×
+            </Control>
+          </>
+        );
+
+        // D-083 — sequence items: KIND picker + dwell + controls on line 1; the value
+        // (text input OR composition picker) on its OWN full-width line so a long
+        // headline stays fully visible in the narrow inspector panel.
+        if (compositions !== undefined) {
+          return (
+            <div key={item.id} className={s.seqItem}>
+              <div className={s.seqTopLine}>
+                <Select
+                  value={kindOf(item)}
+                  aria-label={`${label} item ${String(i + 1)} type`}
+                  onChange={(e) =>
+                    onChange(
+                      items.map((it, j) =>
+                        j === i
+                          ? withKind(
+                              it,
+                              e.target.value === 'composition' ? 'composition' : 'text',
+                              compositions[0]?.id ?? '',
+                            )
+                          : it,
+                      ),
+                    )
+                  }
+                >
+                  <option value="text">Text</option>
+                  <option value="composition">Composition</option>
+                </Select>
+                <div className={s.itemActions}>
+                  {dwellInput}
+                  {controls}
+                </div>
+              </div>
               {kindOf(item) === 'composition' ? (
                 <Select
-                  className={s.itemInput}
                   value={compIdOf(item)}
                   aria-label={`${label} item ${String(i + 1)} composition`}
                   onChange={(e) =>
@@ -207,7 +244,7 @@ export function ListItemsEditor({
                 </Select>
               ) : (
                 <input
-                  className={s.itemInput}
+                  className={s.seqValue}
                   type="text"
                   value={textOf(item)}
                   aria-label={`${label} item ${String(i + 1)}`}
@@ -216,62 +253,46 @@ export function ListItemsEditor({
                   }
                 />
               )}
-            </>
-          ) : (
-            <input
-              className={s.itemInput}
-              type="text"
-              value={textOf(item)}
-              aria-label={`${label} item ${String(i + 1)}`}
-              onChange={(e) =>
-                onChange(items.map((it, j) => (j === i ? { ...it, text: e.target.value } : it)))
-              }
-            />
-          )}
-          {showDwell && (
-            <input
-              className={s.dwellInput}
-              type="number"
-              min={0.1}
-              step={0.5}
-              placeholder="dwell"
-              title="Per-item dwell in seconds (blank = the element's default dwell)"
-              value={dwellSecondsOf(item)}
-              aria-label={`${label} item ${String(i + 1)} dwell`}
-              onChange={(e) =>
-                onChange(items.map((it, j) => (j === i ? withDwell(it, e.target.value) : it)))
-              }
-            />
-          )}
-          <Control
-            size="sm"
-            title="Move up"
-            aria-label={`Move ${label} item ${String(i + 1)} up`}
-            disabled={i === 0}
-            onClick={() => move(i, i - 1)}
-          >
-            ↑
-          </Control>
-          <Control
-            size="sm"
-            title="Move down"
-            aria-label={`Move ${label} item ${String(i + 1)} down`}
-            disabled={i === items.length - 1}
-            onClick={() => move(i, i + 1)}
-          >
-            ↓
-          </Control>
-          <Control
-            variant="danger"
-            size="sm"
-            title="Remove item"
-            aria-label={`Remove ${label} item ${String(i + 1)}`}
-            onClick={() => onChange(items.filter((_, j) => j !== i))}
-          >
-            ×
-          </Control>
-        </div>
-      ))}
+            </div>
+          );
+        }
+
+        return (
+          <div key={item.id} className={s.itemRow}>
+            {columns !== undefined && columns.length > 0 ? (
+              // D-030 — one input per child-composition field (column).
+              columns.map((col) => (
+                <input
+                  key={col.key}
+                  className={s.itemInput}
+                  type={col.kind === 'number' ? 'number' : 'text'}
+                  placeholder={col.label}
+                  title={col.label}
+                  value={cellOf(item, col.key)}
+                  aria-label={`${label} item ${String(i + 1)} ${col.label}`}
+                  onChange={(e) =>
+                    onChange(
+                      items.map((it, j) => (j === i ? withCell(it, col, e.target.value) : it)),
+                    )
+                  }
+                />
+              ))
+            ) : (
+              <input
+                className={s.itemInput}
+                type="text"
+                value={textOf(item)}
+                aria-label={`${label} item ${String(i + 1)}`}
+                onChange={(e) =>
+                  onChange(items.map((it, j) => (j === i ? { ...it, text: e.target.value } : it)))
+                }
+              />
+            )}
+            {dwellInput}
+            {controls}
+          </div>
+        );
+      })}
       <div className={s.addRow}>
         <Button
           variant="secondary"

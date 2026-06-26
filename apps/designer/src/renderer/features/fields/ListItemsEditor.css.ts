@@ -39,11 +39,42 @@ export const dwellInput = style({
   outline: 'none',
 });
 
-/** D-083 — the narrow per-item KIND picker (Text / Composition) for sequences. */
-export const kindSelect = style({
-  width: '6rem',
+/**
+ * D-083 — a sequence item is TWO lines: a top control line (kind picker + dwell +
+ * reorder/remove) and the VALUE on its own full-width line below, so a long headline
+ * stays readable in the narrow inspector panel.
+ */
+export const seqItem = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.25rem',
+});
+
+export const seqTopLine = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.2rem',
+});
+
+/** Right-aligned, fixed-size cluster (dwell + reorder/remove) so the kind picker fills the rest. */
+export const itemActions = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.2rem',
   flex: 'none',
+});
+
+/** The full-width value (text input OR composition picker) on the item's second line. */
+export const seqValue = style({
+  width: '100%',
+  boxSizing: 'border-box',
+  background: colors.panelMuted,
+  color: colors.text,
+  border: `1px solid ${colors.border}`,
+  borderRadius: '0.2rem',
+  padding: '0.25rem 0.4rem',
   fontSize: '0.74rem',
+  outline: 'none',
 });
 
 export const addRow = style({
