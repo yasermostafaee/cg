@@ -2611,7 +2611,7 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 **Notes:** apps/designer/src/renderer/features/inspector/controls.css.ts `hexInput` — set a `minWidth` that fits 8 chars (e.g. ~`8ch`/`64px`) so it doesn't collapse inside `.cg-field`; keep it from overlapping the trailing keyframe dot.
 
-## [~] D-081 — Ticker: no trailing separator ⟨priority: low⟩ — implemented on `feat/quick-wins-batch`
+## [x] D-081 — Ticker: no trailing separator ⟨priority: low⟩ — focused fix, merged (#175)
 
 **What:** The ticker must render its `separator` only BETWEEN items, never after the last item (incl. across the loop seam).
 **Why:** A trailing separator (e.g. "…headline •" with nothing after) looks broken.
@@ -2621,7 +2621,7 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 **Notes:** template-runtime ticker rendering (scene-builder / runtime crawl). The separator is a between-items span; ensure none is emitted after the last item. Mind 'seamless' vs 'drain'. Pairs with D-039.
 
-## [~] D-082 — English default item text for ticker/sequence ⟨priority: low⟩ — implemented on `feat/quick-wins-batch` (+ LTR default direction)
+## [x] D-082 — English default item text for ticker/sequence ⟨priority: low⟩ — focused fix, merged (#175; + LTR default direction & white default text)
 
 **What:** New ticker and sequence elements get English placeholder item text (like the text element's "New text"), not Persian.
 **Why:** Defaults should match the text element; today ticker/seq seed Persian sample text.
@@ -2654,7 +2654,7 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 **Notes:** Add an optional `timezone` (IANA name, e.g. 'Europe/London') to ClockElementSchema; the runtime clock formatter uses Intl.DateTimeFormat({ timeZone }); the inspector adds a time-zone picker.
 
-## [~] D-097 — Distinct timeline icon + color for shared/logo images vs asset images ⟨priority: low⟩ — implemented on `feat/quick-wins-batch`
+## [x] D-097 — Distinct timeline icon + color for shared/logo images vs asset images ⟨priority: low⟩ — focused fix, merged (#175)
 
 **What:** In the timeline layer row, a `source:'shared'` image (logo) gets a different LayerTypeIcon and color from a `source:'project'` image (asset).
 **Why:** Both are `type:'image'` and render identically today; operators can't tell a logo/shared image from a project-asset image at a glance.
@@ -2664,7 +2664,7 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 **Notes:** ElementRow.tsx LayerTypeIcon + the color resolver (lifespanColorFor / TYPE_COLORS) branch on `element.source` for type 'image'. Asset image keeps `Image`; pick a distinct lucide for the shared/logo variant (e.g. `Stamp` or `Images`) + a distinct color (exact icon/color to confirm).
 
-## [~] D-098 — Key icon on bound (data-keyed) layers ⟨priority: low⟩ — implemented on `feat/quick-wins-batch`
+## [x] D-098 — Key icon on bound (data-keyed) layers ⟨priority: low⟩ — focused fix, merged (#175)
 
 **What:** Prefix a bound layer (one with a data key / a field binding targeting it) with a small key icon before its name in the timeline left list.
 **Why:** Operators can't tell which layers are bound/dynamic at a glance.
@@ -2675,7 +2675,7 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 **Notes:** ElementRow.tsx name cell; detect "bound" via the fields/bindings slice (a binding with target.elementId === el.id, or the element's data key). lucide `Key`, small, before the name.
 
-## [~] D-099 — Minimum-window-size gate ⟨priority: medium⟩ — implemented on `feat/quick-wins-batch`
+## [x] D-099 — Minimum-window-size gate ⟨priority: medium⟩ — focused fix, merged (#175)
 
 **What:** When the window is below a minimum usable size, replace the editor with a centered "screen too small" message; restore the editor when resized back up.
 **Why:** On very small windows/monitors the panels + canvas don't render usably.
@@ -2686,7 +2686,7 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 **Notes:** Top-level gate in App.tsx (or a shell wrapper) via a resize listener / matchMedia. Pick a sensible threshold (e.g. ~1024×640 — confirm). RTL message.
 
-## [~] D-100 — Menubar: hover-to-open after first click ⟨priority: low⟩ — implemented on `feat/quick-wins-batch`
+## [x] D-100 — Menubar: hover-to-open after first click ⟨priority: low⟩ — focused fix, merged (#175)
 
 **What:** Once a top menu is open (by click), moving the pointer onto another top-menu button opens it (no click); standard menubar behavior.
 **Why:** Today hover only highlights; each menu needs its own click.
@@ -2697,7 +2697,7 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 **Notes:** apps/designer/src/renderer/features/shell/TopToolbar.tsx — when `openMenu !== null`, the buttons' onMouseEnter sets `setOpenMenu(key)`.
 
-## [~] D-101 — Remove-bind icon: red + match the row remove-item button ⟨priority: low⟩ — implemented on `feat/quick-wins-batch`
+## [x] D-101 — Remove-bind icon: red + match the row remove-item button ⟨priority: low⟩ — focused fix, merged (#175)
 
 **What:** The remove-bind (unbind) control is red and matches the list-items remove-item button in size and style.
 **Why:** Inconsistent — `bindRemove` is muted gray; the row remove-item is a different size/style.
