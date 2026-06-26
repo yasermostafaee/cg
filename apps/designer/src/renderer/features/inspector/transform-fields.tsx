@@ -37,6 +37,10 @@ const identity = (n: number): number => n;
 const toPercent = (n: number): number => Math.round(n * 100);
 const fromPercent = (n: number): number => n / 100;
 const clamp01 = (n: number): number => Math.max(0, Math.min(1, n));
+// B-024 — width / height / scale must never commit a negative value. Clamping here (in
+// `fromDisplay`, which wraps every commit) catches ALL paths — including the typed onChange
+// path, which commits live without consulting `min`.
+const nonNegative = (n: number): number => Math.max(0, n);
 
 /**
  * Per-property display metadata — the ONE place icons/units/conversions live.
@@ -57,23 +61,39 @@ export const TRANSFORM_FIELD_META: Partial<Record<AnimatableProperty, FieldMeta>
     toDisplay: identity,
     fromDisplay: identity,
   },
-  'size.w': { icon: 'W', ariaLabel: 'Width', step: 1, toDisplay: identity, fromDisplay: identity },
-  'size.h': { icon: 'H', ariaLabel: 'Height', step: 1, toDisplay: identity, fromDisplay: identity },
+  'size.w': {
+    icon: 'W',
+    ariaLabel: 'Width',
+    step: 1,
+    min: 0,
+    toDisplay: identity,
+    fromDisplay: nonNegative,
+  },
+  'size.h': {
+    icon: 'H',
+    ariaLabel: 'Height',
+    step: 1,
+    min: 0,
+    toDisplay: identity,
+    fromDisplay: nonNegative,
+  },
   'scale.x': {
     icon: <Icon icon={MoveHorizontal} size={14} />,
     ariaLabel: 'Scale X',
     suffix: '%',
     step: 1,
+    min: 0,
     toDisplay: toPercent,
-    fromDisplay: fromPercent,
+    fromDisplay: (d) => fromPercent(nonNegative(d)),
   },
   'scale.y': {
     icon: <Icon icon={MoveVertical} size={14} />,
     ariaLabel: 'Scale Y',
     suffix: '%',
     step: 1,
+    min: 0,
     toDisplay: toPercent,
-    fromDisplay: fromPercent,
+    fromDisplay: (d) => fromPercent(nonNegative(d)),
   },
   rotation: {
     icon: <Icon icon={RotateCw} size={14} />,
