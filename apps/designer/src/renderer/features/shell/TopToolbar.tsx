@@ -287,7 +287,8 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
           {openMenu === 'view' && (
             <div className={s.dropdown} role="menu">
               <ToggleMenuItem
-                label="Ruler (R)"
+                label="Ruler"
+                shortcut="R"
                 checked={rulerVisible}
                 onClick={() => {
                   setOpenMenu(null);
@@ -406,10 +407,13 @@ function FileMenuItem({
 /** Dropdown item with a leading checkmark for on/off View options. */
 function ToggleMenuItem({
   label,
+  shortcut,
   checked,
   onClick,
 }: {
   label: string;
+  /** Optional keyboard-shortcut hint, shown in parentheses (smaller, muted gray). */
+  shortcut?: string;
   checked: boolean;
   onClick: () => void;
 }): JSX.Element {
@@ -428,6 +432,7 @@ function ToggleMenuItem({
         {checked ? <Icon icon={Check} size={14} /> : ''}
       </span>
       {label}
+      {shortcut !== undefined && <span className={s.menuShortcut}>({shortcut})</span>}
     </Button>
   );
 }
