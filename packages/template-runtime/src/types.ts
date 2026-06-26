@@ -299,6 +299,10 @@ export interface SequenceEntry {
   host: HTMLElement;
   /** B-016 — composed `background` for a gradient text colour, applied per item node. */
   glyphGradientCss?: string | undefined;
+  /** D-083 — composition recursion depth at the build site (comp items build at depth+1). */
+  depth: number;
+  /** D-083 — composition ids on the build path (the cycle guard for comp-item rendering). */
+  visited: ReadonlySet<string>;
 }
 
 /** D-030 — one built repeater: element config + host box + the build-context guards. */

@@ -54,6 +54,10 @@ export function DynamicDataSection({
   const field = conv === undefined ? undefined : scene.fields.find((f) => f.id === conv.fieldId);
   const currentKey = field?.id ?? '';
   const [warn, setWarn] = useState<string | null>(null);
+  // D-083 — binding is TEXT-ONLY in Phase 1: a sequence holding any composition item
+  // can't be data-bound (a bound `list` value carries only text items).
+  const compositionLocked =
+    element.type === 'sequence' && element.items.some((it) => it.kind === 'composition');
 
   // A convenience binding owned by an element OTHER than this one (any
   // kind — one key, one owner).
@@ -99,7 +103,8 @@ export function DynamicDataSection({
           <input
             className={cs.inputInner}
             type="text"
-            placeholder="(static)"
+            placeholder={compositionLocked ? '(composition items)' : '(static)'}
+            disabled={compositionLocked}
             defaultValue={currentKey}
             // Key by the SELECTED element id (+ the committed key) so the input
             // re-initialises when the selection moves to another element instead
@@ -143,7 +148,12 @@ export function DynamicDataSection({
       </div>
       {warn !== null && <p className={s.warn}>{warn}</p>}
 
-      {field === undefined ? (
+      {compositionLocked ? (
+        <p className={s.warn}>
+          Binding is disabled while this sequence has a composition item. Remove composition items
+          to drive its items from a data field (binding is text-only).
+        </p>
+      ) : field === undefined ? (
         <p className={s.hint}>
           {isListElement
             ? `Give this ${element.type} a Data key to drive its items from field data at playout.`

@@ -2632,16 +2632,30 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 **Notes:** apps/designer/src/renderer/state/element-defaults.ts — ticker items (currently 'خبر نخست — متن نمونه' …) and sequence items (currently 'اکنون: برنامهٔ نخست' …) → English (e.g. 'First headline — sample', 'Now: first item', 'Then: second item').
 
-## [ ] D-083 — Sequence: logo and clock items (not just text) ⟨priority: medium; needs design⟩
+## [~] D-083 — Sequence: typed items (text | composition) ⟨priority: medium⟩ — implementing Phase 1 on `feat/sequence-typed-items` (`openspec/changes/sequence-typed-items`)
 
-**What:** A sequence item can be a text, a logo (shared/asset image), OR a clock — not only text.
-**Why:** Now/next rotators commonly cycle mixed content (headline, channel logo, a clock), each with the same in/out transitions and dwell.
+**What:** A sequence item can be TEXT or a COMPOSITION reference — not only text. A single clock/logo
+is just a one-element composition, so clock+text / logo+text / … layouts are authored in the
+composition editor and cycled by the sequence. (Phase 1; text items stay the bindable ones.)
+**Why:** A rotating title/branding element cycles every few seconds between composed layouts
+(clock+text, logo+text, …), each under the same in/out transitions + dwell. News headlines stay
+text + data-bound, unchanged.
 **Acceptance:**
 
-- WHEN building a sequence THEN each item's type can be text, logo, or clock
-- WHEN the sequence advances THEN each item type renders correctly under the existing transitionIn/Out/timing and dwell
+- WHEN building a sequence THEN each item is text OR a composition reference (a composition picker lists `scene.compositions`)
+- WHEN the sequence advances THEN a composition item renders the referenced composition's content (live content inside runs — a clock ticks, honoring timezone/blink; shared/asset logos resolve) under the existing transitionIn/Out / dwell / advance / next
+- WHEN a composition item is present THEN the sequence cannot be text-bound (`sequence-items` is text-only; the bind action is disabled with a hint)
+- WHEN an old text-only sequence is loaded THEN it parses unchanged (`kind` defaults to `'text'`; no schema-version bump, no migration)
 
-**Notes:** Significant. Extend SequenceItemSchema (shared-schema) from `{id,text,dwellMs}` to a discriminated union (text | logo | clock); the runtime sequence renderer renders each kind; the items editor lets the operator pick the item type. Design TBD when scheduled.
+**Notes:** REVISED design (replaces the earlier text|logo|clock primitive plan) — `SequenceItemSchema`
+becomes a discriminated union by `kind`: `{ kind:'text'(default), id, text, dwellMs? }` |
+`{ kind:'composition', id, compositionId, dwellMs? }` (reusing the same `compositionId` reference the
+`composition` element uses). NON-BREAKING (kind defaults to text). The runtime renders a composition
+item via the existing composition-instance rendering path (HELD content — the comp's own intro/outro
+does NOT run inside the sequence, but live content inside DOES); the items editor gets a per-item kind
+picker + the existing composition picker; export serializes the typed items + renders composition
+items (reusing composition export + asset/clock). Phase 2 (per-item field injection into composition
+items) is later.
 
 ## [x] D-084 — Clock: selectable time zone ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-26-clock-timezone/`
 

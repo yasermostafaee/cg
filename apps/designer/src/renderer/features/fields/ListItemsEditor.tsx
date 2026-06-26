@@ -1,8 +1,15 @@
 import type { ListItem } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
+import { Select } from '../../ui/Select.js';
 import type { ListItemColumn } from './repeater-columns.js';
 import * as s from './ListItemsEditor.css.js';
+
+/** D-083 — a composition the sequence's composition items can reference. */
+export interface CompositionChoice {
+  id: string;
+  name: string;
+}
 
 /**
  * D-028 — the shared list-items editor (add / remove / reorder / edit text).
@@ -33,6 +40,36 @@ interface Props {
    * item fields are still preserved.
    */
   columns?: readonly ListItemColumn[] | undefined;
+  /**
+   * D-083 — when provided (sequence contexts), each item gains a KIND picker
+   * (Text / Composition); a Composition item swaps its text input for a
+   * composition picker drawn from this list. Absent ⇒ text-only (the prior
+   * ticker / preview-form behaviour, unchanged).
+   */
+  compositions?: readonly CompositionChoice[] | undefined;
+}
+
+/** D-083 — the item's kind ('text' default for back-compat). */
+function kindOf(item: ListItem): 'text' | 'composition' {
+  return (item as Record<string, unknown>)['kind'] === 'composition' ? 'composition' : 'text';
+}
+
+/** The composition id a composition item references ('' when unset). */
+function compIdOf(item: ListItem): string {
+  const v = (item as Record<string, unknown>)['compositionId'];
+  return typeof v === 'string' ? v : '';
+}
+
+/** Switch an item's kind, preserving its stable id + dwell; drops the other kind's payload. */
+function withKind(item: ListItem, kind: 'text' | 'composition', firstCompId: string): ListItem {
+  const o = item as Record<string, unknown>;
+  const dwell = typeof o['dwellMs'] === 'number' ? { dwellMs: o['dwellMs'] } : {};
+  if (kind === 'composition') {
+    const keep = typeof o['compositionId'] === 'string' ? o['compositionId'] : firstCompId;
+    return { id: item.id, kind: 'composition', compositionId: keep, ...dwell } as ListItem;
+  }
+  const text = typeof o['text'] === 'string' ? o['text'] : '';
+  return { id: item.id, kind: 'text', text, ...dwell } as ListItem;
 }
 
 let seq = 0;
@@ -92,6 +129,7 @@ export function ListItemsEditor({
   label,
   showDwell = false,
   columns,
+  compositions,
 }: Props): JSX.Element {
   const move = (from: number, to: number): void => {
     if (to < 0 || to >= items.length) return;
@@ -123,6 +161,62 @@ export function ListItemsEditor({
                 }
               />
             ))
+          ) : compositions !== undefined ? (
+            // D-083 — sequence: a KIND picker, then a text input OR a composition picker.
+            <>
+              <Select
+                className={s.kindSelect}
+                value={kindOf(item)}
+                aria-label={`${label} item ${String(i + 1)} type`}
+                onChange={(e) =>
+                  onChange(
+                    items.map((it, j) =>
+                      j === i
+                        ? withKind(
+                            it,
+                            e.target.value === 'composition' ? 'composition' : 'text',
+                            compositions[0]?.id ?? '',
+                          )
+                        : it,
+                    ),
+                  )
+                }
+              >
+                <option value="text">Text</option>
+                <option value="composition">Composition</option>
+              </Select>
+              {kindOf(item) === 'composition' ? (
+                <Select
+                  className={s.itemInput}
+                  value={compIdOf(item)}
+                  aria-label={`${label} item ${String(i + 1)} composition`}
+                  onChange={(e) =>
+                    onChange(
+                      items.map((it, j) =>
+                        j === i ? ({ ...it, compositionId: e.target.value } as ListItem) : it,
+                      ),
+                    )
+                  }
+                >
+                  {compositions.length === 0 && <option value="">(no compositions)</option>}
+                  {compositions.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name || c.id}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <input
+                  className={s.itemInput}
+                  type="text"
+                  value={textOf(item)}
+                  aria-label={`${label} item ${String(i + 1)}`}
+                  onChange={(e) =>
+                    onChange(items.map((it, j) => (j === i ? { ...it, text: e.target.value } : it)))
+                  }
+                />
+              )}
+            </>
           ) : (
             <input
               className={s.itemInput}

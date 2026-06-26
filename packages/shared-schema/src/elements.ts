@@ -321,12 +321,44 @@ export type ClockElement = z.infer<typeof ClockElementSchema>;
  * item only. (The dynamic `list` FIELD item stays the open, extensible
  * shape — see `fields.ts`; the element stores only what it renders.)
  */
-export const SequenceItemSchema = z.object({
+/**
+ * D-083 Phase 1 — a TEXT sequence item (the bindable one). `kind` is OPTIONAL (not
+ * `.default('text')`) so an item authored before D-083 ({id,text,dwellMs?} with no
+ * `kind`) parses UNCHANGED — no `kind` injected — and the runtime treats an absent
+ * `kind` as text. The non-breaking widening: no schema-version bump, no migration.
+ * The union disambiguates on the required `text` vs `compositionId` field, so the
+ * literal here is belt-and-braces.
+ */
+export const SequenceTextItemSchema = z.object({
+  kind: z.literal('text').optional(),
   id: z.string().min(1),
   text: z.string(),
   dwellMs: z.number().int().positive().optional(),
 });
+
+/**
+ * D-083 Phase 1 — a COMPOSITION sequence item: references a scene composition by
+ * `compositionId` (the SAME reference the `composition` element uses) and renders
+ * that composition's content for the item's dwell, under the sequence's
+ * transitions. A single clock/logo is just a one-element composition.
+ */
+export const SequenceCompositionItemSchema = z.object({
+  kind: z.literal('composition'),
+  id: z.string().min(1),
+  compositionId: IdSchema,
+  dwellMs: z.number().int().positive().optional(),
+});
+
+/**
+ * D-083 Phase 1 — a sequence item is TEXT or a COMPOSITION reference. A z.union
+ * (not z.discriminatedUnion) so an old item without `kind` still parses (its text
+ * variant defaults `kind` to `'text'`); the variants are unambiguous via their
+ * required fields (`text` vs `compositionId`).
+ */
+export const SequenceItemSchema = z.union([SequenceTextItemSchema, SequenceCompositionItemSchema]);
 export type SequenceItem = z.infer<typeof SequenceItemSchema>;
+export type SequenceTextItem = z.infer<typeof SequenceTextItemSchema>;
+export type SequenceCompositionItem = z.infer<typeof SequenceCompositionItemSchema>;
 
 /** A transition edge: where an item enters from / exits to. `none` = instant cut. */
 const SequenceEdgeSchema = z.enum(['top', 'bottom', 'left', 'right', 'none']);

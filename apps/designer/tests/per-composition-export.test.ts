@@ -6,7 +6,11 @@ import { Exporter } from '../src/platform/Exporter.js';
 import { ExporterSingleFile } from '../src/platform/ExporterSingleFile.js';
 import type { AssetStore } from '../src/platform/AssetStore.js';
 import { scopeSceneToComposition } from '../src/renderer/state/scene-doc.js';
-import { defaultImage, defaultRepeater } from '../src/renderer/state/element-defaults.js';
+import {
+  defaultImage,
+  defaultRepeater,
+  defaultSequence,
+} from '../src/renderer/state/element-defaults.js';
 
 /**
  * D-086 — per-composition export scoping. Exports package the OPEN composition plus
@@ -22,12 +26,14 @@ const A_ROOT = 'a-root';
 const A_CHILD = 'a-child';
 const A_REP = 'a-rep';
 const A_SIB = 'a-sib';
+const A_SEQ = 'a-seq';
 // Distinct VALID hex digests (the manifest/pack rejects non-hex sha256).
 const HEX: Record<string, string> = {
   r: 'a1'.repeat(32),
   c: 'b2'.repeat(32),
   p: 'c3'.repeat(32),
   s: 'd4'.repeat(32),
+  q: 'e5'.repeat(32),
 };
 const shaOf = (k: string): string => HEX[k]!;
 const pathOf = (sha: string): string => `assets/image/${sha}.png`;
@@ -37,6 +43,7 @@ const ASSETS: Record<string, { meta: AssetMeta; bytes: Uint8Array }> = {
   [A_CHILD]: assetFixture(A_CHILD, shaOf('c'), 22),
   [A_REP]: assetFixture(A_REP, shaOf('p'), 33),
   [A_SIB]: assetFixture(A_SIB, shaOf('s'), 44),
+  [A_SEQ]: assetFixture(A_SEQ, shaOf('q'), 55),
 };
 
 function assetFixture(
@@ -199,6 +206,45 @@ describe('D-086 — single-file HTML inlines the root closure, excludes siblings
     expect(html).toContain('imgP');
     expect(html).not.toContain('imgS');
     expect(html).toContain('data:image/png;base64,');
+  });
+});
+
+describe('D-083 — a sequence COMPOSITION item pulls its comp into the export closure', () => {
+  /** Root RS holds a sequence whose item-2 is a composition item referencing Q (which carries an image). */
+  function sequenceCompScene(): Scene {
+    const seq = defaultSequence('seqEl', 0, 0);
+    seq.items = [
+      { id: 's1', text: 'Headline' },
+      { id: 's2', kind: 'composition', compositionId: 'Q' },
+    ];
+    return {
+      schemaVersion: 1,
+      id: 's-d083',
+      name: 'rotating-title',
+      templateType: 'custom',
+      resolution: { width: 1920, height: 1080 },
+      frameRate: 50,
+      safeAreas: { title: 10, action: 5 },
+      frameRange: { in: 0, out: 50 },
+      background: 'transparent',
+      layers: [],
+      compositions: [comp('RS', [seq]), comp('Q', [imageEl('imgQ', A_SEQ)])],
+      fields: [],
+      bindings: [],
+      fonts: [],
+      metadata: { createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+    };
+  }
+
+  it('packages the composition referenced ONLY by a sequence item (its asset is bundled)', async () => {
+    const scoped = scopeSceneToComposition(sequenceCompScene(), 'RS')!;
+    expect(scoped).not.toBeNull();
+    // Q is reachable from RS only through the sequence composition item.
+    expect((scoped.compositions ?? []).map((c) => c.id)).toEqual(['Q']);
+
+    const { vcg } = await makeVcgExporter([A_SEQ]).produce(scoped);
+    const { files } = await unpack(vcg);
+    expect(files.has(pathOf(shaOf('q')))).toBe(true);
   });
 });
 

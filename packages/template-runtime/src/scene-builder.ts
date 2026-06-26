@@ -673,16 +673,104 @@ function buildSequence(element: SequenceElement, ctx: BuildCtx): HTMLElement {
   el.style.alignItems = vAlignToGrid(element.verticalAlign ?? 'middle');
   el.style.justifyItems = element.align;
 
-  // Static initial render: item 1 through the shared factory (empty items ⇒
-  // an empty box). The driver re-renders the same markup on reset().
+  // Static initial render: item 1 through the shared factory (empty items ⇒ an
+  // empty box). The driver re-renders the same markup on reset(). D-083 — a
+  // COMPOSITION item-1 shows the comp's HELD content statically (its clock's
+  // initial value); live ticking begins when the run starts and the driver
+  // re-renders it with wired drivers (the throwaway scope here is NEVER wired).
   const first = element.items[0];
   if (first !== undefined) {
-    const node = makeSequenceItemNode(doc, element.direction, glyphGradientCss);
-    node.textContent = first.text;
-    el.appendChild(node);
+    if (first.kind === 'composition') {
+      const built = buildSequenceCompositionItem(
+        ctx.scene,
+        first.compositionId,
+        { width: element.transform.size.w, height: element.transform.size.h },
+        { depth: ctx.depth, visited: ctx.visited },
+        doc,
+      );
+      if (built !== null) el.appendChild(built.cell);
+    } else {
+      const node = makeSequenceItemNode(doc, element.direction, glyphGradientCss);
+      node.textContent = first.text;
+      el.appendChild(node);
+    }
   }
-  ctx.scope.sequences.push({ element, host: el, glyphGradientCss });
+  ctx.scope.sequences.push({
+    element,
+    host: el,
+    glyphGradientCss,
+    depth: ctx.depth,
+    visited: ctx.visited,
+  });
   return el;
+}
+
+/** D-083 — one rendered composition sequence item: the grid-cell node + its fresh scope. */
+export interface SequenceCompositionItemBuild {
+  cell: HTMLElement;
+  scope: FieldScope;
+}
+
+/**
+ * D-083 — build a COMPOSITION sequence item: the referenced composition's content
+ * scaled to FILL the sequence box (independent x/y, like {@link buildComposition}'s
+ * instance stage), in a grid-cell node stacked in the host's single cell — so it
+ * coexists with the outgoing item during a transition, exactly like a text item.
+ * A FRESH scope (NEVER in `scope.children`) the caller wires + lifecycles. Returns
+ * null for a missing / over-deep / cyclic reference (⇒ the driver renders an empty box).
+ */
+export function buildSequenceCompositionItem(
+  scene: Scene,
+  compositionId: string,
+  box: { width: number; height: number },
+  guard: { depth: number; visited: ReadonlySet<string> },
+  doc: Document,
+): SequenceCompositionItemBuild | null {
+  const comp = scene.compositions?.find((c) => c.id === compositionId);
+  if (
+    comp === undefined ||
+    guard.depth >= MAX_COMPOSITION_DEPTH ||
+    guard.visited.has(compositionId)
+  ) {
+    return null;
+  }
+  const cell = doc.createElement('div');
+  cell.dataset['cgSequenceItem'] = '1';
+  cell.dataset['cgSequenceCompositionId'] = compositionId;
+  cell.style.gridArea = '1 / 1';
+  cell.style.overflow = 'hidden';
+  cell.style.position = 'relative';
+  cell.style.width = `${box.width}px`;
+  cell.style.height = `${box.height}px`;
+
+  const inner = doc.createElement('div');
+  inner.className = 'cg-comp-inner';
+  inner.style.position = 'absolute';
+  inner.style.left = '0';
+  inner.style.top = '0';
+  inner.style.width = `${comp.resolution.width}px`;
+  inner.style.height = `${comp.resolution.height}px`;
+  inner.style.transformOrigin = '0 0';
+  const sx = comp.resolution.width === 0 ? 1 : box.width / comp.resolution.width;
+  const sy = comp.resolution.height === 0 ? 1 : box.height / comp.resolution.height;
+  inner.style.transform = `scale(${String(sx)}, ${String(sy)})`;
+  if (comp.background !== 'transparent') inner.style.background = comp.background;
+
+  // A fresh item scope — real per-scope semantics (drivers, holds) by construction,
+  // but NEVER in `scope.children` (the sequence driver owns its lifecycle).
+  const itemScope = newScope(inner, comp);
+  const itemCtx: BuildCtx = {
+    doc,
+    scene,
+    scope: itemScope,
+    depth: guard.depth + 1,
+    visited: new Set([...guard.visited, compositionId]),
+  };
+  for (const layer of comp.layers) {
+    inner.appendChild(buildLayer(layer, itemCtx));
+  }
+  cell.appendChild(inner);
+  return { cell, scope: itemScope };
 }
 
 /**

@@ -61,6 +61,9 @@ export function resolveBinding(field: DynamicField, element: Element): FieldBind
       return { fieldId: field.id, target: { kind: 'ticker-items', elementId: element.id } };
     }
     if (element.type === 'sequence') {
+      // D-083 — binding is TEXT-ONLY in Phase 1: a sequence holding any composition
+      // item can't be data-bound (a bound `list` value carries only text items).
+      if (element.items.some((it) => it.kind === 'composition')) return null;
       return { fieldId: field.id, target: { kind: 'sequence-items', elementId: element.id } };
     }
     if (element.type === 'repeater') {

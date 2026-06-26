@@ -61,17 +61,19 @@ export function compositionInstancesOf(
 
 /**
  * Collect the child-composition ids DIRECTLY referenced within a layer tree —
- * BOTH `composition` instance elements AND `repeater` elements (each stamps a
- * child composition per row) — recursing into containers. The ONE ref-collector
+ * `composition` instance elements, `repeater` elements (each stamps a child
+ * composition per row), AND D-083 `sequence` COMPOSITION items (each rotates a
+ * referenced composition) — recursing into containers. The ONE ref-collector
  * shared by {@link compositionClosure} and the author-time cycle guard, so the two
  * can never disagree on which element kinds reference a composition.
  *
- * NB this is deliberately NOT used for field aggregation: a repeater's rows never
- * form a field namespace (the single bound `list` is its data surface), so
+ * NB this is deliberately NOT used for field aggregation: a repeater's rows / a
+ * sequence's composition items never form a field namespace (the single bound
+ * `list` is the data surface; composition items are static in Phase 1), so
  * {@link compositionInstancesOf} — `composition`-only — is the right collector
  * there. Reference closure (export, cycle detection) is the opposite: a repeater
- * DOES pull its child composition's template + assets into the package, so it must
- * be followed here.
+ * or a sequence composition item DOES pull its child composition's template +
+ * assets into the package, so it must be followed here.
  */
 export function collectChildCompositionRefs(
   children: readonly Element[],
@@ -80,6 +82,10 @@ export function collectChildCompositionRefs(
   for (const el of children) {
     if (el.type === 'composition' || el.type === 'repeater') {
       out.add(el.compositionId);
+    } else if (el.type === 'sequence') {
+      for (const item of el.items) {
+        if (item.kind === 'composition') out.add(item.compositionId);
+      }
     } else if (el.type === 'container') {
       collectChildCompositionRefs(el.children, out);
     }

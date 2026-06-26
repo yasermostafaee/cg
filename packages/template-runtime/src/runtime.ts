@@ -41,14 +41,24 @@ import { ensureBaselineCss } from './css.js';
 import { EventBus } from './event-bus.js';
 import { LifecycleStateMachine } from './lifecycle.js';
 import { PlayoutController } from './playout-controller.js';
-import { buildRepeaterRows, buildScene, repeaterItemValues } from './scene-builder.js';
+import {
+  buildRepeaterRows,
+  buildScene,
+  buildSequenceCompositionItem,
+  repeaterItemValues,
+} from './scene-builder.js';
 import { ClockDriver } from './clock-driver.js';
 import {
   RepeaterDriver,
   registerRepeaterDriver,
   type RepeaterRowHandle,
 } from './repeater-driver.js';
-import { SequenceDriver, registerSequenceDriver } from './sequence-driver.js';
+import {
+  SequenceDriver,
+  registerSequenceDriver,
+  type RenderedSequenceItem,
+  type SequenceCompositionRenderer,
+} from './sequence-driver.js';
 import { TickerDriver, registerTickerDriver, type TickerSeparatorImage } from './ticker-driver.js';
 import type {
   FieldScope,
@@ -286,6 +296,56 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // D-029 — sequence drivers; the host→driver registry routes
       // `sequence-items` bindings, and `runtime.next()` dispatches per scope.
       const scopeSequences = scope.sequences.map((s) => {
+        // D-083 — a COMPOSITION item renders the referenced composition's HELD content
+        // with LIVE inner drivers (a clock ticks): build the comp subtree and wire it
+        // through the SAME machinery as repeater rows (`wireScopeSubtree`), then drive
+        // its time sources directly from the sequence item's lifecycle. The comp's own
+        // intro/outro controllers are NOT run (held content); teardown is on advance.
+        const renderComposition: SequenceCompositionRenderer = (item): RenderedSequenceItem => {
+          const built = buildSequenceCompositionItem(
+            scene,
+            item.compositionId,
+            { width: s.element.transform.size.w, height: s.element.transform.size.h },
+            { depth: s.depth, visited: s.visited },
+            doc,
+          );
+          if (built === null) {
+            // Missing / over-deep / cyclic reference ⇒ an empty grid-cell box.
+            const empty = doc.createElement('div');
+            empty.style.gridArea = '1 / 1';
+            const noop = (): void => undefined;
+            return { node: empty, show: noop, pause: noop, resume: noop, hide: noop };
+          }
+          const itemSub = wireScopeSubtree(
+            built.scope,
+            `${path}#${s.element.id}:item:${item.id}`,
+            false,
+          );
+          let torndown = false;
+          return {
+            node: built.cell,
+            show: (): void => {
+              for (const c of itemSub.clocks) c.start();
+              for (const t of itemSub.tickers) t.start();
+              for (const sq of itemSub.sequences) sq.start();
+            },
+            pause: (): void => {
+              for (const c of itemSub.clocks) c.pause();
+              for (const t of itemSub.tickers) t.pause();
+              for (const sq of itemSub.sequences) sq.pause();
+            },
+            resume: (): void => {
+              for (const c of itemSub.clocks) c.resume();
+              for (const t of itemSub.tickers) t.resume();
+              for (const sq of itemSub.sequences) sq.resume();
+            },
+            hide: (): void => {
+              if (torndown) return; // idempotent — stop() then reset() both hide
+              torndown = true;
+              itemSub.destroy();
+            },
+          };
+        };
         const driver = new SequenceDriver({
           host: s.host,
           direction: s.element.direction,
@@ -298,6 +358,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           transitionMs: s.element.transitionMs,
           repeat: s.element.repeat,
           glyphGradientCss: s.glyphGradientCss,
+          renderComposition,
           clock: options.clock,
         });
         registerSequenceDriver(s.host, driver);
