@@ -8,6 +8,15 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Sequence/clock wave ([D-084](./prd/designer.md), [D-039](./prd/designer.md) ext,
+  [D-103](./prd/designer.md)) — merged & archived (2026-06-26, PR #177). D-084 clock selectable
+  IANA time zone (wall mode via `Intl`, Persian digits preserved; invalid zone degrades to local),
+  D-039 ext ticker image/logo separator (project OR shared library, between-items only, follows
+  `verticalAlign`, inlined + preflighted on export), D-103 clock blinking colon (opacity pulse at an
+  adjustable rate, no reflow). All NON-BREAKING additive schema widenings — no version bump or
+  migration. Archives under `openspec/changes/archive/2026-06-26-clock-timezone/`,
+  `…-ticker-image-separator/`, `…-clock-blink-colon/`. PRD → [x]. (The wave's D-081/D-082 shipped
+  earlier in Group A.)
 - Group A quick-wins ([D-081](./prd/designer.md), [D-082](./prd/designer.md),
   [D-097](./prd/designer.md), [D-098](./prd/designer.md), [D-099](./prd/designer.md),
   [D-100](./prd/designer.md), [D-101](./prd/designer.md) + [B-024](./prd/bugs.md)) — merged
@@ -125,20 +134,18 @@ entries authored per-item when started** — most of these IDs are not yet filed
    `openspec/changes/guide-coordinate-readout/` +
    `openspec/changes/arrow-key-nudge/`); only the batched green gate + E2E and the
    merge/archive remain.
-2. [D-039](./prd/designer.md) (ext) + [D-083](./prd/designer.md) / [D-084](./prd/designer.md) —
-   sequence / clock wave (remaining): D-039(ext) image/shared-logo separators, D-083 logo/clock
-   sequence items, D-084 clock time zone. (D-081 no-trailing-separator + D-082 English defaults
-   shipped in Group A — see Done.)
-3. [D-090](./prd/designer.md) / D-091 — chrome (additional polish beyond D-086
+2. [D-090](./prd/designer.md) / D-091 — chrome (additional polish beyond D-086
    Phase B; confirm scope vs. what D-086 delivered when filing)
 
 > **Ordering note:** the icon-pack (D-092) is done — the shared `Icon` set now
-> exists, so new control-bearing items (e.g. D-084) reuse it.
+> exists, so new control-bearing items (e.g. [D-083](./prd/designer.md)) reuse it.
 
 Previously-listed designer items not in this order — D-059, D-060 (unblocks the parked
-[D-046](./prd/designer.md)), D-061, D-063, D-064, D-065, D-066, [D-096](./prd/designer.md)
-(perf — animate position via CSS transform; belongs to the hardening wave) — remain **queued**
-in the PRD but are deprioritized below the above. (D-097–D-101 shipped in Group A — see Done.)
+[D-046](./prd/designer.md)), D-061, D-063, D-064, D-065, D-066, [D-083](./prd/designer.md)
+(logo/clock sequence items — the remaining sequence/clock-wave piece; D-039 ext / D-084 / D-103
+shipped, see Done), [D-096](./prd/designer.md) (perf — animate position via CSS transform; belongs
+to the hardening wave) — remain **queued** in the PRD but are deprioritized below the above.
+(D-097–D-101 shipped in Group A — see Done.)
 **Wave tail (carried over):** template cleanup — rebuild / refresh the bundled sample templates
 against the UX wave's finalized controls.
 
