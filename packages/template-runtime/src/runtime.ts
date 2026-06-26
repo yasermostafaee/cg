@@ -1,6 +1,7 @@
 import {
   activeRangeOf,
   playoutOf,
+  sequenceItemInstanceId,
   type Element,
   type FrameRange,
   type ListItem,
@@ -321,9 +322,37 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             `${path}#${s.element.id}:item:${item.id}`,
             false,
           );
+          // D-083 — apply this item's namespaced field values (so the operator can edit
+          // e.g. the label next to a clock INSIDE the composition item), applying the
+          // comp's bindings (falling back to the comp's field defaults). The value KEY is
+          // the stable id-based `sequenceItemInstanceId` (matching the field aggregation,
+          // so two same-named sequences never collide); the item's values live under THIS
+          // scope's namespace path (`path`), so a sequence nested in a composition instance
+          // reads the correctly-scoped sub-object, not a root-level one.
+          const childComp = scene.compositions?.find((c) => c.id === item.compositionId);
+          const namespace = sequenceItemInstanceId(s.element.id, item.id);
+          const applyFields = (values: Record<string, unknown>): void => {
+            if (childComp === undefined) return;
+            let scoped: Record<string, unknown> = values;
+            if (path !== '') {
+              for (const seg of path.split('.')) {
+                const next = scoped[seg];
+                scoped =
+                  next !== null && typeof next === 'object'
+                    ? (next as Record<string, unknown>)
+                    : {};
+              }
+            }
+            const sub = scoped[namespace];
+            const itemValues =
+              sub !== null && typeof sub === 'object' ? (sub as NestedFieldValues) : {};
+            applyScopedFieldValues(scene, childComp, itemValues, built.scope);
+          };
+          applyFields(currentValues); // initial render uses the current values (defaults pre-play)
           let torndown = false;
           return {
             node: built.cell,
+            applyFields,
             show: (): void => {
               for (const c of itemSub.clocks) c.start();
               for (const t of itemSub.tickers) t.start();
@@ -574,6 +603,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     }
   };
 
+  // D-083 — re-apply the operator's field values to any on-screen COMPOSITION sequence
+  // items. Their scopes are built dynamically by the sequence driver (NOT in the static
+  // scope tree applyScopedFieldValues walks), so a plain field update misses them; this
+  // routes the FULL value object to each driver, which extracts each item's namespace.
+  const reapplyCompositionItemFields = (): void => {
+    for (const sub of subtrees)
+      for (const s of sub.sequences) s.applyFieldsToCurrent(currentValues);
+  };
+
   const runtime: TemplateRuntime = {
     ready,
 
@@ -588,6 +626,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // longer matters (D-018/D-019 acceptance).
       currentValues = mergeNestedValues(currentValues, data as NestedFieldValues);
       applyScopedFieldValues(scene, scene, currentValues, built.scopeTree);
+      reapplyCompositionItemFields();
       machine.transition('playing');
       bus.emit('play.start');
       doc.body.classList.remove('cg-pending');
@@ -638,6 +677,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         currentValues = mergeNestedValues(currentValues, data as NestedFieldValues);
       }
       applyScopedFieldValues(scene, scene, currentValues, built.scopeTree);
+      reapplyCompositionItemFields();
       bus.emit('update');
     },
 

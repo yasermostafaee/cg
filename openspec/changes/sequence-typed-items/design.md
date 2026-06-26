@@ -79,9 +79,39 @@ by a sequence item joins the per-composition export closure (its assets are
 gathered by the existing recursive walk) and the cycle guard treats it as a real
 reference. No new export code path is needed.
 
+## Correction: composition-item field surfacing + guard narrowing
+
+The first cut over-broadened the guard (it read as "nothing can be bound/edited")
+and a composition used as a sequence item didn't expose its fields, so the
+operator couldn't edit e.g. the city label next to a clock. Fixed:
+
+- **Surface the fields.** `aggregateCompositionFields` now also emits a
+  `CompositionFieldGroup` per composition sequence item (alongside `composition`
+  instances), reusing the D-025 namespacing — so the existing data form + GDD
+  render them with no form changes. `compositionInstancesOf` stays
+  composition-only (it backs instance-name uniqueness checks).
+- **Stable, unique KEY + friendly LABEL.** The value KEY is id-based
+  (`<seq id>:<item id>`, via `sequenceItemInstanceId`) so two same-named
+  sequences never collide and a rename never orphans values; the form/GDD DISPLAY
+  the friendly `<seq name>[<index>]` (`sequenceItemNamespace`) via a new
+  `CompositionFieldGroup.label`.
+- **Apply per item, parent-scoped.** The runtime applies each item's values to
+  its dynamic scope after `wireScopeSubtree` (build-time + re-applied on
+  `update()` via `applyFields`/`applyFieldsToCurrent`), reading the value at the
+  item's OWN scope path (so a sequence nested in a composition instance reads its
+  correctly-scoped sub-object, not a root one).
+- **Narrow the guard.** Only the item-LIST `sequence-items` binding is disabled;
+  the message is scoped to the rundown and notes per-item text + composition-item
+  fields stay editable. Per-element binding / static-text typing were already
+  structurally independent.
+
+Known minor limitation: a pre-play `update()` to a composition-item namespace is
+reflected only once the run starts (the static authoring render uses a throwaway
+scope). Benign in practice — the preview modal is blank until play, and the
+canvas applies defaults (no operator `update()`); it self-corrects on play.
+
 ## Deferred to Phase 2
 
-- Per-item field injection into composition items (they are static refs now).
 - A nested crawler's liveness inside a composition item (clocks ARE live now; a
   ticker inside a comp item rides the same `wireScopeSubtree` machinery and runs,
   but is not a Phase-1 acceptance target).

@@ -118,7 +118,7 @@ function gddPropertiesFor(
     const sub = gddPropertiesFor(group.aggregate, childCtx);
     properties[group.name] = {
       type: 'object',
-      label: group.name,
+      label: group.label ?? group.name,
       properties: sub.properties,
       ...(sub.required.length > 0 ? { required: sub.required } : {}),
     };

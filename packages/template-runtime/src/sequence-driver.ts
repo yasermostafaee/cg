@@ -59,6 +59,12 @@ export interface RenderedSequenceItem {
   pause(): void;
   resume(): void;
   hide(): void;
+  /**
+   * D-083 — re-apply the operator's namespaced field values to a COMPOSITION item's
+   * content (e.g. the label next to a clock). Given the FULL nested value object; the
+   * renderer extracts its own item namespace. No-op / absent for a TEXT item.
+   */
+  applyFields?(values: Record<string, unknown>): void;
 }
 
 /** D-083 — builds the node + inner-driver lifecycle for a COMPOSITION item. */
@@ -204,6 +210,17 @@ export class SequenceDriver {
     if (!this.running || this.paused || this.completed) return;
     if (this.phase !== 'dwell') return;
     this.advance();
+  }
+
+  /**
+   * D-083 — re-apply the operator's field values to the on-screen COMPOSITION item(s)
+   * (the `update()` path; the build-time apply covers the initial render). Given the
+   * FULL nested value object; each composition item extracts its own namespace. A no-op
+   * for text items.
+   */
+  applyFieldsToCurrent(values: Record<string, unknown>): void {
+    this.currentHooks?.applyFields?.(values);
+    this.incomingHooks?.applyFields?.(values);
   }
 
   /** Freeze the dwell timer AND any in-flight transition (lockstep pause). */
