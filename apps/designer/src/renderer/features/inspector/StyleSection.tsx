@@ -584,6 +584,28 @@ function isoToLocalInput(iso: string): string {
  * padding are keyframe-able (the clock tick stays time-driven, only the box STYLE
  * animates on the timeline).
  */
+/**
+ * D-084 — curated IANA zones for the wall-clock picker. 'Local' is the sentinel
+ * for "no timezone" (machine-local time). A stored zone outside this list (a
+ * hand-edited file) is surfaced as an extra leading option so it stays editable.
+ */
+const CLOCK_TIMEZONES: readonly string[] = [
+  'Local',
+  'UTC',
+  'America/Los_Angeles',
+  'America/New_York',
+  'America/Sao_Paulo',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Moscow',
+  'Asia/Tehran',
+  'Asia/Dubai',
+  'Asia/Kolkata',
+  'Asia/Shanghai',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+];
+
 function ClockSections({
   element,
   currentFrame,
@@ -627,6 +649,24 @@ function ClockSections({
           options={['persian', 'latin', 'arabic-indic'] as const}
           onCommit={(digits) => designerStore.updateElement(id, { digits } as Partial<Element>)}
         />
+        {/* D-084 — wall mode can render a chosen IANA zone; 'Local' clears it. The
+            count modes ignore a time zone, so the picker only shows for wall. */}
+        {element.mode === 'wall' && (
+          <SelectField
+            label="time zone"
+            value={element.timezone ?? 'Local'}
+            options={
+              element.timezone !== undefined && !CLOCK_TIMEZONES.includes(element.timezone)
+                ? [element.timezone, ...CLOCK_TIMEZONES]
+                : CLOCK_TIMEZONES
+            }
+            onCommit={(tz) =>
+              designerStore.updateElement(id, {
+                timezone: tz === 'Local' ? undefined : tz,
+              } as Partial<Element>)
+            }
+          />
+        )}
         {element.mode === 'countdown' && (
           <>
             <SelectField

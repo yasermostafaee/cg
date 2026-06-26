@@ -40,6 +40,11 @@ export interface ClockDriverOptions {
   digits: ClockDigits;
   /** Required for `countdown` (schema-enforced); ignored otherwise. */
   target?: ClockTarget | undefined;
+  /**
+   * D-084 — optional IANA time zone for `wall` mode (e.g. 'Europe/London').
+   * Absent ⇒ machine-local time. `countup`/`countdown` ignore it.
+   */
+  timezone?: string | undefined;
   clock?: RuntimeClock | undefined;
 }
 
@@ -60,10 +65,11 @@ interface NormalizedDriverClock {
  * and keeps approaching); only a duration countdown is a constant.
  */
 export function clockInitialText(
-  opts: Pick<ClockDriverOptions, 'mode' | 'format' | 'digits' | 'target'>,
+  opts: Pick<ClockDriverOptions, 'mode' | 'format' | 'digits' | 'target' | 'timezone'>,
   nowMs: number,
 ): string {
-  if (opts.mode === 'wall') return formatWallClock(new Date(nowMs), opts.format, opts.digits);
+  if (opts.mode === 'wall')
+    return formatWallClock(new Date(nowMs), opts.format, opts.digits, opts.timezone);
   if (opts.mode === 'countup') return formatCountClock(0, opts.format, opts.digits);
   const t = opts.target;
   const remaining = t === undefined ? 0 : t.kind === 'duration' ? t.ms : Date.parse(t.iso) - nowMs;
@@ -212,7 +218,8 @@ export class ClockDriver {
 
   private currentText(): string {
     const o = this.o;
-    if (o.mode === 'wall') return formatWallClock(new Date(this.clock.now()), o.format, o.digits);
+    if (o.mode === 'wall')
+      return formatWallClock(new Date(this.clock.now()), o.format, o.digits, o.timezone);
     if (o.mode === 'countup') {
       return formatCountClock(Math.floor(this.activeElapsedMs() / 1000), o.format, o.digits);
     }

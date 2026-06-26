@@ -59,9 +59,50 @@ function mapDigits(s: string, digits: ClockDigits): string {
   return s;
 }
 
-/** Format a time of day (machine-local components of `date`). */
-export function formatWallClock(date: Date, format: string, digits: ClockDigits): string {
-  const h24 = date.getHours();
+/**
+ * The wall-clock hour/minute/second to display. Without a `timezone` these are
+ * the machine-local components of `date` (the prior behaviour). With one, they
+ * are the same instant rendered in that IANA zone, extracted via
+ * `Intl.DateTimeFormat` so the platform's tz database (DST, historical offsets)
+ * is authoritative — never hand-rolled offset math. The `en-US` locale only
+ * yields ASCII parts; the element's own digit mapping runs later, unchanged.
+ */
+function wallComponents(
+  date: Date,
+  timezone: string | undefined,
+): { h24: number; minutes: number; seconds: number } {
+  if (timezone === undefined || timezone === '') {
+    return { h24: date.getHours(), minutes: date.getMinutes(), seconds: date.getSeconds() };
+  }
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(date);
+  const part = (type: string): number => {
+    const found = parts.find((p) => p.type === type)?.value ?? '0';
+    return Number.parseInt(found, 10) || 0;
+  };
+  // `hour12: false` can emit '24' for midnight in some engines — normalise to 0.
+  const h24 = part('hour') % 24;
+  return { h24, minutes: part('minute'), seconds: part('second') };
+}
+
+/**
+ * Format a time of day. Components are the machine-local fields of `date`, or —
+ * when `timezone` (an IANA name) is given — the same instant in that zone
+ * (D-084). The format tokens, 12-hour/meridiem rules, and digit mapping apply
+ * identically afterwards either way.
+ */
+export function formatWallClock(
+  date: Date,
+  format: string,
+  digits: ClockDigits,
+  timezone?: string,
+): string {
+  const { h24, minutes, seconds } = wallComponents(date, timezone);
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
   const out = tokenize(format)
     .map((part) => {
@@ -76,13 +117,13 @@ export function formatWallClock(date: Date, format: string, digits: ClockDigits)
         case 'h':
           return String(h12);
         case 'mm':
-          return pad2(date.getMinutes());
+          return pad2(minutes);
         case 'm':
-          return String(date.getMinutes());
+          return String(minutes);
         case 'ss':
-          return pad2(date.getSeconds());
+          return pad2(seconds);
         case 's':
-          return String(date.getSeconds());
+          return String(seconds);
         case 'A':
           return h24 < 12 ? 'AM' : 'PM';
         case 'a':

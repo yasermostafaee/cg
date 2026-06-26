@@ -257,6 +257,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           format: c.element.format,
           digits: c.element.digits,
           target: c.element.target,
+          timezone: c.element.timezone,
           clock: options.clock,
         });
         clocks.push(driver);

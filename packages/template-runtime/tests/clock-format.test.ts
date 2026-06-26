@@ -35,6 +35,41 @@ describe('formatWallClock (D-027)', () => {
   });
 });
 
+describe('formatWallClock — time zone (D-084)', () => {
+  // A fixed ABSOLUTE instant (noon UTC) so the zone offsets are deterministic.
+  // June offsets: UTC+0, Tokyo +9 (no DST), New York EDT −4, London BST +1,
+  // Tehran +03:30 (Iran dropped DST in 2022).
+  const noonUtc = new Date('2026-06-11T12:00:00.000Z');
+
+  it('renders the instant in the given IANA zone', () => {
+    expect(formatWallClock(noonUtc, 'HH:mm:ss', 'latin', 'UTC')).toBe('12:00:00');
+    expect(formatWallClock(noonUtc, 'HH:mm:ss', 'latin', 'Asia/Tokyo')).toBe('21:00:00');
+    expect(formatWallClock(noonUtc, 'HH:mm:ss', 'latin', 'America/New_York')).toBe('08:00:00');
+    expect(formatWallClock(noonUtc, 'HH:mm:ss', 'latin', 'Europe/London')).toBe('13:00:00');
+    expect(formatWallClock(noonUtc, 'HH:mm:ss', 'latin', 'Asia/Tehran')).toBe('15:30:00');
+  });
+
+  it('applies the format string + digit mapping AFTER the zone shift', () => {
+    // 21:00 Tokyo → 12-hour 9pm; Persian digits still map last.
+    expect(formatWallClock(noonUtc, 'h:mm a', 'latin', 'Asia/Tokyo')).toBe('9:00 pm');
+    expect(formatWallClock(noonUtc, 'hh:mm A', 'latin', 'America/New_York')).toBe('08:00 AM');
+    expect(formatWallClock(noonUtc, 'HH:mm', 'persian', 'Asia/Tokyo')).toBe('۲۱:۰۰');
+  });
+
+  it('normalises a midnight hour (the hour12:false "24" quirk) to 00', () => {
+    const midnightUtc = new Date('2026-06-11T00:00:00.000Z');
+    expect(formatWallClock(midnightUtc, 'HH:mm:ss', 'latin', 'UTC')).toBe('00:00:00');
+  });
+
+  it('an unset (undefined or empty) zone uses local time — identical to the no-arg form', () => {
+    const local = at(13, 5, 9);
+    const noArg = formatWallClock(local, 'HH:mm:ss', 'latin');
+    expect(formatWallClock(local, 'HH:mm:ss', 'latin', undefined)).toBe(noArg);
+    expect(formatWallClock(local, 'HH:mm:ss', 'latin', '')).toBe(noArg);
+    expect(noArg).toBe('13:05:09');
+  });
+});
+
 describe('formatCountClock (D-027)', () => {
   it('formats a full H:M:S count', () => {
     expect(formatCountClock(3725, 'HH:mm:ss', 'latin')).toBe('01:02:05');

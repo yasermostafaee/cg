@@ -486,6 +486,16 @@ describe('ClockElement (D-027)', () => {
   it('accepts a countup clock without a target', () => {
     expect(ClockElementSchema.parse({ ...clock, mode: 'countup' }).mode).toBe('countup');
   });
+  it('D-084 — timezone is an optional, backward-compatible field', () => {
+    // An OLD clock (no timezone) parses unchanged: the field stays absent.
+    expect(ClockElementSchema.parse(clock).timezone).toBeUndefined();
+    // A NEW clock preserves a set IANA zone, and round-trips through the union.
+    expect(ClockElementSchema.parse({ ...clock, timezone: 'Europe/London' }).timezone).toBe(
+      'Europe/London',
+    );
+    const viaUnion = ElementSchema.parse({ ...clock, timezone: 'Asia/Tokyo' });
+    expect((viaUnion as { timezone?: string }).timezone).toBe('Asia/Tokyo');
+  });
   it('accepts a countdown to a duration', () => {
     const parsed = ClockElementSchema.parse({
       ...clock,

@@ -1014,7 +1014,7 @@ catches regressions faster.
 **Notes:** complements P-004 (Exporter/Preview tests) and P-005 (E2E); prerequisite
 safety net for D-035.
 
-## [ ] D-039 — Ticker image/logo separators ⟨priority: low⟩
+## [~] D-039 — Ticker image/logo separators ⟨priority: low⟩ — implementing on `feat/clock-tz-ticker-img-sep` (`openspec/changes/ticker-image-separator`)
 
 **What:** Let the ticker's `separator` be an image/logo instead of (or alongside)
 a text glyph: the operator picks a logo from the SHARED LIBRARY (logo) OR the
@@ -2643,7 +2643,7 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 **Notes:** Significant. Extend SequenceItemSchema (shared-schema) from `{id,text,dwellMs}` to a discriminated union (text | logo | clock); the runtime sequence renderer renders each kind; the items editor lets the operator pick the item type. Design TBD when scheduled.
 
-## [ ] D-084 — Clock: selectable time zone ⟨priority: medium⟩
+## [~] D-084 — Clock: selectable time zone ⟨priority: medium⟩ — implementing on `feat/clock-tz-ticker-img-sep` (`openspec/changes/clock-timezone`)
 
 **What:** A clock element can be assigned a time zone so `wall` mode shows that zone's current time (different countries/cities).
 **Why:** Broadcast frequently shows clocks for multiple locations.

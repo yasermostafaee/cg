@@ -262,6 +262,14 @@ export const ClockElementSchema = ElementBaseSchema.extend({
   digits: z.enum(['latin', 'persian', 'arabic-indic']).default('persian'),
   /** Countdown target; ignored by `wall`/`countup`. */
   target: ClockTargetSchema.optional(),
+  /**
+   * D-084 — optional IANA time-zone name (e.g. 'Europe/London'). When set,
+   * `wall` mode renders that zone's current time (via Intl.DateTimeFormat);
+   * absent ⇒ the machine's local zone (the prior behaviour). `countup`/
+   * `countdown` ignore it. Additive + backward-compatible — no schema-version
+   * bump: a clock authored without it parses and renders unchanged.
+   */
+  timezone: z.string().optional(),
 })
   .merge(BoxStyleSchema)
   .superRefine((el, ctx) => {
