@@ -95,7 +95,48 @@ import type {
 /** D-026 — a node in the controller tree paralleling the field-scope tree. */
 interface ScopeNode {
   controller: PlayoutController;
+  /** Wiring-tree children: nested composition instances AND stamped repeater rows (the cascade walks these). */
   children: ScopeNode[];
+  /** D-104 — this scope's hold is content-driven (a "coordinator"). */
+  isCoordinator: boolean;
+  /** D-104 — reset + start this scope's OWN content drivers (tickers / clocks / sequences). */
+  startOwnContent: () => void;
+  /** D-104 — this scope's OWN content completion (`Promise.all` of its content sources), or null if it has none. */
+  ownContentWait: () => Promise<void> | null;
+  /** D-104 — composition-INSTANCE children only (NOT repeater rows), for content aggregation up the tree. */
+  instanceChildren: ScopeNode[];
+}
+
+/**
+ * D-104 — reset + start `node`'s own content drivers and those of its
+ * non-coordinator nested-composition descendants, so a coordinator parent starts
+ * nested content at ITS hold entry (after the parent's intro). A coordinator
+ * descendant owns + self-starts its own subtree, so the recursion STOPS at it.
+ */
+function startContentTree(node: ScopeNode): void {
+  node.startOwnContent();
+  for (const child of node.instanceChildren) {
+    if (!child.isCoordinator) startContentTree(child);
+  }
+}
+
+/**
+ * D-104 — `node`'s recursive content completion: its own content sources plus
+ * every non-coordinator nested-composition descendant's (skipping nested
+ * coordinators, which self-settle). null when nothing finite is coordinated (a
+ * zero-length hold).
+ */
+function contentTreeWait(node: ScopeNode): Promise<void> | null {
+  const waits: Promise<void>[] = [];
+  const own = node.ownContentWait();
+  if (own !== null) waits.push(own);
+  for (const child of node.instanceChildren) {
+    if (!child.isCoordinator) {
+      const childWait = contentTreeWait(child);
+      if (childWait !== null) waits.push(childWait);
+    }
+  }
+  return waits.length > 0 ? Promise.all(waits).then(() => undefined) : null;
 }
 
 /**
@@ -274,7 +315,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     const repeaters: RepeaterDriver[] = [];
     const controllers: PlayoutController[] = [];
 
-    const wireScope = (scope: FieldScope, path: string, isSubtreeRoot: boolean): ScopeNode => {
+    const wireScope = (
+      scope: FieldScope,
+      path: string,
+      isSubtreeRoot: boolean,
+      hasCoordinatorAncestor: boolean,
+    ): ScopeNode => {
       const scopeOverride = overrides[path];
       // D-028 — one treadmill driver per ticker element, per scope (the same
       // child composition instanced twice gets two independent drivers).
@@ -448,41 +494,77 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         return driver;
       });
 
-      // D-028/D-027/D-029 — self-wire the scope's content completion from its
-      // CONTENT SOURCES: every ticker, every countdown clock, and every
-      // sequence in the scope. ALL tickers and sequences join the wait — an
-      // infinite one's whenComplete() never resolves, which IS how it holds
-      // the scope until stop(); only the clock filter is by kind (wall/countup
-      // are excluded because they're not content sources at all). No content
-      // sources ⇒ null ⇒ a zero-length hold. An EXPLICIT boot-option
-      // `contentHold` still wins for the ROOT scope (external override / test
-      // seam). Each hold entry resets + starts the scope's drivers, so every
-      // open/close cycle replays the crawl / re-runs the count / restarts
-      // from item 1.
+      // D-028/D-027/D-029 — this scope's OWN content completion from its CONTENT
+      // SOURCES: every ticker, every countdown clock, and every sequence in the
+      // scope. ALL tickers and sequences join the wait — an infinite one's
+      // whenComplete() never resolves, which IS how it holds until stop(); only
+      // the clock filter is by kind (wall/countup are excluded — not content
+      // sources). No own content sources ⇒ null.
       const scopeCountdowns = scopeClocks.filter((c) => c.mode === 'countdown');
-      const contentWait =
+      const hasOwnContent =
+        scopeTickers.length > 0 || scopeClocks.length > 0 || scopeSequences.length > 0;
+      // Reset + start THIS scope's own drivers (a fresh crawl / count / run from
+      // item 1 per open/close cycle). D-104 — a coordinator also calls this for
+      // its non-coordinator nested descendants, so nested content begins at the
+      // PARENT's hold entry.
+      const startOwnContent = (): void => {
+        for (const t of scopeTickers) {
+          t.reset();
+          t.start();
+        }
+        for (const c of scopeClocks) {
+          c.reset();
+          c.start();
+        }
+        for (const s of scopeSequences) {
+          s.reset();
+          s.start();
+        }
+      };
+      const ownContentWait = (): Promise<void> | null =>
         scopeTickers.length > 0 || scopeCountdowns.length > 0 || scopeSequences.length > 0
-          ? (): Promise<void> =>
-              Promise.all([
-                ...scopeTickers.map((t) => t.whenComplete()),
-                ...scopeCountdowns.map((c) => c.whenComplete()),
-                ...scopeSequences.map((s) => s.whenComplete()),
-              ]).then(() => undefined)
-          : undefined;
-      const isGlobalRoot = isSubtreeRoot && isRootSubtree;
-      const externalWait =
-        isGlobalRoot && options.contentHold !== undefined ? options.contentHold : undefined;
-      const waitForContent = externalWait ?? contentWait;
+          ? Promise.all([
+              ...scopeTickers.map((t) => t.whenComplete()),
+              ...scopeCountdowns.map((c) => c.whenComplete()),
+              ...scopeSequences.map((s) => s.whenComplete()),
+            ]).then(() => undefined)
+          : null;
       const stopScopeContent = (): void => {
         for (const t of scopeTickers) t.stop();
         for (const c of scopeClocks) c.stop();
         for (const s of scopeSequences) s.stop();
       };
+      const effPlayout = effectivePlayoutFor(scope.source, path);
+      const isGlobalRoot = isSubtreeRoot && isRootSubtree;
+      // D-104 — a "coordinator" is a content-driven (non-manual) scope: at its
+      // hold entry it starts + awaits its OWN content PLUS its non-coordinator
+      // nested descendants' content (a content-driven nested comp self-settles and
+      // is skipped, preserving its own per-scope hold). A non-coordinator under a
+      // coordinator ancestor does NOT self-start its content (the ancestor drives
+      // it at the parent's hold entry); with no coordinator ancestor it keeps the
+      // old per-scope start behavior. An EXPLICIT boot `contentHold` still wins for
+      // the ROOT scope (external override / test seam).
+      const isCoordinator =
+        effPlayout.mode !== 'manual' && effPlayout.holdSource === 'content-driven';
+      // Build the nested composition-instance children FIRST (they don't depend on
+      // this scope's controller), so the content closures below can close over them
+      // without a forward reference. Each child's path appends its instance name to
+      // the parent's dotted path (root = ''): '' → 'home' → 'home.inner' — the key
+      // `effectivePlayoutFor`/`scopeOverrides` use to target one scope's timing.
+      // D-104 — propagate coordinator coverage down the tree.
+      const instanceChildren = scope.children.map((c) =>
+        wireScope(
+          c.scope,
+          path === '' ? c.name : `${path}.${c.name}`,
+          false,
+          hasCoordinatorAncestor || isCoordinator,
+        ),
+      );
       const controller = new PlayoutController({
         frameRate: scene.frameRate,
         active: activeRangeOf(scope.source),
         lifecycle: scope.source.lifecycle,
-        playout: effectivePlayoutFor(scope.source, path),
+        playout: effPlayout,
         hasAnimation: scope.animated.length > 0,
         applyFrame: (frame: number): void => {
           for (const entry of scope.animated) applyAnimationAtFrame(entry, frame);
@@ -497,38 +579,48 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
               onRootSettled();
             }
           : stopScopeContent,
-        waitForContent:
-          waitForContent === undefined ? undefined : (): Promise<void> => waitForContent(),
-        onHoldStart:
-          scopeTickers.length > 0 || scopeClocks.length > 0 || scopeSequences.length > 0
-            ? (): void => {
-                // Fresh crawl / fresh count / fresh run from item 1 per
-                // composition cycle (reset BEFORE the wait is requested, so
-                // the controller awaits this run's completion).
-                for (const t of scopeTickers) {
-                  t.reset();
-                  t.start();
-                }
-                for (const c of scopeClocks) {
-                  c.reset();
-                  c.start();
-                }
-                for (const s of scopeSequences) {
-                  s.reset();
-                  s.start();
+        // The content closures run at hold entry (post-play); they aggregate THIS
+        // scope's own content with its non-coordinator nested descendants' (a nested
+        // coordinator self-settles, so it is skipped) via the module helpers.
+        waitForContent: isCoordinator
+          ? (): Promise<void> | null => {
+              if (isGlobalRoot && options.contentHold !== undefined) return options.contentHold();
+              const waits: Promise<void>[] = [];
+              const own = ownContentWait();
+              if (own !== null) waits.push(own);
+              for (const child of instanceChildren) {
+                if (!child.isCoordinator) {
+                  const childWait = contentTreeWait(child);
+                  if (childWait !== null) waits.push(childWait);
                 }
               }
+              return waits.length > 0 ? Promise.all(waits).then(() => undefined) : null;
+            }
+          : undefined,
+        onHoldStart: isCoordinator
+          ? (): void => {
+              startOwnContent();
+              for (const child of instanceChildren) {
+                if (!child.isCoordinator) startContentTree(child);
+              }
+            }
+          : hasOwnContent && !hasCoordinatorAncestor
+            ? startOwnContent
             : undefined,
         clock: options.clock,
       });
       controllers.push(controller);
-      // Build each child's path by appending its instance name to the parent's
-      // dotted path (root = ''): '' → 'home' → 'home.inner'. This is the key
-      // `effectivePlayoutFor`/`scopeOverrides` use to target one scope's timing.
-      const children = scope.children.map((c) =>
-        wireScope(c.scope, path === '' ? c.name : `${path}.${c.name}`, false),
-      );
-      const node: ScopeNode = { controller, children };
+      // `children` (the cascade tree) starts as the instance children and also
+      // receives stamped repeater rows below; `instanceChildren` stays rows-free
+      // for D-104 content aggregation.
+      const node: ScopeNode = {
+        controller,
+        children: [...instanceChildren],
+        isCoordinator,
+        startOwnContent,
+        ownContentWait,
+        instanceChildren,
+      };
 
       // D-030 — repeater drivers (after the node exists: stamped rows attach
       // under it so the cascade reaches them like authored children). Each
@@ -585,7 +677,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       return node;
     };
 
-    const node = wireScope(subtreeScope, subtreePath, true);
+    const node = wireScope(subtreeScope, subtreePath, true, false);
     const sub: WiredSubtree = {
       node,
       tickers,
