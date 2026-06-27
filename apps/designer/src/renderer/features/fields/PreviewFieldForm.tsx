@@ -46,9 +46,11 @@ const EMPTY_PENDING: ReadonlySet<string> = new Set<string>();
 export function PreviewFieldForm({
   aggregate,
   values,
+  appliedValues,
   onChange,
   pendingPaths,
   onUpdateField,
+  onUpdateItem,
   onUpdateAll,
   anyPending,
   dwellFieldIds,
@@ -56,11 +58,15 @@ export function PreviewFieldForm({
 }: {
   aggregate: AggregatedFields;
   values: NestedFieldValues;
+  /** D-106 — the on-stage (applied) values, so `list` fields can mark per-item dirtiness. */
+  appliedValues?: NestedFieldValues;
   onChange: (path: string[], value: FieldValue) => void;
   /** D-106 — dotted leaf paths edited but not yet applied (show a pending indicator). */
   pendingPaths?: ReadonlySet<string>;
   /** D-106 — apply one field's pending value to the stage. */
   onUpdateField?: (path: string[]) => void;
+  /** D-106 follow-up — apply ONE item of a `list` field (per-input granularity). */
+  onUpdateItem?: (path: string[], itemId: string) => void;
   /** D-106 — apply ALL pending field values at once. */
   onUpdateAll?: () => void;
   /** D-106 — whether any field is pending (gates the "Update all" control). */
@@ -74,10 +80,12 @@ export function PreviewFieldForm({
     <AggregateSection
       aggregate={aggregate}
       values={values}
+      appliedValues={appliedValues ?? {}}
       path={[]}
       onChange={onChange}
       pendingPaths={pendingPaths ?? EMPTY_PENDING}
       onUpdateField={onUpdateField}
+      onUpdateItem={onUpdateItem}
       onUpdateAll={onUpdateAll}
       anyPending={anyPending ?? false}
       title="Data"
@@ -92,10 +100,12 @@ export function PreviewFieldForm({
 function AggregateSection({
   aggregate,
   values,
+  appliedValues,
   path,
   onChange,
   pendingPaths,
   onUpdateField,
+  onUpdateItem,
   onUpdateAll,
   anyPending,
   title,
@@ -105,10 +115,12 @@ function AggregateSection({
 }: {
   aggregate: AggregatedFields;
   values: NestedFieldValues;
+  appliedValues: NestedFieldValues;
   path: string[];
   onChange: (path: string[], value: FieldValue) => void;
   pendingPaths: ReadonlySet<string>;
   onUpdateField?: ((path: string[]) => void) | undefined;
+  onUpdateItem?: ((path: string[], itemId: string) => void) | undefined;
   onUpdateAll?: (() => void) | undefined;
   anyPending?: boolean | undefined;
   title: string;
@@ -177,6 +189,14 @@ function AggregateSection({
           updateName={[...path, f.label || f.id].join('.')}
           showDwell={dwellFieldIds?.has(f.id) ?? false}
           columns={columnsByFieldId?.get(f.id)}
+          appliedItems={
+            f.type === 'list' ? listItems(scalarAt(appliedValues, f.id), f.default) : undefined
+          }
+          onUpdateItem={
+            onUpdateItem !== undefined
+              ? (itemId) => onUpdateItem([...path, f.id], itemId)
+              : undefined
+          }
         />
       ))}
 
@@ -185,10 +205,12 @@ function AggregateSection({
           key={g.instanceId}
           aggregate={g.aggregate}
           values={namespaceAt(values, g.name)}
+          appliedValues={namespaceAt(appliedValues, g.name)}
           path={[...path, g.name]}
           onChange={onChange}
           pendingPaths={pendingPaths}
           onUpdateField={onUpdateField}
+          onUpdateItem={onUpdateItem}
           title={g.label ?? g.name}
           depth={depth + 1}
           dwellFieldIds={dwellFieldIds}
@@ -224,6 +246,8 @@ function FieldRow({
   updateName,
   showDwell,
   columns,
+  appliedItems,
+  onUpdateItem,
 }: {
   field: DynamicField;
   value: FieldValue | undefined;
@@ -233,8 +257,13 @@ function FieldRow({
   updateName?: string | undefined;
   showDwell?: boolean | undefined;
   columns?: readonly ListItemColumn[] | undefined;
+  appliedItems?: readonly ListItem[] | undefined;
+  onUpdateItem?: ((itemId: string) => void) | undefined;
 }): JSX.Element {
   const error = validateField(field, value);
+  // D-106 follow-up — a `list` field applies PER ITEM (each item input carries its
+  // own Update inside the editor), so it shows no single per-field Update button.
+  const isList = field.type === 'list';
   return (
     <div className={cx(s.row, pending === true && s.rowPending)}>
       <label className={s.label} title={field.description}>
@@ -246,14 +275,23 @@ function FieldRow({
           </span>
         )}
       </label>
-      {renderInput(field, value, onChange, error !== null, showDwell === true, columns)}
+      {renderInput(
+        field,
+        value,
+        onChange,
+        error !== null,
+        showDwell === true,
+        columns,
+        appliedItems,
+        onUpdateItem,
+      )}
       {error !== null && (
         <span className={s.error} role="alert">
           <Icon icon={TriangleAlert} size={14} />
           {error}
         </span>
       )}
-      {pending === true && onUpdate !== undefined && (
+      {pending === true && onUpdate !== undefined && !isList && (
         <Button
           size="sm"
           className={s.updateField}
@@ -316,6 +354,8 @@ function renderInput(
   invalid: boolean,
   showDwell = false,
   columns?: readonly ListItemColumn[],
+  appliedItems?: readonly ListItem[],
+  onUpdateItem?: (itemId: string) => void,
 ): JSX.Element {
   const cls = cx(s.input, invalid && s.inputInvalid);
   // A stable accessible name per field (label, else the data key) so the preview
@@ -403,6 +443,8 @@ function renderInput(
           showDwell={showDwell}
           columns={columns}
           onChange={(items) => onChange(items)}
+          appliedItems={appliedItems}
+          onUpdateItem={onUpdateItem}
         />
       );
     case 'text':

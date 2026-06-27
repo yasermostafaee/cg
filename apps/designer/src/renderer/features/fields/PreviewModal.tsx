@@ -4,6 +4,7 @@ import {
   defaultNestedValues,
   type AggregatedFields,
   type FieldValue,
+  type ListItem,
   type NestedFieldValues,
   type Scene,
 } from '@cg/shared-schema';
@@ -300,6 +301,32 @@ export function PreviewModal({
     },
     [applied, values, dispatch],
   );
+  // D-106 follow-up — apply ONE item of a `list` field (per-input granularity): merge
+  // just that item (matched by stable id) from pending into the applied list, leaving
+  // every other item's applied value untouched, so each item input commits on its own.
+  const onUpdateListItem = useCallback(
+    (path: string[], itemId: string) => {
+      const pendingList = getIn(values, path);
+      if (!Array.isArray(pendingList)) return;
+      const pArr = pendingList as ListItem[];
+      const appliedList = getIn(applied, path);
+      const aArr = Array.isArray(appliedList) ? (appliedList as ListItem[]) : [];
+      const pItem = pArr.find((it) => it.id === itemId);
+      if (pItem === undefined) return; // item was removed in pending — "Update all" handles that
+      let nextArr: ListItem[];
+      if (aArr.some((it) => it.id === itemId)) {
+        nextArr = aArr.map((it) => (it.id === itemId ? pItem : it));
+      } else {
+        // A brand-new item: insert it at its pending index (best effort) so order is sane.
+        const at = Math.min(Math.max(pArr.indexOf(pItem), 0), aArr.length);
+        nextArr = [...aArr.slice(0, at), pItem, ...aArr.slice(at)];
+      }
+      const next = setIn(applied, path, nextArr as unknown as FieldValue);
+      setApplied(next);
+      dispatch.update(next);
+    },
+    [applied, values, dispatch],
+  );
   const pendingPaths = useMemo(() => dirtyPaths(values, applied), [values, applied]);
   const anyPending = pendingPaths.size > 0;
 
@@ -374,9 +401,11 @@ export function PreviewModal({
             <PreviewFieldForm
               aggregate={aggregate}
               values={values}
+              appliedValues={applied}
               onChange={onFieldChange}
               pendingPaths={pendingPaths}
               onUpdateField={onUpdateField}
+              onUpdateItem={onUpdateListItem}
               onUpdateAll={onUpdateAll}
               anyPending={anyPending}
               dwellFieldIds={sequenceListFieldIds(scene)}
