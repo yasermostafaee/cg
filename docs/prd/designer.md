@@ -2834,7 +2834,7 @@ risks partial/flickering on-air updates. Long values (tickers/sequences/headline
 **Notes:** Reuse the amber/dirty-indicator pattern (D-088/D-089) for pending fields; textarea optional or
 auto-grow (default textarea for typically-long fields like ticker/sequence text).
 
-## [~] D-107 — Select which content drives the content-driven hold ⟨priority: medium⟩ — implementing on `feat/selective-content-hold` (`openspec/changes/selective-content-hold`)
+## [x] D-107 — Select which content drives the content-driven hold ⟨priority: medium⟩ — merged (#201) & archived: `openspec/changes/archive/2026-06-27-selective-content-hold/`
 
 **What:** When a composition's hold is content-driven, the designer can choose WHICH of its content
 elements (tickers, sequences, countdown clocks) drive the hold — i.e. determine when the graphic
