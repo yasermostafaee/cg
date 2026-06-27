@@ -24,6 +24,18 @@ only when:
 `anyPending = pending has any entry differing from applied` gates the global
 "Update all" (disabled when nothing pending).
 
+### Follow-up (#198) — per-INPUT, not per-field, for `list` fields
+
+A `list` field (ticker / sequence items) is ONE `dirtyPaths` leaf, so the original
+per-field design gave it a SINGLE Update for the whole list — operators reported
+this as "one Update per element" rather than per editable value. Corrected to
+per-INPUT: a scalar field keeps its one per-field Update (a field == an input), but
+a `list` field's items each carry their OWN per-item Update inside `ListItemsEditor`
+(no single whole-list Update). `PreviewModal.onUpdateListItem(path, itemId)` merges
+just that item (matched by stable id) from pending into applied and posts the same
+`update`, so it commits IN PLACE exactly like the per-field path; per-item dirtiness
+is `JSON.stringify(item) !== JSON.stringify(appliedItemSameId)`.
+
 ## Pending indicator (reuse D-088/D-089)
 
 The desktop-save dirty visual is `borderTop: 2px solid #ffdd40` (amber) keyed off

@@ -13,8 +13,11 @@ and seeded from each field's default. Editing a field value SHALL NOT update the
 previewed output in realtime; the edited (pending) value SHALL be decoupled from the
 applied value and SHALL change the stage ONLY when an explicit Update is invoked. The
 form SHALL offer exactly ONE global "Update all" that applies every pending field at
-once and, for EACH field with a pending change, its OWN per-field Update control that
-applies only that field while the other pending fields stay pending. Applying an
+once and, for EACH editable INPUT with a pending change, its OWN per-input Update
+control that applies only that input while the other pending inputs stay pending — a
+scalar field's single input has its own Update, and a `list` field (ticker / sequence
+items) gives EACH item input its own per-item Update instead of one whole-list Update.
+Applying an
 Update SHALL update the bound values IN PLACE on the currently-held graphic, leaving
 the background and every other element / animation untouched — the CG UPDATE standard:
 no scene rebuild, no playout reset / replay, no background teardown. A field edited
@@ -30,13 +33,22 @@ controls.
 - **THEN** the previewed output does NOT change, and the field shows a pending /
   unapplied indicator until an Update is applied
 
-#### Scenario: Each pending field has its own Update control plus one global Update all
+#### Scenario: Each pending input has its own Update control plus one global Update all
 
-- **WHEN** the operator edits three fields so all three are pending
-- **THEN** the form shows three per-field Update controls (one per pending field)
+- **WHEN** the operator edits three scalar fields so all three are pending
+- **THEN** the form shows three per-input Update controls (one per pending input)
   and exactly one global "Update all" (there is no second global "Update"); clicking
-  a per-field Update applies only that field while the others stay pending, and
+  a per-input Update applies only that input while the others stay pending, and
   clicking "Update all" applies the rest
+
+#### Scenario: A list field's items each get their own per-item Update
+
+- **WHEN** a ticker / sequence binds to a `list` field and the operator edits one of
+  its item inputs
+- **THEN** that item shows its OWN per-item Update control (enabled only for the
+  edited item; the whole `list` field has no single per-field Update), and applying
+  it commits ONLY that item IN PLACE — the other edited items stay pending and the
+  held background is untouched
 
 #### Scenario: Update applies in place and keeps the held background
 

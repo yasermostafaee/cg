@@ -54,3 +54,21 @@
       background; "Update all" applies the rest; a long value renders as a visible
       multi-line textarea showing the full text. Fixed `regressions.spec.ts` D-025 + `critical-flow.spec.ts` to the explicit-Update flow.
 - [x] Re-ran the ONE combined gate (turbo `--force`) + the full E2E (120 passed).
+
+## 7. Per-INPUT correction (follow-up, #198)
+
+- [x] FIX 1 corrected to PER INPUT, not per element: a `list` field (ticker /
+      sequence) no longer commits as ONE whole-list Update. `ListItemsEditor.tsx`
+      renders a per-ITEM Update control (preview context) enabled only when that
+      item differs from its same-id on-stage item.
+- [x] `PreviewFieldForm.tsx`: thread the applied values + an `onUpdateItem`
+      callback to the items editor; SUPPRESS the single per-field Update for `list`
+      fields (the per-item Updates replace it).
+- [x] `PreviewModal.tsx`: `onUpdateListItem(path, itemId)` merges just that item (by
+      stable id) from pending into applied — apply IN PLACE, every other item
+      untouched, routed through the same `!playing` `update` seam.
+- [x] E2E (`preview-item-update.spec.ts`): each ticker item input has its OWN
+      Update, enabled independently; applying one leaves the others pending; the
+      per-item Update keeps the held background (apply-in-place on the per-item
+      path). Neutralize-confirmed (0 vs 3 per-item buttons when reverted).
+- [x] Re-ran the combined gate (turbo `--force`, `@cg/designer` + `@cg/template-runtime`) + `format:check`; merged (#198).
