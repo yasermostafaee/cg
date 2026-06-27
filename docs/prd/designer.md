@@ -2714,7 +2714,7 @@ time source (e.g. `Math.floor(now / period) % 2`) and toggle the colon span(s)' 
 display) — no separate setInterval. Applies to wall/countup/countdown. Inspector clock section:
 a blink toggle + a rate control (period ms or Hz).
 
-## [ ] D-104 — Nested-composition content participates in the parent's lifecycle ⟨priority: high; needs design⟩
+## [~] D-104 — Nested-composition content participates in the parent's lifecycle ⟨priority: high; needs design⟩ — implementing on `feat/nested-content-lifecycle` (`openspec/changes/nested-content-lifecycle`)
 
 **What:** Finite content (ticker / sequence / countdown clock) that lives inside a NESTED composition
 must participate in the PARENT composition's lifecycle: (1) the parent's content-driven hold lasts

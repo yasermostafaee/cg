@@ -382,9 +382,11 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
     const clock = makeClock();
     const scene: Scene = {
       ...tickerScene({}),
-      // Root: content-driven hold with NO root tickers ⇒ zero-length hold ⇒
-      // settles right after play; the nested infinite crawl must be taken
-      // down with it.
+      // D-104 — Root: content-driven hold with NO root tickers, nesting a
+      // content-driven (coordinator) band. A nested COORDINATOR owns + self-settles
+      // its own content, so the root SKIPS it ⇒ the root coordinates nothing ⇒
+      // zero-length hold ⇒ settles right after play; the nested infinite crawl is
+      // taken down with it by the root settle's cascade.
       playout: { mode: 'auto-out', holdSource: 'content-driven' },
       layers: [
         {
@@ -415,7 +417,10 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
           resolution: { width: 400, height: 60 },
           frameRange: { in: 0, out: 50 },
           background: 'transparent',
-          playout: { mode: 'manual' },
+          // D-104 — the band is itself content-driven (a coordinator): it owns its
+          // own infinite crawl, so the content-driven root does NOT wait on it and
+          // still self-settles (zero-length), tearing the crawl down on settle.
+          playout: { mode: 'auto-out', holdSource: 'content-driven' },
           layers: [
             {
               id: 'CL1',

@@ -34,14 +34,30 @@ const HOLD_LABELS: Record<HoldSource, string> = {
  * holds until stop — still a meaningful content-driven authoring choice).
  */
 function hasContentElement(scene: Scene): boolean {
+  // D-104 — a nested composition instance participates in the parent's
+  // content-driven hold, so resolve the referenced composition's layers and
+  // check THEM too (cycle-guarded by a visited set), exactly as we recurse into
+  // a container. So the hold control is offered for a parent whose only finite
+  // content lives inside a nested composition.
+  const visited = new Set<string>();
   const walk = (children: readonly Element[]): boolean =>
-    children.some(
-      (el) =>
+    children.some((el) => {
+      if (
         el.type === 'ticker' ||
         el.type === 'sequence' ||
-        (el.type === 'clock' && el.mode === 'countdown') ||
-        (el.type === 'container' && walk(el.children)),
-    );
+        (el.type === 'clock' && el.mode === 'countdown')
+      ) {
+        return true;
+      }
+      if (el.type === 'container') return walk(el.children);
+      if (el.type === 'composition') {
+        if (visited.has(el.compositionId)) return false;
+        visited.add(el.compositionId);
+        const comp = scene.compositions?.find((c) => c.id === el.compositionId);
+        return comp !== undefined && comp.layers.some((l) => walk(l.children));
+      }
+      return false;
+    });
   return scene.layers.some((l) => walk(l.children));
 }
 
