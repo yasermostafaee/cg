@@ -234,6 +234,25 @@ describe('D-105 — split exit (out vs stop)', () => {
     r.remove();
   });
 
+  it('a pause during an out() fade defers the background close until resume', async () => {
+    const clock = makeClock();
+    const r = createRuntime(scene(), { skipFontLoad: true, clock, tickerMeasure });
+    await r.play({});
+    await run(clock, 1000);
+
+    const outP = r.out();
+    await run(clock, 100); // mid-fade
+    r.pause();
+    await run(clock, 3000); // the fade timer fires, but paused ⇒ the outro is deferred
+    await outP;
+    expect(onAir()).toBe(true); // NOT closed while paused
+
+    r.resume();
+    await run(clock, 2000); // resume finishes the deferred background outro
+    expect(onAir()).toBe(false);
+    r.remove();
+  });
+
   it('replay after an exit restores the content (cleared fade/hide does not persist)', async () => {
     const clock = makeClock();
     const r = createRuntime(scene(), { skipFontLoad: true, clock, tickerMeasure });

@@ -174,6 +174,7 @@ function AggregateSection({
           onChange={(v) => onChange([...path, f.id], v)}
           pending={pendingPaths.has([...path, f.id].join('.'))}
           onUpdate={onUpdateField !== undefined ? () => onUpdateField([...path, f.id]) : undefined}
+          updateName={[...path, f.label || f.id].join('.')}
           showDwell={dwellFieldIds?.has(f.id) ?? false}
           columns={columnsByFieldId?.get(f.id)}
         />
@@ -220,6 +221,7 @@ function FieldRow({
   onChange,
   pending,
   onUpdate,
+  updateName,
   showDwell,
   columns,
 }: {
@@ -228,6 +230,7 @@ function FieldRow({
   onChange: (v: FieldValue) => void;
   pending?: boolean | undefined;
   onUpdate?: (() => void) | undefined;
+  updateName?: string | undefined;
   showDwell?: boolean | undefined;
   columns?: readonly ListItemColumn[] | undefined;
 }): JSX.Element {
@@ -255,7 +258,7 @@ function FieldRow({
           size="sm"
           className={s.updateField}
           onClick={onUpdate}
-          aria-label={`Update field ${field.label || field.id}`}
+          aria-label={`Update field ${updateName ?? field.label ?? field.id}`}
           title="Apply this field to the stage"
         >
           <Icon icon={Check} size={13} />
@@ -270,12 +273,14 @@ function FieldRow({
 function GrowTextarea({
   className,
   rows,
+  multiline,
   value,
   onChange,
   label,
 }: {
   className: string;
   rows: number;
+  multiline: boolean;
   value: string;
   onChange: (v: FieldValue) => void;
   label: string;
@@ -294,6 +299,11 @@ function GrowTextarea({
       rows={rows}
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        // D-106 — a single-line `text` field keeps single-line semantics: Enter
+        // does not insert a newline (only `multiline` fields accept newlines).
+        if (!multiline && e.key === 'Enter') e.preventDefault();
+      }}
       aria-label={label}
     />
   );
@@ -317,6 +327,7 @@ function renderInput(
         <GrowTextarea
           className={cls}
           rows={2}
+          multiline
           value={asString(value)}
           onChange={onChange}
           label={label}
@@ -401,6 +412,7 @@ function renderInput(
         <GrowTextarea
           className={cls}
           rows={1}
+          multiline={false}
           value={asString(value)}
           onChange={onChange}
           label={label}

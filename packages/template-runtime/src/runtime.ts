@@ -786,6 +786,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // A generation token supersedes an in-flight `out()` fade when stop()/play() arrives.
   const OUT_FADE_MS = 400;
   let exitGen = 0;
+  // D-105 — pause-aware exit: a pause arriving during an out() fade defers the
+  // background outro until resume(), so the graphic does not close while paused.
+  let paused = false;
+  let pendingExitOutro = false;
   const exitSetTimeout =
     options.clock?.setTimeout ?? ((cb: () => void, ms: number): unknown => setTimeout(cb, ms));
   const contentRoots = (): HTMLElement[] =>
@@ -850,6 +854,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // D-105 — clear any out()/stop() exit styling so a fresh play shows the
       // content again, and supersede an in-flight out() fade.
       exitGen += 1;
+      pendingExitOutro = false;
+      paused = false;
       restoreContent();
       machine.transition('on-air');
       // D-030 — repeaters re-stamp FIRST: the row COUNT comes from the
@@ -911,6 +917,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // The controller drives onExitStart/onSettle (stop.start / stop.end + hide);
       // D-026 — each nested instance plays its OWN outro in cascade.
       exitGen += 1;
+      pendingExitOutro = false;
       hideContentNow();
       playBackgroundOutroAndSettle();
     },
@@ -926,11 +933,18 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       await fadeContentOut(OUT_FADE_MS);
       if (gen !== exitGen) return;
       if (machine.state !== 'on-air' && machine.state !== 'playing') return;
+      if (paused) {
+        // Paused mid-fade — defer the background outro until resume() so the
+        // graphic does not close while paused.
+        pendingExitOutro = true;
+        return;
+      }
       playBackgroundOutroAndSettle();
     },
 
     pause(): void {
       if (machine.state === 'removed') return;
+      paused = true;
       cascade(rootNode, (c) => c.pause());
       // D-028/D-027/D-029 — freeze the crawls, clocks, and sequences (dwell
       // AND in-flight transitions) in lockstep with the frozen hold timers.
@@ -941,10 +955,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     resume(): void {
       if (machine.state === 'removed') return;
+      paused = false;
       cascade(rootNode, (c) => c.resume());
       for (const sub of subtrees) for (const t of sub.tickers) t.resume();
       for (const sub of subtrees) for (const c of sub.clocks) c.resume();
       for (const sub of subtrees) for (const s of sub.sequences) s.resume();
+      // D-105 — finish an out() exit that was deferred because pause arrived mid-fade.
+      if (pendingExitOutro) {
+        pendingExitOutro = false;
+        playBackgroundOutroAndSettle();
+      }
     },
 
     async next(): Promise<void> {
