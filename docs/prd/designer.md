@@ -2861,3 +2861,17 @@ holdSource is content-driven) a checklist of the scope's content elements ("whic
 graphic?"), pre-checked, toggling drivesHold. Wall/countup clocks never drive the hold regardless —
 only countdown clocks, tickers, sequences are meaningful (list/disable accordingly). Start-marker
 selectivity is OUT of scope (deferred).
+
+## [~] D-108 — Surface nested-composition content that drives the hold ⟨priority: medium⟩ — implementing on `feat/surface-nested-hold-content` (`openspec/changes/surface-nested-hold-content`)
+
+**What:** In the PlayoutSection "which content closes the graphic?" checklist (D-107), show a READ-ONLY indicator for hold-driving content (ticker / sequence / countdown clock with `drivesHold !== false`) that lives inside the active composition's nested composition instances. It lists each such nested composition by name with a count of its hold-driving items, and opens that composition when activated. It does NOT make those items togglable from the parent.
+**Why:** D-107's checklist lists only the active composition's OWN content (recursing groups, not nested composition instances). But the runtime honors `drivesHold` recursively (D-104), so content inside nested compositions DOES drive the parent's hold — an operator viewing the parent's checklist can't see this and may assume nested content is ignored. `drivesHold` is a property of the shared child element (a nested instance is a `compositionId` reference, layers not copied), so making it togglable from the parent would silently mutate every other instance of that child. A read-only, drill-in indicator closes the discoverability gap without that footgun.
+**Acceptance:**
+
+- WHEN the active composition has nested composition instances whose content drives the hold (`drivesHold !== false`) THEN the checklist shows a read-only section listing each such nested composition by name with a count of its hold-driving items
+- WHEN a nested content item is excluded (`drivesHold === false`) THEN it is not counted
+- WHEN no nested composition instance contains hold-driving content THEN the section is not rendered
+- WHEN the section is shown THEN its rows render without a toggle and indicate the operator must edit them in their own composition
+- WHEN the operator activates a listed nested composition THEN the editor switches the active composition to it so its own checklist can be edited
+
+**Notes:** Builds on D-107 (`apps/designer/src/renderer/features/inspector/PlayoutSection.tsx`); extend the recursive content walk it added (which already reaches grouped content) to recurse through composition instances by `compositionId` into the referenced composition's elements. Only ticker / sequence / countdown-clock kinds count (wall / count-up never drive a hold). Group by the immediate nested instance; deeper nesting surfaces progressively as the operator drills in. Drill-in reuses the existing `setActiveComposition` / `openCompositionAndSelect` store action. READ-ONLY — no `drivesHold` writes from the parent. Extend the requirement(s) D-107 added/modified in its living spec (`## MODIFIED` / `## ADDED`). Non-breaking, no schema change.
