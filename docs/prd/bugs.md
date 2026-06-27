@@ -729,7 +729,7 @@ first-paint fallback.
 `--cg-frame-w/-h` vars + `applyFrameSize` on load/scene-replace). Regression E2E:
 `apps/designer/tests/e2e/scene-size-vs-pasteboard.spec.ts`. Capability: `designer-canvas-viewport`.
 
-## [x] B-029 — trimming a clock/ticker/sequence's START on the timeline drops it from play/export ⟨priority: high⟩ — focused fix
+## [x] B-029 — trimming a clock/ticker/sequence's START on the timeline drops it from play/export ⟨priority: high⟩ — focused fix, merged (#187, 9737ab9)
 
 > A content element trimmed at its START edge (lifespan.in > 0) disappears entirely from the preview
 > playout + export — it never plays. scene.resolution / geometry are untouched; this is a lifespan-vs-
