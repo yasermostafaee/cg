@@ -208,6 +208,73 @@ const tickerStarted = (): boolean => {
   return (track?.style.transform ?? '') !== '';
 };
 
+/** A WALL clock (absolute) — the play path used to start it ticking before the marker. */
+function wallClock(id: string): Element {
+  return {
+    id,
+    name: id,
+    type: 'clock',
+    transform: baseTransform,
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+    font: {
+      family: 'Vazirmatn',
+      weight: 600,
+      style: 'normal',
+      size: 48,
+      lineHeight: 1.2,
+      letterSpacing: 0,
+    },
+    color: '#FFFFFF',
+    align: 'center',
+    mode: 'wall',
+    format: 'ss',
+    digits: 'latin',
+  } as unknown as Element;
+}
+
+/** A 2-item now/next sequence (infinite) with a short dwell. */
+function twoItemSequence(id: string): Element {
+  return {
+    id,
+    name: id,
+    type: 'sequence',
+    transform: baseTransform,
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+    font: {
+      family: 'Vazirmatn',
+      weight: 500,
+      style: 'normal',
+      size: 36,
+      lineHeight: 1.4,
+      letterSpacing: 0,
+    },
+    color: '#FFFFFF',
+    align: 'start',
+    direction: 'rtl',
+    items: [
+      { id: 'a', text: 'ONE' },
+      { id: 'b', text: 'TWO' },
+    ],
+    defaultDwellMs: 500,
+    advance: 'auto',
+    transitionIn: 'bottom',
+    transitionOut: 'top',
+    transitionTiming: 'simultaneous',
+    transitionMs: 400,
+    repeat: 'infinite',
+  } as unknown as Element;
+}
+
+/** The rendered text of a built element (the clock's time / the sequence's current item). */
+const elText = (id: string): string =>
+  document.querySelector<HTMLElement>(`[data-cg-element-id="${id}"]`)?.textContent ?? '';
+
 beforeEach(() => {
   document.body.innerHTML = '';
   document.body.className = '';
@@ -340,6 +407,50 @@ describe('D-104 follow-up — content starts at the entrance completion (hold en
     expect(tickerStarted()).toBe(false);
     await run(clock, 200); // ~320ms: past the marker (200ms) but well before the heuristic (800ms)
     expect(tickerStarted()).toBe(true); // the marker (not the later heuristic) governs
+    r.remove();
+  });
+
+  it('(marker, clock) an absolute wall clock is HELD through the entrance, then ticks from the marker', async () => {
+    // Marker at frame 100 (2000ms); entrance settles at frame 10 (200ms). The wall clock used
+    // to tick from PLAY (ignoring the marker) — now it is held until the marker, like the ticker.
+    const clock = makeClock();
+    const r = createRuntime(
+      scene({
+        children: [introShape('bg', 10), wallClock('clk')],
+        outPoint: 150,
+        contentStart: 100,
+        playout: { mode: 'manual' },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await r.play({});
+    const atPlay = elText('clk');
+    await run(clock, 1200); // 1200ms: well past the heuristic (200ms), before the marker (2000ms)
+    expect(elText('clk')).toBe(atPlay); // HELD — the wall clock did NOT tick before the marker
+    await run(clock, 1000); // ~2200ms: past the marker — started + ticking
+    const t1 = elText('clk');
+    await run(clock, 1000); // +1s of wall time
+    expect(elText('clk')).not.toBe(t1); // ticking, having started at the marker
+    r.remove();
+  });
+
+  it('(marker, sequence) the now/next rotation begins at the marker — item 1 before, advances after', async () => {
+    const clock = makeClock();
+    const r = createRuntime(
+      scene({
+        children: [introShape('bg', 10), twoItemSequence('seq')],
+        outPoint: 150,
+        contentStart: 100,
+        playout: { mode: 'manual' },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await r.play({});
+    await run(clock, 1500); // 1500ms: past the heuristic (200ms), before the marker (2000ms)
+    expect(elText('seq')).toContain('ONE');
+    expect(elText('seq')).not.toContain('TWO'); // rotation has NOT begun — held on item 1
+    await run(clock, 1500); // ~3000ms: past the marker (2000) + dwell (500) + transition (400)
+    expect(elText('seq')).toContain('TWO'); // rotation began at the marker → advanced
     r.remove();
   });
 });

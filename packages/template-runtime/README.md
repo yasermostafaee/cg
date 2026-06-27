@@ -344,9 +344,12 @@ modes need a real epoch; the ticker's clock is performance-style).
   loop-cycle hold entry re-runs the full count. A past `datetime` target
   paints 0 and resolves immediately on its run start (zero-length content
   hold). `wall`/`countup` never resolve — not content sources.
-- Absolute clocks (wall, datetime countdown) are also started at `play()`
-  (`isAbsolute`), so they tick during the intro; relative counts display their
-  initial value until their hold-entry run begins.
+- D-104 follow-up — EVERY clock (absolute `wall`/`datetime countdown` AND relative
+  count) is HELD through the entrance and starts at the scope's content-start frame
+  (the hold entry — the content-start marker or its `entranceSettleFrame` heuristic),
+  uniformly with the ticker crawl and the sequence rotation. `play()` only `reset()`s
+  the clocks (they display their initial value through the intro); `startOwnContent`
+  resets + starts them at `onContentStart`.
 - `reset()` repaints the initial value by the same RULE the scene-builder's
   static render uses (wall = now, countup = zero, countdown = the target
   remaining now), so the authoring canvas and a between-runs stage can't drift
