@@ -200,6 +200,7 @@ export function PreviewModal({
       update: (f) => post({ action: 'update', fields: f }),
       play: (f) => post({ action: 'play', fields: f }),
       stop: () => post({ action: 'stop' }),
+      out: () => post({ action: 'out' }),
       next: () => post({ action: 'next' }),
       reset: () => post({ action: 'reset' }),
       pause: () => post({ action: 'pause' }),
@@ -235,6 +236,11 @@ export function PreviewModal({
   }, [dispatch]);
   const onStop = useCallback(() => {
     dispatch.stop();
+    setPaused(false);
+  }, [dispatch]);
+  // D-105 — the coordinated animated exit (distinct from Stop's quick clear).
+  const onOut = useCallback(() => {
+    dispatch.out();
     setPaused(false);
   }, [dispatch]);
   const onNext = useCallback(() => dispatch.next(), [dispatch]);
@@ -326,6 +332,7 @@ export function PreviewModal({
               canStep={canStepScene(scene)}
               onPlay={onPlay}
               onPause={onPause}
+              onOut={onOut}
               onStop={onStop}
               onNext={onNext}
               onReset={onReset}

@@ -2797,7 +2797,7 @@ coordinate via the controller tree (`onHoldStart` already starts a scope's own d
 extend so a child scope's content waits for the PARENT's hold-start). Medium-large; Understand pass on
 `playout-controller.ts` + `runtime.ts` contentWait + the controller-tree cascade before implementing.
 
-## [ ] D-105 — Split exit: animated "Out" vs quick "Stop" (coordinated exit) ⟨priority: medium⟩
+## [~] D-105 — Split exit: animated "Out" vs quick "Stop" (coordinated exit) ⟨priority: medium⟩ — implementing on `feat/preview-exit-and-update` (`openspec/changes/preview-split-exit`)
 
 **What:** Two distinct exit operations in the preview. "Out" (animate off) plays the graphic's designed
 exit, COORDINATED so the content (ticker/clock/sequence) exits first/with and the background follows
@@ -2816,7 +2816,7 @@ standard (CasparCG CG STOP = animate out, vs CG REMOVE/CLEAR = hard removal).
 reuse the existing background outro + content out-transitions. Two transport buttons (Out + Stop) with
 icons + tooltips.
 
-## [ ] D-106 — Preview field form: explicit Update + optional textarea inputs ⟨priority: medium⟩
+## [~] D-106 — Preview field form: explicit Update + optional textarea inputs ⟨priority: medium⟩ — implementing on `feat/preview-exit-and-update` (`openspec/changes/preview-field-update`)
 
 **What:** (1) Editing field values in the preview no longer updates the stage in realtime — an explicit
 Update applies changes, BOTH a global "Update all" and a per-field Update; edited-but-unapplied fields

@@ -367,6 +367,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // (and tests) can see which repeat/seam each ticker is actually running this session.
         t.band.dataset['cgTickerRepeat'] = String(effRepeat);
         t.band.dataset['cgTickerBoundary'] = effBoundary;
+        // D-105 — mark the content root so the coordinated exit (out/stop) can fade/hide it.
+        t.band.dataset['cgContent'] = 'ticker';
         tickers.push(driver);
         return driver;
       });
@@ -383,6 +385,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           blinkPeriodMs: c.element.blinkPeriodMs,
           clock: options.clock,
         });
+        // D-105 — mark the content root for the coordinated exit (out/stop).
+        c.node.dataset['cgContent'] = 'clock';
         clocks.push(driver);
         return driver;
       });
@@ -490,6 +494,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           clock: options.clock,
         });
         registerSequenceDriver(s.host, driver);
+        // D-105 — mark the content root for the coordinated exit (out/stop).
+        s.host.dataset['cgContent'] = 'sequence';
         sequences.push(driver);
         return driver;
       });
@@ -770,6 +776,59 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       for (const s of sub.sequences) s.applyFieldsToCurrent(currentValues);
   };
 
+  // D-105 — coordinated split exit. Content roots (ticker / clock / sequence)
+  // carry `data-cg-content`; the keyframed background does NOT. `out()` fades the
+  // content off, awaits it, then plays the background outro (the existing stop
+  // cascade) so the background never closes over fully-visible content; `stop()`
+  // hides the content immediately, then plays the background outro. The pre-exit
+  // inline opacity/visibility/transition is saved and restored on the next play
+  // (so an authored opacity isn't clobbered and a replay shows the content again).
+  // A generation token supersedes an in-flight `out()` fade when stop()/play() arrives.
+  const OUT_FADE_MS = 400;
+  let exitGen = 0;
+  const exitSetTimeout =
+    options.clock?.setTimeout ?? ((cb: () => void, ms: number): unknown => setTimeout(cb, ms));
+  const contentRoots = (): HTMLElement[] =>
+    Array.from(built.container.querySelectorAll<HTMLElement>('[data-cg-content]'));
+  const saveExitStyles = (n: HTMLElement): void => {
+    if (n.dataset['cgExit'] !== undefined) return;
+    n.dataset['cgExit'] = `${n.style.opacity}|${n.style.visibility}|${n.style.transition}`;
+  };
+  const fadeContentOut = (ms: number): Promise<void> => {
+    for (const n of contentRoots()) {
+      saveExitStyles(n);
+      n.style.transition = `opacity ${String(ms)}ms linear`;
+      n.style.opacity = '0';
+    }
+    return new Promise<void>((res) => {
+      exitSetTimeout(res, ms);
+    });
+  };
+  const hideContentNow = (): void => {
+    for (const n of contentRoots()) {
+      saveExitStyles(n);
+      n.style.transition = '';
+      n.style.opacity = '0';
+      n.style.visibility = 'hidden';
+    }
+  };
+  const restoreContent = (): void => {
+    for (const n of contentRoots()) {
+      const saved = n.dataset['cgExit'];
+      if (saved === undefined) continue;
+      const [op = '', vis = '', tr = ''] = saved.split('|');
+      n.style.opacity = op;
+      n.style.visibility = vis;
+      n.style.transition = tr;
+      delete n.dataset['cgExit'];
+    }
+  };
+  // The existing exit: each scope's controller plays its OUT [outPoint → out] (the
+  // keyframed background), settling cleared (D-085) via onRootSettled / onSettle.
+  const playBackgroundOutroAndSettle = (): void => {
+    cascade(rootNode, (c) => c.stop());
+  };
+
   const runtime: TemplateRuntime = {
     ready,
 
@@ -788,6 +847,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       machine.transition('playing');
       bus.emit('play.start');
       doc.body.classList.remove('cg-pending');
+      // D-105 — clear any out()/stop() exit styling so a fresh play shows the
+      // content again, and supersede an in-flight out() fade.
+      exitGen += 1;
+      restoreContent();
       machine.transition('on-air');
       // D-030 — repeaters re-stamp FIRST: the row COUNT comes from the
       // CURRENT effective items (a retained pre-play update() included),
@@ -842,11 +905,28 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     async stop(_opts?: StopOptions): Promise<void> {
       if (machine.state === 'removed') return;
       if (machine.state !== 'on-air' && machine.state !== 'playing') return;
-      // Lifecycle scenes: play the OUT (outro-start → active-out) then settle
-      // hidden. Absent lifecycle: settle instantly (today's behaviour). The
-      // controller drives onExitStart/onSettle (stop.start / stop.end + hide);
+      // D-105 — QUICK exit: remove the content IMMEDIATELY (before the background
+      // moves), then play the background outro and settle cleared. Lifecycle scenes
+      // play the OUT [outPoint → active.out]; absent lifecycle settles instantly.
+      // The controller drives onExitStart/onSettle (stop.start / stop.end + hide);
       // D-026 — each nested instance plays its OWN outro in cascade.
-      cascade(rootNode, (c) => c.stop());
+      exitGen += 1;
+      hideContentNow();
+      playBackgroundOutroAndSettle();
+    },
+
+    async out(_opts?: StopOptions): Promise<void> {
+      if (machine.state === 'removed') return;
+      if (machine.state !== 'on-air' && machine.state !== 'playing') return;
+      // D-105 — COORDINATED animated exit: fade the content off FIRST, await it,
+      // then (unless a stop()/play()/out() superseded this exit during the fade)
+      // play the background outro and settle cleared — the background never closes
+      // over fully-visible content.
+      const gen = ++exitGen;
+      await fadeContentOut(OUT_FADE_MS);
+      if (gen !== exitGen) return;
+      if (machine.state !== 'on-air' && machine.state !== 'playing') return;
+      playBackgroundOutroAndSettle();
     },
 
     pause(): void {

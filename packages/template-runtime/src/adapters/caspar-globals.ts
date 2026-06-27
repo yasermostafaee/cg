@@ -22,6 +22,7 @@ export function installCasparGlobals(
   const previousStop = win.stop;
   const previousNext = win.next;
   const previousRemove = win.remove;
+  const previousOut = win.out;
   const previousCg = win.cg;
 
   win.play = (payload?: string | Record<string, unknown>) => {
@@ -43,6 +44,10 @@ export function installCasparGlobals(
   win.remove = () => {
     runtime.remove();
   };
+  // D-105 — the coordinated animated exit (distinct from `stop()`'s quick clear).
+  win.out = () => {
+    void runtime.out();
+  };
   win.cg = runtime;
 
   return () => {
@@ -57,6 +62,8 @@ export function installCasparGlobals(
     else delete win.next;
     if (previousRemove !== undefined) win.remove = previousRemove;
     else delete win.remove;
+    if (previousOut !== undefined) win.out = previousOut;
+    else delete win.out;
     if (previousCg !== undefined) win.cg = previousCg;
     else delete win.cg;
   };
@@ -128,6 +135,7 @@ declare global {
     update?: (payload?: string | Record<string, unknown>) => void;
     next?: () => void;
     remove?: () => void;
+    out?: () => void;
     cg?: TemplateRuntime;
   }
 }

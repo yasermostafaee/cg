@@ -657,6 +657,10 @@ export class DesignerApp {
   async stop(): Promise<void> {
     await this.previewDialog.getByRole('button', { name: /Stop/ }).click();
   }
+  /** D-105 — the coordinated animated exit (content first, background last). */
+  async out(): Promise<void> {
+    await this.previewDialog.getByRole('button', { name: 'Out', exact: true }).click();
+  }
   async next(): Promise<void> {
     await this.previewDialog.getByRole('button', { name: /Next/ }).click();
   }

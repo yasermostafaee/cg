@@ -21,6 +21,7 @@ export interface PreviewDispatch {
   update(fields: NestedFieldValues): void;
   play(fields: NestedFieldValues): void;
   stop(): void;
+  out(): void;
   next(): void;
   reset(): void;
   pause(): void;

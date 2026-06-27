@@ -519,6 +519,9 @@ export class Preview {
                 // before play restores it. The prior scrub already painted currentFrame.
               } else if (msg.action === 'stop' && typeof window.stop === 'function') {
                 window.stop();
+              } else if (msg.action === 'out' && typeof window.out === 'function') {
+                // D-105 — the coordinated animated exit (content first, background last).
+                window.out();
               } else if (msg.action === 'next' && typeof window.next === 'function') {
                 window.next();
               } else if (msg.action === 'pause') {
