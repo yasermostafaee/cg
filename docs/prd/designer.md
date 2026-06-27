@@ -2711,6 +2711,36 @@ time source (e.g. `Math.floor(now / period) % 2`) and toggle the colon span(s)' 
 display) — no separate setInterval. Applies to wall/countup/countdown. Inspector clock section:
 a blink toggle + a rate control (period ms or Hz).
 
+## [ ] D-104 — Nested-composition content participates in the parent's lifecycle ⟨priority: high; needs design⟩
+
+**What:** Finite content (ticker / sequence / countdown clock) that lives inside a NESTED composition
+must participate in the PARENT composition's lifecycle: (1) the parent's content-driven hold lasts
+until the nested content completes (the background holds until the subtitle/title finishes, then plays
+out), and (2) the nested content STARTS after the parent's intro animation finishes (during the
+parent's hold), not the instant Play is pressed.
+**Why:** A sequence of clock+text (the news-title rotator) MUST be built as composition items →
+nested compositions, but content-driven is per-scope today: the designer's `hasContentElement`
+(`PlayoutSection.tsx`) doesn't recurse into composition instances; the runtime's per-scope
+`contentWait` (`runtime.ts`) waits only for the scope's OWN direct content; and a nested composition
+cascades on play, so its content appears immediately instead of after the parent's intro. Net effect:
+the parent background closes before the nested sequence finishes, and the sequence shows too early.
+**Acceptance:**
+
+- WHEN a composition's finite content lives inside a nested composition THEN content-driven hold is offered for the parent AND the parent holds until the nested content completes, then plays out
+- WHEN a composition (incl. main) directly contains finite content THEN existing behavior is preserved (verify no regression)
+- WHEN nested content is infinite THEN the parent holds until stop()
+- WHEN Play is pressed THEN nested-composition content begins only AFTER the parent's intro finishes (during the parent's hold), not at play
+
+**Notes:** (a) UI: `hasContentElement` must recurse into composition instances (resolve the referenced
+composition's layers), like it does for container. (b) Runtime: aggregate finite-content completion
+from child scopes up the controller/scope tree — each scope exposes a recursive content-complete promise
+(own drivers' `whenComplete()` + children's content-complete), the parent's content-driven hold awaits it;
+mind infinite content, stop tokens/cascade, the root `contentHold` override. (c) Lifecycle: gate nested
+content START on the parent's intro completion (start at the parent's hold-start, not on play cascade) —
+coordinate via the controller tree (`onHoldStart` already starts a scope's own drivers after its intro;
+extend so a child scope's content waits for the PARENT's hold-start). Medium-large; Understand pass on
+`playout-controller.ts` + `runtime.ts` contentWait + the controller-tree cascade before implementing.
+
 ## [x] D-097 — Distinct timeline icon + color for shared/logo images vs asset images ⟨priority: low⟩ — focused fix, merged (#175)
 
 **What:** In the timeline layer row, a `source:'shared'` image (logo) gets a different LayerTypeIcon and color from a `source:'project'` image (asset).

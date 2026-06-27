@@ -143,6 +143,11 @@ entries authored per-item when started** — most of these IDs are not yet filed
    merge/archive remain.
 2. [D-090](./prd/designer.md) / D-091 — chrome (additional polish beyond D-086
    Phase B; confirm scope vs. what D-086 delivered when filing)
+3. [D-104](./prd/designer.md) — nested-composition content participates in the parent's lifecycle
+   (content-driven hold recurses into nested compositions, and nested content starts after the
+   parent's intro rather than at play). **HIGH** — blocks the news-title sequence use case
+   (the clock+text rotator must be built as composition items → nested compositions). Needs design;
+   Understand pass on `playout-controller.ts` + `runtime.ts` contentWait before implementing.
 
 > **Ordering note:** the icon-pack (D-092) is done — the shared `Icon` set now
 > exists, so new control-bearing items (e.g. [D-083](./prd/designer.md)) reuse it.
