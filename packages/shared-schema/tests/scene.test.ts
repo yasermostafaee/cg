@@ -154,6 +154,50 @@ describe('Scene — D-020 lifecycle / playout', () => {
     expect(() => SceneSchema.parse({ ...within, lifecycle: { outPoint: 5 } })).toThrow(/lifecycle/);
   });
 
+  // D-104 follow-up — the OPTIONAL content-start marker, symmetric to outPoint.
+  it('accepts an optional content-start inside [in, outPoint] and round-trips through JSON', () => {
+    const raw = { ...minimalScene, lifecycle: { outPoint: 40, contentStart: 12 } };
+    const s = SceneSchema.parse(raw);
+    expect(s.lifecycle).toEqual({ outPoint: 40, contentStart: 12 });
+    // non-breaking serialization: stringify → parse yields the same lifecycle.
+    expect(SceneSchema.parse(JSON.parse(JSON.stringify(s))).lifecycle).toEqual({
+      outPoint: 40,
+      contentStart: 12,
+    });
+  });
+
+  it('content-start is OPTIONAL — an out-point without one stays valid (non-breaking, no version bump)', () => {
+    const s = SceneSchema.parse({ ...minimalScene, lifecycle: { outPoint: 40 } });
+    expect(s.lifecycle).toEqual({ outPoint: 40 });
+    expect(s.lifecycle?.contentStart).toBeUndefined();
+  });
+
+  it('accepts a content-start AT either boundary (in or outPoint)', () => {
+    expect(() =>
+      SceneSchema.parse({ ...minimalScene, lifecycle: { outPoint: 40, contentStart: 0 } }),
+    ).not.toThrow();
+    expect(() =>
+      SceneSchema.parse({ ...minimalScene, lifecycle: { outPoint: 40, contentStart: 40 } }),
+    ).not.toThrow();
+  });
+
+  it('rejects a content-start AFTER the out-point', () => {
+    expect(() =>
+      SceneSchema.parse({ ...minimalScene, lifecycle: { outPoint: 40, contentStart: 41 } }),
+    ).toThrow(/contentStart/);
+  });
+
+  it('rejects a content-start before active.in (validated against activeRange)', () => {
+    const within = { ...minimalScene, activeRange: { in: 10, out: 30 } };
+    expect(() =>
+      SceneSchema.parse({ ...within, lifecycle: { outPoint: 25, contentStart: 5 } }),
+    ).toThrow(/contentStart/);
+    // inside [10, 25] — valid
+    expect(() =>
+      SceneSchema.parse({ ...within, lifecycle: { outPoint: 25, contentStart: 15 } }),
+    ).not.toThrow();
+  });
+
   it('defaults playout.mode to manual', () => {
     const s = SceneSchema.parse({ ...minimalScene, playout: {} });
     expect(s.playout?.mode).toBe('manual');

@@ -160,6 +160,7 @@ function comp(id: string, outPoint: number, children: Element[], playout?: Playo
 function scene(opts: {
   children: Element[];
   outPoint: number;
+  contentStart?: number;
   playout: Playout;
   compositions?: Composition[];
 }): Scene {
@@ -172,7 +173,10 @@ function scene(opts: {
     frameRate: 50, // 50fps ⇒ frame 10 = 200ms (entrance), frame 90 = 1800ms (out-point)
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 100 },
-    lifecycle: { outPoint: opts.outPoint },
+    lifecycle:
+      opts.contentStart !== undefined
+        ? { outPoint: opts.outPoint, contentStart: opts.contentStart }
+        : { outPoint: opts.outPoint },
     playout: opts.playout,
     background: 'transparent',
     layers: [
@@ -295,6 +299,47 @@ describe('D-104 follow-up — content starts at the entrance completion (hold en
     expect(tickerStarted()).toBe(false);
     await run(clock, 1400); // ~2000ms: past the out-point (1800ms)
     expect(tickerStarted()).toBe(true);
+    r.remove();
+  });
+
+  it('(marker) an explicit content-start marker OVERRIDES the heuristic — content starts at the marker frame', async () => {
+    // The entrance settles at frame 10 (200ms) — the heuristic — but the designer pinned a
+    // marker at frame 30 (600ms). Content must start at the MARKER, not the heuristic, not 90.
+    const clock = makeClock();
+    const r = createRuntime(
+      scene({
+        children: [introShape('bg', 10), infiniteTicker('sub')],
+        outPoint: 90,
+        contentStart: 30,
+        playout: { mode: 'manual' },
+      }),
+      { skipFontLoad: true, clock, tickerMeasure },
+    );
+    await r.play({});
+    await run(clock, 400); // 400ms: PAST the heuristic (200ms) but BEFORE the marker (600ms)
+    expect(tickerStarted()).toBe(false); // the marker governs, not entranceSettleFrame
+    await run(clock, 400); // ~800ms: past the marker (600ms)
+    expect(tickerStarted()).toBe(true);
+    r.remove();
+  });
+
+  it('(marker earlier) a marker BEFORE the heuristic also wins — content starts earlier', async () => {
+    // Entrance settles at frame 40 (800ms heuristic); a marker pins content to frame 10 (200ms).
+    const clock = makeClock();
+    const r = createRuntime(
+      scene({
+        children: [introShape('bg', 40), infiniteTicker('sub')],
+        outPoint: 90,
+        contentStart: 10,
+        playout: { mode: 'manual' },
+      }),
+      { skipFontLoad: true, clock, tickerMeasure },
+    );
+    await r.play({});
+    await run(clock, 120); // 120ms: before the marker (200ms)
+    expect(tickerStarted()).toBe(false);
+    await run(clock, 200); // ~320ms: past the marker (200ms) but well before the heuristic (800ms)
+    expect(tickerStarted()).toBe(true); // the marker (not the later heuristic) governs
     r.remove();
   });
 });

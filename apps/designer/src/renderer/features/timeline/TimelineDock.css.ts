@@ -269,3 +269,19 @@ export const phaseMarkerOut = style({
   borderRadius: '2px',
   background: '#ffae57',
 });
+
+// D-104 follow-up — the content-start ("in") marker; a distinct cyan vs the out-point's amber.
+export const phaseMarkerIn = style({
+  position: 'absolute',
+  top: 0,
+  bottom: 0,
+  width: '4px',
+  transform: 'translateX(-50%)',
+  cursor: 'ew-resize',
+  touchAction: 'none',
+  pointerEvents: 'auto',
+  zIndex: 5,
+  opacity: 0.9,
+  borderRadius: '2px',
+  background: '#57b6ff',
+});

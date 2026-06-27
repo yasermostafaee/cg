@@ -574,12 +574,17 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         ),
       );
       const activeRange = activeRangeOf(scope.source);
-      // D-104 follow-up — the frame the entrance settles at (where content starts).
-      const holdEntry = entranceSettleFrame(
-        scope.animated,
-        activeRange.in,
-        scope.source.lifecycle?.outPoint ?? activeRange.out,
-      );
+      // D-104 follow-up — the frame where content starts: the designer's EXPLICIT
+      // content-start marker (`lifecycle.contentStart`) when placed, else the
+      // `entranceSettleFrame()` heuristic (entrance completion). The marker is the
+      // deterministic source of truth; the heuristic is only its default. Clamp to
+      // [active.in, outPoint] defensively (the schema already constrains it).
+      const outPoint = scope.source.lifecycle?.outPoint ?? activeRange.out;
+      const marker = scope.source.lifecycle?.contentStart;
+      const holdEntry =
+        marker !== undefined
+          ? Math.max(activeRange.in, Math.min(outPoint, marker))
+          : entranceSettleFrame(scope.animated, activeRange.in, outPoint);
       const controller = new PlayoutController({
         frameRate: scene.frameRate,
         active: activeRange,

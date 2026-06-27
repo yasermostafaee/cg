@@ -103,12 +103,12 @@ only the moving parts, not the whole tree.
 Two pixel spaces meet on the lane, and the conversions are all pure in
 [`timeline-geometry.ts`](timeline-geometry.ts):
 
-| From → to                  | Function                           | Used by                                                                 |
-| -------------------------- | ---------------------------------- | ----------------------------------------------------------------------- |
-| pointer `clientX` → frame  | `frameFromClientX` (clamp + round) | ruler scrub, keyframe drag — **snap-to-frame is the `Math.round`**      |
-| frame → left offset %      | `frameToPct` / `frameToPctClamped` | diamonds, ticks, playhead / draggable markers                           |
-| pixel delta → frame delta  | `deltaFramesFromPx`                | Scene-active-region + out-point marker drags (continuous, store clamps) |
-| visible frames → tick step | `pickStride` (1/2/5/10/25 ladder)  | ruler labels **and** body gridlines (one stride keeps them aligned)     |
+| From → to                  | Function                           | Used by                                                                                 |
+| -------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------- |
+| pointer `clientX` → frame  | `frameFromClientX` (clamp + round) | ruler scrub, keyframe drag — **snap-to-frame is the `Math.round`**                      |
+| frame → left offset %      | `frameToPct` / `frameToPctClamped` | diamonds, ticks, playhead / draggable markers                                           |
+| pixel delta → frame delta  | `deltaFramesFromPx`                | Scene-active-region + out-point + content-start marker drags (continuous, store clamps) |
+| visible frames → tick step | `pickStride` (1/2/5/10/25 ladder)  | ruler labels **and** body gridlines (one stride keeps them aligned)                     |
 
 Position is a **percent of span** because the lane/ruler inner wrappers are
 `width: zoom × 100%`, so a percent left-offset stays correct at every zoom

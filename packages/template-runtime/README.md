@@ -208,9 +208,12 @@ There is **no separate continuous-loop mode** — a looping logo is `loop-cycle`
 `repeat: 'infinite'` (and `holdMs: 0` to loop the whole timeline).
 
 `onContentStart` (optional) fires once per cycle the moment the **entrance animation
-completes** — the `holdEntryFrame`. That frame is `entranceSettleFrame(...)`: the start
-of the trailing _static_ region before `outPoint` (and `outPoint` itself when the
-entrance animates right up to it, or there is no animation). The intro is **split** at
+completes** — the `holdEntryFrame`. The runtime sets that frame to the composition's
+EXPLICIT content-start marker (`lifecycle.contentStart` — placed + dragged on the
+designer timeline, the deterministic source of truth) when present, else the
+`entranceSettleFrame(...)` heuristic: the start of the trailing _static_ region before
+`outPoint` (and `outPoint` itself when the entrance animates right up to it, or there is
+no animation). The intro is **split** at
 it: the controller plays `[active.in → holdEntryFrame]`, STARTS the content, then plays
 the static settle `[holdEntryFrame → outPoint]` — so the playhead still reaches and holds
 at `outPoint` (a start-trimmed element still appears; the held frame and the outro are

@@ -206,12 +206,41 @@ export const documentSlice = {
       set({ scene: withActiveDoc(current.scene, { lifecycle: undefined }) });
       return;
     }
-    const active = activeRangeOf(activeDocOf(current.scene));
+    const doc = activeDocOf(current.scene);
+    const active = activeRangeOf(doc);
     const out = Math.max(active.in, Math.min(active.out, Math.round(marker.outPoint)));
-    const prev = activeDocOf(current.scene).lifecycle;
-    if (prev !== undefined && prev.outPoint === out) return;
+    const prev = doc.lifecycle;
+    // D-104 follow-up — PRESERVE the content-start marker across an out-point drag, but
+    // re-clamp it to `[active.in, out]` (dragging the out-point below it pulls it along).
+    const cs = prev?.contentStart === undefined ? undefined : Math.min(prev.contentStart, out);
+    if (prev !== undefined && prev.outPoint === out && prev.contentStart === cs) return;
+    const lifecycle = cs === undefined ? { outPoint: out } : { outPoint: out, contentStart: cs };
+    set({ scene: withActiveDoc(current.scene, { lifecycle }) });
+  },
+
+  /**
+   * D-104 follow-up — set / clear the active composition's content-start marker (the frame
+   * where ticker / clock / sequence begins). Clamped to `[active.in, outPoint]`. `null`
+   * clears it (back to the runtime's `entranceSettleFrame()` heuristic). A no-op when no
+   * out-point exists yet — the marker lives inside the lifecycle's entrance.
+   */
+  setContentStart(frame: number | null): void {
+    if (current.scene === null) return;
+    const doc = activeDocOf(current.scene);
+    const prev = doc.lifecycle;
+    if (prev === undefined) return;
+    if (frame === null) {
+      if (prev.contentStart === undefined) return;
+      set({ scene: withActiveDoc(current.scene, { lifecycle: { outPoint: prev.outPoint } }) });
+      return;
+    }
+    const active = activeRangeOf(doc);
+    const cs = Math.max(active.in, Math.min(prev.outPoint, Math.round(frame)));
+    if (prev.contentStart === cs) return;
     set({
-      scene: withActiveDoc(current.scene, { lifecycle: { outPoint: out } }),
+      scene: withActiveDoc(current.scene, {
+        lifecycle: { outPoint: prev.outPoint, contentStart: cs },
+      }),
     });
   },
 

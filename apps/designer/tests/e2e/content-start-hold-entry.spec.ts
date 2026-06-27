@@ -69,4 +69,25 @@ test.describe('Content starts at the entrance completion (hold entry), not the o
     await app.play();
     await expectSubtitleCrawlsWithin(app, 1500);
   });
+
+  test('a placed content-start marker DELAYS the subtitle to the marker frame (overrides the heuristic)', async ({
+    app,
+  }) => {
+    await app.newProject('HoldEntryMarker');
+    await authorEnteringGraphic(app, 'content-driven');
+    // Pin a content-start marker (Playout panel), then drag it LATE — ~70% of the timeline,
+    // far past the entrance settle (~frame 8) yet before the out-point (75%).
+    await app.page.getByRole('button', { name: 'Pin a content start' }).click();
+    await expect(app.page.getByText(/Content start @ frame/)).toBeVisible();
+    await app.dragContentStartMarkerToFraction(0.7);
+
+    await app.openPreviewModal();
+    await app.play();
+    // The marker (~70% ≈ 7s) governs, NOT the heuristic (~0.16s): the crawl must not have
+    // started within 1.5s. (Were the marker ignored, the heuristic would crawl it by ~0.2s.)
+    const track = app.previewFrame.locator('.cg-ticker-track').first();
+    await expect(track).toBeAttached(); // the ticker IS rendered, so the next check is meaningful
+    await app.page.waitForTimeout(1500);
+    expect((await track.getAttribute('style')) ?? '').not.toContain('translateX');
+  });
 });

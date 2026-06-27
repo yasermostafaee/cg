@@ -19,9 +19,16 @@ import { FrameRangeSchema, type FrameRange } from './animation.js';
  * activeRange.out]`. The invariant `activeRange.in ≤ outPoint ≤ activeRange.out`
  * is enforced on the host composition (see `refineLifecycle`). Absent `lifecycle`
  * keeps today's behavior (no distinct phases — the full active region plays).
+ *
+ * D-104 follow-up — `contentStart` is the OPTIONAL symmetric "in" marker: the frame
+ * where this composition's CONTENT (ticker / clock / sequence) begins, the designer's
+ * explicit override of the runtime's `entranceSettleFrame()` heuristic. ABSENT ⇒ the
+ * heuristic (entrance completion) is used, so existing scenes are unchanged (no version
+ * bump). Constrained to `[activeRange.in, outPoint]` (see `refineLifecycle`).
  */
 export const LifecycleSchema = z.object({
   outPoint: DurationFramesSchema,
+  contentStart: DurationFramesSchema.optional(),
 });
 export type Lifecycle = z.infer<typeof LifecycleSchema>;
 
@@ -87,13 +94,21 @@ function refineLifecycle(
 ): void {
   if (data.lifecycle === undefined) return;
   const active = data.activeRange ?? data.frameRange;
-  const { outPoint } = data.lifecycle;
+  const { outPoint, contentStart } = data.lifecycle;
   const ok = active.in <= outPoint && outPoint <= active.out;
   if (!ok) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['lifecycle'],
       message: `lifecycle must satisfy activeRange.in (${String(active.in)}) ≤ outPoint (${String(outPoint)}) ≤ activeRange.out (${String(active.out)})`,
+    });
+  }
+  // D-104 follow-up — the content-start marker sits inside the entrance: in ≤ contentStart ≤ outPoint.
+  if (contentStart !== undefined && !(active.in <= contentStart && contentStart <= outPoint)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['lifecycle', 'contentStart'],
+      message: `lifecycle.contentStart (${String(contentStart)}) must satisfy activeRange.in (${String(active.in)}) ≤ contentStart ≤ outPoint (${String(outPoint)})`,
     });
   }
 }
