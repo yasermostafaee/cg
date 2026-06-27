@@ -1,4 +1,4 @@
-import { Link2 } from 'lucide-react';
+import { Check, Link2 } from 'lucide-react';
 import type { ListItem } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
@@ -58,6 +58,15 @@ interface Props {
    */
   itemDataKey?: (itemId: string) => string;
   onItemDataKey?: (itemId: string, key: string) => boolean;
+  /**
+   * D-106 follow-up — PREVIEW form only: a PER-ITEM Update button (matching the
+   * per-field one), so each item input applies independently. `appliedItems` is
+   * the on-stage list (an item is "dirty" when its value differs from its
+   * same-id applied item); `onUpdateItem` applies ONLY that item to the stage.
+   * Absent (inspector / authoring contexts, which edit live) ⇒ no per-item Update.
+   */
+  appliedItems?: readonly ListItem[] | undefined;
+  onUpdateItem?: ((itemId: string) => void) | undefined;
 }
 
 /** D-083 — the item's kind ('text' default for back-compat). */
@@ -143,7 +152,16 @@ export function ListItemsEditor({
   compositions,
   itemDataKey,
   onItemDataKey,
+  appliedItems,
+  onUpdateItem,
 }: Props): JSX.Element {
+  // D-106 follow-up — an item is edited-but-unapplied when its value differs from
+  // the same-id on-stage item (a brand-new item, with no applied twin, is dirty).
+  const itemDirty = (item: ListItem): boolean => {
+    if (onUpdateItem === undefined) return false;
+    const applied = appliedItems?.find((a) => a.id === item.id);
+    return JSON.stringify(item) !== JSON.stringify(applied ?? null);
+  };
   const move = (from: number, to: number): void => {
     if (to < 0 || to >= items.length) return;
     const next = [...items];
@@ -174,6 +192,22 @@ export function ListItemsEditor({
         ) : null;
         const controls = (
           <>
+            {onUpdateItem !== undefined && (
+              <Control
+                variant="primary"
+                size="sm"
+                title={
+                  itemDirty(item)
+                    ? 'Apply this item to the stage'
+                    : 'No unsaved change for this item'
+                }
+                aria-label={`Update ${label} item ${String(i + 1)}`}
+                disabled={!itemDirty(item)}
+                onClick={() => onUpdateItem(item.id)}
+              >
+                <Icon icon={Check} size={12} />
+              </Control>
+            )}
             <Control
               size="sm"
               title="Move up"
