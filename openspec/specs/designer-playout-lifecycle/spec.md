@@ -38,34 +38,67 @@ repeat: 2`, and the exported playout metadata carries the normalized form
 ### Requirement: A content-driven hold ends on the scope's content completion
 
 For `holdSource: 'content-driven'`, the runtime SHALL hold until every CONTENT
-SOURCE the scope COORDINATES completes its own run (`Promise.all` semantics).
-A scope is a **coordinator** when its effective `mode` is not `manual` and its
-`holdSource` is `content-driven`. A coordinator coordinates its OWN content
-sources — its finite tickers, its countdown clocks, AND its finite sequences
-(wall and countup clocks are NOT content sources and SHALL never extend the
-hold) — PLUS the content of every **non-coordinator** nested composition
-instance, aggregated recursively up the composition-instance tree and STOPPING
-at any nested coordinator (a content-driven nested composition owns its own hold
-and self-settles independently, so the parent SHALL NOT wait on it). All
-coordinated finite tickers done, all coordinated countdowns at zero, and all
-coordinated finite sequences past their last pass ⇒ the hold ends; an infinite
-ticker or sequence anywhere in the coordinated set never completes, so the scope
-holds until `stop()`; a coordinator with NO coordinated content sources gets a
-zero-length hold (deferred like a 0ms timer — a zero-hold root must not settle
-before its children receive the play cascade). Each hold entry SHALL reset and
-restart the coordinated content (a fresh crawl / a fresh count / a fresh run from
-item 1 per open/close cycle), and a stale completion (resolving after `stop()` or
-after the hold already ended) SHALL be ignored. The runtime SHALL self-wire this
-from the scope's content elements — preview and exports need no boot wiring; an
-explicitly supplied `RuntimeBootOptions.contentHold` overrides the ROOT scope
-(external override and test seam).
+SOURCE the scope COORDINATES **that drives the hold** completes its own run
+(`Promise.all` semantics). A scope is a **coordinator** when its effective `mode`
+is not `manual` and its `holdSource` is `content-driven`. A coordinator
+coordinates its OWN hold-driving content sources — its finite tickers, its
+countdown clocks, AND its finite sequences **whose `drivesHold` is not `false`**
+(D-107 — every content element drives the hold by DEFAULT, i.e. when `drivesHold`
+is absent; an element explicitly marked `drivesHold: false` is EXCLUDED and SHALL
+NOT gate the hold even when it is infinite/looping, though it still STARTS and
+runs unchanged — this is the HOLD, not visibility; wall and countup clocks are
+NEVER content sources and SHALL never extend the hold regardless of the flag) —
+PLUS the content of every **non-coordinator** nested composition instance,
+aggregated recursively up the composition-instance tree and STOPPING at any
+nested coordinator (a content-driven nested composition owns its own hold and
+self-settles independently, so the parent SHALL NOT wait on it). All coordinated
+hold-driving finite tickers done, all coordinated hold-driving countdowns at
+zero, and all coordinated hold-driving finite sequences past their last pass ⇒
+the hold ends; an infinite ticker or sequence that DRIVES THE HOLD anywhere in
+the coordinated set never completes, so the scope holds until `stop()`; a
+coordinator with NO coordinated hold-driving content sources — none present, OR
+every content source EXCLUDED via `drivesHold: false` — gets a zero-length hold
+(deferred like a 0ms timer — a zero-hold root must not settle before its children
+receive the play cascade). Each hold entry SHALL reset and restart the
+coordinated content (a fresh crawl / a fresh count / a fresh run from item 1 per
+open/close cycle), and a stale completion (resolving after `stop()` or after the
+hold already ended) SHALL be ignored. The runtime SHALL self-wire this from the
+scope's content elements — preview and exports need no boot wiring; an explicitly
+supplied `RuntimeBootOptions.contentHold` overrides the ROOT scope (external
+override and test seam).
 
 A non-coordinator scope under a coordinator ancestor SHALL NOT start its own
 content drivers on its own hold entry; the coordinator ancestor SHALL reset and
 start them at the COORDINATOR's hold entry, so content inside a nested composition
 begins after the parent's intro (during the parent's hold), not on the play
 cascade. A scope with NO coordinator ancestor keeps the per-scope behavior (it
-starts its own content at its own hold entry).
+starts its own content at its own hold entry). The `drivesHold` filter applies
+ONLY to the hold wait — the coordinator STILL starts (and stops) every content
+element, selected or not.
+
+#### Scenario: An excluded content source does not gate the hold, even infinite
+
+- **WHEN** a `content-driven` hold's scope contains a finite ticker that drives
+  the hold (default) AND an infinite ticker marked `drivesHold: false`
+- **THEN** the hold ends when the finite ticker completes its pass — the excluded
+  infinite ticker keeps crawling but does NOT keep the graphic on air — and the
+  outro then plays
+
+#### Scenario: Excluding every content source yields a zero-length hold
+
+- **WHEN** a `content-driven` (`auto-out`) scope's only content is excluded
+  (every ticker / sequence / countdown carries `drivesHold: false`)
+- **THEN** there is no hold-driving content, so the hold is zero-length and the
+  composition settles immediately after its outro — consistent with the
+  no-content case (the excluded content still ran)
+
+#### Scenario: Default (no drivesHold) keeps all content participating
+
+- **WHEN** a `content-driven` scene authored before D-107 (no `drivesHold` on any
+  content element) is played
+- **THEN** every ticker / countdown / sequence participates exactly as before —
+  an infinite one still holds the scope until `stop()` — so existing scenes behave
+  identically (non-breaking)
 
 #### Scenario: A parent holds for content inside a nested composition
 
@@ -84,7 +117,7 @@ starts its own content at its own hold entry).
 #### Scenario: Infinite nested content holds the parent until stop
 
 - **WHEN** the nested composition (non-content-driven) contains a `repeat:
-'infinite'` ticker or sequence
+'infinite'` ticker or sequence that drives the hold
 - **THEN** the parent's content-driven hold never completes on its own and holds
   until `stop()`
 
@@ -108,7 +141,7 @@ holdSource: 'content-driven'` and its ticker has `repeat: 2`
 #### Scenario: Infinite ticker holds until stop
 
 - **WHEN** a `content-driven` hold's scope contains a `repeat: 'infinite'`
-  ticker
+  ticker that drives the hold
 - **THEN** completion never fires and the composition holds (crawling) until
   `stop()`
 
@@ -681,3 +714,44 @@ nested composition SHALL therefore present the hold-source control.
   composition graph contains a reference cycle
 - **THEN** the hold-source control is NOT offered for a purely-static nest, and
   the recursion terminates (each referenced composition is visited at most once)
+
+### Requirement: The designer selects which content drives the content-driven hold
+
+Every ticker, sequence, and clock element SHALL carry an OPTIONAL `drivesHold`
+boolean. Absent ⇒ the element participates in (drives) its scope's content-driven
+hold — the pre-D-107 all-content behaviour — so the field is purely additive and
+NON-BREAKING (no schema-version bump). When the hold is content-driven, the
+inspector's Playout section SHALL present a checklist of the composition's own
+content elements ("which content closes the graphic?"), pre-checked, each toggling
+that element's `drivesHold`. The checklist SHALL list tickers, sequences, and
+COUNTDOWN clocks (recursing groups/containers) and SHALL NOT list wall or countup
+clocks (they never complete, so they can never drive a hold). Unchecking an
+element SHALL set `drivesHold: false`, excluding it from the hold WITHOUT changing
+that it still starts and renders. Start-marker selectivity is OUT of scope
+(deferred): `drivesHold` governs only the HOLD.
+
+#### Scenario: The checklist is offered and pre-checked when the hold is content-driven
+
+- **WHEN** a composition with multiple content elements has `mode` not `manual`
+  and the hold source set to `content-driven`
+- **THEN** the Playout section shows one checkbox per content element (ticker /
+  sequence / countdown clock), all checked by default (every element participates)
+
+#### Scenario: Unchecking an element excludes it from the hold
+
+- **WHEN** the operator unchecks a content element in the checklist
+- **THEN** that element's `drivesHold` becomes `false`, the change persists on the
+  element, and the runtime hold no longer waits for it (it still runs)
+
+#### Scenario: Wall and countup clocks never appear in the checklist
+
+- **WHEN** the composition contains a wall or countup clock alongside a ticker
+- **THEN** only the ticker (and any countdown clock / sequence) is listed — the
+  wall / countup clock is not offered, because it can never drive the hold
+
+#### Scenario: No content is selected yields a zero-length hold
+
+- **WHEN** the operator unchecks every content element (or the composition has
+  none of its own to list)
+- **THEN** the content-driven hold is zero-length, consistent with the no-content
+  case (the unchecked content still runs, it just no longer holds the graphic)
