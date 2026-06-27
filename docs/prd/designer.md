@@ -2151,6 +2151,185 @@ No exporter/packager/runtime/schema change. Recon (umbrella): `design.md` in
 `apps/designer/tests/e2e/off-frame-export.spec.ts`. Change:
 `openspec/changes/off-frame-export-filter/`.
 
+## [~] D-072 — Guide coordinate readout on hover / drag ⟨priority: low⟩ — implemented on `feat/D-072-073-guide-readout-nudge`; change `openspec/changes/guide-coordinate-readout/`
+
+**What:** When the operator hovers a persistent ruler guide OR is dragging one, show a small
+badge with that guide's scene coordinate in px (`x: 960` for a vertical guide, `y: 540` for a
+horizontal one). Updates live while dragging. Applies to the operator's draggable ruler guides
+(`state.guides`), NOT the transient snap/alignment guides.
+
+**Why:** Today a guide can be placed/dragged but its exact position is invisible — the author
+has to eyeball it. A coordinate badge (Figma/AE behaviour) makes guides precise without opening
+any panel. Pure editing affordance; no effect on render/export/playout.
+
+**Acceptance:**
+
+- WHEN the pointer is over a persistent ruler guide THEN a badge shows that guide's scene
+  coordinate in px (vertical guide → `x: <n>`, horizontal → `y: <n>`)
+- WHEN a guide is being dragged THEN the badge stays shown and its value updates live as the
+  guide moves (the badge persists for the whole drag even if the pointer leaves the strip)
+- WHEN neither hovering nor dragging a guide THEN no badge is shown
+- WHEN the canvas is zoomed or scrolled THEN the badge tracks the guide's screen position and
+  stays within the visible viewport
+
+**Notes:** Overlay-only — a styled, non-interactive (`pointerEvents:none`) badge in the
+non-scrolling overlay in `CanvasArea.tsx`; active guide = hovered OR dragging (dragging wins).
+Transient view state lives in the component (do NOT add it to the store). No schema/store/render
+change. Coordinate is scene px (scene 0,0 = frame top-left, per the pasteboard offset).
+Change: `openspec/changes/guide-coordinate-readout/`.
+
+## [~] D-073 — Arrow-key nudge for the selection (Shift = larger step) ⟨priority: low⟩ — implemented on `feat/D-072-073-guide-readout-nudge`; change `openspec/changes/arrow-key-nudge/`
+
+**What:** With one or more elements selected and no editable field focused, the arrow keys move
+the selection by 1px (scene px); holding **Shift** moves by 10px. Keyframe-aware (same path as a
+drag), respects locked/hidden members, single undo step per key-press run.
+
+**Why:** Pixel-precise positioning without dragging — standard editor behaviour. Reuses the
+existing keyframe-aware group-move commit path, so animated and multi-selected elements behave
+exactly as they do when dragged.
+
+**Acceptance:**
+
+- WHEN an element is selected and an arrow key is pressed THEN it moves 1px in that screen
+  direction (Left = −x, Right = +x, Up = −y, Down = +y) — spatial, independent of RTL
+- WHEN Shift is held with an arrow key THEN the step is 10px
+- WHEN multiple elements are selected THEN every movable (visible + unlocked) member moves by
+  the same delta; locked/hidden members do not move
+- WHEN the moved element/axis is animated THEN the nudge writes a keyframe at the playhead
+  (start value + delta), matching drag behaviour; otherwise it writes the static value
+- WHEN an arrow key is held (auto-repeat) THEN the whole repeat run collapses to ONE undo step
+- WHEN nothing is selected, OR the focus is in an input/textarea/select/contentEditable THEN the
+  arrow keys do nothing (no nudge, default behaviour preserved)
+
+**Notes:** New keydown effect in `App.tsx` cloned from the Delete/Backspace handler; new store
+action `nudgeSelection(dx, dy)` mirroring `beginGroupDrag`'s `commitAnimatable` path (no
+snapping). One `markHistoryBoundary()` on the first event of a run (`!e.repeat`). Ripple:
+`ShortcutsModal.tsx`. No schema/render/export change. Change: `openspec/changes/arrow-key-nudge/`.
+
+## [x] D-074 — Remove the border on the timeline zoom slider ⟨priority: low⟩ — focused fix, merged (#167)
+
+**What:** The timeline zoom range slider (StatusBar) shows a visible border/box (the
+native `<input type=range>` chrome). Remove it so the slider reads as a clean track.
+**Why:** Visual inconsistency with the rest of the restyled controls.
+**Acceptance:**
+
+- WHEN the timeline zoom slider renders THEN it shows no border/box around it (the track + thumb only)
+
+**Notes:** apps/designer/src/renderer/features/status/StatusBar.css.ts `zoomSlider` — add `appearance: 'none'` (+ `WebkitAppearance`) and ensure no border; keep `accentColor`/width/cursor. Don't change the +/- buttons.
+
+## [x] D-075 — New default timeline colors per element type ⟨priority: low⟩ — focused fix, merged (#167)
+
+**What:** Change the default per-type timeline colors to: sequence = red, clock = dark purple, ticker = orange, text = yellow.
+**Why:** The current defaults (sequence lime, clock cyan, ticker yellow, text amber) don't match the desired scheme.
+**Acceptance:**
+
+- WHEN a text/ticker/clock/sequence element has no custom `timelineColor` THEN its layer icon + lifespan bar use: text `#FACC15` (yellow), ticker `#F97316` (orange), clock `#7E22CE` (dark purple), sequence `#EF4444` (red)
+
+**Notes:** apps/designer/src/renderer/features/timeline/ElementRow.tsx `TYPE_COLORS`. These overlap container (`#F97316`) and video-placeholder (`#EF4444`) — acceptable; leave the other types as-is.
+
+## [x] D-076 — Multi-select layer context-menu actions ⟨priority: medium⟩ — archived: openspec/changes/archive/2026-06-26-multi-select-clipboard/ (#169)
+
+**What:** The layer right-click menu's actions — color, copy, cut, duplicate, delete, and fit (fit lifespan to the active range) — operate on ALL currently-selected layers, not just the clicked one.
+**Why:** Today these ops are single-element; multi-selecting layers and right-clicking only affects one.
+**Acceptance:**
+
+- WHEN 2+ layers are selected AND the user right-clicks one and chooses color/copy/cut/duplicate/delete/fit THEN the action applies to EVERY selected layer (one undo step)
+- WHEN the right-clicked layer is NOT in the current selection THEN it becomes the operation's target (matching standard editors)
+- WHEN paste runs THEN all copied/cut layers are pasted as fresh clones
+
+**Notes:** apps/designer/src/renderer/features/timeline/LayerContextMenu.tsx (target normalized at the row's `onContextMenu` in ElementRow.tsx) + the selection-aware store ops in state/slices/elements.ts (copySelection/cutSelection/duplicateSelection/pasteElements/fitSelectionLifespanToActiveRange/setSelectionTimelineColor; clipboard is `Element[]`). Shares its core with D-077. Change: `openspec/changes/multi-select-clipboard/` (branch `feat/multi-select-clipboard`).
+
+## [x] D-077 — Copy / cut / paste keyboard shortcuts ⟨priority: medium⟩ — archived: openspec/changes/archive/2026-06-26-multi-select-clipboard/ (#169; physical-key/Persian-safe fix #171)
+
+**What:** Ctrl/Cmd+C copies, Ctrl/Cmd+X cuts, Ctrl/Cmd+V pastes the selected element(s), reusing the same multi-select clipboard ops as D-076.
+**Why:** No keyboard clipboard exists today (only the context menu).
+**Acceptance:**
+
+- WHEN one or more elements are selected and no editable field is focused AND the user presses Ctrl/Cmd+C / +X / +V THEN copy / cut / paste runs on the whole selection (one undo step), and the keydown is consumed
+- WHEN an input/textarea/select/contentEditable is focused THEN the shortcut does NOT fire (native text clipboard wins)
+
+**Notes:** apps/designer/src/renderer/App.tsx — a new keydown effect cloned from the Delete/Backspace handler; calls the D-076 multi-select clipboard ops. Add the rows to ShortcutsModal. Shares its core (clipboard + ops) with D-076. Change: `openspec/changes/multi-select-clipboard/` (branch `feat/multi-select-clipboard`).
+
+## [x] D-078 — Pin the scene/root row while scrolling layers ⟨priority: medium⟩ — archived: openspec/changes/archive/2026-06-26-pin-scene-row/ (#170; playhead-layering follow-up fix/playhead-above-scene-row, PR open)
+
+**What:** The top scene/root row in the layers panel stays pinned (sticky) at the top while the element rows below scroll vertically.
+**Why:** Today the scene row scrolls away with the list; it should remain a fixed header.
+**Acceptance:**
+
+- WHEN the layers list is scrolled vertically THEN the scene/root row stays fixed at the top of the layers panel (and its lane row stays aligned), while the element rows scroll under it
+
+**Notes:** apps/designer/src/renderer/features/timeline/TimelineDock.tsx + TimelineDock.css.ts. RIGHT lane: `sceneLane` is `position: sticky; top: 0` in the native-scroll `rightBody`, with a solid bg + z-index above the lanes. LEFT label: `sceneLabel` stays inside `leftBodyInner` but counteracts its imperative `translateY(-scrollTop)` with its own `translateY(+scrollTop)` (set in `syncScroll`) + solid bg + z-index — the synced-scroll model is preserved (no switch to native `scrollTop`). Change: `openspec/changes/pin-scene-row/` (branch `feat/pin-scene-row`).
+
+## [x] D-079 — Widen the inline color hex input ⟨priority: low⟩ — focused fix, merged (#167, #168)
+
+**What:** The inline color value (hex) input in the inspector is too narrow — the full value (#RRGGBB / #RRGGBBAA) is clipped. Give it enough width to show the whole value.
+**Why:** `hexInput` is `width:100%; minWidth:0` inside a shared `.cg-field`, so it collapses and clips.
+**Acceptance:**
+
+- WHEN a color field shows its hex value THEN the full value (6 or 8 hex chars) is visible without clipping
+
+**Notes:** apps/designer/src/renderer/features/inspector/controls.css.ts `hexInput` — set a `minWidth` that fits 8 chars (e.g. ~`8ch`/`64px`) so it doesn't collapse inside `.cg-field`; keep it from overlapping the trailing keyframe dot.
+
+## [x] D-081 — Ticker: no trailing separator ⟨priority: low⟩ — focused fix, merged (#175)
+
+**What:** The ticker must render its `separator` only BETWEEN items, never after the last item (incl. across the loop seam).
+**Why:** A trailing separator (e.g. "…headline •" with nothing after) looks broken.
+**Acceptance:**
+
+- WHEN a ticker with a separator renders THEN the separator appears between consecutive items only — none trails the final item, and the seam between the last and first item (per `cycleBoundary`) reads correctly
+
+**Notes:** template-runtime ticker rendering (scene-builder / runtime crawl). The separator is a between-items span; ensure none is emitted after the last item. Mind 'seamless' vs 'drain'. Pairs with D-039.
+
+## [x] D-082 — English default item text for ticker/sequence ⟨priority: low⟩ — focused fix, merged (#175; + LTR default direction & white default text)
+
+**What:** New ticker and sequence elements get English placeholder item text (like the text element's "New text"), not Persian.
+**Why:** Defaults should match the text element; today ticker/seq seed Persian sample text.
+**Acceptance:**
+
+- WHEN a new ticker is created THEN its default items use English placeholder text
+- WHEN a new sequence is created THEN its default items use English placeholder text
+
+**Notes:** apps/designer/src/renderer/state/element-defaults.ts — ticker items (currently 'خبر نخست — متن نمونه' …) and sequence items (currently 'اکنون: برنامهٔ نخست' …) → English (e.g. 'First headline — sample', 'Now: first item', 'Then: second item').
+
+## [x] D-083 — Sequence: typed items (text | composition) ⟨priority: medium⟩ — Phase 1 merged & archived (PRs #182/#183/#185/#186/#188): `openspec/changes/archive/2026-06-27-sequence-typed-items/`
+
+**What:** A sequence item can be TEXT or a COMPOSITION reference — not only text. A single clock/logo
+is just a one-element composition, so clock+text / logo+text / … layouts are authored in the
+composition editor and cycled by the sequence. (Phase 1; text items stay the bindable ones.)
+**Why:** A rotating title/branding element cycles every few seconds between composed layouts
+(clock+text, logo+text, …), each under the same in/out transitions + dwell. News headlines stay
+text + data-bound, unchanged.
+**Acceptance:**
+
+- WHEN building a sequence THEN each item is text OR a composition reference (a composition picker lists `scene.compositions`)
+- WHEN the sequence advances THEN a composition item renders the referenced composition's content (live content inside runs — a clock ticks, honoring timezone/blink; shared/asset logos resolve) under the existing transitionIn/Out / dwell / advance / next
+- WHEN a composition item is present THEN the sequence cannot be text-bound (`sequence-items` is text-only; the bind action is disabled with a hint)
+- WHEN an old text-only sequence is loaded THEN it parses unchanged (`kind` defaults to `'text'`; no schema-version bump, no migration)
+
+**Notes:** REVISED design (replaces the earlier text|logo|clock primitive plan) — `SequenceItemSchema`
+becomes a discriminated union by `kind`: `{ kind:'text'(default), id, text, dwellMs? }` |
+`{ kind:'composition', id, compositionId, dwellMs? }` (reusing the same `compositionId` reference the
+`composition` element uses). NON-BREAKING (kind defaults to text). The runtime renders a composition
+item via the existing composition-instance rendering path (HELD content — the comp's own intro/outro
+does NOT run inside the sequence, but live content inside DOES); the items editor gets a per-item kind
+picker + the existing composition picker; export serializes the typed items + renders composition
+items (reusing composition export + asset/clock). Phase 2 (per-item field injection into composition
+items) is later.
+
+**Follow-up:** sequence TEXT items now bind EXPLICITLY (operator opt-in) instead of auto-exposing every
+item as a field — D-083 follow-up, merged in #188 (33edb88).
+
+## [x] D-084 — Clock: selectable time zone ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-26-clock-timezone/`
+
+**What:** A clock element can be assigned a time zone so `wall` mode shows that zone's current time (different countries/cities).
+**Why:** Broadcast frequently shows clocks for multiple locations.
+**Acceptance:**
+
+- WHEN a clock's time zone is set THEN `wall` mode renders the current time in that IANA zone
+- WHEN unset THEN it uses local time (current behavior); countup/countdown unaffected
+
+**Notes:** Add an optional `timezone` (IANA name, e.g. 'Europe/London') to ClockElementSchema; the runtime clock formatter uses Intl.DateTimeFormat({ timeZone }); the inspector adds a time-zone picker.
+
 ## [x] D-085 — Stop/close terminal = CLEARED ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-21-stop-clears-composition/`
 
 **What:** Lock the broadcast STOP semantics: when the operator Stops a composition, it plays its
@@ -2352,6 +2531,50 @@ same `isDirty` hash signal as the tab title.
   **Notes:** Purely the visual binding of D-088's `isDirty` signal — folded into
   the D-088 change (`TopToolbar` + `TopToolbar.css`), not a separate change dir.
 
+## [x] D-092 — Icon pack: replace Unicode-glyph icons with a shared vector Icon component ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-25-replace-glyph-icons/`
+
+**What:** Add a single shared `Icon` component (in apps/designer/src/renderer/ui/)
+backed by `lucide-react`, and replace ALL ad-hoc Unicode-glyph icons across the
+Designer UI with it, so icons are consistent, theme-driven, and RTL-correct. This
+is foundational for the upcoming timeline/layers items (D-075/D-078/D-080/D-084),
+which add new buttons that consume this icon set.
+**Why:** Tool/inspector/timeline/shell controls currently use Unicode glyphs
+(e.g. ↖ ⇇ ◷ ⇉ ▤ ▭ ○ ▦ in the toolbars; ⫷ ☰ ⫸ ⤒ ⇳ ⤓ in align; ↔ ↕ ↻ ◑ in
+transform; ▾ ▸ ▶ chevrons; ✕ × close; ✓ menu check; ▶ ⏸ ■ preview transport; ⚠
+warnings). They render inconsistently (size/weight vary), depend on the OS glyph
+font, and look unprofessional. A library + one wrapper fixes consistency and lets
+new buttons reuse named icons instead of drawing SVG each time.
+**Acceptance:**
+
+- WHEN any Designer control that previously used a Unicode-glyph icon renders THEN it renders a `lucide-react` vector icon via the shared `Icon` component, and no glyph-string icon remains in the migrated files
+- WHEN an `Icon` renders THEN it inherits the current text color (uses `currentColor`), is `aria-hidden` by default (decorative; interactive parents keep their own `aria-label`/`title`), and takes a single `size` prop — preserving the monochrome / CSS-`color` behavior the glyphs relied on
+- WHEN a directional icon's call site sets `flipRtl` THEN the icon mirrors horizontally under RTL; by default an `Icon` does NOT mirror (preserving today's deliberate behavior)
+- WHEN the keyboard-shortcut key labels (`⌘` / `Ctrl` in ShortcutsModal) and the mixed-value `—` placeholder (controls.tsx / transform-fields.tsx) render THEN they are UNCHANGED — they are text, not icons, and are explicitly out of scope
+- WHEN the transport Play/Pause icons render THEN they go through the same `Icon`/lucide path (the local `ic()` SVG helper in TransportBar.tsx is removed/absorbed) so there is exactly one icon mechanism
+- WHEN `lucide-react` is added THEN it is imported per-icon (tree-shaken), and a third-party attribution entry for lucide (ISC/MIT) is added to THIRD_PARTY_LICENSES.md
+- WHEN the Designer runs in RTL THEN no icon's meaning breaks
+- WHEN the canvas tool palette renders THEN its tools are ordered drawing-first (cursor, hand, text, rectangle, ellipse, image) then the dynamic elements (ticker, sequence, clock, repeater); the ticker uses a horizontal double-arrow (`MoveHorizontal`) and the sequence a vertical double-arrow (`ArrowDownUp`), neither RTL-mirrored
+- WHEN the Project Assets / Shared Library grid↔list toggle renders THEN it uses the shared `Icon` (`LayoutGrid` / `List`) and the local `GridIcon` / `ListIcon` SVG functions are removed
+- WHEN the timeline (StatusBar) or canvas (CanvasArea) zoom controls render THEN zoom-out / zoom-in use the SAME `ZoomOut` / `ZoomIn` icons via the shared `Icon`; the canvas group also has a `ScanSearch` Fit and a plain-text `100%` reset (not an icon), ordered readout → Fit → reset → in → out, the `100%` reset using a dedicated auto-width style so it does not overflow the square icon-button box
+- WHEN the Project Assets / Compositions / Shared Library "add" (`+`) buttons render THEN each shows one shared `Icon` `Plus` at a single size, with the panels' `iconButton` boxes matched
+- WHEN the border-radius single/per-corner toggle renders THEN it shows the shared `Icon` (`Square` for uniform, `Maximize` for per-corner) and the old vanilla-extract `iconUniform` / `iconPerCorner` styles are removed
+- WHEN a timeline layer row renders its per-kind type icon THEN it uses the shared `Icon` and matches the canvas-toolbar tool icon for the shared kinds (text/shape/ellipse/image/ticker/clock/sequence/repeater), tinted with the layer's timeline colour
+- WHEN the "More text options" gear renders THEN it shows the shared `Icon` lucide `Settings2` (no `⚙` glyph)
+- WHEN a shared `Select` dropdown renders THEN its down-chevron is a REAL lucide `ChevronDown` element overlaid at the right edge via the shared `Icon` (not a CSS background-image, so a per-site `background` override can't wipe it), with clicks falling through to the select
+
+**Notes:** Capability: extend **designer-controls** (ADDED requirements — the
+shared `Icon` primitive + the glyph→vector migration), since it is the shared
+UI-control-primitive spec alongside Button/Control. `@cg/ui` stays tokens-only —
+`Icon` lives app-local in renderer/ui/. Migration inventory (the glyph files):
+canvas/CanvasToolbar.tsx (+ the HAND_ICON const), tools/ToolRail.tsx,
+inspector/AlignButtonGroup.tsx, inspector/transform-fields.tsx,
+inspector/CollapseSection.tsx, timeline/ElementRow.tsx, timeline/TimelineDock.tsx,
+timeline/LayerContextMenu.tsx, shell/TopToolbar.tsx, shell/Modal.tsx,
+shell/NewProjectModal.tsx, fields/PreviewTransport.tsx, fields/PreviewFieldForm.tsx,
+inspector/KeyframeInspector.tsx, ui/Callout.tsx. Already-SVG icons that are NOT
+glyphs (ElementRow Eye/Lock, keyframe-diamond) may optionally be routed through
+`Icon` for consistency but that is not required.
+
 ## [x] D-093 — Remove from Recent (+ Clear all), non-destructive ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-20-desktop-save-mechanism/`
 
 **What:** Let the operator remove a single Recent entry ("Remove from recent") and
@@ -2414,105 +2637,6 @@ palette feels loud — and because it's per-recipe, it repeats on every new butt
   SAVE indicator (`TopToolbar.css.ts` `saveCtl` / `saveCtlDirty`). Change:
   `openspec/changes/restyle-buttons/`.
 
-## [~] D-072 — Guide coordinate readout on hover / drag ⟨priority: low⟩ — implemented on `feat/D-072-073-guide-readout-nudge`; change `openspec/changes/guide-coordinate-readout/`
-
-**What:** When the operator hovers a persistent ruler guide OR is dragging one, show a small
-badge with that guide's scene coordinate in px (`x: 960` for a vertical guide, `y: 540` for a
-horizontal one). Updates live while dragging. Applies to the operator's draggable ruler guides
-(`state.guides`), NOT the transient snap/alignment guides.
-
-**Why:** Today a guide can be placed/dragged but its exact position is invisible — the author
-has to eyeball it. A coordinate badge (Figma/AE behaviour) makes guides precise without opening
-any panel. Pure editing affordance; no effect on render/export/playout.
-
-**Acceptance:**
-
-- WHEN the pointer is over a persistent ruler guide THEN a badge shows that guide's scene
-  coordinate in px (vertical guide → `x: <n>`, horizontal → `y: <n>`)
-- WHEN a guide is being dragged THEN the badge stays shown and its value updates live as the
-  guide moves (the badge persists for the whole drag even if the pointer leaves the strip)
-- WHEN neither hovering nor dragging a guide THEN no badge is shown
-- WHEN the canvas is zoomed or scrolled THEN the badge tracks the guide's screen position and
-  stays within the visible viewport
-
-**Notes:** Overlay-only — a styled, non-interactive (`pointerEvents:none`) badge in the
-non-scrolling overlay in `CanvasArea.tsx`; active guide = hovered OR dragging (dragging wins).
-Transient view state lives in the component (do NOT add it to the store). No schema/store/render
-change. Coordinate is scene px (scene 0,0 = frame top-left, per the pasteboard offset).
-Change: `openspec/changes/guide-coordinate-readout/`.
-
-## [~] D-073 — Arrow-key nudge for the selection (Shift = larger step) ⟨priority: low⟩ — implemented on `feat/D-072-073-guide-readout-nudge`; change `openspec/changes/arrow-key-nudge/`
-
-**What:** With one or more elements selected and no editable field focused, the arrow keys move
-the selection by 1px (scene px); holding **Shift** moves by 10px. Keyframe-aware (same path as a
-drag), respects locked/hidden members, single undo step per key-press run.
-
-**Why:** Pixel-precise positioning without dragging — standard editor behaviour. Reuses the
-existing keyframe-aware group-move commit path, so animated and multi-selected elements behave
-exactly as they do when dragged.
-
-**Acceptance:**
-
-- WHEN an element is selected and an arrow key is pressed THEN it moves 1px in that screen
-  direction (Left = −x, Right = +x, Up = −y, Down = +y) — spatial, independent of RTL
-- WHEN Shift is held with an arrow key THEN the step is 10px
-- WHEN multiple elements are selected THEN every movable (visible + unlocked) member moves by
-  the same delta; locked/hidden members do not move
-- WHEN the moved element/axis is animated THEN the nudge writes a keyframe at the playhead
-  (start value + delta), matching drag behaviour; otherwise it writes the static value
-- WHEN an arrow key is held (auto-repeat) THEN the whole repeat run collapses to ONE undo step
-- WHEN nothing is selected, OR the focus is in an input/textarea/select/contentEditable THEN the
-  arrow keys do nothing (no nudge, default behaviour preserved)
-
-**Notes:** New keydown effect in `App.tsx` cloned from the Delete/Backspace handler; new store
-action `nudgeSelection(dx, dy)` mirroring `beginGroupDrag`'s `commitAnimatable` path (no
-snapping). One `markHistoryBoundary()` on the first event of a run (`!e.repeat`). Ripple:
-`ShortcutsModal.tsx`. No schema/render/export change. Change: `openspec/changes/arrow-key-nudge/`.
-
-## [x] D-092 — Icon pack: replace Unicode-glyph icons with a shared vector Icon component ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-25-replace-glyph-icons/`
-
-**What:** Add a single shared `Icon` component (in apps/designer/src/renderer/ui/)
-backed by `lucide-react`, and replace ALL ad-hoc Unicode-glyph icons across the
-Designer UI with it, so icons are consistent, theme-driven, and RTL-correct. This
-is foundational for the upcoming timeline/layers items (D-075/D-078/D-080/D-084),
-which add new buttons that consume this icon set.
-**Why:** Tool/inspector/timeline/shell controls currently use Unicode glyphs
-(e.g. ↖ ⇇ ◷ ⇉ ▤ ▭ ○ ▦ in the toolbars; ⫷ ☰ ⫸ ⤒ ⇳ ⤓ in align; ↔ ↕ ↻ ◑ in
-transform; ▾ ▸ ▶ chevrons; ✕ × close; ✓ menu check; ▶ ⏸ ■ preview transport; ⚠
-warnings). They render inconsistently (size/weight vary), depend on the OS glyph
-font, and look unprofessional. A library + one wrapper fixes consistency and lets
-new buttons reuse named icons instead of drawing SVG each time.
-**Acceptance:**
-
-- WHEN any Designer control that previously used a Unicode-glyph icon renders THEN it renders a `lucide-react` vector icon via the shared `Icon` component, and no glyph-string icon remains in the migrated files
-- WHEN an `Icon` renders THEN it inherits the current text color (uses `currentColor`), is `aria-hidden` by default (decorative; interactive parents keep their own `aria-label`/`title`), and takes a single `size` prop — preserving the monochrome / CSS-`color` behavior the glyphs relied on
-- WHEN a directional icon's call site sets `flipRtl` THEN the icon mirrors horizontally under RTL; by default an `Icon` does NOT mirror (preserving today's deliberate behavior)
-- WHEN the keyboard-shortcut key labels (`⌘` / `Ctrl` in ShortcutsModal) and the mixed-value `—` placeholder (controls.tsx / transform-fields.tsx) render THEN they are UNCHANGED — they are text, not icons, and are explicitly out of scope
-- WHEN the transport Play/Pause icons render THEN they go through the same `Icon`/lucide path (the local `ic()` SVG helper in TransportBar.tsx is removed/absorbed) so there is exactly one icon mechanism
-- WHEN `lucide-react` is added THEN it is imported per-icon (tree-shaken), and a third-party attribution entry for lucide (ISC/MIT) is added to THIRD_PARTY_LICENSES.md
-- WHEN the Designer runs in RTL THEN no icon's meaning breaks
-- WHEN the canvas tool palette renders THEN its tools are ordered drawing-first (cursor, hand, text, rectangle, ellipse, image) then the dynamic elements (ticker, sequence, clock, repeater); the ticker uses a horizontal double-arrow (`MoveHorizontal`) and the sequence a vertical double-arrow (`ArrowDownUp`), neither RTL-mirrored
-- WHEN the Project Assets / Shared Library grid↔list toggle renders THEN it uses the shared `Icon` (`LayoutGrid` / `List`) and the local `GridIcon` / `ListIcon` SVG functions are removed
-- WHEN the timeline (StatusBar) or canvas (CanvasArea) zoom controls render THEN zoom-out / zoom-in use the SAME `ZoomOut` / `ZoomIn` icons via the shared `Icon`; the canvas group also has a `ScanSearch` Fit and a plain-text `100%` reset (not an icon), ordered readout → Fit → reset → in → out, the `100%` reset using a dedicated auto-width style so it does not overflow the square icon-button box
-- WHEN the Project Assets / Compositions / Shared Library "add" (`+`) buttons render THEN each shows one shared `Icon` `Plus` at a single size, with the panels' `iconButton` boxes matched
-- WHEN the border-radius single/per-corner toggle renders THEN it shows the shared `Icon` (`Square` for uniform, `Maximize` for per-corner) and the old vanilla-extract `iconUniform` / `iconPerCorner` styles are removed
-- WHEN a timeline layer row renders its per-kind type icon THEN it uses the shared `Icon` and matches the canvas-toolbar tool icon for the shared kinds (text/shape/ellipse/image/ticker/clock/sequence/repeater), tinted with the layer's timeline colour
-- WHEN the "More text options" gear renders THEN it shows the shared `Icon` lucide `Settings2` (no `⚙` glyph)
-- WHEN a shared `Select` dropdown renders THEN its down-chevron is a REAL lucide `ChevronDown` element overlaid at the right edge via the shared `Icon` (not a CSS background-image, so a per-site `background` override can't wipe it), with clicks falling through to the select
-
-**Notes:** Capability: extend **designer-controls** (ADDED requirements — the
-shared `Icon` primitive + the glyph→vector migration), since it is the shared
-UI-control-primitive spec alongside Button/Control. `@cg/ui` stays tokens-only —
-`Icon` lives app-local in renderer/ui/. Migration inventory (the glyph files):
-canvas/CanvasToolbar.tsx (+ the HAND_ICON const), tools/ToolRail.tsx,
-inspector/AlignButtonGroup.tsx, inspector/transform-fields.tsx,
-inspector/CollapseSection.tsx, timeline/ElementRow.tsx, timeline/TimelineDock.tsx,
-timeline/LayerContextMenu.tsx, shell/TopToolbar.tsx, shell/Modal.tsx,
-shell/NewProjectModal.tsx, fields/PreviewTransport.tsx, fields/PreviewFieldForm.tsx,
-inspector/KeyframeInspector.tsx, ui/Callout.tsx. Already-SVG icons that are NOT
-glyphs (ElementRow Eye/Lock, keyframe-diamond) may optionally be routed through
-`Icon` for consistency but that is not required.
-
 ## [ ] D-096 — Animate position via CSS transform (GPU compositor path) instead of left/top ⟨priority: low-medium; needs dedicated design⟩
 
 **What:** In `@cg/template-runtime`'s animation applier, move element position
@@ -2547,129 +2671,58 @@ visual-equivalence test. Keep the STATIC (non-animated) position write path cons
 movers (the ticker track already uses it). Needs a dedicated design pass like D-060
 before implementation — do later, not in the current feature queue.
 
-## [x] D-074 — Remove the border on the timeline zoom slider ⟨priority: low⟩ — focused fix, merged (#167)
+## [x] D-097 — Distinct timeline icon + color for shared/logo images vs asset images ⟨priority: low⟩ — focused fix, merged (#175)
 
-**What:** The timeline zoom range slider (StatusBar) shows a visible border/box (the
-native `<input type=range>` chrome). Remove it so the slider reads as a clean track.
-**Why:** Visual inconsistency with the rest of the restyled controls.
+**What:** In the timeline layer row, a `source:'shared'` image (logo) gets a different LayerTypeIcon and color from a `source:'project'` image (asset).
+**Why:** Both are `type:'image'` and render identically today; operators can't tell a logo/shared image from a project-asset image at a glance.
 **Acceptance:**
 
-- WHEN the timeline zoom slider renders THEN it shows no border/box around it (the track + thumb only)
+- WHEN a layer is an image with `source:'shared'` THEN its timeline type-icon AND lifespan color differ from an image with `source:'project'`
 
-**Notes:** apps/designer/src/renderer/features/status/StatusBar.css.ts `zoomSlider` — add `appearance: 'none'` (+ `WebkitAppearance`) and ensure no border; keep `accentColor`/width/cursor. Don't change the +/- buttons.
+**Notes:** ElementRow.tsx LayerTypeIcon + the color resolver (lifespanColorFor / TYPE_COLORS) branch on `element.source` for type 'image'. Asset image keeps `Image`; pick a distinct lucide for the shared/logo variant (e.g. `Stamp` or `Images`) + a distinct color (exact icon/color to confirm).
 
-## [x] D-075 — New default timeline colors per element type ⟨priority: low⟩ — focused fix, merged (#167)
+## [x] D-098 — Key icon on bound (data-keyed) layers ⟨priority: low⟩ — focused fix, merged (#175)
 
-**What:** Change the default per-type timeline colors to: sequence = red, clock = dark purple, ticker = orange, text = yellow.
-**Why:** The current defaults (sequence lime, clock cyan, ticker yellow, text amber) don't match the desired scheme.
+**What:** Prefix a bound layer (one with a data key / a field binding targeting it) with a small key icon before its name in the timeline left list.
+**Why:** Operators can't tell which layers are bound/dynamic at a glance.
 **Acceptance:**
 
-- WHEN a text/ticker/clock/sequence element has no custom `timelineColor` THEN its layer icon + lifespan bar use: text `#FACC15` (yellow), ticker `#F97316` (orange), clock `#7E22CE` (dark purple), sequence `#EF4444` (red)
+- WHEN a layer's element has a data key / a field binding whose target is that element THEN a small key icon appears before its name in the layer row
+- WHEN the layer is not bound THEN no key icon shows
 
-**Notes:** apps/designer/src/renderer/features/timeline/ElementRow.tsx `TYPE_COLORS`. These overlap container (`#F97316`) and video-placeholder (`#EF4444`) — acceptable; leave the other types as-is.
+**Notes:** ElementRow.tsx name cell; detect "bound" via the fields/bindings slice (a binding with target.elementId === el.id, or the element's data key). lucide `Key`, small, before the name.
 
-## [x] D-076 — Multi-select layer context-menu actions ⟨priority: medium⟩ — archived: openspec/changes/archive/2026-06-26-multi-select-clipboard/ (#169)
+## [x] D-099 — Minimum-window-size gate ⟨priority: medium⟩ — focused fix, merged (#175)
 
-**What:** The layer right-click menu's actions — color, copy, cut, duplicate, delete, and fit (fit lifespan to the active range) — operate on ALL currently-selected layers, not just the clicked one.
-**Why:** Today these ops are single-element; multi-selecting layers and right-clicking only affects one.
+**What:** When the window is below a minimum usable size, replace the editor with a centered "screen too small" message; restore the editor when resized back up.
+**Why:** On very small windows/monitors the panels + canvas don't render usably.
 **Acceptance:**
 
-- WHEN 2+ layers are selected AND the user right-clicks one and chooses color/copy/cut/duplicate/delete/fit THEN the action applies to EVERY selected layer (one undo step)
-- WHEN the right-clicked layer is NOT in the current selection THEN it becomes the operation's target (matching standard editors)
-- WHEN paste runs THEN all copied/cut layers are pasted as fresh clones
+- WHEN the window inner width/height is below the threshold THEN the app shows only a centered message and hides the editor
+- WHEN the window is resized at/above the threshold THEN the editor reappears
 
-**Notes:** apps/designer/src/renderer/features/timeline/LayerContextMenu.tsx (target normalized at the row's `onContextMenu` in ElementRow.tsx) + the selection-aware store ops in state/slices/elements.ts (copySelection/cutSelection/duplicateSelection/pasteElements/fitSelectionLifespanToActiveRange/setSelectionTimelineColor; clipboard is `Element[]`). Shares its core with D-077. Change: `openspec/changes/multi-select-clipboard/` (branch `feat/multi-select-clipboard`).
+**Notes:** Top-level gate in App.tsx (or a shell wrapper) via a resize listener / matchMedia. Pick a sensible threshold (e.g. ~1024×640 — confirm). RTL message.
 
-## [x] D-077 — Copy / cut / paste keyboard shortcuts ⟨priority: medium⟩ — archived: openspec/changes/archive/2026-06-26-multi-select-clipboard/ (#169; physical-key/Persian-safe fix #171)
+## [x] D-100 — Menubar: hover-to-open after first click ⟨priority: low⟩ — focused fix, merged (#175)
 
-**What:** Ctrl/Cmd+C copies, Ctrl/Cmd+X cuts, Ctrl/Cmd+V pastes the selected element(s), reusing the same multi-select clipboard ops as D-076.
-**Why:** No keyboard clipboard exists today (only the context menu).
+**What:** Once a top menu is open (by click), moving the pointer onto another top-menu button opens it (no click); standard menubar behavior.
+**Why:** Today hover only highlights; each menu needs its own click.
 **Acceptance:**
 
-- WHEN one or more elements are selected and no editable field is focused AND the user presses Ctrl/Cmd+C / +X / +V THEN copy / cut / paste runs on the whole selection (one undo step), and the keydown is consumed
-- WHEN an input/textarea/select/contentEditable is focused THEN the shortcut does NOT fire (native text clipboard wins)
+- WHEN a top menu is open AND the pointer enters another top-menu button THEN that menu opens and the previous closes
+- WHEN no menu is open THEN hover only highlights (a click is still required to open the first)
 
-**Notes:** apps/designer/src/renderer/App.tsx — a new keydown effect cloned from the Delete/Backspace handler; calls the D-076 multi-select clipboard ops. Add the rows to ShortcutsModal. Shares its core (clipboard + ops) with D-076. Change: `openspec/changes/multi-select-clipboard/` (branch `feat/multi-select-clipboard`).
+**Notes:** apps/designer/src/renderer/features/shell/TopToolbar.tsx — when `openMenu !== null`, the buttons' onMouseEnter sets `setOpenMenu(key)`.
 
-## [x] D-078 — Pin the scene/root row while scrolling layers ⟨priority: medium⟩ — archived: openspec/changes/archive/2026-06-26-pin-scene-row/ (#170; playhead-layering follow-up fix/playhead-above-scene-row, PR open)
+## [x] D-101 — Remove-bind icon: red + match the row remove-item button ⟨priority: low⟩ — focused fix, merged (#175)
 
-**What:** The top scene/root row in the layers panel stays pinned (sticky) at the top while the element rows below scroll vertically.
-**Why:** Today the scene row scrolls away with the list; it should remain a fixed header.
+**What:** The remove-bind (unbind) control is red and matches the list-items remove-item button in size and style.
+**Why:** Inconsistent — `bindRemove` is muted gray; the row remove-item is a different size/style.
 **Acceptance:**
 
-- WHEN the layers list is scrolled vertically THEN the scene/root row stays fixed at the top of the layers panel (and its lane row stays aligned), while the element rows scroll under it
+- WHEN the remove-bind control renders THEN it uses the danger/red color and the same size + style as the ListItemsEditor remove-item button
 
-**Notes:** apps/designer/src/renderer/features/timeline/TimelineDock.tsx + TimelineDock.css.ts. RIGHT lane: `sceneLane` is `position: sticky; top: 0` in the native-scroll `rightBody`, with a solid bg + z-index above the lanes. LEFT label: `sceneLabel` stays inside `leftBodyInner` but counteracts its imperative `translateY(-scrollTop)` with its own `translateY(+scrollTop)` (set in `syncScroll`) + solid bg + z-index — the synced-scroll model is preserved (no switch to native `scrollTop`). Change: `openspec/changes/pin-scene-row/` (branch `feat/pin-scene-row`).
-
-## [x] D-079 — Widen the inline color hex input ⟨priority: low⟩ — focused fix, merged (#167, #168)
-
-**What:** The inline color value (hex) input in the inspector is too narrow — the full value (#RRGGBB / #RRGGBBAA) is clipped. Give it enough width to show the whole value.
-**Why:** `hexInput` is `width:100%; minWidth:0` inside a shared `.cg-field`, so it collapses and clips.
-**Acceptance:**
-
-- WHEN a color field shows its hex value THEN the full value (6 or 8 hex chars) is visible without clipping
-
-**Notes:** apps/designer/src/renderer/features/inspector/controls.css.ts `hexInput` — set a `minWidth` that fits 8 chars (e.g. ~`8ch`/`64px`) so it doesn't collapse inside `.cg-field`; keep it from overlapping the trailing keyframe dot.
-
-## [x] D-081 — Ticker: no trailing separator ⟨priority: low⟩ — focused fix, merged (#175)
-
-**What:** The ticker must render its `separator` only BETWEEN items, never after the last item (incl. across the loop seam).
-**Why:** A trailing separator (e.g. "…headline •" with nothing after) looks broken.
-**Acceptance:**
-
-- WHEN a ticker with a separator renders THEN the separator appears between consecutive items only — none trails the final item, and the seam between the last and first item (per `cycleBoundary`) reads correctly
-
-**Notes:** template-runtime ticker rendering (scene-builder / runtime crawl). The separator is a between-items span; ensure none is emitted after the last item. Mind 'seamless' vs 'drain'. Pairs with D-039.
-
-## [x] D-082 — English default item text for ticker/sequence ⟨priority: low⟩ — focused fix, merged (#175; + LTR default direction & white default text)
-
-**What:** New ticker and sequence elements get English placeholder item text (like the text element's "New text"), not Persian.
-**Why:** Defaults should match the text element; today ticker/seq seed Persian sample text.
-**Acceptance:**
-
-- WHEN a new ticker is created THEN its default items use English placeholder text
-- WHEN a new sequence is created THEN its default items use English placeholder text
-
-**Notes:** apps/designer/src/renderer/state/element-defaults.ts — ticker items (currently 'خبر نخست — متن نمونه' …) and sequence items (currently 'اکنون: برنامهٔ نخست' …) → English (e.g. 'First headline — sample', 'Now: first item', 'Then: second item').
-
-## [x] D-083 — Sequence: typed items (text | composition) ⟨priority: medium⟩ — Phase 1 merged & archived (PRs #182/#183/#185/#186/#188): `openspec/changes/archive/2026-06-27-sequence-typed-items/`
-
-**What:** A sequence item can be TEXT or a COMPOSITION reference — not only text. A single clock/logo
-is just a one-element composition, so clock+text / logo+text / … layouts are authored in the
-composition editor and cycled by the sequence. (Phase 1; text items stay the bindable ones.)
-**Why:** A rotating title/branding element cycles every few seconds between composed layouts
-(clock+text, logo+text, …), each under the same in/out transitions + dwell. News headlines stay
-text + data-bound, unchanged.
-**Acceptance:**
-
-- WHEN building a sequence THEN each item is text OR a composition reference (a composition picker lists `scene.compositions`)
-- WHEN the sequence advances THEN a composition item renders the referenced composition's content (live content inside runs — a clock ticks, honoring timezone/blink; shared/asset logos resolve) under the existing transitionIn/Out / dwell / advance / next
-- WHEN a composition item is present THEN the sequence cannot be text-bound (`sequence-items` is text-only; the bind action is disabled with a hint)
-- WHEN an old text-only sequence is loaded THEN it parses unchanged (`kind` defaults to `'text'`; no schema-version bump, no migration)
-
-**Notes:** REVISED design (replaces the earlier text|logo|clock primitive plan) — `SequenceItemSchema`
-becomes a discriminated union by `kind`: `{ kind:'text'(default), id, text, dwellMs? }` |
-`{ kind:'composition', id, compositionId, dwellMs? }` (reusing the same `compositionId` reference the
-`composition` element uses). NON-BREAKING (kind defaults to text). The runtime renders a composition
-item via the existing composition-instance rendering path (HELD content — the comp's own intro/outro
-does NOT run inside the sequence, but live content inside DOES); the items editor gets a per-item kind
-picker + the existing composition picker; export serializes the typed items + renders composition
-items (reusing composition export + asset/clock). Phase 2 (per-item field injection into composition
-items) is later.
-
-**Follow-up:** sequence TEXT items now bind EXPLICITLY (operator opt-in) instead of auto-exposing every
-item as a field — D-083 follow-up, merged in #188 (33edb88).
-
-## [x] D-084 — Clock: selectable time zone ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-26-clock-timezone/`
-
-**What:** A clock element can be assigned a time zone so `wall` mode shows that zone's current time (different countries/cities).
-**Why:** Broadcast frequently shows clocks for multiple locations.
-**Acceptance:**
-
-- WHEN a clock's time zone is set THEN `wall` mode renders the current time in that IANA zone
-- WHEN unset THEN it uses local time (current behavior); countup/countdown unaffected
-
-**Notes:** Add an optional `timezone` (IANA name, e.g. 'Europe/London') to ClockElementSchema; the runtime clock formatter uses Intl.DateTimeFormat({ timeZone }); the inspector adds a time-zone picker.
+**Notes:** InspectorPanel.css.ts `bindRemove` + features/fields/ListItemsEditor.tsx remove button — unify (red, same dimensions/icon). Match whatever icon D-092 left the row remove-item as.
 
 ## [x] D-102 — Per-element timing overrides in preview ⟨priority: medium⟩ — Phase 1 (tickers) archived: `openspec/changes/archive/2026-06-26-per-element-preview-timing/`. PHASE 2 (sequences + countdown clocks) + the repeater-stamped-ticker gap (the timing tree only walks authored composition instances) remain OPEN.
 
@@ -2779,56 +2832,3 @@ risks partial/flickering on-air updates. Long values (tickers/sequences/headline
 
 **Notes:** Reuse the amber/dirty-indicator pattern (D-088/D-089) for pending fields; textarea optional or
 auto-grow (default textarea for typically-long fields like ticker/sequence text).
-
-## [x] D-097 — Distinct timeline icon + color for shared/logo images vs asset images ⟨priority: low⟩ — focused fix, merged (#175)
-
-**What:** In the timeline layer row, a `source:'shared'` image (logo) gets a different LayerTypeIcon and color from a `source:'project'` image (asset).
-**Why:** Both are `type:'image'` and render identically today; operators can't tell a logo/shared image from a project-asset image at a glance.
-**Acceptance:**
-
-- WHEN a layer is an image with `source:'shared'` THEN its timeline type-icon AND lifespan color differ from an image with `source:'project'`
-
-**Notes:** ElementRow.tsx LayerTypeIcon + the color resolver (lifespanColorFor / TYPE_COLORS) branch on `element.source` for type 'image'. Asset image keeps `Image`; pick a distinct lucide for the shared/logo variant (e.g. `Stamp` or `Images`) + a distinct color (exact icon/color to confirm).
-
-## [x] D-098 — Key icon on bound (data-keyed) layers ⟨priority: low⟩ — focused fix, merged (#175)
-
-**What:** Prefix a bound layer (one with a data key / a field binding targeting it) with a small key icon before its name in the timeline left list.
-**Why:** Operators can't tell which layers are bound/dynamic at a glance.
-**Acceptance:**
-
-- WHEN a layer's element has a data key / a field binding whose target is that element THEN a small key icon appears before its name in the layer row
-- WHEN the layer is not bound THEN no key icon shows
-
-**Notes:** ElementRow.tsx name cell; detect "bound" via the fields/bindings slice (a binding with target.elementId === el.id, or the element's data key). lucide `Key`, small, before the name.
-
-## [x] D-099 — Minimum-window-size gate ⟨priority: medium⟩ — focused fix, merged (#175)
-
-**What:** When the window is below a minimum usable size, replace the editor with a centered "screen too small" message; restore the editor when resized back up.
-**Why:** On very small windows/monitors the panels + canvas don't render usably.
-**Acceptance:**
-
-- WHEN the window inner width/height is below the threshold THEN the app shows only a centered message and hides the editor
-- WHEN the window is resized at/above the threshold THEN the editor reappears
-
-**Notes:** Top-level gate in App.tsx (or a shell wrapper) via a resize listener / matchMedia. Pick a sensible threshold (e.g. ~1024×640 — confirm). RTL message.
-
-## [x] D-100 — Menubar: hover-to-open after first click ⟨priority: low⟩ — focused fix, merged (#175)
-
-**What:** Once a top menu is open (by click), moving the pointer onto another top-menu button opens it (no click); standard menubar behavior.
-**Why:** Today hover only highlights; each menu needs its own click.
-**Acceptance:**
-
-- WHEN a top menu is open AND the pointer enters another top-menu button THEN that menu opens and the previous closes
-- WHEN no menu is open THEN hover only highlights (a click is still required to open the first)
-
-**Notes:** apps/designer/src/renderer/features/shell/TopToolbar.tsx — when `openMenu !== null`, the buttons' onMouseEnter sets `setOpenMenu(key)`.
-
-## [x] D-101 — Remove-bind icon: red + match the row remove-item button ⟨priority: low⟩ — focused fix, merged (#175)
-
-**What:** The remove-bind (unbind) control is red and matches the list-items remove-item button in size and style.
-**Why:** Inconsistent — `bindRemove` is muted gray; the row remove-item is a different size/style.
-**Acceptance:**
-
-- WHEN the remove-bind control renders THEN it uses the danger/red color and the same size + style as the ListItemsEditor remove-item button
-
-**Notes:** InspectorPanel.css.ts `bindRemove` + features/fields/ListItemsEditor.tsx remove button — unify (red, same dimensions/icon). Match whatever icon D-092 left the row remove-item as.
