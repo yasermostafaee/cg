@@ -37,23 +37,64 @@ repeat: 2`, and the exported playout metadata carries the normalized form
 
 ### Requirement: A content-driven hold ends on the scope's content completion
 
-For `holdSource: 'content-driven'`, the runtime SHALL hold until every
-CONTENT SOURCE in the scope completes its own run (`Promise.all` semantics).
-Content sources are the scope's finite tickers, its countdown clocks, AND
-its finite sequences; wall and countup clocks are NOT content sources and
-SHALL never extend the hold. All finite tickers done, all countdowns at
-zero, and all finite sequences past their last pass ⇒ the hold ends; an
-infinite ticker or an infinite sequence never completes, so the scope holds
-until `stop()`; a scope with NO content sources gets a zero-length hold
-(deferred like a 0ms timer — a zero-hold root must not settle before its
-children receive the play cascade). Each hold entry SHALL reset and restart
-the scope's tickers, clocks, and sequences (a fresh crawl / a fresh count /
-a fresh run from item 1 per open/close cycle), and a stale completion
-(resolving after `stop()` or after the hold already ended) SHALL be
-ignored. The runtime SHALL self-wire this from the scope's content
-elements — preview and exports need no boot wiring; an explicitly supplied
-`RuntimeBootOptions.contentHold` overrides the ROOT scope (external
-override and test seam).
+For `holdSource: 'content-driven'`, the runtime SHALL hold until every CONTENT
+SOURCE the scope COORDINATES completes its own run (`Promise.all` semantics).
+A scope is a **coordinator** when its effective `mode` is not `manual` and its
+`holdSource` is `content-driven`. A coordinator coordinates its OWN content
+sources — its finite tickers, its countdown clocks, AND its finite sequences
+(wall and countup clocks are NOT content sources and SHALL never extend the
+hold) — PLUS the content of every **non-coordinator** nested composition
+instance, aggregated recursively up the composition-instance tree and STOPPING
+at any nested coordinator (a content-driven nested composition owns its own hold
+and self-settles independently, so the parent SHALL NOT wait on it). All
+coordinated finite tickers done, all coordinated countdowns at zero, and all
+coordinated finite sequences past their last pass ⇒ the hold ends; an infinite
+ticker or sequence anywhere in the coordinated set never completes, so the scope
+holds until `stop()`; a coordinator with NO coordinated content sources gets a
+zero-length hold (deferred like a 0ms timer — a zero-hold root must not settle
+before its children receive the play cascade). Each hold entry SHALL reset and
+restart the coordinated content (a fresh crawl / a fresh count / a fresh run from
+item 1 per open/close cycle), and a stale completion (resolving after `stop()` or
+after the hold already ended) SHALL be ignored. The runtime SHALL self-wire this
+from the scope's content elements — preview and exports need no boot wiring; an
+explicitly supplied `RuntimeBootOptions.contentHold` overrides the ROOT scope
+(external override and test seam).
+
+A non-coordinator scope under a coordinator ancestor SHALL NOT start its own
+content drivers on its own hold entry; the coordinator ancestor SHALL reset and
+start them at the COORDINATOR's hold entry, so content inside a nested composition
+begins after the parent's intro (during the parent's hold), not on the play
+cascade. A scope with NO coordinator ancestor keeps the per-scope behavior (it
+starts its own content at its own hold entry).
+
+#### Scenario: A parent holds for content inside a nested composition
+
+- **WHEN** a content-driven (`auto-out`) composition has NO direct content but
+  nests a composition instance (non-content-driven) that contains a finite ticker
+  / sequence / countdown
+- **THEN** the parent holds until that nested content completes and only then plays
+  its outro — it does NOT get a zero-length hold and close early
+
+#### Scenario: Nested content starts at the parent's hold-start, not at play
+
+- **WHEN** Play is pressed on such a parent
+- **THEN** the nested composition's content begins only after the parent's intro
+  finishes (at the parent's hold entry), not the instant Play is pressed
+
+#### Scenario: Infinite nested content holds the parent until stop
+
+- **WHEN** the nested composition (non-content-driven) contains a `repeat:
+'infinite'` ticker or sequence
+- **THEN** the parent's content-driven hold never completes on its own and holds
+  until `stop()`
+
+#### Scenario: A content-driven nested composition stays independent
+
+- **WHEN** a manual (or otherwise non-content-driven) parent nests a content-driven
+  composition that contains a finite ticker
+- **THEN** the nested composition runs and self-settles on its OWN content-driven
+  hold and the parent is untouched (the parent does NOT wait on the nested
+  content) — preserving today's per-scope holds
 
 #### Scenario: Nested loops — loop-cycle repeat=3 × ticker repeat=2 ⇒ 6 passes
 
@@ -616,3 +657,27 @@ driver). (Phase 1 covers tickers; sequences and countdown clocks are a later pha
 - **WHEN** the operator sets per-ticker timing in the preview
 - **THEN** only the preview run is affected — every ticker element's stored `repeat` /
   `cycleBoundary` and the rest of the template are left unchanged
+
+### Requirement: The content-driven hold control is offered for content in a nested composition
+
+The inspector's Playout section SHALL offer the content-driven hold source
+whenever the composition contains finite content — a ticker, a countdown clock,
+or a sequence — directly OR inside a nested `composition` instance, resolving the
+referenced composition's layers (via `scene.compositions`) and recursing through
+them with a cycle guard (a visited set), exactly as it already recurses into a
+`container`'s children. A composition whose only finite content lives inside a
+nested composition SHALL therefore present the hold-source control.
+
+#### Scenario: Hold control offered for content inside a nested composition
+
+- **WHEN** a composition's only finite content (a ticker / countdown / sequence)
+  lives inside a nested `composition` instance and the mode is not `manual`
+- **THEN** the Playout section offers the hold-source control (timed /
+  content-driven) for that composition
+
+#### Scenario: No false offer and no infinite recursion on cyclic references
+
+- **WHEN** a composition nests only static (non-content) compositions, or the
+  composition graph contains a reference cycle
+- **THEN** the hold-source control is NOT offered for a purely-static nest, and
+  the recursion terminates (each referenced composition is visited at most once)

@@ -8,6 +8,16 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Nested-composition content lifecycle ([D-104](./prd/designer.md)) — merged & archived (2026-06-27,
+  PR #191). Finite content (ticker / sequence / countdown) inside a NESTED composition now participates
+  in the parent's content-driven hold: `hasContentElement` recurses into composition instances (so the
+  hold control is OFFERED), and a content-driven "coordinator" scope starts + awaits its OWN content PLUS
+  its non-coordinator nested descendants' at its hold entry — the parent holds until the nested content
+  completes (infinite → until `stop()`) and the nested content starts AFTER the parent's intro, not on
+  the play cascade. Content-driven nested comps stay independent (skipped); repeater rows / sequence
+  comp-items unaffected; the root `contentHold` override is preserved. NON-BREAKING (no schema change).
+  Living spec: `designer-playout-lifecycle`. Archive: `2026-06-27-nested-content-lifecycle`. Follow-up
+  [B-030](./prd/bugs.md) filed (the timed-auto-out nested-holder strand edge).
 - Sequence typed items — Phase 1 ([D-083](./prd/designer.md)) — merged & archived (2026-06-27, PRs
   #182 / #183 / #185 / #186 / #188). A sequence item is now TEXT or a COMPOSITION reference
   (clock+text / logo+text layouts cycled under the same transitions / dwell; live content runs inside,
@@ -156,11 +166,6 @@ entries authored per-item when started** — most of these IDs are not yet filed
    merge/archive remain.
 2. [D-090](./prd/designer.md) / D-091 — chrome (additional polish beyond D-086
    Phase B; confirm scope vs. what D-086 delivered when filing)
-3. [D-104](./prd/designer.md) — nested-composition content participates in the parent's lifecycle
-   (content-driven hold recurses into nested compositions, and nested content starts after the
-   parent's intro rather than at play). **HIGH** — blocks the news-title sequence use case
-   (the clock+text rotator must be built as composition items → nested compositions). Needs design;
-   Understand pass on `playout-controller.ts` + `runtime.ts` contentWait before implementing.
 
 > **Ordering note:** the icon-pack (D-092) is done — the shared `Icon` set now
 > exists, so new control-bearing items reuse it.
