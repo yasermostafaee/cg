@@ -62,4 +62,38 @@ test.describe('D-106 follow-up — preview form: PER-ITEM (per-input) Update', (
     await expect(itemUpdate(1)).toBeDisabled();
     await expect(itemUpdate(2)).toBeEnabled();
   });
+
+  test('the per-item Update applies IN PLACE — committing a ticker item keeps the held background', async ({
+    app,
+  }) => {
+    await app.newProject('PerItemInPlace');
+    // Background: a start-trimmed rectangle — present at the held frame but hidden at
+    // frame 0, so a stray re-tick to frame 0 (the old D-106 bug) would make it vanish.
+    await app.addRectangle({ x: 260, y: 220 });
+    const rectId = (await app.timelineRowIds())[0]!;
+    await app.trimElementStart(rectId, 30);
+    // A ticker bound to a list data key → the per-ITEM Update path (the new code path
+    // the scalar apply-in-place test does not exercise).
+    await app.addTicker({ x: 120, y: 120 });
+    await app.setDataKey('headlines');
+
+    await app.openPreviewModal();
+    await app.play();
+    const bg = app.previewFrame.locator(`[data-cg-element-id="${rectId}"]`);
+    await expect(bg).toBeVisible(); // held: the background is present
+
+    // Edit a ticker item, then apply ONLY that item via its per-item Update.
+    await app.tickerItemInput('headlines', 1, app.previewDialog).fill('BREAKING — Brand X');
+    const itemUpdate = app.previewDialog.getByRole('button', {
+      name: 'Update headlines item 1',
+      exact: true,
+    });
+    await expect(itemUpdate).toBeEnabled();
+    await itemUpdate.click();
+
+    // FIX 2 on the per-item path: the held background is NOT torn down (CG UPDATE in
+    // place — no scene rebuild / playout reset), and the item committed (Update disables).
+    await expect(bg).toBeVisible();
+    await expect(itemUpdate).toBeDisabled();
+  });
 });
