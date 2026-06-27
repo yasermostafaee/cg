@@ -41,6 +41,39 @@ function setIn(obj: NestedFieldValues, path: string[], value: FieldValue): Neste
   return { ...obj, [key]: setIn(childObj, rest, value) };
 }
 
+/** Read a nested value at `path` (undefined when absent). */
+function getIn(obj: NestedFieldValues, path: string[]): FieldValue {
+  let cur: unknown = obj;
+  for (const k of path) cur = (cur as Record<string, unknown> | undefined)?.[k];
+  return cur as FieldValue;
+}
+
+function isNamespaceObj(v: unknown): v is NestedFieldValues {
+  return typeof v === 'object' && v !== null && !Array.isArray(v) && !('assetId' in v);
+}
+
+/**
+ * D-106 — the dotted leaf paths whose PENDING value differs from the APPLIED value
+ * (a list / image value compares by shape). Used to mark edited-but-unapplied fields.
+ */
+function dirtyPaths(
+  pending: NestedFieldValues,
+  applied: NestedFieldValues,
+  prefix: string[] = [],
+  out: Set<string> = new Set<string>(),
+): Set<string> {
+  for (const key of Object.keys(pending)) {
+    const pv = pending[key];
+    const av = (applied as Record<string, unknown> | undefined)?.[key];
+    if (isNamespaceObj(pv)) {
+      dirtyPaths(pv, isNamespaceObj(av) ? av : {}, [...prefix, key], out);
+    } else if (JSON.stringify(pv) !== JSON.stringify(av)) {
+      out.add([...prefix, key].join('.'));
+    }
+  }
+  return out;
+}
+
 /**
  * D-029 — can `next()` advance anything in this scene? True when the scene
  * (or any of its compositions — nested instances advance via the runtime's
@@ -153,10 +186,15 @@ export function PreviewModal({
   // test values survive — the "adjust state during render on key change" pattern.
   const shapeKey = useMemo(() => aggregateShapeKey(aggregate), [aggregate]);
   const [values, setValues] = useState<NestedFieldValues>(() => defaultNestedValues(aggregate));
+  // D-106 — `values` is the PENDING (edited) form state; `applied` is what's on the
+  // stage. Editing changes `values` only; an explicit Update commits pending → applied.
+  const [applied, setApplied] = useState<NestedFieldValues>(() => defaultNestedValues(aggregate));
   const [seededKey, setSeededKey] = useState(shapeKey);
   if (seededKey !== shapeKey) {
     setSeededKey(shapeKey);
-    setValues(defaultNestedValues(aggregate));
+    const seeded = defaultNestedValues(aggregate);
+    setValues(seeded);
+    setApplied(seeded);
   }
 
   // Tracks whether the operator paused, so Play becomes Resume and Pause disables.
@@ -209,16 +247,11 @@ export function PreviewModal({
     [post],
   );
 
-  const onFieldChange = useCallback(
-    (path: string[], value: FieldValue): void => {
-      setValues((prev) => {
-        const next = setIn(prev, path, value);
-        dispatch.update(next);
-        return next;
-      });
-    },
-    [dispatch],
-  );
+  // D-106 — editing stages a PENDING value; it does NOT touch the stage until an
+  // explicit Update (global or per-field) is pressed.
+  const onFieldChange = useCallback((path: string[], value: FieldValue): void => {
+    setValues((prev) => setIn(prev, path, value));
+  }, []);
 
   // Momentary playout commands. Play resumes when paused; otherwise plays with the
   // current data. None of them is a toggle — each is a one-shot command.
@@ -227,7 +260,9 @@ export function PreviewModal({
       dispatch.resume();
       setPaused(false);
     } else {
+      // D-106 — Play commits the prepared (pending) values and plays them.
       dispatch.play(values);
+      setApplied(values);
     }
   }, [dispatch, paused, values]);
   const onPause = useCallback(() => {
@@ -245,10 +280,28 @@ export function PreviewModal({
   }, [dispatch]);
   const onNext = useCallback(() => dispatch.next(), [dispatch]);
   const onReset = useCallback(() => {
-    setValues(defaultNestedValues(aggregate));
+    const seeded = defaultNestedValues(aggregate);
+    setValues(seeded);
+    setApplied(seeded);
     dispatch.reset();
     setPaused(false);
   }, [dispatch, aggregate]);
+  // D-106 — apply pending edits to the stage. "Update all" commits every pending
+  // field at once; a per-field Update commits just one path.
+  const onUpdateAll = useCallback(() => {
+    setApplied(values);
+    dispatch.update(values);
+  }, [dispatch, values]);
+  const onUpdateField = useCallback(
+    (path: string[]) => {
+      const next = setIn(applied, path, getIn(values, path));
+      setApplied(next);
+      dispatch.update(next);
+    },
+    [applied, values, dispatch],
+  );
+  const pendingPaths = useMemo(() => dirtyPaths(values, applied), [values, applied]);
+  const anyPending = pendingPaths.size > 0;
 
   // Apply the session overrides by rebuilding the preview runtime with them (the
   // stored scene + non-persistent per-scope overrides). The iframe preserves typed
@@ -322,6 +375,10 @@ export function PreviewModal({
               aggregate={aggregate}
               values={values}
               onChange={onFieldChange}
+              pendingPaths={pendingPaths}
+              onUpdateField={onUpdateField}
+              onUpdateAll={onUpdateAll}
+              anyPending={anyPending}
               dwellFieldIds={sequenceListFieldIds(scene)}
               columnsByFieldId={repeaterColumnsByFieldId(scene)}
             />

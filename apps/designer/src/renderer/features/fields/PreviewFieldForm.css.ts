@@ -54,6 +54,44 @@ export const inputInvalid = style({
   borderColor: colors.danger,
 });
 
+/** D-106 — auto-grow textarea for long text/multiline values (height set inline to scrollHeight). */
+export const grow = style({
+  resize: 'none',
+  overflow: 'hidden',
+  minHeight: '1.4rem',
+  lineHeight: 1.4,
+});
+
+/** D-106 — a field edited but NOT yet applied: an amber left accent (reuses the
+ *  D-088/D-089 unsaved-amber `#ffdd40`). */
+export const rowPending = style({
+  borderLeft: '2px solid #ffdd40',
+  paddingLeft: '0.4rem',
+  marginLeft: '-0.42rem',
+});
+
+/** The small "pending" tag next to a dirty field's label. */
+export const pendingTag = style({
+  marginLeft: '0.4rem',
+  color: '#ffdd40',
+  fontSize: '0.58rem',
+  fontWeight: 700,
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+});
+
+/** The per-field "Update" affordance (applies just this field). */
+export const updateField = style({
+  justifySelf: 'start',
+  marginTop: '0.05rem',
+});
+
+/** The global "Update all" control in the form header; amber when anything is pending. */
+export const updateAllPending = style({
+  borderColor: '#ffdd40',
+  color: '#ffdd40',
+});
+
 /** Inline per-field error — distinct (danger) and announced, never muted. */
 export const error = style({
   display: 'flex',
