@@ -578,6 +578,31 @@ export class DesignerApp {
 
   // ── keyframes ────────────────────────────────────────────────────────────────
 
+  /** Set the scene's total duration (frames) via the composition inspector's duration row. */
+  async setSceneDuration(frames: number): Promise<void> {
+    await this.deselect();
+    const input = this.page.getByLabel('Scene duration in frames', { exact: true });
+    await input.fill(String(frames));
+    await input.press('Enter');
+  }
+
+  /**
+   * Scrub the timeline playhead to `frame` by clicking the frame ruler (a
+   * pointer-scrubbed slider) at the matching x. Reads the ruler's aria-value range to
+   * map frame → pixel. Used to author a keyframe at a frame other than 0.
+   */
+  async scrubToFrame(frame: number): Promise<void> {
+    const ruler = this.page.getByRole('slider', { name: 'Frame ruler' });
+    const min = Number((await ruler.getAttribute('aria-valuemin')) ?? '0');
+    const max = Number((await ruler.getAttribute('aria-valuemax')) ?? '100');
+    const box = await ruler.boundingBox();
+    if (box === null) throw new Error('frame ruler not visible');
+    const pct = Math.min(1, Math.max(0, (frame - min) / (max - min || 1)));
+    await ruler.click({
+      position: { x: Math.round(pct * box.width), y: Math.round(box.height / 2) },
+    });
+  }
+
   /**
    * Add (or toggle) a keyframe at the current playhead via the timeline track-row
    * diamond for a property label (e.g. "Opacity", "Position X"). The element must be

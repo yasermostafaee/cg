@@ -2,6 +2,8 @@ import type {
   AnimatableProperty,
   Element as SceneElement,
   ElementAnimation,
+  KeyframeValue,
+  Track,
   Transform,
 } from '@cg/shared-schema';
 import { interpolateAtFrame } from './keyframe-eval.js';
@@ -548,4 +550,61 @@ function walk(
     }
     if (el.type === 'container') walk(el.children, elementMap, out);
   }
+}
+
+/**
+ * D-104 follow-up — the frame at which a scope's ENTRANCE animation has SETTLED:
+ * the smallest frame `F` in `[activeIn, outPoint]` such that every animated track is
+ * CONSTANT on `[F, outPoint]` — i.e. the start of the trailing static "hold" region
+ * before the out-point.
+ *
+ * Returns `outPoint` when the animation keeps changing right up to the out-point (a
+ * continuous in→out animation whose entrance ends AT the out-point, or no animation),
+ * so it collapses to today's hold-entry for those scenes. It returns an EARLIER frame
+ * only for a graphic that enters then holds statically (a lower third whose entrance
+ * finishes well before the out-point): the controller starts the composition's content
+ * (ticker / clock / sequence) at this frame — the moment the intro visually completes —
+ * instead of at the out-point, so the content runs through the whole hold rather than
+ * only in the last instant before the outro.
+ */
+export function entranceSettleFrame(
+  animated: AnimatedElement[],
+  activeIn: number,
+  outPoint: number,
+): number {
+  if (animated.length === 0 || outPoint <= activeIn) return outPoint;
+  // Every animated track paired with its value AT the out-point (the held state),
+  // plus the candidate frames where the value could change: the keyframes strictly
+  // inside (activeIn, outPoint), with activeIn as the floor.
+  const tracks: { track: Track; held: KeyframeValue }[] = [];
+  const candidates = new Set<number>([activeIn]);
+  for (const entry of animated) {
+    for (const track of Object.values(entry.animation.tracks)) {
+      if (track === undefined) continue;
+      tracks.push({ track, held: interpolateAtFrame(track, outPoint) });
+      for (const kf of track.keyframes) {
+        if (kf.frame > activeIn && kf.frame < outPoint) candidates.add(kf.frame);
+      }
+    }
+  }
+  if (tracks.length === 0) return outPoint;
+  // Walk candidate frames high→low; the constant tail extends as long as every track
+  // still renders its held value. The first candidate that differs ends the tail —
+  // everything from there to the out-point is the (changing) entrance.
+  const frames = [...candidates].sort((a, b) => a - b);
+  let settle = outPoint;
+  for (let i = frames.length - 1; i >= 0; i -= 1) {
+    const f = frames[i];
+    if (f === undefined) continue;
+    const constant = tracks.every((t) => sameKeyframeValue(interpolateAtFrame(t.track, f), t.held));
+    if (!constant) break;
+    settle = f;
+  }
+  return settle;
+}
+
+/** Value equality for the settle scan — numbers within an epsilon, colors exact. */
+function sameKeyframeValue(a: KeyframeValue, b: KeyframeValue): boolean {
+  if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) < 1e-6;
+  return a === b;
 }

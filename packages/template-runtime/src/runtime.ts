@@ -11,7 +11,11 @@ import {
   type Playout,
   type Scene,
 } from '@cg/shared-schema';
-import { applyAnimationAtFrame, type AnimatedElement } from './animation-applier.js';
+import {
+  applyAnimationAtFrame,
+  entranceSettleFrame,
+  type AnimatedElement,
+} from './animation-applier.js';
 import { applyScopedFieldValues } from './bindings.js';
 
 /**
@@ -319,7 +323,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       scope: FieldScope,
       path: string,
       isSubtreeRoot: boolean,
-      hasCoordinatorAncestor: boolean,
+      hasContentDrivingAncestor: boolean,
     ): ScopeNode => {
       const scopeOverride = overrides[path];
       // D-028 — one treadmill driver per ticker element, per scope (the same
@@ -507,8 +511,6 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // the clock filter is by kind (wall/countup are excluded — not content
       // sources). No own content sources ⇒ null.
       const scopeCountdowns = scopeClocks.filter((c) => c.mode === 'countdown');
-      const hasOwnContent =
-        scopeTickers.length > 0 || scopeClocks.length > 0 || scopeSequences.length > 0;
       // Reset + start THIS scope's own drivers (a fresh crawl / count / run from
       // item 1 per open/close cycle). D-104 — a coordinator also calls this for
       // its non-coordinator nested descendants, so nested content begins at the
@@ -542,34 +544,47 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       };
       const effPlayout = effectivePlayoutFor(scope.source, path);
       const isGlobalRoot = isSubtreeRoot && isRootSubtree;
-      // D-104 — a "coordinator" is a content-driven (non-manual) scope: at its
-      // hold entry it starts + awaits its OWN content PLUS its non-coordinator
-      // nested descendants' content (a content-driven nested comp self-settles and
-      // is skipped, preserving its own per-scope hold). A non-coordinator under a
-      // coordinator ancestor does NOT self-start its content (the ancestor drives
-      // it at the parent's hold entry); with no coordinator ancestor it keeps the
-      // old per-scope start behavior. An EXPLICIT boot `contentHold` still wins for
-      // the ROOT scope (external override / test seam).
+      // D-104 — a "coordinator" is a content-driven (non-manual) scope: its hold lasts
+      // until its OWN content PLUS its non-coordinator nested descendants' content
+      // completes (a content-driven nested comp self-settles and is skipped, preserving
+      // its own per-scope hold). An EXPLICIT boot `contentHold` still wins for the ROOT.
       const isCoordinator =
         effPlayout.mode !== 'manual' && effPlayout.holdSource === 'content-driven';
+      // D-104 follow-up — a scope DRIVES content (starts its OWN + its non-coordinator
+      // nested descendants' content, at its hold entry) when it is a subtree root (no
+      // content-driving ancestor) OR a coordinator. Every other scope is driven by an
+      // ancestor and must NOT self-start — self-starting decoupled nested content from
+      // the parent's intro (it began at the nested instance's own hold entry, or at play).
+      const drivesContent = isCoordinator || !hasContentDrivingAncestor;
       // Build the nested composition-instance children FIRST (they don't depend on
       // this scope's controller), so the content closures below can close over them
       // without a forward reference. Each child's path appends its instance name to
       // the parent's dotted path (root = ''): '' → 'home' → 'home.inner' — the key
       // `effectivePlayoutFor`/`scopeOverrides` use to target one scope's timing.
-      // D-104 — propagate coordinator coverage down the tree.
+      // D-104 follow-up — every child has a content-driving ancestor (this scope drives
+      // it, or this scope is itself driven and `startContentTree` recurses through it),
+      // so a nested non-coordinator never self-starts: its content begins at the nearest
+      // driving ancestor's hold entry.
       const instanceChildren = scope.children.map((c) =>
         wireScope(
           c.scope,
           path === '' ? c.name : `${path}.${c.name}`,
           false,
-          hasCoordinatorAncestor || isCoordinator,
+          drivesContent || hasContentDrivingAncestor,
         ),
+      );
+      const activeRange = activeRangeOf(scope.source);
+      // D-104 follow-up — the frame the entrance settles at (where content starts).
+      const holdEntry = entranceSettleFrame(
+        scope.animated,
+        activeRange.in,
+        scope.source.lifecycle?.outPoint ?? activeRange.out,
       );
       const controller = new PlayoutController({
         frameRate: scene.frameRate,
-        active: activeRangeOf(scope.source),
+        active: activeRange,
         lifecycle: scope.source.lifecycle,
+        holdEntryFrame: holdEntry,
         playout: effPlayout,
         hasAnimation: scope.animated.length > 0,
         applyFrame: (frame: number): void => {
@@ -585,9 +600,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
               onRootSettled();
             }
           : stopScopeContent,
-        // The content closures run at hold entry (post-play); they aggregate THIS
-        // scope's own content with its non-coordinator nested descendants' (a nested
-        // coordinator self-settles, so it is skipped) via the module helpers.
+        // The content closures aggregate THIS scope's own content with its
+        // non-coordinator nested descendants' (a nested coordinator self-settles, so it
+        // is skipped) via the module helpers: `waitForContent` supplies a content-driven
+        // hold's completion (at the hold entry); `onContentStart` starts the content at
+        // the entrance-settle frame (the moment the intro completes).
         waitForContent: isCoordinator
           ? (): Promise<void> | null => {
               if (isGlobalRoot && options.contentHold !== undefined) return options.contentHold();
@@ -603,16 +620,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
               return waits.length > 0 ? Promise.all(waits).then(() => undefined) : null;
             }
           : undefined,
-        onHoldStart: isCoordinator
+        onContentStart: drivesContent
           ? (): void => {
               startOwnContent();
               for (const child of instanceChildren) {
                 if (!child.isCoordinator) startContentTree(child);
               }
             }
-          : hasOwnContent && !hasCoordinatorAncestor
-            ? startOwnContent
-            : undefined,
+          : undefined,
         clock: options.clock,
       });
       controllers.push(controller);
@@ -683,6 +698,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       return node;
     };
 
+    // A subtree root has no content-driving ancestor, so it self-drives its content at
+    // its OWN hold entry. This is the static scene root AND each repeater row / sequence
+    // composition-item subtree: by design (D-030 / D-083) those keep an INDEPENDENT
+    // per-instance lifecycle (own out-point + own outro), so they are NOT driven by the
+    // host's hold entry — only directly-nested compositions are (via instanceChildren).
     const node = wireScope(subtreeScope, subtreePath, true, false);
     const sub: WiredSubtree = {
       node,

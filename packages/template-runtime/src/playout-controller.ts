@@ -23,11 +23,20 @@ export interface PlayoutControllerOptions {
   /** Fully settled hidden (outro finished). */
   onSettle: () => void;
   /**
-   * D-028 — fired at EVERY hold entry (the intro just finished), before the
-   * hold timing starts. The runtime resets + starts the scope's ticker
-   * treadmills here — each composition cycle gets a FRESH crawl run.
+   * D-028 / D-104 follow-up — fired once per cycle the moment the ENTRANCE animation
+   * completes (the intro's settle frame — see `holdEntryFrame`), which is the start of
+   * the hold. The runtime resets + starts the scope's content drivers (tickers / clocks
+   * / sequences) here, so a graphic that enters then holds runs its content through the
+   * WHOLE hold — not only in the last instant before the out-point. Each loop-cycle pass
+   * re-fires it (a FRESH crawl / count / run per cycle).
    */
-  onHoldStart?: (() => void) | undefined;
+  onContentStart?: (() => void) | undefined;
+  /**
+   * D-104 follow-up — the frame at which the entrance animation has settled (the start
+   * of the trailing static region before `outPoint`); content starts there. Absent ⇒
+   * `outPoint` (today's behavior: the entrance spans the whole `[in → outPoint]`).
+   */
+  holdEntryFrame?: number | undefined;
   /**
    * D-028 — content-completion supplier for `holdSource: 'content-driven'`:
    * invoked at each hold entry; the hold lasts until the returned promise
@@ -182,6 +191,11 @@ export class PlayoutController {
     return this.o.lifecycle?.outPoint ?? this.o.active.out;
   }
 
+  /** D-104 follow-up — the entrance-settle frame (content starts here); the out-point when absent. */
+  private holdEntry(): number {
+    return this.o.holdEntryFrame ?? this.outPoint();
+  }
+
   /** Modes that repeat IN → hold → OUT for `repeat` cycles. */
   private cyclic(): boolean {
     return this.o.playout.mode === 'loop-cycle';
@@ -189,20 +203,36 @@ export class PlayoutController {
 
   private startIntro(): void {
     this.phase = 'intro';
-    this.playRange(this.o.active.in, this.outPoint(), () => this.onIntroEnd());
+    // D-104 follow-up — split the intro at the entrance-settle frame. Play the entrance
+    // `[active.in → holdEntry]`; the moment it completes, START the content (so a graphic
+    // that enters then holds runs its content through the WHOLE hold). Then play the
+    // static settle `[holdEntry → outPoint]` so the playhead still reaches the out-point
+    // — a start-trimmed element still appears and the held frame stays the out-point —
+    // before the hold proper begins. When `holdEntry === outPoint` (the entrance animates
+    // right up to the out-point, or there is no animation) the settle leg is instant and
+    // this collapses to today's single intro.
+    const holdEntry = this.holdEntry();
+    const outPoint = this.outPoint();
+    this.playRange(this.o.active.in, holdEntry, () => {
+      this.o.onContentStart?.();
+      // Only play the static settle leg when it is non-empty; when the entrance ends AT
+      // the out-point (or there is no animation) `holdEntry === outPoint` and we go
+      // straight to the hold — no redundant second paint of the out-point frame.
+      if (holdEntry < outPoint) {
+        this.playRange(holdEntry, outPoint, () => this.onIntroEnd());
+      } else {
+        this.onIntroEnd();
+      }
+    });
   }
 
   private onIntroEnd(): void {
     this.phase = 'hold';
-    // Frozen hold for v1: the IN played the full `[active.in → outPoint]` and
-    // the driver left the graphic painted at `outPoint`; the HOLD simply keeps
-    // that frame. (A looping idle while holding is D-021's opt-in, not part of
-    // this change.)
+    // The intro played `[active.in → outPoint]` (entrance + static settle) and the driver
+    // left the graphic painted at `outPoint`; the HOLD simply keeps that frame. Content
+    // already started at the entrance-settle frame (onContentStart) — here we only start
+    // the hold TIMING. (A looping idle while holding is D-021's opt-in, not this change.)
     this.stopDriver();
-    // D-028 — every hold entry gets a FRESH content run (the runtime resets +
-    // starts the scope's tickers here), so each loop-cycle pass replays the
-    // crawl from its entering edge.
-    this.o.onHoldStart?.();
     if (this.o.playout.mode === 'manual') return; // hold frozen until stop()
     if (this.o.playout.holdSource === 'content-driven') {
       // The hold lasts until the scope's content completes. A token guards
