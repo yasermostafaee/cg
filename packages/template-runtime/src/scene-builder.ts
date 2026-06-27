@@ -590,7 +590,9 @@ function buildClock(element: ClockElement, ctx: BuildCtx): HTMLElement {
   // a SOLID colour + text-shadow, or — for a gradient — the glyph drop-shadow composed
   // onto the host filter (B-017). The gradient itself goes on the content-sized span.
   applyTimeDrivenHostStyle(el, element);
-  el.style.display = 'flex';
+  // Respect the layer/element hide flag — the flex display must NOT clobber the
+  // `display: none` applyBaseStyles set for an invisible clock (else hide is ignored).
+  el.style.display = element.visible ? 'flex' : 'none';
   // D-045 — vertical placement via flex `align-items`; horizontal stays `justify-content`.
   // Default 'middle' = the prior centring (non-breaking).
   el.style.alignItems = vAlignToFlex(element.verticalAlign ?? 'middle');
@@ -667,7 +669,9 @@ function buildSequence(element: SequenceElement, ctx: BuildCtx): HTMLElement {
   // transition; `align-items` centres vertically, `justify-items` maps the
   // `align` enum 1:1 (grid ships well below the exported single-file's CEF
   // floor — CasparCG 2.2/2.3 = CEF 63/71).
-  el.style.display = 'grid';
+  // Respect the layer/element hide flag — the grid display must NOT clobber the
+  // `display: none` applyBaseStyles set for an invisible sequence (else hide is ignored).
+  el.style.display = element.visible ? 'grid' : 'none';
   // D-045 — vertical placement via grid `align-items` (start/center/end); horizontal stays
   // `justify-items` (the `align` enum maps 1:1). Default 'middle' = the prior centring.
   el.style.alignItems = vAlignToGrid(element.verticalAlign ?? 'middle');

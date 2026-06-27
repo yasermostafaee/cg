@@ -404,6 +404,15 @@ export class DesignerApp {
       .evaluateAll((rows) => rows.map((r) => r.getAttribute('data-element-id') ?? ''));
   }
 
+  /** Toggle an element's visibility via its timeline row's Hide/Show eye button. */
+  async toggleElementVisibility(elementId: string): Promise<void> {
+    await this.page
+      .locator(`.cg-tl-row[data-element-id="${elementId}"]`)
+      .getByRole('button', { name: /^(Hide|Show) element$/ })
+      .first()
+      .click();
+  }
+
   /** The drop indicator shown while a layer-reorder drag is active. */
   get reorderIndicator(): Locator {
     return this.page.getByTestId('reorder-drop-indicator');
