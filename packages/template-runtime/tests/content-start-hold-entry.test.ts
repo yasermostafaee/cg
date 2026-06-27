@@ -275,6 +275,10 @@ function twoItemSequence(id: string): Element {
 const elText = (id: string): string =>
   document.querySelector<HTMLElement>(`[data-cg-element-id="${id}"]`)?.textContent ?? '';
 
+/** The inline display of a built element's HOST — what the content-start visibility gate drives. */
+const hostDisplay = (id: string): string =>
+  document.querySelector<HTMLElement>(`[data-cg-element-id="${id}"]`)?.style.display ?? 'MISSING';
+
 beforeEach(() => {
   document.body.innerHTML = '';
   document.body.className = '';
@@ -451,6 +455,55 @@ describe('D-104 follow-up — content starts at the entrance completion (hold en
     expect(elText('seq')).not.toContain('TWO'); // rotation has NOT begun — held on item 1
     await run(clock, 1500); // ~3000ms: past the marker (2000) + dwell (500) + transition (400)
     expect(elText('seq')).toContain('TWO'); // rotation began at the marker → advanced
+    r.remove();
+  });
+
+  it('(marker, visibility) the clock + sequence HOSTS are HIDDEN before the marker, revealed at/after it', async () => {
+    // The REAL "startout works for clock/sequence too" behaviour, distinct from the freeze
+    // (textContent) the two tests above check: before the marker the clock/sequence HOST must
+    // NOT show its frozen static content (a clock's "00", a sequence's item 1) — it is
+    // display:none, matching the ticker's empty band — and at/after the marker frame it is
+    // revealed (the driver also starts there). Marker at frame 60 (1200ms @50fps).
+    const clock = makeClock();
+    const r = createRuntime(
+      scene({
+        children: [introShape('bg', 10), wallClock('clk'), twoItemSequence('seq')],
+        outPoint: 150,
+        contentStart: 60,
+        playout: { mode: 'manual' },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await r.play({});
+    await run(clock, 600); // ~frame 30: BEFORE the marker (frame 60)
+    expect(hostDisplay('clk')).toBe('none'); // host hidden — NOT showing the frozen time
+    expect(hostDisplay('seq')).toBe('none'); // host hidden — NOT showing item 1
+    await run(clock, 800); // ~frame 70: AT/AFTER the marker
+    expect(hostDisplay('clk')).toBe('flex'); // revealed at the content-start frame
+    expect(hostDisplay('seq')).toBe('grid'); // revealed at the content-start frame
+    r.remove();
+  });
+
+  it('(heuristic, visibility) with NO marker the hosts are hidden until the entrance-settle heuristic', async () => {
+    // No marker → holdEntry is the entranceSettleFrame heuristic (here frame 40 = 800ms, where
+    // the entrance opacity reaches its held value). The clock + sequence hosts stay hidden until
+    // that fallback frame, then are revealed — the gate keys off `holdEntry`, marker or not.
+    const clock = makeClock();
+    const r = createRuntime(
+      scene({
+        children: [introShape('bg', 40), wallClock('clk'), twoItemSequence('seq')],
+        outPoint: 150,
+        playout: { mode: 'manual' },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await r.play({});
+    await run(clock, 600); // ~frame 30: before the heuristic settle (frame 40)
+    expect(hostDisplay('clk')).toBe('none');
+    expect(hostDisplay('seq')).toBe('none');
+    await run(clock, 600); // ~frame 60: past the heuristic settle
+    expect(hostDisplay('clk')).toBe('flex');
+    expect(hostDisplay('seq')).toBe('grid');
     r.remove();
   });
 });

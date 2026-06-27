@@ -124,9 +124,12 @@ test.describe('Content starts at the entrance completion (hold entry), not the o
     await expect(seq).toBeAttached();
     const c0 = await clock.textContent();
     const s0 = await seq.textContent();
-    // Before the marker (~7s): the wall clock is FROZEN (not ticking) and the sequence is
-    // HELD on item 1 — both wait for the marker, exactly like the ticker crawl. (Pre-fix the
-    // absolute clock ticked from play, so c0 would change within this window.)
+    // Before the marker (~7s): the clock + sequence HOSTS are HIDDEN (display:none) — they no
+    // longer show their frozen static content (the time / item 1), matching the ticker's empty
+    // band — AND their drivers stay held (textContent unchanged). Pre-fix the host showed the
+    // frozen content, so the operator saw "startout works for the ticker only".
+    await expect(clock).toBeHidden();
+    await expect(seq).toBeHidden();
     await app.page.waitForTimeout(1200);
     expect(await clock.textContent()).toBe(c0);
     expect(await seq.textContent()).toBe(s0);
