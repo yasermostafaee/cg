@@ -166,6 +166,10 @@ entries authored per-item when started** — most of these IDs are not yet filed
    merge/archive remain.
 2. [D-090](./prd/designer.md) / D-091 — chrome (additional polish beyond D-086
    Phase B; confirm scope vs. what D-086 delivered when filing)
+3. [D-105](./prd/designer.md) — split exit: animated "Out" (coordinated content-first /
+   background-last) vs a quick "Stop"/"Clear" (hard content removal, then the background close).
+   **MEDIUM** — matches the broadcast CG STOP vs CG REMOVE standard; reuses the existing outro +
+   content out-transitions and `whenComplete` sequencing.
 
 > **Ordering note:** the icon-pack (D-092) is done — the shared `Icon` set now
 > exists, so new control-bearing items reuse it.

@@ -2744,6 +2744,25 @@ coordinate via the controller tree (`onHoldStart` already starts a scope's own d
 extend so a child scope's content waits for the PARENT's hold-start). Medium-large; Understand pass on
 `playout-controller.ts` + `runtime.ts` contentWait + the controller-tree cascade before implementing.
 
+## [ ] D-105 — Split exit: animated "Out" vs quick "Stop" (coordinated exit) ⟨priority: medium⟩
+
+**What:** Two distinct exit operations in the preview. "Out" (animate off) plays the graphic's designed
+exit, COORDINATED so the content (ticker/clock/sequence) exits first/with and the background follows
+last — never the background closing over fully-visible content. "Stop"/"Clear" removes the content
+immediately and then plays the background's close animation (quick exit).
+**Why:** Today a single Stop conflates two intents and plays uncoordinated — the background outro runs
+while content is still visible, then content pops out — which looks broken. This matches the broadcast
+standard (CasparCG CG STOP = animate out, vs CG REMOVE/CLEAR = hard removal).
+**Acceptance:**
+
+- WHEN "Out" is pressed THEN the graphic plays its designed exit, sequenced so content exits first/with and the background is last (the background never closes over fully-visible content)
+- WHEN "Stop" is pressed THEN content is removed immediately and the background plays its close animation
+- WHEN the template has authored out-transitions THEN they are respected; content-first/background-last is the DEFAULT when nothing is choreographed
+
+**Notes:** Coordinate via promise/whenComplete sequencing (the same primitive the runtime already uses);
+reuse the existing background outro + content out-transitions. Two transport buttons (Out + Stop) with
+icons + tooltips.
+
 ## [x] D-097 — Distinct timeline icon + color for shared/logo images vs asset images ⟨priority: low⟩ — focused fix, merged (#175)
 
 **What:** In the timeline layer row, a `source:'shared'` image (logo) gets a different LayerTypeIcon and color from a `source:'project'` image (asset).
