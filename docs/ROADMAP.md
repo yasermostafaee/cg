@@ -8,6 +8,16 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Selective content-driven hold ([D-107](./prd/designer.md)) — merged & archived (2026-06-28,
+  PR #201). An optional `drivesHold` (absent ⇒ participates; non-breaking, no version bump) on
+  ticker / sequence / clock lets the designer pick WHICH content closes the graphic: `ownContentWait`
+  filters to `drivesHold !== false` (start/stop still cover ALL content; D-104's `contentTreeWait`
+  aggregation flows through, so nested selection works for free; all-excluded / none ⇒ zero-length
+  hold). The PlayoutSection shows a pre-checked checklist of the active composition's own content
+  (wall/countup clocks never listed); a recursive `setElementDrivesHold` reaches grouped content.
+  Living spec: `designer-playout-lifecycle`. Archive: `2026-06-27-selective-content-hold`. Follow-up
+  [D-108](./prd/designer.md) surfaces nested-composition hold-driving content (read-only) in the
+  checklist.
 - Nested-composition content lifecycle ([D-104](./prd/designer.md)) — merged & archived (2026-06-27,
   PR #191). Finite content (ticker / sequence / countdown) inside a NESTED composition now participates
   in the parent's content-driven hold: `hasContentElement` recurses into composition instances (so the
@@ -174,12 +184,6 @@ entries authored per-item when started** — most of these IDs are not yet filed
    with a pending/unapplied indicator) and optional multi-line textarea inputs. **MEDIUM** — matches
    CasparCG CG UPDATE (commit-on-cue, not realtime-as-you-type); reuses the D-088/D-089 dirty-indicator
    pattern.
-5. [D-107](./prd/designer.md) — select which content drives the content-driven hold: a per-element
-   `drivesHold` (optional, default true) so the designer picks WHICH tickers/sequences/countdown clocks
-   close the graphic; an infinite/looping or decorative element can opt out instead of blocking the hold
-   forever. **MEDIUM** — HOLD-ONLY (start-marker selectivity deferred); NON-BREAKING additive schema
-   widening (no version bump). **IN PROGRESS** on `feat/selective-content-hold`
-   (`openspec/changes/selective-content-hold`).
 
 > **Ordering note:** the icon-pack (D-092) is done — the shared `Icon` set now
 > exists, so new control-bearing items reuse it.
