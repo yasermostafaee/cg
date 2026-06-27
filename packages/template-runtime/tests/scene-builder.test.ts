@@ -56,6 +56,80 @@ describe('buildScene', () => {
     expect(layerNode?.style.display).toBe('none');
   });
 
+  it('a hidden clock / sequence ends up display:none — the flex/grid display respects `visible`', () => {
+    const t = {
+      position: { x: 0, y: 0 },
+      size: { w: 400, h: 60 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      anchor: { x: 0, y: 0 },
+    };
+    const font = {
+      family: 'Vazirmatn',
+      weight: 600,
+      style: 'normal',
+      size: 48,
+      lineHeight: 1.2,
+      letterSpacing: 0,
+    };
+    const clockEl = (visible: boolean) =>
+      ({
+        id: 'clk',
+        name: 'clock',
+        type: 'clock',
+        transform: t,
+        opacity: 1,
+        visible,
+        locked: false,
+        zIndex: 0,
+        font,
+        color: '#FFFFFF',
+        align: 'center',
+        mode: 'wall',
+        format: 'mm:ss',
+        digits: 'latin',
+      }) as unknown as ClockElement;
+    const seqEl = (visible: boolean) =>
+      ({
+        id: 'seq',
+        name: 'sequence',
+        type: 'sequence',
+        transform: t,
+        opacity: 1,
+        visible,
+        locked: false,
+        zIndex: 0,
+        font: { ...font, size: 36, lineHeight: 1.4 },
+        color: '#FFFFFF',
+        align: 'start',
+        direction: 'rtl',
+        items: [
+          { id: 'a', text: 'one' },
+          { id: 'b', text: 'two' },
+        ],
+        defaultDwellMs: 500,
+        advance: 'auto',
+        transitionIn: 'bottom',
+        transitionOut: 'top',
+        transitionTiming: 'simultaneous',
+        transitionMs: 400,
+        repeat: 1,
+      }) as unknown as SequenceElement;
+    const sceneWith = (visible: boolean): Scene => {
+      const s = structuredClone(lowerThirdScene);
+      s.layers[0]!.children.push(clockEl(visible), seqEl(visible));
+      return s;
+    };
+    // visible → the time-driven flex / grid display.
+    const vis = buildScene(sceneWith(true)).elementMap;
+    expect(vis.get('clk')?.style.display).toBe('flex');
+    expect(vis.get('seq')?.style.display).toBe('grid');
+    // hidden → display:none (regression: flex/grid used to clobber applyBaseStyles' hide).
+    const hid = buildScene(sceneWith(false)).elementMap;
+    expect(hid.get('clk')?.style.display).toBe('none');
+    expect(hid.get('seq')?.style.display).toBe('none');
+  });
+
   it('does not paint a transparent background', () => {
     const { container } = buildScene(lowerThirdScene);
     // happy-dom returns '' when the property isn't set
