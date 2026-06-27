@@ -2833,3 +2833,31 @@ risks partial/flickering on-air updates. Long values (tickers/sequences/headline
 
 **Notes:** Reuse the amber/dirty-indicator pattern (D-088/D-089) for pending fields; textarea optional or
 auto-grow (default textarea for typically-long fields like ticker/sequence text).
+
+## [~] D-107 — Select which content drives the content-driven hold ⟨priority: medium⟩ — implementing on `feat/selective-content-hold` (`openspec/changes/selective-content-hold`)
+
+**What:** When a composition's hold is content-driven, the designer can choose WHICH of its content
+elements (tickers, sequences, countdown clocks) drive the hold — i.e. determine when the graphic
+closes. Unselected content runs without gating the hold (a permanent/looping/decorative element no
+longer keeps the graphic on-air forever).
+**Why:** Today the content-driven hold is all-or-nothing per scope — contentWait (runtime.ts) waits
+for ALL the scope's tickers/sequences/countdowns. An infinite/looping element's whenComplete() never
+resolves, so it blocks the hold forever (holds until stop) — making "close when the subtitle finishes"
+impossible whenever any permanent content coexists. Selecting the duration-driving content fixes this
+and the multiple-content case.
+**Acceptance:**
+
+- WHEN a content-driven composition has multiple content elements THEN the designer can choose which ones drive the hold; default = all participate (non-breaking)
+- WHEN a content element is excluded THEN it does NOT gate the hold (the hold completes from the selected elements only), even if it is infinite/looping
+- WHEN nothing is changed THEN existing scenes behave exactly as before (all content participates)
+- WHEN no content is selected (or none exists) THEN the hold is zero-length, consistent with today's no-content case
+
+**Notes:** Add an OPTIONAL drivesHold boolean (DEFAULT true) to the ticker/sequence/clock element
+schemas — default true preserves "all participate" → NON-BREAKING, no version bump. Runtime:
+contentWait (and the D-104 coordinator / ownContentWait aggregation) filters
+scopeTickers/scopeSequences/scopeCountdowns to drivesHold !== false; startOwnContent still STARTS
+all content (this is about the HOLD, not starting/visibility). Designer: in the playout section (when
+holdSource is content-driven) a checklist of the scope's content elements ("which content closes the
+graphic?"), pre-checked, toggling drivesHold. Wall/countup clocks never drive the hold regardless —
+only countdown clocks, tickers, sequences are meaningful (list/disable accordingly). Start-marker
+selectivity is OUT of scope (deferred).

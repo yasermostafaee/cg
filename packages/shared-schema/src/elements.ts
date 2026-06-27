@@ -213,6 +213,15 @@ export const TickerElementSchema = ElementBaseSchema.extend({
   separator: z.union([z.string(), TickerImageSeparatorSchema]).optional(),
   /** Authored default items; a bound `list` field replaces them at playout. */
   items: z.array(TickerItemSchema),
+  /**
+   * D-107 — whether this ticker DRIVES the composition's content-driven hold.
+   * Under `holdSource: 'content-driven'` only content with `drivesHold !== false`
+   * gates the hold, so a permanent/looping/decorative crawl can run WITHOUT
+   * keeping the graphic on-air forever. Absent ⇒ participates (the pre-D-107
+   * all-content behaviour) — additive + backward-compatible, no schema-version
+   * bump. HOLD only: the ticker still STARTS and crawls regardless. Non-keyframable.
+   */
+  drivesHold: z.boolean().optional(),
 }).merge(BoxStyleSchema);
 export type TickerElement = z.infer<typeof TickerElementSchema>;
 
@@ -301,6 +310,14 @@ export const ClockElementSchema = ElementBaseSchema.extend({
    * `blinkColon` is on.
    */
   blinkPeriodMs: z.number().int().positive().optional(),
+  /**
+   * D-107 — whether this clock DRIVES the composition's content-driven hold.
+   * Only meaningful for `mode: 'countdown'`: `wall`/`countup` never complete, so
+   * they never gate a hold regardless of this flag. Absent ⇒ participates (the
+   * pre-D-107 behaviour) — additive + backward-compatible, no schema-version
+   * bump. HOLD only: the clock still renders/ticks regardless. Non-keyframable.
+   */
+  drivesHold: z.boolean().optional(),
 })
   .merge(BoxStyleSchema)
   .superRefine((el, ctx) => {
@@ -433,6 +450,15 @@ export const SequenceElementSchema = ElementBaseSchema.extend({
    * screen.
    */
   repeat: z.union([z.number().int().min(1), z.literal('infinite')]).default('infinite'),
+  /**
+   * D-107 — whether this sequence DRIVES the composition's content-driven hold.
+   * Under `holdSource: 'content-driven'` only content with `drivesHold !== false`
+   * gates the hold, so a permanent/looping sequence can run WITHOUT keeping the
+   * graphic on-air forever. Absent ⇒ participates (the pre-D-107 all-content
+   * behaviour) — additive + backward-compatible, no schema-version bump. HOLD
+   * only: the sequence still advances/renders regardless. Non-keyframable.
+   */
+  drivesHold: z.boolean().optional(),
 }).merge(BoxStyleSchema);
 export type SequenceElement = z.infer<typeof SequenceElementSchema>;
 

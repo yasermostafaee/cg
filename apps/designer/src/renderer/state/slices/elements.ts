@@ -85,6 +85,24 @@ function insertElementAt(layerIdx: number, pos: number, el: Element, select: boo
 }
 
 /**
+ * D-107 — set a content element's `drivesHold` flag, reaching elements nested in
+ * containers (the shallow `locate` / `updateElement` only reach a layer's direct
+ * children). Only ticker / sequence / clock carry the flag; any other type is left
+ * untouched even on an id match.
+ */
+function patchDrivesHold(els: readonly Element[], id: string, drivesHold: boolean): Element[] {
+  return els.map((el): Element => {
+    if (el.id === id && (el.type === 'ticker' || el.type === 'sequence' || el.type === 'clock')) {
+      return { ...el, drivesHold };
+    }
+    if (el.type === 'container') {
+      return { ...el, children: patchDrivesHold(el.children, id, drivesHold) };
+    }
+    return el;
+  });
+}
+
+/**
  * Elements slice — the layer-tree element CRUD: add / patch / transform /
  * lifespan / remove, the clipboard ops (copy / cut / paste / duplicate), the
  * selection-driven `deleteSelection` (keyframes first, else elements), asset
@@ -199,6 +217,22 @@ export const elementsSlice = {
     const nextLayer: Layer = { ...layer, children: nextChildren };
     const nextLayers = [...activeLayersOf(current.scene)];
     nextLayers[layerIdx] = nextLayer;
+    set({ scene: withActiveLayers(current.scene, nextLayers) });
+  },
+
+  /**
+   * D-107 — toggle whether a content element (ticker / sequence / countdown clock)
+   * DRIVES the composition's content-driven hold. Recurses containers so a grouped
+   * content element is reachable too (unlike the shallow `updateElement`). Excluded
+   * content (`drivesHold: false`) still renders / animates — it just no longer gates
+   * the hold (the runtime's `ownContentWait` filters to `drivesHold !== false`).
+   */
+  setElementDrivesHold(elementId: string, drivesHold: boolean): void {
+    if (current.scene === null) return;
+    const nextLayers = activeLayersOf(current.scene).map((layer) => ({
+      ...layer,
+      children: patchDrivesHold(layer.children, elementId, drivesHold),
+    }));
     set({ scene: withActiveLayers(current.scene, nextLayers) });
   },
 

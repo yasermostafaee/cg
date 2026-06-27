@@ -331,6 +331,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // Instantiated BEFORE the initial field application so a `list` field
       // default can already reconcile into its driver. The node→driver
       // registries are how the bindings applier routes `*-items` values.
+      // D-107 — content whose `drivesHold !== false` (absent ⇒ participates) DRIVES the
+      // content-driven hold; the full `scope*` driver arrays still START/STOP every
+      // content element (this is about the HOLD, not starting/visibility).
+      const holdTickers: TickerDriver[] = [];
       const scopeTickers = scope.tickers.map((t) => {
         // D-028 inner loop — the element's authored repeat/boundary. D-102 Phase 1 — the session
         // override is PER-ELEMENT (keyed by the ticker's element id), so two tickers in one scope
@@ -374,9 +378,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // D-105 — mark the content root so the coordinated exit (out/stop) can fade/hide it.
         t.band.dataset['cgContent'] = 'ticker';
         tickers.push(driver);
+        // D-107 — joins the hold wait unless explicitly excluded.
+        if (t.element.drivesHold !== false) holdTickers.push(driver);
         return driver;
       });
       // D-027 — clock drivers (no overrides and no bindings: no fields in v1).
+      const holdCountdowns: ClockDriver[] = [];
       const scopeClocks = scope.clocks.map((c) => {
         const driver = new ClockDriver({
           node: c.node,
@@ -392,10 +399,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // D-105 — mark the content root for the coordinated exit (out/stop).
         c.node.dataset['cgContent'] = 'clock';
         clocks.push(driver);
+        // D-107 — only a COUNTDOWN drives the hold (wall/countup never complete), and only
+        // when not explicitly excluded.
+        if (c.element.mode === 'countdown' && c.element.drivesHold !== false)
+          holdCountdowns.push(driver);
         return driver;
       });
       // D-029 — sequence drivers; the host→driver registry routes
       // `sequence-items` bindings, and `runtime.next()` dispatches per scope.
+      const holdSequences: SequenceDriver[] = [];
       const scopeSequences = scope.sequences.map((s) => {
         // D-083 — a COMPOSITION item renders the referenced composition's HELD content
         // with LIVE inner drivers (a clock ticks): build the comp subtree and wire it
@@ -501,16 +513,20 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // D-105 — mark the content root for the coordinated exit (out/stop).
         s.host.dataset['cgContent'] = 'sequence';
         sequences.push(driver);
+        // D-107 — joins the hold wait unless explicitly excluded.
+        if (s.element.drivesHold !== false) holdSequences.push(driver);
         return driver;
       });
 
       // D-028/D-027/D-029 — this scope's OWN content completion from its CONTENT
-      // SOURCES: every ticker, every countdown clock, and every sequence in the
-      // scope. ALL tickers and sequences join the wait — an infinite one's
-      // whenComplete() never resolves, which IS how it holds until stop(); only
-      // the clock filter is by kind (wall/countup are excluded — not content
-      // sources). No own content sources ⇒ null.
-      const scopeCountdowns = scopeClocks.filter((c) => c.mode === 'countdown');
+      // SOURCES that DRIVE the hold. D-107 — only content with `drivesHold !== false`
+      // (absent ⇒ participates) gates the hold, so a permanent/looping/decorative
+      // element no longer keeps the graphic on-air forever; the `hold*` arrays were
+      // collected above as each driver was built (countdowns also filtered by kind —
+      // wall/countup never complete and are never content sources). An infinite
+      // SELECTED ticker/sequence still never resolves (holds until stop()). No
+      // HOLD-DRIVING sources ⇒ null — including the case where every content element
+      // is EXCLUDED (a zero-length hold, consistent with the no-content case).
       // Reset + start THIS scope's own drivers (a fresh crawl / count / run from
       // item 1 per open/close cycle). D-104 — a coordinator also calls this for
       // its non-coordinator nested descendants, so nested content begins at the
@@ -530,11 +546,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         }
       };
       const ownContentWait = (): Promise<void> | null =>
-        scopeTickers.length > 0 || scopeCountdowns.length > 0 || scopeSequences.length > 0
+        holdTickers.length > 0 || holdCountdowns.length > 0 || holdSequences.length > 0
           ? Promise.all([
-              ...scopeTickers.map((t) => t.whenComplete()),
-              ...scopeCountdowns.map((c) => c.whenComplete()),
-              ...scopeSequences.map((s) => s.whenComplete()),
+              ...holdTickers.map((t) => t.whenComplete()),
+              ...holdCountdowns.map((c) => c.whenComplete()),
+              ...holdSequences.map((s) => s.whenComplete()),
             ]).then(() => undefined)
           : null;
       const stopScopeContent = (): void => {
