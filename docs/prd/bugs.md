@@ -769,3 +769,35 @@ appears at/after its in-point and plays, and lifespan is honored during play (no
 `tick` + the root controller's `applyFrame`). Regression tests:
 `packages/template-runtime/tests/runtime.test.ts` (B-029) +
 `apps/designer/tests/e2e/trimmed-content-start.spec.ts`. Capability: `designer-playout-lifecycle`.
+
+## [ ] B-030 — a nested TIMED-auto-out content-holder under a content-driven parent strands the parent on-air until stop() ⟨priority: low⟩ — D-104 follow-up
+
+> A non-coordinator nested composition that contains finite content (ticker / countdown / sequence) but
+> is itself set to `auto-out` with `holdSource: 'timed'`, nested under a content-driven parent, stops its
+> own content drivers on its own outro BEFORE they complete — so the parent's aggregated content-wait
+> (D-104) never resolves and the parent holds ON AIR indefinitely (a frozen graphic), exitable only by an
+> external `stop()`. Surfaced by the D-104 adversarial review; see the archived design note
+> `openspec/changes/archive/2026-06-27-nested-content-lifecycle/design.md` ("Risks / edges").
+
+**Repro:**
+
+1. Author a composition C with finite content (e.g. a duration countdown clock) and set C's playout to
+   `auto-out` + `holdSource: 'timed'` with a short `holdMs` (shorter than the content's duration).
+2. In a PARENT composition, set playout to a content-driven mode (`auto-out` / `loop-cycle` +
+   `holdSource: 'content-driven'`) and nest C as a composition instance (parent has no other content).
+3. Play the parent (preview modal or exported single-file HTML).
+
+**Expected:** the parent reaches a terminal state — it holds until the nested content completes and then
+plays out, and never becomes a permanently-stuck-on-air graphic.
+**Actual:** C auto-outs on its `holdMs`; `onSettle` → `stopScopeContent()` halts C's countdown before it
+reaches zero; the parent's content-driven hold awaits a promise that now never resolves, so the parent
+stays on air indefinitely until an external `stop()`.
+**Env:** Browser + Designer preview + exported single-file HTML (runtime `@cg/template-runtime`).
+**Root cause / fix options:** the covered child's content lifecycle is owned by the D-104 coordinator
+ancestor, but the child's OWN controller settle still halts the coordinated drivers. Either (a) when a
+covered child's controller settles, resolve / drop the coordinator's wait on that child so the parent can
+play out; or (b) warn at authoring when a content-bearing nested comp under a content-driven parent is set
+to timed `auto-out`.
+**Regression test:** a `@cg/template-runtime` test (the D-104 "STRAND" scenario) asserting the parent
+reaches a terminal state (settles, or is cleanly stoppable) instead of hanging on air. Capability:
+`designer-playout-lifecycle`.
