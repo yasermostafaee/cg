@@ -60,12 +60,14 @@ test.describe('Regressions', () => {
     await app.nestCompositionInstance('comp1');
 
     // The parent preview exposes the child's field under its instance namespace.
-    // D-087 — blank until Play; play reveals the nested child, then a namespaced
-    // field edit updates the right child.
+    // D-087 — blank until Play; play reveals the nested child. D-106 — a namespaced
+    // field edit is pending until an explicit Update, then it lands on the right child.
     await app.openPreviewModal();
     await app.play();
     await expect(app.previewFrame.getByText('New text')).toBeVisible();
     await app.setPreviewField('teamName', 'Galaxy');
+    await expect(app.previewFrame.getByText('Galaxy')).toBeHidden(); // pending until Update
+    await app.updateAllPreviewFields();
     await expect(app.previewFrame.getByText('Galaxy')).toBeVisible();
   });
 
