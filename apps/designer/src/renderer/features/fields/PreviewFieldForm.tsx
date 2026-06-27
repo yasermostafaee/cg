@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type {
   AggregatedFields,
   DynamicField,
@@ -5,8 +6,9 @@ import type {
   ListItem,
   NestedFieldValues,
 } from '@cg/shared-schema';
-import { TriangleAlert } from 'lucide-react';
+import { Check, TriangleAlert } from 'lucide-react';
 import { cx } from '../../cx.js';
+import { Button } from '../../ui/Button.js';
 import { Callout } from '../../ui/Callout.js';
 import { Icon } from '../../ui/Icon.js';
 import { Select } from '../../ui/Select.js';
@@ -21,6 +23,7 @@ export interface PreviewDispatch {
   update(fields: NestedFieldValues): void;
   play(fields: NestedFieldValues): void;
   stop(): void;
+  out(): void;
   next(): void;
   reset(): void;
   pause(): void;
@@ -38,16 +41,30 @@ export interface PreviewDispatch {
  * Controlled by the {@link PreviewModal}, which owns the nested value state; this
  * form reports edits by `path` (e.g. `['home','teamName']`).
  */
+const EMPTY_PENDING: ReadonlySet<string> = new Set<string>();
+
 export function PreviewFieldForm({
   aggregate,
   values,
   onChange,
+  pendingPaths,
+  onUpdateField,
+  onUpdateAll,
+  anyPending,
   dwellFieldIds,
   columnsByFieldId,
 }: {
   aggregate: AggregatedFields;
   values: NestedFieldValues;
   onChange: (path: string[], value: FieldValue) => void;
+  /** D-106 — dotted leaf paths edited but not yet applied (show a pending indicator). */
+  pendingPaths?: ReadonlySet<string>;
+  /** D-106 — apply one field's pending value to the stage. */
+  onUpdateField?: (path: string[]) => void;
+  /** D-106 — apply ALL pending field values at once. */
+  onUpdateAll?: () => void;
+  /** D-106 — whether any field is pending (gates the "Update all" control). */
+  anyPending?: boolean;
   /** D-029 — `list` fields bound `sequence-items` get the per-item dwell column. */
   dwellFieldIds?: ReadonlySet<string>;
   /** D-030 — `list` fields bound `repeater-items` get child-field columns. */
@@ -59,6 +76,10 @@ export function PreviewFieldForm({
       values={values}
       path={[]}
       onChange={onChange}
+      pendingPaths={pendingPaths ?? EMPTY_PENDING}
+      onUpdateField={onUpdateField}
+      onUpdateAll={onUpdateAll}
+      anyPending={anyPending ?? false}
       title="Data"
       depth={0}
       dwellFieldIds={dwellFieldIds}
@@ -73,6 +94,10 @@ function AggregateSection({
   values,
   path,
   onChange,
+  pendingPaths,
+  onUpdateField,
+  onUpdateAll,
+  anyPending,
   title,
   depth,
   dwellFieldIds,
@@ -82,6 +107,10 @@ function AggregateSection({
   values: NestedFieldValues;
   path: string[];
   onChange: (path: string[], value: FieldValue) => void;
+  pendingPaths: ReadonlySet<string>;
+  onUpdateField?: ((path: string[]) => void) | undefined;
+  onUpdateAll?: (() => void) | undefined;
+  anyPending?: boolean | undefined;
   title: string;
   depth: number;
   dwellFieldIds?: ReadonlySet<string> | undefined;
@@ -101,6 +130,21 @@ function AggregateSection({
           <span className={s.count}>
             {String(aggregate.fields.length)} field{aggregate.fields.length === 1 ? '' : 's'}
           </span>
+        )}
+        {depth === 0 && onUpdateAll !== undefined && (
+          <Button
+            size="sm"
+            className={cx(anyPending === true && s.updateAllPending)}
+            disabled={anyPending !== true}
+            onClick={onUpdateAll}
+            title={
+              anyPending === true
+                ? 'Apply all pending field changes to the stage'
+                : 'No pending changes'
+            }
+          >
+            Update all
+          </Button>
         )}
       </div>
 
@@ -128,6 +172,9 @@ function AggregateSection({
           field={f}
           value={scalarAt(values, f.id)}
           onChange={(v) => onChange([...path, f.id], v)}
+          pending={pendingPaths.has([...path, f.id].join('.'))}
+          onUpdate={onUpdateField !== undefined ? () => onUpdateField([...path, f.id]) : undefined}
+          updateName={[...path, f.label || f.id].join('.')}
           showDwell={dwellFieldIds?.has(f.id) ?? false}
           columns={columnsByFieldId?.get(f.id)}
         />
@@ -140,6 +187,8 @@ function AggregateSection({
           values={namespaceAt(values, g.name)}
           path={[...path, g.name]}
           onChange={onChange}
+          pendingPaths={pendingPaths}
+          onUpdateField={onUpdateField}
           title={g.label ?? g.name}
           depth={depth + 1}
           dwellFieldIds={dwellFieldIds}
@@ -170,21 +219,32 @@ function FieldRow({
   field,
   value,
   onChange,
+  pending,
+  onUpdate,
+  updateName,
   showDwell,
   columns,
 }: {
   field: DynamicField;
   value: FieldValue | undefined;
   onChange: (v: FieldValue) => void;
+  pending?: boolean | undefined;
+  onUpdate?: (() => void) | undefined;
+  updateName?: string | undefined;
   showDwell?: boolean | undefined;
   columns?: readonly ListItemColumn[] | undefined;
 }): JSX.Element {
   const error = validateField(field, value);
   return (
-    <div className={s.row}>
+    <div className={cx(s.row, pending === true && s.rowPending)}>
       <label className={s.label} title={field.description}>
         {field.label || field.id}
         {field.required && <span className={s.required}> *</span>}
+        {pending === true && (
+          <span className={s.pendingTag} title="Edited — not yet applied to the stage">
+            pending
+          </span>
+        )}
       </label>
       {renderInput(field, value, onChange, error !== null, showDwell === true, columns)}
       {error !== null && (
@@ -193,7 +253,59 @@ function FieldRow({
           {error}
         </span>
       )}
+      {pending === true && onUpdate !== undefined && (
+        <Button
+          size="sm"
+          className={s.updateField}
+          onClick={onUpdate}
+          aria-label={`Update field ${updateName ?? field.label ?? field.id}`}
+          title="Apply this field to the stage"
+        >
+          <Icon icon={Check} size={13} />
+          Update
+        </Button>
+      )}
     </div>
+  );
+}
+
+/** D-106 — a textarea that auto-grows to its content (compact when short, full when long). */
+function GrowTextarea({
+  className,
+  rows,
+  multiline,
+  value,
+  onChange,
+  label,
+}: {
+  className: string;
+  rows: number;
+  multiline: boolean;
+  value: string;
+  onChange: (v: FieldValue) => void;
+  label: string;
+}): JSX.Element {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el === null) return;
+    el.style.height = 'auto';
+    el.style.height = `${String(el.scrollHeight)}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      className={cx(className, s.grow)}
+      rows={rows}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        // D-106 — a single-line `text` field keeps single-line semantics: Enter
+        // does not insert a newline (only `multiline` fields accept newlines).
+        if (!multiline && e.key === 'Enter') e.preventDefault();
+      }}
+      aria-label={label}
+    />
   );
 }
 
@@ -212,12 +324,13 @@ function renderInput(
   switch (field.type) {
     case 'multiline':
       return (
-        <textarea
+        <GrowTextarea
           className={cls}
           rows={2}
+          multiline
           value={asString(value)}
-          onChange={(e) => onChange(e.target.value)}
-          aria-label={label}
+          onChange={onChange}
+          label={label}
         />
       );
     case 'number':
@@ -294,13 +407,15 @@ function renderInput(
       );
     case 'text':
     default:
+      // D-106 — an auto-grow textarea so long values are fully visible (compact when short).
       return (
-        <input
+        <GrowTextarea
           className={cls}
-          type="text"
+          rows={1}
+          multiline={false}
           value={asString(value)}
-          onChange={(e) => onChange(e.target.value)}
-          aria-label={label}
+          onChange={onChange}
+          label={label}
         />
       );
   }

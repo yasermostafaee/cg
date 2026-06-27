@@ -15,13 +15,16 @@ test.describe('Designer critical flow', () => {
     await app.setDataKey('headline');
     await expect(app.dataKeyInput).toHaveValue('headline');
 
-    // D-087 — the preview opens loaded-but-unpainted (blank until Play). Play
-    // paints the bound value, and a live field edit updates the (visible) stage.
+    // D-087 — the preview opens loaded-but-unpainted (blank until Play). Play paints
+    // the bound value. D-106 — a field edit is PENDING and does NOT touch the stage
+    // until an explicit Update is applied.
     await app.openPreviewModal();
     await expect(app.previewFrame.getByText('New text')).toBeHidden();
     await app.play();
     await expect(app.previewFrame.getByText('New text')).toBeVisible();
     await app.setPreviewField('headline', 'Hello E2E');
+    await expect(app.previewFrame.getByText('Hello E2E')).toBeHidden(); // pending, not applied
+    await app.updateAllPreviewFields();
     await expect(app.previewFrame.getByText('Hello E2E')).toBeVisible();
 
     // Stop runs the outro and settles the stage blank again.

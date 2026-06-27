@@ -63,6 +63,15 @@ export interface TemplateRuntime {
   stop(opts?: StopOptions): Promise<void>;
 
   /**
+   * D-105 — the COORDINATED animated exit ("Out"). The content (ticker / clock /
+   * sequence) animates off FIRST (a short opacity fade), then the background plays
+   * its outro, then the composition settles cleared — the background never closes
+   * over fully-visible content. Distinct from `stop()`, which removes the content
+   * IMMEDIATELY and then plays the background outro.
+   */
+  out(opts?: StopOptions): Promise<void>;
+
+  /**
    * D-020 — freeze playback at the current frame (intro, hold, or outro). The
    * timing orchestrator (auto-out / loop-cycle) is paused too. No args, so a
    * future `CG INVOKE "pause"` can reach it.

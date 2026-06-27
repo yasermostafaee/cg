@@ -1,4 +1,4 @@
-import { Pause, Play, RotateCcw, SkipForward, Square } from 'lucide-react';
+import { LogOut, Pause, Play, RotateCcw, SkipForward, Square } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import * as s from './PreviewTransport.css.js';
@@ -11,7 +11,10 @@ import * as s from './PreviewTransport.css.js';
  * - **Play** → `play()`, or `resume()` when the composition is paused. It is NOT a
  *   toggle and never stays visually "pressed" after a click.
  * - **Pause** → `pause()` (freezes intro / hold countdown / outro).
- * - **Stop** → `stop()` (runs the outro, then settles off).
+ * - **Out** → `out()` (D-105 — the coordinated animated exit: the content exits
+ *   first, then the background closes, never closing over fully-visible content).
+ * - **Stop** → `stop()` (D-105 — the quick clear: remove the content immediately,
+ *   then close the background; settles cleared).
  * - **Next** → `next()` (advance a paginated template). Disabled when the
  *   composition has a single step, since there is nothing to advance to.
  *
@@ -23,6 +26,7 @@ export function PreviewTransport({
   canStep,
   onPlay,
   onPause,
+  onOut,
   onStop,
   onNext,
   onReset,
@@ -31,6 +35,7 @@ export function PreviewTransport({
   canStep: boolean;
   onPlay: () => void;
   onPause: () => void;
+  onOut: () => void;
   onStop: () => void;
   onNext: () => void;
   onReset: () => void;
@@ -47,7 +52,19 @@ export function PreviewTransport({
           <Icon icon={Pause} size={16} />
           Pause
         </Button>
-        <Button className={s.command} onClick={onStop}>
+        <Button
+          className={s.command}
+          onClick={onOut}
+          title="Animate out — the content exits first, then the background closes"
+        >
+          <Icon icon={LogOut} size={16} />
+          Out
+        </Button>
+        <Button
+          className={s.command}
+          onClick={onStop}
+          title="Clear now — remove the content immediately, then close the background"
+        >
           <Icon icon={Square} size={16} />
           Stop
         </Button>

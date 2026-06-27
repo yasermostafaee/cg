@@ -647,6 +647,18 @@ export class DesignerApp {
     await input.blur();
   }
 
+  /** D-106 — apply ALL pending preview field edits to the stage ("Update all"). */
+  async updateAllPreviewFields(): Promise<void> {
+    await this.previewDialog.getByRole('button', { name: 'Update all', exact: true }).click();
+  }
+
+  /** D-106 — apply just one field's pending edit via its per-field Update button. */
+  async updatePreviewField(key: string): Promise<void> {
+    await this.previewDialog
+      .getByRole('button', { name: `Update field ${key}`, exact: true })
+      .click();
+  }
+
   // preview transport
   async play(): Promise<void> {
     await this.previewDialog.getByRole('button', { name: /Play|Resume/ }).click();
@@ -656,6 +668,10 @@ export class DesignerApp {
   }
   async stop(): Promise<void> {
     await this.previewDialog.getByRole('button', { name: /Stop/ }).click();
+  }
+  /** D-105 — the coordinated animated exit (content first, background last). */
+  async out(): Promise<void> {
+    await this.previewDialog.getByRole('button', { name: 'Out', exact: true }).click();
   }
   async next(): Promise<void> {
     await this.previewDialog.getByRole('button', { name: /Next/ }).click();

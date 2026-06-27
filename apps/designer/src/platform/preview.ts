@@ -246,6 +246,11 @@ export class Preview {
         let runtime = null;
         let currentFields = {};
         let currentFrame = 0;
+        // D-106 — true while the preview is on-air (play → stop/out). A field UPDATE must
+        // not re-tick the controller-owned held frame during playback — that would slam
+        // the animated/background elements back to the scrubbed frame (0). The canvas
+        // never plays, so it keeps re-ticking after an update.
+        let playing = false;
         let busy = false;
         let pendingScene = null;
         // D-011 — assetId → blob URL map, posted by the host. After
@@ -498,7 +503,11 @@ export class Preview {
               } else if (msg.action === 'update' && typeof window.update === 'function') {
                 currentFields = msg.fields ?? {};
                 window.update(JSON.stringify(currentFields));
-                if (runtime) runtime.tick(currentFrame);
+                // D-106 — apply IN PLACE: update() swaps the bound values on the LIVE
+                // graphic; re-tick only when NOT playing (the canvas / static scrub), so a
+                // held graphic keeps its background + animation untouched (the CG UPDATE
+                // standard — no background teardown, no close/reopen).
+                if (runtime && !playing) runtime.tick(currentFrame);
               } else if (msg.action === 'scrub' && typeof msg.frame === 'number') {
                 // D-071 — the offset is current-frame derived, so it can shift as the
                 // playhead moves an animated shape off-frame; re-inset .cg-stage live.
@@ -511,6 +520,7 @@ export class Preview {
                 // await them so the first pass a user ever sees measures with
                 // final glyphs (no-op when already loaded).
                 await applyFontFaces().catch(() => {});
+                playing = true;
                 window.play(JSON.stringify(currentFields));
                 // B-029 — do NOT re-tick currentFrame here. During playback the
                 // controller owns the frame (its per-frame applyFrame now drives the
@@ -518,7 +528,12 @@ export class Preview {
                 // re-hide a start-trimmed (lifespan.in > 0) element at frame 0 just
                 // before play restores it. The prior scrub already painted currentFrame.
               } else if (msg.action === 'stop' && typeof window.stop === 'function') {
+                playing = false;
                 window.stop();
+              } else if (msg.action === 'out' && typeof window.out === 'function') {
+                // D-105 — the coordinated animated exit (content first, background last).
+                playing = false;
+                window.out();
               } else if (msg.action === 'next' && typeof window.next === 'function') {
                 window.next();
               } else if (msg.action === 'pause') {
