@@ -160,6 +160,7 @@ function comp(id: string, outPoint: number, children: Element[], playout?: Playo
 function scene(opts: {
   children: Element[];
   outPoint: number;
+  contentStart?: number;
   playout: Playout;
   compositions?: Composition[];
 }): Scene {
@@ -172,7 +173,10 @@ function scene(opts: {
     frameRate: 50, // 50fps ⇒ frame 10 = 200ms (entrance), frame 90 = 1800ms (out-point)
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 100 },
-    lifecycle: { outPoint: opts.outPoint },
+    lifecycle:
+      opts.contentStart !== undefined
+        ? { outPoint: opts.outPoint, contentStart: opts.contentStart }
+        : { outPoint: opts.outPoint },
     playout: opts.playout,
     background: 'transparent',
     layers: [
@@ -203,6 +207,73 @@ const tickerStarted = (): boolean => {
   const track = document.querySelector<HTMLElement>('.cg-ticker-track');
   return (track?.style.transform ?? '') !== '';
 };
+
+/** A WALL clock (absolute) — the play path used to start it ticking before the marker. */
+function wallClock(id: string): Element {
+  return {
+    id,
+    name: id,
+    type: 'clock',
+    transform: baseTransform,
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+    font: {
+      family: 'Vazirmatn',
+      weight: 600,
+      style: 'normal',
+      size: 48,
+      lineHeight: 1.2,
+      letterSpacing: 0,
+    },
+    color: '#FFFFFF',
+    align: 'center',
+    mode: 'wall',
+    format: 'ss',
+    digits: 'latin',
+  } as unknown as Element;
+}
+
+/** A 2-item now/next sequence (infinite) with a short dwell. */
+function twoItemSequence(id: string): Element {
+  return {
+    id,
+    name: id,
+    type: 'sequence',
+    transform: baseTransform,
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+    font: {
+      family: 'Vazirmatn',
+      weight: 500,
+      style: 'normal',
+      size: 36,
+      lineHeight: 1.4,
+      letterSpacing: 0,
+    },
+    color: '#FFFFFF',
+    align: 'start',
+    direction: 'rtl',
+    items: [
+      { id: 'a', text: 'ONE' },
+      { id: 'b', text: 'TWO' },
+    ],
+    defaultDwellMs: 500,
+    advance: 'auto',
+    transitionIn: 'bottom',
+    transitionOut: 'top',
+    transitionTiming: 'simultaneous',
+    transitionMs: 400,
+    repeat: 'infinite',
+  } as unknown as Element;
+}
+
+/** The rendered text of a built element (the clock's time / the sequence's current item). */
+const elText = (id: string): string =>
+  document.querySelector<HTMLElement>(`[data-cg-element-id="${id}"]`)?.textContent ?? '';
 
 beforeEach(() => {
   document.body.innerHTML = '';
@@ -295,6 +366,91 @@ describe('D-104 follow-up — content starts at the entrance completion (hold en
     expect(tickerStarted()).toBe(false);
     await run(clock, 1400); // ~2000ms: past the out-point (1800ms)
     expect(tickerStarted()).toBe(true);
+    r.remove();
+  });
+
+  it('(marker) an explicit content-start marker OVERRIDES the heuristic — content starts at the marker frame', async () => {
+    // The entrance settles at frame 10 (200ms) — the heuristic — but the designer pinned a
+    // marker at frame 30 (600ms). Content must start at the MARKER, not the heuristic, not 90.
+    const clock = makeClock();
+    const r = createRuntime(
+      scene({
+        children: [introShape('bg', 10), infiniteTicker('sub')],
+        outPoint: 90,
+        contentStart: 30,
+        playout: { mode: 'manual' },
+      }),
+      { skipFontLoad: true, clock, tickerMeasure },
+    );
+    await r.play({});
+    await run(clock, 400); // 400ms: PAST the heuristic (200ms) but BEFORE the marker (600ms)
+    expect(tickerStarted()).toBe(false); // the marker governs, not entranceSettleFrame
+    await run(clock, 400); // ~800ms: past the marker (600ms)
+    expect(tickerStarted()).toBe(true);
+    r.remove();
+  });
+
+  it('(marker earlier) a marker BEFORE the heuristic also wins — content starts earlier', async () => {
+    // Entrance settles at frame 40 (800ms heuristic); a marker pins content to frame 10 (200ms).
+    const clock = makeClock();
+    const r = createRuntime(
+      scene({
+        children: [introShape('bg', 40), infiniteTicker('sub')],
+        outPoint: 90,
+        contentStart: 10,
+        playout: { mode: 'manual' },
+      }),
+      { skipFontLoad: true, clock, tickerMeasure },
+    );
+    await r.play({});
+    await run(clock, 120); // 120ms: before the marker (200ms)
+    expect(tickerStarted()).toBe(false);
+    await run(clock, 200); // ~320ms: past the marker (200ms) but well before the heuristic (800ms)
+    expect(tickerStarted()).toBe(true); // the marker (not the later heuristic) governs
+    r.remove();
+  });
+
+  it('(marker, clock) an absolute wall clock is HELD through the entrance, then ticks from the marker', async () => {
+    // Marker at frame 100 (2000ms); entrance settles at frame 10 (200ms). The wall clock used
+    // to tick from PLAY (ignoring the marker) — now it is held until the marker, like the ticker.
+    const clock = makeClock();
+    const r = createRuntime(
+      scene({
+        children: [introShape('bg', 10), wallClock('clk')],
+        outPoint: 150,
+        contentStart: 100,
+        playout: { mode: 'manual' },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await r.play({});
+    const atPlay = elText('clk');
+    await run(clock, 1200); // 1200ms: well past the heuristic (200ms), before the marker (2000ms)
+    expect(elText('clk')).toBe(atPlay); // HELD — the wall clock did NOT tick before the marker
+    await run(clock, 1000); // ~2200ms: past the marker — started + ticking
+    const t1 = elText('clk');
+    await run(clock, 1000); // +1s of wall time
+    expect(elText('clk')).not.toBe(t1); // ticking, having started at the marker
+    r.remove();
+  });
+
+  it('(marker, sequence) the now/next rotation begins at the marker — item 1 before, advances after', async () => {
+    const clock = makeClock();
+    const r = createRuntime(
+      scene({
+        children: [introShape('bg', 10), twoItemSequence('seq')],
+        outPoint: 150,
+        contentStart: 100,
+        playout: { mode: 'manual' },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await r.play({});
+    await run(clock, 1500); // 1500ms: past the heuristic (200ms), before the marker (2000ms)
+    expect(elText('seq')).toContain('ONE');
+    expect(elText('seq')).not.toContain('TWO'); // rotation has NOT begun — held on item 1
+    await run(clock, 1500); // ~3000ms: past the marker (2000) + dwell (500) + transition (400)
+    expect(elText('seq')).toContain('TWO'); // rotation began at the marker → advanced
     r.remove();
   });
 });

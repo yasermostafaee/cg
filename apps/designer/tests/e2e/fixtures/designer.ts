@@ -587,6 +587,25 @@ export class DesignerApp {
 
   // ── keyframes ────────────────────────────────────────────────────────────────
 
+  /**
+   * Drag the timeline's content-start marker to `frac` (0–1) of the scene lane (which maps
+   * the full frame range). Pointer-drag mirroring the out-point marker.
+   */
+  async dragContentStartMarkerToFraction(frac: number): Promise<void> {
+    const marker = this.page.getByRole('separator', { name: 'Content start marker' });
+    const lane = this.page.getByTestId('scene-row-lane');
+    await expect(marker).toBeVisible();
+    const lbox = await lane.boundingBox();
+    const mbox = await marker.boundingBox();
+    if (lbox === null || mbox === null)
+      throw new Error('content-start marker / scene lane missing');
+    const y = mbox.y + mbox.height / 2;
+    await this.page.mouse.move(mbox.x + mbox.width / 2, y);
+    await this.page.mouse.down();
+    await this.page.mouse.move(lbox.x + frac * lbox.width, y, { steps: 10 });
+    await this.page.mouse.up();
+  }
+
   /** Set the scene's total duration (frames) via the composition inspector's duration row. */
   async setSceneDuration(frames: number): Promise<void> {
     await this.deselect();

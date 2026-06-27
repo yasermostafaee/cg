@@ -108,6 +108,36 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
     return { outPoint: r.in + Math.round(span * 0.75) };
   }
 
+  /**
+   * D-104 follow-up — the content-start marker's DEFAULT frame: the LATEST entrance
+   * keyframe strictly inside `(active.in, outPoint)` across the comp's animated elements
+   * — i.e. where the entrance has finished moving. This matches the runtime's
+   * `entranceSettleFrame()` heuristic for a normal (monotonic, possibly multi-track)
+   * entrance, so PINNING the marker makes the current behavior explicit without a jump;
+   * the operator then drags it. Falls back to `outPoint` when there is no entrance to
+   * settle (a continuous in→out animation, or none).
+   */
+  function contentStartDefault(): number {
+    const r = activeRangeOf(scene);
+    const out = lifecycle?.outPoint ?? r.out;
+    let settle = -1;
+    const walk = (els: readonly Element[]): void => {
+      for (const el of els) {
+        if (el.animation !== undefined) {
+          for (const track of Object.values(el.animation.tracks)) {
+            if (track === undefined) continue;
+            for (const kf of track.keyframes) {
+              if (kf.frame > r.in && kf.frame < out && kf.frame > settle) settle = kf.frame;
+            }
+          }
+        }
+        if (el.type === 'container') walk(el.children);
+      }
+    };
+    for (const layer of scene.layers) walk(layer.children);
+    return settle < 0 ? out : settle;
+  }
+
   function changeMode(next: PlayoutMode): void {
     // `auto-out` / `loop-cycle` need an out-point (an exit segment) — seed a
     // sensible one so the mode does something out of the box (the operator
@@ -179,6 +209,34 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
           to enable in → hold → out, then drag it on the timeline.
         </p>
       )}
+
+      {lifecycle !== undefined &&
+        hasContent &&
+        (lifecycle.contentStart !== undefined ? (
+          <p style={hintStyle}>
+            Content start @ frame {String(lifecycle.contentStart)} — drag the cyan marker on the
+            timeline.{' '}
+            <Button
+              variant="bare"
+              style={linkBtnStyle}
+              onClick={() => designerStore.setContentStart(null)}
+            >
+              Reset to auto
+            </Button>
+          </p>
+        ) : (
+          <p style={hintStyle}>
+            Content starts automatically at the entrance completion.{' '}
+            <Button
+              variant="bare"
+              style={linkBtnStyle}
+              onClick={() => designerStore.setContentStart(contentStartDefault())}
+            >
+              Pin a content start
+            </Button>{' '}
+            to set the exact frame, then drag it on the timeline.
+          </p>
+        ))}
     </CollapseSection>
   );
 }

@@ -69,4 +69,66 @@ test.describe('Content starts at the entrance completion (hold entry), not the o
     await app.play();
     await expectSubtitleCrawlsWithin(app, 1500);
   });
+
+  test('a placed content-start marker DELAYS the subtitle to the marker frame (overrides the heuristic)', async ({
+    app,
+  }) => {
+    await app.newProject('HoldEntryMarker');
+    await authorEnteringGraphic(app, 'content-driven');
+    // Pin a content-start marker (Playout panel), then drag it LATE — ~70% of the timeline,
+    // far past the entrance settle (~frame 8) yet before the out-point (75%).
+    await app.page.getByRole('button', { name: 'Pin a content start' }).click();
+    await expect(app.page.getByText(/Content start @ frame/)).toBeVisible();
+    await app.dragContentStartMarkerToFraction(0.7);
+
+    await app.openPreviewModal();
+    await app.play();
+    // The marker (~70% ≈ 7s) governs, NOT the heuristic (~0.16s): the crawl must not have
+    // started within 1.5s. (Were the marker ignored, the heuristic would crawl it by ~0.2s.)
+    const track = app.previewFrame.locator('.cg-ticker-track').first();
+    await expect(track).toBeAttached(); // the ticker IS rendered, so the next check is meaningful
+    await app.page.waitForTimeout(1500);
+    expect((await track.getAttribute('style')) ?? '').not.toContain('translateX');
+  });
+
+  test('the marker also holds the CLOCK and SEQUENCE until the marker frame (not just the ticker)', async ({
+    app,
+  }) => {
+    await app.newProject('HoldEntryAll');
+    // A short fade-in entrance (settles ~frame 8), then a stretched timeline.
+    await app.addRectangle({ x: 240, y: 110 });
+    await app.setInspectorNumber('Opacity', 0);
+    await app.toggleInspectorKeyframe('opacity');
+    await app.scrubToFrame(8);
+    await app.setInspectorNumber('Opacity', 100);
+    await app.toggleInspectorKeyframe('opacity');
+    await app.scrubToFrame(0);
+    await app.setSceneDuration(500);
+    const rectId = (await app.timelineRowIds())[0]!;
+    // Content: a wall clock (HH:mm:ss — ticks each second) + a now/next sequence.
+    await app.addClock({ x: 140, y: 160 });
+    const clockId = (await app.timelineRowIds()).find((id) => id !== rectId)!;
+    await app.addSequence({ x: 140, y: 210 });
+    const seqId = (await app.timelineRowIds()).find((id) => id !== rectId && id !== clockId)!;
+    await app.addOutPoint();
+    await app.setPlayoutTiming('auto-out');
+    // Pin a content-start marker and drag it LATE (~70% ≈ 7s).
+    await app.page.getByRole('button', { name: 'Pin a content start' }).click();
+    await app.dragContentStartMarkerToFraction(0.7);
+
+    await app.openPreviewModal();
+    await app.play();
+    const clock = app.previewFrame.locator(`[data-cg-element-id="${clockId}"]`);
+    const seq = app.previewFrame.locator(`[data-cg-element-id="${seqId}"]`);
+    await expect(clock).toBeAttached();
+    await expect(seq).toBeAttached();
+    const c0 = await clock.textContent();
+    const s0 = await seq.textContent();
+    // Before the marker (~7s): the wall clock is FROZEN (not ticking) and the sequence is
+    // HELD on item 1 — both wait for the marker, exactly like the ticker crawl. (Pre-fix the
+    // absolute clock ticked from play, so c0 would change within this window.)
+    await app.page.waitForTimeout(1200);
+    expect(await clock.textContent()).toBe(c0);
+    expect(await seq.textContent()).toBe(s0);
+  });
 });

@@ -574,12 +574,17 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         ),
       );
       const activeRange = activeRangeOf(scope.source);
-      // D-104 follow-up — the frame the entrance settles at (where content starts).
-      const holdEntry = entranceSettleFrame(
-        scope.animated,
-        activeRange.in,
-        scope.source.lifecycle?.outPoint ?? activeRange.out,
-      );
+      // D-104 follow-up — the frame where content starts: the designer's EXPLICIT
+      // content-start marker (`lifecycle.contentStart`) when placed, else the
+      // `entranceSettleFrame()` heuristic (entrance completion). The marker is the
+      // deterministic source of truth; the heuristic is only its default. Clamp to
+      // [active.in, outPoint] defensively (the schema already constrains it).
+      const outPoint = scope.source.lifecycle?.outPoint ?? activeRange.out;
+      const marker = scope.source.lifecycle?.contentStart;
+      const holdEntry =
+        marker !== undefined
+          ? Math.max(activeRange.in, Math.min(outPoint, marker))
+          : entranceSettleFrame(scope.animated, activeRange.in, outPoint);
       const controller = new PlayoutController({
         frameRate: scene.frameRate,
         active: activeRange,
@@ -892,16 +897,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // D-028 — a fresh run restarts every crawl from its entering edge (the
       // controllers' first hold then starts the treadmills).
       for (const sub of subtrees) for (const t of sub.tickers) t.reset();
-      // D-027 — clocks reset to their initial value; ABSOLUTE clocks (wall,
-      // datetime countdown) start now so they tick during the intro, while
-      // relative counts display their initial value until their hold-entry
-      // run begins (the hold entry resets + starts every scope clock).
-      for (const sub of subtrees) {
-        for (const c of sub.clocks) {
-          c.reset();
-          if (c.isAbsolute) c.start();
-        }
-      }
+      // D-027 / D-104 follow-up — clocks reset to their initial value but do NOT
+      // tick yet: like the ticker crawl and the sequence rotation, EVERY clock
+      // (absolute wall / datetime-countdown AND relative count) is HELD through the
+      // entrance and starts at the scope's CONTENT-START frame (the hold entry — the
+      // content-start marker or its heuristic), so the marker gates all three content
+      // kinds uniformly. `startOwnContent` (onContentStart) resets + starts them there.
+      for (const sub of subtrees) for (const c of sub.clocks) c.reset();
       // D-029 — sequences reset to item 1, displayed statically through the
       // intro; advancing begins at hold entry (which resets + starts them).
       for (const sub of subtrees) for (const s of sub.sequences) s.reset();

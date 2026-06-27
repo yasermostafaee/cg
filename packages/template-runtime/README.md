@@ -208,9 +208,12 @@ There is **no separate continuous-loop mode** — a looping logo is `loop-cycle`
 `repeat: 'infinite'` (and `holdMs: 0` to loop the whole timeline).
 
 `onContentStart` (optional) fires once per cycle the moment the **entrance animation
-completes** — the `holdEntryFrame`. That frame is `entranceSettleFrame(...)`: the start
-of the trailing _static_ region before `outPoint` (and `outPoint` itself when the
-entrance animates right up to it, or there is no animation). The intro is **split** at
+completes** — the `holdEntryFrame`. The runtime sets that frame to the composition's
+EXPLICIT content-start marker (`lifecycle.contentStart` — placed + dragged on the
+designer timeline, the deterministic source of truth) when present, else the
+`entranceSettleFrame(...)` heuristic: the start of the trailing _static_ region before
+`outPoint` (and `outPoint` itself when the entrance animates right up to it, or there is
+no animation). The intro is **split** at
 it: the controller plays `[active.in → holdEntryFrame]`, STARTS the content, then plays
 the static settle `[holdEntryFrame → outPoint]` — so the playhead still reaches and holds
 at `outPoint` (a start-trimmed element still appears; the held frame and the outro are
@@ -341,9 +344,12 @@ modes need a real epoch; the ticker's clock is performance-style).
   loop-cycle hold entry re-runs the full count. A past `datetime` target
   paints 0 and resolves immediately on its run start (zero-length content
   hold). `wall`/`countup` never resolve — not content sources.
-- Absolute clocks (wall, datetime countdown) are also started at `play()`
-  (`isAbsolute`), so they tick during the intro; relative counts display their
-  initial value until their hold-entry run begins.
+- D-104 follow-up — EVERY clock (absolute `wall`/`datetime countdown` AND relative
+  count) is HELD through the entrance and starts at the scope's content-start frame
+  (the hold entry — the content-start marker or its `entranceSettleFrame` heuristic),
+  uniformly with the ticker crawl and the sequence rotation. `play()` only `reset()`s
+  the clocks (they display their initial value through the intro); `startOwnContent`
+  resets + starts them at `onContentStart`.
 - `reset()` repaints the initial value by the same RULE the scene-builder's
   static render uses (wall = now, countup = zero, countdown = the target
   remaining now), so the authoring canvas and a between-runs stage can't drift

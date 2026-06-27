@@ -320,6 +320,38 @@ export function TimelineDock({
     window.addEventListener('pointercancel', onUp);
   }
 
+  // D-104 follow-up — drag the content-start marker (where ticker / clock / sequence
+  // begins). The store clamps it to `[active.in, outPoint]`, so it always stays inside
+  // the entrance, however far it is dragged.
+  function startContentMarkerDrag(e: React.PointerEvent): void {
+    e.stopPropagation();
+    e.preventDefault();
+    const lane = sceneLaneRef.current;
+    const lc = scene.lifecycle;
+    if (lane === null || lc?.contentStart === undefined) return;
+    const rect = lane.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const startX = e.clientX;
+    const startCs = lc.contentStart;
+    function onMove(ev: PointerEvent): void {
+      const dframes = deltaFramesFromPx(
+        ev.clientX - startX,
+        rect.width,
+        scene.frameRange.in,
+        scene.frameRange.out,
+      );
+      designerStore.setContentStart(startCs + dframes);
+    }
+    function onUp(): void {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  }
+
   // D-047 — pointer-drag a layer row up/down to reorder it (change the z-stack).
   // Mirrors the lifespan / ruler pointer drags: a small move threshold separates a
   // reorder from a plain click→select; past it we capture the pointer, track it over
@@ -596,6 +628,17 @@ export function TimelineDock({
                     aria-orientation="vertical"
                     aria-label="Out point marker"
                     title="Out point — where the intro ends / the hold sits / the exit begins"
+                  />
+                )}
+                {scene.lifecycle?.contentStart !== undefined && (
+                  <div
+                    className={s.phaseMarkerIn}
+                    style={{ left: `${markerPct(scene.lifecycle.contentStart).toFixed(3)}%` }}
+                    onPointerDown={(e) => startContentMarkerDrag(e)}
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label="Content start marker"
+                    title="Content start — where the ticker / clock / sequence begins (reset it in the Playout panel)"
                   />
                 )}
               </div>
