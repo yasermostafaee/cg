@@ -170,6 +170,10 @@ entries authored per-item when started** — most of these IDs are not yet filed
    background-last) vs a quick "Stop"/"Clear" (hard content removal, then the background close).
    **MEDIUM** — matches the broadcast CG STOP vs CG REMOVE standard; reuses the existing outro +
    content out-transitions and `whenComplete` sequencing.
+4. [D-106](./prd/designer.md) — preview field form: explicit Update (a global "Update all" + per-field,
+   with a pending/unapplied indicator) and optional multi-line textarea inputs. **MEDIUM** — matches
+   CasparCG CG UPDATE (commit-on-cue, not realtime-as-you-type); reuses the D-088/D-089 dirty-indicator
+   pattern.
 
 > **Ordering note:** the icon-pack (D-092) is done — the shared `Icon` set now
 > exists, so new control-bearing items reuse it.

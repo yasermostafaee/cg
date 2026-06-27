@@ -2763,6 +2763,23 @@ standard (CasparCG CG STOP = animate out, vs CG REMOVE/CLEAR = hard removal).
 reuse the existing background outro + content out-transitions. Two transport buttons (Out + Stop) with
 icons + tooltips.
 
+## [ ] D-106 — Preview field form: explicit Update + optional textarea inputs ⟨priority: medium⟩
+
+**What:** (1) Editing field values in the preview no longer updates the stage in realtime — an explicit
+Update applies changes, BOTH a global "Update all" and a per-field Update; edited-but-unapplied fields
+show a pending indicator. (2) Field inputs can be multi-line textareas (optional / expandable / auto-grow)
+so long values are fully visible.
+**Why:** Broadcast operators prepare values and commit on cue (CasparCG CG UPDATE); realtime-as-you-type
+risks partial/flickering on-air updates. Long values (tickers/sequences/headlines) need full visibility.
+**Acceptance:**
+
+- WHEN a field value is edited THEN the stage does NOT change until Update is pressed, and the field shows a pending/unapplied indicator
+- WHEN global Update is pressed THEN all pending field changes apply at once; WHEN a per-field Update is pressed THEN only that field applies
+- WHEN a field holds long text THEN it can be shown as a multi-line textarea (optional/expandable) so the full text is visible
+
+**Notes:** Reuse the amber/dirty-indicator pattern (D-088/D-089) for pending fields; textarea optional or
+auto-grow (default textarea for typically-long fields like ticker/sequence text).
+
 ## [x] D-097 — Distinct timeline icon + color for shared/logo images vs asset images ⟨priority: low⟩ — focused fix, merged (#175)
 
 **What:** In the timeline layer row, a `source:'shared'` image (logo) gets a different LayerTypeIcon and color from a `source:'project'` image (asset).
