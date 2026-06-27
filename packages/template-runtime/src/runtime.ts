@@ -585,6 +585,40 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         marker !== undefined
           ? Math.max(activeRange.in, Math.min(outPoint, marker))
           : entranceSettleFrame(scope.animated, activeRange.in, outPoint);
+      // D-104 follow-up (content-start VISIBILITY) — a content host must show its static
+      // initial content (a clock's frozen time, a sequence's item 1, a ticker's band) only
+      // FROM the content-start frame, matching the ticker's empty-until-crawl behaviour;
+      // before then the clock/sequence HOST showed frozen content (only the driver's run was
+      // gated). Collect this scope's content hosts so a per-FRAME gate can HIDE each until the
+      // playhead reaches `holdEntry` (the marker or its heuristic), then reveal + (the driver)
+      // start it. A per-frame gate (NOT a one-shot at `start()`) so it holds under seek / loop;
+      // `natural` is the BUILT display (already `none` for a #197-hidden element), so the gate
+      // composes with the visible flag AND with B-029 lifespan (revealed only while in range).
+      const contentGates: {
+        node: HTMLElement;
+        lifespan: FrameRange | undefined;
+        natural: string;
+      }[] = [];
+      const collectContentHost = (element: {
+        id: string;
+        lifespan?: FrameRange | undefined;
+      }): void => {
+        const node = built.elementMap.get(element.id);
+        if (node !== undefined) {
+          contentGates.push({ node, lifespan: element.lifespan, natural: node.style.display });
+        }
+      };
+      for (const t of scope.tickers) collectContentHost(t.element);
+      for (const c of scope.clocks) collectContentHost(c.element);
+      for (const sq of scope.sequences) collectContentHost(sq.element);
+      const applyContentGateAtFrame = (frame: number): void => {
+        const started = frame >= holdEntry;
+        for (const g of contentGates) {
+          const inLifespan =
+            g.lifespan === undefined || (frame >= g.lifespan.in && frame <= g.lifespan.out);
+          g.node.style.display = started && inLifespan ? g.natural : 'none';
+        }
+      };
       const controller = new PlayoutController({
         frameRate: scene.frameRate,
         active: activeRange,
@@ -598,6 +632,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           // start-trimmed (lifespan.in > 0) element appears at its in-point + plays instead
           // of staying hidden / being dropped. Root-scene gates ride the root playhead.
           if (isGlobalRoot) applyLifespanGatesAtFrame(frame);
+          // D-104 follow-up — hide this scope's content hosts (clock / sequence / ticker)
+          // until its content-start frame, so a clock/sequence no longer shows frozen content
+          // during the intro. After the lifespan gate so it is the final word for content.
+          applyContentGateAtFrame(frame);
         },
         onExitStart: isGlobalRoot ? rootOnExitStart : noop,
         onSettle: isGlobalRoot
