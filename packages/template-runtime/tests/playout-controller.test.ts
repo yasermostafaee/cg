@@ -171,6 +171,60 @@ describe('PlayoutController', () => {
     expect(h.events).toEqual(['exit', 'settle']);
   });
 
+  it('D-104 follow-up — content starts at the entrance-settle frame, not the out-point', () => {
+    // The entrance settles at frame 10, but the out-point is frame 40 — a static hold
+    // region [10 → 40]. Content must start the moment the entrance completes (frame 10),
+    // yet the playhead must still reach + hold at the out-point (frame 40).
+    const clock = makeClock();
+    const frames: number[] = [];
+    let contentAtFrame: number | null = null;
+    const controller = new PlayoutController({
+      frameRate: 50,
+      active,
+      lifecycle: { outPoint: 40 },
+      holdEntryFrame: 10,
+      playout: { mode: 'manual' },
+      hasAnimation: true,
+      applyFrame: (f) => frames.push(f),
+      onExitStart: () => undefined,
+      onSettle: () => undefined,
+      onContentStart: () => {
+        contentAtFrame = Math.max(...frames);
+      },
+      clock,
+    });
+    controller.play();
+    for (let i = 0; i < 60; i++) clock.advance(20); // run well past the whole intro
+    expect(contentAtFrame).toBe(10); // started at the entrance settle, NOT 40 (the out-point)
+    expect(Math.max(...frames)).toBe(40); // …yet the playhead reached the out-point
+    expect(frames[frames.length - 1]).toBe(40); // …and holds there
+  });
+
+  it('D-104 follow-up — no early settle (entrance ends AT the out-point): content fires at the out-point', () => {
+    const clock = makeClock();
+    let contentAtFrame: number | null = null;
+    const frames: number[] = [];
+    const controller = new PlayoutController({
+      frameRate: 50,
+      active,
+      lifecycle: { outPoint: 40 },
+      holdEntryFrame: 40, // entrance animates right up to the out-point
+      playout: { mode: 'manual' },
+      hasAnimation: true,
+      applyFrame: (f) => frames.push(f),
+      onExitStart: () => undefined,
+      onSettle: () => undefined,
+      onContentStart: () => {
+        contentAtFrame = Math.max(...frames);
+      },
+      clock,
+    });
+    controller.play();
+    for (let i = 0; i < 60; i++) clock.advance(20);
+    expect(contentAtFrame).toBe(40); // unchanged: content at the out-point/hold-entry
+    expect(frames.filter((f) => f === 40).length).toBe(1); // no redundant double-paint of 40
+  });
+
   it('content-driven hold ends when waitForContent resolves (holdMs ignored)', async () => {
     // holdMs is present but MUST be ignored — the completion promise wins.
     let resolveContent: () => void = () => undefined;

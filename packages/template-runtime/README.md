@@ -207,12 +207,21 @@ preprocess / `playoutOf`).
 There is **no separate continuous-loop mode** — a looping logo is `loop-cycle` with
 `repeat: 'infinite'` (and `holdMs: 0` to loop the whole timeline).
 
-`onHoldStart` (optional) fires at **every** hold entry, before the hold timing —
-the runtime RESETS + STARTS the scope's ticker treadmills, clocks, AND
-sequences there, so each composition open/close cycle replays the crawl from
-its entering edge / re-runs the count from the top / restarts the rotation
-from item 1 (a fresh run per cycle) and a `content-driven` wait always awaits
-the run it just started.
+`onContentStart` (optional) fires once per cycle the moment the **entrance animation
+completes** — the `holdEntryFrame`. That frame is `entranceSettleFrame(...)`: the start
+of the trailing _static_ region before `outPoint` (and `outPoint` itself when the
+entrance animates right up to it, or there is no animation). The intro is **split** at
+it: the controller plays `[active.in → holdEntryFrame]`, STARTS the content, then plays
+the static settle `[holdEntryFrame → outPoint]` — so the playhead still reaches and holds
+at `outPoint` (a start-trimmed element still appears; the held frame and the outro are
+unchanged) before the hold timing begins. The runtime RESETS + STARTS the scope's ticker
+treadmills, clocks, AND sequences there, **plus** — because the hold entry is the moment
+the parent's intro completes — its non-coordinator nested descendants' content
+(`startContentTree`, D-104). So a graphic that enters quickly then holds runs its content
+through the **whole** hold (not just the instant before the outro), each open/close cycle
+replays the crawl from its entering edge / re-runs the count / restarts the rotation from
+item 1 (a fresh run per cycle), and a `content-driven` wait (taken at `outPoint`) always
+awaits the run it already started.
 
 **Invariants**
 
