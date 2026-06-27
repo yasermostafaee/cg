@@ -174,6 +174,12 @@ entries authored per-item when started** — most of these IDs are not yet filed
    with a pending/unapplied indicator) and optional multi-line textarea inputs. **MEDIUM** — matches
    CasparCG CG UPDATE (commit-on-cue, not realtime-as-you-type); reuses the D-088/D-089 dirty-indicator
    pattern.
+5. [D-107](./prd/designer.md) — select which content drives the content-driven hold: a per-element
+   `drivesHold` (optional, default true) so the designer picks WHICH tickers/sequences/countdown clocks
+   close the graphic; an infinite/looping or decorative element can opt out instead of blocking the hold
+   forever. **MEDIUM** — HOLD-ONLY (start-marker selectivity deferred); NON-BREAKING additive schema
+   widening (no version bump). **IN PROGRESS** on `feat/selective-content-hold`
+   (`openspec/changes/selective-content-hold`).
 
 > **Ordering note:** the icon-pack (D-092) is done — the shared `Icon` set now
 > exists, so new control-bearing items reuse it.

@@ -195,10 +195,14 @@ Playout **modes** (`scene.playout.mode`):
 What ends each hold is the orthogonal **`holdSource`** axis (`auto-out` and
 `loop-cycle`; ignored by `manual`): `'timed'` (default) holds for `holdMs`;
 `'content-driven'` holds until the controller's `waitForContent` promise
-resolves — the scope's CONTENT SOURCES complete: its tickers, its countdown
-clocks, AND its sequences (an infinite ticker or infinite sequence ⇒ until
-`stop()`; wall/countup clocks are NOT content sources and never extend the
-hold; no content sources ⇒ a zero-length hold, deferred like a 0ms timer).
+resolves — the scope's CONTENT SOURCES that DRIVE the hold complete: its
+tickers, its countdown clocks, AND its sequences whose `drivesHold !== false`
+(D-107 — every content element drives the hold by default; one marked
+`drivesHold: false` is excluded and never gates the hold even when
+infinite/looping, though it still starts/renders). An infinite SELECTED ticker
+or sequence ⇒ until `stop()`; wall/countup clocks are NOT content sources and
+never extend the hold; no hold-driving sources — none, or all excluded ⇒ a
+zero-length hold, deferred like a 0ms timer.
 There is **no** `content-driven` mode — a stored legacy
 `mode: 'content-driven'` normalizes to `loop-cycle` +
 `holdSource: 'content-driven'` (`@cg/shared-schema`'s `PlayoutSchema`
@@ -288,11 +292,15 @@ empties the band BETWEEN passes).
 
 **Self-wired completion:** a scope whose composition contains CONTENT SOURCES
 (tickers, countdown clocks, and/or sequences) gets an internal
-`waitForContent` = `Promise.all` over those drivers' `whenComplete()` — a
-`content-driven` hold ends when ALL the scope's finite tickers, countdown
-clocks, AND finite sequences complete; an infinite ticker or infinite
-sequence never resolves, holding the scope until `stop()`; wall/countup
-clocks are excluded by construction. So preview, the single-file export, and
+`waitForContent` = `Promise.all` over the HOLD-DRIVING drivers' `whenComplete()`
+— `wireScope` collects `holdTickers` / `holdCountdowns` / `holdSequences`
+(`drivesHold !== false`; D-107) as it builds each driver, while
+`startOwnContent` / `stopScopeContent` still start/stop EVERY content element. A
+`content-driven` hold ends when ALL the scope's selected finite tickers,
+countdown clocks, AND finite sequences complete; an infinite SELECTED ticker or
+sequence never resolves, holding the scope until `stop()`; wall/countup clocks
+are excluded by construction (and an element with `drivesHold: false` is
+excluded by choice). So preview, the single-file export, and
 `.vcg` need **no boot wiring**, and a content source nested in a child
 composition governs _its own_ scope. An **explicit**
 `RuntimeBootOptions.contentHold` still overrides the root scope (external

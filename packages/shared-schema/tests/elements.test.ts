@@ -487,6 +487,17 @@ describe('TickerElement (D-028)', () => {
       'bottom',
     );
   });
+  it('D-107 — drivesHold is an optional, backward-compatible field (absent ⇒ participates)', () => {
+    // An OLD ticker (no drivesHold) parses unchanged: the field stays absent, so the
+    // runtime's `!== false` treats it as participating (the pre-D-107 all-content hold).
+    expect(TickerElementSchema.parse(ticker).drivesHold).toBeUndefined();
+    // Explicit false (excluded) and true (selected) are both preserved.
+    expect(TickerElementSchema.parse({ ...ticker, drivesHold: false }).drivesHold).toBe(false);
+    expect(TickerElementSchema.parse({ ...ticker, drivesHold: true }).drivesHold).toBe(true);
+    // Round-trips through the Element union, preserving the flag.
+    const viaUnion = ElementSchema.parse({ ...ticker, drivesHold: false });
+    expect((viaUnion as { drivesHold?: boolean }).drivesHold).toBe(false);
+  });
 });
 
 describe('ClockElement (D-027)', () => {
@@ -589,6 +600,21 @@ describe('ClockElement (D-027)', () => {
       'bottom',
     );
   });
+  it('D-107 — drivesHold is an optional, backward-compatible field (meaningful only for countdown)', () => {
+    // An OLD clock (no drivesHold) parses unchanged: the field stays absent.
+    expect(ClockElementSchema.parse(clock).drivesHold).toBeUndefined();
+    // A countdown clock can be EXCLUDED from the content-driven hold; the flag is preserved.
+    const cd = ClockElementSchema.parse({
+      ...clock,
+      mode: 'countdown',
+      target: { kind: 'duration', ms: 60_000 },
+      drivesHold: false,
+    });
+    expect(cd.drivesHold).toBe(false);
+    // The schema accepts the flag on any mode; wall/countup never complete, so the runtime
+    // ignores it there (documented in the element schema, not enforced by Zod).
+    expect(ClockElementSchema.parse({ ...clock, drivesHold: true }).drivesHold).toBe(true);
+  });
 });
 
 describe('SequenceElement (D-029)', () => {
@@ -662,6 +688,14 @@ describe('SequenceElement (D-029)', () => {
     expect(SequenceElementSchema.parse({ ...sequence, verticalAlign: 'top' }).verticalAlign).toBe(
       'top',
     );
+  });
+  it('D-107 — drivesHold is an optional, backward-compatible field (absent ⇒ participates)', () => {
+    // An OLD sequence (no drivesHold) parses unchanged: the field stays absent.
+    expect(SequenceElementSchema.parse(sequence).drivesHold).toBeUndefined();
+    // Explicit false (excluded) is preserved and round-trips through the Element union.
+    expect(SequenceElementSchema.parse({ ...sequence, drivesHold: false }).drivesHold).toBe(false);
+    const viaUnion = ElementSchema.parse({ ...sequence, drivesHold: true });
+    expect((viaUnion as { drivesHold?: boolean }).drivesHold).toBe(true);
   });
 
   // D-083 — a sequence item is a discriminated union: text | composition.

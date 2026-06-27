@@ -61,6 +61,59 @@ function hasContentElement(scene: Scene): boolean {
   return scene.layers.some((l) => walk(l.children));
 }
 
+type ContentKind = 'ticker' | 'sequence' | 'clock';
+interface ContentHoldItem {
+  id: string;
+  name: string;
+  type: ContentKind;
+  drivesHold: boolean;
+}
+
+/**
+ * D-107 — the active composition's OWN content elements that can drive a
+ * content-driven hold: tickers, sequences, and COUNTDOWN clocks (wall/countup
+ * never complete, so they can't end a hold — excluded here, matching the runtime).
+ * Recurses containers (a grouped content element still drives the hold) but NOT
+ * nested composition instances: a nested instance is a SHARED child, so its
+ * content is chosen by drilling into that composition's own Playout section, not
+ * from the parent. `drivesHold` reflects the stored flag (absent ⇒ participates).
+ */
+function contentHoldElementsOf(scene: Scene): ContentHoldItem[] {
+  const out: ContentHoldItem[] = [];
+  const walk = (children: readonly Element[]): void => {
+    for (const el of children) {
+      if (el.type === 'ticker' || el.type === 'sequence') {
+        out.push({ id: el.id, name: el.name, type: el.type, drivesHold: el.drivesHold !== false });
+      } else if (el.type === 'clock' && el.mode === 'countdown') {
+        out.push({ id: el.id, name: el.name, type: 'clock', drivesHold: el.drivesHold !== false });
+      } else if (el.type === 'container') {
+        walk(el.children);
+      }
+    }
+  };
+  for (const l of scene.layers) walk(l.children);
+  return out;
+}
+
+/** Suffix duplicate display names "(1)/(2)/…" so each checklist row is identifiable. */
+function disambiguate(names: readonly string[]): string[] {
+  const counts = new Map<string, number>();
+  for (const n of names) counts.set(n, (counts.get(n) ?? 0) + 1);
+  const seen = new Map<string, number>();
+  return names.map((n) => {
+    if ((counts.get(n) ?? 0) <= 1) return n;
+    const k = (seen.get(n) ?? 0) + 1;
+    seen.set(n, k);
+    return `${n} (${k})`;
+  });
+}
+
+const TYPE_LABEL: Record<ContentKind, string> = {
+  ticker: 'ticker',
+  sequence: 'sequence',
+  clock: 'countdown',
+};
+
 const selectStyle: CSSProperties = {
   background: colors.panelMuted,
   color: colors.text,
@@ -83,6 +136,63 @@ const linkBtnStyle: CSSProperties = {
   padding: 0,
   textDecoration: 'underline',
 };
+
+const checklistStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.18rem',
+  margin: '0.1rem 0 0',
+  maxHeight: '8.5rem',
+  overflowY: 'auto',
+};
+const checkRowStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.4rem',
+  fontSize: '0.7rem',
+  cursor: 'pointer',
+};
+const checkTypeStyle: CSSProperties = { color: colors.textMuted, fontSize: '0.62rem' };
+
+/**
+ * D-107 — when the hold is content-driven, let the designer choose WHICH content
+ * elements close the graphic. Pre-checked (all participate by default); unchecking
+ * one sets its `drivesHold: false` so it no longer gates the hold (it still runs).
+ * Lists the active composition's own tickers / sequences / countdown clocks
+ * (recursing groups). When the only content lives in nested compositions, points
+ * the operator to drill in (those are shared children, tuned in their own section).
+ */
+function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
+  const items = contentHoldElementsOf(scene);
+  if (items.length === 0) {
+    return (
+      <p style={hintStyle}>
+        This composition’s content lives in nested compositions — open each to choose which of its
+        content closes the graphic.
+      </p>
+    );
+  }
+  const labels = disambiguate(items.map((it) => it.name));
+  return (
+    <div className={s.row} style={{ display: 'block' }}>
+      <p style={{ ...mutedStyle, margin: '0 0 0.2rem' }}>Which content closes the graphic?</p>
+      <div style={checklistStyle}>
+        {items.map((it, i) => (
+          <label key={it.id} style={checkRowStyle}>
+            <input
+              type="checkbox"
+              checked={it.drivesHold}
+              aria-label={`${labels[i] ?? it.name} drives the hold`}
+              onChange={(e) => designerStore.setElementDrivesHold(it.id, e.target.checked)}
+            />
+            <span style={{ color: colors.text }}>{labels[i] ?? it.name}</span>
+            <span style={checkTypeStyle}>{TYPE_LABEL[it.type]}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /**
  * D-020 — no-code "Playout" inspector section. Picks the composition's playout
@@ -182,6 +292,10 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
             ))}
           </Select>
         </div>
+      )}
+
+      {hasContent && mode !== 'manual' && playout.holdSource === 'content-driven' && (
+        <ContentHoldChecklist scene={scene} />
       )}
 
       {lifecycle !== undefined ? (
