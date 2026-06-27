@@ -8,6 +8,19 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Sequence typed items — Phase 1 ([D-083](./prd/designer.md)) — merged & archived (2026-06-27, PRs
+  #182 / #183 / #185 / #186 / #188). A sequence item is now TEXT or a COMPOSITION reference
+  (clock+text / logo+text layouts cycled under the same transitions / dwell; live content runs inside,
+  the comp's own intro/outro held); NON-BREAKING (`kind` defaults to `'text'`, no migration). The #188
+  follow-up made TEXT items bind EXPLICITLY (operator opt-in) instead of auto-exposing every item as a
+  field. Living spec: `designer-sequence-element`. Archive: `2026-06-27-sequence-typed-items`. Phase 2
+  (per-item field injection into composition items) remains later.
+- Start-trimmed content no longer dropped from play/export ([B-029](./prd/bugs.md)) — focused fix,
+  merged (2026-06-27, PR #187, 9737ab9). A clock / ticker / sequence trimmed at its start
+  (`lifespan.in > 0`) was hidden for the whole playout because the lifespan gate ran only in the
+  scrubber's `tick`, not the PlayoutController's per-frame `applyFrame`; the root controller now
+  evaluates the same `applyLifespanGatesAtFrame` during play, so the element appears at its in-point.
+  No change dir (focused fix); regression tests in `runtime.test.ts` + `trimmed-content-start.spec.ts`.
 - Per-element preview timing — Phase 1 ([D-102](./prd/designer.md)) — merged & archived
   (2026-06-26, PR #180). Ticker timing in the preview moved from per-scope to PER-ELEMENT (keyed by
   element id), so two tickers in one composition are tuned independently — each ticker's own
@@ -145,12 +158,11 @@ entries authored per-item when started** — most of these IDs are not yet filed
    Phase B; confirm scope vs. what D-086 delivered when filing)
 
 > **Ordering note:** the icon-pack (D-092) is done — the shared `Icon` set now
-> exists, so new control-bearing items (e.g. [D-083](./prd/designer.md)) reuse it.
+> exists, so new control-bearing items reuse it.
 
 Previously-listed designer items not in this order — D-059, D-060 (unblocks the parked
-[D-046](./prd/designer.md)), D-061, D-063, D-064, D-065, D-066, [D-083](./prd/designer.md)
-(logo/clock sequence items — the remaining sequence/clock-wave piece; D-039 ext / D-084 / D-103
-shipped, see Done), [D-096](./prd/designer.md) (perf — animate position via CSS transform; belongs
+[D-046](./prd/designer.md)), D-061, D-063, D-064, D-065, D-066,
+[D-096](./prd/designer.md) (perf — animate position via CSS transform; belongs
 to the hardening wave), and [D-102](./prd/designer.md) **Phase 2** (per-element preview timing for
 SEQUENCES + COUNTDOWN clocks, plus surfacing repeater-stamped tickers in the timing tree — which
 currently walks only authored composition instances; Phase 1 tickers shipped, see Done) — remain

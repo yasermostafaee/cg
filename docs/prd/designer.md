@@ -2632,7 +2632,7 @@ native `<input type=range>` chrome). Remove it so the slider reads as a clean tr
 
 **Notes:** apps/designer/src/renderer/state/element-defaults.ts — ticker items (currently 'خبر نخست — متن نمونه' …) and sequence items (currently 'اکنون: برنامهٔ نخست' …) → English (e.g. 'First headline — sample', 'Now: first item', 'Then: second item').
 
-## [~] D-083 — Sequence: typed items (text | composition) ⟨priority: medium⟩ — implementing Phase 1 on `feat/sequence-typed-items` (`openspec/changes/sequence-typed-items`)
+## [x] D-083 — Sequence: typed items (text | composition) ⟨priority: medium⟩ — Phase 1 merged & archived (PRs #182/#183/#185/#186/#188): `openspec/changes/archive/2026-06-27-sequence-typed-items/`
 
 **What:** A sequence item can be TEXT or a COMPOSITION reference — not only text. A single clock/logo
 is just a one-element composition, so clock+text / logo+text / … layouts are authored in the
@@ -2656,6 +2656,9 @@ does NOT run inside the sequence, but live content inside DOES); the items edito
 picker + the existing composition picker; export serializes the typed items + renders composition
 items (reusing composition export + asset/clock). Phase 2 (per-item field injection into composition
 items) is later.
+
+**Follow-up:** sequence TEXT items now bind EXPLICITLY (operator opt-in) instead of auto-exposing every
+item as a field — D-083 follow-up, merged in #188 (33edb88).
 
 ## [x] D-084 — Clock: selectable time zone ⟨priority: medium⟩ — archived: `openspec/changes/archive/2026-06-26-clock-timezone/`
 
