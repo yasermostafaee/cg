@@ -18,10 +18,20 @@ rendered, and still appeared in the preview timing controls.
 - **Designer (`PlayoutSection.tsx`, `PreviewScopeTiming.tsx`)** — the D-107/D-108/D-112 hold walks
   (`hasContentElement`, `contentHoldElementsOf`, `nestedHoldGroupsOf`) and the preview per-element
   timing walks (`tickersOf`, the content-source check) exclude `visible === false`.
+- **Exporter (`apps/designer/src/platform/ExporterSingleFile.ts`)** — `findFiniteTicker` (the
+  `ticker-finite-with-timed-hold` preflight) now skips `visible === false`, so a hidden ticker raises
+  no operator-facing export diagnostic.
 - **Render** — already correct (`applyBaseStyles` sets `display: none` for `!visible`, covered by the
   existing `hide-clock-sequence` E2E); no change.
 
-The gate is HARD: it overrides `drivesHold` and per-instance `holdOverrides`.
+The gate is HARD: it overrides `drivesHold` and per-instance `holdOverrides`. It is applied where each
+runtime content-driver is BUILT — so a hidden element is absent from the unfiltered `contentDrivers`
+array that a parent override re-filters, and a force-include override cannot resurrect it.
+
+A 7-agent adversarial audit (one refuter per surface + a real-`.vcg` inspection) confirmed every other
+hold-participation path — runtime own + nested aggregation, B-032 timed resolution, exporter playout
+metadata, and the Designer checklist / preview timing — already gates `visible !== false` BEFORE
+`drivesHold`/`holdOverrides`; the exporter preflight above was the one residual leak it surfaced.
 
 ## Capabilities
 
@@ -31,7 +41,11 @@ The gate is HARD: it overrides `drivesHold` and per-instance `holdOverrides`.
 
 - `packages/template-runtime/src/runtime.ts`, `packages/shared-schema/src/scene.ts`,
   `apps/designer/src/renderer/features/inspector/PlayoutSection.tsx`,
-  `apps/designer/src/renderer/features/fields/PreviewScopeTiming.tsx`.
-- Tests: runtime (a hidden infinite driver doesn't force the hold; a hidden finite driver doesn't
-  gate it) + a designer E2E (hidden ticker dropped from the checklist + preview timing, warning
-  cleared). No schema change, no version bump.
+  `apps/designer/src/renderer/features/fields/PreviewScopeTiming.tsx`,
+  `apps/designer/src/platform/ExporterSingleFile.ts`.
+- Tests: runtime (a hidden infinite driver doesn't force the hold; a hidden finite driver doesn't gate
+  it; a parent override cannot force-include a hidden nested driver; a hidden nested driver doesn't
+  extend the parent hold) + a designer E2E (hidden own ticker dropped from the checklist + preview
+  timing, warning cleared; a hidden NESTED driver dropped from the parent nested checklist, un-hiding
+  restores it) + an exporter unit test (a hidden finite ticker raises no preflight). No schema change,
+  no version bump.

@@ -32,8 +32,29 @@ The driver is still BUILT and the band/host still created (then `display: none`)
 participation + listings change. (Not starting the hidden driver at all is an optional perf tidy-up,
 out of scope — a hidden driver is invisible and no longer gates anything, and is stopped on settle.)
 
+## Exporter preflight
+
+`ExporterSingleFile`'s `findFiniteTicker` (the `ticker-finite-with-timed-hold` INFO diagnostic) also
+gates `visible !== false`. It does not decide hold participation (it only runs under a TIMED hold), but
+surfacing a hidden ticker by name in an operator-facing export issue violates "fully inert", so it is
+excluded. Found by the adversarial audit (the one residual leak among all hold/listing surfaces).
+
+## Adversarial audit (completeness)
+
+A 7-agent workflow (one refuter per surface — designer checklist, runtime own hold, runtime nested
+aggregation, B-032 resolution, exporter+schema, preview timing — plus a real-`.vcg` inspector) tried
+to REFUTE "visible:false is fully excluded". Result: 5/6 surfaces complete; the lone gap was the
+exporter preflight above. The decisive structural finding: the visible gate sits at the
+`contentDrivers` BUILD site (runtime.ts), so the unfiltered-array-fed-to-override-refilter attack is
+closed — a parent `holdOverrides` force-include has nothing to re-admit. The bundled
+`fixtures/templates/persian-lower-third.vcg` has no compositions / content / hidden elements, so it
+cannot exercise B-034 — a real repro requires a hidden content element.
+
 ## Out of scope
 
 - Hiding via a hidden CONTAINER/composition ancestor (the runtime flattens scope content and gates on
-  the element's OWN `visible`, matching what the editor hides) — the rule is per content element.
+  the element's OWN `visible`, matching what the editor hides) — the rule is per content element, and
+  it is symmetric across export and on-air (no disagreement).
+- `PreviewModal.canStepScene` enabling the transport Next button for a hidden sequence — a stepping/UX
+  nuance, not a hold-driver / checklist / timing / render concern. Noted, not changed.
 - Any schema / animation-engine change.

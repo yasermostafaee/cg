@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Element, Playout, Scene } from '@cg/shared-schema';
+import type { Composition, Element, Playout, Scene } from '@cg/shared-schema';
 import { createRuntime } from '../src/runtime.js';
 
 /**
@@ -153,6 +153,78 @@ function scene(children: Element[], playout: Playout): Scene {
   } as unknown as Scene;
 }
 
+/** A composition-instance element, optionally carrying per-instance `holdOverrides`. */
+function instance(
+  id: string,
+  name: string,
+  compositionId: string,
+  holdOverrides?: Record<string, boolean>,
+): Element {
+  return {
+    id,
+    name,
+    type: 'composition',
+    compositionId,
+    transform: baseTransform,
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+    ...(holdOverrides !== undefined ? { holdOverrides } : {}),
+  } as unknown as Element;
+}
+
+function comp(id: string, outPoint: number, children: Element[], playout?: Playout): Composition {
+  return {
+    id,
+    name: id,
+    resolution: { width: 400, height: 60 },
+    frameRange: { in: 0, out: 50 },
+    lifecycle: { outPoint },
+    ...(playout !== undefined ? { playout } : {}),
+    background: 'transparent',
+    layers: [
+      { id: `${id}-l`, name: 'main', visible: true, locked: false, blendMode: 'normal', children },
+    ],
+  } as unknown as Composition;
+}
+
+function parentScene(opts: {
+  compositions: Composition[];
+  children: Element[];
+  lifecycle?: { outPoint: number };
+  playout?: Playout;
+}): Scene {
+  return {
+    schemaVersion: 1,
+    id: 'parent',
+    name: 'parent',
+    templateType: 'custom',
+    resolution: { width: 400, height: 120 },
+    frameRate: 50,
+    safeAreas: { title: 10, action: 5 },
+    frameRange: { in: 0, out: 50 },
+    ...(opts.lifecycle !== undefined ? { lifecycle: opts.lifecycle } : {}),
+    ...(opts.playout !== undefined ? { playout: opts.playout } : {}),
+    background: 'transparent',
+    layers: [
+      {
+        id: 'pl',
+        name: 'main',
+        visible: true,
+        locked: false,
+        blendMode: 'normal',
+        children: opts.children,
+      },
+    ],
+    fields: [],
+    bindings: [],
+    fonts: [],
+    compositions: opts.compositions,
+    metadata: { createdAt: '2026-06-28T00:00:00.000Z', updatedAt: '2026-06-28T00:00:00.000Z' },
+  } as unknown as Scene;
+}
+
 const onAir = (): boolean => !document.body.classList.contains('cg-pending');
 
 beforeEach(() => {
@@ -203,6 +275,64 @@ describe('B-034 — a hidden content element does not drive the hold', () => {
 
     await run(clock, 1500); // ~2s: the visible countdown completed → settle
     expect(onAir()).toBe(false); // WITHOUT the fix the hidden 3s countdown would still hold it here
+    r.remove();
+  });
+});
+
+describe('B-034 × D-112 — visibility wins over a parent per-instance holdOverride', () => {
+  it('a parent override CANNOT force-include a HIDDEN nested driver (visible:false beats the override)', async () => {
+    const clock = makeClock();
+    // The child's only content is a HIDDEN infinite ticker (its own drivesHold defaults to true). The
+    // parent tries to FORCE-INCLUDE it via the instance override `{ crawl: true }`. visible:false is a
+    // HARD gate: the hidden element is absent from `contentDrivers`, so the override has nothing to
+    // re-admit ⇒ no effective drivers ⇒ the content-driven hold resolves to TIMED (B-032) and settles.
+    const hidden = infiniteTicker('crawl', false);
+    const child = comp('child', 25, [hidden], { mode: 'manual' });
+    const r = createRuntime(
+      parentScene({
+        compositions: [child],
+        children: [instance('i1', 'inst1', 'child', { crawl: true })], // attempt to force-include
+        lifecycle: { outPoint: 25 },
+        playout: { mode: 'auto-out', holdSource: 'content-driven', holdMs: 3000 },
+      }),
+      { skipFontLoad: true, clock, tickerMeasure },
+    );
+    await r.play({});
+
+    await run(clock, 2000);
+    expect(onAir()).toBe(true); // holding the TIMED 3s — the force-included hidden ticker did NOT win
+
+    await run(clock, 2000); // ~4s: the timed hold elapses → settle
+    expect(onAir()).toBe(false); // WITHOUT the gate the override would re-admit it → frozen until stop()
+    r.remove();
+  });
+
+  it('a HIDDEN nested driver does not extend the parent hold; a VISIBLE nested sibling still does', async () => {
+    const clock = makeClock();
+    // The child has a hidden 3s countdown + a visible 1s countdown. The parent aggregates the child's
+    // content; only the VISIBLE one gates the hold, so the parent closes at ~1s, not ~3s.
+    const child = comp(
+      'child',
+      25,
+      [countdownClock('hidden', 3000, false), countdownClock('shown', 1000, true)],
+      { mode: 'manual' },
+    );
+    const r = createRuntime(
+      parentScene({
+        compositions: [child],
+        children: [instance('i1', 'inst1', 'child')], // no override ⇒ each child element's own visibility/drivesHold
+        lifecycle: { outPoint: 25 },
+        playout: { mode: 'auto-out', holdSource: 'content-driven' },
+      }),
+      { skipFontLoad: true, clock, tickerMeasure },
+    );
+    await r.play({});
+
+    await run(clock, 500);
+    expect(onAir()).toBe(true); // holding for the visible 1s countdown
+
+    await run(clock, 1500); // ~2s: the visible countdown completed → settle (the hidden 3s is inert)
+    expect(onAir()).toBe(false);
     r.remove();
   });
 });

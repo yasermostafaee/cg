@@ -34,3 +34,51 @@ test('a hidden infinite ticker is inert — dropped from the hold checklist + pr
   await app.openPreviewModal();
   await expect(app.previewDialog.getByText(/— passes/)).toHaveCount(0);
 });
+
+/**
+ * B-034 (nested) — a hidden driver inside a NESTED composition instance must drop from the PARENT's
+ * D-108/D-112 nested checklist (own-content coverage is the test above), and un-hiding must restore
+ * the row + its infinite warning. Visibility wins over the per-instance override surface entirely.
+ */
+test('a hidden driver inside a nested instance drops from the parent nested checklist; un-hiding restores it', async ({
+  app,
+}) => {
+  await app.newProject('HiddenNested');
+  // The child keeps a VISIBLE finite countdown (so the nested group still renders) + an infinite
+  // ticker (the one we hide).
+  await app.newComposition('TitleBlock');
+  await app.openComposition('TitleBlock');
+  await app.addClock();
+  const clockId = (await app.timelineRowIds())[0]!;
+  await app.setClockCountdown(5);
+  await app.addTicker();
+  const tickerId = (await app.timelineRowIds()).find((id) => id !== clockId)!;
+
+  // The parent (comp1) nests the child and holds content-driven.
+  await app.openComposition('comp1');
+  await app.setPlayoutTiming('auto-out');
+  await app.nestCompositionInstance('TitleBlock');
+  await app.page.keyboard.press('Escape');
+  await app.page.getByRole('combobox', { name: 'Hold source' }).selectOption('content-driven');
+
+  // Two writable nested rows (countdown + infinite ticker); the ticker is flagged.
+  const checks = app.page.getByRole('checkbox', { name: /drives the hold/ });
+  await expect(checks).toHaveCount(2);
+  await expect(app.page.getByText(/loops forever/)).toHaveCount(1);
+
+  // Hide the ticker IN THE CHILD → inert: its parent nested row drops + the warning clears.
+  await app.openComposition('TitleBlock');
+  await app.toggleElementVisibility(tickerId);
+  await app.openComposition('comp1');
+  await app.page.keyboard.press('Escape');
+  await expect(checks).toHaveCount(1);
+  await expect(app.page.getByText(/loops forever/)).toHaveCount(0);
+
+  // Un-hide → the nested row and its infinite warning return.
+  await app.openComposition('TitleBlock');
+  await app.toggleElementVisibility(tickerId);
+  await app.openComposition('comp1');
+  await app.page.keyboard.press('Escape');
+  await expect(checks).toHaveCount(2);
+  await expect(app.page.getByText(/loops forever/)).toHaveCount(1);
+});

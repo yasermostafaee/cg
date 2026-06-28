@@ -209,11 +209,13 @@ function preflight(scene: Scene): ExportIssue[] {
   return issues;
 }
 
-/** The first finite-repeat ticker in a doc's layers (recursing containers). */
+/** The first VISIBLE finite-repeat ticker in a doc's layers (recursing containers). */
 function findFiniteTicker(layers: Scene['layers']): TickerElement | null {
   const walk = (children: readonly Element[]): TickerElement | null => {
     for (const el of children) {
-      if (el.type === 'ticker' && el.repeat !== 'infinite') return el;
+      // B-034 — a HIDDEN ticker (`visible: false`) is fully inert (not rendered, never a hold
+      // driver), so it must not raise the finite-ticker-under-timed-hold export diagnostic either.
+      if (el.type === 'ticker' && el.repeat !== 'infinite' && el.visible !== false) return el;
       if (el.type === 'container') {
         const found = walk(el.children);
         if (found !== null) return found;
