@@ -801,3 +801,28 @@ to timed `auto-out`.
 **Regression test:** a `@cg/template-runtime` test (the D-104 "STRAND" scenario) asserting the parent
 reaches a terminal state (settles, or is cleanly stoppable) instead of hanging on air. Capability:
 `designer-playout-lifecycle`.
+
+## [x] B-032 — timed hold (`holdMs`) ignored for a content-less auto-out / loop-cycle composition — INVESTIGATED: non-reproducible ⟨priority: low⟩ — guards on `test/content-less-timed-hold-guards`
+
+> Originally filed HIGH: a content-less `auto-out` / `loop-cycle` composition with a timed `holdMs`
+> appeared to close almost immediately (any value behaving like 0). RECON could NOT reproduce it.
+
+**Original repro:** a NEW content-less composition (no ticker/sequence/countdown) with an entrance +
+an out-point; in the preview set mode `auto-out` (or `loop-cycle`) and `holdMs` (e.g. 10000); play.
+**Resolution (non-reproducible):** every layer of the path HONORS `holdMs`, verified end-to-end:
+
+- Controller `scheduleHold(holdMs)` (existing `playout-controller.test.ts`).
+- Runtime wiring `effectivePlayoutFor` → controller — STORED `holdMs`, preview-style `playoutOverride`,
+  the NO-explicit-out-point (implicit `active.out`, empty outro) case, AND `loop-cycle`'s between-cycle
+  (loop-back) hold — all hold `holdMs` (`@cg/template-runtime/tests/content-less-timed-hold.test.ts`, 4 cases).
+- Preview override threading (`PreviewModal` merge → `scene-replace` → `preview.ts` → `createRuntime`) and
+  a LIVE preview of `auto-out` + `loop-cycle` both hold `holdMs` (`apps/designer/tests/e2e/content-less-timed-hold.spec.ts`).
+- The no-out-point UI gate is INTENTIONAL and correct: without an explicit out-point the preview DISABLES
+  `auto-out`/`loop-cycle` and HIDES the `holdMs` input, so no value can be "set" into an unrunnable mode
+  (no UX trap). The only path that collapses to ~0 — a content-less comp resolving to `holdSource:
+'content-driven'` — requires a LEFTOVER content-driven comp, which the fresh-comp repro excludes
+  (a fresh comp defaults to `manual`/`timed`).
+
+No code change (no real cause found). Downgraded to low and closed as non-reproducible; regression guards
+added so a future regression is caught. Reopen with an exact repro (state + steps) if it recurs.
+Capability: `designer-playout-lifecycle`.
