@@ -58,9 +58,11 @@ function hasContentElement(scene: Scene): boolean {
       ) {
         return true;
       }
-      if (el.type === 'container') return walk(el.children);
+      // B-034 — a HIDDEN container / instance makes its WHOLE subtree inert: don't descend (mirrors
+      // render + the runtime), so a comp whose only content lives in hidden ancestors offers no hold.
+      if (el.type === 'container') return el.visible !== false && walk(el.children);
       if (el.type === 'composition') {
-        if (visited.has(el.compositionId)) return false;
+        if (el.visible === false || visited.has(el.compositionId)) return false;
         visited.add(el.compositionId);
         const comp = scene.compositions?.find((c) => c.id === el.compositionId);
         return comp !== undefined && comp.layers.some((l) => walk(l.children));
@@ -114,7 +116,8 @@ function contentHoldElementsOf(scene: Scene): ContentHoldItem[] {
           drivesHold: el.drivesHold !== false,
           infinite: false,
         });
-      } else if (el.type === 'container') {
+      } else if (el.type === 'container' && el.visible !== false) {
+        // B-034 — skip a HIDDEN container's whole subtree (inert, mirrors render).
         walk(el.children);
       }
     }
@@ -238,9 +241,10 @@ function nestedHoldGroupsOf(scene: Scene): NestedHoldGroup[] {
             effective += 1;
             if (infinite) effectiveInfinite += 1;
           }
-        } else if (el.type === 'container') {
+          // B-034 — a HIDDEN container / deeper instance makes its WHOLE subtree inert: don't descend.
+        } else if (el.type === 'container' && el.visible !== false) {
           walk(el.children);
-        } else if (el.type === 'composition') {
+        } else if (el.type === 'composition' && el.visible !== false) {
           // Deeper level — counts cascade (its OWN overrides apply), but its drivers are edited there.
           const sub = analyze(el, seen2);
           eligible += sub.eligible;
@@ -256,7 +260,9 @@ function nestedHoldGroupsOf(scene: Scene): NestedHoldGroup[] {
   const groups: NestedHoldGroup[] = [];
   const findInstances = (children: readonly Element[]): void => {
     for (const el of children) {
-      if (el.type === 'composition') {
+      // B-034 — a HIDDEN immediate instance / container is inert: no checklist group (whole subtree
+      // skipped), matching render + the runtime's hold aggregation.
+      if (el.type === 'composition' && el.visible !== false) {
         const a = analyze(el, new Set<string>());
         if (a.eligible > 0) {
           const comp = scene.compositions?.find((c) => c.id === el.compositionId);
@@ -273,7 +279,7 @@ function nestedHoldGroupsOf(scene: Scene): NestedHoldGroup[] {
             effectiveInfinite: a.effectiveInfinite,
           });
         }
-      } else if (el.type === 'container') {
+      } else if (el.type === 'container' && el.visible !== false) {
         findInstances(el.children);
       }
     }

@@ -82,3 +82,60 @@ test('a hidden driver inside a nested instance drops from the parent nested chec
   await expect(checks).toHaveCount(2);
   await expect(app.page.getByText(/loops forever/)).toHaveCount(1);
 });
+
+/**
+ * B-034 (transport) — "no effect of any kind from a hidden element": a HIDDEN sequence must not make
+ * the scene steppable, so the preview transport's Next control stays disabled. (A VISIBLE sequence
+ * enabling Next is covered by sequence.spec.ts.)
+ */
+test('a hidden sequence does not make the scene steppable (preview Next stays disabled)', async ({
+  app,
+}) => {
+  await app.newProject('HiddenSeqStep');
+  await app.addSequence();
+  const seqId = (await app.timelineRowIds())[0]!;
+  // Hide the only sequence → fully inert: the scene is no longer steppable.
+  await app.toggleElementVisibility(seqId);
+  await app.openPreviewModal();
+  await expect(app.previewDialog.getByRole('button', { name: /Next/ })).toBeDisabled();
+});
+
+/**
+ * B-034 (ancestor) — hiding a composition INSTANCE makes its WHOLE subtree inert (the master.vcg case
+ * the leaf coverage missed). The instance's nested checklist group disappears even though the child's
+ * content is itself visible; un-hiding the instance restores it.
+ */
+test('a hidden composition instance drops its whole subtree from the parent checklist; un-hiding restores it', async ({
+  app,
+}) => {
+  await app.newProject('HiddenAncestor');
+  // The child holds a VISIBLE infinite ticker (would drive forever if it counted).
+  await app.newComposition('TitleBlock');
+  await app.openComposition('TitleBlock');
+  await app.addTicker();
+
+  await app.openComposition('comp1');
+  await app.setPlayoutTiming('auto-out');
+  await app.nestCompositionInstance('TitleBlock');
+  const instId = (await app.timelineRowIds())[0]!;
+  await app.page.keyboard.press('Escape');
+  await app.page.getByRole('combobox', { name: 'Hold source' }).selectOption('content-driven');
+
+  // The visible nested instance contributes a writable driver row + the infinite warning.
+  const checks = app.page.getByRole('checkbox', { name: /drives the hold/ });
+  await expect(checks).toHaveCount(1);
+  await expect(app.page.getByText(/loops forever/)).toBeVisible();
+
+  // Hide the INSTANCE → its whole subtree is inert: the nested group + warning disappear. (Escape to
+  // deselect — a canvas click would re-hit the instance, which fills the stage.)
+  await app.toggleElementVisibility(instId);
+  await app.page.keyboard.press('Escape');
+  await expect(checks).toHaveCount(0);
+  await expect(app.page.getByText(/loops forever/)).toHaveCount(0);
+
+  // Un-hide → the nested group + its infinite warning come back.
+  await app.toggleElementVisibility(instId);
+  await app.page.keyboard.press('Escape');
+  await expect(checks).toHaveCount(1);
+  await expect(app.page.getByText(/loops forever/)).toBeVisible();
+});

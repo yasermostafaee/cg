@@ -8,13 +8,22 @@ A content element marked `visible: false` SHALL be fully inert for playout: it S
 content-driven hold — neither its own scope's hold nor (via a parent's `holdOverrides`) a parent's —
 regardless of `drivesHold`, and SHALL NOT be rendered, listed in the Playout hold checklist (own or
 nested), counted toward the infinite-repeat warning, shown in the preview per-element timing
-controls, or raised as an export preflight diagnostic. This is a HARD gate that takes precedence over
+controls, raised as an export preflight diagnostic, or (a hidden sequence) make the scene steppable
+via the preview transport Next control. This is a HARD gate that takes precedence over
 `drivesHold` and per-instance `holdOverrides`: so a hidden `repeat: 'infinite'` ticker / sequence no
 longer freezes the graphic — a composition whose only hold-driving content is hidden has NO effective
 drivers and resolves its hold to `timed` (B-032). Because the gate is applied where each runtime
 content-driver is BUILT (so a hidden element is absent from the unfiltered `contentDrivers` array a
 parent override re-filters), a parent `holdOverrides` force-include CANNOT resurrect a hidden nested
 element. Unhiding the element restores all of the above.
+
+Visibility PROPAGATES through ancestors: a composition INSTANCE or container marked `visible: false`
+makes its ENTIRE subtree inert — EVERY descendant content element, regardless of the descendant's own
+`visible`. The hold aggregation, the checklist walks (own + nested), the preview per-element timing,
+the export preflight, and the transport-step (`canStepScene`) predicate SHALL all SHORT-CIRCUIT the
+whole subtree the moment they descend into a hidden instance/container, BEFORE collecting any
+descendant driver — mirroring render (a hidden instance is `display: none`, so its subtree is not
+drawn). So a VISIBLE infinite sequence inside a HIDDEN instance does not keep the parent open.
 
 #### Scenario: A hidden infinite driver does not force an infinite hold
 
@@ -55,3 +64,19 @@ element. Unhiding the element restores all of the above.
 - **WHEN** a composition has a TIMED hold and a finite-repeat ticker that is hidden
 - **THEN** the single-file exporter does not emit the `ticker-finite-with-timed-hold` info diagnostic
   for it (a hidden ticker is inert, so there is nothing to warn about)
+
+#### Scenario: A hidden sequence does not make the scene steppable
+
+- **WHEN** the only sequence in the scene (or its compositions) is hidden
+- **THEN** the preview transport's Next control is disabled (the scene is not steppable) — un-hiding
+  the sequence re-enables it
+
+#### Scenario: A hidden composition instance makes its whole subtree inert
+
+- **WHEN** a content-driven parent instances a child whose own content is VISIBLE (e.g. a
+  `repeat: 'infinite'` sequence) but the INSTANCE is hidden (`visible: false`), and a separate VISIBLE
+  finite driver is what should close the parent
+- **THEN** the hidden instance's whole subtree drives nothing — the parent settles when the visible
+  finite driver completes (it is NOT held open by the hidden instance's visible infinite content)
+- **AND** the hidden instance contributes no checklist rows, no preview-timing scope, and no render;
+  un-hiding the instance restores its subtree's participation

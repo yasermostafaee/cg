@@ -323,9 +323,12 @@ export function hasEffectiveHoldDrivers(
     children.some((el) => {
       if (el.type === 'ticker' || el.type === 'sequence') return drives(el, overrides);
       if (el.type === 'clock' && el.mode === 'countdown') return drives(el, overrides);
-      if (el.type === 'container') return walk(el.children, overrides);
+      // B-034 — a HIDDEN container / composition instance makes its WHOLE subtree inert: SHORT-CIRCUIT
+      // before descending, so a visible driver inside a hidden ancestor is not an effective driver
+      // (mirrors render's display:none + the runtime's subtree-skip).
+      if (el.type === 'container') return el.visible !== false && walk(el.children, overrides);
       if (el.type === 'composition') {
-        if (visited.has(el.compositionId)) return false;
+        if (el.visible === false || visited.has(el.compositionId)) return false;
         visited.add(el.compositionId);
         const comp = compositions?.find((c) => c.id === el.compositionId);
         // The nested instance's OWN content is governed by its own `holdOverrides` (cascade per level).

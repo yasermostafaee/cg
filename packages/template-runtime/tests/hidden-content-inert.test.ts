@@ -336,3 +336,65 @@ describe('B-034 × D-112 — visibility wins over a parent per-instance holdOver
     r.remove();
   });
 });
+
+describe('B-034 (ancestor) — a HIDDEN composition instance makes its WHOLE subtree inert', () => {
+  /** Hide an instance element (the ancestor whose subtree must go inert). */
+  const hide = (el: Element): Element => {
+    (el as unknown as { visible: boolean }).visible = false;
+    return el;
+  };
+
+  it('a VISIBLE infinite driver INSIDE a hidden instance does not keep the parent open (resolves to timed)', async () => {
+    const clock = makeClock();
+    // The user's master.vcg shape: a content-driven parent instances a child whose VISIBLE infinite
+    // crawl would never complete — but the INSTANCE is hidden, so render skips it AND its whole subtree
+    // is inert for the hold. The parent has no effective drivers ⇒ resolves to timed (B-032) + settles.
+    const child = comp('child', 25, [infiniteTicker('crawl')], { mode: 'manual' }); // crawl is visible
+    const r = createRuntime(
+      parentScene({
+        compositions: [child],
+        children: [hide(instance('i1', 'inst1', 'child'))], // the INSTANCE is hidden
+        lifecycle: { outPoint: 25 },
+        playout: { mode: 'auto-out', holdSource: 'content-driven', holdMs: 3000 },
+      }),
+      { skipFontLoad: true, clock, tickerMeasure },
+    );
+    await r.play({});
+
+    await run(clock, 2000);
+    expect(onAir()).toBe(true); // holding the timed 3s — NOT frozen by the hidden instance's visible crawl
+
+    await run(clock, 2000); // ~4s: the timed hold elapses → settle
+    expect(onAir()).toBe(false); // WITHOUT the subtree-skip the inner infinite crawl would hold forever
+    r.remove();
+  });
+
+  it('only the HIDDEN instance is inert — a VISIBLE sibling instance still drives the parent hold', async () => {
+    const clock = makeClock();
+    // A HIDDEN instance of a child with an infinite crawl (inert) + a VISIBLE instance of a child with
+    // a 1s countdown (drives). The parent closes on the visible instance — proving the skip is scoped
+    // to the hidden subtree, not all nested content.
+    const childInf = comp('childInf', 25, [infiniteTicker('crawl')], { mode: 'manual' });
+    const childShort = comp('childShort', 25, [countdownClock('clk', 1000)], { mode: 'manual' });
+    const r = createRuntime(
+      parentScene({
+        compositions: [childInf, childShort],
+        children: [
+          hide(instance('i1', 'hidden', 'childInf')),
+          instance('i2', 'shown', 'childShort'),
+        ],
+        lifecycle: { outPoint: 25 },
+        playout: { mode: 'auto-out', holdSource: 'content-driven' },
+      }),
+      { skipFontLoad: true, clock, tickerMeasure },
+    );
+    await r.play({});
+
+    await run(clock, 500);
+    expect(onAir()).toBe(true); // holding for the VISIBLE instance's 1s countdown
+
+    await run(clock, 1500); // ~2s: the visible countdown completes → settle; the hidden crawl is inert
+    expect(onAir()).toBe(false); // WITHOUT the skip the hidden infinite crawl would hold forever
+    r.remove();
+  });
+});

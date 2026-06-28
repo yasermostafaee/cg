@@ -194,6 +194,10 @@ function buildComposition(element: CompositionElement, ctx: BuildCtx): HTMLEleme
     name: element.name,
     compositionId: element.compositionId,
     scope: childScope,
+    // B-034 — a HIDDEN composition instance (`visible: false`) makes its ENTIRE subtree inert: render
+    // already hides it (display:none above), and the parent's hold aggregation must skip it too, so a
+    // visible content driver INSIDE a hidden instance can't keep the parent open.
+    visible: element.visible,
     // D-112 — carry the instance's per-instance hold overrides so the PARENT's aggregation can
     // re-filter this child's content (the override lives on the instance, not the shared child).
     holdOverrides: element.holdOverrides,

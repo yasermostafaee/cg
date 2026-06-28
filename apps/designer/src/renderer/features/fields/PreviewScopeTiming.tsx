@@ -69,7 +69,8 @@ function tickersOf(doc: { layers: Scene['layers'] }): TickerInfo[] {
       // B-034 — a HIDDEN ticker (`visible: false`) is inert: not shown in the preview timing list.
       if (el.type === 'ticker' && el.visible !== false) {
         out.push({ id: el.id, name: el.name, repeat: el.repeat, cycleBoundary: el.cycleBoundary });
-      } else if (el.type === 'container') {
+      } else if (el.type === 'container' && el.visible !== false) {
+        // B-034 — a HIDDEN container's whole subtree is inert (not shown in preview timing).
         walk(el.children);
       }
     }
@@ -98,9 +99,10 @@ function hasAnyContentIn(doc: { layers: Scene['layers'] }, scene: Scene): boolea
       ) {
         return true;
       }
-      if (el.type === 'container') return walk(el.children);
+      // B-034 — a HIDDEN container / instance makes its WHOLE subtree inert (mirrors render + runtime).
+      if (el.type === 'container') return el.visible !== false && walk(el.children);
       if (el.type === 'composition') {
-        if (visited.has(el.compositionId)) return false;
+        if (el.visible === false || visited.has(el.compositionId)) return false;
         visited.add(el.compositionId);
         const comp = scene.compositions?.find((c) => c.id === el.compositionId);
         return comp !== undefined && comp.layers.some((l) => walk(l.children));
@@ -134,7 +136,9 @@ export function timingScopeList(scene: Scene): TimingScopeNode[] {
   ): void => {
     if (depth > MAX_DEPTH) return;
     for (const inst of compositionInstancesOf(doc)) {
-      if (visited.has(inst.compositionId)) continue;
+      // B-034 — a HIDDEN instance's whole subtree is inert: no preview-timing scope (skip + don't
+      // recurse), so its tickers/hold offer never surface (mirrors render + the runtime hold).
+      if (inst.visible === false || visited.has(inst.compositionId)) continue;
       const comp = scene.compositions?.find((c) => c.id === inst.compositionId);
       if (comp === undefined) continue;
       const path = parentPath === '' ? inst.name : `${parentPath}.${inst.name}`;

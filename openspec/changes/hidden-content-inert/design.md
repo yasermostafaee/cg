@@ -50,11 +50,46 @@ closed — a parent `holdOverrides` force-include has nothing to re-admit. The b
 `fixtures/templates/persian-lower-third.vcg` has no compositions / content / hidden elements, so it
 cannot exercise B-034 — a real repro requires a hidden content element.
 
+## Transport stepping (folded in)
+
+`PreviewModal.canStepScene` (the predicate behind the transport's Next control) now also gates
+`el.visible !== false` on a sequence — "no effect of any kind from a hidden element". A hidden sequence
+no longer makes the scene steppable. It is NOT a hold-driver path, but it is squarely "fully inert".
+
+## Real-fixture guards (anti-confound)
+
+To assert against a REAL persisted scene — not only inline constructed comps — the change adds
+`fixtures/b034/hidden-content-inert.{scene.json,vcg}` (regenerable via the sibling `.gen.mjs`,
+which validates with `SceneSchema` and packs with `@cg/vcg-format`). One scene exercises every surface:
+a content-driven parent instances a child whose only content is a HIDDEN infinite ticker WITH a
+per-instance `holdOverrides` force-include; an auxiliary timed comp holds a hidden finite ticker; an
+auxiliary comp holds a hidden sequence. The runtime + `hasEffectiveHoldDrivers` guards load
+`scene.json` (template-runtime, jsdom); the exporter guard + `.vcg` round-trip load and `unpack()` the
+`.vcg` (designer, node). So the runtime, checklist-predicate, and exporter guards all run against the
+committed artifact.
+
+## Ancestor propagation (the residual the leaf gate missed)
+
+The leaf gate (own `visible`) did NOT cover a HIDDEN composition INSTANCE whose child holds VISIBLE
+content: render skips the hidden instance (`display: none` cascades), but the hold aggregation recursed
+INTO it and collected the visible descendant driver → the parent never closed ("nothing changed",
+confirmed on the user's master.vcg). The earlier "symmetric, out of scope" note was WRONG — render and
+the hold DISAGREED. Fix: short-circuit the whole subtree at the hidden ancestor, mirroring render.
+
+- **Runtime** — containers are placeholders (not built), so the runtime case is the composition
+  INSTANCE. `FieldScopeChild` (scene-builder) + `ScopeNode` (wireScope) now carry the instance's
+  `visible`; `aggregateContentWait`, `scopeHasEffectiveHoldDrivers`, `startContentTree`, and
+  `onContentStart` skip a hidden child BEFORE descending. Propagation is automatic across levels: a
+  hidden ancestor is skipped, so its descendants are never reached.
+- **Schema / designer walks** — `hasEffectiveHoldDrivers` (scene.ts), the three `PlayoutSection` walks,
+  `PreviewScopeTiming` (`tickersOf` + `hasAnyContentIn` + `timingScopeList`), `findFiniteTicker`, and
+  `canStepScene` gate their container + composition recursion on `visible !== false`. `canStepScene`
+  was rewritten to walk the instance tree FROM THE ROOT (not every comp independently) so visibility
+  propagates through ancestors.
+
 ## Out of scope
 
-- Hiding via a hidden CONTAINER/composition ancestor (the runtime flattens scope content and gates on
-  the element's OWN `visible`, matching what the editor hides) — the rule is per content element, and
-  it is symmetric across export and on-air (no disagreement).
-- `PreviewModal.canStepScene` enabling the transport Next button for a hidden sequence — a stepping/UX
-  nuance, not a hold-driver / checklist / timing / render concern. Noted, not changed.
+- Container ancestors in the RUNTIME hold: containers render as placeholders there (children not
+  built), so there is no runtime container-subtree to skip; the designer-side walks still gate hidden
+  containers for consistency with the eventual container support.
 - Any schema / animation-engine change.

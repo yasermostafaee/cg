@@ -216,7 +216,9 @@ function findFiniteTicker(layers: Scene['layers']): TickerElement | null {
       // B-034 — a HIDDEN ticker (`visible: false`) is fully inert (not rendered, never a hold
       // driver), so it must not raise the finite-ticker-under-timed-hold export diagnostic either.
       if (el.type === 'ticker' && el.repeat !== 'infinite' && el.visible !== false) return el;
-      if (el.type === 'container') {
+      // B-034 — a HIDDEN container's whole subtree is inert: don't descend (mirrors render), so a
+      // finite ticker inside a hidden container raises no preflight either.
+      if (el.type === 'container' && el.visible !== false) {
         const found = walk(el.children);
         if (found !== null) return found;
       }

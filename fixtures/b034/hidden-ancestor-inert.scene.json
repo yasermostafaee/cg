@@ -1,0 +1,395 @@
+{
+  "schemaVersion": 1,
+  "id": "hidden-ancestor-inert",
+  "name": "Hidden ancestor inert (B-034)",
+  "templateType": "lower-third",
+  "resolution": {
+    "width": 1920,
+    "height": 1080
+  },
+  "frameRate": 50,
+  "safeAreas": {
+    "title": 10,
+    "action": 5
+  },
+  "frameRange": {
+    "in": 0,
+    "out": 50
+  },
+  "activeRange": {
+    "in": 0,
+    "out": 50
+  },
+  "lifecycle": {
+    "outPoint": 25
+  },
+  "playout": {
+    "mode": "auto-out",
+    "holdSource": "content-driven",
+    "holdMs": 30000
+  },
+  "background": "transparent",
+  "layers": [
+    {
+      "id": "root-l",
+      "name": "main",
+      "visible": true,
+      "locked": false,
+      "children": [
+        {
+          "id": "inst-hidden",
+          "name": "Hidden lower-third",
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "w": 1200,
+              "h": 120
+            },
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "rotation": 0,
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "opacity": 1,
+          "visible": false,
+          "locked": false,
+          "zIndex": 0,
+          "type": "composition",
+          "compositionId": "compVisibleSeq"
+        },
+        {
+          "id": "inst-finite",
+          "name": "Finite crawl",
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "w": 1200,
+              "h": 120
+            },
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "rotation": 0,
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "opacity": 1,
+          "visible": true,
+          "locked": false,
+          "zIndex": 0,
+          "type": "composition",
+          "compositionId": "compFiniteTicker"
+        },
+        {
+          "id": "inst-excluded",
+          "name": "Excluded sequence",
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "w": 1200,
+              "h": 120
+            },
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "rotation": 0,
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "opacity": 1,
+          "visible": true,
+          "locked": false,
+          "zIndex": 0,
+          "type": "composition",
+          "compositionId": "compExcludableSeq",
+          "holdOverrides": {
+            "excludableSeq": false
+          }
+        }
+      ],
+      "blendMode": "normal"
+    }
+  ],
+  "fields": [],
+  "bindings": [],
+  "fonts": [
+    {
+      "family": "Vazirmatn",
+      "weights": [400, 500, 700],
+      "styles": ["normal"],
+      "source": "bundled",
+      "bundledPath": "fonts/Vazirmatn-Variable.woff2"
+    }
+  ],
+  "compositions": [
+    {
+      "id": "compVisibleSeq",
+      "name": "compVisibleSeq",
+      "resolution": {
+        "width": 1920,
+        "height": 1080
+      },
+      "frameRange": {
+        "in": 0,
+        "out": 50
+      },
+      "playout": {
+        "mode": "manual"
+      },
+      "background": "transparent",
+      "layers": [
+        {
+          "id": "compVisibleSeq-l",
+          "name": "main",
+          "visible": true,
+          "locked": false,
+          "children": [
+            {
+              "id": "innerSeq",
+              "name": "Inner sequence",
+              "transform": {
+                "position": {
+                  "x": 0,
+                  "y": 200
+                },
+                "size": {
+                  "w": 720,
+                  "h": 72
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1
+                },
+                "rotation": 0,
+                "anchor": {
+                  "x": 0.5,
+                  "y": 0.5
+                }
+              },
+              "opacity": 1,
+              "visible": true,
+              "locked": false,
+              "zIndex": 0,
+              "type": "sequence",
+              "font": {
+                "family": "Vazirmatn",
+                "weight": 500,
+                "style": "normal",
+                "size": 36,
+                "lineHeight": 1.4,
+                "letterSpacing": 0
+              },
+              "color": "#FFFFFF",
+              "align": "start",
+              "verticalAlign": "middle",
+              "direction": "ltr",
+              "items": [
+                {
+                  "id": "i1",
+                  "text": "Now: one"
+                },
+                {
+                  "id": "i2",
+                  "text": "Next: two"
+                }
+              ],
+              "defaultDwellMs": 5000,
+              "advance": "auto",
+              "transitionIn": "bottom",
+              "transitionOut": "top",
+              "transitionTiming": "simultaneous",
+              "transitionMs": 400,
+              "repeat": "infinite"
+            }
+          ],
+          "blendMode": "normal"
+        }
+      ]
+    },
+    {
+      "id": "compFiniteTicker",
+      "name": "compFiniteTicker",
+      "resolution": {
+        "width": 1920,
+        "height": 1080
+      },
+      "frameRange": {
+        "in": 0,
+        "out": 50
+      },
+      "playout": {
+        "mode": "manual"
+      },
+      "background": "transparent",
+      "layers": [
+        {
+          "id": "compFiniteTicker-l",
+          "name": "main",
+          "visible": true,
+          "locked": false,
+          "children": [
+            {
+              "id": "finiteCrawl",
+              "name": "Finite crawl",
+              "transform": {
+                "position": {
+                  "x": 0,
+                  "y": 980
+                },
+                "size": {
+                  "w": 1200,
+                  "h": 72
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1
+                },
+                "rotation": 0,
+                "anchor": {
+                  "x": 0.5,
+                  "y": 0.5
+                }
+              },
+              "opacity": 1,
+              "visible": true,
+              "locked": false,
+              "zIndex": 0,
+              "type": "ticker",
+              "font": {
+                "family": "Vazirmatn",
+                "weight": 500,
+                "style": "normal",
+                "size": 36,
+                "lineHeight": 1.4,
+                "letterSpacing": 0
+              },
+              "color": "#FFFFFF",
+              "verticalAlign": "middle",
+              "direction": "ltr",
+              "speed": 600,
+              "repeat": 1,
+              "cycleBoundary": "seamless",
+              "gap": 48,
+              "separator": " • ",
+              "items": [
+                {
+                  "id": "i1",
+                  "text": "Sample headline"
+                }
+              ]
+            }
+          ],
+          "blendMode": "normal"
+        }
+      ]
+    },
+    {
+      "id": "compExcludableSeq",
+      "name": "compExcludableSeq",
+      "resolution": {
+        "width": 1920,
+        "height": 1080
+      },
+      "frameRange": {
+        "in": 0,
+        "out": 50
+      },
+      "playout": {
+        "mode": "manual"
+      },
+      "background": "transparent",
+      "layers": [
+        {
+          "id": "compExcludableSeq-l",
+          "name": "main",
+          "visible": true,
+          "locked": false,
+          "children": [
+            {
+              "id": "excludableSeq",
+              "name": "Excludable sequence",
+              "transform": {
+                "position": {
+                  "x": 0,
+                  "y": 200
+                },
+                "size": {
+                  "w": 720,
+                  "h": 72
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1
+                },
+                "rotation": 0,
+                "anchor": {
+                  "x": 0.5,
+                  "y": 0.5
+                }
+              },
+              "opacity": 1,
+              "visible": true,
+              "locked": false,
+              "zIndex": 0,
+              "type": "sequence",
+              "font": {
+                "family": "Vazirmatn",
+                "weight": 500,
+                "style": "normal",
+                "size": 36,
+                "lineHeight": 1.4,
+                "letterSpacing": 0
+              },
+              "color": "#FFFFFF",
+              "align": "start",
+              "verticalAlign": "middle",
+              "direction": "ltr",
+              "items": [
+                {
+                  "id": "i1",
+                  "text": "Now: one"
+                },
+                {
+                  "id": "i2",
+                  "text": "Next: two"
+                }
+              ],
+              "defaultDwellMs": 5000,
+              "advance": "auto",
+              "transitionIn": "bottom",
+              "transitionOut": "top",
+              "transitionTiming": "simultaneous",
+              "transitionMs": 400,
+              "repeat": "infinite"
+            }
+          ],
+          "blendMode": "normal"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "createdAt": "2026-06-28T00:00:00.000Z",
+    "updatedAt": "2026-06-28T00:00:00.000Z"
+  }
+}

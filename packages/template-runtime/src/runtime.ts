@@ -142,6 +142,12 @@ interface ScopeNode {
   whenSettled: () => Promise<void>;
   /** B-033 — re-arm this scope's self-settle deferred for a fresh run, so a REPLAY's content-driven hold waits again. */
   resetSettled: () => void;
+  /**
+   * B-034 — the instance's own `visible` (root = true). A HIDDEN instance's whole subtree is inert:
+   * the parent's `aggregateContentWait` + content-start skip it, so a visible content driver INSIDE a
+   * hidden instance can't keep the parent open. Set by the parent from its `FieldScopeChild`.
+   */
+  visible: boolean;
 }
 
 /**
@@ -153,7 +159,9 @@ interface ScopeNode {
 function startContentTree(node: ScopeNode): void {
   node.startOwnContent();
   for (const child of node.instanceChildren) {
-    if (!child.isCoordinator) startContentTree(child);
+    // B-034 — a HIDDEN instance's subtree is inert: don't start its content (it never drives the hold
+    // and is display:none), mirroring render. The whole subtree is skipped at the hidden boundary.
+    if (child.visible && !child.isCoordinator) startContentTree(child);
   }
 }
 
@@ -176,6 +184,10 @@ function aggregateContentWait(
   const waits: Promise<void>[] = [];
   if (ownWait !== null) waits.push(ownWait);
   for (const child of instanceChildren) {
+    // B-034 — a HIDDEN instance's whole subtree is inert: it contributes NOTHING to the parent's hold
+    // (mirrors render's display:none), so a visible infinite driver inside a hidden instance can't keep
+    // the parent open. Skip BEFORE descending — neither its settle nor its content gates the hold.
+    if (!child.visible) continue;
     if (child.isCoordinator) {
       waits.push(child.whenSettled());
     } else {
@@ -250,7 +262,10 @@ function scopeHasEffectiveHoldDrivers(
     if (c.element.mode === 'countdown' && drives(c.element)) return true;
   for (const sq of scope.sequences) if (drives(sq.element)) return true;
   for (const child of scope.children)
-    if (scopeHasEffectiveHoldDrivers(child.scope, child.holdOverrides)) return true;
+    // B-034 — a HIDDEN instance's whole subtree is inert: don't descend (so a content-driven comp
+    // whose only drivers live inside hidden instances resolves to timed, matching the runtime hold).
+    if (child.visible !== false && scopeHasEffectiveHoldDrivers(child.scope, child.holdOverrides))
+      return true;
   return false;
 }
 
@@ -753,6 +768,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // D-112 — attach this instance's per-instance overrides so the PARENT's aggregation
         // (`nestedContentWait`) re-filters THIS child's content without touching the shared child.
         child.holdOverrides = c.holdOverrides;
+        // B-034 — a HIDDEN instance's whole subtree is inert for the parent's hold (mirrors render's
+        // display:none): the aggregation/start below skip it, so a visible driver inside it can't hold.
+        child.visible = c.visible !== false;
         return child;
       });
       const activeRange = activeRangeOf(scope.source);
@@ -844,7 +862,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           ? (): void => {
               startOwnContent();
               for (const child of instanceChildren) {
-                if (!child.isCoordinator) startContentTree(child);
+                // B-034 — skip a HIDDEN instance's subtree (inert; never starts, never gates the hold).
+                if (child.visible && !child.isCoordinator) startContentTree(child);
               }
             }
           : undefined,
@@ -864,6 +883,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         instanceChildren,
         whenSettled: () => settled,
         resetSettled,
+        // B-034 — default visible; the parent overrides each child from its FieldScopeChild (below),
+        // like `holdOverrides`. The root scope has no instancing parent, so it stays visible.
+        visible: true,
       };
 
       // D-030 — repeater drivers (after the node exists: stamped rows attach

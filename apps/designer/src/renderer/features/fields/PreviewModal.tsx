@@ -82,10 +82,24 @@ function dirtyPaths(
  * widen this same predicate when authored steps join the next() dispatch.
  */
 function canStepScene(scene: Scene): boolean {
-  const docs = [scene, ...(scene.compositions ?? [])];
+  // B-034 — walk the instance tree FROM THE ROOT (not every composition independently) so visibility
+  // propagates through ancestors: a sequence reachable ONLY through a HIDDEN instance / container (or
+  // a hidden sequence itself) is inert and must NOT make the scene steppable — mirroring render's
+  // display:none and the runtime hold. Cycle-guarded like the other instance walks.
+  const visited = new Set<string>();
   const walk = (children: readonly Scene['layers'][number]['children'][number][]): boolean =>
-    children.some((el) => el.type === 'sequence' || (el.type === 'container' && walk(el.children)));
-  return docs.some((d) => d.layers.some((l) => walk(l.children)));
+    children.some((el) => {
+      if (el.type === 'sequence') return el.visible !== false;
+      if (el.type === 'container') return el.visible !== false && walk(el.children);
+      if (el.type === 'composition') {
+        if (el.visible === false || visited.has(el.compositionId)) return false;
+        visited.add(el.compositionId);
+        const comp = scene.compositions?.find((c) => c.id === el.compositionId);
+        return comp !== undefined && comp.layers.some((l) => walk(l.children));
+      }
+      return false;
+    });
+  return scene.layers.some((l) => walk(l.children));
 }
 
 /**
