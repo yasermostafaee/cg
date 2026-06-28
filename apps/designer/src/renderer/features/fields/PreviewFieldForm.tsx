@@ -441,6 +441,10 @@ function renderInput(
           items={listItems(value, field.default)}
           label={label}
           showDwell={showDwell}
+          // D-118 — a SEQUENCE-bound list (its hallmark is the per-item dwell) edits its item text in
+          // the SAME multi-line textarea as the inspector, so the preview matches the properties panel.
+          // (A `list` field carries no own direction; the textarea inherits the form's reading order.)
+          multiline={showDwell}
           columns={columns}
           onChange={(items) => onChange(items)}
           appliedItems={appliedItems}
