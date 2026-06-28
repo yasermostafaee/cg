@@ -2889,3 +2889,16 @@ selectivity is OUT of scope (deferred).
 - WHEN an element's `repeat` is finite THEN no warning is shown (no false positives)
 
 **Notes:** UI/UX only — NO runtime or schema change; the runtime behavior (infinite content → hold until stop) is correct and stays. Lives in `apps/designer/src/renderer/features/inspector/PlayoutSection.tsx` (the D-107 checklist + D-108 `nestedHoldGroupsOf` indicator). Reuse the existing recursive walks; just flag rows whose element has `repeat === 'infinite'` and `drivesHold !== false`. Decide warn-only vs. also-offer-a-one-click-exclude in `design.md` (warn-only is the smaller diff and probably enough). Spec: `## ADDED` requirement on the same capability D-107/D-108 touched (`designer-playout-lifecycle`). Tests: a designer/E2E test that an infinite-repeat driver shows the warning and excluding it (or making it finite) clears it.
+
+## [~] D-113 — clearing the out-point reverts an out-point-dependent mode to manual ⟨priority: medium⟩ — `openspec/changes/outpoint-clear-reverts-mode`
+
+**What:** `auto-out` and `loop-cycle` both require an out-point (the mode select already disables them via `NEEDS_OUTPOINT` when none exists, and selecting one in the inspector seeds a marker). The reverse invariant is missing: clearing the out-point while in `auto-out` / `loop-cycle` leaves an impossible state (the mode promises an animated exit with no marker to start from). When the out-point is cleared, if the mode is `auto-out` or `loop-cycle`, set the mode to `manual` in the SAME store action (atomic, single undo).
+**Why:** The out-point ⇄ mode relationship was one-directional — selecting an out-point-dependent mode seeds a marker, but clearing the marker left the mode stranded. The composition then claims an outro it can't run.
+**Acceptance:**
+
+- WHEN the out-point is cleared while the mode is `auto-out` or `loop-cycle` THEN the mode is set to `manual` in the same atomic store action (one undo step)
+- WHEN the out-point is cleared while the mode is already `manual` THEN nothing changes
+- WHEN an out-point is later re-added THEN the prior mode is NOT auto-restored (one-directional)
+- WHEN the out-point is cleared via any path (clear button, drag-off, marker delete) THEN the revert applies (all route through the same store action)
+
+**Notes:** Designer-only, NOT runtime/high-risk. Put the revert in the store action that clears the out-point (`setLifecycle(null)` in the lifecycle/out-point slice), NOT a UI effect — so it is atomic/single-undo. Keep consistent with the existing `NEEDS_OUTPOINT` gating. Spec: `## ADDED` requirement on `designer-playout-lifecycle` (the out-point ⇄ mode invariant). Tests: store/unit (clear in auto-out → manual; loop-cycle → manual; manual → unchanged; one undo step) + designer/E2E (clear marker → mode shows manual).
