@@ -38,67 +38,78 @@ repeat: 2`, and the exported playout metadata carries the normalized form
 ### Requirement: A content-driven hold ends on the scope's content completion
 
 For `holdSource: 'content-driven'`, the runtime SHALL hold until every CONTENT
-SOURCE the scope COORDINATES **that drives the hold** completes its own run
-(`Promise.all` semantics). A scope is a **coordinator** when its effective `mode`
-is not `manual` and its `holdSource` is `content-driven`. A coordinator
-coordinates its OWN hold-driving content sources — its finite tickers, its
-countdown clocks, AND its finite sequences **whose `drivesHold` is not `false`**
-(D-107 — every content element drives the hold by DEFAULT, i.e. when `drivesHold`
-is absent; an element explicitly marked `drivesHold: false` is EXCLUDED and SHALL
-NOT gate the hold even when it is infinite/looping, though it still STARTS and
-runs unchanged — this is the HOLD, not visibility; wall and countup clocks are
-NEVER content sources and SHALL never extend the hold regardless of the flag) —
-PLUS the content of every **non-coordinator** nested composition instance,
-aggregated recursively up the composition-instance tree and STOPPING at any
-nested coordinator (a content-driven nested composition owns its own hold and
-self-settles independently, so the parent SHALL NOT wait on it). All coordinated
-hold-driving finite tickers done, all coordinated hold-driving countdowns at
-zero, and all coordinated hold-driving finite sequences past their last pass ⇒
-the hold ends; an infinite ticker or sequence that DRIVES THE HOLD anywhere in
-the coordinated set never completes, so the scope holds until `stop()`; a
-coordinator with NO coordinated hold-driving content sources — none present, OR
-every content source EXCLUDED via `drivesHold: false` — gets a zero-length hold
-(deferred like a 0ms timer — a zero-hold root must not settle before its children
-receive the play cascade). Each hold entry SHALL reset and restart the
-coordinated content (a fresh crawl / a fresh count / a fresh run from item 1 per
-open/close cycle), and a stale completion (resolving after `stop()` or after the
-hold already ended) SHALL be ignored. The runtime SHALL self-wire this from the
-scope's content elements — preview and exports need no boot wiring; an explicitly
-supplied `RuntimeBootOptions.contentHold` overrides the ROOT scope (external
-override and test seam).
+SOURCE the scope COORDINATES completes its own run (`Promise.all` semantics).
+A scope is a **coordinator** when its effective `mode` is not `manual` and its
+`holdSource` is `content-driven`. A coordinator coordinates its OWN content
+sources — its finite tickers, its countdown clocks, AND its finite sequences
+(wall and countup clocks are NOT content sources and SHALL never extend the
+hold), each honoring its per-element `drivesHold` (an element with
+`drivesHold: false` does not gate the hold) — PLUS the content of every nested
+composition instance, aggregated recursively up the composition-instance tree.
+For a **non-coordinator** nested child, this coordinator SHALL start AND await
+that child's content directly (recursing through it). For a **content-driven**
+(coordinator) nested child, the child self-starts and self-settles its OWN
+content (honoring its own `drivesHold`), and this coordinator SHALL hold until
+that child has SELF-SETTLED — its content complete and its own outro played — so
+a content-driven nested composition ALSO drives the parent's hold (B-031), giving
+a staggered content-first / background-last exit; an infinite content-driven
+nested child never settles, so the parent holds until `stop()`. A NON-coordinator
+(e.g. `manual`) parent does NOT aggregate any nested content (it never has). All
+coordinated finite tickers done, all coordinated countdowns at zero, all
+coordinated finite sequences past their last pass, and all coordinated
+content-driven nested children self-settled ⇒ the hold ends; an infinite ticker
+or sequence anywhere in the coordinated set never completes, so the scope holds
+until `stop()`; a coordinator with NO EFFECTIVE coordinated content sources —
+none present (a content-LESS composition), OR every source EXCLUDED (its own
+`drivesHold: false` or a parent's per-instance `holdOverrides`) — SHALL resolve its
+hold source to `timed` at the resolution boundary (the runtime's per-scope
+`effectivePlayoutFor`, mirrored by the exporter's `buildPlayoutMetadata` and the
+Designer Playout inspector via `@cg/shared-schema`'s `hasEffectiveHoldDrivers`), so
+the authored `holdMs` is honored (a content-driven hold with nothing to wait on is
+meaningless) and the stored template, the single-file HTML export, and on-air all
+agree; a composition whose only hold-driving content lives in a NESTED instance
+still has effective drivers and SHALL remain content-driven (B-032). Each hold
+entry SHALL reset and
+restart the coordinated content (a fresh crawl / a fresh count / a fresh run from
+item 1 per open/close cycle), and a stale completion (resolving after `stop()` or
+after the hold already ended) SHALL be ignored. The runtime SHALL self-wire this
+from the scope's content elements — preview and exports need no boot wiring; an
+explicitly supplied `RuntimeBootOptions.contentHold` overrides the ROOT scope
+(external override and test seam).
 
 A non-coordinator scope under a coordinator ancestor SHALL NOT start its own
 content drivers on its own hold entry; the coordinator ancestor SHALL reset and
 start them at the COORDINATOR's hold entry, so content inside a nested composition
 begins after the parent's intro (during the parent's hold), not on the play
 cascade. A scope with NO coordinator ancestor keeps the per-scope behavior (it
-starts its own content at its own hold entry). The `drivesHold` filter applies
-ONLY to the hold wait — the coordinator STILL starts (and stops) every content
-element, selected or not.
+starts its own content at its own hold entry). A content-driven nested child still
+self-starts its own content (it is a coordinator) — the parent does not double-start
+it; the parent only awaits its self-settle.
 
-#### Scenario: An excluded content source does not gate the hold, even infinite
+#### Scenario: A content-driven nested composition drives the parent's hold
 
-- **WHEN** a `content-driven` hold's scope contains a finite ticker that drives
-  the hold (default) AND an infinite ticker marked `drivesHold: false`
-- **THEN** the hold ends when the finite ticker completes its pass — the excluded
-  infinite ticker keeps crawling but does NOT keep the graphic on air — and the
-  outro then plays
+- **WHEN** a content-driven (`auto-out`) parent's only finite content lives inside a
+  nested composition instance that is ITSELF content-driven (a coordinator with a
+  finite ticker / sequence / countdown, `drivesHold` default)
+- **THEN** the parent holds until that nested composition self-settles (its content
+  completes and it plays its own outro), then the parent plays its outro — the nested
+  content drives the parent's hold (it is no longer skipped), content-first then
+  background-last
 
-#### Scenario: Excluding every content source yields a zero-length hold
+#### Scenario: Per-element drivesHold opts nested content out of the parent's hold
 
-- **WHEN** a `content-driven` (`auto-out`) scope's only content is excluded
-  (every ticker / sequence / countdown carries `drivesHold: false`)
-- **THEN** there is no hold-driving content, so the hold is zero-length and the
-  composition settles immediately after its outro — consistent with the
-  no-content case (the excluded content still ran)
+- **WHEN** the content inside a content-driven nested composition is excluded
+  (`drivesHold: false`)
+- **THEN** that nested composition gets a zero-length hold and self-settles quickly,
+  so the parent does NOT wait on the excluded content — it settles well before the
+  excluded content would have completed (it still runs)
 
-#### Scenario: Default (no drivesHold) keeps all content participating
+#### Scenario: An infinite content-driven nested composition holds the parent until stop
 
-- **WHEN** a `content-driven` scene authored before D-107 (no `drivesHold` on any
-  content element) is played
-- **THEN** every ticker / countdown / sequence participates exactly as before —
-  an infinite one still holds the scope until `stop()` — so existing scenes behave
-  identically (non-breaking)
+- **WHEN** a content-driven parent nests a content-driven composition whose content is
+  infinite (`repeat: 'infinite'`)
+- **THEN** the nested composition never self-settles, so the parent's content-driven
+  hold never completes on its own and holds until `stop()`
 
 #### Scenario: A parent holds for content inside a nested composition
 
@@ -117,17 +128,17 @@ element, selected or not.
 #### Scenario: Infinite nested content holds the parent until stop
 
 - **WHEN** the nested composition (non-content-driven) contains a `repeat:
-'infinite'` ticker or sequence that drives the hold
+'infinite'` ticker or sequence
 - **THEN** the parent's content-driven hold never completes on its own and holds
   until `stop()`
 
-#### Scenario: A content-driven nested composition stays independent
+#### Scenario: A content-driven nested composition under a non-coordinator parent stays independent
 
 - **WHEN** a manual (or otherwise non-content-driven) parent nests a content-driven
   composition that contains a finite ticker
 - **THEN** the nested composition runs and self-settles on its OWN content-driven
-  hold and the parent is untouched (the parent does NOT wait on the nested
-  content) — preserving today's per-scope holds
+  hold and the parent is untouched (a non-coordinator parent does NOT wait on the
+  nested content) — preserving today's per-scope holds
 
 #### Scenario: Nested loops — loop-cycle repeat=3 × ticker repeat=2 ⇒ 6 passes
 
@@ -141,7 +152,7 @@ holdSource: 'content-driven'` and its ticker has `repeat: 2`
 #### Scenario: Infinite ticker holds until stop
 
 - **WHEN** a `content-driven` hold's scope contains a `repeat: 'infinite'`
-  ticker that drives the hold
+  ticker
 - **THEN** completion never fires and the composition holds (crawling) until
   `stop()`
 
@@ -201,6 +212,35 @@ holdSource: 'content-driven'` and its ticker has `repeat: 2`
   — whichever finishes last governs — and each hold entry re-runs all three
   (a fresh crawl / a fresh count / a fresh run from item 1 per open/close
   cycle)
+
+#### Scenario: A content-less content-driven auto-out holds for holdMs
+
+- **WHEN** a composition has `mode: 'auto-out'`, `holdSource: 'content-driven'`,
+  and `holdMs: N`, but NO content sources (e.g. the content was deleted after the
+  hold source was set)
+- **THEN** the resolution boundary falls `holdSource` back to `timed`, so the hold
+  lasts ≈ `N` ms before the outro (not a zero-length hold) — in the stored
+  template AND the single-file HTML export
+
+#### Scenario: A content-less content-driven loop-cycle holds for holdMs each cycle
+
+- **WHEN** a content-less composition is `loop-cycle` + `content-driven` with
+  `holdMs: N`
+- **THEN** each between-cycle hold lasts ≈ `N` ms (resolved to timed), not ~0
+
+#### Scenario: Nested-only content keeps the hold content-driven
+
+- **WHEN** a composition has no OWN content but nests a composition instance that
+  contains a hold-driving content source
+- **THEN** it has effective drivers, so its hold stays `content-driven` and ends
+  on that nested content's completion (NOT resolved to timed)
+
+#### Scenario: An exclusively-excluded composition resolves to timed
+
+- **WHEN** every content source in a content-driven composition is excluded via
+  `drivesHold: false`
+- **THEN** there are no effective drivers, so the hold resolves to `timed` and
+  honors `holdMs`
 
 ### Requirement: Root self-settle takes every nested scope off air
 
@@ -364,12 +404,22 @@ have an exit segment; with no `outPoint` they have no effect.
 
 The runtime SHALL accept a non-persistent playout override — `mode`, `holdMs`, and
 `repeat` — that overrides the composition's stored defaults for a single run
-**without changing the stored template**. The override SHALL NOT include any
-separate continuous-loop flag; continuous looping is expressed as `mode:
-'loop-cycle'` (or `'content-driven'`) with `repeat: 'infinite'`. These params exist
-so the designer preview can test playout and so the rundown (the control app) can
-drive them live on air later; authoritative live control of these belongs to the
-rundown. The template SHALL store only the play-once defaults.
+**without changing the stored template** (the designer preview / rundown session
+override). The override SHALL NOT include any separate continuous-loop flag;
+continuous looping is expressed as `mode: 'loop-cycle'` (or `'content-driven'`)
+with `repeat: 'infinite'`. These params exist so the designer preview can test
+playout and so the rundown (the control app) can drive them live on air later;
+authoritative live control of these belongs to the rundown.
+
+B-032 — the template MAY ALSO STORE an authored timed `holdMs` on `scene.playout`:
+the inspector's Playout section authors it (alongside `mode` and the `outPoint`
+marker) for an `auto-out` / `loop-cycle` composition with a TIMED hold, so a
+STANDALONE export / on-air playback (no rundown) holds for the authored duration
+rather than collapsing to 0. The session override still layers on top via
+`effectivePlayoutFor` (`override.holdMs ?? stored.holdMs`), so a preview / rundown
+can still retune the hold for a run without changing the stored default. `repeat`
+remains an override-only (preview / rundown) param. A composition with no stored
+`holdMs` and no override holds 0 (the prior behaviour — no hold authored).
 
 #### Scenario: Override drives playout without persisting
 
@@ -377,6 +427,15 @@ rundown. The template SHALL store only the play-once defaults.
   a run
 - **THEN** that run uses the override, and the composition's stored `playout`
   defaults are left unchanged
+
+#### Scenario: An authored timed holdMs is stored and exported
+
+- **WHEN** the inspector sets a timed `holdMs` for a content-less `auto-out` /
+  `loop-cycle` composition
+- **THEN** the value is stored on `scene.playout.holdMs`, the single-file export
+  bakes it (`buildPlayoutMetadata`) and the inlined scene carries it, so a
+  standalone export holds for the authored duration (both `auto-out` and
+  `loop-cycle`, including the between-cycle hold) instead of behaving like 0
 
 ### Requirement: The preview binds to the effective playout and re-syncs on change
 
@@ -403,16 +462,27 @@ and the `auto-out` / `loop-cycle` modes (which need an out-point) SHALL be disab
 
 ### Requirement: Preview timing overrides are session-only
 
-`mode` SHALL be authored in the inspector, but `mode`, `holdMs`, and `repeat` SHALL
-be adjustable in the preview modal (`repeat: 'infinite'` is how the preview loops).
-Changing them in the preview SHALL re-run the preview with the overridden playout
-for that session only and SHALL NOT change the composition's stored defaults.
+`mode` AND the timed `holdMs` SHALL be AUTHORABLE in the inspector (stored on
+`scene.playout`); `mode`, `holdMs`, and `repeat` SHALL ALSO be adjustable in the
+preview modal (`repeat: 'infinite'` is how the preview loops). The inspector's
+`holdMs` control SHALL appear only for a TIMED hold under `auto-out` / `loop-cycle`
+(a content-driven hold ignores `holdMs`). A preview change SHALL re-run the preview
+with the overridden playout for that session only — layered on the stored defaults
+(`override ?? stored`) — and SHALL NOT change the composition's stored defaults.
 
 #### Scenario: Preview override is session-only
 
 - **WHEN** the designer changes the mode, hold, or repeat in the preview modal
 - **THEN** the preview re-runs with the overridden playout, and the composition's
   stored `playout` defaults are unchanged
+
+#### Scenario: The inspector authors a stored holdMs, the preview override still layers over it
+
+- **WHEN** the inspector authors a stored `holdMs` and the preview then sets a
+  different `holdMs` override
+- **THEN** the preview run uses the override while the stored value (and the
+  export) keep the authored default — neither changes the other; and the inspector
+  `holdMs` control is hidden for a `manual` or content-driven hold
 
 ### Requirement: Lifecycle and timing are exported and preview-faithful
 
@@ -693,20 +763,31 @@ driver). (Phase 1 covers tickers; sequences and countdown clocks are a later pha
 
 ### Requirement: The content-driven hold control is offered for content in a nested composition
 
-The inspector's Playout section SHALL offer the content-driven hold source
-whenever the composition contains finite content — a ticker, a countdown clock,
-or a sequence — directly OR inside a nested `composition` instance, resolving the
-referenced composition's layers (via `scene.compositions`) and recursing through
-them with a cycle guard (a visited set), exactly as it already recurses into a
-`container`'s children. A composition whose only finite content lives inside a
-nested composition SHALL therefore present the hold-source control.
+The inspector's Playout section AND the preview's per-scope timing controls SHALL
+offer the content-driven hold source whenever the composition contains finite
+content — a ticker, a countdown clock, or a sequence — directly OR inside a nested
+`composition` instance, resolving the referenced composition's layers (via
+`scene.compositions`) and recursing through them with a cycle guard (a visited
+set), exactly as they already recurse into a `container`'s children. A composition
+whose only finite content lives inside a nested composition SHALL therefore present
+the hold-source control in BOTH the inspector and the preview (B-031 — the preview's
+per-scope content check was previously SHALLOW, hiding the content-driven option for
+a nested-only parent).
 
 #### Scenario: Hold control offered for content inside a nested composition
 
 - **WHEN** a composition's only finite content (a ticker / countdown / sequence)
   lives inside a nested `composition` instance and the mode is not `manual`
-- **THEN** the Playout section offers the hold-source control (timed /
+- **THEN** the inspector Playout section offers the hold-source control (timed /
   content-driven) for that composition
+
+#### Scenario: The preview offers the content-driven hold for nested-only content
+
+- **WHEN** the preview opens on a parent whose only finite content lives inside a
+  nested composition instance and the parent's mode is timing-relevant
+  (`auto-out` / `loop-cycle`)
+- **THEN** the parent's per-scope preview timing offers the content-driven hold
+  source (its content check recurses the nested composition)
 
 #### Scenario: No false offer and no infinite recursion on cyclic references
 
@@ -755,3 +836,161 @@ that it still starts and renders. Start-marker selectivity is OUT of scope
   none of its own to list)
 - **THEN** the content-driven hold is zero-length, consistent with the no-content
   case (the unchecked content still runs, it just no longer holds the graphic)
+
+### Requirement: The Playout checklist surfaces nested-composition hold-driving content (read-only)
+
+When the active composition's hold is content-driven, the Playout section SHALL surface the
+hold-driving content (`ticker` / `sequence` / countdown `clock`) inside each IMMEDIATE nested
+composition instance as **WRITABLE** rows — not read-only. Each row SHALL show a checkbox reflecting
+the element's EFFECTIVE participation in THIS parent's hold (the instance's per-instance override if
+set, else the element's own `drivesHold`; absent ⇒ drives). Toggling a row SHALL write a per-instance
+override on the parent's composition-instance element (NOT on the shared child), so other instances of
+the same child are unaffected. The instance's drill-in SHALL remain (to edit the shared child or a
+deeper instance level); deeper nested content (inside the instance's OWN nested instances) is edited by
+drilling in, one level at a time. Rows for a finite countdown clock and finite/infinite ticker /
+sequence are all listed; wall/countup clocks never appear (they cannot end a hold).
+
+#### Scenario: Nested content is listed with a writable toggle
+
+- **WHEN** a parent nests a composition instance whose referenced composition contains hold-driving
+  content
+- **THEN** the parent's content-driven checklist lists that content with a writable "drives the hold"
+  checkbox (not a read-only indicator), reflecting its effective participation, plus the drill-in
+
+#### Scenario: Toggling a nested row writes a per-instance override
+
+- **WHEN** the operator toggles a nested row off (or on) in the parent
+- **THEN** the change is stored as `holdOverrides[elementId]` on the parent's composition-instance
+  element, leaving the shared child element's own `drivesHold` untouched
+
+#### Scenario: Deeper nested content is edited by drilling in
+
+- **WHEN** the nested instance itself contains a deeper composition instance with hold-driving content
+- **THEN** the parent surfaces the immediate level's content as writable rows and the operator drills
+  into the instance to edit the deeper level's per-instance overrides there
+
+#### Scenario: A content-driven (coordinator) nested child stays read-only
+
+- **WHEN** the immediate nested child is itself content-driven (a coordinator — the parent awaits its
+  settle, so a per-instance override on its content would be inert)
+- **THEN** the parent surfaces that child's content READ-ONLY (a drill-in, not writable rows); the
+  operator edits the child's own participation by drilling in
+
+### Requirement: Clearing the out-point reverts an out-point-dependent mode to manual
+
+Clearing a composition's out-point while its mode is `auto-out` or `loop-cycle` SHALL set the mode to
+`manual` in the SAME store action (one atomic undo step). Those modes require an out-point (an exit
+segment to start the animated outro from), so without this the composition would claim an animated
+exit with no marker to start from. The revert SHALL apply for EVERY path that clears the
+out-point (the inspector Clear button, a drag-off, a marker delete), because all route through the
+single clear action. When the mode is already `manual`, clearing the out-point SHALL leave the
+playout unchanged (no spurious write). The invariant is ONE-DIRECTIONAL: re-adding an out-point SHALL
+NOT auto-restore the prior mode.
+
+#### Scenario: Clearing the out-point in auto-out reverts to manual
+
+- **WHEN** the operator clears the out-point while the composition's mode is `auto-out`
+- **THEN** the mode becomes `manual` in the same atomic action (the rest of the playout — holdMs,
+  repeat — is preserved), and one undo restores both the out-point and the prior mode together
+
+#### Scenario: Clearing the out-point in loop-cycle reverts to manual
+
+- **WHEN** the operator clears the out-point while the mode is `loop-cycle`
+- **THEN** the mode becomes `manual`
+
+#### Scenario: Clearing the out-point in manual changes nothing
+
+- **WHEN** the operator clears the out-point while the mode is already `manual`
+- **THEN** the playout is left unchanged (no mode write)
+
+#### Scenario: Re-adding an out-point does not restore the prior mode
+
+- **WHEN** the operator clears the out-point (reverting to manual) and later re-adds an out-point
+- **THEN** the mode stays `manual` (the prior `auto-out` / `loop-cycle` is NOT auto-restored)
+
+### Requirement: Nested content participation is a per-instance override on the parent
+
+A nested content element's participation in its parent hold SHALL resolve to the composition-instance's
+optional `holdOverrides[id]` (keyed by the nested content element's stable id) when that key is defined,
+else the element's own `drivesHold !== false` (absent ⇒ drives, `false` ⇒ excluded). The
+override SHALL affect ONLY the parent's hold aggregation — never the shared child element, never the
+child composition's OWN hold, never whether the content starts / runs / is visible (an excluded looping
+element keeps running until the parent's exit). Each composition-instance level overrides only its
+referenced composition's OWN direct content (recursing containers, NOT deeper instances); a deeper
+instance carries its own `holdOverrides`, applied at its level (cascade per level). The field is
+OPTIONAL and additive — scenes without it are unchanged, it round-trips through `.vcg` and single-file
+HTML export, and the schema version is NOT bumped.
+
+#### Scenario: An instance override excludes a nested element from the parent hold
+
+- **WHEN** a parent nests a child with a finite ticker and a `repeat: 'infinite'` sequence, and the
+  parent sets `holdOverrides[sequenceId] = false` on that instance
+- **THEN** the parent's content-driven hold ends when the finite ticker completes (then plays its
+  outro), while the looping sequence keeps running until the parent's exit — matching the
+  single-composition behaviour of unchecking the sequence
+
+#### Scenario: Per-instance isolation
+
+- **WHEN** the same child composition is instanced in two parents (or twice in one parent) and only the
+  first instance sets `holdOverrides[id] = false`
+- **THEN** the second instance's hold is unaffected — its element resolves to the element's own
+  `drivesHold`
+
+#### Scenario: Fallback when no override
+
+- **WHEN** a nested content element has no `holdOverrides` entry on its instance
+- **THEN** its effective participation falls back to its own `drivesHold` (absent ⇒ drives, `false` ⇒
+  excluded) — backward compatible with pre-D-112 scenes
+
+#### Scenario: Overrides survive round-trips
+
+- **WHEN** a scene with per-instance `holdOverrides` is packed to `.vcg` and unpacked, or exported as
+  single-file HTML and re-parsed
+- **THEN** the `holdOverrides` survive unchanged and the scene validates
+
+### Requirement: An infinite-repeat hold driver is flagged on own and nested rows (supersedes D-111)
+
+When the hold is content-driven, the Playout section SHALL flag any hold driver — an own-content row OR
+a writable nested row — whose element has `repeat: 'infinite'` and is EFFECTIVELY participating (own:
+`drivesHold !== false`; nested: the per-instance effective value is `true`): such a driver never
+completes, so the graphic holds until `stop()` (it won't auto-close). The flag SHALL be inline on that
+row and SHALL clear when the element is excluded (own `drivesHold === false`, or the nested override
+turns it off) or given a finite `repeat`. When EVERY effective hold driver of the composition (own plus
+those reached through nested instances, overrides applied) is infinite-repeat, the warning SHALL be
+PROMINENT at the checklist level (an alert), not only per-row. A finite-repeat driver SHALL show no
+warning (no false positives). This is presentation only — the runtime behaviour (infinite content ⇒
+hold until `stop()`) is unchanged.
+
+#### Scenario: An effectively-driving infinite nested row is flagged
+
+- **WHEN** a writable nested row's element has `repeat: 'infinite'` and is effectively driving the
+  parent's hold (override unset or `true`)
+- **THEN** the row shows an inline warning that the graphic won't auto-close
+
+#### Scenario: Excluding the infinite nested element via override clears the warning
+
+- **WHEN** the operator toggles that nested infinite row off (per-instance override `false`)
+- **THEN** the inline warning clears and the element no longer counts toward the prominent
+  all-infinite alert
+
+#### Scenario: A finite nested driver shows no warning
+
+- **WHEN** a nested hold driver's `repeat` is finite (or it is a countdown clock, always finite)
+- **THEN** no warning is shown for it (no false positives)
+
+### Requirement: The Playout inspector shows a content-less hold as timed
+
+The Designer Playout inspector SHALL reflect the same resolution as the runtime:
+when a composition has no effective hold-driving content (own or nested, with
+`drivesHold !== false` and no per-instance `holdOverrides` excluding it), it SHALL
+present the hold as `timed` and offer the authorable `holdMs` control under
+`auto-out` / `loop-cycle`, even if the stored `holdSource` is `content-driven` — so
+the operator is never trapped with a hidden duration that the runtime silently
+ignores.
+
+#### Scenario: The holdMs control appears for a content-less content-driven comp
+
+- **WHEN** a composition is stored `holdSource: 'content-driven'` under `auto-out`
+  but has no content sources (e.g. its only content was deleted)
+- **THEN** the Playout inspector shows the timed `holdMs` control (the hold
+  resolves to timed), so the operator can author the duration the runtime honors

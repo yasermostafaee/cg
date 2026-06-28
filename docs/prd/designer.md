@@ -2862,7 +2862,7 @@ graphic?"), pre-checked, toggling drivesHold. Wall/countup clocks never drive th
 only countdown clocks, tickers, sequences are meaningful (list/disable accordingly). Start-marker
 selectivity is OUT of scope (deferred).
 
-## [~] D-108 — Surface nested-composition content that drives the hold ⟨priority: medium⟩ — implementing on `feat/surface-nested-hold-content` (`openspec/changes/surface-nested-hold-content`)
+## [x] D-108 — Surface nested-composition content that drives the hold ⟨priority: medium⟩ — implementing on `feat/surface-nested-hold-content` (`openspec/changes/surface-nested-hold-content`)
 
 **What:** In the PlayoutSection "which content closes the graphic?" checklist (D-107), show a READ-ONLY indicator for hold-driving content (ticker / sequence / countdown clock with `drivesHold !== false`) that lives inside the active composition's nested composition instances. It lists each such nested composition by name with a count of its hold-driving items, and opens that composition when activated. It does NOT make those items togglable from the parent.
 **Why:** D-107's checklist lists only the active composition's OWN content (recursing groups, not nested composition instances). But the runtime honors `drivesHold` recursively (D-104), so content inside nested compositions DOES drive the parent's hold — an operator viewing the parent's checklist can't see this and may assume nested content is ignored. `drivesHold` is a property of the shared child element (a nested instance is a `compositionId` reference, layers not copied), so making it togglable from the parent would silently mutate every other instance of that child. A read-only, drill-in indicator closes the discoverability gap without that footgun.
@@ -2876,7 +2876,37 @@ selectivity is OUT of scope (deferred).
 
 **Notes:** Builds on D-107 (`apps/designer/src/renderer/features/inspector/PlayoutSection.tsx`); extend the recursive content walk it added (which already reaches grouped content) to recurse through composition instances by `compositionId` into the referenced composition's elements. Only ticker / sequence / countdown-clock kinds count (wall / count-up never drive a hold). Group by the immediate nested instance; deeper nesting surfaces progressively as the operator drills in. Drill-in reuses the existing `setActiveComposition` / `openCompositionAndSelect` store action. READ-ONLY — no `drivesHold` writes from the parent. Extend the requirement(s) D-107 added/modified in its living spec (`## MODIFIED` / `## ADDED`). Non-breaking, no schema change.
 
-## [~] D-111 — guard against an infinite-repeat content element silently driving the hold ⟨priority: medium⟩ — `openspec/changes/guard-infinite-hold-driver` — SUPERSEDED by D-112 (the infinite-repeat warning is folded into D-112's writable nested rows; D-111 not implemented separately)
+## [ ] D-109 — Pen tool + editable bézier `path` element ⟨priority: high⟩
+
+**What:** A new `path` element kind, drawn with a Pen tool added to the top canvas toolbar (alongside cursor / rectangle / text / ellipse / hand / image), matching the Loopic pen. The pen draws full bézier outlines: a click places a corner anchor, a click-drag places a smooth anchor whose two handles mirror the drag; clicking the first anchor closes the path; Enter / Esc / double-click finishes an open path. After drawing, the path is fully editable: drag anchors, drag handles, insert a point on a segment, delete a point, and toggle an anchor between corner and smooth. A closed path renders fill + stroke; an open path renders stroke only. Transform / opacity / filter / stroke animate exactly like the other shapes. Per-point morphing animation is NOT in this item (it is D-110).
+**Why:** The owner wants Loopic-style custom vector shapes; rectangle and ellipse can't express arbitrary outlines. This `path` element — with each anchor carrying a stable id — is also the foundation the D-110 path-morph animation builds on.
+**Acceptance:**
+
+- WHEN the operator selects the Pen tool and clicks the canvas THEN a new path element begins with a corner anchor at the click; each further click adds a corner anchor; a click-drag adds a smooth anchor whose two handles mirror the drag direction/length
+- WHEN the operator clicks the first anchor THEN the path closes; WHEN the operator presses Enter / Esc or double-clicks THEN the path finishes open; in both cases the tool returns to the cursor with the new path selected
+- WHEN a path is closed THEN it renders fill + stroke; WHEN a path is open THEN it renders stroke only (fill ignored) — identically in canvas preview, `.vcg`, and single-file HTML (preview == export)
+- WHEN a path is selected and the edit affordance is active THEN its anchors and handles are shown; dragging an anchor moves it; dragging a handle reshapes the adjacent segment(s); a smooth anchor keeps its two handles mirrored, a corner anchor moves each handle independently; a modifier (e.g. Alt) breaks a mirrored pair into an independent corner and back
+- WHEN the operator clicks on a segment with the pen/edit affordance THEN a new anchor is inserted there preserving the curve; WHEN an anchor is removed (right-click → remove, or Delete on a selected anchor) THEN the path re-stitches across the gap; removing below 2 anchors deletes the whole path element
+- WHEN the path's transform / opacity / filter / stroke is keyframed THEN it animates exactly like a rectangle/ellipse (same timeline rows, same diamonds, same gizmo); the point set is not keyframe-able here (deferred to D-110)
+- WHEN a path is selected THEN the B-022 scale-aware selection gizmo tracks it under scale + rotation; its size is the bounding box of its points; resizing applies a scaleX/scaleY transform — it does NOT re-bake the point coordinates
+- WHEN the operator clicks inside a closed path THEN it selects (point-in-polygon over the actual outline); WHEN the operator clicks near an open path's stroke THEN it selects (distance-to-stroke); clicking inside the bounding box but outside the actual shape does NOT select it
+- WHEN a scene containing a path is saved, reloaded, previewed, and exported THEN it round-trips and validates, and every anchor keeps its stable id
+
+**Notes:** Schema first (`@cg/shared-schema`). Add `PathElementSchema` (`type: 'path'`) to the element union. Shape: `points: AnchorPoint[]`, `closed: boolean`, the existing fill/background-color field, and the existing stroke from the box-style mixin (D-042). Path has no border-radius, so reuse only the stroke part of the box mixin (carve a stroke-only sub-schema if cleaner — record the choice in `design.md`). `AnchorPoint = { id: string; x: number; y: number; in?: {x,y}; out?: {x,y}; smooth: boolean }`. Handles (`in`/`out`) are deltas relative to the anchor, not absolute scene coords (cleaner under transform and for D-110). Each `id` is a stable nanoid for D-110 reconciliation. Points live in the element's local space; the element's `position` places it and the bbox of the points gives its implicit size.
+Runtime (`@cg/template-runtime`). In the scene-builder, render the path as `<svg><path d="…">`; build `d` from the points (`M`, cubic `C` segments from each anchor's `out` handle to the next anchor's `in` handle, `Z` when `closed`). Fill applies only when closed; open paths get `fill:none`. Transform / opacity / filter / stroke are applied by the existing appliers (path is a box-styled element for stroke). No animation-engine change in this phase (morphing is D-110).
+Designer UI. Add the Pen tool to the top-of-canvas tools in `features/canvas`. Build a pen-draw interaction controller (pointer state machine: place anchor / drag-to-smooth / hover-and-click-first-anchor-to-close / Enter-Esc-dblclick to finish). Add an edit overlay that draws anchors + handles for the selected path and routes drags through the existing `updateElement` / store methods (one undo entry per gesture). Extend `features/canvas/hit-test.ts` (closed → point-in-polygon over the outline; open → distance-to-stroke). Add a Path inspector section: fill, the reused D-042 stroke section, a closed toggle, and a read-only point count.
+Selection gizmo. Reuse the B-022 scale-aware parallelogram (no new gizmo). Path size = bbox of points; resize maps to scaleX/scaleY transform, consistent with the renderer/hit-test transform — do not re-bake point coords on resize.
+OpenSpec. Add a new `designer-path-element` capability for the element + pen-draw + edit behavior, and extend `designer-shapes` with `## MODIFIED Requirements` for the new tool and the selection-gizmo/hit-test coverage of paths (or fold the whole thing into `designer-shapes` — pick the smaller diff and record the choice in `design.md`).
+Tests (part of the green gate). Schema round-trip (a path with bézier handles + `closed` survives `.vcg` and single-file HTML, ids preserved); a runtime `d`-string unit test (open vs closed, smooth vs corner); a designer interaction test (pen draws → closes → becomes selectable/editable; insert/remove anchor re-stitches).
+OUT OF SCOPE v1 (record in `design.md`): path-point morphing / per-point keyframes (D-110); boolean ops (union/subtract/intersect); variable-width stroke; importing external SVG paths; converting rectangle/ellipse into editable paths. These are deliberate non-goals for this item.
+
+## [ ] D-110 — Path morphing (per-point keyframe animation) ⟨priority: medium⟩
+
+**What:** Make a `path` element's outline shape animatable. Model it as a single animatable `path` property (After-Effects style): each keyframe stores a full snapshot of the anchor array, and the runtime interpolates point-by-point (anchor x/y + in/out handles) between two path keyframes, matching anchors by their stable `id`. Interpolation requires the two keyframes to have the same anchor set (same ids / count); otherwise the segment holds/snaps (no tween).
+**Why:** Morphing custom outlines is the headline reason for the pen tool; D-109 deliberately deferred it because it touches the playout engine (animation-applier / FrameDriver — flagged high-risk in `CLAUDE.md`), so it gets its own recon-first, two-phase change.
+**Acceptance / Notes:** to be authored when scheduled. Anchor with same `id` is the correspondence key; a single "Path" timeline row + diamond (not N per-point tracks); editing points at a frame upserts a path keyframe; registry (D-051) gets a special path descriptor. Two-phase: recon first before touching the applier.
+
+## [x] D-111 — guard against an infinite-repeat content element silently driving the hold ⟨priority: medium⟩ — `openspec/changes/guard-infinite-hold-driver` — SUPERSEDED by D-112 (the infinite-repeat warning is folded into D-112's writable nested rows; D-111 not implemented separately)
 
 **What:** In the content-driven hold checklist (D-107) and its nested-content indicator (D-108), make it impossible to _accidentally_ let an infinite-repeat content element drive a hold. A `ticker` / `sequence` with `repeat: 'infinite'` that participates in the hold (`drivesHold !== false`) guarantees the composition holds forever (hold-until-stop) — surface that instead of leaving it silent.
 **Why:** The hold model is "every content element drives the hold unless excluded," and an infinite-repeat element never completes — so one such element among the drivers silently forces an infinite parent hold. A real authored scene (content-driven parent with a `repeat: 'infinite'` sequence + a finite ticker) froze the parent with no indication why; the runtime was correct (D-104: infinite content → hold until stop), but nothing told the operator. This is a discoverability/footgun gap, not a runtime bug.
@@ -2890,7 +2920,7 @@ selectivity is OUT of scope (deferred).
 
 **Notes:** UI/UX only — NO runtime or schema change; the runtime behavior (infinite content → hold until stop) is correct and stays. Lives in `apps/designer/src/renderer/features/inspector/PlayoutSection.tsx` (the D-107 checklist + D-108 `nestedHoldGroupsOf` indicator). Reuse the existing recursive walks; just flag rows whose element has `repeat === 'infinite'` and `drivesHold !== false`. Decide warn-only vs. also-offer-a-one-click-exclude in `design.md` (warn-only is the smaller diff and probably enough). Spec: `## ADDED` requirement on the same capability D-107/D-108 touched (`designer-playout-lifecycle`). Tests: a designer/E2E test that an infinite-repeat driver shows the warning and excluding it (or making it finite) clears it.
 
-## [~] D-112 — per-instance hold overrides: choose which nested content drives the PARENT's hold ⟨priority: high⟩ — `openspec/changes/per-instance-hold-overrides`
+## [x] D-112 — per-instance hold overrides: choose which nested content drives the PARENT's hold ⟨priority: high⟩ — `openspec/changes/per-instance-hold-overrides`
 
 **What:** Bring the single-composition hold experience to nesting. Today D-107's checklist includes/excludes EACH content element from a composition's hold per-element; for NESTED content, D-108 only shows a READ-ONLY indicator (you must drill into the child, and that toggle is shared across all instances). Add a PER-INSTANCE override so the PARENT can include/exclude a nested content element from driving ITS hold — without affecting other instances of the same child composition. The parent's checklist becomes writable for nested content (replacing D-108's read-only rows). Folds in D-111: the infinite-repeat-driver warning shows inline on these rows. This item SUPERSEDES D-111.
 **Why:** A single composition with a looping (`repeat: 'infinite'`) sequence + a finite ticker already closes on just the ticker (uncheck the sequence). The identical NESTED arrangement can't — there's no way to say "only the child's ticker closes the parent, not the child's looping sequence" from the parent. The blocker: `drivesHold` lives on the shared child element (toggling from one parent hits every instance — the footgun D-108 dodged by staying read-only). A per-instance override fixes the scope: the parent tunes ITS own hold, the shared child definition stays untouched. Unifies the single-scope and nested models the operator already expects.
@@ -2910,7 +2940,7 @@ Runtime (`@cg/template-runtime`): in the parent's aggregation (B-031's `whenSett
 Designer UI: make D-108's nested rows writable — each writes the per-instance `holdOverrides` on the correct composition-instance element (NOT the shared child); checkbox reflects the effective value; keep the drill-in; add the D-111 infinite-repeat warning inline.
 OpenSpec: `## MODIFIED` the D-108 requirement (read-only → writable per-instance) + `## ADDED` the override + infinite-warning requirements on `designer-playout-lifecycle`. Tests: schema round-trip (overrides survive `.vcg` + single-file HTML); runtime (parent excludes a nested infinite element via instance override → parent closes on the finite nested content; a SECOND instance of the same child is unaffected); designer/E2E (writable nested toggle + infinite warning).
 
-## [~] D-113 — clearing the out-point reverts an out-point-dependent mode to manual ⟨priority: medium⟩ — `openspec/changes/outpoint-clear-reverts-mode`
+## [x] D-113 — clearing the out-point reverts an out-point-dependent mode to manual ⟨priority: medium⟩ — `openspec/changes/outpoint-clear-reverts-mode`
 
 **What:** When the operator clears a composition's lifecycle out-point while its playout `mode` is `auto-out` or `loop-cycle`, automatically revert `mode` to `manual` in the same action. This mirrors the existing forward guard — without an out-point, `auto-out` / `loop-cycle` are already disabled (`NEEDS_OUTPOINT`) in the mode select — so the reverse must hold too: you can't be left IN an out-point-dependent mode with no out-point.
 **Why:** `auto-out` (run the outro once) and `loop-cycle` (repeat in→out / out→end) both need an out-point to define where the exit segment begins. Clearing the out-point while in one of those modes leaves an impossible state: the mode promises an animated exit but there's no marker for it to start from, so the lifecycle can't resolve. The mode select already forbids ENTERING these modes without an out-point; clearing the marker afterward must symmetrically drop back to `manual` (hold-until-stop, the no-out-point-valid mode).
@@ -2923,3 +2953,74 @@ OpenSpec: `## MODIFIED` the D-108 requirement (read-only → writable per-instan
 - WHEN the out-point is later re-added THEN `auto-out` / `loop-cycle` become selectable again (the operator re-picks; no auto-restore of the prior mode)
 
 **Notes:** Designer-only, NOT runtime/high-risk. The revert belongs in the store action that clears the out-point (the lifecycle/out-point slice — same place `setPlayout` / the out-point marker live), so it's atomic and single-undo, not a UI-effect afterthought. Keep it consistent with the existing `NEEDS_OUTPOINT` gating in `PlayoutSection.tsx`'s mode select. Edge: confirm whatever "clears" the out-point routes through that action (drag-off, a clear button, deleting the marker) so all paths revert. Spec: `## ADDED` requirement on `designer-playout-lifecycle` (the out-point ⇄ mode invariant). Tests: a store/unit test (clear out-point in auto-out → manual; in loop-cycle → manual; in manual → unchanged; one undo step) + a designer/E2E test (clear marker → mode shows manual + NEEDS_OUTPOINT modes disabled).
+
+## [ ] D-114 — 'static' playout mode for compositions with no out-point ⟨priority: medium⟩
+
+**What:** Add a fourth mode `static` (label e.g. "Static — plays in, holds, cut on stop; no exit animation"), which IS the mode whenever a composition has no lifecycle out-point. `manual` / `auto-out` / `loop-cycle` all require an out-point (they decide WHEN the animated exit fires); `static` is the no-out-point state (no animated exit, hard cut on stop).
+**Why:** Without an out-point there's no outro segment, so `manual` is misleading and stop() does nothing visible. A distinct `static` makes the model honest. REVISES D-113: clearing the out-point now reverts an out-point-dependent mode to `static` (not `manual`).
+**Acceptance:**
+
+- WHEN a composition has no out-point THEN its mode is `static`, and manual/auto-out/loop-cycle are disabled in the select
+- WHEN the operator clears the out-point while in manual/auto-out/loop-cycle THEN mode reverts to `static` (revising D-113's →manual)
+- WHEN an out-point is added THEN manual/auto-out/loop-cycle become selectable again
+- WHEN a `static` graphic is stopped THEN it's removed by a clean cut (no outro); the controller treats `static` as: play intro → hold until stop → cut
+- WHEN a scene with `static` is saved/reloaded/exported THEN it round-trips and validates
+
+**Notes:** Schema: add `static` to PlayoutModeSchema (non-breaking); a no-out-point `manual` scene should resolve/normalize to `static` via `playoutOf` (decide migrate-vs-resolve in design.md). Runtime: controller handles `static` (no outro path). UI: PlayoutSection select + the out-point⇄mode coupling (extends D-113's invariant). RECON FIRST (touches the controller stop/exit). Spec: `## MODIFIED` designer-playout-lifecycle (D-113's invariant) + `## ADDED static`. Tests: round-trip; controller (cut-on-stop, no outro); store/E2E (no out-point ⇒ static + others disabled; clear ⇒ static).
+
+## [ ] D-115 — designate the main / entry composition (explicit, not list-order) ⟨priority: medium⟩
+
+**What:** Let the operator explicitly designate which composition is the MAIN/entry — what the editor opens on by default and what plays as the template's entry — instead of it being implicit (currently the active comp on load defaults by list position, not by intent). Add an explicit `entryCompositionId` on the scene (`null` ⇒ the main document itself), a "Set as main" action in the Compositions panel, and a clear indicator of which is main.
+**Why:** A template's "real" entry may not be the first composition; relying on order is fragile (reordering for organization silently changes the default). An explicit pointer is order-independent and matches intent.
+**Acceptance:**
+
+- WHEN the operator sets a composition as main THEN `entryCompositionId` persists on the scene and the Compositions panel marks it
+- WHEN a template is opened THEN the editor's active composition is the designated main (falling back to the document / current default if none is set — backward compatible)
+- WHEN no main is designated THEN behavior is unchanged (no regression for existing templates)
+- WHEN the main composition is deleted THEN the designation clears (fall back to default)
+- WHEN saved/reloaded/exported THEN the designation round-trips; the runtime/export entry point honors it
+
+**Notes:** RECON FIRST the current active-on-load model — the main IS `activeCompositionId === null` (the document); sub-comps live in the registry (`apps/designer/src/renderer/state/slices/composition.ts`, `document.ts`). Decide whether "main" points at a registry comp or also covers the document, and how it maps to the runtime/export entry. Schema: optional `entryCompositionId` (non-breaking). UI: Compositions panel "Set as main" + indicator + open-on-main. (Composition reordering is a SEPARATE optional organizational feature — note it, don't fold it in.) Spec: `## ADDED` to the relevant designer capability. Tests: round-trip; open-on-main; delete-clears; no-designation fallback.
+
+## [ ] D-116 — finite sequence: animate first item IN and last item OUT before completion ⟨priority: medium⟩
+
+**What:** For a finite sequence, play the first item's `transitionIn` on entry and the last item's `transitionOut` (e.g. push-up) at the end — and signal the sequence's completion only AFTER the last item's OUT finishes, so the composition's outro fires after the content's exit (content-first / background-last). Today the first item appears abruptly and the last item freezes in place and closes simultaneously with the overall exit (the background may even close first).
+**Why:** The per-item transitions (`transitionIn`/`transitionOut`/`transitionMs`) exist but aren't applied at the first/last boundaries, and the sequence reports "complete" without playing the last item's exit — so the content-driven hold ends too early and the background closes over still-present content. This is the staggered exit the operator expects (and the D-105 content-first principle).
+**Acceptance:**
+
+- WHEN a finite sequence starts THEN its first item enters with `transitionIn` (not an abrupt cut-in)
+- WHEN a finite sequence reaches its last item and that item's dwell ends THEN the last item plays `transitionOut`, and ONLY THEN does the sequence signal completion
+- WHEN the sequence drives a content-driven hold THEN the parent/composition holds until that OUT completes, then plays its own outro — content exits first, background last (the background does NOT close while content is still on screen)
+- WHEN the sequence is infinite THEN behavior is unchanged (no last-item OUT/completion)
+- WHEN previewed and exported THEN identical (preview == export)
+
+**Notes:** RECON FIRST — this changes WHEN the sequence's completion signal fires (it feeds the content-driven hold / B-031 aggregation), so it's the high-risk playout path. Lives in the sequence runtime (`@cg/template-runtime`) + its completion signal. Align with D-105 (content-first/background-last exit). Schema likely unchanged (transition fields exist). Spec: `## MODIFIED`/`## ADDED` on `designer-playout-lifecycle` (sequence boundary transitions + completion timing). Tests: a runtime test asserting last-item OUT plays before completion and the parent outro follows it (ordering); first-item IN plays; infinite unchanged.
+
+## [ ] D-117 — multi-line text in ticker/sequence items on air (explicit \n + auto-wrap) ⟨priority: medium⟩
+
+**What:** Render ticker/sequence item text as multi-line on air: honor explicit `\n` line breaks in the item text AND auto-wrap long lines at the element's width. The two compose — a single item may contain authored breaks and have its long lines wrapped. The item's height adapts to the wrapped/broken content, and `align` / `verticalAlign` / `direction` (RTL) and the item transitions (push-up, etc.) all keep working with the taller, multi-line item.
+**Why:** Today an item renders single-line, so long text overflows or clips and there's no way to force a break (e.g. a two-line title/subtitle). Operators need both authored breaks and automatic wrapping for long Persian lines.
+**Acceptance:**
+
+- WHEN an item's text contains `\n` THEN it breaks at exactly those points on air
+- WHEN a line is longer than the element width THEN it auto-wraps to additional lines (no overflow/clip)
+- WHEN an item becomes multi-line THEN its layout height adapts and `align` / `verticalAlign` / RTL still position it correctly
+- WHEN a multi-line item enters/exits via its transition (e.g. push-up) THEN the transition animates the full multi-line block cleanly (no mid-line cut)
+- WHEN previewed and exported THEN identical (preview == export) for both ticker and sequence
+- WHEN an item is single-line THEN rendering is unchanged (no regression)
+
+**Notes:** RENDER change (`@cg/template-runtime` ticker/sequence rendering) — NOT the editor (that's D-118). Applies to BOTH ticker and sequence items. Schema: the text field already holds a string; `\n` needs no schema change — but if a max-lines or wrap toggle is wanted, add it optional/non-breaking (decide in design.md; default = wrap + honor `\n`, no cap). Watch the transition/measurement path: item height is now dynamic, so any code assuming fixed item height (push-up offsets, dwell layout, ticker scroll metrics) must use measured height. Spec: `## MODIFIED` the ticker/sequence rendering requirement on the relevant capability. Tests: a render/`d`-string-or-DOM unit test (explicit `\n` breaks; long line wraps; height adapts) + an E2E (two-line item renders + transitions correctly, preview==export), both ticker and sequence, incl. an RTL case.
+
+## [ ] D-118 — larger multi-line (textarea) input for ticker/sequence item text ⟨priority: low-medium⟩
+
+**What:** Replace the single-line item-text input in the ticker and sequence inspectors with a multi-line, resizable textarea, so operators can edit long text comfortably and insert explicit line breaks (Enter → `\n`). Pairs with D-117 (which renders those breaks on air).
+**Why:** The current single-line input can't hold long Persian copy comfortably and can't enter a line break at all (no Enter), so authored multi-line text (D-117) is impossible to create.
+**Acceptance:**
+
+- WHEN editing a ticker or sequence item's text THEN the control is a multi-line textarea, not a single-line input
+- WHEN the operator presses Enter in the textarea THEN a `\n` is inserted into the item text (does NOT commit/close the field)
+- WHEN the text is long THEN the textarea is comfortably sized and resizable/auto-growing (no tiny one-line box)
+- WHEN edits are made THEN they commit through the existing item-update store path (one undo entry per edit, RTL input intact)
+- WHEN the field is used THEN it follows the design system (shared primitives / vanilla-extract, no ad-hoc styling)
+
+**Notes:** UI/editor only — NO runtime/schema/render change (rendering is D-117). Lives in the ticker + sequence item inspectors (`apps/designer/src/renderer/features/inspector/...`). Reuse a shared textarea primitive (add one to `@cg/ui` / the renderer controls if none exists) so both ticker and sequence use the same control. Mind the keybinding: Enter must insert a newline, not trigger commit/submit; keep any commit-on-blur / explicit-commit behavior consistent with the other inspector fields. Spec: `## MODIFIED` the relevant designer inspector capability. Tests: a designer/E2E test that Enter inserts a newline (not commit), the value round-trips with embedded `\n`, and it commits via the normal path.

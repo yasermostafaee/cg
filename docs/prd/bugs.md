@@ -802,7 +802,7 @@ to timed `auto-out`.
 reaches a terminal state (settles, or is cleanly stoppable) instead of hanging on air. Capability:
 `designer-playout-lifecycle`.
 
-## [~] B-031 — a content-driven nested composition does not drive its parent's hold, so the parent never closes on the nested content ⟨priority: high⟩ — D-104 follow-up (distinct from B-030); fixing on `fix/nested-content-drives-parent-hold` (`openspec/changes/nested-content-drives-parent-hold`)
+## [x] B-031 — a content-driven nested composition does not drive its parent's hold, so the parent never closes on the nested content ⟨priority: high⟩ — D-104 follow-up (distinct from B-030); fixing on `fix/nested-content-drives-parent-hold` (`openspec/changes/nested-content-drives-parent-hold`)
 
 > A composition instance whose own playout is content-driven (a "coordinator") is SKIPPED by its parent's
 > aggregated content-wait (D-104's `contentTreeWait` / `startContentTree` skip nested coordinators, assuming
@@ -826,7 +826,7 @@ reaches a terminal state (settles, or is cleanly stoppable) instead of hanging o
 **Fix:** runtime waits on a content-driven nested child's reset-safe `whenSettled()` (in `aggregateContentWait`) instead of skipping it; the preview's `hasAnyContentIn` recurses nested instances. Honors `drivesHold`; `startContentTree` unchanged (no double-start). The ticker-runtime "finite root self-settle past a nested infinite content-driven child" test is rewritten (that scenario now holds until `stop()`).
 **Regression test:** `@cg/template-runtime` tests: (1) a parent with a content-driven nested child (finite content, `drivesHold` default) holds until the nested content completes then settles; (2) `drivesHold === false` on the nested item makes the parent NOT wait on it. Plus a designer/E2E test: the preview offers content-driven hold on a parent whose only content is nested. Capability: `designer-playout-lifecycle`.
 
-## [~] B-032 — timed hold (`holdMs`) ignored for a content-less auto-out / loop-cycle composition ⟨priority: high⟩ — half 1: persist + bake holdMs (`openspec/changes/persist-timed-hold`, merged); half 2: resolve a content-less content-driven hold → timed at the boundary on `fix/content-less-timed-hold-resolution` (`openspec/changes/resolve-content-less-hold-source`, local/UNPUSHED)
+## [x] B-032 — timed hold (`holdMs`) ignored for a content-less auto-out / loop-cycle composition ⟨priority: high⟩ — half 1: persist + bake holdMs (`openspec/changes/persist-timed-hold`, merged); half 2: resolve a content-less content-driven hold → timed at the boundary on `fix/content-less-timed-hold-resolution` (`openspec/changes/resolve-content-less-hold-source`, local/UNPUSHED)
 
 > A content-less `auto-out` / `loop-cycle` composition with a timed `holdMs` closes ~immediately on
 > EXPORT / on-air (any value behaving like 0). Root cause (RECON): `holdMs` was preview-session-only —
@@ -850,3 +850,25 @@ preview/rundown session override.
 loop-cycle); a designer E2E for the inspector `holdMs` control (appears for timed auto-out / loop-cycle,
 persists across a mode round-trip, hidden for manual); the `content-less-timed-hold` runtime + preview
 guards. Capability: `designer-playout-lifecycle`.
+
+## [ ] B-033 — preview replay does not re-arm the content-driven hold (closes instantly on 2nd play) ⟨priority: high⟩
+
+> In the preview, a content-driven hold waits correctly on the FIRST play, but pressing Play again (without reopening) makes it close instantly — it no longer waits for content. Closing and reopening the preview fixes it.
+
+**Repro:** 1) Open a scene whose content-driven hold waits on a finite content element (own or nested). 2) Preview → Play; confirm it holds until the content completes. 3) Without reopening, press Play again.
+**Expected:** every replay re-arms the hold and waits for content exactly like the first play.
+**Actual:** the 2nd+ play ignores content and closes immediately; only reopening the preview restores correct behavior.
+**Env:** Designer preview (runtime `@cg/template-runtime` reset/replay path + the preview Play control).
+**Root cause / fix:** replay isn't fully resetting the content-completion state, so the coordinator's wait sees stale "already complete" drivers (the child's `whenComplete`/`whenSettled` is re-minted on `reset()` per B-031 — confirm replay actually triggers that reset for every driver and re-arms the coordinator's captured wait). On replay, fully reset content drivers + re-arm the content-driven hold. RECON FIRST.
+**Regression test:** a runtime test that resets+replays a content-driven scene and asserts the hold re-arms (waits again) on the 2nd play; a preview/E2E play-twice guard. Capability: `designer-playout-lifecycle`.
+
+## [ ] B-034 — a hidden ticker/sequence still affects playout (drives the hold, renders, shows in preview timing) ⟨priority: high⟩
+
+> Hiding a content layer (ticker/sequence, possibly loop-infinite) should make it fully inert, but it still drives the content-driven hold, still renders, and still appears in the preview timing controls.
+
+**Repro:** 1) A composition with a ticker/sequence (e.g. `repeat: infinite`). 2) Hide that layer (`visible: false`). 3) Play / preview.
+**Expected:** a hidden content element is fully inert — it does NOT drive the hold, does NOT render, and does NOT appear (settings or effects) in the preview timing controls.
+**Actual:** it still drives the hold (an infinite one freezes the graphic), still renders/affects output, and still shows in preview timing.
+**Env:** runtime `@cg/template-runtime` (hold-driver aggregation + scene render) + Designer preview timing UI (`PlayoutSection.tsx` driver walk, `PreviewScopeTiming.tsx`).
+**Root cause / fix:** visibility isn't consulted anywhere in the hold-driver determination (confirmed). Rule: `visible === false` ⟹ excluded from hold drivers (regardless of `drivesHold`/`holdOverrides`), not rendered, not listed in preview timing. Apply in the driver predicate (runtime + the D-107/D-112 walks) and the render/timing paths.
+**Regression test:** a hidden infinite driver does NOT force an infinite hold (parent/comp still settles); a hidden element is absent from the preview timing list and from render. Capability: `designer-playout-lifecycle`.
