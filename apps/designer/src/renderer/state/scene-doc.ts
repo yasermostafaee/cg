@@ -225,7 +225,11 @@ export function ensureCompositions(scene: Scene): { scene: Scene; activeId: stri
   if (comps.length > 0) {
     // D-025 — distribute any legacy GLOBAL fields/bindings into the owning comps.
     const next = migrateGlobalFieldsToCompositions({ ...scene, layers: [] });
-    return { scene: next, activeId: comps[0]?.id ?? null };
+    // D-115 — open the explicitly designated MAIN/entry composition when set + still valid; else
+    // fall back to the first composition (the prior list-order default, so old scenes are unchanged).
+    const entry = scene.entryCompositionId;
+    const entryValid = entry !== undefined && comps.some((c) => c.id === entry);
+    return { scene: next, activeId: entryValid ? entry : (comps[0]?.id ?? null) };
   }
   const rootLayers = Array.isArray(scene.layers) ? scene.layers : [];
   if (rootLayers.length > 0) {

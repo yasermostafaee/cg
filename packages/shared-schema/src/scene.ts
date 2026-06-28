@@ -255,6 +255,14 @@ export const SceneSchema = z
      * scenes authored before the feature validate unchanged.
      */
     compositions: z.array(CompositionSchema).optional(),
+    /**
+     * D-115 — the explicitly designated MAIN / entry composition: which composition the editor
+     * opens on by default (and the template's intended entry), independent of list order. A
+     * `compositions[].id`. Absent ⇒ no designation: fall back to the first composition (the prior
+     * default), so scenes authored before this field open + play unchanged. Cleared when the
+     * referenced composition is deleted.
+     */
+    entryCompositionId: IdSchema.optional(),
     metadata: SceneMetadataSchema,
   })
   .superRefine(refineLifecycle);
