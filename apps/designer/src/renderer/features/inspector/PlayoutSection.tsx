@@ -7,12 +7,15 @@ import {
   type PlayoutMode,
   type Scene,
 } from '@cg/shared-schema';
+import { ChevronRight } from 'lucide-react';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import { Select } from '../../ui/Select.js';
 import { designerStore } from '../../state/store.js';
 import { CollapseSection } from './CollapseSection.js';
 import * as s from './InspectorPanel.css.js';
+import * as cls from './PlayoutSection.css.js';
 
 const MODE_LABELS: Record<PlayoutMode, string> = {
   manual: 'Manual — hold until stop',
@@ -95,6 +98,69 @@ function contentHoldElementsOf(scene: Scene): ContentHoldItem[] {
   return out;
 }
 
+interface NestedHoldGroup {
+  /** The nested INSTANCE element id — stable React key (a comp can be instanced twice). */
+  key: string;
+  /** The referenced composition to drill into. */
+  compositionId: string;
+  /** The instance's name (what the operator sees and drills into). */
+  name: string;
+  /** Hold-driving items reachable through this instance (recursive). */
+  count: number;
+}
+
+/**
+ * D-108 — the active composition's IMMEDIATE nested composition instances that
+ * contribute hold-driving content (a `ticker` / `sequence` / countdown `clock`
+ * with `drivesHold !== false`), with a RECURSIVE count of such items reachable
+ * through each. `drivesHold` lives on the SHARED child element, so the parent
+ * surfaces these READ-ONLY (drill in to toggle). Only immediate instances are
+ * listed; deeper nesting surfaces one level at a time as the operator drills in.
+ * Counting recurses the referenced composition's groups AND its own deeper nested
+ * instances (cycle-guarded), so a deep-only case still surfaces its immediate
+ * instance — mirroring `hasContentElement`'s recursion.
+ */
+function nestedHoldGroupsOf(scene: Scene): NestedHoldGroup[] {
+  const countIn = (compId: string, seen: Set<string>): number => {
+    if (seen.has(compId)) return 0;
+    seen.add(compId);
+    const comp = scene.compositions?.find((c) => c.id === compId);
+    if (comp === undefined) return 0;
+    let n = 0;
+    const walk = (children: readonly Element[]): void => {
+      for (const el of children) {
+        if (el.type === 'ticker' || el.type === 'sequence') {
+          if (el.drivesHold !== false) n += 1;
+        } else if (el.type === 'clock' && el.mode === 'countdown') {
+          if (el.drivesHold !== false) n += 1;
+        } else if (el.type === 'container') {
+          walk(el.children);
+        } else if (el.type === 'composition') {
+          n += countIn(el.compositionId, seen);
+        }
+      }
+    };
+    for (const l of comp.layers) walk(l.children);
+    return n;
+  };
+
+  const groups: NestedHoldGroup[] = [];
+  const findInstances = (children: readonly Element[]): void => {
+    for (const el of children) {
+      if (el.type === 'composition') {
+        const count = countIn(el.compositionId, new Set<string>());
+        if (count > 0) {
+          groups.push({ key: el.id, compositionId: el.compositionId, name: el.name, count });
+        }
+      } else if (el.type === 'container') {
+        findInstances(el.children);
+      }
+    }
+  };
+  for (const l of scene.layers) findInstances(l.children);
+  return groups;
+}
+
 /** Suffix duplicate display names "(1)/(2)/…" so each checklist row is identifiable. */
 function disambiguate(names: readonly string[]): string[] {
   const counts = new Map<string, number>();
@@ -159,38 +225,73 @@ const checkTypeStyle: CSSProperties = { color: colors.textMuted, fontSize: '0.62
  * elements close the graphic. Pre-checked (all participate by default); unchecking
  * one sets its `drivesHold: false` so it no longer gates the hold (it still runs).
  * Lists the active composition's own tickers / sequences / countdown clocks
- * (recursing groups). When the only content lives in nested compositions, points
- * the operator to drill in (those are shared children, tuned in their own section).
+ * (recursing groups). D-108 — below it, a READ-ONLY section surfaces hold-driving
+ * content inside nested composition instances (which drive the parent's hold via
+ * D-104) with a drill-in, since `drivesHold` lives on the shared child and must be
+ * edited there. Falls back to a drill-in hint only when neither surface has rows.
  */
 function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
   const items = contentHoldElementsOf(scene);
-  if (items.length === 0) {
-    return (
-      <p style={hintStyle}>
-        This composition’s content lives in nested compositions — open each to choose which of its
-        content closes the graphic.
-      </p>
-    );
-  }
+  // D-108 — hold-driving content inside nested composition instances drives the
+  // parent's hold too (D-104), but `drivesHold` is on the SHARED child, so surface
+  // it READ-ONLY with a drill-in rather than a toggle.
+  const nested = nestedHoldGroupsOf(scene);
   const labels = disambiguate(items.map((it) => it.name));
+  const nestedLabels = disambiguate(nested.map((g) => g.name));
   return (
-    <div className={s.row} style={{ display: 'block' }}>
-      <p style={{ ...mutedStyle, margin: '0 0 0.2rem' }}>Which content closes the graphic?</p>
-      <div style={checklistStyle}>
-        {items.map((it, i) => (
-          <label key={it.id} style={checkRowStyle}>
-            <input
-              type="checkbox"
-              checked={it.drivesHold}
-              aria-label={`${labels[i] ?? it.name} drives the hold`}
-              onChange={(e) => designerStore.setElementDrivesHold(it.id, e.target.checked)}
-            />
-            <span style={{ color: colors.text }}>{labels[i] ?? it.name}</span>
-            <span style={checkTypeStyle}>{TYPE_LABEL[it.type]}</span>
-          </label>
-        ))}
-      </div>
-    </div>
+    <>
+      {items.length > 0 && (
+        <div className={s.row} style={{ display: 'block' }}>
+          <p style={{ ...mutedStyle, margin: '0 0 0.2rem' }}>Which content closes the graphic?</p>
+          <div style={checklistStyle}>
+            {items.map((it, i) => (
+              <label key={it.id} style={checkRowStyle}>
+                <input
+                  type="checkbox"
+                  checked={it.drivesHold}
+                  aria-label={`${labels[i] ?? it.name} drives the hold`}
+                  onChange={(e) => designerStore.setElementDrivesHold(it.id, e.target.checked)}
+                />
+                <span style={{ color: colors.text }}>{labels[i] ?? it.name}</span>
+                <span style={checkTypeStyle}>{TYPE_LABEL[it.type]}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {nested.length > 0 && (
+        <div className={s.row} style={{ display: 'block' }}>
+          <p style={{ ...mutedStyle, margin: '0 0 0.2rem' }}>
+            Also inside nested compositions — read-only; open each to edit:
+          </p>
+          <div style={checklistStyle}>
+            {nested.map((g, i) => (
+              <Button
+                key={g.key}
+                variant="bare"
+                className={cls.nestedRow}
+                aria-label={`Open ${nestedLabels[i] ?? g.name} to choose which of its content closes the graphic`}
+                onClick={() => designerStore.setActiveComposition(g.compositionId)}
+              >
+                <Icon icon={ChevronRight} size={12} flipRtl />
+                <span>{nestedLabels[i] ?? g.name}</span>
+                <span style={checkTypeStyle}>
+                  {g.count} item{g.count === 1 ? '' : 's'}
+                </span>
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {items.length === 0 && nested.length === 0 && (
+        <p style={hintStyle}>
+          This composition’s content lives in nested compositions — open each to choose which of its
+          content closes the graphic.
+        </p>
+      )}
+    </>
   );
 }
 
