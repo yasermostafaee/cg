@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import {
   activeRangeOf,
   playoutOf,
+  type Composition,
   type Element,
   type HoldSource,
   type PlayoutMode,
@@ -118,72 +119,152 @@ function contentHoldElementsOf(scene: Scene): ContentHoldItem[] {
   return out;
 }
 
+type NestedInstance = Extract<Element, { type: 'composition' }>;
+
+/**
+ * D-112 — is this referenced composition a content-driven "coordinator" (the same predicate the
+ * runtime uses: `mode !== 'manual' && holdSource === 'content-driven'`)? A coordinator nested child
+ * self-settles, so its PARENT awaits its `whenSettled` rather than aggregating its content per-element
+ * — a per-instance override on it would be INERT. So the parent surfaces a coordinator child's content
+ * READ-ONLY (drill in to edit the child's own participation), never as a writable override.
+ */
+function isCoordinatorComp(comp: Composition): boolean {
+  const p = playoutOf(comp);
+  return p.mode !== 'manual' && p.holdSource === 'content-driven';
+}
+
+/** D-112 — one writable nested driver row: the referenced comp's OWN direct content element. */
+interface NestedHoldDriver {
+  /** The nested content element id — the per-instance override key. */
+  id: string;
+  name: string;
+  type: ContentKind;
+  /** The element's OWN authored flag (absent ⇒ drives). */
+  drivesHold: boolean;
+  /** `repeat: 'infinite'` (a countdown clock is always finite). */
+  infinite: boolean;
+  /** The instance's stored override for this element (undefined ⇒ none → fall back to `drivesHold`). */
+  override: boolean | undefined;
+  /** D-112 — effective participation in THIS parent's hold = `override ?? drivesHold`. */
+  effective: boolean;
+}
+
 interface NestedHoldGroup {
-  /** The nested INSTANCE element id — stable React key (a comp can be instanced twice). */
+  /** The nested INSTANCE element id — override target + stable React key (a comp can be instanced twice). */
   key: string;
   /** The referenced composition to drill into. */
   compositionId: string;
   /** The instance's name (what the operator sees and drills into). */
   name: string;
-  /** Hold-driving items reachable through this instance (recursive). */
-  count: number;
-  /** D-111 — how many of those drivers have `repeat: 'infinite'` (force a hold-until-stop). */
-  infiniteCount: number;
+  /**
+   * D-112 — false when the referenced comp is a content-driven coordinator: the per-instance
+   * override would be inert (the parent awaits its settle), so its content is surfaced READ-ONLY.
+   */
+  writable: boolean;
+  /** D-112 — the referenced comp's OWN DIRECT content, as WRITABLE rows (this instance's override). */
+  drivers: NestedHoldDriver[];
+  /** Hold-eligible content reachable through this instance's OWN deeper nested instances (drill in to edit). */
+  deeperCount: number;
+  /** Recursive EFFECTIVE drivers (own direct + deeper, per-level overrides applied) — for the all-infinite alert. */
+  effectiveCount: number;
+  /** Recursive EFFECTIVE + infinite drivers. */
+  effectiveInfinite: number;
 }
 
 /**
- * D-108 — the active composition's IMMEDIATE nested composition instances that
- * contribute hold-driving content (a `ticker` / `sequence` / countdown `clock`
- * with `drivesHold !== false`), with a RECURSIVE count of such items reachable
- * through each. `drivesHold` lives on the SHARED child element, so the parent
- * surfaces these READ-ONLY (drill in to toggle). Only immediate instances are
- * listed; deeper nesting surfaces one level at a time as the operator drills in.
- * Counting recurses the referenced composition's groups AND its own deeper nested
- * instances (cycle-guarded), so a deep-only case still surfaces its immediate
- * instance — mirroring `hasContentElement`'s recursion.
+ * D-108 + D-112 — the active composition's IMMEDIATE nested composition instances that contribute
+ * hold-eligible content. D-112 makes each instance's OWN DIRECT content (recursing containers, NOT
+ * deeper instances) WRITABLE: the parent toggles whether each drives ITS hold via a per-instance
+ * `holdOverrides` on the instance element (effective = `override ?? element.drivesHold`), without
+ * touching the shared child. Deeper nested content (inside this instance's own instances) carries
+ * its OWN overrides and is edited by drilling in — one level at a time (cascade per level). Also
+ * reports recursive EFFECTIVE driver counts (overrides applied at each level) for the all-infinite
+ * alert. Cycle-guarded.
  */
 function nestedHoldGroupsOf(scene: Scene): NestedHoldGroup[] {
-  const countIn = (compId: string, seen: Set<string>): { count: number; infiniteCount: number } => {
-    if (seen.has(compId)) return { count: 0, infiniteCount: 0 };
-    seen.add(compId);
-    const comp = scene.compositions?.find((c) => c.id === compId);
-    if (comp === undefined) return { count: 0, infiniteCount: 0 };
-    let count = 0;
-    let infiniteCount = 0;
+  const analyze = (
+    inst: NestedInstance,
+    seen: Set<string>,
+  ): {
+    drivers: NestedHoldDriver[];
+    eligible: number;
+    effective: number;
+    effectiveInfinite: number;
+  } => {
+    const empty = {
+      drivers: [] as NestedHoldDriver[],
+      eligible: 0,
+      effective: 0,
+      effectiveInfinite: 0,
+    };
+    if (seen.has(inst.compositionId)) return empty;
+    const seen2 = new Set([...seen, inst.compositionId]);
+    const comp = scene.compositions?.find((c) => c.id === inst.compositionId);
+    if (comp === undefined) return empty;
+    const overrides = inst.holdOverrides;
+    const drivers: NestedHoldDriver[] = [];
+    let eligible = 0;
+    let effective = 0;
+    let effectiveInfinite = 0;
     const walk = (children: readonly Element[]): void => {
       for (const el of children) {
-        if (el.type === 'ticker' || el.type === 'sequence') {
-          if (el.drivesHold !== false) {
-            count += 1;
-            if (el.repeat === 'infinite') infiniteCount += 1;
+        if (
+          el.type === 'ticker' ||
+          el.type === 'sequence' ||
+          (el.type === 'clock' && el.mode === 'countdown')
+        ) {
+          const drivesHold = el.drivesHold !== false;
+          const override = overrides?.[el.id];
+          const eff = override !== undefined ? override : drivesHold;
+          const infinite =
+            (el.type === 'ticker' || el.type === 'sequence') && el.repeat === 'infinite';
+          drivers.push({
+            id: el.id,
+            name: el.name,
+            type: el.type === 'clock' ? 'clock' : el.type,
+            drivesHold,
+            infinite,
+            override,
+            effective: eff,
+          });
+          eligible += 1;
+          if (eff) {
+            effective += 1;
+            if (infinite) effectiveInfinite += 1;
           }
-        } else if (el.type === 'clock' && el.mode === 'countdown') {
-          if (el.drivesHold !== false) count += 1;
         } else if (el.type === 'container') {
           walk(el.children);
         } else if (el.type === 'composition') {
-          const sub = countIn(el.compositionId, seen);
-          count += sub.count;
-          infiniteCount += sub.infiniteCount;
+          // Deeper level — counts cascade (its OWN overrides apply), but its drivers are edited there.
+          const sub = analyze(el, seen2);
+          eligible += sub.eligible;
+          effective += sub.effective;
+          effectiveInfinite += sub.effectiveInfinite;
         }
       }
     };
     for (const l of comp.layers) walk(l.children);
-    return { count, infiniteCount };
+    return { drivers, eligible, effective, effectiveInfinite };
   };
 
   const groups: NestedHoldGroup[] = [];
   const findInstances = (children: readonly Element[]): void => {
     for (const el of children) {
       if (el.type === 'composition') {
-        const { count, infiniteCount } = countIn(el.compositionId, new Set<string>());
-        if (count > 0) {
+        const a = analyze(el, new Set<string>());
+        if (a.eligible > 0) {
+          const comp = scene.compositions?.find((c) => c.id === el.compositionId);
           groups.push({
             key: el.id,
             compositionId: el.compositionId,
             name: el.name,
-            count,
-            infiniteCount,
+            // A coordinator immediate child ignores per-instance overrides (it self-settles), so
+            // its content is read-only here — edit it by drilling into the child.
+            writable: comp === undefined ? true : !isCoordinatorComp(comp),
+            drivers: a.drivers,
+            deeperCount: a.eligible - a.drivers.length,
+            effectiveCount: a.effective,
+            effectiveInfinite: a.effectiveInfinite,
           });
         }
       } else if (el.type === 'container') {
@@ -253,6 +334,18 @@ const checkRowStyle: CSSProperties = {
   cursor: 'pointer',
 };
 const checkTypeStyle: CSSProperties = { color: colors.textMuted, fontSize: '0.62rem' };
+// D-112 — a nested instance's drill-in header plus its writable per-driver rows, indented under it.
+const nestedGroupStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.14rem',
+};
+const nestedDriversStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.18rem',
+  marginLeft: '1.15rem',
+};
 const holdMsNumStyle: CSSProperties = {
   background: colors.panelMuted,
   color: colors.text,
@@ -290,28 +383,29 @@ function InfiniteWarn({ title }: { title: string }): JSX.Element {
  * elements close the graphic. Pre-checked (all participate by default); unchecking
  * one sets its `drivesHold: false` so it no longer gates the hold (it still runs).
  * Lists the active composition's own tickers / sequences / countdown clocks
- * (recursing groups). D-108 — below it, a READ-ONLY section surfaces hold-driving
- * content inside nested composition instances (which drive the parent's hold via
- * D-104) with a drill-in, since `drivesHold` lives on the shared child and must be
- * edited there. Falls back to a drill-in hint only when neither surface has rows.
- * D-111 — any hold driver authored with `repeat: 'infinite'` never completes, so its
- * row is flagged ("loops forever"); when EVERY driver is infinite a prominent alert
- * says the graphic won't auto-close (the hold runs until stop).
+ * (recursing groups). D-112 — below it, each nested composition instance's OWN content is shown as
+ * WRITABLE rows: the checkbox reflects the EFFECTIVE participation (the per-instance override if set,
+ * else the element's own `drivesHold`) and toggling it writes a `holdOverrides` entry on the INSTANCE
+ * (not the shared child) — so two instances of the same child differ. The drill-in stays (to edit the
+ * child or a deeper instance level). Falls back to a drill-in hint only when neither surface has rows.
+ * D-111 (folded into D-112) — any EFFECTIVELY-driving `repeat: 'infinite'` row is flagged
+ * ("loops forever"); when EVERY effective driver is infinite a prominent alert says the graphic won't
+ * auto-close (the hold runs until stop).
  */
 function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
   const items = contentHoldElementsOf(scene);
-  // D-108 — hold-driving content inside nested composition instances drives the
-  // parent's hold too (D-104), but `drivesHold` is on the SHARED child, so surface
-  // it READ-ONLY with a drill-in rather than a toggle.
+  // D-112 — hold-driving content inside nested composition instances drives the parent's hold too
+  // (D-104); each instance's own direct content is now WRITABLE per-instance (its `holdOverrides`).
   const nested = nestedHoldGroupsOf(scene);
-  // D-111 — a content-driven hold is `Promise.all` over its drivers, so ANY infinite-repeat
-  // driver (`repeat: 'infinite'`, still participating) keeps the graphic on air until stop().
-  // Flag each such row; escalate to a prominent alert when EVERY driver (own + nested) is
-  // infinite, so nothing can end the hold on content.
+  // D-111/D-112 — a content-driven hold is `Promise.all` over its EFFECTIVE drivers, so ANY
+  // infinite-repeat driver (still effectively participating) keeps the graphic on air until stop().
+  // Flag each such row; escalate to a prominent alert when EVERY effective driver (own + nested,
+  // per-instance overrides applied) is infinite, so nothing can end the hold on content.
   const ownDrivers = items.filter((it) => it.drivesHold);
-  const totalDrivers = ownDrivers.length + nested.reduce((n, g) => n + g.count, 0);
+  const totalDrivers = ownDrivers.length + nested.reduce((n, g) => n + g.effectiveCount, 0);
   const infiniteDrivers =
-    ownDrivers.filter((it) => it.infinite).length + nested.reduce((n, g) => n + g.infiniteCount, 0);
+    ownDrivers.filter((it) => it.infinite).length +
+    nested.reduce((n, g) => n + g.effectiveInfinite, 0);
   const allInfinite = infiniteDrivers > 0 && infiniteDrivers === totalDrivers;
   const labels = disambiguate(items.map((it) => it.name));
   const nestedLabels = disambiguate(nested.map((g) => g.name));
@@ -354,29 +448,76 @@ function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
       {nested.length > 0 && (
         <div className={s.row} style={{ display: 'block' }}>
           <p style={{ ...mutedStyle, margin: '0 0 0.2rem' }}>
-            Also inside nested compositions — read-only; open each to edit:
+            Nested content — choose which closes THIS graphic (per instance):
           </p>
           <div style={checklistStyle}>
-            {nested.map((g, i) => (
-              <Button
-                key={g.key}
-                variant="bare"
-                className={cls.nestedRow}
-                aria-label={`Open ${nestedLabels[i] ?? g.name} to choose which of its content closes the graphic`}
-                onClick={() => designerStore.setActiveComposition(g.compositionId)}
-              >
-                <Icon icon={ChevronRight} size={12} flipRtl />
-                <span>{nestedLabels[i] ?? g.name}</span>
-                <span style={checkTypeStyle}>
-                  {g.count} item{g.count === 1 ? '' : 's'}
-                </span>
-                {g.infiniteCount > 0 && (
-                  <InfiniteWarn
-                    title={`An element inside “${nestedLabels[i] ?? g.name}” has repeat: infinite, so it never completes — the graphic holds until stop(). Open it to give that element a finite repeat or exclude it.`}
-                  />
-                )}
-              </Button>
-            ))}
+            {nested.map((g, i) => {
+              const instanceLabel = nestedLabels[i] ?? g.name;
+              const driverLabels = disambiguate(g.drivers.map((d) => d.name));
+              return (
+                <div key={g.key} style={nestedGroupStyle}>
+                  <Button
+                    variant="bare"
+                    className={cls.nestedRow}
+                    aria-label={`Open ${instanceLabel} to edit its content${
+                      g.deeperCount > 0 ? ' or its deeper nested compositions' : ''
+                    }`}
+                    onClick={() => designerStore.setActiveComposition(g.compositionId)}
+                  >
+                    <Icon icon={ChevronRight} size={12} flipRtl />
+                    <span>{instanceLabel}</span>
+                    {g.deeperCount > 0 && (
+                      <span style={checkTypeStyle}>+{g.deeperCount} inside — open</span>
+                    )}
+                  </Button>
+                  {g.writable && g.drivers.length > 0 && (
+                    <div style={nestedDriversStyle}>
+                      {g.drivers.map((d, di) => {
+                        const driverLabel = driverLabels[di] ?? d.name;
+                        return (
+                          <label key={`${g.key}:${d.id}`} style={checkRowStyle}>
+                            <input
+                              type="checkbox"
+                              checked={d.effective}
+                              aria-label={`${driverLabel} in ${instanceLabel} drives the hold`}
+                              onChange={(e) =>
+                                designerStore.setHoldOverride(
+                                  g.key,
+                                  d.id,
+                                  // Clear the override when it matches the child's own default
+                                  // (keeps stored data minimal; the fallback rule governs).
+                                  e.target.checked === d.drivesHold ? undefined : e.target.checked,
+                                )
+                              }
+                            />
+                            <span style={{ color: colors.text }}>{driverLabel}</span>
+                            <span style={checkTypeStyle}>{TYPE_LABEL[d.type]}</span>
+                            {d.effective && d.infinite && (
+                              <InfiniteWarn
+                                title={`“${driverLabel}” has repeat: infinite, so it never completes — the graphic holds until stop(). Toggle it off here or give it a finite repeat to let the graphic auto-close.`}
+                              />
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {!g.writable && (
+                    <div style={nestedDriversStyle}>
+                      <span style={checkTypeStyle}>
+                        {g.effectiveCount} item{g.effectiveCount === 1 ? '' : 's'} — content-driven;
+                        open to edit
+                      </span>
+                      {g.effectiveInfinite > 0 && (
+                        <InfiniteWarn
+                          title={`Content inside “${instanceLabel}” has repeat: infinite — it self-settles only on stop(), so this graphic won't auto-close. Open it to give that content a finite repeat or exclude it there.`}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

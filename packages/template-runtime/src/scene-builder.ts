@@ -194,6 +194,9 @@ function buildComposition(element: CompositionElement, ctx: BuildCtx): HTMLEleme
     name: element.name,
     compositionId: element.compositionId,
     scope: childScope,
+    // D-112 — carry the instance's per-instance hold overrides so the PARENT's aggregation can
+    // re-filter this child's content (the override lives on the instance, not the shared child).
+    holdOverrides: element.holdOverrides,
   });
   const childCtx: BuildCtx = {
     ...ctx,

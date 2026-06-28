@@ -339,6 +339,12 @@ export interface FieldScopeChild {
   /** The referenced child composition id (resolved against `scene.compositions`). */
   compositionId: string;
   scope: FieldScope;
+  /**
+   * D-112 — the instance element's per-instance hold overrides (keyed by nested content element id).
+   * Applied by the PARENT's content-wait aggregation to this child's OWN content; absent key ⇒ the
+   * element's own `drivesHold`. Lives on the instance, so two instances of the same child differ.
+   */
+  holdOverrides?: Readonly<Record<string, boolean>> | undefined;
 }
 
 /** A nested element + its node + animation, collected during comp expansion. */
