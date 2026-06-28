@@ -96,6 +96,18 @@ import type {
   UpdateOptions,
 } from './types.js';
 
+/**
+ * D-112 — one of a scope's OWN hold-eligible content sources (ticker / countdown clock / sequence),
+ * UNFILTERED by `drivesHold`, so the PARENT's aggregation can re-filter it per the instance override
+ * (which may force-include a child-excluded element or force-exclude a child-included one). `drivesHold`
+ * is the element's OWN authored flag (absent ⇒ `true`); `id` is the content element's stable id.
+ */
+interface ContentDriver {
+  id: string;
+  drivesHold: boolean;
+  whenComplete: () => Promise<void>;
+}
+
 /** D-026 — a node in the controller tree paralleling the field-scope tree. */
 interface ScopeNode {
   controller: PlayoutController;
@@ -107,6 +119,18 @@ interface ScopeNode {
   startOwnContent: () => void;
   /** D-104 — this scope's OWN content completion (`Promise.all` of its content sources), or null if it has none. */
   ownContentWait: () => Promise<void> | null;
+  /**
+   * D-112 — this scope's OWN hold-eligible drivers, UNFILTERED (each with its own `drivesHold`), so
+   * an instancing PARENT can re-filter them by its per-instance `holdOverrides` (see {@link
+   * nestedContentWait}). `ownContentWait` is the `drivesHold`-only subset used by THIS scope's own hold.
+   */
+  contentDrivers: readonly ContentDriver[];
+  /**
+   * D-112 — the per-instance hold overrides from the composition-instance element that produced THIS
+   * scope (keyed by nested content element id), set by the instancing parent. Applied to
+   * `contentDrivers` when the PARENT aggregates; absent key ⇒ the element's own `drivesHold`.
+   */
+  holdOverrides?: Readonly<Record<string, boolean>> | undefined;
   /** D-104 — composition-INSTANCE children only (NOT repeater rows), for content aggregation up the tree. */
   instanceChildren: ScopeNode[];
   /**
@@ -153,16 +177,48 @@ function aggregateContentWait(
     if (child.isCoordinator) {
       waits.push(child.whenSettled());
     } else {
-      const childWait = contentTreeWait(child);
+      const childWait = nestedContentWait(child);
       if (childWait !== null) waits.push(childWait);
     }
   }
   return waits.length > 0 ? Promise.all(waits).then(() => undefined) : null;
 }
 
-/** A node's recursive content completion (see {@link aggregateContentWait}). */
-function contentTreeWait(node: ScopeNode): Promise<void> | null {
-  return aggregateContentWait(node.ownContentWait(), node.instanceChildren);
+/**
+ * D-112 — does content driver `d` drive the hold of the PARENT that instanced its scope? The
+ * instance's per-instance `overrides[d.id]` wins when defined; otherwise the element's own
+ * `drivesHold`. This is consulted ONLY by the parent's aggregation — the child's own hold uses
+ * `ownContentWait` (its own `drivesHold`), and content still starts/runs regardless.
+ */
+function effectiveDrivesParentHold(
+  overrides: Readonly<Record<string, boolean>> | undefined,
+  d: ContentDriver,
+): boolean {
+  const o = overrides?.[d.id];
+  return o !== undefined ? o : d.drivesHold;
+}
+
+/**
+ * D-112 — a NON-coordinator nested child's content as seen by its PARENT: its OWN drivers re-filtered
+ * by THIS instance's `holdOverrides` (so a parent can include/exclude a nested element without
+ * touching the shared child), PLUS its instance children (a coordinator grandchild self-settles;
+ * a non-coordinator grandchild recurses, applying ITS OWN overrides — cascade per level). Replaces
+ * the old `contentTreeWait` (which used `ownContentWait`, baking only the child's own `drivesHold`).
+ */
+function nestedContentWait(node: ScopeNode): Promise<void> | null {
+  const waits: Promise<void>[] = [];
+  for (const d of node.contentDrivers) {
+    if (effectiveDrivesParentHold(node.holdOverrides, d)) waits.push(d.whenComplete());
+  }
+  for (const child of node.instanceChildren) {
+    if (child.isCoordinator) {
+      waits.push(child.whenSettled());
+    } else {
+      const childWait = nestedContentWait(child);
+      if (childWait !== null) waits.push(childWait);
+    }
+  }
+  return waits.length > 0 ? Promise.all(waits).then(() => undefined) : null;
 }
 
 /**
@@ -356,6 +412,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // D-107 — content whose `drivesHold !== false` (absent ⇒ participates) DRIVES the
       // content-driven hold; the full `scope*` driver arrays still START/STOP every
       // content element (this is about the HOLD, not starting/visibility).
+      // D-112 — every hold-eligible OWN driver, UNFILTERED by `drivesHold`, so an instancing parent
+      // can re-filter by its per-instance override (the `hold*` arrays stay the own-hold subset).
+      const contentDrivers: ContentDriver[] = [];
       const holdTickers: TickerDriver[] = [];
       const scopeTickers = scope.tickers.map((t) => {
         // D-028 inner loop — the element's authored repeat/boundary. D-102 Phase 1 — the session
@@ -402,6 +461,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         tickers.push(driver);
         // D-107 — joins the hold wait unless explicitly excluded.
         if (t.element.drivesHold !== false) holdTickers.push(driver);
+        // D-112 — exposed UNFILTERED so a parent instance override can re-filter it.
+        contentDrivers.push({
+          id: t.element.id,
+          drivesHold: t.element.drivesHold !== false,
+          whenComplete: () => driver.whenComplete(),
+        });
         return driver;
       });
       // D-027 — clock drivers (no overrides and no bindings: no fields in v1).
@@ -422,9 +487,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         c.node.dataset['cgContent'] = 'clock';
         clocks.push(driver);
         // D-107 — only a COUNTDOWN drives the hold (wall/countup never complete), and only
-        // when not explicitly excluded.
-        if (c.element.mode === 'countdown' && c.element.drivesHold !== false)
-          holdCountdowns.push(driver);
+        // when not explicitly excluded. D-112 — a countdown is also exposed UNFILTERED.
+        if (c.element.mode === 'countdown') {
+          if (c.element.drivesHold !== false) holdCountdowns.push(driver);
+          contentDrivers.push({
+            id: c.element.id,
+            drivesHold: c.element.drivesHold !== false,
+            whenComplete: () => driver.whenComplete(),
+          });
+        }
         return driver;
       });
       // D-029 — sequence drivers; the host→driver registry routes
@@ -537,6 +608,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         sequences.push(driver);
         // D-107 — joins the hold wait unless explicitly excluded.
         if (s.element.drivesHold !== false) holdSequences.push(driver);
+        // D-112 — exposed UNFILTERED so a parent instance override can re-filter it.
+        contentDrivers.push({
+          id: s.element.id,
+          drivesHold: s.element.drivesHold !== false,
+          whenComplete: () => driver.whenComplete(),
+        });
         return driver;
       });
 
@@ -611,14 +688,18 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // it, or this scope is itself driven and `startContentTree` recurses through it),
       // so a nested non-coordinator never self-starts: its content begins at the nearest
       // driving ancestor's hold entry.
-      const instanceChildren = scope.children.map((c) =>
-        wireScope(
+      const instanceChildren = scope.children.map((c) => {
+        const child = wireScope(
           c.scope,
           path === '' ? c.name : `${path}.${c.name}`,
           false,
           drivesContent || hasContentDrivingAncestor,
-        ),
-      );
+        );
+        // D-112 — attach this instance's per-instance overrides so the PARENT's aggregation
+        // (`nestedContentWait`) re-filters THIS child's content without touching the shared child.
+        child.holdOverrides = c.holdOverrides;
+        return child;
+      });
       const activeRange = activeRangeOf(scope.source);
       // D-104 follow-up — the frame where content starts: the designer's EXPLICIT
       // content-start marker (`lifecycle.contentStart`) when placed, else the
@@ -724,6 +805,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         isCoordinator,
         startOwnContent,
         ownContentWait,
+        contentDrivers,
         instanceChildren,
         whenSettled: () => settled,
       };

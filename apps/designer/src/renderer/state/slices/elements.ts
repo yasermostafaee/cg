@@ -103,6 +103,36 @@ function patchDrivesHold(els: readonly Element[], id: string, drivesHold: boolea
 }
 
 /**
+ * D-112 — set or clear a per-INSTANCE hold override on the composition-instance element
+ * (`type:'composition'`, matched by `instanceId`), keyed by a nested content element id. `drives ===
+ * undefined` deletes the key (the element falls back to its OWN `drivesHold`); an empty record
+ * collapses to `undefined` (so a cleared instance round-trips as before). Recurses containers (an
+ * instance may sit inside a group); the SHARED child element is never touched — that is the point.
+ */
+function patchHoldOverride(
+  els: readonly Element[],
+  instanceId: string,
+  nestedElementId: string,
+  drives: boolean | undefined,
+): Element[] {
+  return els.map((el): Element => {
+    if (el.id === instanceId && el.type === 'composition') {
+      const next: Record<string, boolean> = { ...el.holdOverrides };
+      if (drives === undefined) delete next[nestedElementId];
+      else next[nestedElementId] = drives;
+      return { ...el, holdOverrides: Object.keys(next).length > 0 ? next : undefined };
+    }
+    if (el.type === 'container') {
+      return {
+        ...el,
+        children: patchHoldOverride(el.children, instanceId, nestedElementId, drives),
+      };
+    }
+    return el;
+  });
+}
+
+/**
  * Elements slice — the layer-tree element CRUD: add / patch / transform /
  * lifespan / remove, the clipboard ops (copy / cut / paste / duplicate), the
  * selection-driven `deleteSelection` (keyframes first, else elements), asset
@@ -232,6 +262,21 @@ export const elementsSlice = {
     const nextLayers = activeLayersOf(current.scene).map((layer) => ({
       ...layer,
       children: patchDrivesHold(layer.children, elementId, drivesHold),
+    }));
+    set({ scene: withActiveLayers(current.scene, nextLayers) });
+  },
+
+  /**
+   * D-112 — set or clear a PER-INSTANCE hold override for a nested content element, stored on the
+   * parent's composition-instance element (NOT the shared child), so other instances of the same
+   * child are unaffected. Pass `drives === undefined` to clear (fall back to the child's own
+   * `drivesHold`). The override changes ONLY which nested content drives THIS parent's hold.
+   */
+  setHoldOverride(instanceId: string, nestedElementId: string, drives: boolean | undefined): void {
+    if (current.scene === null) return;
+    const nextLayers = activeLayersOf(current.scene).map((layer) => ({
+      ...layer,
+      children: patchHoldOverride(layer.children, instanceId, nestedElementId, drives),
     }));
     set({ scene: withActiveLayers(current.scene, nextLayers) });
   },

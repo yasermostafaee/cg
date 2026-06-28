@@ -91,6 +91,47 @@ describe('ExporterSingleFile', () => {
       outroDurationMs: 400,
     });
   });
+
+  it('D-112 — inlines per-instance holdOverrides into the exported scene', async () => {
+    const scene: Scene = {
+      ...makeScene(),
+      layers: [
+        {
+          id: 'L0',
+          name: 'Layer 1',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [
+            {
+              id: 'inst-1',
+              name: 'nested',
+              type: 'composition',
+              compositionId: 'child',
+              transform: {
+                position: { x: 0, y: 0 },
+                size: { w: 100, h: 100 },
+                scale: { x: 1, y: 1 },
+                rotation: 0,
+                anchor: { x: 0, y: 0 },
+              },
+              opacity: 1,
+              visible: true,
+              locked: false,
+              zIndex: 0,
+              holdOverrides: { 'seq-1': false },
+            },
+          ],
+        },
+      ],
+    } as unknown as Scene;
+    const { html } = await makeExporter().produce(scene);
+
+    // The whole scene is inlined as a JS literal (JSON.stringify), so the per-instance override
+    // ships in the exported single-file HTML and on-air matches the preview.
+    expect(html).toContain('"holdOverrides"');
+    expect(html).toContain('"seq-1":false');
+  });
 });
 
 describe('ExporterSingleFile — D-028 list field / ticker preflight', () => {

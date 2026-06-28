@@ -306,6 +306,23 @@ composition governs _its own_ scope. An **explicit**
 `RuntimeBootOptions.contentHold` still overrides the root scope (external
 override/test seam).
 
+**D-112 — per-instance hold overrides.** A content-driven PARENT aggregates a
+NON-coordinator nested child's content per-element via `nestedContentWait`
+(which replaced `contentTreeWait`). Each `ScopeNode` also exposes
+`contentDrivers` — every hold-eligible OWN driver (ticker / countdown clock /
+sequence) UNFILTERED by `drivesHold` — so the parent can re-filter them by a
+per-INSTANCE `holdOverrides: Record<elementId, boolean>` carried on the
+composition-instance element (threaded `FieldScopeChild.holdOverrides` → the
+child `ScopeNode.holdOverrides`, set right after `wireScope`). The effective
+"drives THIS parent's hold" = `holdOverrides[id]` when that key is defined, else
+the element's own `drivesHold !== false`. The override affects ONLY the parent's
+aggregation: the child's OWN hold still uses `ownContentWait` (its own
+`drivesHold`), content still starts/runs, and a COORDINATOR child still
+self-settles (the parent awaits its `whenSettled`, so an override on that child's
+internal content is moot). Overrides cascade **per level** — each instance
+overrides only its referenced composition's OWN direct content; a deeper instance
+carries its own `holdOverrides`, applied at its level.
+
 **Invariants**
 
 - The treadmill rolls continuously **within one hold**; each composition

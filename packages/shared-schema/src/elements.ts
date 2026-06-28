@@ -561,6 +561,15 @@ export type VideoPlaceholderElement = z.infer<typeof VideoPlaceholderElementSche
 export const CompositionElementSchema = ElementBaseSchema.extend({
   type: z.literal('composition'),
   compositionId: IdSchema,
+  /**
+   * D-112 — per-INSTANCE hold overrides. Keyed by a nested content element's stable id; the value
+   * is whether that element drives THIS instance's parent hold. Absent key ⇒ fall back to the
+   * element's own `drivesHold` (absent ⇒ drives, `false` ⇒ excluded). Scopes to the referenced
+   * composition's OWN direct content; a deeper instance carries its own `holdOverrides` (cascade per
+   * level). Lives on the parent's instance, NOT the shared child — so other instances are unaffected.
+   * Optional + additive: pre-D-112 scenes round-trip unchanged (no schema-version bump).
+   */
+  holdOverrides: z.record(z.string(), z.boolean()).optional(),
 });
 export type CompositionElement = z.infer<typeof CompositionElementSchema>;
 
