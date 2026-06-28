@@ -203,7 +203,20 @@ export const documentSlice = {
   setLifecycle(marker: { outPoint: number } | null): void {
     if (current.scene === null) return;
     if (marker === null) {
-      set({ scene: withActiveDoc(current.scene, { lifecycle: undefined }) });
+      // D-113 — clearing the out-point leaves an out-point-DEPENDENT mode (`auto-out` /
+      // `loop-cycle`) impossible: each promises an animated exit with no marker to start it. So in
+      // the SAME action (one atomic undo step) revert such a mode to `manual`. No change when
+      // already manual; no auto-restore of the prior mode when an out-point is later re-added.
+      const doc = activeDocOf(current.scene);
+      const revert = playoutOf(doc).mode !== 'manual';
+      set({
+        scene: withActiveDoc(
+          current.scene,
+          revert
+            ? { lifecycle: undefined, playout: { ...doc.playout, mode: 'manual' as const } }
+            : { lifecycle: undefined },
+        ),
+      });
       return;
     }
     const doc = activeDocOf(current.scene);
