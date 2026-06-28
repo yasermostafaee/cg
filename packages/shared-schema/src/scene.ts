@@ -292,31 +292,44 @@ export function playoutOf(scene: Pick<Scene, 'playout'>): Playout {
 
 /**
  * B-032 — does this composition tree have any EFFECTIVE content hold driver: a `ticker` /
- * `sequence` / countdown `clock` with `drivesHold !== false`, in its OWN layers OR reachable through
- * a nested composition instance (recursing containers; cycle-guarded)? A `content-driven` hold with
- * NONE is a zero-length, meaningless hold, so the resolution boundary (this is consumed by the
- * exporter's `buildPlayoutMetadata`, the Designer Playout inspector, and mirrored by the runtime's
- * per-scope `effectivePlayoutFor`) falls `content-driven` back to `timed` — honoring the authored
- * `holdMs` so export + on-air agree. Wall/countup clocks never complete, so they are not drivers.
- * (D-112 per-instance `holdOverrides` fold into the driver test once that change lands.)
+ * `sequence` / countdown `clock` that EFFECTIVELY drives the hold, in its OWN layers OR reachable
+ * through a nested composition instance (recursing containers; cycle-guarded)? A `content-driven`
+ * hold with NONE is a zero-length, meaningless hold, so the resolution boundary (this is consumed by
+ * the exporter's `buildPlayoutMetadata`, the Designer Playout inspector, and mirrored by the
+ * runtime's per-scope `effectivePlayoutFor`) falls `content-driven` back to `timed` — honoring the
+ * authored `holdMs` so export + on-air agree. Wall/countup clocks never complete, so they are not
+ * drivers. D-112 — effective participation through a nested instance is the instance's
+ * `holdOverrides[id]` (force-include / force-exclude per instance) when defined, else the element's
+ * own `drivesHold !== false`; so a nested element excluded via an override correctly counts as "no
+ * driver" (→ timed), and a `drivesHold:false` element force-included via an override counts as one.
  */
 export function hasEffectiveHoldDrivers(
   root: Pick<Scene, 'layers'>,
   compositions: readonly Composition[] | undefined,
 ): boolean {
   const visited = new Set<string>();
-  const walk = (children: readonly Element[]): boolean =>
+  // `overrides` are the per-instance `holdOverrides` governing THIS level's direct content (undefined
+  // at the root — the root's own content uses its own `drivesHold`).
+  const drives = (
+    el: { id: string; drivesHold?: boolean | undefined },
+    overrides?: Readonly<Record<string, boolean>>,
+  ): boolean => overrides?.[el.id] ?? el.drivesHold !== false;
+  const walk = (
+    children: readonly Element[],
+    overrides?: Readonly<Record<string, boolean>>,
+  ): boolean =>
     children.some((el) => {
-      if (el.type === 'ticker' || el.type === 'sequence') return el.drivesHold !== false;
-      if (el.type === 'clock' && el.mode === 'countdown') return el.drivesHold !== false;
-      if (el.type === 'container') return walk(el.children);
+      if (el.type === 'ticker' || el.type === 'sequence') return drives(el, overrides);
+      if (el.type === 'clock' && el.mode === 'countdown') return drives(el, overrides);
+      if (el.type === 'container') return walk(el.children, overrides);
       if (el.type === 'composition') {
         if (visited.has(el.compositionId)) return false;
         visited.add(el.compositionId);
         const comp = compositions?.find((c) => c.id === el.compositionId);
-        return comp !== undefined && comp.layers.some((l) => walk(l.children));
+        // The nested instance's OWN content is governed by its own `holdOverrides` (cascade per level).
+        return comp !== undefined && comp.layers.some((l) => walk(l.children, el.holdOverrides));
       }
       return false;
     });
-  return root.layers.some((l) => walk(l.children));
+  return root.layers.some((l) => walk(l.children, undefined));
 }

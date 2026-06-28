@@ -223,17 +223,27 @@ function nestedContentWait(node: ScopeNode): Promise<void> | null {
 
 /**
  * B-032 — does this scope's content tree have any EFFECTIVE hold driver: an OWN ticker / sequence /
- * countdown clock with `drivesHold !== false`, OR one reachable through a nested instance child
+ * countdown clock that EFFECTIVELY drives, OR one reachable through a nested instance child
  * (recursively)? Mirrors `@cg/shared-schema`'s `hasEffectiveHoldDrivers` (which walks the scene
  * tree) over the already-BUILT `FieldScope` tree. Consumed by `effectivePlayoutFor` to fall a
  * `content-driven` hold with NO drivers back to `timed`, so the authored `holdMs` is honored.
+ * D-112 — effective participation through a nested instance is the instance's `holdOverrides[id]`
+ * when defined (force-include / force-exclude per instance), else the element's own `drivesHold`
+ * (matching the parent's `nestedContentWait` aggregation), cascading per instance level. `overrides`
+ * is undefined at the scope's own level (its own content uses its own `drivesHold`).
  */
-function scopeHasEffectiveHoldDrivers(scope: FieldScope): boolean {
-  for (const t of scope.tickers) if (t.element.drivesHold !== false) return true;
+function scopeHasEffectiveHoldDrivers(
+  scope: FieldScope,
+  overrides?: Readonly<Record<string, boolean>>,
+): boolean {
+  const drives = (el: { id: string; drivesHold?: boolean | undefined }): boolean =>
+    overrides?.[el.id] ?? el.drivesHold !== false;
+  for (const t of scope.tickers) if (drives(t.element)) return true;
   for (const c of scope.clocks)
-    if (c.element.mode === 'countdown' && c.element.drivesHold !== false) return true;
-  for (const sq of scope.sequences) if (sq.element.drivesHold !== false) return true;
-  for (const child of scope.children) if (scopeHasEffectiveHoldDrivers(child.scope)) return true;
+    if (c.element.mode === 'countdown' && drives(c.element)) return true;
+  for (const sq of scope.sequences) if (drives(sq.element)) return true;
+  for (const child of scope.children)
+    if (scopeHasEffectiveHoldDrivers(child.scope, child.holdOverrides)) return true;
   return false;
 }
 

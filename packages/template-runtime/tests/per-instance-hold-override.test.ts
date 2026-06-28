@@ -373,4 +373,29 @@ describe('D-112 — per-instance hold overrides', () => {
     expect(onAir()).toBe(false);
     r.remove();
   });
+
+  it('B-032 × D-112 fold — excluding the ONLY nested driver via an instance override resolves the hold to TIMED (holds holdMs)', async () => {
+    const clock = makeClock();
+    // The child's only hold driver is a finite countdown; the parent EXCLUDES it via a per-instance
+    // override → no EFFECTIVE drivers → the content-driven hold resolves to TIMED (B-032) and honors
+    // holdMs, instead of closing on the (excluded) countdown or collapsing to a zero-length hold.
+    const child = comp('child', 25, [countdownClock('clk', 1000)], { mode: 'manual' });
+    const scene = parentScene({
+      compositions: [child],
+      children: [instance('i1', 'inst1', 'child', { clk: false })], // exclude the only driver
+      lifecycle: { outPoint: 25 },
+      playout: { mode: 'auto-out', holdSource: 'content-driven', holdMs: 5000 },
+    });
+    const r = createRuntime(scene, { skipFontLoad: true, clock, tickerMeasure });
+    await r.play({});
+
+    await run(clock, 2000);
+    // If the override were ignored, the countdown (~1000ms) would have closed the parent by now; if
+    // the resolution miscounted it would be zero-length. Resolved to timed (5000ms) ⇒ still holding.
+    expect(onAir()).toBe(true);
+
+    await run(clock, 4000); // ~6s: the 5s timed hold elapses → outro → settle
+    expect(onAir()).toBe(false);
+    r.remove();
+  });
 });
