@@ -92,3 +92,30 @@ test.describe('B-032 — the inspector persists a stored holdMs (so the export h
     ).toHaveCount(0);
   });
 });
+
+test.describe('B-032 ext — a content-LESS comp left content-driven resolves to timed (no trap)', () => {
+  test('deleting the only content leaves a content-driven hold that resolves to timed → holdMs control appears', async ({
+    app,
+  }) => {
+    await app.newProject('TrappedHold');
+    await app.addRectangle({ x: 300, y: 120 });
+    // A ticker so content-driven is selectable; then we delete it to recreate the trapped scene
+    // (stored content-driven, but no content) the bug report describes.
+    await app.addTicker({ x: 120, y: 240 });
+    await app.addOutPoint();
+    await app.setPlayoutTiming('auto-out');
+    await app.setHoldSource('content-driven');
+
+    // Delete the ticker → the comp is now CONTENT-LESS but still stored content-driven.
+    // Click clearly INSIDE the ticker's box (placed at 120,240) to select it, then Delete.
+    await app.selectTool('Select');
+    await app.canvas.click({ position: { x: 150, y: 252 } });
+    await app.page.keyboard.press('Delete');
+
+    // The content-driven hold with no drivers resolves to TIMED at the boundary, so the holdMs
+    // control appears (the operator is NOT trapped) and the runtime/export honor the duration.
+    await expect(
+      app.page.getByRole('spinbutton', { name: 'Hold duration in milliseconds' }),
+    ).toBeVisible();
+  });
+});

@@ -7,7 +7,7 @@ import {
   ISODateSchema,
   ResolutionSchema,
 } from './primitives.js';
-import { ElementSchema } from './elements.js';
+import { ElementSchema, type Element } from './elements.js';
 import { DynamicFieldSchema } from './fields.js';
 import { FieldBindingSchema } from './bindings.js';
 import { FrameRangeSchema, type FrameRange } from './animation.js';
@@ -288,4 +288,35 @@ export function playoutOf(scene: Pick<Scene, 'playout'>): Playout {
     return { ...p, mode: 'loop-cycle', holdSource: 'content-driven' };
   }
   return { ...p, holdSource: p.holdSource ?? 'timed' };
+}
+
+/**
+ * B-032 — does this composition tree have any EFFECTIVE content hold driver: a `ticker` /
+ * `sequence` / countdown `clock` with `drivesHold !== false`, in its OWN layers OR reachable through
+ * a nested composition instance (recursing containers; cycle-guarded)? A `content-driven` hold with
+ * NONE is a zero-length, meaningless hold, so the resolution boundary (this is consumed by the
+ * exporter's `buildPlayoutMetadata`, the Designer Playout inspector, and mirrored by the runtime's
+ * per-scope `effectivePlayoutFor`) falls `content-driven` back to `timed` — honoring the authored
+ * `holdMs` so export + on-air agree. Wall/countup clocks never complete, so they are not drivers.
+ * (D-112 per-instance `holdOverrides` fold into the driver test once that change lands.)
+ */
+export function hasEffectiveHoldDrivers(
+  root: Pick<Scene, 'layers'>,
+  compositions: readonly Composition[] | undefined,
+): boolean {
+  const visited = new Set<string>();
+  const walk = (children: readonly Element[]): boolean =>
+    children.some((el) => {
+      if (el.type === 'ticker' || el.type === 'sequence') return el.drivesHold !== false;
+      if (el.type === 'clock' && el.mode === 'countdown') return el.drivesHold !== false;
+      if (el.type === 'container') return walk(el.children);
+      if (el.type === 'composition') {
+        if (visited.has(el.compositionId)) return false;
+        visited.add(el.compositionId);
+        const comp = compositions?.find((c) => c.id === el.compositionId);
+        return comp !== undefined && comp.layers.some((l) => walk(l.children));
+      }
+      return false;
+    });
+  return root.layers.some((l) => walk(l.children));
 }
