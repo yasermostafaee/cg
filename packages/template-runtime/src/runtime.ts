@@ -222,6 +222,22 @@ function nestedContentWait(node: ScopeNode): Promise<void> | null {
 }
 
 /**
+ * B-032 — does this scope's content tree have any EFFECTIVE hold driver: an OWN ticker / sequence /
+ * countdown clock with `drivesHold !== false`, OR one reachable through a nested instance child
+ * (recursively)? Mirrors `@cg/shared-schema`'s `hasEffectiveHoldDrivers` (which walks the scene
+ * tree) over the already-BUILT `FieldScope` tree. Consumed by `effectivePlayoutFor` to fall a
+ * `content-driven` hold with NO drivers back to `timed`, so the authored `holdMs` is honored.
+ */
+function scopeHasEffectiveHoldDrivers(scope: FieldScope): boolean {
+  for (const t of scope.tickers) if (t.element.drivesHold !== false) return true;
+  for (const c of scope.clocks)
+    if (c.element.mode === 'countdown' && c.element.drivesHold !== false) return true;
+  for (const sq of scope.sequences) if (sq.element.drivesHold !== false) return true;
+  for (const child of scope.children) if (scopeHasEffectiveHoldDrivers(child.scope)) return true;
+  return false;
+}
+
+/**
  * D-030 — one WIRED subtree: the controller tree + every driver of one scope
  * tree, with symmetric teardown. The static scene is one subtree; a repeater
  * stamps one more per row at each fresh play and destroys them on re-stamp.
@@ -336,18 +352,23 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // (auto-out / loop-cycle) runs, with `holdSource` deciding what ends each hold
   // (timed `holdMs` vs. the scope's content sources completing). The stored
   // `playout` carries the defaults; `overrides` layers the session knobs per scope.
-  const effectivePlayoutFor = (
-    source: { playout?: Playout | undefined },
-    path: string,
-  ): Playout => {
-    const b = playoutOf(source);
+  const effectivePlayoutFor = (scope: FieldScope, path: string): Playout => {
+    const b = playoutOf(scope.source);
     const o = overrides[path];
-    return {
+    const merged: Playout = {
       mode: o?.mode ?? b.mode,
       holdSource: o?.holdSource ?? b.holdSource,
       holdMs: o?.holdMs ?? b.holdMs,
       repeat: o?.repeat ?? b.repeat,
     };
+    // B-032 — a content-driven hold with NO effective content drivers (own + nested, drivesHold-aware)
+    // is a zero-length, meaningless hold: resolve it to TIMED so the authored `holdMs` is honored and
+    // export + on-air agree. The static `@cg/shared-schema` `hasEffectiveHoldDrivers` does the same on
+    // the scene tree for the exporter / inspector.
+    if (merged.holdSource === 'content-driven' && !scopeHasEffectiveHoldDrivers(scope)) {
+      return { ...merged, holdSource: 'timed' };
+    }
+    return merged;
   };
 
   // D-026 — the root scope alone drives the global lifecycle machine + events: its
@@ -663,7 +684,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       const settled = new Promise<void>((res) => {
         resolveSettled = res;
       });
-      const effPlayout = effectivePlayoutFor(scope.source, path);
+      const effPlayout = effectivePlayoutFor(scope, path);
       const isGlobalRoot = isSubtreeRoot && isRootSubtree;
       // D-104 — a "coordinator" is a content-driven (non-manual) scope: its hold lasts
       // until its OWN content PLUS its nested descendants' content completes. B-031 — a

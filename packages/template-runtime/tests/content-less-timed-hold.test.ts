@@ -219,4 +219,46 @@ describe('B-032 — content-less timed hold honors holdMs', () => {
     expect(onAir()).toBe(false);
     r.remove();
   });
+
+  // B-032 EXT — a comp STORED as content-driven but with ZERO content drivers (e.g. the content was
+  // deleted after the hold source was set) used to give a zero-length hold that ignored holdMs. The
+  // resolution boundary (`effectivePlayoutFor`) now falls it back to TIMED so the authored holdMs
+  // governs — and export agrees (covered in @cg/vcg-format playout-metadata tests). A comp whose only
+  // content is NESTED still resolves content-driven — guarded by nested-content-lifecycle.test.ts.
+  it('content-driven + CONTENT-LESS auto-out resolves to TIMED — holds ~holdMs (not ~0)', async () => {
+    const clock = makeClock();
+    const r = createRuntime(
+      contentLessScene({ mode: 'auto-out', holdSource: 'content-driven', holdMs: 10_000 }),
+      { skipFontLoad: true, clock },
+    );
+    await r.play({});
+
+    await run(clock, 5_000);
+    expect(onAir()).toBe(true); // holding ~holdMs — NOT a zero-length content-driven hold
+
+    await run(clock, 6_500); // ~11.5s total: 10s hold done → outro → settle
+    expect(onAir()).toBe(false);
+    r.remove();
+  });
+
+  it('content-driven + CONTENT-LESS loop-cycle resolves to TIMED — each between-cycle hold honors holdMs', async () => {
+    const clock = makeClock();
+    const r = createRuntime(
+      contentLessScene({
+        mode: 'loop-cycle',
+        holdSource: 'content-driven',
+        holdMs: 3000,
+        repeat: 2,
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await r.play({});
+
+    await run(clock, 4_000);
+    expect(onAir()).toBe(true); // still cycling — each cycle's hold honored (would settle by ~2s if collapsed)
+
+    await run(clock, 6_000); // ~10s total: both finite cycles' holds elapsed → settle
+    expect(onAir()).toBe(false);
+    r.remove();
+  });
 });

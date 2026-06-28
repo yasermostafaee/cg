@@ -826,7 +826,7 @@ reaches a terminal state (settles, or is cleanly stoppable) instead of hanging o
 **Fix:** runtime waits on a content-driven nested child's reset-safe `whenSettled()` (in `aggregateContentWait`) instead of skipping it; the preview's `hasAnyContentIn` recurses nested instances. Honors `drivesHold`; `startContentTree` unchanged (no double-start). The ticker-runtime "finite root self-settle past a nested infinite content-driven child" test is rewritten (that scenario now holds until `stop()`).
 **Regression test:** `@cg/template-runtime` tests: (1) a parent with a content-driven nested child (finite content, `drivesHold` default) holds until the nested content completes then settles; (2) `drivesHold === false` on the nested item makes the parent NOT wait on it. Plus a designer/E2E test: the preview offers content-driven hold on a parent whose only content is nested. Capability: `designer-playout-lifecycle`.
 
-## [~] B-032 — timed hold (`holdMs`) ignored for a content-less auto-out / loop-cycle composition — FIX: persist + bake holdMs ⟨priority: high⟩ — implementing on `fix/content-less-timed-hold` (`openspec/changes/persist-timed-hold`)
+## [~] B-032 — timed hold (`holdMs`) ignored for a content-less auto-out / loop-cycle composition ⟨priority: high⟩ — half 1: persist + bake holdMs (`openspec/changes/persist-timed-hold`, merged); half 2: resolve a content-less content-driven hold → timed at the boundary on `fix/content-less-timed-hold-resolution` (`openspec/changes/resolve-content-less-hold-source`, local/UNPUSHED)
 
 > A content-less `auto-out` / `loop-cycle` composition with a timed `holdMs` closes ~immediately on
 > EXPORT / on-air (any value behaving like 0). Root cause (RECON): `holdMs` was preview-session-only —

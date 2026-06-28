@@ -1,5 +1,6 @@
 import {
   activeRangeOf,
+  hasEffectiveHoldDrivers,
   playoutOf,
   type HoldSource,
   type PlayoutMode,
@@ -36,8 +37,15 @@ export interface PlayoutMetadata {
 /** Build the {@link PlayoutMetadata} for a scene (mode always present). */
 export function buildPlayoutMetadata(scene: Scene): PlayoutMetadata {
   const playout = playoutOf(scene);
+  // B-032 — a content-driven hold with NO effective content drivers is a zero-length hold; resolve
+  // it to timed (matching the runtime's `effectivePlayoutFor`) so the baked metadata agrees with
+  // on-air and the authored `holdMs` is honored instead of being silently dropped.
+  const holdSource =
+    playout.holdSource === 'content-driven' && !hasEffectiveHoldDrivers(scene, scene.compositions)
+      ? 'timed'
+      : playout.holdSource;
   const meta: PlayoutMetadata = { mode: playout.mode };
-  if (playout.holdSource === 'content-driven') meta.holdSource = 'content-driven';
+  if (holdSource === 'content-driven') meta.holdSource = 'content-driven';
   if (playout.holdMs !== undefined) meta.holdMs = playout.holdMs;
   if (playout.repeat !== undefined) meta.repeat = playout.repeat;
   if (scene.lifecycle !== undefined) {

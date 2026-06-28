@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import {
   activeRangeOf,
+  hasEffectiveHoldDrivers,
   playoutOf,
   type Composition,
   type Element,
@@ -553,7 +554,11 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
   // back with the hold (the preview session override still layers on top via
   // `effectivePlayoutFor`). Offered only for a TIMED hold under `auto-out` / `loop-cycle`
   // (a content-driven hold ignores `holdMs`).
-  const holdSourceEff: HoldSource = hasContent ? (playout.holdSource ?? 'timed') : 'timed';
+  // B-032 — resolve exactly like the runtime/exporter: a content-driven hold with NO effective
+  // content drivers (own + nested, drivesHold-aware) is really a TIMED hold, so the holdMs input
+  // shows AND applies (the runtime now honors it). For the zero-content case this equals `hasContent`.
+  const hasDrivers = hasEffectiveHoldDrivers(scene, scene.compositions);
+  const holdSourceEff: HoldSource = hasDrivers ? (playout.holdSource ?? 'timed') : 'timed';
   const showHoldMs = (mode === 'auto-out' || mode === 'loop-cycle') && holdSourceEff === 'timed';
 
   /** Default out-point at 75 % of the active region (leaves room for the exit). */
