@@ -463,6 +463,7 @@ const TYPE_COLORS: Record<Exclude<Element['type'], 'shape'>, string> = {
   clock: '#7E22CE', // dark purple (D-075)
   sequence: '#EF4444', // red (D-075; shares video-placeholder's red — acceptable)
   repeater: '#10B981', // emerald — data-driven rows
+  path: '#14B8A6', // teal — D-109 bézier path (matches the shape `path` color)
   image: '#EC4899', // pink
   lottie: '#A78BFA', // violet
   'video-placeholder': '#EF4444', // red

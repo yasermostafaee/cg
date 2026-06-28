@@ -63,6 +63,7 @@ test.describe('D-092 — shared vector Icon', () => {
       'Text',
       'Rectangle',
       'Ellipse',
+      'Pen', // D-109 — the pen draws an editable bézier path
       'Image (logo)',
       'Ticker',
       'Sequence',

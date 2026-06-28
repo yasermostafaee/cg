@@ -276,7 +276,7 @@ const STROKE_DESCS: readonly PropertyDescriptor[] = [
     read: (el) => boxStroke(el)?.color ?? '#000000',
     // D-052 — stroke animation on shapes AND the time-driven kinds (ticker/clock/
     // sequence). Text stroke stays static (text is out of the D-052 scope).
-    keyframeable: (el) => el.type === 'shape',
+    keyframeable: (el) => el.type === 'shape' || el.type === 'path',
     multiSelect: true,
   },
   {
@@ -286,7 +286,7 @@ const STROKE_DESCS: readonly PropertyDescriptor[] = [
     label: 'stroke width',
     timelineLabel: 'Stroke width',
     read: (el) => boxStroke(el)?.width ?? 0,
-    keyframeable: (el) => el.type === 'shape',
+    keyframeable: (el) => el.type === 'shape' || el.type === 'path',
     multiSelect: true,
     step: 1,
     min: 0,
@@ -298,7 +298,7 @@ const STROKE_DESCS: readonly PropertyDescriptor[] = [
     label: 'dash array',
     timelineLabel: 'Stroke dasharray',
     read: (el) => boxStroke(el)?.dash?.[0] ?? 0,
-    keyframeable: (el) => el.type === 'shape',
+    keyframeable: (el) => el.type === 'shape' || el.type === 'path',
     multiSelect: true,
     step: 1,
     min: 0,
@@ -364,12 +364,19 @@ const SHAPE_FILL: PropertyDescriptor = {
   fieldKind: 'fill',
   label: 'fill',
   timelineLabel: 'Fill',
-  read: (el) => (el.type === 'shape' && el.fill?.kind === 'solid' ? el.fill.color : '#000000'),
+  // D-109 — fill belongs to shape AND path (both carry an optional `fill`).
+  read: (el) =>
+    (el.type === 'shape' || el.type === 'path') && el.fill?.kind === 'solid'
+      ? el.fill.color
+      : '#000000',
   // The uniform colour, or null (→ "mixed") for a gradient / non-solid fill.
-  multiRead: (el) => (el.type === 'shape' && el.fill?.kind === 'solid' ? el.fill.color : null),
+  multiRead: (el) =>
+    (el.type === 'shape' || el.type === 'path') && el.fill?.kind === 'solid' ? el.fill.color : null,
   // A colour is keyframe-able only while it is a SOLID fill — gradients can't
   // interpolate, so no diamond (in either panel) when the fill is a gradient.
-  keyframeable: (el) => el.type === 'shape' && (el.fill === undefined || el.fill.kind === 'solid'),
+  keyframeable: (el) =>
+    (el.type === 'shape' || el.type === 'path') &&
+    (el.fill === undefined || el.fill.kind === 'solid'),
   multiSelect: true,
 };
 
@@ -631,6 +638,9 @@ const UNIVERSAL_ONLY: readonly PropertyDescriptor[] = [...TRANSFORM, ...FILTER];
 // background) and the bare kinds stay transform + filter only.
 export const FIELD_REGISTRY: Record<Element['type'], readonly PropertyDescriptor[]> = {
   shape: [...TRANSFORM, SHAPE_FILL, ...BOX_DESCS, ...SHAPE_SHADOW, ...FILTER],
+  // D-109 — a path has fill + stroke (Path Style) but NO border radius (not a box)
+  // and no drop shadow; transform/opacity/filter/fill/stroke animate like a shape.
+  path: [...TRANSFORM, SHAPE_FILL, ...STROKE_DESCS, ...FILTER],
   // D-057 — text adds an independent box-shadow set (BOX_SHADOW_DESCS, `boxShadow.*`)
   // beside its text-shadow (in TEXT_SPECIFIC via SHADOW_DESCS).
   text: [...TRANSFORM, ...TEXT_SPECIFIC, ...BOX_DESCS, ...BOX_SHADOW_DESCS, ...FILTER],

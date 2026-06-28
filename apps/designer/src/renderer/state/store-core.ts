@@ -25,6 +25,7 @@ export type DesignerTool =
   | 'repeater'
   | 'shape'
   | 'ellipse'
+  | 'pen'
   | 'image'
   | 'hand';
 

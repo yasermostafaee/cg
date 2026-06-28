@@ -17,6 +17,8 @@ import { getActiveSharedImage } from '../sharedLibrary/activeSharedImage.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
 import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
+import { penPointerDown, finishPen, isPenDrawing } from './pen-draw.js';
+import { PathEditor } from './PathEditor.js';
 import { collectGroupMoveTargets } from './group-move.js';
 import { drillTarget } from './drill.js';
 import { screenToScene, snapAxis } from './geometry.js';
@@ -152,9 +154,19 @@ export function CanvasOverlay({
   }, [bindModeFieldId]);
 
   // Esc deselects the selected shape — unless something else owns Esc (bind
-  // mode, inline text editing) or the operator is typing in a field.
+  // mode, inline text editing) or the operator is typing in a field. D-109 — while
+  // the pen tool is mid-draw, Enter / Esc instead FINISH the path (open) and restore
+  // the cursor with it selected; this takes priority (checked first, same handler so
+  // there's no listener-ordering race).
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
+      if (isPenDrawing()) {
+        if (e.key === 'Enter' || e.key === 'Escape') {
+          e.preventDefault();
+          finishPen(false);
+        }
+        return;
+      }
       if (e.key !== 'Escape') return;
       if (bindModeFieldId !== null || editingTextId !== null) return;
       const t = e.target;
@@ -295,6 +307,12 @@ export function CanvasOverlay({
       designerStore.setTool('cursor');
       return;
     }
+    if (tool === 'pen') {
+      // D-109 — the pen accumulates anchors across clicks; click the first anchor to
+      // close. The tool is restored on finish (close / Enter / Esc / double-click).
+      penPointerDown(scenePoint, scale, e.nativeEvent);
+      return;
+    }
     if (tool === 'image') {
       // D-040 — stamp the selected Shared Library image as a `source: 'shared'`
       // logo. Empty library ⇒ a hint, never a silent insert (mirrors D-030).
@@ -304,6 +322,11 @@ export function CanvasOverlay({
   }
 
   function onDoubleClick(e: React.MouseEvent<HTMLDivElement>): void {
+    // D-109 — a double-click finishes an in-progress pen path (open).
+    if (isPenDrawing()) {
+      finishPen(false);
+      return;
+    }
     const scenePoint = viewportToScene(e.clientX, e.clientY);
     const hit = topmostHit(allElementsAtFrame, scenePoint);
     if (hit === null) return;
@@ -407,6 +430,16 @@ export function CanvasOverlay({
           bindModeFieldId === null && (
             <Gizmo element={selectedEl} scale={scale} currentFrame={currentFrame} />
           )}
+        {/* D-109 — the path edit overlay (anchors + handles) sits over the gizmo, but
+            only with the SELECT tool: while the pen is mid-draw its anchor dots must
+            not intercept the click that closes the path. */}
+        {selectedEl !== null &&
+          selectedEl.type === 'path' &&
+          tool === 'cursor' &&
+          selectedEl.visible &&
+          !selectedEl.locked &&
+          editingEl === null &&
+          bindModeFieldId === null && <PathEditor element={selectedEl} scale={scale} />}
         {selectedEls.length > 1 && editingEl === null && bindModeFieldId === null && (
           <MultiGizmo elements={selectedEls} scale={scale} currentFrame={currentFrame} />
         )}

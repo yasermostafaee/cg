@@ -7,6 +7,7 @@ import type {
   Filter,
   ImageElement,
   Padding,
+  PathElement,
   RepeaterElement,
   SequenceElement,
   Shadow,
@@ -81,6 +82,14 @@ export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element 
   if (element.type === 'shape')
     return (
       <ShapeSections
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    );
+  if (element.type === 'path')
+    return (
+      <PathSections
         element={element}
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
@@ -188,6 +197,111 @@ function VAlignRow({
         }
       />
     </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────
+//                              PATH (D-109)
+// ────────────────────────────────────────────────────────────────────────
+
+/**
+ * D-109 — the `path` inspector: fill + stroke (Path Style), a closed/open toggle,
+ * and a read-only anchor count. No border-radius / box-shadow (a path is not a box).
+ * Fill + stroke route through `commitAnimatable` exactly like a shape's (D-051
+ * registry now marks them keyframe-able for `path`), so they animate identically.
+ */
+function PathSections({
+  element,
+  currentFrame,
+  selectedKeyframe,
+}: SectionProps<PathElement>): JSX.Element {
+  const id = element.id;
+  const staticFill =
+    element.fill !== undefined && element.fill.kind === 'solid' ? element.fill.color : '#000000';
+  const fillColor = evColor(element, 'fill.color', currentFrame, staticFill);
+  const displayFill =
+    element.fill !== undefined && element.fill.kind === 'solid'
+      ? { ...element.fill, color: fillColor }
+      : element.fill;
+  const strokeColor = evColor(
+    element,
+    'stroke.color',
+    currentFrame,
+    element.stroke?.color ?? '#000000',
+  );
+  const strokeWidth = evNum(element, 'stroke.width', currentFrame, element.stroke?.width ?? 0);
+  const strokeDashFirst = evNum(
+    element,
+    'stroke.dash',
+    currentFrame,
+    element.stroke?.dash?.[0] ?? 0,
+  );
+  return (
+    <>
+      <CollapseSection title="Path Style" pinned>
+        <div className={fieldCss.row}>
+          <span className={fieldCss.label}>path</span>
+          <TogglePair
+            value={element.closed ? 'closed' : 'open'}
+            options={[
+              { value: 'open', label: 'Open' },
+              { value: 'closed', label: 'Closed' },
+            ]}
+            onChange={(v) =>
+              designerStore.updateElement(id, { closed: v === 'closed' } as Partial<Element>)
+            }
+          />
+        </div>
+        <FillField
+          label="fill"
+          value={displayFill}
+          onChange={(f) => {
+            if (
+              f.kind === 'solid' &&
+              (element.fill === undefined || element.fill.kind === 'solid')
+            ) {
+              designerStore.commitAnimatable(id, 'fill.color', f.color);
+            } else {
+              applyFillModeChange(element, 'fill.color', { fill: f } as Partial<Element>);
+            }
+          }}
+          trailing={KeyframeDot(element, 'fill.color', currentFrame, selectedKeyframe)}
+        />
+        <ColorField
+          label="stroke"
+          value={strokeColor}
+          resetKey={id}
+          onCommit={(color) => designerStore.commitAnimatable(id, 'stroke.color', color)}
+          trailing={KeyframeDot(element, 'stroke.color', currentFrame, selectedKeyframe)}
+        />
+        <NumberField
+          label="stroke width"
+          value={strokeWidth}
+          step={1}
+          min={0}
+          onCommit={(width) => designerStore.commitAnimatable(id, 'stroke.width', width)}
+          trailing={KeyframeDot(element, 'stroke.width', currentFrame, selectedKeyframe)}
+        />
+        <NumberField
+          label="dash array"
+          value={strokeDashFirst}
+          step={1}
+          min={0}
+          onCommit={(d) => designerStore.commitAnimatable(id, 'stroke.dash', d)}
+          trailing={KeyframeDot(element, 'stroke.dash', currentFrame, selectedKeyframe)}
+        />
+        <div className={fieldCss.row}>
+          <span className={fieldCss.label}>points</span>
+          <span>{element.points.length}</span>
+        </div>
+      </CollapseSection>
+
+      <FilterSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    </>
   );
 }
 

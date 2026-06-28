@@ -557,6 +557,17 @@ payloads are dropped silently (a broadcast frame can't write logs).
 5. If it can be **animated/bound**, make sure `applyBaseStyles` / `animation-applier`
    / `bindings` handle its target properties (see below).
 
+> The **path** (D-109) is the SVG-rendered example: `buildPath` builds
+> `<div><svg viewBox=pathBBox preserveAspectRatio=none><path d></svg></div>` — the
+> wrapper carries `applyBaseStyles` (transform/opacity/filter) and the inner `<path>`
+> the outline. `pathD(points, closed)` builds the `d` (`M`, cubic `C` from each
+> anchor's `out` to the next anchor's `in`, `L` for a handle-less segment, `Z` when
+> closed); a CLOSED path fills + strokes, an OPEN one strokes only (`fill: none`).
+> The viewBox = the points' bbox, so a gizmo resize (which changes `transform.size`)
+> rescales the outline without re-baking points. `animation-applier` writes fill /
+> stroke onto the inner `<path>` (a `querySelector('path')` branch); per-point
+> morphing is **D-110**, not here.
+
 ### Add a new field type / binding target
 
 > Worked example: the **`list` field** + **`ticker-items`** target (D-028) — an

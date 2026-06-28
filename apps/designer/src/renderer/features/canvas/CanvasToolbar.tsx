@@ -7,6 +7,7 @@ import {
   Image,
   MousePointer2,
   MoveHorizontal,
+  PenTool,
   Rows3,
   Square,
   Type,
@@ -38,6 +39,8 @@ const TOOLS: readonly ToolEntry[] = [
   { id: 'text', label: 'Text', icon: Type },
   { id: 'shape', label: 'Rectangle', icon: Square },
   { id: 'ellipse', label: 'Ellipse', icon: Circle },
+  // D-109 — the Pen tool draws an editable bézier `path` element.
+  { id: 'pen', label: 'Pen', icon: PenTool },
   // D-040 — the logo/image tool stamps the selected Shared Library image (the
   // shared source it needed now exists); empty library ⇒ a hint, no silent insert.
   { id: 'image', label: 'Image (logo)', icon: Image },
