@@ -50,9 +50,11 @@ function hasContentElement(scene: Scene): boolean {
   const walk = (children: readonly Element[]): boolean =>
     children.some((el) => {
       if (
-        el.type === 'ticker' ||
-        el.type === 'sequence' ||
-        (el.type === 'clock' && el.mode === 'countdown')
+        (el.type === 'ticker' ||
+          el.type === 'sequence' ||
+          (el.type === 'clock' && el.mode === 'countdown')) &&
+        // B-034 — a HIDDEN content element (`visible: false`) is fully inert: not a hold driver.
+        el.visible !== false
       ) {
         return true;
       }
@@ -95,7 +97,8 @@ function contentHoldElementsOf(scene: Scene): ContentHoldItem[] {
   const out: ContentHoldItem[] = [];
   const walk = (children: readonly Element[]): void => {
     for (const el of children) {
-      if (el.type === 'ticker' || el.type === 'sequence') {
+      // B-034 — a HIDDEN content element (`visible: false`) is inert: never listed as a hold driver.
+      if ((el.type === 'ticker' || el.type === 'sequence') && el.visible !== false) {
         out.push({
           id: el.id,
           name: el.name,
@@ -103,7 +106,7 @@ function contentHoldElementsOf(scene: Scene): ContentHoldItem[] {
           drivesHold: el.drivesHold !== false,
           infinite: el.repeat === 'infinite',
         });
-      } else if (el.type === 'clock' && el.mode === 'countdown') {
+      } else if (el.type === 'clock' && el.mode === 'countdown' && el.visible !== false) {
         out.push({
           id: el.id,
           name: el.name,
@@ -210,9 +213,11 @@ function nestedHoldGroupsOf(scene: Scene): NestedHoldGroup[] {
     const walk = (children: readonly Element[]): void => {
       for (const el of children) {
         if (
-          el.type === 'ticker' ||
-          el.type === 'sequence' ||
-          (el.type === 'clock' && el.mode === 'countdown')
+          (el.type === 'ticker' ||
+            el.type === 'sequence' ||
+            (el.type === 'clock' && el.mode === 'countdown')) &&
+          // B-034 — a HIDDEN nested content element is inert: not listed/counted as a hold driver.
+          el.visible !== false
         ) {
           const drivesHold = el.drivesHold !== false;
           const override = overrides?.[el.id];

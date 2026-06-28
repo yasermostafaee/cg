@@ -310,10 +310,12 @@ export function hasEffectiveHoldDrivers(
   const visited = new Set<string>();
   // `overrides` are the per-instance `holdOverrides` governing THIS level's direct content (undefined
   // at the root — the root's own content uses its own `drivesHold`).
+  // B-034 — a HIDDEN content element (`visible: false`) is never an effective driver, regardless of
+  // `drivesHold` / `holdOverrides`, so a composition whose only content is hidden has no drivers.
   const drives = (
-    el: { id: string; drivesHold?: boolean | undefined },
+    el: { id: string; drivesHold?: boolean | undefined; visible?: boolean },
     overrides?: Readonly<Record<string, boolean>>,
-  ): boolean => overrides?.[el.id] ?? el.drivesHold !== false;
+  ): boolean => el.visible !== false && (overrides?.[el.id] ?? el.drivesHold !== false);
   const walk = (
     children: readonly Element[],
     overrides?: Readonly<Record<string, boolean>>,
