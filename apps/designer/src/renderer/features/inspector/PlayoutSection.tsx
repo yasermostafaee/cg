@@ -7,9 +7,10 @@ import {
   type PlayoutMode,
   type Scene,
 } from '@cg/shared-schema';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, TriangleAlert } from 'lucide-react';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { Callout } from '../../ui/Callout.js';
 import { Icon } from '../../ui/Icon.js';
 import { Select } from '../../ui/Select.js';
 import { designerStore } from '../../state/store.js';
@@ -71,6 +72,12 @@ interface ContentHoldItem {
   name: string;
   type: ContentKind;
   drivesHold: boolean;
+  /**
+   * D-111 — a ticker/sequence authored with `repeat: 'infinite'`. Such a driver never
+   * completes, so while it participates (`drivesHold`) the content-driven hold runs until
+   * `stop()` (the graphic won't auto-close). A countdown clock is always finite ⇒ never true.
+   */
+  infinite: boolean;
 }
 
 /**
@@ -87,9 +94,21 @@ function contentHoldElementsOf(scene: Scene): ContentHoldItem[] {
   const walk = (children: readonly Element[]): void => {
     for (const el of children) {
       if (el.type === 'ticker' || el.type === 'sequence') {
-        out.push({ id: el.id, name: el.name, type: el.type, drivesHold: el.drivesHold !== false });
+        out.push({
+          id: el.id,
+          name: el.name,
+          type: el.type,
+          drivesHold: el.drivesHold !== false,
+          infinite: el.repeat === 'infinite',
+        });
       } else if (el.type === 'clock' && el.mode === 'countdown') {
-        out.push({ id: el.id, name: el.name, type: 'clock', drivesHold: el.drivesHold !== false });
+        out.push({
+          id: el.id,
+          name: el.name,
+          type: 'clock',
+          drivesHold: el.drivesHold !== false,
+          infinite: false,
+        });
       } else if (el.type === 'container') {
         walk(el.children);
       }
@@ -108,6 +127,8 @@ interface NestedHoldGroup {
   name: string;
   /** Hold-driving items reachable through this instance (recursive). */
   count: number;
+  /** D-111 — how many of those drivers have `repeat: 'infinite'` (force a hold-until-stop). */
+  infiniteCount: number;
 }
 
 /**
@@ -122,36 +143,48 @@ interface NestedHoldGroup {
  * instance — mirroring `hasContentElement`'s recursion.
  */
 function nestedHoldGroupsOf(scene: Scene): NestedHoldGroup[] {
-  const countIn = (compId: string, seen: Set<string>): number => {
-    if (seen.has(compId)) return 0;
+  const countIn = (compId: string, seen: Set<string>): { count: number; infiniteCount: number } => {
+    if (seen.has(compId)) return { count: 0, infiniteCount: 0 };
     seen.add(compId);
     const comp = scene.compositions?.find((c) => c.id === compId);
-    if (comp === undefined) return 0;
-    let n = 0;
+    if (comp === undefined) return { count: 0, infiniteCount: 0 };
+    let count = 0;
+    let infiniteCount = 0;
     const walk = (children: readonly Element[]): void => {
       for (const el of children) {
         if (el.type === 'ticker' || el.type === 'sequence') {
-          if (el.drivesHold !== false) n += 1;
+          if (el.drivesHold !== false) {
+            count += 1;
+            if (el.repeat === 'infinite') infiniteCount += 1;
+          }
         } else if (el.type === 'clock' && el.mode === 'countdown') {
-          if (el.drivesHold !== false) n += 1;
+          if (el.drivesHold !== false) count += 1;
         } else if (el.type === 'container') {
           walk(el.children);
         } else if (el.type === 'composition') {
-          n += countIn(el.compositionId, seen);
+          const sub = countIn(el.compositionId, seen);
+          count += sub.count;
+          infiniteCount += sub.infiniteCount;
         }
       }
     };
     for (const l of comp.layers) walk(l.children);
-    return n;
+    return { count, infiniteCount };
   };
 
   const groups: NestedHoldGroup[] = [];
   const findInstances = (children: readonly Element[]): void => {
     for (const el of children) {
       if (el.type === 'composition') {
-        const count = countIn(el.compositionId, new Set<string>());
+        const { count, infiniteCount } = countIn(el.compositionId, new Set<string>());
         if (count > 0) {
-          groups.push({ key: el.id, compositionId: el.compositionId, name: el.name, count });
+          groups.push({
+            key: el.id,
+            compositionId: el.compositionId,
+            name: el.name,
+            count,
+            infiniteCount,
+          });
         }
       } else if (el.type === 'container') {
         findInstances(el.children);
@@ -232,6 +265,26 @@ const holdMsNumStyle: CSSProperties = {
   boxSizing: 'border-box',
 };
 
+// D-111 — inline flag on a hold-driving row whose element repeats forever (`repeat: 'infinite'`):
+// such a driver never completes, so it keeps the graphic on air until stop(). Reuses the design
+// system's danger colour + triangle-alert glyph (no new palette).
+const infiniteWarnStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.18rem',
+  color: colors.danger,
+  fontSize: '0.6rem',
+  fontWeight: 600,
+};
+function InfiniteWarn({ title }: { title: string }): JSX.Element {
+  return (
+    <span style={infiniteWarnStyle} title={title}>
+      <Icon icon={TriangleAlert} size={11} />
+      loops forever
+    </span>
+  );
+}
+
 /**
  * D-107 — when the hold is content-driven, let the designer choose WHICH content
  * elements close the graphic. Pre-checked (all participate by default); unchecking
@@ -241,6 +294,9 @@ const holdMsNumStyle: CSSProperties = {
  * content inside nested composition instances (which drive the parent's hold via
  * D-104) with a drill-in, since `drivesHold` lives on the shared child and must be
  * edited there. Falls back to a drill-in hint only when neither surface has rows.
+ * D-111 — any hold driver authored with `repeat: 'infinite'` never completes, so its
+ * row is flagged ("loops forever"); when EVERY driver is infinite a prominent alert
+ * says the graphic won't auto-close (the hold runs until stop).
  */
 function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
   const items = contentHoldElementsOf(scene);
@@ -248,10 +304,28 @@ function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
   // parent's hold too (D-104), but `drivesHold` is on the SHARED child, so surface
   // it READ-ONLY with a drill-in rather than a toggle.
   const nested = nestedHoldGroupsOf(scene);
+  // D-111 — a content-driven hold is `Promise.all` over its drivers, so ANY infinite-repeat
+  // driver (`repeat: 'infinite'`, still participating) keeps the graphic on air until stop().
+  // Flag each such row; escalate to a prominent alert when EVERY driver (own + nested) is
+  // infinite, so nothing can end the hold on content.
+  const ownDrivers = items.filter((it) => it.drivesHold);
+  const totalDrivers = ownDrivers.length + nested.reduce((n, g) => n + g.count, 0);
+  const infiniteDrivers =
+    ownDrivers.filter((it) => it.infinite).length + nested.reduce((n, g) => n + g.infiniteCount, 0);
+  const allInfinite = infiniteDrivers > 0 && infiniteDrivers === totalDrivers;
   const labels = disambiguate(items.map((it) => it.name));
   const nestedLabels = disambiguate(nested.map((g) => g.name));
   return (
     <>
+      {allInfinite && (
+        <div className={s.row} style={{ display: 'block' }}>
+          <Callout variant="danger">
+            This graphic won’t auto-close — every content driver repeats forever, so the
+            content-driven hold runs until stop. Give a driver a finite repeat, exclude one below,
+            or switch to a timed hold.
+          </Callout>
+        </div>
+      )}
       {items.length > 0 && (
         <div className={s.row} style={{ display: 'block' }}>
           <p style={{ ...mutedStyle, margin: '0 0 0.2rem' }}>Which content closes the graphic?</p>
@@ -266,6 +340,11 @@ function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
                 />
                 <span style={{ color: colors.text }}>{labels[i] ?? it.name}</span>
                 <span style={checkTypeStyle}>{TYPE_LABEL[it.type]}</span>
+                {it.drivesHold && it.infinite && (
+                  <InfiniteWarn
+                    title={`“${labels[i] ?? it.name}” has repeat: infinite, so it never completes — the graphic holds until stop(). Uncheck it or give it a finite repeat to let the graphic auto-close.`}
+                  />
+                )}
               </label>
             ))}
           </div>
@@ -291,6 +370,11 @@ function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
                 <span style={checkTypeStyle}>
                   {g.count} item{g.count === 1 ? '' : 's'}
                 </span>
+                {g.infiniteCount > 0 && (
+                  <InfiniteWarn
+                    title={`An element inside “${nestedLabels[i] ?? g.name}” has repeat: infinite, so it never completes — the graphic holds until stop(). Open it to give that element a finite repeat or exclude it.`}
+                  />
+                )}
               </Button>
             ))}
           </div>
