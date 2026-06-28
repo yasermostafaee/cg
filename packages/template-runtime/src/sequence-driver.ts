@@ -568,7 +568,13 @@ export function makeSequenceItemNode(
   const node = doc.createElement('span');
   node.dataset['cgSequenceItem'] = '1';
   node.style.gridArea = '1 / 1';
-  node.style.whiteSpace = 'pre';
+  // D-117 — multi-line item text: honor explicit `\n` AND auto-wrap a line longer than the element
+  // width onto further lines (capped to the grid cell), `break-word` for an unbreakable long word.
+  // The item wraps inside the FIXED box; the per-item transition moves the whole block by the fixed
+  // box height (sequence-driver `box()`), so a multi-line block animates as one unit (no mid-line cut).
+  node.style.whiteSpace = 'pre-wrap';
+  node.style.maxWidth = '100%';
+  node.style.overflowWrap = 'break-word';
   node.style.direction = direction;
   node.style.unicodeBidi = 'isolate';
   // B-016 — a gradient text colour paints on the item (a content-sized grid item),

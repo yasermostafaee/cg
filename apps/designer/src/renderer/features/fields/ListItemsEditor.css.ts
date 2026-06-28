@@ -26,6 +26,13 @@ export const itemInput = style({
   outline: 'none',
 });
 
+/** D-118 — the multi-line item-text textarea filling the item row (the look lives in the shared
+ * `Textarea` primitive; this only makes it flex to the row width). */
+export const itemTextArea = style({
+  flex: 1,
+  minWidth: 0,
+});
+
 /** D-029 — the narrow per-item dwell (seconds) column for sequences. */
 export const dwellInput = style({
   width: '3.2rem',
@@ -62,19 +69,6 @@ export const itemActions = style({
   alignItems: 'center',
   gap: '0.2rem',
   flex: 'none',
-});
-
-/** The full-width value (text input OR composition picker) on the item's second line. */
-export const seqValue = style({
-  width: '100%',
-  boxSizing: 'border-box',
-  background: colors.panelMuted,
-  color: colors.text,
-  border: `1px solid ${colors.border}`,
-  borderRadius: '0.2rem',
-  padding: '0.25rem 0.4rem',
-  fontSize: '0.74rem',
-  outline: 'none',
 });
 
 /**

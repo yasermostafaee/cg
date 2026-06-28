@@ -87,6 +87,21 @@ export const name = style({
   whiteSpace: 'nowrap',
 });
 
+/** D-115 — the "main" badge on the designated entry composition's row (accent, distinct from the
+ * open-composition dot). */
+export const mainBadge = style({
+  flexShrink: 0,
+  fontSize: '0.6rem',
+  fontWeight: 700,
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+  color: colors.accent,
+  border: `1px solid ${colors.accent}`,
+  borderRadius: '0.2rem',
+  padding: '0 0.25rem',
+  lineHeight: 1.6,
+});
+
 export const nameInput = style({
   flex: 1,
   background: colors.panelMuted,

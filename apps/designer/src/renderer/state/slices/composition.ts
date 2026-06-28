@@ -59,6 +59,21 @@ export const compositionSlice = {
   },
 
   /**
+   * D-115 — designate (or clear, with `null`) the MAIN / entry composition: which composition the
+   * editor opens on by default (persisted on the scene, order-independent). A non-null id must be a
+   * known composition; `null` clears the designation (fall back to the first composition). The
+   * referenced comp is cleared automatically on delete (see `deleteComposition`).
+   */
+  setEntryComposition(id: string | null): void {
+    if (current.scene === null) return;
+    if (id !== null && (current.scene.compositions ?? []).some((c) => c.id === id) !== true) return;
+    const next: Scene = { ...current.scene };
+    if (id === null) delete next.entryCompositionId;
+    else next.entryCompositionId = id;
+    set({ scene: next });
+  },
+
+  /**
    * D-086 Phase B — open (non-null) / close (null) the Preview modal on a composition
    * snapshot. Session-only: the in-canvas preview host renders the modal off this, so
    * the left-rail action bar can trigger it without re-rendering the editor tree.
@@ -174,12 +189,15 @@ export const compositionSlice = {
       .filter((c) => c.id !== id)
       .map((c) => ({ ...c, layers: cleanLayers(c.layers) }));
     const goMain = current.activeCompositionId === id;
+    const nextScene: Scene = {
+      ...current.scene,
+      layers: cleanLayers(current.scene.layers),
+      compositions: nextComps,
+    };
+    // D-115 — clear the main designation if the deleted comp was it (fall back to the default).
+    if (current.scene.entryCompositionId === id) delete nextScene.entryCompositionId;
     set({
-      scene: {
-        ...current.scene,
-        layers: cleanLayers(current.scene.layers),
-        compositions: nextComps,
-      },
+      scene: nextScene,
       ...(goMain
         ? {
             activeCompositionId: null,

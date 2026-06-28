@@ -126,6 +126,12 @@ export function CompositionsPanel(): JSX.Element {
                 ) : (
                   <span className={s.name}>{comp.name}</span>
                 )}
+                {/* D-115 — the designated MAIN/entry composition (what the editor opens on). */}
+                {comp.id === scene.entryCompositionId && renaming !== comp.id && (
+                  <span className={s.mainBadge} title="Main composition — opens by default">
+                    main
+                  </span>
+                )}
               </div>
             );
           })
@@ -154,6 +160,16 @@ export function CompositionsPanel(): JSX.Element {
                     : `Can’t add “${name}” here — it already contains the open composition, so nesting it would loop forever.`,
                 );
               }
+            }}
+          />
+          <MenuButton
+            label={menu.id === scene.entryCompositionId ? 'Unset main' : 'Set as main'}
+            title="Open this composition by default when the template is opened"
+            onClick={() => {
+              designerStore.setEntryComposition(
+                menu.id === scene.entryCompositionId ? null : menu.id,
+              );
+              setMenu(null);
             }}
           />
           <MenuButton

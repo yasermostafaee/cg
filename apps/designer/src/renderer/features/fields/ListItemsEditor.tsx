@@ -4,6 +4,7 @@ import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
 import { Select } from '../../ui/Select.js';
+import { Textarea } from '../../ui/Textarea.js';
 import type { ListItemColumn } from './repeater-columns.js';
 import * as s from './ListItemsEditor.css.js';
 
@@ -34,6 +35,18 @@ interface Props {
   onChange: (items: ListItem[]) => void;
   /** Accessible-name base, e.g. the field label ("Headlines item 2"). */
   label: string;
+  /**
+   * D-118 — the item TEXT reading direction (the element's `direction`) applied to the multi-line
+   * textarea, so Persian/RTL item text edits in reading order. Absent ⇒ inherits (LTR contexts).
+   */
+  dir?: 'ltr' | 'rtl' | undefined;
+  /**
+   * D-118 — render the single-text item input as a multi-line `<Textarea>` (sequence contexts), in
+   * BOTH the inspector and the preview field form, so authoring a `\n` (D-117 renders it) is possible
+   * everywhere. Absent/false ⇒ a single-line `<input>` (the ticker + generic list, unchanged). (The
+   * `compositions` sequence-inspector branch is always a textarea.)
+   */
+  multiline?: boolean | undefined;
   /** D-029 — show the optional per-item dwell input (sequence contexts). */
   showDwell?: boolean;
   /**
@@ -147,6 +160,8 @@ export function ListItemsEditor({
   items,
   onChange,
   label,
+  dir,
+  multiline = false,
   showDwell = false,
   columns,
   compositions,
@@ -290,10 +305,11 @@ export function ListItemsEditor({
                   ))}
                 </Select>
               ) : (
-                <input
-                  className={s.seqValue}
-                  type="text"
+                // D-118 — a multi-line textarea (Enter inserts `\n`, does not commit), committing
+                // through the same per-change item-update path. RTL via the element's `dir`.
+                <Textarea
                   value={textOf(item)}
+                  dir={dir}
                   aria-label={`${label} item ${String(i + 1)}`}
                   onChange={(e) =>
                     onChange(items.map((it, j) => (j === i ? { ...it, text: e.target.value } : it)))
@@ -353,6 +369,18 @@ export function ListItemsEditor({
                   }
                 />
               ))
+            ) : multiline ? (
+              // D-118 — sequence contexts (inspector + preview form): a multi-line textarea (Enter
+              // inserts `\n`, does not commit), same per-change item-update path. RTL via `dir`.
+              <Textarea
+                className={s.itemTextArea}
+                value={textOf(item)}
+                dir={dir}
+                aria-label={`${label} item ${String(i + 1)}`}
+                onChange={(e) =>
+                  onChange(items.map((it, j) => (j === i ? { ...it, text: e.target.value } : it)))
+                }
+              />
             ) : (
               <input
                 className={s.itemInput}
