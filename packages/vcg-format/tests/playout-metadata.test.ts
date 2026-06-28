@@ -58,4 +58,20 @@ describe('buildPlayoutMetadata', () => {
     // (30 - 20) / 50 fps * 1000 = 200 ms
     expect(buildPlayoutMetadata(scene).outroDurationMs).toBe(200);
   });
+
+  it('B-032 — bakes a STORED holdMs for a content-less auto-out AND loop-cycle (not 0)', () => {
+    // The inspector now persists the timed `holdMs` onto `scene.playout`, so a standalone
+    // export carries the authored hold (both the baked metadata here AND the inlined scene
+    // the runtime reads). fixtureScene has no content sources.
+    for (const mode of ['auto-out', 'loop-cycle'] as const) {
+      const scene: Scene = {
+        ...fixtureScene,
+        lifecycle: { outPoint: 40 },
+        playout: { mode, holdMs: 8000 },
+      };
+      const meta = buildPlayoutMetadata(scene);
+      expect(meta.mode).toBe(mode);
+      expect(meta.holdMs).toBe(8000); // exported ⇒ a standalone export holds for the authored duration
+    }
+  });
 });

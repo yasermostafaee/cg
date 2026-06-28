@@ -15,6 +15,7 @@ import { Icon } from '../../ui/Icon.js';
 import { Select } from '../../ui/Select.js';
 import { designerStore } from '../../state/store.js';
 import { CollapseSection } from './CollapseSection.js';
+import { RealtimeNumberInput } from './controls.js';
 import * as s from './InspectorPanel.css.js';
 import * as cls from './PlayoutSection.css.js';
 
@@ -252,6 +253,17 @@ const checkRowStyle: CSSProperties = {
   cursor: 'pointer',
 };
 const checkTypeStyle: CSSProperties = { color: colors.textMuted, fontSize: '0.62rem' };
+const holdMsNumStyle: CSSProperties = {
+  background: colors.panelMuted,
+  color: colors.text,
+  border: `1px solid ${colors.border}`,
+  borderRadius: '0.18rem',
+  padding: '0.1rem 0.35rem',
+  fontSize: '0.72rem',
+  width: '76px',
+  fontVariantNumeric: 'tabular-nums',
+  boxSizing: 'border-box',
+};
 
 // D-111 — inline flag on a hold-driving row whose element repeats forever (`repeat: 'infinite'`):
 // such a driver never completes, so it keeps the graphic on air until stop(). Reuses the design
@@ -383,9 +395,9 @@ function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
  * D-020 — no-code "Playout" inspector section. Picks the composition's playout
  * `mode` (the design-time decision: what kind of template this is), wired to
  * `designerStore.setPlayout`. The single `outPoint` marker is dragged on the
- * timeline (this section just reports it). `holdMs` / `repeat` are NOT here —
- * they are playout-time / operator decisions and live in the preview modal as a
- * session-only override (and at the control surface later).
+ * timeline (this section just reports it). B-032 — the TIMED `holdMs` is authored
+ * here too (a stored default that EXPORTS, still overridable in the preview);
+ * `repeat` remains a preview/control-surface session override.
  */
 export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
   const playout = playoutOf(scene);
@@ -395,6 +407,13 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
   // actually contains a content source (a ticker or a countdown clock): a
   // dead control teaches nothing (same principle as Next disabled at steps=1).
   const hasContent = hasContentElement(scene);
+  // B-032 — the TIMED hold duration (`holdMs`) is an AUTHORABLE default stored on the
+  // composition's playout, so a content-less `auto-out` / `loop-cycle` EXPORTS and plays
+  // back with the hold (the preview session override still layers on top via
+  // `effectivePlayoutFor`). Offered only for a TIMED hold under `auto-out` / `loop-cycle`
+  // (a content-driven hold ignores `holdMs`).
+  const holdSourceEff: HoldSource = hasContent ? (playout.holdSource ?? 'timed') : 'timed';
+  const showHoldMs = (mode === 'auto-out' || mode === 'loop-cycle') && holdSourceEff === 'timed';
 
   /** Default out-point at 75 % of the active region (leaves room for the exit). */
   function defaultMarker(): { outPoint: number } {
@@ -483,10 +502,28 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
         <ContentHoldChecklist scene={scene} />
       )}
 
+      {showHoldMs && (
+        <div className={s.row}>
+          <span className={s.label}>hold ms</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <RealtimeNumberInput
+              style={holdMsNumStyle}
+              scrub={false}
+              min={0}
+              step={100}
+              value={playout.holdMs ?? 0}
+              onCommit={(n) => designerStore.setPlayout({ holdMs: Math.max(0, Math.round(n)) })}
+              ariaLabel="Hold duration in milliseconds"
+            />
+            <span style={mutedStyle}>ms</span>
+          </div>
+        </div>
+      )}
+
       {lifecycle !== undefined ? (
         <p style={hintStyle}>
-          Out point @ frame {String(lifecycle.outPoint)} — drag the marker on the timeline. Hold /
-          repeat are tuned live in the preview.{' '}
+          Out point @ frame {String(lifecycle.outPoint)} — drag the marker on the timeline. Repeat
+          is tuned live in the preview.{' '}
           <Button
             variant="bare"
             style={linkBtnStyle}
