@@ -851,7 +851,7 @@ loop-cycle); a designer E2E for the inspector `holdMs` control (appears for time
 persists across a mode round-trip, hidden for manual); the `content-less-timed-hold` runtime + preview
 guards. Capability: `designer-playout-lifecycle`.
 
-## [ ] B-033 — preview replay does not re-arm the content-driven hold (closes instantly on 2nd play) ⟨priority: high⟩
+## [~] B-033 — preview replay does not re-arm the content-driven hold (closes instantly on 2nd play) ⟨priority: high⟩ — `openspec/changes/replay-rearms-content-hold`
 
 > In the preview, a content-driven hold waits correctly on the FIRST play, but pressing Play again (without reopening) makes it close instantly — it no longer waits for content. Closing and reopening the preview fixes it.
 
