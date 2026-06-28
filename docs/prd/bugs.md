@@ -825,3 +825,28 @@ reaches a terminal state (settles, or is cleanly stoppable) instead of hanging o
 **Root cause / fix:** TWO coupled fixes for one behavior. (a) UI: make the preview's per-scope content check recurse into nested composition instances (match the inspector's recursive `hasContentElement`) so a parent whose content is entirely nested IS offered content-driven hold. (b) Runtime: stop unconditionally skipping a content-driven nested comp in `contentTreeWait`; instead include its content in the parent's wait, honoring each element's `drivesHold` (D-107) — default drives the parent, `drivesHold === false` opts out. The nested comp still runs its own outro (self-settles), giving the staggered content-first / background-last exit. Coordinate with B-030 (the inverse timed-auto-out strand) — both touch the coordinator's child handling. Verify no existing fixture/test relies on the old skip. HIGH-RISK playout engine → RECON FIRST.
 **Fix:** runtime waits on a content-driven nested child's reset-safe `whenSettled()` (in `aggregateContentWait`) instead of skipping it; the preview's `hasAnyContentIn` recurses nested instances. Honors `drivesHold`; `startContentTree` unchanged (no double-start). The ticker-runtime "finite root self-settle past a nested infinite content-driven child" test is rewritten (that scenario now holds until `stop()`).
 **Regression test:** `@cg/template-runtime` tests: (1) a parent with a content-driven nested child (finite content, `drivesHold` default) holds until the nested content completes then settles; (2) `drivesHold === false` on the nested item makes the parent NOT wait on it. Plus a designer/E2E test: the preview offers content-driven hold on a parent whose only content is nested. Capability: `designer-playout-lifecycle`.
+
+## [~] B-032 — timed hold (`holdMs`) ignored for a content-less auto-out / loop-cycle composition — FIX: persist + bake holdMs ⟨priority: high⟩ — implementing on `fix/content-less-timed-hold` (`openspec/changes/persist-timed-hold`)
+
+> A content-less `auto-out` / `loop-cycle` composition with a timed `holdMs` closes ~immediately on
+> EXPORT / on-air (any value behaving like 0). Root cause (RECON): `holdMs` was preview-session-only —
+> the runtime honors it, but it was never persisted to the stored playout, so the single-file export
+> baked no `holdMs`. Fix (decided): author + store `holdMs`.
+
+**Repro:** a NEW content-less composition with an entrance + an out-point; set `auto-out` (or
+`loop-cycle`) and `holdMs`; export the single-file HTML (or play on-air without a rundown).
+**Root cause (preview vs export):** the runtime/controller honor `holdMs` (stored OR a preview-session
+`playoutOverride`, incl. loop-cycle's between-cycle hold and the no-out-point / empty-outro case) — so
+the PREVIEW holds. But the export bakes only the STORED playout (`buildPlayoutMetadata` → `playoutOf`
+plus the inlined scene), and the inspector never persisted `holdMs` (D-020 made it preview-only) ⇒
+exported `holdMs` undefined ⇒ `scheduleHold(0)` ⇒ collapse.
+**Fix (Option 1 — persist + bake):** the inspector's Playout section now authors the STORED
+`playout.holdMs` (the SAME optional field — no schema change) for a TIMED hold under `auto-out` /
+`loop-cycle`; the preview session override still layers on top (`effectivePlayoutFor`:
+`override.holdMs ?? stored.holdMs`). The exporter already bakes a present `holdMs` (both modes) and the
+inlined scene carries it, so a standalone export now holds for the authored duration. `repeat` stays a
+preview/rundown session override.
+**Regression test:** `@cg/vcg-format` `buildPlayoutMetadata` bakes a stored `holdMs` (auto-out +
+loop-cycle); a designer E2E for the inspector `holdMs` control (appears for timed auto-out / loop-cycle,
+persists across a mode round-trip, hidden for manual); the `content-less-timed-hold` runtime + preview
+guards. Capability: `designer-playout-lifecycle`.
