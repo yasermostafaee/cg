@@ -140,6 +140,8 @@ interface ScopeNode {
    * self-settling (its own outro) — the staggered content-first / background-last exit.
    */
   whenSettled: () => Promise<void>;
+  /** B-033 — re-arm this scope's self-settle deferred for a fresh run, so a REPLAY's content-driven hold waits again. */
+  resetSettled: () => void;
 }
 
 /**
@@ -690,10 +692,18 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       };
       // B-031 — resolves when THIS scope settles (after its outro), so a content-driven
       // parent can hold until a nested content-driven (coordinator) child has played out.
+      // B-033 — re-mintable per run: a REPLAY must re-arm this (via `resetSettled`, before the
+      // controller cascade) so the parent — which captures `whenSettled()` FRESH at each hold
+      // entry — waits on a PENDING settle again instead of the one already resolved last play.
       let resolveSettled: () => void = () => undefined;
-      const settled = new Promise<void>((res) => {
+      let settled = new Promise<void>((res) => {
         resolveSettled = res;
       });
+      const resetSettled = (): void => {
+        settled = new Promise<void>((res) => {
+          resolveSettled = res;
+        });
+      };
       const effPlayout = effectivePlayoutFor(scope, path);
       const isGlobalRoot = isSubtreeRoot && isRootSubtree;
       // D-104 — a "coordinator" is a content-driven (non-manual) scope: its hold lasts
@@ -839,6 +849,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         contentDrivers,
         instanceChildren,
         whenSettled: () => settled,
+        resetSettled,
       };
 
       // D-030 — repeater drivers (after the node exists: stamped rows attach
@@ -1104,6 +1115,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // the mode orchestration (auto-out / loop-cycle / content-driven) then runs.
       // Absent lifecycle: the whole timeline is the entrance and the hold is its
       // last frame. D-026 — cascades to every nested instance's own controller.
+      // B-033 — re-arm every scope's self-settle signal for THIS run BEFORE the controller cascade,
+      // so a replay's content-driven hold waits on a FRESH (pending) nested-coordinator settle
+      // instead of the one already resolved last play (which made the 2nd+ play close instantly).
+      const rearmSettled = (n: ScopeNode): void => {
+        n.resetSettled();
+        for (const child of n.children) rearmSettled(child);
+      };
+      rearmSettled(rootNode);
       cascade(rootNode, (c) => c.play());
       bus.emit('play.end');
     },
