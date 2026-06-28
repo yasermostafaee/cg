@@ -392,4 +392,54 @@ describe('D-104 — nested-composition content participates in the parent lifecy
     expect(onAir()).toBe(false); // settles only when the override resolves
     r.remove();
   });
+
+  it('(B-031) a content-driven parent HOLDS for a CONTENT-DRIVEN nested child until it self-settles', async () => {
+    const clock = makeClock();
+    // The nested comp is ITSELF content-driven (a coordinator): a 1s countdown drives
+    // ITS own hold. B-031 — that nested content now DRIVES the content-driven parent's
+    // hold too; the parent waits until the child self-settles (its content + its outro).
+    const child = comp('cd', 10, [countdownClock('clk', 1000)], {
+      mode: 'auto-out',
+      holdSource: 'content-driven',
+    });
+    const scene = parentScene({
+      compositions: [child],
+      children: [instance('i-cd', 'cd', 'cd')],
+      lifecycle: { outPoint: 25 },
+      playout: { mode: 'auto-out', holdSource: 'content-driven' },
+    });
+    const r = createRuntime(scene, { skipFontLoad: true, clock });
+    await r.play({});
+
+    await run(clock, 600);
+    expect(onAir()).toBe(true); // holding — the nested content-driven child has not settled
+
+    await run(clock, 3000); // child countdown done (~1s) → child self-settles → parent plays out
+    expect(onAir()).toBe(false);
+    r.remove();
+  });
+
+  it('(B-031) drivesHold:false on the nested content opts it out — the parent does NOT wait on it', async () => {
+    const clock = makeClock();
+    // The child's only content (a 5s countdown) is EXCLUDED (drivesHold:false), so the
+    // child gets a zero-length hold and self-settles fast; the parent must NOT wait on
+    // the 5s countdown — it settles well before the countdown would have ended.
+    const excluded = {
+      ...countdownClock('clk', 5000),
+      drivesHold: false,
+    } as unknown as Element;
+    const child = comp('cd', 10, [excluded], { mode: 'auto-out', holdSource: 'content-driven' });
+    const scene = parentScene({
+      compositions: [child],
+      children: [instance('i-cd', 'cd', 'cd')],
+      lifecycle: { outPoint: 25 },
+      playout: { mode: 'auto-out', holdSource: 'content-driven' },
+    });
+    const r = createRuntime(scene, { skipFontLoad: true, clock });
+    await r.play({});
+
+    await run(clock, 3000); // < the 5s countdown: settled ⇒ the parent did not wait on the opted-out content
+    expect(onAir()).toBe(false);
+    r.remove();
+  });
 });

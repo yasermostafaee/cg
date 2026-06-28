@@ -109,6 +109,13 @@ interface ScopeNode {
   ownContentWait: () => Promise<void> | null;
   /** D-104 — composition-INSTANCE children only (NOT repeater rows), for content aggregation up the tree. */
   instanceChildren: ScopeNode[];
+  /**
+   * B-031 — resolves when THIS scope's controller SETTLES (after its own outro). A
+   * content-driven parent waits on a nested CONTENT-DRIVEN (coordinator) child's settle,
+   * so a content-driven nested composition DRIVES the parent's hold while still
+   * self-settling (its own outro) — the staggered content-first / background-last exit.
+   */
+  whenSettled: () => Promise<void>;
 }
 
 /**
@@ -125,22 +132,37 @@ function startContentTree(node: ScopeNode): void {
 }
 
 /**
- * D-104 — `node`'s recursive content completion: its own content sources plus
- * every non-coordinator nested-composition descendant's (skipping nested
- * coordinators, which self-settle). null when nothing finite is coordinated (a
- * zero-length hold).
+ * B-031 — aggregate a scope's content completion for a content-driven hold: its OWN
+ * content sources (already D-107 `drivesHold`-filtered) PLUS, for each
+ * composition-instance child, EITHER the recursed wait of a NON-coordinator child
+ * (whose content this coordinator starts + waits on), OR a CONTENT-DRIVEN
+ * (coordinator) child's SELF-SETTLE (`whenSettled`). A content-driven nested
+ * composition self-starts and self-settles its own content (honoring its own
+ * `drivesHold`); the parent holds until it has played out — so it DRIVES the parent's
+ * hold too (the D-104 unconditional skip is removed). An infinite nested coordinator
+ * never settles, so the parent holds until `stop()`. null when nothing finite is
+ * coordinated (a zero-length hold).
  */
-function contentTreeWait(node: ScopeNode): Promise<void> | null {
+function aggregateContentWait(
+  ownWait: Promise<void> | null,
+  instanceChildren: readonly ScopeNode[],
+): Promise<void> | null {
   const waits: Promise<void>[] = [];
-  const own = node.ownContentWait();
-  if (own !== null) waits.push(own);
-  for (const child of node.instanceChildren) {
-    if (!child.isCoordinator) {
+  if (ownWait !== null) waits.push(ownWait);
+  for (const child of instanceChildren) {
+    if (child.isCoordinator) {
+      waits.push(child.whenSettled());
+    } else {
       const childWait = contentTreeWait(child);
       if (childWait !== null) waits.push(childWait);
     }
   }
   return waits.length > 0 ? Promise.all(waits).then(() => undefined) : null;
+}
+
+/** A node's recursive content completion (see {@link aggregateContentWait}). */
+function contentTreeWait(node: ScopeNode): Promise<void> | null {
+  return aggregateContentWait(node.ownContentWait(), node.instanceChildren);
 }
 
 /**
@@ -558,12 +580,20 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         for (const c of scopeClocks) c.stop();
         for (const s of scopeSequences) s.stop();
       };
+      // B-031 — resolves when THIS scope settles (after its outro), so a content-driven
+      // parent can hold until a nested content-driven (coordinator) child has played out.
+      let resolveSettled: () => void = () => undefined;
+      const settled = new Promise<void>((res) => {
+        resolveSettled = res;
+      });
       const effPlayout = effectivePlayoutFor(scope.source, path);
       const isGlobalRoot = isSubtreeRoot && isRootSubtree;
       // D-104 — a "coordinator" is a content-driven (non-manual) scope: its hold lasts
-      // until its OWN content PLUS its non-coordinator nested descendants' content
-      // completes (a content-driven nested comp self-settles and is skipped, preserving
-      // its own per-scope hold). An EXPLICIT boot `contentHold` still wins for the ROOT.
+      // until its OWN content PLUS its nested descendants' content completes. B-031 — a
+      // content-driven nested comp is ALSO coordinated (the parent waits on its
+      // self-settle), so it drives the parent's hold; a non-coordinator nested comp's
+      // content is started + awaited by this coordinator. An EXPLICIT boot `contentHold`
+      // still wins for the ROOT.
       const isCoordinator =
         effPlayout.mode !== 'manual' && effPlayout.holdSource === 'content-driven';
       // D-104 follow-up — a scope DRIVES content (starts its OWN + its non-coordinator
@@ -658,25 +688,20 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           ? (): void => {
               onRootSettled();
             }
-          : stopScopeContent,
-        // The content closures aggregate THIS scope's own content with its
-        // non-coordinator nested descendants' (a nested coordinator self-settles, so it
-        // is skipped) via the module helpers: `waitForContent` supplies a content-driven
+          : (): void => {
+              stopScopeContent();
+              resolveSettled(); // B-031 — let a content-driven parent's wait resolve
+            },
+        // The content closures aggregate THIS scope's own content with its nested
+        // descendants' via the module helpers: a non-coordinator child's content is
+        // started + awaited here; a content-driven (coordinator) child self-settles and
+        // the parent waits on that (B-031). `waitForContent` supplies a content-driven
         // hold's completion (at the hold entry); `onContentStart` starts the content at
         // the entrance-settle frame (the moment the intro completes).
         waitForContent: isCoordinator
           ? (): Promise<void> | null => {
               if (isGlobalRoot && options.contentHold !== undefined) return options.contentHold();
-              const waits: Promise<void>[] = [];
-              const own = ownContentWait();
-              if (own !== null) waits.push(own);
-              for (const child of instanceChildren) {
-                if (!child.isCoordinator) {
-                  const childWait = contentTreeWait(child);
-                  if (childWait !== null) waits.push(childWait);
-                }
-              }
-              return waits.length > 0 ? Promise.all(waits).then(() => undefined) : null;
+              return aggregateContentWait(ownContentWait(), instanceChildren);
             }
           : undefined,
         onContentStart: drivesContent
@@ -700,6 +725,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         startOwnContent,
         ownContentWait,
         instanceChildren,
+        whenSettled: () => settled,
       };
 
       // D-030 — repeater drivers (after the node exists: stamped rows attach

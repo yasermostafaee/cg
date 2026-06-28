@@ -378,15 +378,15 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
     expect(document.body.classList.contains('cg-pending')).toBe(false);
   });
 
-  it('a finite root self-settle exits a nested infinite ticker (nothing rolls under the hidden stage)', async () => {
+  it('B-031 — a content-driven root HOLDS on a nested content-driven band with an infinite crawl (until stop)', async () => {
     const clock = makeClock();
     const scene: Scene = {
       ...tickerScene({}),
-      // D-104 — Root: content-driven hold with NO root tickers, nesting a
-      // content-driven (coordinator) band. A nested COORDINATOR owns + self-settles
-      // its own content, so the root SKIPS it ⇒ the root coordinates nothing ⇒
-      // zero-length hold ⇒ settles right after play; the nested infinite crawl is
-      // taken down with it by the root settle's cascade.
+      // B-031 — Root: content-driven hold with NO root tickers, nesting a
+      // content-driven (coordinator) band with an INFINITE crawl. The nested
+      // content-driven comp now DRIVES the root's hold (the parent waits on its
+      // self-settle); the infinite crawl never completes, so the band never settles
+      // and the root HOLDS on air until stop() — it no longer self-settles early.
       playout: { mode: 'auto-out', holdSource: 'content-driven' },
       layers: [
         {
@@ -417,9 +417,9 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
           resolution: { width: 400, height: 60 },
           frameRange: { in: 0, out: 50 },
           background: 'transparent',
-          // D-104 — the band is itself content-driven (a coordinator): it owns its
-          // own infinite crawl, so the content-driven root does NOT wait on it and
-          // still self-settles (zero-length), tearing the crawl down on settle.
+          // B-031 — the band is itself content-driven (a coordinator) with an infinite
+          // crawl; the content-driven root now WAITS on its self-settle, so the infinite
+          // crawl holds the root on air until stop().
           playout: { mode: 'auto-out', holdSource: 'content-driven' },
           layers: [
             {
@@ -436,12 +436,19 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
     };
     const runtime = createRuntime(scene, { skipFontLoad: true, clock, tickerMeasure });
     await runtime.play({});
-    await run(clock, 200);
-    expect(document.body.classList.contains('cg-pending')).toBe(true); // root settled
+    await run(clock, 2000);
+    // The infinite nested crawl drives the root's hold ⇒ the root stays ON AIR.
+    expect(document.body.classList.contains('cg-pending')).toBe(false);
+    await run(clock, 20_000, 2000);
+    expect(document.body.classList.contains('cg-pending')).toBe(false); // still holding — never self-settles
+    // Only stop() settles it; the cascade then freezes the crawl under the hidden stage.
+    await runtime.stop();
+    await run(clock, 2000);
+    expect(document.body.classList.contains('cg-pending')).toBe(true);
     const track = bandEl().querySelector<HTMLElement>('.cg-ticker-track');
     const frozen = track?.style.transform;
-    await run(clock, 60_000, 5000);
-    expect(track?.style.transform).toBe(frozen); // crawl frozen — rAF stopped
+    await run(clock, 10_000, 2000);
+    expect(track?.style.transform).toBe(frozen); // crawl frozen — rAF stopped after stop()
   });
 
   it('update() with a list field reconciles the crawl through the ticker-items binding', async () => {

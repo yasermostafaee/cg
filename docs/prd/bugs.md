@@ -801,3 +801,27 @@ to timed `auto-out`.
 **Regression test:** a `@cg/template-runtime` test (the D-104 "STRAND" scenario) asserting the parent
 reaches a terminal state (settles, or is cleanly stoppable) instead of hanging on air. Capability:
 `designer-playout-lifecycle`.
+
+## [~] B-031 — a content-driven nested composition does not drive its parent's hold, so the parent never closes on the nested content ⟨priority: high⟩ — D-104 follow-up (distinct from B-030); fixing on `fix/nested-content-drives-parent-hold` (`openspec/changes/nested-content-drives-parent-hold`)
+
+> A composition instance whose own playout is content-driven (a "coordinator") is SKIPPED by its parent's
+> aggregated content-wait (D-104's `contentTreeWait` / `startContentTree` skip nested coordinators, assuming
+> they self-settle). So the parent never waits on the nested content. Compounding it, the preview's per-scope
+> timing tree computes `hasContent` SHALLOWLY (own elements only, not recursing into nested instances — unlike
+> the inspector's recursive `hasContentElement`), so the parent isn't even OFFERED the content-driven hold in
+> the preview. Net: a graphic whose closing content lives inside a content-driven child never closes its
+> background.
+
+**Repro:**
+
+1. Author a child composition C with a finite ticker (repeat: 1); set C's playout to content-driven (`auto-out` + `holdSource: 'content-driven'`).
+2. In a PARENT P with a background animation + an out-point, nest C as a composition instance (P has no other content); mark C's ticker as hold-driving via the D-107/D-108 checklist.
+3. In the preview timing, try to set P's hold to content-driven.
+4. Play P (preview modal / exported single-file HTML); let the ticker finish its pass.
+
+**Expected:** P can be set to content-driven; P holds until the nested content completes, then plays its outro — content first, background last. Per-element `drivesHold === false` opts a nested item OUT of driving the parent.
+**Actual:** the preview offers P only a numeric (timed) hold, no content-driven option; and at runtime the content-driven child C is skipped, so P never waits on the ticker and the background never closes (P holds on air until `stop()`).
+**Env:** Browser + Designer preview + exported single-file HTML (runtime `@cg/template-runtime`; preview UI `features/fields/PreviewScopeTiming.tsx`).
+**Root cause / fix:** TWO coupled fixes for one behavior. (a) UI: make the preview's per-scope content check recurse into nested composition instances (match the inspector's recursive `hasContentElement`) so a parent whose content is entirely nested IS offered content-driven hold. (b) Runtime: stop unconditionally skipping a content-driven nested comp in `contentTreeWait`; instead include its content in the parent's wait, honoring each element's `drivesHold` (D-107) — default drives the parent, `drivesHold === false` opts out. The nested comp still runs its own outro (self-settles), giving the staggered content-first / background-last exit. Coordinate with B-030 (the inverse timed-auto-out strand) — both touch the coordinator's child handling. Verify no existing fixture/test relies on the old skip. HIGH-RISK playout engine → RECON FIRST.
+**Fix:** runtime waits on a content-driven nested child's reset-safe `whenSettled()` (in `aggregateContentWait`) instead of skipping it; the preview's `hasAnyContentIn` recurses nested instances. Honors `drivesHold`; `startContentTree` unchanged (no double-start). The ticker-runtime "finite root self-settle past a nested infinite content-driven child" test is rewritten (that scenario now holds until `stop()`).
+**Regression test:** `@cg/template-runtime` tests: (1) a parent with a content-driven nested child (finite content, `drivesHold` default) holds until the nested content completes then settles; (2) `drivesHold === false` on the nested item makes the parent NOT wait on it. Plus a designer/E2E test: the preview offers content-driven hold on a parent whose only content is nested. Capability: `designer-playout-lifecycle`.

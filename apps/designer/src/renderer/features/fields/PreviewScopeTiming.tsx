@@ -24,9 +24,13 @@ export interface TimingScopeNode {
   depth: number;
   /** D-102 Phase 1 — EVERY ticker in the scope (recursing containers); each is tuned on its own row. */
   tickers: TickerInfo[];
-  /** D-027/D-029 — whether the scope contains a non-ticker content source
-   *  (a countdown clock or a sequence). */
-  hasOtherContent: boolean;
+  /**
+   * B-031 — whether the scope has ANY content source (ticker / countdown clock /
+   * sequence) — directly OR inside a nested composition instance (cycle-guarded) — so a
+   * parent whose closing content is entirely nested IS offered the content-driven hold,
+   * matching the inspector's recursive `hasContentElement`.
+   */
+  hasContent: boolean;
 }
 
 /** D-102 Phase 1 — a ticker in a scope: element id + name + authored resting repeat/boundary. */
@@ -73,15 +77,33 @@ function tickersOf(doc: { layers: Scene['layers'] }): TickerInfo[] {
   return out;
 }
 
-/** D-027/D-029 — does the scope contain a countdown clock or a sequence? */
-function hasOtherContentIn(doc: { layers: Scene['layers'] }): boolean {
+/**
+ * B-031 — does the scope have ANY content source (ticker / countdown clock / sequence)
+ * — directly OR inside a nested composition instance (resolving `scene.compositions`,
+ * cycle-guarded), matching the inspector's recursive `hasContentElement`? A parent
+ * whose closing content lives entirely in a nested composition is therefore OFFERED the
+ * content-driven hold in the preview (previously a shallow check hid it).
+ */
+function hasAnyContentIn(doc: { layers: Scene['layers'] }, scene: Scene): boolean {
+  const visited = new Set<string>();
   const walk = (children: readonly Element[]): boolean =>
-    children.some(
-      (el) =>
-        (el.type === 'clock' && el.mode === 'countdown') ||
+    children.some((el) => {
+      if (
+        el.type === 'ticker' ||
         el.type === 'sequence' ||
-        (el.type === 'container' && walk(el.children)),
-    );
+        (el.type === 'clock' && el.mode === 'countdown')
+      ) {
+        return true;
+      }
+      if (el.type === 'container') return walk(el.children);
+      if (el.type === 'composition') {
+        if (visited.has(el.compositionId)) return false;
+        visited.add(el.compositionId);
+        const comp = scene.compositions?.find((c) => c.id === el.compositionId);
+        return comp !== undefined && comp.layers.some((l) => walk(l.children));
+      }
+      return false;
+    });
   return doc.layers.some((l) => walk(l.children));
 }
 
@@ -98,7 +120,7 @@ export function timingScopeList(scene: Scene): TimingScopeNode[] {
       source: scene,
       depth: 0,
       tickers: tickersOf(scene),
-      hasOtherContent: hasOtherContentIn(scene),
+      hasContent: hasAnyContentIn(scene, scene),
     },
   ];
   const walk = (
@@ -119,7 +141,7 @@ export function timingScopeList(scene: Scene): TimingScopeNode[] {
         source: comp,
         depth,
         tickers: tickersOf(comp),
-        hasOtherContent: hasOtherContentIn(comp),
+        hasContent: hasAnyContentIn(comp, scene),
       });
       walk(comp, path, depth + 1, new Set([...visited, inst.compositionId]));
     }
@@ -175,7 +197,7 @@ export function PreviewScopeTiming({
               title={node.path === '' ? 'Timing (session)' : `Timing — ${node.label}`}
               defaultExpanded={node.path === ''}
               showFooter={i === visible.length - 1}
-              hasContent={node.tickers.length > 0 || node.hasOtherContent}
+              hasContent={node.hasContent}
               override={scopeOverride}
               onChange={(patch) => onChange(node.path, patch)}
             >

@@ -218,3 +218,58 @@ describe('D-102 Phase 1 — per-element ticker enumeration', () => {
     expect(disambiguateNames(['Crawl A', 'Crawl B'])).toEqual(['Crawl A', 'Crawl B']);
   });
 });
+
+describe('B-031 — content-driven hold offered when content is nested', () => {
+  function countdown(id: string): Element {
+    return {
+      id,
+      name: id,
+      type: 'clock',
+      transform: baseTransform,
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 0,
+      font: {
+        family: 'Vazirmatn',
+        weight: 600,
+        style: 'normal',
+        size: 24,
+        lineHeight: 1.2,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      align: 'center',
+      mode: 'countdown',
+      format: 'mm:ss',
+      digits: 'latin',
+      target: { kind: 'duration', ms: 1000 },
+    } as unknown as Element;
+  }
+
+  it('a parent whose only content lives in a nested composition is marked hasContent (recursive)', () => {
+    // The child "team" holds a countdown; the parent only NESTS it (home/away) — no own content.
+    const scene = parentScene({
+      layers: [
+        {
+          id: 'team-l',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [countdown('clk')],
+        },
+      ],
+    });
+    // Root has no own content, but the nested countdown is surfaced (the content-driven
+    // hold is offered) — previously a shallow check left it false.
+    expect(timingScopeList(scene).find((n) => n.path === '')?.hasContent).toBe(true);
+    // The nested scope reports its own content too.
+    expect(timingScopeList(scene).find((n) => n.path === 'home')?.hasContent).toBe(true);
+  });
+
+  it('a purely-static nest is NOT offered the content-driven hold', () => {
+    const root = timingScopeList(parentScene()).find((n) => n.path === '')!;
+    expect(root.hasContent).toBe(false); // empty team child ⇒ no content anywhere
+  });
+});
