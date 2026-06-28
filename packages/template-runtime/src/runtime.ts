@@ -236,8 +236,13 @@ function scopeHasEffectiveHoldDrivers(
   scope: FieldScope,
   overrides?: Readonly<Record<string, boolean>>,
 ): boolean {
-  const drives = (el: { id: string; drivesHold?: boolean | undefined }): boolean =>
-    overrides?.[el.id] ?? el.drivesHold !== false;
+  // B-034 — a HIDDEN content element (`visible: false`) is never an effective driver, regardless of
+  // `drivesHold` / `holdOverrides` (a comp whose only content is hidden has no drivers ⇒ B-032 timed).
+  const drives = (el: {
+    id: string;
+    drivesHold?: boolean | undefined;
+    visible?: boolean;
+  }): boolean => el.visible !== false && (overrides?.[el.id] ?? el.drivesHold !== false);
   for (const t of scope.tickers) if (drives(t.element)) return true;
   for (const c of scope.clocks)
     if (c.element.mode === 'countdown' && drives(c.element)) return true;
@@ -490,14 +495,19 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // D-105 — mark the content root so the coordinated exit (out/stop) can fade/hide it.
         t.band.dataset['cgContent'] = 'ticker';
         tickers.push(driver);
-        // D-107 — joins the hold wait unless explicitly excluded.
-        if (t.element.drivesHold !== false) holdTickers.push(driver);
-        // D-112 — exposed UNFILTERED so a parent instance override can re-filter it.
-        contentDrivers.push({
-          id: t.element.id,
-          drivesHold: t.element.drivesHold !== false,
-          whenComplete: () => driver.whenComplete(),
-        });
+        // B-034 — a HIDDEN content element (`visible: false`) is fully inert: it NEVER drives the
+        // hold (its own or a parent's, regardless of `drivesHold` / `holdOverrides`), so it is
+        // excluded from BOTH the own-hold array AND `contentDrivers` (no override can force it in).
+        if (t.element.visible !== false) {
+          // D-107 — joins the hold wait unless explicitly excluded.
+          if (t.element.drivesHold !== false) holdTickers.push(driver);
+          // D-112 — exposed UNFILTERED so a parent instance override can re-filter it.
+          contentDrivers.push({
+            id: t.element.id,
+            drivesHold: t.element.drivesHold !== false,
+            whenComplete: () => driver.whenComplete(),
+          });
+        }
         return driver;
       });
       // D-027 — clock drivers (no overrides and no bindings: no fields in v1).
@@ -519,7 +529,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         clocks.push(driver);
         // D-107 — only a COUNTDOWN drives the hold (wall/countup never complete), and only
         // when not explicitly excluded. D-112 — a countdown is also exposed UNFILTERED.
-        if (c.element.mode === 'countdown') {
+        // B-034 — a HIDDEN countdown is fully inert (never drives the hold).
+        if (c.element.mode === 'countdown' && c.element.visible !== false) {
           if (c.element.drivesHold !== false) holdCountdowns.push(driver);
           contentDrivers.push({
             id: c.element.id,
@@ -637,14 +648,17 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // D-105 — mark the content root for the coordinated exit (out/stop).
         s.host.dataset['cgContent'] = 'sequence';
         sequences.push(driver);
-        // D-107 — joins the hold wait unless explicitly excluded.
-        if (s.element.drivesHold !== false) holdSequences.push(driver);
-        // D-112 — exposed UNFILTERED so a parent instance override can re-filter it.
-        contentDrivers.push({
-          id: s.element.id,
-          drivesHold: s.element.drivesHold !== false,
-          whenComplete: () => driver.whenComplete(),
-        });
+        // B-034 — a HIDDEN sequence is fully inert (never drives the hold, own or via an override).
+        if (s.element.visible !== false) {
+          // D-107 — joins the hold wait unless explicitly excluded.
+          if (s.element.drivesHold !== false) holdSequences.push(driver);
+          // D-112 — exposed UNFILTERED so a parent instance override can re-filter it.
+          contentDrivers.push({
+            id: s.element.id,
+            drivesHold: s.element.drivesHold !== false,
+            whenComplete: () => driver.whenComplete(),
+          });
+        }
         return driver;
       });
 

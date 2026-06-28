@@ -66,7 +66,8 @@ function tickersOf(doc: { layers: Scene['layers'] }): TickerInfo[] {
   const out: TickerInfo[] = [];
   const walk = (children: readonly Element[]): void => {
     for (const el of children) {
-      if (el.type === 'ticker') {
+      // B-034 — a HIDDEN ticker (`visible: false`) is inert: not shown in the preview timing list.
+      if (el.type === 'ticker' && el.visible !== false) {
         out.push({ id: el.id, name: el.name, repeat: el.repeat, cycleBoundary: el.cycleBoundary });
       } else if (el.type === 'container') {
         walk(el.children);
@@ -89,9 +90,11 @@ function hasAnyContentIn(doc: { layers: Scene['layers'] }, scene: Scene): boolea
   const walk = (children: readonly Element[]): boolean =>
     children.some((el) => {
       if (
-        el.type === 'ticker' ||
-        el.type === 'sequence' ||
-        (el.type === 'clock' && el.mode === 'countdown')
+        (el.type === 'ticker' ||
+          el.type === 'sequence' ||
+          (el.type === 'clock' && el.mode === 'countdown')) &&
+        // B-034 — a HIDDEN content element is inert (not offered as content-driven in the preview).
+        el.visible !== false
       ) {
         return true;
       }
