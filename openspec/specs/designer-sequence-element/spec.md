@@ -331,3 +331,84 @@ name>[<index>]` (keyed stably so same-named sequences don't collide)
 - **WHEN** a sequence's item-list IS data-bound
 - **THEN** no per-item fields are exposed (the bound list drives the items via
   the existing list editor); per-item exposure resumes if the binding is removed
+
+### Requirement: Multi-line sequence item text
+
+The runtime SHALL render a sequence item's text as MULTI-LINE on air: it SHALL honor explicit `\n`
+line breaks AND auto-wrap a line longer than the element width onto additional lines
+(`white-space: pre-wrap` + a cap to the item's grid cell + `overflow-wrap: break-word`), composing
+authored breaks with wrapping. The item SHALL wrap inside the FIXED element box (grid cell), and its
+per-item transition (push-up etc.) SHALL animate the WHOLE multi-line block as one unit by the fixed
+box height — content exits/enters cleanly, never cut mid-line. `align` / `verticalAlign` / RTL
+reading direction SHALL still position the taller item correctly. A single-line item SHALL render
+exactly as before.
+
+#### Scenario: Explicit line breaks
+
+- **WHEN** a sequence item's text contains `\n`
+- **THEN** it breaks at exactly those points on air
+
+#### Scenario: Long line auto-wraps at the element width
+
+- **WHEN** a sequence item's line is longer than the element width
+- **THEN** it wraps onto additional lines (no overflow past the box) rather than one over-long line
+
+#### Scenario: Multi-line height adapts and alignment/RTL still position it
+
+- **WHEN** a sequence item becomes multi-line
+- **THEN** its block height adapts and `align` / `verticalAlign` / RTL reading direction still
+  position it correctly within the box
+
+#### Scenario: The multi-line block transitions as one unit
+
+- **WHEN** a multi-line sequence item enters or exits via its transition (e.g. push-up)
+- **THEN** the transition animates the full multi-line block cleanly by the fixed box height (no
+  mid-line cut)
+
+#### Scenario: Preview equals export
+
+- **WHEN** a multi-line sequence item is previewed and exported
+- **THEN** the on-air rendering is identical (both go through the same runtime sequence driver)
+
+#### Scenario: Single-line unchanged
+
+- **WHEN** a sequence item is single-line (no `\n`, fits the element width)
+- **THEN** its rendering is unchanged (no regression)
+
+### Requirement: Multi-line textarea for sequence item text
+
+A sequence's per-item TEXT field SHALL be a multi-line, vertically resizable textarea (the shared
+`renderer/ui/Textarea` design-system primitive), not a single-line input — comfortably sized for long
+Persian copy — in BOTH the inspector (properties panel) AND the operator preview field form, so the
+two match. Pressing Enter in it SHALL insert a `\n` into the item text and SHALL NOT commit/close the
+field. Edits SHALL commit through the existing item-update store path (`setSequenceItems`, one undo
+entry per edit), so an embedded `\n` round-trips through the store; in the inspector the textarea
+SHALL apply the element's `direction` (`dir`) for RTL/mixed text. A composition item's picker is
+unaffected (only the TEXT item gets the textarea).
+
+#### Scenario: The item-text control is a textarea
+
+- **WHEN** editing a sequence TEXT item's text in the inspector
+- **THEN** the control is a multi-line textarea (the shared primitive), not a single-line input
+
+#### Scenario: The preview field form matches the inspector
+
+- **WHEN** editing a sequence-bound list field's item text in the operator PREVIEW field form
+- **THEN** the control is the same multi-line textarea (not a single-line input) — the preview matches
+  the properties panel
+
+#### Scenario: Enter inserts a newline, not a commit
+
+- **WHEN** the operator presses Enter in the item-text textarea
+- **THEN** a `\n` is inserted into the item text and the field is NOT committed/closed
+
+#### Scenario: Edits commit via the existing path and round-trip the newline
+
+- **WHEN** the operator types multi-line text (including `\n`) into a sequence item
+- **THEN** it commits through the existing `setSequenceItems` item-update path (one undo entry per
+  edit), the value round-trips with the embedded `\n`, and undo reverts the edit
+
+#### Scenario: RTL item text edits in reading order
+
+- **WHEN** the sequence element's `direction` is `rtl`
+- **THEN** the item-text textarea is `dir="rtl"` so Persian text edits in reading order

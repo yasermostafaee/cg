@@ -322,20 +322,30 @@ during the intro, the hold, or the outro.
 ### Requirement: Preview transport is separate, momentary playout commands
 
 The preview modal SHALL present the playout commands as **separate, momentary**
-buttons — **Play**, **Pause**, **Stop**, **Next** — each issuing a single command,
-mirroring on-air control. **Play** SHALL call `play()`, or `resume()` when the
-composition is paused; it SHALL NOT be a toggle and SHALL NOT remain visually
-"pressed"/active after a click. **Pause** SHALL call `pause()`, **Stop** SHALL call
-`stop()`, and **Next** SHALL call `next()` and SHALL be **disabled when the template
-has a single step** (nothing to advance to). Preview-only utilities (e.g. **Reset**)
-SHALL be grouped visually apart from the playout commands. All interactive controls
-SHALL expose hover / active / focus-visible / disabled states.
+buttons — **Play**, **Pause**, **Out**, **Stop**, **Next** — each issuing a single
+command, mirroring on-air control. **Play** SHALL call `play()`, or `resume()`
+when the composition is paused; it SHALL NOT be a toggle and SHALL NOT remain
+visually "pressed"/active after a click. **Pause** SHALL call `pause()`. **Out**
+SHALL call `out()` (the coordinated animated exit) and **Stop** SHALL call
+`stop()` (the immediate clear); both are momentary and visually distinct, each
+with its own icon and a short tooltip making the difference clear. **Next** SHALL
+call `next()` and SHALL be **disabled when the template has a single step**
+(nothing to advance to). Preview-only utilities (e.g. **Reset**) SHALL be grouped
+visually apart from the playout commands. All interactive controls SHALL expose
+hover / active / focus-visible / disabled states.
 
 #### Scenario: Play is momentary and resumes when paused
 
 - **WHEN** the operator clicks Play while the composition is paused
 - **THEN** the runtime resumes from the paused frame; **and** after any Play click
   the button does not stay pressed/active — it is a one-shot command, not a toggle
+
+#### Scenario: Out and Stop are distinct momentary commands
+
+- **WHEN** the transport is shown
+- **THEN** an **Out** command (calling `out()`) is presented alongside a **Stop**
+  command (calling `stop()`), each a separate momentary button with its own icon
+  and tooltip, neither staying pressed after a click
 
 #### Scenario: Next is disabled for a single-step template
 
@@ -366,39 +376,68 @@ the stage stays prominent.
 
 ### Requirement: No-code playout timing modes
 
-A composition SHALL carry a playout config with a `mode` of `manual`, `auto-out`,
-`loop-cycle`, or `content-driven`, plus `holdMs` and `repeat` where applicable.
-`manual` SHALL hold after the intro until `stop()`. `auto-out` SHALL, after
-reaching `outPoint` and `holdMs`, play the outro automatically. `loop-cycle` SHALL
-repeat `[in→outPoint]` → hold(`holdMs`) → `[outPoint→end]` for `repeat` cycles (or
-forever when `repeat` is `infinite`), or until `stop()`. `content-driven` SHALL run
-`repeat` content passes (or forever when `repeat` is `infinite`, or until
-`stop()`); each pass SHALL take its duration from the runtime-supplied duration
-hook (recomputed per pass — the ticker item computes content→duration), and
-`holdMs` SHALL NOT apply to `content-driven`. There SHALL be no separate
-continuous-loop mode: a looping playout is `loop-cycle` (or `content-driven`) with
-`repeat: 'infinite'`. `auto-out` and `loop-cycle` require an explicit `outPoint` to
-have an exit segment; with no `outPoint` they have no effect.
+A composition SHALL carry a playout config with a `mode` of `static`, `manual`, `auto-out`,
+`loop-cycle`, or `content-driven`, plus `holdMs` and `repeat` where applicable. `static` SHALL be the
+mode of a composition with NO out-point: it plays the intro, holds until `stop()`, and hard-cuts with
+NO outro (no animated exit) — it requires and uses no out-point. `manual` SHALL hold after the intro
+until `stop()`. `auto-out` SHALL, after reaching `outPoint` and `holdMs`, play the outro
+automatically. `loop-cycle` SHALL repeat `[in→outPoint]` → hold(`holdMs`) → `[outPoint→end]` for
+`repeat` cycles (or forever when `repeat` is `infinite`), or until `stop()`. `content-driven` SHALL
+run `repeat` content passes (or forever when `repeat` is `infinite`, or until `stop()`); each pass
+SHALL take its duration from the runtime-supplied duration hook (recomputed per pass — the ticker item
+computes content→duration), and `holdMs` SHALL NOT apply to `content-driven`. There SHALL be no
+separate continuous-loop mode: a looping playout is `loop-cycle` (or `content-driven`) with `repeat:
+'infinite'`. `manual` / `auto-out` / `loop-cycle` require an explicit `outPoint` to have an exit
+segment; a composition with NO `outPoint` and the DEFAULT (`manual`) mode resolves to `static` (a
+single resolver — `playoutOf` — returns `static`, so the runtime, exporter, and inspector agree). The
+designer UI never SETS `auto-out` / `loop-cycle` without an out-point, so a composition authored with
+no out-point IS `static`; an explicit `auto-out` / `loop-cycle` without an out-point (legacy /
+programmatic) keeps its timed / content-driven hold + empty (cut) outro and is NOT coerced.
+
+#### Scenario: A composition with no out-point is static
+
+- **WHEN** a composition has no out-point
+- **THEN** its resolved mode is `static`, and `manual` / `auto-out` / `loop-cycle` are disabled in the
+  inspector's mode select
+
+#### Scenario: A static graphic cuts on stop
+
+- **WHEN** a `static` composition is stopped
+- **THEN** it is removed by a clean cut with no outro — the controller plays the intro, holds until
+  `stop()`, then cuts (an empty exit)
+
+#### Scenario: Adding an out-point re-enables the animated modes
+
+- **WHEN** an out-point is added to a `static` composition
+- **THEN** `manual` / `auto-out` / `loop-cycle` become selectable again (and `static` is disabled
+  while an out-point exists)
+
+#### Scenario: The preview timing controls match the inspector
+
+- **WHEN** the operator opens the preview session-timing mode select for a composition
+- **THEN** it disables the same modes as the composition inspector — with no out-point only `static`
+  is selectable, with an out-point `static` is disabled — so the preview and the main scene properties
+  never disagree
 
 #### Scenario: Auto-out plays the outro after the hold
 
 - **WHEN** the mode is `auto-out` with `holdMs = T` and `play()` is called
-- **THEN** the intro plays, the composition holds at `outPoint` for T, and then the
-  outro plays automatically
+- **THEN** the intro plays, the composition holds at `outPoint` for T, and then the outro plays
+  automatically
 
 #### Scenario: Loop-cycle repeats the full cycle
 
 - **WHEN** the mode is `loop-cycle` with `holdMs = T` and `repeat = N`
-- **THEN** the composition repeats `[in→outPoint]` → hold(T) → `[outPoint→end]` N
-  times and then stops, and when `repeat` is `infinite` it repeats until `stop()`
+- **THEN** the composition repeats `[in→outPoint]` → hold(T) → `[outPoint→end]` N times and then
+  stops, and when `repeat` is `infinite` it repeats until `stop()`
 
 #### Scenario: Content-driven honors the repeat field
 
-- **WHEN** the mode is `content-driven` and `play()` is called, with each pass's
-  duration supplied by the runtime duration hook
-- **THEN** with `repeat = N` the composition runs N passes and then settles, and
-  with `repeat = 'infinite'` it loops the content pass continuously until `stop()`;
-  `holdMs` has no effect on either case
+- **WHEN** the mode is `content-driven` and `play()` is called, with each pass's duration supplied by
+  the runtime duration hook
+- **THEN** with `repeat = N` the composition runs N passes and then settles, and with `repeat =
+'infinite'` it loops the content pass continuously until `stop()`; `holdMs` has no effect on either
+  case
 
 ### Requirement: Mode + hold + repeat are overridable, non-persistent params
 
@@ -876,38 +915,6 @@ sequence are all listed; wall/countup clocks never appear (they cannot end a hol
 - **THEN** the parent surfaces that child's content READ-ONLY (a drill-in, not writable rows); the
   operator edits the child's own participation by drilling in
 
-### Requirement: Clearing the out-point reverts an out-point-dependent mode to manual
-
-Clearing a composition's out-point while its mode is `auto-out` or `loop-cycle` SHALL set the mode to
-`manual` in the SAME store action (one atomic undo step). Those modes require an out-point (an exit
-segment to start the animated outro from), so without this the composition would claim an animated
-exit with no marker to start from. The revert SHALL apply for EVERY path that clears the
-out-point (the inspector Clear button, a drag-off, a marker delete), because all route through the
-single clear action. When the mode is already `manual`, clearing the out-point SHALL leave the
-playout unchanged (no spurious write). The invariant is ONE-DIRECTIONAL: re-adding an out-point SHALL
-NOT auto-restore the prior mode.
-
-#### Scenario: Clearing the out-point in auto-out reverts to manual
-
-- **WHEN** the operator clears the out-point while the composition's mode is `auto-out`
-- **THEN** the mode becomes `manual` in the same atomic action (the rest of the playout — holdMs,
-  repeat — is preserved), and one undo restores both the out-point and the prior mode together
-
-#### Scenario: Clearing the out-point in loop-cycle reverts to manual
-
-- **WHEN** the operator clears the out-point while the mode is `loop-cycle`
-- **THEN** the mode becomes `manual`
-
-#### Scenario: Clearing the out-point in manual changes nothing
-
-- **WHEN** the operator clears the out-point while the mode is already `manual`
-- **THEN** the playout is left unchanged (no mode write)
-
-#### Scenario: Re-adding an out-point does not restore the prior mode
-
-- **WHEN** the operator clears the out-point (reverting to manual) and later re-adds an out-point
-- **THEN** the mode stays `manual` (the prior `auto-out` / `loop-cycle` is NOT auto-restored)
-
 ### Requirement: Nested content participation is a per-instance override on the parent
 
 A nested content element's participation in its parent hold SHALL resolve to the composition-instance's
@@ -1096,3 +1103,76 @@ instantly; only re-opening the preview must not be required to restore correct w
   composition has settled, and `play()` is called again
 - **THEN** the parent waits again on that nested composition's fresh self-settle (it does NOT close
   instantly on the already-resolved settle from the previous play)
+
+### Requirement: Coordinated animated exit (Out) versus immediate clear (Stop)
+
+The runtime SHALL expose two distinct exit operations — `out()` (animated) and
+`stop()` (immediate) — that BOTH settle into the cleared terminal state but differ
+in how the CONTENT (tickers / clocks / sequences) leaves RELATIVE TO the
+background's close (the composition's authored `[outPoint → out]` outro). For
+`out()`, the content SHALL animate off FIRST / with — a sensible default short
+opacity fade for content that has no authored exit (a crawling ticker, a clock) —
+sequenced via a promise so the background's outro plays LAST; the background SHALL
+NEVER close over fully-visible content. For `stop()`, the content SHALL be halted
+and hidden IMMEDIATELY and the background's close SHALL then play. The background's
+authored `[outPoint → out]` keyframes SHALL be respected in both cases, and
+content-first / background-last SHALL be the DEFAULT ordering when nothing is
+choreographed. This coordination SHALL live in the runtime so the preview, the
+exported single-file HTML, and on-air behave identically.
+
+#### Scenario: Out animates the content off before the background closes
+
+- **WHEN** `out()` is invoked on a composition whose content is a crawling ticker /
+  a clock with a background that has an authored outro
+- **THEN** the content animates out first (a default fade when it has no authored
+  exit), and only after the content has left does the background play its outro —
+  the background never closes over fully-visible content — and the composition then
+  settles into the cleared terminal state
+
+#### Scenario: Stop removes the content immediately, then closes the background
+
+- **WHEN** `stop()` is invoked
+- **THEN** the content drivers are halted and hidden immediately (gone before the
+  background moves), the background then plays its close animation, and the
+  composition settles cleared
+
+#### Scenario: Authored background outro respected; content-first is the default
+
+- **WHEN** a template has an authored background out-transition (its
+  `[outPoint → out]` keyframes) and no explicit exit choreography
+- **THEN** that authored background outro is played, and the content-first /
+  background-last ordering is applied by default so the two never overlap with the
+  background closing over visible content
+
+### Requirement: Clearing the out-point reverts the mode to static
+
+Clearing a composition's out-point SHALL rewrite an out-point-DEPENDENT mode (`auto-out` /
+`loop-cycle`) to `static` in the SAME store action (one atomic undo step), since a no-out-point
+composition has no animated exit. A `manual`/absent composition SHALL be left unchanged (no spurious
+write) — `playoutOf` already resolves a no-out-point default to `static`. The revert SHALL apply for
+EVERY path that clears the out-point (the inspector Clear button, a drag-off, a marker delete),
+because all route through the single clear action. The invariant is ONE-DIRECTIONAL: re-adding an
+out-point SHALL NOT auto-restore the prior mode.
+
+#### Scenario: Clearing the out-point in auto-out reverts to static
+
+- **WHEN** the operator clears the out-point while the composition's mode is `auto-out`
+- **THEN** the mode becomes `static` in the same atomic action (the rest of the playout — holdMs,
+  repeat — is preserved), and one undo restores both the out-point and the prior mode together
+
+#### Scenario: Clearing the out-point in loop-cycle reverts to static
+
+- **WHEN** the operator clears the out-point while the mode is `loop-cycle`
+- **THEN** the mode becomes `static`
+
+#### Scenario: Clearing the out-point in manual leaves the playout unchanged (resolves to static)
+
+- **WHEN** the operator clears the out-point while the mode is `manual` (or absent)
+- **THEN** the stored playout is left unchanged (no spurious write) and the EFFECTIVE mode resolves to
+  `static` (a no-out-point default is `static`)
+
+#### Scenario: Re-adding an out-point does not restore the prior mode
+
+- **WHEN** the operator clears the out-point (reverting to `static`) and later re-adds an out-point
+- **THEN** the mode lands on `manual` (the benign default for an out-point composition) — the prior
+  `auto-out` / `loop-cycle` is NOT auto-restored

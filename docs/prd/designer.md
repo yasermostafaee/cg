@@ -2151,7 +2151,7 @@ No exporter/packager/runtime/schema change. Recon (umbrella): `design.md` in
 `apps/designer/tests/e2e/off-frame-export.spec.ts`. Change:
 `openspec/changes/off-frame-export-filter/`.
 
-## [~] D-072 — Guide coordinate readout on hover / drag ⟨priority: low⟩ — implemented on `feat/D-072-073-guide-readout-nudge`; change `openspec/changes/guide-coordinate-readout/`
+## [x] D-072 — Guide coordinate readout on hover / drag ⟨priority: low⟩ — implemented on `feat/D-072-073-guide-readout-nudge`; change `openspec/changes/guide-coordinate-readout/`
 
 **What:** When the operator hovers a persistent ruler guide OR is dragging one, show a small
 badge with that guide's scene coordinate in px (`x: 960` for a vertical guide, `y: 540` for a
@@ -2178,7 +2178,7 @@ Transient view state lives in the component (do NOT add it to the store). No sch
 change. Coordinate is scene px (scene 0,0 = frame top-left, per the pasteboard offset).
 Change: `openspec/changes/guide-coordinate-readout/`.
 
-## [~] D-073 — Arrow-key nudge for the selection (Shift = larger step) ⟨priority: low⟩ — implemented on `feat/D-072-073-guide-readout-nudge`; change `openspec/changes/arrow-key-nudge/`
+## [x] D-073 — Arrow-key nudge for the selection (Shift = larger step) ⟨priority: low⟩ — implemented on `feat/D-072-073-guide-readout-nudge`; change `openspec/changes/arrow-key-nudge/`
 
 **What:** With one or more elements selected and no editable field focused, the arrow keys move
 the selection by 1px (scene px); holding **Shift** moves by 10px. Keyframe-aware (same path as a
@@ -2797,7 +2797,7 @@ coordinate via the controller tree (`onHoldStart` already starts a scope's own d
 extend so a child scope's content waits for the PARENT's hold-start). Medium-large; Understand pass on
 `playout-controller.ts` + `runtime.ts` contentWait + the controller-tree cascade before implementing.
 
-## [~] D-105 — Split exit: animated "Out" vs quick "Stop" (coordinated exit) ⟨priority: medium⟩ — implementing on `feat/preview-exit-and-update` (`openspec/changes/preview-split-exit`)
+## [x] D-105 — Split exit: animated "Out" vs quick "Stop" (coordinated exit) ⟨priority: medium⟩ — implementing on `feat/preview-exit-and-update` (`openspec/changes/preview-split-exit`)
 
 **What:** Two distinct exit operations in the preview. "Out" (animate off) plays the graphic's designed
 exit, COORDINATED so the content (ticker/clock/sequence) exits first/with and the background follows
@@ -2876,7 +2876,7 @@ selectivity is OUT of scope (deferred).
 
 **Notes:** Builds on D-107 (`apps/designer/src/renderer/features/inspector/PlayoutSection.tsx`); extend the recursive content walk it added (which already reaches grouped content) to recurse through composition instances by `compositionId` into the referenced composition's elements. Only ticker / sequence / countdown-clock kinds count (wall / count-up never drive a hold). Group by the immediate nested instance; deeper nesting surfaces progressively as the operator drills in. Drill-in reuses the existing `setActiveComposition` / `openCompositionAndSelect` store action. READ-ONLY — no `drivesHold` writes from the parent. Extend the requirement(s) D-107 added/modified in its living spec (`## MODIFIED` / `## ADDED`). Non-breaking, no schema change.
 
-## [~] D-109 — Pen tool + editable bézier `path` element ⟨priority: high⟩ — `openspec/changes/pen-path-element`
+## [x] D-109 — Pen tool + editable bézier `path` element ⟨priority: high⟩ — `openspec/changes/pen-path-element`
 
 **What:** A new `path` element kind, drawn with a Pen tool added to the top canvas toolbar (alongside cursor / rectangle / text / ellipse / hand / image), matching the Loopic pen. The pen draws full bézier outlines: a click places a corner anchor, a click-drag places a smooth anchor whose two handles mirror the drag; clicking the first anchor closes the path; Enter / Esc / double-click finishes an open path. After drawing, the path is fully editable: drag anchors, drag handles, insert a point on a segment, delete a point, and toggle an anchor between corner and smooth. A closed path renders fill + stroke; an open path renders stroke only. Transform / opacity / filter / stroke animate exactly like the other shapes. Per-point morphing animation is NOT in this item (it is D-110).
 **Why:** The owner wants Loopic-style custom vector shapes; rectangle and ellipse can't express arbitrary outlines. This `path` element — with each anchor carrying a stable id — is also the foundation the D-110 path-morph animation builds on.
@@ -2954,7 +2954,7 @@ OpenSpec: `## MODIFIED` the D-108 requirement (read-only → writable per-instan
 
 **Notes:** Designer-only, NOT runtime/high-risk. The revert belongs in the store action that clears the out-point (the lifecycle/out-point slice — same place `setPlayout` / the out-point marker live), so it's atomic and single-undo, not a UI-effect afterthought. Keep it consistent with the existing `NEEDS_OUTPOINT` gating in `PlayoutSection.tsx`'s mode select. Edge: confirm whatever "clears" the out-point routes through that action (drag-off, a clear button, deleting the marker) so all paths revert. Spec: `## ADDED` requirement on `designer-playout-lifecycle` (the out-point ⇄ mode invariant). Tests: a store/unit test (clear out-point in auto-out → manual; in loop-cycle → manual; in manual → unchanged; one undo step) + a designer/E2E test (clear marker → mode shows manual + NEEDS_OUTPOINT modes disabled).
 
-## [~] D-114 — 'static' playout mode for compositions with no out-point ⟨priority: medium⟩ — `openspec/changes/static-playout-mode`
+## [x] D-114 — 'static' playout mode for compositions with no out-point ⟨priority: medium⟩ — `openspec/changes/static-playout-mode`
 
 **What:** Add a fourth mode `static` (label e.g. "Static — plays in, holds, cut on stop; no exit animation"), which IS the mode whenever a composition has no lifecycle out-point. `manual` / `auto-out` / `loop-cycle` all require an out-point (they decide WHEN the animated exit fires); `static` is the no-out-point state (no animated exit, hard cut on stop).
 **Why:** Without an out-point there's no outro segment, so `manual` is misleading and stop() does nothing visible. A distinct `static` makes the model honest. REVISES D-113: clearing the out-point now reverts an out-point-dependent mode to `static` (not `manual`).
@@ -2968,7 +2968,7 @@ OpenSpec: `## MODIFIED` the D-108 requirement (read-only → writable per-instan
 
 **Notes:** Schema: add `static` to PlayoutModeSchema (non-breaking); a no-out-point `manual` scene should resolve/normalize to `static` via `playoutOf` (decide migrate-vs-resolve in design.md). Runtime: controller handles `static` (no outro path). UI: PlayoutSection select + the out-point⇄mode coupling (extends D-113's invariant). RECON FIRST (touches the controller stop/exit). Spec: `## MODIFIED` designer-playout-lifecycle (D-113's invariant) + `## ADDED static`. Tests: round-trip; controller (cut-on-stop, no outro); store/E2E (no out-point ⇒ static + others disabled; clear ⇒ static).
 
-## [~] D-115 — designate the main / entry composition (explicit, not list-order) ⟨priority: medium⟩ — `openspec/changes/designate-entry-composition`
+## [x] D-115 — designate the main / entry composition (explicit, not list-order) ⟨priority: medium⟩ — `openspec/changes/designate-entry-composition`
 
 **What:** Let the operator explicitly designate which composition is the MAIN/entry — what the editor opens on by default and what plays as the template's entry — instead of it being implicit (currently the active comp on load defaults by list position, not by intent). Add an explicit `entryCompositionId` on the scene (`null` ⇒ the main document itself), a "Set as main" action in the Compositions panel, and a clear indicator of which is main.
 **Why:** A template's "real" entry may not be the first composition; relying on order is fragile (reordering for organization silently changes the default). An explicit pointer is order-independent and matches intent.
@@ -2996,7 +2996,7 @@ OpenSpec: `## MODIFIED` the D-108 requirement (read-only → writable per-instan
 
 **Notes:** RECON FIRST — this changes WHEN the sequence's completion signal fires (it feeds the content-driven hold / B-031 aggregation), so it's the high-risk playout path. Lives in the sequence runtime (`@cg/template-runtime`) + its completion signal. Align with D-105 (content-first/background-last exit). Schema likely unchanged (transition fields exist). Spec: `## MODIFIED`/`## ADDED` on `designer-playout-lifecycle` (sequence boundary transitions + completion timing). Tests: a runtime test asserting last-item OUT plays before completion and the parent outro follows it (ordering); first-item IN plays; infinite unchanged.
 
-## [~] D-117 — multi-line text in sequence items on air (explicit \n + auto-wrap) ⟨priority: medium⟩ — `openspec/changes/multiline-sequence-items`
+## [x] D-117 — multi-line text in sequence items on air (explicit \n + auto-wrap) ⟨priority: medium⟩ — `openspec/changes/multiline-sequence-items`
 
 **What:** Render sequence item text as multi-line on air: honor explicit `\n` line breaks in the item text AND auto-wrap long lines at the element's width. The two compose — a single item may contain authored breaks and have its long lines wrapped. The item's height adapts to the wrapped/broken content, and `align` / `verticalAlign` / `direction` (RTL) and the item transitions (push-up, etc.) all keep working with the taller, multi-line item.
 **Why:** Today an item renders single-line, so long text overflows or clips and there's no way to force a break (e.g. a two-line title/subtitle). Operators need both authored breaks and automatic wrapping for long Persian lines.
@@ -3012,7 +3012,7 @@ OpenSpec: `## MODIFIED` the D-108 requirement (read-only → writable per-instan
 
 **Notes:** RENDER change (`@cg/template-runtime` sequence rendering) — NOT the editor (that's D-118). Applies to sequence items. Schema: the text field already holds a string; `\n` needs no schema change — but if a max-lines or wrap toggle is wanted, add it optional/non-breaking (decide in design.md; default = wrap + honor `\n`, no cap). Watch the transition/measurement path: item height is now dynamic, so any code assuming fixed item height (push-up offsets, dwell layout, scroll metrics) must use measured height. Spec: `## MODIFIED` the sequence rendering requirement on the relevant capability. Tests: a render/`d`-string-or-DOM unit test (explicit `\n` breaks; long line wraps; height adapts) + an E2E (two-line item renders + transitions correctly, preview==export), sequence, incl. an RTL case.
 
-## [~] D-118 — larger multi-line (textarea) input for sequence item text ⟨priority: low-medium⟩ — `openspec/changes/sequence-item-textarea`
+## [x] D-118 — larger multi-line (textarea) input for sequence item text ⟨priority: low-medium⟩ — `openspec/changes/sequence-item-textarea`
 
 **What:** Replace the single-line item-text input in the SEQUENCE item editor with a multi-line, resizable textarea, so operators can edit long text comfortably and insert explicit line breaks (Enter → `\n`) — in BOTH the properties panel (inspector) AND the operator preview field form, so the two match. Pairs with D-117 (which renders those breaks on air). SEQUENCE ONLY — the ticker keeps its single-line input.
 **Why:** The current single-line input can't hold long Persian copy comfortably and can't enter a line break at all (no Enter), so authored multi-line text (D-117) is impossible to create.
