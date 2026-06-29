@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 
 /**
  * Runtime browser SPA. The renderer lives under `src/renderer`; the
@@ -8,18 +9,21 @@ import react from '@vitejs/plugin-react';
  * (`@cg/*`) resolve to their built `dist/` via the pnpm workspace.
  */
 export default defineConfig({
-  plugins: [react()],
+  plugins: [vanillaExtractPlugin(), react()],
   build: {
     outDir: 'dist',
     emptyOutDir: true,
     target: 'es2022',
   },
   server: {
-    host: '127.0.0.1',
-    port: 5174,
+    // Defaults to loopback. Set HOST=0.0.0.0 (or `true`) to expose the dev
+    // server on the LAN — e.g. to open the Designer from another device.
+    // Override the port with PORT (e.g. PORT=80 for a bare http://<ip>/ URL).
+    host: process.env.HOST ?? '127.0.0.1',
+    port: process.env.PORT !== undefined ? Number(process.env.PORT) : 5174,
   },
   preview: {
-    host: '127.0.0.1',
-    port: 4174,
+    host: process.env.HOST ?? '127.0.0.1',
+    port: process.env.PORT !== undefined ? Number(process.env.PORT) : 7000,
   },
 });

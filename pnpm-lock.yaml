@@ -153,6 +153,9 @@ importers:
       '@cg/vcg-format':
         specifier: workspace:*
         version: link:../../packages/vcg-format
+      '@vanilla-extract/css':
+        specifier: ^1.20.1
+        version: 1.20.1
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -178,6 +181,9 @@ importers:
       '@types/react-dom':
         specifier: ^18.3.1
         version: 18.3.7(@types/react@18.3.28)
+      '@vanilla-extract/vite-plugin':
+        specifier: ^5.2.2
+        version: 5.2.2(@types/node@22.19.19)(esbuild@0.24.2)(lightningcss@1.32.0)(vite@5.4.21(@types/node@22.19.19)(lightningcss@1.32.0))(yaml@2.9.0)
       '@vitejs/plugin-react':
         specifier: ^4.3.4
         version: 4.7.0(vite@5.4.21(@types/node@22.19.19)(lightningcss@1.32.0))
