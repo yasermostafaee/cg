@@ -129,10 +129,12 @@ describe('SequenceDriver (D-029)', () => {
     expect(visible(h.host)).toEqual([ITEMS[0]?.text]); // still item 1
   });
 
-  it('a finite repeat completes EXACTLY ONCE past the last item — by timer', async () => {
+  it('a finite repeat plays the boundary transitions and completes after the LAST item EXITS — by timer', async () => {
     const h = make({ repeat: 1, defaultDwellMs: 500 });
     const done = completionFlag(h.driver);
     h.driver.start();
+    h.clock.advance(400); // D-116 — the first item's entrance (transitionIn) plays before dwelling
+    expect(visible(h.host)).toEqual([ITEMS[0]?.text]);
     // a → b → c, then c's dwell elapses: past the last item of pass 1.
     for (let i = 0; i < 2; i += 1) {
       h.clock.advance(500);
@@ -141,18 +143,23 @@ describe('SequenceDriver (D-029)', () => {
     expect(visible(h.host)).toEqual([ITEMS[2]?.text]);
     await flush();
     expect(done.done).toBe(false);
-    h.clock.advance(500); // c's dwell ends — the run completes
+    h.clock.advance(500); // c's dwell ends — the LAST item's EXIT (transitionOut) begins
+    await flush();
+    expect(done.done).toBe(false); // D-116 — completion waits until the exit finishes
+    h.clock.advance(400); // the exit completes — NOW the run completes
     await flush();
     expect(done.done).toBe(true);
-    // The LAST item stays on screen; nothing advances any more.
+    // The last item has EXITED (off-screen); nothing advances any more.
+    expect(visible(h.host)).toEqual([]);
     h.clock.advance(10_000);
-    expect(visible(h.host)).toEqual([ITEMS[2]?.text]);
+    expect(visible(h.host)).toEqual([]);
   });
 
-  it('a finite repeat completes past the last item — by next() too', async () => {
+  it('a finite repeat completes after the last item EXITS — by next() too', async () => {
     const h = make({ repeat: 1, advance: 'manual' });
     const done = completionFlag(h.driver);
     h.driver.start();
+    h.clock.advance(400); // D-116 — the first-item entrance plays on start (next() waits for it)
     h.driver.next();
     h.clock.advance(400);
     h.driver.next();
@@ -160,10 +167,13 @@ describe('SequenceDriver (D-029)', () => {
     expect(visible(h.host)).toEqual([ITEMS[2]?.text]);
     await flush();
     expect(done.done).toBe(false);
-    h.driver.next(); // past the last item of pass 1
+    h.driver.next(); // past the last item of pass 1 — the LAST item's EXIT begins
+    await flush();
+    expect(done.done).toBe(false); // D-116 — completion waits for the exit
+    h.clock.advance(400); // the exit completes — NOW the run completes
     await flush();
     expect(done.done).toBe(true);
-    expect(visible(h.host)).toEqual([ITEMS[2]?.text]); // last item stays
+    expect(visible(h.host)).toEqual([]); // the last item has exited
   });
 
   it("'infinite' wraps to item 1 and never completes", async () => {
@@ -217,9 +227,11 @@ describe('SequenceDriver (D-029)', () => {
       items: ITEMS.slice(0, 2).map((i) => ({ ...i })),
     });
     h.driver.start();
+    h.clock.advance(400); // entrance
     h.driver.next();
-    h.clock.advance(400);
-    h.driver.next(); // past the last item — run 1 completes
+    h.clock.advance(400); // a → b transition
+    h.driver.next(); // past the last item — run 1's last item exits
+    h.clock.advance(400); // exit → run 1 completes
     await flush();
     h.driver.reset();
     expect(visible(h.host)).toEqual([ITEMS[0]?.text]); // back to item 1
@@ -227,9 +239,11 @@ describe('SequenceDriver (D-029)', () => {
     await flush();
     expect(second.done).toBe(false);
     h.driver.start();
+    h.clock.advance(400); // entrance (run 2 — fresh)
     h.driver.next();
-    h.clock.advance(400);
-    h.driver.next();
+    h.clock.advance(400); // a → b
+    h.driver.next(); // past b — exit
+    h.clock.advance(400); // exit completes
     await flush();
     expect(second.done).toBe(true);
   });
@@ -293,6 +307,7 @@ describe('SequenceDriver (D-029)', () => {
       const h = make({ repeat: 1, advance: 'manual' });
       const done = completionFlag(h.driver);
       h.driver.start();
+      h.clock.advance(400); // D-116 — the first-item entrance completes (next() waits for it)
       h.driver.next(); // a → b transition in flight
       h.clock.advance(100); // mid-motion
       h.driver.setItems([{ id: 'c', text: ITEMS[2]?.text ?? '' }]);
@@ -303,7 +318,10 @@ describe('SequenceDriver (D-029)', () => {
       expect(visible(h.host)).toEqual([ITEMS[2]?.text]);
       await flush();
       expect(done.done).toBe(false); // no premature completion
-      h.driver.next(); // past the real last item — NOW the run completes
+      h.driver.next(); // past the real last item — the last item's EXIT begins
+      await flush();
+      expect(done.done).toBe(false); // D-116 — completion waits for the exit
+      h.clock.advance(400); // exit completes — NOW the run completes
       await flush();
       expect(done.done).toBe(true);
     });
