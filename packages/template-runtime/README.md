@@ -79,6 +79,18 @@ composition instance owns its **own** `elementMap`, `textOriginals`, container,
 `animated` list, `tickers` + `clocks` + `sequences` lists, and lifecycle
 `source`.
 
+**Auto-size text (D-060).** A `text` element with `fitMode: 'autosize'` hugs its
+content in BOTH dimensions via CSS intrinsic sizing — `buildText` skips the
+`transform.size` width/height (`applyBaseStyles(..., skipSize)`) and sets
+`width/height: max-content` + `white-space: pre` (so explicit `\n` make lines and
+nothing width-wraps), a minimum box (≥ one line) so empty text stays selectable,
+and skips the vertical-align flex wrapper (no vertical slack). The anchor is the
+reading-start corner: LTR keeps the top-left (`left`); RTL pins the top-right via
+CSS `right = resolutionWidth − position.x` (so growth extends leftward). It is
+synchronous + CEF/`file://`-safe (no JS measurement) and identical in preview /
+`.vcg` / single-file HTML. Size keyframes are ignored for an auto text box
+(`animation-applier` skips the `size.w`/`size.h` write); `fixed` is unchanged.
+
 An `image` element builds as `<img data-cg-asset-id>` with **no `src`** — the
 runtime doesn't own asset bytes; the **host** wires `src` (D-062). `createRuntime`
 takes a `RuntimeBootOptions.assetUrls` map (`assetId → url`) and, after build, sets

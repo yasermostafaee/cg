@@ -88,6 +88,13 @@ export const TextElementSchema = ElementBaseSchema.extend({
    */
   shadow: ShadowSchema.optional(),
   maxLines: z.number().int().positive().optional(),
+  /**
+   * Box sizing mode (D-060). `fixed` sizes the box from `transform.size`
+   * (default). `autosize` makes the runtime hug the content in BOTH dimensions
+   * via CSS intrinsic sizing (honours explicit `\n`, no auto-wrap; size keyframes
+   * are ignored while auto). `shrink-to-fit` (font-shrink) is NOT yet implemented
+   * — it renders like `fixed` today.
+   */
   fitMode: z.enum(['fixed', 'shrink-to-fit', 'autosize']),
   overflow: z.enum(['clip', 'ellipsis', 'shrink']),
   /** D-010 — inner padding inside the text box. */

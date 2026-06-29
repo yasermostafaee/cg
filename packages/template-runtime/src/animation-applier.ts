@@ -51,7 +51,11 @@ export function applyAnimationAtFrame(entry: AnimatedElement, frame: number): vo
     entry.node.style.left = `${animated.posX}px`;
     entry.node.style.top = `${animated.posY}px`;
   }
-  if (animated.sizeDirty) {
+  // D-060/D-046 — an auto-sized text box is content-driven, so size keyframes are
+  // ignored (the D-046 toggle guard deletes them on switch, but a scene loaded with
+  // stale size tracks must not fight the intrinsic sizing).
+  const autoSizedText = entry.source.type === 'text' && entry.source.fitMode === 'autosize';
+  if (animated.sizeDirty && !autoSizedText) {
     entry.node.style.width = `${animated.sizeW}px`;
     entry.node.style.height = `${animated.sizeH}px`;
   }
