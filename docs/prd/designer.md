@@ -2968,7 +2968,7 @@ OpenSpec: `## MODIFIED` the D-108 requirement (read-only → writable per-instan
 
 **Notes:** Schema: add `static` to PlayoutModeSchema (non-breaking); a no-out-point `manual` scene should resolve/normalize to `static` via `playoutOf` (decide migrate-vs-resolve in design.md). Runtime: controller handles `static` (no outro path). UI: PlayoutSection select + the out-point⇄mode coupling (extends D-113's invariant). RECON FIRST (touches the controller stop/exit). Spec: `## MODIFIED` designer-playout-lifecycle (D-113's invariant) + `## ADDED static`. Tests: round-trip; controller (cut-on-stop, no outro); store/E2E (no out-point ⇒ static + others disabled; clear ⇒ static).
 
-## [ ] D-115 — designate the main / entry composition (explicit, not list-order) ⟨priority: medium⟩
+## [~] D-115 — designate the main / entry composition (explicit, not list-order) ⟨priority: medium⟩ — `openspec/changes/designate-entry-composition`
 
 **What:** Let the operator explicitly designate which composition is the MAIN/entry — what the editor opens on by default and what plays as the template's entry — instead of it being implicit (currently the active comp on load defaults by list position, not by intent). Add an explicit `entryCompositionId` on the scene (`null` ⇒ the main document itself), a "Set as main" action in the Compositions panel, and a clear indicator of which is main.
 **Why:** A template's "real" entry may not be the first composition; relying on order is fragile (reordering for organization silently changes the default). An explicit pointer is order-independent and matches intent.
@@ -2996,9 +2996,9 @@ OpenSpec: `## MODIFIED` the D-108 requirement (read-only → writable per-instan
 
 **Notes:** RECON FIRST — this changes WHEN the sequence's completion signal fires (it feeds the content-driven hold / B-031 aggregation), so it's the high-risk playout path. Lives in the sequence runtime (`@cg/template-runtime`) + its completion signal. Align with D-105 (content-first/background-last exit). Schema likely unchanged (transition fields exist). Spec: `## MODIFIED`/`## ADDED` on `designer-playout-lifecycle` (sequence boundary transitions + completion timing). Tests: a runtime test asserting last-item OUT plays before completion and the parent outro follows it (ordering); first-item IN plays; infinite unchanged.
 
-## [ ] D-117 — multi-line text in ticker/sequence items on air (explicit \n + auto-wrap) ⟨priority: medium⟩
+## [~] D-117 — multi-line text in sequence items on air (explicit \n + auto-wrap) ⟨priority: medium⟩ — `openspec/changes/multiline-sequence-items`
 
-**What:** Render ticker/sequence item text as multi-line on air: honor explicit `\n` line breaks in the item text AND auto-wrap long lines at the element's width. The two compose — a single item may contain authored breaks and have its long lines wrapped. The item's height adapts to the wrapped/broken content, and `align` / `verticalAlign` / `direction` (RTL) and the item transitions (push-up, etc.) all keep working with the taller, multi-line item.
+**What:** Render sequence item text as multi-line on air: honor explicit `\n` line breaks in the item text AND auto-wrap long lines at the element's width. The two compose — a single item may contain authored breaks and have its long lines wrapped. The item's height adapts to the wrapped/broken content, and `align` / `verticalAlign` / `direction` (RTL) and the item transitions (push-up, etc.) all keep working with the taller, multi-line item.
 **Why:** Today an item renders single-line, so long text overflows or clips and there's no way to force a break (e.g. a two-line title/subtitle). Operators need both authored breaks and automatic wrapping for long Persian lines.
 **Acceptance:**
 
@@ -3006,21 +3006,23 @@ OpenSpec: `## MODIFIED` the D-108 requirement (read-only → writable per-instan
 - WHEN a line is longer than the element width THEN it auto-wraps to additional lines (no overflow/clip)
 - WHEN an item becomes multi-line THEN its layout height adapts and `align` / `verticalAlign` / RTL still position it correctly
 - WHEN a multi-line item enters/exits via its transition (e.g. push-up) THEN the transition animates the full multi-line block cleanly (no mid-line cut)
-- WHEN previewed and exported THEN identical (preview == export) for both ticker and sequence
+- WHEN previewed and exported THEN identical (preview == export) for the sequence
 - WHEN an item is single-line THEN rendering is unchanged (no regression)
+- WHEN the element is a TICKER THEN it is unchanged — a single-line crawl, out of scope here
 
-**Notes:** RENDER change (`@cg/template-runtime` ticker/sequence rendering) — NOT the editor (that's D-118). Applies to BOTH ticker and sequence items. Schema: the text field already holds a string; `\n` needs no schema change — but if a max-lines or wrap toggle is wanted, add it optional/non-breaking (decide in design.md; default = wrap + honor `\n`, no cap). Watch the transition/measurement path: item height is now dynamic, so any code assuming fixed item height (push-up offsets, dwell layout, ticker scroll metrics) must use measured height. Spec: `## MODIFIED` the ticker/sequence rendering requirement on the relevant capability. Tests: a render/`d`-string-or-DOM unit test (explicit `\n` breaks; long line wraps; height adapts) + an E2E (two-line item renders + transitions correctly, preview==export), both ticker and sequence, incl. an RTL case.
+**Notes:** RENDER change (`@cg/template-runtime` sequence rendering) — NOT the editor (that's D-118). Applies to sequence items. Schema: the text field already holds a string; `\n` needs no schema change — but if a max-lines or wrap toggle is wanted, add it optional/non-breaking (decide in design.md; default = wrap + honor `\n`, no cap). Watch the transition/measurement path: item height is now dynamic, so any code assuming fixed item height (push-up offsets, dwell layout, scroll metrics) must use measured height. Spec: `## MODIFIED` the sequence rendering requirement on the relevant capability. Tests: a render/`d`-string-or-DOM unit test (explicit `\n` breaks; long line wraps; height adapts) + an E2E (two-line item renders + transitions correctly, preview==export), sequence, incl. an RTL case.
 
-## [ ] D-118 — larger multi-line (textarea) input for ticker/sequence item text ⟨priority: low-medium⟩
+## [~] D-118 — larger multi-line (textarea) input for sequence item text ⟨priority: low-medium⟩ — `openspec/changes/sequence-item-textarea`
 
-**What:** Replace the single-line item-text input in the ticker and sequence inspectors with a multi-line, resizable textarea, so operators can edit long text comfortably and insert explicit line breaks (Enter → `\n`). Pairs with D-117 (which renders those breaks on air).
+**What:** Replace the single-line item-text input in the SEQUENCE item editor with a multi-line, resizable textarea, so operators can edit long text comfortably and insert explicit line breaks (Enter → `\n`) — in BOTH the properties panel (inspector) AND the operator preview field form, so the two match. Pairs with D-117 (which renders those breaks on air). SEQUENCE ONLY — the ticker keeps its single-line input.
 **Why:** The current single-line input can't hold long Persian copy comfortably and can't enter a line break at all (no Enter), so authored multi-line text (D-117) is impossible to create.
 **Acceptance:**
 
-- WHEN editing a ticker or sequence item's text THEN the control is a multi-line textarea, not a single-line input
+- WHEN editing a SEQUENCE item's text (in the inspector OR the preview field form) THEN the control is a multi-line textarea, not a single-line input
 - WHEN the operator presses Enter in the textarea THEN a `\n` is inserted into the item text (does NOT commit/close the field)
-- WHEN the text is long THEN the textarea is comfortably sized and resizable/auto-growing (no tiny one-line box)
+- WHEN the text is long THEN the textarea is comfortably sized and resizable (no tiny one-line box)
 - WHEN edits are made THEN they commit through the existing item-update store path (one undo entry per edit, RTL input intact)
 - WHEN the field is used THEN it follows the design system (shared primitives / vanilla-extract, no ad-hoc styling)
+- WHEN the element is a TICKER THEN its item input is unchanged (single-line)
 
-**Notes:** UI/editor only — NO runtime/schema/render change (rendering is D-117). Lives in the ticker + sequence item inspectors (`apps/designer/src/renderer/features/inspector/...`). Reuse a shared textarea primitive (add one to `@cg/ui` / the renderer controls if none exists) so both ticker and sequence use the same control. Mind the keybinding: Enter must insert a newline, not trigger commit/submit; keep any commit-on-blur / explicit-commit behavior consistent with the other inspector fields. Spec: `## MODIFIED` the relevant designer inspector capability. Tests: a designer/E2E test that Enter inserts a newline (not commit), the value round-trips with embedded `\n`, and it commits via the normal path.
+**Notes:** UI/editor only — NO runtime/schema/render change (rendering is D-117). Lives in the SEQUENCE item editor (the shared `ListItemsEditor`, used by the inspector AND the preview field form). Reuse a shared textarea primitive (add one to the renderer `ui/` controls if none exists). Mind the keybinding: Enter must insert a newline, not trigger commit/submit; keep commit-on-change consistent with the other inspector fields. Spec: `## ADDED` on the sequence capability. Tests: a designer/E2E test that Enter inserts a newline (not commit), the value round-trips with embedded `\n`, it commits via the normal path (one undo), and the preview field form uses the same textarea — incl. an RTL case. The ticker input is untouched.

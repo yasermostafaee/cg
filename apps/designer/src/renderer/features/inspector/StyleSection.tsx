@@ -1105,6 +1105,7 @@ function SequenceSections({
         <ListItemsEditor
           items={element.items}
           label={element.name || 'Sequence'}
+          dir={element.direction}
           showDwell
           compositions={compChoicesAll}
           onChange={(items) => designerStore.setSequenceItems(id, items)}
