@@ -276,9 +276,11 @@ describe('Playout — D-028 holdSource axis + legacy normalization', () => {
   });
 
   it('playoutOf defensively normalizes an UNPARSED legacy object (old template.json)', () => {
-    const legacy = { playout: { mode: 'content-driven', repeat: 2 } } as unknown as Parameters<
-      typeof playoutOf
-    >[0];
+    // An out-point is present, so the mode resolves to the legacy-normalized value (not D-114 static).
+    const legacy = {
+      playout: { mode: 'content-driven', repeat: 2 },
+      lifecycle: { outPoint: 30 },
+    } as unknown as Parameters<typeof playoutOf>[0];
     expect(playoutOf(legacy)).toMatchObject({
       mode: 'loop-cycle',
       holdSource: 'content-driven',
@@ -287,7 +289,25 @@ describe('Playout — D-028 holdSource axis + legacy normalization', () => {
   });
 
   it('playoutOf resolves an absent holdSource to timed', () => {
-    expect(playoutOf({ playout: { mode: 'auto-out' } }).holdSource).toBe('timed');
+    // (an out-point present so the auto-out mode survives; holdSource is the field under test)
+    expect(
+      playoutOf({ playout: { mode: 'auto-out' }, lifecycle: { outPoint: 10 } }).holdSource,
+    ).toBe('timed');
     expect(playoutOf({}).holdSource).toBe('timed');
+  });
+
+  it('D-114 — playoutOf resolves a no-out-point DEFAULT composition to static', () => {
+    // No lifecycle + the default (manual/absent) mode ⇒ static.
+    expect(playoutOf({}).mode).toBe('static');
+    expect(playoutOf({ playout: { mode: 'manual' } }).mode).toBe('static');
+    // An EXPLICIT auto-out / loop-cycle without an out-point is NOT coerced (B-032 — it keeps its
+    // timed / content-driven hold + empty cut outro; the editor never sets these without an out-point).
+    expect(playoutOf({ playout: { mode: 'auto-out' } }).mode).toBe('auto-out');
+    expect(playoutOf({ playout: { mode: 'loop-cycle' } }).mode).toBe('loop-cycle');
+    // With an out-point present, the stored mode applies (absent ⇒ manual).
+    expect(playoutOf({ playout: { mode: 'auto-out' }, lifecycle: { outPoint: 20 } }).mode).toBe(
+      'auto-out',
+    );
+    expect(playoutOf({ lifecycle: { outPoint: 20 } }).mode).toBe('manual');
   });
 });

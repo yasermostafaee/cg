@@ -60,6 +60,8 @@ const MODE_LABELS: Record<PlayoutMode, string> = {
   manual: 'Manual — hold until stop',
   'auto-out': 'Auto-out — outro after hold',
   'loop-cycle': 'Loop cycle — repeat in → hold → out',
+  // D-114 — the no-out-point mode (the preview reflects it; it's resolved by `playoutOf`).
+  static: 'Static — plays in, holds, cut on stop',
 };
 
 const HOLD_LABELS: Record<HoldSource, string> = {
@@ -67,9 +69,6 @@ const HOLD_LABELS: Record<HoldSource, string> = {
   'content-driven':
     'Content-driven — until the content completes (ticker passes / countdown / sequence passes)',
 };
-
-/** Modes that need an explicit out-point to mean anything (an exit segment). */
-const NEEDS_OUTPOINT: ReadonlySet<PlayoutMode> = new Set<PlayoutMode>(['auto-out', 'loop-cycle']);
 
 /**
  * D-020/D-028 — live playout override for the preview modal, bound to the
@@ -146,14 +145,17 @@ export function PreviewTimingControls({
           onChange={(e) => onChange({ mode: e.target.value as PlayoutMode })}
         >
           {(Object.keys(MODE_LABELS) as PlayoutMode[]).map((m) => (
-            <option key={m} value={m} disabled={!hasOutPoint && NEEDS_OUTPOINT.has(m)}>
+            // D-114 — match the composition inspector: with no out-point only `static` is selectable
+            // (manual / auto-out / loop-cycle are disabled); with one, `static` is disabled. Keeps the
+            // preview and the main scene properties from getting mixed up.
+            <option key={m} value={m} disabled={hasOutPoint ? m === 'static' : m !== 'static'}>
               {MODE_LABELS[m]}
             </option>
           ))}
         </Select>
       </div>
 
-      {hasContent && mode !== 'manual' && (
+      {hasContent && mode !== 'manual' && mode !== 'static' && (
         <div className={s.row}>
           <span className={s.label}>hold</span>
           <Select

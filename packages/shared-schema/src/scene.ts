@@ -32,8 +32,13 @@ export const LifecycleSchema = z.object({
 });
 export type Lifecycle = z.infer<typeof LifecycleSchema>;
 
-/** No-code playout timing modes. `manual` holds after the intro until `stop()`. */
-export const PlayoutModeSchema = z.enum(['manual', 'auto-out', 'loop-cycle']);
+/**
+ * No-code playout timing modes. `manual` holds after the intro until `stop()`.
+ * D-114 — `static` is the no-out-point mode: play intro → hold → hard cut on `stop()`,
+ * with NO animated exit. `manual` / `auto-out` / `loop-cycle` all require an out-point;
+ * `playoutOf` resolves a composition with no out-point to `static`.
+ */
+export const PlayoutModeSchema = z.enum(['manual', 'auto-out', 'loop-cycle', 'static']);
 export type PlayoutMode = z.infer<typeof PlayoutModeSchema>;
 
 /**
@@ -289,13 +294,24 @@ export function activeRangeOf(scene: Pick<Scene, 'frameRange' | 'activeRange'>):
  * handed straight to `createRuntime` without re-parsing (e.g. old exported
  * `template.json` driven by a NEW runtime bundle).
  */
-export function playoutOf(scene: Pick<Scene, 'playout'>): Playout {
+export function playoutOf(scene: Pick<Scene, 'playout' | 'lifecycle'>): Playout {
   const p = scene.playout;
-  if (p === undefined) return { mode: 'manual', holdSource: 'timed' };
-  if ((p.mode as string) === 'content-driven') {
-    return { ...p, mode: 'loop-cycle', holdSource: 'content-driven' };
-  }
-  return { ...p, holdSource: p.holdSource ?? 'timed' };
+  const base: Playout =
+    p === undefined
+      ? { mode: 'manual', holdSource: 'timed' }
+      : (p.mode as string) === 'content-driven'
+        ? { ...p, mode: 'loop-cycle', holdSource: 'content-driven' }
+        : { ...p, holdSource: p.holdSource ?? 'timed' };
+  // D-114 — a composition with NO out-point and the DEFAULT (`manual`) mode is `static`: it plays in,
+  // holds until `stop()`, and hard-cuts (no animated exit). Resolve-on-read (non-destructive, like the
+  // legacy content-driven normalization above), so the runtime controller, exporter, and inspector
+  // agree without a stored migration. SCOPE — only `manual`/absent resolves: an explicit `auto-out` /
+  // `loop-cycle` (or normalized `content-driven`) WITHOUT an out-point keeps its timed / content-driven
+  // hold + empty (cut) outro (B-032). The designer UI never SETS those without an out-point — clearing
+  // the out-point reverts to `static` — so a no-out-point composition authored in the editor IS static;
+  // the auto-out-without-out-point case is legacy / programmatic only.
+  if (scene.lifecycle === undefined && base.mode === 'manual') return { ...base, mode: 'static' };
+  return base;
 }
 
 /**

@@ -557,7 +557,14 @@ export class DesignerApp {
    */
   async setPlayoutTiming(mode: 'manual' | 'auto-out' | 'loop-cycle'): Promise<void> {
     await this.deselect();
-    await this.page.getByRole('combobox', { name: 'Playout mode' }).selectOption(mode);
+    const select = this.page.getByRole('combobox', { name: 'Playout mode' });
+    await select.waitFor({ state: 'visible' });
+    // D-114 — manual / auto-out / loop-cycle require an out-point (they are disabled in the select
+    // without one; a no-out-point composition is `static`). Seed one first when absent — the old
+    // "select auto-out seeds an out-point" behavior, now explicit — then select the mode.
+    const addOut = this.page.getByRole('button', { name: 'Add an out point' });
+    if (await addOut.isVisible().catch(() => false)) await addOut.click();
+    await select.selectOption(mode);
   }
 
   /**

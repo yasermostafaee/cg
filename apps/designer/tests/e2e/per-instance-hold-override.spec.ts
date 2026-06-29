@@ -76,8 +76,8 @@ test.describe('D-112 — per-instance hold overrides (writable nested rows)', ()
     await expect(checks.nth(0)).toBeChecked();
     await expect(app.page.getByText(/loops forever/)).toHaveCount(0);
 
-    // The drill-in stays — open the child (its own mode is the default 'manual').
+    // The drill-in stays — open the child (a no-out-point child resolves to D-114 `static`).
     await app.page.getByRole('button', { name: /Open .* to edit its content/ }).click();
-    await expect(app.page.getByRole('combobox', { name: 'Playout mode' })).toHaveValue('manual');
+    await expect(app.page.getByRole('combobox', { name: 'Playout mode' })).toHaveValue('static');
   });
 });

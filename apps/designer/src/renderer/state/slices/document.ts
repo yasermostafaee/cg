@@ -203,17 +203,21 @@ export const documentSlice = {
   setLifecycle(marker: { outPoint: number } | null): void {
     if (current.scene === null) return;
     if (marker === null) {
-      // D-113 — clearing the out-point leaves an out-point-DEPENDENT mode (`auto-out` /
-      // `loop-cycle`) impossible: each promises an animated exit with no marker to start it. So in
-      // the SAME action (one atomic undo step) revert such a mode to `manual`. No change when
-      // already manual; no auto-restore of the prior mode when an out-point is later re-added.
+      // D-114 (revises D-113) — clearing the out-point makes the composition `static` (no marker ⇒
+      // no animated exit). The out-point-DEPENDENT modes (`auto-out` / `loop-cycle`) are rewritten to
+      // `static` in the SAME action (one atomic undo step), so re-adding an out-point does NOT
+      // auto-restore them (the invariant stays ONE-DIRECTIONAL). A `manual`/absent composition needs
+      // no write — `playoutOf` already resolves a no-out-point default to `static` — so clearing it
+      // leaves the playout untouched (no spurious write). `playoutOf(doc)` here still sees the
+      // out-point (about to be cleared), so it returns the STORED mode.
       const doc = activeDocOf(current.scene);
-      const revert = playoutOf(doc).mode !== 'manual';
+      const stored = playoutOf(doc).mode;
+      const revert = stored === 'auto-out' || stored === 'loop-cycle';
       set({
         scene: withActiveDoc(
           current.scene,
           revert
-            ? { lifecycle: undefined, playout: { ...doc.playout, mode: 'manual' as const } }
+            ? { lifecycle: undefined, playout: { ...doc.playout, mode: 'static' as const } }
             : { lifecycle: undefined },
         ),
       });
@@ -228,7 +232,19 @@ export const documentSlice = {
     const cs = prev?.contentStart === undefined ? undefined : Math.min(prev.contentStart, out);
     if (prev !== undefined && prev.outPoint === out && prev.contentStart === cs) return;
     const lifecycle = cs === undefined ? { outPoint: out } : { outPoint: out, contentStart: cs };
-    set({ scene: withActiveDoc(current.scene, { lifecycle }) });
+    // D-114 — ADDING the first out-point to a stored-`static` composition lands it on `manual` (the
+    // benign default for an out-point composition; `static` means no out-point). This does NOT
+    // restore any prior `auto-out` / `loop-cycle` (the clear-revert stays one-directional). Dragging
+    // an existing out-point (`prev` defined) never touches the mode.
+    const coerceStaticToManual = prev === undefined && doc.playout?.mode === 'static';
+    set({
+      scene: withActiveDoc(
+        current.scene,
+        coerceStaticToManual
+          ? { lifecycle, playout: { ...doc.playout, mode: 'manual' as const } }
+          : { lifecycle },
+      ),
+    });
   },
 
   /**

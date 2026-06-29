@@ -2954,7 +2954,7 @@ OpenSpec: `## MODIFIED` the D-108 requirement (read-only → writable per-instan
 
 **Notes:** Designer-only, NOT runtime/high-risk. The revert belongs in the store action that clears the out-point (the lifecycle/out-point slice — same place `setPlayout` / the out-point marker live), so it's atomic and single-undo, not a UI-effect afterthought. Keep it consistent with the existing `NEEDS_OUTPOINT` gating in `PlayoutSection.tsx`'s mode select. Edge: confirm whatever "clears" the out-point routes through that action (drag-off, a clear button, deleting the marker) so all paths revert. Spec: `## ADDED` requirement on `designer-playout-lifecycle` (the out-point ⇄ mode invariant). Tests: a store/unit test (clear out-point in auto-out → manual; in loop-cycle → manual; in manual → unchanged; one undo step) + a designer/E2E test (clear marker → mode shows manual + NEEDS_OUTPOINT modes disabled).
 
-## [ ] D-114 — 'static' playout mode for compositions with no out-point ⟨priority: medium⟩
+## [~] D-114 — 'static' playout mode for compositions with no out-point ⟨priority: medium⟩ — `openspec/changes/static-playout-mode`
 
 **What:** Add a fourth mode `static` (label e.g. "Static — plays in, holds, cut on stop; no exit animation"), which IS the mode whenever a composition has no lifecycle out-point. `manual` / `auto-out` / `loop-cycle` all require an out-point (they decide WHEN the animated exit fires); `static` is the no-out-point state (no animated exit, hard cut on stop).
 **Why:** Without an out-point there's no outro segment, so `manual` is misleading and stop() does nothing visible. A distinct `static` makes the model honest. REVISES D-113: clearing the out-point now reverts an out-point-dependent mode to `static` (not `manual`).
