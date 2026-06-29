@@ -9,6 +9,13 @@ export const col = style({
 });
 
 export const icon = style({
+  // B-036 — flex-center the leading lucide icon against the input's value text.
+  // The span wraps an SVG (post-D-092 icon pack); without flex centring the icon
+  // sat top-aligned / off-centre against the value. Shared by the W / H / rotate /
+  // opacity rows (transform-fields) across single- and multi-select.
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   color: colors.textMuted,
   fontSize: '0.65rem',
   fontWeight: 600,
