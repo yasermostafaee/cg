@@ -163,6 +163,18 @@ export class MockRuntime {
     return [...this.#templates.values()];
   }
 
+  /**
+   * Register a verified template (R-001). The renderer has already run
+   * `@cg/vcg-format.verify` + `unpack` on the uploaded `.vcg`; we just extend
+   * the in-memory registry so `templateGet` / `templateList` surface it (and the
+   * Inspector picks up its field schema). A re-imported id overwrites the prior
+   * entry. No persistence — the registry resets on reload (see design.md).
+   */
+  templateImport(template: TemplateInfo): { registered: boolean; templateId: string } {
+    this.#templates.set(template.templateId, template);
+    return { registered: true, templateId: template.templateId };
+  }
+
   // ── audit ───────────────────────────────────────────────────────────
   auditRecent(limit = 200, action?: AuditEntry['action'], actor?: string): AuditEntry[] {
     let rows = this.#audit;
