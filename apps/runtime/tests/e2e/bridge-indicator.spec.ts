@@ -1,5 +1,18 @@
 import { expect, test } from '@playwright/test';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
+import type { ConnectionConfig } from '@cg/shared-ipc';
+
+/** Unreachable CasparCG + ephemeral OSC bind — these tests only exercise the WS link. */
+function ephemeralConnection(): ConnectionConfig {
+  return {
+    servers: {
+      A: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 },
+      B: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 },
+    },
+    strategy: 'mirror-sync',
+    autoFailoverEnabled: false,
+  };
+}
 
 /**
  * C-001 Phase 1 — boot selection + resilience, end to end through the real UI.
@@ -22,7 +35,7 @@ test.describe('bridge link indicator', () => {
 
   test('boot with no bridge → OFFLINE (mock) indicator', async ({ page }) => {
     // Claim a free port, then release it so nothing answers there.
-    const probe = await createBridge({ port: 0 });
+    const probe = await createBridge({ port: 0, connection: ephemeralConnection() });
     const deadUrl = probe.url;
     await probe.close();
 
@@ -34,7 +47,7 @@ test.describe('bridge link indicator', () => {
   });
 
   test('boot with a reachable bridge → LIVE indicator', async ({ page }) => {
-    bridge = await createBridge({ port: 0 });
+    bridge = await createBridge({ port: 0, connection: ephemeralConnection() });
 
     await page.addInitScript(setBridgeUrl(bridge.url));
     await page.goto('/');
@@ -46,7 +59,7 @@ test.describe('bridge link indicator', () => {
   test('bridge drops mid-session → DISCONNECTED indicator (no silent downgrade)', async ({
     page,
   }) => {
-    bridge = await createBridge({ port: 0 });
+    bridge = await createBridge({ port: 0, connection: ephemeralConnection() });
 
     await page.addInitScript(setBridgeUrl(bridge.url));
     await page.goto('/');
