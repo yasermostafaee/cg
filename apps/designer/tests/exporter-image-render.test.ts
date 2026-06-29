@@ -3,9 +3,9 @@ import { unpack } from '@cg/vcg-format';
 import type { Scene, Element } from '@cg/shared-schema';
 import type { AssetMeta } from '@cg/shared-ipc';
 import { Exporter } from '../src/platform/Exporter.js';
-import { ExporterSingleFile } from '../src/platform/ExporterSingleFile.js';
+import { ExporterSingleFile } from '@cg/single-file-export';
 import type { AssetStore } from '../src/platform/AssetStore.js';
-import { collectImageElements } from '../src/platform/image-export.js';
+import { collectImageElements } from '@cg/single-file-export';
 import { defaultImage } from '../src/renderer/state/element-defaults.js';
 
 /**

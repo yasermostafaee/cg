@@ -7,7 +7,7 @@ import {
   compositeImageSource,
   resolveImageAsset,
   type ImageAssetLibrary,
-} from './image-export.js';
+} from '@cg/single-file-export';
 import { Emitter } from './emitter.js';
 
 export interface ExporterOptions {

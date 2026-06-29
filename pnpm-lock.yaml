@@ -50,6 +50,9 @@ importers:
       '@cg/shared-schema':
         specifier: workspace:*
         version: link:../../packages/shared-schema
+      '@cg/single-file-export':
+        specifier: workspace:*
+        version: link:../../packages/single-file-export
       '@cg/starter-templates':
         specifier: workspace:*
         version: link:../../packages/starter-templates
@@ -101,13 +104,10 @@ importers:
         version: 18.3.7(@types/react@18.3.28)
       '@vanilla-extract/vite-plugin':
         specifier: ^5.2.2
-        version: 5.2.2(@types/node@22.19.19)(esbuild@0.24.2)(lightningcss@1.32.0)(vite@5.4.21(@types/node@22.19.19)(lightningcss@1.32.0))(yaml@2.9.0)
+        version: 5.2.2(@types/node@22.19.19)(lightningcss@1.32.0)(vite@5.4.21(@types/node@22.19.19)(lightningcss@1.32.0))(yaml@2.9.0)
       '@vitejs/plugin-react':
         specifier: ^4.3.4
         version: 4.7.0(vite@5.4.21(@types/node@22.19.19)(lightningcss@1.32.0))
-      esbuild:
-        specifier: ^0.24.0
-        version: 0.24.2
       eslint:
         specifier: ^9.17.0
         version: 9.39.4
@@ -138,6 +138,9 @@ importers:
       '@cg/shared-schema':
         specifier: workspace:*
         version: link:../../packages/shared-schema
+      '@cg/single-file-export':
+        specifier: workspace:*
+        version: link:../../packages/single-file-export
       '@cg/starter-templates':
         specifier: workspace:*
         version: link:../../packages/starter-templates
@@ -189,7 +192,7 @@ importers:
         version: 8.18.1
       '@vanilla-extract/vite-plugin':
         specifier: ^5.2.2
-        version: 5.2.2(@types/node@22.19.19)(esbuild@0.24.2)(lightningcss@1.32.0)(vite@5.4.21(@types/node@22.19.19)(lightningcss@1.32.0))(yaml@2.9.0)
+        version: 5.2.2(@types/node@22.19.19)(lightningcss@1.32.0)(vite@5.4.21(@types/node@22.19.19)(lightningcss@1.32.0))(yaml@2.9.0)
       '@vitejs/plugin-react':
         specifier: ^4.3.4
         version: 4.7.0(vite@5.4.21(@types/node@22.19.19)(lightningcss@1.32.0))
@@ -373,6 +376,46 @@ importers:
       eslint:
         specifier: ^9.17.0
         version: 9.39.4
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.3
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.19)(happy-dom@15.11.7)(jsdom@25.0.1)(lightningcss@1.32.0)
+
+  packages/single-file-export:
+    dependencies:
+      '@cg/shared-ipc':
+        specifier: workspace:*
+        version: link:../shared-ipc
+      '@cg/shared-schema':
+        specifier: workspace:*
+        version: link:../shared-schema
+      '@cg/vcg-format':
+        specifier: workspace:*
+        version: link:../vcg-format
+    devDependencies:
+      '@cg/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@cg/template-runtime':
+        specifier: workspace:*
+        version: link:../template-runtime
+      '@vitest/coverage-v8':
+        specifier: ^2.1.8
+        version: 2.1.9(vitest@2.1.9(@types/node@22.19.19)(happy-dom@15.11.7)(jsdom@25.0.1)(lightningcss@1.32.0))
+      esbuild:
+        specifier: ^0.24.0
+        version: 0.24.2
+      eslint:
+        specifier: ^9.17.0
+        version: 9.39.4
+      happy-dom:
+        specifier: ^15.11.7
+        version: 15.11.7
       rimraf:
         specifier: ^6.0.1
         version: 6.1.3
@@ -4898,12 +4941,12 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@vanilla-extract/compiler@0.7.0(@types/node@22.19.19)(esbuild@0.24.2)(lightningcss@1.32.0)(yaml@2.9.0)':
+  '@vanilla-extract/compiler@0.7.0(@types/node@22.19.19)(lightningcss@1.32.0)(yaml@2.9.0)':
     dependencies:
       '@vanilla-extract/css': 1.20.1
       '@vanilla-extract/integration': 8.0.10
       vite: 5.4.21(@types/node@22.19.19)(lightningcss@1.32.0)
-      vite-node: 6.0.0(@types/node@22.19.19)(esbuild@0.24.2)(yaml@2.9.0)
+      vite-node: 6.0.0(@types/node@22.19.19)(yaml@2.9.0)
     transitivePeerDependencies:
       - '@types/node'
       - '@vitejs/devtools'
@@ -4955,9 +4998,9 @@ snapshots:
 
   '@vanilla-extract/private@1.0.9': {}
 
-  '@vanilla-extract/vite-plugin@5.2.2(@types/node@22.19.19)(esbuild@0.24.2)(lightningcss@1.32.0)(vite@5.4.21(@types/node@22.19.19)(lightningcss@1.32.0))(yaml@2.9.0)':
+  '@vanilla-extract/vite-plugin@5.2.2(@types/node@22.19.19)(lightningcss@1.32.0)(vite@5.4.21(@types/node@22.19.19)(lightningcss@1.32.0))(yaml@2.9.0)':
     dependencies:
-      '@vanilla-extract/compiler': 0.7.0(@types/node@22.19.19)(esbuild@0.24.2)(lightningcss@1.32.0)(yaml@2.9.0)
+      '@vanilla-extract/compiler': 0.7.0(@types/node@22.19.19)(lightningcss@1.32.0)(yaml@2.9.0)
       '@vanilla-extract/integration': 8.0.10
       vite: 5.4.21(@types/node@22.19.19)(lightningcss@1.32.0)
     transitivePeerDependencies:
@@ -6956,13 +6999,13 @@ snapshots:
       - supports-color
       - terser
 
-  vite-node@6.0.0(@types/node@22.19.19)(esbuild@0.24.2)(yaml@2.9.0):
+  vite-node@6.0.0(@types/node@22.19.19)(yaml@2.9.0):
     dependencies:
       cac: 7.0.0
       es-module-lexer: 2.1.0
       obug: 2.1.2
       pathe: 2.0.3
-      vite: 8.0.16(@types/node@22.19.19)(esbuild@0.24.2)(yaml@2.9.0)
+      vite: 8.0.16(@types/node@22.19.19)(yaml@2.9.0)
     transitivePeerDependencies:
       - '@types/node'
       - '@vitejs/devtools'
@@ -6987,7 +7030,7 @@ snapshots:
       fsevents: 2.3.3
       lightningcss: 1.32.0
 
-  vite@8.0.16(@types/node@22.19.19)(esbuild@0.24.2)(yaml@2.9.0):
+  vite@8.0.16(@types/node@22.19.19)(yaml@2.9.0):
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.4
@@ -6996,7 +7039,6 @@ snapshots:
       tinyglobby: 0.2.17
     optionalDependencies:
       '@types/node': 22.19.19
-      esbuild: 0.24.2
       fsevents: 2.3.3
       yaml: 2.9.0
 

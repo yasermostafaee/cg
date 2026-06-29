@@ -6,13 +6,13 @@ import {
   type GddSchema,
   type PlayoutMetadata,
 } from '@cg/vcg-format';
-import type { AssetStore } from './AssetStore.js';
 import {
   collectImageElements,
   compositeImageSource,
   imageMimeOf,
   resolveImageAsset,
   type ImageAssetLibrary,
+  type ImageAssetSource,
   type ImageRef,
 } from './image-export.js';
 
@@ -23,7 +23,11 @@ export interface SingleFileExportOptions {
   cgCss: string;
   /** App `@font-face` CSS (Vazirmatn / Exo 2) with `/fonts/…` URLs to inline. */
   fontsCss: string;
-  assets: AssetStore;
+  /**
+   * Image-byte source for inlining (project `AssetStore` satisfies it
+   * structurally — `get` + `bytes`).
+   */
+  assets: ImageAssetSource;
   /**
    * D-040 — the device-level shared image library. When present, a logo
    * (`source: 'shared'`) base64-inlines from the library; absent ⇒ project-only.
@@ -58,7 +62,7 @@ export class ExporterSingleFile {
   readonly #cgJsIife: string;
   readonly #cgCss: string;
   readonly #fontsCss: string;
-  readonly #assets: AssetStore;
+  readonly #assets: ImageAssetSource;
   readonly #sharedImages: ImageAssetLibrary | undefined;
   readonly #fetchUrl: (url: string) => Promise<ArrayBuffer>;
 
