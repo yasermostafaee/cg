@@ -10,8 +10,9 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit --tsBuildInfoFile typecheck.tsbuildinfo",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "lint": "eslint .",
-    "clean": "rimraf --glob dist .vite coverage *.tsbuildinfo"
+    "clean": "rimraf --glob dist .vite coverage playwright-report test-results *.tsbuildinfo"
   },
   "dependencies": {
     "@cg/caspar-client": "workspace:*",
@@ -22,15 +23,18 @@
     "@cg/text-shaping": "workspace:*",
     "@cg/ui": "workspace:*",
     "@cg/vcg-format": "workspace:*",
+    "@vanilla-extract/css": "^1.20.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@cg/eslint-config": "workspace:*",
+    "@playwright/test": "1.60.0",
     "@types/node": "^22.10.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@vanilla-extract/vite-plugin": "^5.2.2",
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9.17.0",
     "jsdom": "^25.0.1",

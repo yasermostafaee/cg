@@ -28,3 +28,17 @@ export const TemplatesListChannel = defineChannel(
   z.void(),
   z.array(TemplateInfoSchema),
 );
+
+/**
+ * Register a template in the runtime library (R-001). The `.vcg` is verified
+ * (`@cg/vcg-format.verify`) and unpacked in the browser before this call — the
+ * format is isomorphic, so no Node APIs reach the renderer — and the resulting
+ * `TemplateInfo` is handed to the registry. `templates.list` / `templates.get`
+ * see it immediately, so the operator can load it onto the stack with its field
+ * schema in the Inspector. A package that fails verification never reaches here.
+ */
+export const TemplatesImportChannel = defineChannel(
+  'templates.import',
+  z.object({ template: TemplateInfoSchema }),
+  z.object({ registered: z.boolean(), templateId: IdSchema }),
+);
