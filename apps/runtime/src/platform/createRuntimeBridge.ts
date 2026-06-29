@@ -43,6 +43,7 @@ export function createRuntimeBridge(): RuntimeBridge {
     templates: {
       get: (req) => Promise.resolve(mock.templateGet(req.templateId)),
       list: () => Promise.resolve(mock.templateList()),
+      import: (req) => Promise.resolve(mock.templateImport(req.template)),
     },
 
     audit: {

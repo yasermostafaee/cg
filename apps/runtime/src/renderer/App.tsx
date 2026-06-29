@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { RuntimeBridge } from '../shared/runtime-bridge.js';
 import { AuditPanel } from './features/audit/AuditPanel.js';
 import { FailoverBanner } from './features/connections/FailoverBanner.js';
+import { LibraryPanel } from './features/library/LibraryPanel.js';
 import { StackPanel } from './features/stack/StackPanel.js';
 import { Inspector } from './features/inspector/Inspector.js';
 import { LockOverlay } from './features/lock/LockOverlay.js';
@@ -35,23 +36,6 @@ const styles = {
     padding: '0.75rem',
     minHeight: 0,
   },
-  sidebar: {
-    background: colors.panel,
-    borderRadius: '0.25rem',
-    border: `1px solid ${colors.border}`,
-    padding: '0.75rem',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.5rem',
-  },
-  sidebarHeading: {
-    fontSize: '0.85rem',
-    fontWeight: 700,
-    color: colors.textMuted,
-    letterSpacing: '0.05em',
-    margin: 0,
-  },
-  sidebarHint: { fontSize: '0.8rem', color: colors.textMuted, lineHeight: 1.4 },
   workspace: {
     display: 'flex',
     flexDirection: 'column' as const,
@@ -84,16 +68,7 @@ export function App(): JSX.Element {
     <main style={styles.page}>
       <FailoverBanner health={health} />
       <div style={styles.shell}>
-        <nav style={styles.sidebar} aria-label="Library">
-          <h2 style={styles.sidebarHeading}>LIBRARY</h2>
-          <p style={styles.sidebarHint}>
-            Drop a <code>.vcg</code> into the watched folder to register a template.
-          </p>
-          <p style={styles.sidebarHint}>
-            Library browser arrives with M5.4; for now items are pre-loaded via the demo harness
-            (M5.3).
-          </p>
-        </nav>
+        <LibraryPanel />
         <section style={styles.workspace}>
           <div style={styles.monitor}>
             PVW / PGM monitor strip will live here. Full monitor with frame grabs is M9.

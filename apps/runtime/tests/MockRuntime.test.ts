@@ -73,6 +73,20 @@ describe('MockRuntime templates + audit', () => {
     expect(rt.templateGet(list[0]!.templateId)).not.toBeNull();
   });
 
+  it('imports a verified template into the registry (R-001)', () => {
+    const rt = new MockRuntime();
+    const before = rt.templateList().length;
+    const result = rt.templateImport({
+      templateId: 'tpl-imported-1',
+      templateType: 'lower-third',
+      fields: [{ id: 'anchor', label: 'Anchor name', required: true, type: 'text', default: '' }],
+    });
+    expect(result).toEqual({ registered: true, templateId: 'tpl-imported-1' });
+    expect(rt.templateList().length).toBe(before + 1);
+    const got = rt.templateGet('tpl-imported-1');
+    expect(got?.fields[0]?.id).toBe('anchor');
+  });
+
   it('records audit rows for intents, most-recent first', () => {
     const rt = new MockRuntime();
     const id = rt.stackSnapshot()[0]!.itemId;

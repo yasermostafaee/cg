@@ -24,6 +24,7 @@ import type {
   StackTakeChannel,
   StackUpdateChannel,
   TemplatesGetChannel,
+  TemplatesImportChannel,
   TemplatesListChannel,
   UpdateCancelChannel,
   UpdateRequestChannel,
@@ -91,6 +92,14 @@ export interface RuntimeBridge {
       req: ChannelRequest<typeof TemplatesGetChannel>,
     ): Promise<ChannelResponse<typeof TemplatesGetChannel>>;
     list(): Promise<ChannelResponse<typeof TemplatesListChannel>>;
+    /**
+     * Register a verified `.vcg` template (R-001). The renderer verifies +
+     * unpacks the upload first; this call adds the parsed template to the
+     * registry so `list` / `get` see it.
+     */
+    import(
+      req: ChannelRequest<typeof TemplatesImportChannel>,
+    ): Promise<ChannelResponse<typeof TemplatesImportChannel>>;
   };
 
   audit: {
