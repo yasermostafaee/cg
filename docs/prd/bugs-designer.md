@@ -748,7 +748,7 @@ guards. Capability: `designer-playout-lifecycle`.
 **Notes:** Capability `designer-canvas-viewport`. The fit-on-open path exists (the pasteboard specs reference "on project open, fit from frame bounds and center"), but it intermittently doesn't apply on template / project load — likely a timing / ordering race between scene load and the fit effect (the fit may run before the composition / resolution is ready, or before the iframe has laid out). Touch points to check: the `CanvasArea.tsx` fit effect, and the project-open / template-load path.
 **Regression test:** open a saved project (and load a bundled template) with a composition that is larger / smaller than the viewport, and assert the canvas zoom + scroll match the Fit result (frame fully visible and centered) WITHOUT a manual Fit — deterministically, after scene + iframe layout settle (wait on a ready signal, not a timer).
 
-## [ ] B-036 — inspector input icons (rotate / opacity / W·H) misaligned with the value ⟨priority: low⟩
+## [~] B-036 — inspector input icons (rotate / opacity / W·H) misaligned with the value ⟨priority: low⟩ — fixed on `fix/B-036-inspector-icon-align`: added `display:flex` + `align-items/justify-content:center` to the shared `icon` span style (`TransformSection.css.ts`), which the W/H/rotate/opacity rows (`transform-fields.tsx`) use across single- + multi-select — one shared style, so it covers every icon-input row. CSS-only (owner-verified locally).
 
 **Repro:**
 
