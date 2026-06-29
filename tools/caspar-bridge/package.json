@@ -2,7 +2,7 @@
   "name": "@cg/caspar-bridge",
   "version": "0.0.0",
   "private": true,
-  "description": "Local CasparCG bridge (C-001 Phase 1): a localhost WebSocket server speaking the @cg/shared-ipc contract. Phase-1 backing is an in-memory throwaway; the real @cg/caspar-client stack lands in Phase 2.",
+  "description": "Local CasparCG bridge (C-001): a localhost WebSocket server speaking the @cg/shared-ipc contract, backed by the real @cg/caspar-client stack (ServerSession + CommandQueue + OSC pipeline + Reconciler + LayerManager) in its native Node tier.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -28,11 +28,13 @@
     "start": "node ./bin/caspar-bridge.mjs"
   },
   "dependencies": {
+    "@cg/caspar-client": "workspace:*",
     "@cg/shared-ipc": "workspace:*",
     "@cg/shared-schema": "workspace:*",
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@cg/amcp-mock": "workspace:*",
     "@cg/eslint-config": "workspace:*",
     "@types/node": "^22.10.0",
     "@types/ws": "^8.5.13",

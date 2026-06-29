@@ -562,6 +562,9 @@ importers:
 
   tools/caspar-bridge:
     dependencies:
+      '@cg/caspar-client':
+        specifier: workspace:*
+        version: link:../../packages/caspar-client
       '@cg/shared-ipc':
         specifier: workspace:*
         version: link:../../packages/shared-ipc
@@ -572,6 +575,9 @@ importers:
         specifier: ^8.18.0
         version: 8.21.0
     devDependencies:
+      '@cg/amcp-mock':
+        specifier: workspace:*
+        version: link:../amcp-mock
       '@cg/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config

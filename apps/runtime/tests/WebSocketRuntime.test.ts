@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from 'vitest';
 import { WebSocket as WsWebSocket } from 'ws';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
+import type { ConnectionConfig } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import type { BridgeLinkStatus } from '../src/shared/runtime-bridge.js';
 import {
@@ -10,6 +11,32 @@ import {
 } from '../src/platform/WebSocketRuntime.js';
 
 const wsFactory = (url: string): WebSocketLike => new WsWebSocket(url) as unknown as WebSocketLike;
+
+/**
+ * These tests exercise the browser↔bridge **WebSocket transport + resilience**.
+ * The bridge's CasparCG session points at an unreachable server with an
+ * ephemeral OSC bind (no fixed ports, no hang) — real playout against a server
+ * is proven in `@cg/caspar-bridge`'s integration test. The `WebSocketRuntime`
+ * source is unchanged from Phase 1.
+ */
+function ephemeralConnection(): ConnectionConfig {
+  return {
+    servers: {
+      A: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 },
+      B: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 },
+    },
+    strategy: 'mirror-sync',
+    autoFailoverEnabled: true,
+  };
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs = 4000): Promise<void> {
+  const start = Date.now();
+  while (!predicate()) {
+    if (Date.now() - start > timeoutMs) throw new Error('waitFor timed out');
+    await new Promise((r) => setTimeout(r, 15));
+  }
+}
 
 let handle: BridgeHandle | null = null;
 let runtime: WebSocketRuntime | null = null;
@@ -43,33 +70,27 @@ function awaitStatus(
   });
 }
 
-it('selects live and round-trips load/take/out reflected via published state', async () => {
-  handle = await createBridge({ port: 0 });
+it('selects live, round-trips a read, and delivers a published delta over the WS', async () => {
+  handle = await createBridge({ port: 0, connection: ephemeralConnection() });
   runtime = new WebSocketRuntime(handle.url, { createWebSocket: wsFactory });
   await runtime.whenReady();
   expect(runtime.link.status()).toBe('live');
 
+  // Request/response round-trip over the WS (reads don't depend on a server).
+  expect(Array.isArray(await runtime.stack.snapshot())).toBe(true);
+  expect((await runtime.connections.health()).primary.label).toBe('A');
+
+  // Publish delivery: a load makes the Reconciler delta cross the WS as a
+  // `stack.state-changed` publish (no server here, so the item's status settles
+  // to an error after the failed ack — what matters is the publish round-trip).
   const snapshots: (readonly StackItemState[])[] = [];
   runtime.stack.onStateChanged((s) => snapshots.push(s));
-
-  const load = await runtime.stack.load({ itemId: 'a', templateId: 'lower-third', fields: {} });
-  expect(load.accepted).toBe(true);
-  const take = await runtime.stack.take({ itemId: 'a' });
-  expect(take.accepted).toBe(true);
-  await runtime.stack.out({ itemId: 'a' });
-
-  // The round-trip is proven by published state: 'a' goes loaded → on-air → idle.
-  expect(snapshots.some((s) => s.some((i) => i.itemId === 'a' && i.status === 'loaded'))).toBe(
-    true,
-  );
-  expect(snapshots.some((s) => s.some((i) => i.itemId === 'a' && i.status === 'on-air'))).toBe(
-    true,
-  );
-  expect(snapshots.at(-1)?.some((i) => i.itemId === 'a' && i.status === 'idle')).toBe(true);
+  void runtime.stack.load({ itemId: 'a', templateId: 'lower-third', fields: {} });
+  await waitFor(() => snapshots.some((s) => s.some((i) => i.itemId === 'a')));
 });
 
 it('on a mid-session drop: goes DISCONNECTED, rejects commands, never falls back to mock', async () => {
-  handle = await createBridge({ port: 0 });
+  handle = await createBridge({ port: 0, connection: ephemeralConnection() });
   runtime = new WebSocketRuntime(handle.url, { createWebSocket: wsFactory });
   await runtime.whenReady();
 
@@ -84,7 +105,7 @@ it('on a mid-session drop: goes DISCONNECTED, rejects commands, never falls back
 });
 
 it('on reconnect: re-pulls a full snapshot (stack/health/lock) to resync', async () => {
-  handle = await createBridge({ port: 0 });
+  handle = await createBridge({ port: 0, connection: ephemeralConnection() });
   runtime = new WebSocketRuntime(handle.url, { createWebSocket: wsFactory });
   await runtime.whenReady();
 
