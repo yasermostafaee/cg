@@ -24,7 +24,7 @@ import {
   zoomAnchorScroll,
 } from './geometry.js';
 import { contentBounds } from './content-bounds.js';
-import { fitOnceForScene, type FitGate } from './fit-on-open.js';
+import { needsFit, markFitted, frameCenterScroll, type FitGate } from './fit-on-open.js';
 import { registerPreviewDocument, bumpMeasureVersion } from './measure-element.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
@@ -38,6 +38,12 @@ import {
 
 interface Props {
   scene: Scene | null;
+  /**
+   * The active composition's id — the fit-on-open identity (B-035). `scene.id` is the
+   * PROJECT id (stable across composition switches), so a same-resolution comp switch
+   * must re-fit keyed on this, not on `scene.id`.
+   */
+  activeCompositionId: string | null;
   tool: DesignerTool;
   selection: ReadonlySet<string>;
   /**
@@ -96,6 +102,7 @@ function collectSceneImageIds(scene: Scene): string[] {
  */
 export function CanvasArea({
   scene,
+  activeCompositionId,
   tool,
   selection,
   editingTextId,
@@ -469,35 +476,27 @@ export function CanvasArea({
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
-  // D-071 Phase B — scroll so the FRAME is centered in the viewport at the given
-  // zoom. The frame is INSET into the symmetric pasteboard by `frame` (scene px), so
-  // its top-left in content = the stage top-left + that offset × zoom.
-  function centerFrameInView(z: number): void {
-    const el = outerRef.current;
-    const s = stageRef.current;
-    const sc = latestSceneRef.current;
-    if (el === null || s === null || sc === null) return;
-    const frame = frameOffsetRef.current; // content-aware inset
-    const srect = s.getBoundingClientRect();
-    const orect = el.getBoundingClientRect();
-    const frameLeftInContent = srect.left - orect.left + el.scrollLeft + frame.x * z;
-    const frameTopInContent = srect.top - orect.top + el.scrollTop + frame.y * z;
-    el.scrollLeft = frameLeftInContent + (sc.resolution.width * z) / 2 - el.clientWidth / 2;
-    el.scrollTop = frameTopInContent + (sc.resolution.height * z) / 2 - el.clientHeight / 2;
-  }
+  // B-035 — fit-on-open is keyed on the active COMPOSITION, not `sceneId`: `scene.id`
+  // is the PROJECT id (editSceneOf spreads the root scene), so it is stable across a
+  // composition switch — keying on it would miss a same-resolution comp switch (and
+  // the bug shows on child comps too). `activeCompositionId` changes on BOTH a project
+  // switch and a comp switch, so it is the right fit identity.
+  const fitKey = activeCompositionId ?? sceneId;
+  // Marked fitted only AFTER centering actually applies (in the centering layout-effect
+  // below), so a zoom that succeeds but whose center hasn't run does NOT consume the
+  // one fit (B-035 Bug A). Comparing to `fitKey` resets on a switch and blocks double-fit.
+  const fitGateRef = useRef<FitGate>({ fittedKey: null });
+  // Bumped by every fit request; the centering layout-effect keys on it so centering
+  // ALWAYS runs after the zoom commit + layout — even when the zoom value is unchanged
+  // (manual Fit at the current zoom).
+  const [centerNonce, setCenterNonce] = useState(0);
 
-  // Fit the FRAME inside the scroll viewport (small margin) so it's large + fully
-  // visible, then CENTER it. The pasteboard extends beyond and is reachable by
-  // scrolling/panning — the scrollbars are hidden (see `s.outer`), so there are no
-  // default scrollbars even though the dark workspace overflows the viewport.
-  // Returns TRUE only when it ACTUALLY fit (a real zoom was applied). Returns FALSE
-  // when the viewport isn't measured yet (`fitZoom` → null on a zero-size viewport),
-  // so the fit-once caller knows NOT to mark the scene fitted and to retry when the
-  // size arrives (B-035).
-  function fitToViewport(): boolean {
+  // The fit zoom for the current viewport + scene, or null when the viewport isn't
+  // measured yet (`fitZoom` → null on a zero-size viewport) so the caller retries.
+  function computeFitZoom(): number | null {
     const el = outerRef.current;
     const s = latestSceneRef.current;
-    if (el === null || s === null) return false;
+    if (el === null || s === null) return null;
     const margin = 16;
     const z = fitZoom(
       el.clientWidth,
@@ -506,40 +505,69 @@ export function CanvasArea({
       s.resolution.height,
       margin,
     );
-    if (z === null) return false; // viewport not measured yet — caller retries
-    const cz = clampZoom(z);
-    setZoom(cz);
-    // Center after the new zoom lays out (the stage size depends on it).
-    requestAnimationFrame(() => centerFrameInView(cz));
-    return true;
+    return z === null ? null : clampZoom(z);
   }
 
-  // B-035 — fit-on-open must fire EXACTLY ONCE per scene, and only when BOTH
-  // prerequisites are ready: the scene (resolution known, via `latestSceneRef`) AND
-  // the canvas viewport (real dimensions). `fittedSceneIdRef` records the last scene
-  // that was actually fit; comparing it to the current `sceneId` both resets on a
-  // scene switch and guards against a double-fit. We mark the scene fitted ONLY when
-  // `fitToViewport()` returned true, so a no-op on a zero viewport (cold open) does
-  // NOT consume the one fit — the viewport-gated effect retries when the size lands.
-  const fitGateRef = useRef<FitGate>({ fittedSceneId: null });
+  // Apply the fit zoom + request a (re)center. Does NOT mark the gate — the centering
+  // effect does, once it applies — so an unmeasured viewport (null) is retried by the
+  // cold effect and a center that hasn't run can't be skipped.
+  function applyFit(): void {
+    const cz = computeFitZoom();
+    if (cz === null) return;
+    setZoom(cz);
+    setCenterNonce((n) => n + 1);
+  }
+
+  // Fit-on-open: fire once per composition (the warm + cold paths share the gate).
   function fitOnOpenIfReady(): void {
-    fitOnceForScene(fitGateRef.current, sceneId, fitToViewport);
+    if (!needsFit(fitGateRef.current, fitKey)) return;
+    applyFit();
+  }
+
+  // Manual Fit (header button): always re-fit + re-center, even if already fitted and
+  // even when the zoom doesn't change.
+  function manualFit(): void {
+    applyFit();
   }
 
   // WARM path — synchronous before paint, so when the viewport is already measured at
-  // the sceneId tick the first frame is at the fit zoom (no flash).
+  // the composition tick the first frame is at the fit zoom (no flash).
   useLayoutEffect(() => {
     fitOnOpenIfReady();
-  }, [sceneId, scene?.resolution.width, scene?.resolution.height]);
+  }, [fitKey, scene?.resolution.width, scene?.resolution.height]);
 
-  // COLD-OPEN fallback — when the canvas mounts/reveals after the scene loads, the
-  // viewport's real size arrives later (the ResizeObserver `measure()` sets `viewport`
-  // below). Re-trying on `viewport.w/h` fits as soon as the size is known. The shared
-  // `fittedSceneIdRef` guard means if the warm path already fit, this no-ops (no
-  // double-fit); a manual zoom after the one fit is left untouched (ref === sceneId).
+  // COLD-OPEN fallback — the viewport's real size arrives after the scene loads (the
+  // ResizeObserver `measure()` sets `viewport`). Retrying on `viewport.w/h` fits once
+  // the size is known; the gate guard no-ops it after the warm path already fit.
   useEffect(() => {
     fitOnOpenIfReady();
-  }, [sceneId, scene?.resolution.width, scene?.resolution.height, viewport.w, viewport.h]);
+  }, [fitKey, scene?.resolution.width, scene?.resolution.height, viewport.w, viewport.h]);
+
+  // CENTERING (B-035 fix) — runs AFTER the zoom is committed + the stage laid out (a
+  // layout-effect, NOT a one-off rAF), keyed on `centerNonce` (bumped by every fit
+  // request). The scroll target is derived ARITHMETICALLY from the frame's known
+  // position in the pasteboard (`frameOffset` + resolution, × zoom) plus the stage's
+  // content-space offset (the scroll container's padding, read once from the settled
+  // computed style) — NOT a transitional getBoundingClientRect / live scrollLeft — so a
+  // warm switch (reloading iframe, stale prior scroll) cannot land it in a corner. The
+  // gate is marked fitted HERE, after the scroll applies, so a fit isn't consumed until
+  // centering actually happened.
+  useLayoutEffect(() => {
+    if (centerNonce === 0) return; // no fit requested yet
+    const el = outerRef.current;
+    const stage = stageRef.current;
+    const sc = latestSceneRef.current;
+    if (el === null || stage === null || sc === null) return; // not laid out → retry on next request
+    const frame = frameOffsetRef.current;
+    const cs = getComputedStyle(el);
+    const padX = Number.parseFloat(cs.paddingLeft) || 0;
+    const padY = Number.parseFloat(cs.paddingTop) || 0;
+    el.scrollLeft = frameCenterScroll(padX, frame.x, sc.resolution.width, zoom, el.clientWidth);
+    el.scrollTop = frameCenterScroll(padY, frame.y, sc.resolution.height, zoom, el.clientHeight);
+    markFitted(fitGateRef.current, fitKey);
+    // Keyed on `centerNonce` only: it is bumped in the same batch as `setZoom`, so this
+    // render's `zoom` / `fitKey` are fresh when the effect runs after the commit.
+  }, [centerNonce]);
 
   function applyPan(dx: number, dy: number): void {
     const el = outerRef.current;
@@ -676,7 +704,7 @@ export function CanvasArea({
         <Control
           variant="bare"
           className={s.headerButton}
-          onClick={fitToViewport}
+          onClick={manualFit}
           aria-label="Fit"
           title="Fit canvas"
         >

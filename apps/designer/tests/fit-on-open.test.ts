@@ -1,59 +1,78 @@
-import { describe, expect, it, vi } from 'vitest';
-import { fitOnceForScene, type FitGate } from '../src/renderer/features/canvas/fit-on-open.js';
+import { describe, expect, it } from 'vitest';
+import {
+  needsFit,
+  markFitted,
+  frameCenterScroll,
+  type FitGate,
+} from '../src/renderer/features/canvas/fit-on-open.js';
 
 /**
- * B-035 — fit-on-open must fire exactly ONCE per scene, gated on the viewport being
- * measured. These lock the warm/cold handoff that the bug got wrong (cold open never
- * re-fit because the effect ran once against a zero viewport and gave up).
+ * B-035 — fit-on-open. Two invariants the first attempt got wrong:
+ *  - the gate is "fit once per composition" and must be marked ONLY after centering
+ *    applied (markFitted), so a zoom-succeeded-but-center-pending attempt can retry;
+ *  - centering is derived from numbers (frameCenterScroll) so it cannot land in a corner.
+ * The prior test only locked zoom-once and missed the centering failure — this adds it.
  */
 
-describe('fitOnceForScene', () => {
-  it('no scene → never attempts a fit', () => {
-    const gate: FitGate = { fittedSceneId: null };
-    const doFit = vi.fn(() => true);
-    expect(fitOnceForScene(gate, null, doFit)).toBe(false);
-    expect(doFit).not.toHaveBeenCalled();
-    expect(gate.fittedSceneId).toBeNull();
+describe('fit-once gate (needsFit / markFitted)', () => {
+  it('no key → never needs a fit', () => {
+    expect(needsFit({ fittedKey: null }, null)).toBe(false);
   });
 
-  it('WARM: viewport ready at the scene tick → fits once, then no-ops', () => {
-    const gate: FitGate = { fittedSceneId: null };
-    const doFit = vi.fn(() => true); // viewport measured → fit succeeds
-
-    expect(fitOnceForScene(gate, 's1', doFit)).toBe(true); // fits
-    expect(gate.fittedSceneId).toBe('s1');
-
-    // A second trigger (e.g. the cold-fallback effect firing after paint) must NOT
-    // fit again — no double-fit jump.
-    expect(fitOnceForScene(gate, 's1', doFit)).toBe(false);
-    expect(doFit).toHaveBeenCalledTimes(1);
+  it('needs a fit until the key is marked fitted (only after centering applies)', () => {
+    const gate: FitGate = { fittedKey: null };
+    expect(needsFit(gate, 'compA')).toBe(true);
+    // A zoom that succeeded but whose centering has NOT run yet must NOT mark the gate —
+    // so it still needs a fit and the cold/center retry can finish it.
+    expect(needsFit(gate, 'compA')).toBe(true);
+    // Centering applied → mark.
+    markFitted(gate, 'compA');
+    expect(needsFit(gate, 'compA')).toBe(false); // no double-fit
   });
 
-  it('COLD: viewport measured AFTER scene load → does not consume the fit, then fits once it lands', () => {
-    const gate: FitGate = { fittedSceneId: null };
-    // First two attempts run while the viewport is still zero-sized → fit no-ops.
-    const coldFit = vi.fn(() => false);
-    expect(fitOnceForScene(gate, 's1', coldFit)).toBe(false); // warm layout-effect, viewport 0
-    expect(fitOnceForScene(gate, 's1', coldFit)).toBe(false); // cold effect, viewport still 0
-    expect(gate.fittedSceneId).toBeNull(); // NOT marked — the one fit is still owed
+  it('a different composition resets the gate → it fits once', () => {
+    const gate: FitGate = { fittedKey: 'compA' };
+    expect(needsFit(gate, 'compB')).toBe(true); // switch → re-fit
+    markFitted(gate, 'compB');
+    expect(needsFit(gate, 'compB')).toBe(false);
+    expect(needsFit(gate, 'compA')).toBe(true); // back to A → fits again
+  });
+});
 
-    // The ResizeObserver reports a real viewport → the retry now succeeds.
-    const warmFit = vi.fn(() => true);
-    expect(fitOnceForScene(gate, 's1', warmFit)).toBe(true);
-    expect(gate.fittedSceneId).toBe('s1');
+describe('frameCenterScroll — centering math (the missed assertion)', () => {
+  // Centering means: after applying the returned scroll, the FRAME CENTER lands at the
+  // VIEWPORT CENTER. (stageOffset + (frameOffset + res/2)*zoom) − scroll === viewport/2.
+  function frameCenterOnScreen(
+    stageOffset: number,
+    frameOffset: number,
+    res: number,
+    zoom: number,
+    viewport: number,
+  ): number {
+    const scroll = frameCenterScroll(stageOffset, frameOffset, res, zoom, viewport);
+    return stageOffset + (frameOffset + res / 2) * zoom - scroll;
+  }
 
-    // And it does NOT fit a second time once the size keeps changing (manual zoom /
-    // window resize after the one fit is left alone).
-    const afterFit = vi.fn(() => true);
-    expect(fitOnceForScene(gate, 's1', afterFit)).toBe(false);
-    expect(afterFit).not.toHaveBeenCalled();
+  it('centers the frame in the viewport (1920 frame, 2× pasteboard, fit zoom)', () => {
+    // 1920×1080 frame, symmetric 2× pasteboard → frame inset 960px; fit in a 1280-wide
+    // viewport ⇒ zoom 0.5 (frame 960px on screen). Pad 8px.
+    const scroll = frameCenterScroll(8, 960, 1920, 0.5, 1280);
+    // frame center content = 8 + (960 + 960)*0.5 = 968 → scroll = 968 − 640 = 328.
+    expect(scroll).toBe(328);
+    // And it actually centers: frame center appears at the viewport center.
+    expect(frameCenterOnScreen(8, 960, 1920, 0.5, 1280)).toBe(640);
   });
 
-  it('a new scene resets the gate → the next scene fits once', () => {
-    const gate: FitGate = { fittedSceneId: 's1' };
-    const doFit = vi.fn(() => true);
-    expect(fitOnceForScene(gate, 's2', doFit)).toBe(true);
-    expect(gate.fittedSceneId).toBe('s2');
-    expect(fitOnceForScene(gate, 's2', doFit)).toBe(false); // once only
+  it('NEVER lands the frame in a corner (center, not 0) for a typical fit', () => {
+    const scroll = frameCenterScroll(8, 540, 1080, 0.5, 720); // vertical axis
+    expect(scroll).toBeGreaterThan(0); // not pinned to the top-left corner
+    expect(frameCenterOnScreen(8, 540, 1080, 0.5, 720)).toBe(360); // = viewport/2
+  });
+
+  it('is independent of any prior scroll (pure function of the numbers)', () => {
+    // Same inputs → same target regardless of where the previous scene was scrolled.
+    const a = frameCenterScroll(8, 960, 1920, 0.5, 1280);
+    const b = frameCenterScroll(8, 960, 1920, 0.5, 1280);
+    expect(a).toBe(b);
   });
 });
