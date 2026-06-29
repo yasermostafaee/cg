@@ -17,28 +17,23 @@ const FLASH_LAYER = 0;
  * AMCP command-construction **seam** (ADR 0006).
  *
  * This is the SINGLE place AMCP command lines are built for an HTML-producer
- * slot. Keeping construction here means the on-hardware-verified sequence can be
- * slotted in at **Phase 3** without touching `ServerSession` / `CommandQueue` /
- * `Reconciler`.
+ * slot. Keeping construction here means the verified sequence is isolated from
+ * `ServerSession` / `CommandQueue` / `Reconciler`.
  *
- * ⚠️ The Phase-2 sequence below is **`amcp-mock`-VALIDATED, NOT
- * hardware-VALIDATED.** It is exactly what `tools/amcp-mock` acknowledges:
+ * ✅ **Hardware-validated on CasparCG 2.3.2 (`4de6d18f` Dev) — see ADR 0006.**
+ * The C-001 Phase-3b harness (`tools/caspar-amcp-probe`) ran every candidate
+ * against real hardware; this is the sequence that delivered a Persian-laden
+ * JSON payload to `window.update` intact:
  *
  *   load   → `CG <ch>-<layer> ADD 0 "<template>" 1 "<data>"`
  *   take   → `CG <ch>-<layer> PLAY 0`
  *   update → `CG <ch>-<layer> UPDATE 0 "<data>"`
  *   out    → `CLEAR <ch>-<layer>`
  *
- * ADR 0006 found that on real CasparCG 2.3.2, `CG INVOKE 1 "update"` delivered an
- * EMPTY payload and `CALL ... "update"` returned `202 CALL OK` but never invoked
- * `window.update`. The correct update verb is therefore **unresolved on
- * hardware**. `amcp-mock` does not implement `CALL` and acks `CG UPDATE`, so
- * Phase 2 uses `CG UPDATE`. Phase 3 replaces the verb HERE with the verified one
- * (and updates ADR 0006) — no other code changes.
- *
- * Phase 3b: the hardware-validation harness `tools/caspar-amcp-probe` resolves
- * which sequence works; paste its verdict into ADR 0006 → "Phase 3b findings",
- * then slot the verified `update` verb in below.
+ * The disproven alternatives are NOT pending work: `CALL ... "update"` returned
+ * `202` but never invoked `window.update`; `CG INVOKE ... "update" "<json>"`
+ * delivered an EMPTY param; the inline `CG INVOKE ... "update(<json>)"` form
+ * delivered `"[object Object]"`. `CG UPDATE` is the answer.
  *
  * All user values are escaped via `quote()` from `@cg/caspar-client` (the one
  * canonical AMCP quoter); a raw value never reaches the wire unquoted.

@@ -1,0 +1,121 @@
+[
+  {
+    "id": "cg-add+cg-update",
+    "title": "CG ADD then CG UPDATE",
+    "note": "Phase-2 mock-validated path. amcp-mock acks CG UPDATE; UNVERIFIED on hardware that it reaches window.update.",
+    "loadSteps": [
+      {
+        "cmd": "CG 1-10 ADD 0 \"http://172.18.0.1:7900/probe.html\" 1 \"{\\\"headline\\\":\\\"سلام دنیا\\\",\\\"ticker\\\":\\\"اخبار\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "updateSteps": [
+      {
+        "cmd": "CG 1-10 UPDATE 0 \"{\\\"headline\\\":\\\"خبر فوری ۱۴۰۳\\\",\\\"ticker\\\":\\\"به‌روزرسانی زنده\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "amcpOk": true,
+    "helloObserved": true,
+    "updateObserved": true,
+    "payloadMatch": true,
+    "persianIntact": true,
+    "received": "{\"headline\":\"خبر فوری ۱۴۰۳\",\"ticker\":\"به‌روزرسانی زنده\"}"
+  },
+  {
+    "id": "play-html+call-update",
+    "title": "PLAY [HTML] then CALL \"update\"",
+    "note": "ADR 0006: CALL returned 202 CALL OK but never invoked window.update. Re-verify.",
+    "loadSteps": [
+      {
+        "cmd": "PLAY 1-10 [HTML] \"http://172.18.0.1:7900/probe.html\"",
+        "code": 202,
+        "reply": "202 PLAY OK"
+      }
+    ],
+    "updateSteps": [
+      {
+        "cmd": "CALL 1-10 \"update\" \"{\\\"headline\\\":\\\"خبر فوری ۱۴۰۳\\\",\\\"ticker\\\":\\\"به‌روزرسانی زنده\\\"}\"",
+        "code": 202,
+        "reply": "202 CALL OK"
+      }
+    ],
+    "amcpOk": true,
+    "helloObserved": true,
+    "updateObserved": false,
+    "payloadMatch": false,
+    "persianIntact": false,
+    "received": null
+  },
+  {
+    "id": "cg-add+cg-invoke-update",
+    "title": "CG ADD then CG INVOKE \"update\" \"<json>\"",
+    "note": "ADR 0006 / Phase 4 §9 form: INVOKE delivered an EMPTY param. Re-verify the param survives.",
+    "loadSteps": [
+      {
+        "cmd": "CG 1-10 ADD 0 \"http://172.18.0.1:7900/probe.html\" 1 \"{\\\"headline\\\":\\\"سلام دنیا\\\",\\\"ticker\\\":\\\"اخبار\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "updateSteps": [
+      {
+        "cmd": "CG 1-10 INVOKE 0 \"update\" \"{\\\"headline\\\":\\\"خبر فوری ۱۴۰۳\\\",\\\"ticker\\\":\\\"به‌روزرسانی زنده\\\"}\"",
+        "code": 201,
+        "reply": "201 CG OK"
+      }
+    ],
+    "amcpOk": true,
+    "helloObserved": true,
+    "updateObserved": true,
+    "payloadMatch": false,
+    "persianIntact": false,
+    "received": ""
+  },
+  {
+    "id": "cg-add+cg-invoke-inline",
+    "title": "CG ADD then CG INVOKE \"update(<json>)\" (inline call)",
+    "note": "Variant: pass the whole call as the INVOKE method string in case the param form is the problem.",
+    "loadSteps": [
+      {
+        "cmd": "CG 1-10 ADD 0 \"http://172.18.0.1:7900/probe.html\" 1 \"{\\\"headline\\\":\\\"سلام دنیا\\\",\\\"ticker\\\":\\\"اخبار\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "updateSteps": [
+      {
+        "cmd": "CG 1-10 INVOKE 0 \"update({\\\"headline\\\":\\\"خبر فوری ۱۴۰۳\\\",\\\"ticker\\\":\\\"به‌روزرسانی زنده\\\"})\"",
+        "code": 201,
+        "reply": "201 CG OK"
+      }
+    ],
+    "amcpOk": true,
+    "helloObserved": true,
+    "updateObserved": true,
+    "payloadMatch": false,
+    "persianIntact": false,
+    "received": "[object Object]"
+  },
+  {
+    "id": "play-html-urlquery",
+    "title": "PLAY [HTML] \"...?data=<json>\" (URL-query fallback)",
+    "note": "ADR 0006 fallback (a): the page reads location.search at load; no AMCP update needed.",
+    "loadSteps": [
+      {
+        "cmd": "PLAY 1-10 [HTML] \"http://172.18.0.1:7900/probe.html?data=%7B%22headline%22%3A%22%D8%AE%D8%A8%D8%B1%20%D9%81%D9%88%D8%B1%DB%8C%20%DB%B1%DB%B4%DB%B0%DB%B3%22%2C%22ticker%22%3A%22%D8%A8%D9%87%E2%80%8C%D8%B1%D9%88%D8%B2%D8%B1%D8%B3%D8%A7%D9%86%DB%8C%20%D8%B2%D9%86%D8%AF%D9%87%22%7D\"",
+        "code": 202,
+        "reply": "202 PLAY OK"
+      }
+    ],
+    "updateSteps": [],
+    "amcpOk": true,
+    "helloObserved": true,
+    "updateObserved": false,
+    "payloadMatch": false,
+    "persianIntact": false,
+    "received": null
+  }
+]

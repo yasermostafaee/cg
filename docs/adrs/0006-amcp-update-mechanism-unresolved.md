@@ -1,8 +1,11 @@
-# ADR 0006 — AMCP update mechanism for HTML producer (unresolved; deferred to M4)
+# ADR 0006 — AMCP update mechanism for HTML producer (RESOLVED: `CG UPDATE`)
 
-- **Status:** Accepted (with open question)
-- **Date:** 2026-05-23
-- **Spike:** M1 Spike D
+- **Status:** Accepted — **open question RESOLVED 2026-06-29** (C-001 Phase 3b;
+  see "Phase 3b findings" below). The title kept the original "unresolved"
+  framing for history; the verified verb is **`CG UPDATE`**.
+- **Date:** 2026-05-23 · **Resolved:** 2026-06-29
+- **Spike:** M1 Spike D · **Resolution:** C-001 Phase 3b harness
+  (`tools/caspar-amcp-probe`)
 - **CasparCG version observed:** 2.3.2 Dev (`4de6d18f`)
 
 ## Context
@@ -115,29 +118,48 @@ Persian payloads?" — splits into two:
   is complete (Spike B saw no `cg.invoked` event; the right marker
   might be a `/foreground/file/path` change or no marker at all).
 
-## Phase 3b findings — TBD
+## Phase 3b findings — RESOLVED (`CG UPDATE`)
 
-> **Status: NOT YET RUN.** The harness exists; the on-hardware result does not.
->
-> C-001 Phase 3b built a hardware-validation harness — `tools/caspar-amcp-probe`
-> (see its `README.md`) — that runs a matrix of candidate load/update/stop
-> sequences against a real CasparCG 2.3.2 and reports, per candidate, the raw AMCP
-> return codes and whether a Persian-laden JSON payload reached `window.update`
-> intact (WebSocket beacon + on-screen echo). The candidates are:
-> `cg-add+cg-update`, `play-html+call-update`, `cg-add+cg-invoke-update`,
-> `cg-add+cg-invoke-inline`, and the `play-html-urlquery` fallback.
->
-> **Fill this in after running the harness on hardware:**
->
-> - **CasparCG build / date / operator:** _TBD_
-> - **Results table:** paste from the harness output / the README results table.
-> - **Verified sequence (the winner):** _TBD_ — the exact AMCP commands that
->   deliver the JSON to `window.update` with Persian intact (or, if none do, the
->   `play-html-urlquery` / WS-sidekick fallback per the "Risk" note above).
-> - **OSC update marker (if any):** _TBD_ — whether an OSC event confirms the
->   update completed.
->
-> **Once filled:** the follow-up change locks the verified verb into the
-> command-builder seam (`tools/caspar-bridge/src/command-builder.ts` — the Phase-2
-> mock-validated `CG UPDATE` is the placeholder), revises Phase 4 §9, flips this
-> ADR's status to **Resolved**, and flips C-001 to done.
+**Run:** 2026-06-29, against real **CasparCG 2.3.2 Dev (`4de6d18f`)**, via the
+C-001 Phase-3b harness `tools/caspar-amcp-probe` (matrix of candidate
+load/update/stop sequences; raw AMCP codes + a WebSocket beacon + on-screen echo
+to confirm what `window.update` received and whether Persian/UTF-8 survived).
+
+| candidate                                        | AMCP | `window.update` | payload               | verdict          |
+| ------------------------------------------------ | ---- | --------------- | --------------------- | ---------------- |
+| `CG ADD` → **`CG UPDATE`**                       | 202  | **called**      | **exact, Persian OK** | ✅ **WINNER**    |
+| `PLAY [HTML]` → `CALL "update"`                  | 202  | never called    | —                     | ✗                |
+| `CG ADD` → `CG INVOKE "update" "<json>"`         | 201  | called          | **EMPTY**             | ✗                |
+| `CG ADD` → `CG INVOKE "update(<json>)"` (inline) | 201  | called          | `"[object Object]"`   | ✗                |
+| `PLAY [HTML] "...?data=<json>"` (URL fallback)   | 202  | n/a             | arrives at load only  | (not via update) |
+
+**Verified sequence (the winner):**
+
+```
+load   → CG <ch>-<layer> ADD 0 "<template-url>" 1 "<data-json>"
+take   → CG <ch>-<layer> PLAY 0
+update → CG <ch>-<layer> UPDATE 0 "<data-json>"
+out    → CLEAR <ch>-<layer>
+```
+
+`CG UPDATE` delivers the **exact** Persian-laden JSON to `window.update` with no
+replacement characters. This **confirms the M1 Spike D findings above and
+resolves the open question**: `CG INVOKE` delivers an empty param (or
+`[object Object]` for the inline form), and `CALL "update"` returns `202` but
+never invokes `window.update` — neither is viable, and they are **not** pending
+work. The `play-html-urlquery` fallback (ADR 0006 option a) is unnecessary.
+
+**OSC update marker:** none required — the bridge's Reconciler confirms playout
+from `/foreground/producer`; no per-update OSC marker is needed for `CG UPDATE`.
+
+**Raw evidence:** the harness output is archived at
+[`tools/caspar-amcp-probe/evidence/casparcg-2.3.2-4de6d18f/`](../../tools/caspar-amcp-probe/evidence/casparcg-2.3.2-4de6d18f/)
+(`results.json` + `wire.ndjson`).
+
+**Applied:** the verified `CG UPDATE` verb — already the Phase-2 placeholder — is
+now marked hardware-validated in the command-builder seam
+(`tools/caspar-bridge/src/command-builder.ts`); no logic change was needed. The
+`runtime-caspar-bridge` living spec is updated from mock-validated to
+hardware-validated, and **C-001 is complete**. (Phase 4 §9's stale
+`CG INVOKE` example should be corrected to `CG UPDATE` when that export doc is
+next touched.)

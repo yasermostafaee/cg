@@ -4,7 +4,13 @@ The Runtime currently runs against an in-memory mock. Real playout needs a
 small local bridge because browsers can't open raw TCP/UDP. See
 `docs/adrs/0007-electron-to-browser-migration.md`.
 
-## [~] C-001 — Local CasparCG bridge + real transport ⟨priority: high⟩
+## [x] C-001 — Local CasparCG bridge + real transport ⟨priority: high⟩
+
+**Done:** Phases 1–3 + the hardware AMCP-sequence validation are all complete —
+transport (`tools/caspar-bridge` WS ↔ `WebSocketRuntime`), the real
+`@cg/caspar-client` stack backing, real two-session redundancy/failover, and the
+update verb hardware-validated as `CG UPDATE` on CasparCG 2.3.2 (`4de6d18f`,
+ADR 0006). All four acceptance bullets met.
 
 **What:** A tiny Node tool (`tools/caspar-bridge`) that exposes a WebSocket and
 relays AMCP over TCP + OSC over UDP to CasparCG; plus a browser
