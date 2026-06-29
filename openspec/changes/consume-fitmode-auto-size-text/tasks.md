@@ -64,7 +64,27 @@
       correct) or switch to `fixed` (if it relied on a fixed `transform.size`),
       so the shipped templates look right under real auto-size.
 
-## 7. Tests
+## 7. D-046 — sizing=auto guard (inspector + confirm modal)
+
+- [ ] Add `hasSizeKeyframes(el)` (mirror `off-frame.ts` `hasGeometryAnimation`,
+      narrowed to `tracks['size.w'] || tracks['size.h']`).
+- [ ] Add `SizingAutoConfirmModal` built on the shared `Modal` / `ModalButton`
+      (`features/shell/Modal.tsx`) — Cancel + a `danger` Confirm; `.css.ts`
+      consistent with the chrome (RTL-safe, no new colours); localizable copy.
+- [ ] Rewire the Sizing toggle handler (`TextStyleSection.tsx:88-92`):
+      `fixed` → switch immediately; `auto` + no size keyframes → switch immediately;
+      `auto` + size keyframes → open the modal (do NOT change `fitMode` yet).
+- [ ] On Confirm, inside `runAsSingleHistoryEntry`: set `fitMode` to `autosize`
+      via `updateElement`, then call `clearKeyframeTrack` for `size.w` and for
+      `size.h` (`timeline.ts:229`) — one undo step. On Cancel: no-op.
+- [ ] Multi-select: aggregate — modal if ANY selected text element has size
+      keyframes; Confirm switches all + deletes size tracks where present as one
+      history entry; Cancel aborts all. (Only where the toggle is offered.)
+- [ ] Confirm `fitMode` write path: `updateElement` already accepts it; no schema
+      change. Auto→Fixed falls back to `transform.size` (no write-back; matches
+      D-060 §C / design §D-046-E).
+
+## 8. Tests
 
 - [ ] Runtime unit (`@cg/template-runtime`): auto hugs both dims; `fixed`
       unchanged; `\n` → widest-line width + summed height; long line does not
@@ -76,20 +96,26 @@
       align values and `transform.size` sizing.
 - [ ] Exporter parity test: load the exported single-file HTML headless and
       assert the auto text box hugs (matches preview).
+- [ ] D-046 store/unit: to-Auto with no size keyframes switches immediately; with
+      size keyframes the `fitMode` + track deletion is ONE undo step (undo restores
+      both); Cancel path leaves `fitMode` + keyframes untouched; Auto→Fixed no-ops
+      the guard.
+- [ ] D-046 E2E: the confirm modal appears ONLY when size keyframes exist; Confirm
+      switches + deletes (one undo); Cancel keeps Fixed + keyframes.
 
-## 8. Docs / engine-sync
+## 9. Docs / engine-sync
 
 - [ ] `packages/template-runtime/README.md` — document the text auto-size render
       path (intrinsic sizing, `\n`, RTL anchor).
 - [ ] `apps/designer/src/renderer/features/canvas/README.md` — the gizmo on a
       content-sized box (measured bounds, inert resize handles).
 
-## 9. Gate
+## 10. Gate
 
 - [ ] `format:check` + `typecheck` + `lint` + `test` + `build` for the touched
       workspaces (`@cg/template-runtime`, `@cg/designer`, `@cg/starter-templates`,
       `@cg/shared-schema` if the docstring changed), uncached at least once.
 - [ ] Run the new E2E (`pnpm test:e2e`).
 - [ ] `pnpm openspec validate consume-fitmode-auto-size-text --strict`.
-- [ ] Mark the PRD D-060 item `[~]` with the change dir; remind the owner to
-      archive (and to schedule the coupled D-046 guard).
+- [ ] Mark the PRD D-060 AND D-046 items `[~]` with the change dir (both ship from
+      this one change); remind the owner to archive.

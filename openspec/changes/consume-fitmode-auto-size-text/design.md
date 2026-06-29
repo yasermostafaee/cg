@@ -219,6 +219,97 @@ auto text box hugs) as a guardrail.
 
 ---
 
+## D-046 — sizing=auto guard (warn + confirm)
+
+Owner-decided behavior **A**: switching a text element to Auto when it has size
+keyframes must WARN + CONFIRM before destroying them — never a silent switch. This
+is what makes D-060's "size keyframes are ignored in Auto" (Risks) non-silent and
+recoverable.
+
+### D-046-A. Keyframe detection
+
+**Decision:** detect size keyframes via `el.animation?.tracks`, keyed by the
+`AnimatableProperty` track names `'size.w'` and `'size.h'`.
+
+- Evidence: tracks live at `el.animation.tracks[property]`
+  (`state/slices/timeline.ts:293`, `state/scene-doc.ts:268`); the size track keys
+  are `'size.w'` / `'size.h'` (`state/off-frame.ts:31-32`, and the static-write
+  switch `timeline.ts:442-445`).
+- Reuse the existing predicate shape `hasGeometryAnimation`
+  (`off-frame.ts:38-42`, `tracks[k] !== undefined`) but narrowed to size: a new
+  `hasSizeKeyframes(el) = el.animation?.tracks['size.w'] !== undefined ||
+el.animation?.tracks['size.h'] !== undefined`.
+
+### D-046-B. Keyframe deletion
+
+**Decision:** reuse `clearKeyframeTrack(elementId, property)`
+(`state/slices/timeline.ts:229`) — it removes a property's whole track, prunes the
+`animation` field when empty, and clears dangling keyframe-selection refs. Call it
+for `'size.w'` and `'size.h'`. (This is the exact path B-014 used for orphaned
+colour tracks, so the guard invents nothing.)
+
+### D-046-C. Modal — reuse, not new primitive
+
+**Decision:** REUSE the existing shared modal primitive `Modal` + `ModalButton`
+(`features/shell/Modal.tsx`) — the same one `SaveBeforeSwitchModal.tsx` uses for a
+destructive confirm (Cancel + `variant="danger"` action). Add a small
+`SizingAutoConfirmModal` (Cancel + a `danger` Confirm) with a `.css.ts` consistent
+with the existing chrome (vanilla-extract, RTL-safe, no new colours). Copy is
+plain strings localizable like the rest of the UI. No new modal infrastructure.
+
+### D-046-D. Toggle wiring
+
+**Decision:** the Sizing toggle handler (`TextStyleSection.tsx:88-92`) changes from
+"write `fitMode` directly" to:
+
+- `v === 'fixed'` → switch immediately (`updateElement(id, { fitMode: 'fixed' })`),
+  no modal.
+- `v === 'auto'` and `!hasSizeKeyframes(el)` → switch immediately
+  (`updateElement(id, { fitMode: 'autosize' })`).
+- `v === 'auto'` and `hasSizeKeyframes(el)` → open `SizingAutoConfirmModal`; only on
+  **Confirm** run, inside `runAsSingleHistoryEntry` (the one-undo helper the
+  `clearKeyframeTrack` doc itself prescribes, `timeline.ts:226-227`):
+  `updateElement(id, { fitMode: 'autosize' })` + `clearKeyframeTrack(id, 'size.w')`
+  - `clearKeyframeTrack(id, 'size.h')`. **Cancel** does nothing (stays Fixed).
+
+### D-046-E. Fallback on return to Fixed
+
+**Decision:** Auto → Fixed falls back to **`transform.size`** — the value preserved
+unchanged from before Auto. This is consistent with the D-060 design §C, which
+keeps `transform.size` as Fixed's source of truth and explicitly forbids writing
+the measured box back into the model. So there is **no contradiction**: nothing was
+written during Auto, and Fixed resumes from the same `transform.size` it had.
+
+> **Trade-off (flagged, not a blocker):** if the content grew a lot in Auto,
+> returning to Fixed snaps to the pre-Auto size rather than the last hug size. The
+> alternative — a one-shot commit of the measured hug box into `transform.size` at
+> the toggle moment (a deliberate commit, distinct from the forbidden continuous
+> write-back) — would keep the visual size. Chosen the simpler, contradiction-free
+> `transform.size` fallback; owner can opt into the one-shot commit later.
+
+### D-046-F. Edge cases
+
+- **Multi-selection:** wherever the Sizing toggle is offered for a multi-text
+  selection, the guard aggregates: the modal appears if **any** selected text
+  element has size keyframes, and its copy names how many will lose keyframes; on
+  Confirm, **all** selected text elements switch to Auto and the size tracks are
+  deleted on those that have them, as **one** `runAsSingleHistoryEntry`; Cancel
+  aborts the whole batch (none switch). (If the inspector does not expose the
+  Sizing toggle for multi-select, this is moot — the guard simply lives on whatever
+  path offers the toggle.)
+- **Already Auto:** toggling "to Auto" when already Auto is a no-op (no modal);
+  Auto → Fixed is immediate (no modal), size falls back to `transform.size` (E).
+- **Undo:** the switch-to-Auto + size-track deletion is a **single undo step**
+  (`runAsSingleHistoryEntry`), so one Ctrl+Z restores both `fitMode: 'fixed'` and
+  the deleted size keyframes.
+- **Loaded scene with stale size keyframes on an already-`autosize` element:** the
+  guard is a TOGGLE-action guard, not a load migration — it does not fire on load.
+  Such stale tracks are simply ignored by the runtime per D-060 (no silent
+  animation, no crash); they are only ever deleted when the operator actively
+  toggles. This keeps the guard scoped to the user action.
+
+---
+
 ## Risks / edges
 
 - **Multi-line `\n`:** `width: max-content` + `white-space: pre` ⇒ width = widest
@@ -242,9 +333,12 @@ auto text box hugs) as a guardrail.
   resizes while selected.
 - **Keyframed size in Auto:** `animation-applier.ts:55-56` animates
   `style.width/height` from `size` keyframes. In Auto the box is content-driven,
-  so size-track writes are ignored for an auto text box (the registry/D-046 guard
-  will also block authoring them). Flagged as the explicit coupling point with
-  D-046.
+  so size-track writes are ignored for an auto text box. The **D-046 guard (in
+  this change, §D-046)** makes this non-silent: switching to Auto with size
+  keyframes prompts a confirm modal that deletes those tracks on confirm, so an
+  Auto element never carries a hidden, ignored size track created via the toggle.
+  (Stale tracks on a scene loaded from disk are still simply ignored — the guard
+  fires on the toggle action, not on load; see §D-046-F.)
 - **RTL multi-line:** right-pinned box, per-line bidi via the element `direction`;
   `direction: 'auto'` pins left (documented).
 - **Gradient text inner node:** the gradient path uses a `max-width: 100%` inner

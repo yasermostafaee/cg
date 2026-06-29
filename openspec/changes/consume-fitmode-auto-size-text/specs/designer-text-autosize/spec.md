@@ -137,3 +137,56 @@ remain `fixed`, so new elements are unaffected.
 
 - **WHEN** the operator adds a new text element
 - **THEN** its `fitMode` defaults to `fixed` (its box uses `transform.size`)
+
+### Requirement: Switching a text element to Auto guards its size keyframes (D-046)
+
+Switching a text element's Sizing toggle to Auto SHALL NOT silently destroy data:
+when the element has keyframes on its size track (`size.w` and/or `size.h`), the
+Designer SHALL show a confirmation modal explaining that Auto sizing is
+content-driven and the element's existing size keyframes will be removed, offering
+**Confirm** (switch to Auto AND delete the size keyframes) and **Cancel** (stay
+Fixed, keep the keyframes); when the element has NO size keyframes the switch to
+Auto SHALL apply immediately with no modal; switching Auto → Fixed SHALL apply
+immediately with no modal (nothing is destroyed) and the box SHALL fall back to
+`transform.size`. A confirmed switch SHALL be a single undoable step (one undo
+restores both `fixed` and the deleted size keyframes).
+
+#### Scenario: Switching to Auto with no size keyframes applies immediately
+
+- **WHEN** the operator toggles Sizing to Auto on a text element that has no
+  `size.w` / `size.h` keyframes
+- **THEN** `fitMode` becomes `autosize` immediately with no confirmation modal
+
+#### Scenario: Switching to Auto with size keyframes prompts a confirm modal
+
+- **WHEN** the operator toggles Sizing to Auto on a text element that has `size.w`
+  and/or `size.h` keyframes
+- **THEN** a confirmation modal appears explaining the size keyframes will be
+  removed, and `fitMode` is NOT changed yet
+
+#### Scenario: Confirming switches to Auto and removes the size keyframes in one undo step
+
+- **WHEN** the operator confirms that modal
+- **THEN** `fitMode` becomes `autosize` AND the element's `size.w` / `size.h`
+  keyframe tracks are removed, together as a single undoable step (one undo
+  restores both the `fixed` sizing and the deleted size keyframes)
+
+#### Scenario: Cancelling leaves the element Fixed with its keyframes intact
+
+- **WHEN** the operator cancels that modal
+- **THEN** `fitMode` stays `fixed` and the element's size keyframes are untouched
+
+#### Scenario: Switching Auto back to Fixed needs no modal and falls back to transform.size
+
+- **WHEN** the operator toggles Sizing from Auto to Fixed
+- **THEN** the switch applies immediately with no modal and the box renders at
+  `transform.size` (the value preserved from before Auto)
+
+#### Scenario: Multi-selection aggregates the guard
+
+- **WHEN** the Sizing toggle is set to Auto for a multi-text selection in which at
+  least one element has size keyframes
+- **THEN** the confirmation modal appears (naming how many elements will lose
+  keyframes); on Confirm every selected text element switches to Auto and the size
+  keyframes are removed from those that had them as one undoable step, and on
+  Cancel none of them switch
