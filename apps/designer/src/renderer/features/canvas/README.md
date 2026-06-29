@@ -87,16 +87,25 @@ re-measures and stays glued. The auto→fixed toggle commits the measured size i
 
 The stage is a **FIXED pasteboard** (B-027): its size is `pasteboardLayout(resolution)` — a pure
 function of the resolution, **not** content-grown. The margins are a multiple of the frame per side:
-`PASTEBOARD_MARGIN_X` (= 3) × the frame width left + right, `PASTEBOARD_MARGIN_Y` (= 2) × the frame
-height top + bottom → total extent **7× the frame width × 5× the frame height**. `layout.frame` is
-the frame's **constant offset** into the stage (scene (0,0) sits there): `3× width` / `2× height`.
+`PASTEBOARD_MARGIN_X` (= 1) × the frame width left + right, `PASTEBOARD_MARGIN_Y` (= 1) × the frame
+height top + bottom → total extent **3× the frame width × 3× the frame height** (a one-frame margin on
+every side). `layout.frame` is the frame's **constant offset** into the stage (scene (0,0) sits there):
+`1× width` / `1× height`.
 
 Because the extent + offset are constant per resolution, dragging a shape off-frame moves **only the
 shape** — the dark area never grows and the frame never drifts (the old grow-to-fit origin shift was
 the during-drag jitter source; it, plus `contentBounds` and the origin-shift scroll-comp seam, were
-removed). A shape parked **within** the extent stays visible + selectable on every side; one parked
-**beyond** it is clipped from the dark area but stays in the scene (reachable by zooming out / panning
-— `ZOOM_MIN` is low enough that a full zoom-out shows the whole fixed pasteboard).
+removed).
+
+**No dead zone — drags/nudges are clamped to the pasteboard.** A shape's full bounding box can never
+cross the extent edge: `beginDrag` (single), `beginGroupDrag` (the whole selection box), and
+`nudgeSelection` (arrow keys) all run their delta through `clampDeltaToPasteboard` against
+`pasteboardSceneBounds(resolution)`, so a shape can never reach the clipped region beyond the extent
+(no invisible/unselectable shapes) — the pasteboard **is** the whole workable area. Edge cases: a
+shape that begins OUTSIDE (an old/imported scene) isn't yanked — the clamp only tightens (never pushes
+it further out) and lets it move back in, then bounds it; a shape LARGER than the pasteboard on an axis
+is centered on that axis (it can't fit, so it stops following the pointer there). `ZOOM_MIN` (0.1) is
+low enough that a full zoom-out shows the whole 3× pasteboard.
 
 Three places consume the (constant) offset so they agree: the iframe (`frameOffset` insets `.cg-stage`
 via the `--cg-frame-x/-y` CSS vars — see below), the overlay (`CanvasOverlay`'s frame box is inset by
@@ -116,13 +125,16 @@ arithmetically from the constant offset (`frameCenterScroll`, B-035) in a layout
 The pasteboard overflows the viewport, but **the scrollbars are hidden** (`s.outer`); the operator
 pans with the hand tool / wheel and zooms with Ctrl+wheel.
 
-**Two-tone, by region.** The **surround** (everything beyond the frame — `s.outer` _and_ the
-iframe `html, body`) is the dark **`#161927`**. The **frame-sized page backdrop** is a light gray
-**`#a7a7a7`** (with a near-white **`#f5f5f5`** checker) — it is `.cg-stage`'s **`background-color`**,
-so CSS paints it _behind_ the checkerboard (`background-image`) and the shapes (children). Every
-shape — on-frame over the `#a7a7a7` page _or_ off-frame over the `#161927` surround — paints **on
-top** of both backdrops and stays visible + selectable; because `#a7a7a7` is a `background-color` it
-is a **backdrop, never an overlay** (it cannot occlude a shape).
+**Tones, by region.** Three nested tones make the workable area read as a defined rectangle: the
+empty **scroll-container surround** (`s.outer`, beyond the pasteboard) is the darkest **`#0e1018`**;
+the **pasteboard** itself (the stage + the iframe `html, body`) is **`#161927`**, marked off from the
+surround by a subtle 1px edge ring on `s.stage` (a `box-shadow`, so the boundary is explicit even
+though clamping already keeps shapes inside); the **frame-sized page backdrop** is **`#3d4253`** (with
+a **`#5b6075`** checker) — it is `.cg-stage`'s **`background-color`**, so CSS paints it _behind_ the
+checkerboard (`background-image`) and the shapes (children). Every shape — on-frame over the `#3d4253`
+page _or_ off-frame over the `#161927` pasteboard — paints **on top** of both backdrops and stays
+visible + selectable; because `#3d4253` is a `background-color` it is a **backdrop, never an overlay**
+(it cannot occlude a shape).
 
 **Zoom toward a point.** `zoomAt(factor, clientX, clientY)` measures the scene point under the
 anchor pre-zoom and stashes it; a **`useLayoutEffect` keyed on `zoom`** then applies the scroll

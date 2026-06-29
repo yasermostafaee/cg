@@ -137,7 +137,7 @@ export class Preview {
            - the FRAME-SIZED PAGE backdrop is #3d4253 (\`.cg-stage\`'s background-color)
              with the #5b6075 broadcast checker, inset by the frame offset + outlined, so
              the editing surface matches the preview modal exactly.
-           CSS paints background-color (#a7a7a7 page) → background-image (the
+           CSS paints background-color (#3d4253 page) → background-image (the
            checkerboard) → children (shapes), so the page is a BACKDROP behind every
            shape — on-frame shapes over the page paint on top and stay visible;
            off-frame shapes over the #161927 surround likewise (clip lifted). */
