@@ -24,6 +24,7 @@ import {
   zoomAnchorScroll,
 } from './geometry.js';
 import { contentBounds } from './content-bounds.js';
+import { fitOnceForScene, type FitGate } from './fit-on-open.js';
 import { registerPreviewDocument, bumpMeasureVersion } from './measure-element.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
@@ -489,10 +490,14 @@ export function CanvasArea({
   // visible, then CENTER it. The pasteboard extends beyond and is reachable by
   // scrolling/panning — the scrollbars are hidden (see `s.outer`), so there are no
   // default scrollbars even though the dark workspace overflows the viewport.
-  function fitToViewport(): void {
+  // Returns TRUE only when it ACTUALLY fit (a real zoom was applied). Returns FALSE
+  // when the viewport isn't measured yet (`fitZoom` → null on a zero-size viewport),
+  // so the fit-once caller knows NOT to mark the scene fitted and to retry when the
+  // size arrives (B-035).
+  function fitToViewport(): boolean {
     const el = outerRef.current;
     const s = latestSceneRef.current;
-    if (el === null || s === null) return;
+    if (el === null || s === null) return false;
     const margin = 16;
     const z = fitZoom(
       el.clientWidth,
@@ -501,21 +506,40 @@ export function CanvasArea({
       s.resolution.height,
       margin,
     );
-    if (z !== null) {
-      const cz = clampZoom(z);
-      setZoom(cz);
-      // Center after the new zoom lays out (the stage size depends on it).
-      requestAnimationFrame(() => centerFrameInView(cz));
-    }
+    if (z === null) return false; // viewport not measured yet — caller retries
+    const cz = clampZoom(z);
+    setZoom(cz);
+    // Center after the new zoom lays out (the stage size depends on it).
+    requestAnimationFrame(() => centerFrameInView(cz));
+    return true;
   }
 
-  // Auto-fit on load / project (or composition size) switch. Runs in a layout
-  // effect (before paint) so the very first frame is already at the fit zoom —
-  // no flash from the initial state value.
+  // B-035 — fit-on-open must fire EXACTLY ONCE per scene, and only when BOTH
+  // prerequisites are ready: the scene (resolution known, via `latestSceneRef`) AND
+  // the canvas viewport (real dimensions). `fittedSceneIdRef` records the last scene
+  // that was actually fit; comparing it to the current `sceneId` both resets on a
+  // scene switch and guards against a double-fit. We mark the scene fitted ONLY when
+  // `fitToViewport()` returned true, so a no-op on a zero viewport (cold open) does
+  // NOT consume the one fit — the viewport-gated effect retries when the size lands.
+  const fitGateRef = useRef<FitGate>({ fittedSceneId: null });
+  function fitOnOpenIfReady(): void {
+    fitOnceForScene(fitGateRef.current, sceneId, fitToViewport);
+  }
+
+  // WARM path — synchronous before paint, so when the viewport is already measured at
+  // the sceneId tick the first frame is at the fit zoom (no flash).
   useLayoutEffect(() => {
-    if (sceneId === null) return;
-    fitToViewport();
+    fitOnOpenIfReady();
   }, [sceneId, scene?.resolution.width, scene?.resolution.height]);
+
+  // COLD-OPEN fallback — when the canvas mounts/reveals after the scene loads, the
+  // viewport's real size arrives later (the ResizeObserver `measure()` sets `viewport`
+  // below). Re-trying on `viewport.w/h` fits as soon as the size is known. The shared
+  // `fittedSceneIdRef` guard means if the warm path already fit, this no-ops (no
+  // double-fit); a manual zoom after the one fit is left untouched (ref === sceneId).
+  useEffect(() => {
+    fitOnOpenIfReady();
+  }, [sceneId, scene?.resolution.width, scene?.resolution.height, viewport.w, viewport.h]);
 
   function applyPan(dx: number, dy: number): void {
     const el = outerRef.current;
@@ -646,7 +670,9 @@ export function CanvasArea({
       <div className={s.header} aria-label="Canvas header">
         {showToolbar && <CanvasToolbar tool={tool} />}
         <span className={s.spacer} />
-        <span className={s.zoomReadout}>{zoomPct}%</span>
+        <span className={s.zoomReadout} data-testid="zoom-readout">
+          {zoomPct}%
+        </span>
         <Control
           variant="bare"
           className={s.headerButton}
