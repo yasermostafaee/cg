@@ -2115,7 +2115,7 @@ Library should match for consistency.
 > the Phase-A filter. A follow-up (B-026, PR #157, archived
 > `openspec/changes/archive/…-pasteboard-extent-fits-content/`) made the extent **grow-to-fit** so a
 > shape parked far off-frame stays visible/selectable. **Deferred:** the during-drag whole-canvas
-> jitter at extreme parking distances is filed as **B-027** [DEFERRED] (see `docs/prd/bugs.md`).
+> jitter at extreme parking distances is filed as **B-027** [DEFERRED] (see `docs/prd/bugs-designer.md`).
 
 **What:** A "dark area" (pasteboard) OUTSIDE the frame where the author parks/stages shapes. They
 stay visible + editable in the editor and PERSIST in the saved `.cg.json`, but are EXCLUDED from
@@ -2151,7 +2151,7 @@ No exporter/packager/runtime/schema change. Recon (umbrella): `design.md` in
 `apps/designer/tests/e2e/off-frame-export.spec.ts`. Change:
 `openspec/changes/off-frame-export-filter/`.
 
-## [x] D-072 — Guide coordinate readout on hover / drag ⟨priority: low⟩ — implemented on `feat/D-072-073-guide-readout-nudge`; change `openspec/changes/guide-coordinate-readout/`
+## [x] D-072 — Guide coordinate readout on hover / drag ⟨priority: low⟩ — archived: `openspec/changes/archive/2026-06-29-guide-coordinate-readout/`
 
 **What:** When the operator hovers a persistent ruler guide OR is dragging one, show a small
 badge with that guide's scene coordinate in px (`x: 960` for a vertical guide, `y: 540` for a
@@ -2176,9 +2176,9 @@ any panel. Pure editing affordance; no effect on render/export/playout.
 non-scrolling overlay in `CanvasArea.tsx`; active guide = hovered OR dragging (dragging wins).
 Transient view state lives in the component (do NOT add it to the store). No schema/store/render
 change. Coordinate is scene px (scene 0,0 = frame top-left, per the pasteboard offset).
-Change: `openspec/changes/guide-coordinate-readout/`.
+Change: `openspec/changes/archive/2026-06-29-guide-coordinate-readout/` (merged #160).
 
-## [x] D-073 — Arrow-key nudge for the selection (Shift = larger step) ⟨priority: low⟩ — implemented on `feat/D-072-073-guide-readout-nudge`; change `openspec/changes/arrow-key-nudge/`
+## [x] D-073 — Arrow-key nudge for the selection (Shift = larger step) ⟨priority: low⟩ — archived: `openspec/changes/archive/2026-06-29-arrow-key-nudge/`
 
 **What:** With one or more elements selected and no editable field focused, the arrow keys move
 the selection by 1px (scene px); holding **Shift** moves by 10px. Keyframe-aware (same path as a
@@ -2204,7 +2204,7 @@ exactly as they do when dragged.
 **Notes:** New keydown effect in `App.tsx` cloned from the Delete/Backspace handler; new store
 action `nudgeSelection(dx, dy)` mirroring `beginGroupDrag`'s `commitAnimatable` path (no
 snapping). One `markHistoryBoundary()` on the first event of a run (`!e.repeat`). Ripple:
-`ShortcutsModal.tsx`. No schema/render/export change. Change: `openspec/changes/arrow-key-nudge/`.
+`ShortcutsModal.tsx`. No schema/render/export change. Change: `openspec/changes/archive/2026-06-29-arrow-key-nudge/` (merged #160).
 
 ## [x] D-074 — Remove the border on the timeline zoom slider ⟨priority: low⟩ — focused fix, merged (#167)
 
@@ -2408,7 +2408,7 @@ the full `compositions` array. Export must be scoped to one composition + its cl
 latent correctness bugs surfaced and are fixed here (Phase A): the export over-gather, and a
 **repeater-mediated nesting cycle** the author-time guard missed (it only followed
 `composition` edges, not `repeater` ones) — see `docs/recon/d-086-export-scoping.md` and
-bugs.md **B-023**.
+bugs-designer.md **B-023**.
 
 **Acceptance:**
 
@@ -2603,7 +2603,7 @@ touching the underlying files.
 > sky-blue (`accent #38BDF8`, `accentMuted #0EA5E9`); the no-border base + secondary/danger/
 > selected affordances are KEPT. `onAccent` stays `#06121F` (dark) — it's legible (8.9:1) on the
 > light sky-blue, so the primary-button label reverts cleanly. Done on
-> `fix/B-025-selection-box-accent` alongside the [B-025](./bugs.md) selection-frame fix.
+> `fix/B-025-selection-box-accent` alongside the [B-025](./bugs-designer.md) selection-frame fix.
 
 **What:** Fix the recurring "every new button has a thick border + the colors aren't
 nice" at the SOURCE — the shared `Button`/`Control` recipe
@@ -2797,7 +2797,7 @@ coordinate via the controller tree (`onHoldStart` already starts a scope's own d
 extend so a child scope's content waits for the PARENT's hold-start). Medium-large; Understand pass on
 `playout-controller.ts` + `runtime.ts` contentWait + the controller-tree cascade before implementing.
 
-## [x] D-105 — Split exit: animated "Out" vs quick "Stop" (coordinated exit) ⟨priority: medium⟩ — implementing on `feat/preview-exit-and-update` (`openspec/changes/preview-split-exit`)
+## [x] D-105 — Split exit: animated "Out" vs quick "Stop" (coordinated exit) ⟨priority: medium⟩ — merged (#194) & archived: `openspec/changes/archive/2026-06-29-preview-split-exit/`
 
 **What:** Two distinct exit operations in the preview. "Out" (animate off) plays the graphic's designed
 exit, COORDINATED so the content (ticker/clock/sequence) exits first/with and the background follows
@@ -2816,7 +2816,7 @@ standard (CasparCG CG STOP = animate out, vs CG REMOVE/CLEAR = hard removal).
 reuse the existing background outro + content out-transitions. Two transport buttons (Out + Stop) with
 icons + tooltips.
 
-## [x] D-106 — Preview field form: explicit Update + optional textarea inputs ⟨priority: medium⟩ — merged (#194 + #198 per-INPUT correction); spec reconciled, archive pending (`openspec/changes/preview-field-update`)
+## [x] D-106 — Preview field form: explicit Update + optional textarea inputs ⟨priority: medium⟩ — merged (#194 + #198 per-INPUT correction) & archived: `openspec/changes/archive/2026-06-29-preview-field-update/`
 
 **What:** (1) Editing field values in the preview no longer updates the stage in realtime — an explicit
 Update applies changes: a global "Update all" and a per-INPUT Update (each editable input applies on its
