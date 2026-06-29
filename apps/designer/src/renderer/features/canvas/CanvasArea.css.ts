@@ -91,12 +91,12 @@ export const viewport = style({
 
 export const outer = style({
   flex: 1,
-  // The PASTEBOARD SURROUND — the DARK tone (#161927). The whole scrollable area
-  // beyond the frame reads as this one tone; the LIGHT tone (#a7a7a7) is the
-  // FRAME-SIZED page backdrop drawn INSIDE the iframe (`.cg-stage` background-color),
-  // so the two-tone is by REGION (dark surround, light page) and every shape paints
-  // on top of both backdrops.
-  background: '#161927',
+  // B-027 — the EMPTY SURROUND beyond the fixed pasteboard is a DARKER neutral (#0e1018)
+  // than the pasteboard (the stage, #161927), so the workable area reads as a defined
+  // rectangle instead of one flat dark field. (The frame-sized page backdrop is #3d4253,
+  // drawn INSIDE the iframe as `.cg-stage`'s background-color.) Drags/nudges are clamped
+  // to the pasteboard, so this tone + the stage edge ring are clarity/insurance.
+  background: '#0e1018',
   border: `1px solid ${colors.border}`,
   borderRadius: '0.25rem',
   minHeight: 0,
@@ -150,6 +150,10 @@ export const stage = style({
   position: 'relative',
   backgroundColor: '#161927',
   overflow: 'hidden',
+  // B-027 — a subtle 1px ring marks the pasteboard's edge against the darker surround, so
+  // the boundary of the workable area is explicit. `box-shadow` (not `border`) keeps it
+  // off the box model, so the absolutely-positioned iframe isn't offset.
+  boxShadow: '0 0 0 1px #2b3146',
 });
 
 export const empty = style({
