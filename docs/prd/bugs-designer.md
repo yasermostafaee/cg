@@ -734,3 +734,42 @@ guards. Capability: `designer-playout-lifecycle`.
 **Env:** runtime `@cg/template-runtime` (hold-driver aggregation + scene render) + Designer preview timing UI (`PlayoutSection.tsx` driver walk, `PreviewScopeTiming.tsx`).
 **Root cause / fix:** visibility isn't consulted anywhere in the hold-driver determination (confirmed). Rule: `visible === false` ⟹ excluded from hold drivers (regardless of `drivesHold`/`holdOverrides`), not rendered, not listed in preview timing. Apply in the driver predicate (runtime + the D-107/D-112 walks) and the render/timing paths.
 **Regression test:** a hidden infinite driver does NOT force an infinite hold (parent/comp still settles); a hidden element is absent from the preview timing list and from render. Capability: `designer-playout-lifecycle`.
+
+## [ ] B-035 — composition not fit-to-canvas on project / template open ⟨priority: medium⟩
+
+**Repro:**
+
+1. Save a project (or open a bundled template) with a composition open.
+2. Reopen the project / load the template.
+
+**Expected:** the opened composition is automatically fit and centered in the canvas viewport (identical to pressing **Fit**).
+**Actual:** sometimes the composition is NOT fit — the user has to press **Fit** manually.
+**Env:** Browser + Designer authoring canvas.
+**Notes:** Capability `designer-canvas-viewport`. The fit-on-open path exists (the pasteboard specs reference "on project open, fit from frame bounds and center"), but it intermittently doesn't apply on template / project load — likely a timing / ordering race between scene load and the fit effect (the fit may run before the composition / resolution is ready, or before the iframe has laid out). Touch points to check: the `CanvasArea.tsx` fit effect, and the project-open / template-load path.
+**Regression test:** open a saved project (and load a bundled template) with a composition that is larger / smaller than the viewport, and assert the canvas zoom + scroll match the Fit result (frame fully visible and centered) WITHOUT a manual Fit — deterministically, after scene + iframe layout settle (wait on a ready signal, not a timer).
+
+## [ ] B-036 — inspector input icons (rotate / opacity / W·H) misaligned with the value ⟨priority: low⟩
+
+**Repro:**
+
+1. Open the Transform / Style inspector for any element.
+2. Look at the leading icons (rotate, opacity, the W / H arrows) next to their numeric inputs.
+
+**Expected:** each leading icon is vertically centered against its input's value text.
+**Actual:** the icons sit misaligned (not vertically centered) against the value.
+**Env:** Browser + Designer inspector.
+**Notes:** The user verified a local fix: setting `display: flex` on the inspector icon span (`.TransformSection_icon__*`) resolves it — the icon wrapper likely lacks `display: flex` / `align-items: center`. Fix the icon-wrapper CSS (vanilla-extract) so the icon is flex-centered against the input, and check every section reusing the same icon-input row pattern (TransformSection, opacity, etc.) so all rows are consistent.
+**Regression test:** a component / DOM test (or visual check) asserting the icon span uses the centered flex layout in the icon-input row, across the Transform and the other sections that reuse the pattern.
+
+## [ ] B-037 — pen tool is hard to use and only edits the first shape ⟨priority: low — pending a keep-or-remove decision⟩
+
+**Repro:**
+
+1. Select the pen tool.
+2. Draw a shape, then try to draw a SECOND shape on the canvas.
+
+**Expected:** each pen draw creates a new, independent shape.
+**Actual:** subsequent draws only modify the FIRST shape; you cannot create multiple pen shapes.
+**Env:** Browser + Designer canvas.
+**Notes:** The owner finds the pen tool not useful in its current form and questions whether it should stay. Decide direction when scheduled: (a) fix the multi-shape bug and keep the pen, or (b) simplify / remove the pen tool, keeping only the existing "close" path behavior if that is sufficient. File now; decide at scheduling. Touch points: the pen / path tool in `CanvasOverlay` and the path-tool state (it likely never resets the "active path" after a draw completes, so the next draw keeps editing the first path).
+**Regression test:** (only if direction (a) is chosen) draw two pen shapes in sequence and assert two independent path elements exist, the second NOT mutating the first; if direction (b), the test/coverage follows the simplified behavior.
