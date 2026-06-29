@@ -195,8 +195,27 @@ SEQUENCES + COUNTDOWN clocks, plus surfacing repeater-stamped tickers in the tim
 currently walks only authored composition instances; Phase 1 tickers shipped, see Done) — remain
 **queued** in the PRD but are deprioritized below the above. (D-097–D-101 shipped in Group A — see
 Done.)
-**Wave tail (carried over):** template cleanup — rebuild / refresh the bundled sample templates
-against the UX wave's finalized controls.
+
+### Designer — remaining, in order
+
+The concrete near-term Designer sequence (survives across sessions; the Runtime
+track is independent — see its own entries):
+
+1. **[D-060](./prd/designer.md) auto-size text** (+ **[D-046](./prd/designer.md)**
+   sizing=auto guard, batched) — design done (branch `design/D-060-auto-size-text`,
+   PR #218); implementation next.
+2. **[B-036](./prd/bugs-designer.md) inspector icon align** (quick) — filed, fix pending.
+3. **[B-035](./prd/bugs-designer.md) fit-on-open** (medium) — filed, investigate the
+   timing/ordering race.
+4. **[B-037](./prd/bugs-designer.md) pen tool** (low, keep-or-remove decision) — filed.
+5. **[D-119](./prd/designer.md) rebuild starter templates** (5 showcases) — filed,
+   **BLOCKED until 1–3 are done** (templates should exercise healthy features);
+   supersedes the old "template cleanup" wave-tail note.
+
+Plus the existing queued / deprioritized items already in `designer.md`:
+[D-059](./prd/designer.md), [D-061](./prd/designer.md), [D-063](./prd/designer.md),
+[D-064](./prd/designer.md), [D-096](./prd/designer.md), and
+[D-102](./prd/designer.md) **Phase 2**.
 
 ## Then — hardening wave (after features)
 
