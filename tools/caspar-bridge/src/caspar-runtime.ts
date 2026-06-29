@@ -1,8 +1,11 @@
 import {
   LayerManager,
   Reconciler,
+  RedundancyAdapter,
   ServerSession,
   UnknownTemplateTypeError,
+  type FailoverEvent,
+  type ServerLabel,
 } from '@cg/caspar-client';
 import type { AuditEntry, FieldValues, StackItemState } from '@cg/shared-schema';
 import type {
@@ -37,22 +40,26 @@ class Emitter<T> {
 }
 
 /**
- * **Real** C-001 backing (Phase 2). Replaces the throwaway in-memory
- * `RuntimeBacking` with the actual `@cg/caspar-client` stack running in its
- * native Node tier: a `ServerSession` (AMCP TCP + OSC UDP), a `CommandQueue`
- * (via the session), a `Reconciler` (the single source of truth for stack
- * state), a `LayerManager` (slot allocation), and the `CommandBuilder` seam.
+ * **Real** C-001 backing. Replaces the throwaway in-memory `RuntimeBacking` with
+ * the actual `@cg/caspar-client` stack running in its native Node tier: TWO
+ * `ServerSession`s (A/B) under a `RedundancyAdapter` (Phase 3a), a `Reconciler`
+ * (the single source of truth for stack state), a `LayerManager` (slot
+ * allocation), and the `CommandBuilder` seam.
  *
  * Browser-side everything is unchanged: this answers the same `@cg/shared-ipc`
  * contract `bridge.ts` routes, exposes the same `*Changed` emitters, and the
  * `Reconciler.snapshot()` is published over `StackStateChangedChannel`.
  *
  * Stack state comes from the Reconciler, driven by AMCP acks AND real OSC
- * confirmations from the server — NOT a hand-rolled state machine. Non-playout
- * channels (lock / templates / audit / settings / update gate) stay simple
- * in-memory stubs; `failover` is a Phase-3 stub.
+ * confirmations from the **current primary** — NOT a hand-rolled state machine.
+ * Failover (auto per the strategy's triggers, or manual via `connections.failover`)
+ * switches the live server; the published `ConnectionHealth` reflects the real
+ * current primary + last failover, and the new primary's OSC re-confirms state.
+ * Non-playout channels (lock / templates / audit / settings / update gate) stay
+ * simple in-memory stubs.
  *
- * Integration-tested ONLY against `tools/amcp-mock` (NOT real hardware — Phase 3).
+ * Integration-tested ONLY against `tools/amcp-mock` (NOT real hardware — the
+ * on-hardware AMCP-sequence validation is Phase 3b).
  */
 export class CasparRuntime {
   readonly stackChanged = new Emitter<readonly StackItemState[]>();
@@ -62,7 +69,8 @@ export class CasparRuntime {
   readonly updateChanged = new Emitter<PendingUpdate | null>();
 
   readonly #config: ConnectionConfig;
-  readonly #session: ServerSession;
+  readonly #sessions: Record<ServerLabel, ServerSession>;
+  readonly #adapter: RedundancyAdapter;
   readonly #reconciler = new Reconciler();
   readonly #layers = new LayerManager();
   readonly #builder = new CommandBuilder();
@@ -70,6 +78,7 @@ export class CasparRuntime {
   /** itemId → the slot we allocated for it (so take/update/out target it). */
   readonly #slots = new Map<string, CommandSlot>();
   #seq = 0;
+  #lastFailover: ConnectionHealth['lastFailover'] = undefined;
 
   // Coalescing (Phase-2 NOTE): collapse per-itemId changes into bounded publishes.
   readonly #dirty = new Set<string>();
@@ -87,18 +96,25 @@ export class CasparRuntime {
 
   constructor(config: ConnectionConfig) {
     this.#config = config;
-    const a = config.servers.A;
-    this.#session = new ServerSession({
-      name: 'A',
-      host: a.host,
-      port: a.amcpPort,
-      oscPort: a.oscPort,
-      oscBindHost: '127.0.0.1',
-      resyncDurationMs: RESYNC_MS,
+    const session = (name: ServerLabel, ep: ConnectionConfig['servers']['A']): ServerSession =>
+      new ServerSession({
+        name,
+        host: ep.host,
+        port: ep.amcpPort,
+        oscPort: ep.oscPort,
+        oscBindHost: '127.0.0.1',
+        resyncDurationMs: RESYNC_MS,
+      });
+    this.#sessions = { A: session('A', config.servers.A), B: session('B', config.servers.B) };
+    this.#adapter = new RedundancyAdapter({
+      strategy: config.strategy,
+      sessions: this.#sessions,
+      initialPrimary: 'A',
+      autoFailoverEnabled: config.autoFailoverEnabled,
     });
   }
 
-  /** Wire the stack and connect the session. Idempotent. */
+  /** Wire the stack and connect both sessions. Idempotent. */
   start(): void {
     if (this.#started) return;
     this.#started = true;
@@ -106,42 +122,73 @@ export class CasparRuntime {
     this.#reconciler.on('item-changed', (state) => this.#markDirty(state.itemId));
     this.#reconciler.on('item-removed', (info) => this.#markDirty(info.itemId));
 
-    // OSC firehose → Reconciler (the OscTransport already ran interest →
-    // rate-limit → change-track and handed us typed events).
-    this.#session.osc.on('events', (events) => {
-      for (const event of events) this.#reconciler.applyOsc(event);
+    // OSC firehose → Reconciler, but only from the **current primary** — the
+    // backup mirrors the same commands, so after a failover the new primary's
+    // OSC re-confirms state. Each OscTransport already ran interest →
+    // rate-limit → change-track and handed us typed events.
+    for (const label of ['A', 'B'] as const) {
+      this.#sessions[label].osc.on('events', (events) => {
+        if (this.#adapter.currentPrimary !== label) return;
+        for (const event of events) this.#reconciler.applyOsc(event);
+      });
+    }
+
+    // Real health + failover from the adapter — replaces the Phase-1/2 mock health.
+    this.#adapter.on('health', () => this.healthChanged.emit(this.health()));
+    this.#adapter.on('failover-complete', (event: FailoverEvent) => {
+      this.#lastFailover = {
+        at: new Date(event.at).toISOString(),
+        reason: event.reason,
+        from: event.from,
+        to: event.to,
+      };
+      this.healthChanged.emit(this.health());
     });
 
-    this.#session.on('state-change', () => this.healthChanged.emit(this.health()));
-    this.#session.on('healthy', () => this.healthChanged.emit(this.health()));
-
-    this.#session.start();
+    this.#sessions.A.start();
+    this.#sessions.B.start();
   }
 
   async stop(): Promise<void> {
     if (this.#flushTimer !== null) clearTimeout(this.#flushTimer);
     this.#flushTimer = null;
-    await this.#session.stop();
+    await Promise.all([this.#sessions.A.stop(), this.#sessions.B.stop()]);
   }
 
-  /** The session's bound OSC port (0 until bound). Tests point the mock here. */
+  /** Which server is currently the live primary. */
+  get currentPrimary(): ServerLabel {
+    return this.#adapter.currentPrimary;
+  }
+
+  /** The current primary's bound OSC port (0 until bound). Diagnostic. */
   get oscPort(): number {
-    return this.#session.osc.port;
+    return this.#adapter.primarySession.osc.port;
   }
 
-  /** Resolves when the session reaches HEALTHY (or rejects after `timeoutMs`). */
+  /** Resolves when BOTH sessions reach HEALTHY (mirror needs both). */
   whenServerHealthy(timeoutMs = 5000): Promise<void> {
-    if (this.#session.state === 'healthy') return Promise.resolve();
+    const bothHealthy = (): boolean =>
+      this.#sessions.A.state === 'healthy' && this.#sessions.B.state === 'healthy';
+    if (bothHealthy()) return Promise.resolve();
     return new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.#session.off('healthy', onHealthy);
-        reject(new Error('CasparCG server did not reach HEALTHY in time'));
-      }, timeoutMs);
-      const onHealthy = (): void => {
+      const cleanup = (): void => {
         clearTimeout(timer);
-        resolve();
+        this.#sessions.A.off('healthy', check);
+        this.#sessions.B.off('healthy', check);
       };
-      this.#session.once('healthy', onHealthy);
+      const check = (): void => {
+        if (bothHealthy()) {
+          cleanup();
+          resolve();
+        }
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error('CasparCG servers did not both reach HEALTHY in time'));
+      }, timeoutMs);
+      this.#sessions.A.on('healthy', check);
+      this.#sessions.B.on('healthy', check);
+      check();
     });
   }
 
@@ -167,7 +214,9 @@ export class CasparRuntime {
     }
     this.#slots.set(itemId, slot);
     this.#reconciler.assignSlot(itemId, { ...slot, server: 'primary' });
-    this.#session.osc.interest.add(slot.channel, slot.layer);
+    // Interest on BOTH sessions' OSC so whichever is primary, its confirmations
+    // pass the filter (survives failover).
+    this.#addInterest(slot);
 
     const ok = await this.#send(this.#builder.load(slot, templateId, fields), seq, 'normal');
     return { accepted: ok };
@@ -213,7 +262,7 @@ export class CasparRuntime {
     this.#reconciler.applyIntent({ kind: 'remove', itemId }, this.#nextSeq());
     if (slot !== undefined) {
       this.#slots.delete(itemId);
-      this.#session.osc.interest.remove(slot.channel, slot.layer);
+      this.#removeInterest(slot);
       this.#layers.deallocate(slot);
       await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
     }
@@ -226,19 +275,28 @@ export class CasparRuntime {
   }
 
   health(): ConnectionHealth {
-    // ServerSessionState and ServerHealth.state share the same vocabulary.
-    const state = this.#session.state;
+    // `primary`/`backup` reflect the current ROLES (after failover, `primary`
+    // is the live server). ServerSessionState and ServerHealth.state share the
+    // same vocabulary.
+    const cur = this.#adapter.currentPrimary;
+    const other: ServerLabel = cur === 'A' ? 'B' : 'A';
+    const snapshot = (label: ServerLabel): ConnectionHealth['primary'] => {
+      const state = this.#sessions[label].state;
+      return { label, state, amcpAxisOk: state === 'healthy' };
+    };
     return {
-      primary: { label: 'A', state, amcpAxisOk: state === 'healthy' },
-      backup: { label: 'B', state: 'disconnected', amcpAxisOk: false },
-      currentPrimary: 'A',
+      primary: snapshot(cur),
+      backup: snapshot(other),
+      currentPrimary: cur,
       strategy: this.#config.strategy,
+      ...(this.#lastFailover !== undefined ? { lastFailover: this.#lastFailover } : {}),
     };
   }
 
-  /** Phase-3 stub — real primary↔backup failover needs the second session. */
-  failover(): { ok: boolean; newPrimary: 'A' | 'B' } {
-    return { ok: false, newPrimary: 'A' };
+  /** Manual operator failover (the `connections.failover` channel). Real switch. */
+  async failover(): Promise<{ ok: boolean; newPrimary: ServerLabel }> {
+    await this.#adapter.failover('manual');
+    return { ok: true, newPrimary: this.#adapter.currentPrimary };
   }
 
   // ── lock / templates / audit / settings / update (in-memory stubs) ──
@@ -329,10 +387,24 @@ export class CasparRuntime {
     }
   }
 
-  /** Enqueue an AMCP line, await the ack, and feed it to the Reconciler. */
+  #addInterest(slot: CommandSlot): void {
+    this.#sessions.A.osc.interest.add(slot.channel, slot.layer);
+    this.#sessions.B.osc.interest.add(slot.channel, slot.layer);
+  }
+
+  #removeInterest(slot: CommandSlot): void {
+    this.#sessions.A.osc.interest.remove(slot.channel, slot.layer);
+    this.#sessions.B.osc.interest.remove(slot.channel, slot.layer);
+  }
+
+  /**
+   * Send an AMCP line through the `RedundancyAdapter` (strategy-aware fan-out to
+   * primary/backup; drives the auto-failover triggers), await the ack, and feed
+   * it to the Reconciler.
+   */
   async #send(line: string, seq: number, priority: 'urgent' | 'normal'): Promise<boolean> {
     try {
-      const result = await this.#session.queue.enqueue(line, { priority });
+      const result = await this.#adapter.send(line, { priority });
       const ok = result.response.kind !== 'err';
       this.#reconciler.applyAck(seq, ok, ok ? undefined : `amcp-${String(result.response.code)}`);
       return ok;

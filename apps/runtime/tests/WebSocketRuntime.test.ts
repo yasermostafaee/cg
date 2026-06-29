@@ -26,7 +26,7 @@ function ephemeralConnection(): ConnectionConfig {
       B: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 },
     },
     strategy: 'mirror-sync',
-    autoFailoverEnabled: true,
+    autoFailoverEnabled: false,
   };
 }
 

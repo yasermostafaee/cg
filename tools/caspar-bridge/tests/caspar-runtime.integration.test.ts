@@ -43,11 +43,14 @@ async function waitFor(predicate: () => boolean, timeoutMs = 4000): Promise<void
   }
 }
 
-function connectionFor(amcpPort: number, oscPort: number): ConnectionConfig {
+function connectionFor(amcpPort: number, oscPort: number, oscPortB: number): ConnectionConfig {
+  // One mock pair; session B shares the AMCP port but needs its OWN (free) OSC
+  // bind. Only A (primary) receives OSC here — B exists to exercise the
+  // two-session wiring.
   return {
     servers: {
       A: { host: '127.0.0.1', amcpPort, oscPort },
-      B: { host: '127.0.0.1', amcpPort, oscPort: oscPort + 1 },
+      B: { host: '127.0.0.1', amcpPort, oscPort: oscPortB },
     },
     strategy: 'mirror-sync',
     autoFailoverEnabled: true,
@@ -58,7 +61,7 @@ it('drives load/take/update/out as AMCP (acked) and confirms state from real OSC
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
 
-  runtime = new CasparRuntime(connectionFor(mock.amcpPort, oscPort));
+  runtime = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
   runtime.start();
   await runtime.whenServerHealthy(5000);
 
@@ -100,7 +103,7 @@ it('drives load/take/update/out as AMCP (acked) and confirms state from real OSC
 it('reports health from the real session state', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 20 });
-  runtime = new CasparRuntime(connectionFor(mock.amcpPort, oscPort));
+  runtime = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
   runtime.start();
   await runtime.whenServerHealthy(5000);
 
