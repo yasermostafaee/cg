@@ -33,49 +33,70 @@ import {
   serializeWsFrame,
   type AnyChannel,
   type AnyPublishChannel,
+  type ConnectionConfig,
   type WsPublishFrame,
   type WsResponseFrame,
 } from '@cg/shared-ipc';
-import { RuntimeBacking } from './runtime-backing.js';
+import { CasparRuntime } from './caspar-runtime.js';
 
 export interface BridgeOptions {
   /** Bind host. Defaults to loopback (`127.0.0.1`) — enforced at the socket bind. */
   host?: string;
   /** Bind port. Defaults to the browser-safe `DEFAULT_BRIDGE_PORT`. `0` = ephemeral. */
   port?: number;
+  /** CasparCG server(s) + OSC bind. Phase 2 drives server A. */
+  connection?: ConnectionConfig;
 }
 
 export interface BridgeHandle {
   readonly host: string;
   readonly port: number;
   readonly url: string;
-  /** The in-memory Phase-1 backing (throwaway). */
-  readonly backing: RuntimeBacking;
+  /** The real `@cg/caspar-client`-backed runtime (Reconciler is the truth). */
+  readonly runtime: CasparRuntime;
   /** Force-close every client socket — used by tests to simulate a mid-session drop. */
   dropConnections(): void;
-  /** Stop the server and close all clients. */
+  /** Stop the WebSocket server, the CasparCG session, and close all clients. */
   close(): Promise<void>;
 }
 
-/** One request route: a channel + a handler producing its response. */
+/** One request route: a channel + a (possibly async) handler producing its response. */
 interface Route {
   readonly channel: AnyChannel;
   readonly handle: (req: unknown) => unknown;
 }
 
+/** Default connection — loopback CasparCG on the standard AMCP/OSC ports. */
+function defaultConnection(): ConnectionConfig {
+  return {
+    servers: {
+      A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 },
+      B: { host: '127.0.0.1', amcpPort: 5251, oscPort: 6251 },
+    },
+    strategy: 'mirror-sync',
+    autoFailoverEnabled: true,
+  };
+}
+
 /**
- * Start the localhost CasparCG bridge (C-001 Phase 1).
+ * Start the localhost CasparCG bridge (C-001).
  *
  * A single `ws` WebSocket server speaks the existing `@cg/shared-ipc`
  * request/response + publish contract as JSON frames (see `ws-frame.ts`),
- * backed by a throwaway in-memory runtime. It binds loopback by default,
- * **enforced at the socket bind** via `new WebSocketServer({ host, port })`.
+ * backed by the real `@cg/caspar-client` stack (`CasparRuntime`). It binds
+ * loopback by default, **enforced at the socket bind** via
+ * `new WebSocketServer({ host, port })`.
+ *
+ * The CasparCG session is started in the background — `createBridge` resolves as
+ * soon as the WebSocket is listening, so the bridge serves even while the server
+ * is unreachable (commands then fail their AMCP ack). Tests await
+ * `handle.runtime.whenServerHealthy()` before driving playout.
  */
 export async function createBridge(options: BridgeOptions = {}): Promise<BridgeHandle> {
   const host = options.host ?? DEFAULT_BRIDGE_HOST;
   const requestedPort = options.port ?? DEFAULT_BRIDGE_PORT;
-  const backing = new RuntimeBacking();
-  const routes = buildRoutes(backing);
+  const runtime = new CasparRuntime(options.connection ?? defaultConnection());
+  const routes = buildRoutes(runtime);
 
   const wss = new WebSocketServer({ host, port: requestedPort });
 
@@ -88,9 +109,9 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   const port = typeof address === 'object' && address !== null ? address.port : requestedPort;
 
   wss.on('connection', (socket) => {
-    const unsubscribers = wirePublishes(socket, backing);
+    const unsubscribers = wirePublishes(socket, runtime);
     socket.on('message', (data) => {
-      handleMessage(socket, routes, data.toString());
+      void handleMessage(socket, routes, data.toString());
     });
     socket.on('close', () => {
       for (const off of unsubscribers) off();
@@ -100,24 +121,31 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     });
   });
 
+  runtime.start();
+
   return {
     host,
     port,
     url: `ws://${host}:${port}`,
-    backing,
+    runtime,
     dropConnections() {
       for (const client of wss.clients) client.terminate();
     },
-    close() {
+    async close() {
       for (const client of wss.clients) client.terminate();
-      return new Promise<void>((resolve, reject) => {
+      await runtime.stop();
+      await new Promise<void>((resolve, reject) => {
         wss.close((err) => (err ? reject(err) : resolve()));
       });
     },
   };
 }
 
-function handleMessage(socket: WebSocket, routes: Map<string, Route>, raw: string): void {
+async function handleMessage(
+  socket: WebSocket,
+  routes: Map<string, Route>,
+  raw: string,
+): Promise<void> {
   const frame = parseWsFrame(raw);
   // Only `request` frames are inbound to the bridge; ignore anything else.
   if (frame === null || frame.type !== 'request') return;
@@ -135,7 +163,8 @@ function handleMessage(socket: WebSocket, routes: Map<string, Route>, raw: strin
   }
 
   try {
-    const result = route.handle(parsedReq.data);
+    // Stack ops are async (they await their AMCP ack); await every handler.
+    const result = await route.handle(parsedReq.data);
     const parsedRes = route.channel.response.safeParse(result);
     if (!parsedRes.success) {
       send(socket, errorResponse(frame.id, `invalid response for ${frame.channel}`));
@@ -157,7 +186,7 @@ function send(socket: WebSocket, frame: WsResponseFrame | WsPublishFrame): void 
 }
 
 /** Subscribe a connection to every publish channel; returns unsubscribers. */
-function wirePublishes(socket: WebSocket, backing: RuntimeBacking): (() => void)[] {
+function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[] {
   const push = (channel: AnyPublishChannel, payload: unknown): void => {
     const parsed = channel.payload.safeParse(payload);
     if (parsed.success)
@@ -173,7 +202,7 @@ function wirePublishes(socket: WebSocket, backing: RuntimeBacking): (() => void)
 }
 
 /** Map every RuntimeBridge channel to its backing handler. */
-function buildRoutes(b: RuntimeBacking): Map<string, Route> {
+function buildRoutes(b: CasparRuntime): Map<string, Route> {
   const route = (channel: AnyChannel, handle: (req: never) => unknown): Route => ({
     channel,
     handle: handle as (req: unknown) => unknown,
