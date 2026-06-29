@@ -17,6 +17,7 @@ import { CanvasToolbar } from './CanvasToolbar.js';
 import { PreviewHost } from './PreviewHost.js';
 import {
   clampZoom as clampZoomPure,
+  coverZoom,
   fitZoom,
   pasteboardLayout,
   screenToScene,
@@ -60,11 +61,12 @@ interface Props {
   showToolbar?: boolean;
 }
 
-// B-027 — the fixed pasteboard is 3× the frame width / 3× the height (a one-frame margin
-// per side). At ZOOM_MIN 0.1 a 1920-wide frame's 3× extent (5760px) is ~576px on screen —
-// comfortably showing the whole pasteboard in a normal viewport, without making it a tiny
-// dot. (The interim 0.05, sized for the larger 7×5 extent, is no longer needed.)
-const ZOOM_MIN = 0.1;
+// B-027 — the minimum zoom is DYNAMIC (the cover-fit of the pasteboard over the viewport,
+// `coverZoom` × `dynamicZoomMin` below), so a full zoom-out always leaves the pasteboard
+// COVERING the viewport (no empty surround) — one axis may overflow and scroll. `ZOOM_HARD_MIN`
+// is only an absolute safety floor for the unmeasured/degenerate case (the cover-fit governs
+// in every normal case, and is always well above this).
+const ZOOM_HARD_MIN = 0.02;
 const ZOOM_MAX = 4;
 const ZOOM_STEP = 1.1; // multiplicative step per click / wheel notch
 const ZOOM_DEFAULT = 0.5;
@@ -165,7 +167,7 @@ export function CanvasArea({
   const sceneId = scene?.id ?? null;
 
   // B-027 — the FIXED pasteboard: extent + frame offset are a pure function of the
-  // resolution (3× the frame width left/right, 2× the frame height top/bottom), NOT
+  // resolution (a one-frame margin on every side → 3× the frame width × 3× the height), NOT
   // content-grown. So dragging a shape off-frame moves nothing but the shape, and the
   // frame never drifts (the old grow-to-fit origin shift was the jitter source).
   const layout = useMemo(
@@ -177,6 +179,21 @@ export function CanvasArea({
   // Latest (constant-per-resolution) offset for the deps-limited load + scene-replace effects.
   const frameOffsetRef = useRef(frameOffset);
   frameOffsetRef.current = frameOffset;
+
+  // B-027 — the DYNAMIC minimum zoom: the cover-fit of the pasteboard over the current
+  // viewport (the MAX of the two axis ratios), so a full zoom-out always leaves the
+  // pasteboard COVERING the viewport — no empty surround ever shows (one axis may overflow
+  // and scroll). Recomputes whenever the viewport size (ResizeObserver → `viewport`) or the
+  // resolution (→ `extent`) changes. Falls back to the absolute hard floor before the
+  // viewport is measured. `clampZoom` binds the pure clamp to this floor + `ZOOM_MAX`, so
+  // EVERY zoom path (buttons, Ctrl+wheel, Fit) is bounded by it — Fit can only be clamped
+  // UP to it, never below (fitting the frame is always more zoomed-in than covering the 3×3
+  // pasteboard, so in normal cases there is no conflict).
+  const dynamicZoomMin = useMemo(
+    () => Math.max(ZOOM_HARD_MIN, coverZoom(viewport.w, viewport.h, extent.width, extent.height)),
+    [viewport.w, viewport.h, extent.width, extent.height],
+  );
+  const clampZoom = (z: number): number => clampZoomPure(z, dynamicZoomMin, ZOOM_MAX, ZOOM_DEFAULT);
   useEffect(() => {
     const current = latestSceneRef.current;
     if (current === null) {
@@ -432,6 +449,14 @@ export function CanvasArea({
     el.scrollLeft = zoomAnchorScroll(el.scrollLeft, r.left, anchor.px, zoom, anchor.clientX);
     el.scrollTop = zoomAnchorScroll(el.scrollTop, r.top, anchor.py, zoom, anchor.clientY);
   }, [zoom]);
+
+  // B-027 — when the dynamic minimum RISES (the window grew, or the resolution shrank the
+  // extent relative to the viewport) while the user was zoomed at/below the old floor, clamp
+  // the CURRENT zoom UP to the new minimum so the empty surround never appears. Fit always
+  // lands ≥ this floor, so it is a no-op on the fit path.
+  useEffect(() => {
+    setZoom((z) => (z < dynamicZoomMin ? dynamicZoomMin : z));
+  }, [dynamicZoomMin]);
 
   // B-027 — the origin-shift scroll compensation (Seam 2) is GONE: the frame offset is
   // now constant per resolution, so scene (0,0) never moves on a drag/scrub and there is
@@ -1081,9 +1106,4 @@ function CanvasRuler({
       />
     </>
   );
-}
-
-/** Thin wrapper binding the pure {@link clampZoomPure} to this view's zoom bounds. */
-function clampZoom(z: number): number {
-  return clampZoomPure(z, ZOOM_MIN, ZOOM_MAX, ZOOM_DEFAULT);
 }

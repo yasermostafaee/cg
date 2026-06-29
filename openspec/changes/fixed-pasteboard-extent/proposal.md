@@ -50,9 +50,14 @@ workable area is obvious.
   are no-ops during a drag (they only actually change when the **resolution** changes —
   B-028, no reload). Baking-once would duplicate the margin constants into the iframe
   runtime, so the DRY pass-through is kept.
-- **Min zoom** (`ZOOM_MIN` 0.1) so a full zoom-out comfortably shows the entire 3× fixed
-  pasteboard without making it a tiny dot. (The interim 0.05, sized for a larger 7×5
-  extent, is no longer needed now the extent is 3×3.)
+- **Dynamic cover-fit minimum zoom.** Because clamping keeps shapes inside the pasteboard,
+  any empty surround at low zoom is wasted space. The minimum zoom is now DYNAMIC —
+  `coverZoom(viewport, extent) = MAX(viewportW/extentW, viewportH/extentH)` — the cover-fit,
+  so a full zoom-out always leaves the pasteboard COVERING the viewport (no surround; one
+  axis may overflow and scroll). `clampZoom` binds every zoom path to it; it recomputes on
+  viewport (ResizeObserver) / resolution change and clamps the current zoom UP if the floor
+  rises. `ZOOM_HARD_MIN` (0.02) is just a degenerate-case safety net. Fit (frames the
+  smaller frame) always lands above the floor, so it is never clamped down.
 - **Docs:** correct stale frame-backdrop colour references (`#080a10` / `#a7a7a7`) to the
   actual `#3d4253` page (+ `#5b6075` checker) — code is the source of truth — in the canvas
   README, the `preview.ts` / `CanvasArea.css.ts` comments, and this spec delta.

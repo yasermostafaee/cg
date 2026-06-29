@@ -376,6 +376,25 @@ export function clampZoom(z: number, min: number, max: number, fallback: number)
   return Math.max(min, Math.min(max, z));
 }
 
+/**
+ * B-027 — the COVER-fit zoom: the SMALLEST zoom at which the pasteboard (`extent`) still
+ * fully COVERS the viewport on BOTH axes, so no empty surround is ever visible at maximum
+ * zoom-out. It is the MAX of the two axis ratios (NOT min — that would be the contain fit,
+ * which leaves margins): the axis that needs the most zoom to cover sets the floor, and the
+ * other axis overflows (scrollable). Used as the dynamic minimum zoom. Returns 0 when any
+ * dimension is non-positive (viewport not measured yet) so the caller falls back to the hard
+ * floor.
+ */
+export function coverZoom(
+  viewportW: number,
+  viewportH: number,
+  extentW: number,
+  extentH: number,
+): number {
+  if (viewportW <= 0 || viewportH <= 0 || extentW <= 0 || extentH <= 0) return 0;
+  return Math.max(viewportW / extentW, viewportH / extentH);
+}
+
 /** Largest zoom that fits `scene` inside `viewport` (minus `margin`), or null if degenerate. */
 export function fitZoom(
   viewportW: number,

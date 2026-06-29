@@ -104,8 +104,17 @@ cross the extent edge: `beginDrag` (single), `beginGroupDrag` (the whole selecti
 (no invisible/unselectable shapes) — the pasteboard **is** the whole workable area. Edge cases: a
 shape that begins OUTSIDE (an old/imported scene) isn't yanked — the clamp only tightens (never pushes
 it further out) and lets it move back in, then bounds it; a shape LARGER than the pasteboard on an axis
-is centered on that axis (it can't fit, so it stops following the pointer there). `ZOOM_MIN` (0.1) is
-low enough that a full zoom-out shows the whole 3× pasteboard.
+is centered on that axis (it can't fit, so it stops following the pointer there).
+
+**Dynamic cover-fit minimum zoom.** Because shapes can't leave the pasteboard, empty surround beyond it
+is wasted space — so the minimum zoom is the **cover-fit** of the pasteboard over the viewport:
+`dynamicZoomMin = coverZoom(viewport, extent) = MAX(viewportW / extentW, viewportH / extentH)` (the MAX,
+not the contain-fit `min`). At maximum zoom-out the pasteboard therefore **covers the viewport on both
+axes** (no surround ever shows); the axis with the larger ratio fits exactly and the other overflows /
+scrolls. `clampZoom` binds every zoom path (buttons, Ctrl+wheel, Fit) to this floor (+ `ZOOM_MAX`), and
+it recomputes whenever the viewport (ResizeObserver) or the resolution (extent) changes — a `useEffect`
+clamps the current zoom **up** if the floor rose. `ZOOM_HARD_MIN` (0.02) is only a degenerate-case
+safety net. Fit (below) always lands above this floor, so it is never clamped down.
 
 Three places consume the (constant) offset so they agree: the iframe (`frameOffset` insets `.cg-stage`
 via the `--cg-frame-x/-y` CSS vars — see below), the overlay (`CanvasOverlay`'s frame box is inset by

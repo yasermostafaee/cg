@@ -46,8 +46,12 @@ preview + export SHALL still EXCLUDE fully-off-frame static shapes (the Phase-A 
 unchanged, applied to the modal/export scene). The fixed extent SHALL NOT regress the canvas layout:
 the fit action and project-open SHALL fit the zoom from the FRAME bounds (NOT the extent) and CENTER the
 frame in the viewport; the canvas SHALL show NO default scrollbars (the overflowing pasteboard is
-pannable, but the scrollbars are hidden); the minimum zoom SHALL be low enough that a full zoom-out can
-show the ENTIRE fixed pasteboard; a Ctrl+wheel zoom SHALL zoom toward the CURSOR (and the zoom buttons
+pannable, but the scrollbars are hidden); the minimum zoom SHALL be the COVER-FIT of the pasteboard over
+the viewport — the MAXIMUM of the two axis ratios (viewportW/extentW, viewportH/extentH) — so that at
+maximum zoom-out the pasteboard always COVERS the viewport and NO empty surround is visible (one axis may
+overflow and scroll); this minimum SHALL recompute when the viewport size or the resolution changes, and
+if the current zoom is below the new minimum it SHALL be clamped UP (the Fit zoom always lands above this
+floor, so Fit is never clamped down); a Ctrl+wheel zoom SHALL zoom toward the CURSOR (and the zoom buttons
 toward the viewport centre); the rulers SHALL place scene (0,0) at the frame top-left and track scroll +
 zoom; and the alignment / snap guides SHALL span the FULL visible canvas (the scroll viewport), not the
 frame dimensions.
@@ -112,3 +116,17 @@ frame dimensions.
 - **WHEN** the author opens a project/composition or clicks Fit
 - **THEN** the zoom is fit from the FRAME bounds (not the extent) and the frame is centered in the
   viewport (deterministically, with the constant frame offset)
+
+#### Scenario: The minimum zoom is the cover-fit so no empty surround shows
+
+- **WHEN** the author zooms out as far as the controls allow
+- **THEN** the zoom stops at the cover-fit minimum (the max of the two viewport/extent axis ratios), so
+  the pasteboard still covers the viewport on both axes with NO empty surround — one axis may overflow
+  and be scrollable
+
+#### Scenario: The cover-fit minimum tracks the viewport and resolution
+
+- **WHEN** the viewport is resized (or the composition resolution changes) so the cover-fit minimum rises
+  above the current zoom
+- **THEN** the minimum is recomputed and the current zoom is clamped UP to it, so the surround never
+  appears; the Fit zoom (which frames the smaller frame) remains above the minimum and is unaffected

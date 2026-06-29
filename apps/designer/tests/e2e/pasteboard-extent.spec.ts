@@ -122,13 +122,44 @@ test.describe('B-027 — fixed pasteboard extent + drag/nudge clamp (no dead zon
     await expect(app.gizmoFrame).toBeAttached();
   });
 
+  test('at maximum zoom-out the pasteboard COVERS the viewport — no empty surround', async ({
+    app,
+  }) => {
+    await app.newProject('Cover');
+    await app.addRectangle({ x: 240, y: 200 });
+    // Zoom out HARD, well past the dynamic cover-fit floor (each click ×1/1.1).
+    const zoomOut = app.page.getByRole('button', { name: 'Zoom out', exact: true });
+    for (let i = 0; i < 40; i++) await zoomOut.click();
+
+    // The dynamic minimum is the cover-fit, so the stage (pasteboard) still covers the scroll
+    // viewport's CLIENT area on BOTH axes — no surround-coloured gap shows; one axis just
+    // overflows/scrolls. (Compare the stage's rendered size to `clientWidth/Height` — the
+    // basis `coverZoom` uses — not the border-box `boundingBox`.)
+    const m = await app.page.evaluate(() => {
+      const outer = document.querySelector('[data-testid="canvas-viewport"]') as HTMLElement;
+      const stage = document.querySelector('[data-testid="canvas-stage"]') as HTMLElement;
+      return {
+        sw: parseFloat(stage.style.width),
+        sh: parseFloat(stage.style.height),
+        cw: outer.clientWidth,
+        ch: outer.clientHeight,
+      };
+    });
+    expect(m.sw).toBeGreaterThanOrEqual(m.cw - 1);
+    expect(m.sh).toBeGreaterThanOrEqual(m.ch - 1);
+  });
+
   test('arrow-key nudge cannot push a shape past the pasteboard edge', async ({ app }) => {
     await app.newProject('NudgeClamp');
     await app.addRectangle({ x: 240, y: 200 });
-    // Park it AT the left bound by dragging far left (focus stays on the canvas, not an
-    // input — so the arrow-nudge handler is live).
+    // Park it AT the left bound by dragging far left.
     await dragSelected(app, { x: -4000, y: 0 });
     expect(await readX(app)).toBe(-1920);
+
+    // Blur the focused toolbar button (from `selectTool`) so the arrow keys reach the
+    // window-level nudge handler (target = body, not a button that might eat arrows). The
+    // selection is store state, so blurring doesn't drop it.
+    await app.page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 
     // Nudge RIGHT 5px (1px/press) — the nudge path moves the shape…
     for (let i = 0; i < 5; i++) await app.page.keyboard.press('ArrowRight');

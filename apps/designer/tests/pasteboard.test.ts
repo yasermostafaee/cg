@@ -5,6 +5,7 @@ import {
   PASTEBOARD_MARGIN_X,
   PASTEBOARD_MARGIN_Y,
   clampDeltaToPasteboard,
+  coverZoom,
   fitZoom,
   pasteboardLayout,
   pasteboardSceneBounds,
@@ -159,6 +160,44 @@ describe('B-027 — clampDeltaToPasteboard keeps a box inside the pasteboard (no
     expect(d).toBe((minX + maxX) / 2 - (0 + 6000) / 2);
     // After applying, the box center sits at the pasteboard center.
     expect((0 + d + (6000 + d)) / 2).toBe((minX + maxX) / 2);
+  });
+});
+
+describe('B-027 — coverZoom is the cover-fit minimum (pasteboard always covers the viewport)', () => {
+  // The 1920×1080 pasteboard extent is 5760 × 3240.
+  const E = pasteboardLayout({ width: 1920, height: 1080 });
+
+  it('is the MAX of the two axis ratios (cover, not contain)', () => {
+    // A WIDE viewport: width ratio dominates.
+    expect(coverZoom(1000, 500, E.width, E.height)).toBeCloseTo(
+      Math.max(1000 / E.width, 500 / E.height),
+      6,
+    );
+    expect(coverZoom(1000, 500, E.width, E.height)).toBe(1000 / E.width); // 1000/5760 > 500/3240
+    // A TALL viewport: height ratio dominates.
+    expect(coverZoom(500, 1000, E.width, E.height)).toBe(1000 / E.height); // 1000/3240 > 500/5760
+  });
+
+  it('at the cover-fit zoom the pasteboard covers the viewport on BOTH axes (no gap)', () => {
+    for (const [vw, vh] of [
+      [1000, 500],
+      [500, 1000],
+      [1280, 720],
+      [800, 800],
+    ] as const) {
+      const z = coverZoom(vw, vh, E.width, E.height);
+      // scaled extent ≥ viewport on each axis → no empty surround on either side.
+      expect(E.width * z).toBeGreaterThanOrEqual(vw - 1e-6);
+      expect(E.height * z).toBeGreaterThanOrEqual(vh - 1e-6);
+      // …and one axis fits EXACTLY (the max-ratio axis), so it is the SMALLEST covering zoom.
+      const exact = Math.min(E.width * z - vw, E.height * z - vh);
+      expect(exact).toBeCloseTo(0, 6);
+    }
+  });
+
+  it('returns 0 for a degenerate (unmeasured) viewport or extent', () => {
+    expect(coverZoom(0, 500, E.width, E.height)).toBe(0);
+    expect(coverZoom(1000, 500, 0, E.height)).toBe(0);
   });
 });
 

@@ -30,10 +30,13 @@
 - [x] `CanvasArea.css.ts`: `s.outer` surround `#0e1018` (distinct from the `#161927`
       pasteboard) + `s.stage` 1px `box-shadow` edge ring.
 
-## 5. Zoom-out reach
+## 5. Zoom-out reach — dynamic cover-fit minimum
 
-- [x] `ZOOM_MIN` 0.1 — a full zoom-out shows the whole 3× pasteboard without a tiny dot.
-      (The interim 0.05, sized for 7×5, is dropped.)
+- [x] `geometry.ts`: `coverZoom(vw, vh, ew, eh)` = MAX of the axis ratios (cover, not contain).
+- [x] `CanvasArea.tsx`: `dynamicZoomMin` (cover-fit, floored at `ZOOM_HARD_MIN` 0.02), bound
+      into `clampZoom` so every zoom path (buttons / Ctrl+wheel / Fit) is clamped to it;
+      recompute on viewport (ResizeObserver) + resolution change; clamp current zoom UP when
+      the floor rises. So a full zoom-out always COVERS the viewport — no empty surround.
 
 ## 6. Colour-doc drift (code is source of truth: `#3d4253`)
 
@@ -51,8 +54,11 @@
 - [x] Unit `pasteboard.test.ts`: fixed 3×3 extent (inset 1×/1×), content-independent;
       `clampDeltaToPasteboard` — box stays inside (single + group); edge touches the bound,
       not crossing; pre-existing-outside tightens only; oversized centers.
+- [x] Unit `coverZoom`: MAX of the axis ratios; the pasteboard covers the viewport on both
+      axes at that zoom; 0 for a degenerate viewport/extent.
 - [x] E2E `pasteboard-extent.spec.ts`: extent FIXED (no grow), frame does NOT drift, drag
-      past an edge STOPS at the pasteboard edge (left/top too), arrow-nudge stops at the edge.
+      past an edge STOPS at the pasteboard edge (left/top too), arrow-nudge stops at the edge,
+      and at maximum zoom-out the pasteboard COVERS the viewport (no empty surround).
 - [x] E2E: B-035 fit-on-open / fit-on-switch still center (run the existing spec).
 - [x] Confirm no regression in `scene-size-vs-pasteboard.spec.ts` (resolution change
       recomputes the 3×3 extent + Fit re-fits).
@@ -65,5 +71,5 @@
 ## 10. Gate
 
 - [x] `@cg/designer` typecheck + lint + test + build (uncached `turbo --force`) 14/14, then
-      full E2E (`playwright test`) 158/158 — pasteboard / scene-size / fit / selection specs.
+      full E2E (`playwright test`) 159/159 — pasteboard / scene-size / fit / cover / selection.
 - [x] `pnpm openspec validate fixed-pasteboard-extent --strict`.
