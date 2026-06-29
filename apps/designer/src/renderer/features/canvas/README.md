@@ -218,12 +218,24 @@ to grab. The `size === 1` path keeps the full `Gizmo` above, untouched.
 
 ## Tools system
 
-`DesignerTool = 'cursor' | 'hand' | 'text' | 'shape' | 'ellipse' | 'image'`.
+`DesignerTool = 'cursor' | 'hand' | 'text' | 'shape' | 'ellipse' | 'pen' | 'image'`.
 `CanvasToolbar` renders one `Control` per tool (→ `designerStore.setTool`);
 `CanvasOverlay.onPointerDown` switches on the active tool: `cursor` selects/drags,
 `hand` pans, the creator tools add an element from
 [`state/element-defaults.ts`](../../state/element-defaults.ts) at the click point
 and snap back to `cursor`.
+
+D-109 — the `pen` tool is the multi-gesture exception: [`pen-draw.ts`](./pen-draw.ts)
+is a module-level pointer state machine (click = corner anchor, drag = smooth with
+mirrored handles, click-first-anchor = close, Enter/Esc/double-click = finish open),
+upserting the `path` element live (`pathFromScenePoints`) so preview == export
+mid-draw. A selected path's edit affordance is [`PathEditor`](./PathEditor.tsx) — an
+SVG overlay of draggable anchor squares + handle dots (Alt breaks a mirrored pair,
+click a segment to insert, Delete removes + re-stitches), shown **only with the
+select tool** so its dots don't intercept the pen's close-click. `hit-test.ts` adds
+the path branch (point-in-polygon for a closed interior + distance-to-stroke), and
+the B-022 gizmo is reused unchanged (size = the points' bbox; the runtime SVG
+`viewBox` makes a size-resize rescale the outline without re-baking points).
 
 D-040 — the `image` (logo) tool stamps a `source: 'shared'` image from the device
 **shared library** ([`features/sharedLibrary`](../sharedLibrary)): the operator's

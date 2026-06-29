@@ -70,6 +70,13 @@ export function applyAnimationAtFrame(entry: AnimatedElement, frame: number): vo
     const v = interpolateAtFrame(tracks['fill.color'], frame);
     if (typeof v === 'string') entry.node.style.background = v;
   }
+  // D-109 — a path fills its inner `<svg><path>` (only when closed; an open path is
+  // stroke-only), not the wrapper background.
+  if (tracks['fill.color'] !== undefined && entry.source.type === 'path' && entry.source.closed) {
+    const v = interpolateAtFrame(tracks['fill.color'], frame);
+    const p = entry.node.querySelector('path');
+    if (typeof v === 'string' && p !== null) p.setAttribute('fill', v);
+  }
   // D-052 — text colour animates on text AND the time-driven kinds (it inherits to
   // the ticker items / clock digit span / sequence items, as the static colour does).
   // B-016/B-017 — write the glyph node (the inner gradient node for gradient text, else
@@ -263,15 +270,31 @@ function applyStroke(
   const hasAny = STROKE_PROPS.some((p) => tracks[p] !== undefined);
   if (!hasAny) return;
   const src = entry.source;
-  // D-056 — stroke animation is shape-only again (content-driven kinds carry no box;
-  // text stroke stays static — no track is authored for it).
-  if (src.type !== 'shape') return;
+  // D-056 — stroke animation is shape-only (content-driven kinds carry no box; text
+  // stroke stays static). D-109 — a path also strokes, on its inner `<svg><path>`.
+  if (src.type !== 'shape' && src.type !== 'path') return;
   const stroke = src.stroke;
   const width = readNumericTrack(tracks, 'stroke.width', frame) ?? stroke?.width ?? 0;
   const color = readStringTrack(tracks, 'stroke.color', frame) ?? stroke?.color ?? '#000000';
   const staticDash = (stroke?.dash?.length ?? 0) > 0;
   const animatedDash = readNumericTrack(tracks, 'stroke.dash', frame);
   const dashOn = animatedDash !== undefined ? animatedDash > 0 : staticDash;
+  if (src.type === 'path') {
+    const p = entry.node.querySelector('path');
+    if (p === null) return;
+    p.setAttribute('stroke', color);
+    p.setAttribute('stroke-width', String(width));
+    if (dashOn) {
+      const dash =
+        stroke?.dash !== undefined && stroke.dash.length > 0
+          ? stroke.dash.join(' ')
+          : `${width * 2} ${width * 2}`;
+      p.setAttribute('stroke-dasharray', dash);
+    } else {
+      p.removeAttribute('stroke-dasharray');
+    }
+    return;
+  }
   entry.node.style.border = `${width}px ${dashOn ? 'dashed' : 'solid'} ${color}`;
 }
 

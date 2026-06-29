@@ -107,6 +107,7 @@ export class DesignerApp {
       | 'Repeater'
       | 'Rectangle'
       | 'Ellipse'
+      | 'Pen'
       | 'Image (logo)'
       | 'Hand (pan)',
   ): Promise<void> {

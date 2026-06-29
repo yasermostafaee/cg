@@ -1,8 +1,10 @@
 import type {
+  AnchorPoint,
   ClockElement,
   DynamicField,
   ImageElement,
   ListItem,
+  PathElement,
   RepeaterElement,
   SequenceElement,
   ShapeElement,
@@ -10,6 +12,7 @@ import type {
   TickerElement,
   Transform,
 } from '@cg/shared-schema';
+import { pathBBox } from '@cg/shared-schema';
 
 /**
  * Default element factories — what we drop on the canvas when the
@@ -259,6 +262,66 @@ export function defaultEllipse(id: string, x: number, y: number): ShapeElement {
     shape: 'ellipse',
     fill: { kind: 'solid', color: '#BEBEBE' },
   };
+}
+
+/**
+ * D-109 — re-derive a path's transform from its points: shift the points so their
+ * bounding box starts at the local origin `(0,0)` and move `position` by the same
+ * amount (scene-stable — every point keeps its on-screen spot), then set `size` to
+ * the bbox. Keeping points in a 0-origin local frame decouples them from
+ * `position`, so moving the element (position only) and editing a point (points
+ * only) never interfere. Called after every pen/edit gesture; resize does NOT call
+ * it (the gizmo changes `size`, the runtime viewBox rescales, points are untouched).
+ */
+export function normalizePathPoints(el: PathElement): PathElement {
+  if (el.points.length === 0) return el;
+  const bbox = pathBBox(el.points);
+  const points =
+    bbox.x === 0 && bbox.y === 0
+      ? el.points
+      : el.points.map((p) => ({ ...p, x: p.x - bbox.x, y: p.y - bbox.y }));
+  return {
+    ...el,
+    points,
+    transform: {
+      ...el.transform,
+      position: { x: el.transform.position.x + bbox.x, y: el.transform.position.y + bbox.y },
+      size: { w: Math.max(bbox.w, 1), h: Math.max(bbox.h, 1) },
+    },
+  };
+}
+
+/**
+ * D-109 — a `path` element from a list of anchor points in SCENE coordinates (what
+ * the pen tool accumulates). Normalized so `position` is the bbox top-left and the
+ * points sit in a 0-origin local frame. Closed ⇒ fill + stroke; open ⇒ stroke only.
+ */
+export function pathFromScenePoints(
+  id: string,
+  scenePoints: readonly AnchorPoint[],
+  closed: boolean,
+): PathElement {
+  const seed: PathElement = {
+    id,
+    name: 'Path',
+    type: 'path',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    zIndex: 0,
+    transform: {
+      position: { x: 0, y: 0 },
+      size: { w: 1, h: 1 },
+      rotation: 0,
+      scale: { x: 1, y: 1 },
+      anchor: { x: 0.5, y: 0.5 },
+    },
+    points: [...scenePoints],
+    closed,
+    fill: { kind: 'solid', color: '#BEBEBE' },
+    stroke: { width: 2, color: '#1A1A1A' },
+  };
+  return normalizePathPoints(seed);
 }
 
 /**

@@ -1,4 +1,6 @@
+import { pathBBox } from '@cg/shared-schema';
 import type {
+  AnchorPoint,
   BoxStyle,
   ClockElement,
   CompositionElement,
@@ -7,6 +9,7 @@ import type {
   Filter,
   Layer,
   ListItem,
+  PathElement,
   RepeaterElement,
   Scene,
   SequenceElement,
@@ -138,6 +141,8 @@ function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null 
       return buildImage(element, ctx.doc);
     case 'shape':
       return buildShape(element, ctx.doc);
+    case 'path':
+      return buildPath(element, ctx.doc);
     case 'composition':
       return buildComposition(element, ctx);
     case 'container':
@@ -977,6 +982,103 @@ function buildShape(element: ShapeElement, doc: Document): HTMLElement {
     el.style.boxShadow = composeBoxShadow(element.shadow);
   }
   return el;
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * D-109 — build the SVG `d` attribute for a `path` element from its anchor points.
+ * Each segment is a cubic `C` from the start anchor's `out` handle to the next
+ * anchor's `in` handle (handles are deltas from the anchor); a segment with NO
+ * handle on either end collapses to a straight `L`. A CLOSED path appends the
+ * wrap-around segment (last → first) and `Z`. Points are in the element's local
+ * box space (px), drawn 1:1 by an un-viewBox'd SVG, so the B-022 gizmo's scale
+ * transform on the wrapper scales the outline without re-baking coordinates.
+ * Exported for the d-string unit test.
+ */
+export function pathD(points: readonly AnchorPoint[], closed: boolean): string {
+  const first = points[0];
+  if (first === undefined) return '';
+  const n = (v: number): string => String(Math.round(v * 1000) / 1000);
+  const seg = (a: AnchorPoint, b: AnchorPoint): string => {
+    if (a.out === undefined && b.in === undefined) return `L ${n(b.x)} ${n(b.y)}`;
+    const c1x = a.x + (a.out?.x ?? 0);
+    const c1y = a.y + (a.out?.y ?? 0);
+    const c2x = b.x + (b.in?.x ?? 0);
+    const c2y = b.y + (b.in?.y ?? 0);
+    return `C ${n(c1x)} ${n(c1y)} ${n(c2x)} ${n(c2y)} ${n(b.x)} ${n(b.y)}`;
+  };
+  const segs: string[] = [`M ${n(first.x)} ${n(first.y)}`];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (a !== undefined && b !== undefined) segs.push(seg(a, b));
+  }
+  if (closed) {
+    const last = points[points.length - 1];
+    if (last !== undefined && last !== first) segs.push(seg(last, first));
+    segs.push('Z');
+  }
+  return segs.join(' ');
+}
+
+/**
+ * D-109 — the SVG `fill` value for a path. Solid is the colour itself (the editor
+ * only authors solid path fills); a stored gradient degrades to its first stop
+ * (a plain SVG `fill` can't carry a CSS gradient — full SVG-gradient defs are a
+ * future enhancement, see design.md).
+ */
+function pathFillColor(fill: Fill): string {
+  return fill.kind === 'solid' ? fill.color : (fill.stops[0]?.color ?? 'none');
+}
+
+/**
+ * D-109 — render a `path` element as `<div><svg><path d></svg></div>`: the wrapper
+ * carries the element transform/opacity/filter (so transform animates like any
+ * shape), the SVG fills it 1:1 (`overflow: visible`), and the `<path>` carries the
+ * outline. A CLOSED path fills + strokes; an OPEN path strokes only (`fill: none`).
+ */
+function buildPath(element: PathElement, doc: Document): HTMLElement {
+  const el = doc.createElement('div');
+  el.dataset['cgElementId'] = element.id;
+  applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
+  const svg = doc.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', '100%');
+  // viewBox = the points' bbox + non-uniform fit, so resizing the box (gizmo →
+  // transform.size) rescales the outline without re-baking points (B-022).
+  const bbox = pathBBox(element.points);
+  const n = (v: number): string => String(Math.round(v * 1000) / 1000);
+  svg.setAttribute(
+    'viewBox',
+    `${n(bbox.x)} ${n(bbox.y)} ${n(Math.max(bbox.w, 1))} ${n(Math.max(bbox.h, 1))}`,
+  );
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.style.display = 'block';
+  svg.style.overflow = 'visible';
+  const path = doc.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', pathD(element.points, element.closed));
+  path.setAttribute(
+    'fill',
+    element.closed && element.fill !== undefined ? pathFillColor(element.fill) : 'none',
+  );
+  applyPathStroke(path, element.stroke);
+  svg.appendChild(path);
+  el.appendChild(svg);
+  return el;
+}
+
+/** D-109 — apply a {@link Stroke} to an SVG `<path>` (the SVG analogue of the box border). */
+function applyPathStroke(path: Element, stroke: BoxStyle['stroke']): void {
+  if (stroke === undefined || stroke.width <= 0) {
+    path.setAttribute('stroke', 'none');
+    return;
+  }
+  path.setAttribute('stroke', stroke.color);
+  path.setAttribute('stroke-width', String(stroke.width));
+  if (stroke.dash !== undefined && stroke.dash.length > 0) {
+    path.setAttribute('stroke-dasharray', stroke.dash.join(' '));
+  }
 }
 
 function buildPlaceholder(element: SceneElement, doc: Document): HTMLElement {

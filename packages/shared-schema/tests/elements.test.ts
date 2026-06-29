@@ -9,6 +9,7 @@ import {
   ElementSchema,
   ImageElementSchema,
   LottieElementSchema,
+  PathElementSchema,
   ShapeElementSchema,
   TextElementSchema,
   TickerElementSchema,
@@ -186,6 +187,56 @@ describe('ShapeElement', () => {
   });
 });
 
+describe('PathElement (D-109)', () => {
+  const path = {
+    ...baseProps,
+    type: 'path' as const,
+    closed: true,
+    points: [
+      { id: 'a1', x: 0, y: 0, smooth: false },
+      { id: 'a2', x: 100, y: 0, out: { x: 20, y: 30 }, smooth: true },
+      { id: 'a3', x: 100, y: 100, in: { x: -20, y: -30 }, smooth: true },
+    ],
+    fill: { kind: 'solid' as const, color: '#22C55E' },
+    stroke: { width: 2, color: '#000000' },
+  };
+
+  it('accepts a closed path with corner + smooth anchors and bézier handles', () => {
+    expect(PathElementSchema.parse(path)).toEqual(path);
+  });
+
+  it('round-trips through the Element union, preserving every anchor id', () => {
+    const parsed = ElementSchema.parse(path);
+    expect((parsed as { type: string }).type).toBe('path');
+    expect((parsed as typeof path).points.map((p) => p.id)).toEqual(['a1', 'a2', 'a3']);
+  });
+
+  it('accepts an open path with no fill (stroke-only)', () => {
+    const open = { ...baseProps, type: 'path' as const, closed: false, points: path.points };
+    const parsed = PathElementSchema.parse(open);
+    expect(parsed.closed).toBe(false);
+    expect(parsed.fill).toBeUndefined();
+    expect(parsed.stroke).toBeUndefined();
+    expect(parsed.points[1]?.in).toBeUndefined();
+  });
+
+  it('rejects a path with fewer than 2 anchors (re-stitch deletes the element instead)', () => {
+    expect(() =>
+      PathElementSchema.parse({
+        ...baseProps,
+        type: 'path',
+        closed: false,
+        points: [{ id: 'a1', x: 0, y: 0, smooth: false }],
+      }),
+    ).toThrow();
+  });
+
+  it('has no border radius (path reuses only the stroke part of the box mixin)', () => {
+    const parsed = PathElementSchema.parse(path) as { cornerRadius?: unknown };
+    expect(parsed.cornerRadius).toBeUndefined();
+  });
+});
+
 describe('LottieElement', () => {
   it('accepts a Lottie ref with segment', () => {
     const l = {
@@ -357,6 +408,7 @@ describe('Element union dispatch', () => {
     ['text' as const, 'Persian'],
     ['image' as const, 'image'],
     ['shape' as const, 'shape'],
+    ['path' as const, 'path'],
   ])('parses kind=%s via the union', (kind) => {
     const variants: Record<string, unknown> = {
       text: {
@@ -379,6 +431,15 @@ describe('Element union dispatch', () => {
       },
       image: { ...baseProps, type: 'image', assetId: 'a', fit: 'cover', preserveAspect: true },
       shape: { ...baseProps, type: 'shape', shape: 'rect' },
+      path: {
+        ...baseProps,
+        type: 'path',
+        closed: false,
+        points: [
+          { id: 'a1', x: 0, y: 0, smooth: false },
+          { id: 'a2', x: 50, y: 50, smooth: false },
+        ],
+      },
     };
     const parsed = ElementSchema.parse(variants[kind]);
     expect((parsed as { type: string }).type).toBe(kind);

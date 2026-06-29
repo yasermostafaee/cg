@@ -8,6 +8,7 @@ import {
   OpacitySchema,
   PaddingSchema,
   ShadowSchema,
+  StrokeSchema,
   TransformSchema,
   Vec2Schema,
   ZIndexSchema,
@@ -527,6 +528,71 @@ export const ShapeElementSchema = ElementBaseSchema.extend({
 }).merge(BoxStyleSchema);
 export type ShapeElement = z.infer<typeof ShapeElementSchema>;
 
+/**
+ * D-109 — a Bézier anchor on a `path` element. `in`/`out` are the two control
+ * handles expressed as DELTAS from the anchor (`{x,y}` offsets), so they stay
+ * correct under the element transform and give D-110 a clean per-point morph
+ * target. `smooth` records corner (independent handles) vs smooth (mirrored
+ * pair) so the editor can re-mirror a handle on drag. `id` is a stable id (the
+ * editor mints a nanoid) — the reconciliation key D-110 matches anchors by.
+ */
+export const AnchorPointSchema = z.object({
+  id: IdSchema,
+  x: z.number(),
+  y: z.number(),
+  in: Vec2Schema.optional(),
+  out: Vec2Schema.optional(),
+  smooth: z.boolean(),
+});
+export type AnchorPoint = z.infer<typeof AnchorPointSchema>;
+
+/**
+ * D-109 — an editable Bézier `path` element (distinct from the legacy
+ * `shape: 'path'` + `pathData` string variant). `points` live in the element's
+ * local space; `transform.size` is the points' bounding box, so the B-022 gizmo
+ * resizes via `scale` without re-baking coordinates. A CLOSED path renders
+ * fill + stroke; an OPEN path renders stroke only. Only the STROKE part of the
+ * D-042 box mixin is reused (a freeform path has no border radius) — inlined
+ * here rather than merging `BoxStyleSchema`. The point set is not keyframe-able
+ * in this item (per-point morphing is D-110).
+ */
+export const PathElementSchema = ElementBaseSchema.extend({
+  type: z.literal('path'),
+  points: z.array(AnchorPointSchema).min(2),
+  closed: z.boolean(),
+  fill: FillSchema.optional(),
+  stroke: StrokeSchema.optional(),
+});
+export type PathElement = z.infer<typeof PathElementSchema>;
+
+/**
+ * D-109 — the axis-aligned bounding box of a path's ANCHOR points (in the
+ * element's local space). The element's `transform.size` tracks this, and the
+ * runtime renders the SVG with `viewBox` = this box + `preserveAspectRatio:
+ * none`, so the B-022 gizmo resizes by changing `transform.size` (the viewBox
+ * rescales the outline to fill it) WITHOUT re-baking point coordinates. An empty
+ * set is a zero box. Handle overshoot is not included (size is the anchor bbox).
+ */
+export function pathBBox(points: readonly AnchorPoint[]): {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+} {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const p of points) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  if (!Number.isFinite(minX)) return { x: 0, y: 0, w: 0, h: 0 };
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
 /** Lottie animation element. */
 export const LottieElementSchema = ElementBaseSchema.extend({
   type: z.literal('lottie'),
@@ -585,6 +651,7 @@ export type Element =
   | RepeaterElement
   | ImageElement
   | ShapeElement
+  | PathElement
   | LottieElement
   | VideoPlaceholderElement
   | CompositionElement
@@ -604,6 +671,7 @@ export type ElementInput =
   | z.input<typeof RepeaterElementSchema>
   | z.input<typeof ImageElementSchema>
   | ShapeElement
+  | PathElement
   | LottieElement
   | VideoPlaceholderElement
   | CompositionElement
@@ -648,6 +716,7 @@ export const ElementSchema: z.ZodType<Element, z.ZodTypeDef, ElementInput> = z.l
     RepeaterElementSchema,
     ImageElementSchema,
     ShapeElementSchema,
+    PathElementSchema,
     LottieElementSchema,
     VideoPlaceholderElementSchema,
     CompositionElementSchema,
