@@ -1,6 +1,7 @@
 import { useConnections } from '../../hooks/useConnections.js';
 import { useLock } from '../../hooks/useLock.js';
 import { colors } from '../../theme.js';
+import { LinkIndicator } from './LinkIndicator.js';
 
 interface Props {
   onOpenAudit?: () => void;
@@ -80,6 +81,7 @@ export function StatusBar({ onOpenAudit }: Props = {}): JSX.Element {
   if (health === null) {
     return (
       <footer style={styles.bar} aria-label="Status bar">
+        <LinkIndicator />
         <span style={styles.pill}>Loading…</span>
       </footer>
     );
@@ -90,6 +92,7 @@ export function StatusBar({ onOpenAudit }: Props = {}): JSX.Element {
 
   return (
     <footer style={styles.bar} aria-label="Status bar">
+      <LinkIndicator />
       <span style={styles.pill}>
         <span style={styles.primary}>● PRIMARY {health.primary.label}</span>{' '}
         <span style={primary.style}>{primary.text}</span>

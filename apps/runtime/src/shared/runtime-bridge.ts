@@ -44,8 +44,27 @@ export interface AppInfo {
 
 export type Unsubscribe = () => void;
 
+/**
+ * Tri-state link to the local CasparCG bridge (C-001 Phase 1).
+ *
+ * - `live` — connected to the bridge over WebSocket; commands reach it.
+ * - `offline-mock` — no bridge at boot; the Runtime runs the in-memory
+ *   `MockRuntime`. An explicit, persistent offline mode (never a silent
+ *   fallback for a dropped live connection).
+ * - `disconnected` — a previously-live bridge dropped mid-session;
+ *   commands are rejected (never optimistic on-air, never routed to the mock)
+ *   until the link reconnects and resyncs.
+ */
+export type BridgeLinkStatus = 'live' | 'offline-mock' | 'disconnected';
+
 export interface RuntimeBridge {
   getAppInfo(): Promise<AppInfo>;
+
+  /** Status of the link to the local bridge (drives the connection indicator). */
+  link: {
+    status(): BridgeLinkStatus;
+    onStatusChanged(handler: (status: BridgeLinkStatus) => void): Unsubscribe;
+  };
 
   stack: {
     load(

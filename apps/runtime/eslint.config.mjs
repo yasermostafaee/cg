@@ -31,6 +31,7 @@ export default [
     },
   },
   {
-    ignores: ['dist/**', '.vite/**', '*.tsbuildinfo'],
+    // `*.timestamp-*.mjs` are transient Vite config-load artifacts.
+    ignores: ['dist/**', '.vite/**', '*.tsbuildinfo', '*.timestamp-*.mjs'],
   },
 ];
