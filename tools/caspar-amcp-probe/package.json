@@ -1,0 +1,33 @@
+{
+  "name": "@cg/caspar-amcp-probe",
+  "version": "0.0.0",
+  "private": true,
+  "description": "C-001 Phase 3b spike: hardware-validation harness for the AMCP HTML-producer update sequence (ADR 0006). Runs a matrix of candidate load/update/stop sequences against a real CasparCG 2.3.2 and reports which delivers a Persian-laden JSON payload to window.update.",
+  "type": "module",
+  "bin": {
+    "caspar-amcp-probe": "./bin/caspar-amcp-probe.mjs"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "public"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rimraf --glob dist *.tsbuildinfo",
+    "typecheck": "tsc --noEmit -p tsconfig.json --tsBuildInfoFile typecheck.tsbuildinfo",
+    "lint": "eslint . --max-warnings 0",
+    "start": "node ./bin/caspar-amcp-probe.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@cg/eslint-config": "workspace:*",
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "eslint": "^9.17.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.6.3"
+  }
+}
