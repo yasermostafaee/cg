@@ -31,6 +31,7 @@ export function AlignButtonGroup<T extends string>({
   current,
   options,
   onChange,
+  disabled = false,
 }: {
   /** Group label, e.g. "Horizontal alignment" / "Vertical alignment". */
   ariaLabel: string;
@@ -41,9 +42,16 @@ export function AlignButtonGroup<T extends string>({
   current: string;
   options: readonly AlignOption<T>[];
   onChange: (value: T) => void;
+  /**
+   * D-060 — when true the group is shown but inert (e.g. vertical-align on an
+   * auto-sized text box has no vertical slack to distribute). Default false, so
+   * every other caller is unaffected. The stored value is NOT changed; the active
+   * state still reflects `current` so it round-trips when re-enabled.
+   */
+  disabled?: boolean;
 }): JSX.Element {
   return (
-    <div className={s.group} role="group" aria-label={ariaLabel}>
+    <div className={s.group} role="group" aria-label={ariaLabel} aria-disabled={disabled}>
       {options.map((opt) => {
         const active = opt.value === current;
         return (
@@ -54,6 +62,7 @@ export function AlignButtonGroup<T extends string>({
             onClick={() => onChange(opt.value)}
             aria-label={opt.label}
             aria-pressed={active}
+            disabled={disabled}
             title={opt.label}
           >
             <Icon icon={opt.icon} size={16} />

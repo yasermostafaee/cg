@@ -24,6 +24,7 @@ import {
   zoomAnchorScroll,
 } from './geometry.js';
 import { contentBounds } from './content-bounds.js';
+import { registerPreviewDocument, bumpMeasureVersion } from './measure-element.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
 import * as s from './CanvasArea.css.js';
@@ -226,6 +227,9 @@ export function CanvasArea({
         },
         '*',
       );
+      // D-060 — after the iframe re-lays-out (a frame later), re-measure auto-sized
+      // text so the selection gizmo stays glued to the content box.
+      requestAnimationFrame(() => bumpMeasureVersion());
     });
     return () => {
       if (rafRef.current !== 0) {
@@ -334,6 +338,10 @@ export function CanvasArea({
           { kind: 'cg-preview', action: 'asset-urls', assetUrls: mergedAssetUrls() },
           '*',
         );
+        // D-060 — the preview is up: re-measure auto text now, and again once the
+        // bundled/imported webfonts finish loading (they change the hug size).
+        requestAnimationFrame(() => bumpMeasureVersion());
+        void iframeRef.current?.contentDocument?.fonts?.ready?.then(() => bumpMeasureVersion());
       }
       if (msg?.kind === 'cg-preview-error') {
         console.error('[cg-preview]', msg.label, msg.payload);
@@ -342,6 +350,14 @@ export function CanvasArea({
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [currentFrame, editingTextId]);
+
+  // D-060 — expose the live preview document so the selection gizmo (and the
+  // auto→fixed one-shot size commit) can measure an auto-sized text box's rendered
+  // content box. Display-only; nothing is written back on the render path.
+  useEffect(() => {
+    registerPreviewDocument(() => iframeRef.current?.contentDocument ?? null);
+    return () => registerPreviewDocument(null);
+  }, []);
 
   useEffect(() => {
     iframeRef.current?.contentWindow?.postMessage(
