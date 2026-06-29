@@ -85,53 +85,36 @@ re-measures and stays glued. The auto→fixed toggle commits the measured size i
 
 ## Off-frame pasteboard (D-071 Phase B; content-aware follow-up B-026)
 
-The stage is a **content-aware pasteboard**: its size is `pasteboardLayout(resolution, content?)`,
-where `content` is the scene-coord AABB of all on-canvas elements at the current frame
-(`contentBounds(layers, currentFrame)` — corner-folds each top-level element through `localToScene`
-at `effectiveTransformAt`; a nested composition **instance** counts only its **own box**, since
-instances render `overflow:hidden` and clip their children). The base is the **fixed 2× extent** —
-the frame plus a margin (`PASTEBOARD_MARGIN_RATIO`, a fraction of the frame) on **all four sides**,
-symmetric so off-frame shapes show on **every** side (left/top too). The extent then:
+The stage is a **FIXED pasteboard** (B-027): its size is `pasteboardLayout(resolution)` — a pure
+function of the resolution, **not** content-grown. The margins are a multiple of the frame per side:
+`PASTEBOARD_MARGIN_X` (= 3) × the frame width left + right, `PASTEBOARD_MARGIN_Y` (= 2) × the frame
+height top + bottom → total extent **7× the frame width × 5× the frame height**. `layout.frame` is
+the frame's **constant offset** into the stage (scene (0,0) sits there): `3× width` / `2× height`.
 
-- **grows only past a 2× boundary** (Q1 = B): content within `[−margin, size+margin]` per axis is
-  **byte-identical** to the old fixed 2× (everyday off-frame drags don't touch the seams); once
-  content crosses a boundary the extent grows to give it a **full margin** of headroom;
-- **shrinks back** toward 2× as far content returns inward, but **never below** the 2× floor;
-- is **clamped** at `MAX_EXTENT_RATIO` (12×) the frame per axis, so a stray far coordinate (bad
-  import / fat-finger drag) can't blow the iframe up.
+Because the extent + offset are constant per resolution, dragging a shape off-frame moves **only the
+shape** — the dark area never grows and the frame never drifts (the old grow-to-fit origin shift was
+the during-drag jitter source; it, plus `contentBounds` and the origin-shift scroll-comp seam, were
+removed). A shape parked **within** the extent stays visible + selectable on every side; one parked
+**beyond** it is clipped from the dark area but stays in the scene (reachable by zooming out / panning
+— `ZOOM_MIN` is low enough that a full zoom-out shows the whole fixed pasteboard).
 
-This keeps a shape parked far off-frame **visible + selectable** (the old fixed extent clipped it out
-of the iframe past the margin). With no off-frame content the result is exactly the old 2× (the
-default `content` is the frame box — full back-compat).
+Three places consume the (constant) offset so they agree: the iframe (`frameOffset` insets `.cg-stage`
+via the `--cg-frame-x/-y` CSS vars — see below), the overlay (`CanvasOverlay`'s frame box is inset by
+`frameOffset × scale`, so the gizmos / `canvas-surface` and click→scene measure from the frame), and
+the rulers (`rulerOrigin = stageRect − outerRect + frame × zoom`).
 
-`layout.frame` is the frame's **offset** (scene px) into the stage: **scene (0,0) sits there**, not
-at the stage origin — and it **grows** when content extends off the **left/top** (so off-frame
-content lands at positive iframe coords). Three places consume that offset so they agree: the iframe
-(`frameOffset` insets `.cg-stage` — see below), the overlay (`CanvasOverlay`'s frame box is inset by
-`frameOffset × scale`, so the gizmos/`canvas-surface` and click→scene measure from the frame), and
-the rulers (`rulerOrigin = stageRect − outerRect + frame × zoom`; `measure` is re-keyed on
-`frameOffset` so it re-fires on an origin shift, not only on scroll/zoom).
-
-Because the offset can move at runtime, two seams keep it live:
-
-- **Live `.cg-stage` inset** — the baked `.cg-stage { top/left }` is a **CSS variable** on `:root`
-  (`--cg-frame-x/-y`) that `createRuntime` never recreates; the grown offset rides the existing
-  rAF-throttled `scene-replace` postMessage (and the `scrub` message — the offset is **current-frame
-  derived**, so an animated shape flying off-frame shifts it as the playhead moves) and updates the
-  variables via a shared `applyFrameOffset` helper, so the frame re-insets **live** with no iframe
-  reload/flash (the baked value is only the load-time fallback).
-- **Origin-shift scroll-comp** — a `useLayoutEffect` keyed on `frameOffset` scrolls by
-  `offsetShiftScroll(scroll, Δoffset, zoom)` so the visible content stays **stationary** when the
-  origin shifts (left/up growth **and** inward shrink). It is **independent** of the zoom-anchor
-  effect (disjoint keys: `frameOffset` vs `zoom` — a drag moves the offset not the zoom, a zoom the
-  reverse), and `prevOffsetRef` resets on `sceneId` so fit-on-open isn't fought.
+The `.cg-stage` inset is a **CSS variable** on `:root` (`--cg-frame-x/-y`) baked with the constant
+offset as the load-time fallback; the offset still rides the `scene-replace` / `scrub` postMessages
+(via `applyFrameOffset`), but since it is constant per resolution those are **idempotent** during a
+drag (they only actually change when the **resolution** changes — B-028, no reload). No live origin
+shift, so there is no scroll-comp seam.
 
 The iframe element is sized to the extent; a **`device-width` viewport** means the runtime content
-fills that size with **no stretch**. `fitToViewport` fits the zoom from the **frame** bounds — the
-**resolution**, NOT the grown extent — (so the frame is large) and `centerFrameInView` scrolls so the
-frame is **centered** (⛶ + project-open). The pasteboard overflows the viewport, but **the scrollbars
-are hidden** (`s.outer`) — there are no default scrollbars; the operator pans with the hand tool /
-wheel and zooms with Ctrl+wheel.
+fills that size with **no stretch**. Fit fits the zoom from the **frame** bounds — the **resolution**,
+NOT the extent (so the frame is large) — and centering scrolls so the frame is **centered**, computed
+arithmetically from the constant offset (`frameCenterScroll`, B-035) in a layout effect — drift-free.
+The pasteboard overflows the viewport, but **the scrollbars are hidden** (`s.outer`); the operator
+pans with the hand tool / wheel and zooms with Ctrl+wheel.
 
 **Two-tone, by region.** The **surround** (everything beyond the frame — `s.outer` _and_ the
 iframe `html, body`) is the dark **`#161927`**. The **frame-sized page backdrop** is a light gray

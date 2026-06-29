@@ -18,12 +18,10 @@ import { PreviewHost } from './PreviewHost.js';
 import {
   clampZoom as clampZoomPure,
   fitZoom,
-  offsetShiftScroll,
   pasteboardLayout,
   screenToScene,
   zoomAnchorScroll,
 } from './geometry.js';
-import { contentBounds } from './content-bounds.js';
 import { needsFit, markFitted, frameCenterScroll, type FitGate } from './fit-on-open.js';
 import { registerPreviewDocument, bumpMeasureVersion } from './measure-element.js';
 import { Control } from '../../ui/Control.js';
@@ -62,7 +60,11 @@ interface Props {
   showToolbar?: boolean;
 }
 
-const ZOOM_MIN = 0.1;
+// B-027 — the fixed pasteboard is 7× the frame width / 5× the height, so the min zoom is
+// lowered enough that a full zoom-out can show the ENTIRE pasteboard (so a shape parked
+// anywhere within it is reachable). At 0.05, a 1920-wide frame's 7× extent (13440px) is
+// ~672px on screen — within any normal canvas viewport. (Was 0.1, sized for the old 2×.)
+const ZOOM_MIN = 0.05;
 const ZOOM_MAX = 4;
 const ZOOM_STEP = 1.1; // multiplicative step per click / wheel notch
 const ZOOM_DEFAULT = 0.5;
@@ -162,22 +164,17 @@ export function CanvasArea({
   latestSceneRef.current = scene;
   const sceneId = scene?.id ?? null;
 
-  // D-071 — the content-aware pasteboard. `contentBounds` is the scene-coord AABB of all
-  // on-canvas elements at the CURRENT frame; `pasteboardLayout` grows the extent + frame
-  // offset to contain it (only past the 2× boundary — within it this is the fixed 2×).
-  // Recomputed every render (so it grows/shrinks live as a shape is dragged off-frame).
-  // Computed BEFORE the effects/early-return so the rulers + scroll-comp can read it.
-  const contentBox = useMemo(
-    () => (scene === null ? null : contentBounds(scene.layers, currentFrame)),
-    [scene, currentFrame],
-  );
+  // B-027 — the FIXED pasteboard: extent + frame offset are a pure function of the
+  // resolution (3× the frame width left/right, 2× the frame height top/bottom), NOT
+  // content-grown. So dragging a shape off-frame moves nothing but the shape, and the
+  // frame never drifts (the old grow-to-fit origin shift was the jitter source).
   const layout = useMemo(
-    () => (scene === null ? null : pasteboardLayout(scene.resolution, contentBox)),
-    [scene, contentBox],
+    () => (scene === null ? null : pasteboardLayout(scene.resolution)),
+    [scene?.resolution.width, scene?.resolution.height],
   );
   const frameOffset = layout?.frame ?? { x: 0, y: 0 };
   const extent = { width: layout?.width ?? 0, height: layout?.height ?? 0 };
-  // Latest content-aware offset for the (deps-limited) load + scene-replace effects.
+  // Latest (constant-per-resolution) offset for the deps-limited load + scene-replace effects.
   const frameOffsetRef = useRef(frameOffset);
   frameOffsetRef.current = frameOffset;
   useEffect(() => {
@@ -436,30 +433,10 @@ export function CanvasArea({
     el.scrollTop = zoomAnchorScroll(el.scrollTop, r.top, anchor.py, zoom, anchor.clientY);
   }, [zoom]);
 
-  // D-071 — origin-shift scroll compensation. When the content-grown frame offset shifts
-  // (a shape dragged past the left/up boundary grows the pasteboard, OR returns inward),
-  // scene (0,0) moves; scroll by `Δoffset × zoom` to hold the visible content STATIONARY.
-  // Keyed on the OFFSET (not `zoom`), so it is independent of the zoom-anchor effect —
-  // a zoom changes `zoom` but not the offset, a drag the offset but not `zoom`, so the
-  // two never fight. `prevOffsetRef` resets on `sceneId` so fit-on-open isn't fought.
-  const prevOffsetRef = useRef(frameOffset);
-  const offsetSceneRef = useRef<string | null>(sceneId);
-  useLayoutEffect(() => {
-    if (offsetSceneRef.current !== sceneId) {
-      offsetSceneRef.current = sceneId;
-      prevOffsetRef.current = frameOffset;
-      return; // project/comp switch — fit/center places it, don't compensate
-    }
-    const dx = frameOffset.x - prevOffsetRef.current.x;
-    const dy = frameOffset.y - prevOffsetRef.current.y;
-    prevOffsetRef.current = frameOffset;
-    if (dx === 0 && dy === 0) return;
-    const el = outerRef.current;
-    if (el === null) return;
-    el.scrollLeft = offsetShiftScroll(el.scrollLeft, dx, zoomRef.current);
-    el.scrollTop = offsetShiftScroll(el.scrollTop, dy, zoomRef.current);
-    // Keyed on the offset only (zoom read via `zoomRef`), so a zoom never triggers it.
-  }, [frameOffset.x, frameOffset.y, sceneId]);
+  // B-027 — the origin-shift scroll compensation (Seam 2) is GONE: the frame offset is
+  // now constant per resolution, so scene (0,0) never moves on a drag/scrub and there is
+  // nothing to compensate. Removing it (and the per-move extent recompute) is what kills
+  // the during-drag jitter by construction.
 
   // Ctrl + wheel over the canvas zooms toward the cursor; plain wheel keeps the default
   // overflow:auto scroll. A non-passive listener so we can preventDefault on the
