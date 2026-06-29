@@ -51,12 +51,20 @@ abstraction so the choice is reversible.
 Browsers cannot open raw TCP (AMCP) or UDP (OSC) sockets, so the Runtime's
 control path cannot be pure-browser. The chosen path: a small local
 **WebSocket↔TCP/UDP bridge** that runs on the operator's machine and relays
-to CasparCG. The pure protocol logic in `@cg/caspar-client` (command
+to CasparCG. ~~The pure protocol logic in `@cg/caspar-client` (command
 building, response parsing, reconciler, redundancy) stays browser-side
 behind a transport interface; only the socket transport lives in the
-bridge. Until that tool ships, the Runtime runs against an in-memory
+bridge.~~ Until that tool ships, the Runtime runs against an in-memory
 **mock** (`apps/runtime/src/platform/MockRuntime.ts`) so the operator UI is
 fully exercised.
+
+> **Reversed by [ADR 0008](0008-thick-caspar-bridge.md) (2026-06-29).** The
+> struck-through "thin bridge" premise above does not hold: `@cg/caspar-client`
+> is Node-tier throughout (`node:net` / `node:dgram` / `node:events`) with no
+> real transport interface to implement browser-side. The **full** protocol
+> stack (session, queue, OSC pipeline, reconciler, redundancy) now runs **inside
+> the bridge**; the browser↔bridge wire is the existing `@cg/shared-ipc`
+> contract over a single WebSocket. The bridge decision itself stands.
 
 ### On the "sales platform" the migration drew from
 

@@ -4,7 +4,7 @@ The Runtime currently runs against an in-memory mock. Real playout needs a
 small local bridge because browsers can't open raw TCP/UDP. See
 `docs/adrs/0007-electron-to-browser-migration.md`.
 
-## [ ] C-001 — Local CasparCG bridge + real transport ⟨priority: high⟩
+## [~] C-001 — Local CasparCG bridge + real transport ⟨priority: high⟩
 
 **What:** A tiny Node tool (`tools/caspar-bridge`) that exposes a WebSocket and
 relays AMCP over TCP + OSC over UDP to CasparCG; plus a browser
