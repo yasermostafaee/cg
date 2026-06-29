@@ -8,6 +8,19 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Auto-size text + sizing=auto guard ([D-060](./prd/designer.md) +
+  [D-046](./prd/designer.md)) — merged & archived (2026-06-29, design #218 + impl
+  #223). A `text` element with `fitMode: 'autosize'` now hugs its content in BOTH
+  dimensions via CSS intrinsic sizing (`max-content` + `white-space: pre`; `\n`
+  honored, no auto-wrap; min box; RTL pins the right edge) — synchronous +
+  CEF/`file://`-safe, identical in preview / `.vcg` / single-file HTML. The selection
+  gizmo traces the measured rendered box with inert resize handles; vertical-align is
+  disabled in Auto (horizontal kept). D-046 guard: switching to Auto with size
+  keyframes warns+confirms then deletes them as one undo; Auto→Fixed commits the
+  measured size once. Living specs: `designer-text-autosize` (net-new),
+  `designer-shapes` (gizmo MODIFIED). Archive:
+  `2026-06-29-consume-fitmode-auto-size-text`. (Squeeze-off / `shrink-to-fit` remain
+  out of scope; starter-template visual repair folds into [D-119](./prd/designer.md).)
 - Guide readout + nudge, split exit, explicit field Update ([D-072](./prd/designer.md) /
   [D-073](./prd/designer.md) / [D-105](./prd/designer.md) / [D-106](./prd/designer.md)) — merged &
   archived (2026-06-29, PRs #160 · #194 · #198). D-072 guide coordinate badge on hover/drag, D-073
@@ -201,16 +214,14 @@ Done.)
 The concrete near-term Designer sequence (survives across sessions; the Runtime
 track is independent — see its own entries):
 
-1. **[D-060](./prd/designer.md) auto-size text** (+ **[D-046](./prd/designer.md)**
-   sizing=auto guard, batched) — design done (branch `design/D-060-auto-size-text`,
-   PR #218); implementation next.
-2. **[B-036](./prd/bugs-designer.md) inspector icon align** (quick) — filed, fix pending.
-3. **[B-035](./prd/bugs-designer.md) fit-on-open** (medium) — filed, investigate the
+1. **[B-036](./prd/bugs-designer.md) inspector icon align** (quick) — filed, fix pending.
+2. **[B-035](./prd/bugs-designer.md) fit-on-open** (medium) — filed, investigate the
    timing/ordering race.
-4. **[B-037](./prd/bugs-designer.md) pen tool** (low, keep-or-remove decision) — filed.
-5. **[D-119](./prd/designer.md) rebuild starter templates** (5 showcases) — filed,
+3. **[B-037](./prd/bugs-designer.md) pen tool** (low, keep-or-remove decision) — filed.
+4. **[D-119](./prd/designer.md) rebuild starter templates** (5 showcases) — filed,
    **BLOCKED until 1–3 are done** (templates should exercise healthy features);
-   supersedes the old "template cleanup" wave-tail note.
+   supersedes the old "template cleanup" wave-tail note. (D-060 auto-size, its other
+   prerequisite, is now done — see Done.)
 
 Plus the existing queued / deprioritized items already in `designer.md`:
 [D-059](./prd/designer.md), [D-061](./prd/designer.md), [D-063](./prd/designer.md),

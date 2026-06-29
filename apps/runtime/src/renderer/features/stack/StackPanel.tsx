@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
 import { useStack } from '../../hooks/useStack.js';
 import { colors } from '../../theme.js';
+import { runCommand } from '../status/commandFeedback.js';
 import { StackRow } from './StackRow.js';
 
 interface Props {
@@ -66,18 +67,21 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
               item={item}
               selected={item.itemId === selected}
               onSelect={select}
-              onTake={(id) => void window.cg.stack.take({ itemId: id })}
+              onTake={(id) => runCommand('Take', window.cg.stack.take({ itemId: id }))}
               onUpdate={(id) => {
                 const item = items.find((i) => i.itemId === id);
                 if (item === undefined) return;
-                void window.cg.stack.update({
-                  itemId: id,
-                  fields: item.fields,
-                  mergeMode: 'merge',
-                });
+                runCommand(
+                  'Update',
+                  window.cg.stack.update({
+                    itemId: id,
+                    fields: item.fields,
+                    mergeMode: 'merge',
+                  }),
+                );
               }}
-              onOut={(id) => void window.cg.stack.out({ itemId: id })}
-              onRemove={(id) => void window.cg.stack.remove({ itemId: id })}
+              onOut={(id) => runCommand('Out', window.cg.stack.out({ itemId: id }))}
+              onRemove={(id) => runCommand('Remove', window.cg.stack.remove({ itemId: id }))}
             />
           ))
         )}

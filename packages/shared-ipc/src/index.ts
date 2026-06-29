@@ -18,6 +18,19 @@ export type {
   PublishPayload,
 } from './publish.js';
 
+export {
+  WsFrameSchema,
+  WsRequestFrameSchema,
+  WsResponseFrameSchema,
+  WsPublishFrameSchema,
+  parseWsFrame,
+  serializeWsFrame,
+  DEFAULT_BRIDGE_HOST,
+  DEFAULT_BRIDGE_PORT,
+  DEFAULT_BRIDGE_WS_URL,
+} from './ws-frame.js';
+export type { WsFrame, WsRequestFrame, WsResponseFrame, WsPublishFrame } from './ws-frame.js';
+
 export * from './channels/common.js';
 export * from './channels/stack.js';
 export * from './channels/connections.js';

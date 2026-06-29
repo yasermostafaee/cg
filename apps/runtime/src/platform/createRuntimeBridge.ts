@@ -1,20 +1,74 @@
-import type { AppInfo, RuntimeBridge } from '../shared/runtime-bridge.js';
+import { DEFAULT_BRIDGE_WS_URL } from '@cg/shared-ipc';
+import type { AppInfo, BridgeLinkStatus, RuntimeBridge } from '../shared/runtime-bridge.js';
 import { MockRuntime } from './MockRuntime.js';
+import { WebSocketRuntime } from './WebSocketRuntime.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
 
+/** Boot probe budget — reachable within this window → use the bridge (C-001). */
+const PROBE_TIMEOUT_MS = 1500;
+
 /**
- * Build the browser `RuntimeBridge` — the in-process replacement for the
- * Electron preload's `window.cg`. Until the CasparCG WebSocket↔TCP bridge
- * lands, it is backed by an in-memory simulation (`MockRuntime`): the
- * operator UI is fully interactive, but no frames reach a real playout
- * server. The renderer is unchanged; only the implementation differs.
+ * Build the browser `RuntimeBridge`, deciding the backend **once** at boot
+ * (C-001 Phase 1).
+ *
+ * Probes the configured bridge WebSocket with a short timeout: reachable →
+ * `WebSocketRuntime` (live, real round-trips to the local bridge); refused or
+ * timed out → the in-memory `MockRuntime` in an explicit, persistent
+ * **offline-mock** mode. The choice is fixed for the session — a live link that
+ * later drops surfaces as `disconnected` (handled in `WebSocketRuntime`), never
+ * a silent fall-back to the mock.
  */
-export function createRuntimeBridge(): RuntimeBridge {
+export async function createRuntimeBridge(): Promise<RuntimeBridge> {
+  const url = resolveBridgeUrl();
+  const ws = new WebSocketRuntime(url);
+  try {
+    await withTimeout(ws.whenReady(), PROBE_TIMEOUT_MS);
+    return ws;
+  } catch {
+    ws.dispose();
+    return createMockBridge();
+  }
+}
+
+function resolveBridgeUrl(): string {
+  const override = (globalThis as { __CG_BRIDGE_URL__?: string }).__CG_BRIDGE_URL__;
+  return typeof override === 'string' && override.length > 0 ? override : DEFAULT_BRIDGE_WS_URL;
+}
+
+function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('bridge probe timed out')), ms);
+    promise.then(
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      },
+    );
+  });
+}
+
+/**
+ * Offline fallback: the existing in-memory simulation, wrapped to satisfy the
+ * `RuntimeBridge` contract. Its link status is a constant `offline-mock` — an
+ * explicit, persistent offline mode the indicator surfaces unmistakably.
+ */
+function createMockBridge(): RuntimeBridge {
   const mock = new MockRuntime();
+  const OFFLINE: BridgeLinkStatus = 'offline-mock';
 
   return {
     getAppInfo: () => Promise.resolve(APP_INFO),
+
+    link: {
+      status: () => OFFLINE,
+      // Constant mode — never changes, so nothing to emit; the unsubscribe is a noop.
+      onStatusChanged: () => () => undefined,
+    },
 
     stack: {
       load: (req) => Promise.resolve(mock.load(req.itemId, req.templateId, req.fields)),
