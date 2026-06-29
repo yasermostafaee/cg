@@ -18,6 +18,7 @@
     "@cg/caspar-client": "workspace:*",
     "@cg/shared-ipc": "workspace:*",
     "@cg/shared-schema": "workspace:*",
+    "@cg/single-file-export": "workspace:*",
     "@cg/starter-templates": "workspace:*",
     "@cg/storage": "workspace:*",
     "@cg/text-shaping": "workspace:*",

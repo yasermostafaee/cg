@@ -1,7 +1,7 @@
 import { SceneSchema, type Element, type Scene } from '@cg/shared-schema';
 import { getStarter } from '@cg/starter-templates';
 import type { AppInfo, DesignerBridge } from '../shared/designer-bridge.js';
-import { cgCss, cgJs, cgJsIife } from './cg-runtime.js';
+import { cgCss, cgJs, cgJsIife, ExporterSingleFile } from '@cg/single-file-export';
 // The app's bundled @font-face rules (Vazirmatn / Exo 2) as a raw CSS string,
 // injected into the preview iframe so built-in fonts render on the canvas — the
 // iframe is srcdoc (same origin), so its `/fonts/…` URLs resolve like the host.
@@ -17,7 +17,6 @@ import { ProjectStore } from './ProjectStore.js';
 import { AssetStore } from './AssetStore.js';
 import { SharedImageStore } from './SharedImageStore.js';
 import { Exporter } from './Exporter.js';
-import { ExporterSingleFile } from './ExporterSingleFile.js';
 import { Preview } from './preview.js';
 import { pickFiles } from './pickFiles.js';
 

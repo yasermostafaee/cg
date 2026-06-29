@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { unpack } from '@cg/vcg-format';
 import type { Scene } from '@cg/shared-schema';
-import { ExporterSingleFile } from '../src/platform/ExporterSingleFile.js';
+import { ExporterSingleFile } from '@cg/single-file-export';
 import type { AssetStore } from '../src/platform/AssetStore.js';
 
 /**

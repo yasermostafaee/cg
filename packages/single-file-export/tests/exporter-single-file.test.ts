@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Scene } from '@cg/shared-schema';
-import { ExporterSingleFile } from '../src/platform/ExporterSingleFile.js';
-import type { AssetStore } from '../src/platform/AssetStore.js';
+import { ExporterSingleFile } from '../src/exporter-single-file.js';
+import type { ImageAssetSource } from '../src/image-export.js';
 
 function makeScene(): Scene {
   return {
@@ -31,7 +31,7 @@ function makeExporter(): ExporterSingleFile {
       'var CG = { createRuntime: function () { return { ready: Promise.resolve() }; }, installCasparGlobals: function () {} };',
     cgCss: 'html,body{background:transparent}',
     fontsCss: "@font-face{font-family:'Vazirmatn';src:url('/fonts/v.woff2') format('woff2')}",
-    assets: { bytes: async () => null } as unknown as AssetStore,
+    assets: { bytes: async () => null } as unknown as ImageAssetSource,
     fetchUrl: async () => new Uint8Array([1, 2, 3, 4]).buffer,
   });
 }

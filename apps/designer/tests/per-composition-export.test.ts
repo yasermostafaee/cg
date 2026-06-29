@@ -3,7 +3,7 @@ import { unpack } from '@cg/vcg-format';
 import type { Composition, Element, Layer, Scene } from '@cg/shared-schema';
 import type { AssetMeta } from '@cg/shared-ipc';
 import { Exporter } from '../src/platform/Exporter.js';
-import { ExporterSingleFile } from '../src/platform/ExporterSingleFile.js';
+import { ExporterSingleFile } from '@cg/single-file-export';
 import type { AssetStore } from '../src/platform/AssetStore.js';
 import { scopeSceneToComposition } from '../src/renderer/state/scene-doc.js';
 import {

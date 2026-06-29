@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Composition, Element, Layer, Scene, Transform } from '@cg/shared-schema';
 import { editSceneOf, scopeSceneToComposition } from '../src/renderer/state/scene-doc.js';
 import { isFullyOffFrame } from '../src/renderer/state/off-frame.js';
-import { collectImageElements } from '../src/platform/image-export.js';
+import { collectImageElements } from '@cg/single-file-export';
 
 /**
  * D-071 Phase A — the EXPORT-ONLY off-frame filter. `scopeSceneToComposition`

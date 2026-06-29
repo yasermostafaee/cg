@@ -4,7 +4,7 @@ import {
   compositeImageSource,
   resolveImageAsset,
   type ImageAssetSource,
-} from '../src/platform/image-export.js';
+} from '@cg/single-file-export';
 
 /**
  * D-040 — the two-source resolver. Each image resolves from its source-indicated
