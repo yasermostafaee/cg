@@ -228,12 +228,14 @@ describe('createRuntime — sequence content source + next() dispatch (D-029)', 
     runtime.on('stop.start', () => events.push('stop.start'));
     runtime.on('stop.end', () => events.push('stop.end'));
     await runtime.play({});
-    await run(clock, 1300); // completes at 1400ms of hold time
+    // D-116 — the run now spans entrance(400) + dwellA(500) + trans(400) + dwellB(500) + exit(400)
+    // = 2200ms (the first item enters and the last item exits before completion).
+    await run(clock, 2100);
     expect(events).toEqual([]);
     await run(clock, 300);
     expect(events).toEqual(['stop.start', 'stop.end']);
-    // The LAST item stayed on screen through the exit.
-    expect(visibleItems()).toEqual(['سپس: دو']);
+    // D-116 / D-105 — the LAST item EXITED (content-first) before the background outro fired.
+    expect(visibleItems()).toEqual([]);
     expect(document.body.classList.contains('cg-pending')).toBe(true);
   });
 
@@ -307,10 +309,11 @@ describe('createRuntime — sequence content source + next() dispatch (D-029)', 
     const events: string[] = [];
     runtime.on('stop.end', () => events.push('stop.end'));
     await runtime.play({});
-    await run(clock, 1600); // inside cycle 2 — item 1 again (fresh run)
+    // D-116 — each finite cycle's run is now 2200ms (entrance + dwells + transitions + exit).
+    await run(clock, 2700); // inside cycle 2 — item 1 again (fresh run, just entered + dwelling)
     expect(events).toEqual([]);
     expect(visibleItems()).toEqual(['اکنون: یک']);
-    await run(clock, 1500); // cycle 2's run plays out too
+    await run(clock, 2100); // cycle 2's run plays out too
     expect(events).toEqual(['stop.end']);
   });
 
@@ -368,13 +371,13 @@ describe('createRuntime — sequence content source + next() dispatch (D-029)', 
     const events: string[] = [];
     runtime.on('stop.end', () => events.push('stop.end'));
     await runtime.play({});
-    await run(clock, 300); // mid first dwell
+    await run(clock, 300); // D-116 — mid the first item's entrance
     runtime.pause();
     await run(clock, 30_000, 1000);
     expect(events).toEqual([]);
-    expect(visibleItems()).toEqual(['اکنون: یک']); // frozen
+    expect(visibleItems()).toEqual(['اکنون: یک']); // frozen (item 1)
     runtime.resume();
-    await run(clock, 1300); // remaining 1100ms of the run + margin
+    await run(clock, 2100); // remaining ~1900ms of the 2200ms run + margin
     expect(events).toEqual(['stop.end']);
   });
 

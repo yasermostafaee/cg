@@ -116,7 +116,10 @@ interface NormalizedDriverClock {
   now: () => number;
 }
 
-type Phase = 'idle' | 'dwell' | 'transition';
+// D-116 — `entrance` plays the FIRST item's transitionIn on start (finite only); `exit` plays the
+// LAST item's transitionOut before completion (finite only) so the parent's outro fires AFTER the
+// content has left (D-105 content-first / background-last).
+type Phase = 'idle' | 'dwell' | 'transition' | 'entrance' | 'exit';
 
 export class SequenceDriver {
   private readonly o: SequenceDriverOptions;
@@ -193,6 +196,15 @@ export class SequenceDriver {
       this.running = false;
       return;
     }
+    // D-116 — a FINITE sequence enters its first item with `transitionIn` (not an abrupt cut-in)
+    // before dwelling. Infinite sequences are unchanged; a 'none' edge / zero duration goes straight
+    // to dwell (today's behavior).
+    if (this.o.repeat !== 'infinite' && this.o.transitionIn !== 'none' && this.o.transitionMs > 0) {
+      this.enterPhase('entrance');
+      this.paintBoundary('entrance');
+      this.scheduleIfNeeded();
+      return;
+    }
     this.enterPhase('dwell');
     this.scheduleIfNeeded();
   }
@@ -248,6 +260,7 @@ export class SequenceDriver {
     this.currentHooks?.resume(); // D-083 — continue inner drivers in lockstep
     this.incomingHooks?.resume();
     if (this.phase === 'transition') this.paintTransition();
+    else if (this.phase === 'entrance' || this.phase === 'exit') this.paintBoundary(this.phase);
     this.scheduleIfNeeded();
   }
 
@@ -394,8 +407,17 @@ export class SequenceDriver {
       // Past the last item of this pass — complete (finite, all passes done)
       // or wrap to item 1 for the next pass.
       if (this.o.repeat !== 'infinite' && this.passesStarted >= this.o.repeat) {
-        // The LAST item stays on screen; the run signals its scope and
-        // freezes (completion fires exactly once per run).
+        // D-116 — play the LAST item's `transitionOut` (it exits to the OUT edge), and signal
+        // completion ONLY AFTER that exit finishes — so the parent's content-driven hold ends after
+        // the content has left and its outro fires last (D-105 content-first / background-last). A
+        // 'none' edge / zero duration completes immediately with the last item frozen (today's
+        // behavior). `phase === 'exit'` already in flight ⇒ don't restart it.
+        if (this.o.transitionOut !== 'none' && this.o.transitionMs > 0 && this.phase !== 'exit') {
+          this.enterPhase('exit');
+          this.paintBoundary('exit');
+          this.scheduleIfNeeded();
+          return;
+        }
         this.fireComplete();
         this.running = false;
         this.cancelFrame();
@@ -448,6 +470,48 @@ export class SequenceDriver {
     this.enterPhase('dwell');
   }
 
+  /**
+   * D-116 — the single-item boundary motion spec (first-item entrance / last-item exit): only the
+   * entering OR exiting edge moves, run simultaneously over `transitionMs` (there is no second item
+   * to sequence against, so `timing` is always simultaneous here).
+   */
+  private boundarySpec(kind: 'entrance' | 'exit'): SequenceTransitionSpec {
+    return {
+      inEdge: kind === 'entrance' ? this.o.transitionIn : 'none',
+      outEdge: kind === 'exit' ? this.o.transitionOut : 'none',
+      timing: 'simultaneous',
+      transitionMs: this.o.transitionMs,
+      box: this.box(),
+    };
+  }
+
+  /** D-116 — paint one boundary frame: the first item sliding IN, or the last item sliding OUT. */
+  private paintBoundary(kind: 'entrance' | 'exit'): void {
+    const spec = this.boundarySpec(kind);
+    const frame = sampleTransition(spec, this.phaseElapsedMs());
+    if (this.currentNode !== null) {
+      this.applyPose(this.currentNode, kind === 'entrance' ? frame.in : frame.out);
+    }
+    if (frame.done || transitionTotalMs(spec) <= 0) this.finishBoundary(kind);
+  }
+
+  private finishBoundary(kind: 'entrance' | 'exit'): void {
+    if (kind === 'entrance') {
+      // The first item has settled at rest — start the dwell.
+      if (this.currentNode !== null) {
+        this.currentNode.style.transform = '';
+        this.currentNode.style.visibility = '';
+      }
+      this.enterPhase('dwell');
+      return;
+    }
+    // exit — the last item has left the box; NOW signal completion and freeze (the parent's outro
+    // follows, so content exits before the background — D-105).
+    this.fireComplete();
+    this.running = false;
+    this.cancelFrame();
+  }
+
   private applyPose(node: HTMLElement, pose: MotionPose): void {
     node.style.transform =
       pose.offset.x === 0 && pose.offset.y === 0
@@ -459,7 +523,13 @@ export class SequenceDriver {
   /** rAF runs only while something is time-driven: a transition, or an auto dwell. */
   private scheduleIfNeeded(): void {
     if (!this.running || this.paused) return;
-    if (this.phase === 'transition' || (this.phase === 'dwell' && this.o.advance === 'auto')) {
+    // D-116 — the entrance/exit boundary phases are time-driven like a transition.
+    if (
+      this.phase === 'transition' ||
+      this.phase === 'entrance' ||
+      this.phase === 'exit' ||
+      (this.phase === 'dwell' && this.o.advance === 'auto')
+    ) {
       this.scheduleFrame();
     }
   }
@@ -467,6 +537,8 @@ export class SequenceDriver {
   private step(): void {
     if (this.phase === 'transition') {
       this.paintTransition();
+    } else if (this.phase === 'entrance' || this.phase === 'exit') {
+      this.paintBoundary(this.phase);
     } else if (this.phase === 'dwell' && this.o.advance === 'auto') {
       if (this.phaseElapsedMs() >= this.currentDwellMs()) this.advance();
     }
