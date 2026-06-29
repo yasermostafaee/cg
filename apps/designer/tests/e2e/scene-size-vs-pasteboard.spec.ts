@@ -42,7 +42,7 @@ test.describe('Scene size vs pasteboard extent — invariants (B-0xx)', () => {
     return app.inspector.getByRole('spinbutton', { name: 'Composition width' }).inputValue();
   }
 
-  test('drag far off-frame grows the pasteboard but NOT the frame page or scene.resolution', async ({
+  test('drag far off-frame changes NEITHER the fixed pasteboard extent NOR the frame page / scene.resolution (B-027)', async ({
     app,
   }) => {
     await app.newProject('FramePinned'); // default 1920×1080
@@ -52,13 +52,14 @@ test.describe('Scene size vs pasteboard extent — invariants (B-0xx)', () => {
     await expect.poll(() => frameW(app)).toBe(1920);
     await expect.poll(() => frameH(app)).toBe(1080);
     const baseExtent = await extentW(app);
+    expect(baseExtent).toBe(1920 * 7); // fixed 7× extent
 
-    // Park the shape FAR off the right + bottom (past the 2× boundary).
+    // Park the shape FAR off the right + bottom.
     await setXY(app, 5000, 4000);
 
-    // The dark pasteboard (iframe extent) grows to contain it…
-    await expect.poll(() => extentW(app)).toBeGreaterThan(baseExtent + 100);
-    // …but the checkered FRAME page stays resolution-sized (the invariant under test)…
+    // B-027 — the dark pasteboard extent is FIXED: it does NOT grow to contain the shape…
+    expect(await extentW(app)).toBe(baseExtent);
+    // …the checkered FRAME page stays resolution-sized…
     expect(await frameW(app)).toBe(1920);
     expect(await frameH(app)).toBe(1080);
     // …and scene.resolution is untouched (the inspector W still reads 1920).
