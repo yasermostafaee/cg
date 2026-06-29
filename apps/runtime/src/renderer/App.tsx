@@ -6,6 +6,7 @@ import { LibraryPanel } from './features/library/LibraryPanel.js';
 import { StackPanel } from './features/stack/StackPanel.js';
 import { Inspector } from './features/inspector/Inspector.js';
 import { LockOverlay } from './features/lock/LockOverlay.js';
+import { CommandErrorToast } from './features/status/CommandErrorToast.js';
 import { StatusBar } from './features/status/StatusBar.js';
 import { useConnections } from './hooks/useConnections.js';
 import { useLock } from './hooks/useLock.js';
@@ -78,6 +79,7 @@ export function App(): JSX.Element {
         <Inspector item={selected} />
       </div>
       <StatusBar onOpenAudit={() => setAuditOpen(true)} />
+      <CommandErrorToast />
       <AuditPanel open={auditOpen} onClose={() => setAuditOpen(false)} />
       <LockOverlay
         engaged={lock.engaged}
