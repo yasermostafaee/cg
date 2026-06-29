@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit --tsBuildInfoFile typecheck.tsbuildinfo",
     "test": "vitest run",
     "lint": "eslint .",
-    "clean": "rimraf dist .vite coverage *.tsbuildinfo"
+    "clean": "rimraf --glob dist .vite coverage *.tsbuildinfo"
   },
   "dependencies": {
     "@cg/caspar-client": "workspace:*",
