@@ -4,8 +4,10 @@ import { Preview } from '../src/platform/preview.js';
 import {
   PASTEBOARD_MARGIN_X,
   PASTEBOARD_MARGIN_Y,
+  clampDeltaToPasteboard,
   fitZoom,
   pasteboardLayout,
+  pasteboardSceneBounds,
   screenToScene,
   zoomAnchorScroll,
 } from '../src/renderer/features/canvas/geometry.js';
@@ -59,10 +61,10 @@ describe('pasteboard authoring document', () => {
     // live on the no-reload scene-replace path); the baked resolution is the fallback.
     expect(html).toContain('width: var(--cg-frame-w, 1920px) !important');
     expect(html).toContain('height: var(--cg-frame-h, 1080px) !important');
-    // B-027 — the frame inset is the CONSTANT fixed-pasteboard margin (3×1920 / 2×1080 =
-    // 5760 / 2160), baked as the CSS-var fallback so the first paint is correct.
-    expect(html).toContain('left: var(--cg-frame-x, 5760px) !important');
-    expect(html).toContain('top: var(--cg-frame-y, 2160px) !important');
+    // B-027 — the frame inset is the CONSTANT fixed-pasteboard margin (1×1920 / 1×1080 =
+    // 1920 / 1080), baked as the CSS-var fallback so the first paint is correct.
+    expect(html).toContain('left: var(--cg-frame-x, 1920px) !important');
+    expect(html).toContain('top: var(--cg-frame-y, 1080px) !important');
     expect(html).toContain('applyFrameSize({ width: 1920, height: 1080 })');
     expect(html).toContain('html, body { background: #161927 !important; }');
     expect(html).toContain('background-color: #3d4253');
@@ -81,23 +83,23 @@ describe('pasteboard authoring document', () => {
 });
 
 describe('B-027 — pasteboardLayout is a FIXED extent (pure function of the resolution)', () => {
-  it('total = 7× width × 5× height; frame inset = 3× width / 2× height', () => {
-    // margins: 3× the frame width left+right, 2× the frame height top+bottom.
+  it('total = 3× width × 3× height; frame inset = 1× width / 1× height', () => {
+    // margins: a one-frame margin on every side (1× width left+right, 1× height top+bottom).
     expect(pasteboardLayout({ width: 1920, height: 1080 })).toEqual({
-      width: 1920 * 7,
-      height: 1080 * 5,
-      frame: { x: 1920 * 3, y: 1080 * 2 },
+      width: 1920 * 3,
+      height: 1080 * 3,
+      frame: { x: 1920, y: 1080 },
     });
     expect(pasteboardLayout({ width: 1280, height: 720 })).toEqual({
-      width: 1280 * 7,
-      height: 720 * 5,
-      frame: { x: 1280 * 3, y: 720 * 2 },
+      width: 1280 * 3,
+      height: 720 * 3,
+      frame: { x: 1280, y: 720 },
     });
   });
 
-  it('uses the documented margin constants (3 / 2)', () => {
-    expect(PASTEBOARD_MARGIN_X).toBe(3);
-    expect(PASTEBOARD_MARGIN_Y).toBe(2);
+  it('uses the documented margin constants (1 / 1)', () => {
+    expect(PASTEBOARD_MARGIN_X).toBe(1);
+    expect(PASTEBOARD_MARGIN_Y).toBe(1);
     const r = { width: 1920, height: 1080 };
     const l = pasteboardLayout(r);
     expect(l.frame.x).toBe(r.width * PASTEBOARD_MARGIN_X);
@@ -112,6 +114,51 @@ describe('B-027 — pasteboardLayout is a FIXED extent (pure function of the res
     const a = pasteboardLayout({ width: 1920, height: 1080 });
     const b = pasteboardLayout({ width: 1920, height: 1080 });
     expect(a).toEqual(b);
+  });
+
+  it('pasteboardSceneBounds spans [−margin, frame + margin] in scene coords', () => {
+    // scene (0,0) = frame top-left; the 1× margin extends to −W left / 2W right (= W frame
+    // + W right margin), symmetrically on Y.
+    expect(pasteboardSceneBounds({ width: 1920, height: 1080 })).toEqual({
+      minX: -1920,
+      minY: -1080,
+      maxX: 1920 * 2,
+      maxY: 1080 * 2,
+    });
+  });
+});
+
+describe('B-027 — clampDeltaToPasteboard keeps a box inside the pasteboard (no dead zone)', () => {
+  // A 1920×1080 frame → bounds x ∈ [−1920, 3840], y ∈ [−1080, 2160].
+  const { minX, maxX } = pasteboardSceneBounds({ width: 1920, height: 1080 });
+
+  it('passes a delta through untouched while the whole box stays inside', () => {
+    // box [0, 100] moved by +200 → [200, 300] ⊆ [−1920, 3840]; unclamped.
+    expect(clampDeltaToPasteboard(200, 0, 100, minX, maxX)).toBe(200);
+  });
+
+  it('clamps so the box edge stops AT the bound, never crossing (right + left)', () => {
+    // box [3700, 3800], want +500 → would be [4200, 4300] past maxX 3840; allowed delta
+    // is maxX − boxMax = 3840 − 3800 = 40, so the right edge touches the bound.
+    expect(clampDeltaToPasteboard(500, 3700, 3800, minX, maxX)).toBe(40);
+    // box [−1800, −1700] wanting −500 → past minX −1920; allowed is minX − boxMin = −120.
+    expect(clampDeltaToPasteboard(-500, -1800, -1700, minX, maxX)).toBe(-120);
+  });
+
+  it('pre-existing-outside: never pushes further out, lets it move back in', () => {
+    // box already LEFT-outside: [−2200, −2100] (boxMin < minX). A further-left delta is
+    // refused (clamped to 0 — don't push out), but an inward (+) delta is allowed.
+    expect(clampDeltaToPasteboard(-300, -2200, -2100, minX, maxX)).toBe(0);
+    expect(clampDeltaToPasteboard(300, -2200, -2100, minX, maxX)).toBe(300);
+  });
+
+  it('oversized on an axis: centers the box (it cannot fit), ignoring the requested delta', () => {
+    // box wider than the pasteboard span (3840 − (−1920) = 5760): width 6000, box [0, 6000].
+    // Centered: center delta = (minX+maxX)/2 − (boxMin+boxMax)/2 = 960 − 3000 = −2040.
+    const d = clampDeltaToPasteboard(999, 0, 6000, minX, maxX);
+    expect(d).toBe((minX + maxX) / 2 - (0 + 6000) / 2);
+    // After applying, the box center sits at the pasteboard center.
+    expect((0 + d + (6000 + d)) / 2).toBe((minX + maxX) / 2);
   });
 });
 

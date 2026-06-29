@@ -19,9 +19,13 @@ test.describe('Scene size vs pasteboard extent — invariants (B-0xx)', () => {
       .frameLocator('iframe[title="cgpreview"]')
       .locator('.cg-stage')
       .evaluate((el) => (el as HTMLElement).offsetHeight);
-  // The dark pasteboard EXTENT = the iframe element's own size (CSS px = scene-px extent).
+  // The dark pasteboard EXTENT = the iframe element's INLINE width (scene-px extent). Read
+  // the inline style, NOT offsetWidth — offsetWidth resolves `width:100%` to the scaled
+  // stage size mid-settle under load, which flakes.
   const extentW = (app: DesignerApp): Promise<number> =>
-    app.page.locator('iframe[title="cgpreview"]').evaluate((el) => (el as HTMLElement).offsetWidth);
+    app.page
+      .locator('iframe[title="cgpreview"]')
+      .evaluate((el) => parseFloat((el as HTMLElement).style.width));
 
   async function setXY(app: DesignerApp, x?: number, y?: number): Promise<void> {
     if (x !== undefined) {
@@ -51,8 +55,10 @@ test.describe('Scene size vs pasteboard extent — invariants (B-0xx)', () => {
     // The checkered frame page is the scene resolution.
     await expect.poll(() => frameW(app)).toBe(1920);
     await expect.poll(() => frameH(app)).toBe(1080);
+    // The iframe element's own width = the fixed 3× extent (poll: under load the iframe
+    // element resizes a tick after the in-iframe .cg-stage settles to the new resolution).
+    await expect.poll(() => extentW(app)).toBe(1920 * 3);
     const baseExtent = await extentW(app);
-    expect(baseExtent).toBe(1920 * 7); // fixed 7× extent
 
     // Park the shape FAR off the right + bottom.
     await setXY(app, 5000, 4000);

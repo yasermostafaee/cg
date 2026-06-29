@@ -60,11 +60,11 @@ interface Props {
   showToolbar?: boolean;
 }
 
-// B-027 — the fixed pasteboard is 7× the frame width / 5× the height, so the min zoom is
-// lowered enough that a full zoom-out can show the ENTIRE pasteboard (so a shape parked
-// anywhere within it is reachable). At 0.05, a 1920-wide frame's 7× extent (13440px) is
-// ~672px on screen — within any normal canvas viewport. (Was 0.1, sized for the old 2×.)
-const ZOOM_MIN = 0.05;
+// B-027 — the fixed pasteboard is 3× the frame width / 3× the height (a one-frame margin
+// per side). At ZOOM_MIN 0.1 a 1920-wide frame's 3× extent (5760px) is ~576px on screen —
+// comfortably showing the whole pasteboard in a normal viewport, without making it a tiny
+// dot. (The interim 0.05, sized for the larger 7×5 extent, is no longer needed.)
+const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 4;
 const ZOOM_STEP = 1.1; // multiplicative step per click / wheel notch
 const ZOOM_DEFAULT = 0.5;
@@ -727,11 +727,11 @@ export function CanvasArea({
               <div
                 ref={stageRef}
                 className={s.stage}
+                data-testid="canvas-stage"
                 style={{
-                  // D-071 — the stage is the content-aware pasteboard: the 2× extent,
-                  // GROWN to contain any off-frame content (past the 2× boundary). The
-                  // frame is inset by `frameOffset`, so off-frame content shows on every
-                  // side; an origin shift is compensated by the scroll-comp effect.
+                  // B-027 — the stage is the FIXED pasteboard (3× × 3× the frame, a constant
+                  // function of resolution; no grow, no origin shift). The frame is inset by
+                  // the constant `frameOffset`, so off-frame content shows on every side.
                   width: extent.width * zoom,
                   height: extent.height * zoom,
                 }}

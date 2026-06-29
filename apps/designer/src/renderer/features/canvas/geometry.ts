@@ -280,16 +280,18 @@ export function screenToScene(
  * is reachable by zooming out / panning; the extent never grows, so the frame can never
  * drift (the grow-to-fit origin shift was the source of the during-drag jitter).
  */
-export const PASTEBOARD_MARGIN_X = 3;
-export const PASTEBOARD_MARGIN_Y = 2;
+export const PASTEBOARD_MARGIN_X = 1;
+export const PASTEBOARD_MARGIN_Y = 1;
 
 /**
  * The canvas STAGE layout (scene px): the FIXED pasteboard. Total extent =
- * frame × (1 + 2·margin) per axis — width = 7× the frame width, height = 5× the frame
- * height. `frame.{x,y}` is the frame's CONSTANT offset (scene px) into the stage —
- * scene (0,0) sits there — `PASTEBOARD_MARGIN_X·width` / `PASTEBOARD_MARGIN_Y·height`.
- * Independent of element positions, so dragging a shape off-frame moves nothing but the
- * shape (no extent growth, no origin shift).
+ * frame × (1 + 2·margin) per axis — width = 3× the frame width, height = 3× the frame
+ * height (a one-frame margin on every side). `frame.{x,y}` is the frame's CONSTANT offset
+ * (scene px) into the stage — scene (0,0) sits there — `PASTEBOARD_MARGIN_X·width` /
+ * `PASTEBOARD_MARGIN_Y·height`. Independent of element positions, so dragging a shape
+ * off-frame moves nothing but the shape (no extent growth, no origin shift). Element
+ * drags/nudges are CLAMPED to this extent ({@link clampDeltaToPasteboard}) so no shape can
+ * cross into the clipped region — the pasteboard IS the whole workable area.
  */
 export function pasteboardLayout(resolution: { width: number; height: number }): {
   width: number;
@@ -303,6 +305,50 @@ export function pasteboardLayout(resolution: { width: number; height: number }):
     height: Math.round(resolution.height * (1 + 2 * PASTEBOARD_MARGIN_Y)),
     frame: { x: offX, y: offY },
   };
+}
+
+/** The pasteboard's bounds in SCENE coordinates (scene 0,0 = frame top-left). The frame
+ *  is the constant inset, so the pasteboard spans `[−margin, frame + margin]` per axis. */
+export function pasteboardSceneBounds(resolution: { width: number; height: number }): {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+} {
+  const { width, height, frame } = pasteboardLayout(resolution);
+  return { minX: -frame.x, minY: -frame.y, maxX: width - frame.x, maxY: height - frame.y };
+}
+
+/**
+ * B-027 — clamp a move so an element/group's full bounding box `[boxMin, boxMax]` (one
+ * axis) stays inside the pasteboard `[padMin, padMax]`. Returns the clamped DELTA (works
+ * for a single element — box = its own AABB — and a multi-select group — box = the
+ * combined AABB, so the group stops as soon as any member hits an edge). Edge cases:
+ *
+ *  - **Oversized** (box bigger than the pasteboard on this axis): the full box cannot fit,
+ *    so CENTER it on this axis (it stops following the pointer here) rather than fighting —
+ *    its center sits at the pasteboard center, maximally visible.
+ *  - **Pre-existing outside** (a shape loaded/imported beyond the bounds): the clamp only
+ *    TIGHTENS — it never pushes the box further out than where it started (`delta = 0`),
+ *    and lets it move inward freely; once inside, normal bounds apply. So an outside shape
+ *    is recoverable (draggable back in), never trapped or violently snapped.
+ */
+export function clampDeltaToPasteboard(
+  delta: number,
+  boxMin: number,
+  boxMax: number,
+  padMin: number,
+  padMax: number,
+): number {
+  if (boxMax - boxMin >= padMax - padMin) {
+    // Oversized: align the box center with the pasteboard center.
+    return (padMin + padMax) / 2 - (boxMin + boxMax) / 2;
+  }
+  // Keep `[boxMin+delta, boxMax+delta]` inside `[padMin, padMax]`, but relax each bound
+  // toward 0 (the start) so a box that begins outside isn't yanked / pushed further out.
+  const lo = Math.min(padMin - boxMin, 0);
+  const hi = Math.max(padMax - boxMax, 0);
+  return Math.max(lo, Math.min(hi, delta));
 }
 
 /**
