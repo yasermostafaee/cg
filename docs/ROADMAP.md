@@ -8,6 +8,14 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Guide readout + nudge, split exit, explicit field Update ([D-072](./prd/designer.md) /
+  [D-073](./prd/designer.md) / [D-105](./prd/designer.md) / [D-106](./prd/designer.md)) — merged &
+  archived (2026-06-29, PRs #160 · #194 · #198). D-072 guide coordinate badge on hover/drag, D-073
+  arrow-key nudge (Shift = 10px, keyframe-aware, one undo step per key-press run), D-105 split exit
+  (animated "Out" = content-first/background-last vs a quick "Stop"/"Clear" hard removal), D-106
+  preview field form with an explicit global + per-INPUT Update and a pending/unapplied indicator
+  (+ optional textarea). Archives: `2026-06-29-guide-coordinate-readout`, `2026-06-29-arrow-key-nudge`,
+  `2026-06-29-preview-split-exit`, `2026-06-29-preview-field-update`.
 - Selective content-driven hold ([D-107](./prd/designer.md)) — merged & archived (2026-06-28,
   PR #201). An optional `drivesHold` (absent ⇒ participates; non-breaking, no version bump) on
   ticker / sequence / clock lets the designer pick WHICH content closes the graphic: `ownContentWait`
@@ -27,7 +35,7 @@ the order changes. Strategic / non-engineering notes live in
   the play cascade. Content-driven nested comps stay independent (skipped); repeater rows / sequence
   comp-items unaffected; the root `contentHold` override is preserved. NON-BREAKING (no schema change).
   Living spec: `designer-playout-lifecycle`. Archive: `2026-06-27-nested-content-lifecycle`. Follow-up
-  [B-030](./prd/bugs.md) filed (the timed-auto-out nested-holder strand edge).
+  [B-030](./prd/bugs-designer.md) filed (the timed-auto-out nested-holder strand edge).
 - Sequence typed items — Phase 1 ([D-083](./prd/designer.md)) — merged & archived (2026-06-27, PRs
   #182 / #183 / #185 / #186 / #188). A sequence item is now TEXT or a COMPOSITION reference
   (clock+text / logo+text layouts cycled under the same transitions / dwell; live content runs inside,
@@ -35,7 +43,7 @@ the order changes. Strategic / non-engineering notes live in
   follow-up made TEXT items bind EXPLICITLY (operator opt-in) instead of auto-exposing every item as a
   field. Living spec: `designer-sequence-element`. Archive: `2026-06-27-sequence-typed-items`. Phase 2
   (per-item field injection into composition items) remains later.
-- Start-trimmed content no longer dropped from play/export ([B-029](./prd/bugs.md)) — focused fix,
+- Start-trimmed content no longer dropped from play/export ([B-029](./prd/bugs-designer.md)) — focused fix,
   merged (2026-06-27, PR #187, 9737ab9). A clock / ticker / sequence trimmed at its start
   (`lifespan.in > 0`) was hidden for the whole playout because the lifespan gate ran only in the
   scrubber's `tick`, not the PlayoutController's per-frame `applyFrame`; the root controller now
@@ -59,7 +67,7 @@ the order changes. Strategic / non-engineering notes live in
   earlier in Group A.)
 - Group A quick-wins ([D-081](./prd/designer.md), [D-082](./prd/designer.md),
   [D-097](./prd/designer.md), [D-098](./prd/designer.md), [D-099](./prd/designer.md),
-  [D-100](./prd/designer.md), [D-101](./prd/designer.md) + [B-024](./prd/bugs.md)) — merged
+  [D-100](./prd/designer.md), [D-101](./prd/designer.md) + [B-024](./prd/bugs-designer.md)) — merged
   (2026-06-26, PR #175; filed in #174). D-081 no-trailing ticker separator, D-082 English
   ticker/sequence defaults (+ LTR direction & white default text), D-097 distinct shared-image
   timeline icon/color, D-098 bound-layer key icon, D-099 minimum-window-size gate, D-100 menubar
@@ -86,11 +94,11 @@ the order changes. Strategic / non-engineering notes live in
   `2026-06-25-replace-glyph-icons`. (Standalone fixes rode the same branch: canvas
   checkerboard contrast, Compositions panel border, a vcg-format lint fix.)
 - Pasteboard editing epic ([D-071](./prd/designer.md) Phase A off-frame export
-  filter + Phase B editor + [B-026](./prd/bugs.md) grow-to-fit extent) — merged &
+  filter + Phase B editor + [B-026](./prd/bugs-designer.md) grow-to-fit extent) — merged &
   archived (2026-06-21 / 2026-06-22, PRs #153 / #154 · #155 / #156 · #157). An
   off-frame staging area outside the frame, excluded from export / `.vcg` /
   single-file HTML, with the pasteboard extent growing to contain content parked
-  far off-frame. [B-027](./prd/bugs.md) (during-drag drift) filed **DEFERRED**.
+  far off-frame. [B-027](./prd/bugs-designer.md) (during-drag drift) filed **DEFERRED**.
   Archives: `2026-06-21-off-frame-export-filter`, `2026-06-22-pasteboard-editing`,
   `2026-06-22-pasteboard-extent-fits-content`. Living spec: `designer-canvas-viewport`.
 - Per-composition export + top-chrome relocation ([D-086](./prd/designer.md),
@@ -98,7 +106,7 @@ the order changes. Strategic / non-engineering notes live in
   #144 / #145 / #147). Phase A scopes `.vcg` / HTML export to the open
   composition plus its nested closure; Phase B relocated the global chrome (slim
   top bar, centered project name adjacent to Save) and added the per-composition
-  Preview / Export / HTML bar. Also fixed [B-023](./prd/bugs.md)
+  Preview / Export / HTML bar. Also fixed [B-023](./prd/bugs-designer.md)
   (repeater-mediated nesting cycle slipping past the author-time guard). Archive:
   `2026-06-21-per-composition-export-and-chrome`. Living specs:
   `designer-composition-export` (net-new), `designer-shell`, `designer-repeater-element`.
@@ -110,10 +118,10 @@ the order changes. Strategic / non-engineering notes live in
   `2026-06-21-preview-blank-until-play`.
 - Global button restyle ([D-094](./prd/designer.md)) — merged & archived
   (2026-06-20, PRs #142 / #143). No default border + refined accent colors at the
-  shared button recipe; the [B-025](./prd/bugs.md) gizmo-frame render fix
+  shared button recipe; the [B-025](./prd/bugs-designer.md) gizmo-frame render fix
   (selection box renders again) rode alongside (#146). Archive:
   `2026-06-20-restyle-buttons`.
-- Selection-overlay scale + rotate fix ([B-022](./prd/bugs.md)) — merged &
+- Selection-overlay scale + rotate fix ([B-022](./prd/bugs-designer.md)) — merged &
   archived (2026-06-20, PRs #141 / #143). The selection overlay now tracks the
   shape under scale + rotation. Archive: `2026-06-20-fix-selection-overlay-scale-rotate`.
 - Desktop-style Save epic ([D-088](./prd/designer.md) + folded [D-089](./prd/designer.md)
@@ -123,8 +131,8 @@ the order changes. Strategic / non-engineering notes live in
   tab-title / `beforeunload` guards, Home-closes-project, handle-keyed Recent + tiered
   OPFS/download fallback. Absorbs D-002 / D-003. Living spec: `designer-project-persistence`.
 - Asset-import polish ([D-067](./prd/designer.md) loading indicator + the headerless D-069/D-070
-  multi-select + prepend sub-labels + the [B-019](./prd/bugs.md) / [B-020](./prd/bugs.md) /
-  [B-021](./prd/bugs.md) fixes, and [D-068](./prd/designer.md) Shared Library search + grid/list
+  multi-select + prepend sub-labels + the [B-019](./prd/bugs-designer.md) / [B-020](./prd/bugs-designer.md) /
+  [B-021](./prd/bugs-designer.md) fixes, and [D-068](./prd/designer.md) Shared Library search + grid/list
   view toggle) — merged & archived (2026-06-20, PRs #138 / #137 / #134 / #130). Living specs:
   `designer-project-assets` (net-new), `designer-shared-image-library`.
 - Shared image library epic ([D-040](./prd/designer.md) + [D-062](./prd/designer.md)) — archived
@@ -139,12 +147,12 @@ the order changes. Strategic / non-engineering notes live in
 - Owner UX-feature wave ([D-042](./prd/designer.md) → [D-048](./prd/designer.md) + [D-052](./prd/designer.md)) —
   complete. The final batch ([D-043](./prd/designer.md) box-shadow spread+inset, [D-044](./prd/designer.md)
   font-weight, [D-045](./prd/designer.md) unified alignment + vertical align, [D-047](./prd/designer.md)
-  layer-reorder drag, [D-048](./prd/designer.md) inspector visual polish, + the [B-018](./prd/bugs.md)
+  layer-reorder drag, [D-048](./prd/designer.md) inspector visual polish, + the [B-018](./prd/bugs-designer.md)
   spread static-write fix) merged & archived (2026-06-17); D-042 and D-052 landed earlier. Only
   [D-046](./prd/designer.md) (sizing=auto guard) is NOT done — PARKED, blocked on the new D-060
   (auto-size rendering); see Next.
 - Multi-select chain ([D-041](./prd/designer.md) + follow-ups D-049 / D-050 /
-  D-051 / D-053 / D-054 + [B-014](./prd/bugs.md)) — merged & archived
+  D-051 / D-053 / D-054 + [B-014](./prd/bugs-designer.md)) — merged & archived
   (2026-06-14); multi-select editing now reaches single-selection parity "fanned
   out": keyframe-aware group move + field edits (reusing `commitAnimatable`),
   aggregate keyframe diamonds (empty / at-frame / partial), realtime single-undo
@@ -164,26 +172,17 @@ the order changes. Strategic / non-engineering notes live in
 ## Next — agreed order
 
 The save + import-polish, button-restyle, per-composition export + chrome,
-stop-clears, preview-blank, pasteboard, icon-pack, and timeline/layers work is
-archived — see Done (recent). The agreed upcoming order (one line each; **full PRD
-entries authored per-item when started** — most of these IDs are not yet filed):
+stop-clears, preview-blank, pasteboard, icon-pack, timeline/layers, and the
+guide-readout / arrow-nudge / split-exit / explicit-field-Update work
+([D-072](./prd/designer.md) / [D-073](./prd/designer.md) / [D-105](./prd/designer.md) /
+[D-106](./prd/designer.md)) is archived — see Done (recent). The agreed upcoming order
+(one line each; **full PRD entries authored per-item when started** — most of these IDs
+are not yet filed):
 
-1. [D-072](./prd/designer.md) / [D-073](./prd/designer.md) — guide coordinate
-   readout + arrow-key nudge. **IN REVIEW:** both implemented + tested on
-   `feat/D-072-073-guide-readout-nudge` (changes
-   `openspec/changes/guide-coordinate-readout/` +
-   `openspec/changes/arrow-key-nudge/`); only the batched green gate + E2E and the
-   merge/archive remain.
-2. [D-090](./prd/designer.md) / D-091 — chrome (additional polish beyond D-086
-   Phase B; confirm scope vs. what D-086 delivered when filing)
-3. [D-105](./prd/designer.md) — split exit: animated "Out" (coordinated content-first /
-   background-last) vs a quick "Stop"/"Clear" (hard content removal, then the background close).
-   **MEDIUM** — matches the broadcast CG STOP vs CG REMOVE standard; reuses the existing outro +
-   content out-transitions and `whenComplete` sequencing.
-4. [D-106](./prd/designer.md) — preview field form: explicit Update (a global "Update all" + per-field,
-   with a pending/unapplied indicator) and optional multi-line textarea inputs. **MEDIUM** — matches
-   CasparCG CG UPDATE (commit-on-cue, not realtime-as-you-type); reuses the D-088/D-089 dirty-indicator
-   pattern.
+1. [D-090](./prd/designer.md) / D-091 — chrome (additional polish beyond D-086
+   Phase B; confirm scope vs. what D-086 delivered when filing). NOTE: neither ID is
+   filed in `docs/prd/designer.md` yet — author the PRD entries (or fold into D-086's
+   follow-ups) before starting.
 
 > **Ordering note:** the icon-pack (D-092) is done — the shared `Icon` set now
 > exists, so new control-bearing items reuse it.

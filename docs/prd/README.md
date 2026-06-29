@@ -7,13 +7,15 @@ detailed specs live in `openspec/`.
 
 ```
 docs/prd/
-├── README.md     ← this file (format + processing contract)
-├── designer.md   ← Designer (visual editor) features
-├── runtime.md    ← Runtime (playout controller) features
-├── caspar.md     ← CasparCG control / the local bridge
-├── platform.md   ← cross-cutting / infra / tooling / tests
-├── bugs.md       ← bug reports (always include a repro)
-└── roadmap.md    ← strategic / non-engineering notes (NOT D-/C-/P- items)
+├── README.md         ← this file (format + processing contract)
+├── designer.md       ← Designer (visual editor) features
+├── runtime.md        ← Runtime (playout controller) features
+├── caspar.md         ← CasparCG control / the local bridge
+├── platform.md       ← cross-cutting / infra / tooling / tests
+├── bugs-designer.md  ← Designer bug reports (always include a repro)
+├── bugs-runtime.md   ← Runtime / CasparCG bug reports
+├── bugs.md           ← cross-cutting / tooling bug reports + the canonical bug format
+└── roadmap.md        ← strategic / non-engineering notes (NOT D-/C-/P- items)
 ```
 
 ## Item format
@@ -36,6 +38,9 @@ Copy this block for each item. Keep it short — Claude expands it into the chan
 
 - **ID** = category prefix + zero-padded number, never reused:
   `D-` designer · `R-` runtime · `C-` caspar · `P-` platform · `B-` bugs.
+  `B-` numbers are **global across all three bug files** (`bugs-designer.md`,
+  `bugs-runtime.md`, `bugs.md`) and are never reused — when filing a new bug, pick the
+  next unused `B-` number regardless of which file it goes in.
 - **Status checkbox** (in the `##` heading):
   - `[ ]` queued
   - `[~]` in progress / in review (change implemented, not yet archived)
@@ -45,8 +50,10 @@ Copy this block for each item. Keep it short — Claude expands it into the chan
 - **Acceptance** drives the spec: write each line as **WHEN … THEN …** so it
   maps 1:1 to an OpenSpec `#### Scenario`. This is the most important field —
   it's how we both know when the item is done.
-- **Bugs** (`bugs.md`) must include **Repro / Expected / Actual** instead of
-  Acceptance, plus a regression-test note.
+- **Bugs** (`bugs-designer.md` / `bugs-runtime.md` / `bugs.md`) must include
+  **Repro / Expected / Actual** instead of Acceptance, plus a regression-test note.
+  File a bug in the app file it belongs to; cross-cutting / tooling bugs go in
+  `bugs.md`, which also holds the canonical bug format.
 
 ## Processing contract (what Claude does)
 
@@ -85,6 +92,19 @@ for each chosen item:
 - If an item is ambiguous or the Acceptance is missing, ask before coding.
 - Respect the constraints in `CLAUDE.md` (no backend, browser-only, RTL, strict TS).
 - Never delete or renumber existing IDs; mark obsolete items `[!]` with a reason.
+
+## Parallel sessions
+
+The backlog is split by app so a **Designer** session and a **Runtime** session can run
+at the same time without merge conflicts:
+
+- **Designer session** edits `designer.md` + `bugs-designer.md`.
+- **Runtime session** edits `runtime.md` + `caspar.md` + `bugs-runtime.md`.
+- Both may touch shared files — `ROADMAP.md`, `bugs.md` (cross-cutting), and the living
+  specs under `openspec/`. Keep edits there **append-only** where possible, and **rebase
+  on `main`** before merging so the shared files reconcile cleanly.
+
+`B-` numbers are global across the three bug files (see the ID rule) — never reuse one.
 
 ## How to invoke (examples)
 
