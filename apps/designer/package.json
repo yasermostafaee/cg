@@ -16,7 +16,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "lint": "eslint .",
-    "clean": "rimraf dist .vite coverage src/generated playwright-report test-results *.tsbuildinfo"
+    "clean": "rimraf --glob dist .vite coverage src/generated playwright-report test-results *.tsbuildinfo"
   },
   "dependencies": {
     "@cg/lottie-bridge": "workspace:*",

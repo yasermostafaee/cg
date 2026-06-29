@@ -133,7 +133,7 @@ warned "no output files found"; outputs go to repo-root `fixtures/templates/**`
 and its real inputs are `build.mjs` + `*.scene.mjs`, so cache hits never
 restored the fixtures and scene edits didn't bust the cache).
 
-## [ ] B-013 — `clean` scripts fail on Windows (rimraf 6 + unexpanded glob) ⟨priority: low⟩
+## [x] B-013 — `clean` scripts fail on Windows (rimraf 6 + unexpanded glob) ⟨priority: low⟩ — fixed on `fix/B-013-rimraf-glob`
 
 **Repro:**
 
@@ -147,6 +147,16 @@ CI/dev on Linux/macOS is unaffected.
 **Env:** Windows only; all packages with `clean: rimraf dist *.tsbuildinfo`.
 **Notes:** Fix is mechanical: `rimraf --glob dist "*.tsbuildinfo"` in every
 package's clean script. Surfaced while reproducing B-012 from a clean tree.
+**DONE** — added `--glob` to all 16 workspace `clean` scripts that use a glob (the 12
+`packages/*`, `apps/designer`, `apps/runtime`, `tools/amcp-mock`, `tools/soak-runner`);
+the two literal-only clean scripts (root `node_modules`, `tools/template-fixtures`) need
+no flag. **Regression guard / why:** rimraf **6** no longer expands glob patterns
+unless `--glob` is passed — a bare `rimraf *.tsbuildinfo` throws `EINVAL: Illegal
+characters in path` on Windows (cmd doesn't pre-expand the glob), leaving
+`*.tsbuildinfo` behind. Verified: `rimraf "*.tsbuildinfo"` (quoted, so no shell
+expansion) errors, while `rimraf --glob "*.tsbuildinfo"` deletes the files. Keep
+`--glob` on any clean script that lists a glob; this is a focused tooling fix (no
+OpenSpec change).
 
 <!-- Add new open bugs above this line using the format. Example:
 
