@@ -19,3 +19,7 @@ apps/designer/resources/template-runtime
 
 # Generated CasparCG runtime bundles (ESM + IIFE) — by scripts/bundle-runtime.mjs
 apps/designer/src/generated/cg-runtime*.js
+
+# Generated harness output — written to cwd by @cg/caspar-amcp-probe (C-001 Phase 3b)
+caspar-amcp-probe-*.results.json
+caspar-amcp-probe-*.wire.ndjson

@@ -11,7 +11,13 @@ per-bug loop, see [bugs.md](bugs.md).
 
 ---
 
-## [ ] B-038 — LIVE bridge renders nothing: CG ADD references the template by UUID and sends empty fields ⟨priority: high⟩
+## [~] B-038 — LIVE bridge renders nothing: CG ADD references the template by UUID and sends empty fields ⟨priority: high⟩
+
+> **The Runtime is NOT on-air-capable until B-038 lands.** C-001's transport /
+> failover / AMCP-update-verb capability is real and hardware-verified (stays
+> `[x]`), but no actual template renders on CasparCG output yet — that is this
+> separate template-content-delivery + render gap. Design:
+> `openspec/changes/fix-live-template-render/` (design-only; not implemented).
 
 **Repro:**
 
