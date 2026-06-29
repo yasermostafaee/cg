@@ -3026,3 +3026,36 @@ OpenSpec: `## MODIFIED` the D-108 requirement (read-only → writable per-instan
 - WHEN the element is a TICKER THEN its item input is unchanged (single-line)
 
 **Notes:** UI/editor only — NO runtime/schema/render change (rendering is D-117). Lives in the SEQUENCE item editor (the shared `ListItemsEditor`, used by the inspector AND the preview field form). Reuse a shared textarea primitive (add one to the renderer `ui/` controls if none exists). Mind the keybinding: Enter must insert a newline, not trigger commit/submit; keep commit-on-change consistent with the other inspector fields. Spec: `## ADDED` on the sequence capability. Tests: a designer/E2E test that Enter inserts a newline (not commit), the value round-trips with embedded `\n`, it commits via the normal path (one undo), and the preview field form uses the same textarea — incl. an RTL case. The ticker input is untouched.
+
+## [ ] D-119 — Rebuild starter templates (5 professional showcases) ⟨priority: high⟩
+
+**What:** Delete all current starter templates and author 5 new, highly polished Persian-language templates, each showcasing a distinct app capability so a professional designer immediately understands what the tool can do.
+
+The 5 templates:
+
+1. **Logo sting** — entrance animation, a few seconds hold, close + reopen, then loop the cycle.
+2. **Lower-third (ticker style)** — infinite ticker, PLUS a sequence panel cycling: Tehran clock, GMT clock, and "@IRIBNEWS" text.
+3. **Lower-third (sequence style)** — infinite sequence, PLUS the same Tehran / GMT / @IRIBNEWS sequence panel.
+4. **Guest / expert name title** — shows for a few seconds then self-closes.
+5. **Program schedule / time announce** — shows for a few seconds then self-closes.
+
+**Why:** Current templates are early/rough and don't demonstrate the app's real capabilities (child compositions, ticker/sequence, self-closing lifecycle, shared library/assets, rich animation). New showcase templates double as documentation-by-example and as a quality bar.
+**Acceptance:**
+
+- WHEN the app's starter templates are listed THEN only these 5 (no legacy templates) appear
+- WHEN each template is previewed THEN it runs its full lifecycle (entrance → hold → exit, with loops where specified) with polished animation
+- WHEN templates 2 and 3 run THEN the sequence panel cycles Tehran clock / GMT clock / @IRIBNEWS, and the lower-third runs as ticker (t2) / sequence (t3) respectively
+- WHEN templates 4 and 5 run THEN they self-close after their hold without operator action
+- WHEN any template renders Persian text THEN it shapes correctly (RTL, ZWNJ) in preview, exported HTML, and CEF
+
+**Notes — design constraints (locked with owner):**
+
+- Maximum visual beauty and animation quality — these are the showcase / quality bar.
+- NO "new" tags on any template.
+- All text in Persian.
+- Use CHILD COMPOSITIONS where it makes sense (the sequence panels are natural candidates).
+- Use the SHARED LIBRARY and ASSETS where possible.
+- Full-screen / large-background templates are NOT needed for now — just these 5.
+- @IRIBNEWS / any logo: IRIB is a real brand; do NOT reproduce their real logo. Use a clear PLACEHOLDER (simple SVG/text mark) the owner can swap for the real asset later. Note this in the template.
+- **SEQUENCING — dependency:** implement this AFTER **D-060** (auto-size text) and the open Designer bugs **B-035** (fit-on-open), **B-036** (icon align), **B-037** (pen tool) are done — templates should exercise healthy features. **BLOCKED** until those land.
+- **OPEN QUESTIONS to resolve with owner before implementation:** (a) resolution(s) — all 1920×1080, or some vertical 1080×1920? (b) colour palette — specific (e.g. news red/white) or designer's choice? (c) storage location — bundled `@cg/starter-templates` package vs sample projects? (d) real logo asset availability.
