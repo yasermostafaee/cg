@@ -47,6 +47,12 @@ interface BuildCtx {
   scope: FieldScope;
   depth: number;
   visited: ReadonlySet<string>;
+  /**
+   * Width (px) of the ENCLOSING stage — the scene resolution at the root, the
+   * composition resolution inside a nested instance. Used to pin an auto-sized
+   * RTL text box by its RIGHT edge via CSS `right` (D-060 §E).
+   */
+  resolutionWidth: number;
 }
 
 function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
@@ -82,6 +88,7 @@ export function buildScene(scene: Scene, doc: Document = document): BuildSceneRe
     scope: rootScope,
     depth: 0,
     visited: new Set<string>(),
+    resolutionWidth: scene.resolution.width,
   };
 
   for (const layer of scene.layers) {
@@ -128,7 +135,7 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
 function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null {
   switch (element.type) {
     case 'text':
-      return buildText(element, ctx.doc, ctx.scope.textOriginals);
+      return buildText(element, ctx);
     case 'ticker':
       return buildTicker(element, ctx);
     case 'clock':
@@ -212,6 +219,7 @@ function buildComposition(element: CompositionElement, ctx: BuildCtx): HTMLEleme
     scope: childScope,
     depth: ctx.depth + 1,
     visited: new Set([...ctx.visited, element.compositionId]),
+    resolutionWidth: comp.resolution.width,
   };
   for (const layer of comp.layers) {
     inner.appendChild(buildLayer(layer, childCtx));
@@ -226,12 +234,20 @@ function applyBaseStyles(
   opacity: number,
   visible: boolean,
   filter?: Filter,
+  /**
+   * D-060 — when true, skip writing `width`/`height` from `transform.size` so the
+   * caller can size the box from content (auto-size text uses CSS intrinsic
+   * sizing). Position/opacity/transform/origin are written as usual.
+   */
+  skipSize = false,
 ): void {
   el.classList.add('cg-element');
   el.style.left = `${transform.position.x}px`;
   el.style.top = `${transform.position.y}px`;
-  el.style.width = `${transform.size.w}px`;
-  el.style.height = `${transform.size.h}px`;
+  if (!skipSize) {
+    el.style.width = `${transform.size.w}px`;
+    el.style.height = `${transform.size.h}px`;
+  }
   el.style.opacity = String(opacity);
   el.style.transform = composeTransform(transform);
   el.style.transformOrigin = `${transform.anchor.x * 100}% ${transform.anchor.y * 100}%`;
@@ -381,14 +397,15 @@ function composeTransform(t: Transform): string {
   return parts.join(' ');
 }
 
-function buildText(
-  element: TextElement,
-  doc: Document,
-  textOriginals: Map<string, string>,
-): HTMLElement {
+function buildText(element: TextElement, ctx: BuildCtx): HTMLElement {
+  const doc = ctx.doc;
+  const textOriginals = ctx.scope.textOriginals;
+  // D-060 — Auto sizing (`fitMode: 'autosize'`) hugs the content in BOTH dimensions
+  // via CSS intrinsic sizing; `fixed` keeps the `transform.size` box (today's path).
+  const isAuto = element.fitMode === 'autosize';
   const el = doc.createElement('div');
   el.dataset['cgElementId'] = element.id;
-  applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
+  applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter, isAuto);
   // Append a fallback stack for glyphs the authored family lacks. The bundled,
   // shaping-capable Vazirmatn (+ Noto Sans Arabic) come *before* the system UI
   // fonts, so Persian/Arabic text in a Latin-only family (Verdana, Georgia,
@@ -429,20 +446,44 @@ function buildText(
   }
   // D-042 — stroke border + uniform-or-per-corner radius (shared box style).
   applyBoxStyle(el, element);
-  // D-010-pic-5 — `wrap === false` forces single-line; vertical align
-  // is honoured by turning the text node into a flex container.
-  if (element.wrap === false) {
-    el.style.whiteSpace = 'nowrap';
-  }
-  if (element.verticalAlign !== undefined) {
-    el.style.display = 'flex';
-    el.style.flexDirection = 'column';
-    el.style.justifyContent =
-      element.verticalAlign === 'middle'
-        ? 'center'
-        : element.verticalAlign === 'bottom'
-          ? 'flex-end'
-          : 'flex-start';
+  if (isAuto) {
+    // D-060 §B — hug the content in both dimensions with CSS intrinsic sizing
+    // (synchronous, CEF/file://-safe — no JS measurement). `white-space: pre`
+    // honours explicit `\n` (multi-line: width = widest line, height = sum of
+    // line heights) and forbids width-constrained wrapping. A minimum box keeps
+    // empty/whitespace text selectable + editable rather than collapsing to zero.
+    // The vertical-align flex wrapper is intentionally NOT applied (the height
+    // hugs content, so there is no vertical slack); horizontal `text-align` above
+    // still positions shorter lines within a multi-line box (D-060 §D).
+    el.style.width = 'max-content';
+    el.style.height = 'max-content';
+    el.style.whiteSpace = 'pre';
+    el.style.minWidth = `${element.font.size * 0.5}px`;
+    el.style.minHeight = `${element.font.size * element.font.lineHeight}px`;
+    // D-060 §E — anchor at the reading-start corner. LTR (and `auto`) keep the
+    // top-left pin (CSS `left` from `applyBaseStyles`) and grow right/down; RTL
+    // pins the top-RIGHT edge via CSS `right` (derived from the enclosing stage
+    // width) so growth extends leftward and the right edge stays put.
+    if (element.direction === 'rtl') {
+      el.style.left = 'auto';
+      el.style.right = `${ctx.resolutionWidth - element.transform.position.x}px`;
+    }
+  } else {
+    // D-010-pic-5 — `wrap === false` forces single-line; vertical align
+    // is honoured by turning the text node into a flex container.
+    if (element.wrap === false) {
+      el.style.whiteSpace = 'nowrap';
+    }
+    if (element.verticalAlign !== undefined) {
+      el.style.display = 'flex';
+      el.style.flexDirection = 'column';
+      el.style.justifyContent =
+        element.verticalAlign === 'middle'
+          ? 'center'
+          : element.verticalAlign === 'bottom'
+            ? 'flex-end'
+            : 'flex-start';
+    }
   }
   renderTextGlyphs(el, element, doc);
   textOriginals.set(element.id, element.text);
@@ -781,6 +822,7 @@ export function buildSequenceCompositionItem(
     scope: itemScope,
     depth: guard.depth + 1,
     visited: new Set([...guard.visited, compositionId]),
+    resolutionWidth: comp.resolution.width,
   };
   for (const layer of comp.layers) {
     inner.appendChild(buildLayer(layer, itemCtx));
@@ -914,6 +956,7 @@ export function buildRepeaterRows(
       scope: rowScope,
       depth: guard.depth + 1,
       visited: new Set([...guard.visited, element.compositionId]),
+      resolutionWidth: comp.resolution.width,
     };
     for (const layer of comp.layers) {
       inner.appendChild(buildLayer(layer, rowCtx));

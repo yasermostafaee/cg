@@ -70,6 +70,19 @@ Everything hit-tests at the **visually-effective transform for the current frame
 (`effectiveTransformAt`), so animated elements are picked where the operator sees
 them, not at their static base.
 
+**Gizmo on a content-sized box (D-060).** An auto-sized text element
+(`fitMode: 'autosize'`) is sized by the runtime from its content, so
+`transform.size` is no longer authoritative. The gizmo measures the element's
+RENDERED local box from the preview iframe (`measure-element.ts` →
+`offsetWidth/Height`, unaffected by zoom or the element's own scale/rotate) and
+feeds that as the box `w × h` (for RTL, the rendered left edge is
+`position.x − width`); the `Scale·Rotate`-about-anchor projection (B-022) is
+otherwise unchanged. Its **resize handles are inert** (the box is content-driven —
+move + rotate still work). `CanvasArea` registers the preview document and bumps a
+measure version after each scene stream + on `document.fonts.ready` so the gizmo
+re-measures and stays glued. The auto→fixed toggle commits the measured size into
+`transform.size` once (D-046 §E) — the only write-back, a discrete user action.
+
 ## Off-frame pasteboard (D-071 Phase B; content-aware follow-up B-026)
 
 The stage is a **content-aware pasteboard**: its size is `pasteboardLayout(resolution, content?)`,

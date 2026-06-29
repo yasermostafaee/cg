@@ -1,4 +1,8 @@
-# Auto-size text rendering — consume `fitMode` (D-060)
+# Auto-size text rendering — consume `fitMode` (D-060) + sizing=auto guard (D-046)
+
+This change covers **both** D-060 (consume `fitMode`) and **D-046** (the
+sizing=auto guard), folded together per the PRD because the guard is what makes
+D-060's "size is content-driven in Auto" safe and non-silent.
 
 ## Why
 
@@ -47,18 +51,38 @@ Plus the interactions this forces (resolved in design.md):
   templates that already carry `fitMode: 'autosize'` will now hug — the shipped
   starter templates are audited/repaired as part of this change (design.md §F).
 
+### D-046 — sizing=auto guard (warn + confirm)
+
+Because Auto makes the box content-driven, any **size keyframes** (`size.w` /
+`size.h`) on a text element become meaningless in Auto (D-060 ignores them at
+render). To make that non-silent, switching a text element's Sizing toggle **to
+Auto** is guarded (owner-decided behavior A):
+
+- **No size keyframes** → switch to Auto immediately (no modal).
+- **Has size keyframes** → a small **confirm modal** explains that Auto is
+  content-driven and its existing size keyframes will be removed; **Confirm**
+  switches to Auto AND deletes the `size.w` / `size.h` tracks as **one undoable
+  step**; **Cancel** stays Fixed with the keyframes untouched (no silent switch).
+- **Auto → Fixed** needs no modal (nothing is destroyed); at the transition the
+  current measured hug size is committed into `transform.size` **once** (one-shot)
+  so the box stays exactly where the operator sees it (no snap-back to the pre-Auto
+  size). This is the single sanctioned exception to D-060 §C's "no write-back" rule
+  — a discrete user action, not a render-time loop (see design.md §C + §D-046-E).
+
 Out of scope (stated to bound the work): `fitMode: 'shrink-to-fit'` and
-`autoSqueeze` (font-shrink-to-fit) remain unimplemented as today; auto line-wrap;
-and the D-046 sizing=auto guard (confirm-modal / squeeze-off / no-keyframes),
-which ships coupled with this per the PRD but is a separate change.
+`autoSqueeze` (font-shrink-to-fit) remain unimplemented as today; auto line-wrap.
 
 ## Capabilities
 
 - **`designer-text-autosize`** (ADDED — net-new capability): the auto-size
   rendering contract — Auto hugs both dimensions; `\n` honored with no auto-wrap;
   the anchor/growth-direction model incl. RTL; vertical-align disabled (horizontal
-  retained) while Auto; size handles inert while Auto; export parity; and the
-  honor-as-authored back-compat rule with a minimum box for empty text.
+  retained) while Auto; size handles inert while Auto; export parity; the
+  honor-as-authored back-compat rule with a minimum box for empty text; **and the
+  D-046 sizing=auto guard** — switching to Auto with size keyframes prompts a
+  confirm modal that (on confirm) switches + deletes the size tracks in one
+  undoable step, while a clean switch (no size keyframes) and Auto→Fixed apply
+  immediately.
 - **`designer-shapes`** (MODIFIED): the "Move and resize shapes" selection-gizmo
   requirement is amended so the gizmo traces an auto text box's **rendered**
   geometry (not `transform.size`) and its resize handles are inert in Auto, while
@@ -84,6 +108,14 @@ which ships coupled with this per the PRD but is a separate change.
   control (keep horizontal) for a text element while `fitMode` is Auto, without
   clearing the stored `align`/`verticalAlign`. `AlignButtonGroup` gains a
   `disabled` prop (default false → other kinds unaffected).
+- **Inspector — D-046 guard** (`TextStyleSection.tsx:88-92` Sizing toggle): rewire
+  the to-Auto handler to detect size keyframes (`el.animation.tracks['size.w'|'size.h']`,
+  mirroring `off-frame.ts` `hasGeometryAnimation`) and, when present, open a confirm
+  modal instead of switching directly; on confirm, run the `fitMode='autosize'`
+  write + `clearKeyframeTrack(id,'size.w')` + `clearKeyframeTrack(id,'size.h')`
+  (`timeline.ts:229`) inside `runAsSingleHistoryEntry` (one undo). New small
+  `SizingAutoConfirmModal` built on the shared `Modal`/`ModalButton`
+  (`features/shell/Modal.tsx`) — no new modal primitive.
 - **Exporters**: none required — `.vcg` and single-file HTML reuse the shared
   runtime and snapshot no per-element size (`ExporterSingleFile.ts` sizes only
   the stage). Verified, not changed.
@@ -94,4 +126,8 @@ which ships coupled with this per the PRD but is a separate change.
   and the canvas feature README (gizmo on a content-sized box).
 - **Tests**: runtime unit (hug both dims, `\n`, no-wrap, RTL edge-pin, empty-box
   min, size-track ignored), and Designer E2E (toggle Auto hugs; handles inert;
-  V-align disabled / H-align enabled; toggle back to Fixed restores).
+  V-align disabled / H-align enabled; toggle back to Fixed restores). **D-046**:
+  store/unit (to-Auto with no size keyframes switches immediately; with size
+  keyframes the switch + track deletion is one undo step; Cancel leaves both
+  untouched; Auto→Fixed no-ops the guard) + E2E (the confirm modal appears only
+  when size keyframes exist, Confirm/Cancel outcomes, single undo).

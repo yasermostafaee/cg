@@ -1,6 +1,8 @@
+import { useSyncExternalStore } from 'react';
 import type { Element } from '@cg/shared-schema';
 import { designerStore, editSceneOf } from '../../state/store.js';
 import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
+import { measureElementSceneSize, subscribeMeasure, getMeasureVersion } from './measure-element.js';
 import { cx } from '../../cx.js';
 import {
   cornerLocal,
@@ -134,7 +136,24 @@ export function lockCursor(cursor: string): () => void {
  * Resize works in the element's local (rotated) frame.
  */
 export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
-  const t = effectiveTransformAt(element, currentFrame);
+  // D-060 §C — re-measure after the preview iframe re-lays-out (text/font edits stream
+  // asynchronously; webfonts swap in later). Subscribing re-renders the gizmo so the
+  // auto box stays glued without polling.
+  useSyncExternalStore(subscribeMeasure, getMeasureVersion);
+  let t = effectiveTransformAt(element, currentFrame);
+  // D-060 §C — an auto-sized text box is content-driven, so `transform.size` is not
+  // authoritative. Trace the RENDERED box (the element's local content size measured
+  // from the iframe — `offsetWidth/Height`, unaffected by zoom or scale/rotate), and
+  // its resize handles are INERT (the box can't be drag-resized). RTL pins the RIGHT
+  // edge, so the rendered left edge is `position.x − width`.
+  const isAutoText = element.type === 'text' && element.fitMode === 'autosize';
+  if (element.type === 'text' && element.fitMode === 'autosize') {
+    const m = measureElementSceneSize(element.id);
+    if (m !== null) {
+      const leftX = element.direction === 'rtl' ? t.position.x - m.w : t.position.x;
+      t = { ...t, size: { w: m.w, h: m.h }, position: { ...t.position, x: leftX } };
+    }
+  }
   // Project the element's RENDERED box (`Scale·Rotate` about the anchor — a parallelogram
   // under non-uniform scale) into overlay/screen space, so the frame + handles trace the
   // SAME geometry the renderer draws (matches `hit-test.inverseToLocal`). Fixes B-022,
@@ -231,26 +250,31 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
               width: screenDistance(a, b),
               height: EDGE,
               transform: `translate(-50%, -50%) rotate(${String(screenAngleDeg(a, b))}deg)`,
-              cursor: resizeCur(m),
+              cursor: isAutoText ? 'default' : resizeCur(m),
             }}
-            onPointerDown={down(h, 'resize')}
+            onPointerDown={isAutoText ? undefined : down(h, 'resize')}
           />
         );
       })}
 
-      {/* Corner resize hit areas (larger than the visible square). */}
+      {/* Corner resize hit areas (larger than the visible square). D-060 — inert for an
+          auto-sized text box (the box is content-driven, not drag-resizable). */}
       {cornerPts.map(({ h, p }) => (
         <div
           key={`hit-${h}`}
           className={`cg-gizmo-corner ${s.cornerHit}`}
-          style={at(p, { cursor: resizeCur(p) })}
-          onPointerDown={down(h, 'resize')}
+          style={at(p, { cursor: isAutoText ? 'default' : resizeCur(p) })}
+          onPointerDown={isAutoText ? undefined : down(h, 'resize')}
         />
       ))}
 
-      {/* Visible corner squares (decoration only). */}
+      {/* Visible corner squares (decoration only; dimmed when resize is inert). */}
       {cornerPts.map(({ h, p }) => (
-        <div key={`rs-${h}`} className={s.handle} style={at(p)} />
+        <div
+          key={`rs-${h}`}
+          className={s.handle}
+          style={at(p, isAutoText ? { opacity: 0.35 } : undefined)}
+        />
       ))}
 
       {/* Centre pivot indicator (visual only). */}
