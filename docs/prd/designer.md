@@ -1345,7 +1345,7 @@ TickerDriver). Capabilities: designer-ticker-element, designer-clock-element,
 designer-sequence-element, designer-inspector (MODIFIED). Change:
 `openspec/changes/unify-align-add-vertical/`.
 
-## [ ] D-046 — Sizing=auto guard (confirm modal + squeeze off + no keyframes on text metrics) ⟨priority: high — PARKED⟩
+## [~] D-046 — Sizing=auto guard (confirm modal + squeeze off + no keyframes on text metrics) ⟨priority: high⟩ — implemented with D-060 in `openspec/changes/consume-fitmode-auto-size-text/` (warn+confirm; auto→fixed one-shot size commit). Squeeze-off is out of scope (autoSqueeze unimplemented).
 
 **Status:** PARKED — no target yet. Recon found auto sizing does not exist: fitMode and autoSqueeze
 are stored-but-unread (the renderer always sizes from transform.size; fitMode is read nowhere in
@@ -1887,7 +1887,7 @@ whole-value matches (avoids the unanchored-substring gotcha). Single-phase, low-
 Capabilities: designer-dynamic-fields + designer-inspector. Sequenced after the
 UX-feature wave (D-042→D-048).
 
-## [ ] D-060 — Auto-size text rendering (consume fitMode) ⟨priority: medium; needs dedicated design⟩
+## [~] D-060 — Auto-size text rendering (consume fitMode) ⟨priority: medium⟩ — implemented in `openspec/changes/consume-fitmode-auto-size-text/` (consumes fitMode; covers D-046)
 
 **What:** Make the text element's Sizing actually work — when fitMode=auto the box hugs its text
 content instead of using transform.size (today fitMode/autoSqueeze are stored but never read).
