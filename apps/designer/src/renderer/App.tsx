@@ -557,6 +557,7 @@ export function App(): JSX.Element {
               <div className={s.canvasWrap}>
                 <CanvasArea
                   scene={editScene}
+                  activeCompositionId={activeCompositionId}
                   tool={tool}
                   selection={selection}
                   editingTextId={editingTextId}

@@ -133,6 +133,7 @@ export function LandingView(): JSX.Element {
               key={st.id}
               variant="bare"
               className={s.card}
+              data-testid="starter-card"
               onClick={() => guardedSwitch(st.label, () => loadStarter(st.id))}
             >
               {st.isNew === true && <span className={s.newBadge}>New</span>}
