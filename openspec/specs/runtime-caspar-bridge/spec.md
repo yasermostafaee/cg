@@ -131,14 +131,17 @@ event.
 ### Requirement: AMCP command construction sits behind a verifiable seam
 
 The bridge SHALL construct AMCP commands (load / keep-alive / update / stop for
-HTML producers) behind a small command-construction seam, so the
-on-hardware-verified sequence (ADR 0006) can be slotted in without reworking the
-session / queue / reconciler. The verified sequence SHALL be established on real
-CasparCG before this capability is considered complete, and ADR 0006 / Phase 4 §9
-SHALL be updated with it.
+HTML producers) behind a small command-construction seam, so the verified
+sequence is isolated from the session / queue / reconciler. The update sequence
+is now **hardware-validated on CasparCG 2.3.2 (`4de6d18f` Dev)** per ADR 0006:
+`load → CG ADD`, `take → CG PLAY`, **`update → CG UPDATE`**, `out → CLEAR`.
+`CG UPDATE` delivers a Persian-laden JSON payload to `window.update` intact; the
+disproven alternatives (`CALL "update"` never invokes it; `CG INVOKE` delivers an
+empty param) are not used.
 
-#### Scenario: The update sequence can change without reworking the stack
+#### Scenario: The verified update sequence is applied at the seam
 
-- **WHEN** the verified AMCP update sequence is determined on real hardware
-  **THEN** it is applied at the command-construction seam without changes to
-  `ServerSession` / `CommandQueue` / `Reconciler`, and ADR 0006 is updated
+- **WHEN** the bridge updates a playing HTML producer **THEN** it issues the
+  hardware-validated `CG UPDATE` via the command-construction seam — established
+  on real CasparCG 2.3.2 (ADR 0006) — without changes to `ServerSession` /
+  `CommandQueue` / `Reconciler`
