@@ -110,6 +110,11 @@ rotate stay active; the B-022 scale·rotate-about-anchor composition is unchange
   changes. The overlay re-measures when the box changes (text / font.size edit,
   and on `document.fonts.ready`) so it stays glued live.
 
+> **Single sanctioned exception (D-046 §E):** "never written back to the model"
+> applies to the continuous render path _while in Auto_. The discrete,
+> user-initiated **Auto → Fixed** toggle is allowed to commit this measured size
+> into `transform.size` exactly once (no loop, no race) — see §D-046-E.
+
 ---
 
 ## D. Align interaction (D-045) — disable or hide?
@@ -272,20 +277,27 @@ plain strings localizable like the rest of the UI. No new modal infrastructure.
   `updateElement(id, { fitMode: 'autosize' })` + `clearKeyframeTrack(id, 'size.w')`
   - `clearKeyframeTrack(id, 'size.h')`. **Cancel** does nothing (stays Fixed).
 
-### D-046-E. Fallback on return to Fixed
+### D-046-E. Commit the measured size on return to Fixed (one-shot)
 
-**Decision:** Auto → Fixed falls back to **`transform.size`** — the value preserved
-unchanged from before Auto. This is consistent with the D-060 design §C, which
-keeps `transform.size` as Fixed's source of truth and explicitly forbids writing
-the measured box back into the model. So there is **no contradiction**: nothing was
-written during Auto, and Fixed resumes from the same `transform.size` it had.
+**Decision (owner-chosen):** Auto → Fixed performs a **one-shot commit** — at that
+transition the CURRENT measured hug size is written into `transform.size` exactly
+once, so the box stays precisely where the operator sees it and does **not** snap
+back to the pre-Auto size. The measured size is the SAME value the gizmo overlay
+reads while the element is selected (the rendered box measured from the `cgpreview`
+iframe, converted to scene space — see D-060 §C); the toggle is in the inspector,
+which requires the element to be selected, so that measurement is available at the
+transition. If for any reason no measurement is available (e.g. fonts not yet
+loaded), fall back to the existing `transform.size` (no crash, no zero box).
 
-> **Trade-off (flagged, not a blocker):** if the content grew a lot in Auto,
-> returning to Fixed snaps to the pre-Auto size rather than the last hug size. The
-> alternative — a one-shot commit of the measured hug box into `transform.size` at
-> the toggle moment (a deliberate commit, distinct from the forbidden continuous
-> write-back) — would keep the visual size. Chosen the simpler, contradiction-free
-> `transform.size` fallback; owner can opt into the one-shot commit later.
+**Why this does NOT contradict D-060 §C:** §C forbids writing the measured box back
+into the model _during Auto_ — i.e. on the continuous render path — to avoid a
+measurement→write-back loop/race while the box is content-driven. The Auto → Fixed
+toggle is a **discrete, user-initiated event**, not a render-time write: it fires
+once, when the element is no longer content-driven. Writing the measured size once
+at that moment has no loop and no race, so it is consistent with the spirit of §C
+and is the single sanctioned exception (stated in §C and used by the resize-commit
+path, like a manual resize). After the commit, Fixed renders from `transform.size`
+as usual.
 
 ### D-046-F. Edge cases
 
@@ -298,7 +310,8 @@ written during Auto, and Fixed resumes from the same `transform.size` it had.
   Sizing toggle for multi-select, this is moot — the guard simply lives on whatever
   path offers the toggle.)
 - **Already Auto:** toggling "to Auto" when already Auto is a no-op (no modal);
-  Auto → Fixed is immediate (no modal), size falls back to `transform.size` (E).
+  Auto → Fixed is immediate (no modal) and commits the current measured hug size
+  into `transform.size` once (E).
 - **Undo:** the switch-to-Auto + size-track deletion is a **single undo step**
   (`runAsSingleHistoryEntry`), so one Ctrl+Z restores both `fitMode: 'fixed'` and
   the deleted size keyframes.

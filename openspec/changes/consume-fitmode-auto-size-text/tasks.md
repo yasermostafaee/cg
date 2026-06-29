@@ -81,8 +81,11 @@
       keyframes; Confirm switches all + deletes size tracks where present as one
       history entry; Cancel aborts all. (Only where the toggle is offered.)
 - [ ] Confirm `fitMode` write path: `updateElement` already accepts it; no schema
-      change. Auto→Fixed falls back to `transform.size` (no write-back; matches
-      D-060 §C / design §D-046-E).
+      change. Auto→Fixed commits the current measured hug size into `transform.size`
+      ONCE at the transition (reuse the resize-commit path; the measured size is the
+      same value the gizmo overlay reads per D-060 §C) — the single sanctioned
+      write-back exception; falls back to existing `transform.size` if no
+      measurement is available. See design §C + §D-046-E.
 
 ## 8. Tests
 

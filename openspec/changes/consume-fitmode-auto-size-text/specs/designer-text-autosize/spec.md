@@ -147,9 +147,10 @@ content-driven and the element's existing size keyframes will be removed, offeri
 **Confirm** (switch to Auto AND delete the size keyframes) and **Cancel** (stay
 Fixed, keep the keyframes); when the element has NO size keyframes the switch to
 Auto SHALL apply immediately with no modal; switching Auto → Fixed SHALL apply
-immediately with no modal (nothing is destroyed) and the box SHALL fall back to
-`transform.size`. A confirmed switch SHALL be a single undoable step (one undo
-restores both `fixed` and the deleted size keyframes).
+immediately with no modal (nothing is destroyed) and SHALL commit the current
+measured hug size into `transform.size` once at that transition, so the box does
+not snap back to the pre-Auto size. A confirmed switch SHALL be a single undoable
+step (one undo restores both `fixed` and the deleted size keyframes).
 
 #### Scenario: Switching to Auto with no size keyframes applies immediately
 
@@ -176,11 +177,12 @@ restores both `fixed` and the deleted size keyframes).
 - **WHEN** the operator cancels that modal
 - **THEN** `fitMode` stays `fixed` and the element's size keyframes are untouched
 
-#### Scenario: Switching Auto back to Fixed needs no modal and falls back to transform.size
+#### Scenario: Switching Auto back to Fixed needs no modal and commits the measured size once
 
 - **WHEN** the operator toggles Sizing from Auto to Fixed
-- **THEN** the switch applies immediately with no modal and the box renders at
-  `transform.size` (the value preserved from before Auto)
+- **THEN** the switch applies immediately with no modal AND the current measured
+  hug size is committed into `transform.size` once, so the box does not snap back
+  to the pre-Auto size
 
 #### Scenario: Multi-selection aggregates the guard
 

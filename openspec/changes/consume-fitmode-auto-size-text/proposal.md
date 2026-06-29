@@ -63,10 +63,11 @@ Auto** is guarded (owner-decided behavior A):
   content-driven and its existing size keyframes will be removed; **Confirm**
   switches to Auto AND deletes the `size.w` / `size.h` tracks as **one undoable
   step**; **Cancel** stays Fixed with the keyframes untouched (no silent switch).
-- **Auto → Fixed** needs no modal (nothing is destroyed); the box falls back to
-  `transform.size` (the value preserved from before Auto — consistent with the
-  D-060 design's "`transform.size` stays Fixed's source of truth, no write-back";
-  see design.md §D-046-E).
+- **Auto → Fixed** needs no modal (nothing is destroyed); at the transition the
+  current measured hug size is committed into `transform.size` **once** (one-shot)
+  so the box stays exactly where the operator sees it (no snap-back to the pre-Auto
+  size). This is the single sanctioned exception to D-060 §C's "no write-back" rule
+  — a discrete user action, not a render-time loop (see design.md §C + §D-046-E).
 
 Out of scope (stated to bound the work): `fitMode: 'shrink-to-fit'` and
 `autoSqueeze` (font-shrink-to-fit) remain unimplemented as today; auto line-wrap.
