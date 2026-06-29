@@ -13,6 +13,7 @@ import {
 } from '../scene-doc.js';
 import { designerStore } from '../store.js';
 import { collectGroupMoveTargets } from '../../features/canvas/group-move.js';
+import { clampDeltaToPasteboard, pasteboardSceneBounds } from '../../features/canvas/geometry.js';
 
 /**
  * Deep-clone an element, assigning a fresh id to it and (recursively) to
@@ -579,16 +580,23 @@ export const elementsSlice = {
     const { resolution } = activeDocOf(current.scene);
     const layers = activeLayersOf(current.scene);
     const anchorId = [...selection][0]!; // movers don't depend on the anchor — any selected id
-    const { movers } = collectGroupMoveTargets(
+    const { movers, box } = collectGroupMoveTargets(
       layers,
       selection,
       anchorId,
       current.currentFrame,
       resolution,
     );
+    // B-027 — clamp the nudge so the whole selection box stays inside the pasteboard
+    // (nudging can't push a shape past the edge into the clipped region either).
+    const bounds = pasteboardSceneBounds(resolution);
+    const cdx =
+      box === null ? dx : clampDeltaToPasteboard(dx, box.minX, box.maxX, bounds.minX, bounds.maxX);
+    const cdy =
+      box === null ? dy : clampDeltaToPasteboard(dy, box.minY, box.maxY, bounds.minY, bounds.maxY);
     for (const m of movers) {
-      designerStore.commitAnimatable(m.id, 'position.x', m.x + dx);
-      designerStore.commitAnimatable(m.id, 'position.y', m.y + dy);
+      designerStore.commitAnimatable(m.id, 'position.x', m.x + cdx);
+      designerStore.commitAnimatable(m.id, 'position.y', m.y + cdy);
     }
   },
 
