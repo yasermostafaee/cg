@@ -36,6 +36,10 @@ const FLASH_LAYER = 0;
  * Phase 2 uses `CG UPDATE`. Phase 3 replaces the verb HERE with the verified one
  * (and updates ADR 0006) — no other code changes.
  *
+ * Phase 3b: the hardware-validation harness `tools/caspar-amcp-probe` resolves
+ * which sequence works; paste its verdict into ADR 0006 → "Phase 3b findings",
+ * then slot the verified `update` verb in below.
+ *
  * All user values are escaped via `quote()` from `@cg/caspar-client` (the one
  * canonical AMCP quoter); a raw value never reaches the wire unquoted.
  */

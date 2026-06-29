@@ -114,3 +114,30 @@ Persian payloads?" — splits into two:
   found, verify that the corresponding OSC event signals the update
   is complete (Spike B saw no `cg.invoked` event; the right marker
   might be a `/foreground/file/path` change or no marker at all).
+
+## Phase 3b findings — TBD
+
+> **Status: NOT YET RUN.** The harness exists; the on-hardware result does not.
+>
+> C-001 Phase 3b built a hardware-validation harness — `tools/caspar-amcp-probe`
+> (see its `README.md`) — that runs a matrix of candidate load/update/stop
+> sequences against a real CasparCG 2.3.2 and reports, per candidate, the raw AMCP
+> return codes and whether a Persian-laden JSON payload reached `window.update`
+> intact (WebSocket beacon + on-screen echo). The candidates are:
+> `cg-add+cg-update`, `play-html+call-update`, `cg-add+cg-invoke-update`,
+> `cg-add+cg-invoke-inline`, and the `play-html-urlquery` fallback.
+>
+> **Fill this in after running the harness on hardware:**
+>
+> - **CasparCG build / date / operator:** _TBD_
+> - **Results table:** paste from the harness output / the README results table.
+> - **Verified sequence (the winner):** _TBD_ — the exact AMCP commands that
+>   deliver the JSON to `window.update` with Persian intact (or, if none do, the
+>   `play-html-urlquery` / WS-sidekick fallback per the "Risk" note above).
+> - **OSC update marker (if any):** _TBD_ — whether an OSC event confirms the
+>   update completed.
+>
+> **Once filled:** the follow-up change locks the verified verb into the
+> command-builder seam (`tools/caspar-bridge/src/command-builder.ts` — the Phase-2
+> mock-validated `CG UPDATE` is the placeholder), revises Phase 4 §9, flips this
+> ADR's status to **Resolved**, and flips C-001 to done.

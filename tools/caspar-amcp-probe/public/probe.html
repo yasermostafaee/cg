@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=1920, initial-scale=1" />
+    <title>AMCP update probe — C-001 Phase 3b</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=block"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #0f172a;
+        color: #e5e7eb;
+        font-family: 'Vazirmatn', system-ui, 'Segoe UI', sans-serif;
+      }
+      body {
+        width: 1920px;
+        height: 1080px;
+        padding: 64px;
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+      }
+      .label {
+        font-size: 28px;
+        opacity: 0.5;
+        letter-spacing: 3px;
+      }
+      #headline {
+        font-size: 96px;
+        font-weight: 700;
+        line-height: 1.2;
+        min-height: 130px;
+      }
+      #ticker {
+        font-size: 44px;
+        opacity: 0.85;
+      }
+      #raw {
+        margin-top: auto;
+        font-family: ui-monospace, Consolas, monospace;
+        direction: ltr;
+        text-align: left;
+        font-size: 22px;
+        background: #020617;
+        border: 1px solid #1e293b;
+        border-radius: 10px;
+        padding: 18px 22px;
+        white-space: pre-wrap;
+        word-break: break-all;
+        max-height: 320px;
+        overflow: hidden;
+      }
+      #status {
+        font-family: ui-monospace, Consolas, monospace;
+        direction: ltr;
+        text-align: left;
+        font-size: 22px;
+        display: flex;
+        gap: 28px;
+      }
+      .ok {
+        color: #34d399;
+      }
+      .bad {
+        color: #f87171;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="label">window.update PROBE — what the AMCP update sequence delivered</div>
+    <div id="headline">…منتظر اولین به‌روزرسانی…</div>
+    <div id="ticker"></div>
+    <div id="status">
+      <span>updates: <b id="count">0</b></span>
+      <span>beacon: <b id="beacon" class="bad">connecting…</b></span>
+      <span>persian: <b id="persian">—</b></span>
+    </div>
+    <div id="raw">(raw window.update string appears here — eyeball Persian correctness)</div>
+
+    <script>
+      var headlineEl = document.getElementById('headline');
+      var tickerEl = document.getElementById('ticker');
+      var rawEl = document.getElementById('raw');
+      var countEl = document.getElementById('count');
+      var persianEl = document.getElementById('persian');
+      var beaconEl = document.getElementById('beacon');
+      var count = 0;
+      var ws = null;
+
+      function beacon(obj) {
+        try {
+          if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+        } catch (e) {
+          /* best effort */
+        }
+      }
+
+      function render(payload, source) {
+        count += 1;
+        var raw = payload == null ? '' : String(payload);
+        rawEl.textContent = raw;
+        countEl.textContent = String(count);
+        var hasPersian = /[؀-ۿ]/.test(raw);
+        var hasReplacement = raw.indexOf('�') !== -1;
+        persianEl.textContent = hasPersian && !hasReplacement ? 'OK ✓' : 'CHECK ✗';
+        persianEl.className = hasPersian && !hasReplacement ? 'ok' : 'bad';
+        try {
+          var p = JSON.parse(raw);
+          headlineEl.textContent = p.headline || p.text || p.anchor || raw;
+          tickerEl.textContent = p.ticker || '';
+        } catch (e) {
+          headlineEl.textContent = raw || '(empty payload)';
+          tickerEl.textContent = '';
+        }
+        beacon({ type: 'update', payload: raw, len: raw.length, count: count, source: source || 'update' });
+      }
+
+      // CasparCG HTML-producer surface. CG INVOKE / CALL "update" call window.update;
+      // we also mirror onto window.cg.* for older template conventions.
+      window.update = function (s) {
+        render(s, 'update-command');
+      };
+      window.play = function () {};
+      window.stop = function () {};
+      window.remove = function () {
+        document.body.innerHTML = '';
+      };
+      window.cg = {
+        update: window.update,
+        play: window.play,
+        stop: window.stop,
+        remove: window.remove,
+      };
+
+      // Open the beacon back to the harness (same origin when served over HTTP).
+      try {
+        ws = new WebSocket(
+          (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host,
+        );
+        ws.onopen = function () {
+          beaconEl.textContent = 'connected ✓';
+          beaconEl.className = 'ok';
+          beacon({ type: 'hello', href: location.href });
+        };
+        ws.onerror = function () {
+          beaconEl.textContent = 'failed (eyeball screen)';
+          beaconEl.className = 'bad';
+        };
+      } catch (e) {
+        beaconEl.textContent = 'unavailable (eyeball screen)';
+        beaconEl.className = 'bad';
+      }
+
+      // URL-query fallback (ADR 0006 option a): payload delivered at load time.
+      (function () {
+        var m = /[?&]data=([^&]+)/.exec(location.search);
+        if (m) {
+          try {
+            render(decodeURIComponent(m[1]), 'url-query');
+          } catch (e) {
+            render(m[1], 'url-query');
+          }
+        }
+      })();
+    </script>
+  </body>
+</html>
