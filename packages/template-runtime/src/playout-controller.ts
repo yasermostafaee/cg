@@ -233,7 +233,9 @@ export class PlayoutController {
     // already started at the entrance-settle frame (onContentStart) — here we only start
     // the hold TIMING. (A looping idle while holding is D-021's opt-in, not this change.)
     this.stopDriver();
-    if (this.o.playout.mode === 'manual') return; // hold frozen until stop()
+    // D-114 — `manual` and `static` both hold the out-point frozen until `stop()`; `static`
+    // additionally has no outro (a no-out-point composition — it cuts on stop, see `startOutro`).
+    if (this.o.playout.mode === 'manual' || this.o.playout.mode === 'static') return;
     if (this.o.playout.holdSource === 'content-driven') {
       // The hold lasts until the scope's content completes. A token guards
       // against stale resolutions (stop()/a later cycle); a null wait (no
@@ -260,7 +262,11 @@ export class PlayoutController {
     this.clearHold();
     this.phase = 'outro';
     if (this.isFinalOutro()) this.announceExit();
-    this.playRange(this.outPoint(), this.o.active.out, () => this.onOutroEnd());
+    // D-114 — `static` has NO outro: cut cleanly (an empty range) regardless of any out-point, so a
+    // stored `static` with a stray out-point still hard-cuts. Other modes play `[outPoint→end]`
+    // (empty when there is no marker, today's behavior).
+    const from = this.o.playout.mode === 'static' ? this.o.active.out : this.outPoint();
+    this.playRange(from, this.o.active.out, () => this.onOutroEnd());
   }
 
   private onOutroEnd(): void {

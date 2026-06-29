@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { activeRangeOf, SceneSchema, type Composition } from '@cg/shared-schema';
+import { activeRangeOf, playoutOf, SceneSchema, type Composition } from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore } from '../src/renderer/state/store.js';
@@ -63,43 +63,47 @@ describe('designerStore — D-020 lifecycle / playout', () => {
     expect(activeDoc().playout).toMatchObject({ mode: 'auto-out', holdMs: 2000 });
   });
 
-  // D-113 — clearing the out-point must revert an out-point-DEPENDENT mode (auto-out / loop-cycle)
-  // to manual, atomically (one undo step), since those modes promise an animated exit with no marker
-  // to start from. No change when already manual; no auto-restore when an out-point is re-added.
-  it('D-113 — clearing the out-point in auto-out reverts the mode to manual (rest preserved)', () => {
+  // D-114 (revises D-113) — clearing the out-point makes the composition `static` (no marker ⇒ no
+  // animated exit). The out-point-DEPENDENT modes (auto-out / loop-cycle) are rewritten to `static`
+  // atomically (one undo step); a manual/absent composition is left untouched (it already resolves to
+  // `static` with no out-point). The invariant is ONE-DIRECTIONAL: re-adding an out-point does not
+  // auto-restore the prior mode.
+  it('D-114 — clearing the out-point in auto-out reverts the mode to static (rest preserved)', () => {
     freshScene();
     designerStore.setLifecycle({ outPoint: 2 });
     designerStore.setPlayout({ mode: 'auto-out', holdMs: 1500 });
     designerStore.setLifecycle(null);
     expect(activeDoc().lifecycle).toBeUndefined();
-    expect(activeDoc().playout).toMatchObject({ mode: 'manual', holdMs: 1500 });
+    expect(activeDoc().playout).toMatchObject({ mode: 'static', holdMs: 1500 });
   });
 
-  it('D-113 — clearing the out-point in loop-cycle reverts the mode to manual', () => {
+  it('D-114 — clearing the out-point in loop-cycle reverts the mode to static', () => {
     freshScene();
     designerStore.setLifecycle({ outPoint: 2 });
     designerStore.setPlayout({ mode: 'loop-cycle', repeat: 3 });
     designerStore.setLifecycle(null);
     expect(activeDoc().lifecycle).toBeUndefined();
-    expect(activeDoc().playout).toMatchObject({ mode: 'manual' });
+    expect(activeDoc().playout).toMatchObject({ mode: 'static' });
   });
 
-  it('D-113 — clearing the out-point in manual leaves the playout untouched (no spurious write)', () => {
+  it('D-114 — clearing the out-point in manual leaves the playout untouched (resolves to static)', () => {
     freshScene();
     designerStore.setLifecycle({ outPoint: 2 });
-    designerStore.setLifecycle(null); // still default manual ⇒ no playout written
+    designerStore.setLifecycle(null); // default manual + no out-point resolves to static, no write
     expect(activeDoc().lifecycle).toBeUndefined();
     expect(activeDoc().playout).toBeUndefined();
+    // playoutOf resolves the effective mode to `static` (no out-point + default).
+    expect(playoutOf(activeDoc()).mode).toBe('static');
   });
 
-  it('D-113 — the clear + revert is a SINGLE undo step (restores out-point AND mode together)', () => {
+  it('D-114 — the clear + revert is a SINGLE undo step (restores out-point AND mode together)', () => {
     freshScene();
     designerStore.setLifecycle({ outPoint: 2 });
     designerStore.setPlayout({ mode: 'auto-out' });
     designerStore.markHistoryBoundary();
     designerStore.setLifecycle(null);
     expect(activeDoc().lifecycle).toBeUndefined();
-    expect(activeDoc().playout?.mode).toBe('manual');
+    expect(activeDoc().playout?.mode).toBe('static');
     // ONE undo restores BOTH the out-point and the auto-out mode (atomic action).
     designerStore.undo();
     expect(activeDoc().lifecycle?.outPoint).toBe(2);

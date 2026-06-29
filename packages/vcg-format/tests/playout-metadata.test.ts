@@ -49,8 +49,9 @@ function withContentDriver(base: Scene): Scene {
 }
 
 describe('buildPlayoutMetadata', () => {
-  it('defaults to manual mode with no lifecycle fields', () => {
-    expect(buildPlayoutMetadata(fixtureScene)).toEqual({ mode: 'manual' });
+  it('D-114 — a scene with no lifecycle (no out-point) exports as static mode', () => {
+    // No out-point ⇒ static (preview == export); playoutOf resolves the default to static.
+    expect(buildPlayoutMetadata(fixtureScene)).toEqual({ mode: 'static' });
   });
 
   it('carries the out-point, timing, and the outro duration in ms', () => {

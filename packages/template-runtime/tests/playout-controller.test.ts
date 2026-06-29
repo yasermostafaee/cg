@@ -128,6 +128,34 @@ describe('PlayoutController', () => {
     expect(h.events).toEqual(['exit', 'settle']);
   });
 
+  it('D-114 static: plays in, holds at the implicit out-point, and never auto-outs', () => {
+    const h = make({ mode: 'static' }, { lifecycle: undefined });
+    h.controller.play();
+    expect(h.frames).toEqual([50]); // held at active.out (no marker)
+    expect(h.events).toEqual([]);
+    h.clock.advance(10_000); // no holdMs / content — holds until stop()
+    expect(h.events).toEqual([]);
+    expect(h.frames).toEqual([50]); // frozen, not looping
+  });
+
+  it('D-114 static: stop cuts cleanly — settles with no outro animation', () => {
+    const h = make({ mode: 'static' }, { lifecycle: undefined });
+    h.controller.play();
+    h.controller.stop();
+    expect(h.events).toEqual(['exit', 'settle']); // exits + settles immediately
+    expect(h.frames.every((f) => f === 50)).toBe(true); // no frames below the held cut frame
+  });
+
+  it('D-114 static: ignores a stray out-point and still cuts (empty outro, no animation)', () => {
+    const h = make({ mode: 'static' }, { lifecycle: { outPoint: 40 } });
+    h.controller.play();
+    expect(h.frames[h.frames.length - 1]).toBe(40); // held at the marker
+    h.controller.stop();
+    expect(h.events).toEqual(['exit', 'settle']);
+    // The static outro is forced empty (from = active.out): no animated frames between 40 and 50.
+    expect(h.frames.filter((f) => f > 40 && f < 50)).toEqual([]);
+  });
+
   it('auto-out: plays the outro automatically after holdMs', () => {
     const h = make({ mode: 'auto-out', holdMs: 2000 });
     h.controller.play();

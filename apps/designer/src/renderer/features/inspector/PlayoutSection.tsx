@@ -25,6 +25,8 @@ const MODE_LABELS: Record<PlayoutMode, string> = {
   manual: 'Manual — hold until stop',
   'auto-out': 'Auto-out — outro after hold',
   'loop-cycle': 'Loop cycle — repeat in → hold → out',
+  // D-114 — the no-out-point mode: play in → hold → hard cut on stop, no animated exit.
+  static: 'Static — plays in, holds, cut on stop (no out-point)',
 };
 
 const HOLD_LABELS: Record<HoldSource, string> = {
@@ -629,15 +631,21 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
           aria-label="Playout mode"
           onChange={(e) => changeMode(e.target.value as PlayoutMode)}
         >
-          {(Object.keys(MODE_LABELS) as PlayoutMode[]).map((m) => (
-            <option key={m} value={m}>
-              {MODE_LABELS[m]}
-            </option>
-          ))}
+          {(Object.keys(MODE_LABELS) as PlayoutMode[]).map((m) => {
+            // D-114 — `static` is the no-out-point mode; the animated modes require an out-point.
+            // With no out-point only `static` is enabled; with one, `static` is disabled (you go
+            // static by clearing the out-point, and leave it by adding one).
+            const disabled = lifecycle === undefined ? m !== 'static' : m === 'static';
+            return (
+              <option key={m} value={m} disabled={disabled}>
+                {MODE_LABELS[m]}
+              </option>
+            );
+          })}
         </Select>
       </div>
 
-      {hasContent && mode !== 'manual' && (
+      {hasContent && mode !== 'manual' && mode !== 'static' && (
         <div className={s.row}>
           <span className={s.label}>hold</span>
           <Select
@@ -655,9 +663,10 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
         </div>
       )}
 
-      {hasContent && mode !== 'manual' && playout.holdSource === 'content-driven' && (
-        <ContentHoldChecklist scene={scene} />
-      )}
+      {hasContent &&
+        mode !== 'manual' &&
+        mode !== 'static' &&
+        playout.holdSource === 'content-driven' && <ContentHoldChecklist scene={scene} />}
 
       {showHoldMs && (
         <div className={s.row}>
@@ -691,7 +700,7 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
         </p>
       ) : (
         <p style={hintStyle}>
-          No out point yet.{' '}
+          No out point — this composition is <strong>static</strong> (plays in, holds, cut on stop).{' '}
           <Button
             variant="bare"
             style={linkBtnStyle}
@@ -699,7 +708,7 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
           >
             Add an out point
           </Button>{' '}
-          to enable in → hold → out, then drag it on the timeline.
+          to enable manual / auto-out / loop-cycle (in → hold → out), then drag it on the timeline.
         </p>
       )}
 
