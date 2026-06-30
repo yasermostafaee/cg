@@ -424,3 +424,55 @@ export function fitZoom(
   const z = Math.min((viewportW - margin) / sceneW, (viewportH - margin) / sceneH);
   return Number.isFinite(z) && z > 0 ? z : null;
 }
+
+/**
+ * D-120 — the pixel grid is shown only when one scene pixel maps to at least this many SCREEN px
+ * (i.e. `zoom ≥ PIXEL_GRID_MIN_ZOOM`). Below it a 1px-per-cell grid is an illegible smear; 8 px
+ * (800%) leaves a wide useful pixel-editing band up to the 6400% (`ZOOM_MAX = 64`) ceiling.
+ */
+export const PIXEL_GRID_MIN_ZOOM = 8;
+/** D-120 — every Nth grid line is emphasized (graph-paper), aligned to scene multiples of N. */
+export const PIXEL_GRID_MAJOR_EVERY = 10;
+
+/** D-120 — whether the pixel grid should be drawn at this zoom (one scene px ≥ the threshold). */
+export function pixelGridVisible(zoom: number): boolean {
+  return zoom >= PIXEL_GRID_MIN_ZOOM;
+}
+
+/** D-120 — one visible pixel-grid line: its `scene` coordinate (for major/minor styling) and the
+ *  DEVICE-pixel x/y at which a 1px stroke should be drawn (already snapped + half-pixel-offset). */
+export interface PixelGridLine {
+  scene: number;
+  devicePx: number;
+}
+
+/**
+ * D-120 — the device-pixel-snapped positions of the visible pixel-grid lines on ONE axis, for the
+ * canvas grid. `originCss` is the screen position (CSS px, in the canvas's own top-left frame) of
+ * scene 0 — i.e. the rulers' origin on this axis; `zoom` is screen px per scene px; `lengthCss` is
+ * the visible extent (CSS px); `dpr` the devicePixelRatio. A line exists at every integer scene
+ * coordinate, whose TRUE screen pos is `originCss + scene·zoom`; only the lines inside `[0,
+ * lengthCss]` are returned (viewport cull). Each is SNAPPED to the device-pixel raster —
+ * `Math.round(pos·dpr) + 0.5` — so a 1-device-px stroke lands on a single physical pixel and is
+ * crisp at ANY (even fractional) zoom, never anti-aliased across two. A CSS `repeating` gradient
+ * can't do this (its fixed fractional period drifts off the raster); snapping each line
+ * INDEPENDENTLY also means no accumulating drift — every line stays within half a device pixel of
+ * its true scene coordinate (invisible as position at high zoom, decisive for crispness), so the
+ * grid still aligns with the rulers.
+ */
+export function pixelGridLines(
+  originCss: number,
+  zoom: number,
+  lengthCss: number,
+  dpr: number,
+): PixelGridLine[] {
+  if (zoom <= 0 || lengthCss <= 0 || dpr <= 0) return [];
+  const firstScene = Math.ceil(-originCss / zoom); // first integer scene coord with pos ≥ 0
+  const lastScene = Math.floor((lengthCss - originCss) / zoom); // last with pos ≤ lengthCss
+  const out: PixelGridLine[] = [];
+  for (let scene = firstScene; scene <= lastScene; scene++) {
+    const cssPos = originCss + scene * zoom;
+    out.push({ scene, devicePx: Math.round(cssPos * dpr) + 0.5 });
+  }
+  return out;
+}

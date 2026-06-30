@@ -3059,3 +3059,20 @@ The 5 templates:
 - @IRIBNEWS / any logo: IRIB is a real brand; do NOT reproduce their real logo. Use a clear PLACEHOLDER (simple SVG/text mark) the owner can swap for the real asset later. Note this in the template.
 - **SEQUENCING — dependency:** implement this AFTER **D-060** (auto-size text) and the open Designer bugs **B-035** (fit-on-open), **B-036** (icon align), **B-037** (pen tool) are done — templates should exercise healthy features. **BLOCKED** until those land.
 - **OPEN QUESTIONS to resolve with owner before implementation:** (a) resolution(s) — all 1920×1080, or some vertical 1080×1920? (b) colour palette — specific (e.g. news red/white) or designer's choice? (c) storage location — bundled `@cg/starter-templates` package vs sample projects? (d) real logo asset availability.
+
+## [~] D-120 — High zoom + pixel grid for pixel-perfect editing ⟨priority: medium⟩ — `openspec/changes/high-zoom-pixel-grid`
+
+**What:** Raise the maximum canvas zoom to 6400% and render a pixel grid (1 grid cell = 1 scene pixel) that appears only at high zoom, across the whole pasteboard, so the user can align/move shapes at single-pixel precision.
+
+**Why:** The current 400% max is too low to see or place individual pixels; pixel-perfect alignment (e.g. moving a shape from x=5 to x=6) needs both deep zoom and a visible pixel grid. Matches the affordance pro tools (Loopic) provide.
+
+**Acceptance:**
+
+- WHEN the user zooms in THEN the maximum zoom is 6400% (each scene pixel = 64 screen px at max)
+- WHEN the zoom is high enough that a scene pixel is comfortably visible THEN a pixel grid appears over the WHOLE pasteboard (1 cell = 1 pixel)
+- WHEN the zoom is below that threshold THEN the grid is hidden (no clutter at normal zoom)
+- WHEN a shape is nudged 1px at high zoom THEN the movement is clearly visible against the grid
+
+**Notes:** max zoom 6400%; grid spans the whole pasteboard (not just the frame); grid appears only above a zoom threshold (one scene pixel ≥ **8** screen px → **800%+**); built on the B-027 pasteboard/zoom work (dynamic cover-fit MIN unchanged — only the MAX rises).
+
+**Evidence:** `ZOOM_MAX` 4 → **64** (6400%) in `CanvasArea.tsx`, clamped via the existing `clampZoom` path so every zoom control (±/1× buttons, Ctrl+wheel, Fit) respects it; B-027's dynamic cover-fit min still governs the bottom of the range. Pure helpers in `geometry.ts`: `pixelGridVisible(zoom)` (shown iff `zoom ≥ PIXEL_GRID_MIN_ZOOM` = 8) + `pixelGridLines(origin, zoom, lengthCss, dpr)` (the visible, viewport-culled line positions). The grid is a **device-pixel-snapped `<canvas>`** (`s.pixelGrid`, `pointer-events: none`) — the bottom layer of the non-scrolling ruler overlay, tracking the stage via `rulerOrigin` like the rulers; `drawPixelGrid` repaints it on scroll/zoom/resize, culling to the viewport and snapping each line to `Math.round(pos·dpr) + 0.5`. **Sub-pixel snap fix:** a first cut used a CSS `linear-gradient` whose fixed FRACTIONAL period (`zoom` px) drifted lines off the device-pixel raster → anti-aliased/doubled/blurry at fractional zoom (e.g. 4808%), crisp only at integer scales; switching to the snapped canvas makes every line a single crisp 1-physical-pixel stroke at ANY zoom + HiDPI. Each line is snapped INDEPENDENTLY (no accumulating drift) and stays within half a device pixel of its true scene pos `rulerOrigin + X·zoom` — the SAME mapping the rulers use, so the grid never visibly drifts from them; every 10th line (`scene % 10`, scene 0 / ±10) a hair stronger (graph-paper). Capability `designer-canvas-viewport` (MODIFIED zoom-max + ADDED pixel-grid requirement, incl. crisp-at-fractional-zoom). Tests: `pasteboard.test.ts` (threshold + device-pixel snapping at fractional zoom + HiDPI + ≤½-device-px ruler alignment + culling + major) + `pixel-grid.spec.ts` E2E (grid present at ≥1600%, absent at 100%, max reaches 6400%, 1px nudge moves 1 scene px). Fractional-zoom crispness checked manually (blur is visual).

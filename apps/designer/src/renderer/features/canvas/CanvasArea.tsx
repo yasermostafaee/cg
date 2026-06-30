@@ -20,6 +20,9 @@ import {
   coverZoom,
   fitZoom,
   pasteboardLayout,
+  pixelGridLines,
+  pixelGridVisible,
+  PIXEL_GRID_MAJOR_EVERY,
   screenToScene,
   zoomAnchorScroll,
 } from './geometry.js';
@@ -67,9 +70,58 @@ interface Props {
 // is only an absolute safety floor for the unmeasured/degenerate case (the cover-fit governs
 // in every normal case, and is always well above this).
 const ZOOM_HARD_MIN = 0.02;
-const ZOOM_MAX = 4;
+// D-120 — the maximum zoom is 6400% (one scene pixel = 64 screen px at the top), deep enough for
+// pixel-perfect work; the pixel grid (below) appears well before this so there is a wide editing
+// band. The dynamic cover-fit MINIMUM (B-027) is unchanged — only this upper bound rose from 4.
+const ZOOM_MAX = 64;
 const ZOOM_STEP = 1.1; // multiplicative step per click / wheel notch
 const ZOOM_DEFAULT = 0.5;
+
+// D-120 — pixel-grid hairline tones: faint over BOTH the #161927 pasteboard and the #3d4253 frame
+// backdrop so the grid delineates pixels without occluding shapes; the every-10th MAJOR line is a
+// hair stronger (graph-paper, for counting pixels). White-alpha so it reads on either backdrop.
+const PIXEL_GRID_MINOR = 'rgba(255, 255, 255, 0.07)';
+const PIXEL_GRID_MAJOR = 'rgba(255, 255, 255, 0.14)';
+
+/**
+ * D-120 — paint the pixel grid onto its viewport-sized `<canvas>`. Lines are drawn with
+ * `pixelGridLines` (device-pixel-snapped) so each is a single crisp 1-physical-px stroke at ANY
+ * zoom — a CSS gradient with a fractional period blurred every line at fractional scales. Only the
+ * lines inside the viewport are drawn (cull), every 10th (scene ≡ 0 mod 10) a hair stronger. The
+ * canvas backing store is `viewport · dpr` so HiDPI stays 1 physical px; `origin` is the rulers'
+ * scene-0 position, so the grid uses the exact mapping the rulers do.
+ */
+function drawPixelGrid(
+  canvas: HTMLCanvasElement,
+  origin: { x: number; y: number },
+  zoom: number,
+  viewport: { w: number; h: number },
+  dpr: number,
+): void {
+  canvas.width = Math.round(viewport.w * dpr);
+  canvas.height = Math.round(viewport.h * dpr);
+  canvas.style.width = `${String(viewport.w)}px`;
+  canvas.style.height = `${String(viewport.h)}px`;
+  const ctx = canvas.getContext('2d');
+  if (ctx === null) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.lineWidth = 1; // device px → 1 physical pixel
+  const major = (scene: number): boolean => scene % PIXEL_GRID_MAJOR_EVERY === 0;
+  for (const { scene, devicePx } of pixelGridLines(origin.x, zoom, viewport.w, dpr)) {
+    ctx.strokeStyle = major(scene) ? PIXEL_GRID_MAJOR : PIXEL_GRID_MINOR;
+    ctx.beginPath();
+    ctx.moveTo(devicePx, 0);
+    ctx.lineTo(devicePx, canvas.height);
+    ctx.stroke();
+  }
+  for (const { scene, devicePx } of pixelGridLines(origin.y, zoom, viewport.h, dpr)) {
+    ctx.strokeStyle = major(scene) ? PIXEL_GRID_MAJOR : PIXEL_GRID_MINOR;
+    ctx.beginPath();
+    ctx.moveTo(0, devicePx);
+    ctx.lineTo(canvas.width, devicePx);
+    ctx.stroke();
+  }
+}
 
 /**
  * D-040 — the assetId → blob URL map posted to the preview iframe, merged across
@@ -100,7 +152,7 @@ function collectSceneImageIds(scene: Scene): string[] {
  * Canvas work area with the cgpreview iframe + transparent input
  * overlay. D-007 added:
  *   - zoom in / out / fit / reset buttons in the header
- *   - Ctrl+wheel over the canvas zooms (clamped 10..400%)
+ *   - Ctrl+wheel over the canvas zooms (clamped: dynamic cover-fit min .. 6400% max)
  *   - plain wheel scrolls the inner container (overflow: auto)
  *   - hand-tool drag pans the inner container (scrollLeft/Top)
  */
@@ -116,6 +168,9 @@ export function CanvasArea({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  // D-120 — the pixel-grid <canvas> (a non-scrolling viewport-sized overlay layer); redrawn
+  // imperatively whenever the ruler origin / zoom / viewport changes (see the effect below).
+  const gridCanvasRef = useRef<HTMLCanvasElement>(null);
   const [html, setHtml] = useState<string | null>(null);
   const [zoom, setZoom] = useState<number>(ZOOM_DEFAULT);
   // Live mirror of `zoom` so the (once-bound) wheel listener + the zoom helpers read
@@ -620,6 +675,17 @@ export function CanvasArea({
     // Q5 — re-measure when the content-aware offset shifts, not only on scroll/zoom.
   }, [zoom, sceneId, html, frameOffset.x, frameOffset.y]);
 
+  // D-120 — (re)paint the pixel grid whenever the ruler origin (scroll), zoom, or viewport size
+  // changes. The canvas only exists at high zoom (gated in the JSX), so a null ref / hidden grid
+  // no-ops. Drawn in DEVICE px (snapped) so lines are crisp at every zoom — see `drawPixelGrid`.
+  useEffect(() => {
+    const canvas = gridCanvasRef.current;
+    if (canvas === null || rulerOrigin === null || !pixelGridVisible(zoom)) return;
+    if (viewport.w <= 0 || viewport.h <= 0) return;
+    const dpr = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
+    drawPixelGrid(canvas, rulerOrigin, zoom, viewport, dpr);
+  }, [rulerOrigin, zoom, viewport]);
+
   if (scene === null) {
     return (
       <div className={s.wrap}>
@@ -806,6 +872,19 @@ export function CanvasArea({
             stay pinned to the visible area while `rulerOrigin` tracks the
             scrolling stage (so they no longer slide away on zoom + scroll). */}
         <div className={s.overlay}>
+          {/* D-120 — the pixel grid: a viewport-sized, non-scrolling <canvas> that tracks the
+              stage via `rulerOrigin` (same as the rulers), shown only at high zoom. It is the
+              BOTTOM layer of this overlay (so rulers + guides paint over it) and sits above the
+              scroll content (paints lightly over shapes + gizmos); `pointer-events: none` keeps
+              all hit-testing on the canvas below. Device-pixel-snapped → crisp at every zoom. */}
+          {pixelGridVisible(zoom) && rulerOrigin !== null && html !== null && (
+            <canvas
+              ref={gridCanvasRef}
+              className={s.pixelGrid}
+              data-testid="pixel-grid"
+              aria-hidden
+            />
+          )}
           {rulerVisible && rulerOrigin !== null && html !== null && (
             <CanvasRuler
               originX={rulerOrigin.x}
