@@ -323,3 +323,21 @@ canonical escaper covering `"`, `\\`, odd/even backslash runs, newline, and cont
 chars; and an integration test driving a payload with all of them through the bridge
 → hardened mock → `JSON.parse` round-trip. On-hardware re-validation with a
 quote/backslash/newline payload before B-041 closes.
+
+**Progress / corrections (stays `[~]`):**
+
+- Attempt 1 — `fix-amcp-escaping` (PR #245): "quotes-only" (escape `"`→`\"`, leave `\`
+  literal). **Confirmed WRONG on real CasparCG 2.3.2.** Hardware: updating `ttt` to
+  `New text␊second text` → the template's `JSON.parse` hit
+  `Uncaught SyntaxError: Invalid or unexpected token` (a raw newline inside the JSON
+  string); `"` and `\` (odd) also still failed.
+- Attempt 2 — `fix-amcp-escaping-v2` (investigation/design): a byte-level trace proves
+  the **bridge emits the newline as backslash-n (two chars), NOT a raw newline** — so
+  the raw newline the template sees is produced by **CasparCG itself un-escaping `\n`
+  → `0x0A`**. This **disproves #245's assumption** that CasparCG keeps backslashes
+  literal; CasparCG actively processes backslash escapes. Because attempt 1
+  (quotes-only) AND the original double-escape both failed, no single hand-derived
+  un-escape model fits both data points — so the exact rule is pinned **empirically**
+  via an escape-matrix harness on real hardware, then implemented as the single
+  canonical quoter, with the mock decoding by the real rule AND rejecting raw control
+  chars / un-parseable payloads. See `openspec/changes/fix-amcp-escaping-v2/`.
