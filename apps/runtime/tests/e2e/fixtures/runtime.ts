@@ -187,6 +187,52 @@ export async function buildValidVcg(templateId = 'tpl-e2e-1'): Promise<Uint8Arra
   });
 }
 
+/**
+ * B-040 — a verifiable `.vcg` that also carries a ticker-style `list` Data key
+ * (`_tickerTexts`) with structured Persian items, so the operator Inspector must
+ * render an items editor (not "[object Object]").
+ */
+export async function buildListFieldVcg(templateId = 'tpl-e2e-list'): Promise<Uint8Array> {
+  const scene = fixtureScene();
+  scene.fields = [
+    ...scene.fields,
+    {
+      id: '_tickerTexts',
+      label: 'Ticker items',
+      required: false,
+      type: 'list',
+      default: [
+        { id: 'i1', text: 'سلام دنیا' },
+        { id: 'i2', text: 'اخبار فوری' },
+      ],
+    },
+  ];
+  const fontDeps: readonly FontReference[] = scene.fonts;
+  const assetIndex: readonly AssetEntry[] = [];
+  const manifestExtras = {
+    id: templateId,
+    name: 'e2e-lower-third-list',
+    authoring: {
+      designerVersion: '0.0.0',
+      createdAt: '2026-06-29T00:00:00.000Z',
+      exportedAt: '2026-06-29T00:01:00.000Z',
+    },
+    compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+    fontDeps,
+    assetIndex,
+  } satisfies Pick<Manifest, 'id' | 'name' | 'authoring' | 'compatibility'> & {
+    fontDeps: readonly FontReference[];
+    assetIndex: readonly AssetEntry[];
+  };
+  return pack({
+    scene,
+    manifestExtras,
+    indexHtml: '<!doctype html><html><body>placeholder</body></html>',
+    cgJs: '/* placeholder template runtime */',
+    cgCss: '/* placeholder template styles */',
+  });
+}
+
 /** Bytes that are NOT a valid `.vcg` — `verify()` fails to even unpack them. */
 export function buildInvalidVcg(): Uint8Array {
   return new TextEncoder().encode('this is not a .vcg archive');

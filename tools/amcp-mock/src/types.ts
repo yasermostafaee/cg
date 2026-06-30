@@ -40,6 +40,14 @@ export interface LayerState {
   backgroundProducer: 'empty' | 'html';
   /** Play/pause flag — `false` means playing. */
   paused: boolean;
+  /**
+   * B-039 — whether a CG template producer is loaded AND playing (on air). `CG ADD`
+   * sets it from the play-on-load flag; `CG PLAY` sets it true ONLY when a producer
+   * is loaded (PLAY on an empty/destroyed layer is an observable no-op); `CLEAR` /
+   * `CG REMOVE` reset it. Lets tests distinguish "playing a producer" from "PLAY on
+   * nothing" — the exact gap the old blind-ack hid.
+   */
+  onAir: boolean;
 }
 
 export interface MockOptions {

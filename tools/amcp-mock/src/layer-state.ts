@@ -20,6 +20,7 @@ export class LayerRegistry {
       filePath: '',
       backgroundProducer: 'empty',
       paused: false,
+      onAir: false,
     };
     this.slots.set(key, fresh);
     return fresh;
