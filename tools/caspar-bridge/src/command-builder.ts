@@ -42,7 +42,11 @@ const FLASH_LAYER = 0;
  * delivered `"[object Object]"`. `CG UPDATE` is the answer.
  *
  * All user values are escaped via `quote()` from `@cg/caspar-client` (the one
- * canonical AMCP quoter); a raw value never reaches the wire unquoted.
+ * canonical AMCP quoter), applied EXACTLY ONCE per argument. The data argument is
+ * already a `JSON.stringify` string, so `quote()` only makes it survive CasparCG's
+ * quoted-string parsing (escapes `"` → `\"`; backslashes stay literal) — it does NOT
+ * re-escape what JSON already handled (B-041: the old backslash-doubling corrupted
+ * `"` / `\` / newline values). A raw value never reaches the wire unquoted.
  */
 export class CommandBuilder {
   /** Load a template onto a slot — `CG ADD` with play-on-load OFF (loaded, NOT playing). */

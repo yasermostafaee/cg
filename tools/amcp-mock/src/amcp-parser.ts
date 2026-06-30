@@ -3,9 +3,13 @@ import type { AmcpRequest } from './types.js';
 /**
  * AMCP command tokenizer.
  *
- * Wire form is whitespace-separated; tokens containing spaces are wrapped
- * in `"..."` with `\"` escaping a literal quote and `\\` a literal backslash
- * (the inverse of Phase 5 §3.2's escape rules). Empty input → null.
+ * Wire form is whitespace-separated; tokens containing spaces are wrapped in
+ * `"..."`. Quoted-string un-escaping models **real CasparCG 2.3.x** (B-041):
+ * inside `"..."`, ONLY `\"` → `"` is an escape; every other character — including a
+ * backslash — is LITERAL, and an unescaped `"` closes the token. This is deliberately
+ * NOT the inverse of `@cg/caspar-client`'s `escape()` — modelling CasparCG
+ * independently is what lets the mock CATCH a double-escaped (backslash-doubled)
+ * payload instead of mirroring it. Empty input → null.
  */
 export function parseAmcpLine(line: string): AmcpRequest | null {
   const raw = line.trimEnd();
@@ -53,25 +57,17 @@ function readQuoted(s: string, start: number): { value: string; next: number } {
   let out = '';
   while (i < s.length) {
     const c = s.charCodeAt(i);
-    if (c === 0x5c /* \ */ && i + 1 < s.length) {
-      const next = s.charCodeAt(i + 1);
-      if (next === 0x22) {
-        out += '"';
-        i += 2;
-        continue;
-      }
-      if (next === 0x5c) {
-        out += '\\';
-        i += 2;
-        continue;
-      }
-      out += String.fromCharCode(next);
+    // CasparCG 2.3.x: `\"` is the ONLY in-quote escape → a literal `"`.
+    if (c === 0x5c /* \ */ && i + 1 < s.length && s.charCodeAt(i + 1) === 0x22 /* " */) {
+      out += '"';
       i += 2;
       continue;
     }
+    // An unescaped `"` closes the token.
     if (c === 0x22) {
       return { value: out, next: i + 1 };
     }
+    // Everything else — including a lone backslash — is literal.
     out += s[i];
     i++;
   }
