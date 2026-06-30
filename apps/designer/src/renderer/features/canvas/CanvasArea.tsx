@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { ScanSearch, ZoomIn, ZoomOut } from 'lucide-react';
 import type { Element, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
@@ -20,6 +20,8 @@ import {
   coverZoom,
   fitZoom,
   pasteboardLayout,
+  pixelGridMetrics,
+  pixelGridVisible,
   screenToScene,
   zoomAnchorScroll,
 } from './geometry.js';
@@ -68,11 +70,42 @@ interface Props {
 // in every normal case, and is always well above this).
 const ZOOM_HARD_MIN = 0.02;
 // D-120 — the maximum zoom is 6400% (one scene pixel = 64 screen px at the top), deep enough for
-// pixel-perfect work; the pixel grid (added separately) appears well before this so there is a wide
-// editing band. The dynamic cover-fit MINIMUM (B-027) is unchanged — only this upper bound rose.
+// pixel-perfect work; the pixel grid (below) appears well before this so there is a wide editing
+// band. The dynamic cover-fit MINIMUM (B-027) is unchanged — only this upper bound rose from 4.
 const ZOOM_MAX = 64;
 const ZOOM_STEP = 1.1; // multiplicative step per click / wheel notch
 const ZOOM_DEFAULT = 0.5;
+
+// D-120 — pixel-grid hairline tones: faint over BOTH the #161927 pasteboard and the #3d4253 frame
+// backdrop so the grid delineates pixels without occluding shapes; the every-10th MAJOR line is a
+// hair stronger (graph-paper, for counting pixels). White-alpha so it reads on either backdrop.
+const PIXEL_GRID_MINOR = 'rgba(255, 255, 255, 0.07)';
+const PIXEL_GRID_MAJOR = 'rgba(255, 255, 255, 0.14)';
+
+/**
+ * D-120 — the inline background for the pixel-grid layer at this zoom. Two 1px `linear-gradient`
+ * hairlines (vertical + horizontal) at `cell = zoom` px for the MINOR grid, plus two at `10·zoom`
+ * for the MAJOR lines, listed FIRST so they paint ON TOP of the minor at every 10th boundary. The
+ * compositor rasterizes only the visible tile, so this stays cheap even though the pasteboard is
+ * ~760k px wide at 6400%. The major lines are offset by `(frameOffset % 10)·zoom` so an emphasized
+ * line lands on scene multiples of 10; the minor grid needs no offset (frameOffset is integer, so
+ * every scene boundary is already a multiple of `cell` from the stage origin).
+ */
+function pixelGridBackground(zoom: number, frameOffset: { x: number; y: number }): CSSProperties {
+  const g = pixelGridMetrics(zoom, frameOffset);
+  const line = (dir: 'right' | 'bottom', color: string): string =>
+    `linear-gradient(to ${dir}, ${color}, ${color} 1px, transparent 1px)`;
+  return {
+    backgroundImage: [
+      line('right', PIXEL_GRID_MAJOR),
+      line('bottom', PIXEL_GRID_MAJOR),
+      line('right', PIXEL_GRID_MINOR),
+      line('bottom', PIXEL_GRID_MINOR),
+    ].join(', '),
+    backgroundSize: `${g.major}px ${g.major}px, ${g.major}px ${g.major}px, ${g.cell}px ${g.cell}px, ${g.cell}px ${g.cell}px`,
+    backgroundPosition: `${g.offsetX}px 0, 0 ${g.offsetY}px, 0 0, 0 0`,
+  };
+}
 
 /**
  * D-040 — the assetId → blob URL map posted to the preview iframe, merged across
@@ -790,6 +823,19 @@ export function CanvasArea({
                   // import from a blob URL" only works without sandbox
                   // in current Chromium.
                 />
+                {/* D-120 — the pixel grid: a non-interactive layer over the WHOLE pasteboard
+                    (this stage), shown only at high zoom (`pixelGridVisible`). It sits ABOVE the
+                    iframe (so it's visible over the opaque content) and BELOW the overlay (so the
+                    gizmos read on top and `pointer-events: none` keeps hit-testing on the overlay).
+                    1 cell = 1 scene px; lines land on integer scene coords (ruler-aligned). */}
+                {pixelGridVisible(zoom) && (
+                  <div
+                    className={s.pixelGrid}
+                    data-testid="pixel-grid"
+                    aria-hidden
+                    style={pixelGridBackground(zoom, frameOffset)}
+                  />
+                )}
                 <CanvasOverlay
                   scene={scene}
                   tool={tool}

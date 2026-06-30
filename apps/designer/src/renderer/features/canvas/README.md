@@ -168,6 +168,25 @@ resized-but-unscrolled frame first — a one-frame jerk per wheel notch). Ctrl+w
 fit/centre path has no stashed anchor, so the layout effect no-ops there — wheel-zoom never
 recenters (auto-fit is keyed on `sceneId` + resolution, never on `zoom`).
 
+**High zoom + pixel grid (D-120).** The maximum zoom is **6400%** (`ZOOM_MAX = 64`; one scene pixel =
+64 screen px at the top) — deep enough for pixel-perfect work; the dynamic cover-fit **minimum**
+(B-027) is unchanged, and every zoom path still routes through the single `clampZoom`. At high zoom a
+**pixel grid** (1 cell = 1 scene pixel) is drawn over the WHOLE pasteboard, shown only when one scene
+pixel maps to **≥ 8 screen px** (`pixelGridVisible(zoom)`, i.e. zoom ≥ 800%) so normal zoom isn't
+cluttered. It is a single non-interactive `div` (`s.pixelGrid`, `pointer-events:none`) inside the
+stage, placed **between the iframe and the overlay** in DOM order with **no `z-index`** — so the
+overlay's gizmos paint on top (a positive z-index would lift the grid over the `z-index:auto`
+overlay) and hit-testing stays on the overlay. The lines are a **CSS `linear-gradient` layer**
+(`pixelGridBackground` → `background-image`/`-size`/`-position` from `pixelGridMetrics`): two 1px
+hairlines at `cell = zoom` px (minor) plus two at `10·zoom` (major, listed first so they paint over
+the minor every 10th line — graph-paper). The compositor rasterizes **only the visible tile**, so
+there is no per-line draw even though the pasteboard is ~760k px wide at 6400%, and the lines stay
+crisp (hard gradient stops). Because `frameOffset` is an integer, a scene integer boundary lands at
+stage-local `k·zoom`, exactly where the minor gradient draws — so lines sit on every integer scene
+coordinate using the **same `(x + frameOffset)·zoom` mapping the rulers use** (a unit test pins the
+two are identical → no drift); the major lines carry a `(frameOffset % 10)·zoom` offset so an
+emphasized line lands on scene multiples of 10.
+
 The rulers + guides live in a **non-scrolling overlay** (`s.overlay`) that is a **sibling** of the
 scroll container (`s.outer`), not a child of it — absolutely-positioned children of an
 `overflow:auto` element scroll **with** the content, which would slide the rulers out of view and

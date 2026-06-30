@@ -424,3 +424,40 @@ export function fitZoom(
   const z = Math.min((viewportW - margin) / sceneW, (viewportH - margin) / sceneH);
   return Number.isFinite(z) && z > 0 ? z : null;
 }
+
+/**
+ * D-120 — the pixel grid is shown only when one scene pixel maps to at least this many SCREEN px
+ * (i.e. `zoom ≥ PIXEL_GRID_MIN_ZOOM`). Below it a 1px-per-cell grid is an illegible smear; 8 px
+ * (800%) leaves a wide useful pixel-editing band up to the 6400% (`ZOOM_MAX = 64`) ceiling.
+ */
+export const PIXEL_GRID_MIN_ZOOM = 8;
+/** D-120 — every Nth grid line is emphasized (graph-paper), aligned to scene multiples of N. */
+export const PIXEL_GRID_MAJOR_EVERY = 10;
+
+/** D-120 — whether the pixel grid should be drawn at this zoom (one scene px ≥ the threshold). */
+export function pixelGridVisible(zoom: number): boolean {
+  return zoom >= PIXEL_GRID_MIN_ZOOM;
+}
+
+/**
+ * D-120 — the CSS metrics for the pixel-grid layer (an inset child of the stage). One cell = one
+ * scene pixel = `zoom` screen px, so the minor lines repeat every `cell` and the MAJOR (every-10th)
+ * lines every `major`. The stage's top-left is scene `(-frameOffset)` and `frameOffset` is an
+ * integer, so a scene integer boundary already lands at stage-local `k·zoom` — the minor grid needs
+ * no offset (scene 0 included). The MAJOR lines are shifted by `(frameOffset % 10)·zoom` so an
+ * emphasized line sits on scene multiples of 10 (matching the round ruler labels). This is the SAME
+ * `scene→stage = (x + frameOffset)·zoom` mapping the rulers use, so the grid never drifts from them.
+ */
+export function pixelGridMetrics(
+  zoom: number,
+  frameOffset: { x: number; y: number },
+): { cell: number; major: number; offsetX: number; offsetY: number } {
+  const cell = zoom;
+  const major = zoom * PIXEL_GRID_MAJOR_EVERY;
+  return {
+    cell,
+    major,
+    offsetX: (frameOffset.x % PIXEL_GRID_MAJOR_EVERY) * zoom,
+    offsetY: (frameOffset.y % PIXEL_GRID_MAJOR_EVERY) * zoom,
+  };
+}

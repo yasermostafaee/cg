@@ -161,6 +161,18 @@ export const stage = style({
   boxShadow: '0 0 0 1px #2b3146',
 });
 
+// D-120 — the pixel-grid layer: covers the whole stage (pasteboard), drawn ABOVE the iframe and
+// BELOW the overlay. NO `z-index` — it relies on DOM order (iframe → grid → overlay, all
+// `z-index: auto`), so the overlay's gizmos paint on top; a positive z-index here would instead
+// lift the grid OVER the (auto) overlay. `pointer-events: none` so it never intercepts
+// selection/drag (the overlay above owns hit-testing). The hairline `background-image` +
+// sizing/position are set inline per zoom (`pixelGridBackground`); display-only, no own colour.
+export const pixelGrid = style({
+  position: 'absolute',
+  inset: 0,
+  pointerEvents: 'none',
+});
+
 export const empty = style({
   color: colors.textMuted,
   fontSize: '0.9rem',

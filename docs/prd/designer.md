@@ -3059,3 +3059,20 @@ The 5 templates:
 - @IRIBNEWS / any logo: IRIB is a real brand; do NOT reproduce their real logo. Use a clear PLACEHOLDER (simple SVG/text mark) the owner can swap for the real asset later. Note this in the template.
 - **SEQUENCING — dependency:** implement this AFTER **D-060** (auto-size text) and the open Designer bugs **B-035** (fit-on-open), **B-036** (icon align), **B-037** (pen tool) are done — templates should exercise healthy features. **BLOCKED** until those land.
 - **OPEN QUESTIONS to resolve with owner before implementation:** (a) resolution(s) — all 1920×1080, or some vertical 1080×1920? (b) colour palette — specific (e.g. news red/white) or designer's choice? (c) storage location — bundled `@cg/starter-templates` package vs sample projects? (d) real logo asset availability.
+
+## [~] D-120 — High zoom + pixel grid for pixel-perfect editing ⟨priority: medium⟩ — `openspec/changes/high-zoom-pixel-grid`
+
+**What:** Raise the maximum canvas zoom to 6400% and render a pixel grid (1 grid cell = 1 scene pixel) that appears only at high zoom, across the whole pasteboard, so the user can align/move shapes at single-pixel precision.
+
+**Why:** The current 400% max is too low to see or place individual pixels; pixel-perfect alignment (e.g. moving a shape from x=5 to x=6) needs both deep zoom and a visible pixel grid. Matches the affordance pro tools (Loopic) provide.
+
+**Acceptance:**
+
+- WHEN the user zooms in THEN the maximum zoom is 6400% (each scene pixel = 64 screen px at max)
+- WHEN the zoom is high enough that a scene pixel is comfortably visible THEN a pixel grid appears over the WHOLE pasteboard (1 cell = 1 pixel)
+- WHEN the zoom is below that threshold THEN the grid is hidden (no clutter at normal zoom)
+- WHEN a shape is nudged 1px at high zoom THEN the movement is clearly visible against the grid
+
+**Notes:** max zoom 6400%; grid spans the whole pasteboard (not just the frame); grid appears only above a zoom threshold (one scene pixel ≥ **8** screen px → **800%+**); built on the B-027 pasteboard/zoom work (dynamic cover-fit MIN unchanged — only the MAX rises).
+
+**Evidence:** `ZOOM_MAX` 4 → **64** (6400%) in `CanvasArea.tsx`, clamped via the existing `clampZoom` path so every zoom control (±/1× buttons, Ctrl+wheel, Fit) respects it; B-027's dynamic cover-fit min still governs the bottom of the range. Pure helpers in `geometry.ts`: `pixelGridVisible(zoom)` (shown iff `zoom ≥ PIXEL_GRID_MIN_ZOOM` = 8) + `pixelGridMetrics(zoom, frameOffset)` (cell = `zoom` px, major every 10, scene-aligned offset). The grid is a **CSS `linear-gradient` layer** (`s.pixelGrid`) inside the stage, `pointer-events: none`, between the iframe and the overlay — GPU-cheap, viewport-culled by the compositor (no per-line draw), crisp 1px hairlines, faint over both the `#161927` pasteboard and `#3d4253` frame; major (every-10th) lines a hair stronger (graph-paper). Lines sit on integer scene coordinates via the SAME scene→stage mapping the rulers use (`(x + frameOffset)·zoom`), so the grid never drifts from the rulers. Capability `designer-canvas-viewport` (MODIFIED zoom-max + ADDED pixel-grid requirement). Tests: `pasteboard.test.ts` (threshold + metrics + ruler alignment) + `pixel-grid.spec.ts` E2E (grid present at 1600%, absent at 100%, max reaches 6400%, 1px nudge moves 1 scene px).
