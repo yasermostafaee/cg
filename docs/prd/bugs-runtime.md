@@ -103,10 +103,15 @@ the item's real fields) is tracked separately — see the C-001 follow-up.
 
 ---
 
-## [~] B-039 — broken playout state model: Load auto-plays, and a Take after Out never re-renders (no re-ADD) ⟨priority: high⟩
+## [x] B-039 — broken playout state model: Load auto-plays, and a Take after Out never re-renders (no re-ADD) ⟨priority: high⟩
 
-> Surfaced only on **real CasparCG 2.3.2** (live take/out/retake); `amcp-mock`'s
-> simpler cycle hid it. Read-only report — no fix here; the fix is designed next.
+> **CLOSED — hardware-validated.** Fixed by `fix-playout-state-model` (PR #241): the
+> bridge now chooses `CG ADD` vs `CG PLAY` from per-slot producer state. Confirmed
+> live on **CasparCG 2.3.2** (the flag-0 sequence, not just amcp-mock): Load emits
+> `CG ADD` with play-on-load OFF and does NOT auto-play (loaded, not on air); Take
+> renders with correct Persian; Out destroys the producer (`CLEAR`); a subsequent
+> Take **re-ADDs** then `CG PLAY`s and renders again; Update still pushes field
+> changes to air.
 
 **Repro:**
 
