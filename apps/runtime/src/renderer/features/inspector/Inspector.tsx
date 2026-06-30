@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { DynamicField, FieldValue, StackItemState } from '@cg/shared-schema';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
+import { ListFieldEditor } from './ListFieldEditor.js';
 
 interface Props {
   item: StackItemState | null;
@@ -288,6 +289,21 @@ function FieldControl({
       />
     );
   }
+  if (kind === 'list') {
+    // B-040 — a `list` (array) field gets a structured items editor, never the
+    // default text input (which would `String()`-coerce the array to
+    // "[object Object]"). Keyed by the value signature so selecting a different
+    // stack item / an external update re-seeds the editor (mirrors the scalar
+    // inputs' `key`). The committed value stays a structured `ListItem[]`.
+    return (
+      <ListFieldEditor
+        key={`${fieldId}-${JSON.stringify(value)}`}
+        fieldId={fieldId}
+        value={value}
+        onCommit={onCommit}
+      />
+    );
+  }
   // Default: text input.
   const v = typeof value === 'string' ? value : value === undefined ? '' : String(value);
   return (
@@ -308,6 +324,9 @@ function FieldControl({
 function inferKind(value: FieldValue | undefined): DynamicField['type'] | 'unknown' {
   if (typeof value === 'boolean') return 'boolean';
   if (typeof value === 'number') return 'number';
+  // B-040 — an array value is a `list` field; route it to the items editor so it's
+  // never rendered (or committed) as a `String()`-coerced "[object Object]".
+  if (Array.isArray(value)) return 'list';
   if (typeof value === 'string') {
     if (/^#[0-9a-f]{3,8}$/i.test(value)) return 'color';
     return 'text';
