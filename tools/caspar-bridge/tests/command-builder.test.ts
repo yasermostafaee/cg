@@ -5,8 +5,10 @@ const slot: CommandSlot = { channel: 1, layer: 10 };
 const builder = new CommandBuilder();
 
 describe('CommandBuilder (ADR 0006 seam — amcp-mock-validated)', () => {
-  it('load → CG ADD with quoted template + JSON data', () => {
-    expect(builder.load(slot, 'lower-third', {})).toBe('CG 1-10 ADD 0 "lower-third" 1 "{}"');
+  it('load → CG ADD with play-on-load OFF (0): loaded, NOT playing (B-039)', () => {
+    // The play-on-load flag is `0` — load only ADDs the producer; the operator's
+    // take issues the CG PLAY. (Was `1`, which auto-played on load.)
+    expect(builder.load(slot, 'lower-third', {})).toBe('CG 1-10 ADD 0 "lower-third" 0 "{}"');
   });
 
   it('take → CG PLAY', () => {

@@ -187,6 +187,61 @@ describe('createMock', () => {
     expect(mock.lastCgUpdate({ channel: 1, layer: 10 })?.data).toBe('{"title":"به‌روز"}');
   });
 
+  // B-039 — the mock models the producer lifecycle so the broken playout cycle is
+  // testable: a load (play-on-load OFF) does NOT play; CG PLAY plays a loaded
+  // producer; CG PLAY on an empty/destroyed layer is an observable no-op.
+  it('CG ADD with play-on-load OFF loads the producer WITHOUT playing', async () => {
+    const { url, close } = await serveOnce('<!doctype html><html><body>ok</body></html>');
+    try {
+      mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+      await sendAndReceive(mock.amcpPort, [`CG 1-10 ADD 0 "${url}" 0 "{}"`]);
+      const state = mock.layerState({ channel: 1, layer: 10 });
+      expect(state?.producer).toBe('html'); // loaded
+      expect(state?.onAir).toBe(false); // but NOT playing
+    } finally {
+      await close();
+    }
+  });
+
+  it('CG ADD with play-on-load ON loads AND plays', async () => {
+    const { url, close } = await serveOnce('<!doctype html><html><body>ok</body></html>');
+    try {
+      mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+      await sendAndReceive(mock.amcpPort, [`CG 1-10 ADD 0 "${url}" 1 "{}"`]);
+      expect(mock.layerState({ channel: 1, layer: 10 })?.onAir).toBe(true);
+    } finally {
+      await close();
+    }
+  });
+
+  it('CG PLAY plays a loaded producer; CG PLAY on an empty layer is an observable no-op', async () => {
+    const { url, close } = await serveOnce('<!doctype html><html><body>ok</body></html>');
+    try {
+      mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+      const slot = { channel: 1, layer: 10 };
+
+      // PLAY on an empty layer → 202 (blind ack like real CasparCG) but NOT on air.
+      const emptyPlay = await sendAndReceive(mock.amcpPort, ['CG 1-10 PLAY 0']);
+      expect(emptyPlay).toContain('202 CG');
+      expect(mock.layerState(slot)?.onAir ?? false).toBe(false);
+
+      // Load (no auto-play) then PLAY → now on air.
+      await sendAndReceive(mock.amcpPort, [`CG 1-10 ADD 0 "${url}" 0 "{}"`]);
+      expect(mock.layerState(slot)?.onAir).toBe(false);
+      await sendAndReceive(mock.amcpPort, ['CG 1-10 PLAY 0']);
+      expect(mock.layerState(slot)?.onAir).toBe(true);
+
+      // CLEAR destroys the producer → off air; a subsequent PLAY is a no-op again.
+      await sendAndReceive(mock.amcpPort, ['CLEAR 1-10']);
+      expect(mock.layerState(slot)?.producer).toBe('empty');
+      expect(mock.layerState(slot)?.onAir).toBe(false);
+      await sendAndReceive(mock.amcpPort, ['CG 1-10 PLAY 0']);
+      expect(mock.layerState(slot)?.onAir).toBe(false);
+    } finally {
+      await close();
+    }
+  });
+
   it('a handler that throws yields a 500', async () => {
     mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
     mock.setHandler('CRASH', () => {

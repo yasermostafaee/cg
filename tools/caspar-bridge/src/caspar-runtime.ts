@@ -82,8 +82,18 @@ export class CasparRuntime {
   readonly #layers = new LayerManager();
   readonly #builder = new CommandBuilder();
 
-  /** itemId → the slot we allocated for it (so take/update/out target it). */
+  /**
+   * itemId → the slot RESERVED for it (so take/update/out target it). Set at load,
+   * retained through out (the item is still on the stack, idle), deleted at remove.
+   */
   readonly #slots = new Map<string, CommandSlot>();
+  /**
+   * B-039 — itemIds whose slot currently has a LIVE producer (a `CG ADD` succeeded
+   * and no later `CLEAR` destroyed it). The prescriptive signal: `take` plays when
+   * present, else re-issues `CG ADD` (a fresh load) before `CG PLAY`. Server-agnostic
+   * (mirror-sync fans out ADD/CLEAR to both, so existence matches on each).
+   */
+  readonly #loaded = new Set<string>();
   #seq = 0;
   #lastFailover: ConnectionHealth['lastFailover'] = undefined;
 
@@ -259,13 +269,9 @@ export class CasparRuntime {
     // pass the filter (survives failover).
     this.#addInterest(slot);
 
-    // B-038 Phase 3 — `CG ADD` references the SERVED `/template/<id>` URL (a real,
-    // loadable page) when the HTTP server is up; falls back to the bare id only
-    // when serving isn't started (e.g. isolated unit tests).
-    const templateArg = this.#templateServer.listening
-      ? this.#templateServer.urlFor(templateId)
-      : templateId;
-    const ok = await this.#send(this.#builder.load(slot, templateArg, fields), seq, 'normal');
+    // B-039 — `CG ADD` only (play-on-load OFF in the builder): the producer is
+    // loaded, NOT playing. The operator's take issues the `CG PLAY`.
+    const ok = await this.#sendAdd(itemId, slot, templateId, fields, seq);
     return { accepted: ok };
   }
 
@@ -274,6 +280,27 @@ export class CasparRuntime {
     if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'take', itemId }, seq);
+
+    // B-039 — PRESCRIPTIVE: `CG PLAY` only renders if a live producer exists on the
+    // slot. If a prior out destroyed it, re-issue `CG ADD` (a fresh load) FIRST so
+    // the take re-renders instead of playing an empty layer. The re-ADD recovers the
+    // template id + current (merged) fields from the Reconciler, and rides a
+    // non-intent seq so its ack doesn't perturb the take's status.
+    if (!this.#loaded.has(itemId)) {
+      const item = this.#reconciler.get(itemId);
+      const addedOk = await this.#sendAdd(
+        itemId,
+        slot,
+        item?.templateId ?? itemId,
+        item?.fields ?? {},
+        this.#nextSeq(),
+      );
+      if (!addedOk) {
+        this.#reconciler.applyAck(seq, false, 'amcp-error');
+        return { accepted: false, errorCode: 'amcp-error' };
+      }
+    }
+
     const ok = await this.#send(this.#builder.take(slot), seq, 'normal');
     return ok ? { accepted: true } : { accepted: false, errorCode: 'amcp-error' };
   }
@@ -299,6 +326,11 @@ export class CasparRuntime {
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'out', itemId }, seq);
     const ok = await this.#send(this.#builder.out(slot), seq, 'urgent');
+    // B-039 — `CLEAR` DESTROYS the producer: record that no producer exists on the
+    // slot so a subsequent take re-ADDs (instead of `CG PLAY`-ing an empty layer).
+    // The slot stays RESERVED (the item is still on the stack, idle) until remove —
+    // retake re-ADDs onto the same slot; OSC interest stays put so idle confirms.
+    this.#loaded.delete(itemId);
     return { accepted: ok };
   }
 
@@ -307,6 +339,7 @@ export class CasparRuntime {
     // Drop it from the stack immediately (UI responsiveness), then best-effort
     // clear the slot on the server.
     this.#reconciler.applyIntent({ kind: 'remove', itemId }, this.#nextSeq());
+    this.#loaded.delete(itemId);
     if (slot !== undefined) {
       this.#slots.delete(itemId);
       this.#removeInterest(slot);
@@ -470,6 +503,27 @@ export class CasparRuntime {
       this.#reconciler.applyAck(seq, false, 'amcp-send-failed');
       return false;
     }
+  }
+
+  /**
+   * B-039 — issue `CG ADD` (play-on-load OFF) for an item's slot and, on success,
+   * record that a live producer now exists (`#loaded`). Shared by `load` and the
+   * `take` re-ADD path. Uses the SERVED `/template/<id>` URL when the HTTP server is
+   * up (B-038 Phase 3), else the bare id (isolated unit tests).
+   */
+  async #sendAdd(
+    itemId: string,
+    slot: CommandSlot,
+    templateId: string,
+    fields: FieldValues,
+    seq: number,
+  ): Promise<boolean> {
+    const templateArg = this.#templateServer.listening
+      ? this.#templateServer.urlFor(templateId)
+      : templateId;
+    const ok = await this.#send(this.#builder.load(slot, templateArg, fields), seq, 'normal');
+    if (ok) this.#loaded.add(itemId);
+    return ok;
   }
 
   #markDirty(itemId: string): void {

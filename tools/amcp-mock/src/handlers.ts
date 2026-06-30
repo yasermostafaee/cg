@@ -64,7 +64,7 @@ function handlePlay(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   if (!slot) return { kind: 'err', code: 401, verb: 'PLAY' };
   if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'PLAY' };
   const url = req.args[1] ?? '';
-  ctx.setLayer(slot, { producer: 'html', filePath: url, paused: false });
+  ctx.setLayer(slot, { producer: 'html', filePath: url, paused: false, onAir: true });
   return { kind: 'ok', code: 202, verb: 'PLAY' };
 }
 
@@ -74,7 +74,7 @@ function handleLoad(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'LOAD' };
   const url = req.args[1] ?? '';
   // LOAD primes the foreground but pauses immediately — PLAY is required to resume.
-  ctx.setLayer(slot, { producer: 'html', filePath: url, paused: true });
+  ctx.setLayer(slot, { producer: 'html', filePath: url, paused: true, onAir: false });
   return { kind: 'ok', code: 202, verb: 'LOAD' };
 }
 
@@ -86,7 +86,8 @@ function handleClear(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   const slot = parseChannelLayer(target);
   if (slot) {
     if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'CLEAR' };
-    ctx.setLayer(slot, { producer: 'empty', filePath: '', paused: false });
+    // B-039 — CLEAR DESTROYS the producer (and takes it off air).
+    ctx.setLayer(slot, { producer: 'empty', filePath: '', paused: false, onAir: false });
     return { kind: 'ok', code: 202, verb: 'CLEAR' };
   }
   // `CLEAR <channel>` — clear all layers on the channel. Walk known slots.
@@ -125,13 +126,22 @@ async function handleCg(req: AmcpRequest, ctx: HandlerContext): Promise<AmcpResp
     case 'ADD': {
       // `CG <slot> ADD <flash-layer> "<template>" <play-on-load> "<data>"`.
       const template = req.args[3] ?? '';
+      const playOnLoad = req.args[4] === '1';
       const data = req.args[5] ?? '';
       ctx.recordCgAdd(slot, template, data);
       // Resolve the template argument instead of blind-acking. A served URL → 202;
       // a bare id / unreachable URL → 404 CG ADD FAILED (matches real CasparCG).
       const resolved = await resolveTemplateRef(template);
       if (!resolved) return { kind: 'err', code: 404, verb: 'CG', detail: 'CG ADD FAILED' };
-      ctx.setLayer(slot, { producer: 'html', filePath: template, paused: false });
+      // B-039 — the producer is now LOADED; it is on air only if play-on-load is set
+      // (`… 1 …`). A load (`… 0 …`) loads it without playing — the operator's
+      // `CG PLAY` puts it on air.
+      ctx.setLayer(slot, {
+        producer: 'html',
+        filePath: template,
+        paused: false,
+        onAir: playOnLoad,
+      });
       return { kind: 'ok', code: 202, verb: 'CG' };
     }
     case 'UPDATE': {
@@ -139,13 +149,22 @@ async function handleCg(req: AmcpRequest, ctx: HandlerContext): Promise<AmcpResp
       ctx.recordCgUpdate(slot, req.args[3] ?? '');
       return { kind: 'ok', code: 202, verb: 'CG' };
     }
-    case 'PLAY':
+    case 'PLAY': {
+      // B-039 — `CG PLAY` puts the template on air ONLY when a producer is loaded.
+      // PLAY on an empty/destroyed layer is an observable NO-OP (onAir stays false),
+      // though it still 202s — matching real CasparCG's blind ack. This is the exact
+      // "looks acked, renders nothing" gap the old mock hid.
+      if (ctx.getLayer(slot).producer === 'html') ctx.setLayer(slot, { onAir: true });
+      return { kind: 'ok', code: 202, verb: 'CG' };
+    }
     case 'STOP':
+      ctx.setLayer(slot, { onAir: false });
+      return { kind: 'ok', code: 202, verb: 'CG' };
     case 'INVOKE':
     case 'NEXT':
       return { kind: 'ok', code: 202, verb: 'CG' };
     case 'REMOVE': {
-      ctx.setLayer(slot, { producer: 'empty', filePath: '', paused: false });
+      ctx.setLayer(slot, { producer: 'empty', filePath: '', paused: false, onAir: false });
       return { kind: 'ok', code: 202, verb: 'CG' };
     }
     default:

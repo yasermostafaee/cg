@@ -20,15 +20,21 @@ const FLASH_LAYER = 0;
  * slot. Keeping construction here means the verified sequence is isolated from
  * `ServerSession` / `CommandQueue` / `Reconciler`.
  *
- * ✅ **Hardware-validated on CasparCG 2.3.2 (`4de6d18f` Dev) — see ADR 0006.**
- * The C-001 Phase-3b harness (`tools/caspar-amcp-probe`) ran every candidate
- * against real hardware; this is the sequence that delivered a Persian-laden
- * JSON payload to `window.update` intact:
+ * ✅ **`CG UPDATE` hardware-validated on CasparCG 2.3.2 (`4de6d18f` Dev) — ADR 0006.**
+ * The C-001 Phase-3b harness (`tools/caspar-amcp-probe`) proved `CG UPDATE` delivers
+ * a Persian-laden JSON payload to `window.update` intact. The verb sequence is:
  *
- *   load   → `CG <ch>-<layer> ADD 0 "<template>" 1 "<data>"`
+ *   load   → `CG <ch>-<layer> ADD 0 "<template>" 0 "<data>"`  (play-on-load OFF)
  *   take   → `CG <ch>-<layer> PLAY 0`
  *   update → `CG <ch>-<layer> UPDATE 0 "<data>"`
  *   out    → `CLEAR <ch>-<layer>`
+ *
+ * B-039 — the play-on-load flag is **`0`** (load does NOT auto-play): load only
+ * ADDs the producer (loaded, not playing); the operator's take issues the `CG PLAY`.
+ * The bridge (`CasparRuntime`) chooses the verb sequence prescriptively — a take
+ * after an out re-issues this `load()` (re-ADD) before `take()` since the prior
+ * `CLEAR` destroyed the producer. (The load/take/out/retake cycle with the flag OFF
+ * is re-validated on real CasparCG before B-039 closes.)
  *
  * The disproven alternatives are NOT pending work: `CALL ... "update"` returned
  * `202` but never invoked `window.update`; `CG INVOKE ... "update" "<json>"`
@@ -39,9 +45,9 @@ const FLASH_LAYER = 0;
  * canonical AMCP quoter); a raw value never reaches the wire unquoted.
  */
 export class CommandBuilder {
-  /** Load a template onto a slot (primed to play). */
+  /** Load a template onto a slot — `CG ADD` with play-on-load OFF (loaded, NOT playing). */
   load(slot: CommandSlot, template: string, fields: FieldValues): string {
-    return `CG ${target(slot)} ADD ${String(FLASH_LAYER)} ${quote(template)} 1 ${quote(serialize(fields))}`;
+    return `CG ${target(slot)} ADD ${String(FLASH_LAYER)} ${quote(template)} 0 ${quote(serialize(fields))}`;
   }
 
   /** Play (take to air) the loaded template on a slot. */
