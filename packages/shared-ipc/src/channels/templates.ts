@@ -36,9 +36,16 @@ export const TemplatesListChannel = defineChannel(
  * `TemplateInfo` is handed to the registry. `templates.list` / `templates.get`
  * see it immediately, so the operator can load it onto the stack with its field
  * schema in the Inspector. A package that fails verification never reaches here.
+ *
+ * B-038 Phase 2 — the request also carries `html`: the rendered **self-contained
+ * standalone HTML** the browser produces from the unpacked `.vcg` (the D-019
+ * single-file export, runtime + scene + images inlined). The bridge retains it
+ * keyed by `templateId` so a later phase can serve it over HTTP and `CG ADD` it.
+ * This is a **Runtime-only** channel (the Designer does not consume it); the
+ * offline `MockRuntime` accepts and ignores `html`.
  */
 export const TemplatesImportChannel = defineChannel(
   'templates.import',
-  z.object({ template: TemplateInfoSchema }),
+  z.object({ template: TemplateInfoSchema, html: z.string() }),
   z.object({ registered: z.boolean(), templateId: IdSchema }),
 );

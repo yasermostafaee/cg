@@ -41,12 +41,26 @@ LIVE path validated on real CasparCG before B-038 closes.
 
 ## 3. Bridge serve + URL + fields (follow-up)
 
+> **Phase-2 status:** the channel + browser-produce + bridge-RETAIN half of this
+> phase shipped in the `deliver-template-html` change (B-038 Phase 2): the bridge
+> now HOLDS the HTML keyed by id (`CasparRuntime.templateHtml(id)` /
+> `TemplateRegistry`). What remains below is the SERVE + URL + real-fields half.
+
 - [ ] `tools/caspar-bridge`: small HTTP server (`GET /template/<id>` →
       `200 text/html`), separate from the control WS (WS stays `127.0.0.1`).
+      Serve from `CasparRuntime.templateHtml(id)` (the Phase-2 retention seam).
 - [ ] Host/bind selection: loopback when CasparCG is local; routable opt-in serve
       host (config or guessed LAN IPv4) when remote; log the chosen URL.
-- [ ] `CasparRuntime`: store/serve the imported HTML; build the `CG ADD` template
-      arg as the served URL; pass real field values; re-deliver on connect.
+- [ ] `CasparRuntime`: build the `CG ADD` template arg as the served URL; pass real
+      field values; re-deliver on connect.
+- [ ] **REQUIRED — bundled Persian fonts (deferred from Phase 2).** Phase 2 ships
+      the produced HTML with `fontsCss: ''` (the Runtime bundles no Vazirmatn /
+      Exo 2 faces and serves no `/fonts/`), so the bundled faces are NOT inlined and
+      a Vazirmatn/Exo 2 template renders with a **fallback face** on air. Before the
+      on-hardware Persian validation below, inline the bundled faces: bundle the
+      woff2 + `fonts.css` into `apps/runtime` and pass a real `fontsCss` to
+      `produce()`, OR serve `/fonts/` from the bridge so the exporter can
+      fetch+inline. Persian output is wrong until this lands.
 
 ## 4. amcp-mock regression + integration tests (follow-up)
 

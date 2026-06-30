@@ -66,6 +66,15 @@ interface Route {
   readonly handle: (req: unknown) => unknown;
 }
 
+/**
+ * B-038 Phase 2 — generous inbound WS frame cap. A `templates.import` frame
+ * carries the rendered self-contained HTML (inlined runtime + scene + base64
+ * images) — hundreds of KB to a couple of MB, once per import (not a hot path).
+ * Set well above that so a large import is never silently dropped; gzip remains a
+ * later tuning, not a contract change (design §4).
+ */
+const WS_MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
+
 /** Default connection — loopback CasparCG on the standard AMCP/OSC ports. */
 function defaultConnection(): ConnectionConfig {
   return {
@@ -98,7 +107,11 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   const runtime = new CasparRuntime(options.connection ?? defaultConnection());
   const routes = buildRoutes(runtime);
 
-  const wss = new WebSocketServer({ host, port: requestedPort });
+  const wss = new WebSocketServer({
+    host,
+    port: requestedPort,
+    maxPayload: WS_MAX_PAYLOAD_BYTES,
+  });
 
   await new Promise<void>((resolve, reject) => {
     wss.once('listening', resolve);
@@ -234,7 +247,11 @@ function buildRoutes(b: CasparRuntime): Map<string, Route> {
 
     route(TemplatesGetChannel, (r: { templateId: string }) => b.templateGet(r.templateId)),
     route(TemplatesListChannel, () => b.templateList()),
-    route(TemplatesImportChannel, (r: { template: never }) => b.templateImport(r.template)),
+    // B-038 Phase 2 — retain the browser-produced self-contained HTML alongside
+    // the TemplateInfo (held, not served yet).
+    route(TemplatesImportChannel, (r: { template: never; html: string }) =>
+      b.templateImport(r.template, r.html),
+    ),
 
     route(AuditRecentChannel, (r: { limit?: number; action?: never; actor?: string }) =>
       b.auditRecent(r.limit, r.action, r.actor),
