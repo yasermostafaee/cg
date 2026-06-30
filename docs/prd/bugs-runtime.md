@@ -242,3 +242,84 @@ field renders a structured items editor (not a text input) and never displays or
 commits `"[object Object]"`; (b) a field-flow test asserting a seeded list value
 round-trips as a JSON **array of objects** through `stack.update` → `CG UPDATE` (and
 `CG ADD`), Persian intact — never a stringified `"[object Object]"`.
+
+---
+
+## [~] B-041 — special characters (`"`, `\`, newline) in a field value break the live CG UPDATE / CG ADD (broken AMCP escaping) ⟨priority: high⟩
+
+> Surfaced on **real CasparCG 2.3.2** with special-character field values; `amcp-mock`
+> hid it (its tokenizer is the exact inverse of our own escaper) and the ADR-0006
+> harness missed it (its probe payloads had no `"` or `\`). Read-only report — no fix
+> here; the escaping fix is designed next.
+
+**Repro:**
+
+1. Run the Runtime **LIVE** against real CasparCG 2.3.2; load + take a template.
+2. In the Inspector, edit a text field to a value containing a `"`, a `\`, or a
+   newline, and click **Update**.
+3. Watch the CasparCG output + bridge log.
+
+**Expected:** the field value (any text) reaches `window.update` intact and the
+on-air template updates.
+
+**Actual:** the update silently does not apply (template unchanged on air) for
+certain characters, even though CasparCG returns `202 CG OK` — bytes accepted, JSON
+payload mangled. Character matrix (confirmed live):
+
+| Input in the field value                        | Result                             |
+| ----------------------------------------------- | ---------------------------------- |
+| `' _ - ^ & * ~ ! @ # $ % = / . ,` (and Persian) | ✅ applies                         |
+| `"` (double-quote)                              | ❌ update does not apply           |
+| `\` (backslash)                                 | ❌ ODD count fails, EVEN works     |
+| newline (`\n`)                                  | ❌ fails (not even line 1 applies) |
+
+**Findings (read-only):**
+
+- **The data arg is double-escaped (JSON, then AMCP).** Both the load and update
+  commands build the data argument as `quote(serialize(fields))`
+  (`tools/caspar-bridge/src/command-builder.ts:50` for `CG ADD`,
+  `command-builder.ts:60` for `CG UPDATE`), where `serialize` is `JSON.stringify`
+  (`command-builder.ts:75-77`). So a field value is escaped **twice**: first by
+  `JSON.stringify` in the browser (which already turns `"` → `\"`, `\` → `\\`, a
+  newline → the two-char `\n`), then again by the bridge's AMCP `escape()`.
+- **What `escape()` does** (`packages/caspar-client/src/amcp/escape.ts:21-40`,
+  wrapped by `quote()` at `:43-45`): `\` → `\\`, `"` → `\"`, and `\r`/`\n` → a
+  space. It does NOT special-case any other control char. Both CG ADD and CG UPDATE
+  route through it (the seam comment claims it's the single canonical quoter).
+- **The newline branch is dead for this payload.** Because `JSON.stringify` has
+  already converted a real newline to the two characters `\` + `n`, `escape()` never
+  sees a literal `\n`/`\r` (its `:31-34` space branch never fires for the JSON path).
+  Instead the `\` is doubled (`\` → `\\`), so a newline travels as `\\n` on the wire
+  — whatever CasparCG then does with `\\n` is the failure (the update doesn't apply).
+- **The odd/even-backslash signature ⇒ an escape-layer mismatch.** A correct round
+  trip needs CasparCG 2.3.x's AMCP quoted-string un-escaping to be the EXACT inverse
+  of `escape()` for `\` and `"`. The empirical "odd backslash count fails, even
+  works" / "`"` fails" result is the classic signature that the two do not compose:
+  the JSON+AMCP double-escaping leaves a dangling or duplicated backslash after
+  CasparCG's un-quote, corrupting the JSON the template then `JSON.parse`s — so the
+  update is silently dropped (202, but mangled). The exact divergence between
+  `escape()` and CasparCG's real rules is the thing the fix must pin down (single
+  source of truth, full coverage of `"`, `\`, control chars).
+- **Affects both verbs.** `CG ADD`'s data arg (`command-builder.ts:50`) and
+  `CG UPDATE`'s (`:60`) carry the identical `quote(serialize(fields))` payload, so
+  both the initial load data and every update are affected.
+- **Why amcp-mock hid it.** The mock's tokenizer `readQuoted`
+  (`tools/amcp-mock/src/amcp-parser.ts:51-80`) decodes `\"` → `"` (`:58-59`),
+  `\\` → `\` (`:63-64`), and `\X` → `X` (`:68`) — i.e. it is the **exact inverse of
+  our own `escape()`**. So anything `escape()` produces, `readQuoted` perfectly
+  reverses, and the B-038/B-039 integration tests round-trip the payload cleanly;
+  the mock encodes the SAME escaping assumption as the bridge, so it can never reveal
+  a divergence from real CasparCG. The mock also only RECORDS the decoded string
+  (`handlers.ts` `recordCgAdd`/`recordCgUpdate`) — the integration test does the
+  `JSON.parse`, which succeeds precisely because `escape()` ↔ `readQuoted` agree. The
+  ADR-0006 harness used its own identical `quote()` (`candidates.ts:45`) with
+  quote-free/backslash-free payloads (`run.ts:25-26`), so it never exercised this.
+
+**Regression test:** the fix must make `amcp-mock` decode the quoted data arg per
+**real CasparCG 2.3.x** rules (not our `escape()`), then `JSON.parse` it and assert
+it equals the original object — so a `"`, `\` (odd + even counts), and a newline in a
+field value all survive `CG ADD` and `CG UPDATE` end-to-end. Add a unit test for the
+canonical escaper covering `"`, `\\`, odd/even backslash runs, newline, and control
+chars; and an integration test driving a payload with all of them through the bridge
+→ hardened mock → `JSON.parse` round-trip. On-hardware re-validation with a
+quote/backslash/newline payload before B-041 closes.
