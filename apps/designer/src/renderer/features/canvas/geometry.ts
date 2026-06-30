@@ -273,37 +273,37 @@ export function screenToScene(
 }
 
 /**
- * B-027 — the pasteboard is a FIXED extent (a pure function of the resolution), NOT
- * content-grown. The margins per side are a multiple of the frame dimension:
- * {@link PASTEBOARD_MARGIN_X}× the frame width left + right, {@link PASTEBOARD_MARGIN_Y}×
- * the frame height top + bottom. A shape parked beyond the extent stays in the scene and
- * is reachable by zooming out / panning; the extent never grows, so the frame can never
- * drift (the grow-to-fit origin shift was the source of the during-drag jitter).
+ * B-027 — the pasteboard margin per side (SCENE px) is the LARGER of an absolute minimum or
+ * ONE full frame: `max(PASTEBOARD_MIN_X, frameWidth)` left + right,
+ * `max(PASTEBOARD_MIN_Y, frameHeight)` top + bottom. The absolute floor keeps the pasteboard
+ * usefully large even for a TINY frame (a 1× multiplier alone made a 100×100 frame a
+ * 300×300 pasteboard, so the cover-fit min-zoom shot to ~428% and froze zoom); once the
+ * frame exceeds the floor the margin grows with it (one frame per side).
  */
-export const PASTEBOARD_MARGIN_X = 1;
-export const PASTEBOARD_MARGIN_Y = 1;
+export const PASTEBOARD_MIN_X = 5000;
+export const PASTEBOARD_MIN_Y = 3000;
 
 /**
- * The canvas STAGE layout (scene px): the FIXED pasteboard. Total extent =
- * frame × (1 + 2·margin) per axis — width = 3× the frame width, height = 3× the frame
- * height (a one-frame margin on every side). `frame.{x,y}` is the frame's CONSTANT offset
- * (scene px) into the stage — scene (0,0) sits there — `PASTEBOARD_MARGIN_X·width` /
- * `PASTEBOARD_MARGIN_Y·height`. Independent of element positions, so dragging a shape
- * off-frame moves nothing but the shape (no extent growth, no origin shift). Element
- * drags/nudges are CLAMPED to this extent ({@link clampDeltaToPasteboard}) so no shape can
- * cross into the clipped region — the pasteboard IS the whole workable area.
+ * The canvas STAGE layout (scene px): the FIXED pasteboard. Margin per side =
+ * `max(PASTEBOARD_MIN_X, width)` / `max(PASTEBOARD_MIN_Y, height)`; total extent =
+ * `frame + 2·margin` per axis, and `frame.{x,y}` is the frame's CONSTANT inset into the
+ * stage (= the margin) — scene (0,0) sits there. A pure function of the resolution (NOT
+ * content-grown), so dragging a shape off-frame moves nothing but the shape (no extent
+ * growth, no origin shift). Element drags/nudges are CLAMPED to this extent
+ * ({@link clampDeltaToPasteboard}) so no shape can cross into the clipped region — the
+ * pasteboard IS the whole workable area.
  */
 export function pasteboardLayout(resolution: { width: number; height: number }): {
   width: number;
   height: number;
   frame: { x: number; y: number };
 } {
-  const offX = Math.round(resolution.width * PASTEBOARD_MARGIN_X);
-  const offY = Math.round(resolution.height * PASTEBOARD_MARGIN_Y);
+  const marginX = Math.max(PASTEBOARD_MIN_X, resolution.width);
+  const marginY = Math.max(PASTEBOARD_MIN_Y, resolution.height);
   return {
-    width: Math.round(resolution.width * (1 + 2 * PASTEBOARD_MARGIN_X)),
-    height: Math.round(resolution.height * (1 + 2 * PASTEBOARD_MARGIN_Y)),
-    frame: { x: offX, y: offY },
+    width: resolution.width + 2 * marginX,
+    height: resolution.height + 2 * marginY,
+    frame: { x: marginX, y: marginY },
   };
 }
 

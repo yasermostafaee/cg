@@ -2,8 +2,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import type { Scene } from '@cg/shared-schema';
 import { Preview } from '../src/platform/preview.js';
 import {
-  PASTEBOARD_MARGIN_X,
-  PASTEBOARD_MARGIN_Y,
+  PASTEBOARD_MIN_X,
+  PASTEBOARD_MIN_Y,
   clampDeltaToPasteboard,
   coverZoom,
   fitZoom,
@@ -62,10 +62,10 @@ describe('pasteboard authoring document', () => {
     // live on the no-reload scene-replace path); the baked resolution is the fallback.
     expect(html).toContain('width: var(--cg-frame-w, 1920px) !important');
     expect(html).toContain('height: var(--cg-frame-h, 1080px) !important');
-    // B-027 — the frame inset is the CONSTANT fixed-pasteboard margin (1×1920 / 1×1080 =
-    // 1920 / 1080), baked as the CSS-var fallback so the first paint is correct.
-    expect(html).toContain('left: var(--cg-frame-x, 1920px) !important');
-    expect(html).toContain('top: var(--cg-frame-y, 1080px) !important');
+    // B-027 — the frame inset is the CONSTANT pasteboard margin = max(5000, 1920) /
+    // max(3000, 1080) = 5000 / 3000, baked as the CSS-var fallback so the first paint is right.
+    expect(html).toContain('left: var(--cg-frame-x, 5000px) !important');
+    expect(html).toContain('top: var(--cg-frame-y, 3000px) !important');
     expect(html).toContain('applyFrameSize({ width: 1920, height: 1080 })');
     expect(html).toContain('html, body { background: #161927 !important; }');
     expect(html).toContain('background-color: #3d4253');
@@ -83,30 +83,37 @@ describe('pasteboard authoring document', () => {
   });
 });
 
-describe('B-027 — pasteboardLayout is a FIXED extent (pure function of the resolution)', () => {
-  it('total = 3× width × 3× height; frame inset = 1× width / 1× height', () => {
-    // margins: a one-frame margin on every side (1× width left+right, 1× height top+bottom).
-    expect(pasteboardLayout({ width: 1920, height: 1080 })).toEqual({
-      width: 1920 * 3,
-      height: 1080 * 3,
-      frame: { x: 1920, y: 1080 },
-    });
-    expect(pasteboardLayout({ width: 1280, height: 720 })).toEqual({
-      width: 1280 * 3,
-      height: 720 * 3,
-      frame: { x: 1280, y: 720 },
-    });
+describe('B-027 — pasteboardLayout is a FIXED extent (margin = max(absolute-min, one-frame) per side)', () => {
+  it('margin per side = max(5000, W) X / max(3000, H) Y; extent = frame + 2·margin; inset = margin', () => {
+    // Worked examples (locked with the owner). marginX = max(5000, W), marginY = max(3000, H);
+    // extent = frame + 2·margin per axis; frame inset = (marginX, marginY). The absolute floor
+    // keeps a TINY frame's pasteboard large — a 1× multiplier alone made 100×100 a 300×300
+    // pasteboard, so the cover-fit min-zoom shot to ~428% and froze zoom.
+    const cases: [number, number, number, number, number, number][] = [
+      // [W, H, marginX, marginY, extentW, extentH]
+      [100, 100, 5000, 3000, 10100, 6100], // tiny — the previously-broken zoom-lock case
+      [1280, 720, 5000, 3000, 11280, 6720],
+      [1920, 1080, 5000, 3000, 11920, 7080],
+      [1080, 1920, 5000, 3000, 11080, 7920], // vertical
+      [5000, 3000, 5000, 3000, 15000, 9000], // BOUNDARY: the min EQUALS one frame
+      [8000, 3000, 8000, 3000, 24000, 9000], // EXCEED: one frame > the X min → one-frame margin
+    ];
+    for (const [width, height, mx, my, ew, eh] of cases) {
+      expect(pasteboardLayout({ width, height })).toEqual({
+        width: ew,
+        height: eh,
+        frame: { x: mx, y: my },
+      });
+    }
   });
 
-  it('uses the documented margin constants (1 / 1)', () => {
-    expect(PASTEBOARD_MARGIN_X).toBe(1);
-    expect(PASTEBOARD_MARGIN_Y).toBe(1);
-    const r = { width: 1920, height: 1080 };
-    const l = pasteboardLayout(r);
-    expect(l.frame.x).toBe(r.width * PASTEBOARD_MARGIN_X);
-    expect(l.frame.y).toBe(r.height * PASTEBOARD_MARGIN_Y);
-    expect(l.width).toBe(r.width * (1 + 2 * PASTEBOARD_MARGIN_X));
-    expect(l.height).toBe(r.height * (1 + 2 * PASTEBOARD_MARGIN_Y));
+  it('uses the documented absolute-minimum constants (5000 / 3000)', () => {
+    expect(PASTEBOARD_MIN_X).toBe(5000);
+    expect(PASTEBOARD_MIN_Y).toBe(3000);
+    // Below the floor the margin IS the floor (a sub-floor frame, e.g. 1920×1080); at/above it
+    // the margin is the frame itself (e.g. 8000 on X).
+    expect(pasteboardLayout({ width: 1920, height: 1080 }).frame).toEqual({ x: 5000, y: 3000 });
+    expect(pasteboardLayout({ width: 8000, height: 3000 }).frame).toEqual({ x: 8000, y: 3000 });
   });
 
   it('is content-INDEPENDENT: it depends only on the resolution (calling it twice is identical)', () => {
@@ -118,53 +125,67 @@ describe('B-027 — pasteboardLayout is a FIXED extent (pure function of the res
   });
 
   it('pasteboardSceneBounds spans [−margin, frame + margin] in scene coords', () => {
-    // scene (0,0) = frame top-left; the 1× margin extends to −W left / 2W right (= W frame
-    // + W right margin), symmetrically on Y.
+    // scene (0,0) = frame top-left; for 1920×1080 (both axes below the floor → margin = floor)
+    // the bounds extend to −5000 left / 1920+5000 = 6920 right, −3000 top / 1080+3000 = 4080.
     expect(pasteboardSceneBounds({ width: 1920, height: 1080 })).toEqual({
-      minX: -1920,
-      minY: -1080,
-      maxX: 1920 * 2,
-      maxY: 1080 * 2,
+      minX: -5000,
+      minY: -3000,
+      maxX: 6920,
+      maxY: 4080,
     });
+  });
+
+  it('a TINY 100×100 frame yields a SMALL cover-fit min-zoom — the zoom-lock fix (not ~428%)', () => {
+    const E = pasteboardLayout({ width: 100, height: 100 });
+    expect(E).toEqual({ width: 10100, height: 6100, frame: { x: 5000, y: 3000 } });
+    // With the always-large pasteboard the cover-fit over a typical editor viewport is a small
+    // fraction, so zoom-out works across a useful range (well under 100%).
+    const z = coverZoom(1920, 1080, E.width, E.height); // MAX(1920/10100, 1080/6100) ≈ 0.19
+    expect(z).toBeLessThan(0.2);
+    expect(z).toBeGreaterThan(0);
+    // Contrast: the OLD 1×-margin pasteboard for 100×100 was only 300×300, so the cover-fit
+    // shot ABOVE ZOOM_MAX (4) — pinning the minimum and freezing zoom (the reported bug).
+    expect(coverZoom(1920, 1080, 300, 300)).toBeGreaterThan(4);
   });
 });
 
 describe('B-027 — clampDeltaToPasteboard keeps a box inside the pasteboard (no dead zone)', () => {
-  // A 1920×1080 frame → bounds x ∈ [−1920, 3840], y ∈ [−1080, 2160].
+  // A 1920×1080 frame → margin max(5000,1920)/max(3000,1080) = 5000/3000 → bounds
+  // x ∈ [−5000, 6920], y ∈ [−3000, 4080].
   const { minX, maxX } = pasteboardSceneBounds({ width: 1920, height: 1080 });
 
   it('passes a delta through untouched while the whole box stays inside', () => {
-    // box [0, 100] moved by +200 → [200, 300] ⊆ [−1920, 3840]; unclamped.
+    // box [0, 100] moved by +200 → [200, 300] ⊆ [−5000, 6920]; unclamped.
     expect(clampDeltaToPasteboard(200, 0, 100, minX, maxX)).toBe(200);
   });
 
   it('clamps so the box edge stops AT the bound, never crossing (right + left)', () => {
-    // box [3700, 3800], want +500 → would be [4200, 4300] past maxX 3840; allowed delta
-    // is maxX − boxMax = 3840 − 3800 = 40, so the right edge touches the bound.
-    expect(clampDeltaToPasteboard(500, 3700, 3800, minX, maxX)).toBe(40);
-    // box [−1800, −1700] wanting −500 → past minX −1920; allowed is minX − boxMin = −120.
-    expect(clampDeltaToPasteboard(-500, -1800, -1700, minX, maxX)).toBe(-120);
+    // box [6800, 6900], want +500 → would be [7300, 7400] past maxX 6920; allowed delta
+    // is maxX − boxMax = 6920 − 6900 = 20, so the right edge touches the bound.
+    expect(clampDeltaToPasteboard(500, 6800, 6900, minX, maxX)).toBe(20);
+    // box [−4900, −4800] wanting −500 → past minX −5000; allowed is minX − boxMin = −100.
+    expect(clampDeltaToPasteboard(-500, -4900, -4800, minX, maxX)).toBe(-100);
   });
 
   it('pre-existing-outside: never pushes further out, lets it move back in', () => {
-    // box already LEFT-outside: [−2200, −2100] (boxMin < minX). A further-left delta is
+    // box already LEFT-outside: [−5200, −5100] (boxMin < minX). A further-left delta is
     // refused (clamped to 0 — don't push out), but an inward (+) delta is allowed.
-    expect(clampDeltaToPasteboard(-300, -2200, -2100, minX, maxX)).toBe(0);
-    expect(clampDeltaToPasteboard(300, -2200, -2100, minX, maxX)).toBe(300);
+    expect(clampDeltaToPasteboard(-300, -5200, -5100, minX, maxX)).toBe(0);
+    expect(clampDeltaToPasteboard(300, -5200, -5100, minX, maxX)).toBe(300);
   });
 
   it('oversized on an axis: centers the box (it cannot fit), ignoring the requested delta', () => {
-    // box wider than the pasteboard span (3840 − (−1920) = 5760): width 6000, box [0, 6000].
-    // Centered: center delta = (minX+maxX)/2 − (boxMin+boxMax)/2 = 960 − 3000 = −2040.
-    const d = clampDeltaToPasteboard(999, 0, 6000, minX, maxX);
-    expect(d).toBe((minX + maxX) / 2 - (0 + 6000) / 2);
+    // box wider than the pasteboard span (6920 − (−5000) = 11920): width 12000, box [0, 12000].
+    // Centered: center delta = (minX+maxX)/2 − (boxMin+boxMax)/2 = 960 − 6000 = −5040.
+    const d = clampDeltaToPasteboard(999, 0, 12000, minX, maxX);
+    expect(d).toBe((minX + maxX) / 2 - (0 + 12000) / 2);
     // After applying, the box center sits at the pasteboard center.
-    expect((0 + d + (6000 + d)) / 2).toBe((minX + maxX) / 2);
+    expect((0 + d + (12000 + d)) / 2).toBe((minX + maxX) / 2);
   });
 });
 
 describe('B-027 — coverZoom is the cover-fit minimum (pasteboard always covers the viewport)', () => {
-  // The 1920×1080 pasteboard extent is 5760 × 3240.
+  // The 1920×1080 pasteboard extent is 11920 × 7080.
   const E = pasteboardLayout({ width: 1920, height: 1080 });
 
   it('is the MAX of the two axis ratios (cover, not contain)', () => {
@@ -173,9 +194,9 @@ describe('B-027 — coverZoom is the cover-fit minimum (pasteboard always covers
       Math.max(1000 / E.width, 500 / E.height),
       6,
     );
-    expect(coverZoom(1000, 500, E.width, E.height)).toBe(1000 / E.width); // 1000/5760 > 500/3240
+    expect(coverZoom(1000, 500, E.width, E.height)).toBe(1000 / E.width); // 1000/11920 > 500/7080
     // A TALL viewport: height ratio dominates.
-    expect(coverZoom(500, 1000, E.width, E.height)).toBe(1000 / E.height); // 1000/3240 > 500/5760
+    expect(coverZoom(500, 1000, E.width, E.height)).toBe(1000 / E.height); // 1000/7080 > 500/11920
   });
 
   it('at the cover-fit zoom the pasteboard covers the viewport on BOTH axes (no gap)', () => {

@@ -86,11 +86,16 @@ re-measures and stays glued. The auto→fixed toggle commits the measured size i
 ## Off-frame pasteboard (D-071 Phase B; content-aware follow-up B-026)
 
 The stage is a **FIXED pasteboard** (B-027): its size is `pasteboardLayout(resolution)` — a pure
-function of the resolution, **not** content-grown. The margins are a multiple of the frame per side:
-`PASTEBOARD_MARGIN_X` (= 1) × the frame width left + right, `PASTEBOARD_MARGIN_Y` (= 1) × the frame
-height top + bottom → total extent **3× the frame width × 3× the frame height** (a one-frame margin on
-every side). `layout.frame` is the frame's **constant offset** into the stage (scene (0,0) sits there):
-`1× width` / `1× height`.
+function of the resolution, **not** content-grown. The margin per side is the LARGER of an absolute
+minimum or one full frame: `marginX = max(PASTEBOARD_MIN_X (5000), frameWidth)` left + right,
+`marginY = max(PASTEBOARD_MIN_Y (3000), frameHeight)` top + bottom → total extent
+`frameWidth + 2·marginX` × `frameHeight + 2·marginY`. `layout.frame` is the frame's **constant
+offset** into the stage (scene (0,0) sits there): `(marginX, marginY)`. The absolute floor keeps the
+pasteboard usefully large even for a TINY frame — a plain 1× multiplier made a 100×100 frame only a
+300×300 pasteboard, so the cover-fit min-zoom shot to ~428% and **froze** zoom; with the floor a
+100×100 frame is a 10100×6100 pasteboard and zoom-out stays free. Once the frame exceeds a floor on an
+axis (e.g. 8000 wide > 5000) the margin grows with it (one frame per side: an 8000-wide frame →
+24000-wide pasteboard).
 
 Because the extent + offset are constant per resolution, dragging a shape off-frame moves **only the
 shape** — the dark area never grows and the frame never drifts (the old grow-to-fit origin shift was

@@ -15,16 +15,20 @@ to the extent, so a shape dragged BEYOND it is clipped (invisible) AND its gizmo
 (unselectable on the canvas), and zoom-out can't reach past the extent — recoverable only
 via the layers panel. The owner's decision: don't manage the dead zone, ELIMINATE it by
 **clamping** drags/nudges so a shape's full bounding box can never leave the pasteboard. The
-extent is also sized down to a **one-frame margin per side** (3×3, was 7×5) now that shapes
-can't be parked arbitrarily far, and the pasteboard gets a visible **edge marker** so the
-workable area is obvious.
+extent margin per side is the **larger of an absolute minimum or one full frame** — `max(5000, W)` on
+X, `max(3000, H)` on Y (was the interim 1× multiplier, and before that 7×5) — so shapes can't be parked
+arbitrarily far yet the pasteboard stays usefully large even for a TINY frame (a plain 1× multiplier
+made a 100×100 frame only a 300×300 pasteboard, freezing the cover-fit min-zoom at ~428%). The
+pasteboard also gets a visible **edge marker** so the workable area is obvious.
 
 ## What Changes
 
 - **Fixed extent (pure function of resolution).** `pasteboardLayout(resolution)` returns
-  a constant extent: a margin of **1× the frame** on **every** side → total **3× width ×
-  3× height**, with the frame at the constant inset `(1× width, 1× height)`. It no longer
-  takes a content AABB and never grows, shrinks, or clamps.
+  a constant extent: a margin per side of **`max(PASTEBOARD_MIN_X (5000), frameWidth)`** left/right
+  and **`max(PASTEBOARD_MIN_Y (3000), frameHeight)`** top/bottom → total **`frame + 2·margin`** per
+  axis, with the frame at the constant inset `(marginX, marginY)`. It no longer takes a content AABB
+  and never grows, shrinks, or clamps. The absolute floor keeps a tiny frame's pasteboard large so the
+  cover-fit min-zoom never locks (a 1× multiplier froze a 100×100 frame at ~428%).
 - **Clamp drags + nudges to the pasteboard (eliminate the dead zone).** With a fixed
   extent, the iframe + overlay clip at the extent, so a shape dragged BEYOND it was
   invisible AND unselectable (a dead zone, recoverable only via the layers panel). The
@@ -70,7 +74,8 @@ workable area is obvious.
 
 - **`designer-canvas-viewport`** (MODIFIED): the "off-frame pasteboard" requirement
   changes from a content-grown extent (grow / shrink / clamp / origin-shift
-  scroll-comp) to a **fixed** 3×3 extent (constant function of resolution; no drift) with
+  scroll-comp) to a **fixed** extent (margin = `max(absolute-min, one-frame)` per side; constant
+  function of resolution; no drift) with
   element moves **clamped** to it (no dead zone) and a visible pasteboard edge. The
   grow / shrink / clamp / left-top-scroll-comp scenarios are dropped; fixed-extent +
   no-drift + drag-clamp + nudge-clamp + group-bounded + pre-existing-outside-recoverable +
@@ -80,7 +85,8 @@ workable area is obvious.
 ## Impact
 
 - `apps/designer/src/renderer/features/canvas/geometry.ts` — `pasteboardLayout` rewritten
-  (fixed, 1×/1×); `PASTEBOARD_MARGIN_X/Y` (= 1) added; new `pasteboardSceneBounds` +
+  (fixed, margin = `max(min, frame)` per side); `PASTEBOARD_MIN_X` (5000) / `PASTEBOARD_MIN_Y`
+  (3000) added; new `pasteboardSceneBounds` +
   `clampDeltaToPasteboard`; `PASTEBOARD_MARGIN_RATIO`, `MAX_EXTENT_RATIO`, `SceneAabb`,
   `offsetShiftScroll` removed.
 - `apps/designer/src/renderer/features/canvas/group-move.ts` — `collectGroupMoveTargets`
@@ -96,7 +102,8 @@ workable area is obvious.
   `#0e1018` (distinct from the pasteboard) + `s.stage` 1px `box-shadow` edge ring.
 - `apps/designer/src/platform/preview.ts` — unchanged colour (`#3d4253`); stale `#a7a7a7`
   comment corrected.
-- Tests: `pasteboard.test.ts` (fixed 1×/1× extent + `clampDeltaToPasteboard` cases),
+- Tests: `pasteboard.test.ts` (fixed `max(min, frame)` extent + worked examples +
+  `clampDeltaToPasteboard` cases),
   `pasteboard-extent.spec.ts` (no-grow, **no-drift**, **drag/nudge clamp**),
   `content-bounds.test.ts` removed; B-035 fit E2E intact.
 - Docs: the canvas feature README; stale `#080a10` / `#a7a7a7` colour refs corrected to

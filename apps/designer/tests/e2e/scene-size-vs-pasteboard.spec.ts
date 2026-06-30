@@ -55,9 +55,10 @@ test.describe('Scene size vs pasteboard extent — invariants (B-0xx)', () => {
     // The checkered frame page is the scene resolution.
     await expect.poll(() => frameW(app)).toBe(1920);
     await expect.poll(() => frameH(app)).toBe(1080);
-    // The iframe element's own width = the fixed 3× extent (poll: under load the iframe
-    // element resizes a tick after the in-iframe .cg-stage settles to the new resolution).
-    await expect.poll(() => extentW(app)).toBe(1920 * 3);
+    // The iframe element's own width = the fixed extent `W + 2·max(5000,W)` = 1920 + 2·5000 =
+    // 11920 (poll: under load the iframe element resizes a tick after the in-iframe .cg-stage
+    // settles to the new resolution).
+    await expect.poll(() => extentW(app)).toBe(11920);
     const baseExtent = await extentW(app);
 
     // Park the shape FAR off the right + bottom.

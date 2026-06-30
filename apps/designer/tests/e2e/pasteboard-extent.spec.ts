@@ -1,16 +1,19 @@
 import { test, expect, type DesignerApp } from './fixtures/designer.js';
 
 /**
- * B-027 — the pasteboard is a FIXED extent (a pure function of the resolution: a one-frame
- * margin on every side → total 3× × 3×), NOT content-grown. Parking a shape off-frame
- * changes neither the extent nor the frame offset, and the frame never drifts (the
- * grow-to-fit origin shift was the jitter source). Element drags + nudges are CLAMPED to
- * the extent, so no shape can be moved into the clipped region beyond it (no dead zone).
+ * B-027 — the pasteboard is a FIXED extent (a pure function of the resolution), NOT
+ * content-grown. The margin per side is the LARGER of an absolute minimum or one full frame:
+ * `max(5000, W)` left+right, `max(3000, H)` top+bottom → extent `W + 2·marginX` × `H + 2·marginY`.
+ * Parking a shape off-frame changes neither the extent nor the frame offset, and the frame
+ * never drifts (the grow-to-fit origin shift was the jitter source). Element drags + nudges
+ * are CLAMPED to the extent, so no shape can be moved into the clipped region beyond it (no
+ * dead zone).
  *
- * The default rectangle is 320×120 (scale 1). For a 1920×1080 frame the pasteboard spans
- * scene x ∈ [−1920, 3840], y ∈ [−1080, 2160]; clamping the FULL box keeps the top-left in
- * x ∈ [−1920, 3840−320 = 3520], y ∈ [−1080, 2160−120 = 2040]. The clamp is delta-based, so
- * an overshooting drag pins the box edge exactly to the bound regardless of where it began.
+ * The default rectangle is 320×120 (scale 1). For a 1920×1080 frame (both axes below the
+ * floor → margin 5000/3000) the pasteboard spans scene x ∈ [−5000, 6920], y ∈ [−3000, 4080];
+ * clamping the FULL box keeps the top-left in x ∈ [−5000, 6920−320 = 6600], y ∈ [−3000,
+ * 4080−120 = 3960]. The clamp is delta-based, so an overshooting drag pins the box edge
+ * exactly to the bound regardless of where it began.
  */
 test.describe('B-027 — fixed pasteboard extent + drag/nudge clamp (no dead zone)', () => {
   // The iframe element's INLINE width/height is the scene-px extent (React sets it from
@@ -60,25 +63,25 @@ test.describe('B-027 — fixed pasteboard extent + drag/nudge clamp (no dead zon
     await app.dragShape({ x: 260, y: 210 }, by);
   }
 
-  test('the extent is FIXED (3× × 3×) and does NOT change when a shape is parked far off any side', async ({
+  test('the extent is FIXED (frame + 2·margin) and does NOT change when a shape is parked far off any side', async ({
     app,
   }) => {
     await app.newProject('Fixed');
     await app.addRectangle({ x: 240, y: 200 });
-    await expect.poll(() => extentW(app)).toBe(1920 * 3); // 5760
-    await expect.poll(() => extentH(app)).toBe(1080 * 3); // 3240
+    await expect.poll(() => extentW(app)).toBe(11920); // 1920 + 2·5000
+    await expect.poll(() => extentH(app)).toBe(7080); //  1080 + 2·3000
 
     // The inspector (unlike a drag) is NOT clamped, so it can still park a shape beyond the
     // extent — the extent must stay FIXED regardless (no grow-to-fit).
     for (const [dir, x, y] of [
-      ['right', 6000, 200],
-      ['left', -5000, 200],
-      ['bottom', 240, 4000],
-      ['top', 240, -3000],
+      ['right', 9000, 200],
+      ['left', -7000, 200],
+      ['bottom', 240, 6000],
+      ['top', 240, -4000],
     ] as const) {
       await setXY(app, x, y);
-      await expect.poll(() => extentW(app), dir).toBe(1920 * 3); // no grow-to-fit
-      await expect.poll(() => extentH(app), dir).toBe(1080 * 3);
+      await expect.poll(() => extentW(app), dir).toBe(11920); // no grow-to-fit
+      await expect.poll(() => extentH(app), dir).toBe(7080);
       await setXY(app, 240, 200);
     }
   });
@@ -106,8 +109,8 @@ test.describe('B-027 — fixed pasteboard extent + drag/nudge clamp (no dead zon
     // Drag hard up-and-left, well past the pasteboard corner.
     await dragSelected(app, { x: -4000, y: -4000 });
     // The full box stops AT the negative bounds — the left/top edges touch, never cross.
-    expect(await readX(app)).toBe(-1920);
-    expect(await readY(app)).toBe(-1080);
+    expect(await readX(app)).toBe(-5000);
+    expect(await readY(app)).toBe(-3000);
     // …and the shape is still rendered + selectable (it never entered a clipped dead zone).
     await expect(app.gizmoFrame).toBeAttached();
   });
@@ -116,9 +119,9 @@ test.describe('B-027 — fixed pasteboard extent + drag/nudge clamp (no dead zon
     await app.newProject('ClampRightBottom');
     await app.addRectangle({ x: 240, y: 200 });
     await dragSelected(app, { x: 4000, y: 4000 });
-    // Top-left clamped so the box's right/bottom edges touch the bounds (3840−320, 2160−120).
-    expect(await readX(app)).toBe(3520);
-    expect(await readY(app)).toBe(2040);
+    // Top-left clamped so the box's right/bottom edges touch the bounds (6920−320, 4080−120).
+    expect(await readX(app)).toBe(6600);
+    expect(await readY(app)).toBe(3960);
     await expect(app.gizmoFrame).toBeAttached();
   });
 
@@ -154,19 +157,92 @@ test.describe('B-027 — fixed pasteboard extent + drag/nudge clamp (no dead zon
     await app.addRectangle({ x: 240, y: 200 });
     // Park it AT the left bound by dragging far left.
     await dragSelected(app, { x: -4000, y: 0 });
-    expect(await readX(app)).toBe(-1920);
+    expect(await readX(app)).toBe(-5000);
 
-    // Blur the focused toolbar button (from `selectTool`) so the arrow keys reach the
-    // window-level nudge handler (target = body, not a button that might eat arrows). The
-    // selection is store state, so blurring doesn't drop it.
-    await app.page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    // Dispatch the nudge keydowns directly on `window` (the global handler's target), so the
+    // test is immune to where focus landed after the off-screen drag (the canvas toolbar uses
+    // roving-tabindex, so arrows to a focused tool button get trapped). Matches the held-key
+    // technique in arrow-nudge.spec.ts. `e.target` is then `window` (not an input), so the
+    // handler runs; the selection is store state, so it is still active.
+    const nudge = (key: string, times: number): Promise<void> =>
+      app.page.evaluate(
+        ({ key, times }) => {
+          for (let i = 0; i < times; i++) {
+            window.dispatchEvent(
+              new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+            );
+          }
+        },
+        { key, times },
+      );
 
-    // Nudge RIGHT 5px (1px/press) — the nudge path moves the shape…
-    for (let i = 0; i < 5; i++) await app.page.keyboard.press('ArrowRight');
-    expect(await readX(app)).toBe(-1915);
+    // Nudge RIGHT 5px (1px/press) — the nudge path moves the shape inward off the bound…
+    await nudge('ArrowRight', 5);
+    await expect.poll(() => readX(app)).toBe(-4995);
 
-    // …then nudge LEFT 10px — it reaches the bound and STOPS there (does not cross to −1925).
-    for (let i = 0; i < 10; i++) await app.page.keyboard.press('ArrowLeft');
-    expect(await readX(app)).toBe(-1920);
+    // …then nudge LEFT 10px — it reaches the bound and STOPS there (does not cross to −5005).
+    await nudge('ArrowLeft', 10);
+    await expect.poll(() => readX(app)).toBe(-5000);
+  });
+
+  test('a TINY resolution does NOT freeze zoom — min-zoom is small and zoom in/out works', async ({
+    app,
+  }) => {
+    // The reported bug: a 100×100 frame gave a 300×300 pasteboard → cover-fit forced a ~428%
+    // min-zoom, locking zoom. With margin = max(5000,W)/max(3000,H) the pasteboard is
+    // 10100×6100, so the cover-fit min-zoom is a small fraction and zoom-out is free again.
+    await app.newProject('TinyRes');
+    // Shrink the composition to 100×100 via the (deselected) composition size inputs.
+    await app.deselect();
+    const wInput = app.inspector.getByRole('spinbutton', { name: 'Composition width' });
+    const hInput = app.inspector.getByRole('spinbutton', { name: 'Composition height' });
+    await wInput.fill('100');
+    await wInput.press('Enter');
+    await hInput.fill('100');
+    await hInput.press('Enter');
+    // The extent re-derives to the always-large 10100×6100 pasteboard.
+    await expect.poll(() => extentW(app)).toBe(10100);
+    await expect.poll(() => extentH(app)).toBe(6100);
+
+    const readZoom = async (): Promise<number> =>
+      Number((await app.page.getByTestId('zoom-readout').textContent())!.replace('%', ''));
+
+    // Zoom out HARD — the dynamic min is the cover-fit of a 10100-wide pasteboard, a small %.
+    const zoomOut = app.page.getByRole('button', { name: 'Zoom out', exact: true });
+    for (let i = 0; i < 40; i++) await zoomOut.click();
+    const minZoom = await readZoom();
+    // Well under 100% (≈ 10–20% for a normal viewport) — NOT the old frozen ~428%.
+    expect(minZoom).toBeLessThan(100);
+
+    // …and zoom is not locked: zooming IN raises the %, proving a useful range exists.
+    const zoomIn = app.page.getByRole('button', { name: 'Zoom in', exact: true });
+    for (let i = 0; i < 5; i++) await zoomIn.click();
+    expect(await readZoom()).toBeGreaterThan(minZoom);
+  });
+
+  test('drag clamp still keeps a shape inside the pasteboard at a non-default (smaller) resolution', async ({
+    app,
+  }) => {
+    // Not only the default 1920×1080 — the clamp reads `pasteboardSceneBounds(resolution)`, so it
+    // follows the re-derived extent at any resolution. 1280×720 is below the floor on both axes, so
+    // the margins are still 5000/3000 (bounds −5000 / −3000); Fit centers + sizes the smaller frame
+    // to the viewport so the placement click + grab stay reliable. (Above-floor bounds — where the
+    // margin is one full frame — are exhaustively covered by the pasteboardLayout unit tests.)
+    await app.newProject('SmallerResClamp');
+    await app.deselect();
+    const wInput = app.inspector.getByRole('spinbutton', { name: 'Composition width' });
+    const hInput = app.inspector.getByRole('spinbutton', { name: 'Composition height' });
+    await wInput.fill('1280');
+    await wInput.press('Enter');
+    await hInput.fill('720');
+    await hInput.press('Enter');
+    await app.page.getByRole('button', { name: 'Fit' }).click();
+
+    await app.addRectangle({ x: 240, y: 200 });
+    // Drag hard up-and-left, well past the corner — the box stops at the re-derived bounds.
+    await dragSelected(app, { x: -4000, y: -4000 });
+    expect(await readX(app)).toBe(-5000);
+    expect(await readY(app)).toBe(-3000);
+    await expect(app.gizmoFrame).toBeAttached();
   });
 });

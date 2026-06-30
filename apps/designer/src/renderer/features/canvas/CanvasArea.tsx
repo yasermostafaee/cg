@@ -167,9 +167,12 @@ export function CanvasArea({
   const sceneId = scene?.id ?? null;
 
   // B-027 — the FIXED pasteboard: extent + frame offset are a pure function of the
-  // resolution (a one-frame margin on every side → 3× the frame width × 3× the height), NOT
-  // content-grown. So dragging a shape off-frame moves nothing but the shape, and the
-  // frame never drifts (the old grow-to-fit origin shift was the jitter source).
+  // resolution (margin per side = max(5000, W) / max(3000, H) — an absolute floor OR one full
+  // frame, whichever is larger; extent = frame + 2·margin), NOT content-grown. So dragging a
+  // shape off-frame moves nothing but the shape, and the frame never drifts (the old
+  // grow-to-fit origin shift was the jitter source). The floor keeps the pasteboard usefully
+  // large even for a tiny frame, so the cover-fit min-zoom never locks (the 1× multiplier
+  // froze a 100×100 frame at ~428%).
   const layout = useMemo(
     () => (scene === null ? null : pasteboardLayout(scene.resolution)),
     [scene?.resolution.width, scene?.resolution.height],
@@ -187,8 +190,8 @@ export function CanvasArea({
   // resolution (→ `extent`) changes. Falls back to the absolute hard floor before the
   // viewport is measured. `clampZoom` binds the pure clamp to this floor + `ZOOM_MAX`, so
   // EVERY zoom path (buttons, Ctrl+wheel, Fit) is bounded by it — Fit can only be clamped
-  // UP to it, never below (fitting the frame is always more zoomed-in than covering the 3×3
-  // pasteboard, so in normal cases there is no conflict).
+  // UP to it, never below (fitting the frame is always more zoomed-in than covering the much
+  // larger pasteboard, so in normal cases there is no conflict).
   const dynamicZoomMin = useMemo(
     () => Math.max(ZOOM_HARD_MIN, coverZoom(viewport.w, viewport.h, extent.width, extent.height)),
     [viewport.w, viewport.h, extent.width, extent.height],
@@ -754,9 +757,9 @@ export function CanvasArea({
                 className={s.stage}
                 data-testid="canvas-stage"
                 style={{
-                  // B-027 — the stage is the FIXED pasteboard (3× × 3× the frame, a constant
-                  // function of resolution; no grow, no origin shift). The frame is inset by
-                  // the constant `frameOffset`, so off-frame content shows on every side.
+                  // B-027 — the stage is the FIXED pasteboard (frame + 2·max(floor, frame) per
+                  // axis, a constant function of resolution; no grow, no origin shift). The frame
+                  // is inset by the constant `frameOffset`, so off-frame content shows on every side.
                   width: extent.width * zoom,
                   height: extent.height * zoom,
                 }}

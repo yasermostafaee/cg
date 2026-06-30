@@ -5,11 +5,16 @@
 ### Requirement: An off-frame pasteboard for parking/editing shapes
 
 The canvas SHALL present an off-frame PASTEBOARD — a dark area around the frame — whose extent is a
-FIXED function of the resolution (NOT content-grown): a margin of 1× the frame width on the left AND
-right, and 1× the frame height on the top AND bottom, so the total stage is 3× the frame width by 3×
-the frame height, with the frame at the constant inset (1× width, 1× height). The extent and the frame
-offset SHALL NOT depend on element positions, so dragging a shape off-frame moves ONLY the shape — the
-dark area never resizes and the frame origin never shifts (so the frame cannot drift on a drag).
+FIXED function of the resolution (NOT content-grown): the margin per side is the LARGER of an absolute
+minimum or one full frame — `max(5000, frameWidth)` on the left AND right, `max(3000, frameHeight)` on
+the top AND bottom — so the total stage is `frameWidth + 2·marginX` by `frameHeight + 2·marginY`, with
+the frame at the constant inset `(marginX, marginY)`. The absolute floor (5000 on X, 3000 on Y) keeps
+the pasteboard usefully large even for a TINY frame so the cover-fit minimum zoom never locks — a plain
+1× multiplier made a 100×100 frame only a 300×300 pasteboard, forcing a ~428% minimum that FROZE zoom;
+once the frame exceeds a floor on an axis the margin grows with it (one frame per side). The extent and
+the frame offset SHALL NOT depend on element positions, so dragging a shape off-frame moves ONLY the
+shape — the dark area never resizes and the frame origin never shifts (so the frame cannot drift on a
+drag).
 Element moves SHALL be CLAMPED to the pasteboard so there is NO dead zone: a single drag, a
 multi-select group drag, and an arrow-key nudge SHALL each keep the moved element's full bounding box
 (for a group, the whole selection's combined bounding box) inside the extent, so no part of any shape
@@ -59,8 +64,22 @@ frame dimensions.
 #### Scenario: The pasteboard extent is a fixed function of the resolution
 
 - **WHEN** the canvas renders a composition of a given resolution
-- **THEN** the pasteboard stage is 3× the frame width by 3× the frame height (a 1× frame margin on
-  every side), with the frame at the constant inset (1× width, 1× height)
+- **THEN** the pasteboard stage is `frameWidth + 2·max(5000, frameWidth)` by
+  `frameHeight + 2·max(3000, frameHeight)` (margin per side = the larger of the absolute floor or one
+  full frame), with the frame at the constant inset `(max(5000, frameWidth), max(3000, frameHeight))`
+
+#### Scenario: A tiny resolution keeps a usefully-large pasteboard so zoom never locks
+
+- **WHEN** the composition resolution is far below the absolute floor (e.g. 100×100)
+- **THEN** the margin is the floor (5000 on X, 3000 on Y), so the pasteboard is large (10100×6100) and
+  the cover-fit minimum zoom is a small fraction — zoom-out stays free, NOT pinned near the maximum as
+  a plain one-frame margin (300×300 pasteboard → ~428% minimum) would force
+
+#### Scenario: A frame larger than the floor gets a one-frame margin
+
+- **WHEN** the frame exceeds an axis floor (e.g. 8000 wide, past the 5000 X floor)
+- **THEN** the margin on that axis is one full frame (8000), so the pasteboard is `frame + 2·frame` on
+  that axis (24000 wide) — the floor only raises a sub-floor margin, it never caps a larger one
 
 #### Scenario: Parking a shape off-frame does NOT resize the extent or shift the frame
 

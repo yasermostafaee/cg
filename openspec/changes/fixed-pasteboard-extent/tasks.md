@@ -1,9 +1,11 @@
 # Tasks — fixed pasteboard extent + clamp + edge marker (B-027)
 
-## 1. Geometry — fixed extent (1×/1×) + clamp helpers
+## 1. Geometry — fixed extent (margin = max(absolute-min, one-frame)) + clamp helpers
 
-- [x] `geometry.ts`: `pasteboardLayout(resolution)` → fixed extent **3× width × 3× height**
-      (frame inset 1× width / 1× height); `PASTEBOARD_MARGIN_X` / `PASTEBOARD_MARGIN_Y` = 1.
+- [x] `geometry.ts`: `pasteboardLayout(resolution)` → fixed extent **`frame + 2·margin`** per axis,
+      margin = `max(PASTEBOARD_MIN_X (5000), W)` / `max(PASTEBOARD_MIN_Y (3000), H)` (frame inset =
+      margin); replaces the interim 1× multiplier (`PASTEBOARD_MARGIN_X/Y`). The absolute floor stops
+      a tiny frame's pasteboard from shrinking so far the cover-fit min-zoom locks (~428% at 100×100).
 - [x] `geometry.ts`: add `pasteboardSceneBounds(resolution)` (scene-coord bounds) and
       `clampDeltaToPasteboard(delta, boxMin, boxMax, padMin, padMax)` — keep a box inside the
       extent; oversized → center; pre-existing-outside → tighten-only (never push further out).
@@ -46,27 +48,33 @@
 
 ## 7. B-035 centering
 
-- [x] Verify fit-on-open + fit-on-switch still center the frame with the constant 1×/1×
-      offset (`frameCenterScroll` reads `frameOffset`). No Seam-2 interaction (it's gone).
+- [x] Verify fit-on-open + fit-on-switch still center the frame with the constant
+      `(marginX, marginY)` offset (`frameCenterScroll` reads `frameOffset`). No Seam-2 interaction.
 
 ## 8. Tests
 
-- [x] Unit `pasteboard.test.ts`: fixed 3×3 extent (inset 1×/1×), content-independent;
+- [x] Unit `pasteboard.test.ts`: fixed extent for ALL worked examples (100×100, 1280×720,
+      1920×1080, 1080×1920, the 5000×3000 boundary, the 8000×3000 exceed), content-independent;
+      a tiny 100×100 frame gives a small cover-fit min-zoom (the zoom-lock fix);
       `clampDeltaToPasteboard` — box stays inside (single + group); edge touches the bound,
       not crossing; pre-existing-outside tightens only; oversized centers.
 - [x] Unit `coverZoom`: MAX of the axis ratios; the pasteboard covers the viewport on both
       axes at that zoom; 0 for a degenerate viewport/extent.
 - [x] E2E `pasteboard-extent.spec.ts`: extent FIXED (no grow), frame does NOT drift, drag
       past an edge STOPS at the pasteboard edge (left/top too), arrow-nudge stops at the edge,
-      and at maximum zoom-out the pasteboard COVERS the viewport (no empty surround).
+      at maximum zoom-out the pasteboard COVERS the viewport (no empty surround), a TINY 100×100
+      resolution does NOT freeze zoom (small min-zoom + zoom in/out works), and the drag clamp
+      holds at a small resolution too (not only the default).
 - [x] E2E: B-035 fit-on-open / fit-on-switch still center (run the existing spec).
 - [x] Confirm no regression in `scene-size-vs-pasteboard.spec.ts` (resolution change
-      recomputes the 3×3 extent + Fit re-fits).
+      recomputes the `frame + 2·margin` extent + Fit re-fits).
 
 ## 9. Docs / PRD
 
-- [x] Canvas feature `README.md` — pasteboard section (1×/1×, clamp, edge marker, colours).
-- [x] PRD `bugs-designer.md`: B-027 evidence (1×/1×, clamp, edge marker, colour docs).
+- [x] Canvas feature `README.md` — pasteboard section (margin = max(min, frame), clamp, edge
+      marker, colours).
+- [x] PRD `bugs-designer.md`: B-027 evidence (margin = max(5000,W)/max(3000,H), zoom-lock fix,
+      clamp, edge marker, colour docs).
 
 ## 10. Gate
 
