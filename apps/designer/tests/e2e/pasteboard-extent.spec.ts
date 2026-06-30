@@ -125,31 +125,63 @@ test.describe('B-027 — fixed pasteboard extent + drag/nudge clamp (no dead zon
     await expect(app.gizmoFrame).toBeAttached();
   });
 
-  test('at maximum zoom-out the pasteboard COVERS the viewport — no empty surround', async ({
+  test('at maximum zoom-out the pasteboard hugs ALL FOUR viewport edges — no surround sliver (multi-resolution)', async ({
     app,
   }) => {
     await app.newProject('Cover');
-    await app.addRectangle({ x: 240, y: 200 });
-    // Zoom out HARD, well past the dynamic cover-fit floor (each click ×1/1.1).
-    const zoomOut = app.page.getByRole('button', { name: 'Zoom out', exact: true });
-    for (let i = 0; i < 40; i++) await zoomOut.click();
 
-    // The dynamic minimum is the cover-fit, so the stage (pasteboard) still covers the scroll
-    // viewport's CLIENT area on BOTH axes — no surround-coloured gap shows; one axis just
-    // overflows/scrolls. (Compare the stage's rendered size to `clientWidth/Height` — the
-    // basis `coverZoom` uses — not the border-box `boundingBox`.)
-    const m = await app.page.evaluate(() => {
-      const outer = document.querySelector('[data-testid="canvas-viewport"]') as HTMLElement;
-      const stage = document.querySelector('[data-testid="canvas-stage"]') as HTMLElement;
-      return {
-        sw: parseFloat(stage.style.width),
-        sh: parseFloat(stage.style.height),
-        cw: outer.clientWidth,
-        ch: outer.clientHeight,
-      };
-    });
-    expect(m.sw).toBeGreaterThanOrEqual(m.cw - 1);
-    expect(m.sh).toBeGreaterThanOrEqual(m.ch - 1);
+    const zoomOut = app.page.getByRole('button', { name: 'Zoom out', exact: true });
+
+    async function setResolution(w: number, h: number): Promise<void> {
+      await app.deselect();
+      const wInput = app.inspector.getByRole('spinbutton', { name: 'Composition width' });
+      const hInput = app.inspector.getByRole('spinbutton', { name: 'Composition height' });
+      await wInput.fill(String(w));
+      await wInput.press('Enter');
+      await hInput.fill(String(h));
+      await hInput.press('Enter');
+    }
+
+    // How far the rendered stage (pasteboard) covers each edge of the scroll viewport's CLIENT
+    // area — the padding-box, where the `#0e1018` surround would show. The client edges are the
+    // border-box (getBoundingClientRect) inset by the border (`clientLeft/Top` + `clientW/H`).
+    // Positive = the stage covers/overflows that edge; NEGATIVE = a surround gap there.
+    async function edgeCoverage(): Promise<{
+      left: number;
+      top: number;
+      right: number;
+      bottom: number;
+    }> {
+      return app.page.evaluate(() => {
+        const outer = document.querySelector('[data-testid="canvas-viewport"]') as HTMLElement;
+        const stage = document.querySelector('[data-testid="canvas-stage"]') as HTMLElement;
+        const o = outer.getBoundingClientRect();
+        const s = stage.getBoundingClientRect();
+        const cl = o.left + outer.clientLeft;
+        const ct = o.top + outer.clientTop;
+        const cr = cl + outer.clientWidth;
+        const cb = ct + outer.clientHeight;
+        return { left: cl - s.left, top: ct - s.top, right: s.right - cr, bottom: s.bottom - cb };
+      });
+    }
+
+    // A WIDE, a TALL, and a smaller resolution → different extent aspects so a different axis is
+    // the tight (cover) one. At maximum zoom-out EVERY edge must be covered (the over-cover bias
+    // keeps the TRAILING right/bottom edges flush too, not just the leading left/top).
+    for (const [w, h] of [
+      [1920, 1080],
+      [1080, 1920],
+      [1280, 720],
+    ] as const) {
+      await setResolution(w, h);
+      for (let i = 0; i < 40; i++) await zoomOut.click();
+      const cov = await edgeCoverage();
+      // Every edge covered (≥ 0, within a sub-pixel tolerance) — the stage hugs or overflows
+      // each side, so NO `#0e1018` surround shows. The old `0.5rem` padding left an ~8px gap.
+      for (const [edge, v] of Object.entries(cov)) {
+        expect(v, `${String(w)}×${String(h)} ${edge} gap`).toBeGreaterThanOrEqual(-0.5);
+      }
+    }
   });
 
   test('arrow-key nudge cannot push a shape past the pasteboard edge', async ({ app }) => {

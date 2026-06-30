@@ -109,7 +109,12 @@ export const outer = style({
   display: 'flex',
   alignItems: 'flex-start',
   justifyContent: 'flex-start',
-  padding: '0.5rem',
+  // B-027 — NO padding: the cover-fit minimum zoom guarantees the pasteboard always OVERFLOWS
+  // the viewport, so padding never frames a smaller stage — it only offsets the stage into the
+  // content box (by the padding) while `coverZoom` covers the padding-box (`clientWidth`), so at
+  // the scroll start the padding showed as a hairline of `#0e1018` surround on the leading edge
+  // (and, depending on scroll, the trailing one). With no padding the box the stage fills equals
+  // the box coverZoom targets, so all four edges hug the viewport at maximum zoom-out.
   width: '100%',
   boxSizing: 'border-box',
   position: 'relative',

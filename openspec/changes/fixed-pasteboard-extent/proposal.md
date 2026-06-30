@@ -56,12 +56,22 @@ pasteboard also gets a visible **edge marker** so the workable area is obvious.
   runtime, so the DRY pass-through is kept.
 - **Dynamic cover-fit minimum zoom.** Because clamping keeps shapes inside the pasteboard,
   any empty surround at low zoom is wasted space. The minimum zoom is now DYNAMIC —
-  `coverZoom(viewport, extent) = MAX(viewportW/extentW, viewportH/extentH)` — the cover-fit,
-  so a full zoom-out always leaves the pasteboard COVERING the viewport (no surround; one
-  axis may overflow and scroll). `clampZoom` binds every zoom path to it; it recomputes on
-  viewport (ResizeObserver) / resolution change and clamps the current zoom UP if the floor
-  rises. `ZOOM_HARD_MIN` (0.02) is just a degenerate-case safety net. Fit (frames the
-  smaller frame) always lands above the floor, so it is never clamped down.
+  `coverZoom(viewport, extent) = MAX((viewportW+ε)/extentW, (viewportH+ε)/extentH)` — the
+  cover-fit, biased UP by a small over-cover hair (`COVER_OVERSHOOT_PX`), so a full zoom-out
+  always leaves the pasteboard COVERING the viewport on ALL FOUR edges (no surround; one axis
+  may overflow and scroll). `clampZoom` binds every zoom path to it; it recomputes on viewport
+  (ResizeObserver) / resolution change and clamps the current zoom UP if the floor rises.
+  `ZOOM_HARD_MIN` (0.02) is just a degenerate-case safety net. Fit (frames the smaller frame)
+  always lands above the floor, so it is never clamped down.
+- **Exact cover-fit on all four edges (no trailing-edge sliver).** Two things made the cover
+  axis under-cover the trailing (right/bottom) edges: (1) it landed `extent × (viewport/extent)
+=== viewport` EXACTLY (zero overflow slack), so a sub-pixel centering scroll exposed a
+  hairline of surround — fixed by the over-cover bias above; and (2) `s.outer` carried a
+  `0.5rem` padding, so the stage was laid out in the CONTENT box while `coverZoom` covered the
+  padding-box (`clientWidth`), offsetting the stage and showing the padding as a surround strip
+  on the leading edge. Because the cover-fit already guarantees the pasteboard overflows the
+  viewport, the padding never framed a smaller stage — it was vestigial and is REMOVED, so the
+  box the stage fills equals the box the cover-fit targets and all four edges hug the viewport.
 - **Docs:** correct stale frame-backdrop colour references (`#080a10` / `#a7a7a7`) to the
   actual `#3d4253` page (+ `#5b6075` checker) — code is the source of truth — in the canvas
   README, the `preview.ts` / `CanvasArea.css.ts` comments, and this spec delta.
@@ -86,9 +96,9 @@ pasteboard also gets a visible **edge marker** so the workable area is obvious.
 
 - `apps/designer/src/renderer/features/canvas/geometry.ts` — `pasteboardLayout` rewritten
   (fixed, margin = `max(min, frame)` per side); `PASTEBOARD_MIN_X` (5000) / `PASTEBOARD_MIN_Y`
-  (3000) added; new `pasteboardSceneBounds` +
-  `clampDeltaToPasteboard`; `PASTEBOARD_MARGIN_RATIO`, `MAX_EXTENT_RATIO`, `SceneAabb`,
-  `offsetShiftScroll` removed.
+  (3000) added; `coverZoom` biased to OVER-cover by `COVER_OVERSHOOT_PX` (2); new
+  `pasteboardSceneBounds` + `clampDeltaToPasteboard`; `PASTEBOARD_MARGIN_RATIO`,
+  `MAX_EXTENT_RATIO`, `SceneAabb`, `offsetShiftScroll` removed.
 - `apps/designer/src/renderer/features/canvas/group-move.ts` — `collectGroupMoveTargets`
   also returns the movable group's combined AABB (`box`) for the group/nudge clamp.
 - `apps/designer/src/renderer/features/canvas/CanvasOverlay.tsx` — `beginDrag` +
@@ -99,7 +109,8 @@ pasteboard also gets a visible **edge marker** so the workable area is obvious.
   `offsetShiftScroll` imports + the `contentBox` memo + Seam 2; constant `frameOffset`;
   `ZOOM_MIN` 0.1.
 - `apps/designer/src/renderer/features/canvas/CanvasArea.css.ts` — `s.outer` surround
-  `#0e1018` (distinct from the pasteboard) + `s.stage` 1px `box-shadow` edge ring.
+  `#0e1018` (distinct from the pasteboard) + `s.stage` 1px `box-shadow` edge ring; `s.outer`
+  `0.5rem` padding REMOVED (it offset the stage off a leading edge → a surround strip).
 - `apps/designer/src/platform/preview.ts` — unchanged colour (`#3d4253`); stale `#a7a7a7`
   comment corrected.
 - Tests: `pasteboard.test.ts` (fixed `max(min, frame)` extent + worked examples +

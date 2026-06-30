@@ -52,9 +52,15 @@ unchanged, applied to the modal/export scene). The fixed extent SHALL NOT regres
 the fit action and project-open SHALL fit the zoom from the FRAME bounds (NOT the extent) and CENTER the
 frame in the viewport; the canvas SHALL show NO default scrollbars (the overflowing pasteboard is
 pannable, but the scrollbars are hidden); the minimum zoom SHALL be the COVER-FIT of the pasteboard over
-the viewport — the MAXIMUM of the two axis ratios (viewportW/extentW, viewportH/extentH) — so that at
-maximum zoom-out the pasteboard always COVERS the viewport and NO empty surround is visible (one axis may
-overflow and scroll); this minimum SHALL recompute when the viewport size or the resolution changes, and
+the viewport — the MAXIMUM of the two axis ratios, each axis target biased UP by a small over-cover hair
+((viewportW + ε)/extentW, (viewportH + ε)/extentH) — so that at maximum zoom-out the pasteboard always
+COVERS the viewport on ALL FOUR edges and NO empty surround is visible, biased to slightly OVER-cover
+(never exactly equal, which a sub-pixel scroll would expose as a surround sliver on the trailing edges)
+with one axis overflowing and scrolling; the scroll container SHALL carry NO padding (the cover-fit
+already guarantees the pasteboard overflows the viewport, so padding would only offset the stage into the
+content box and show as a surround strip on the leading edge — without it the box the cover-fit targets
+equals the box the stage fills, so all four edges hug the viewport); this minimum SHALL recompute when the
+viewport size or the resolution changes, and
 if the current zoom is below the new minimum it SHALL be clamped UP (the Fit zoom always lands above this
 floor, so Fit is never clamped down); a Ctrl+wheel zoom SHALL zoom toward the CURSOR (and the zoom buttons
 toward the viewport centre); the rulers SHALL place scene (0,0) at the frame top-left and track scroll +
@@ -142,6 +148,14 @@ frame dimensions.
 - **THEN** the zoom stops at the cover-fit minimum (the max of the two viewport/extent axis ratios), so
   the pasteboard still covers the viewport on both axes with NO empty surround — one axis may overflow
   and be scrollable
+
+#### Scenario: At maximum zoom-out the pasteboard hugs all four viewport edges
+
+- **WHEN** the author zooms out fully at any resolution / viewport aspect ratio
+- **THEN** the pasteboard covers ALL FOUR edges of the viewport with no `#0e1018` surround sliver on
+  ANY side (leading OR trailing) — the cover-fit is biased to slightly OVER-cover (never exactly equal,
+  which a sub-pixel scroll would expose as a trailing-edge sliver) and the scroll container has no
+  padding (so the stage is not offset off a leading edge)
 
 #### Scenario: The cover-fit minimum tracks the viewport and resolution
 

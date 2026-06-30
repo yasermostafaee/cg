@@ -113,13 +113,22 @@ is centered on that axis (it can't fit, so it stops following the pointer there)
 
 **Dynamic cover-fit minimum zoom.** Because shapes can't leave the pasteboard, empty surround beyond it
 is wasted space — so the minimum zoom is the **cover-fit** of the pasteboard over the viewport:
-`dynamicZoomMin = coverZoom(viewport, extent) = MAX(viewportW / extentW, viewportH / extentH)` (the MAX,
-not the contain-fit `min`). At maximum zoom-out the pasteboard therefore **covers the viewport on both
-axes** (no surround ever shows); the axis with the larger ratio fits exactly and the other overflows /
-scrolls. `clampZoom` binds every zoom path (buttons, Ctrl+wheel, Fit) to this floor (+ `ZOOM_MAX`), and
-it recomputes whenever the viewport (ResizeObserver) or the resolution (extent) changes — a `useEffect`
-clamps the current zoom **up** if the floor rose. `ZOOM_HARD_MIN` (0.02) is only a degenerate-case
-safety net. Fit (below) always lands above this floor, so it is never clamped down.
+`dynamicZoomMin = coverZoom(viewport, extent) = MAX((viewportW + ε) / extentW, (viewportH + ε) / extentH)`
+(the MAX, not the contain-fit `min`), where `ε = COVER_OVERSHOOT_PX` biases each axis target **up** by a
+hair. At maximum zoom-out the pasteboard therefore **covers all four viewport edges** (no surround ever
+shows); the axis with the larger ratio is the tight one and the other overflows / scrolls. The over-cover
+bias matters because without it the cover axis lands `extent × (viewport / extent) === viewport`
+**exactly** — zero overflow slack — so a sub-pixel centering scroll exposes a hairline of `#0e1018`
+surround on the **trailing** (right/bottom) edge; over-covering by a couple px gives the scroll slack so
+all four edges hug. The other half of "hug all four edges" is that **`s.outer` carries no padding**: the
+cover-fit already guarantees the pasteboard overflows the viewport, so padding never framed a smaller
+stage — it only offset the stage into the content box (while `coverZoom` covers the padding-box
+`clientWidth`), showing as a surround strip on the **leading** edge; removing it makes the box the stage
+fills equal the box the cover-fit targets. `clampZoom` binds every zoom path (buttons, Ctrl+wheel, Fit)
+to this floor (+ `ZOOM_MAX`), and it recomputes whenever the viewport (ResizeObserver) or the resolution
+(extent) changes — a `useEffect` clamps the current zoom **up** if the floor rose. `ZOOM_HARD_MIN` (0.02)
+is only a degenerate-case safety net. Fit (below) always lands above this floor, so it is never clamped
+down.
 
 Three places consume the (constant) offset so they agree: the iframe (`frameOffset` insets `.cg-stage`
 via the `--cg-frame-x/-y` CSS vars — see below), the overlay (`CanvasOverlay`'s frame box is inset by

@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import type { Scene } from '@cg/shared-schema';
 import { Preview } from '../src/platform/preview.js';
 import {
+  COVER_OVERSHOOT_PX,
   PASTEBOARD_MIN_X,
   PASTEBOARD_MIN_Y,
   clampDeltaToPasteboard,
@@ -188,18 +189,19 @@ describe('B-027 — coverZoom is the cover-fit minimum (pasteboard always covers
   // The 1920×1080 pasteboard extent is 11920 × 7080.
   const E = pasteboardLayout({ width: 1920, height: 1080 });
 
-  it('is the MAX of the two axis ratios (cover, not contain)', () => {
+  it('is the MAX of the two axis ratios (cover, not contain), each biased up by the over-cover hair', () => {
+    // The axis targets are nudged up by COVER_OVERSHOOT_PX before the ratio (over-cover bias).
     // A WIDE viewport: width ratio dominates.
     expect(coverZoom(1000, 500, E.width, E.height)).toBeCloseTo(
-      Math.max(1000 / E.width, 500 / E.height),
+      Math.max((1000 + COVER_OVERSHOOT_PX) / E.width, (500 + COVER_OVERSHOOT_PX) / E.height),
       6,
     );
-    expect(coverZoom(1000, 500, E.width, E.height)).toBe(1000 / E.width); // 1000/11920 > 500/7080
+    expect(coverZoom(1000, 500, E.width, E.height)).toBe((1000 + COVER_OVERSHOOT_PX) / E.width);
     // A TALL viewport: height ratio dominates.
-    expect(coverZoom(500, 1000, E.width, E.height)).toBe(1000 / E.height); // 1000/7080 > 500/11920
+    expect(coverZoom(500, 1000, E.width, E.height)).toBe((1000 + COVER_OVERSHOOT_PX) / E.height);
   });
 
-  it('at the cover-fit zoom the pasteboard covers the viewport on BOTH axes (no gap)', () => {
+  it('OVER-covers the viewport on BOTH axes — the cover axis exceeds it by the over-cover hair, never under', () => {
     for (const [vw, vh] of [
       [1000, 500],
       [500, 1000],
@@ -207,12 +209,14 @@ describe('B-027 — coverZoom is the cover-fit minimum (pasteboard always covers
       [800, 800],
     ] as const) {
       const z = coverZoom(vw, vh, E.width, E.height);
-      // scaled extent ≥ viewport on each axis → no empty surround on either side.
-      expect(E.width * z).toBeGreaterThanOrEqual(vw - 1e-6);
-      expect(E.height * z).toBeGreaterThanOrEqual(vh - 1e-6);
-      // …and one axis fits EXACTLY (the max-ratio axis), so it is the SMALLEST covering zoom.
-      const exact = Math.min(E.width * z - vw, E.height * z - vh);
-      expect(exact).toBeCloseTo(0, 6);
+      // scaled extent ≥ viewport on each axis → no empty surround on either side…
+      expect(E.width * z).toBeGreaterThanOrEqual(vw);
+      expect(E.height * z).toBeGreaterThanOrEqual(vh);
+      // …and the TIGHTEST axis over-covers by EXACTLY the over-cover hair (the bias) — so the
+      // pasteboard is always a sliver larger than the viewport, never exactly equal (which a
+      // sub-pixel scroll would expose as surround on the trailing edges).
+      const tightest = Math.min(E.width * z - vw, E.height * z - vh);
+      expect(tightest).toBeCloseTo(COVER_OVERSHOOT_PX, 6);
     }
   });
 

@@ -377,13 +377,28 @@ export function clampZoom(z: number, min: number, max: number, fallback: number)
 }
 
 /**
+ * B-027 — the cover-fit over-cover bias (SCENE→viewport px). Each axis target is nudged up by
+ * this many px before the ratio is taken (see {@link coverZoom}), so the scaled pasteboard is
+ * always a HAIR larger than the viewport, never exactly equal. Without it the cover axis lands
+ * `extent × (viewport/extent) === viewport` EXACTLY — zero overflow slack — and the centering
+ * scroll + the browser's sub-pixel scroll/layout rounding then leave a hairline of the
+ * `#0e1018` surround on the TRAILING (right/bottom) edges while the leading (left/top) edges,
+ * pinned at the scroll start, stay flush. A couple px of (already-scrollable) over-cover gives
+ * the scroll enough slack that all four edges stay covered — the owner prefers a hair of
+ * overflow to any visible surround.
+ */
+export const COVER_OVERSHOOT_PX = 2;
+
+/**
  * B-027 — the COVER-fit zoom: the SMALLEST zoom at which the pasteboard (`extent`) still
  * fully COVERS the viewport on BOTH axes, so no empty surround is ever visible at maximum
  * zoom-out. It is the MAX of the two axis ratios (NOT min — that would be the contain fit,
  * which leaves margins): the axis that needs the most zoom to cover sets the floor, and the
- * other axis overflows (scrollable). Used as the dynamic minimum zoom. Returns 0 when any
- * dimension is non-positive (viewport not measured yet) so the caller falls back to the hard
- * floor.
+ * other axis overflows (scrollable). Each axis target is biased UP by {@link COVER_OVERSHOOT_PX}
+ * so the cover axis OVER-covers by that hair instead of meeting the viewport exactly (which a
+ * sub-pixel scroll then under-covers on the trailing edges). Used as the dynamic minimum zoom.
+ * Returns 0 when any dimension is non-positive (viewport not measured yet) so the caller falls
+ * back to the hard floor.
  */
 export function coverZoom(
   viewportW: number,
@@ -392,7 +407,10 @@ export function coverZoom(
   extentH: number,
 ): number {
   if (viewportW <= 0 || viewportH <= 0 || extentW <= 0 || extentH <= 0) return 0;
-  return Math.max(viewportW / extentW, viewportH / extentH);
+  return Math.max(
+    (viewportW + COVER_OVERSHOOT_PX) / extentW,
+    (viewportH + COVER_OVERSHOOT_PX) / extentH,
+  );
 }
 
 /** Largest zoom that fits `scene` inside `viewport` (minus `margin`), or null if degenerate. */

@@ -34,11 +34,16 @@
 
 ## 5. Zoom-out reach — dynamic cover-fit minimum
 
-- [x] `geometry.ts`: `coverZoom(vw, vh, ew, eh)` = MAX of the axis ratios (cover, not contain).
+- [x] `geometry.ts`: `coverZoom(vw, vh, ew, eh)` = MAX of the axis ratios (cover, not contain),
+      each axis target biased UP by `COVER_OVERSHOOT_PX` (2) so it OVER-covers by a hair instead
+      of meeting the viewport exactly (which a sub-pixel scroll exposes as a trailing-edge sliver).
+- [x] `CanvasArea.css.ts`: REMOVE the `s.outer` `0.5rem` padding — the cover-fit guarantees the
+      pasteboard overflows the viewport, so padding only offset the stage into the content box and
+      showed as a surround strip on the leading edge; without it all four edges hug the viewport.
 - [x] `CanvasArea.tsx`: `dynamicZoomMin` (cover-fit, floored at `ZOOM_HARD_MIN` 0.02), bound
       into `clampZoom` so every zoom path (buttons / Ctrl+wheel / Fit) is clamped to it;
       recompute on viewport (ResizeObserver) + resolution change; clamp current zoom UP when
-      the floor rises. So a full zoom-out always COVERS the viewport — no empty surround.
+      the floor rises. So a full zoom-out always COVERS the viewport on all four edges — no surround.
 
 ## 6. Colour-doc drift (code is source of truth: `#3d4253`)
 
@@ -58,13 +63,15 @@
       a tiny 100×100 frame gives a small cover-fit min-zoom (the zoom-lock fix);
       `clampDeltaToPasteboard` — box stays inside (single + group); edge touches the bound,
       not crossing; pre-existing-outside tightens only; oversized centers.
-- [x] Unit `coverZoom`: MAX of the axis ratios; the pasteboard covers the viewport on both
-      axes at that zoom; 0 for a degenerate viewport/extent.
+- [x] Unit `coverZoom`: MAX of the axis ratios (each biased up by `COVER_OVERSHOOT_PX`); the
+      pasteboard OVER-covers the viewport on both axes (the tight axis by exactly the hair, never
+      under); 0 for a degenerate viewport/extent.
 - [x] E2E `pasteboard-extent.spec.ts`: extent FIXED (no grow), frame does NOT drift, drag
       past an edge STOPS at the pasteboard edge (left/top too), arrow-nudge stops at the edge,
-      at maximum zoom-out the pasteboard COVERS the viewport (no empty surround), a TINY 100×100
-      resolution does NOT freeze zoom (small min-zoom + zoom in/out works), and the drag clamp
-      holds at a small resolution too (not only the default).
+      at maximum zoom-out the pasteboard hugs ALL FOUR viewport edges (no surround sliver on any
+      side, across multiple resolutions / aspect ratios), a TINY 100×100 resolution does NOT freeze
+      zoom (small min-zoom + zoom in/out works), and the drag clamp holds at a smaller resolution
+      too (not only the default).
 - [x] E2E: B-035 fit-on-open / fit-on-switch still center (run the existing spec).
 - [x] Confirm no regression in `scene-size-vs-pasteboard.spec.ts` (resolution change
       recomputes the `frame + 2·margin` extent + Fit re-fits).
