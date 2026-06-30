@@ -114,15 +114,27 @@
         var hasReplacement = raw.indexOf('�') !== -1;
         persianEl.textContent = hasPersian && !hasReplacement ? 'OK ✓' : 'CHECK ✗';
         persianEl.className = hasPersian && !hasReplacement ? 'ok' : 'bad';
+        // B-041 escape-sweep — report whether the template's OWN JSON.parse succeeds
+        // (the exact on-air failure mode: a raw newline inside the string throws).
+        var parseOk = false;
         try {
           var p = JSON.parse(raw);
+          parseOk = true;
           headlineEl.textContent = p.headline || p.text || p.anchor || raw;
           tickerEl.textContent = p.ticker || '';
         } catch (e) {
+          parseOk = false;
           headlineEl.textContent = raw || '(empty payload)';
           tickerEl.textContent = '';
         }
-        beacon({ type: 'update', payload: raw, len: raw.length, count: count, source: source || 'update' });
+        beacon({
+          type: 'update',
+          payload: raw,
+          len: raw.length,
+          count: count,
+          source: source || 'update',
+          parseOk: parseOk,
+        });
       }
 
       // CasparCG HTML-producer surface. CG INVOKE / CALL "update" call window.update;
