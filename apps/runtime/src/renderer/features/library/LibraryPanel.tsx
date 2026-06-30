@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TemplateInfo } from '@cg/shared-ipc';
-import { unpack, verify } from '@cg/vcg-format';
 import { colors } from '../../theme.js';
 import { uuid } from '../../lib/uuid.js';
+import { importTemplateFromBytes } from './templateDelivery.js';
 
 const styles = {
   panel: {
@@ -109,31 +109,26 @@ export function LibraryPanel(): JSX.Element {
         return;
       }
 
-      const result = await verify(bytes);
-      if (!result.ok) {
-        // Verification failed → register nothing; show the reason(s).
-        setError(`“${file.name}” failed verification: ${result.errors.join('; ')}`);
-        return;
-      }
-
-      let template: TemplateInfo;
+      let imported: { templateId: string; warnings: string[] };
       try {
-        const { scene, manifest } = await unpack(bytes);
-        template = {
-          templateId: manifest.id,
-          templateType: scene.templateType,
-          fields: scene.fields ?? [],
-        };
+        // B-038 Phase 2 — produce the self-contained standalone HTML from the
+        // unpacked `.vcg` and deliver it with the `TemplateInfo` over
+        // `templates.import`. A package that fails verification / unpack / export
+        // throws → nothing is registered (the R-001 invariant). Thrown messages
+        // are pre-formatted (e.g. "failed verification: …"); the file name is
+        // added here for the operator-facing error.
+        imported = await importTemplateFromBytes(window.cg, bytes);
       } catch (err) {
-        setError(
-          `“${file.name}” could not be unpacked: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        setError(`“${file.name}” ${err instanceof Error ? err.message : String(err)}`);
         return;
       }
 
-      await window.cg.templates.import({ template });
       await refresh();
-      setStatus(`Imported “${template.templateId}”.`);
+      setStatus(
+        imported.warnings.length > 0
+          ? `Imported “${imported.templateId}” (${String(imported.warnings.length)} warning(s): ${imported.warnings.join('; ')}).`
+          : `Imported “${imported.templateId}”.`,
+      );
     },
     [refresh],
   );

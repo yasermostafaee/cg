@@ -99,6 +99,87 @@ it('rejects an unknown channel with an error response', async () => {
   ws.close();
 });
 
+it('retains the delivered template HTML keyed by id over the WS (B-038 Phase 2)', async () => {
+  handle = await createBridge({ port: 0, connection: deadConnection() });
+  const ws = await connect(handle.url);
+  const frames: WsFrame[] = [];
+  ws.on('message', (data: Buffer) => {
+    const frame = parseWsFrame(data.toString());
+    if (frame !== null) frames.push(frame);
+  });
+
+  const template = {
+    templateId: 'tpl-ws',
+    templateType: 'lower-third',
+    fields: [{ id: 'anchor', label: 'Anchor name', required: true, type: 'text', default: '' }],
+  };
+  const htmlV1 = '<!doctype html><html><body>v1</body></html>';
+
+  ws.send(
+    serializeWsFrame({
+      type: 'request',
+      id: 'imp1',
+      channel: 'templates.import',
+      payload: { template, html: htmlV1 },
+    }),
+  );
+  await waitFor(() => frames.some((f) => f.type === 'response' && f.id === 'imp1'));
+  const resp = frames.find((f) => f.type === 'response' && f.id === 'imp1');
+  expect(
+    resp?.type === 'response' &&
+      typeof resp.payload === 'object' &&
+      resp.payload !== null &&
+      'registered' in resp.payload &&
+      resp.payload.registered === true,
+  ).toBe(true);
+
+  // The bridge HOLDS the HTML keyed by id (the Phase 3 serve seam).
+  expect(handle.runtime.templateHtml('tpl-ws')).toBe(htmlV1);
+  // …and the TemplateInfo is still surfaced.
+  expect(handle.runtime.templateGet('tpl-ws')?.templateType).toBe('lower-third');
+
+  // Re-import the SAME id with different HTML → the stored HTML is replaced.
+  const htmlV2 = '<!doctype html><html><body>v2</body></html>';
+  ws.send(
+    serializeWsFrame({
+      type: 'request',
+      id: 'imp2',
+      channel: 'templates.import',
+      payload: { template, html: htmlV2 },
+    }),
+  );
+  await waitFor(() => frames.some((f) => f.type === 'response' && f.id === 'imp2'));
+  expect(handle.runtime.templateHtml('tpl-ws')).toBe(htmlV2);
+  expect(handle.runtime.templateList()).toHaveLength(1);
+
+  ws.close();
+});
+
+it('rejects a templates.import missing the html payload (B-038 Phase 2)', async () => {
+  handle = await createBridge({ port: 0, connection: deadConnection() });
+  const ws = await connect(handle.url);
+  const frames: WsFrame[] = [];
+  ws.on('message', (data: Buffer) => {
+    const frame = parseWsFrame(data.toString());
+    if (frame !== null) frames.push(frame);
+  });
+  ws.send(
+    serializeWsFrame({
+      type: 'request',
+      id: 'imp-bad',
+      channel: 'templates.import',
+      payload: {
+        template: { templateId: 'tpl-nohtml', templateType: 'lower-third', fields: [] },
+      },
+    }),
+  );
+  await waitFor(() => frames.some((f) => f.type === 'response' && f.id === 'imp-bad'));
+  const resp = frames.find((f) => f.type === 'response' && f.id === 'imp-bad');
+  expect(resp?.type === 'response' && resp.error?.message).toContain('invalid request');
+  expect(handle.runtime.templateHtml('tpl-nohtml')).toBeNull();
+  ws.close();
+});
+
 it('rejects a request whose payload fails the channel schema', async () => {
   handle = await createBridge({ port: 0, connection: deadConnection() });
   const ws = await connect(handle.url);

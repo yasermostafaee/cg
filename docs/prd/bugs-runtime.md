@@ -71,3 +71,16 @@ whose data arg is the item's **real fields** (non-empty), and that `CG UPDATE`
 carries the updated fields. The fix design (likely: the bridge serves each
 registered template as HTML over its own HTTP endpoint and `CG ADD`s that URL with
 the item's real fields) is tracked separately — see the C-001 follow-up.
+
+**Progress (stays `[~]` until the LIVE path is hardware-validated):**
+
+- Phase 1 — `extract-single-file-export` (PR #235): the D-019 single-file export is
+  now a shared browser package (`@cg/single-file-export`) the Runtime can import.
+- Phase 2 — `deliver-template-html`: the browser produces the self-contained HTML at
+  import and ships it over the extended `templates.import`; the bridge **retains** it
+  keyed by id (`TemplateRegistry` / `CasparRuntime.templateHtml`). Content delivery +
+  retention only — **nothing renders yet** (no HTTP serve, `CG ADD`/fields unchanged).
+- Phase 3 (next) — bridge HTTP serve (`GET /template/<id>`) + `CG ADD`-by-URL + real
+  fields + **bundled Persian-font inlining** (deferred from Phase 2; required before
+  on-hardware Persian validation). Phase 4 — hardened `amcp-mock` + integration tests.
+  See `openspec/changes/fix-live-template-render/`.

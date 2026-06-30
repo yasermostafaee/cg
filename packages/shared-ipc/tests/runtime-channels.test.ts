@@ -15,6 +15,7 @@ import {
   StackStateChangedChannel,
   StackTakeChannel,
   StackUpdateChannel,
+  TemplatesImportChannel,
 } from '../src/index.js';
 
 /**
@@ -109,6 +110,37 @@ describe('connections.* channel schemas', () => {
     expect(ConnectionsHealthChangedChannel.payload.parse(healthSnapshot)).toMatchObject({
       currentPrimary: 'A',
     });
+  });
+});
+
+describe('templates.import channel schema (B-038 Phase 2)', () => {
+  const template = {
+    templateId: 'tpl-1',
+    templateType: 'lower-third',
+    fields: [{ id: 'anchor', label: 'Anchor name', required: true, type: 'text', default: '' }],
+  };
+
+  it('accepts a template + the rendered self-contained html', () => {
+    const parsed = TemplatesImportChannel.request.parse({
+      template,
+      html: '<!doctype html><html><body>hi</body></html>',
+    });
+    expect(parsed.html).toContain('<!doctype html');
+    expect(parsed.template.templateId).toBe('tpl-1');
+  });
+
+  it('rejects an import missing the html payload', () => {
+    expect(() => TemplatesImportChannel.request.parse({ template })).toThrow();
+  });
+
+  it('rejects an import missing the template', () => {
+    expect(() => TemplatesImportChannel.request.parse({ html: '<html></html>' })).toThrow();
+  });
+
+  it('response carries the registered flag + template id', () => {
+    expect(
+      TemplatesImportChannel.response.parse({ registered: true, templateId: 'tpl-1' }),
+    ).toMatchObject({ registered: true, templateId: 'tpl-1' });
   });
 });
 

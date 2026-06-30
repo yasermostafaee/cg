@@ -17,6 +17,7 @@ import type {
   TemplateInfo,
 } from '@cg/shared-ipc';
 import { CommandBuilder, type CommandSlot } from './command-builder.js';
+import { TemplateRegistry } from './template-registry.js';
 
 /** CasparCG video channel the bridge drives (Phase 2: single channel). */
 const DEFAULT_CHANNEL = 1;
@@ -85,7 +86,9 @@ export class CasparRuntime {
   #flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   // ── non-playout stub state ──────────────────────────────────────────
-  #templates = new Map<string, TemplateInfo>();
+  // B-038 Phase 2 — holds each imported template's info + the browser-produced
+  // self-contained HTML, keyed by id (retained, not served yet).
+  readonly #templates = new TemplateRegistry();
   #lock: LockState = { engaged: false };
   #lockPin: string | null = null;
   #audit: AuditEntry[] = [];
@@ -319,14 +322,25 @@ export class CasparRuntime {
   }
 
   templateGet(templateId: string): TemplateInfo | null {
-    return this.#templates.get(templateId) ?? null;
+    return this.#templates.get(templateId);
   }
   templateList(): TemplateInfo[] {
-    return [...this.#templates.values()];
+    return this.#templates.list();
   }
-  templateImport(template: TemplateInfo): { registered: boolean; templateId: string } {
-    this.#templates.set(template.templateId, template);
-    return { registered: true, templateId: template.templateId };
+  /**
+   * B-038 Phase 2 — register a template AND retain its browser-produced
+   * self-contained HTML, keyed by id. Re-import replaces both. The HTML is held,
+   * not served yet (Phase 3 serves it over HTTP; Phase 4 `CG ADD`s its URL).
+   */
+  templateImport(
+    template: TemplateInfo,
+    html: string,
+  ): { registered: boolean; templateId: string } {
+    return this.#templates.import(template, html);
+  }
+  /** The retained HTML for a template id, or `null` (the Phase 3 serve seam). */
+  templateHtml(templateId: string): string | null {
+    return this.#templates.html(templateId);
   }
 
   auditRecent(limit = 200, action?: AuditEntry['action'], actor?: string): AuditEntry[] {
