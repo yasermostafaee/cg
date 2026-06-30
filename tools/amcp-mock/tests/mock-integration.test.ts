@@ -1,5 +1,6 @@
 import * as net from 'node:net';
 import * as dgram from 'node:dgram';
+import * as http from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createMock } from '../src/mock.js';
 import type { MockHandle } from '../src/types.js';
@@ -137,10 +138,53 @@ describe('createMock', () => {
     expect(await sendAndReceive(mock.amcpPort, ['CG 1-10 BOGUS 0'])).toBe('400 ERROR\r\n');
   });
 
-  it('CG ADD on an empty layer auto-loads the HTML producer', async () => {
+  // B-038 — the mock no longer blind-acks CG ADD: a bare id is unresolvable → 404,
+  // and the producer is NOT loaded (the exact "looks acked, renders nothing" bug).
+  it('CG ADD with a bare (non-URL) template id returns 404 and loads nothing', async () => {
     mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-    await sendAndReceive(mock.amcpPort, ['CG 1-10 ADD 0 "tmpl" 1 "{\\"a\\":1}"']);
-    expect(mock.layerState({ channel: 1, layer: 10 })?.producer).toBe('html');
+    const reply = await sendAndReceive(mock.amcpPort, ['CG 1-10 ADD 0 "tmpl" 1 "{\\"a\\":1}"']);
+    expect(reply).toContain('404');
+    expect(mock.layerState({ channel: 1, layer: 10 })?.producer ?? 'empty').toBe('empty');
+    // …but the data payload is still recorded for assertion.
+    expect(mock.lastCgAdd({ channel: 1, layer: 10 })).toEqual({
+      template: 'tmpl',
+      data: '{"a":1}',
+    });
+  });
+
+  it('CG ADD resolves a served URL → 202 + html producer; records the data payload', async () => {
+    const { url, close } = await serveOnce('<!doctype html><html><body>ok</body></html>');
+    try {
+      mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+      const reply = await sendAndReceive(mock.amcpPort, [
+        `CG 1-10 ADD 0 "${url}" 1 "{\\"title\\":\\"خبر\\"}"`,
+      ]);
+      expect(reply).toContain('202 CG');
+      expect(mock.layerState({ channel: 1, layer: 10 })?.producer).toBe('html');
+      const add = mock.lastCgAdd({ channel: 1, layer: 10 });
+      expect(add?.template).toBe(url);
+      expect(add?.data).toBe('{"title":"خبر"}');
+    } finally {
+      await close();
+    }
+  });
+
+  it('CG ADD with a URL that 404s is itself 404 (renders nothing)', async () => {
+    const { url, close } = await serveOnce('not found', 404);
+    try {
+      mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+      const reply = await sendAndReceive(mock.amcpPort, [`CG 1-10 ADD 0 "${url}" 1 "{}"`]);
+      expect(reply).toContain('404');
+      expect(mock.layerState({ channel: 1, layer: 10 })?.producer ?? 'empty').toBe('empty');
+    } finally {
+      await close();
+    }
+  });
+
+  it('CG UPDATE records its data payload', async () => {
+    mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+    await sendAndReceive(mock.amcpPort, ['CG 1-10 UPDATE 0 "{\\"title\\":\\"به‌روز\\"}"']);
+    expect(mock.lastCgUpdate({ channel: 1, layer: 10 })?.data).toBe('{"title":"به‌روز"}');
   });
 
   it('a handler that throws yields a 500', async () => {
@@ -216,6 +260,28 @@ async function sendAndReceive(port: number, lines: readonly string[]): Promise<s
     sock.on('end', () => resolve(buf));
     sock.on('error', reject);
   });
+}
+
+/** Serve `body` (with `status`) on an ephemeral loopback port; returns its URL + a closer. */
+async function serveOnce(
+  body: string,
+  status = 200,
+): Promise<{ url: string; close: () => Promise<void> }> {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(status, { 'content-type': 'text/html; charset=utf-8' });
+    res.end(body);
+  });
+  const port = await new Promise<number>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const addr = server.address();
+      resolve(typeof addr === 'object' && addr !== null ? addr.port : 0);
+    });
+  });
+  return {
+    url: `http://127.0.0.1:${String(port)}/template/x`,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
 }
 
 async function openOscListener(

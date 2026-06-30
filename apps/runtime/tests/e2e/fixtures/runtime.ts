@@ -197,6 +197,11 @@ export const test = base.extend<{ app: RuntimeApp }>({
   app: async ({ page }, use) => {
     await page.addInitScript(() => {
       (window as unknown as { CG_E2E: boolean }).CG_E2E = true;
+      // B-038 Phase 3 — pin the bridge probe at a guaranteed-dead port so a real
+      // caspar-bridge listening on the default 127.0.0.1:5280 can't make these
+      // specs go LIVE (failover banner + real CG ADD) and flake. The library /
+      // import flow exercises the offline MockRuntime deterministically.
+      (window as unknown as { __CG_BRIDGE_URL__: string }).__CG_BRIDGE_URL__ = 'ws://127.0.0.1:1';
     });
     page.on('dialog', (d) => void d.dismiss());
     const app = new RuntimeApp(page);

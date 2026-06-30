@@ -41,6 +41,10 @@ const handle = await createBridge({
 });
 
 console.error(`[caspar-bridge] WS listening on ${handle.url} → CasparCG via @cg/caspar-client`);
+console.error(
+  `[caspar-bridge] template HTTP server on ${handle.templateServe.url}/template/<id>` +
+    (handle.templateServe.exposed ? ' (LAN-exposed)' : ' (loopback)'),
+);
 
 const shutdown = async () => {
   console.error('[caspar-bridge] stopping');

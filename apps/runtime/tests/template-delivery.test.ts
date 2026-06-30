@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { pack, sha256Hex } from '@cg/vcg-format';
 import type { AssetEntry, FontReference, Manifest, Scene } from '@cg/shared-schema';
@@ -6,6 +8,20 @@ import {
   produceTemplateDelivery,
   type TemplateImportBridge,
 } from '../src/renderer/features/library/templateDelivery.js';
+
+// B-038 Phase 3 — the bundled app fonts ship in apps/runtime. Read the real
+// fonts.css + serve the woff2 from disk so the export inlines the bundled faces
+// off-DOM (vitest node env has no `/fonts/` server).
+const FONTS_CSS = readFileSync(
+  fileURLToPath(new URL('../src/renderer/fonts.css', import.meta.url)),
+  'utf-8',
+);
+function nodeFontFetch(url: string): Promise<ArrayBuffer> {
+  // `url` is an app path like `/fonts/vazirmatn/…woff2`; resolve it under public/.
+  const file = fileURLToPath(new URL(`../public${url}`, import.meta.url));
+  const buf = readFileSync(file);
+  return Promise.resolve(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+}
 
 /**
  * B-038 Phase 2 — the browser produces the self-contained standalone HTML at
@@ -186,6 +202,29 @@ describe('produceTemplateDelivery', () => {
   it('throws (registers nothing) for bytes that fail verification', async () => {
     const notAVcg = new TextEncoder().encode('this is not a .vcg archive');
     await expect(produceTemplateDelivery(notAVcg)).rejects.toThrow(/failed verification/i);
+  });
+
+  // B-038 Phase 3 — the bundled Persian/Latin faces inline as base64; the HTML
+  // stays self-contained (CasparCG fetches no external font) so Persian renders
+  // with the correct Vazirmatn face on air.
+  it('inlines the bundled @font-face faces as base64 with NO external font refs', async () => {
+    const { html } = await produceTemplateDelivery(await buildVcgWithImage('tpl-fonts'), {
+      fontsCss: FONTS_CSS,
+      fetchUrl: nodeFontFetch,
+    });
+
+    // The bundled faces (incl. the Vazirmatn Arabic subset used for Persian) are
+    // inlined as base64 woff2 data URIs — not left as `/fonts/…` URLs.
+    expect(html).toContain('@font-face');
+    expect(html).toContain('Vazirmatn');
+    expect(html).toContain('data:font/woff2;base64,');
+    // Still fully self-contained: no `/fonts/…` URLs survived inlining, no external
+    // stylesheet/script/image loads. (A bare namespace string like the SVG xmlns
+    // inside the runtime bundle is not an external load, so we don't blanket-ban
+    // `http(s)://` — we ban external *references*.)
+    expect(html).not.toMatch(/url\(['"]?\/fonts\//);
+    expect(html).not.toMatch(/<link\b/);
+    expect(html).not.toMatch(/src="https?:/);
   });
 });
 

@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TemplateInfo } from '@cg/shared-ipc';
+import { defaultFieldValue, type FieldValues } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { uuid } from '../../lib/uuid.js';
 import { importTemplateFromBytes } from './templateDelivery.js';
+// B-038 Phase 3 — the bundled app @font-face CSS (Vazirmatn / Exo 2) as a raw
+// string. Passed to the single-file export so the bundled faces inline as base64
+// and the template HTML CasparCG loads renders Persian with the correct face.
+import appFontsCss from '../../fonts.css?inline';
 
 const styles = {
   panel: {
@@ -116,8 +121,9 @@ export function LibraryPanel(): JSX.Element {
         // `templates.import`. A package that fails verification / unpack / export
         // throws → nothing is registered (the R-001 invariant). Thrown messages
         // are pre-formatted (e.g. "failed verification: …"); the file name is
-        // added here for the operator-facing error.
-        imported = await importTemplateFromBytes(window.cg, bytes);
+        // added here for the operator-facing error. The bundled fonts are inlined
+        // (Phase 3) so the delivered HTML renders Persian with the correct face.
+        imported = await importTemplateFromBytes(window.cg, bytes, { fontsCss: appFontsCss });
       } catch (err) {
         setError(`“${file.name}” ${err instanceof Error ? err.message : String(err)}`);
         return;
@@ -144,10 +150,15 @@ export function LibraryPanel(): JSX.Element {
   );
 
   const loadOntoStack = useCallback((template: TemplateInfo): void => {
+    // B-038 Phase 3 — seed the item's fields from the template's field-schema
+    // defaults (not `{}`), so `CG ADD` carries real data on load. Operator edits
+    // from the Inspector flow as subsequent `stack.update` values.
+    const fields: FieldValues = {};
+    for (const field of template.fields) fields[field.id] = defaultFieldValue(field);
     void window.cg.stack.load({
       itemId: `item-${uuid()}`,
       templateId: template.templateId,
-      fields: {},
+      fields,
     });
   }, []);
 

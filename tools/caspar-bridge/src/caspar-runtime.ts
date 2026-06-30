@@ -18,6 +18,12 @@ import type {
 } from '@cg/shared-ipc';
 import { CommandBuilder, type CommandSlot } from './command-builder.js';
 import { TemplateRegistry } from './template-registry.js';
+import {
+  TemplateHttpServer,
+  deriveServeOptions,
+  type TemplateServeOptions,
+  type TemplateServeOverride,
+} from './template-http-server.js';
 
 /** CasparCG video channel the bridge drives (Phase 2: single channel). */
 const DEFAULT_CHANNEL = 1;
@@ -87,8 +93,11 @@ export class CasparRuntime {
 
   // ── non-playout stub state ──────────────────────────────────────────
   // B-038 Phase 2 — holds each imported template's info + the browser-produced
-  // self-contained HTML, keyed by id (retained, not served yet).
+  // self-contained HTML, keyed by id. B-038 Phase 3 — the HTTP server serves that
+  // HTML at `/template/<id>`, so `CG ADD` can reference a real, loadable URL.
   readonly #templates = new TemplateRegistry();
+  readonly #templateServer = new TemplateHttpServer((id) => this.#templates.html(id));
+  readonly #serveOptions: TemplateServeOptions;
   #lock: LockState = { engaged: false };
   #lockPin: string | null = null;
   #audit: AuditEntry[] = [];
@@ -97,8 +106,11 @@ export class CasparRuntime {
 
   #started = false;
 
-  constructor(config: ConnectionConfig) {
+  constructor(config: ConnectionConfig, serveOverride: TemplateServeOverride = {}) {
     this.#config = config;
+    // B-038 Phase 3 — serve loopback when CasparCG is local; an opt-in routable
+    // host (configured or guessed) when remote. The control WS stays loopback.
+    this.#serveOptions = deriveServeOptions(config.servers.A.host, serveOverride);
     const session = (name: ServerLabel, ep: ConnectionConfig['servers']['A']): ServerSession =>
       new ServerSession({
         name,
@@ -152,10 +164,36 @@ export class CasparRuntime {
     this.#sessions.B.start();
   }
 
+  /**
+   * B-038 Phase 3 — start the template HTTP server (`GET /template/<id>` → the
+   * retained HTML). Idempotent. After this, `load()` issues `CG ADD` with the
+   * served URL instead of the bare template id.
+   */
+  async startServing(): Promise<void> {
+    await this.#templateServer.start(this.#serveOptions);
+  }
+
+  /** The template HTTP serve address once serving (B-038 Phase 3), else null. */
+  get templateServe(): { serveHost: string; port: number; bindHost: string } | null {
+    return this.#templateServer.listening
+      ? {
+          serveHost: this.#templateServer.serveHost,
+          port: this.#templateServer.port,
+          bindHost: this.#serveOptions.bindHost,
+        }
+      : null;
+  }
+
+  /** The served URL for a template id (the `CG ADD` arg), or null if not serving. */
+  templateServeUrl(templateId: string): string | null {
+    return this.#templateServer.listening ? this.#templateServer.urlFor(templateId) : null;
+  }
+
   async stop(): Promise<void> {
     if (this.#flushTimer !== null) clearTimeout(this.#flushTimer);
     this.#flushTimer = null;
     await Promise.all([this.#sessions.A.stop(), this.#sessions.B.stop()]);
+    await this.#templateServer.stop();
   }
 
   /** Which server is currently the live primary. */
@@ -221,7 +259,13 @@ export class CasparRuntime {
     // pass the filter (survives failover).
     this.#addInterest(slot);
 
-    const ok = await this.#send(this.#builder.load(slot, templateId, fields), seq, 'normal');
+    // B-038 Phase 3 — `CG ADD` references the SERVED `/template/<id>` URL (a real,
+    // loadable page) when the HTTP server is up; falls back to the bare id only
+    // when serving isn't started (e.g. isolated unit tests).
+    const templateArg = this.#templateServer.listening
+      ? this.#templateServer.urlFor(templateId)
+      : templateId;
+    const ok = await this.#send(this.#builder.load(slot, templateArg, fields), seq, 'normal');
     return { accepted: ok };
   }
 

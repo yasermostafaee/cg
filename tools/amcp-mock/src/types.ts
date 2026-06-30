@@ -91,6 +91,13 @@ export interface MockHandle {
   setHandler(verb: string, handler: AmcpHandler): void;
   /** Snapshot of the layer the slot currently has. */
   layerState(slot: LayerSlot): LayerState | undefined;
+  /**
+   * B-038 — the last `CG ADD` seen on a slot: the template argument and the data
+   * payload. Lets tests assert `CG ADD` carried a real URL + non-empty fields.
+   */
+  lastCgAdd(slot: LayerSlot): { template: string; data: string } | undefined;
+  /** B-038 — the last `CG UPDATE` data payload seen on a slot. */
+  lastCgUpdate(slot: LayerSlot): { data: string } | undefined;
   /** Number of currently-connected AMCP clients. */
   readonly amcpClientCount: number;
   /** Shut down both servers and resolve when fully closed. */
@@ -107,6 +114,10 @@ export interface HandlerContext {
   getLayer(slot: LayerSlot): LayerState;
   /** Apply a partial update to a layer; emits OSC reflecting the new state. */
   setLayer(slot: LayerSlot, patch: Partial<Omit<LayerState, 'slot'>>): void;
+  /** B-038 — record a `CG ADD`'s template argument + data payload for assertion. */
+  recordCgAdd(slot: LayerSlot, template: string, data: string): void;
+  /** B-038 — record a `CG UPDATE`'s data payload for assertion. */
+  recordCgUpdate(slot: LayerSlot, data: string): void;
   /** Channel count the mock was started with. */
   readonly channelCount: number;
 }

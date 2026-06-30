@@ -1,3 +1,5 @@
+import * as http from 'node:http';
+import * as https from 'node:https';
 import type { AmcpHandler, AmcpRequest, HandlerContext, AmcpResponse } from './types.js';
 
 /**
@@ -102,14 +104,18 @@ function handleClear(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
  * `CG <channel>-<layer> ADD <flash-layer> "<template>" <play-on-load> "<data>"`
  * `CG <channel>-<layer> PLAY <flash-layer>`
  * `CG <channel>-<layer> STOP <flash-layer>`
+ * `CG <channel>-<layer> UPDATE <flash-layer> "<data>"`
  * `CG <channel>-<layer> INVOKE <flash-layer> "<method>"`
  * `CG <channel>-<layer> REMOVE <flash-layer>`
  *
- * The mock treats CG as a pass-through to layer state — it doesn't model
- * Flash-layer slots inside an HTML producer (that's the template-runtime's
- * domain). CG ADD without a prior PLAY [HTML] is rejected.
+ * B-038 — the mock STOPS blind-acking `CG ADD`: it **resolves** the template
+ * argument so a "looks acked, renders nothing" regression can't hide. A bare id
+ * (no URL) or a URL it cannot `GET` → `404` (real CasparCG's `CG ADD FAILED`);
+ * only a URL that returns a served page → `202` (+ producer `html`). It also
+ * records the `CG ADD` / `CG UPDATE` data payload on the handle so tests can
+ * assert it is the real, non-empty field JSON (not `"{}"`).
  */
-function handleCg(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
+async function handleCg(req: AmcpRequest, ctx: HandlerContext): Promise<AmcpResponse> {
   const slot = parseChannelLayer(req.args[0]);
   if (!slot) return { kind: 'err', code: 401, verb: 'CG' };
   if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'CG' };
@@ -117,20 +123,26 @@ function handleCg(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   const sub = req.args[1]?.toUpperCase();
   switch (sub) {
     case 'ADD': {
-      // The mock accepts CG ADD even on an empty layer — real CasparCG does too,
-      // it'll auto-load an HTML producer. Mirror that.
-      const cur = ctx.getLayer(slot);
-      if (cur.producer === 'empty') {
-        const url = req.args[3] ?? '';
-        ctx.setLayer(slot, { producer: 'html', filePath: url, paused: false });
-      }
+      // `CG <slot> ADD <flash-layer> "<template>" <play-on-load> "<data>"`.
+      const template = req.args[3] ?? '';
+      const data = req.args[5] ?? '';
+      ctx.recordCgAdd(slot, template, data);
+      // Resolve the template argument instead of blind-acking. A served URL → 202;
+      // a bare id / unreachable URL → 404 CG ADD FAILED (matches real CasparCG).
+      const resolved = await resolveTemplateRef(template);
+      if (!resolved) return { kind: 'err', code: 404, verb: 'CG', detail: 'CG ADD FAILED' };
+      ctx.setLayer(slot, { producer: 'html', filePath: template, paused: false });
+      return { kind: 'ok', code: 202, verb: 'CG' };
+    }
+    case 'UPDATE': {
+      // `CG <slot> UPDATE <flash-layer> "<data>"` — expose the data for assertion.
+      ctx.recordCgUpdate(slot, req.args[3] ?? '');
       return { kind: 'ok', code: 202, verb: 'CG' };
     }
     case 'PLAY':
     case 'STOP':
     case 'INVOKE':
     case 'NEXT':
-    case 'UPDATE':
       return { kind: 'ok', code: 202, verb: 'CG' };
     case 'REMOVE': {
       ctx.setLayer(slot, { producer: 'empty', filePath: '', paused: false });
@@ -139,6 +151,43 @@ function handleCg(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
     default:
       return { kind: 'err', code: 400, verb: 'CG' };
   }
+}
+
+/**
+ * Resolve a `CG ADD` template argument the way real CasparCG must be able to: a
+ * bare id / non-URL is unresolvable here (→ 404); an `http(s)://` URL is fetched
+ * and resolves only when it returns a page.
+ */
+async function resolveTemplateRef(ref: string): Promise<boolean> {
+  if (!/^https?:\/\//i.test(ref)) return false;
+  return httpGetOk(ref, 2000);
+}
+
+/** True iff `GET <url>` returns a 2xx within `timeoutMs`. Never throws. */
+function httpGetOk(url: string, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (ok: boolean): void => {
+      if (settled) return;
+      settled = true;
+      resolve(ok);
+    };
+    try {
+      const lib = url.toLowerCase().startsWith('https:') ? https : http;
+      const request = lib.get(url, (res) => {
+        const status = res.statusCode ?? 0;
+        res.resume(); // drain so the socket can free
+        done(status >= 200 && status < 300);
+      });
+      request.setTimeout(timeoutMs, () => {
+        request.destroy();
+        done(false);
+      });
+      request.on('error', () => done(false));
+    } catch {
+      done(false);
+    }
+  });
 }
 
 /**

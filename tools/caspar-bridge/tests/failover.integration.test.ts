@@ -70,6 +70,13 @@ async function bootPair(autoFailoverEnabled: boolean): Promise<void> {
     twoServer(mockA.amcpPort, oscA, mockB.amcpPort, oscB, autoFailoverEnabled),
   );
   runtime.start();
+  // B-038 Phase 3 — serve the template so the (now-resolving) mock 202s `CG ADD`
+  // against a real URL after failover too.
+  await runtime.startServing();
+  runtime.templateImport(
+    { templateId: 'lower-third', templateType: 'lower-third', fields: [] },
+    '<!doctype html><html><body>served</body></html>',
+  );
   await runtime.whenServerHealthy(6000);
 }
 
