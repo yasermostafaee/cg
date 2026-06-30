@@ -85,61 +85,79 @@ re-measures and stays glued. The auto→fixed toggle commits the measured size i
 
 ## Off-frame pasteboard (D-071 Phase B; content-aware follow-up B-026)
 
-The stage is a **content-aware pasteboard**: its size is `pasteboardLayout(resolution, content?)`,
-where `content` is the scene-coord AABB of all on-canvas elements at the current frame
-(`contentBounds(layers, currentFrame)` — corner-folds each top-level element through `localToScene`
-at `effectiveTransformAt`; a nested composition **instance** counts only its **own box**, since
-instances render `overflow:hidden` and clip their children). The base is the **fixed 2× extent** —
-the frame plus a margin (`PASTEBOARD_MARGIN_RATIO`, a fraction of the frame) on **all four sides**,
-symmetric so off-frame shapes show on **every** side (left/top too). The extent then:
+The stage is a **FIXED pasteboard** (B-027): its size is `pasteboardLayout(resolution)` — a pure
+function of the resolution, **not** content-grown. The margin per side is the LARGER of an absolute
+minimum or one full frame: `marginX = max(PASTEBOARD_MIN_X (5000), frameWidth)` left + right,
+`marginY = max(PASTEBOARD_MIN_Y (3000), frameHeight)` top + bottom → total extent
+`frameWidth + 2·marginX` × `frameHeight + 2·marginY`. `layout.frame` is the frame's **constant
+offset** into the stage (scene (0,0) sits there): `(marginX, marginY)`. The absolute floor keeps the
+pasteboard usefully large even for a TINY frame — a plain 1× multiplier made a 100×100 frame only a
+300×300 pasteboard, so the cover-fit min-zoom shot to ~428% and **froze** zoom; with the floor a
+100×100 frame is a 10100×6100 pasteboard and zoom-out stays free. Once the frame exceeds a floor on an
+axis (e.g. 8000 wide > 5000) the margin grows with it (one frame per side: an 8000-wide frame →
+24000-wide pasteboard).
 
-- **grows only past a 2× boundary** (Q1 = B): content within `[−margin, size+margin]` per axis is
-  **byte-identical** to the old fixed 2× (everyday off-frame drags don't touch the seams); once
-  content crosses a boundary the extent grows to give it a **full margin** of headroom;
-- **shrinks back** toward 2× as far content returns inward, but **never below** the 2× floor;
-- is **clamped** at `MAX_EXTENT_RATIO` (12×) the frame per axis, so a stray far coordinate (bad
-  import / fat-finger drag) can't blow the iframe up.
+Because the extent + offset are constant per resolution, dragging a shape off-frame moves **only the
+shape** — the dark area never grows and the frame never drifts (the old grow-to-fit origin shift was
+the during-drag jitter source; it, plus `contentBounds` and the origin-shift scroll-comp seam, were
+removed).
 
-This keeps a shape parked far off-frame **visible + selectable** (the old fixed extent clipped it out
-of the iframe past the margin). With no off-frame content the result is exactly the old 2× (the
-default `content` is the frame box — full back-compat).
+**No dead zone — drags/nudges are clamped to the pasteboard.** A shape's full bounding box can never
+cross the extent edge: `beginDrag` (single), `beginGroupDrag` (the whole selection box), and
+`nudgeSelection` (arrow keys) all run their delta through `clampDeltaToPasteboard` against
+`pasteboardSceneBounds(resolution)`, so a shape can never reach the clipped region beyond the extent
+(no invisible/unselectable shapes) — the pasteboard **is** the whole workable area. Edge cases: a
+shape that begins OUTSIDE (an old/imported scene) isn't yanked — the clamp only tightens (never pushes
+it further out) and lets it move back in, then bounds it; a shape LARGER than the pasteboard on an axis
+is centered on that axis (it can't fit, so it stops following the pointer there).
 
-`layout.frame` is the frame's **offset** (scene px) into the stage: **scene (0,0) sits there**, not
-at the stage origin — and it **grows** when content extends off the **left/top** (so off-frame
-content lands at positive iframe coords). Three places consume that offset so they agree: the iframe
-(`frameOffset` insets `.cg-stage` — see below), the overlay (`CanvasOverlay`'s frame box is inset by
-`frameOffset × scale`, so the gizmos/`canvas-surface` and click→scene measure from the frame), and
-the rulers (`rulerOrigin = stageRect − outerRect + frame × zoom`; `measure` is re-keyed on
-`frameOffset` so it re-fires on an origin shift, not only on scroll/zoom).
+**Dynamic cover-fit minimum zoom.** Because shapes can't leave the pasteboard, empty surround beyond it
+is wasted space — so the minimum zoom is the **cover-fit** of the pasteboard over the viewport:
+`dynamicZoomMin = coverZoom(viewport, extent) = MAX((viewportW + ε) / extentW, (viewportH + ε) / extentH)`
+(the MAX, not the contain-fit `min`), where `ε = COVER_OVERSHOOT_PX` biases each axis target **up** by a
+hair. At maximum zoom-out the pasteboard therefore **covers all four viewport edges** (no surround ever
+shows); the axis with the larger ratio is the tight one and the other overflows / scrolls. The over-cover
+bias matters because without it the cover axis lands `extent × (viewport / extent) === viewport`
+**exactly** — zero overflow slack — so a sub-pixel centering scroll exposes a hairline of `#0e1018`
+surround on the **trailing** (right/bottom) edge; over-covering by a couple px gives the scroll slack so
+all four edges hug. The other half of "hug all four edges" is that **`s.outer` carries no padding**: the
+cover-fit already guarantees the pasteboard overflows the viewport, so padding never framed a smaller
+stage — it only offset the stage into the content box (while `coverZoom` covers the padding-box
+`clientWidth`), showing as a surround strip on the **leading** edge; removing it makes the box the stage
+fills equal the box the cover-fit targets. `clampZoom` binds every zoom path (buttons, Ctrl+wheel, Fit)
+to this floor (+ `ZOOM_MAX`), and it recomputes whenever the viewport (ResizeObserver) or the resolution
+(extent) changes — a `useEffect` clamps the current zoom **up** if the floor rose. `ZOOM_HARD_MIN` (0.02)
+is only a degenerate-case safety net. Fit (below) always lands above this floor, so it is never clamped
+down.
 
-Because the offset can move at runtime, two seams keep it live:
+Three places consume the (constant) offset so they agree: the iframe (`frameOffset` insets `.cg-stage`
+via the `--cg-frame-x/-y` CSS vars — see below), the overlay (`CanvasOverlay`'s frame box is inset by
+`frameOffset × scale`, so the gizmos / `canvas-surface` and click→scene measure from the frame), and
+the rulers (`rulerOrigin = stageRect − outerRect + frame × zoom`).
 
-- **Live `.cg-stage` inset** — the baked `.cg-stage { top/left }` is a **CSS variable** on `:root`
-  (`--cg-frame-x/-y`) that `createRuntime` never recreates; the grown offset rides the existing
-  rAF-throttled `scene-replace` postMessage (and the `scrub` message — the offset is **current-frame
-  derived**, so an animated shape flying off-frame shifts it as the playhead moves) and updates the
-  variables via a shared `applyFrameOffset` helper, so the frame re-insets **live** with no iframe
-  reload/flash (the baked value is only the load-time fallback).
-- **Origin-shift scroll-comp** — a `useLayoutEffect` keyed on `frameOffset` scrolls by
-  `offsetShiftScroll(scroll, Δoffset, zoom)` so the visible content stays **stationary** when the
-  origin shifts (left/up growth **and** inward shrink). It is **independent** of the zoom-anchor
-  effect (disjoint keys: `frameOffset` vs `zoom` — a drag moves the offset not the zoom, a zoom the
-  reverse), and `prevOffsetRef` resets on `sceneId` so fit-on-open isn't fought.
+The `.cg-stage` inset is a **CSS variable** on `:root` (`--cg-frame-x/-y`) baked with the constant
+offset as the load-time fallback; the offset still rides the `scene-replace` / `scrub` postMessages
+(via `applyFrameOffset`), but since it is constant per resolution those are **idempotent** during a
+drag (they only actually change when the **resolution** changes — B-028, no reload). No live origin
+shift, so there is no scroll-comp seam.
 
 The iframe element is sized to the extent; a **`device-width` viewport** means the runtime content
-fills that size with **no stretch**. `fitToViewport` fits the zoom from the **frame** bounds — the
-**resolution**, NOT the grown extent — (so the frame is large) and `centerFrameInView` scrolls so the
-frame is **centered** (⛶ + project-open). The pasteboard overflows the viewport, but **the scrollbars
-are hidden** (`s.outer`) — there are no default scrollbars; the operator pans with the hand tool /
-wheel and zooms with Ctrl+wheel.
+fills that size with **no stretch**. Fit fits the zoom from the **frame** bounds — the **resolution**,
+NOT the extent (so the frame is large) — and centering scrolls so the frame is **centered**, computed
+arithmetically from the constant offset (`frameCenterScroll`, B-035) in a layout effect — drift-free.
+The pasteboard overflows the viewport, but **the scrollbars are hidden** (`s.outer`); the operator
+pans with the hand tool / wheel and zooms with Ctrl+wheel.
 
-**Two-tone, by region.** The **surround** (everything beyond the frame — `s.outer` _and_ the
-iframe `html, body`) is the dark **`#161927`**. The **frame-sized page backdrop** is a light gray
-**`#a7a7a7`** (with a near-white **`#f5f5f5`** checker) — it is `.cg-stage`'s **`background-color`**,
-so CSS paints it _behind_ the checkerboard (`background-image`) and the shapes (children). Every
-shape — on-frame over the `#a7a7a7` page _or_ off-frame over the `#161927` surround — paints **on
-top** of both backdrops and stays visible + selectable; because `#a7a7a7` is a `background-color` it
-is a **backdrop, never an overlay** (it cannot occlude a shape).
+**Tones, by region.** Three nested tones make the workable area read as a defined rectangle: the
+empty **scroll-container surround** (`s.outer`, beyond the pasteboard) is the darkest **`#0e1018`**;
+the **pasteboard** itself (the stage + the iframe `html, body`) is **`#161927`**, marked off from the
+surround by a subtle 1px edge ring on `s.stage` (a `box-shadow`, so the boundary is explicit even
+though clamping already keeps shapes inside); the **frame-sized page backdrop** is **`#3d4253`** (with
+a **`#5b6075`** checker) — it is `.cg-stage`'s **`background-color`**, so CSS paints it _behind_ the
+checkerboard (`background-image`) and the shapes (children). Every shape — on-frame over the `#3d4253`
+page _or_ off-frame over the `#161927` pasteboard — paints **on top** of both backdrops and stays
+visible + selectable; because `#3d4253` is a `background-color` it is a **backdrop, never an overlay**
+(it cannot occlude a shape).
 
 **Zoom toward a point.** `zoomAt(factor, clientX, clientY)` measures the scene point under the
 anchor pre-zoom and stashes it; a **`useLayoutEffect` keyed on `zoom`** then applies the scroll

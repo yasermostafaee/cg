@@ -21,7 +21,12 @@ import { penPointerDown, finishPen, isPenDrawing } from './pen-draw.js';
 import { PathEditor } from './PathEditor.js';
 import { collectGroupMoveTargets } from './group-move.js';
 import { drillTarget } from './drill.js';
-import { screenToScene, snapAxis } from './geometry.js';
+import {
+  clampDeltaToPasteboard,
+  pasteboardSceneBounds,
+  screenToScene,
+  snapAxis,
+} from './geometry.js';
 import { Gizmo, MultiGizmo, lockCursor } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
 import * as s from './CanvasOverlay.css.js';
@@ -529,6 +534,9 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
   for (const gx of state.guides.x) xTargets.push(gx);
   for (const gy of state.guides.y) yTargets.push(gy);
 
+  // B-027 — clamp the drag so the element's full box stays inside the fixed pasteboard.
+  const bounds = pasteboardSceneBounds(doc.resolution);
+
   let moved = false;
   const onMove = (e: PointerEvent): void => {
     const dx = (e.clientX - startX) / scale;
@@ -551,6 +559,15 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
         guides.y.push(sy.guide);
       }
     }
+    // B-027 — clamp AFTER snapping: the element's full box [pos, pos+size] can never
+    // cross the pasteboard edge (no dead zone). Delta-based off the drag start so a shape
+    // that began outside isn't yanked.
+    nx =
+      startPos.x +
+      clampDeltaToPasteboard(nx - startPos.x, startPos.x, startPos.x + w, bounds.minX, bounds.maxX);
+    ny =
+      startPos.y +
+      clampDeltaToPasteboard(ny - startPos.y, startPos.y, startPos.y + h, bounds.minY, bounds.maxY);
     designerStore.commitAnimatable(elementId, 'position.x', nx);
     designerStore.commitAnimatable(elementId, 'position.y', ny);
     designerStore.setSnapGuides(guides);
@@ -584,7 +601,7 @@ function beginGroupDrag(
   if (state.scene === null) return;
   const doc = editSceneOf(state.scene, state.activeCompositionId);
   if (doc === null) return;
-  const { movers, anchor, xTargets, yTargets } = collectGroupMoveTargets(
+  const { movers, anchor, xTargets, yTargets, box } = collectGroupMoveTargets(
     doc.layers,
     state.selection,
     anchorId,
@@ -596,6 +613,10 @@ function beginGroupDrag(
   // Ruler guides are snap targets too.
   for (const gx of state.guides.x) xTargets.push(gx);
   for (const gy of state.guides.y) yTargets.push(gy);
+
+  // B-027 — clamp the group delta so the WHOLE selection box stays inside the pasteboard
+  // (the group stops as soon as any member would cross an edge).
+  const bounds = pasteboardSceneBounds(doc.resolution);
 
   const unlockCursor = lockCursor(ARROW_CURSOR);
   const startX = ev.clientX;
@@ -628,8 +649,13 @@ function beginGroupDrag(
         guides.y.push(sy.guide);
       }
     }
-    const fdx = ax - anc.x;
-    const fdy = ay - anc.y;
+    let fdx = ax - anc.x;
+    let fdy = ay - anc.y;
+    // B-027 — clamp the group delta against the combined box so no member crosses the edge.
+    if (box !== null) {
+      fdx = clampDeltaToPasteboard(fdx, box.minX, box.maxX, bounds.minX, bounds.maxX);
+      fdy = clampDeltaToPasteboard(fdy, box.minY, box.maxY, bounds.minY, bounds.maxY);
+    }
     for (const m of movers) {
       // D-054 — keyframe-AWARE per member via the shared single-drag helper: a
       // member with a position track keyframes at the playhead (m.x/m.y are the
