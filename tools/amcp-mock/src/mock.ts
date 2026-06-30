@@ -35,6 +35,12 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
   const handlers = defaultHandlers();
   const traceStream = opts.tracePath ? fs.createWriteStream(opts.tracePath, { flags: 'a' }) : null;
 
+  // B-038 — last CG ADD / CG UPDATE payload per slot, so tests can assert the
+  // template arg was a real URL and the data was real (non-empty) field JSON.
+  const slotKey = (slot: LayerSlot): string => `${String(slot.channel)}-${String(slot.layer)}`;
+  const cgAdds = new Map<string, { template: string; data: string }>();
+  const cgUpdates = new Map<string, { data: string }>();
+
   const ctx: HandlerContext = {
     channelCount,
     getLayer(slot: LayerSlot): LayerState {
@@ -49,6 +55,12 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
         `/channel/${String(slot.channel)}/stage/layer/${String(slot.layer)}/foreground/producer`,
         [registry.get(slot).producer],
       );
+    },
+    recordCgAdd(slot: LayerSlot, template: string, data: string): void {
+      cgAdds.set(slotKey(slot), { template, data });
+    },
+    recordCgUpdate(slot: LayerSlot, data: string): void {
+      cgUpdates.set(slotKey(slot), { data });
     },
   };
 
@@ -79,6 +91,12 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     },
     layerState(slot: LayerSlot): LayerState | undefined {
       return registry.peek(slot);
+    },
+    lastCgAdd(slot: LayerSlot): { template: string; data: string } | undefined {
+      return cgAdds.get(slotKey(slot));
+    },
+    lastCgUpdate(slot: LayerSlot): { data: string } | undefined {
+      return cgUpdates.get(slotKey(slot));
     },
     get amcpClientCount(): number {
       return server.clientCount;

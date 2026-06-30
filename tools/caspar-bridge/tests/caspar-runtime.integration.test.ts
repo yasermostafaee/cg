@@ -63,6 +63,13 @@ it('drives load/take/update/out as AMCP (acked) and confirms state from real OSC
 
   runtime = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
   runtime.start();
+  // B-038 Phase 3 — start the template HTTP server and register the template, so
+  // `CG ADD` references a served URL the (now-resolving) mock can fetch (→ 202).
+  await runtime.startServing();
+  runtime.templateImport(
+    { templateId: 'lower-third', templateType: 'lower-third', fields: [] },
+    '<!doctype html><html><body>served</body></html>',
+  );
   await runtime.whenServerHealthy(5000);
 
   // lower-third allocates the first slot in its policy range (channel 1, layer 10).

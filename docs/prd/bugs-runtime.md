@@ -80,7 +80,16 @@ the item's real fields) is tracked separately — see the C-001 follow-up.
   import and ships it over the extended `templates.import`; the bridge **retains** it
   keyed by id (`TemplateRegistry` / `CasparRuntime.templateHtml`). Content delivery +
   retention only — **nothing renders yet** (no HTTP serve, `CG ADD`/fields unchanged).
-- Phase 3 (next) — bridge HTTP serve (`GET /template/<id>`) + `CG ADD`-by-URL + real
-  fields + **bundled Persian-font inlining** (deferred from Phase 2; required before
-  on-hardware Persian validation). Phase 4 — hardened `amcp-mock` + integration tests.
-  See `openspec/changes/fix-live-template-render/`.
+- Phase 3 — `serve-template-and-render`: the bridge serves each retained template at
+  `GET /template/<id>` (loopback local; opt-in routable when CasparCG is remote);
+  `CG ADD` references that URL with the item's **real field values** (schema defaults
+  plus operator edits, never `"{}"`); the produced HTML inlines the **bundled Persian
+  fonts** (Vazirmatn / Exo 2) as base64 so it stays self-contained. The `amcp-mock`
+  regression is closed too — it **resolves** the `CG ADD` arg (404 on an unresolvable
+  reference) and exposes the data payload, with an end-to-end integration test
+  (served URL + real Persian fields). This is the first phase where a `.vcg` actually
+  renders on CasparCG. **Still `[~]`** — pending on-hardware validation below.
+- **Remaining to close B-038 (`[x]`):** run the Runtime LIVE against real CasparCG
+  2.3.2 and visually confirm a real `.vcg` renders with correct Persian (right font,
+  intact shaping) via take, and updates via `CG UPDATE`. (Optional later follow-up:
+  re-deliver retained HTML to the bridge on reconnect after a bridge restart.)

@@ -31,6 +31,23 @@ export interface TemplateDelivery {
   warnings: string[];
 }
 
+/** Inputs that vary by caller/environment (kept out of this React-free module). */
+export interface ProduceOptions {
+  /**
+   * B-038 Phase 3 — the bundled app `@font-face` CSS (Vazirmatn / Exo 2). The
+   * exporter fetches its `/fonts/…` URLs and inlines them as base64, so the
+   * produced HTML stays self-contained AND Persian renders with the right face.
+   * `LibraryPanel` passes the SPA's `fonts.css?inline`; default `''` (no bundled
+   * faces) keeps the module usable without a Vite/`?inline` dependency.
+   */
+  fontsCss?: string;
+  /**
+   * Fetch a `/fonts/…` URL's bytes. Defaults to the browser `fetch` (resolves
+   * against the SPA). Tests inject a node-fs reader so they can run off-DOM.
+   */
+  fetchUrl?: (url: string) => Promise<ArrayBuffer>;
+}
+
 /** The minimal `window.cg` surface this module needs (the extended import channel). */
 export interface TemplateImportBridge {
   templates: {
@@ -83,14 +100,15 @@ function vcgImageAssetSource(
  * fails verification, cannot be unpacked, or the export yields an error-severity
  * issue (the R-001 "bad input → clear error, nothing registered" invariant).
  *
- * `fontsCss` is intentionally empty this phase: the Runtime ships no bundled
- * Vazirmatn / Exo 2 faces and serves no `/fonts/…`, so a real `fontsCss` would
- * leave broken external font refs and break self-containment. Operator `asset-*`
- * fonts and images carried in the `.vcg` still inline. Inlining the bundled
- * Persian faces is a REQUIRED Phase 3 item (see the change docs) — until then a
- * template relying on Vazirmatn / Exo 2 renders with a fallback face on air.
+ * B-038 Phase 3 — `fontsCss` (the bundled Vazirmatn / Exo 2 faces) is now inlined
+ * as base64, so the produced HTML stays self-contained AND Persian renders with
+ * the correct face on air. Operator `asset-*` fonts and images carried in the
+ * `.vcg` also inline.
  */
-export async function produceTemplateDelivery(bytes: Uint8Array): Promise<TemplateDelivery> {
+export async function produceTemplateDelivery(
+  bytes: Uint8Array,
+  opts: ProduceOptions = {},
+): Promise<TemplateDelivery> {
   const result = await verify(bytes);
   if (!result.ok) {
     throw new Error(`failed verification: ${result.errors.join('; ')}`);
@@ -113,8 +131,9 @@ export async function produceTemplateDelivery(bytes: Uint8Array): Promise<Templa
     const exporter = new ExporterSingleFile({
       cgJsIife,
       cgCss,
-      fontsCss: '',
+      fontsCss: opts.fontsCss ?? '',
       assets: vcgImageAssetSource(manifest, files),
+      ...(opts.fetchUrl !== undefined ? { fetchUrl: opts.fetchUrl } : {}),
     });
     const produced = await exporter.produce(scene);
     const errors = produced.issues.filter((i) => i.severity === 'error');
@@ -135,8 +154,9 @@ export async function produceTemplateDelivery(bytes: Uint8Array): Promise<Templa
 export async function importTemplateFromBytes(
   bridge: TemplateImportBridge,
   bytes: Uint8Array,
+  opts: ProduceOptions = {},
 ): Promise<{ templateId: string; warnings: string[] }> {
-  const { template, html, warnings } = await produceTemplateDelivery(bytes);
+  const { template, html, warnings } = await produceTemplateDelivery(bytes, opts);
   await bridge.templates.import({ template, html });
   return { templateId: template.templateId, warnings };
 }

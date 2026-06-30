@@ -38,6 +38,7 @@ import {
   type WsResponseFrame,
 } from '@cg/shared-ipc';
 import { CasparRuntime } from './caspar-runtime.js';
+import type { TemplateServeOverride } from './template-http-server.js';
 
 export interface BridgeOptions {
   /** Bind host. Defaults to loopback (`127.0.0.1`) — enforced at the socket bind. */
@@ -46,12 +47,24 @@ export interface BridgeOptions {
   port?: number;
   /** CasparCG server(s) + OSC bind. Phase 2 drives server A. */
   connection?: ConnectionConfig;
+  /**
+   * B-038 Phase 3 — overrides for the template HTTP server (`/template/<id>`).
+   * Defaults derive from where CasparCG runs: loopback bind + serve-host when
+   * CasparCG is local; an opt-in routable bind + guessed/configured serve-host
+   * when remote. The control WebSocket is unaffected and stays loopback.
+   */
+  templateServe?: TemplateServeOverride;
 }
 
 export interface BridgeHandle {
   readonly host: string;
   readonly port: number;
   readonly url: string;
+  /**
+   * B-038 Phase 3 — the template HTTP serve address: the base URL CasparCG fetches
+   * `/template/<id>` from, plus whether the bind is LAN-exposed (non-loopback).
+   */
+  readonly templateServe: { url: string; serveHost: string; port: number; exposed: boolean };
   /** The real `@cg/caspar-client`-backed runtime (Reconciler is the truth). */
   readonly runtime: CasparRuntime;
   /** Force-close every client socket — used by tests to simulate a mid-session drop. */
@@ -104,7 +117,10 @@ function defaultConnection(): ConnectionConfig {
 export async function createBridge(options: BridgeOptions = {}): Promise<BridgeHandle> {
   const host = options.host ?? DEFAULT_BRIDGE_HOST;
   const requestedPort = options.port ?? DEFAULT_BRIDGE_PORT;
-  const runtime = new CasparRuntime(options.connection ?? defaultConnection());
+  const runtime = new CasparRuntime(
+    options.connection ?? defaultConnection(),
+    options.templateServe ?? {},
+  );
   const routes = buildRoutes(runtime);
 
   const wss = new WebSocketServer({
@@ -135,11 +151,34 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   });
 
   runtime.start();
+  // B-038 Phase 3 — start the template HTTP server so `CG ADD` can reference a
+  // real, loadable `/template/<id>` URL. Awaited so the bound port is known.
+  await runtime.startServing();
+  const serve = runtime.templateServe;
+  const serveHost = serve?.serveHost ?? DEFAULT_BRIDGE_HOST;
+  const servePort = serve?.port ?? 0;
+  const exposed =
+    serve !== null && serve.bindHost !== '127.0.0.1' && serve.bindHost !== 'localhost';
+  const templateServe = {
+    url: `http://${serveHost}:${String(servePort)}`,
+    serveHost,
+    port: servePort,
+    exposed,
+  };
+  // Loud warning ONLY when the template server is LAN-exposed (remote CasparCG):
+  // a wrong serve-host guess must be obvious. Loopback (the common case) is quiet.
+  if (exposed) {
+    process.stderr.write(
+      `[caspar-bridge] ⚠ template HTTP server LAN-EXPOSED on ${serve?.bindHost ?? '0.0.0.0'}:${String(servePort)} ` +
+        `— CG ADD URL host is ${serveHost}. Ensure this is the bridge's address as CasparCG sees it.\n`,
+    );
+  }
 
   return {
     host,
     port,
     url: `ws://${host}:${port}`,
+    templateServe,
     runtime,
     dropConnections() {
       for (const client of wss.clients) client.terminate();
