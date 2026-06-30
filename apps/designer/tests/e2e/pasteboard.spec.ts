@@ -154,7 +154,7 @@ test.describe('Editor pasteboard (D-071 Phase B)', () => {
     expect(box.y).toBeGreaterThan(vp.y); // visible, not clipped past the top edge
   });
 
-  test('two-tone canvas — #161927 surround + #3d4253 frame page — on-frame shapes stay visible (not occluded)', async ({
+  test('region tones — #0e1018 empty surround / #161927 pasteboard / #3d4253 frame page — on-frame shapes stay visible (not occluded)', async ({
     app,
   }) => {
     await app.newProject('TwoTone');
@@ -163,16 +163,22 @@ test.describe('Editor pasteboard (D-071 Phase B)', () => {
     const shape = canvasFrame.locator('[data-cg-element-id]').first();
     await expect(shape).toBeVisible();
 
-    // SURROUND = the lighter #161927: the scroll viewport (s.outer) AND the iframe
-    // body (the area beyond the frame, where off-frame shapes park).
+    // B-027 — the EMPTY surround (the scroll viewport, s.outer, BEYOND the pasteboard) is the
+    // DARKER #0e1018, distinct from the pasteboard so the workable area reads as a rectangle.
     const surround = await app.page
       .getByTestId('canvas-viewport')
       .evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(surround).toBe('rgb(22, 25, 39)'); // #161927
+    expect(surround).toBe('rgb(14, 16, 24)'); // #0e1018
+    // The PASTEBOARD itself (the iframe body, where off-frame shapes park) stays #161927…
     const bodyBg = await canvasFrame
       .locator('body')
       .evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(bodyBg).toBe('rgb(22, 25, 39)'); // #161927
+    // …and its edge is marked by a 1px box-shadow ring on the stage (B-027 edge marker).
+    const stageShadow = await app.page
+      .getByTestId('canvas-stage')
+      .evaluate((el) => getComputedStyle(el).boxShadow);
+    expect(stageShadow).not.toBe('none');
 
     // FRAME-SIZED page backdrop (.cg-stage) = #3d4253 — a background-color, so it paints
     // BEHIND the #5b6075 broadcast checker + shapes (matches the preview modal; D-039ext

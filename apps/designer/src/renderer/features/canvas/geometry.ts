@@ -272,69 +272,83 @@ export function screenToScene(
   return { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale };
 }
 
-/** The pasteboard margin on EACH side, as a fraction of the frame dimension. */
-export const PASTEBOARD_MARGIN_RATIO = 0.5;
+/**
+ * B-027 — the pasteboard margin per side (SCENE px) is the LARGER of an absolute minimum or
+ * ONE full frame: `max(PASTEBOARD_MIN_X, frameWidth)` left + right,
+ * `max(PASTEBOARD_MIN_Y, frameHeight)` top + bottom. The absolute floor keeps the pasteboard
+ * usefully large even for a TINY frame (a 1× multiplier alone made a 100×100 frame a
+ * 300×300 pasteboard, so the cover-fit min-zoom shot to ~428% and froze zoom); once the
+ * frame exceeds the floor the margin grows with it (one frame per side).
+ */
+export const PASTEBOARD_MIN_X = 5000;
+export const PASTEBOARD_MIN_Y = 3000;
 
 /**
- * Hard cap on the content-grown extent: at most this many × the frame on EACH axis, so a
- * stray far coordinate (bad import / fat-finger drag) can't blow the iframe up.
+ * The canvas STAGE layout (scene px): the FIXED pasteboard. Margin per side =
+ * `max(PASTEBOARD_MIN_X, width)` / `max(PASTEBOARD_MIN_Y, height)`; total extent =
+ * `frame + 2·margin` per axis, and `frame.{x,y}` is the frame's CONSTANT inset into the
+ * stage (= the margin) — scene (0,0) sits there. A pure function of the resolution (NOT
+ * content-grown), so dragging a shape off-frame moves nothing but the shape (no extent
+ * growth, no origin shift). Element drags/nudges are CLAMPED to this extent
+ * ({@link clampDeltaToPasteboard}) so no shape can cross into the clipped region — the
+ * pasteboard IS the whole workable area.
  */
-export const MAX_EXTENT_RATIO = 12;
+export function pasteboardLayout(resolution: { width: number; height: number }): {
+  width: number;
+  height: number;
+  frame: { x: number; y: number };
+} {
+  const marginX = Math.max(PASTEBOARD_MIN_X, resolution.width);
+  const marginY = Math.max(PASTEBOARD_MIN_Y, resolution.height);
+  return {
+    width: resolution.width + 2 * marginX,
+    height: resolution.height + 2 * marginY,
+    frame: { x: marginX, y: marginY },
+  };
+}
 
-/** A scene-coordinate AABB (frame-relative; scene 0,0 = frame top-left). */
-export interface SceneAabb {
+/** The pasteboard's bounds in SCENE coordinates (scene 0,0 = frame top-left). The frame
+ *  is the constant inset, so the pasteboard spans `[−margin, frame + margin]` per axis. */
+export function pasteboardSceneBounds(resolution: { width: number; height: number }): {
   minX: number;
   minY: number;
   maxX: number;
   maxY: number;
+} {
+  const { width, height, frame } = pasteboardLayout(resolution);
+  return { minX: -frame.x, minY: -frame.y, maxX: width - frame.x, maxY: height - frame.y };
 }
 
 /**
- * D-071 — the canvas STAGE layout (scene px): a symmetric pasteboard that GROWS to fit
- * off-frame content. The base is the FIXED 2× extent — the frame plus a margin (a
- * fraction of the frame, {@link PASTEBOARD_MARGIN_RATIO}) on ALL FOUR sides — covering
- * scene `[−margin, size+margin]` per axis. Given a `content` AABB, each axis GROWS
- * **only when content crosses a 2× boundary**, and then gives a FULL margin of headroom
- * past the content (Q1 = B). When content stays within the 2× boundaries the result is
- * BYTE-IDENTICAL to the fixed 2× (everyday off-frame drags don't move the origin). The
- * extent shrinks back toward 2× as far content returns inward, but NEVER below 2×, and
- * is clamped at {@link MAX_EXTENT_RATIO}× the frame per axis. `frame.{x,y}` is the
- * frame's offset (scene px) into the stage — scene (0,0) sits there — grown so off-frame
- * left/up content lands at positive iframe coords (`offset ≥ margin`). With no `content`
- * the bounds default to the frame, so nothing grows (the original 2×, back-compat).
+ * B-027 — clamp a move so an element/group's full bounding box `[boxMin, boxMax]` (one
+ * axis) stays inside the pasteboard `[padMin, padMax]`. Returns the clamped DELTA (works
+ * for a single element — box = its own AABB — and a multi-select group — box = the
+ * combined AABB, so the group stops as soon as any member hits an edge). Edge cases:
+ *
+ *  - **Oversized** (box bigger than the pasteboard on this axis): the full box cannot fit,
+ *    so CENTER it on this axis (it stops following the pointer here) rather than fighting —
+ *    its center sits at the pasteboard center, maximally visible.
+ *  - **Pre-existing outside** (a shape loaded/imported beyond the bounds): the clamp only
+ *    TIGHTENS — it never pushes the box further out than where it started (`delta = 0`),
+ *    and lets it move inward freely; once inside, normal bounds apply. So an outside shape
+ *    is recoverable (draggable back in), never trapped or violently snapped.
  */
-export function pasteboardLayout(
-  resolution: { width: number; height: number },
-  content?: SceneAabb | null,
-): { width: number; height: number; frame: { x: number; y: number } } {
-  const axis = (size: number, cMin: number, cMax: number): { offset: number; extent: number } => {
-    const margin = Math.round(size * PASTEBOARD_MARGIN_RATIO);
-    const baseLo = -margin; // today's 2× boundaries (scene coords)
-    const baseHi = size + margin;
-    // Q1 = B — grow ONLY past a 2× boundary; then a FULL margin of headroom past content.
-    let lo = cMin < baseLo ? cMin - margin : baseLo;
-    let hi = cMax > baseHi ? cMax + margin : baseHi;
-    // Q4 — clamp each side so the total extent ≤ MAX_EXTENT_RATIO × the frame.
-    const maxSide = ((MAX_EXTENT_RATIO - 1) / 2) * size;
-    lo = Math.max(lo, -maxSide);
-    hi = Math.min(hi, size + maxSide);
-    return { offset: Math.round(-lo), extent: Math.round(hi - lo) };
-  };
-  const c = content ?? { minX: 0, minY: 0, maxX: resolution.width, maxY: resolution.height };
-  const x = axis(resolution.width, c.minX, c.maxX);
-  const y = axis(resolution.height, c.minY, c.maxY);
-  return { width: x.extent, height: y.extent, frame: { x: x.offset, y: y.offset } };
-}
-
-/**
- * Origin-shift scroll compensation: the new scroll offset (one axis) that holds the
- * visible content STATIONARY when the frame offset shifts by `deltaOffset` (scene px) at
- * the current `zoom`. Mirrors {@link zoomAnchorScroll} for content-driven origin growth
- * / shrink (left/up content extending the pasteboard moves scene (0,0); scrolling by the
- * shift keeps everything put).
- */
-export function offsetShiftScroll(scroll: number, deltaOffset: number, zoom: number): number {
-  return scroll + deltaOffset * zoom;
+export function clampDeltaToPasteboard(
+  delta: number,
+  boxMin: number,
+  boxMax: number,
+  padMin: number,
+  padMax: number,
+): number {
+  if (boxMax - boxMin >= padMax - padMin) {
+    // Oversized: align the box center with the pasteboard center.
+    return (padMin + padMax) / 2 - (boxMin + boxMax) / 2;
+  }
+  // Keep `[boxMin+delta, boxMax+delta]` inside `[padMin, padMax]`, but relax each bound
+  // toward 0 (the start) so a box that begins outside isn't yanked / pushed further out.
+  const lo = Math.min(padMin - boxMin, 0);
+  const hi = Math.max(padMax - boxMax, 0);
+  return Math.max(lo, Math.min(hi, delta));
 }
 
 /**
@@ -360,6 +374,43 @@ export function zoomAnchorScroll(
 export function clampZoom(z: number, min: number, max: number, fallback: number): number {
   if (!Number.isFinite(z)) return fallback;
   return Math.max(min, Math.min(max, z));
+}
+
+/**
+ * B-027 — the cover-fit over-cover bias (SCENE→viewport px). Each axis target is nudged up by
+ * this many px before the ratio is taken (see {@link coverZoom}), so the scaled pasteboard is
+ * always a HAIR larger than the viewport, never exactly equal. Without it the cover axis lands
+ * `extent × (viewport/extent) === viewport` EXACTLY — zero overflow slack — and the centering
+ * scroll + the browser's sub-pixel scroll/layout rounding then leave a hairline of the
+ * `#0e1018` surround on the TRAILING (right/bottom) edges while the leading (left/top) edges,
+ * pinned at the scroll start, stay flush. A couple px of (already-scrollable) over-cover gives
+ * the scroll enough slack that all four edges stay covered — the owner prefers a hair of
+ * overflow to any visible surround.
+ */
+export const COVER_OVERSHOOT_PX = 2;
+
+/**
+ * B-027 — the COVER-fit zoom: the SMALLEST zoom at which the pasteboard (`extent`) still
+ * fully COVERS the viewport on BOTH axes, so no empty surround is ever visible at maximum
+ * zoom-out. It is the MAX of the two axis ratios (NOT min — that would be the contain fit,
+ * which leaves margins): the axis that needs the most zoom to cover sets the floor, and the
+ * other axis overflows (scrollable). Each axis target is biased UP by {@link COVER_OVERSHOOT_PX}
+ * so the cover axis OVER-covers by that hair instead of meeting the viewport exactly (which a
+ * sub-pixel scroll then under-covers on the trailing edges). Used as the dynamic minimum zoom.
+ * Returns 0 when any dimension is non-positive (viewport not measured yet) so the caller falls
+ * back to the hard floor.
+ */
+export function coverZoom(
+  viewportW: number,
+  viewportH: number,
+  extentW: number,
+  extentH: number,
+): number {
+  if (viewportW <= 0 || viewportH <= 0 || extentW <= 0 || extentH <= 0) return 0;
+  return Math.max(
+    (viewportW + COVER_OVERSHOOT_PX) / extentW,
+    (viewportH + COVER_OVERSHOOT_PX) / extentH,
+  );
 }
 
 /** Largest zoom that fits `scene` inside `viewport` (minus `margin`), or null if degenerate. */

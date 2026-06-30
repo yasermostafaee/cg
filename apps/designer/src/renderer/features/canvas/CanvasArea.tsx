@@ -17,13 +17,12 @@ import { CanvasToolbar } from './CanvasToolbar.js';
 import { PreviewHost } from './PreviewHost.js';
 import {
   clampZoom as clampZoomPure,
+  coverZoom,
   fitZoom,
-  offsetShiftScroll,
   pasteboardLayout,
   screenToScene,
   zoomAnchorScroll,
 } from './geometry.js';
-import { contentBounds } from './content-bounds.js';
 import { needsFit, markFitted, frameCenterScroll, type FitGate } from './fit-on-open.js';
 import { registerPreviewDocument, bumpMeasureVersion } from './measure-element.js';
 import { Control } from '../../ui/Control.js';
@@ -62,7 +61,12 @@ interface Props {
   showToolbar?: boolean;
 }
 
-const ZOOM_MIN = 0.1;
+// B-027 — the minimum zoom is DYNAMIC (the cover-fit of the pasteboard over the viewport,
+// `coverZoom` × `dynamicZoomMin` below), so a full zoom-out always leaves the pasteboard
+// COVERING the viewport (no empty surround) — one axis may overflow and scroll. `ZOOM_HARD_MIN`
+// is only an absolute safety floor for the unmeasured/degenerate case (the cover-fit governs
+// in every normal case, and is always well above this).
+const ZOOM_HARD_MIN = 0.02;
 const ZOOM_MAX = 4;
 const ZOOM_STEP = 1.1; // multiplicative step per click / wheel notch
 const ZOOM_DEFAULT = 0.5;
@@ -162,24 +166,37 @@ export function CanvasArea({
   latestSceneRef.current = scene;
   const sceneId = scene?.id ?? null;
 
-  // D-071 — the content-aware pasteboard. `contentBounds` is the scene-coord AABB of all
-  // on-canvas elements at the CURRENT frame; `pasteboardLayout` grows the extent + frame
-  // offset to contain it (only past the 2× boundary — within it this is the fixed 2×).
-  // Recomputed every render (so it grows/shrinks live as a shape is dragged off-frame).
-  // Computed BEFORE the effects/early-return so the rulers + scroll-comp can read it.
-  const contentBox = useMemo(
-    () => (scene === null ? null : contentBounds(scene.layers, currentFrame)),
-    [scene, currentFrame],
-  );
+  // B-027 — the FIXED pasteboard: extent + frame offset are a pure function of the
+  // resolution (margin per side = max(5000, W) / max(3000, H) — an absolute floor OR one full
+  // frame, whichever is larger; extent = frame + 2·margin), NOT content-grown. So dragging a
+  // shape off-frame moves nothing but the shape, and the frame never drifts (the old
+  // grow-to-fit origin shift was the jitter source). The floor keeps the pasteboard usefully
+  // large even for a tiny frame, so the cover-fit min-zoom never locks (the 1× multiplier
+  // froze a 100×100 frame at ~428%).
   const layout = useMemo(
-    () => (scene === null ? null : pasteboardLayout(scene.resolution, contentBox)),
-    [scene, contentBox],
+    () => (scene === null ? null : pasteboardLayout(scene.resolution)),
+    [scene?.resolution.width, scene?.resolution.height],
   );
   const frameOffset = layout?.frame ?? { x: 0, y: 0 };
   const extent = { width: layout?.width ?? 0, height: layout?.height ?? 0 };
-  // Latest content-aware offset for the (deps-limited) load + scene-replace effects.
+  // Latest (constant-per-resolution) offset for the deps-limited load + scene-replace effects.
   const frameOffsetRef = useRef(frameOffset);
   frameOffsetRef.current = frameOffset;
+
+  // B-027 — the DYNAMIC minimum zoom: the cover-fit of the pasteboard over the current
+  // viewport (the MAX of the two axis ratios), so a full zoom-out always leaves the
+  // pasteboard COVERING the viewport — no empty surround ever shows (one axis may overflow
+  // and scroll). Recomputes whenever the viewport size (ResizeObserver → `viewport`) or the
+  // resolution (→ `extent`) changes. Falls back to the absolute hard floor before the
+  // viewport is measured. `clampZoom` binds the pure clamp to this floor + `ZOOM_MAX`, so
+  // EVERY zoom path (buttons, Ctrl+wheel, Fit) is bounded by it — Fit can only be clamped
+  // UP to it, never below (fitting the frame is always more zoomed-in than covering the much
+  // larger pasteboard, so in normal cases there is no conflict).
+  const dynamicZoomMin = useMemo(
+    () => Math.max(ZOOM_HARD_MIN, coverZoom(viewport.w, viewport.h, extent.width, extent.height)),
+    [viewport.w, viewport.h, extent.width, extent.height],
+  );
+  const clampZoom = (z: number): number => clampZoomPure(z, dynamicZoomMin, ZOOM_MAX, ZOOM_DEFAULT);
   useEffect(() => {
     const current = latestSceneRef.current;
     if (current === null) {
@@ -436,30 +453,18 @@ export function CanvasArea({
     el.scrollTop = zoomAnchorScroll(el.scrollTop, r.top, anchor.py, zoom, anchor.clientY);
   }, [zoom]);
 
-  // D-071 — origin-shift scroll compensation. When the content-grown frame offset shifts
-  // (a shape dragged past the left/up boundary grows the pasteboard, OR returns inward),
-  // scene (0,0) moves; scroll by `Δoffset × zoom` to hold the visible content STATIONARY.
-  // Keyed on the OFFSET (not `zoom`), so it is independent of the zoom-anchor effect —
-  // a zoom changes `zoom` but not the offset, a drag the offset but not `zoom`, so the
-  // two never fight. `prevOffsetRef` resets on `sceneId` so fit-on-open isn't fought.
-  const prevOffsetRef = useRef(frameOffset);
-  const offsetSceneRef = useRef<string | null>(sceneId);
-  useLayoutEffect(() => {
-    if (offsetSceneRef.current !== sceneId) {
-      offsetSceneRef.current = sceneId;
-      prevOffsetRef.current = frameOffset;
-      return; // project/comp switch — fit/center places it, don't compensate
-    }
-    const dx = frameOffset.x - prevOffsetRef.current.x;
-    const dy = frameOffset.y - prevOffsetRef.current.y;
-    prevOffsetRef.current = frameOffset;
-    if (dx === 0 && dy === 0) return;
-    const el = outerRef.current;
-    if (el === null) return;
-    el.scrollLeft = offsetShiftScroll(el.scrollLeft, dx, zoomRef.current);
-    el.scrollTop = offsetShiftScroll(el.scrollTop, dy, zoomRef.current);
-    // Keyed on the offset only (zoom read via `zoomRef`), so a zoom never triggers it.
-  }, [frameOffset.x, frameOffset.y, sceneId]);
+  // B-027 — when the dynamic minimum RISES (the window grew, or the resolution shrank the
+  // extent relative to the viewport) while the user was zoomed at/below the old floor, clamp
+  // the CURRENT zoom UP to the new minimum so the empty surround never appears. Fit always
+  // lands ≥ this floor, so it is a no-op on the fit path.
+  useEffect(() => {
+    setZoom((z) => (z < dynamicZoomMin ? dynamicZoomMin : z));
+  }, [dynamicZoomMin]);
+
+  // B-027 — the origin-shift scroll compensation (Seam 2) is GONE: the frame offset is
+  // now constant per resolution, so scene (0,0) never moves on a drag/scrub and there is
+  // nothing to compensate. Removing it (and the per-move extent recompute) is what kills
+  // the during-drag jitter by construction.
 
   // Ctrl + wheel over the canvas zooms toward the cursor; plain wheel keeps the default
   // overflow:auto scroll. A non-passive listener so we can preventDefault on the
@@ -750,11 +755,11 @@ export function CanvasArea({
               <div
                 ref={stageRef}
                 className={s.stage}
+                data-testid="canvas-stage"
                 style={{
-                  // D-071 — the stage is the content-aware pasteboard: the 2× extent,
-                  // GROWN to contain any off-frame content (past the 2× boundary). The
-                  // frame is inset by `frameOffset`, so off-frame content shows on every
-                  // side; an origin shift is compensated by the scroll-comp effect.
+                  // B-027 — the stage is the FIXED pasteboard (frame + 2·max(floor, frame) per
+                  // axis, a constant function of resolution; no grow, no origin shift). The frame
+                  // is inset by the constant `frameOffset`, so off-frame content shows on every side.
                   width: extent.width * zoom,
                   height: extent.height * zoom,
                 }}
@@ -1104,9 +1109,4 @@ function CanvasRuler({
       />
     </>
   );
-}
-
-/** Thin wrapper binding the pure {@link clampZoomPure} to this view's zoom bounds. */
-function clampZoom(z: number): number {
-  return clampZoomPure(z, ZOOM_MIN, ZOOM_MAX, ZOOM_DEFAULT);
 }
