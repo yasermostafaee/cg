@@ -67,7 +67,10 @@ interface Props {
 // is only an absolute safety floor for the unmeasured/degenerate case (the cover-fit governs
 // in every normal case, and is always well above this).
 const ZOOM_HARD_MIN = 0.02;
-const ZOOM_MAX = 4;
+// D-120 — the maximum zoom is 6400% (one scene pixel = 64 screen px at the top), deep enough for
+// pixel-perfect work; the pixel grid (added separately) appears well before this so there is a wide
+// editing band. The dynamic cover-fit MINIMUM (B-027) is unchanged — only this upper bound rose.
+const ZOOM_MAX = 64;
 const ZOOM_STEP = 1.1; // multiplicative step per click / wheel notch
 const ZOOM_DEFAULT = 0.5;
 
@@ -100,7 +103,7 @@ function collectSceneImageIds(scene: Scene): string[] {
  * Canvas work area with the cgpreview iframe + transparent input
  * overlay. D-007 added:
  *   - zoom in / out / fit / reset buttons in the header
- *   - Ctrl+wheel over the canvas zooms (clamped 10..400%)
+ *   - Ctrl+wheel over the canvas zooms (clamped: dynamic cover-fit min .. 6400% max)
  *   - plain wheel scrolls the inner container (overflow: auto)
  *   - hand-tool drag pans the inner container (scrollLeft/Top)
  */
