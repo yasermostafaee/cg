@@ -100,3 +100,140 @@ the item's real fields) is tracked separately — see the C-001 follow-up.
   loads survive a bridge restart without a manual re-import (the bridge's in-memory
   store is empty after a bounce). Tracked as a future enhancement, not part of
   B-038's closed scope.
+
+---
+
+## [~] B-039 — broken playout state model: Load auto-plays, and a Take after Out never re-renders (no re-ADD) ⟨priority: high⟩
+
+> Surfaced only on **real CasparCG 2.3.2** (live take/out/retake); `amcp-mock`'s
+> simpler cycle hid it. Read-only report — no fix here; the fix is designed next.
+
+**Repro:**
+
+1. Run the Runtime **LIVE** against real CasparCG 2.3.2; import a `.vcg` and click
+   **Load** to put it on the stack.
+2. Watch the CasparCG output: the template appears **immediately** (auto-plays)
+   before you click Take.
+3. Click **Take** (plays), then **Out**, then **Take** again.
+
+**Expected** (the intended, confirmed model):
+
+- **Load** = `CG ADD` only → the template is _loaded, NOT playing_.
+- **Take** = `CG PLAY` → on air.
+- **Out** = exit + clear → the producer is gone.
+- A **subsequent Take** = a fresh load (`CG ADD` again) then play.
+
+**Actual:**
+
+- Load **auto-plays** — the template is on air before Take.
+- Out sends `CLEAR` → the HTML producer is **Destroyed**.
+- The next Take sends **only `CG PLAY`** onto the now-empty/destroyed layer → `202 OK`
+  but nothing renders. The template never comes back.
+
+**Findings (read-only):**
+
+- **AMCP per verb** — `tools/caspar-bridge/src/command-builder.ts`:
+  - load → `CG <ch>-<layer> ADD 0 "<url>" 1 "<data>"` — the `1` is the
+    **play-on-load flag (= true)**, so CasparCG plays on ADD. Load emits ONLY this
+    one ADD (there is no separate `CG PLAY` on load); the flag is the auto-play. The
+    method comment even says "(primed to play)" (`command-builder.ts:42-45`).
+  - take → `CG <ch>-<layer> PLAY 0` · update → `CG <ch>-<layer> UPDATE 0 "<data>"` ·
+    out → `CLEAR <ch>-<layer>` (destroys the producer).
+- **Where load triggers play:** the hardcoded `1` play-on-load argument in
+  `CommandBuilder.load` (`command-builder.ts:44`). Origin: the ADR-0006 hardware
+  harness validated a load+play-in-one sequence with `1`; the operator UI's
+  load/take split needs `0` (load only), with Take's `CG PLAY` doing the play.
+- **Producer/slot tracking:** `CasparRuntime` keeps `#slots: Map<itemId, CommandSlot>`
+  plus the `LayerManager` allocation, but there is **no tracking of whether a live
+  producer exists on the slot** — nothing checks "is a producer loaded here?" before
+  `CG PLAY`.
+- **Why a retake skips `CG ADD`:** `CasparRuntime.take()` (`caspar-runtime.ts:272`)
+  only ever emits `CG PLAY` from `#slots.get(itemId)`. `CasparRuntime.out()`
+  (`caspar-runtime.ts:296`) emits `CLEAR` but does **not** clear `#slots`, deallocate
+  the layer, or drop OSC interest (only `remove()` does). So after Out the slot
+  mapping persists while the producer is destroyed → the next `take()` `CG PLAY`s a
+  dead layer and never re-ADDs.
+- **The status state machine is descriptive, not prescriptive.** `StackItemStatus`
+  (`loaded`/`playing`/`updating`/`exiting`/`idle`/`on-air`/`error`) lives in
+  `@cg/shared-schema` (`runtime/item-state.ts`) and is reduced by the `Reconciler`
+  (`packages/caspar-client/src/reconciler/reconciler.ts`): `applyIntent` sets
+  load→`loaded`, take→`playing`, out→`exiting` (→ OSC `idle`), and only `remove`
+  deletes the item. The status drives the **UI**, but it does **not** gate or choose
+  which AMCP verb `CasparRuntime` emits — each method emits a fixed verb regardless of
+  the item's status, so nothing makes a post-Out Take re-load. After Out the item
+  stays in the stack (`idle`, not removed), so the UI still offers Take — which only
+  `CG PLAY`s the destroyed slot.
+
+**Regression test:** the gap is exactly what `amcp-mock` hid — it auto-loads an HTML
+producer on `CG ADD` and 202-acks a `CG PLAY` after `CLEAR` without modeling that
+`CLEAR` destroyed the producer. The fix's regression tests should: (a) assert Load
+emits `CG ADD … 0 …` (play-on-load OFF) and the item is _loaded, not playing_, until
+Take; (b) teach the mock that `CLEAR`/out destroys the producer, so a bare `CG PLAY`
+afterwards renders nothing, and assert a Take-after-Out re-issues `CG ADD` (fresh
+served URL) before `CG PLAY`; (c) drive load→take→out→take through `CasparRuntime`
+end-to-end and assert the second take re-ADDs then plays. On-hardware re-validation of
+the load/take/out/retake cycle closes it.
+
+---
+
+## [~] B-040 — ticker list field (`_tickerTexts`) displays + serializes as "[object Object]" — the Runtime Inspector has no list-field control ⟨priority: high⟩
+
+> Surfaced on **real CasparCG**; `amcp-mock` hid it by never inspecting the data
+> payload's structure. Read-only report — no fix here.
+
+**Repro:**
+
+1. Import a `.vcg` whose ticker has a **Data key** (a `list` field, e.g.
+   `_tickerTexts`); Load it; select the stack row.
+2. In the Inspector, look at the `_tickerTexts` field.
+3. Edit/blur that field and watch the bridge `CG ADD` / `CG UPDATE` JSON.
+
+**Expected:** the list field shows a **structured items editor** (as the Designer's
+preview form does) and travels as a JSON **array of `{ id, text, … }` objects** in the
+`CG ADD`/`CG UPDATE` data, so the ticker renders its items.
+
+**Actual:** the Inspector shows `_tickerTexts` as the literal text
+`"[object Object],[object Object]"`; committing it sends that string via
+`stack.update`, so `CG UPDATE` ships `"_tickerTexts":"[object Object],…"` (a
+stringified array) and the ticker can't render its items.
+
+**Findings (read-only):**
+
+- **Schema:** a ticker Data key is a `list` dynamic field — `ListFieldSchema`
+  (`type: 'list'`, `default: ListItem[]`) where `ListItemSchema` is `{ id }` + open
+  passthrough fields (`@cg/shared-schema/src/fields.ts`). It is a top-level
+  `scene.fields` entry (the R-001 export preflight's `gdd-list-field-limited-clients`
+  warning fires only for `field.type === 'list'`).
+- **Seed (correct):** `LibraryPanel.loadOntoStack` seeds each field via
+  `defaultFieldValue(field)`; for a list that returns `field.default` — the
+  **structured array** (`@cg/shared-schema/src/composition-fields.ts:285`). So the
+  stack item's list value starts as a real array.
+- **Wire (correct when structured):** `CommandBuilder.serialize` is
+  `JSON.stringify(fields)` (`command-builder.ts:69`), which preserves the array — so
+  the GOOD case (initial Load with the seeded array) ships correct nested JSON, as the
+  bridge log showed earlier.
+- **The coercion site (where the bad path diverges):** the Runtime Inspector's
+  `FieldControl` (`apps/runtime/src/renderer/features/inspector/Inspector.tsx`) has
+  branches for boolean/number/color/select/image/multiline and a **default text
+  `<input>`** — but **no `list` branch**. A list value therefore hits the default
+  text input:
+  - _Display:_ `const v = … : String(value)` (`Inspector.tsx:292`) →
+    `String([{…},{…}])` = `"[object Object],[object Object]"`.
+  - _Wire:_ that input's `onBlur` commits `e.target.value` (a string) via `commit()` →
+    `stack.update({ fields: { _tickerTexts: "[object Object],…" } })`; the bridge's
+    `update()` merges it into the Reconciler and `CG UPDATE` ships the string, and the
+    item's stored value stays a string thereafter.
+  - So the divergence from the good path is precisely the Inspector: the missing
+    `list` control turns the structured array into stringified text on display AND on
+    commit. (The Designer renders the same list field correctly via `ListItemsEditor`
+    / `PreviewFieldForm`; the Runtime Inspector simply never got the equivalent.)
+- **CG ADD vs CG UPDATE:** the very first `CG ADD` from a fresh Load is correct (the
+  seeded array); the `"[object Object]"` reaches the wire once the list field's text
+  input is committed (→ `CG UPDATE`) and then persists in the item.
+
+**Regression test:** `amcp-mock` hid this by never asserting the data payload's
+structure. The fix's tests should: (a) a Runtime Inspector test asserting a `list`
+field renders a structured items editor (not a text input) and never displays or
+commits `"[object Object]"`; (b) a field-flow test asserting a seeded list value
+round-trips as a JSON **array of objects** through `stack.update` → `CG UPDATE` (and
+`CG ADD`), Persian intact — never a stringified `"[object Object]"`.
