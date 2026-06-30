@@ -11,13 +11,12 @@ per-bug loop, see [bugs.md](bugs.md).
 
 ---
 
-## [~] B-038 — LIVE bridge renders nothing: CG ADD references the template by UUID and sends empty fields ⟨priority: high⟩
+## [x] B-038 — LIVE bridge renders nothing: CG ADD references the template by UUID and sends empty fields ⟨priority: high⟩
 
-> **The Runtime is NOT on-air-capable until B-038 lands.** C-001's transport /
-> failover / AMCP-update-verb capability is real and hardware-verified (stays
-> `[x]`), but no actual template renders on CasparCG output yet — that is this
-> separate template-content-delivery + render gap. Design:
-> `openspec/changes/fix-live-template-render/` (design-only; not implemented).
+> **CLOSED — hardware-validated.** The Runtime is now on-air-capable. Verified live
+> on **CasparCG 2.3.2**: a real `.vcg` renders on the output with correct Persian
+> (right font, intact shaping) via take, the served `/template/<id>` URL loads
+> (`202`, not `404`), and `CG UPDATE` carries real field data.
 
 **Repro:**
 
@@ -72,7 +71,7 @@ carries the updated fields. The fix design (likely: the bridge serves each
 registered template as HTML over its own HTTP endpoint and `CG ADD`s that URL with
 the item's real fields) is tracked separately — see the C-001 follow-up.
 
-**Progress (stays `[~]` until the LIVE path is hardware-validated):**
+**Progress (hardware-validated — closed):**
 
 - Phase 1 — `extract-single-file-export` (PR #235): the D-019 single-file export is
   now a shared browser package (`@cg/single-file-export`) the Runtime can import.
@@ -88,8 +87,16 @@ the item's real fields) is tracked separately — see the C-001 follow-up.
   regression is closed too — it **resolves** the `CG ADD` arg (404 on an unresolvable
   reference) and exposes the data payload, with an end-to-end integration test
   (served URL + real Persian fields). This is the first phase where a `.vcg` actually
-  renders on CasparCG. **Still `[~]`** — pending on-hardware validation below.
-- **Remaining to close B-038 (`[x]`):** run the Runtime LIVE against real CasparCG
-  2.3.2 and visually confirm a real `.vcg` renders with correct Persian (right font,
-  intact shaping) via take, and updates via `CG UPDATE`. (Optional later follow-up:
-  re-deliver retained HTML to the bridge on reconnect after a bridge restart.)
+  renders on CasparCG.
+- Hardware validation — **PASSED** on CasparCG 2.3.2: a real `.vcg` rendered on the
+  output with correct Persian (right font, intact shaping) via take; the served
+  `/template/<id>` URL loaded (`202`, not `404`); `CG UPDATE` carried real field
+  data. B-038's core goal (live content delivery + serve + real fields + render) is
+  verified end-to-end, so B-038 is `[x]`.
+
+**Open follow-up (separate, not blocking — B-038 stays closed):**
+
+- Re-deliver each retained template's HTML to the bridge on **reconnect**, so live
+  loads survive a bridge restart without a manual re-import (the bridge's in-memory
+  store is empty after a bounce). Tracked as a future enhancement, not part of
+  B-038's closed scope.
