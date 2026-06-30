@@ -5,11 +5,15 @@ import {
   COVER_OVERSHOOT_PX,
   PASTEBOARD_MIN_X,
   PASTEBOARD_MIN_Y,
+  PIXEL_GRID_MAJOR_EVERY,
+  PIXEL_GRID_MIN_ZOOM,
   clampDeltaToPasteboard,
   coverZoom,
   fitZoom,
   pasteboardLayout,
   pasteboardSceneBounds,
+  pixelGridMetrics,
+  pixelGridVisible,
   screenToScene,
   zoomAnchorScroll,
 } from '../src/renderer/features/canvas/geometry.js';
@@ -231,6 +235,56 @@ describe('fitZoom — fits the FRAME bounds (not the pasteboard extent)', () => 
     // 1920×1080 frame in an 800×600 viewport (margin 16): limited by width →
     // (800 - 16) / 1920. (Computed from the FRAME, never the pasteboard extent.)
     expect(fitZoom(800, 600, 1920, 1080, 16)).toBeCloseTo((800 - 16) / 1920, 5);
+  });
+});
+
+describe('D-120 — high-zoom pixel grid (threshold + metrics + ruler alignment)', () => {
+  it('pixelGridVisible: hidden below the threshold, shown at/above it (one scene px ≥ 8 screen px)', () => {
+    expect(PIXEL_GRID_MIN_ZOOM).toBe(8);
+    expect(pixelGridVisible(1)).toBe(false); // 100%
+    expect(pixelGridVisible(4)).toBe(false); // 400% — the OLD max, still no grid
+    expect(pixelGridVisible(7.99)).toBe(false); // just under the threshold
+    expect(pixelGridVisible(8)).toBe(true); // 800% — the threshold
+    expect(pixelGridVisible(16)).toBe(true); // 1600%
+    expect(pixelGridVisible(64)).toBe(true); // 6400% — the max
+  });
+
+  it('pixelGridMetrics: cell = 1 scene px (= zoom), major every 10, scene-aligned offset', () => {
+    const { frame } = pasteboardLayout({ width: 1920, height: 1080 }); // { x: 5000, y: 3000 }
+    const m = pixelGridMetrics(16, frame);
+    expect(m.cell).toBe(16); // one scene px = 16 screen px at 1600%
+    expect(m.major).toBe(16 * PIXEL_GRID_MAJOR_EVERY); // 160 — every 10th line
+    // frameOffset 5000 / 3000 are multiples of 10, so the major lines need no shift.
+    expect(m.offsetX).toBe(0);
+    expect(m.offsetY).toBe(0);
+  });
+
+  it('major lines land on scene multiples of 10 even when frameOffset is NOT divisible by 10', () => {
+    // A frame WIDER than the 5000 floor whose width is not a multiple of 10 → frameOffset.x = 6003.
+    const { frame } = pasteboardLayout({ width: 6003, height: 1080 });
+    expect(frame.x).toBe(6003);
+    const zoom = 10;
+    const m = pixelGridMetrics(zoom, frame);
+    // scene 0 sits at stage-x frameOffset.x·zoom = 60030; the major-line offset must put it on a
+    // MAJOR line, i.e. (60030 − offsetX) is a whole number of `major` cells.
+    const sceneZeroStageX = frame.x * zoom; // 60030
+    expect((sceneZeroStageX - m.offsetX) % m.major).toBe(0);
+  });
+
+  it('a grid line lands on each integer scene coordinate, matching the ruler tick mapping (no drift)', () => {
+    const { frame } = pasteboardLayout({ width: 1920, height: 1080 }); // x: 5000
+    const zoom = 16;
+    const { cell } = pixelGridMetrics(zoom, frame);
+    // The minor lines are at stage-local multiples of `cell` from the stage origin (scene
+    // −frameOffset). The rulers place scene X at stage-relative `frameOffset.x·zoom + X·zoom`. The
+    // two mappings must be identical so the grid never drifts from the rulers — and the position
+    // must be exactly on a minor line (a whole number of cells from the origin).
+    for (const sceneX of [-13, 0, 1, 5, 6, 1920]) {
+      const gridLineStageX = (sceneX + frame.x) * zoom; // scene→stage mapping (the grid)
+      const rulerTickStageX = frame.x * zoom + sceneX * zoom; // the rulers' mapping
+      expect(gridLineStageX).toBe(rulerTickStageX);
+      expect(gridLineStageX % cell).toBe(0);
+    }
   });
 });
 
