@@ -161,6 +161,17 @@ export const stage = style({
   boxShadow: '0 0 0 1px #2b3146',
 });
 
+// D-120 — the pixel-grid <canvas>: the BOTTOM layer of the non-scrolling ruler overlay (so the
+// rulers + guides paint over it), pinned to the viewport top-left. Its width/height (CSS + backing
+// store) are set imperatively per zoom in `drawPixelGrid`. `pointer-events: none` so it never
+// intercepts selection/drag — all hit-testing stays on the canvas content below the overlay.
+export const pixelGrid = style({
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  pointerEvents: 'none',
+});
+
 export const empty = style({
   color: colors.textMuted,
   fontSize: '0.9rem',
