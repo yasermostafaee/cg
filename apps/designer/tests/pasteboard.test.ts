@@ -12,7 +12,7 @@ import {
   fitZoom,
   pasteboardLayout,
   pasteboardSceneBounds,
-  pixelGridMetrics,
+  pixelGridLines,
   pixelGridVisible,
   screenToScene,
   zoomAnchorScroll,
@@ -238,7 +238,7 @@ describe('fitZoom — fits the FRAME bounds (not the pasteboard extent)', () => 
   });
 });
 
-describe('D-120 — high-zoom pixel grid (threshold + metrics + ruler alignment)', () => {
+describe('D-120 — high-zoom pixel grid (threshold + device-pixel snapping + ruler alignment)', () => {
   it('pixelGridVisible: hidden below the threshold, shown at/above it (one scene px ≥ 8 screen px)', () => {
     expect(PIXEL_GRID_MIN_ZOOM).toBe(8);
     expect(pixelGridVisible(1)).toBe(false); // 100%
@@ -249,42 +249,73 @@ describe('D-120 — high-zoom pixel grid (threshold + metrics + ruler alignment)
     expect(pixelGridVisible(64)).toBe(true); // 6400% — the max
   });
 
-  it('pixelGridMetrics: cell = 1 scene px (= zoom), major every 10, scene-aligned offset', () => {
-    const { frame } = pasteboardLayout({ width: 1920, height: 1080 }); // { x: 5000, y: 3000 }
-    const m = pixelGridMetrics(16, frame);
-    expect(m.cell).toBe(16); // one scene px = 16 screen px at 1600%
-    expect(m.major).toBe(16 * PIXEL_GRID_MAJOR_EVERY); // 160 — every 10th line
-    // frameOffset 5000 / 3000 are multiples of 10, so the major lines need no shift.
-    expect(m.offsetX).toBe(0);
-    expect(m.offsetY).toBe(0);
-  });
-
-  it('major lines land on scene multiples of 10 even when frameOffset is NOT divisible by 10', () => {
-    // A frame WIDER than the 5000 floor whose width is not a multiple of 10 → frameOffset.x = 6003.
-    const { frame } = pasteboardLayout({ width: 6003, height: 1080 });
-    expect(frame.x).toBe(6003);
-    const zoom = 10;
-    const m = pixelGridMetrics(zoom, frame);
-    // scene 0 sits at stage-x frameOffset.x·zoom = 60030; the major-line offset must put it on a
-    // MAJOR line, i.e. (60030 − offsetX) is a whole number of `major` cells.
-    const sceneZeroStageX = frame.x * zoom; // 60030
-    expect((sceneZeroStageX - m.offsetX) % m.major).toBe(0);
-  });
-
-  it('a grid line lands on each integer scene coordinate, matching the ruler tick mapping (no drift)', () => {
-    const { frame } = pasteboardLayout({ width: 1920, height: 1080 }); // x: 5000
-    const zoom = 16;
-    const { cell } = pixelGridMetrics(zoom, frame);
-    // The minor lines are at stage-local multiples of `cell` from the stage origin (scene
-    // −frameOffset). The rulers place scene X at stage-relative `frameOffset.x·zoom + X·zoom`. The
-    // two mappings must be identical so the grid never drifts from the rulers — and the position
-    // must be exactly on a minor line (a whole number of cells from the origin).
-    for (const sceneX of [-13, 0, 1, 5, 6, 1920]) {
-      const gridLineStageX = (sceneX + frame.x) * zoom; // scene→stage mapping (the grid)
-      const rulerTickStageX = frame.x * zoom + sceneX * zoom; // the rulers' mapping
-      expect(gridLineStageX).toBe(rulerTickStageX);
-      expect(gridLineStageX % cell).toBe(0);
+  it('snaps every line to a whole device pixel at a FRACTIONAL zoom (crisp, not blurred)', () => {
+    // The regression: at a fractional scale like 48.08× a CSS-gradient grid blurred each line
+    // across two device pixels. The canvas snaps each line to `round(pos·dpr) + 0.5`, so a 1px
+    // stroke lands on ONE physical pixel — crisp at ANY zoom. Pin: every devicePx is integer+0.5.
+    for (const zoom of [48.08, 33, 12.5, 16, 64]) {
+      const lines = pixelGridLines(137.42, zoom, 900, 1); // fractional origin + length, dpr 1
+      expect(lines.length).toBeGreaterThan(0);
+      for (const { devicePx } of lines) {
+        expect(Number.isInteger(devicePx - 0.5)).toBe(true); // snapped to the device-pixel raster
+      }
     }
+  });
+
+  it('HiDPI (devicePixelRatio = 2): lines are still snapped to a whole device pixel', () => {
+    const lines = pixelGridLines(50.7, 48.08, 800, 2);
+    expect(lines.length).toBeGreaterThan(0);
+    for (const { devicePx } of lines) {
+      expect(Number.isInteger(devicePx - 0.5)).toBe(true);
+    }
+  });
+
+  it('the snap stays within half a device pixel of the true scene position (ruler-aligned)', () => {
+    // The snap is a sub-pixel visual correction, not a reposition: a line for scene X still sits at
+    // its true screen pos `origin + X·zoom` (the SAME mapping the rulers use) to within half a
+    // device pixel — invisible as position at high zoom, but decisive for crispness. No drift: each
+    // line is snapped independently, so the error never accumulates across cells.
+    const origin = 137.42;
+    const zoom = 48.08;
+    const dpr = 1;
+    const lines = pixelGridLines(origin, zoom, 900, dpr);
+    for (const { scene, devicePx } of lines) {
+      const truePx = (origin + scene * zoom) * dpr; // the ruler's mapping, in device px
+      expect(Math.abs(devicePx - 0.5 - truePx)).toBeLessThanOrEqual(0.5);
+    }
+  });
+
+  it('returns only the VISIBLE lines (viewport-culled), contiguous integer scene coords', () => {
+    const origin = 137.42;
+    const zoom = 48.08;
+    const lines = pixelGridLines(origin, zoom, 900, 1);
+    // Every returned line is inside the viewport [0, 900].
+    for (const { scene } of lines) {
+      const pos = origin + scene * zoom;
+      expect(pos).toBeGreaterThanOrEqual(0);
+      expect(pos).toBeLessThanOrEqual(900);
+    }
+    // …and one step beyond each end would fall OUTSIDE (nothing extra drawn).
+    expect(origin + (lines[0]!.scene - 1) * zoom).toBeLessThan(0);
+    expect(origin + (lines[lines.length - 1]!.scene + 1) * zoom).toBeGreaterThan(900);
+    // Contiguous scene coordinates (1 cell = 1 scene pixel; every integer coord has a line).
+    for (let i = 1; i < lines.length; i++) expect(lines[i]!.scene).toBe(lines[i - 1]!.scene + 1);
+  });
+
+  it('a MAJOR line (every 10th) is detectable via `scene % PIXEL_GRID_MAJOR_EVERY` and includes scene 0', () => {
+    expect(PIXEL_GRID_MAJOR_EVERY).toBe(10);
+    // Put scene 0 inside the viewport (origin within [0, length]).
+    const lines = pixelGridLines(100, 16, 900, 1);
+    const majors = lines.filter((l) => l.scene % PIXEL_GRID_MAJOR_EVERY === 0).map((l) => l.scene);
+    expect(majors).toContain(0); // scene 0 is a major line
+    expect(majors).toContain(10); // …and every 10th
+    expect(majors).not.toContain(5); // a non-multiple-of-10 is minor
+  });
+
+  it('degenerate inputs yield no lines (no runaway loop)', () => {
+    expect(pixelGridLines(0, 0, 900, 1)).toEqual([]); // zoom 0
+    expect(pixelGridLines(0, 16, 0, 1)).toEqual([]); // length 0
+    expect(pixelGridLines(0, 16, 900, 0)).toEqual([]); // dpr 0
   });
 });
 

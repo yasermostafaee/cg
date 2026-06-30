@@ -41,13 +41,17 @@ through the single clamp so they all honour the same bounds.
 The canvas SHALL render a pixel grid — hairline lines at every integer scene-pixel boundary, one
 cell = one scene pixel — over the WHOLE pasteboard extent (not just the frame), shown ONLY when one
 scene pixel maps to at least 8 screen px (zoom ≥ 800%) and hidden below that threshold so a normal
-zoom is not cluttered by an illegible smear. Each grid line SHALL sit exactly on an integer scene
-coordinate using the SAME scene→screen mapping the rest of the canvas uses (`(x + frameOffset)·zoom`),
-so the grid is pixel-accurate and never drifts from the rulers; the cell SHALL track the zoom and the
-grid SHALL scroll and zoom WITH the pasteboard content. The grid SHALL be a NON-interactive,
-display-only layer (it MUST NOT block selection or hit-testing) drawn lightly over the content with
-faint low-contrast hairlines, and MAY emphasize every 10th line slightly (graph-paper) without
-affecting alignment.
+zoom is not cluttered by an illegible smear. Each grid line SHALL sit on its integer scene coordinate
+using the SAME scene→screen mapping the rest of the canvas uses (`(x + frameOffset)·zoom`) so the grid
+is ruler-aligned and never drifts; the cell SHALL track the zoom and the grid SHALL scroll and zoom
+WITH the pasteboard content. Every grid line SHALL be CRISP — a single 1-physical-pixel line — at ANY
+zoom, including FRACTIONAL scales (e.g. 4808%) and HiDPI (`devicePixelRatio > 1`): each line's screen
+position SHALL be snapped to the device-pixel raster (so a 1px stroke never anti-aliases across two
+pixels), snapped INDEPENDENTLY so the correction never accumulates and each line stays within half a
+device pixel of its true scene coordinate (invisible as position, decisive for crispness). The grid
+SHALL be a NON-interactive, display-only layer (it MUST NOT block selection or hit-testing) drawn
+lightly over the content with faint low-contrast hairlines, viewport-culled (only the visible lines
+drawn), and MAY emphasize every 10th line slightly (graph-paper) without affecting alignment.
 
 #### Scenario: The grid appears at high zoom
 
@@ -68,8 +72,16 @@ affecting alignment.
 #### Scenario: Grid lines are pixel-accurate and ruler-aligned
 
 - **WHEN** the grid is visible
-- **THEN** a grid line lands exactly on each integer scene coordinate (the cell between line N and
-  N+1 is scene-pixel N), aligned to the rulers' tick mapping so the two never drift apart
+- **THEN** a grid line lands on each integer scene coordinate (the cell between line N and N+1 is
+  scene-pixel N), aligned to the rulers' tick mapping (within half a device pixel) so the two never
+  visibly drift apart
+
+#### Scenario: Grid lines are crisp at fractional zoom
+
+- **WHEN** the zoom is a FRACTIONAL scale (e.g. 4808%, where one scene pixel is 48.08 screen px) at
+  any device-pixel ratio
+- **THEN** every grid line is a single crisp 1-physical-pixel line — its position snapped to the
+  device-pixel raster — never doubled or blurred across two pixels (as it would be just at 6400%)
 
 #### Scenario: A 1px nudge is visible against the grid
 

@@ -22,22 +22,25 @@ MAXIMUM rises, and a grid is layered over the existing pasteboard stage.
   6400%. Pure helpers in `geometry.ts` — `pixelGridVisible(zoom)` and `pixelGridMetrics(zoom,
 frameOffset)` (cell = `zoom` px, major line every 10, scene-aligned offset) — keep the threshold
   and the line math unit-testable.
-- **Rendering approach — CSS `linear-gradient` layer.** The grid is a single absolutely-positioned
-  `div` (`s.pixelGrid`) inside the stage, between the iframe and the `CanvasOverlay`, with
-  `pointer-events: none` (so it never blocks selection/hit-testing — the overlay sits above it).
-  Its `background-image` is two `linear-gradient`s (a vertical + a horizontal 1px hairline) at
-  `background-size: zoom × zoom` for the minor grid, plus two more at `10·zoom` for slightly
-  stronger **major** lines (graph-paper, every 10th). This is GPU-friendly and **viewport-culled
-  by the compositor** — only the visible tile is rasterized, so there is no per-line draw even
-  though the pasteboard is ~760k px wide at 6400%; the lines stay crisp (hard gradient stops, no
-  blur) at any zoom. Because the stage is a child of the scroll container and the gradient origin
-  is the stage top-left, the grid scrolls/zooms WITH the content and the cell tracks the zoom.
-- **Pixel-accurate, ruler-aligned.** The frame offset (`frameOffset`) is an integer, so a scene
-  integer boundary lands at stage-local `k·zoom` for every integer `k` — exactly where the minor
-  gradient draws a line. The grid therefore sits on each integer scene coordinate using the SAME
-  `scene→stage = (x + frameOffset)·zoom` mapping the rulers use, so it never drifts from the
-  rulers (a unit test pins this). Major lines are offset by `(frameOffset % 10)·zoom` so an
-  emphasized line lands on scene multiples of 10 (matching round ruler labels).
+- **Rendering approach — a device-pixel-snapped `<canvas>`.** The grid is NOT a CSS gradient: a
+  `repeating`/sized gradient has a fixed period of `zoom` px, which at FRACTIONAL zoom (e.g. 48.08px
+  at 4808%) drifts every line off the device-pixel raster, so the browser anti-aliases each 1px line
+  across two physical pixels — doubled/blurry at fractional scales, crisp only at integer ones.
+  Instead the grid is a viewport-sized `<canvas>` (`s.pixelGrid`, `pointer-events: none`) that is the
+  BOTTOM layer of the non-scrolling ruler overlay (`s.overlay`), tracking the stage via `rulerOrigin`
+  exactly as the rulers do. `drawPixelGrid` repaints it whenever `rulerOrigin` (scroll), zoom, or the
+  viewport changes, via `pixelGridLines(origin, zoom, lengthCss, dpr)`: it **culls** to the visible
+  region (only ~viewport/zoom lines — a few dozen at high zoom) and snaps each line to
+  `Math.round(pos·dpr) + 0.5`, so a 1-device-px stroke lands on a single physical pixel — crisp at
+  ANY zoom, HiDPI included. The canvas paints lightly over the scroll content (shapes + gizmos) and
+  under the rulers/guides; hit-testing stays on the canvas below the overlay.
+- **Pixel-accurate, ruler-aligned (no drift).** A line for scene X is drawn at `rulerOrigin + X·zoom`
+  — the SAME mapping the rulers use — then snapped to the device pixel. Because each line is snapped
+  INDEPENDENTLY, the correction never accumulates: every line stays within half a device pixel of its
+  true scene coordinate (invisible as position at high zoom, decisive for crispness), so the grid
+  never drifts from the rulers (unit tests pin both the snapping and the ≤ half-device-pixel
+  alignment). Every 10th line (`scene % 10 === 0` → scene 0 / ±10 / ±20, the round ruler labels) is a
+  hair stronger (graph-paper).
 - **Appearance.** Faint, low-contrast 1px hairlines tuned to read over both the `#161927`
   pasteboard and the `#3d4253` frame backdrop without occluding shapes; the major lines are a hair
   stronger. Display-only (`aria-hidden`).
@@ -47,16 +50,18 @@ frameOffset)` (cell = `zoom` px, major line every 10, scene-aligned offset) — 
 - **`designer-canvas-viewport`** (MODIFIED + ADDED): the "Canvas zoom controls and Ctrl-wheel
   zoom" requirement's upper bound changes from 400% to 6400% (lower bound stays the dynamic
   cover-fit minimum from B-027). A new "Pixel grid at high zoom" requirement is ADDED (threshold,
-  whole-pasteboard coverage, pixel-accurate ruler-aligned lines, non-interactive).
+  whole-pasteboard coverage, device-pixel-snapped crisp ruler-aligned lines, non-interactive).
 
 ## Impact
 
 - `apps/designer/src/renderer/features/canvas/CanvasArea.tsx` — `ZOOM_MAX` 4 → 64; render the
-  `s.pixelGrid` layer (gated on `pixelGridVisible(zoom)`) inside the stage; stale "10..400%"
-  comment corrected.
+  `s.pixelGrid` `<canvas>` (gated on `pixelGridVisible(zoom)`) as the bottom layer of the ruler
+  overlay; `drawPixelGrid` redraw effect; stale "10..400%" comment corrected.
 - `apps/designer/src/renderer/features/canvas/geometry.ts` — `PIXEL_GRID_MIN_ZOOM` (8),
-  `PIXEL_GRID_MAJOR_EVERY` (10), `pixelGridVisible`, `pixelGridMetrics`.
-- `apps/designer/src/renderer/features/canvas/CanvasArea.css.ts` — `s.pixelGrid` layer style.
-- Tests: `pasteboard.test.ts` (threshold + metrics + ruler-alignment); E2E `pixel-grid.spec.ts`
+  `PIXEL_GRID_MAJOR_EVERY` (10), `pixelGridVisible`, `pixelGridLines` (device-pixel-snapped,
+  viewport-culled line positions).
+- `apps/designer/src/renderer/features/canvas/CanvasArea.css.ts` — `s.pixelGrid` canvas style.
+- Tests: `pasteboard.test.ts` (threshold + device-pixel snapping at fractional zoom + HiDPI +
+  ≤ half-device-pixel ruler alignment + culling + major detection); E2E `pixel-grid.spec.ts`
   (grid present at 1600% / absent at 100%, max reaches 6400%, a 1px nudge moves exactly 1 scene px).
 - Docs: canvas feature `README.md` (pixel-grid section); PRD `docs/prd/designer.md` D-120.

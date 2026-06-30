@@ -40,20 +40,16 @@ test.describe('D-120 — high zoom + pixel grid', () => {
     await expect(grid(app)).toHaveCount(1);
     await expect(grid(app)).toBeVisible();
 
-    // Pixel-accurate: the rendered MINOR cell (the last background-size layer) equals exactly one
-    // scene pixel in screen px — i.e. the stage's px-per-scene-px (`stageW / extentW` = zoom) — so
-    // one grid cell IS one scene pixel and the grid cannot drift from the rulers.
-    const m = await app.page.evaluate(() => {
-      const g = document.querySelector('[data-testid="pixel-grid"]') as HTMLElement;
-      const stage = document.querySelector('[data-testid="canvas-stage"]') as HTMLElement;
-      const iframe = document.querySelector('iframe[title="cgpreview"]') as HTMLElement;
-      const sizes = getComputedStyle(g).backgroundSize.split(',');
-      return {
-        minorCell: parseFloat(sizes[sizes.length - 1]!), // last layer = minor grid
-        zoom: parseFloat(stage.style.width) / parseFloat(iframe.style.width),
-      };
+    // The grid is a device-pixel-snapped <canvas> (snapping → crisp at fractional zoom; the line
+    // math + ruler alignment are pinned by the `pixelGridLines` unit tests). Confirm it actually
+    // rendered: a CANVAS with a non-zero backing store (viewport · devicePixelRatio).
+    const c = await app.page.evaluate(() => {
+      const g = document.querySelector('[data-testid="pixel-grid"]') as HTMLCanvasElement;
+      return { tag: g.tagName, w: g.width, h: g.height };
     });
-    expect(m.minorCell).toBeCloseTo(m.zoom, 1); // 1 cell == 1 scene pixel
+    expect(c.tag).toBe('CANVAS');
+    expect(c.w).toBeGreaterThan(0);
+    expect(c.h).toBeGreaterThan(0);
 
     // Zooming back to 100% hides it again (a clean on/off, no clutter at low zoom).
     await app.page.getByRole('button', { name: 'Reset zoom to 100%' }).click();

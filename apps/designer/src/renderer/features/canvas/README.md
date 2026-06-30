@@ -173,19 +173,23 @@ recenters (auto-fit is keyed on `sceneId` + resolution, never on `zoom`).
 (B-027) is unchanged, and every zoom path still routes through the single `clampZoom`. At high zoom a
 **pixel grid** (1 cell = 1 scene pixel) is drawn over the WHOLE pasteboard, shown only when one scene
 pixel maps to **≥ 8 screen px** (`pixelGridVisible(zoom)`, i.e. zoom ≥ 800%) so normal zoom isn't
-cluttered. It is a single non-interactive `div` (`s.pixelGrid`, `pointer-events:none`) inside the
-stage, placed **between the iframe and the overlay** in DOM order with **no `z-index`** — so the
-overlay's gizmos paint on top (a positive z-index would lift the grid over the `z-index:auto`
-overlay) and hit-testing stays on the overlay. The lines are a **CSS `linear-gradient` layer**
-(`pixelGridBackground` → `background-image`/`-size`/`-position` from `pixelGridMetrics`): two 1px
-hairlines at `cell = zoom` px (minor) plus two at `10·zoom` (major, listed first so they paint over
-the minor every 10th line — graph-paper). The compositor rasterizes **only the visible tile**, so
-there is no per-line draw even though the pasteboard is ~760k px wide at 6400%, and the lines stay
-crisp (hard gradient stops). Because `frameOffset` is an integer, a scene integer boundary lands at
-stage-local `k·zoom`, exactly where the minor gradient draws — so lines sit on every integer scene
-coordinate using the **same `(x + frameOffset)·zoom` mapping the rulers use** (a unit test pins the
-two are identical → no drift); the major lines carry a `(frameOffset % 10)·zoom` offset so an
-emphasized line lands on scene multiples of 10.
+cluttered.
+
+The grid is a **device-pixel-snapped `<canvas>`** (not a CSS gradient — a gradient's fixed
+**fractional** period, e.g. 48.08px at 4808%, drifts each line off the device-pixel raster, so the
+browser anti-aliased every line across two pixels: doubled/blurry at fractional scales, crisp only at
+integer ones). The canvas is the **bottom layer of the non-scrolling ruler overlay** (`s.overlay`):
+viewport-sized, `pointer-events:none`, tracking the stage via `rulerOrigin` exactly as the rulers do.
+It paints lightly over the scroll content (shapes + gizmos) and under the rulers/guides; hit-testing
+stays on the canvas below the overlay. `drawPixelGrid` repaints it whenever `rulerOrigin` (scroll),
+zoom, or the viewport changes, using `pixelGridLines(origin, zoom, lengthCss, dpr)` — which **culls**
+to the visible region (only ~viewport/zoom lines, a few dozen at high zoom) and snaps each line to
+`Math.round(pos·dpr) + 0.5`, so a 1-device-px stroke lands on a **single physical pixel** — crisp at
+**any** zoom, HiDPI included. Snapping each line **independently** means no accumulating drift: a line
+for scene X stays within half a device pixel of its true screen pos `rulerOrigin + X·zoom` (the SAME
+mapping the rulers use — invisible as position at high zoom, decisive for crispness), so the grid
+never drifts from the rulers. Every 10th line (`scene % 10 === 0`, so scene 0 / ±10 / ±20 — round
+ruler labels) is drawn a hair stronger (graph-paper).
 
 The rulers + guides live in a **non-scrolling overlay** (`s.overlay`) that is a **sibling** of the
 scroll container (`s.outer`), not a child of it — absolutely-positioned children of an

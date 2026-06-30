@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ScanSearch, ZoomIn, ZoomOut } from 'lucide-react';
 import type { Element, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
@@ -20,8 +20,9 @@ import {
   coverZoom,
   fitZoom,
   pasteboardLayout,
-  pixelGridMetrics,
+  pixelGridLines,
   pixelGridVisible,
+  PIXEL_GRID_MAJOR_EVERY,
   screenToScene,
   zoomAnchorScroll,
 } from './geometry.js';
@@ -83,28 +84,43 @@ const PIXEL_GRID_MINOR = 'rgba(255, 255, 255, 0.07)';
 const PIXEL_GRID_MAJOR = 'rgba(255, 255, 255, 0.14)';
 
 /**
- * D-120 — the inline background for the pixel-grid layer at this zoom. Two 1px `linear-gradient`
- * hairlines (vertical + horizontal) at `cell = zoom` px for the MINOR grid, plus two at `10·zoom`
- * for the MAJOR lines, listed FIRST so they paint ON TOP of the minor at every 10th boundary. The
- * compositor rasterizes only the visible tile, so this stays cheap even though the pasteboard is
- * ~760k px wide at 6400%. The major lines are offset by `(frameOffset % 10)·zoom` so an emphasized
- * line lands on scene multiples of 10; the minor grid needs no offset (frameOffset is integer, so
- * every scene boundary is already a multiple of `cell` from the stage origin).
+ * D-120 — paint the pixel grid onto its viewport-sized `<canvas>`. Lines are drawn with
+ * `pixelGridLines` (device-pixel-snapped) so each is a single crisp 1-physical-px stroke at ANY
+ * zoom — a CSS gradient with a fractional period blurred every line at fractional scales. Only the
+ * lines inside the viewport are drawn (cull), every 10th (scene ≡ 0 mod 10) a hair stronger. The
+ * canvas backing store is `viewport · dpr` so HiDPI stays 1 physical px; `origin` is the rulers'
+ * scene-0 position, so the grid uses the exact mapping the rulers do.
  */
-function pixelGridBackground(zoom: number, frameOffset: { x: number; y: number }): CSSProperties {
-  const g = pixelGridMetrics(zoom, frameOffset);
-  const line = (dir: 'right' | 'bottom', color: string): string =>
-    `linear-gradient(to ${dir}, ${color}, ${color} 1px, transparent 1px)`;
-  return {
-    backgroundImage: [
-      line('right', PIXEL_GRID_MAJOR),
-      line('bottom', PIXEL_GRID_MAJOR),
-      line('right', PIXEL_GRID_MINOR),
-      line('bottom', PIXEL_GRID_MINOR),
-    ].join(', '),
-    backgroundSize: `${g.major}px ${g.major}px, ${g.major}px ${g.major}px, ${g.cell}px ${g.cell}px, ${g.cell}px ${g.cell}px`,
-    backgroundPosition: `${g.offsetX}px 0, 0 ${g.offsetY}px, 0 0, 0 0`,
-  };
+function drawPixelGrid(
+  canvas: HTMLCanvasElement,
+  origin: { x: number; y: number },
+  zoom: number,
+  viewport: { w: number; h: number },
+  dpr: number,
+): void {
+  canvas.width = Math.round(viewport.w * dpr);
+  canvas.height = Math.round(viewport.h * dpr);
+  canvas.style.width = `${String(viewport.w)}px`;
+  canvas.style.height = `${String(viewport.h)}px`;
+  const ctx = canvas.getContext('2d');
+  if (ctx === null) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.lineWidth = 1; // device px → 1 physical pixel
+  const major = (scene: number): boolean => scene % PIXEL_GRID_MAJOR_EVERY === 0;
+  for (const { scene, devicePx } of pixelGridLines(origin.x, zoom, viewport.w, dpr)) {
+    ctx.strokeStyle = major(scene) ? PIXEL_GRID_MAJOR : PIXEL_GRID_MINOR;
+    ctx.beginPath();
+    ctx.moveTo(devicePx, 0);
+    ctx.lineTo(devicePx, canvas.height);
+    ctx.stroke();
+  }
+  for (const { scene, devicePx } of pixelGridLines(origin.y, zoom, viewport.h, dpr)) {
+    ctx.strokeStyle = major(scene) ? PIXEL_GRID_MAJOR : PIXEL_GRID_MINOR;
+    ctx.beginPath();
+    ctx.moveTo(0, devicePx);
+    ctx.lineTo(canvas.width, devicePx);
+    ctx.stroke();
+  }
 }
 
 /**
@@ -152,6 +168,9 @@ export function CanvasArea({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  // D-120 — the pixel-grid <canvas> (a non-scrolling viewport-sized overlay layer); redrawn
+  // imperatively whenever the ruler origin / zoom / viewport changes (see the effect below).
+  const gridCanvasRef = useRef<HTMLCanvasElement>(null);
   const [html, setHtml] = useState<string | null>(null);
   const [zoom, setZoom] = useState<number>(ZOOM_DEFAULT);
   // Live mirror of `zoom` so the (once-bound) wheel listener + the zoom helpers read
@@ -656,6 +675,17 @@ export function CanvasArea({
     // Q5 — re-measure when the content-aware offset shifts, not only on scroll/zoom.
   }, [zoom, sceneId, html, frameOffset.x, frameOffset.y]);
 
+  // D-120 — (re)paint the pixel grid whenever the ruler origin (scroll), zoom, or viewport size
+  // changes. The canvas only exists at high zoom (gated in the JSX), so a null ref / hidden grid
+  // no-ops. Drawn in DEVICE px (snapped) so lines are crisp at every zoom — see `drawPixelGrid`.
+  useEffect(() => {
+    const canvas = gridCanvasRef.current;
+    if (canvas === null || rulerOrigin === null || !pixelGridVisible(zoom)) return;
+    if (viewport.w <= 0 || viewport.h <= 0) return;
+    const dpr = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
+    drawPixelGrid(canvas, rulerOrigin, zoom, viewport, dpr);
+  }, [rulerOrigin, zoom, viewport]);
+
   if (scene === null) {
     return (
       <div className={s.wrap}>
@@ -823,19 +853,6 @@ export function CanvasArea({
                   // import from a blob URL" only works without sandbox
                   // in current Chromium.
                 />
-                {/* D-120 — the pixel grid: a non-interactive layer over the WHOLE pasteboard
-                    (this stage), shown only at high zoom (`pixelGridVisible`). It sits ABOVE the
-                    iframe (so it's visible over the opaque content) and BELOW the overlay (so the
-                    gizmos read on top and `pointer-events: none` keeps hit-testing on the overlay).
-                    1 cell = 1 scene px; lines land on integer scene coords (ruler-aligned). */}
-                {pixelGridVisible(zoom) && (
-                  <div
-                    className={s.pixelGrid}
-                    data-testid="pixel-grid"
-                    aria-hidden
-                    style={pixelGridBackground(zoom, frameOffset)}
-                  />
-                )}
                 <CanvasOverlay
                   scene={scene}
                   tool={tool}
@@ -855,6 +872,19 @@ export function CanvasArea({
             stay pinned to the visible area while `rulerOrigin` tracks the
             scrolling stage (so they no longer slide away on zoom + scroll). */}
         <div className={s.overlay}>
+          {/* D-120 — the pixel grid: a viewport-sized, non-scrolling <canvas> that tracks the
+              stage via `rulerOrigin` (same as the rulers), shown only at high zoom. It is the
+              BOTTOM layer of this overlay (so rulers + guides paint over it) and sits above the
+              scroll content (paints lightly over shapes + gizmos); `pointer-events: none` keeps
+              all hit-testing on the canvas below. Device-pixel-snapped → crisp at every zoom. */}
+          {pixelGridVisible(zoom) && rulerOrigin !== null && html !== null && (
+            <canvas
+              ref={gridCanvasRef}
+              className={s.pixelGrid}
+              data-testid="pixel-grid"
+              aria-hidden
+            />
+          )}
           {rulerVisible && rulerOrigin !== null && html !== null && (
             <CanvasRuler
               originX={rulerOrigin.x}
