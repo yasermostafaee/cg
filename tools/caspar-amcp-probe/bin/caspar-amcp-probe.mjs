@@ -1,46 +1,62 @@
 #!/usr/bin/env node
-// C-001 Phase 3b — AMCP HTML-producer update-sequence harness (ADR 0006).
+// CasparCG AMCP probe harness (real-hardware spikes).
 //
-// Runs a matrix of candidate load/update/stop sequences against a real
-// CasparCG 2.3.2 and reports which delivers a Persian-laden JSON payload to
-// window.update. See README.md for the full runbook.
+// Two modes:
+//   (default) ADR-0006 update-SEQUENCE sweep — which load/update/stop verbs deliver
+//             a JSON payload to window.update.
+//   --sweep   B-041 ESCAPE-matrix sweep — fixed CG ADD+UPDATE verbs, varying the
+//             AMCP escaping of a hard payload (", \ ×1-4, newline, tab, Persian),
+//             to discover which escaping round-trips byte-exact to JSON.parse.
 //
 // Usage:
 //   caspar-amcp-probe --caspar-host 192.168.1.50 --caspar-port 5250
-//   caspar-amcp-probe --caspar-host 192.168.1.50 --serve-host 192.168.1.10
-//   caspar-amcp-probe --channel 1 --layer 10
-//   caspar-amcp-probe --probe-url "file:///C:/probe/probe.html"   # serve elsewhere
+//   caspar-amcp-probe --sweep --caspar-host 192.168.1.50 --serve-host 192.168.1.10
+//   caspar-amcp-probe --sweep --channel 1 --layer 10
 //
 // Key flags:
+//   --sweep                      run the B-041 escape-matrix (default: ADR-0006 verbs)
 //   --caspar-host/--caspar-port  AMCP endpoint (default 127.0.0.1:5250)
 //   --serve-host                 host CasparCG uses to reach THIS machine
 //                                (default: a guessed LAN IP) — set it if wrong
 //   --serve-port                 probe HTTP + WS beacon port (default 7900)
 //   --channel/--layer            CasparCG slot (default 1-10)
-//   --probe-url                  override the probe URL (disables serving)
+//   --flash-layer                CG flash-layer index (default 0; --sweep only)
+//   --probe-url                  override the probe URL (disables serving; verbs mode)
 //   --out                        output file prefix
 
 import { runProbe, guessLanHost } from '../dist/run.js';
+import { runEscapeSweep } from '../dist/escape-sweep.js';
 
 const args = parseArgs(process.argv.slice(2));
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+const sweep = args.sweep === true || args.mode === 'escape-sweep';
 
-const opts = {
+const common = {
   casparHost: args['caspar-host'] ?? '127.0.0.1',
   casparPort: num(args['caspar-port'], 5250),
   serveHost: args['serve-host'] ?? guessLanHost(),
   servePort: num(args['serve-port'], 7900),
   channel: num(args.channel, 1),
   layer: num(args.layer, 10),
-  probeUrl: typeof args['probe-url'] === 'string' ? args['probe-url'] : undefined,
   settleMs: num(args['settle-ms'], 400),
   loadWaitMs: num(args['load-wait-ms'], 8000),
   updateWaitMs: num(args['update-wait-ms'], 4000),
-  outPrefix: typeof args.out === 'string' ? args.out : `caspar-amcp-probe-${stamp}`,
 };
 
 try {
-  await runProbe(opts);
+  if (sweep) {
+    await runEscapeSweep({
+      ...common,
+      flashLayer: num(args['flash-layer'], 0),
+      outPrefix: typeof args.out === 'string' ? args.out : `caspar-escape-sweep-${stamp}`,
+    });
+  } else {
+    await runProbe({
+      ...common,
+      probeUrl: typeof args['probe-url'] === 'string' ? args['probe-url'] : undefined,
+      outPrefix: typeof args.out === 'string' ? args.out : `caspar-amcp-probe-${stamp}`,
+    });
+  }
   process.exit(0);
 } catch (err) {
   process.stderr.write(`[probe] FAILED: ${err instanceof Error ? err.message : String(err)}\n`);

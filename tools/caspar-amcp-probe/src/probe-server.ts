@@ -19,6 +19,8 @@ export interface BeaconMessage {
   count?: number;
   source?: string;
   href?: string;
+  /** B-041 escape-sweep — whether the template's own `JSON.parse(payload)` succeeded. */
+  parseOk?: boolean;
 }
 
 /**
