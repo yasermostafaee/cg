@@ -71,6 +71,36 @@ screenCssPos·dpr)/dpr`, and the line-snap phase `screenCssPos·dpr − deviceOr
 
 ## 6. Gate
 
-- [ ] `@cg/designer` format:check + typecheck + lint + test + build, uncached at least once
-      (`turbo --force`), then `pnpm test:e2e`.
-- [ ] `pnpm openspec validate fix-pixel-grid-content-alignment --strict` (and `--all --strict`).
+- [x] `@cg/designer` format:check + typecheck + lint + test + build, uncached at least once
+      (`turbo --force`), then `pnpm test:e2e` (168 passed).
+- [x] `pnpm openspec validate fix-pixel-grid-content-alignment --strict` (and `--all --strict`).
+
+## 7. Follow-up — owner still sees the misalignment on the real laptop (2026-07-07)
+
+The emulated evidence (bitmap E2E at dpr 1 / 1.25 / 2) is green, but the owner reports NO visible
+change at 6400% on the affected Windows laptop. New owner evidence: dragging writes FRACTIONAL
+X/Y (the border honestly sits between lines — separate product gap, filed as D-122); at INTEGER
+coords the selection border lands ON the grid lines (grid↔gizmo agree → H1 unlikely); the rendered
+SHAPE is quantized to whole scene pixels but every landing position is OFFSET from the lines →
+prime suspect H2: the stage/iframe layer rasterizes with a fractional device-pixel phase on the
+real compositor (the emulated ≈0 stage-displacement measurement may not hold there). Measure ON
+the machine, then fix from the readings.
+
+- [x] Part A — stale build made impossible: worktree branch/head confirmed
+      (`fix/B-042-pixel-grid-content-alignment`), full fresh build served via `vite preview`,
+      boot log `console.log('B-042 build', <tag>)` + the same tag shown in the probe panel.
+- [x] Part B — temporary OPT-IN probe (`?b042probe=1` / `localStorage.b042probe='1'`,
+      `B042Probe.tsx`): live dpr / visualViewport.scale / browser-zoom warning; grid layer rect +
+      fractional device origin + applied nudge + rasterPhase + backing↔CSS scale; stage / iframe /
+      gizmo layer rects + fractional device origins; judged-edge row (ideal / bitmap-read stroke /
+      content / gizmo, with deltas in device px) + all-stroke min→max sweep; copy-as-text button
+      (+ `console.table`).
+- [ ] Part C — owner loop: readings #1 (deselected, left + right of viewport) and #2 (selected)
+      pasted back, plus the Windows display-scale %. **PAUSED HERE awaiting the owner.**
+- [ ] Part D — act on the readings (H0 stale build / H1 gizmo overlay / H2 content raster phase /
+      H3 browser zoom / H4 nudge not applying); record the confirmed finding in `design.md`
+      (including the honest note if the emulated stage measurement is falsified on real hardware);
+      spec/E2E per the finding.
+- [ ] Part E — strip the probe + boot log (or keep behind the flag, documented in the canvas
+      README — decide); full uncached gate + `pnpm test:e2e`; `pnpm openspec validate --all
+  --strict`; push; owner re-verifies visually before any archive.

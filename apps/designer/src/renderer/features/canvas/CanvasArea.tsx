@@ -15,6 +15,7 @@ import {
 import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
 import { PreviewHost } from './PreviewHost.js';
+import { B042Probe, b042ProbeEnabled } from './B042Probe.js';
 import {
   clampZoom as clampZoomPure,
   coverZoom,
@@ -1034,6 +1035,19 @@ export function CanvasArea({
               Display-only (pointerEvents:none), positioned at the guide's screen coord near
               the ruler edge and clamped to the viewport; `direction:ltr` keeps `x: 960`
               readable under RTL. */}
+          {/* B-042 follow-up — TEMPORARY opt-in on-machine alignment probe
+              (?b042probe=1 or localStorage.b042probe='1'); see B042Probe.tsx. */}
+          {b042ProbeEnabled() && html !== null && (
+            <B042Probe
+              outerRef={outerRef}
+              stageRef={stageRef}
+              iframeRef={iframeRef}
+              gridRef={gridCanvasRef}
+              zoom={zoom}
+              frameOffset={frameOffset}
+              selection={selection}
+            />
+          )}
           {activeGuide !== null &&
             rulerOrigin !== null &&
             (() => {
