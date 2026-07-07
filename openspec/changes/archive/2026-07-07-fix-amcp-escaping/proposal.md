@@ -1,5 +1,7 @@
 # Fix AMCP string escaping for special characters (B-041)
 
+> **SUPERSEDED (2026-07-07):** the quotes-only escaping rule this change shipped was disproven on real hardware (#246) and is corrected by `fix-amcp-escaping-v2`; archived as shipped history — B-041 stays open under v2.
+
 ## Why
 
 B-041 (hardware-observed on real CasparCG 2.3.2): a field value containing a

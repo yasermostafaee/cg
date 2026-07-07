@@ -220,10 +220,18 @@ isolated from the session / queue / reconciler. The sequence is:
 (preceded by a re-issued `CG ADD` when no live producer exists on the slot),
 **`update → CG UPDATE`**, `out → CLEAR`. `CG UPDATE` remains the
 **hardware-validated** (CasparCG 2.3.2 `4de6d18f`, ADR 0006) way to deliver a
-Persian-laden JSON payload to `window.update` intact; the disproven alternatives
-(`CALL "update"` never invokes it; `CG INVOKE` delivers an empty param) are not used.
-The load/take/out/retake cycle with play-on-load OFF SHALL be re-validated on real
-CasparCG before B-039 closes.
+Persian-laden JSON payload to `window.update` intact.
+
+Every AMCP string argument SHALL be quoted by a **single canonical quoter** (one
+source of truth), applied **exactly once** per argument. Because the data argument
+is already a `JSON.stringify` string (the JSON layer has escaped `"`, `\`, and
+newline), the AMCP layer SHALL escape **only what CasparCG 2.3.x's quoted-string
+parser requires** — a `"` → `\"` (the one escape CasparCG un-escapes) — and SHALL
+NOT re-escape backslashes (which would double them and corrupt the payload). A JSON
+payload containing `"`, `\` (any count), or a newline SHALL therefore survive
+`CG ADD` and `CG UPDATE` byte-exact to what the template's `JSON.parse` receives.
+The load/take/out/retake cycle AND the special-character payload SHALL be
+re-validated on real CasparCG before B-041 closes.
 
 #### Scenario: The verified update sequence is applied at the seam
 
@@ -232,11 +240,13 @@ CasparCG before B-039 closes.
   real CasparCG 2.3.2 (ADR 0006) — without changes to `ServerSession` /
   `CommandQueue` / `Reconciler`
 
-#### Scenario: Load is constructed as a non-playing add
+#### Scenario: Special characters survive the AMCP data argument
 
-- **WHEN** the bridge constructs the load command **THEN** the seam emits
-  `CG ADD` with the play-on-load flag OFF, so the producer is loaded without playing
-  (the operator's take issues the `CG PLAY`)
+- **WHEN** a field value contains a double-quote, a backslash (odd or even count),
+  or a newline **THEN** the canonical quoter (applied once over the JSON payload)
+  produces a `CG ADD` / `CG UPDATE` data argument that round-trips byte-exact: the
+  value reaches the template's `JSON.parse` unchanged (Persian intact), with no
+  double-escaping
 
 ### Requirement: The single-file HTML exporter is a shared, browser-importable package
 
@@ -385,24 +395,27 @@ LAN IPv4), logged loudly.
 ### Requirement: Template resolution is validated, not blind-acked
 
 `tools/amcp-mock` SHALL stop blind-acking `CG ADD`: it SHALL resolve the template
-argument — for a URL, an HTTP `GET` (`202` only when it returns a page; `404 CG ADD
-FAILED` otherwise) and a bare non-URL id SHALL be `404` — and SHALL expose the
-`CG ADD` / `CG UPDATE` data payload so tests can assert it is the real, non-empty
-field JSON. Integration tests SHALL exercise a real served URL and non-empty field
-values end-to-end, not just command acceptance.
+argument (for a URL, an HTTP `GET` — `404 CG ADD FAILED` when it does not return a
+page; a bare id → `404`) and SHALL expose the `CG ADD` / `CG UPDATE` data payload so
+tests can assert it. The mock SHALL decode quoted arguments per **real CasparCG
+2.3.x rules** (un-escape only `\"` → `"`; every other character, including `\`,
+literal), **independently of the bridge's own escaper**, so a double-escaped payload
+is decoded WRONG (caught) and only a correctly single-escaped payload decodes to the
+original. Integration tests SHALL `JSON.parse` the decoded data argument and assert
+it equals the original object.
 
 #### Scenario: Mock 404s an unresolvable template reference
 
 - **WHEN** `CG ADD` references a bare id or a URL the mock cannot `GET` **THEN** the
-  mock returns `404 CG ADD FAILED` (matching real CasparCG), so a "looks acked,
-  renders nothing" regression fails the test
+  mock returns `404 CG ADD FAILED` (matching real CasparCG)
 
-#### Scenario: Integration test asserts a served URL + real fields
+#### Scenario: Mock decodes the data arg per real CasparCG and catches double-escaping
 
-- **WHEN** the bridge (with its HTTP server) drives the hardened mock for a loaded,
-  taken, then updated template **THEN** the test asserts `CG ADD` used a served URL
-  the mock fetched (`202`) and a non-empty field payload, and `CG UPDATE` carried
-  the updated fields
+- **WHEN** a `CG ADD` / `CG UPDATE` data argument is decoded by the mock **THEN** it
+  un-escapes only `\"`→`"` (backslashes literal) and the test `JSON.parse`s the
+  result: a correctly single-escaped payload equals the original object, while the
+  old double-escaped payload decodes to a different (corrupted) object — so the
+  regression fails the test instead of passing silently
 
 ### Requirement: Playout verbs are chosen from producer state (prescriptive)
 
