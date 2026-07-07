@@ -165,6 +165,9 @@ export const stage = style({
 // rulers + guides paint over it), pinned to the viewport top-left. Its width/height (CSS + backing
 // store) are set imperatively per zoom in `drawPixelGrid`. `pointer-events: none` so it never
 // intercepts selection/drag — all hit-testing stays on the canvas content below the overlay.
+// B-042 — `drawPixelGrid` also sets a sub-CSS-px inline `left`/`top` nudge (overriding these
+// defaults) so the canvas layer starts ON an integer device pixel, and sizes the CSS box FROM the
+// backing store (raster scale exactly 1) — the strokes rasterize exactly where the snap computed.
 export const pixelGrid = style({
   position: 'absolute',
   top: 0,

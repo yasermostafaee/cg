@@ -19,6 +19,8 @@ import {
   clampZoom as clampZoomPure,
   coverZoom,
   fitZoom,
+  gridBackingSize,
+  gridCanvasAlignment,
   pasteboardLayout,
   pixelGridLines,
   pixelGridVisible,
@@ -87,9 +89,19 @@ const PIXEL_GRID_MAJOR = 'rgba(255, 255, 255, 0.14)';
  * D-120 — paint the pixel grid onto its viewport-sized `<canvas>`. Lines are drawn with
  * `pixelGridLines` (device-pixel-snapped) so each is a single crisp 1-physical-px stroke at ANY
  * zoom — a CSS gradient with a fractional period blurred every line at fractional scales. Only the
- * lines inside the viewport are drawn (cull), every 10th (scene ≡ 0 mod 10) a hair stronger. The
- * canvas backing store is `viewport · dpr` so HiDPI stays 1 physical px; `origin` is the rulers'
- * scene-0 position, so the grid uses the exact mapping the rulers do.
+ * lines inside the viewport are drawn (cull), every 10th (scene ≡ 0 mod 10) a hair stronger.
+ * `origin` is the rulers' scene-0 position, so the grid uses the exact mapping the rulers do.
+ *
+ * B-042 — the snap must target the PHYSICAL raster, not the canvas-internal one: the overlay sits
+ * at an arbitrary (fractional) device position (`screenPos`, the outer viewport's live screen
+ * coords) and the content iframe composites UN-snapped at its ideal position, so a canvas-internal
+ * snap left strokes displaced/resampled by the compositor and stretched across the viewport
+ * (backing rounded to device px but displayed at the un-rounded CSS size). Fix: floor-align the
+ * canvas element itself to the device raster (sub-CSS-px `left`/`top` nudge → integer device
+ * origin, nothing for the compositor to snap), size the CSS box FROM the backing store (raster
+ * scale exactly 1), and fold the overlay's fractional device offset (`phase`) into each line's
+ * snap — the painted stroke then rasterizes on the physical pixel nearest its true screen
+ * position, within ½ device px of the composited content at every zoom and every dpr.
  */
 function drawPixelGrid(
   canvas: HTMLCanvasElement,
@@ -97,24 +109,31 @@ function drawPixelGrid(
   zoom: number,
   viewport: { w: number; h: number },
   dpr: number,
+  screenPos: { x: number; y: number },
 ): void {
-  canvas.width = Math.round(viewport.w * dpr);
-  canvas.height = Math.round(viewport.h * dpr);
-  canvas.style.width = `${String(viewport.w)}px`;
-  canvas.style.height = `${String(viewport.h)}px`;
+  const alignX = gridCanvasAlignment(screenPos.x, dpr);
+  const alignY = gridCanvasAlignment(screenPos.y, dpr);
+  const backingW = gridBackingSize(viewport.w, dpr);
+  const backingH = gridBackingSize(viewport.h, dpr);
+  canvas.width = backingW.devicePx;
+  canvas.height = backingH.devicePx;
+  canvas.style.width = `${String(backingW.cssPx)}px`;
+  canvas.style.height = `${String(backingH.cssPx)}px`;
+  canvas.style.left = `${String(alignX.nudgeCss)}px`;
+  canvas.style.top = `${String(alignY.nudgeCss)}px`;
   const ctx = canvas.getContext('2d');
   if (ctx === null) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.lineWidth = 1; // device px → 1 physical pixel
   const major = (scene: number): boolean => scene % PIXEL_GRID_MAJOR_EVERY === 0;
-  for (const { scene, devicePx } of pixelGridLines(origin.x, zoom, viewport.w, dpr)) {
+  for (const { scene, devicePx } of pixelGridLines(origin.x, zoom, viewport.w, dpr, alignX.phase)) {
     ctx.strokeStyle = major(scene) ? PIXEL_GRID_MAJOR : PIXEL_GRID_MINOR;
     ctx.beginPath();
     ctx.moveTo(devicePx, 0);
     ctx.lineTo(devicePx, canvas.height);
     ctx.stroke();
   }
-  for (const { scene, devicePx } of pixelGridLines(origin.y, zoom, viewport.h, dpr)) {
+  for (const { scene, devicePx } of pixelGridLines(origin.y, zoom, viewport.h, dpr, alignY.phase)) {
     ctx.strokeStyle = major(scene) ? PIXEL_GRID_MAJOR : PIXEL_GRID_MINOR;
     ctx.beginPath();
     ctx.moveTo(0, devicePx);
@@ -678,12 +697,20 @@ export function CanvasArea({
   // D-120 — (re)paint the pixel grid whenever the ruler origin (scroll), zoom, or viewport size
   // changes. The canvas only exists at high zoom (gated in the JSX), so a null ref / hidden grid
   // no-ops. Drawn in DEVICE px (snapped) so lines are crisp at every zoom — see `drawPixelGrid`.
+  // B-042 — the OUTER viewport's live screen position rides along so the snap targets the physical
+  // raster (the overlay sits at a fractional device position). Read from `outerRef` — never from
+  // the grid canvas's own rect, which the draw nudges (that would be a feedback loop). Window
+  // resizes and layout shifts re-run `measure()` → fresh `rulerOrigin`/`viewport` objects → this
+  // effect re-reads the rect, so the alignment tracks the layout.
   useEffect(() => {
     const canvas = gridCanvasRef.current;
-    if (canvas === null || rulerOrigin === null || !pixelGridVisible(zoom)) return;
+    const outer = outerRef.current;
+    if (canvas === null || outer === null || rulerOrigin === null || !pixelGridVisible(zoom))
+      return;
     if (viewport.w <= 0 || viewport.h <= 0) return;
     const dpr = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
-    drawPixelGrid(canvas, rulerOrigin, zoom, viewport, dpr);
+    const orect = outer.getBoundingClientRect();
+    drawPixelGrid(canvas, rulerOrigin, zoom, viewport, dpr, { x: orect.left, y: orect.top });
   }, [rulerOrigin, zoom, viewport]);
 
   if (scene === null) {

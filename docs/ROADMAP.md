@@ -224,8 +224,12 @@ Done.)
 The concrete near-term Designer sequence (survives across sessions; the Runtime
 track is independent — see "Runtime — next" below):
 
-1. **B-042 canvas-zoom bug** — PLACEHOLDER: to be filed separately with a repro
-   from the owner (number reserved; blocks D-119).
+1. **[B-042](./prd/bugs-designer.md) pixel-grid ↔ content sub-pixel misalignment**
+   (medium) — filed: at high zoom a shape edge at an integer scene coordinate
+   sits slightly off its pixel-grid line, in a repeating position-dependent
+   pattern (D-120 follow-up; blocks D-119). Fix in review on
+   `fix/B-042-pixel-grid-content-alignment`
+   (`openspec/changes/fix-pixel-grid-content-alignment`).
 2. **[B-037](./prd/bugs-designer.md) pen tool** (low, keep-or-remove decision) — filed.
 3. **[D-119](./prd/designer.md) rebuild starter templates** (5 showcases) — filed,
    **BLOCKED only on B-042 + B-037** (templates should exercise healthy

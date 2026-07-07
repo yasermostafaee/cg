@@ -182,14 +182,36 @@ integer ones). The canvas is the **bottom layer of the non-scrolling ruler overl
 viewport-sized, `pointer-events:none`, tracking the stage via `rulerOrigin` exactly as the rulers do.
 It paints lightly over the scroll content (shapes + gizmos) and under the rulers/guides; hit-testing
 stays on the canvas below the overlay. `drawPixelGrid` repaints it whenever `rulerOrigin` (scroll),
-zoom, or the viewport changes, using `pixelGridLines(origin, zoom, lengthCss, dpr)` — which **culls**
-to the visible region (only ~viewport/zoom lines, a few dozen at high zoom) and snaps each line to
-`Math.round(pos·dpr) + 0.5`, so a 1-device-px stroke lands on a **single physical pixel** — crisp at
-**any** zoom, HiDPI included. Snapping each line **independently** means no accumulating drift: a line
-for scene X stays within half a device pixel of its true screen pos `rulerOrigin + X·zoom` (the SAME
-mapping the rulers use — invisible as position at high zoom, decisive for crispness), so the grid
-never drifts from the rulers. Every 10th line (`scene % 10 === 0`, so scene 0 / ±10 / ±20 — round
-ruler labels) is drawn a hair stronger (graph-paper).
+zoom, or the viewport changes, using `pixelGridLines(origin, zoom, lengthCss, dpr, rasterPhase)` —
+which **culls** to the visible region (only ~viewport/zoom lines, a few dozen at high zoom) and snaps
+each line to `Math.round(pos·dpr + rasterPhase) + 0.5`, so a 1-device-px stroke lands on a **single
+physical pixel** — crisp at **any** zoom, HiDPI included. Snapping each line **independently** means
+no accumulating drift: a line for scene X stays within half a device pixel of its true screen pos
+`rulerOrigin + X·zoom` (the SAME mapping the rulers use — invisible as position at high zoom,
+decisive for crispness), so the grid never drifts from the rulers. Every 10th line
+(`scene % 10 === 0`, so scene 0 / ±10 / ±20 — round ruler labels) is drawn a hair stronger
+(graph-paper).
+
+**Grid ↔ content alignment (B-042).** The snap targets the **PHYSICAL screen raster, not the
+canvas-internal one** — the overlay sits at an arbitrary (fractional) device position (the studio
+layout puts the canvas viewport at a fractional CSS x at every dpr), and the scaled preview iframe
+composites **un-snapped at its ideal position** (measured), so a canvas-internal snap left painted
+strokes displaced (the compositor snapped/resampled the fractionally-placed layer: −0.39 device px
+at dpr 1, −0.5 at dpr 1.25 measured) and **stretched** across the viewport (backing store rounded to
+device px but displayed at the un-rounded CSS size → `round(w·dpr)/(w·dpr)` scale, 1.00031 at dpr
+1.25 — the misalignment GREW past ½ device px). `drawPixelGrid` therefore (1) floor-aligns the
+canvas element itself to the device raster — `gridCanvasAlignment(screenCssPos, dpr)` gives the
+integer device origin, the sub-CSS-px `left`/`top` **nudge** that lands the layer on it (nothing for
+the compositor to snap or resample), and the fractional-offset **`phase`** folded into each line's
+snap; and (2) sizes the CSS box FROM the backing store (`gridBackingSize`: `cssPx = devicePx/dpr`,
+raster scale **exactly 1**; +2 device px overspan keeps the viewport covered despite the nudge,
+clipped by the overlay). The painted stroke then rasterizes at `round(trueScreenDevice) + 0.5` — the
+physical pixel nearest the line's true screen position — so an edge at an integer scene coordinate
+renders within **≤ ½ device px** of its grid line at every zoom ≥ the threshold and every dpr
+(including fractional 1.25 / 1.5), with a CONSTANT (uniform) residual when `zoom·dpr` is integer
+(6400% at dpr 1/1.25/1.5/2). The alignment is derived from the OUTER viewport's rect — never the
+grid canvas's own rect (the draw nudges it — reading it back would feed back). The stage / scroll
+pipeline is untouched (B-027 / B-035 invariants hold).
 
 The rulers + guides live in a **non-scrolling overlay** (`s.overlay`) that is a **sibling** of the
 scroll container (`s.outer`), not a child of it — absolutely-positioned children of an
