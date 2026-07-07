@@ -242,6 +242,89 @@ describe('createMock', () => {
     }
   });
 
+  // B-041 — the mock decodes CG data args through BOTH emulated un-escape layers
+  // (tokenizer, then html_cg_proxy → V8) and flags what a real 202 hides.
+  describe('CG data args — two-layer decode + rejection (B-041)', () => {
+    const fields = { quote: 'he said "hi"', bs1: 'a\\b', nl: 'line1\nline2' };
+    const json = JSON.stringify(fields);
+    // The confirmed rule (js-escape+amcp-escape): JS layer (double every `\`),
+    // then AMCP layer (double again + escape quotes).
+    const twoLayer = (s: string): string =>
+      s.replace(/\\/g, '\\\\').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    // The failed #245 rule (quotes-only) — the regression this class now catches.
+    const quotesOnly = (s: string): string => s.replace(/"/g, '\\"');
+
+    it('CG UPDATE with the canonical escaping delivers the JSON byte-exact', async () => {
+      mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+      const reply = await sendAndReceive(mock.amcpPort, [`CG 1-10 UPDATE 0 "${twoLayer(json)}"`]);
+      expect(reply).toContain('202 CG');
+      const upd = mock.lastCgUpdate({ channel: 1, layer: 10 });
+      expect(upd?.rejected).toBeUndefined();
+      expect(upd?.data).toBe(json);
+      expect(JSON.parse(upd?.data ?? '{}')).toEqual(fields);
+    });
+
+    it('the #245 quotes-only emission still 202s but is FLAGGED — the regression proof', async () => {
+      mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+      // The operator's exact DP2 payload (design.md): a two-line value, no other
+      // special chars — decodes fully, and the bare backslash-n becomes a raw LF.
+      const dp2 = JSON.stringify({ ttt: 'New text\nsecond text' });
+      const reply = await sendAndReceive(mock.amcpPort, [`CG 1-10 UPDATE 0 "${quotesOnly(dp2)}"`]);
+      // Real CasparCG acks — the V8 SyntaxError is async and update never fires.
+      expect(reply).toContain('202 CG');
+      const upd = mock.lastCgUpdate({ channel: 1, layer: 10 });
+      expect(upd?.data).toBeNull();
+      expect(upd?.rejected?.reason).toBe('raw-control-char');
+      // With quote/backslash values too, the emission still never delivers —
+      // there the token itself desyncs first (early close → dangling backslash).
+      await sendAndReceive(mock.amcpPort, [`CG 1-10 UPDATE 0 "${quotesOnly(json)}"`]);
+      expect(mock.lastCgUpdate({ channel: 1, layer: 10 })?.rejected?.reason).toBe(
+        'js-syntax-error',
+      );
+    });
+
+    it('a cleanly-decoding non-JSON data arg is flagged invalid-json over the wire', async () => {
+      mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+      const reply = await sendAndReceive(mock.amcpPort, ['CG 1-10 UPDATE 0 "not-json"']);
+      expect(reply).toContain('202 CG'); // fires update("not-json"); the template's parse throws
+      const upd = mock.lastCgUpdate({ channel: 1, layer: 10 });
+      expect(upd?.data).toBeNull();
+      expect(upd?.rejected?.reason).toBe('invalid-json');
+    });
+
+    it('the pre-#245 double-escape emission is flagged too (V8 layer breaks it)', async () => {
+      mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+      const doubleEscape = (s: string): string => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      await sendAndReceive(mock.amcpPort, [`CG 1-10 UPDATE 0 "${doubleEscape(json)}"`]);
+      const upd = mock.lastCgUpdate({ channel: 1, layer: 10 });
+      expect(upd?.data).toBeNull();
+      // The tokenizer restores the JSON byte-exact; the V8 layer then collapses
+      // the JSON's own `\"` into a literal-closing bare quote → SyntaxError.
+      expect(upd?.rejected?.reason).toBe('js-syntax-error');
+    });
+
+    it('CG ADD flags a broken data arg the same way (and still resolves the template)', async () => {
+      const { url, close } = await serveOnce('<!doctype html><html><body>ok</body></html>');
+      try {
+        mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+        const dp2 = JSON.stringify({ ttt: 'New text\nsecond text' });
+        const reply = await sendAndReceive(mock.amcpPort, [
+          `CG 1-10 ADD 0 "${url}" 0 "${quotesOnly(dp2)}"`,
+        ]);
+        expect(reply).toContain('202 CG');
+        // The producer still loads (real CasparCG behavior) …
+        expect(mock.layerState({ channel: 1, layer: 10 })?.producer).toBe('html');
+        // … but the data delivery is surfaced as rejected.
+        const add = mock.lastCgAdd({ channel: 1, layer: 10 });
+        expect(add?.template).toBe(url);
+        expect(add?.data).toBeNull();
+        expect(add?.rejected?.reason).toBe('raw-control-char');
+      } finally {
+        await close();
+      }
+    });
+  });
+
   it('a handler that throws yields a 500', async () => {
     mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
     mock.setHandler('CRASH', () => {

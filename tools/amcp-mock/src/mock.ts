@@ -5,6 +5,7 @@ import { LayerRegistry } from './layer-state.js';
 import { defaultHandlers } from './handlers.js';
 import type {
   AmcpHandler,
+  CgDataResult,
   HandlerContext,
   LayerSlot,
   LayerState,
@@ -37,9 +38,10 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
 
   // B-038 — last CG ADD / CG UPDATE payload per slot, so tests can assert the
   // template arg was a real URL and the data was real (non-empty) field JSON.
+  // B-041 — the recorded value is the full two-layer decode verdict.
   const slotKey = (slot: LayerSlot): string => `${String(slot.channel)}-${String(slot.layer)}`;
-  const cgAdds = new Map<string, { template: string; data: string }>();
-  const cgUpdates = new Map<string, { data: string }>();
+  const cgAdds = new Map<string, { template: string } & CgDataResult>();
+  const cgUpdates = new Map<string, CgDataResult>();
 
   const ctx: HandlerContext = {
     channelCount,
@@ -56,11 +58,11 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
         [registry.get(slot).producer],
       );
     },
-    recordCgAdd(slot: LayerSlot, template: string, data: string): void {
-      cgAdds.set(slotKey(slot), { template, data });
+    recordCgAdd(slot: LayerSlot, template: string, result: CgDataResult): void {
+      cgAdds.set(slotKey(slot), { template, ...result });
     },
-    recordCgUpdate(slot: LayerSlot, data: string): void {
-      cgUpdates.set(slotKey(slot), { data });
+    recordCgUpdate(slot: LayerSlot, result: CgDataResult): void {
+      cgUpdates.set(slotKey(slot), result);
     },
   };
 
@@ -92,10 +94,10 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     layerState(slot: LayerSlot): LayerState | undefined {
       return registry.peek(slot);
     },
-    lastCgAdd(slot: LayerSlot): { template: string; data: string } | undefined {
+    lastCgAdd(slot: LayerSlot): ({ template: string } & CgDataResult) | undefined {
       return cgAdds.get(slotKey(slot));
     },
-    lastCgUpdate(slot: LayerSlot): { data: string } | undefined {
+    lastCgUpdate(slot: LayerSlot): CgDataResult | undefined {
       return cgUpdates.get(slotKey(slot));
     },
     get amcpClientCount(): number {

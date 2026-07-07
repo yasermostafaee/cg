@@ -20,6 +20,17 @@ describe('CommandBuilder (ADR 0006 seam — amcp-mock-validated)', () => {
     expect(builder.update(slot, { title: 'Hi' })).toBe('CG 1-10 UPDATE 0 "{\\"title\\":\\"Hi\\"}"');
   });
 
+  it('update → the data arg carries the two-layer escaping: each JSON \\ → 4 wire \\ (B-041)', () => {
+    // value `a\b` → JSON `"a\\b"` → each of the 2 JSON backslashes ×4 → 8 on the wire.
+    expect(builder.update(slot, { text: 'a\\b' })).toBe(
+      'CG 1-10 UPDATE 0 "{\\"text\\":\\"a\\\\\\\\\\\\\\\\b\\"}"',
+    );
+    // a newline value → JSON two-char `\n` → 4 wire backslashes + literal n.
+    expect(builder.update(slot, { text: 'x\ny' })).toBe(
+      'CG 1-10 UPDATE 0 "{\\"text\\":\\"x\\\\\\\\ny\\"}"',
+    );
+  });
+
   it('out → CLEAR', () => {
     expect(builder.out(slot)).toBe('CLEAR 1-10');
   });
@@ -30,5 +41,7 @@ describe('CommandBuilder (ADR 0006 seam — amcp-mock-validated)', () => {
     // No bare (unescaped) double-quote inside the payload body.
     const body = line.slice('CG 1-10 UPDATE 0 "'.length, -1);
     expect(/(?<!\\)"/.test(body)).toBe(false);
+    // And no raw control byte ever rides the line (AMCP framing).
+    expect(/[\n\r]/.test(builder.update(slot, { text: 'x\ny' }))).toBe(false);
   });
 });

@@ -22,7 +22,7 @@ describe('parseAmcpLine', () => {
     expect(r?.args).toEqual(['1-10', 'ADD', '0', 'mytemplate', '1']);
   });
 
-  it('unwraps quoted tokens with escaped quotes and backslashes', () => {
+  it('unwraps quoted tokens with escaped quotes', () => {
     const r = parseAmcpLine('CG 1-10 INVOKE 0 "say \\"hi\\""');
     expect(r?.args).toEqual(['1-10', 'INVOKE', '0', 'say "hi"']);
   });
@@ -41,38 +41,71 @@ describe('parseAmcpLine', () => {
     const r = parseAmcpLine('VERSION\r');
     expect(r?.raw).toBe('VERSION');
   });
+});
 
-  it('treats a lone backslash as literal (CasparCG only escapes \\")', () => {
-    // `\\b` on the wire is backslash + b — NOT an escaped anything; both literal.
-    const r = parseAmcpLine('CG 1-10 UPDATE 0 "a\\b"');
+/**
+ * B-041 — `readQuoted` models the REAL CasparCG tokenizer (layer 1 of the
+ * two-layer un-escape; hardware-confirmed on 2.5.0 `69e8ad5`): `\\` → `\`,
+ * `\"` → `"`, `\n` → a RAW newline, and any other `\X` pair is silently
+ * dropped. Decoding by the real rule — not the inverse of our own escaper — is
+ * what lets the mock catch a wrongly-escaped emission.
+ */
+describe('readQuoted decodes per the real CasparCG tokenizer (B-041)', () => {
+  it('un-escapes backslash-backslash to ONE backslash', () => {
+    const r = parseAmcpLine('CG 1-10 UPDATE 0 "a\\\\b"');
     expect(r?.args[3]).toBe('a\\b');
+  });
+
+  it('un-escapes backslash-n to a RAW newline (the DP2 hardware signature)', () => {
+    const r = parseAmcpLine('CG 1-10 UPDATE 0 "New text\\nsecond text"');
+    expect(r?.args[3]).toBe('New text\nsecond text'); // raw 0x0A between the words
+  });
+
+  it('silently DROPS an unknown escape pair (sweep evidence: \\u000a arrived as 000a)', () => {
+    const r = parseAmcpLine('CG 1-10 UPDATE 0 "New text\\u000asecond text"');
+    expect(r?.args[3]).toBe('New text000asecond text');
+  });
+
+  it('drops a lone backslash + following char (it is NOT literal)', () => {
+    // `a\b` on the wire: `\b` is an unknown pair → both characters dropped.
+    const r = parseAmcpLine('CG 1-10 UPDATE 0 "a\\bc"');
+    expect(r?.args[3]).toBe('ac');
+  });
+
+  it('drops a dangling trailing backslash', () => {
+    const r = parseAmcpLine('CG 1-10 UPDATE 0 "abc\\');
+    expect(r?.args[3]).toBe('abc');
   });
 });
 
 /**
- * B-041 — the mock un-quotes per REAL CasparCG (only `\"` → `"`, backslashes
- * literal), so it CATCHES a double-escaped payload instead of mirroring our own
- * escaper. A field value with a backslash + a quote, JSON-serialized:
+ * B-041 regression proof at the tokenizer level: the failed #245 "quotes-only"
+ * emission (escape `"` only, leave backslashes literal) puts a bare backslash-n
+ * on the wire, which the real tokenizer — and now the mock — turns into a RAW
+ * newline: the exact framing/V8-breaking value `cg-data.ts` then flags. The
+ * correct two-layer emission decodes to the JS-layer string (backslashes still
+ * doubled) which layer 2 restores to the original JSON.
  */
-describe('readQuoted catches double-escaping (B-041)', () => {
-  const fields = { v: 'a\\b', q: 'x"y' };
+describe('readQuoted catches the broken escapings (B-041)', () => {
+  const fields = { v: 'a\\b', nl: 'line1\nline2' };
   const json = JSON.stringify(fields);
 
-  // The B-041 fix: escape ONLY `"` → `\"` (backslashes literal).
-  const correctEscape = (s: string): string => s.replace(/"/g, '\\"');
-  // The OLD bug: escape `\` → `\\` AND `"` → `\"` (the redundant second pass).
-  const oldEscape = (s: string): string => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  // The failed #245 rule: escape ONLY `"` → `\"` (backslashes literal).
+  const quotesOnly = (s: string): string => s.replace(/"/g, '\\"');
+  // The confirmed rule (winner js-escape+amcp-escape): double every backslash
+  // (the JS layer), then double again + escape quotes (the AMCP layer).
+  const twoLayer = (s: string): string =>
+    s.replace(/\\/g, '\\\\').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
-  it('decodes the correctly single-escaped data arg back to the original JSON', () => {
-    const arg = parseAmcpLine(`CG 1-10 UPDATE 0 "${correctEscape(json)}"`)?.args[3];
-    expect(arg).toBe(json);
-    expect(JSON.parse(arg ?? '')).toEqual(fields);
+  it('the quotes-only emission decodes with a RAW newline inside (the on-air bug)', () => {
+    const arg = parseAmcpLine(`CG 1-10 UPDATE 0 "${quotesOnly(json)}"`)?.args[3];
+    expect(arg).not.toBe(json);
+    expect(arg).toContain('\n'); // raw 0x0A — breaks the update("…") V8 embed
   });
 
-  it('decodes the OLD double-escaped data arg to something OTHER than the original', () => {
-    const arg = parseAmcpLine(`CG 1-10 UPDATE 0 "${oldEscape(json)}"`)?.args[3];
-    // The mock no longer mirrors our escaper, so the double-escaped wire does NOT
-    // decode back to the original JSON — an equality round-trip test would FAIL on it.
-    expect(arg).not.toBe(json);
+  it('the two-layer emission decodes to the JS-layer string (backslashes doubled, no raw LF)', () => {
+    const arg = parseAmcpLine(`CG 1-10 UPDATE 0 "${twoLayer(json)}"`)?.args[3];
+    expect(arg).toBe(json.replace(/\\/g, '\\\\'));
+    expect(arg).not.toContain('\n');
   });
 });

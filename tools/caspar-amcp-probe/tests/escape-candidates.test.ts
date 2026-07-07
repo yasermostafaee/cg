@@ -1,6 +1,7 @@
 import * as net from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
+import { quote } from '@cg/caspar-client';
 import {
   ESCAPE_CANDIDATES,
   HARD_PAYLOAD,
@@ -11,9 +12,11 @@ import {
 /**
  * Smoke-tests the escape-matrix HARNESS LOGIC (the encoders + the per-character
  * PASS/FAIL evaluator). It does NOT — and cannot — determine the real CasparCG
- * un-escape rule: that needs real CasparCG 2.3.2 + a browser running the probe
- * (the beacon path). The amcp-mock check below confirms the harness emits
- * mock-acceptable AMCP, and demonstrates exactly why the mock can't pick the winner.
+ * un-escape rule: that needs real CasparCG + a browser running the probe (the
+ * beacon path); pass 1 (2.5.0 `69e8ad5`) picked `js-escape+amcp-escape`. The
+ * parity block pins the shipped `@cg/caspar-client` quoter to that winning
+ * encoder, and the amcp-mock block checks the mock's model of the confirmed
+ * rule agrees with the sweep result.
  */
 
 function byId(id: string) {
@@ -110,6 +113,27 @@ describe('encoders — exact wire bytes (the candidate behaviours)', () => {
   });
 });
 
+/**
+ * B-041 §2 — the shipped canonical quoter (`@cg/caspar-client` `quote()`) IS the
+ * winning candidate (`js-escape+amcp-escape`, the pass-1 sweep winner). This
+ * parity pin means the production escape and the harness's executable spec of
+ * the rule can never drift apart: change one without the other and this fails.
+ */
+describe('parity — shipped quoter ≡ winning candidate js-escape+amcp-escape', () => {
+  const winner = byId('js-escape+amcp-escape');
+
+  it('produces identical wire bytes for the full hard payload', () => {
+    expect(quote(expectedJson())).toBe(winner.encodeArg(expectedJson()));
+  });
+
+  it('produces identical wire bytes for every individual character class', () => {
+    for (const value of Object.values(HARD_PAYLOAD)) {
+      const json = JSON.stringify({ v: value });
+      expect(quote(json)).toBe(winner.encodeArg(json));
+    }
+  });
+});
+
 describe('evaluator — per-character PASS/FAIL classification', () => {
   it('a byte-exact received string passes every class', () => {
     const e = evaluateReceived('x', expectedJson());
@@ -147,12 +171,14 @@ describe('evaluator — per-character PASS/FAIL classification', () => {
 });
 
 /**
- * Against amcp-mock: the harness emits well-formed AMCP the mock accepts (202), and
- * the mock records a decoded payload. But the mock decodes by its OWN rule — so it
- * canNOT confirm the real CasparCG rule (only hardware can). This asserts the
- * plumbing, not the rule.
+ * Against amcp-mock: since the B-041 fix the mock decodes CG data args through
+ * BOTH emulated CasparCG un-escape layers (the tokenizer, then the html_cg_proxy
+ * `update("…")` V8 embed — the hardware-confirmed rule). So the sweep winner
+ * round-trips byte-exact through it, and the losing control candidates are
+ * flagged. This is a MODEL of the hardware evidence, not ground truth — the rule
+ * itself is (re-)confirmed only by the on-hardware sweep.
  */
-describe('amcp-mock smoke (plumbing only — NOT ground truth)', () => {
+describe('amcp-mock — models the confirmed rule (winner passes, controls are flagged)', () => {
   let mock: MockHandle | null = null;
   afterEach(async () => {
     await mock?.stop();
@@ -174,13 +200,25 @@ describe('amcp-mock smoke (plumbing only — NOT ground truth)', () => {
     });
   }
 
-  it('accepts a candidate CG UPDATE (202) and records SOME decoded payload', async () => {
+  it('the winning candidate round-trips the hard payload byte-exact', async () => {
     mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-    const dataArg = byId('backslash-quote').encodeArg(expectedJson());
+    const dataArg = byId('js-escape+amcp-escape').encodeArg(expectedJson());
     const reply = await sendLine(mock.amcpPort, `CG 1-10 UPDATE 0 ${dataArg}`);
     expect(reply).toContain('202 CG');
-    // The mock decoded the arg by ITS rule; it's defined, but is NOT proof of the
-    // real CasparCG round-trip — that's what the hardware sweep is for.
-    expect(mock.lastCgUpdate({ channel: 1, layer: 10 })?.data).toBeDefined();
+    const upd = mock.lastCgUpdate({ channel: 1, layer: 10 });
+    expect(upd?.rejected).toBeUndefined();
+    expect(upd?.data).toBe(expectedJson());
+  });
+
+  it('the failed control candidates are flagged (202 on the wire, no delivery)', async () => {
+    mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+    for (const id of ['quotes-only', 'backslash-quote']) {
+      const dataArg = byId(id).encodeArg(expectedJson());
+      const reply = await sendLine(mock.amcpPort, `CG 1-10 UPDATE 0 ${dataArg}`);
+      expect(reply).toContain('202 CG'); // real CasparCG acks; update never fires
+      const upd = mock.lastCgUpdate({ channel: 1, layer: 10 });
+      expect(upd?.data).toBeNull();
+      expect(upd?.rejected).toBeDefined();
+    }
   });
 });

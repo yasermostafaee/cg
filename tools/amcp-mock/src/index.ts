@@ -3,6 +3,8 @@ export type {
   AmcpHandler,
   AmcpRequest,
   AmcpResponse,
+  CgDataRejection,
+  CgDataResult,
   HandlerContext,
   LayerSlot,
   LayerState,
@@ -10,6 +12,7 @@ export type {
   MockOptions,
   OscArgValue,
 } from './types.js';
+export { decodeCgData } from './cg-data.js';
 export { encodeBundle, encodeMessage } from './osc-encode.js';
 export type { OscMessage } from './osc-encode.js';
 export { parseAmcpLine } from './amcp-parser.js';

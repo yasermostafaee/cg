@@ -1,55 +1,79 @@
 /**
  * AMCP escape + quote — the ONE canonical quoter (Phase 5 §3.2; corrected for
- * B-041).
+ * B-041 take 2 — the escaping is empirically derived on hardware).
  *
  * The transport never sees an unquoted user value: an unescaped `"` inside a token
  * would close the AMCP quoted-string and desync the wire. There is exactly one
  * quote function in this package; every command builder MUST route through it,
  * exactly once.
  *
- * ## CasparCG 2.3.x quoted-string rule (the un-escape this MUST invert)
+ * ## The TWO-layer un-escape this inverts (hardware-confirmed)
  *
- * Inside `"…"`, CasparCG 2.3.x un-escapes **only** `\"` → `"`. Every other
- * character — **including `\`** — is taken literally; an unescaped `"` ends the
- * token. (B-041: the captured hardware wire evidence shows `\"`-per-quote payloads
- * render correctly, and `"`/`\`/newline values fail under the old double-escaping —
- * which rules out a `\\`→`\` rule. Pending on-hardware re-confirmation of the
- * special-character payload.)
+ * CasparCG applies two un-escapes between the wire and an HTML template's
+ * `window.update` (escape-matrix sweep, winner `js-escape+amcp-escape`;
+ * see `openspec/changes/fix-amcp-escaping-v2/design.md` → "Hardware sweep
+ * results" — confirmed on 2.5.0 `69e8ad5`, provisional for 2.3.2 pending a 2.3.x
+ * pass; upstream `v2.3.x-lts` and `master` share identical escape semantics):
  *
- * So the ONLY thing the AMCP layer must do is escape `"` → `\"`. It MUST NOT escape
- * `\` — backslashes are literal to CasparCG, and the data argument is already a
- * `JSON.stringify` string (the JSON layer escaped `"`, `\`, and newline). Escaping
- * `\` again (the old behavior) doubled backslashes and corrupted the payload, so the
- * template's `JSON.parse` failed and the update was silently dropped.
+ * 1. **The AMCP tokenizer** (quoted-string): `\\` → `\`, `\"` → `"`, `\n` → a
+ *    RAW newline (`0x0A`), and any OTHER `\X` pair is silently dropped (both
+ *    characters). Backslashes are NOT literal — the #245 "quotes-only"
+ *    assumption is disproven by hardware.
+ * 2. **html_cg_proxy → V8**: `update()` re-escapes QUOTES ONLY and embeds the
+ *    tokenizer-decoded data in an `update("…")` JS string literal, so V8 applies
+ *    a second, full string-literal un-escape (`\\` → `\`, `\n` → newline, …). A
+ *    raw LF/CR inside that literal is a script `SyntaxError` — `window.update`
+ *    never fires (the exact on-air symptom of B-041).
  *
- * ## Inputs + invariant
+ * `escape()` is the exact inverse, applied ONCE here: first the JS-literal layer
+ * (double every backslash; carry a raw LF/CR as `\n`/`\r`), then the AMCP layer
+ * (double every backslash again; escape every quote). Net effect per input char:
  *
- * Callers pass either a `JSON.stringify` payload or a simple token (e.g. a URL).
- * Neither ends in a lone backslash, so the "a trailing `\` would escape the wrapping
- * quote" edge cannot arise (there is no `\\`→`\` collapse to protect it with under
- * this rule). Raw `\r`/`\n` cannot ride a single AMCP line, so they are mapped to a
- * space defensively; a field-value newline never reaches here as a raw newline — JSON
- * already emitted it as the two characters `\` + `n`, which pass through literally and
- * CasparCG hands back to the template's `JSON.parse`.
+ * - `\`        → FOUR wire backslashes
+ * - `"`        → `\"` (the proxy's own quote re-escape covers the second layer)
+ * - raw LF/CR  → `\\n` / `\\r` (two backslashes + letter — see below)
+ * - everything else literal (incl. tab: legal in both layers, survives as-is)
+ *
+ * The executable spec of this rule is the winning candidate in
+ * `tools/caspar-amcp-probe/src/escape-candidates.ts`; a parity test there pins
+ * this function to it byte-for-byte.
+ *
+ * ## Raw CR/LF inputs (framing safety)
+ *
+ * The quoter NEVER emits a raw `0x0A`/`0x0D` — either would terminate the AMCP
+ * line mid-command and desync the wire. A `JSON.stringify` payload never contains
+ * them (JSON escapes all controls), but the quoter must stay framing-safe for ANY
+ * caller, so a raw LF/CR input is carried as its JS-layer escape (`\n`/`\r`,
+ * backslash-doubled for the AMCP layer → `\\n`/`\\r` on the wire) and is restored
+ * byte-exact by CasparCG's two un-escape layers on the CG data path.
+ *
+ * ## Non-data arguments
+ *
+ * Simple tokens (e.g. the served template URL) pass only layer 1. They contain no
+ * `\`, `"`, or control characters, so the two-layer escape is the identity for
+ * them and one quoter safely serves both kinds of argument.
  */
 export function escape(s: string): string {
   let out = '';
   for (const ch of s) {
     switch (ch) {
+      case '\\':
+        // JS layer doubles it, AMCP layer doubles each again → four on the wire.
+        out += '\\\\\\\\';
+        break;
       case '"':
-        // The one escape CasparCG 2.3.x un-escapes (`\"` → `"`).
+        // AMCP layer only — between the layers, html_cg_proxy re-escapes quotes
+        // itself, so V8 always sees `\"` without our help.
         out += '\\"';
         break;
-      case '\r':
       case '\n':
-        // Raw CR/LF would terminate the AMCP line; neutralize. (Field-value newlines
-        // arrive pre-escaped from JSON as the two chars `\` + `n`, handled below.)
-        out += ' ';
+        // JS-layer `\n` (V8 restores the newline), backslash-doubled for AMCP.
+        out += '\\\\n';
+        break;
+      case '\r':
+        out += '\\\\r';
         break;
       default:
-        // Everything else — including a literal backslash — is passed through; the
-        // JSON layer already did all JSON-level escaping and CasparCG keeps `\`
-        // literal.
         out += ch;
     }
   }

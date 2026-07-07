@@ -1,5 +1,6 @@
 import * as http from 'node:http';
 import * as https from 'node:https';
+import { decodeCgData } from './cg-data.js';
 import type { AmcpHandler, AmcpRequest, HandlerContext, AmcpResponse } from './types.js';
 
 /**
@@ -115,6 +116,12 @@ function handleClear(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
  * only a URL that returns a served page → `202` (+ producer `html`). It also
  * records the `CG ADD` / `CG UPDATE` data payload on the handle so tests can
  * assert it is the real, non-empty field JSON (not `"{}"`).
+ *
+ * B-041 — the recorded data payload is the SECOND-layer decode verdict
+ * (`decodeCgData`): what `window.update` would receive after the html_cg_proxy
+ * `update("…")` V8 embed, or a rejection flag for a framing/JSON-breaking
+ * argument. Like real CasparCG the command still `202`s — the V8 failure is
+ * asynchronous — but the payload assertion in tests now catches it.
  */
 async function handleCg(req: AmcpRequest, ctx: HandlerContext): Promise<AmcpResponse> {
   const slot = parseChannelLayer(req.args[0]);
@@ -127,8 +134,9 @@ async function handleCg(req: AmcpRequest, ctx: HandlerContext): Promise<AmcpResp
       // `CG <slot> ADD <flash-layer> "<template>" <play-on-load> "<data>"`.
       const template = req.args[3] ?? '';
       const playOnLoad = req.args[4] === '1';
-      const data = req.args[5] ?? '';
-      ctx.recordCgAdd(slot, template, data);
+      // B-041 — the data arg has passed layer 1 (the tokenizer); run the
+      // layer-2 (html_cg_proxy → V8) emulation before recording.
+      ctx.recordCgAdd(slot, template, decodeCgData(req.args[5] ?? ''));
       // Resolve the template argument instead of blind-acking. A served URL → 202;
       // a bare id / unreachable URL → 404 CG ADD FAILED (matches real CasparCG).
       const resolved = await resolveTemplateRef(template);
@@ -145,8 +153,9 @@ async function handleCg(req: AmcpRequest, ctx: HandlerContext): Promise<AmcpResp
       return { kind: 'ok', code: 202, verb: 'CG' };
     }
     case 'UPDATE': {
-      // `CG <slot> UPDATE <flash-layer> "<data>"` — expose the data for assertion.
-      ctx.recordCgUpdate(slot, req.args[3] ?? '');
+      // `CG <slot> UPDATE <flash-layer> "<data>"` — expose the two-layer decode
+      // verdict for assertion (B-041).
+      ctx.recordCgUpdate(slot, decodeCgData(req.args[3] ?? ''));
       return { kind: 'ok', code: 202, verb: 'CG' };
     }
     case 'PLAY': {

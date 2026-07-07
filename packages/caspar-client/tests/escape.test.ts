@@ -2,101 +2,171 @@ import { describe, expect, it } from 'vitest';
 import { escape, quote } from '../src/amcp/escape.js';
 
 /**
- * B-041 — the canonical AMCP quoter. CasparCG 2.3.x un-escapes ONLY `\"` → `"`
- * inside `"…"`; every other char (incl. `\`) is literal. So `escape()` escapes
- * `"` → `\"` and leaves backslashes ALONE — no doubling (the old bug). The data
- * argument is already a `JSON.stringify` string, so this single pass is all the
- * wire needs.
+ * B-041 (take 2) — the canonical AMCP quoter inverts CasparCG's TWO-layer
+ * un-escape (hardware-confirmed sweep winner `js-escape+amcp-escape`; see
+ * `openspec/changes/fix-amcp-escaping-v2/design.md` → "Hardware sweep results"):
  *
- * `casparUnquote` below models the real CasparCG un-escape, so the round-trip
- * assertions prove the quoter against the actual rule (not against itself).
+ *   layer 1 — AMCP tokenizer: `\\`→`\`, `\"`→`"`, `\n`→raw LF, other `\X` pairs
+ *             silently dropped; an unescaped `"` closes the token.
+ *   layer 2 — html_cg_proxy re-escapes QUOTES ONLY and embeds the decoded data
+ *             in an `update("…")` script → V8 applies a full JS string-literal
+ *             un-escape; a raw LF/CR inside the literal is a SyntaxError.
+ *
+ * `tokenizerDecode` + `proxyV8Decode` below model the two layers independently
+ * of the quoter, so the round-trip assertions prove `escape()` against the real
+ * rule — never against itself. (Byte-for-byte parity with the sweep's winning
+ * candidate encoder is pinned in `tools/caspar-amcp-probe/tests/`.)
  */
 
-/** Model of CasparCG 2.3.x quoted-string un-escaping: only `\"` → `"`, else literal. */
-function casparUnquote(wire: string): string {
-  // Strip the wrapping quotes the quoter added.
+/** Layer 1 — the real AMCP tokenizer's quoted-string un-escape. */
+function tokenizerDecode(wire: string): string {
+  expect(wire.startsWith('"') && wire.endsWith('"')).toBe(true);
   const body = wire.slice(1, -1);
   let out = '';
   for (let i = 0; i < body.length; i++) {
-    if (body[i] === '\\' && body[i + 1] === '"') {
-      out += '"';
+    const c = body[i];
+    if (c === '\\') {
+      const n = body[i + 1];
+      if (n === '\\') out += '\\';
+      else if (n === '"') out += '"';
+      else if (n === 'n') out += '\n';
+      // any other \X pair is silently dropped (both chars)
       i++;
       continue;
     }
-    out += body[i];
+    // A well-formed emission never contains a mid-token unescaped quote — it
+    // would close the token early and desync the wire.
+    expect(c).not.toBe('"');
+    out += c;
   }
   return out;
 }
 
-describe('escape — exact wire bytes (no backslash doubling)', () => {
+/** Layer 2 — html_cg_proxy quote-re-escape + V8 string-literal un-escape. */
+function proxyV8Decode(tokenized: string): string {
+  // A raw LF/CR inside the injected update("…") literal is a V8 SyntaxError —
+  // window.update never fires. A correct emission never produces one here.
+  expect(/[\n\r]/.test(tokenized)).toBe(false);
+  const script = tokenized.replace(/"/g, '\\"');
+  let out = '';
+  for (let i = 0; i < script.length; i++) {
+    const c = script[i];
+    // An unescaped quote would close the literal early → SyntaxError.
+    expect(c).not.toBe('"');
+    if (c !== '\\') {
+      out += c;
+      continue;
+    }
+    const n = script[i + 1];
+    // A dangling backslash would escape the closing quote → SyntaxError.
+    expect(n).toBeDefined();
+    i++;
+    if (n === 'n') out += '\n';
+    else if (n === 'r') out += '\r';
+    else if (n === 't') out += '\t';
+    // identity escape — covers `\\`→`\`, `\"`→`"`, and V8's unknown-escape rule
+    else out += n as string;
+  }
+  return out;
+}
+
+/** What the template's `window.update` receives for a value quoted by `quote()`. */
+function throughCaspar(s: string): string {
+  return proxyV8Decode(tokenizerDecode(quote(s)));
+}
+
+// Mirrors the probe's HARD_PAYLOAD (`tools/caspar-amcp-probe/src/escape-candidates.ts`)
+// — one value per character class the sweep validated on hardware.
+const MATRIX: Record<string, string> = {
+  quote: 'aaa"bbb',
+  bs1: 'a\\b',
+  bs2: 'a\\\\b',
+  bs3: 'a\\\\\\b',
+  bs4: 'a\\\\\\\\b',
+  newline: 'New text\nsecond text',
+  tab: 'col1\tcol2',
+  persian: 'خبر فوری ۱۴۰۳ — «به‌روزرسانی»',
+  combo: 'he said "a\\b"\nخط دوم',
+};
+
+describe('escape — exact wire bytes (the two-layer rule)', () => {
   it('passes plain ASCII + Persian through unchanged', () => {
     expect(escape('hello')).toBe('hello');
-    expect(escape('خبر فوری')).toBe('خبر فوری');
+    expect(escape('خبر فوری ۱۴۰۳ — «به‌روزرسانی»')).toBe('خبر فوری ۱۴۰۳ — «به‌روزرسانی»');
     expect(escape('')).toBe('');
   });
 
-  it('escapes a double-quote as \\" (the one CasparCG escape)', () => {
+  it('escapes a double-quote as \\" (the proxy re-escapes it for the V8 layer)', () => {
     expect(escape('a"b')).toBe('a\\"b');
   });
 
-  it('leaves backslashes LITERAL — 1, 2, 3, 4 (never doubled)', () => {
-    expect(escape('a\\b')).toBe('a\\b'); // 1
-    expect(escape('a\\\\b')).toBe('a\\\\b'); // 2
-    expect(escape('a\\\\\\b')).toBe('a\\\\\\b'); // 3
-    expect(escape('a\\\\\\\\b')).toBe('a\\\\\\\\b'); // 4
+  it('emits FOUR wire backslashes per input backslash (both layers pre-compensated)', () => {
+    expect(escape('a\\b')).toBe('a\\\\\\\\b'); // 1 → 4
+    expect(escape('a\\\\b')).toBe('a\\\\\\\\\\\\\\\\b'); // 2 → 8
   });
 
-  it('maps raw newline / CR to a space (cannot ride a single AMCP line)', () => {
-    expect(escape('a\nb')).toBe('a b');
-    expect(escape('a\rb')).toBe('a b');
+  it('a JSON payload gets the net rule: every \\ ×4, every " → \\" (nothing else)', () => {
+    const json = JSON.stringify(MATRIX);
+    expect(escape(json)).toBe(json.replace(/\\/g, '\\\\\\\\').replace(/"/g, '\\"'));
   });
 
-  it('leaves a tab literal', () => {
+  it('carries a raw LF/CR as its backslash-doubled JS escape — NEVER a raw byte', () => {
+    // Framing choice (documented in escape.ts): a raw LF/CR input rides as the
+    // JS-layer `\n`/`\r`, backslash-doubled for the AMCP layer — lossless on the
+    // CG data path, and the AMCP line framing can never break.
+    expect(escape('a\nb')).toBe('a\\\\nb'); // backslash, backslash, n
+    expect(escape('a\rb')).toBe('a\\\\rb');
+  });
+
+  it('leaves a raw tab literal (legal in both layers)', () => {
     expect(escape('a\tb')).toBe('a\tb');
   });
 
-  it('a JSON-escaped value passes through with ONLY its structural quotes escaped', () => {
-    // JSON.stringify already produced `\"` (for a value quote) and `\\` (for a
-    // backslash); escape() must NOT touch those backslashes, only escape every `"`.
-    const json = JSON.stringify({ t: 'a"b\\c' }); // {"t":"a\"b\\c"}
-    // For a JSON payload (no raw newline), escape() == "escape every quote", nothing
-    // more — proving the backslashes JSON already emitted are left untouched.
-    expect(escape(json)).toBe(json.replace(/"/g, '\\"'));
+  it('never emits a raw 0x0A/0x0D for ANY input (AMCP framing safety)', () => {
+    const inputs = [...Object.values(MATRIX), 'raw\nLF', 'raw\rCR', '\r\n', '\n', '\r'];
+    for (const s of inputs) {
+      expect(/[\n\r]/.test(quote(s))).toBe(false);
+    }
   });
 });
 
-describe('quote — round-trips byte-exact under the CasparCG rule', () => {
-  it('wraps + escapes only quotes', () => {
+describe('quote — round-trips byte-exact through the modeled two-layer un-escape', () => {
+  it('wraps in quotes with the escape applied once', () => {
     expect(quote('hello')).toBe('"hello"');
     expect(quote('say "hi"')).toBe('"say \\"hi\\""');
-    expect(quote('C:\\Path')).toBe('"C:\\Path"'); // backslash NOT doubled
   });
 
-  // The real test: a field value with special chars, JSON-serialized, quoted for
-  // the wire, then un-quoted by CasparCG's rule + JSON.parse must equal the original.
-  const values: Record<string, string> = {
-    quote: 'a"b',
-    backslash1: 'a\\b',
-    backslash2: 'a\\\\b',
-    backslash3: 'a\\\\\\b',
-    backslash4: 'a\\\\\\\\b',
-    newline: 'line1\nline2',
-    tab: 'a\tb',
-    combo: 'he said "a\\b"\nرفت',
-    persian: 'خبر فوری ۱۴۰۳',
-  };
-
-  for (const [name, value] of Object.entries(values)) {
-    it(`round-trips a value containing: ${name}`, () => {
+  for (const [name, value] of Object.entries(MATRIX)) {
+    it(`round-trips a JSON field value containing: ${name}`, () => {
       const fields = { v: value };
-      const wire = quote(JSON.stringify(fields));
-      const decoded = casparUnquote(wire);
-      // Decoded wire equals the original JSON string byte-exact…
-      expect(decoded).toBe(JSON.stringify(fields));
-      // …and JSON.parse recovers the value byte-exact. (The value's newline reached
-      // JSON.stringify as the 2-char `\n` BEFORE escape() — so it passes through and
-      // round-trips, never hitting escape()'s raw-newline→space branch.)
-      expect((JSON.parse(decoded) as { v: string }).v).toBe(value);
+      const delivered = throughCaspar(JSON.stringify(fields));
+      // What window.update receives equals the original JSON string byte-exact…
+      expect(delivered).toBe(JSON.stringify(fields));
+      // …and the template's JSON.parse recovers the value byte-exact.
+      expect((JSON.parse(delivered) as { v: string }).v).toBe(value);
     });
   }
+
+  it('round-trips the WHOLE hard payload byte-exact (the sweep’s pass condition)', () => {
+    const json = JSON.stringify(MATRIX);
+    expect(throughCaspar(json)).toBe(json);
+    expect(JSON.parse(throughCaspar(json))).toEqual(MATRIX);
+  });
+
+  it('round-trips a raw LF/CR input lossless on the CG data path', () => {
+    expect(throughCaspar('line1\nline2')).toBe('line1\nline2');
+    expect(throughCaspar('a\rb')).toBe('a\rb');
+  });
+
+  it('list fields (arrays of items) survive as structured JSON', () => {
+    const fields = {
+      items: [
+        { id: 'i1', text: 'خبر اول\nخط دوم' },
+        { id: 'i2', text: 'a "quoted" \\ item' },
+      ],
+    };
+    const delivered = throughCaspar(JSON.stringify(fields));
+    expect(JSON.parse(delivered)).toEqual(fields);
+    expect(Array.isArray((JSON.parse(delivered) as typeof fields).items)).toBe(true);
+  });
 });

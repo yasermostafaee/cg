@@ -605,6 +605,9 @@ importers:
 
   tools/caspar-amcp-probe:
     dependencies:
+      '@cg/caspar-client':
+        specifier: workspace:*
+        version: link:../../packages/caspar-client
       ws:
         specifier: ^8.18.0
         version: 8.21.0
