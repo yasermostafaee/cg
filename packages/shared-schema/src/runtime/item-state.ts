@@ -17,6 +17,10 @@ export const StackItemStatusSchema = z.enum([
   'on-air',
   'updating',
   'exiting',
+  // B-044 — explicit bounded-timeout state: the bridge sent the intent's
+  // command and no AMCP ack arrived within the bound; the on-air result is
+  // unknown. A resting state (never a spinner); the next intent overwrites it.
+  'unconfirmed',
   'error',
   'disconnected',
 ]);

@@ -81,6 +81,8 @@ export class MockRuntime {
       pending: wasOnAir,
     });
     this.#audit.unshift(auditEntry('update', { itemId, templateId: item.templateId }));
+    // B-044 contract: `updating` is transient — it settles to the item's
+    // underlying on-air state on the (simulated) ack, never resting.
     if (wasOnAir) this.#settle(itemId, 'on-air');
     else this.#emitStack();
     return { accepted: true };
@@ -249,7 +251,15 @@ export class MockRuntime {
     this.#patch(itemId, { status, pending });
   }
 
-  /** Resolve a pending transition to its settled status after a short beat. */
+  /**
+   * Simulated ack-settlement of the B-044 pending-intent contract: a transient
+   * intent (`playing`+pending / `updating` / `exiting`) settles to its
+   * underlying state when its own round-trip acks — here a 160 ms beat stands
+   * in for the WS + AMCP round-trip. Mirrors the bridge Reconciler's
+   * settle-on-ack (update → the underlying on-air state; out → `idle`); the
+   * real path additionally expires to `unconfirmed` after 5 s without an ack —
+   * the mock never loses acks, so it has no unconfirmed path.
+   */
   #settle(itemId: string, status: StackItemStatus): void {
     setTimeout(() => {
       const item = this.#find(itemId);

@@ -49,6 +49,10 @@ export function airStateVisual(status: StackItemStatus, pending: boolean): AirSt
       ? { color: colors.pending, icon: '⟳', label: 'TAKING' }
       : { color: colors.onAir, icon: '●', label: 'ON AIR' };
   if (status === 'updating') return { color: colors.onAir, icon: '⟳', label: 'UPDATING' };
+  // B-044 — bounded-timeout state: the command was sent but no ack arrived in
+  // time; the on-air result is unknown. Minimal visual for now (the queued
+  // runtime UI-polish item restyles all badge states).
+  if (status === 'unconfirmed') return { color: colors.pending, icon: '?', label: 'UNCONFIRMED' };
   if (status === 'exiting') return { color: colors.exit, icon: '◐', label: 'EXIT' };
   if (status === 'loaded') return { color: colors.ready, icon: '▸', label: 'READY' };
   return { color: colors.idle, icon: '○', label: 'IDLE' };

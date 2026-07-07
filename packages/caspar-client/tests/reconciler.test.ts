@@ -253,3 +253,162 @@ describe('Reconciler — null/no-op paths', () => {
     expect(r.applyIntent({ kind: 'reconnect' }, 2)).toBeNull();
   });
 });
+
+describe('Reconciler — B-044 pending-intent completion (settle on ack, expire on timeout)', () => {
+  /** Load + take + OK ack → the item rests acked-'playing' (renders ON AIR). */
+  function onAirItem(r: Reconciler): void {
+    r.applyIntent(loadIntent(1), 1);
+    r.applyIntent({ kind: 'take', itemId: itemId(1) }, 2);
+    r.applyAck(2, true);
+  }
+
+  it('an in-flight update shows updating+pending (the previous ack no longer masks it)', () => {
+    const r = new Reconciler();
+    onAirItem(r);
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '1' }, mergeMode: 'merge' }, 3);
+    expect(r.get(itemId(1))).toMatchObject({ status: 'updating', pending: true });
+  });
+
+  it('an OK ack settles updating back to the underlying playing state — never resting on updating', () => {
+    const r = new Reconciler();
+    onAirItem(r);
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '1' }, mergeMode: 'merge' }, 3);
+    const s = r.applyAck(3, true);
+    expect(s).toMatchObject({ status: 'playing', pending: false });
+    expect(s?.errorCode).toBeUndefined();
+  });
+
+  it('an OK ack settles exiting to idle (the single CLEAR completes the out)', () => {
+    const r = new Reconciler();
+    onAirItem(r);
+    r.applyIntent({ kind: 'out', itemId: itemId(1) }, 3);
+    expect(r.get(itemId(1))).toMatchObject({ status: 'exiting', pending: true });
+    expect(r.applyAck(3, true)).toMatchObject({ status: 'idle', pending: false });
+  });
+
+  it('back-to-back updates settle only on the LATEST ack; a stale ack never mutates state', () => {
+    const r = new Reconciler();
+    onAirItem(r);
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '1' }, mergeMode: 'merge' }, 3);
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '2' }, mergeMode: 'merge' }, 4);
+    // Stale ack for the superseded update: ignored, item stays in flight.
+    expect(r.applyAck(3, true)).toBeNull();
+    expect(r.get(itemId(1))).toMatchObject({ status: 'updating', pending: true });
+    // The latest update's ack settles to the ORIGINAL underlying state.
+    expect(r.applyAck(4, true)).toMatchObject({ status: 'playing', pending: false });
+  });
+
+  it('a NAK routes to error (with code) instead of settling', () => {
+    const r = new Reconciler();
+    onAirItem(r);
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '1' }, mergeMode: 'merge' }, 3);
+    expect(r.applyAck(3, false, 'amcp-403')).toMatchObject({
+      status: 'error',
+      errorCode: 'amcp-403',
+    });
+  });
+
+  it('expireIntent lands an unacked update in unconfirmed — resting, pending=false, acked cleared', () => {
+    const r = new Reconciler();
+    onAirItem(r);
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '1' }, mergeMode: 'merge' }, 3);
+    const s = r.expireIntent(3);
+    expect(s).toMatchObject({ status: 'unconfirmed', pending: false, errorCode: 'unconfirmed' });
+  });
+
+  it('expireIntent works for an unacked out too', () => {
+    const r = new Reconciler();
+    onAirItem(r);
+    r.applyIntent({ kind: 'out', itemId: itemId(1) }, 3);
+    expect(r.expireIntent(3)).toMatchObject({ status: 'unconfirmed', pending: false });
+  });
+
+  it('a late OK ack after expiry settles honestly (the ack DID arrive)', () => {
+    const r = new Reconciler();
+    onAirItem(r);
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '1' }, mergeMode: 'merge' }, 3);
+    r.expireIntent(3);
+    expect(r.applyAck(3, true)).toMatchObject({ status: 'playing', pending: false });
+  });
+
+  it('expireIntent is a no-op once the ack settled the intent or a newer intent superseded it', () => {
+    const r = new Reconciler();
+    onAirItem(r);
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '1' }, mergeMode: 'merge' }, 3);
+    r.applyAck(3, true);
+    expect(r.expireIntent(3)).toBeNull(); // settled — nothing to expire
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '2' }, mergeMode: 'merge' }, 4);
+    expect(r.expireIntent(3)).toBeNull(); // superseded — seq 4 owns the item
+    expect(r.get(itemId(1))).toMatchObject({ status: 'updating' });
+  });
+
+  it('a new operator intent overwrites unconfirmed', () => {
+    const r = new Reconciler();
+    onAirItem(r);
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '1' }, mergeMode: 'merge' }, 3);
+    r.expireIntent(3);
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '2' }, mergeMode: 'merge' }, 4);
+    expect(r.get(itemId(1))).toMatchObject({ status: 'updating', pending: true });
+    // …and its ack settles to the last known underlying state.
+    expect(r.applyAck(4, true)).toMatchObject({ status: 'playing', pending: false });
+  });
+
+  it('load ack is identity; take acks settle playing (mid-flight shows pending TAKING — the ack-invalidation refinement)', () => {
+    const now = vi.fn(() => 1000);
+    const r = new Reconciler({ now });
+    r.applyIntent(loadIntent(1), 1);
+    expect(r.applyAck(1, true)).toMatchObject({ status: 'loaded', pending: false });
+    r.applyIntent({ kind: 'take', itemId: itemId(1) }, 2);
+    expect(r.get(itemId(1))).toMatchObject({ status: 'playing', pending: true });
+    expect(r.applyAck(2, true)).toMatchObject({ status: 'playing', pending: false });
+  });
+});
+
+describe('Reconciler — B-044 settle provenance (review findings: out targets never leak into updates)', () => {
+  function onAirItem(r: Reconciler): void {
+    r.applyIntent(loadIntent(1), 1);
+    r.applyIntent({ kind: 'take', itemId: itemId(1) }, 2);
+    r.applyAck(2, true);
+  }
+
+  it("an update racing an IN-FLIGHT out never inherits the out's target: it settles playing (safe direction), not a permanent exiting", () => {
+    const r = new Reconciler();
+    onAirItem(r);
+    r.applyIntent({ kind: 'out', itemId: itemId(1) }, 3); // CLEAR in flight
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '1' }, mergeMode: 'merge' }, 4);
+    expect(r.applyAck(3, true)).toBeNull(); // the out's ack is stale — superseded
+    // The update's OK ack must NOT rest on 'exiting' (the pre-fix disease) nor
+    // claim 'idle' without evidence — 'playing' is the broadcast-safe landing.
+    expect(r.applyAck(4, true)).toMatchObject({ status: 'playing', pending: false });
+  });
+
+  it("an update after an EXPIRED out settles playing — the out's unevidenced idle target never claims off-air", () => {
+    const r = new Reconciler();
+    onAirItem(r);
+    r.applyIntent({ kind: 'out', itemId: itemId(1) }, 3);
+    r.expireIntent(3); // CLEAR unconfirmed — it may never have executed
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '1' }, mergeMode: 'merge' }, 4);
+    expect(r.applyAck(4, true)).toMatchObject({ status: 'playing', pending: false });
+  });
+
+  it('a late CLEAR ack after an out expiry still rescues to idle (the ack IS the evidence)', () => {
+    const r = new Reconciler();
+    onAirItem(r);
+    r.applyIntent({ kind: 'out', itemId: itemId(1) }, 3);
+    r.expireIntent(3);
+    expect(r.applyAck(3, true)).toMatchObject({ status: 'idle', pending: false });
+  });
+
+  it('an update from a RESTED idle item captures the evidenced idle and settles back to it', () => {
+    const r = new Reconciler();
+    onAirItem(r);
+    r.applyIntent({ kind: 'out', itemId: itemId(1) }, 3);
+    r.applyAck(3, true); // out completed: idle is EVIDENCED by the CLEAR's ack
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '1' }, mergeMode: 'merge' }, 4);
+    expect(r.applyAck(4, true)).toMatchObject({ status: 'idle', pending: false });
+    // …and a back-to-back update still inherits the evidenced idle.
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '2' }, mergeMode: 'merge' }, 5);
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '3' }, mergeMode: 'merge' }, 6);
+    expect(r.applyAck(6, true)).toMatchObject({ status: 'idle', pending: false });
+  });
+});

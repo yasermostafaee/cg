@@ -72,6 +72,23 @@ interface ItemRecord {
   lastOscAt?: number;
   pendingSince?: number;
   errorCode?: string;
+  /**
+   * B-044 — where a TRANSIENT intent (`updating`/`exiting`) settles when its
+   * own command's OK ack arrives. `updating`/`exiting` are never resting
+   * states — OSC cannot complete them (a CG UPDATE causes no producer
+   * transition, and the change-tracker suppresses repeats), so the ack is the
+   * completion signal ("accepted by CasparCG" — NOT proof the template
+   * applied the value; see the fix-pending-update-completion design).
+   *
+   * `evidenced` carries the target's provenance: an update captures the item's
+   * OBSERVED resting status (evidenced) while an out records its TARGET
+   * (`idle`, unevidenced — the CLEAR may not have executed yet). An update
+   * applied mid-intent inherits only an EVIDENCED target; otherwise it falls
+   * back to `playing` — the broadcast-safe error direction (a false ON AIR
+   * badge prompts the operator to check the output; a false IDLE would hide a
+   * live graphic).
+   */
+  settle?: { to: StackItemStatus; evidenced: boolean };
 }
 
 export class Reconciler extends EventEmitter<ReconcilerEvents> {
@@ -106,21 +123,61 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
    * Correlate an AMCP ack to its originating intent (by seq). The merge
    * rule prefers OSC truth, so the ack's effect is to bump `ackedStatus`
    * — which only wins until OSC catches up.
+   *
+   * B-044 — transient intents COMPLETE here: an OK ack with a `settleTo`
+   * pending settles `intentStatus`/`ackedStatus` to the underlying state
+   * (update → the pre-update status; out → `idle`). This also rescues a late
+   * ack after expiry (`unconfirmed` → settled — the ack DID arrive). A stale
+   * ack (an older seq than the item's latest intent) never mutates state:
+   * with AMCP pipelining, an earlier update's ack must not settle a newer
+   * in-flight one.
    */
   applyAck(seq: number, ok: boolean, errorCode?: string): StackItemState | null {
     const itemId = this.seqIndex.get(seq);
     if (itemId === undefined) return null;
     const rec = this.items.get(itemId);
     if (rec === undefined) return null;
+    if (rec.lastIntentSeq !== seq) return null; // stale ack — superseded intent
 
     rec.lastAckAt = this.now();
     if (ok) {
-      rec.ackedStatus = intentToAckedStatus(rec.intentStatus);
+      if (rec.settle !== undefined) {
+        rec.intentStatus = rec.settle.to;
+        rec.ackedStatus = rec.settle.to;
+        delete rec.settle;
+      } else {
+        rec.ackedStatus = intentToAckedStatus(rec.intentStatus);
+      }
       delete rec.errorCode;
     } else {
       rec.ackedStatus = 'error';
+      delete rec.settle;
       if (errorCode !== undefined) rec.errorCode = errorCode;
     }
+    return this.emitChange(rec);
+  }
+
+  /**
+   * B-044 — bounded-timeout expiry for a transient intent. Called by the
+   * bridge's per-send timer when no ack arrived within the bound. Only the
+   * item's LATEST intent can expire, and only while it is still in flight
+   * (`updating`/`exiting`): the item lands in the explicit `unconfirmed`
+   * resting state (never a silent revert, never an indefinite spinner).
+   * `ackedStatus` is cleared so the reconcile ladder cannot fall back to a
+   * stale acked value. A later OK ack (see `applyAck`) or any new operator
+   * intent replaces `unconfirmed`.
+   */
+  expireIntent(seq: number): StackItemState | null {
+    const itemId = this.seqIndex.get(seq);
+    if (itemId === undefined) return null;
+    const rec = this.items.get(itemId);
+    if (rec === undefined) return null;
+    if (rec.lastIntentSeq !== seq) return null; // a newer intent owns the item
+    if (rec.intentStatus !== 'updating' && rec.intentStatus !== 'exiting') return null;
+
+    rec.intentStatus = 'unconfirmed';
+    delete rec.ackedStatus;
+    rec.errorCode = 'unconfirmed';
     return this.emitChange(rec);
   }
 
@@ -233,6 +290,10 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
         rec.intentStatus = 'playing';
         rec.lastIntentSeq = seq;
         rec.pendingSince = this.now();
+        // A new intent invalidates the PREVIOUS command's ack — without this
+        // the reconcile ladder shows the stale acked value mid-flight (B-044).
+        delete rec.ackedStatus;
+        delete rec.settle;
         this.seqIndex.set(seq, rec.itemId);
         return this.emitChange(rec);
       }
@@ -242,8 +303,26 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
         rec.fields =
           intent.mergeMode === 'replace' ? intent.fields : { ...rec.fields, ...intent.fields };
         rec.fieldsHash = hashFields(rec.fields);
+        // B-044 — `updating` is TRANSIENT: remember where the OK ack settles
+        // it. From a RESTING status the observed status is captured
+        // (evidenced). Mid-intent (`updating`/`exiting`/`unconfirmed`) only an
+        // EVIDENCED prior target is inherited (back-to-back updates keep the
+        // true underlying state); an out's unevidenced `idle` TARGET never
+        // leaks into an update's completion — the fallback is `playing`, the
+        // broadcast-safe error direction (never claim off-air without
+        // evidence).
+        const midIntent =
+          rec.intentStatus === 'updating' ||
+          rec.intentStatus === 'exiting' ||
+          rec.intentStatus === 'unconfirmed';
+        rec.settle = midIntent
+          ? rec.settle?.evidenced === true
+            ? rec.settle
+            : { to: 'playing', evidenced: false }
+          : { to: rec.intentStatus, evidenced: true };
         rec.intentStatus = 'updating';
         rec.lastIntentSeq = seq;
+        delete rec.ackedStatus;
         this.seqIndex.set(seq, rec.itemId);
         return this.emitChange(rec);
       }
@@ -251,8 +330,13 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
         const rec = this.items.get(intent.itemId);
         if (rec === undefined) return null;
         rec.intentStatus = intent.immediate === true ? 'idle' : 'exiting';
+        // B-044 — `exiting` is TRANSIENT: the single CLEAR's OK ack settles it.
+        // `idle` is the out's TARGET, not an observation — unevidenced.
+        if (intent.immediate === true) delete rec.settle;
+        else rec.settle = { to: 'idle', evidenced: false };
         rec.lastIntentSeq = seq;
         rec.pendingSince = this.now();
+        delete rec.ackedStatus;
         this.seqIndex.set(seq, rec.itemId);
         return this.emitChange(rec);
       }
@@ -365,7 +449,9 @@ function intentToAckedStatus(intent: StackItemStatus): StackItemStatus {
 
 /** Terminal intents don't require physical-state confirmation. */
 function isTerminalStatus(status: StackItemStatus): boolean {
-  return status === 'idle' || status === 'loaded';
+  // `unconfirmed` is an explicit RESTING state (B-044 bounded expiry) — it
+  // must not spin as pending; the next intent or a late ack replaces it.
+  return status === 'idle' || status === 'loaded' || status === 'unconfirmed';
 }
 
 /**
