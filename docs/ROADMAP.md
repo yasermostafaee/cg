@@ -8,6 +8,14 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Pixel-grid ↔ content alignment at high zoom ([B-042](./prd/bugs-designer.md)) —
+  merged (#251) & archived (2026-07-08,
+  `2026-07-07-fix-pixel-grid-content-alignment`); containing-pixel stroke snap +
+  device-raster-aligned grid layer, ruler-mark lockstep, gizmo layout-lattice
+  fidelity (1-device-px frame stroke), plus the [B-045](./prd/bugs-designer.md)
+  stale-raster mitigation (authoring position pin; B-045 stays open for the
+  D-096 root fix + the upstream Chromium report). Owner-verified on the
+  affected machine.
 - Fixed pasteboard extent — no grow-to-fit ([B-027](./prd/bugs-designer.md)) —
   merged (#234) & archived (2026-07-07, `2026-07-07-fixed-pasteboard-extent`);
   drag/nudge clamped to the extent, jitter-free by construction.
@@ -224,18 +232,18 @@ Done.)
 The concrete near-term Designer sequence (survives across sessions; the Runtime
 track is independent — see "Runtime — next" below):
 
-1. **[B-042](./prd/bugs-designer.md) pixel-grid ↔ content sub-pixel misalignment**
-   (medium) — filed: at high zoom a shape edge at an integer scene coordinate
-   sits slightly off its pixel-grid line, in a repeating position-dependent
-   pattern (D-120 follow-up; blocks D-119). Fix in review on
-   `fix/B-042-pixel-grid-content-alignment`
-   (`openspec/changes/fix-pixel-grid-content-alignment`).
+1. **[D-122](./prd/designer.md) snap dragging to integer scene pixels while the
+   pixel grid is active** (medium) — filed with the owner's decided behavior:
+   full snap at pixel-grid zoom, first arrow-nudge lands on the integer lattice,
+   `Alt` bypasses, Inspector values stay free. The pixel-perfect-editing
+   companion to the merged B-042/B-045 work (a dragged shape now honestly PAINTS
+   at fractional spots — D-122 decides when placement itself snaps).
 2. **[B-037](./prd/bugs-designer.md) pen tool** (low, keep-or-remove decision) — filed.
 3. **[D-119](./prd/designer.md) rebuild starter templates** (5 showcases) — filed,
-   **BLOCKED only on B-042 + B-037** (templates should exercise healthy
-   features); supersedes the old "template cleanup" wave-tail note. (Its other
-   prerequisites — D-060 auto-size, B-035 fit-on-open, B-036 icon align — are
-   done, see Done.)
+   **BLOCKED only on B-037 + D-122** (B-042 is done — see Done; templates should
+   exercise healthy features); supersedes the old "template cleanup" wave-tail
+   note. (Its other prerequisites — D-060 auto-size, B-035 fit-on-open, B-036
+   icon align — are done, see Done.)
 
 Plus the existing queued / deprioritized items already in `designer.md`:
 [D-059](./prd/designer.md), [D-061](./prd/designer.md), [D-063](./prd/designer.md),

@@ -411,3 +411,13 @@ one-time warning, never a crash.
 - **E2E (the React/interaction layer):** the Playwright suite drives the real
   surface (`data-testid="canvas-surface"`) — drag, select, drill, snap — so the
   components themselves aren't chased for unit coverage.
+- **Paint diagnostics — the B-042 probe (`B042Probe.tsx`, kept on purpose):** an opt-in
+  on-canvas panel for diagnosing sub-pixel paint/alignment issues on the OPERATOR's machine —
+  the class of defect (B-042 alignment, B-045 stale raster) that only reproduces on a real
+  compositor at a real fractional `devicePixelRatio` and is invisible to unit tests. Strictly
+  flag-gated: renders ONLY with `?b042probe=1` in the URL or `localStorage.b042probe = '1'`;
+  zero footprint otherwise. It reports live (2 Hz): `devicePixelRatio`, zoom, per-axis stage
+  device phases, grid-stroke vs content-edge device positions with expected↔measured deltas
+  (reading the live `--cg-frame-*` vars), gizmo edges from the polygon points, and a build tag —
+  the numbers an owner screenshot can be reconciled against pixel-by-pixel (that reconciliation
+  is exactly how B-045 was isolated; see the archived change's `design.md` Takes 3–6).
