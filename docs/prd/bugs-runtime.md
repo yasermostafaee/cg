@@ -341,3 +341,13 @@ quote/backslash/newline payload before B-041 closes.
   via an escape-matrix harness on real hardware, then implemented as the single
   canonical quoter, with the mock decoding by the real rule AND rejecting raw control
   chars / un-parseable payloads. See `openspec/changes/fix-amcp-escaping-v2/`.
+- Sweep pass 1 (2026-07-07, local CasparCG `2.5.0 69e8ad5 Stable`, probe `--sweep`):
+  all 7 pre-existing candidates FAIL — the controls reproduce the DP1/DP2 signatures
+  on this build — and both two-layer-model candidates PASS every class; winner
+  **`js-escape+amcp-escape`** (byte-exact: net JSON backslash → 4 wire backslashes,
+  quote → backslash-quote). Status: empirically confirmed on 2.5.0 (`69e8ad5`);
+  provisional for 2.3.2, supported by the source-level finding that `v2.3.x-lts`
+  and `master` share byte-identical escape semantics in both layers; a 2.3.x
+  hardware pass (sweep, or live special-char validation) remains the gate before
+  B-041 closes. Details:
+  `openspec/changes/fix-amcp-escaping-v2/design.md` → "Hardware sweep results".

@@ -63,6 +63,51 @@ describe('encoders — exact wire bytes (the candidate behaviours)', () => {
     // a literal escaped-backslash is preserved (parity-correct): `a\\b` stays `a\\b`.
     expect(byId('quotes-only+uXXXX-controls').encodeArg('a\\\\b')).toBe('"a\\\\b"');
   });
+
+  // ── the two-layer-model candidates (B-041 sweep, added pre-pass-1) ──────────
+  // Net wire rule for js-escape+amcp-escape: each JSON `\` → FOUR wire `\`, each
+  // JSON `"` → `\"`, everything else unchanged. One un-escape layer is the AMCP
+  // tokenizer (`\\`→`\`, `\"`→`"`, `\n`→raw LF), the second is V8 parsing the
+  // `update("…")` literal html_cg_proxy builds (quotes-only re-escape in between).
+
+  it('js-escape+amcp-escape: exact wire bytes per hard-payload class', () => {
+    const enc = byId('js-escape+amcp-escape');
+    // quote class — JSON `\"` (bs, quote) → bs×4 then `\"`: 5 backslashes + quote.
+    expect(enc.encodeArg('a\\"b')).toBe('"a\\\\\\\\\\"b"');
+    // a bare structural quote → `\"`.
+    expect(enc.encodeArg('a"b')).toBe('"a\\"b"');
+    // backslash×1 class — JSON `\\` (2 chars) → 8 wire backslashes.
+    expect(enc.encodeArg('a\\\\b')).toBe('"a\\\\\\\\\\\\\\\\b"');
+    // newline class — JSON `\n` (bs, n) → 4 backslashes + literal n.
+    expect(enc.encodeArg('a\\nb')).toBe('"a\\\\\\\\nb"');
+    // tab class — JSON `\t` (bs, t) → 4 backslashes + literal t.
+    expect(enc.encodeArg('a\\tb')).toBe('"a\\\\\\\\tb"');
+    // Persian — untouched (no backslash, no quote).
+    expect(enc.encodeArg('خبر فوری')).toBe('"خبر فوری"');
+  });
+
+  it('js-escape+amcp-escape: full hard payload = spec transform (\\→××××, "→\\")', () => {
+    // The net-effect spec, written independently of the encoder's layer composition:
+    // double-double every backslash FIRST, then escape quotes (later-inserted
+    // backslashes must not be re-doubled).
+    const spec = `"${expectedJson().replace(/\\/g, '\\\\\\\\').replace(/"/g, '\\"')}"`;
+    expect(byId('js-escape+amcp-escape').encodeArg(expectedJson())).toBe(spec);
+  });
+
+  it('js-escape+amcp-escape+uXXXX-controls: exact wire bytes per hard-payload class', () => {
+    const enc = byId('js-escape+amcp-escape+uXXXX-controls');
+    // newline class — the JSON backslash-n pair is rewritten to the u000a form
+    // first, then the single backslash is doubled twice: 4 backslashes + "u000a".
+    expect(enc.encodeArg('a\\nb')).toBe('"a\\\\\\\\u000ab"');
+    // tab class — same shape with "u0009".
+    expect(enc.encodeArg('a\\tb')).toBe('"a\\\\\\\\u0009b"');
+    // backslash×1 class — the escaped-backslash pair is parity-preserved, then ×4 each: 8.
+    expect(enc.encodeArg('a\\\\b')).toBe('"a\\\\\\\\\\\\\\\\b"');
+    // quote class — JSON `\"` → 5 backslashes + quote (same as the base candidate).
+    expect(enc.encodeArg('a\\"b')).toBe('"a\\\\\\\\\\"b"');
+    // Persian — untouched.
+    expect(enc.encodeArg('خبر فوری')).toBe('"خبر فوری"');
+  });
 });
 
 describe('evaluator — per-character PASS/FAIL classification', () => {

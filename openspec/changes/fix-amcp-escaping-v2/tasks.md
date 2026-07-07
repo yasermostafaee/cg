@@ -10,7 +10,11 @@
 - [x] `proposal.md` + `specs/runtime-caspar-bridge/spec.md` (MODIFIED) + this plan.
 - [x] B-041 PRD entry extended with the v2 findings; B-041 stays `[~]`.
 - [x] `pnpm openspec validate fix-amcp-escaping-v2 --strict` + `format:check`.
-- [ ] Review the diagnosis (operator) BEFORE implementation.
+- [x] Review the diagnosis (operator) BEFORE implementation. — Approved by the
+      operator 2026-07-07 (session-1 digest: every claim re-verified against
+      current code with file:line evidence + a local byte-trace repro; upstream
+      CasparCG source identified the two-layer un-escape pipeline — AMCP
+      tokenizer + `html_cg_proxy` `update("…")` V8 embed).
 
 ## 1. Escape-matrix hardware harness (follow-up — after review)
 
@@ -18,6 +22,13 @@
       payload (`"`, `\` ×1–4, newline, tab, combos, Persian) against real CasparCG
       2.3.2, recording per candidate whether the template's `window.update` value
       `JSON.parse`s byte-exact to the original. The winning candidate is the rule.
+
+_Note (2026-07-07): the harness pre-existed (#247); this session added the two
+two-layer-model candidates (operator pre-approved) and swept the local
+`2.5.0 69e8ad5 Stable` — winner `js-escape+amcp-escape` (all 7 old candidates
+fail, both new ones pass; see `design.md` → "Hardware sweep results"). The 2.5
+pass is done; the 2.3.2 pass is pending and the harness is ready to re-run. The
+box stays unticked because its text requires real 2.3.2._
 
 ## 2. Implement the empirical rule (follow-up)
 

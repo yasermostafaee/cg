@@ -123,6 +123,18 @@ function unicodeEscapeControls(json: string): string {
   return out;
 }
 
+/**
+ * JS-string-literal escape of ONLY the backslashes (`\`→`\\`). Pre-compensates the
+ * SECOND un-escape layer in CasparCG's HTML path: `html_cg_proxy::update()` embeds
+ * the (tokenizer-decoded) data argument in an `update("…")` script, re-escaping
+ * QUOTES ONLY — so V8's string-literal parse un-escapes backslashes a second time.
+ * Quotes need no doubling here (the proxy's own `"`→`\"` handles them); only the
+ * backslashes must survive two un-escape layers.
+ */
+function escJsBackslashes(json: string): string {
+  return json.replace(/\\/g, '\\\\');
+}
+
 const wrap = (body: string): string => `"${body}"`;
 
 /**
@@ -172,6 +184,22 @@ export const ESCAPE_CANDIDATES: EscapeCandidate[] = [
     title: 'structural-quote-only + control chars as \\uXXXX',
     note: 'Minimal AMCP escaping (structural quotes) plus newline carried as \\u000a.',
     encodeArg: (json) => wrap(escStructuralQuotesOnly(unicodeEscapeControls(json))),
+  },
+  {
+    id: 'js-escape+amcp-escape',
+    title: 'double every \\ (JS-literal layer), then AMCP-escape \\→\\\\ and "→\\"',
+    note:
+      'Predicted winner under the two-layer model (AMCP tokenizer un-escape, then ' +
+      'html_cg_proxy update("…") V8 embed). Net: each JSON \\ → 4 on the wire, each " → \\".',
+    encodeArg: (json) => wrap(escBackslashQuote(escJsBackslashes(json))),
+  },
+  {
+    id: 'js-escape+amcp-escape+uXXXX-controls',
+    title: 'controls as \\uXXXX, then double \\ (JS layer), then AMCP-escape',
+    note:
+      'Robustness variant of js-escape+amcp-escape: JSON control escapes pre-encoded ' +
+      '(\\n→\\u000a etc.) before BOTH backslash layers, so no n/t letter ever follows a backslash run.',
+    encodeArg: (json) => wrap(escBackslashQuote(escJsBackslashes(unicodeEscapeControls(json)))),
   },
 ];
 
