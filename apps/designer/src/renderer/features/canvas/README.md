@@ -228,6 +228,22 @@ assertions with the selection state PROVEN (a silently-selected shape puts the g
 border on the measured edge; that artifact once mimicked a "content smear" — see the change's
 `design.md`, Takes 3–5).
 
+**Stale-raster position pin (B-045).** Chromium loses raster invalidation for `left`/`top`
+changes ≲ 2 CSS px inside the ×zoom-scaled canvas subtree: layout and the DOM update, the painted
+pixels stay at the previous position — through idle, scrolling, and even full runtime rebuilds
+(node replacement does not invalidate the stale tiles; no display-list poke does either —
+measured, see `design.md` Take 6). `transform` updates are compositor-tracked and never miss, so
+the CANVAS preview document (`REVEAL_ON_LOAD` gate in `platform/preview.ts` — the broadcast modal
+and exported outputs are untouched) pins every runtime element's box at `left/top: 0` and carries
+its position in a `translate(x, y)` prefix, quantized to the engine's 1/64-css LayoutUnit lattice
+(pixel parity with playout; the gizmo projection stays exact; transform-origin math is unaffected
+because a translate composed first commutes out of the origin conjugation). Interception is a
+realm-local per-element style Proxy (every engine `left`/`top` write reroutes synchronously,
+before paint); RTL auto-hug text (right-anchored, `left:auto`) opts out. The root fix — the
+engine itself positioning via transform — is queued as D-096 and deletes this shim. Regression
+coverage: the `B-045` test in `pixel-paint.spec.ts` (sub-pixel inspector edit + arrow-step
+nudges, painted edge vs layout edge).
+
 The rulers + guides live in a **non-scrolling overlay** (`s.overlay`) that is a **sibling** of the
 scroll container (`s.outer`), not a child of it — absolutely-positioned children of an
 `overflow:auto` element scroll **with** the content, which would slide the rulers out of view and
