@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties, type RefObject } from 'react';
 import { Button } from '../../ui/Button.js';
-import { gridCanvasAlignment, pixelGridVisible } from './geometry.js';
+import { pixelGridVisible } from './geometry.js';
 
 /**
  * B-042 follow-up — TEMPORARY on-machine alignment probe (the owner still sees the
@@ -10,24 +10,27 @@ import { gridCanvasAlignment, pixelGridVisible } from './geometry.js';
  * Strictly opt-in: renders ONLY with `?b042probe=1` in the URL or
  * `localStorage.b042probe = '1'`. It reports, live (2 Hz): devicePixelRatio +
  * visualViewport.scale + a browser-zoom heuristic (loud warning + "press Ctrl+0");
- * the grid canvas layer's rect, fractional device origin, applied sub-CSS-px nudge,
- * raster phase, and backing↔CSS scale (must be exactly 1); the stage /
- * preview-iframe / selection-gizmo layers' rects and fractional device origins; and,
- * for the selection's right edge (or the column at the viewport centre), the ideal /
- * grid-stroke (read back from the canvas BITMAP) / content / gizmo device positions
- * with deltas — plus a min→max delta sweep across every visible stroke (left↔right
- * drift shows up as a spread). "Copy readout" puts the whole thing on the clipboard
- * as text and `console.table`s the key metrics.
+ * the grid canvas layer's rect, fractional device origin, and backing↔CSS scale;
+ * the stage / preview-iframe / selection-gizmo layers' rects and fractional device
+ * origins; and per-axis edge blocks — X: the judged element's RIGHT edge vs the
+ * nearest vertical stroke (read back from the canvas BITMAP), Y: its TOP edge vs
+ * the nearest horizontal stroke — plus min→max delta sweeps across every visible
+ * stroke on BOTH axes. The judged element is the selection, or (deselected) the
+ * first rendered element in the preview DOM. The gizmo is measured BOTH ways:
+ * from the polygon's `points` geometry (authoritative) and from its
+ * `getBoundingClientRect` (stroke- and snap-polluted — reported to expose the
+ * difference), per side. "Copy readout" puts the whole thing on the clipboard as
+ * text and `console.table`s the key metrics.
  *
  * Removed (or kept behind the flag) once B-042 is confirmed fixed on the owner's
  * machine — see the change's tasks.md follow-up section.
  */
 
-/** The build tag the owner checks against — parent commit + probe revision. */
-export const B042_BUILD = 'd0fd37d+probe1';
+/** The build tag the owner checks against — parent commit + fix revision. */
+export const B042_BUILD = '8ed5a52+contain-snap+probe3';
 
-// Part A.2 — boot log: fires on app boot (this module is statically imported by
-// CanvasArea), so a stale/pre-fix build is detectable from the console alone.
+// Boot log: fires on app boot (this module is statically imported by CanvasArea),
+// so a stale/pre-fix build is detectable from the console alone.
 console.log('B-042 build', B042_BUILD);
 
 /** Windows display-scale factors Chrome reports at 100% browser zoom. */
@@ -60,24 +63,23 @@ interface LayerReading {
   fracTop: number;
 }
 
-interface EdgeReading {
-  source: string;
-  /** scene coord of the judged edge (fractional if the shape was dragged there) */
-  sceneRight: number;
-  /** the integer scene column being compared against the grid */
-  column: number;
-  /** ruler/ideal mapping of the column: (outer + rulerOrigin + column·zoom)·dpr */
-  idealDev: number;
-  /** iframe-rect mapping of the same integer column */
-  contentColumnDev: number;
-  /** the element's ACTUAL rendered edge (honest about fractional coords), or null */
-  contentEdgeDev: number | null;
+/** One axis's edge-vs-stroke comparison (X: right edge / vertical strokes; Y: top
+ *  edge / horizontal strokes). All positions in SCREEN DEVICE px. */
+interface AxisEdgeReading {
+  /** scene coordinate of the judged edge (fractional if the shape was dragged) */
+  sceneCoord: number;
+  /** the integer scene column/row nearest the edge */
+  lattice: number;
+  /** the content lattice line's device position (iframe mapping of the integer) */
+  contentLatticeDev: number;
+  /** the element's ACTUAL rendered edge (honest about fractional coords) */
+  contentEdgeDev: number;
   /** nearest painted grid stroke CENTER, read back from the bitmap, or null */
   strokeDev: number | null;
-  gizmoRightDev: number | null;
-  /** stroke − (column + ½) — the grid↔content alignment defect, device px */
-  dStrokeVsColumn: number | null;
-  dGizmoVsContent: number | null;
+  /** strokeCenter − contentEdge — |·| ≤ ½ means the stroke pixel contains/hugs the edge */
+  dStrokeVsEdge: number | null;
+  /** strokeCenter − contentLattice — same, for the integer lattice line */
+  dStrokeVsLattice: number | null;
 }
 
 interface StrokeSweep {
@@ -88,11 +90,30 @@ interface StrokeSweep {
   maxDelta: number;
 }
 
+/** The gizmo frame, measured from the polygon's `points` GEOMETRY (authoritative)
+ *  and from getBoundingClientRect (stroke/snap-polluted) — screen device px. */
+interface GizmoReading {
+  pointsLeft: number;
+  pointsRight: number;
+  pointsTop: number;
+  pointsBottom: number;
+  bboxLeft: number;
+  bboxRight: number;
+  bboxTop: number;
+  bboxBottom: number;
+  /** per-side points-geometry − content-edge deltas (the Directive-2 acceptance) */
+  dLeft: number | null;
+  dRight: number | null;
+  dTop: number | null;
+  dBottom: number | null;
+  /** per-side bbox − points differences (exposes the rect-measurement artifact) */
+  bboxBiasRight: number;
+  bboxBiasBottom: number;
+}
+
 interface GridReading extends LayerReading {
   styleLeft: string;
   styleTop: string;
-  expectedNudge: number;
-  rasterPhase: number;
   backingScale: number;
 }
 
@@ -105,9 +126,12 @@ interface ProbeReading {
   grid: GridReading | null;
   stage: LayerReading | null;
   iframe: LayerReading | null;
-  gizmo: LayerReading | null;
-  edge: EdgeReading | null;
-  sweep: StrokeSweep | null;
+  judged: string;
+  edgeX: AxisEdgeReading | null;
+  edgeY: AxisEdgeReading | null;
+  sweepX: StrokeSweep | null;
+  sweepY: StrokeSweep | null;
+  gizmo: GizmoReading | null;
   note: string;
 }
 
@@ -124,23 +148,51 @@ function layerReading(rect: DOMRect, dpr: number): LayerReading {
   };
 }
 
-/** Painted vertical-stroke columns in the grid bitmap (min alpha across spread rows,
- *  so horizontal lines don't count) — same technique as the B-042 E2E. */
-function strokeColumns(grid: HTMLCanvasElement): number[] {
+/** Painted stroke positions in the grid bitmap on one axis: min alpha across a few
+ *  spread lines of the OTHER axis, so crossing lines don't count. */
+function strokePositions(grid: HTMLCanvasElement, axis: 'x' | 'y'): number[] {
   const ctx = grid.getContext('2d');
   if (ctx === null || grid.width === 0 || grid.height === 0) return [];
-  const rows = [0.13, 0.29, 0.47, 0.61, 0.83].map((f) => Math.floor(grid.height * f));
-  const minAlpha = new Float64Array(grid.width).fill(255);
-  for (const y of rows) {
-    const data = ctx.getImageData(0, y, grid.width, 1).data;
-    for (let x = 0; x < grid.width; x++) {
-      const a = data[x * 4 + 3] ?? 0;
-      if (a < (minAlpha[x] ?? 255)) minAlpha[x] = a;
+  const across = axis === 'x' ? grid.height : grid.width;
+  const along = axis === 'x' ? grid.width : grid.height;
+  const samples = [0.13, 0.29, 0.47, 0.61, 0.83].map((f) => Math.floor(across * f));
+  const minAlpha = new Float64Array(along).fill(255);
+  for (const s of samples) {
+    const data =
+      axis === 'x'
+        ? ctx.getImageData(0, s, grid.width, 1).data
+        : ctx.getImageData(s, 0, 1, grid.height).data;
+    for (let i = 0; i < along; i++) {
+      const a = data[i * 4 + 3] ?? 0;
+      if (a < (minAlpha[i] ?? 255)) minAlpha[i] = a;
     }
   }
-  const cols: number[] = [];
-  for (let x = 0; x < grid.width; x++) if ((minAlpha[x] ?? 0) > 0) cols.push(x);
-  return cols;
+  const out: number[] = [];
+  for (let i = 0; i < along; i++) if ((minAlpha[i] ?? 0) > 0) out.push(i);
+  return out;
+}
+
+/** Parse the gizmo polygon's `points` attribute → overlay-space corner extremes. */
+function polygonExtremes(
+  points: string,
+): { minX: number; maxX: number; minY: number; maxY: number } | null {
+  const nums = points
+    .split(/[\s,]+/)
+    .map(Number)
+    .filter((n) => Number.isFinite(n));
+  if (nums.length < 8) return null;
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (let i = 0; i + 1 < nums.length; i += 2) {
+    xs.push(nums[i] ?? 0);
+    ys.push(nums[i + 1] ?? 0);
+  }
+  return {
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minY: Math.min(...ys),
+    maxY: Math.max(...ys),
+  };
 }
 
 interface ProbeInputs {
@@ -150,6 +202,7 @@ interface ProbeInputs {
   grid: HTMLCanvasElement | null;
   zoom: number;
   frameOffsetX: number;
+  frameOffsetY: number;
   selection: ReadonlySet<string>;
 }
 
@@ -167,24 +220,82 @@ function readProbe(inp: ProbeInputs): ProbeReading {
     grid: null,
     stage: null,
     iframe: null,
+    judged: '—',
+    edgeX: null,
+    edgeY: null,
+    sweepX: null,
+    sweepY: null,
     gizmo: null,
-    edge: null,
-    sweep: null,
     note: '',
   };
-  const { outer, stage, iframe, grid, zoom, frameOffsetX, selection } = inp;
+  const { outer, stage, iframe, grid, zoom, frameOffsetX, frameOffsetY, selection } = inp;
   if (outer === null || stage === null || iframe === null) {
     base.note = 'waiting for canvas layout…';
     return base;
   }
-  const orect = outer.getBoundingClientRect();
   const srect = stage.getBoundingClientRect();
   const irect = iframe.getBoundingClientRect();
   base.stage = layerReading(srect, dpr);
   base.iframe = layerReading(irect, dpr);
-  const gizmoEl = document.querySelector('[data-testid="gizmo-frame"]');
-  const gizmoRect = gizmoEl === null ? null : gizmoEl.getBoundingClientRect();
-  base.gizmo = gizmoRect === null ? null : layerReading(gizmoRect, dpr);
+  // B-042 take 4 — the iframe is a WINDOW into the stage: its live `--cg-frame-x/-y` vars carry
+  // the window-compensated inset. All iframe-based content mappings must use these, not the
+  // model frame offset (which stays valid only for STAGE/spacer-based mappings).
+  const rootStyle = iframe.contentDocument?.documentElement.style;
+  const fxRaw = rootStyle ? Number.parseFloat(rootStyle.getPropertyValue('--cg-frame-x')) : NaN;
+  const fyRaw = rootStyle ? Number.parseFloat(rootStyle.getPropertyValue('--cg-frame-y')) : NaN;
+  const effX = Number.isFinite(fxRaw) ? fxRaw : frameOffsetX;
+  const effY = Number.isFinite(fyRaw) ? fyRaw : frameOffsetY;
+
+  // ── the judged element: the selection, or the first rendered element ────────
+  const idoc = iframe.contentDocument;
+  const selectedId = selection.size > 0 ? [...selection][0] : undefined;
+  let el: Element | null = null;
+  if (idoc !== null) {
+    el =
+      selectedId !== undefined
+        ? idoc.querySelector(`[data-cg-element-id="${selectedId}"]`)
+        : idoc.querySelector('[data-cg-element-id]');
+  }
+  const local = el === null ? null : el.getBoundingClientRect(); // iframe-local CSS (pre-scale)
+  base.judged =
+    el === null
+      ? 'none (no rendered element)'
+      : `${selectedId !== undefined ? 'selection' : 'first element (deselected)'} ${(el.getAttribute('data-cg-element-id') ?? '').slice(0, 8)}`;
+
+  // ── gizmo, from points geometry AND bbox ─────────────────────────────────────
+  const polygon = document.querySelector('[data-testid="gizmo-frame"]');
+  if (polygon !== null && local !== null) {
+    const svg = polygon.closest('svg');
+    const srectSvg = svg === null ? null : svg.getBoundingClientRect();
+    const ext = polygonExtremes(polygon.getAttribute('points') ?? '');
+    const bbox = polygon.getBoundingClientRect();
+    if (srectSvg !== null && ext !== null) {
+      const pointsLeft = (srectSvg.left + ext.minX) * dpr;
+      const pointsRight = (srectSvg.left + ext.maxX) * dpr;
+      const pointsTop = (srectSvg.top + ext.minY) * dpr;
+      const pointsBottom = (srectSvg.top + ext.maxY) * dpr;
+      const contentLeft = (irect.left + local.left * zoom) * dpr;
+      const contentRight = (irect.left + local.right * zoom) * dpr;
+      const contentTop = (irect.top + local.top * zoom) * dpr;
+      const contentBottom = (irect.top + local.bottom * zoom) * dpr;
+      base.gizmo = {
+        pointsLeft,
+        pointsRight,
+        pointsTop,
+        pointsBottom,
+        bboxLeft: bbox.left * dpr,
+        bboxRight: bbox.right * dpr,
+        bboxTop: bbox.top * dpr,
+        bboxBottom: bbox.bottom * dpr,
+        dLeft: pointsLeft - contentLeft,
+        dRight: pointsRight - contentRight,
+        dTop: pointsTop - contentTop,
+        dBottom: pointsBottom - contentBottom,
+        bboxBiasRight: bbox.right * dpr - pointsRight,
+        bboxBiasBottom: bbox.bottom * dpr - pointsBottom,
+      };
+    }
+  }
 
   if (!pixelGridVisible(zoom)) {
     base.note = `pixel grid hidden — zoom ${String(Math.round(zoom * 100))}% is below the 800% threshold`;
@@ -195,81 +306,75 @@ function readProbe(inp: ProbeInputs): ProbeReading {
     return base;
   }
   const grect = grid.getBoundingClientRect();
-  const align = gridCanvasAlignment(orect.left, dpr);
   const backingScale = grid.width === 0 ? Number.NaN : (grect.width * dpr) / grid.width;
   base.grid = {
     ...layerReading(grect, dpr),
     styleLeft: grid.style.left,
     styleTop: grid.style.top,
-    expectedNudge: align.nudgeCss,
-    rasterPhase: align.phase,
     backingScale,
   };
 
-  // ── the judged edge ────────────────────────────────────────────────────────
-  const rulerOriginX = srect.left - orect.left + frameOffsetX * zoom;
-  const idoc = iframe.contentDocument;
-  let source = 'viewport-centre column';
-  let sceneRight: number | null = null;
-  let contentEdgeDev: number | null = null;
-  const selectedId = selection.size > 0 ? [...selection][0] : undefined;
-  if (selectedId !== undefined && idoc !== null) {
-    const el = idoc.querySelector(`[data-cg-element-id="${selectedId}"]`);
-    if (el !== null) {
-      const local = el.getBoundingClientRect(); // iframe-local CSS px (pre-scale)
-      sceneRight = local.right - frameOffsetX;
-      contentEdgeDev = (irect.left + local.right * zoom) * dpr;
-      source = `selection ${selectedId.slice(0, 8)} right edge`;
+  // ── per-axis edge blocks + sweeps ────────────────────────────────────────────
+  const axes: ('x' | 'y')[] = ['x', 'y'];
+  for (const axis of axes) {
+    const isX = axis === 'x';
+    const contentOrigin = isX ? irect.left : irect.top; // iframe origin, CSS
+    const frameOff = isX ? effX : effY;
+    const gridOrigin = (isX ? grect.left : grect.top) * dpr;
+    const strokes = strokePositions(grid, axis);
+    const strokeDevOf = (i: number): number => gridOrigin + (i + 0.5) * backingScale;
+    // the judged edge: X → element right; Y → element top
+    let edge: AxisEdgeReading | null = null;
+    if (local !== null) {
+      const localEdge = isX ? local.right : local.top;
+      const sceneCoord = localEdge - frameOff;
+      const lattice = Math.round(sceneCoord);
+      const contentLatticeDev = (contentOrigin + (frameOff + lattice) * zoom) * dpr;
+      const contentEdgeDev = (contentOrigin + localEdge * zoom) * dpr;
+      let strokeDev: number | null = null;
+      let best = Number.POSITIVE_INFINITY;
+      for (const i of strokes) {
+        const d = Math.abs(strokeDevOf(i) - contentEdgeDev);
+        if (d < best) {
+          best = d;
+          strokeDev = strokeDevOf(i);
+        }
+      }
+      if (strokeDev !== null && best > (zoom * dpr) / 2) strokeDev = null;
+      edge = {
+        sceneCoord,
+        lattice,
+        contentLatticeDev,
+        contentEdgeDev,
+        strokeDev,
+        dStrokeVsEdge: strokeDev === null ? null : strokeDev - contentEdgeDev,
+        dStrokeVsLattice: strokeDev === null ? null : strokeDev - contentLatticeDev,
+      };
     }
-  }
-  // nothing selected → judge the integer column nearest the viewport centre
-  sceneRight ??= (orect.width / 2 - rulerOriginX) / zoom;
-  const column = Math.round(sceneRight);
-  const idealDev = (orect.left + rulerOriginX + column * zoom) * dpr;
-  const contentColumnDev = (irect.left + (frameOffsetX + column) * zoom) * dpr;
-
-  const cols = strokeColumns(grid);
-  const strokeDevOf = (col: number): number => grect.left * dpr + (col + 0.5) * backingScale;
-  let strokeDev: number | null = null;
-  let bestDist = Number.POSITIVE_INFINITY;
-  for (const col of cols) {
-    const d = Math.abs(strokeDevOf(col) - idealDev);
-    if (d < bestDist) {
-      bestDist = d;
-      strokeDev = strokeDevOf(col);
+    // sweep: every stroke vs the nearest CONTENT lattice line on this axis
+    let sweep: StrokeSweep | null = null;
+    if (strokes.length > 0) {
+      const deltas = strokes.map((i) => {
+        const dev = strokeDevOf(i);
+        const scene = Math.round((dev / dpr - contentOrigin) / zoom - frameOff);
+        const content = (contentOrigin + (frameOff + scene) * zoom) * dpr;
+        return dev - content;
+      });
+      sweep = {
+        count: deltas.length,
+        firstDelta: deltas[0] ?? Number.NaN,
+        lastDelta: deltas[deltas.length - 1] ?? Number.NaN,
+        minDelta: Math.min(...deltas),
+        maxDelta: Math.max(...deltas),
+      };
     }
-  }
-  if (strokeDev !== null && bestDist > (zoom * dpr) / 2) strokeDev = null; // none near it
-  const gizmoRightDev = gizmoRect === null ? null : gizmoRect.right * dpr;
-  base.edge = {
-    source,
-    sceneRight,
-    column,
-    idealDev,
-    contentColumnDev,
-    contentEdgeDev,
-    strokeDev,
-    gizmoRightDev,
-    dStrokeVsColumn: strokeDev === null ? null : strokeDev - (contentColumnDev + 0.5),
-    dGizmoVsContent:
-      gizmoRightDev === null || contentEdgeDev === null ? null : gizmoRightDev - contentEdgeDev,
-  };
-
-  // ── all-stroke sweep (left↔right drift shows as a spread) ──────────────────
-  if (cols.length > 0) {
-    const deltas = cols.map((col) => {
-      const dev = strokeDevOf(col);
-      const scene = Math.round((dev / dpr - orect.left - rulerOriginX) / zoom);
-      const content = (orect.left + rulerOriginX + scene * zoom) * dpr;
-      return dev - (content + 0.5);
-    });
-    base.sweep = {
-      count: deltas.length,
-      firstDelta: deltas[0] ?? Number.NaN,
-      lastDelta: deltas[deltas.length - 1] ?? Number.NaN,
-      minDelta: Math.min(...deltas),
-      maxDelta: Math.max(...deltas),
-    };
+    if (isX) {
+      base.edgeX = edge;
+      base.sweepX = sweep;
+    } else {
+      base.edgeY = edge;
+      base.sweepY = sweep;
+    }
   }
   return base;
 }
@@ -295,28 +400,46 @@ function formatReading(r: ProbeReading): string {
   if (r.grid !== null) {
     layer('grid  ', r.grid);
     lines.push(
-      `grid  : nudge style(${r.grid.styleLeft || '0px'}, ${r.grid.styleTop || '0px'}) expected ${f(r.grid.expectedNudge, 6)}px  rasterPhase ${f(r.grid.rasterPhase, 6)}  backingScale ${f(r.grid.backingScale, 8)}`,
+      `grid  : nudge style(${r.grid.styleLeft || '0px'}, ${r.grid.styleTop || '0px'})  backingScale ${f(r.grid.backingScale, 8)}`,
     );
   } else {
     lines.push('grid  : —');
   }
   layer('stage ', r.stage);
   layer('iframe', r.iframe);
-  layer('gizmo ', r.gizmo);
-  if (r.edge !== null) {
-    const e = r.edge;
-    lines.push(`edge  : ${e.source}  sceneRight=${f(e.sceneRight)}  column=${String(e.column)}`);
+  lines.push(`judged: ${r.judged}`);
+  const axisBlock = (name: string, e: AxisEdgeReading | null, s: StrokeSweep | null): void => {
+    if (e !== null) {
+      lines.push(
+        `${name}: scene=${f(e.sceneCoord)}  lattice=${String(e.lattice)}  latticeDev ${f(e.contentLatticeDev)}  edgeDev ${f(e.contentEdgeDev)}  stroke ${f(e.strokeDev)}`,
+      );
+      lines.push(
+        `${name}: stroke−edge = ${f(e.dStrokeVsEdge)} dev px   stroke−lattice = ${f(e.dStrokeVsLattice)} dev px`,
+      );
+    } else {
+      lines.push(`${name}: —`);
+    }
+    if (s !== null) {
+      lines.push(
+        `${name}: sweep ${String(s.count)} strokes  first ${f(s.firstDelta)}  last ${f(s.lastDelta)}  min ${f(s.minDelta)}  max ${f(s.maxDelta)}  (stroke−contentLattice, dev px)`,
+      );
+    }
+  };
+  axisBlock('edgeX ', r.edgeX, r.sweepX);
+  axisBlock('edgeY ', r.edgeY, r.sweepY);
+  if (r.gizmo !== null) {
+    const g = r.gizmo;
     lines.push(
-      `edge  : ideal ${f(e.idealDev)}  contentCol ${f(e.contentColumnDev)}  contentEdge ${f(e.contentEdgeDev)}  stroke ${f(e.strokeDev)}  gizmoRight ${f(e.gizmoRightDev)}`,
+      `gizmo : points L ${f(g.pointsLeft)} R ${f(g.pointsRight)} T ${f(g.pointsTop)} B ${f(g.pointsBottom)}`,
     );
     lines.push(
-      `edge  : stroke−(col+½) = ${f(e.dStrokeVsColumn)} dev px   gizmo−content = ${f(e.dGizmoVsContent)} dev px`,
+      `gizmo : Δcontent L ${f(g.dLeft)} R ${f(g.dRight)} T ${f(g.dTop)} B ${f(g.dBottom)} dev px (points-based)`,
     );
-  }
-  if (r.sweep !== null) {
     lines.push(
-      `sweep : ${String(r.sweep.count)} strokes  first ${f(r.sweep.firstDelta)}  last ${f(r.sweep.lastDelta)}  min ${f(r.sweep.minDelta)}  max ${f(r.sweep.maxDelta)}  (stroke−(col+½), dev px)`,
+      `gizmo : bbox R ${f(g.bboxRight)} B ${f(g.bboxBottom)}  bbox−points R ${f(g.bboxBiasRight)} B ${f(g.bboxBiasBottom)} (rect artifact)`,
     );
+  } else {
+    lines.push('gizmo : — (nothing selected)');
   }
   if (r.note !== '') lines.push(`note  : ${r.note}`);
   return lines.join('\n');
@@ -329,24 +452,25 @@ function tableRow(r: ProbeReading): Record<string, string | number | null> {
     dpr: r.dpr,
     vvScale: r.vvScale,
     zoomSuspect: r.zoomSuspect ? 'YES — Ctrl+0' : 'no',
-    gridFracLeft: r.grid === null ? null : Number(r.grid.fracLeft.toFixed(4)),
-    gridBackingScale: r.grid === null ? null : Number(r.grid.backingScale.toFixed(8)),
-    gridRasterPhase: r.grid === null ? null : Number(r.grid.rasterPhase.toFixed(4)),
-    stageFracLeft: r.stage === null ? null : Number(r.stage.fracLeft.toFixed(4)),
-    iframeFracLeft: r.iframe === null ? null : Number(r.iframe.fracLeft.toFixed(4)),
-    gizmoFracLeft: r.gizmo === null ? null : Number(r.gizmo.fracLeft.toFixed(4)),
-    dStrokeVsColumn: r.edge === null ? null : r.edge.dStrokeVsColumn,
-    dGizmoVsContent: r.edge === null ? null : r.edge.dGizmoVsContent,
-    sweepMin: r.sweep === null ? null : Number(r.sweep.minDelta.toFixed(4)),
-    sweepMax: r.sweep === null ? null : Number(r.sweep.maxDelta.toFixed(4)),
+    stageFracX: r.stage === null ? null : Number(r.stage.fracLeft.toFixed(4)),
+    stageFracY: r.stage === null ? null : Number(r.stage.fracTop.toFixed(4)),
+    dStrokeVsEdgeX: r.edgeX === null ? null : r.edgeX.dStrokeVsEdge,
+    dStrokeVsEdgeY: r.edgeY === null ? null : r.edgeY.dStrokeVsEdge,
+    sweepXMin: r.sweepX === null ? null : Number(r.sweepX.minDelta.toFixed(4)),
+    sweepXMax: r.sweepX === null ? null : Number(r.sweepX.maxDelta.toFixed(4)),
+    sweepYMin: r.sweepY === null ? null : Number(r.sweepY.minDelta.toFixed(4)),
+    sweepYMax: r.sweepY === null ? null : Number(r.sweepY.maxDelta.toFixed(4)),
+    gizmoDRight: r.gizmo === null ? null : r.gizmo.dRight,
+    gizmoDTop: r.gizmo === null ? null : r.gizmo.dTop,
     note: r.note,
   };
 }
 
 const OWNER_STEPS =
-  '1) Ctrl+0 (reset zoom)  2) rect X=0 Y=0 W=320 H=120, zoom 6400%\n' +
-  '3) Esc (deselect) → judge edge vs line LEFT + RIGHT of viewport → Copy readout\n' +
-  '4) select the shape → Copy readout again  5) paste both + Windows display-scale %';
+  '1) Ctrl+0  2) rect X=0 Y=0 W=320 H=120, zoom 6400%, scroll so an edge is visible\n' +
+  '3) Esc (deselect) → Copy readout (X + Y blocks now fill from the first element)\n' +
+  '4) select the shape → Copy readout  5) drag to a fractional position → Copy readout\n' +
+  '6) paste all + Windows display-scale %';
 
 const panelStyle: CSSProperties = {
   position: 'fixed',
@@ -360,7 +484,7 @@ const panelStyle: CSSProperties = {
   padding: '6px 8px',
   font: '11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
   whiteSpace: 'pre',
-  maxWidth: 720,
+  maxWidth: 760,
   overflowX: 'auto',
   direction: 'ltr',
   pointerEvents: 'auto',
@@ -377,10 +501,11 @@ export function B042Probe(props: {
 }): JSX.Element {
   const { outerRef, stageRef, iframeRef, gridRef, zoom, selection } = props;
   const frameOffsetX = props.frameOffset.x;
+  const frameOffsetY = props.frameOffset.y;
   const [reading, setReading] = useState<ProbeReading | null>(null);
   const [copied, setCopied] = useState<string>('');
 
-  // Live at 2 Hz — rect reads + a few 1-row getImageData calls are cheap.
+  // Live at 2 Hz — rect reads + a few 1-line getImageData calls are cheap.
   useEffect(() => {
     const tick = (): void => {
       setReading(
@@ -391,6 +516,7 @@ export function B042Probe(props: {
           grid: gridRef.current,
           zoom,
           frameOffsetX,
+          frameOffsetY,
           selection,
         }),
       );
@@ -400,7 +526,7 @@ export function B042Probe(props: {
     return () => {
       window.clearInterval(id);
     };
-  }, [outerRef, stageRef, iframeRef, gridRef, zoom, frameOffsetX, selection]);
+  }, [outerRef, stageRef, iframeRef, gridRef, zoom, frameOffsetX, frameOffsetY, selection]);
 
   const text = useMemo(
     () => (reading === null ? 'B-042 probe: starting…' : formatReading(reading)),

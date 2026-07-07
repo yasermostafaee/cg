@@ -463,11 +463,19 @@ export interface PixelGridLine {
  * B-042 — `rasterPhase` is the grid canvas's own fractional device offset on this axis
  * ({@link gridCanvasAlignment}.phase). The overlay the canvas lives in sits at an arbitrary
  * (fractional) device position, so snapping to the canvas-INTERNAL raster alone lands strokes off
- * the PHYSICAL pixel grid the content is composited on. With the phase folded into the snap (and
- * the canvas element floor-aligned to the device raster via the alignment's `nudgeCss`), the
- * painted stroke's SCREEN position is `round(trueScreenDevice) + 0.5` — the physical pixel nearest
- * the line's true position, within ½ device px of the un-snapped composited content at every zoom
- * and every (fractional) dpr. Defaults to 0 (an axis already on the raster).
+ * the PHYSICAL pixel grid the content is composited on. With the phase folded in (and the canvas
+ * element floor-aligned to the device raster via the alignment's `nudgeCss`),
+ * `cssPos·dpr + rasterPhase` IS the line's true screen device position. Defaults to 0.
+ *
+ * B-042 owner-machine round — the snap is `floor(...) + 0.5`, NOT `round`: the stroke is the
+ * device pixel CONTAINING the line's true position. The content paints at its layout position
+ * (verified-deselected paint profiles: one honest AA pixel), and the stage's per-axis device
+ * phase is an arbitrary fraction (measured Y ≈ 0.68 in every owner reading, X a scroll lottery).
+ * `round` picks the NEAREST boundary, which at phase > ½ puts the whole stroke one pixel PAST the
+ * edge (owner-visible: horizontal strokes +0.81 device px below every content row); `floor`
+ * always picks the pixel the line passes through, so the stroke and a content edge at that
+ * coordinate share a pixel at ANY phase — the stroke CENTER stays within ½ device px of the true
+ * line position, the tightest a crisp 1-px stroke can do.
  */
 export function pixelGridLines(
   originCss: number,
@@ -482,9 +490,27 @@ export function pixelGridLines(
   const out: PixelGridLine[] = [];
   for (let scene = firstScene; scene <= lastScene; scene++) {
     const cssPos = originCss + scene * zoom;
-    out.push({ scene, devicePx: Math.round(cssPos * dpr + rasterPhase) + 0.5 });
+    out.push({ scene, devicePx: Math.floor(cssPos * dpr + rasterPhase) + 0.5 });
   }
   return out;
+}
+
+/**
+ * B-042 — the snapped position + size (CSS px, overlay coords) for a RULER tick mark, so the
+ * mark occupies EXACTLY the same physical device pixel as the grid stroke for that coordinate
+ * (`floor` of the true screen device position — the containing pixel, matching
+ * {@link pixelGridLines}). `cssPos` is the tick's ideal overlay position
+ * (`rulerOrigin + scene·zoom`), `rasterPhase` the overlay's fractional device offset on this
+ * axis. Keeps the D-120 grid↔ruler contract exact while both use the containing-pixel
+ * convention; the 1-device-px size also makes the marks crisp at fractional dpr.
+ */
+export function snapMarkToGridPixel(
+  cssPos: number,
+  dpr: number,
+  rasterPhase: number,
+): { posCss: number; sizeCss: number } {
+  if (dpr <= 0) return { posCss: cssPos, sizeCss: 1 };
+  return { posCss: (Math.floor(cssPos * dpr + rasterPhase) - rasterPhase) / dpr, sizeCss: 1 / dpr };
 }
 
 /** B-042 — how to place the grid canvas so its bitmap is a faithful window onto the PHYSICAL
@@ -535,4 +561,32 @@ export function gridBackingSize(
   if (lengthCss <= 0 || dpr <= 0) return { devicePx: 0, cssPx: 0 };
   const devicePx = Math.round(lengthCss * dpr) + 2;
   return { devicePx, cssPx: devicePx / dpr };
+}
+
+/**
+ * B-042 — Blink's LayoutUnit quantization: CSS lengths are stored in 1/64-px units,
+ * TRUNCATED toward zero (`style.left = "2.2749px"` measured to render a rect at 2.265625 in the
+ * preview iframe). The preview positions elements via `style.left/top` in SCENE units, so at high
+ * zoom the quantum is magnified to `zoom·dpr/64` device px (1.25 device px at 6400% / dpr 1.25) —
+ * the selection gizmo projecting the RAW model coordinate therefore sat up to that far OUTSIDE
+ * the rendered edge at fractional coords (owner-measured +1.0156 dev px; exactly 0 at integer
+ * coords). Quantizing the gizmo's box through the same lattice makes the overlay trace the box
+ * the engine ACTUALLY laid out; the E2E compares against the real rendered rect, so an engine
+ * change in this rule fails loudly rather than drifting silently.
+ */
+export function layoutQuantize(v: number): number {
+  return Math.trunc(v * 64) / 64;
+}
+
+/** B-042 — a {@link BoxTransform} with its LAYOUT-driven fields (position + size) passed through
+ *  {@link layoutQuantize}, matching how the preview iframe lays the element out. The
+ *  transform-driven fields (rotation / anchor / scale — CSS transforms, float-precision in the
+ *  engine) are untouched. Used by the gizmo's VISUAL projection only — interaction math stays on
+ *  the raw model. */
+export function quantizeBoxToLayout(t: BoxTransform): BoxTransform {
+  return {
+    ...t,
+    position: { x: layoutQuantize(t.position.x), y: layoutQuantize(t.position.y) },
+    size: { w: layoutQuantize(t.size.w), h: layoutQuantize(t.size.h) },
+  };
 }

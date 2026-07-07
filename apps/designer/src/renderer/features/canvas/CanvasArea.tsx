@@ -27,6 +27,7 @@ import {
   pixelGridVisible,
   PIXEL_GRID_MAJOR_EVERY,
   screenToScene,
+  snapMarkToGridPixel,
   zoomAnchorScroll,
 } from './geometry.js';
 import { needsFit, markFitted, frameCenterScroll, type FitGate } from './fit-on-open.js';
@@ -218,6 +219,14 @@ export function CanvasArea({
   // pinned rulers and the guide lines stay aligned with the canvas as it
   // zooms / scrolls / resizes.
   const [rulerOrigin, setRulerOrigin] = useState<{ x: number; y: number } | null>(null);
+  // B-042 — what the ruler needs to snap its tick MARKS onto the same physical device pixel
+  // as the grid strokes (dpr + the overlay's per-axis fractional device offset). Captured in
+  // `measure()` alongside `rulerOrigin` so both update in one batch.
+  const [rulerSnap, setRulerSnap] = useState<{
+    dpr: number;
+    phaseX: number;
+    phaseY: number;
+  } | null>(null);
   // Visible viewport size, so the rulers can tick across the whole dark area
   // (including negative scene coords and past the canvas edges), not just 0..w.
   const [viewport, setViewport] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
@@ -679,6 +688,15 @@ export function CanvasArea({
         x: srect.left - orect.left + frame.x * zoom,
         y: srect.top - orect.top + frame.y * zoom,
       });
+      // B-042 — the overlay's fractional device offset, for snapping ruler tick marks onto
+      // the same physical pixel as the grid strokes (grid↔ruler stay glued under the
+      // containing-pixel convention).
+      const dpr = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
+      setRulerSnap({
+        dpr,
+        phaseX: orect.left * dpr - Math.floor(orect.left * dpr),
+        phaseY: orect.top * dpr - Math.floor(orect.top * dpr),
+      });
       setViewport({ w: o.clientWidth, h: o.clientHeight });
     }
     measure();
@@ -920,6 +938,7 @@ export function CanvasArea({
               zoom={zoom}
               viewW={viewport.w}
               viewH={viewport.h}
+              snap={rulerSnap}
               onCreateGuide={createGuideFromRuler}
             />
           )}
@@ -1096,6 +1115,10 @@ const RULER = 16;
 /**
  * Pinned canvas rulers (top + left) showing scene-pixel coordinates. The tick
  * step adapts to zoom so labels stay ~64px apart; `originX/Y` place scene (0,0).
+ * B-042 — the tick MARKS are snapped onto the same physical device pixel as the pixel-grid
+ * strokes (`snapMarkToGridPixel`, 1 device px, containing-pixel convention), so grid↔ruler
+ * stay exactly glued. `snap` is null before the first measure (marks fall back to the ideal
+ * unsnapped position).
  */
 function CanvasRuler({
   originX,
@@ -1103,6 +1126,7 @@ function CanvasRuler({
   zoom,
   viewW,
   viewH,
+  snap,
   onCreateGuide,
 }: {
   originX: number;
@@ -1111,6 +1135,7 @@ function CanvasRuler({
   /** Visible viewport size in px — the rulers tick across this whole range. */
   viewW: number;
   viewH: number;
+  snap: { dpr: number; phaseX: number; phaseY: number } | null;
   onCreateGuide: (axis: 'x' | 'y', e: React.PointerEvent) => void;
 }): JSX.Element {
   const STEPS = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
@@ -1153,24 +1178,30 @@ function CanvasRuler({
         title="Drag down for a horizontal guide"
         onPointerDown={(e) => onCreateGuide('y', e)}
       >
-        {xticks.map((x) => (
-          <div
-            key={x}
-            style={{ position: 'absolute', left: originX + x * zoom, top: 0, bottom: 0 }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                left: 0,
-                bottom: 0,
-                width: 1,
-                height: 5,
-                background: colors.border,
-              }}
-            />
-            <span style={{ position: 'absolute', left: 2, top: 1, whiteSpace: 'nowrap' }}>{x}</span>
-          </div>
-        ))}
+        {xticks.map((x) => {
+          const ideal = originX + x * zoom;
+          const mark =
+            snap === null
+              ? { posCss: ideal, sizeCss: 1 }
+              : snapMarkToGridPixel(ideal, snap.dpr, snap.phaseX);
+          return (
+            <div key={x} style={{ position: 'absolute', left: ideal, top: 0, bottom: 0 }}>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: mark.posCss - ideal,
+                  bottom: 0,
+                  width: mark.sizeCss,
+                  height: 5,
+                  background: colors.border,
+                }}
+              />
+              <span style={{ position: 'absolute', left: 2, top: 1, whiteSpace: 'nowrap' }}>
+                {x}
+              </span>
+            </div>
+          );
+        })}
       </div>
       <div
         style={{
@@ -1186,31 +1217,38 @@ function CanvasRuler({
         title="Drag right for a vertical guide"
         onPointerDown={(e) => onCreateGuide('x', e)}
       >
-        {yticks.map((y) => (
-          <div key={y} style={{ position: 'absolute', top: originY + y * zoom, left: 0, right: 0 }}>
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                right: 0,
-                height: 1,
-                width: 5,
-                background: colors.border,
-              }}
-            />
-            <span
-              style={{
-                position: 'absolute',
-                left: 1,
-                top: 2,
-                writingMode: 'vertical-rl' as const,
-                fontSize: 8,
-              }}
-            >
-              {y}
-            </span>
-          </div>
-        ))}
+        {yticks.map((y) => {
+          const ideal = originY + y * zoom;
+          const mark =
+            snap === null
+              ? { posCss: ideal, sizeCss: 1 }
+              : snapMarkToGridPixel(ideal, snap.dpr, snap.phaseY);
+          return (
+            <div key={y} style={{ position: 'absolute', top: ideal, left: 0, right: 0 }}>
+              <div
+                style={{
+                  position: 'absolute',
+                  top: mark.posCss - ideal,
+                  right: 0,
+                  height: mark.sizeCss,
+                  width: 5,
+                  background: colors.border,
+                }}
+              />
+              <span
+                style={{
+                  position: 'absolute',
+                  left: 1,
+                  top: 2,
+                  writingMode: 'vertical-rl' as const,
+                  fontSize: 8,
+                }}
+              >
+                {y}
+              </span>
+            </div>
+          );
+        })}
       </div>
       <div
         style={{

@@ -205,13 +205,28 @@ integer device origin, the sub-CSS-px `left`/`top` **nudge** that lands the laye
 the compositor to snap or resample), and the fractional-offset **`phase`** folded into each line's
 snap; and (2) sizes the CSS box FROM the backing store (`gridBackingSize`: `cssPx = devicePx/dpr`,
 raster scale **exactly 1**; +2 device px overspan keeps the viewport covered despite the nudge,
-clipped by the overlay). The painted stroke then rasterizes at `round(trueScreenDevice) + 0.5` — the
-physical pixel nearest the line's true screen position — so an edge at an integer scene coordinate
-renders within **≤ ½ device px** of its grid line at every zoom ≥ the threshold and every dpr
-(including fractional 1.25 / 1.5), with a CONSTANT (uniform) residual when `zoom·dpr` is integer
-(6400% at dpr 1/1.25/1.5/2). The alignment is derived from the OUTER viewport's rect — never the
+clipped by the overlay). The alignment is derived from the OUTER viewport's rect — never the
 grid canvas's own rect (the draw nudges it — reading it back would feed back). The stage / scroll
 pipeline is untouched (B-027 / B-035 invariants hold).
+
+**Containing-pixel snap + gizmo fidelity (B-042, owner-machine round).** Each stroke is the device
+pixel **CONTAINING** its lattice line — `floor(trueScreenDevice) + 0.5`, not nearest-rounding: the
+stage composites at an arbitrary per-axis device phase (owner-measured Y ≈ 0.68 in every reading,
+X a scroll lottery), the content paints AT its layout position (verified-deselected paint
+profiles: one honest AA pixel per edge), and `round` put whole strokes one pixel PAST every edge
+at phases > ½ (the owner-visible +0.81 device-px Y offset). Under `floor` the stroke center stays
+≤ ½ device px from the line at ANY phase. The **ruler tick marks** snap to the SAME pixel
+(`snapMarkToGridPixel`, 1 device px wide) so grid↔ruler cannot split. The **selection gizmo** (the
+thing the operator actually stares at when working selected): its visual projection quantizes the
+box through the engine's LayoutUnit lattice (`quantizeBoxToLayout` — 1/64 css px, truncated;
+measured `2.2749px → 2.265625`), so at fractional model coords the frame traces the RENDERED edges
+(raw-model projection sat up to `zoom·dpr/64` = 1.25 device px outside at 6400%/dpr 1.25), and its
+frame stroke is **1 device px** (a 1-css stroke is a fuzzy 1.25-device band at dpr 1.25).
+Interaction math stays on the raw model; the border remains honest for fractional placement
+(D-122 governs placement snapping). Verification lives in `pixel-paint.spec.ts` — screenshot-pixel
+assertions with the selection state PROVEN (a silently-selected shape puts the gizmo's accent
+border on the measured edge; that artifact once mimicked a "content smear" — see the change's
+`design.md`, Takes 3–5).
 
 The rulers + guides live in a **non-scrolling overlay** (`s.overlay`) that is a **sibling** of the
 scroll container (`s.outer`), not a child of it — absolutely-positioned children of an

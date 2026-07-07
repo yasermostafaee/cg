@@ -173,6 +173,12 @@ for (const dpr of [1, 1.25, 2]) {
           const grect = grid.getBoundingClientRect();
           const irect = iframe.getBoundingClientRect();
           const zoom = stage.getBoundingClientRect().width / EXTENT_W;
+          // B-042 take 4 — the iframe is a WINDOW into the stage; its live `--cg-frame-x` var
+          // carries the window-compensated inset, so iframe-based content mappings use it.
+          const fxRaw = Number.parseFloat(
+            iframe.contentDocument!.documentElement.style.getPropertyValue('--cg-frame-x'),
+          );
+          const FX = Number.isFinite(fxRaw) ? fxRaw : FRAME_X;
           // Layer alignment: origin on an integer device px (± the 1/64-CSS-px layout quantum)…
           const leftDevice = grect.left * dpr;
           const topDevice = grect.top * dpr;
@@ -203,8 +209,8 @@ for (const dpr of [1, 1.25, 2]) {
             // through the canvas element's ACTUAL rect (catches a broken nudge/backing size)
             const strokeCenter = leftDevice + (col + 0.5) * ((grect.width * dpr) / grid.width);
             // nearest integer scene coordinate + the content's composited device position for it
-            const sceneX = Math.round((strokeCenter / dpr - irect.left) / zoom - FRAME_X);
-            const contentDevice = (irect.left + (FRAME_X + sceneX) * zoom) * dpr;
+            const sceneX = Math.round((strokeCenter / dpr - irect.left) / zoom - FX);
+            const contentDevice = (irect.left + (FX + sceneX) * zoom) * dpr;
             return { col, sceneX, delta: strokeCenter - contentDevice };
           });
           return {
@@ -254,11 +260,12 @@ for (const dpr of [1, 1.25, 2]) {
       expect(r.strokes.length, ctxLabel).toBeGreaterThanOrEqual(6);
       expect(r.adjacentPairs, `${ctxLabel}: doubled/blurred strokes`).toBe(0);
       // every stroke within ½ device px (+ layout-quantum tolerance) of its content position:
-      // the ideal stroke hugs the boundary's right side (center = boundary + ½). This is ALSO the
-      // ruler contract — the rulers use the same stage-rect + frame-offset mapping.
+      // the CONTAINING-pixel convention — the stroke is the device pixel the lattice line
+      // passes through, so its center stays within ½ px of the line at ANY stage phase. This
+      // is ALSO the ruler contract — the rulers use the same stage-rect + frame-offset mapping.
       for (const s of r.strokes) {
         expect(
-          Math.abs(s.delta - 0.5),
+          Math.abs(s.delta),
           `${ctxLabel}: stroke @col ${String(s.col)} (scene ${String(s.sceneX)}) delta ${String(s.delta)}`,
         ).toBeLessThanOrEqual(0.6);
       }

@@ -12,11 +12,14 @@ import {
   fitZoom,
   gridBackingSize,
   gridCanvasAlignment,
+  layoutQuantize,
   pasteboardLayout,
   pasteboardSceneBounds,
   pixelGridLines,
   pixelGridVisible,
+  quantizeBoxToLayout,
   screenToScene,
+  snapMarkToGridPixel,
   zoomAnchorScroll,
 } from '../src/renderer/features/canvas/geometry.js';
 
@@ -283,7 +286,9 @@ describe('D-120 — high-zoom pixel grid (threshold + device-pixel snapping + ru
     const lines = pixelGridLines(origin, zoom, 900, dpr);
     for (const { scene, devicePx } of lines) {
       const truePx = (origin + scene * zoom) * dpr; // the ruler's mapping, in device px
-      expect(Math.abs(devicePx - 0.5 - truePx)).toBeLessThanOrEqual(0.5);
+      // containing-pixel convention (B-042): the stroke CENTER stays within half a device
+      // pixel of the true line position — the stroke is the pixel the line passes through.
+      expect(Math.abs(devicePx - truePx)).toBeLessThanOrEqual(0.5);
     }
   });
 
@@ -388,9 +393,10 @@ describe('B-042 — grid↔content alignment (screen-raster snapping + device-al
           for (const { scene, devicePx } of lines) {
             const contentDevice = (screenCss + originCss + scene * zoom) * dpr;
             const strokeCenterScreen = align.deviceOrigin + devicePx;
-            expect(Math.abs(strokeCenterScreen - (contentDevice + 0.5))).toBeLessThanOrEqual(
-              0.5 + 1e-9,
-            );
+            // containing-pixel convention: the stroke center is within ½ device px of the
+            // content lattice line — i.e. the stroke's pixel CONTAINS the line at any phase
+            // (`round` broke this visibly at phases > ½: strokes one pixel past the edge).
+            expect(Math.abs(strokeCenterScreen - contentDevice)).toBeLessThanOrEqual(0.5 + 1e-9);
           }
         }
       }
@@ -405,7 +411,7 @@ describe('B-042 — grid↔content alignment (screen-raster snapping + device-al
     expect(lines.length).toBeGreaterThan(10);
     const residuals = lines.map(
       ({ scene, devicePx }) =>
-        align.deviceOrigin + devicePx - ((screenCss + originCss + scene * 64) * dpr + 0.5),
+        align.deviceOrigin + devicePx - (screenCss + originCss + scene * 64) * dpr,
     );
     for (const r of residuals) expect(r).toBeCloseTo(residuals[0]!, 9);
   });
@@ -422,6 +428,49 @@ describe('B-042 — grid↔content alignment (screen-raster snapping + device-al
 
   it('rasterPhase defaults to 0 — the D-120 call shape and line positions are unchanged', () => {
     expect(pixelGridLines(137.42, 48.08, 900, 1)).toEqual(pixelGridLines(137.42, 48.08, 900, 1, 0));
+  });
+});
+
+describe('B-042 — gizmo LayoutUnit quantization + ruler mark lockstep', () => {
+  it('layoutQuantize matches Blink LayoutUnit truncation (measured: style.left 2.2749px → rect 2.265625)', () => {
+    expect(layoutQuantize(2.2749)).toBe(2.265625);
+    expect(layoutQuantize(322)).toBe(322); // integers are exact — the gizmo fix is a no-op there
+    expect(layoutQuantize(0.68)).toBe(43 / 64); // 0.671875
+    expect(layoutQuantize(-3.7)).toBe(-3.6875); // truncation toward zero, not floor
+  });
+
+  it('quantizeBoxToLayout quantizes ONLY the layout-driven fields (position + size)', () => {
+    const t = {
+      position: { x: 2.2749, y: 1.5 },
+      size: { w: 320.9999, h: 120 },
+      rotation: 12.3,
+      anchor: { x: 0.5, y: 0.5 },
+      scale: { x: 1.1, y: 1 },
+    };
+    const q = quantizeBoxToLayout(t);
+    expect(q.position.x).toBe(2.265625);
+    expect(q.position.y).toBe(1.5); // 1.5·64 is integer — unchanged
+    expect(q.size.w).toBe(Math.trunc(320.9999 * 64) / 64);
+    expect(q.size.h).toBe(120);
+    expect(q.rotation).toBe(12.3);
+    expect(q.anchor).toEqual(t.anchor);
+    expect(q.scale).toEqual(t.scale);
+  });
+
+  it('snapMarkToGridPixel: the ruler mark occupies EXACTLY the grid stroke’s device pixel', () => {
+    for (const dpr of [1, 1.25, 1.5, 2]) {
+      for (const phase of [0, 0.3906, 0.6875, 0.9922]) {
+        for (const cssPos of [354.984375, 137.42, 640]) {
+          const mark = snapMarkToGridPixel(cssPos, dpr, phase);
+          // the stroke for the same inputs: floor(cssPos·dpr + phase) + 0.5 (canvas-internal)
+          const strokeLeft = Math.floor(cssPos * dpr + phase);
+          // the mark's device position (same overlay frame): posCss·dpr + phase
+          expect(mark.posCss * dpr + phase).toBeCloseTo(strokeLeft, 9);
+          expect(mark.sizeCss * dpr).toBeCloseTo(1, 9); // exactly one device pixel
+        }
+      }
+    }
+    expect(snapMarkToGridPixel(100, 0, 0.5)).toEqual({ posCss: 100, sizeCss: 1 }); // degenerate
   });
 });
 
