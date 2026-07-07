@@ -73,4 +73,6 @@ conventions is the clean choice. See `design.md`.
   `"[object Object]"`, edits round-trip as structure through `stack.update`, and
   a two-line item keeps its newline through the committed payload).
 - No shared package change (no extraction).
-- B-040 stays `[~]` until reviewed/merged.
+- B-040: the original editor merged as PR #243; the multi-line extension closes
+  the bug — flipped `[x]` after the operator's on-air validation PASS
+  (2026-07-07, CasparCG 2.5.0 `69e8ad5`).

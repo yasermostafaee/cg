@@ -45,7 +45,8 @@ _headless_ hook could be extracted then — out of scope here.)
   - `itemText(item)`, `setItemText`, `addItem(items, id)`, `removeItem`,
     `moveItem` — all preserve each item's `id` + unknown fields and return arrays.
 - `inspector/ListFieldEditor.tsx` — a small stateful editor (local `items` state
-  seeded from `value`): one text input per item + ↑/↓/× controls + "Add item".
+  seeded from `value`): one auto-growing multi-line textarea per item (see
+  "Multi-line items" below) + ↑/↓/× controls + "Add item".
   Text edits update local state and commit on blur; add/remove/reorder commit
   immediately. New item ids use the Runtime's `uuid()` helper. Commits the
   structured `ListItem[]` via `onCommit` (a `ListItem[]` is a valid `FieldValue`).
