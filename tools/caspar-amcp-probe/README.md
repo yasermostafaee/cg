@@ -114,15 +114,17 @@ class** so you see exactly which characters a candidate mangles.
 
 ## The candidate escapings (in `src/escape-candidates.ts` — add your own)
 
-| id                                 | escaping of the JSON data arg                                         |
-| ---------------------------------- | --------------------------------------------------------------------- |
-| `raw-json`                         | none (control — inner quotes break the token)                         |
-| `quotes-only`                      | `"`→`\"` only (the failed #245 rule — control)                        |
-| `backslash-quote`                  | `\`→`\\`, `"`→`\"` (original double-escape — control)                 |
-| `structural-quotes-only`           | escape only bare structural `"`; keep JSON’s `\`-escapes              |
-| `quotes-only+uXXXX-controls`       | quotes-only + control chars as `\uXXXX` (pre-compensate `\n`→newline) |
-| `backslash-quote+uXXXX-controls`   | double-escape + control chars as `\uXXXX`                             |
-| `structural-quotes+uXXXX-controls` | structural-quote-only + control chars as `\uXXXX`                     |
+| id                                     | escaping of the JSON data arg                                                                                                           |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `raw-json`                             | none (control — inner quotes break the token)                                                                                           |
+| `quotes-only`                          | `"`→`\"` only (the failed #245 rule — control)                                                                                          |
+| `backslash-quote`                      | `\`→`\\`, `"`→`\"` (original double-escape — control)                                                                                   |
+| `structural-quotes-only`               | escape only bare structural `"`; keep JSON’s `\`-escapes                                                                                |
+| `quotes-only+uXXXX-controls`           | quotes-only + control chars as `\uXXXX` (pre-compensate `\n`→newline)                                                                   |
+| `backslash-quote+uXXXX-controls`       | double-escape + control chars as `\uXXXX`                                                                                               |
+| `structural-quotes+uXXXX-controls`     | structural-quote-only + control chars as `\uXXXX`                                                                                       |
+| `js-escape+amcp-escape`                | double every `\` (JS-literal layer), then AMCP `\`→`\\`, `"`→`\"` — net: each JSON `\` → 4 wire `\` (predicted winner, two-layer model) |
+| `js-escape+amcp-escape+uXXXX-controls` | same, with JSON control escapes pre-encoded `\uXXXX` first (robustness variant)                                                         |
 
 ## Run it
 
@@ -153,19 +155,41 @@ several pass, pick the simplest.
 
 ## Recording the result — paste here, then I lock it in
 
-> CasparCG build: `__________` · date: `__________` · operator: `__________`
+One filled table per swept build. All prior evidence and the production box are
+**2.3.2**, so the **canonical rule comes ONLY from a 2.3.x pass**; results from any
+other build are provisional.
 
-| candidate                          | fire | parse | bytes | `"` | `\1` | `\2` | `\3` | `\4` | NL  | TAB | FA  | MIX | ALL |
-| ---------------------------------- | ---- | ----- | ----- | --- | ---- | ---- | ---- | ---- | --- | --- | --- | --- | --- |
-| `raw-json`                         |      |       |       |     |      |      |      |      |     |     |     |     |     |
-| `quotes-only`                      |      |       |       |     |      |      |      |      |     |     |     |     |     |
-| `backslash-quote`                  |      |       |       |     |      |      |      |      |     |     |     |     |     |
-| `structural-quotes-only`           |      |       |       |     |      |      |      |      |     |     |     |     |     |
-| `quotes-only+uXXXX-controls`       |      |       |       |     |      |      |      |      |     |     |     |     |     |
-| `backslash-quote+uXXXX-controls`   |      |       |       |     |      |      |      |      |     |     |     |     |     |
-| `structural-quotes+uXXXX-controls` |      |       |       |     |      |      |      |      |     |     |     |     |     |
+### Pass 1 — CasparCG build: `2.5.0 69e8ad5 Stable` · date: `2026-07-07` · operator: `yasere`
 
-**Winning escaping (the canonical rule):** `____________________________________`
+| candidate                              | fire | parse | bytes | `"` | `\1` | `\2` | `\3` | `\4` | NL  | TAB | FA  | MIX | ALL      |
+| -------------------------------------- | ---- | ----- | ----- | --- | ---- | ---- | ---- | ---- | --- | --- | --- | --- | -------- |
+| `raw-json`                             | YES  | no    | no    | ✗   | ✗    | ✗    | ✗    | ✗    | ✗   | ✗   | ✗   | ✗   | fail     |
+| `quotes-only`                          | no   | no    | no    | ✗   | ✗    | ✗    | ✗    | ✗    | ✗   | ✗   | ✗   | ✗   | fail     |
+| `backslash-quote`                      | no   | no    | no    | ✗   | ✗    | ✗    | ✗    | ✗    | ✗   | ✗   | ✗   | ✗   | fail     |
+| `structural-quotes-only`               | no   | no    | no    | ✗   | ✗    | ✗    | ✗    | ✗    | ✗   | ✗   | ✗   | ✗   | fail     |
+| `quotes-only+uXXXX-controls`           | no   | no    | no    | ✗   | ✗    | ✗    | ✗    | ✗    | ✗   | ✗   | ✗   | ✗   | fail     |
+| `backslash-quote+uXXXX-controls`       | no   | no    | no    | ✗   | ✗    | ✗    | ✗    | ✗    | ✗   | ✗   | ✗   | ✗   | fail     |
+| `structural-quotes+uXXXX-controls`     | YES  | no    | no    | ✗   | ✗    | ✗    | ✗    | ✗    | ✗   | ✗   | ✗   | ✗   | fail     |
+| `js-escape+amcp-escape`                | YES  | YES   | YES   | ✓   | ✓    | ✓    | ✓    | ✓    | ✓   | ✓   | ✓   | ✓   | **PASS** |
+| `js-escape+amcp-escape+uXXXX-controls` | YES  | YES   | no    | ✓   | ✓    | ✓    | ✓    | ✓    | ✓   | ✓   | ✓   | ✓   | **PASS** |
+
+**Provisional winner (build 2.5.0 — NOT canonical):** `js-escape+amcp-escape` — the
+only byte-exact candidate (`bytes=YES`); the `+uXXXX-controls` variant passes all
+classes but delivers the controls in their six-char `uXXXX` unicode-escape form
+(equal after `JSON.parse`, not byte-exact). All 7 pre-existing candidates failed,
+exactly as the two-layer model
+predicts. Notable wire evidence: `structural-quotes+uXXXX-controls` was received as
+`…New text000asecond text…` — the tokenizer DROPPED the unknown `\u` pair, and
+`quotes-only`/`backslash-quote` never fired `window.update` at all (V8 script
+SyntaxError — the DP1/DP2 signatures reproduced on this build).
+
+### Pass 2 — CasparCG 2.3.x: DEFERRED (no 2.3.2 build available this session; the harness is ready to re-run)
+
+**Winning escaping:** `js-escape+amcp-escape` — empirically confirmed on 2.5.0
+(`69e8ad5`); **provisional for 2.3.2**, supported by the source-level finding that
+`v2.3.x-lts` and `master` share byte-identical escape semantics in both layers; a
+2.3.x hardware pass (sweep, or live special-char validation) remains the gate
+before B-041 closes.
 
 Tell me the winning candidate id. The follow-up change (`fix-amcp-escaping-v2`) then
 locks exactly that escaping into the single canonical quoter

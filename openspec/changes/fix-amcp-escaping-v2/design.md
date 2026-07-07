@@ -46,9 +46,15 @@ sent as a bare backslash-n.
 
 Whether the raw `0x0A` also breaks AMCP **framing**: the bridge does not emit a raw
 newline (trace step 5), so framing is intact up to CasparCG; CasparCG produces the
-raw newline AFTER tokenizing the line, inside the token value — so the failure is the
-template's `JSON.parse`, not line framing. (A raw newline must still never be emitted
-by the AMCP layer — that WOULD break framing — which the mock must now enforce.)
+raw newline AFTER tokenizing the line, inside the token value — the failure is
+downstream of framing. **Correction (2026-07-07, operator-approved):** the DP2
+newline failure happens in **V8's parse of the injected `update("…")` script** —
+`html_cg_proxy::update()` re-escapes quotes only and embeds the tokenizer-decoded
+data in a JS string literal, and a raw LF inside that literal is a script
+`SyntaxError`, so **`window.update` is never invoked** — NOT in the template's
+`JSON.parse` as this section originally said. (A raw newline must still never be
+emitted by the AMCP layer — that WOULD break framing — which the mock must now
+enforce.)
 
 ## Why the exact rule can't be settled on paper (two conflicting data points)
 
@@ -99,3 +105,61 @@ attempted.)
   the empirically-derived escaping.
 - This change is the diagnosis + plan; the harness + fix + mock changes land in the
   follow-up and close only after on-hardware matrix validation.
+
+## Hardware sweep results (recorded 2026-07-07)
+
+### Pass 1 — local CasparCG `2.5.0 69e8ad5 Stable` (PROVISIONAL — the canonical rule requires a 2.3.x pass)
+
+Sweep run: `--sweep --caspar-host 127.0.0.1 --serve-host 127.0.0.1`, channel 1 /
+layer 10 / flash-layer 0. Full per-candidate matrix recorded in
+`tools/caspar-amcp-probe/README.md` → "Recording the result" (pass 1). Evidence
+committed per the repo's existing precedent
+(`tools/caspar-amcp-probe/evidence/casparcg-2.3.2-4de6d18f/`):
+`tools/caspar-amcp-probe/evidence/casparcg-2.5.0-69e8ad5/escape-sweep.results.json`
+and `…/escape-sweep.wire.ndjson`.
+
+- All 7 pre-existing candidates FAILED, including the three controls — the DP1/DP2
+  signatures reproduce on this build (`quotes-only` and `backslash-quote` never fire
+  `window.update`: a V8 script `SyntaxError` kills the injected `update("…")` call).
+- Both two-layer-model candidates (added pre-pass with operator approval) PASSED
+  every character class; `js-escape+amcp-escape` is additionally byte-exact
+  (`bytes=YES`) → **provisional winner: `js-escape+amcp-escape`** (the simpler, per
+  the README tie-break).
+- Direct tokenizer evidence: `structural-quotes+uXXXX-controls` was received as
+  `…New text000asecond text…` — the unknown backslash-escape pair was DROPPED by
+  the tokenizer, exactly as the upstream `v2.3.x-lts`/`master` source predicts.
+
+The provisional rule, stated in both directions (wording locks in as CANONICAL only
+after the 2.3.x pass agrees):
+
+- **The un-escape CasparCG applies (two layers):** (1) the AMCP tokenizer maps
+  backslash-backslash → one backslash, backslash-quote → a literal quote,
+  backslash-n → a RAW newline (`0x0A`), and silently DROPS any other backslash-X
+  pair; then (2) `html_cg_proxy::update()` re-escapes quotes only and embeds the
+  result in an `update("…")` JS string literal, so V8 applies a second full
+  string-literal un-escape before the template's `window.update` sees the value.
+- **The escape the bridge must emit (the exact inverse):** starting from the
+  `JSON.stringify` payload, first double every backslash (pre-compensating the V8
+  layer), then apply the AMCP escape — double every backslash again and escape
+  every quote. Net wire effect: each JSON backslash → FOUR wire backslashes; each
+  quote → backslash-quote; no raw control byte is ever emitted.
+
+### Behavioral evidence on 2.5.0 for the CURRENT #245 quotes-only rule (operator repro, 2026-07-07)
+
+`CG ADD` / `CG UPDATE` whose seq items contain the JSON two-char newline, sent under
+the current quotes-only rule, returned `202 CG OK` with
+`html[...] Log: Uncaught SyntaxError: Invalid or unexpected token`; `window.update`
+never ran and the output kept showing the template's baked-in default values. A
+later UPDATE with the newline removed from item 1 only STILL failed (items 2–3
+still contained newlines) — exactly the tokenizer(backslash-n → raw LF) →
+`update("…")` embed → V8 signature the two-layer model predicts. (Raw log lines to
+be pasted by the operator.)
+
+### Status (2026-07-07) — winner: `js-escape+amcp-escape`
+
+Empirically confirmed on 2.5.0 (`69e8ad5`); **provisional for 2.3.2**, supported by
+the source-level finding that `v2.3.x-lts` and `master` share byte-identical escape
+semantics in both layers (AMCP tokenizer + `html_cg_proxy` `update("…")` embed); a
+2.3.x hardware pass (sweep, or live special-char validation) remains the gate
+before B-041 closes. Pass 2 is DEFERRED — no 2.3.2 build was available this
+session; the harness is ready to re-run.

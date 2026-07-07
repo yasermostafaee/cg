@@ -1,0 +1,857 @@
+[
+  {
+    "id": "raw-json",
+    "title": "raw JSON.stringify, NO AMCP escaping",
+    "note": "CONTROL — inner quotes are unescaped; should break the AMCP token. Baseline.",
+    "loadSteps": [
+      {
+        "cmd": "CG 1-10 ADD 0 \"http://127.0.0.1:7900/probe.html\" 1 \"{\"quote\":\"aaa\\\"bbb\",\"bs1\":\"a\\\\b\",\"bs2\":\"a\\\\\\\\b\",\"bs3\":\"a\\\\\\\\\\\\b\",\"bs4\":\"a\\\\\\\\\\\\\\\\b\",\"newline\":\"New text\\nsecond text\",\"tab\":\"col1\\tcol2\",\"persian\":\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\",\"combo\":\"he said \\\"a\\\\b\\\"\\nخط دوم\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "updateSteps": [
+      {
+        "cmd": "CG 1-10 UPDATE 0 \"{\"quote\":\"aaa\\\"bbb\",\"bs1\":\"a\\\\b\",\"bs2\":\"a\\\\\\\\b\",\"bs3\":\"a\\\\\\\\\\\\b\",\"bs4\":\"a\\\\\\\\\\\\\\\\b\",\"newline\":\"New text\\nsecond text\",\"tab\":\"col1\\tcol2\",\"persian\":\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\",\"combo\":\"he said \\\"a\\\\b\\\"\\nخط دوم\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "amcpOk": true,
+    "helloObserved": true,
+    "beaconParseOk": false,
+    "evaluation": {
+      "id": "raw-json",
+      "fired": true,
+      "parseOk": false,
+      "byteExact": false,
+      "classes": [
+        {
+          "cls": "quote",
+          "label": "quote \"",
+          "expected": "aaa\"bbb",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs1",
+          "label": "backslash×1",
+          "expected": "a\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs2",
+          "label": "backslash×2",
+          "expected": "a\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs3",
+          "label": "backslash×3",
+          "expected": "a\\\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs4",
+          "label": "backslash×4",
+          "expected": "a\\\\\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "newline",
+          "label": "newline",
+          "expected": "New text\nsecond text",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "tab",
+          "label": "tab",
+          "expected": "col1\tcol2",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "persian",
+          "label": "persian",
+          "expected": "خبر فوری ۱۴۰۳ — «به‌روزرسانی»",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "combo",
+          "label": "combo",
+          "expected": "he said \"a\\b\"\nخط دوم",
+          "actual": null,
+          "pass": false
+        }
+      ],
+      "allPass": false,
+      "received": "{"
+    }
+  },
+  {
+    "id": "quotes-only",
+    "title": "escape only \" → \\\" (leave backslashes literal)",
+    "note": "CONTROL — the failed PR #245 rule. Expect newline/quote/backslash to fail.",
+    "loadSteps": [
+      {
+        "cmd": "CG 1-10 ADD 0 \"http://127.0.0.1:7900/probe.html\" 1 \"{\\\"quote\\\":\\\"aaa\\\\\"bbb\\\",\\\"bs1\\\":\\\"a\\\\b\\\",\\\"bs2\\\":\\\"a\\\\\\\\b\\\",\\\"bs3\\\":\\\"a\\\\\\\\\\\\b\\\",\\\"bs4\\\":\\\"a\\\\\\\\\\\\\\\\b\\\",\\\"newline\\\":\\\"New text\\nsecond text\\\",\\\"tab\\\":\\\"col1\\tcol2\\\",\\\"persian\\\":\\\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\\\",\\\"combo\\\":\\\"he said \\\\\"a\\\\b\\\\\"\\nخط دوم\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "updateSteps": [
+      {
+        "cmd": "CG 1-10 UPDATE 0 \"{\\\"quote\\\":\\\"aaa\\\\\"bbb\\\",\\\"bs1\\\":\\\"a\\\\b\\\",\\\"bs2\\\":\\\"a\\\\\\\\b\\\",\\\"bs3\\\":\\\"a\\\\\\\\\\\\b\\\",\\\"bs4\\\":\\\"a\\\\\\\\\\\\\\\\b\\\",\\\"newline\\\":\\\"New text\\nsecond text\\\",\\\"tab\\\":\\\"col1\\tcol2\\\",\\\"persian\\\":\\\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\\\",\\\"combo\\\":\\\"he said \\\\\"a\\\\b\\\\\"\\nخط دوم\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "amcpOk": true,
+    "helloObserved": true,
+    "beaconParseOk": null,
+    "evaluation": {
+      "id": "quotes-only",
+      "fired": false,
+      "parseOk": false,
+      "byteExact": false,
+      "allPass": false,
+      "received": null,
+      "classes": [
+        {
+          "cls": "quote",
+          "label": "quote \"",
+          "expected": "aaa\"bbb",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs1",
+          "label": "backslash×1",
+          "expected": "a\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs2",
+          "label": "backslash×2",
+          "expected": "a\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs3",
+          "label": "backslash×3",
+          "expected": "a\\\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs4",
+          "label": "backslash×4",
+          "expected": "a\\\\\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "newline",
+          "label": "newline",
+          "expected": "New text\nsecond text",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "tab",
+          "label": "tab",
+          "expected": "col1\tcol2",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "persian",
+          "label": "persian",
+          "expected": "خبر فوری ۱۴۰۳ — «به‌روزرسانی»",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "combo",
+          "label": "combo",
+          "expected": "he said \"a\\b\"\nخط دوم",
+          "actual": null,
+          "pass": false
+        }
+      ]
+    }
+  },
+  {
+    "id": "backslash-quote",
+    "title": "escape \\ → \\\\ and \" → \\\" (original double-escape)",
+    "note": "CONTROL — the original pre-#245 rule. B-041 reported it failed too; confirm.",
+    "loadSteps": [
+      {
+        "cmd": "CG 1-10 ADD 0 \"http://127.0.0.1:7900/probe.html\" 1 \"{\\\"quote\\\":\\\"aaa\\\\\\\"bbb\\\",\\\"bs1\\\":\\\"a\\\\\\\\b\\\",\\\"bs2\\\":\\\"a\\\\\\\\\\\\\\\\b\\\",\\\"bs3\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"bs4\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"newline\\\":\\\"New text\\\\nsecond text\\\",\\\"tab\\\":\\\"col1\\\\tcol2\\\",\\\"persian\\\":\\\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\\\",\\\"combo\\\":\\\"he said \\\\\\\"a\\\\\\\\b\\\\\\\"\\\\nخط دوم\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "updateSteps": [
+      {
+        "cmd": "CG 1-10 UPDATE 0 \"{\\\"quote\\\":\\\"aaa\\\\\\\"bbb\\\",\\\"bs1\\\":\\\"a\\\\\\\\b\\\",\\\"bs2\\\":\\\"a\\\\\\\\\\\\\\\\b\\\",\\\"bs3\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"bs4\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"newline\\\":\\\"New text\\\\nsecond text\\\",\\\"tab\\\":\\\"col1\\\\tcol2\\\",\\\"persian\\\":\\\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\\\",\\\"combo\\\":\\\"he said \\\\\\\"a\\\\\\\\b\\\\\\\"\\\\nخط دوم\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "amcpOk": true,
+    "helloObserved": true,
+    "beaconParseOk": null,
+    "evaluation": {
+      "id": "backslash-quote",
+      "fired": false,
+      "parseOk": false,
+      "byteExact": false,
+      "allPass": false,
+      "received": null,
+      "classes": [
+        {
+          "cls": "quote",
+          "label": "quote \"",
+          "expected": "aaa\"bbb",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs1",
+          "label": "backslash×1",
+          "expected": "a\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs2",
+          "label": "backslash×2",
+          "expected": "a\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs3",
+          "label": "backslash×3",
+          "expected": "a\\\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs4",
+          "label": "backslash×4",
+          "expected": "a\\\\\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "newline",
+          "label": "newline",
+          "expected": "New text\nsecond text",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "tab",
+          "label": "tab",
+          "expected": "col1\tcol2",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "persian",
+          "label": "persian",
+          "expected": "خبر فوری ۱۴۰۳ — «به‌روزرسانی»",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "combo",
+          "label": "combo",
+          "expected": "he said \"a\\b\"\nخط دوم",
+          "actual": null,
+          "pass": false
+        }
+      ]
+    }
+  },
+  {
+    "id": "structural-quotes-only",
+    "title": "escape only the structural \" ; keep JSON’s own \\-escapes intact",
+    "note": "Leaves the JSON’s `\\\"` / `\\\\` / `\\n` untouched so they reach CasparCG as-is.",
+    "loadSteps": [
+      {
+        "cmd": "CG 1-10 ADD 0 \"http://127.0.0.1:7900/probe.html\" 1 \"{\\\"quote\\\":\\\"aaa\\\"bbb\\\",\\\"bs1\\\":\\\"a\\\\b\\\",\\\"bs2\\\":\\\"a\\\\\\\\b\\\",\\\"bs3\\\":\\\"a\\\\\\\\\\\\b\\\",\\\"bs4\\\":\\\"a\\\\\\\\\\\\\\\\b\\\",\\\"newline\\\":\\\"New text\\nsecond text\\\",\\\"tab\\\":\\\"col1\\tcol2\\\",\\\"persian\\\":\\\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\\\",\\\"combo\\\":\\\"he said \\\"a\\\\b\\\"\\nخط دوم\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "updateSteps": [
+      {
+        "cmd": "CG 1-10 UPDATE 0 \"{\\\"quote\\\":\\\"aaa\\\"bbb\\\",\\\"bs1\\\":\\\"a\\\\b\\\",\\\"bs2\\\":\\\"a\\\\\\\\b\\\",\\\"bs3\\\":\\\"a\\\\\\\\\\\\b\\\",\\\"bs4\\\":\\\"a\\\\\\\\\\\\\\\\b\\\",\\\"newline\\\":\\\"New text\\nsecond text\\\",\\\"tab\\\":\\\"col1\\tcol2\\\",\\\"persian\\\":\\\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\\\",\\\"combo\\\":\\\"he said \\\"a\\\\b\\\"\\nخط دوم\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "amcpOk": true,
+    "helloObserved": true,
+    "beaconParseOk": null,
+    "evaluation": {
+      "id": "structural-quotes-only",
+      "fired": false,
+      "parseOk": false,
+      "byteExact": false,
+      "allPass": false,
+      "received": null,
+      "classes": [
+        {
+          "cls": "quote",
+          "label": "quote \"",
+          "expected": "aaa\"bbb",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs1",
+          "label": "backslash×1",
+          "expected": "a\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs2",
+          "label": "backslash×2",
+          "expected": "a\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs3",
+          "label": "backslash×3",
+          "expected": "a\\\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs4",
+          "label": "backslash×4",
+          "expected": "a\\\\\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "newline",
+          "label": "newline",
+          "expected": "New text\nsecond text",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "tab",
+          "label": "tab",
+          "expected": "col1\tcol2",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "persian",
+          "label": "persian",
+          "expected": "خبر فوری ۱۴۰۳ — «به‌روزرسانی»",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "combo",
+          "label": "combo",
+          "expected": "he said \"a\\b\"\nخط دوم",
+          "actual": null,
+          "pass": false
+        }
+      ]
+    }
+  },
+  {
+    "id": "quotes-only+uXXXX-controls",
+    "title": "quotes-only, but control chars as \\uXXXX (pre-compensate \\n→newline)",
+    "note": "No bare backslash-n for CasparCG to turn into a raw newline; JSON.parse still decodes \\u000a.",
+    "loadSteps": [
+      {
+        "cmd": "CG 1-10 ADD 0 \"http://127.0.0.1:7900/probe.html\" 1 \"{\\\"quote\\\":\\\"aaa\\\\\"bbb\\\",\\\"bs1\\\":\\\"a\\\\b\\\",\\\"bs2\\\":\\\"a\\\\\\\\b\\\",\\\"bs3\\\":\\\"a\\\\\\\\\\\\b\\\",\\\"bs4\\\":\\\"a\\\\\\\\\\\\\\\\b\\\",\\\"newline\\\":\\\"New text\\u000asecond text\\\",\\\"tab\\\":\\\"col1\\u0009col2\\\",\\\"persian\\\":\\\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\\\",\\\"combo\\\":\\\"he said \\\\\"a\\\\b\\\\\"\\u000aخط دوم\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "updateSteps": [
+      {
+        "cmd": "CG 1-10 UPDATE 0 \"{\\\"quote\\\":\\\"aaa\\\\\"bbb\\\",\\\"bs1\\\":\\\"a\\\\b\\\",\\\"bs2\\\":\\\"a\\\\\\\\b\\\",\\\"bs3\\\":\\\"a\\\\\\\\\\\\b\\\",\\\"bs4\\\":\\\"a\\\\\\\\\\\\\\\\b\\\",\\\"newline\\\":\\\"New text\\u000asecond text\\\",\\\"tab\\\":\\\"col1\\u0009col2\\\",\\\"persian\\\":\\\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\\\",\\\"combo\\\":\\\"he said \\\\\"a\\\\b\\\\\"\\u000aخط دوم\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "amcpOk": true,
+    "helloObserved": true,
+    "beaconParseOk": null,
+    "evaluation": {
+      "id": "quotes-only+uXXXX-controls",
+      "fired": false,
+      "parseOk": false,
+      "byteExact": false,
+      "allPass": false,
+      "received": null,
+      "classes": [
+        {
+          "cls": "quote",
+          "label": "quote \"",
+          "expected": "aaa\"bbb",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs1",
+          "label": "backslash×1",
+          "expected": "a\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs2",
+          "label": "backslash×2",
+          "expected": "a\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs3",
+          "label": "backslash×3",
+          "expected": "a\\\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs4",
+          "label": "backslash×4",
+          "expected": "a\\\\\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "newline",
+          "label": "newline",
+          "expected": "New text\nsecond text",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "tab",
+          "label": "tab",
+          "expected": "col1\tcol2",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "persian",
+          "label": "persian",
+          "expected": "خبر فوری ۱۴۰۳ — «به‌روزرسانی»",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "combo",
+          "label": "combo",
+          "expected": "he said \"a\\b\"\nخط دوم",
+          "actual": null,
+          "pass": false
+        }
+      ]
+    }
+  },
+  {
+    "id": "backslash-quote+uXXXX-controls",
+    "title": "backslash+quote, but control chars as \\uXXXX",
+    "note": "Double-escape variant that also removes bare backslash-n via \\uXXXX.",
+    "loadSteps": [
+      {
+        "cmd": "CG 1-10 ADD 0 \"http://127.0.0.1:7900/probe.html\" 1 \"{\\\"quote\\\":\\\"aaa\\\\\\\"bbb\\\",\\\"bs1\\\":\\\"a\\\\\\\\b\\\",\\\"bs2\\\":\\\"a\\\\\\\\\\\\\\\\b\\\",\\\"bs3\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"bs4\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"newline\\\":\\\"New text\\\\u000asecond text\\\",\\\"tab\\\":\\\"col1\\\\u0009col2\\\",\\\"persian\\\":\\\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\\\",\\\"combo\\\":\\\"he said \\\\\\\"a\\\\\\\\b\\\\\\\"\\\\u000aخط دوم\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "updateSteps": [
+      {
+        "cmd": "CG 1-10 UPDATE 0 \"{\\\"quote\\\":\\\"aaa\\\\\\\"bbb\\\",\\\"bs1\\\":\\\"a\\\\\\\\b\\\",\\\"bs2\\\":\\\"a\\\\\\\\\\\\\\\\b\\\",\\\"bs3\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"bs4\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"newline\\\":\\\"New text\\\\u000asecond text\\\",\\\"tab\\\":\\\"col1\\\\u0009col2\\\",\\\"persian\\\":\\\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\\\",\\\"combo\\\":\\\"he said \\\\\\\"a\\\\\\\\b\\\\\\\"\\\\u000aخط دوم\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "amcpOk": true,
+    "helloObserved": true,
+    "beaconParseOk": null,
+    "evaluation": {
+      "id": "backslash-quote+uXXXX-controls",
+      "fired": false,
+      "parseOk": false,
+      "byteExact": false,
+      "allPass": false,
+      "received": null,
+      "classes": [
+        {
+          "cls": "quote",
+          "label": "quote \"",
+          "expected": "aaa\"bbb",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs1",
+          "label": "backslash×1",
+          "expected": "a\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs2",
+          "label": "backslash×2",
+          "expected": "a\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs3",
+          "label": "backslash×3",
+          "expected": "a\\\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs4",
+          "label": "backslash×4",
+          "expected": "a\\\\\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "newline",
+          "label": "newline",
+          "expected": "New text\nsecond text",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "tab",
+          "label": "tab",
+          "expected": "col1\tcol2",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "persian",
+          "label": "persian",
+          "expected": "خبر فوری ۱۴۰۳ — «به‌روزرسانی»",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "combo",
+          "label": "combo",
+          "expected": "he said \"a\\b\"\nخط دوم",
+          "actual": null,
+          "pass": false
+        }
+      ]
+    }
+  },
+  {
+    "id": "structural-quotes+uXXXX-controls",
+    "title": "structural-quote-only + control chars as \\uXXXX",
+    "note": "Minimal AMCP escaping (structural quotes) plus newline carried as \\u000a.",
+    "loadSteps": [
+      {
+        "cmd": "CG 1-10 ADD 0 \"http://127.0.0.1:7900/probe.html\" 1 \"{\\\"quote\\\":\\\"aaa\\\"bbb\\\",\\\"bs1\\\":\\\"a\\\\b\\\",\\\"bs2\\\":\\\"a\\\\\\\\b\\\",\\\"bs3\\\":\\\"a\\\\\\\\\\\\b\\\",\\\"bs4\\\":\\\"a\\\\\\\\\\\\\\\\b\\\",\\\"newline\\\":\\\"New text\\u000asecond text\\\",\\\"tab\\\":\\\"col1\\u0009col2\\\",\\\"persian\\\":\\\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\\\",\\\"combo\\\":\\\"he said \\\"a\\\\b\\\"\\u000aخط دوم\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "updateSteps": [
+      {
+        "cmd": "CG 1-10 UPDATE 0 \"{\\\"quote\\\":\\\"aaa\\\"bbb\\\",\\\"bs1\\\":\\\"a\\\\b\\\",\\\"bs2\\\":\\\"a\\\\\\\\b\\\",\\\"bs3\\\":\\\"a\\\\\\\\\\\\b\\\",\\\"bs4\\\":\\\"a\\\\\\\\\\\\\\\\b\\\",\\\"newline\\\":\\\"New text\\u000asecond text\\\",\\\"tab\\\":\\\"col1\\u0009col2\\\",\\\"persian\\\":\\\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\\\",\\\"combo\\\":\\\"he said \\\"a\\\\b\\\"\\u000aخط دوم\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "amcpOk": true,
+    "helloObserved": true,
+    "beaconParseOk": false,
+    "evaluation": {
+      "id": "structural-quotes+uXXXX-controls",
+      "fired": true,
+      "parseOk": false,
+      "byteExact": false,
+      "classes": [
+        {
+          "cls": "quote",
+          "label": "quote \"",
+          "expected": "aaa\"bbb",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs1",
+          "label": "backslash×1",
+          "expected": "a\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs2",
+          "label": "backslash×2",
+          "expected": "a\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs3",
+          "label": "backslash×3",
+          "expected": "a\\\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "bs4",
+          "label": "backslash×4",
+          "expected": "a\\\\\\\\b",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "newline",
+          "label": "newline",
+          "expected": "New text\nsecond text",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "tab",
+          "label": "tab",
+          "expected": "col1\tcol2",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "persian",
+          "label": "persian",
+          "expected": "خبر فوری ۱۴۰۳ — «به‌روزرسانی»",
+          "actual": null,
+          "pass": false
+        },
+        {
+          "cls": "combo",
+          "label": "combo",
+          "expected": "he said \"a\\b\"\nخط دوم",
+          "actual": null,
+          "pass": false
+        }
+      ],
+      "allPass": false,
+      "received": "{\"quote\":\"aaa\"bbb\",\"bs1\":\"a\b\",\"bs2\":\"a\\b\",\"bs3\":\"a\\\b\",\"bs4\":\"a\\\\b\",\"newline\":\"New text000asecond text\",\"tab\":\"col10009col2\",\"persian\":\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\",\"combo\":\"he said \"a\b\"000aخط دوم\"}"
+    }
+  },
+  {
+    "id": "js-escape+amcp-escape",
+    "title": "double every \\ (JS-literal layer), then AMCP-escape \\→\\\\ and \"→\\\"",
+    "note": "Predicted winner under the two-layer model (AMCP tokenizer un-escape, then html_cg_proxy update(\"…\") V8 embed). Net: each JSON \\ → 4 on the wire, each \" → \\\".",
+    "loadSteps": [
+      {
+        "cmd": "CG 1-10 ADD 0 \"http://127.0.0.1:7900/probe.html\" 1 \"{\\\"quote\\\":\\\"aaa\\\\\\\\\\\"bbb\\\",\\\"bs1\\\":\\\"a\\\\\\\\\\\\\\\\b\\\",\\\"bs2\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"bs3\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"bs4\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"newline\\\":\\\"New text\\\\\\\\nsecond text\\\",\\\"tab\\\":\\\"col1\\\\\\\\tcol2\\\",\\\"persian\\\":\\\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\\\",\\\"combo\\\":\\\"he said \\\\\\\\\\\"a\\\\\\\\\\\\\\\\b\\\\\\\\\\\"\\\\\\\\nخط دوم\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "updateSteps": [
+      {
+        "cmd": "CG 1-10 UPDATE 0 \"{\\\"quote\\\":\\\"aaa\\\\\\\\\\\"bbb\\\",\\\"bs1\\\":\\\"a\\\\\\\\\\\\\\\\b\\\",\\\"bs2\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"bs3\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"bs4\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"newline\\\":\\\"New text\\\\\\\\nsecond text\\\",\\\"tab\\\":\\\"col1\\\\\\\\tcol2\\\",\\\"persian\\\":\\\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\\\",\\\"combo\\\":\\\"he said \\\\\\\\\\\"a\\\\\\\\\\\\\\\\b\\\\\\\\\\\"\\\\\\\\nخط دوم\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "amcpOk": true,
+    "helloObserved": true,
+    "beaconParseOk": true,
+    "evaluation": {
+      "id": "js-escape+amcp-escape",
+      "fired": true,
+      "parseOk": true,
+      "byteExact": true,
+      "classes": [
+        {
+          "cls": "quote",
+          "label": "quote \"",
+          "expected": "aaa\"bbb",
+          "actual": "aaa\"bbb",
+          "pass": true
+        },
+        {
+          "cls": "bs1",
+          "label": "backslash×1",
+          "expected": "a\\b",
+          "actual": "a\\b",
+          "pass": true
+        },
+        {
+          "cls": "bs2",
+          "label": "backslash×2",
+          "expected": "a\\\\b",
+          "actual": "a\\\\b",
+          "pass": true
+        },
+        {
+          "cls": "bs3",
+          "label": "backslash×3",
+          "expected": "a\\\\\\b",
+          "actual": "a\\\\\\b",
+          "pass": true
+        },
+        {
+          "cls": "bs4",
+          "label": "backslash×4",
+          "expected": "a\\\\\\\\b",
+          "actual": "a\\\\\\\\b",
+          "pass": true
+        },
+        {
+          "cls": "newline",
+          "label": "newline",
+          "expected": "New text\nsecond text",
+          "actual": "New text\nsecond text",
+          "pass": true
+        },
+        {
+          "cls": "tab",
+          "label": "tab",
+          "expected": "col1\tcol2",
+          "actual": "col1\tcol2",
+          "pass": true
+        },
+        {
+          "cls": "persian",
+          "label": "persian",
+          "expected": "خبر فوری ۱۴۰۳ — «به‌روزرسانی»",
+          "actual": "خبر فوری ۱۴۰۳ — «به‌روزرسانی»",
+          "pass": true
+        },
+        {
+          "cls": "combo",
+          "label": "combo",
+          "expected": "he said \"a\\b\"\nخط دوم",
+          "actual": "he said \"a\\b\"\nخط دوم",
+          "pass": true
+        }
+      ],
+      "allPass": true,
+      "received": "{\"quote\":\"aaa\\\"bbb\",\"bs1\":\"a\\\\b\",\"bs2\":\"a\\\\\\\\b\",\"bs3\":\"a\\\\\\\\\\\\b\",\"bs4\":\"a\\\\\\\\\\\\\\\\b\",\"newline\":\"New text\\nsecond text\",\"tab\":\"col1\\tcol2\",\"persian\":\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\",\"combo\":\"he said \\\"a\\\\b\\\"\\nخط دوم\"}"
+    }
+  },
+  {
+    "id": "js-escape+amcp-escape+uXXXX-controls",
+    "title": "controls as \\uXXXX, then double \\ (JS layer), then AMCP-escape",
+    "note": "Robustness variant of js-escape+amcp-escape: JSON control escapes pre-encoded (\\n→\\u000a etc.) before BOTH backslash layers, so no n/t letter ever follows a backslash run.",
+    "loadSteps": [
+      {
+        "cmd": "CG 1-10 ADD 0 \"http://127.0.0.1:7900/probe.html\" 1 \"{\\\"quote\\\":\\\"aaa\\\\\\\\\\\"bbb\\\",\\\"bs1\\\":\\\"a\\\\\\\\\\\\\\\\b\\\",\\\"bs2\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"bs3\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"bs4\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"newline\\\":\\\"New text\\\\\\\\u000asecond text\\\",\\\"tab\\\":\\\"col1\\\\\\\\u0009col2\\\",\\\"persian\\\":\\\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\\\",\\\"combo\\\":\\\"he said \\\\\\\\\\\"a\\\\\\\\\\\\\\\\b\\\\\\\\\\\"\\\\\\\\u000aخط دوم\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "updateSteps": [
+      {
+        "cmd": "CG 1-10 UPDATE 0 \"{\\\"quote\\\":\\\"aaa\\\\\\\\\\\"bbb\\\",\\\"bs1\\\":\\\"a\\\\\\\\\\\\\\\\b\\\",\\\"bs2\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"bs3\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"bs4\\\":\\\"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b\\\",\\\"newline\\\":\\\"New text\\\\\\\\u000asecond text\\\",\\\"tab\\\":\\\"col1\\\\\\\\u0009col2\\\",\\\"persian\\\":\\\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\\\",\\\"combo\\\":\\\"he said \\\\\\\\\\\"a\\\\\\\\\\\\\\\\b\\\\\\\\\\\"\\\\\\\\u000aخط دوم\\\"}\"",
+        "code": 202,
+        "reply": "202 CG OK"
+      }
+    ],
+    "amcpOk": true,
+    "helloObserved": true,
+    "beaconParseOk": true,
+    "evaluation": {
+      "id": "js-escape+amcp-escape+uXXXX-controls",
+      "fired": true,
+      "parseOk": true,
+      "byteExact": false,
+      "classes": [
+        {
+          "cls": "quote",
+          "label": "quote \"",
+          "expected": "aaa\"bbb",
+          "actual": "aaa\"bbb",
+          "pass": true
+        },
+        {
+          "cls": "bs1",
+          "label": "backslash×1",
+          "expected": "a\\b",
+          "actual": "a\\b",
+          "pass": true
+        },
+        {
+          "cls": "bs2",
+          "label": "backslash×2",
+          "expected": "a\\\\b",
+          "actual": "a\\\\b",
+          "pass": true
+        },
+        {
+          "cls": "bs3",
+          "label": "backslash×3",
+          "expected": "a\\\\\\b",
+          "actual": "a\\\\\\b",
+          "pass": true
+        },
+        {
+          "cls": "bs4",
+          "label": "backslash×4",
+          "expected": "a\\\\\\\\b",
+          "actual": "a\\\\\\\\b",
+          "pass": true
+        },
+        {
+          "cls": "newline",
+          "label": "newline",
+          "expected": "New text\nsecond text",
+          "actual": "New text\nsecond text",
+          "pass": true
+        },
+        {
+          "cls": "tab",
+          "label": "tab",
+          "expected": "col1\tcol2",
+          "actual": "col1\tcol2",
+          "pass": true
+        },
+        {
+          "cls": "persian",
+          "label": "persian",
+          "expected": "خبر فوری ۱۴۰۳ — «به‌روزرسانی»",
+          "actual": "خبر فوری ۱۴۰۳ — «به‌روزرسانی»",
+          "pass": true
+        },
+        {
+          "cls": "combo",
+          "label": "combo",
+          "expected": "he said \"a\\b\"\nخط دوم",
+          "actual": "he said \"a\\b\"\nخط دوم",
+          "pass": true
+        }
+      ],
+      "allPass": true,
+      "received": "{\"quote\":\"aaa\\\"bbb\",\"bs1\":\"a\\\\b\",\"bs2\":\"a\\\\\\\\b\",\"bs3\":\"a\\\\\\\\\\\\b\",\"bs4\":\"a\\\\\\\\\\\\\\\\b\",\"newline\":\"New text\\u000asecond text\",\"tab\":\"col1\\u0009col2\",\"persian\":\"خبر فوری ۱۴۰۳ — «به‌روزرسانی»\",\"combo\":\"he said \\\"a\\\\b\\\"\\u000aخط دوم\"}"
+    }
+  }
+]
