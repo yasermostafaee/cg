@@ -389,11 +389,27 @@ quote/backslash/newline payload before B-041 closes.
 
 ---
 
-## [ ] B-044 — stack item badge stays "updating" indefinitely after a CG UPDATE (the value DOES apply on air) ⟨priority: high⟩
+## [x] B-044 — stack item badge stays "updating" indefinitely after a CG UPDATE (the value DOES apply on air) ⟨priority: high⟩
 
-> Observed in the **2026-07-07 live session** (Runtime LIVE via `tools/caspar-bridge`
-> against local CasparCG **2.5.0** `69e8ad5`, post-B-041 two-layer escaping).
-> **Symptom-level report only — no diagnosis yet.**
+> **CLOSED — live-validated.** Fixed by `fix-pending-update-completion`: the
+> Reconciler parked `updating` (and `exiting`) as resting statuses — the OK ack
+> confirmed the intent by identity and nothing could ever transition it again;
+> OSC cannot rescue an update (a `CG UPDATE` causes no producer transition, the
+> change-tracker suppresses repeated identical values, 1s truth TTL — confirmed
+> by a live OSC probe: ~50 datagrams/s in, transitions-only out, no event on
+> update), and no timeout existed on any tier. Now transient intents settle on
+> their own command's OK ack (update → the evidenced underlying status; out →
+> `idle` via its single `CLEAR`), and a lost ack expires within 5 s to the
+> explicit `unconfirmed` badge — never a stuck spinner, never fake success.
+> Operator-validated live on **CasparCG 2.5.0** (`69e8ad5`, 2026-07-07): update
+> on a text field AND a ticker item settles to ON AIR at ack speed with the
+> value on air; Out rests IDLE; negative test (CasparCG stopped mid-update)
+> landed the explicit unconfirmed/error state within ~5 s and recovered after
+> restart. Root cause is NOT build-dependent — no extra 2.3.2 gate beyond the
+> standing B-041 one.
+> Originally observed in the **2026-07-07 live session** (Runtime LIVE via
+> `tools/caspar-bridge` against local CasparCG **2.5.0** `69e8ad5`, post-B-041
+> two-layer escaping).
 
 **Repro:**
 

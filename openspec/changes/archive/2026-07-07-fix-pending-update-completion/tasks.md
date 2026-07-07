@@ -69,12 +69,16 @@
 
 ## 9. Live validation (operator) + wrap-up
 
-- [ ] STOP for the operator's live pass (real CasparCG 2.5.0 `69e8ad5`):
-      update on a text field AND a ticker item → badge settles within ~5 s and
-      the value is on air; Take/Out badges behave (out rests IDLE, not EXIT);
-      negative test — stop CasparCG mid-update → badge lands in the explicit
-      `unconfirmed`/`error` state (not stuck), and after Caspar restarts + the
-      bridge reconnects, a fresh Load/Take + Update works.
-- [ ] After PASS: tick tasks, flip B-044 → `[x]` (note build 2.5.0 `69e8ad5`;
+- [x] Operator live validation — **PASS, CasparCG 2.5.0 (`69e8ad5`),
+      2026-07-07 (operator report)**, on the freshly rebuilt bridge: update on
+      a plain text field AND a ticker item → value on air, badge settles to
+      ON AIR at ack speed; Take → ON AIR; Out rests IDLE (no lingering EXIT);
+      negative test — CasparCG stopped mid-update → badge landed in the
+      explicit unconfirmed/error state within ~5s (no forever-spinner, no fake
+      success), and after CasparCG restarted + the link recovered, a fresh
+      Load + Take + Update worked. (The first-Load retest result for the
+      findings filing was NOT included in the report — it follows with the
+      findings-branch go-ahead.)
+- [x] After PASS: tick tasks, flip B-044 → `[x]` (note build 2.5.0 `69e8ad5`;
       root cause is NOT build-dependent — no extra 2.3.2 gate beyond the
       standing B-041 one), archive per the workflow, push, compare URL.
