@@ -12,6 +12,11 @@ import { addItem, itemText, moveItem, removeItem, setItemText, toListItems } fro
  * Inspector's raw-element + inline-style conventions (the Runtime has no shared UI
  * primitives; see the change design for why this is Runtime-local, not extracted).
  *
+ * Item text may span multiple lines, so the per-item editor is an auto-growing
+ * `<textarea>` — a single-line `<input>` strips line breaks on display AND commit
+ * (the 2026-07-07 live finding). Enter inserts a newline (native textarea
+ * behavior, no Enter→blur handler); commit stays on blur.
+ *
  * Local state is seeded from `value` on mount; the parent re-mounts this editor
  * (via a value-signature `key`) when the selection or the upstream value changes,
  * mirroring the scalar inputs' `key={fieldId-value}` resync. Text edits commit on
@@ -20,7 +25,7 @@ import { addItem, itemText, moveItem, removeItem, setItemText, toListItems } fro
 const styles = {
   list: { display: 'flex', flexDirection: 'column' as const, gap: '0.3rem', minWidth: 0 },
   empty: { color: colors.textMuted, fontSize: '0.8rem', margin: 0 },
-  row: { display: 'flex', gap: '0.25rem', alignItems: 'center' },
+  row: { display: 'flex', gap: '0.25rem', alignItems: 'flex-start' },
   input: {
     background: colors.panelMuted,
     color: colors.text,
@@ -28,6 +33,9 @@ const styles = {
     padding: '0.25rem 0.5rem',
     borderRadius: '0.2rem',
     fontSize: '0.9rem',
+    fontFamily: 'inherit',
+    lineHeight: 1.4,
+    resize: 'vertical' as const,
     flex: 1,
     minWidth: 0,
     boxSizing: 'border-box' as const,
@@ -78,10 +86,12 @@ export function ListFieldEditor({
       {items.length === 0 && <p style={styles.empty}>No items.</p>}
       {items.map((item, i) => (
         <div key={item.id} style={styles.row}>
-          <input
+          <textarea
             style={styles.input}
-            type="text"
             value={itemText(item)}
+            // Auto-grow with the content's line count: comfortable 2-row minimum,
+            // capped at 8 (beyond that the textarea scrolls).
+            rows={Math.min(Math.max(itemText(item).split('\n').length, 2), 8)}
             aria-label={`${fieldId} item ${String(i + 1)}`}
             onChange={(e) => setItems((cur) => setItemText(cur, i, e.target.value))}
             onBlur={() => onCommit(items)}

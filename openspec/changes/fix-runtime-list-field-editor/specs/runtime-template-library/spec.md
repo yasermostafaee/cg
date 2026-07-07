@@ -8,18 +8,21 @@ The Runtime operator Inspector SHALL edit a `list` (array) dynamic field — e.g
 ticker's Data key — with a **structured items editor**, preserving the field value's
 `ListItem[]` structure through display, edit, and the committed `stack.update`
 payload. The editor SHALL preserve each item's stable `id` and any other (unknown)
-fields, and SHALL support add / remove / reorder. A list value SHALL NEVER be
-rendered in a plain text input nor `String()`-coerced (which produces
-`"[object Object]"`); a non-array value (including a legacy `"[object Object]"`
-string) SHALL yield an empty items editor, not a corrupted text field. The committed
-field value SHALL be the structured array, so the `CG ADD` / `CG UPDATE` JSON carries
-real items, not a stringified array.
+fields, and SHALL support add / remove / reorder. Item text MAY span multiple
+lines: the per-item editor SHALL be a multi-line control that preserves newlines in
+an item's `text` on display AND on commit (lines are never joined/flattened), and
+pressing Enter inside it SHALL insert a newline — never commit or submit. A list
+value SHALL NEVER be rendered in a plain text input nor `String()`-coerced (which
+produces `"[object Object]"`); a non-array value (including a legacy
+`"[object Object]"` string) SHALL yield an empty items editor, not a corrupted text
+field. The committed field value SHALL be the structured array, so the `CG ADD` /
+`CG UPDATE` JSON carries real items, not a stringified array.
 
 #### Scenario: A list field renders an items editor, not "[object Object]"
 
 - **WHEN** a stack item with a `list` field (e.g. a ticker's `_tickerTexts`) is
-  selected **THEN** the Inspector renders an items editor (one editable input per
-  item showing the item's text) and never displays `"[object Object]"`
+  selected **THEN** the Inspector renders an items editor (one editable multi-line
+  control per item showing the item's text) and never displays `"[object Object]"`
 
 #### Scenario: Editing an item preserves structure and ships structured JSON
 
@@ -33,3 +36,10 @@ real items, not a stringified array.
 - **WHEN** the field value is not an array (undefined, or a legacy stringified
   value) **THEN** the editor shows no items (ready to add) rather than a text input
   containing `"[object Object]"`
+
+#### Scenario: A multi-line item survives editing (newline never flattened)
+
+- **WHEN** the operator types a two-line item text — pressing Enter for the line
+  break — and commits (blur) **THEN** Enter inserts a newline (it does not commit
+  or submit), the committed `ListItem[]` carries the item's `text` with the `\n`
+  intact, and the editor keeps displaying both lines (the lines are never joined)

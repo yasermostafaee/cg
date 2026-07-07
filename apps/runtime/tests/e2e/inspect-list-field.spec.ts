@@ -35,3 +35,54 @@ test('a ticker list field renders an items editor (not "[object Object]") and ed
   );
   await expect(app.inspector.getByText('[object Object]', { exact: false })).toHaveCount(0);
 });
+
+test('a two-line item keeps its newline: Enter inserts a line break and the \\n survives the committed payload', async ({
+  app,
+}) => {
+  const templateId = 'tpl-e2e-list-ml';
+  const twoLines = 'خبر خط یک\nخط دوم';
+  await app.importVcg('list-ml.vcg', await buildListFieldVcg(templateId));
+  await app.loadTemplate(templateId);
+  await app.selectStackRow(templateId);
+
+  // Type line 1, press Enter (must insert a newline — NOT commit/submit), type line 2.
+  const item1 = app.inspector.getByRole('textbox', { name: '_tickerTexts item 1' });
+  await item1.fill('خبر خط یک');
+  await item1.press('Enter');
+  await item1.pressSequentially('خط دوم');
+  await expect(item1).toHaveValue(twoLines);
+
+  // Commit on blur → the edited item round-trips as structure with the \n intact.
+  await item1.blur();
+  await expect(app.inspector.getByRole('textbox', { name: '_tickerTexts item 1' })).toHaveValue(
+    twoLines,
+  );
+  await expect(app.inspector.getByRole('textbox', { name: '_tickerTexts item 2' })).toHaveValue(
+    'اخبار فوری',
+  );
+
+  // The committed stack payload (what `stack.update` shipped) carries the newline —
+  // a flattening editor would have joined the lines before commit. Look the item up
+  // by templateId: the MockRuntime boots with a seeded demo stack, so index 0 is
+  // NOT the template this spec loaded.
+  const readPayload = (): Promise<string> =>
+    app.page.evaluate(async (tid) => {
+      const cg = (
+        window as unknown as {
+          cg: {
+            stack: {
+              snapshot(): Promise<{ templateId: string; fields: Record<string, unknown> }[]>;
+            };
+          };
+        }
+      ).cg;
+      const snap = await cg.stack.snapshot();
+      const item = snap.find((i) => i.templateId === tid);
+      return JSON.stringify(item?.fields['_tickerTexts'] ?? null);
+    }, templateId);
+  await expect.poll(readPayload).toContain('خط دوم');
+  const items = JSON.parse(await readPayload()) as { id: string; text: string }[];
+  expect(items).toHaveLength(2);
+  expect(items[0]?.text).toBe(twoLines);
+  expect(items[1]?.text).toBe('اخبار فوری');
+});
