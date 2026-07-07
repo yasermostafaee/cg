@@ -5,6 +5,16 @@ on:
   push:
     branches: [main]
 
+# B-043 — paths-filter fetches a PR's changed files via the GitHub API, which
+# needs `pull-requests: read`. With no permissions block the token falls back
+# to the repo default (restrictive `contents: read`), and every pull_request
+# run failed with "Resource not accessible by integration" → the fail-safe
+# `required` gate went red. Explicit least-privilege grant — correct under
+# both restrictive and permissive defaults.
+permissions:
+  contents: read
+  pull-requests: read
+
 concurrency:
   # Cancel in-progress runs of the same workflow on the same ref.
   group: ${{ github.workflow }}-${{ github.ref }}
