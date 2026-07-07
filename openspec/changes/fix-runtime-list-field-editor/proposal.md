@@ -21,6 +21,13 @@ end-to-end** (display, edit, and the `CG ADD` / `CG UPDATE` payload). The editor
 - renders one row per item, editing the item's `text` (the ticker/list data),
   preserving each item's stable `id` and any other (unknown) fields per the
   extensible `ListItem` shape in `@cg/shared-schema`;
+- edits item text in an **auto-growing multi-line control (textarea)**: a `\n`
+  inside an item's text is preserved on read AND write, and Enter inserts a
+  newline — it never commits/submits (commit stays on blur). _Extension from the
+  2026-07-07 live session (CasparCG 2.5.0 `69e8ad5`): the first-cut single-line
+  `<input>` (PR #243) flattened multi-line items — the input element's value
+  sanitization strips line breaks — even though the B-041 wire escaping now
+  carries the newline correctly end-to-end;_
 - supports add / remove / reorder;
 - commits the **structured `ListItem[]`** array via `stack.update` (never a
   `String()`-coerced string);
@@ -49,17 +56,21 @@ conventions is the clean choice. See `design.md`.
 
 - `runtime-template-library` (ADDED): the operator Inspector edits a `list`
   (array) dynamic field with a structured items editor — display, edit, and the
-  committed `stack.update` payload all preserve the `ListItem[]` structure; a list
-  value is never rendered or sent as a `String()`-coerced `"[object Object]"`.
+  committed `stack.update` payload all preserve the `ListItem[]` structure,
+  including newlines inside an item's text (multi-line items are never
+  flattened); a list value is never rendered or sent as a `String()`-coerced
+  `"[object Object]"`.
 
 ## Impact
 
 - `apps/runtime` — Inspector `FieldControl` gains a `list` branch +
   `ListFieldEditor` component; `inferKind` maps arrays to `list`; pure list-edit
-  helpers (`listField.ts`).
+  helpers (`listField.ts`). The item editor is an auto-growing `<textarea>`
+  (multi-line-safe), not a single-line `<input>`.
 - Tests — a unit test for the pure list-edit helpers (structure preserved, never
-  stringified) + an E2E for import → inspect → edit of a ticker `list` field (the
-  Inspector shows an items editor, not `"[object Object]"`, and edits round-trip as
-  structure through `stack.update`).
+  stringified; newlines preserved) + an E2E for import → inspect → edit of a
+  ticker `list` field (the Inspector shows an items editor, not
+  `"[object Object]"`, edits round-trip as structure through `stack.update`, and
+  a two-line item keeps its newline through the committed payload).
 - No shared package change (no extraction).
 - B-040 stays `[~]` until reviewed/merged.

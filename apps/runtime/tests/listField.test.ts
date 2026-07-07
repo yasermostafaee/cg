@@ -77,3 +77,27 @@ describe('edits preserve structure (id + unknown fields) and return arrays', () 
     expect(JSON.parse(json)[2]).toEqual({ id: 'c', text: 'تازه' });
   });
 });
+
+describe('multi-line item text is never flattened (2026-07-07 live finding)', () => {
+  const twoLines = 'Now: خط یک\nخط دوم';
+
+  it('setItemText preserves a newline in the text (id + other fields intact)', () => {
+    const next = setItemText(seed, 0, twoLines);
+    expect(next[0]).toEqual({ id: 'a', text: twoLines, kind: 'text' });
+    expect(itemText(next[0] as ListItem)).toBe(twoLines);
+  });
+
+  it('toListItems passes multi-line items through untouched', () => {
+    const items: ListItem[] = [{ id: 'x', text: 'یک\nدو\nسه' }];
+    expect(toListItems(items)).toEqual(items);
+  });
+
+  it('a committed multi-line item round-trips through JSON with the newline intact', () => {
+    const committed = setItemText(seed, 1, twoLines);
+    const parsed = JSON.parse(JSON.stringify(committed)) as ListItem[];
+    // The JSON layer escapes the newline (\n, two chars) and restores it byte-exact —
+    // the payload never carries a flattened/joined string.
+    expect(parsed[1]).toEqual({ id: 'b', text: twoLines, dwellMs: 4000 });
+    expect((parsed[1] as { text: string }).text).toContain('\n');
+  });
+});

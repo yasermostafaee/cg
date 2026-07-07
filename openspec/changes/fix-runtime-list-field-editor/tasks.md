@@ -41,3 +41,39 @@
 - [x] `pnpm openspec validate fix-runtime-list-field-editor --strict`.
 - [x] Commit + push + open a PR. **B-040 stays `[~]`** (flip to `[x]` on review/merge
       confirmation, per the bug loop).
+
+## 5. Multi-line items (extension — 2026-07-07 live finding)
+
+> Live session (CasparCG 2.5.0 `69e8ad5`): multi-line list items get flattened —
+> the per-item editor is a single-line `<input>`, whose value sanitization strips
+> line breaks. See the PRD B-040 appended finding + `design.md` → "Multi-line
+> items".
+
+- [ ] `ListFieldEditor.tsx`: replace the single-line item `<input>` with an
+      auto-growing `<textarea>` (rows from the line count, comfortable minimum,
+      capped; `resize: vertical`) preserving `\n` on read AND write. Enter inserts
+      a newline — never commits/submits (commit stays on blur; the staged-edit
+      model is R-003, out of scope). Add/remove/reorder + the structured-array
+      round-trip unchanged (never `"[object Object]"`, never flattened strings).
+- [ ] Unit (`tests/listField.test.ts`): multi-line round-trip — `setItemText`
+      preserves `\n`; the committed array's JSON round-trip keeps the newline
+      intact (never flattened).
+- [ ] E2E (`inspect-list-field.spec.ts`): type a two-line item (Enter for the
+      break) → the newline survives into the committed payload
+      (`stack.snapshot`) and the re-read editor value; item 2 untouched; no
+      `"[object Object]"`.
+- [ ] Bridge→mock integration matrix stays green (it already covers two-line
+      Persian list items on the wire — no bridge/mock change expected).
+
+## 6. Gate + on-air validation (multi-line extension)
+
+- [ ] Full green gate UNCACHED (`turbo … --force`) for `@cg/runtime` +
+      repo `format:check`; `pnpm test:e2e`.
+- [ ] `pnpm openspec validate fix-runtime-list-field-editor --strict`.
+- [ ] Operator on-air validation (real CasparCG): edit a ticker item to two lines
+      incl. Persian → Update → both lines render on the output; reorder; add +
+      remove an item; plain text fields unaffected. (A sticky "updating" badge is
+      the separately-filed B-044 — the pass criterion is the value on air, not
+      the badge.)
+- [ ] After the operator's PASS: flip B-040 → `[x]` in the PRD, archive the
+      change per the workflow, commit + push.
