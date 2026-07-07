@@ -3060,7 +3060,7 @@ The 5 templates:
 - **SEQUENCING — dependency:** implement this AFTER **D-060** (auto-size text) and the open Designer bugs **B-035** (fit-on-open), **B-036** (icon align), **B-037** (pen tool) are done — templates should exercise healthy features. **BLOCKED** until those land.
 - **OPEN QUESTIONS to resolve with owner before implementation:** (a) resolution(s) — all 1920×1080, or some vertical 1080×1920? (b) colour palette — specific (e.g. news red/white) or designer's choice? (c) storage location — bundled `@cg/starter-templates` package vs sample projects? (d) real logo asset availability.
 
-## [~] D-120 — High zoom + pixel grid for pixel-perfect editing ⟨priority: medium⟩ — `openspec/changes/high-zoom-pixel-grid`
+## [x] D-120 — High zoom + pixel grid for pixel-perfect editing ⟨priority: medium⟩ — merged (#240, `9f4654a`), archived `openspec/changes/archive/2026-07-07-high-zoom-pixel-grid/`
 
 **What:** Raise the maximum canvas zoom to 6400% and render a pixel grid (1 grid cell = 1 scene pixel) that appears only at high zoom, across the whole pasteboard, so the user can align/move shapes at single-pixel precision.
 
