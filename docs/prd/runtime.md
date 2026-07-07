@@ -56,6 +56,17 @@ explicit apply step.
   "updating" badge) — design them together, ship separately. This is a dedicated
   future change, NOT part of the B-040 list-editor fix (which deliberately keeps
   the current commit semantics).
+  **Known hazard this design must remove or explicitly handle** (found in the
+  B-040 adversarial review, 2026-07-07): the Inspector's blur-commit triggers a
+  whole-editor REMOUNT via the value-signature `key`
+  (`key={fieldId-JSON.stringify(value)}`, `Inspector.tsx`); on the synchronous
+  mock path the remount detaches the mousedown'ed node so the FIRST click on the
+  list editor's ↑/↓/×/Add buttons is silently swallowed, and on the live bridge
+  the delayed state push re-seeds the editor and can DISCARD keystrokes typed
+  into another item's row between commit and push. Staged edits (no commit on
+  blur) removes the trigger — but the chosen design must state how upstream
+  value changes reconcile with in-progress local edits without a destructive
+  remount.
 
 ## [ ] R-004 — template Library shows the manifest display name, not the raw id ⟨priority: low⟩
 

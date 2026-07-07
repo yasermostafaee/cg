@@ -421,4 +421,6 @@ change — this entry records the symptom.
 
 **Note:** interacts with R-003 (staged Inspector edits — explicit Update-button
 apply); design the pending-update status handling with that item in mind, but they
-are separate changes.
+are separate changes. See also the blur-commit remount hazard recorded in R-003's
+Notes (swallowed first click / lost keystrokes) — adjacent Inspector behavior,
+not part of this bug.

@@ -31,6 +31,13 @@ const DEFAULT_CHANNEL = 1;
 const COALESCE_MS = 20;
 /** Keep the post-reconnect resync window short so the bridge is responsive. */
 const RESYNC_MS = 150;
+/**
+ * B-044 — bounded completion for transient intents (update/out): if the
+ * command's AMCP ack has not arrived within this window, the Reconciler
+ * expires the intent to the explicit `unconfirmed` state (never a stuck
+ * `updating`/`exiting` badge, never a silent revert).
+ */
+const INTENT_TIMEOUT_MS = 5000;
 
 /** Minimal typed pub-sub backing the bridge's `on*` publish channels. */
 class Emitter<T> {
@@ -101,6 +108,9 @@ export class CasparRuntime {
   readonly #dirty = new Set<string>();
   #flushTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // B-044 — per-seq expiry timers for in-flight transient intents (update/out).
+  readonly #expiryTimers = new Map<number, ReturnType<typeof setTimeout>>();
+
   // ── non-playout stub state ──────────────────────────────────────────
   // B-038 Phase 2 — holds each imported template's info + the browser-produced
   // self-contained HTML, keyed by id. B-038 Phase 3 — the HTTP server serves that
@@ -115,8 +125,14 @@ export class CasparRuntime {
   #pendingUpdate: PendingUpdate | null = null;
 
   #started = false;
+  readonly #intentTimeoutMs: number;
 
-  constructor(config: ConnectionConfig, serveOverride: TemplateServeOverride = {}) {
+  constructor(
+    config: ConnectionConfig,
+    serveOverride: TemplateServeOverride = {},
+    options: { intentTimeoutMs?: number } = {},
+  ) {
+    this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
     this.#config = config;
     // B-038 Phase 3 — serve loopback when CasparCG is local; an opt-in routable
     // host (configured or guessed) when remote. The control WS stays loopback.
@@ -202,6 +218,8 @@ export class CasparRuntime {
   async stop(): Promise<void> {
     if (this.#flushTimer !== null) clearTimeout(this.#flushTimer);
     this.#flushTimer = null;
+    for (const timer of this.#expiryTimers.values()) clearTimeout(timer);
+    this.#expiryTimers.clear();
     await Promise.all([this.#sessions.A.stop(), this.#sessions.B.stop()]);
     await this.#templateServer.stop();
   }
@@ -316,6 +334,7 @@ export class CasparRuntime {
     this.#reconciler.applyIntent({ kind: 'update', itemId, fields, mergeMode }, seq);
     // Send the merged field set the Reconciler now holds.
     const merged = this.#reconciler.get(itemId)?.fields ?? fields;
+    this.#armExpiry(seq);
     const ok = await this.#send(this.#builder.update(slot, merged), seq, 'normal');
     return { accepted: ok };
   }
@@ -325,6 +344,7 @@ export class CasparRuntime {
     if (slot === undefined) return { accepted: false };
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'out', itemId }, seq);
+    this.#armExpiry(seq);
     const ok = await this.#send(this.#builder.out(slot), seq, 'urgent');
     // B-039 — `CLEAR` DESTROYS the producer: record that no producer exists on the
     // slot so a subsequent take re-ADDs (instead of `CG PLAY`-ing an empty layer).
@@ -489,6 +509,29 @@ export class CasparRuntime {
   }
 
   /**
+   * B-044 — arm the bounded-completion timer for a transient intent
+   * (update/out). Cleared when the ack lands (`#send`); on fire the Reconciler
+   * expires the intent to the explicit `unconfirmed` state (a no-op if a newer
+   * intent superseded it or the ack already settled it).
+   */
+  #armExpiry(seq: number): void {
+    const timer = setTimeout(() => {
+      this.#expiryTimers.delete(seq);
+      this.#reconciler.expireIntent(seq);
+    }, this.#intentTimeoutMs);
+    timer.unref?.();
+    this.#expiryTimers.set(seq, timer);
+  }
+
+  #clearExpiry(seq: number): void {
+    const timer = this.#expiryTimers.get(seq);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.#expiryTimers.delete(seq);
+    }
+  }
+
+  /**
    * Send an AMCP line through the `RedundancyAdapter` (strategy-aware fan-out to
    * primary/backup; drives the auto-failover triggers), await the ack, and feed
    * it to the Reconciler.
@@ -496,10 +539,12 @@ export class CasparRuntime {
   async #send(line: string, seq: number, priority: 'urgent' | 'normal'): Promise<boolean> {
     try {
       const result = await this.#adapter.send(line, { priority });
+      this.#clearExpiry(seq);
       const ok = result.response.kind !== 'err';
       this.#reconciler.applyAck(seq, ok, ok ? undefined : `amcp-${String(result.response.code)}`);
       return ok;
     } catch {
+      this.#clearExpiry(seq);
       this.#reconciler.applyAck(seq, false, 'amcp-send-failed');
       return false;
     }
