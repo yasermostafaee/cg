@@ -103,4 +103,4 @@ the machine, then fix from the readings.
       spec/E2E per the finding.
 - [ ] Part E — strip the probe + boot log (or keep behind the flag, documented in the canvas
       README — decide); full uncached gate + `pnpm test:e2e`; `pnpm openspec validate --all
-  --strict`; push; owner re-verifies visually before any archive.
+--strict`; push; owner re-verifies visually before any archive.
