@@ -243,6 +243,16 @@ commits `"[object Object]"`; (b) a field-flow test asserting a seeded list value
 round-trips as a JSON **array of objects** through `stack.update` → `CG UPDATE` (and
 `CG ADD`), Persian intact — never a stringified `"[object Object]"`.
 
+**Finding (2026-07-07, live session — CasparCG 2.5.0 `69e8ad5`):** the structured
+items editor merged in PR #243 **flattens multi-line list items** — the per-item
+editor is a single-line `<input type="text">`, whose value sanitization strips line
+breaks. An item whose `text` contains a newline (e.g. the original two-line ticker
+items) displays with its lines joined, and editing that item commits the flattened
+single-line string — the newline is destroyed in the Inspector even though the wire
+escaping (B-041) now carries it correctly end-to-end. Fix home: the open
+`fix-runtime-list-field-editor` change (multi-line item editing — an auto-growing
+textarea preserving `\n` on read and write).
+
 ---
 
 ## [~] B-041 — special characters (`"`, `\`, newline) in a field value break the live CG UPDATE / CG ADD (broken AMCP escaping) ⟨priority: high⟩
@@ -366,3 +376,39 @@ quote/backslash/newline payload before B-041 closes.
   exactly as typed, updates apply, no `Uncaught SyntaxError`. **Stays `[~]`: the
   only remaining gate before `[x]` is the 2.3.2 confirmation** (sweep re-run or
   live special-char validation on a 2.3.2 box).
+
+---
+
+## [ ] B-044 — stack item badge stays "updating" indefinitely after a CG UPDATE (the value DOES apply on air) ⟨priority: high⟩
+
+> Observed in the **2026-07-07 live session** (Runtime LIVE via `tools/caspar-bridge`
+> against local CasparCG **2.5.0** `69e8ad5`, post-B-041 two-layer escaping).
+> **Symptom-level report only — no diagnosis yet.**
+
+**Repro:**
+
+1. Run the Runtime LIVE against real CasparCG; import a `.vcg`, Load, Take — the
+   item is on air.
+2. Edit a field in the Inspector and commit → the bridge sends `CG UPDATE`,
+   CasparCG replies `202 CG OK`, and the new value renders on the output.
+3. Watch the stack row's status badge.
+
+**Expected:** the badge returns to the item's on-air state once the update has
+applied.
+
+**Actual:** the badge shows **"updating" indefinitely** — it never settles back —
+while the updated value is ALREADY live on the CasparCG output. The stack row
+permanently reads as if the update were still in flight.
+
+**Suspected area (unverified):** the pending-update completion signal in the
+intent/truth state machine — `Reconciler.applyIntent` sets
+`intentStatus = 'updating'` on an update intent
+(`packages/caspar-client/src/reconciler/reconciler.ts:245`) and
+`truthConfirmsIntent` expects a truth report (`on-air`) to confirm it
+(`reconciler.ts:379`); an UPDATE on an already-on-air layer may never produce a
+fresh truth/OSC transition to clear the intent. Diagnosis belongs to the fix
+change — this entry records the symptom.
+
+**Note:** interacts with R-003 (staged Inspector edits — explicit Update-button
+apply); design the pending-update status handling with that item in mind, but they
+are separate changes.
