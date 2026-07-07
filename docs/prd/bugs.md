@@ -158,6 +158,40 @@ expansion) errors, while `rimraf --glob "*.tsbuildinfo"` deletes the files. Keep
 `--glob` on any clean script that lists a glob; this is a focused tooling fix (no
 OpenSpec change).
 
+## [x] B-043 — CI: every pull_request run fails in "Detect changed paths" (workflow token lacks `pull-requests: read`) ⟨priority: high⟩ — fixed on `fix/B-043-pr-workflow-token-permissions`
+
+**Repro:**
+
+1. Open any PR (observed on the housekeeping PR #249's run).
+2. The `PR` workflow's `changes` job ("Detect changed paths") fails immediately:
+   `Run dorny/paths-filter@v3` → `Error: Resource not accessible by integration`.
+
+**Expected:** paths-filter reads the PR's changed-file list, the `code` output is
+computed, and the cascade (`ci`/`e2e` on code changes, docs-check always, the
+`required` aggregate) runs normally.
+**Actual:** the API call is rejected, `code` comes out empty, `ci`/`e2e` skip
+(their `if:` sees `''` ≠ `'true'`), and the fail-safe `required` aggregator — by
+design (P-008) — treats the unknown as a code change with no passing ci/e2e →
+**required FAIL on every pull_request run**. Push runs on `main` are unaffected
+(the push path diffs git history, no API call).
+**Env:** GitHub Actions, `pull_request` events only; observed on PR #249.
+**Notes:** Root cause: `.github/workflows/pr.yml` declared **no `permissions:`
+block**, so the workflow `GITHUB_TOKEN` fell back to the repository's default
+workflow permissions — the restrictive `contents: read` default, which does NOT
+include the `pull-requests: read` scope `dorny/paths-filter@v3` needs to fetch a
+PR's changed files via the GitHub API (the job's own comment documents the API
+mode on PRs). Fix: an explicit top-level least-privilege block —
+`permissions:` with `contents: read` + `pull-requests: read` — which grants the
+one missing scope under a restrictive default AND pins the token down under a
+permissive one (correct in both worlds). Nothing else changed: API-mode
+detection for PRs stays (intentional and documented), and the fail-safe
+`required` logic stays as-is (it did exactly its job). The fix PR's own checks
+are the regression demonstration — "Detect changed paths" must go green on a
+`pull_request` event. (The "Node 20 is being deprecated" banner in the same log
+is informational runner noise — all actions in the file are on current majors;
+no change made for it.) Focused tooling fix, no OpenSpec change (the B-013
+rimraf `--glob` precedent).
+
 <!-- Add new open bugs above this line using the format. Example:
 
 ## [ ] B-0NN — Export blocked dialog shows wrong error count
