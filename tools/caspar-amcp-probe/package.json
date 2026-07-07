@@ -21,6 +21,7 @@
     "start": "node ./bin/caspar-amcp-probe.mjs"
   },
   "dependencies": {
+    "@cg/caspar-client": "workspace:*",
     "ws": "^8.18.0"
   },
   "devDependencies": {

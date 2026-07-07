@@ -50,6 +50,30 @@ export interface LayerState {
   onAir: boolean;
 }
 
+/** B-041 — why the mock's second-layer (html_cg_proxy → V8) emulation rejected a CG data arg. */
+export interface CgDataRejection {
+  reason: 'raw-control-char' | 'js-syntax-error' | 'invalid-json';
+  /** The tokenizer-decoded (layer-1) wire argument that failed validation. */
+  decodedArg: string;
+  /** Human-readable specifics for test-failure messages. */
+  detail: string;
+}
+
+/**
+ * B-041 — outcome of decoding a `CG ADD` / `CG UPDATE` data argument through
+ * BOTH emulated un-escape layers (AMCP tokenizer, then html_cg_proxy → V8).
+ */
+export interface CgDataResult {
+  /**
+   * The string `window.update` would receive — post BOTH layers — or `null`
+   * when the argument was rejected (real CasparCG still `202`s such a command;
+   * the V8 error just means the update never fires).
+   */
+  data: string | null;
+  /** Present iff the argument was rejected/flagged. */
+  rejected?: CgDataRejection;
+}
+
 export interface MockOptions {
   /**
    * AMCP TCP port. Default 5250. Pass `0` for an OS-assigned ephemeral port
@@ -102,10 +126,12 @@ export interface MockHandle {
   /**
    * B-038 — the last `CG ADD` seen on a slot: the template argument and the data
    * payload. Lets tests assert `CG ADD` carried a real URL + non-empty fields.
+   * B-041 — `data` is what `window.update` would receive (post BOTH un-escape
+   * layers); a framing/JSON-breaking argument is surfaced via `rejected`.
    */
-  lastCgAdd(slot: LayerSlot): { template: string; data: string } | undefined;
-  /** B-038 — the last `CG UPDATE` data payload seen on a slot. */
-  lastCgUpdate(slot: LayerSlot): { data: string } | undefined;
+  lastCgAdd(slot: LayerSlot): ({ template: string } & CgDataResult) | undefined;
+  /** B-038/B-041 — the last `CG UPDATE` data payload seen on a slot (see `lastCgAdd`). */
+  lastCgUpdate(slot: LayerSlot): CgDataResult | undefined;
   /** Number of currently-connected AMCP clients. */
   readonly amcpClientCount: number;
   /** Shut down both servers and resolve when fully closed. */
@@ -122,10 +148,10 @@ export interface HandlerContext {
   getLayer(slot: LayerSlot): LayerState;
   /** Apply a partial update to a layer; emits OSC reflecting the new state. */
   setLayer(slot: LayerSlot, patch: Partial<Omit<LayerState, 'slot'>>): void;
-  /** B-038 — record a `CG ADD`'s template argument + data payload for assertion. */
-  recordCgAdd(slot: LayerSlot, template: string, data: string): void;
-  /** B-038 — record a `CG UPDATE`'s data payload for assertion. */
-  recordCgUpdate(slot: LayerSlot, data: string): void;
+  /** B-038/B-041 — record a `CG ADD`'s template argument + decoded data verdict. */
+  recordCgAdd(slot: LayerSlot, template: string, result: CgDataResult): void;
+  /** B-038/B-041 — record a `CG UPDATE`'s decoded data verdict. */
+  recordCgUpdate(slot: LayerSlot, result: CgDataResult): void;
   /** Channel count the mock was started with. */
   readonly channelCount: number;
 }

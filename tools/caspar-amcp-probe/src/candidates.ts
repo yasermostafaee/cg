@@ -8,6 +8,8 @@
  * Add rows here to try more variants — the harness runs whatever is exported.
  */
 
+import { quote } from '@cg/caspar-client';
+
 export interface BuildContext {
   /** `<channel>-<layer>`, e.g. `1-10`. */
   target: string;
@@ -41,17 +43,10 @@ export interface Candidate {
   build(ctx: BuildContext): CandidateSteps;
 }
 
-/** AMCP escape + quote (mirrors `@cg/caspar-client`'s canonical quoter). */
-export function quote(s: string): string {
-  let out = '"';
-  for (const ch of s) {
-    if (ch === '\\') out += '\\\\';
-    else if (ch === '"') out += '\\"';
-    else if (ch === '\r' || ch === '\n') out += ' ';
-    else out += ch;
-  }
-  return out + '"';
-}
+// The data/URL args are quoted by THE canonical `@cg/caspar-client` quoter (the
+// B-041 two-layer escaping) — a local re-implementation here previously encoded
+// the superseded pre-#245 double-escape while claiming to mirror it. For the
+// current Persian-only verb-sweep payloads the wire bytes are identical.
 
 export const CANDIDATES: Candidate[] = [
   {
