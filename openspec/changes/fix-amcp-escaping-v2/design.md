@@ -152,8 +152,22 @@ the current quotes-only rule, returned `202 CG OK` with
 never ran and the output kept showing the template's baked-in default values. A
 later UPDATE with the newline removed from item 1 only STILL failed (items 2–3
 still contained newlines) — exactly the tokenizer(backslash-n → raw LF) →
-`update("…")` embed → V8 signature the two-layer model predicts. (Raw log lines to
-be pasted by the operator.)
+`update("…")` embed → V8 signature the two-layer model predicts.
+
+Raw caspar log lines (operator repro, CasparCG 2.5.0 `69e8ad5`, 2026-07-07, under
+the pre-fix #245 quotes-only rule; Chromium/GCM noise omitted):
+
+```
+[2026-07-07 17:19:57.359] [info]    Received message from 127.0.0.1: CG 1-60 ADD 0 "http://127.0.0.1:63842/template/8a9bbe60-1a79-4980-aa91-54462b3cbe42" 0 "{\"text1\":\"New text\",\"seq1\":[{\"id\":\"item-1\",\"text\":\"Now: first item\naaa\"},{\"id\":\"item-2\",\"text\":\"Then: second item\nbbb\"},{\"id\":\"item-3\",\"text\":\"Next: third item\nccc\"}]}"\r\n
+[2026-07-07 17:19:57.360] [info]    Sent message to 127.0.0.1:202 CG OK\r\n
+[2026-07-07 17:19:57.560] [error]   html[http://127.0.0.1:63842/template/8a9bbe60-1a79-4980-aa91-54462b3cbe42] 1280 720 50.000000 Log: Uncaught SyntaxError: Invalid or unexpected token
+[2026-07-07 17:20:04.640] [info]    Received message from 127.0.0.1: CG 1-60 UPDATE 0 "{\"text1\":\"New text222\",\"seq1\":[{\"id\":\"item-1\",\"text\":\"Now: first item\naaa\"},{\"id\":\"item-2\",\"text\":\"Then: second item\nbbb\"},{\"id\":\"item-3\",\"text\":\"Next: third item\nccc\"}]}"\r\n
+[2026-07-07 17:20:04.641] [info]    Sent message to 127.0.0.1:202 CG OK\r\n
+[2026-07-07 17:20:04.641] [error]   html[http://127.0.0.1:63842/template/8a9bbe60-1a79-4980-aa91-54462b3cbe42] 1280 720 50.000000 Log: Uncaught SyntaxError: Invalid or unexpected token
+[2026-07-07 17:20:30.831] [info]    Received message from 127.0.0.1: CG 1-60 UPDATE 0 "{\"text1\":\"New text222\",\"seq1\":[{\"id\":\"item-1\",\"text\":\"11Now: first itemaaa\"},{\"id\":\"item-2\",\"text\":\"Then: second item\nbbb\"},{\"id\":\"item-3\",\"text\":\"Next: third item\nccc\"}]}"\r\n
+[2026-07-07 17:20:30.831] [info]    Sent message to 127.0.0.1:202 CG OK\r\n
+[2026-07-07 17:20:30.832] [error]   html[http://127.0.0.1:63842/template/8a9bbe60-1a79-4980-aa91-54462b3cbe42] 1280 720 50.000000 Log: Uncaught SyntaxError: Invalid or unexpected token
+```
 
 ### Status (2026-07-07) — winner: `js-escape+amcp-escape`
 
