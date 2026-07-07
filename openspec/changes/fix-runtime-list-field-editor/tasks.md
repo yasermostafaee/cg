@@ -1,9 +1,10 @@
 # Tasks — Runtime Inspector list-field editor (B-040)
 
-> **Reconciled 2026-07-07:** every task below shipped in the merged PR #243
-> (`8a7fd87`) — boxes checked to match reality. The change stays ACTIVE (not
-> archived) and **B-040 stays `[~]`** pending the operator's on-air validation;
-> archive on the Runtime track after that report.
+> **Reconciled 2026-07-07:** every task in §1–4 shipped in the merged PR #243
+> (`8a7fd87`) — boxes checked to match reality. §5–6 (multi-line extension)
+> shipped on `fix/B-040-multiline-list-items` and passed the operator's on-air
+> validation on **CasparCG 2.5.0** (`69e8ad5`, 2026-07-07) — **B-040 → `[x]`**,
+> change archived.
 
 ## 1. Pure list-edit helpers
 
@@ -49,31 +50,35 @@
 > line breaks. See the PRD B-040 appended finding + `design.md` → "Multi-line
 > items".
 
-- [ ] `ListFieldEditor.tsx`: replace the single-line item `<input>` with an
+- [x] `ListFieldEditor.tsx`: replace the single-line item `<input>` with an
       auto-growing `<textarea>` (rows from the line count, comfortable minimum,
       capped; `resize: vertical`) preserving `\n` on read AND write. Enter inserts
       a newline — never commits/submits (commit stays on blur; the staged-edit
       model is R-003, out of scope). Add/remove/reorder + the structured-array
       round-trip unchanged (never `"[object Object]"`, never flattened strings).
-- [ ] Unit (`tests/listField.test.ts`): multi-line round-trip — `setItemText`
+- [x] Unit (`tests/listField.test.ts`): multi-line round-trip — `setItemText`
       preserves `\n`; the committed array's JSON round-trip keeps the newline
       intact (never flattened).
-- [ ] E2E (`inspect-list-field.spec.ts`): type a two-line item (Enter for the
+- [x] E2E (`inspect-list-field.spec.ts`): type a two-line item (Enter for the
       break) → the newline survives into the committed payload
-      (`stack.snapshot`) and the re-read editor value; item 2 untouched; no
+      (`stack.snapshot`, item looked up by templateId — the mock seeds a demo
+      stack) and the re-read editor value; item 2 untouched; no
       `"[object Object]"`.
-- [ ] Bridge→mock integration matrix stays green (it already covers two-line
+- [x] Bridge→mock integration matrix stays green (it already covers two-line
       Persian list items on the wire — no bridge/mock change expected).
 
 ## 6. Gate + on-air validation (multi-line extension)
 
-- [ ] Full green gate UNCACHED (`turbo … --force`) for `@cg/runtime` +
-      repo `format:check`; `pnpm test:e2e`.
-- [ ] `pnpm openspec validate fix-runtime-list-field-editor --strict`.
-- [ ] Operator on-air validation (real CasparCG): edit a ticker item to two lines
-      incl. Persian → Update → both lines render on the output; reorder; add +
-      remove an item; plain text fields unaffected. (A sticky "updating" badge is
-      the separately-filed B-044 — the pass criterion is the value on air, not
-      the badge.)
-- [ ] After the operator's PASS: flip B-040 → `[x]` in the PRD, archive the
+- [x] Full green gate UNCACHED (`turbo … --force`) for `@cg/runtime` +
+      repo `format:check`; `pnpm test:e2e` (Runtime suite green; the one Designer
+      failure — `scene-size-vs-pasteboard.spec.ts` — is pre-existing on `main`,
+      no Designer file in this diff, handed to the Designer track).
+- [x] `pnpm openspec validate fix-runtime-list-field-editor --strict`.
+- [x] Operator on-air validation — **PASS, CasparCG 2.5.0 (`69e8ad5`),
+      2026-07-07**: a ticker item edited to two lines incl. Persian → Update →
+      both lines render on the output; reorder reflected on air; add + remove
+      reflected on air; plain text fields unaffected. (The sticky "updating"
+      badge reproduced as expected — that is the separately-filed B-044, not a
+      fail criterion here.)
+- [x] After the operator's PASS: flip B-040 → `[x]` in the PRD, archive the
       change per the workflow, commit + push.

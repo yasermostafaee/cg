@@ -181,10 +181,20 @@ the load/take/out/retake cycle closes it.
 
 ---
 
-## [~] B-040 — ticker list field (`_tickerTexts`) displays + serializes as "[object Object]" — the Runtime Inspector has no list-field control ⟨priority: high⟩
+## [x] B-040 — ticker list field (`_tickerTexts`) displays + serializes as "[object Object]" — the Runtime Inspector has no list-field control ⟨priority: high⟩
 
-> Surfaced on **real CasparCG**; `amcp-mock` hid it by never inspecting the data
-> payload's structure. Read-only report — no fix here.
+> **CLOSED — on-air validated.** Fixed by `fix-runtime-list-field-editor`: the
+> structured items editor (PR #243) + the multi-line extension
+> (`fix/B-040-multiline-list-items` — the per-item editor is an auto-growing
+> textarea, so a `\n` in an item's text survives read AND write). The Inspector
+> renders a `list` field as an items editor, commits structured `ListItem[]`
+> (never `"[object Object]"`), and never flattens multi-line items.
+> Operator-validated live on **CasparCG 2.5.0** (`69e8ad5`, 2026-07-07): a ticker
+> item edited to two lines incl. Persian renders both lines on air via Update;
+> reorder / add / remove reflected on air; plain text fields unaffected. (The
+> sticky "updating" badge seen during validation is the separately-filed B-044.)
+> Originally surfaced on **real CasparCG**; `amcp-mock` hid it by never
+> inspecting the data payload's structure.
 
 **Repro:**
 
