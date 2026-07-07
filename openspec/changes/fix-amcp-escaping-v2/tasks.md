@@ -32,26 +32,36 @@ box stays unticked because its text requires real 2.3.2._
 
 ## 2. Implement the empirical rule (follow-up)
 
-- [ ] `@cg/caspar-client escape()`: the single canonical quoter = the empirical
+- [x] `@cg/caspar-client escape()`: the single canonical quoter = the empirical
       inverse of CasparCG's un-escape (backslash-aware; never emits raw `0x0A`/`0x0D`).
-- [ ] `command-builder`: route both `CG ADD` + `CG UPDATE` data args through it once
+- [x] `command-builder`: route both `CG ADD` + `CG UPDATE` data args through it once
       (unchanged structure).
 
 ## 3. amcp-mock decodes by the REAL rule + rejects framing/JSON-breakers (follow-up)
 
-- [ ] `tools/amcp-mock amcp-parser.ts readQuoted`: decode per the confirmed real
+- [x] `tools/amcp-mock amcp-parser.ts readQuoted`: decode per the confirmed real
       CasparCG rule (NOT the inverse of our escaper).
-- [ ] Reject / flag a decoded data argument containing a raw control char or that
+- [x] Reject / flag a decoded data argument containing a raw control char or that
       fails `JSON.parse`, so the mock catches THIS class.
 
 ## 4. Tests (follow-up — full char + control-char matrix)
 
-- [ ] Canonical-quoter unit: exact bytes + round-trip under the confirmed rule for
+- [x] Canonical-quoter unit: exact bytes + round-trip under the confirmed rule for
       `"`, `\` ×1–4, newline, tab, combos, Persian.
-- [ ] Mock-decode: catches a raw-newline / un-parseable payload.
-- [ ] Bridge → amcp-mock end-to-end: the whole matrix round-trips byte-exact
+- [x] Mock-decode: catches a raw-newline / un-parseable payload.
+- [x] Bridge → amcp-mock end-to-end: the whole matrix round-trips byte-exact
       (`JSON.parse` equals the original).
-- [ ] Full green gate uncached for the touched workspaces.
+- [x] Full green gate uncached for the touched workspaces.
+
+_Note (2026-07-07): §2–4 implemented on branch `fix/B-041-escaping-implementation`
+(layer-2 html_cg_proxy→V8 emulation in `tools/amcp-mock/src/cg-data.ts`; a parity
+test pins `escape()` byte-for-byte to the winning `js-escape+amcp-escape` candidate
+encoder) and **live-validated by the operator on the local CasparCG 2.5.0
+(`69e8ad5`)**: quotes, `\`×1/×3, multi-line via Enter (incl. the original two-line
+ticker items), mixed Persian/Latin — in a plain text field AND ticker list items,
+via BOTH `CG ADD` (fresh Load+Take) and `CG UPDATE` (on-air Update) — render
+exactly as typed with no `Uncaught SyntaxError`. B-041 stays `[~]`: §1's 2.3.2
+pass is the only remaining gate._
 
 ## DO NOT close B-041
 

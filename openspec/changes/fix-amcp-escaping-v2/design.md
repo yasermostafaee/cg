@@ -163,3 +163,19 @@ semantics in both layers (AMCP tokenizer + `html_cg_proxy` `update("…")` embed
 2.3.x hardware pass (sweep, or live special-char validation) remains the gate
 before B-041 closes. Pass 2 is DEFERRED — no 2.3.2 build was available this
 session; the harness is ready to re-run.
+
+**Fix implemented + live-validated (2026-07-07).** The winning rule ships as the
+canonical `@cg/caspar-client` `escape()` (each JSON `\` → four wire backslashes,
+`"` → `\"`, a raw LF/CR input carried as `\\n`/`\\r` — never a raw control byte on
+the wire), `amcp-mock` decodes CG data args through BOTH emulated layers
+(tokenizer in `amcp-parser.ts`, html_cg_proxy→V8 in `cg-data.ts`) and flags
+raw-control-char / JS-syntax-error / invalid-JSON payloads (the failed #245
+quotes-only emission and the pre-#245 double-escape both fail against it), and a
+parity test pins `escape()` byte-for-byte to the winning candidate encoder.
+**Live-validated by the operator on the local CasparCG 2.5.0 (`69e8ad5`) on
+2026-07-07**: quotes, `\`×1/×3, multi-line via Enter (incl. the original two-line
+ticker items), and mixed Persian/Latin — in a plain text field AND in ticker list
+items, via BOTH `CG ADD` (fresh Load+Take) and `CG UPDATE` (on-air Update) —
+render exactly as typed, updates apply, no `Uncaught SyntaxError` in the caspar
+log. The ONLY remaining gate before B-041 flips to `[x]` is the **2.3.2
+confirmation** (sweep re-run, or live special-char validation on a 2.3.2 box).

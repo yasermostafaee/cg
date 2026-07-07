@@ -351,3 +351,18 @@ quote/backslash/newline payload before B-041 closes.
   hardware pass (sweep, or live special-char validation) remains the gate before
   B-041 closes. Details:
   `openspec/changes/fix-amcp-escaping-v2/design.md` → "Hardware sweep results".
+- **Fix implemented + live-validated on 2.5.0 (2026-07-07)** — `fix-amcp-escaping-v2`
+  §2–4: canonical `@cg/caspar-client` `escape()` = the two-layer inverse (JSON `\` →
+  4 wire backslashes, `"` → `\"`, raw LF/CR carried as `\\n`/`\\r`, never a raw
+  control byte); `amcp-mock` decodes CG data args through both emulated layers
+  (tokenizer + html_cg_proxy→V8 in `tools/amcp-mock/src/cg-data.ts`) and flags
+  raw-control-char / JS-syntax-error / invalid-JSON payloads — the old quotes-only
+  emission now FAILS against the mock; full matrix unit + wire + bridge→mock
+  end-to-end tests, plus a parity test pinning `escape()` to the winning sweep
+  candidate encoder. Live manual matrix on the local CasparCG 2.5.0 (`69e8ad5`):
+  `"a quote"`, `\` ×1 and ×3, multi-line via Enter (incl. the original two-line
+  ticker items), mixed Persian/Latin — in a plain text field AND ticker list items,
+  via BOTH `CG ADD` (fresh Load+Take) and `CG UPDATE` (on-air Update) — all render
+  exactly as typed, updates apply, no `Uncaught SyntaxError`. **Stays `[~]`: the
+  only remaining gate before `[x]` is the 2.3.2 confirmation** (sweep re-run or
+  live special-char validation on a 2.3.2 box).
