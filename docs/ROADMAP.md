@@ -225,8 +225,10 @@ track is independent — see its own entries):
 
 Plus the existing queued / deprioritized items already in `designer.md`:
 [D-059](./prd/designer.md), [D-061](./prd/designer.md), [D-063](./prd/designer.md),
-[D-064](./prd/designer.md), [D-096](./prd/designer.md), and
-[D-102](./prd/designer.md) **Phase 2**.
+[D-064](./prd/designer.md), [D-096](./prd/designer.md),
+[D-102](./prd/designer.md) **Phase 2**, and
+[D-121](./prd/designer.md) (bundle fonts in `.vcg` export — fixes the
+content-driven crawl-duration drift).
 
 ## Then — hardening wave (after features)
 
