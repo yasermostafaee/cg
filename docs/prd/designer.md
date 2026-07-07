@@ -2639,7 +2639,15 @@ palette feels loud — and because it's per-recipe, it repeats on every new butt
   SAVE indicator (`TopToolbar.css.ts` `saveCtl` / `saveCtlDirty`). Change:
   `openspec/changes/restyle-buttons/`.
 
-## [ ] D-096 — Animate position via CSS transform (GPU compositor path) instead of left/top ⟨priority: low-medium; needs dedicated design⟩
+## [ ] D-096 — Animate position via CSS transform (GPU compositor path) instead of left/top ⟨priority: low-medium → RAISED: root fix for B-045; needs dedicated design⟩
+
+> **B-045 rider (2026-07-08):** this is also the ROOT fix for B-045 (stale raster: small
+> `left`/`top` position changes — ≤ ~1 CSS px inside the scaled canvas preview iframe — update
+> layout but not paint; Chromium misses the invalidation even across a full runtime DOM rebuild).
+> `transform: translate()` updates are compositor-tracked and never miss invalidation, so routing
+> position through the transform removes the defect class entirely. Until then an authoring-scoped
+> forced-invalidation mitigation lives in `apps/designer/src/platform/preview.ts` (see B-045 in
+> `bugs-designer.md`); remove that mitigation as part of this item's acceptance.
 
 **What:** In `@cg/template-runtime`'s animation applier, move element position
 (position.x / position.y) off `left` / `top` and into the composed CSS `transform`
@@ -3092,3 +3100,21 @@ The 5 templates:
 - WHEN a font is a licensed/system font that can't be embedded THEN handle gracefully (skip + keep the warning for that font) — decide the policy in design.md
 
 **Notes:** Export/packaging change — the Designer `.vcg` writer (`apps/designer/src/platform/Exporter.ts`, which already validates `font-no-path` and collects `fontDeps`) supplies the font bytes to the existing `@cg/vcg-format` `pack()` `fonts` seam; the loader/runtime side resolves the packaged `fonts/` paths (mirror how packaged image assets resolve, and how the single-file HTML inlines fonts). Mind package size (prefer woff2) and the licensed-font edge. Spec: `## ADDED`/`## MODIFIED` on the export capability (`.vcg` bundles fonts). Tests: an exporter test (a non-system-font template yields a `.vcg` containing the font bytes + CSS reference); a measurement test/fixture asserting crawl width/duration is font-correct without the system font; the warning-suppression case.
+
+## [ ] D-122 — snap dragging to integer scene pixels while the pixel grid is active ⟨priority: medium⟩
+
+**What:** At pixel-grid zoom (zoom ≥ the 800% grid threshold), make drag placement land on INTEGER scene coordinates, and make the first arrow-nudge of a fractional coordinate land on the next integer in the nudge direction. Surfaced by the owner during B-042 verification (2026-07-07): dragging writes continuous FRACTIONAL scene X/Y, so at pixel-grid zoom a drag can park an element between two pixels — the selection border honestly shows it sitting between two grid lines. This is a separate product gap from B-042 (which is only about grid↔content ALIGNMENT at integer coords), so it is filed on its own.
+
+**Today's behavior (recorded):** a drag writes continuous fractional coords (e.g. x=0.68); arrow nudges are RELATIVE ±1 moves that PRESERVE any fractional part (x=0.68 → right-arrow → x=1.68) — so once an element goes fractional it STAYS fractional until the value is retyped in the Inspector.
+
+**Decision (owner, 2026-07-07 — decided, not pending): full snap at pixel-grid zoom.** At zoom ≥ the grid threshold: (i) dragging lands on integer scene coords; (ii) the FIRST nudge of a fractional coordinate moves it to the next integer in the nudge direction (x=0.68 → right → 1, left → 0), after which nudges step by whole pixels — accelerated nudge variants follow the same rule; (iii) holding **Alt** during a drag or nudge BYPASSES the snap (free sub-pixel placement / relative nudge). Values typed in the Inspector stay free either way. Below the grid threshold, today's behavior is unchanged.
+
+**Acceptance:**
+
+- WHEN the zoom is ≥ the pixel-grid threshold and an element is dragged THEN its committed position is integer scene X/Y (the drag lands ON grid lines), unless Alt is held
+- WHEN an element sits at a fractional coordinate (e.g. x=0.68) at grid zoom and an arrow nudge fires THEN the coordinate moves to the NEXT integer in the nudge direction (right → 1, left → 0), and subsequent nudges step by whole pixels; accelerated nudge variants obey the same first-snap rule
+- WHEN Alt is held during a drag or nudge at grid zoom THEN the snap is bypassed (free sub-pixel drag / relative ±1 nudge preserving the fraction)
+- WHEN a value is typed in the Inspector THEN it is stored as typed (fractional allowed), at any zoom
+- WHEN the zoom is below the grid threshold THEN drag and nudge behave exactly as today (no new snapping)
+
+**Notes:** Queued, NOT scheduled — implementation is a later change, not part of B-042 (do not fold into `fix-pixel-grid-content-alignment`). Touch points when picked up: the drag-commit path and the arrow-nudge handler in the canvas feature (`CanvasOverlay`/group-move + the D-073 nudge), gated on `pixelGridVisible(zoom)`; Alt-bypass must not collide with existing Alt gestures; multi-select drags snap the anchor and preserve relative offsets (B-027 clamp still applies). Spec: extend the canvas-viewport (or a pointer-editing) capability with a snapping requirement mirroring the decision above.

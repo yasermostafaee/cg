@@ -15,15 +15,19 @@ import {
 import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
 import { PreviewHost } from './PreviewHost.js';
+import { B042Probe, b042ProbeEnabled } from './B042Probe.js';
 import {
   clampZoom as clampZoomPure,
   coverZoom,
   fitZoom,
+  gridBackingSize,
+  gridCanvasAlignment,
   pasteboardLayout,
   pixelGridLines,
   pixelGridVisible,
   PIXEL_GRID_MAJOR_EVERY,
   screenToScene,
+  snapMarkToGridPixel,
   zoomAnchorScroll,
 } from './geometry.js';
 import { needsFit, markFitted, frameCenterScroll, type FitGate } from './fit-on-open.js';
@@ -87,9 +91,19 @@ const PIXEL_GRID_MAJOR = 'rgba(255, 255, 255, 0.14)';
  * D-120 — paint the pixel grid onto its viewport-sized `<canvas>`. Lines are drawn with
  * `pixelGridLines` (device-pixel-snapped) so each is a single crisp 1-physical-px stroke at ANY
  * zoom — a CSS gradient with a fractional period blurred every line at fractional scales. Only the
- * lines inside the viewport are drawn (cull), every 10th (scene ≡ 0 mod 10) a hair stronger. The
- * canvas backing store is `viewport · dpr` so HiDPI stays 1 physical px; `origin` is the rulers'
- * scene-0 position, so the grid uses the exact mapping the rulers do.
+ * lines inside the viewport are drawn (cull), every 10th (scene ≡ 0 mod 10) a hair stronger.
+ * `origin` is the rulers' scene-0 position, so the grid uses the exact mapping the rulers do.
+ *
+ * B-042 — the snap must target the PHYSICAL raster, not the canvas-internal one: the overlay sits
+ * at an arbitrary (fractional) device position (`screenPos`, the outer viewport's live screen
+ * coords) and the content iframe composites UN-snapped at its ideal position, so a canvas-internal
+ * snap left strokes displaced/resampled by the compositor and stretched across the viewport
+ * (backing rounded to device px but displayed at the un-rounded CSS size). Fix: floor-align the
+ * canvas element itself to the device raster (sub-CSS-px `left`/`top` nudge → integer device
+ * origin, nothing for the compositor to snap), size the CSS box FROM the backing store (raster
+ * scale exactly 1), and fold the overlay's fractional device offset (`phase`) into each line's
+ * snap — the painted stroke then rasterizes on the physical pixel nearest its true screen
+ * position, within ½ device px of the composited content at every zoom and every dpr.
  */
 function drawPixelGrid(
   canvas: HTMLCanvasElement,
@@ -97,24 +111,31 @@ function drawPixelGrid(
   zoom: number,
   viewport: { w: number; h: number },
   dpr: number,
+  screenPos: { x: number; y: number },
 ): void {
-  canvas.width = Math.round(viewport.w * dpr);
-  canvas.height = Math.round(viewport.h * dpr);
-  canvas.style.width = `${String(viewport.w)}px`;
-  canvas.style.height = `${String(viewport.h)}px`;
+  const alignX = gridCanvasAlignment(screenPos.x, dpr);
+  const alignY = gridCanvasAlignment(screenPos.y, dpr);
+  const backingW = gridBackingSize(viewport.w, dpr);
+  const backingH = gridBackingSize(viewport.h, dpr);
+  canvas.width = backingW.devicePx;
+  canvas.height = backingH.devicePx;
+  canvas.style.width = `${String(backingW.cssPx)}px`;
+  canvas.style.height = `${String(backingH.cssPx)}px`;
+  canvas.style.left = `${String(alignX.nudgeCss)}px`;
+  canvas.style.top = `${String(alignY.nudgeCss)}px`;
   const ctx = canvas.getContext('2d');
   if (ctx === null) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.lineWidth = 1; // device px → 1 physical pixel
   const major = (scene: number): boolean => scene % PIXEL_GRID_MAJOR_EVERY === 0;
-  for (const { scene, devicePx } of pixelGridLines(origin.x, zoom, viewport.w, dpr)) {
+  for (const { scene, devicePx } of pixelGridLines(origin.x, zoom, viewport.w, dpr, alignX.phase)) {
     ctx.strokeStyle = major(scene) ? PIXEL_GRID_MAJOR : PIXEL_GRID_MINOR;
     ctx.beginPath();
     ctx.moveTo(devicePx, 0);
     ctx.lineTo(devicePx, canvas.height);
     ctx.stroke();
   }
-  for (const { scene, devicePx } of pixelGridLines(origin.y, zoom, viewport.h, dpr)) {
+  for (const { scene, devicePx } of pixelGridLines(origin.y, zoom, viewport.h, dpr, alignY.phase)) {
     ctx.strokeStyle = major(scene) ? PIXEL_GRID_MAJOR : PIXEL_GRID_MINOR;
     ctx.beginPath();
     ctx.moveTo(0, devicePx);
@@ -198,6 +219,14 @@ export function CanvasArea({
   // pinned rulers and the guide lines stay aligned with the canvas as it
   // zooms / scrolls / resizes.
   const [rulerOrigin, setRulerOrigin] = useState<{ x: number; y: number } | null>(null);
+  // B-042 — what the ruler needs to snap its tick MARKS onto the same physical device pixel
+  // as the grid strokes (dpr + the overlay's per-axis fractional device offset). Captured in
+  // `measure()` alongside `rulerOrigin` so both update in one batch.
+  const [rulerSnap, setRulerSnap] = useState<{
+    dpr: number;
+    phaseX: number;
+    phaseY: number;
+  } | null>(null);
   // Visible viewport size, so the rulers can tick across the whole dark area
   // (including negative scene coords and past the canvas edges), not just 0..w.
   const [viewport, setViewport] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
@@ -659,6 +688,15 @@ export function CanvasArea({
         x: srect.left - orect.left + frame.x * zoom,
         y: srect.top - orect.top + frame.y * zoom,
       });
+      // B-042 — the overlay's fractional device offset, for snapping ruler tick marks onto
+      // the same physical pixel as the grid strokes (grid↔ruler stay glued under the
+      // containing-pixel convention).
+      const dpr = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
+      setRulerSnap({
+        dpr,
+        phaseX: orect.left * dpr - Math.floor(orect.left * dpr),
+        phaseY: orect.top * dpr - Math.floor(orect.top * dpr),
+      });
       setViewport({ w: o.clientWidth, h: o.clientHeight });
     }
     measure();
@@ -678,12 +716,20 @@ export function CanvasArea({
   // D-120 — (re)paint the pixel grid whenever the ruler origin (scroll), zoom, or viewport size
   // changes. The canvas only exists at high zoom (gated in the JSX), so a null ref / hidden grid
   // no-ops. Drawn in DEVICE px (snapped) so lines are crisp at every zoom — see `drawPixelGrid`.
+  // B-042 — the OUTER viewport's live screen position rides along so the snap targets the physical
+  // raster (the overlay sits at a fractional device position). Read from `outerRef` — never from
+  // the grid canvas's own rect, which the draw nudges (that would be a feedback loop). Window
+  // resizes and layout shifts re-run `measure()` → fresh `rulerOrigin`/`viewport` objects → this
+  // effect re-reads the rect, so the alignment tracks the layout.
   useEffect(() => {
     const canvas = gridCanvasRef.current;
-    if (canvas === null || rulerOrigin === null || !pixelGridVisible(zoom)) return;
+    const outer = outerRef.current;
+    if (canvas === null || outer === null || rulerOrigin === null || !pixelGridVisible(zoom))
+      return;
     if (viewport.w <= 0 || viewport.h <= 0) return;
     const dpr = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
-    drawPixelGrid(canvas, rulerOrigin, zoom, viewport, dpr);
+    const orect = outer.getBoundingClientRect();
+    drawPixelGrid(canvas, rulerOrigin, zoom, viewport, dpr, { x: orect.left, y: orect.top });
   }, [rulerOrigin, zoom, viewport]);
 
   if (scene === null) {
@@ -892,6 +938,7 @@ export function CanvasArea({
               zoom={zoom}
               viewW={viewport.w}
               viewH={viewport.h}
+              snap={rulerSnap}
               onCreateGuide={createGuideFromRuler}
             />
           )}
@@ -1007,6 +1054,19 @@ export function CanvasArea({
               Display-only (pointerEvents:none), positioned at the guide's screen coord near
               the ruler edge and clamped to the viewport; `direction:ltr` keeps `x: 960`
               readable under RTL. */}
+          {/* B-042 follow-up — TEMPORARY opt-in on-machine alignment probe
+              (?b042probe=1 or localStorage.b042probe='1'); see B042Probe.tsx. */}
+          {b042ProbeEnabled() && html !== null && (
+            <B042Probe
+              outerRef={outerRef}
+              stageRef={stageRef}
+              iframeRef={iframeRef}
+              gridRef={gridCanvasRef}
+              zoom={zoom}
+              frameOffset={frameOffset}
+              selection={selection}
+            />
+          )}
           {activeGuide !== null &&
             rulerOrigin !== null &&
             (() => {
@@ -1055,6 +1115,10 @@ const RULER = 16;
 /**
  * Pinned canvas rulers (top + left) showing scene-pixel coordinates. The tick
  * step adapts to zoom so labels stay ~64px apart; `originX/Y` place scene (0,0).
+ * B-042 — the tick MARKS are snapped onto the same physical device pixel as the pixel-grid
+ * strokes (`snapMarkToGridPixel`, 1 device px, containing-pixel convention), so grid↔ruler
+ * stay exactly glued. `snap` is null before the first measure (marks fall back to the ideal
+ * unsnapped position).
  */
 function CanvasRuler({
   originX,
@@ -1062,6 +1126,7 @@ function CanvasRuler({
   zoom,
   viewW,
   viewH,
+  snap,
   onCreateGuide,
 }: {
   originX: number;
@@ -1070,6 +1135,7 @@ function CanvasRuler({
   /** Visible viewport size in px — the rulers tick across this whole range. */
   viewW: number;
   viewH: number;
+  snap: { dpr: number; phaseX: number; phaseY: number } | null;
   onCreateGuide: (axis: 'x' | 'y', e: React.PointerEvent) => void;
 }): JSX.Element {
   const STEPS = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
@@ -1112,24 +1178,30 @@ function CanvasRuler({
         title="Drag down for a horizontal guide"
         onPointerDown={(e) => onCreateGuide('y', e)}
       >
-        {xticks.map((x) => (
-          <div
-            key={x}
-            style={{ position: 'absolute', left: originX + x * zoom, top: 0, bottom: 0 }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                left: 0,
-                bottom: 0,
-                width: 1,
-                height: 5,
-                background: colors.border,
-              }}
-            />
-            <span style={{ position: 'absolute', left: 2, top: 1, whiteSpace: 'nowrap' }}>{x}</span>
-          </div>
-        ))}
+        {xticks.map((x) => {
+          const ideal = originX + x * zoom;
+          const mark =
+            snap === null
+              ? { posCss: ideal, sizeCss: 1 }
+              : snapMarkToGridPixel(ideal, snap.dpr, snap.phaseX);
+          return (
+            <div key={x} style={{ position: 'absolute', left: ideal, top: 0, bottom: 0 }}>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: mark.posCss - ideal,
+                  bottom: 0,
+                  width: mark.sizeCss,
+                  height: 5,
+                  background: colors.border,
+                }}
+              />
+              <span style={{ position: 'absolute', left: 2, top: 1, whiteSpace: 'nowrap' }}>
+                {x}
+              </span>
+            </div>
+          );
+        })}
       </div>
       <div
         style={{
@@ -1145,31 +1217,38 @@ function CanvasRuler({
         title="Drag right for a vertical guide"
         onPointerDown={(e) => onCreateGuide('x', e)}
       >
-        {yticks.map((y) => (
-          <div key={y} style={{ position: 'absolute', top: originY + y * zoom, left: 0, right: 0 }}>
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                right: 0,
-                height: 1,
-                width: 5,
-                background: colors.border,
-              }}
-            />
-            <span
-              style={{
-                position: 'absolute',
-                left: 1,
-                top: 2,
-                writingMode: 'vertical-rl' as const,
-                fontSize: 8,
-              }}
-            >
-              {y}
-            </span>
-          </div>
-        ))}
+        {yticks.map((y) => {
+          const ideal = originY + y * zoom;
+          const mark =
+            snap === null
+              ? { posCss: ideal, sizeCss: 1 }
+              : snapMarkToGridPixel(ideal, snap.dpr, snap.phaseY);
+          return (
+            <div key={y} style={{ position: 'absolute', top: ideal, left: 0, right: 0 }}>
+              <div
+                style={{
+                  position: 'absolute',
+                  top: mark.posCss - ideal,
+                  right: 0,
+                  height: mark.sizeCss,
+                  width: 5,
+                  background: colors.border,
+                }}
+              />
+              <span
+                style={{
+                  position: 'absolute',
+                  left: 1,
+                  top: 2,
+                  writingMode: 'vertical-rl' as const,
+                  fontSize: 8,
+                }}
+              >
+                {y}
+              </span>
+            </div>
+          );
+        })}
       </div>
       <div
         style={{

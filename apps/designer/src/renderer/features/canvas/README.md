@@ -182,14 +182,67 @@ integer ones). The canvas is the **bottom layer of the non-scrolling ruler overl
 viewport-sized, `pointer-events:none`, tracking the stage via `rulerOrigin` exactly as the rulers do.
 It paints lightly over the scroll content (shapes + gizmos) and under the rulers/guides; hit-testing
 stays on the canvas below the overlay. `drawPixelGrid` repaints it whenever `rulerOrigin` (scroll),
-zoom, or the viewport changes, using `pixelGridLines(origin, zoom, lengthCss, dpr)` — which **culls**
-to the visible region (only ~viewport/zoom lines, a few dozen at high zoom) and snaps each line to
-`Math.round(pos·dpr) + 0.5`, so a 1-device-px stroke lands on a **single physical pixel** — crisp at
-**any** zoom, HiDPI included. Snapping each line **independently** means no accumulating drift: a line
-for scene X stays within half a device pixel of its true screen pos `rulerOrigin + X·zoom` (the SAME
-mapping the rulers use — invisible as position at high zoom, decisive for crispness), so the grid
-never drifts from the rulers. Every 10th line (`scene % 10 === 0`, so scene 0 / ±10 / ±20 — round
-ruler labels) is drawn a hair stronger (graph-paper).
+zoom, or the viewport changes, using `pixelGridLines(origin, zoom, lengthCss, dpr, rasterPhase)` —
+which **culls** to the visible region (only ~viewport/zoom lines, a few dozen at high zoom) and snaps
+each line to `Math.round(pos·dpr + rasterPhase) + 0.5`, so a 1-device-px stroke lands on a **single
+physical pixel** — crisp at **any** zoom, HiDPI included. Snapping each line **independently** means
+no accumulating drift: a line for scene X stays within half a device pixel of its true screen pos
+`rulerOrigin + X·zoom` (the SAME mapping the rulers use — invisible as position at high zoom,
+decisive for crispness), so the grid never drifts from the rulers. Every 10th line
+(`scene % 10 === 0`, so scene 0 / ±10 / ±20 — round ruler labels) is drawn a hair stronger
+(graph-paper).
+
+**Grid ↔ content alignment (B-042).** The snap targets the **PHYSICAL screen raster, not the
+canvas-internal one** — the overlay sits at an arbitrary (fractional) device position (the studio
+layout puts the canvas viewport at a fractional CSS x at every dpr), and the scaled preview iframe
+composites **un-snapped at its ideal position** (measured), so a canvas-internal snap left painted
+strokes displaced (the compositor snapped/resampled the fractionally-placed layer: −0.39 device px
+at dpr 1, −0.5 at dpr 1.25 measured) and **stretched** across the viewport (backing store rounded to
+device px but displayed at the un-rounded CSS size → `round(w·dpr)/(w·dpr)` scale, 1.00031 at dpr
+1.25 — the misalignment GREW past ½ device px). `drawPixelGrid` therefore (1) floor-aligns the
+canvas element itself to the device raster — `gridCanvasAlignment(screenCssPos, dpr)` gives the
+integer device origin, the sub-CSS-px `left`/`top` **nudge** that lands the layer on it (nothing for
+the compositor to snap or resample), and the fractional-offset **`phase`** folded into each line's
+snap; and (2) sizes the CSS box FROM the backing store (`gridBackingSize`: `cssPx = devicePx/dpr`,
+raster scale **exactly 1**; +2 device px overspan keeps the viewport covered despite the nudge,
+clipped by the overlay). The alignment is derived from the OUTER viewport's rect — never the
+grid canvas's own rect (the draw nudges it — reading it back would feed back). The stage / scroll
+pipeline is untouched (B-027 / B-035 invariants hold).
+
+**Containing-pixel snap + gizmo fidelity (B-042, owner-machine round).** Each stroke is the device
+pixel **CONTAINING** its lattice line — `floor(trueScreenDevice) + 0.5`, not nearest-rounding: the
+stage composites at an arbitrary per-axis device phase (owner-measured Y ≈ 0.68 in every reading,
+X a scroll lottery), the content paints AT its layout position (verified-deselected paint
+profiles: one honest AA pixel per edge), and `round` put whole strokes one pixel PAST every edge
+at phases > ½ (the owner-visible +0.81 device-px Y offset). Under `floor` the stroke center stays
+≤ ½ device px from the line at ANY phase. The **ruler tick marks** snap to the SAME pixel
+(`snapMarkToGridPixel`, 1 device px wide) so grid↔ruler cannot split. The **selection gizmo** (the
+thing the operator actually stares at when working selected): its visual projection quantizes the
+box through the engine's LayoutUnit lattice (`quantizeBoxToLayout` — 1/64 css px, truncated;
+measured `2.2749px → 2.265625`), so at fractional model coords the frame traces the RENDERED edges
+(raw-model projection sat up to `zoom·dpr/64` = 1.25 device px outside at 6400%/dpr 1.25), and its
+frame stroke is **1 device px** (a 1-css stroke is a fuzzy 1.25-device band at dpr 1.25).
+Interaction math stays on the raw model; the border remains honest for fractional placement
+(D-122 governs placement snapping). Verification lives in `pixel-paint.spec.ts` — screenshot-pixel
+assertions with the selection state PROVEN (a silently-selected shape puts the gizmo's accent
+border on the measured edge; that artifact once mimicked a "content smear" — see the change's
+`design.md`, Takes 3–5).
+
+**Stale-raster position pin (B-045).** Chromium loses raster invalidation for `left`/`top`
+changes ≲ 2 CSS px inside the ×zoom-scaled canvas subtree: layout and the DOM update, the painted
+pixels stay at the previous position — through idle, scrolling, and even full runtime rebuilds
+(node replacement does not invalidate the stale tiles; no display-list poke does either —
+measured, see `design.md` Take 6). `transform` updates are compositor-tracked and never miss, so
+the CANVAS preview document (`REVEAL_ON_LOAD` gate in `platform/preview.ts` — the broadcast modal
+and exported outputs are untouched) pins every runtime element's box at `left/top: 0` and carries
+its position in a `translate(x, y)` prefix, quantized to the engine's 1/64-css LayoutUnit lattice
+(pixel parity with playout; the gizmo projection stays exact; transform-origin math is unaffected
+because a translate composed first commutes out of the origin conjugation). Interception is a
+realm-local per-element style Proxy (every engine `left`/`top` write reroutes synchronously,
+before paint); RTL auto-hug text (right-anchored, `left:auto`) opts out. The root fix — the
+engine itself positioning via transform — is queued as D-096 and deletes this shim. Regression
+coverage: the `B-045` test in `pixel-paint.spec.ts` (sub-pixel inspector edit + arrow-step
+nudges, painted edge vs layout edge).
 
 The rulers + guides live in a **non-scrolling overlay** (`s.overlay`) that is a **sibling** of the
 scroll container (`s.outer`), not a child of it — absolutely-positioned children of an

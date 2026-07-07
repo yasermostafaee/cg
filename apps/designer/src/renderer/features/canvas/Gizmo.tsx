@@ -12,6 +12,7 @@ import {
   handleLocal,
   localToScene,
   pivotClientFromGrab,
+  quantizeBoxToLayout,
   screenAngleDeg,
   screenDistance,
   snapValue,
@@ -158,8 +159,18 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   // under non-uniform scale) into overlay/screen space, so the frame + handles trace the
   // SAME geometry the renderer draws (matches `hit-test.inverseToLocal`). Fixes B-022,
   // where the old box baked scale into width/height and rotated a rectangle instead.
-  const c = gizmoCorners(t, scale);
+  // B-042 — the VISUAL projection quantizes the box to the engine's LayoutUnit lattice
+  // (1/64 css px, truncated) because that's where the preview ACTUALLY lays the element
+  // out: at fractional model coords the raw model sat up to zoom·dpr/64 device px (1.25 at
+  // 6400%/dpr 1.25 — owner-measured +1.0156) OUTSIDE the rendered edge. No-op at integer
+  // coords; interaction math below stays on the raw model.
+  const c = gizmoCorners(quantizeBoxToLayout(t), scale);
   const center = c.center;
+  // B-042 — a 1-DEVICE-px frame stroke: 1 css px is 1.25 device px at dpr 1.25 — a fuzzy band
+  // straddling the very edge the operator is judging at pixel-grid zoom. One device pixel,
+  // centered on the RENDERED (layout-quantized) edge, stays crisp at any dpr and remains
+  // HONEST for fractional placement (the border visibly sits between grid lines — see D-122).
+  const frameStrokePx = 1 / (window.devicePixelRatio > 0 ? window.devicePixelRatio : 1);
 
   /** Resize cursor for a handle: the double-arrow points along centre→handle. */
   const resizeCur = (p: ScreenPoint): string => resizeCursor(screenAngleDeg(center, p));
@@ -219,7 +230,7 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
           points={`${String(c.tl.x)},${String(c.tl.y)} ${String(c.tr.x)},${String(c.tr.y)} ${String(c.br.x)},${String(c.br.y)} ${String(c.bl.x)},${String(c.bl.y)}`}
           fill="none"
           stroke={colors.accent}
-          strokeWidth={1}
+          strokeWidth={frameStrokePx}
         />
       </svg>
 
@@ -300,7 +311,8 @@ interface MultiProps {
 export function MultiGizmo({ elements, scale, currentFrame }: MultiProps): JSX.Element | null {
   if (elements.length < 2) return null;
   const boxes = elements.map((el) => {
-    const t = effectiveTransformAt(el, currentFrame);
+    // B-042 — same LayoutUnit quantization as the single-selection gizmo (visual only).
+    const t = quantizeBoxToLayout(effectiveTransformAt(el, currentFrame));
     return {
       id: el.id,
       x: t.position.x * scale,

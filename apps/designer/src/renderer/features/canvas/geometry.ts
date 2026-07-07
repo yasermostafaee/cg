@@ -453,18 +453,36 @@ export interface PixelGridLine {
  * the visible extent (CSS px); `dpr` the devicePixelRatio. A line exists at every integer scene
  * coordinate, whose TRUE screen pos is `originCss + scene·zoom`; only the lines inside `[0,
  * lengthCss]` are returned (viewport cull). Each is SNAPPED to the device-pixel raster —
- * `Math.round(pos·dpr) + 0.5` — so a 1-device-px stroke lands on a single physical pixel and is
- * crisp at ANY (even fractional) zoom, never anti-aliased across two. A CSS `repeating` gradient
- * can't do this (its fixed fractional period drifts off the raster); snapping each line
- * INDEPENDENTLY also means no accumulating drift — every line stays within half a device pixel of
- * its true scene coordinate (invisible as position at high zoom, decisive for crispness), so the
- * grid still aligns with the rulers.
+ * `Math.round(pos·dpr + rasterPhase) + 0.5` — so a 1-device-px stroke lands on a single physical
+ * pixel and is crisp at ANY (even fractional) zoom, never anti-aliased across two. A CSS
+ * `repeating` gradient can't do this (its fixed fractional period drifts off the raster); snapping
+ * each line INDEPENDENTLY also means no accumulating drift — every line stays within half a device
+ * pixel of its true scene coordinate (invisible as position at high zoom, decisive for crispness),
+ * so the grid still aligns with the rulers.
+ *
+ * B-042 — `rasterPhase` is the grid canvas's own fractional device offset on this axis
+ * ({@link gridCanvasAlignment}.phase). The overlay the canvas lives in sits at an arbitrary
+ * (fractional) device position, so snapping to the canvas-INTERNAL raster alone lands strokes off
+ * the PHYSICAL pixel grid the content is composited on. With the phase folded in (and the canvas
+ * element floor-aligned to the device raster via the alignment's `nudgeCss`),
+ * `cssPos·dpr + rasterPhase` IS the line's true screen device position. Defaults to 0.
+ *
+ * B-042 owner-machine round — the snap is `floor(...) + 0.5`, NOT `round`: the stroke is the
+ * device pixel CONTAINING the line's true position. The content paints at its layout position
+ * (verified-deselected paint profiles: one honest AA pixel), and the stage's per-axis device
+ * phase is an arbitrary fraction (measured Y ≈ 0.68 in every owner reading, X a scroll lottery).
+ * `round` picks the NEAREST boundary, which at phase > ½ puts the whole stroke one pixel PAST the
+ * edge (owner-visible: horizontal strokes +0.81 device px below every content row); `floor`
+ * always picks the pixel the line passes through, so the stroke and a content edge at that
+ * coordinate share a pixel at ANY phase — the stroke CENTER stays within ½ device px of the true
+ * line position, the tightest a crisp 1-px stroke can do.
  */
 export function pixelGridLines(
   originCss: number,
   zoom: number,
   lengthCss: number,
   dpr: number,
+  rasterPhase = 0,
 ): PixelGridLine[] {
   if (zoom <= 0 || lengthCss <= 0 || dpr <= 0) return [];
   const firstScene = Math.ceil(-originCss / zoom); // first integer scene coord with pos ≥ 0
@@ -472,7 +490,103 @@ export function pixelGridLines(
   const out: PixelGridLine[] = [];
   for (let scene = firstScene; scene <= lastScene; scene++) {
     const cssPos = originCss + scene * zoom;
-    out.push({ scene, devicePx: Math.round(cssPos * dpr) + 0.5 });
+    out.push({ scene, devicePx: Math.floor(cssPos * dpr + rasterPhase) + 0.5 });
   }
   return out;
+}
+
+/**
+ * B-042 — the snapped position + size (CSS px, overlay coords) for a RULER tick mark, so the
+ * mark occupies EXACTLY the same physical device pixel as the grid stroke for that coordinate
+ * (`floor` of the true screen device position — the containing pixel, matching
+ * {@link pixelGridLines}). `cssPos` is the tick's ideal overlay position
+ * (`rulerOrigin + scene·zoom`), `rasterPhase` the overlay's fractional device offset on this
+ * axis. Keeps the D-120 grid↔ruler contract exact while both use the containing-pixel
+ * convention; the 1-device-px size also makes the marks crisp at fractional dpr.
+ */
+export function snapMarkToGridPixel(
+  cssPos: number,
+  dpr: number,
+  rasterPhase: number,
+): { posCss: number; sizeCss: number } {
+  if (dpr <= 0) return { posCss: cssPos, sizeCss: 1 };
+  return { posCss: (Math.floor(cssPos * dpr + rasterPhase) - rasterPhase) / dpr, sizeCss: 1 / dpr };
+}
+
+/** B-042 — how to place the grid canvas so its bitmap is a faithful window onto the PHYSICAL
+ *  device-pixel raster on one axis (see {@link gridCanvasAlignment}). */
+export interface GridRasterAlignment {
+  /** The integer device-px screen coordinate the canvas origin is placed on (floor of the true
+   *  position, so the nudge never uncovers the viewport's leading edge). */
+  deviceOrigin: number;
+  /** Sub-CSS-px offset for the canvas's `left`/`top` so its screen position lands exactly ON
+   *  `deviceOrigin` — always ≤ 0 (the canvas starts at or before the overlay origin). */
+  nudgeCss: number;
+  /** The overlay's fractional device offset `[0, 1)` — fed to {@link pixelGridLines} as
+   *  `rasterPhase` so the per-line snap targets the physical raster, not the canvas-internal one. */
+  phase: number;
+}
+
+/**
+ * B-042 — device-raster alignment for the grid canvas on one axis. The overlay the grid canvas
+ * lives in sits at an ARBITRARY screen position (`screenCssPos` — fractional in the real studio
+ * layout, e.g. 298.390625, at every dpr), so a canvas naively placed at its origin is composited at
+ * a fractional device offset: the compositor then snaps or resamples the whole layer (measured:
+ * −0.39 device px at dpr 1, −0.5 at dpr 1.25), displacing every "snapped" stroke off the physical
+ * raster. Placing the canvas at `floor(screenCssPos·dpr)` instead — via the sub-CSS-px `nudgeCss`
+ * on its `left`/`top` — gives the layer an integer device origin (nothing to snap or resample),
+ * and `phase` carries the fraction into the per-line snap so strokes land on the physical pixel
+ * nearest their true screen position. Degenerate inputs return the identity alignment.
+ */
+export function gridCanvasAlignment(screenCssPos: number, dpr: number): GridRasterAlignment {
+  if (dpr <= 0 || !Number.isFinite(screenCssPos)) return { deviceOrigin: 0, nudgeCss: 0, phase: 0 };
+  const device = screenCssPos * dpr;
+  const deviceOrigin = Math.floor(device);
+  return { deviceOrigin, nudgeCss: (deviceOrigin - device) / dpr, phase: device - deviceOrigin };
+}
+
+/**
+ * B-042 — the grid canvas's backing-store size (device px) and the CSS size that shows it at
+ * raster scale EXACTLY 1 (`cssPx·dpr === devicePx`). D-120 sized the backing to
+ * `round(viewport·dpr)` but displayed it at `viewport` CSS px, so at fractional dpr the bitmap was
+ * stretched by `round(w·dpr)/(w·dpr)` (measured 1.00031 at dpr 1.25) and stroke positions drifted
+ * linearly across the viewport, past the ≤½-device-px promise. Sizing the CSS box FROM the backing
+ * makes the scale exactly 1; the +2 device px overspan keeps the viewport covered on both edges
+ * despite the ≤1-device-px floor-alignment nudge (the overlay clips the sub-pixel overhang).
+ */
+export function gridBackingSize(
+  lengthCss: number,
+  dpr: number,
+): { devicePx: number; cssPx: number } {
+  if (lengthCss <= 0 || dpr <= 0) return { devicePx: 0, cssPx: 0 };
+  const devicePx = Math.round(lengthCss * dpr) + 2;
+  return { devicePx, cssPx: devicePx / dpr };
+}
+
+/**
+ * B-042 — Blink's LayoutUnit quantization: CSS lengths are stored in 1/64-px units,
+ * TRUNCATED toward zero (`style.left = "2.2749px"` measured to render a rect at 2.265625 in the
+ * preview iframe). The preview positions elements via `style.left/top` in SCENE units, so at high
+ * zoom the quantum is magnified to `zoom·dpr/64` device px (1.25 device px at 6400% / dpr 1.25) —
+ * the selection gizmo projecting the RAW model coordinate therefore sat up to that far OUTSIDE
+ * the rendered edge at fractional coords (owner-measured +1.0156 dev px; exactly 0 at integer
+ * coords). Quantizing the gizmo's box through the same lattice makes the overlay trace the box
+ * the engine ACTUALLY laid out; the E2E compares against the real rendered rect, so an engine
+ * change in this rule fails loudly rather than drifting silently.
+ */
+export function layoutQuantize(v: number): number {
+  return Math.trunc(v * 64) / 64;
+}
+
+/** B-042 — a {@link BoxTransform} with its LAYOUT-driven fields (position + size) passed through
+ *  {@link layoutQuantize}, matching how the preview iframe lays the element out. The
+ *  transform-driven fields (rotation / anchor / scale — CSS transforms, float-precision in the
+ *  engine) are untouched. Used by the gizmo's VISUAL projection only — interaction math stays on
+ *  the raw model. */
+export function quantizeBoxToLayout(t: BoxTransform): BoxTransform {
+  return {
+    ...t,
+    position: { x: layoutQuantize(t.position.x), y: layoutQuantize(t.position.y) },
+    size: { w: layoutQuantize(t.size.w), h: layoutQuantize(t.size.h) },
+  };
 }

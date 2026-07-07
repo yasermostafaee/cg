@@ -10,11 +10,16 @@ import {
   clampDeltaToPasteboard,
   coverZoom,
   fitZoom,
+  gridBackingSize,
+  gridCanvasAlignment,
+  layoutQuantize,
   pasteboardLayout,
   pasteboardSceneBounds,
   pixelGridLines,
   pixelGridVisible,
+  quantizeBoxToLayout,
   screenToScene,
+  snapMarkToGridPixel,
   zoomAnchorScroll,
 } from '../src/renderer/features/canvas/geometry.js';
 
@@ -281,7 +286,9 @@ describe('D-120 — high-zoom pixel grid (threshold + device-pixel snapping + ru
     const lines = pixelGridLines(origin, zoom, 900, dpr);
     for (const { scene, devicePx } of lines) {
       const truePx = (origin + scene * zoom) * dpr; // the ruler's mapping, in device px
-      expect(Math.abs(devicePx - 0.5 - truePx)).toBeLessThanOrEqual(0.5);
+      // containing-pixel convention (B-042): the stroke CENTER stays within half a device
+      // pixel of the true line position — the stroke is the pixel the line passes through.
+      expect(Math.abs(devicePx - truePx)).toBeLessThanOrEqual(0.5);
     }
   });
 
@@ -316,6 +323,154 @@ describe('D-120 — high-zoom pixel grid (threshold + device-pixel snapping + ru
     expect(pixelGridLines(0, 0, 900, 1)).toEqual([]); // zoom 0
     expect(pixelGridLines(0, 16, 0, 1)).toEqual([]); // length 0
     expect(pixelGridLines(0, 16, 900, 0)).toEqual([]); // dpr 0
+  });
+});
+
+describe('B-042 — grid↔content alignment (screen-raster snapping + device-aligned canvas layer)', () => {
+  // The measured studio layout: the canvas viewport's border box sits at a FRACTIONAL CSS
+  // position (298.390625) at every dpr, and the ruler origin is fractional after scroll.
+  const LAYOUTS: { screenCss: number; originCss: number }[] = [
+    { screenCss: 298.390625, originCss: -20125.015625 }, // measured @ 6400%
+    { screenCss: 298.390625, originCss: -15570.849727349007 }, // measured @ ~4977% (fractional)
+    { screenCss: 0, originCss: 137.42 }, // already-aligned overlay, fractional origin
+    { screenCss: 731.203125, originCss: -333.7 }, // fractional scroll variant
+  ];
+  const DPRS = [1, 1.25, 1.5, 2];
+  const ZOOMS = [64, 49.767633, 8.137406]; // 6400% · a real fractional stop · ~the threshold
+
+  it('gridCanvasAlignment: the nudged canvas origin lands ON an integer device pixel', () => {
+    for (const dpr of DPRS) {
+      for (const pos of [298.390625, 0, 123.4567, 64.5, 88.53125]) {
+        const a = gridCanvasAlignment(pos, dpr);
+        expect(Number.isInteger(a.deviceOrigin)).toBe(true);
+        // applying the nudge to the element puts its screen position exactly on deviceOrigin
+        expect((pos + a.nudgeCss) * dpr).toBeCloseTo(a.deviceOrigin, 9);
+        // floor alignment: the canvas never starts INSIDE the overlay (no uncovered leading edge)
+        expect(a.nudgeCss).toBeLessThanOrEqual(0);
+        expect(a.phase).toBeGreaterThanOrEqual(0);
+        expect(a.phase).toBeLessThan(1);
+        expect(a.phase).toBeCloseTo(pos * dpr - a.deviceOrigin, 9);
+      }
+    }
+  });
+
+  it('gridCanvasAlignment: an already-aligned position is the identity (no nudge, no phase)', () => {
+    expect(gridCanvasAlignment(100, 1)).toEqual({ deviceOrigin: 100, nudgeCss: 0, phase: 0 });
+    expect(gridCanvasAlignment(100.8, 1.25)).toEqual({ deviceOrigin: 126, nudgeCss: 0, phase: 0 });
+    // degenerate inputs → identity
+    expect(gridCanvasAlignment(100, 0)).toEqual({ deviceOrigin: 0, nudgeCss: 0, phase: 0 });
+    expect(gridCanvasAlignment(Number.NaN, 1)).toEqual({ deviceOrigin: 0, nudgeCss: 0, phase: 0 });
+  });
+
+  it('gridBackingSize: the CSS box shows the backing at raster scale EXACTLY 1 and overspans the viewport', () => {
+    for (const [len, dpr] of [
+      [645, 1.25],
+      [645, 1.5],
+      [800, 1],
+      [999, 2],
+      [1280.5, 1.25],
+    ] as const) {
+      const b = gridBackingSize(len, dpr);
+      expect(b.cssPx * dpr).toBeCloseTo(b.devicePx, 9); // scale exactly 1 — no stretch
+      expect(b.cssPx).toBeGreaterThanOrEqual(len); // still covers the whole viewport
+    }
+    expect(gridBackingSize(0, 1)).toEqual({ devicePx: 0, cssPx: 0 });
+    expect(gridBackingSize(100, 0)).toEqual({ devicePx: 0, cssPx: 0 });
+  });
+
+  it('a stroke stays within ½ device px of the CONTENT at its integer scene coordinate — every column, zoom, dpr, layout', () => {
+    // The content (scaled iframe) composites UN-snapped at its ideal screen device position
+    // (measured in the B-042 recon), so `contentDevice` IS where the edge rasterizes. The stroke
+    // rasterizes at `deviceOrigin + devicePx` (the canvas layer is floor-aligned + scale 1). The
+    // ideal stroke for a boundary hugs its right side (center = boundary + ½); the snap residual
+    // must never exceed ½ device px — at any column across the viewport (no growth, no beat > ½).
+    for (const dpr of DPRS) {
+      for (const zoom of ZOOMS) {
+        for (const { screenCss, originCss } of LAYOUTS) {
+          const align = gridCanvasAlignment(screenCss, dpr);
+          const lines = pixelGridLines(originCss, zoom, 1280, dpr, align.phase);
+          expect(lines.length).toBeGreaterThan(0);
+          for (const { scene, devicePx } of lines) {
+            const contentDevice = (screenCss + originCss + scene * zoom) * dpr;
+            const strokeCenterScreen = align.deviceOrigin + devicePx;
+            // containing-pixel convention: the stroke center is within ½ device px of the
+            // content lattice line — i.e. the stroke's pixel CONTAINS the line at any phase
+            // (`round` broke this visibly at phases > ½: strokes one pixel past the edge).
+            expect(Math.abs(strokeCenterScreen - contentDevice)).toBeLessThanOrEqual(0.5 + 1e-9);
+          }
+        }
+      }
+    }
+  });
+
+  it('at integer zoom·dpr (6400% at dpr 1.25) the residual is CONSTANT across the viewport — no per-column beat, no stretch ramp', () => {
+    const dpr = 1.25; // zoom·dpr = 80 exactly — the owner-visible case that ramped pre-fix
+    const { screenCss, originCss } = LAYOUTS[0]!;
+    const align = gridCanvasAlignment(screenCss, dpr);
+    const lines = pixelGridLines(originCss, 64, 1280, dpr, align.phase);
+    expect(lines.length).toBeGreaterThan(10);
+    const residuals = lines.map(
+      ({ scene, devicePx }) =>
+        align.deviceOrigin + devicePx - (screenCss + originCss + scene * 64) * dpr,
+    );
+    for (const r of residuals) expect(r).toBeCloseTo(residuals[0]!, 9);
+  });
+
+  it('strokes stay CRISP with a phase: canvas-internal centers still at integer + 0.5', () => {
+    for (const phase of [0, 0.3906, 0.98828125, 0.5859]) {
+      for (const zoom of ZOOMS) {
+        const lines = pixelGridLines(137.42, zoom, 900, 1.25, phase);
+        expect(lines.length).toBeGreaterThan(0);
+        for (const { devicePx } of lines) expect(Number.isInteger(devicePx - 0.5)).toBe(true);
+      }
+    }
+  });
+
+  it('rasterPhase defaults to 0 — the D-120 call shape and line positions are unchanged', () => {
+    expect(pixelGridLines(137.42, 48.08, 900, 1)).toEqual(pixelGridLines(137.42, 48.08, 900, 1, 0));
+  });
+});
+
+describe('B-042 — gizmo LayoutUnit quantization + ruler mark lockstep', () => {
+  it('layoutQuantize matches Blink LayoutUnit truncation (measured: style.left 2.2749px → rect 2.265625)', () => {
+    expect(layoutQuantize(2.2749)).toBe(2.265625);
+    expect(layoutQuantize(322)).toBe(322); // integers are exact — the gizmo fix is a no-op there
+    expect(layoutQuantize(0.68)).toBe(43 / 64); // 0.671875
+    expect(layoutQuantize(-3.7)).toBe(-3.6875); // truncation toward zero, not floor
+  });
+
+  it('quantizeBoxToLayout quantizes ONLY the layout-driven fields (position + size)', () => {
+    const t = {
+      position: { x: 2.2749, y: 1.5 },
+      size: { w: 320.9999, h: 120 },
+      rotation: 12.3,
+      anchor: { x: 0.5, y: 0.5 },
+      scale: { x: 1.1, y: 1 },
+    };
+    const q = quantizeBoxToLayout(t);
+    expect(q.position.x).toBe(2.265625);
+    expect(q.position.y).toBe(1.5); // 1.5·64 is integer — unchanged
+    expect(q.size.w).toBe(Math.trunc(320.9999 * 64) / 64);
+    expect(q.size.h).toBe(120);
+    expect(q.rotation).toBe(12.3);
+    expect(q.anchor).toEqual(t.anchor);
+    expect(q.scale).toEqual(t.scale);
+  });
+
+  it('snapMarkToGridPixel: the ruler mark occupies EXACTLY the grid stroke’s device pixel', () => {
+    for (const dpr of [1, 1.25, 1.5, 2]) {
+      for (const phase of [0, 0.3906, 0.6875, 0.9922]) {
+        for (const cssPos of [354.984375, 137.42, 640]) {
+          const mark = snapMarkToGridPixel(cssPos, dpr, phase);
+          // the stroke for the same inputs: floor(cssPos·dpr + phase) + 0.5 (canvas-internal)
+          const strokeLeft = Math.floor(cssPos * dpr + phase);
+          // the mark's device position (same overlay frame): posCss·dpr + phase
+          expect(mark.posCss * dpr + phase).toBeCloseTo(strokeLeft, 9);
+          expect(mark.sizeCss * dpr).toBeCloseTo(1, 9); // exactly one device pixel
+        }
+      }
+    }
+    expect(snapMarkToGridPixel(100, 0, 0.5)).toEqual({ posCss: 100, sizeCss: 1 }); // degenerate
   });
 });
 

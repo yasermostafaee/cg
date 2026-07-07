@@ -438,6 +438,201 @@ export class Preview {
           }
         }
 
+        // ── B-045 — stale-raster position pin (AUTHORING CANVAS ONLY) ─────────────
+        // Chromium fails to re-raster a transform-scaled subtree when an element's
+        // left/top changes by ≲2 CSS px: layout and the DOM update but the painted
+        // pixels stay at the previous position — surviving idle, scrolling, and even
+        // full runtime rebuilds (docs/prd/bugs-designer.md B-045; measurements in the
+        // change's design.md Take 6). transform updates are compositor-tracked and
+        // never miss. So on the canvas each runtime element's BOX is pinned at
+        // left/top:0 and its position rides a translate() PREFIX on the inline
+        // transform instead — the box never moves, so there is nothing for Chromium
+        // to mis-invalidate. The translate value is quantized to Blink's LayoutUnit
+        // lattice (trunc(v*64)/64), keeping the rendered geometry identical to the
+        // left/top layout it replaces (pixel parity with playout; the designer
+        // gizmo's layout-lattice projection stays exact). transform-origin math is
+        // unaffected for ANY anchor: a translate composed FIRST commutes out of the
+        // origin conjugation. Interception is a per-element style Proxy installed
+        // through THIS document's HTMLElement.prototype.style getter (realm-local),
+        // so every engine write — scene-builder, bindings, animation-applier ticks —
+        // reroutes synchronously (before any paint) with the raw intended value in
+        // hand (a MutationObserver cannot distinguish an engine-written '0px' from
+        // the pin's own). The broadcast Preview modal and exported .vcg / HTML never
+        // install it (REVEAL_ON_LOAD gate) — playout output is untouched. Root fix =
+        // engine-level transform positioning (D-096), which deletes this shim. RTL
+        // auto-hug text re-anchors via left:'auto' + right: the pin restores raw
+        // state and opts those elements out (documented scope limit).
+        function installPositionPin() {
+          var styleDesc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'style');
+          if (!styleDesc || typeof styleDesc.get !== 'function') return;
+          var rawStyleOf = function (el) {
+            return styleDesc.get.call(el);
+          };
+          var recs = new WeakMap(); // el → { x, y, rest } (rest = engine's own transform)
+          var proxies = new WeakMap(); // el → style proxy
+          var optedOut = new WeakSet(); // left went auto/%/…: never pin this el again
+          var q64 = function (v) {
+            return Math.trunc(v * 64) / 64;
+          };
+          // '6.69px' → 6.69 · '0' → 0 · anything else (auto, %, calc, '') → null
+          var pxValue = function (v) {
+            if (v === 0 || v === '0') return 0;
+            var s = String(v);
+            if (/^-?(\\d+\\.?\\d*|\\.\\d+)px$/.test(s)) return parseFloat(s);
+            return null;
+          };
+          var composedOf = function (rec) {
+            return (
+              'translate(' + String(rec.x) + 'px, ' + String(rec.y) + 'px)' +
+              (rec.rest !== '' ? ' ' + rec.rest : '')
+            );
+          };
+          var writePin = function (el, raw, rec) {
+            recs.set(el, rec);
+            raw.left = '0px';
+            raw.top = '0px';
+            raw.transform = composedOf(rec);
+          };
+          var pinAxis = function (el, raw, axis, v) {
+            var rec = recs.get(el);
+            if (rec === undefined) {
+              // first pin — adopt whatever the engine has written so far
+              var t = raw.transform;
+              var px = pxValue(raw.left);
+              var py = pxValue(raw.top);
+              rec = {
+                x: px === null ? 0 : q64(px),
+                y: py === null ? 0 : q64(py),
+                rest: t === 'none' || !t ? '' : t,
+              };
+            }
+            rec[axis] = q64(v);
+            writePin(el, raw, rec);
+          };
+          var unpin = function (el, raw, axis, value) {
+            var rec = recs.get(el);
+            if (rec !== undefined) {
+              raw.transform = rec.rest;
+              if (axis === 'x') raw.top = String(rec.y) + 'px';
+              else raw.left = String(rec.x) + 'px';
+              recs.delete(el);
+            }
+            optedOut.add(el);
+            raw[axis === 'x' ? 'left' : 'top'] = value;
+          };
+          // true = handled; false = caller forwards to the raw declaration
+          var route = function (el, raw, prop, value) {
+            if (prop === 'left' || prop === 'top') {
+              if (optedOut.has(el)) return false;
+              var axis = prop === 'left' ? 'x' : 'y';
+              var n = pxValue(value);
+              if (n === null) {
+                unpin(el, raw, axis, value);
+                return true;
+              }
+              pinAxis(el, raw, axis, n);
+              return true;
+            }
+            if (prop === 'transform') {
+              var rec = recs.get(el);
+              if (rec === undefined) return false;
+              rec.rest = value === 'none' || !value ? '' : String(value);
+              writePin(el, raw, rec);
+              return true;
+            }
+            return false;
+          };
+          var makeProxy = function (el, raw) {
+            return new Proxy(raw, {
+              get: function (t, prop) {
+                if (prop === 'left' || prop === 'top' || prop === 'transform') {
+                  var rec = recs.get(el);
+                  if (rec !== undefined) {
+                    if (prop === 'transform') return rec.rest;
+                    return String(prop === 'left' ? rec.x : rec.y) + 'px';
+                  }
+                  return t[prop];
+                }
+                if (prop === 'setProperty') {
+                  return function (name, value, priority) {
+                    if (route(el, t, name, value)) return undefined;
+                    return t.setProperty(name, value, priority);
+                  };
+                }
+                if (prop === 'removeProperty') {
+                  return function (name) {
+                    if (name === 'left' || name === 'top') {
+                      route(el, t, name, '');
+                      return '';
+                    }
+                    return t.removeProperty(name);
+                  };
+                }
+                var v = t[prop];
+                return typeof v === 'function' ? v.bind(t) : v;
+              },
+              set: function (t, prop, value) {
+                if (typeof prop === 'string' && route(el, t, prop, value)) return true;
+                t[prop] = value;
+                return true;
+              },
+            });
+          };
+          Object.defineProperty(HTMLElement.prototype, 'style', {
+            configurable: true,
+            enumerable: styleDesc.enumerable === true,
+            get: function () {
+              var raw = rawStyleOf(this);
+              if (
+                typeof this.hasAttribute !== 'function' ||
+                !this.hasAttribute('data-cg-element-id') ||
+                optedOut.has(this)
+              ) {
+                return raw;
+              }
+              var p = proxies.get(this);
+              if (p === undefined) {
+                p = makeProxy(this, raw);
+                proxies.set(this, p);
+              }
+              return p;
+            },
+          });
+          // Safety net: a builder that styled an element BEFORE stamping
+          // data-cg-element-id would land raw left/top — pin such nodes when they
+          // enter the document (still before their first paint).
+          new MutationObserver(function (records) {
+            for (var i = 0; i < records.length; i++) {
+              var added = records[i].addedNodes;
+              for (var j = 0; j < added.length; j++) {
+                var n = added[j];
+                if (n.nodeType !== 1) continue;
+                var list = [];
+                if (n.hasAttribute && n.hasAttribute('data-cg-element-id')) list.push(n);
+                if (n.querySelectorAll) {
+                  var q = n.querySelectorAll('[data-cg-element-id]');
+                  for (var k = 0; k < q.length; k++) list.push(q[k]);
+                }
+                for (var m = 0; m < list.length; m++) {
+                  var el = list[m];
+                  if (recs.has(el) || optedOut.has(el)) continue;
+                  var raw = rawStyleOf(el);
+                  var nx = pxValue(raw.left);
+                  if (nx === null) continue; // auto/unset — not px-positioned
+                  pinAxis(el, raw, 'x', nx);
+                }
+              }
+            }
+          }).observe(document.documentElement, { subtree: true, childList: true });
+        }
+        if (REVEAL_ON_LOAD) {
+          try {
+            installPositionPin();
+          } catch (e) {
+            /* the pin must never brick the canvas preview */
+          }
+        }
+
         await applyScene(${sceneJson});
 
         // D-071 — the content-grown frame inset is a CSS variable on :root (which
