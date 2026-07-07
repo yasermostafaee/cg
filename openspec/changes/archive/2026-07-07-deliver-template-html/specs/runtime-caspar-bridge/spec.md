@@ -44,8 +44,10 @@ The bridge's in-memory template registry SHALL store the delivered HTML keyed by
 id SHALL replace the stored HTML (and info). The registry SHALL expose the stored
 HTML by id so a later phase can serve it over HTTP (`GET /template/<id>`) and
 resolve the `CG ADD` URL to it. The registry holds the HTML only — it does **not**
-serve it in this phase. The store is in-memory (empty on bridge restart); the
-browser retains the produced HTML and re-delivery on reconnect is a later phase.
+serve it in this phase. The store is in-memory (empty on bridge restart);
+browser-side retention + re-delivery on reconnect was descoped from B-038's
+close and is tracked as an open follow-up in `docs/prd/bugs-runtime.md` — until
+it lands, a bridge restart requires a manual re-import.
 
 #### Scenario: Import retains the HTML by template id
 

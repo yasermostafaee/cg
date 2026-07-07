@@ -3,7 +3,7 @@
 Features for the visual editor (`apps/designer`). See `README.md` for the
 format and how Claude processes these.
 
-## [ ] D-001 — Image / asset import UI ⟨priority: high⟩
+## [x] D-001 — Image / asset import UI ⟨priority: high⟩ — superseded by D-011 project assets + the asset waves (2026-07-07 review): ProjectAssetsPanel import/list/drag-to-canvas, preview renders via the `assetUrls` blob map, `.vcg`/HTML exports via D-062 (#129)
 
 **What:** A visible "Import image" affordance in the Designer that lets the
 operator pick a file, store it, and place it on the canvas as an image element.
@@ -21,7 +21,7 @@ the renderer has no button, so images can't be added at all today.
   currently skips assets — inline imported bytes as data URLs in
   `src/platform/preview.ts`.
 
-## [ ] D-002 — Connect a real on-disk folder (File System Access) ⟨priority: medium⟩
+## [ ] D-002 — Connect a real on-disk folder (File System Access) ⟨priority: medium⟩ — 2026-07-07 review: the persistence half is superseded by D-088 desktop-style save (per-file FS-Access handles, archive `2026-06-20-desktop-save-mechanism`); KEPT OPEN for the backend-indicator half — on the OPFS/memory tiers a save still lands silently in the browser profile with no UI signal of the active backend
 
 **What:** A "Connect folder" control + an indicator of the active storage
 backend (folder / OPFS / memory).
@@ -34,7 +34,7 @@ surfaced; operators can't choose a real library folder.
 - WHEN no folder is connected THEN the UI shows the current backend (OPFS or memory)
   **Notes:** `connectDirectory()` + handle persistence already in `@cg/storage`.
 
-## [ ] D-003 — Replace window.prompt save/export with real dialogs ⟨priority: medium⟩
+## [x] D-003 — Replace window.prompt save/export with real dialogs ⟨priority: medium⟩ — superseded by D-088 desktop-style save (#139, archive `2026-06-20-desktop-save-mechanism`): `showSaveFilePicker` Save-As + export dialogs, no `window.prompt` remains (2026-07-07 review)
 
 **What:** Replace the `window.prompt` flows for Save-As and Export with proper
 in-app dialogs (and `showSaveFilePicker` where available).
@@ -48,7 +48,7 @@ output name — crude and easy to mis-enter.
   filename and no prompt
   **Notes:** `apps/designer/src/renderer/features/status/StatusBar.tsx`.
 
-## [ ] D-004 — Preview font + asset fidelity ⟨priority: medium⟩
+## [x] D-004 — Preview font + asset fidelity ⟨priority: medium⟩ — superseded by the preview font + asset inlining (2026-07-07 review): `fonts.css?inline` → `fontsCss` srcdoc injection (#68) + the `assetUrls` blob map (D-040, #131), export parity via D-062 (#129); the remaining `.vcg`-side gap (the package ships no font bytes, so preview↔`.vcg` font parity fails on a machine without the fonts) is tracked by D-121
 
 **What:** Make the live preview match the exported `.vcg` for fonts and assets.
 **Why:** The Blob-URL preview inlines the scene but not fonts/assets, so Persian
@@ -108,7 +108,7 @@ see the files inside the: `docs/designer-guide/sample-assets/D-006-old-codes`. t
 - and any features you see inside the video.
   **Notes:** see the video: `docs/designer-guide/sample-assets/D-007-video-0`
 
-## [~] D-008 — redesign and reorder style and elements (priority: high) — focused fix, no openspec change
+## [x] D-008 — redesign and reorder style and elements (priority: high) — focused fix, no openspec change; shipped (`ee9bf49`), chrome preserved/extended by D-086/D-095 + D-092 (2026-07-07 review)
 
 **What:** change the position of sceen tools
 **Why:** it gets extra space
@@ -119,7 +119,7 @@ see the files inside the: `docs/designer-guide/sample-assets/D-006-old-codes`. t
 - remove color picker from on top of sceen area. it is also exist in sceen properties area and it's enough
   **Notes:** see the pic: `docs/designer-guide/sample-assets/D-008-pic-0`
 
-## [~] D-009 — redesign and reorder style and elements (priority: high) — focused fix
+## [x] D-009 — redesign and reorder style and elements (priority: high) — focused fix; shipped (`e740fdb`), absorbed by the D-007 redesign + D-048 (#126) + the D-051 registry (2026-07-07 review)
 
 **What:** add other properties for shapes and text
 **Why:** we need more properties for make a usefull animation
@@ -131,7 +131,7 @@ see the files inside the: `docs/designer-guide/sample-assets/D-006-old-codes`. t
 - inside the properties area on the right we need separeted point icons for positionX and positionY, width and height, scaleX and scaleY like the screenshots `D-009-pic-2`.
 - **Notes:** see all the pics for D-009: `docs/designer-guide/sample-assets/D-009-pic-*`
 
-## [~] D-010 — add new properties (priority: high)
+## [~] D-010 — add new properties (priority: high) — 2026-07-07 review: shipped pre-OpenSpec (`cd44f75`/`b26bb15`/`47443ee`) and absorbed by D-042/D-051/D-057 EXCEPT one gap — the Stroke Linecap control shown in `D-010-pic-2` (the stroke schema has no linecap at all); KEPT OPEN for that
 
 **What:** add other properties for shapes and text on 2 areas: right area and the area on the left of the timeline.
 **Why:** we need more properties for make an usefull animation
@@ -142,7 +142,7 @@ see the files inside the: `docs/designer-guide/sample-assets/D-006-old-codes`. t
   2- add Text, Drop Shadow, Text Padding, Border radius and Filter sections for the text.
   **Notes:** see these pics : `docs/designer-guide/sample-assets/D-010-pic-*`
 
-## [~] D-011 — project assets (priority: high)
+## [x] D-011 — project assets (priority: high) — shipped (`e042a56`/`19827c5`/`44f92aa`); living spec `designer-project-assets` (via D-067), extended by D-040/D-062 (#129)/D-068/D-097 (#175) (2026-07-07 review)
 
 **What:** add new panel for project assets
 **Why:** we need this panel to add our resourses like fonts or images for use them inside the project
@@ -347,7 +347,7 @@ broadcast CG template.
   (`apps/designer/src/platform/preview.ts`, `bridge.preview.update`).
   Change: `openspec/changes/add-dynamic-text-fields/`.
 
-## [~] D-019 — Single-file CasparCG HTML export (+ embedded GDD) ⟨priority: high⟩
+## [x] D-019 — Single-file CasparCG HTML export (+ embedded GDD) ⟨priority: high⟩ — shipped (#70, `fe25427`); exporter extracted into `@cg/single-file-export` (#235, `fd8ee6c`) and reused by the Runtime B-038 delivery
 
 **What:** A "Download HTML" action that exports the current composition as **one
 self-contained, `file://`-safe `.html`** to drop into CasparCG's `templates/`:
@@ -382,7 +382,9 @@ straight into CasparCG, and no GDD for standard CG clients.
   behind a small interface so an OGraf exporter can be added later (do NOT build
   OGraf now). Keep CSS within common CasparCG CEF builds (63 = 2.2, 71 = 2.3.x,
   117 = 2.4.x). Leaves the existing `.vcg` exporter unchanged.
-  Change: `openspec/changes/add-caspar-single-file-export/`.
+  Change: shipped via PR #70 (the `add-caspar-single-file-export` dir no longer
+  exists); the exporter now lives in `@cg/single-file-export` — extraction
+  archived at `openspec/changes/archive/2026-07-07-extract-single-file-export/`.
 
 ## [x] D-020 — Animation lifecycle + playout timing ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-06-15-add-animation-lifecycle-timing/`
 
@@ -2968,7 +2970,7 @@ OpenSpec: `## MODIFIED` the D-108 requirement (read-only → writable per-instan
 
 **Notes:** Schema: add `static` to PlayoutModeSchema (non-breaking); a no-out-point `manual` scene should resolve/normalize to `static` via `playoutOf` (decide migrate-vs-resolve in design.md). Runtime: controller handles `static` (no outro path). UI: PlayoutSection select + the out-point⇄mode coupling (extends D-113's invariant). RECON FIRST (touches the controller stop/exit). Spec: `## MODIFIED` designer-playout-lifecycle (D-113's invariant) + `## ADDED static`. Tests: round-trip; controller (cut-on-stop, no outro); store/E2E (no out-point ⇒ static + others disabled; clear ⇒ static).
 
-## [x] D-115 — designate the main / entry composition (explicit, not list-order) ⟨priority: medium⟩ — `openspec/changes/designate-entry-composition`
+## [x] D-115 — designate the main / entry composition (explicit, not list-order) ⟨priority: medium⟩ — `openspec/changes/archive/2026-06-29-designate-entry-composition/`
 
 **What:** Let the operator explicitly designate which composition is the MAIN/entry — what the editor opens on by default and what plays as the template's entry — instead of it being implicit (currently the active comp on load defaults by list position, not by intent). Add an explicit `entryCompositionId` on the scene (`null` ⇒ the main document itself), a "Set as main" action in the Compositions panel, and a clear indicator of which is main.
 **Why:** A template's "real" entry may not be the first composition; relying on order is fragile (reordering for organization silently changes the default). An explicit pointer is order-independent and matches intent.
@@ -2982,7 +2984,7 @@ OpenSpec: `## MODIFIED` the D-108 requirement (read-only → writable per-instan
 
 **Notes:** RECON FIRST the current active-on-load model — the main IS `activeCompositionId === null` (the document); sub-comps live in the registry (`apps/designer/src/renderer/state/slices/composition.ts`, `document.ts`). Decide whether "main" points at a registry comp or also covers the document, and how it maps to the runtime/export entry. Schema: optional `entryCompositionId` (non-breaking). UI: Compositions panel "Set as main" + indicator + open-on-main. (Composition reordering is a SEPARATE optional organizational feature — note it, don't fold it in.) Spec: `## ADDED` to the relevant designer capability. Tests: round-trip; open-on-main; delete-clears; no-designation fallback.
 
-## [x] D-116 — finite sequence: animate first item IN and last item OUT before completion ⟨priority: medium⟩ — `openspec/changes/sequence-exit-timing`
+## [x] D-116 — finite sequence: animate first item IN and last item OUT before completion ⟨priority: medium⟩ — `openspec/changes/archive/2026-06-29-sequence-exit-timing/`
 
 **What:** For a finite sequence, play the first item's `transitionIn` on entry and the last item's `transitionOut` (e.g. push-up) at the end — and signal the sequence's completion only AFTER the last item's OUT finishes, so the composition's outro fires after the content's exit (content-first / background-last). Today the first item appears abruptly and the last item freezes in place and closes simultaneously with the overall exit (the background may even close first).
 **Why:** The per-item transitions (`transitionIn`/`transitionOut`/`transitionMs`) exist but aren't applied at the first/last boundaries, and the sequence reports "complete" without playing the last item's exit — so the content-driven hold ends too early and the background closes over still-present content. This is the staggered exit the operator expects (and the D-105 content-first principle).
@@ -2996,7 +2998,7 @@ OpenSpec: `## MODIFIED` the D-108 requirement (read-only → writable per-instan
 
 **Notes:** RECON FIRST — this changes WHEN the sequence's completion signal fires (it feeds the content-driven hold / B-031 aggregation), so it's the high-risk playout path. Lives in the sequence runtime (`@cg/template-runtime`) + its completion signal. Align with D-105 (content-first/background-last exit). Schema likely unchanged (transition fields exist). Spec: `## MODIFIED`/`## ADDED` on `designer-playout-lifecycle` (sequence boundary transitions + completion timing). Tests: a runtime test asserting last-item OUT plays before completion and the parent outro follows it (ordering); first-item IN plays; infinite unchanged.
 
-## [x] D-117 — multi-line text in sequence items on air (explicit \n + auto-wrap) ⟨priority: medium⟩ — `openspec/changes/multiline-sequence-items`
+## [x] D-117 — multi-line text in sequence items on air (explicit \n + auto-wrap) ⟨priority: medium⟩ — `openspec/changes/archive/2026-06-29-multiline-sequence-items/`
 
 **What:** Render sequence item text as multi-line on air: honor explicit `\n` line breaks in the item text AND auto-wrap long lines at the element's width. The two compose — a single item may contain authored breaks and have its long lines wrapped. The item's height adapts to the wrapped/broken content, and `align` / `verticalAlign` / `direction` (RTL) and the item transitions (push-up, etc.) all keep working with the taller, multi-line item.
 **Why:** Today an item renders single-line, so long text overflows or clips and there's no way to force a break (e.g. a two-line title/subtitle). Operators need both authored breaks and automatic wrapping for long Persian lines.
@@ -3012,7 +3014,7 @@ OpenSpec: `## MODIFIED` the D-108 requirement (read-only → writable per-instan
 
 **Notes:** RENDER change (`@cg/template-runtime` sequence rendering) — NOT the editor (that's D-118). Applies to sequence items. Schema: the text field already holds a string; `\n` needs no schema change — but if a max-lines or wrap toggle is wanted, add it optional/non-breaking (decide in design.md; default = wrap + honor `\n`, no cap). Watch the transition/measurement path: item height is now dynamic, so any code assuming fixed item height (push-up offsets, dwell layout, scroll metrics) must use measured height. Spec: `## MODIFIED` the sequence rendering requirement on the relevant capability. Tests: a render/`d`-string-or-DOM unit test (explicit `\n` breaks; long line wraps; height adapts) + an E2E (two-line item renders + transitions correctly, preview==export), sequence, incl. an RTL case.
 
-## [x] D-118 — larger multi-line (textarea) input for sequence item text ⟨priority: low-medium⟩ — `openspec/changes/sequence-item-textarea`
+## [x] D-118 — larger multi-line (textarea) input for sequence item text ⟨priority: low-medium⟩ — `openspec/changes/archive/2026-06-29-sequence-item-textarea/`
 
 **What:** Replace the single-line item-text input in the SEQUENCE item editor with a multi-line, resizable textarea, so operators can edit long text comfortably and insert explicit line breaks (Enter → `\n`) — in BOTH the properties panel (inspector) AND the operator preview field form, so the two match. Pairs with D-117 (which renders those breaks on air). SEQUENCE ONLY — the ticker keeps its single-line input.
 **Why:** The current single-line input can't hold long Persian copy comfortably and can't enter a line break at all (no Enter), so authored multi-line text (D-117) is impossible to create.
@@ -3057,10 +3059,10 @@ The 5 templates:
 - Use the SHARED LIBRARY and ASSETS where possible.
 - Full-screen / large-background templates are NOT needed for now — just these 5.
 - @IRIBNEWS / any logo: IRIB is a real brand; do NOT reproduce their real logo. Use a clear PLACEHOLDER (simple SVG/text mark) the owner can swap for the real asset later. Note this in the template.
-- **SEQUENCING — dependency:** implement this AFTER **D-060** (auto-size text) and the open Designer bugs **B-035** (fit-on-open), **B-036** (icon align), **B-037** (pen tool) are done — templates should exercise healthy features. **BLOCKED** until those land.
+- **SEQUENCING — dependency:** implement this AFTER the open Designer bugs **B-037** (pen tool keep-or-remove) and **B-042** (canvas-zoom bug — number reserved, to be filed with the owner's repro) are done — templates should exercise healthy features. **BLOCKED** until those land. (The other prerequisites — **D-060** auto-size, **B-035** fit-on-open, **B-036** icon align — are done as of 2026-07-07.)
 - **OPEN QUESTIONS to resolve with owner before implementation:** (a) resolution(s) — all 1920×1080, or some vertical 1080×1920? (b) colour palette — specific (e.g. news red/white) or designer's choice? (c) storage location — bundled `@cg/starter-templates` package vs sample projects? (d) real logo asset availability.
 
-## [~] D-120 — High zoom + pixel grid for pixel-perfect editing ⟨priority: medium⟩ — `openspec/changes/high-zoom-pixel-grid`
+## [x] D-120 — High zoom + pixel grid for pixel-perfect editing ⟨priority: medium⟩ — merged (#240, `9f4654a`), archived `openspec/changes/archive/2026-07-07-high-zoom-pixel-grid/`
 
 **What:** Raise the maximum canvas zoom to 6400% and render a pixel grid (1 grid cell = 1 scene pixel) that appears only at high zoom, across the whole pasteboard, so the user can align/move shapes at single-pixel precision.
 

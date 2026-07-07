@@ -8,31 +8,30 @@ TBD - created by archiving change redesign-studio-loopic-style. Update Purpose a
 
 ### Requirement: Canvas zoom controls and Ctrl-wheel zoom
 
-The canvas SHALL expose zoom-in, zoom-out, fit, and reset controls in
-its header. The zoom level MUST be clamped to the inclusive range
-[10%, 400%]. `Ctrl + wheel` over the canvas SHALL also zoom in /
-out, stepping in the same range; the canvas MUST `preventDefault` on
-that gesture so it does not bubble up to the browser's page-zoom.
+The canvas SHALL expose zoom-in, zoom-out, fit, and reset controls in its header. The zoom level
+MUST be clamped to an inclusive range whose UPPER bound is 6400% (each scene pixel = 64 screen px at
+the top); the LOWER bound is the canvas's dynamic minimum zoom (the cover-fit of the pasteboard over
+the viewport — unchanged by this requirement). `Ctrl + wheel` over the canvas SHALL also zoom in /
+out, stepping within the same range; the canvas MUST `preventDefault` on that gesture so it does not
+bubble up to the browser's page-zoom. Every zoom path (the buttons, `Ctrl + wheel`, and Fit) SHALL go
+through the single clamp so they all honour the same bounds.
 
 #### Scenario: Operator clicks zoom in
 
-- **WHEN** the canvas is at 100% and the operator clicks the
-  zoom-in button
-- **THEN** the canvas zoom increases by one step (clamped at 400%)
-  and the displayed canvas grows accordingly
+- **WHEN** the canvas is at 100% and the operator clicks the zoom-in button
+- **THEN** the canvas zoom increases by one step (clamped at 6400%) and the displayed canvas grows
+  accordingly
 
 #### Scenario: Ctrl-wheel up zooms in
 
 - **WHEN** the operator holds Ctrl and wheels up over the canvas
-- **THEN** the canvas zoom increases by one wheel-step (clamped at
-  400%) and the page does NOT scroll or invoke the browser's page
-  zoom
+- **THEN** the canvas zoom increases by one wheel-step (clamped at 6400%) and the page does NOT
+  scroll or invoke the browser's page zoom
 
 #### Scenario: Zoom clamps at the upper bound
 
-- **WHEN** the canvas is already at 400% and the operator zooms in
-  again
-- **THEN** the zoom stays at 400%
+- **WHEN** the canvas is already at 6400% and the operator zooms in again
+- **THEN** the zoom stays at 6400%
 
 #### Scenario: Reset returns to 100%
 
@@ -67,134 +66,220 @@ or creating elements.
 
 ### Requirement: An off-frame pasteboard for parking/editing shapes
 
-The canvas SHALL present an off-frame PASTEBOARD — a dark area around the frame — whose extent GROWS
-to contain off-frame content so a parked shape always stays visible and selectable. The extent is the
-fixed 2× extent (the frame plus a margin, a fraction of the frame, on ALL FOUR sides) for content that
-stays WITHIN that 2× boundary — BYTE-IDENTICAL to before, so everyday off-frame drags within the
-margin do NOT resize the dark area — and it GROWS, giving a FULL margin of headroom past content, only
-once content crosses a 2× boundary. The extent SHALL shrink back toward the 2× extent as far content
-returns inward but SHALL NEVER shrink below it, and SHALL be clamped at a sane maximum
-(`MAX_EXTENT_RATIO` × the frame per axis) so a stray far coordinate (bad import / fat-finger drag)
-cannot blow the iframe up. The bounds come from the CURRENT-FRAME transforms of every top-level
-element (the same boxes the overlay hit-tests / the runtime renders); a nested composition INSTANCE
-contributes only its OWN box (instances render `overflow: hidden`, so nested children that overflow
-the instance box are already clipped — bounding the instance box is exact). When the extent grows on
-the LEFT/TOP the frame origin shifts; the canvas SHALL scroll-compensate (`Δoffset × zoom`) so the
-visible content stays STATIONARY (no jump), on growth AND on inward shrink. The frame SHALL be clearly
-OUTLINED so the author distinguishes the frame (what exports) from the pasteboard (what does not). In
-authoring the editor SHALL lift the stage clip (the canvas iframe renders with
+The canvas SHALL present an off-frame PASTEBOARD — a dark area around the frame — whose extent is a
+FIXED function of the resolution (NOT content-grown): the margin per side is the LARGER of an absolute
+minimum or one full frame — `max(5000, frameWidth)` on the left AND right, `max(3000, frameHeight)` on
+the top AND bottom — so the total stage is `frameWidth + 2·marginX` by `frameHeight + 2·marginY`, with
+the frame at the constant inset `(marginX, marginY)`. The absolute floor (5000 on X, 3000 on Y) keeps
+the pasteboard usefully large even for a TINY frame so the cover-fit minimum zoom never locks — a plain
+1× multiplier made a 100×100 frame only a 300×300 pasteboard, forcing a ~428% minimum that FROZE zoom;
+once the frame exceeds a floor on an axis the margin grows with it (one frame per side). The extent and
+the frame offset SHALL NOT depend on element positions, so dragging a shape off-frame moves ONLY the
+shape — the dark area never resizes and the frame origin never shifts (so the frame cannot drift on a
+drag).
+Element moves SHALL be CLAMPED to the pasteboard so there is NO dead zone: a single drag, a
+multi-select group drag, and an arrow-key nudge SHALL each keep the moved element's full bounding box
+(for a group, the whole selection's combined bounding box) inside the extent, so no part of any shape
+can be moved into the clipped region beyond the extent — the pasteboard IS the whole workable area, and
+a shape can never become invisible/unselectable by being dragged off it. The clamp SHALL only TIGHTEN:
+a shape that is ALREADY outside the extent (e.g. loaded from an older scene or imported with far
+coordinates) SHALL NOT be snapped violently or pushed further out — it can move freely until it is
+inside, then it is bounded — so such a shape is always recoverable (draggable back in), never trapped. A
+shape LARGER than the pasteboard on an axis SHALL be centered on that axis (it cannot fit, so it stops
+following the pointer there rather than fighting it). The frame SHALL be clearly OUTLINED so the author
+distinguishes the frame (what exports) from the pasteboard (what does not), and the PASTEBOARD in turn
+SHALL be visually distinguished from the empty surround beyond it — the surround (the scroll container)
+is a DARKER tone than the pasteboard and the pasteboard carries a subtle edge outline — so the workable
+area reads as a defined rectangle (insurance/clarity even though the clamp already keeps shapes inside).
+In authoring the editor SHALL lift the stage clip (the canvas iframe renders with
 `.cg-stage { overflow: visible }`) so a fully off-frame shape PAINTS into the pasteboard on ANY side
 (left/top as well as right/bottom) instead of being clipped, and such a shape SHALL remain selectable
 and draggable on the canvas (the pointer/hit-test layer covers the whole pasteboard). The frame inset
-SHALL update LIVE as the extent grows (driven by a CSS variable the runtime never recreates, carried
-on the live preview messages — both scene-replace and scrub, since the offset is current-frame
-derived) so a growing offset re-insets the frame with no iframe reload or flash. The canvas SHALL be TWO-TONE by region: the SURROUND (everything beyond the frame — the
-scroll container and the iframe body) is the lighter `#161927`, and a FRAME-SIZED page backdrop is the
-darker `#080a10` drawn as the frame's `background-color` (BEHIND the checkerboard and the shapes), so
-every shape — on-frame over the page or off-frame over the surround — paints ON TOP and stays visible
-(the `#080a10` is a backdrop, never an overlay that occludes a shape). On-frame editing SHALL be
-UNCHANGED — scene (0,0) is the frame's top-left (inset into the pasteboard), and every consumer
-(iframe, overlay, rulers) measures from that offset, so click→scene placement and on-frame hit-testing
-are identical to before. The pasteboard is an AUTHORING affordance only, driven by an `authoring` flag
-on the preview document that is INDEPENDENT of the broadcast flag: the broadcast preview modal and the
-exports SHALL keep the native clip (off-frame content stays invisible, frame offset `{0,0}`) and the
-modal SHALL still open blank-until-play. Save SHALL persist off-frame shapes in the project
-(`.cg.json`), while the broadcast preview + export SHALL still EXCLUDE fully-off-frame static shapes
-(the Phase-A export filter, unchanged, applied to the modal/export scene). The grow-to-fit extent
-SHALL NOT regress the canvas layout: the fit action and project-open SHALL fit the zoom from the FRAME
-bounds (NOT the grown extent) and CENTER the frame in the viewport; the canvas SHALL show NO default
-scrollbars (the overflowing pasteboard is pannable, but the scrollbars are hidden); a Ctrl+wheel zoom
-SHALL zoom toward the CURSOR (and the zoom buttons toward the viewport centre) and stay anchored even
-under a shifted origin; the rulers SHALL place scene (0,0) at the frame top-left and track scroll +
-zoom + the shifting origin; and the alignment / snap guides SHALL span the FULL visible canvas (the
-scroll viewport), not the frame dimensions.
+SHALL be a CSS variable (`--cg-frame-x/-y`, baked with the constant offset as the load-time fallback)
+that the runtime never recreates; because the offset is constant per resolution it updates only when
+the RESOLUTION changes (no reload), never per drag/scrub. The canvas SHALL distinguish three regions by
+tone: the empty SURROUND (the scroll container beyond the pasteboard) is `#0e1018`, the PASTEBOARD (the
+stage and the iframe body) is `#161927`, and a FRAME-SIZED page backdrop is drawn as the frame's
+`background-color` `#3d4253` (BEHIND the checkerboard and the shapes), so every shape — on-frame over
+the page or off-frame over the pasteboard — paints ON TOP and stays visible (the page backdrop is never
+an overlay that occludes a shape). On-frame editing SHALL be UNCHANGED — scene (0,0) is the frame's
+top-left (inset into the pasteboard), and every consumer (iframe, overlay, rulers) measures from that
+constant offset, so click→scene placement and on-frame hit-testing are identical to before. The
+pasteboard is an AUTHORING affordance only, driven by an `authoring` flag on the preview document that
+is INDEPENDENT of the broadcast flag: the broadcast preview modal and the exports SHALL keep the native
+clip (off-frame content stays invisible, frame offset `{0,0}`) and the modal SHALL still open
+blank-until-play. Save SHALL persist off-frame shapes in the project (`.cg.json`), while the broadcast
+preview + export SHALL still EXCLUDE fully-off-frame static shapes (the Phase-A export filter,
+unchanged, applied to the modal/export scene). The fixed extent SHALL NOT regress the canvas layout:
+the fit action and project-open SHALL fit the zoom from the FRAME bounds (NOT the extent) and CENTER the
+frame in the viewport; the canvas SHALL show NO default scrollbars (the overflowing pasteboard is
+pannable, but the scrollbars are hidden); the minimum zoom SHALL be the COVER-FIT of the pasteboard over
+the viewport — the MAXIMUM of the two axis ratios, each axis target biased UP by a small over-cover hair
+((viewportW + ε)/extentW, (viewportH + ε)/extentH) — so that at maximum zoom-out the pasteboard always
+COVERS the viewport on ALL FOUR edges and NO empty surround is visible, biased to slightly OVER-cover
+(never exactly equal, which a sub-pixel scroll would expose as a surround sliver on the trailing edges)
+with one axis overflowing and scrolling; the scroll container SHALL carry NO padding (the cover-fit
+already guarantees the pasteboard overflows the viewport, so padding would only offset the stage into the
+content box and show as a surround strip on the leading edge — without it the box the cover-fit targets
+equals the box the stage fills, so all four edges hug the viewport); this minimum SHALL recompute when the
+viewport size or the resolution changes, and
+if the current zoom is below the new minimum it SHALL be clamped UP (the Fit zoom always lands above this
+floor, so Fit is never clamped down); a Ctrl+wheel zoom SHALL zoom toward the CURSOR (and the zoom buttons
+toward the viewport centre); the rulers SHALL place scene (0,0) at the frame top-left and track scroll +
+zoom; and the alignment / snap guides SHALL span the FULL visible canvas (the scroll viewport), not the
+frame dimensions.
 
-#### Scenario: A shape parked far off-frame on any side grows the extent and stays editable
+#### Scenario: The pasteboard extent is a fixed function of the resolution
 
-- **WHEN** the author moves a shape FAR outside the frame on any side (past the 2× boundary, including
-  off the LEFT or TOP, i.e. large negative scene coordinates)
-- **THEN** the pasteboard extent GROWS to contain it (giving a full margin of headroom past the
-  content) so it paints into the pasteboard and remains selectable and draggable on the canvas — never
-  clipped out of the iframe
+- **WHEN** the canvas renders a composition of a given resolution
+- **THEN** the pasteboard stage is `frameWidth + 2·max(5000, frameWidth)` by
+  `frameHeight + 2·max(3000, frameHeight)` (margin per side = the larger of the absolute floor or one
+  full frame), with the frame at the constant inset `(max(5000, frameWidth), max(3000, frameHeight))`
 
-#### Scenario: An off-frame shape within the 2× boundary does NOT resize the dark area
+#### Scenario: A tiny resolution keeps a usefully-large pasteboard so zoom never locks
 
-- **WHEN** the author drags a shape off-frame but it stays within the existing 2× boundary (within the
-  margin)
-- **THEN** the pasteboard (dark area) extent and the frame offset are BYTE-IDENTICAL to before — no
-  growth, no origin shift (only zooming changes the dark area's on-screen size)
+- **WHEN** the composition resolution is far below the absolute floor (e.g. 100×100)
+- **THEN** the margin is the floor (5000 on X, 3000 on Y), so the pasteboard is large (10100×6100) and
+  the cover-fit minimum zoom is a small fraction — zoom-out stays free, NOT pinned near the maximum as
+  a plain one-frame margin (300×300 pasteboard → ~428% minimum) would force
 
-#### Scenario: The extent shrinks back to the 2× floor as far content returns, never below it
+#### Scenario: A frame larger than the floor gets a one-frame margin
 
-- **WHEN** a shape that grew the extent is dragged back inside the 2× boundary
-- **THEN** the extent shrinks back to EXACTLY the fixed 2× extent (never smaller), and the visible
-  content stays put (scroll-compensated)
+- **WHEN** the frame exceeds an axis floor (e.g. 8000 wide, past the 5000 X floor)
+- **THEN** the margin on that axis is one full frame (8000), so the pasteboard is `frame + 2·frame` on
+  that axis (24000 wide) — the floor only raises a sub-floor margin, it never caps a larger one
 
-#### Scenario: An absurd far coordinate is clamped
+#### Scenario: Parking a shape off-frame does NOT resize the extent or shift the frame
 
-- **WHEN** content sits at an absurd coordinate (e.g. a bad import or fat-finger drag to millions of
-  px)
-- **THEN** the extent is CLAMPED at `MAX_EXTENT_RATIO` × the frame per axis (the iframe does not blow
-  up); content beyond the clamp may clip
+- **WHEN** the author moves a shape outside the frame on any side (including off the LEFT or TOP, i.e.
+  negative scene coordinates)
+- **THEN** the pasteboard extent and the frame offset are UNCHANGED (no grow-to-fit, no origin shift),
+  and within the extent the shape still paints into the pasteboard and stays selectable + draggable
 
-#### Scenario: Left/top growth is scroll-compensated so the frame does not jump
+#### Scenario: The frame does not drift when a shape is parked off-frame on the left/top
 
-- **WHEN** the extent grows on the LEFT or TOP (the frame origin shifts right/down)
-- **THEN** the canvas scrolls by `Δoffset × zoom` so the visible content (the frame) stays STATIONARY
-  on screen — no jump — and the inset updates live with no iframe reload
+- **WHEN** the author parks a shape off the LEFT or TOP of the frame
+- **THEN** the frame's on-screen position is identical to before (no jitter, no drift) — only the
+  dragged shape moved
 
-#### Scenario: The canvas is two-tone and a shape over the page is not occluded
+#### Scenario: Dragging a shape toward an edge stops at the pasteboard edge
 
-- **WHEN** the author places a shape on the frame (over the darker `#080a10` page)
-- **THEN** the surround reads `#161927` and the frame-sized page backdrop reads `#080a10`, and the
-  shape paints ON TOP of the page (visible + selectable, not occluded by the `#080a10` backdrop)
+- **WHEN** the author drags a shape toward (and past) the edge of the pasteboard on any side
+- **THEN** the shape STOPS with its full bounding box at the pasteboard edge — it never crosses into
+  the clipped region and never disappears
+
+#### Scenario: Arrow-key nudge stops at the pasteboard edge
+
+- **WHEN** the author nudges a shape with the arrow keys toward an edge until it reaches the bound
+- **THEN** further nudges in that direction do not move it past the pasteboard edge (the full box stays
+  inside)
+
+#### Scenario: A multi-select group is bounded so no member crosses the edge
+
+- **WHEN** the author drags or nudges a multi-selection toward an edge
+- **THEN** the group stops as soon as ANY member's bounding box reaches the pasteboard edge (the whole
+  selection box stays inside; relative offsets are preserved)
+
+#### Scenario: A shape already outside is recoverable, not trapped
+
+- **WHEN** a shape was saved/imported BEYOND the extent and the author drags it
+- **THEN** it is not snapped violently and is never pushed further out — it can be dragged back toward
+  the frame and, once its box is inside, it is clamped normally
+
+#### Scenario: The canvas distinguishes pasteboard from surround and the page is not occluded
+
+- **WHEN** the author views the canvas and places a shape on the frame (over the page backdrop)
+- **THEN** the empty surround reads `#0e1018`, the pasteboard reads `#161927` with a subtle edge
+  outline, and the frame-sized `#3d4253` page backdrop is drawn behind — the shape paints ON TOP of the
+  page (visible + selectable, not occluded by the backdrop)
 
 #### Scenario: On-frame editing is unchanged
 
 - **WHEN** the author places, selects, or drags a shape inside the frame
 - **THEN** it behaves exactly as before the pasteboard (scene (0,0) is the frame's top-left)
 
-#### Scenario: The broadcast preview + export exclude the off-frame shape; the modal still blanks
+#### Scenario: Fit and project-open fit the frame and center it
 
-- **WHEN** a composition with a fully-off-frame static shape is previewed (broadcast) or exported
-- **THEN** that shape is absent from the output (the Phase-A filter, through the authoring flag, with
-  frame offset `{0,0}`), and the broadcast modal still opens blank-until-play (D-087 intact)
+- **WHEN** the author opens a project/composition or clicks Fit
+- **THEN** the zoom is fit from the FRAME bounds (not the extent) and the frame is centered in the
+  viewport (deterministically, with the constant frame offset)
 
-#### Scenario: Save keeps the off-frame shape
+#### Scenario: The minimum zoom is the cover-fit so no empty surround shows
 
-- **WHEN** the project is saved
-- **THEN** the off-frame staging shape is persisted in the `.cg.json` (the exclusion is export-only)
+- **WHEN** the author zooms out as far as the controls allow
+- **THEN** the zoom stops at the cover-fit minimum (the max of the two viewport/extent axis ratios), so
+  the pasteboard still covers the viewport on both axes with NO empty surround — one axis may overflow
+  and be scrollable
 
-#### Scenario: On open / fit, the frame is fit and centered with no default scrollbars
+#### Scenario: At maximum zoom-out the pasteboard hugs all four viewport edges
 
-- **WHEN** a project is opened, or the fit action is invoked, even with far-parked content present
-- **THEN** the zoom is fit from the FRAME bounds (NOT the grown extent), the frame is centered in the
-  canvas viewport (no off-center scroll), and NO scrollbars are shown by default (the overflowing
-  pasteboard is pannable but its scrollbars are hidden)
+- **WHEN** the author zooms out fully at any resolution / viewport aspect ratio
+- **THEN** the pasteboard covers ALL FOUR edges of the viewport with no `#0e1018` surround sliver on
+  ANY side (leading OR trailing) — the cover-fit is biased to slightly OVER-cover (never exactly equal,
+  which a sub-pixel scroll would expose as a trailing-edge sliver) and the scroll container has no
+  padding (so the stage is not offset off a leading edge)
 
-#### Scenario: Ctrl+wheel zooms toward the cursor, smoothly, under a shifted origin
+#### Scenario: The cover-fit minimum tracks the viewport and resolution
 
-- **WHEN** the author Ctrl+wheels over the canvas to zoom, including when the origin has shifted from
-  grown off-frame content
-- **THEN** the scene point under the cursor stays under the cursor — the zoom is anchored on the
-  pointer (not the stage's top-left corner) and does NOT jump/recenter (the scroll correction is
-  applied before paint)
+- **WHEN** the viewport is resized (or the composition resolution changes) so the cover-fit minimum rises
+  above the current zoom
+- **THEN** the minimum is recomputed and the current zoom is clamped UP to it, so the surround never
+  appears; the Fit zoom (which frames the smaller frame) remains above the minimum and is unaffected
 
-#### Scenario: The rulers track scroll, zoom, and the shifting origin from the frame origin
+### Requirement: Pixel grid at high zoom
 
-- **WHEN** the canvas is scrolled or zoomed, or the origin shifts because off-frame content grew the
-  extent
-- **THEN** the rulers read scene 0 at the frame top-left and scene (W/2, H/2) at the frame center, for
-  the current scroll + zoom + offset
+The canvas SHALL render a pixel grid — hairline lines at every integer scene-pixel boundary, one
+cell = one scene pixel — over the WHOLE pasteboard extent (not just the frame), shown ONLY when one
+scene pixel maps to at least 8 screen px (zoom ≥ 800%) and hidden below that threshold so a normal
+zoom is not cluttered by an illegible smear. Each grid line SHALL sit on its integer scene coordinate
+using the SAME scene→screen mapping the rest of the canvas uses (`(x + frameOffset)·zoom`) so the grid
+is ruler-aligned and never drifts; the cell SHALL track the zoom and the grid SHALL scroll and zoom
+WITH the pasteboard content. Every grid line SHALL be CRISP — a single 1-physical-pixel line — at ANY
+zoom, including FRACTIONAL scales (e.g. 4808%) and HiDPI (`devicePixelRatio > 1`): each line's screen
+position SHALL be snapped to the device-pixel raster (so a 1px stroke never anti-aliases across two
+pixels), snapped INDEPENDENTLY so the correction never accumulates and each line stays within half a
+device pixel of its true scene coordinate (invisible as position, decisive for crispness). The grid
+SHALL be a NON-interactive, display-only layer (it MUST NOT block selection or hit-testing) drawn
+lightly over the content with faint low-contrast hairlines, viewport-culled (only the visible lines
+drawn), and MAY emphasize every 10th line slightly (graph-paper) without affecting alignment.
 
-#### Scenario: The rulers and guides stay pinned to the visible viewport on scroll
+#### Scenario: The grid appears at high zoom
 
-- **WHEN** the canvas is zoomed in so it overflows and is then scrolled
-- **THEN** the rulers and the alignment/guide lines stay pinned to the visible viewport (they do not
-  scroll out of view with the content) while their tick/guide positions follow the scrolling stage
+- **WHEN** the operator zooms in until one scene pixel is at least 8 screen px (≥ 800%)
+- **THEN** a pixel grid (1 cell = 1 scene pixel) is visible across the whole pasteboard
 
-#### Scenario: Alignment guides span the full visible canvas
+#### Scenario: The grid is hidden at normal zoom
 
-- **WHEN** a drag raises an alignment / snap guide
-- **THEN** the guide spans the full visible canvas (the scroll viewport), not just the frame
-  dimensions
+- **WHEN** the zoom is below the threshold (a scene pixel is fewer than 8 screen px, e.g. 100%)
+- **THEN** no pixel grid is shown
+
+#### Scenario: The grid spans the whole pasteboard, not just the frame
+
+- **WHEN** the grid is visible and the operator pans into the off-frame pasteboard margin
+- **THEN** the grid still covers that area (it spans the entire fixed extent), scrolling and zooming
+  in lockstep with the content
+
+#### Scenario: Grid lines are pixel-accurate and ruler-aligned
+
+- **WHEN** the grid is visible
+- **THEN** a grid line lands on each integer scene coordinate (the cell between line N and N+1 is
+  scene-pixel N), aligned to the rulers' tick mapping (within half a device pixel) so the two never
+  visibly drift apart
+
+#### Scenario: Grid lines are crisp at fractional zoom
+
+- **WHEN** the zoom is a FRACTIONAL scale (e.g. 4808%, where one scene pixel is 48.08 screen px) at
+  any device-pixel ratio
+- **THEN** every grid line is a single crisp 1-physical-pixel line — its position snapped to the
+  device-pixel raster — never doubled or blurred across two pixels (as it would be just at 6400%)
+
+#### Scenario: A 1px nudge is visible against the grid
+
+- **WHEN** a shape is selected at high zoom and nudged by one pixel with an arrow key
+- **THEN** the shape moves exactly one scene pixel — one full grid cell — so the single-pixel move is
+  clearly visible
+
+#### Scenario: The grid does not block interaction
+
+- **WHEN** the grid is visible and the operator clicks or drags a shape
+- **THEN** selection and dragging work exactly as without the grid (the grid is non-interactive)

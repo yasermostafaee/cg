@@ -3,9 +3,9 @@
 Features for the playout controller (`apps/runtime`). The CasparCG control path
 itself lives in `caspar.md`. See `README.md` for the format.
 
-## [~] R-001 — Import a `.vcg` template (upload) ⟨priority: medium⟩
+## [x] R-001 — Import a `.vcg` template (upload) ⟨priority: medium⟩ — merged (#216, `5a0329d`) + archived
 
-<!-- change: openspec/changes/import-vcg-template/ -->
+<!-- change: openspec/changes/archive/2026-07-07-import-vcg-template/ -->
 
 **What:** Let the operator upload a `.vcg` file to register it as an available
 template in the Runtime.

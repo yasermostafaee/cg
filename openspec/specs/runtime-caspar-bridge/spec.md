@@ -9,22 +9,28 @@ TBD - created by archiving change caspar-bridge-architecture. Update Purpose aft
 ### Requirement: The bridge hosts the full caspar-client stack (thick bridge)
 
 The system SHALL run the complete `@cg/caspar-client` stack — `ServerSession`,
-`CommandQueue`, the OSC pipeline, `Reconciler`, and `RedundancyAdapter` — inside
-a localhost Node bridge process (`tools/caspar-bridge`), using
+`CommandQueue`, the OSC pipeline, `Reconciler`, and `LayerManager` — inside a
+localhost Node bridge process (`tools/caspar-bridge`), using
 `AmcpTransport`/`OscTransport` with real sockets. Protocol logic SHALL NOT run in
 the browser, and `@cg/caspar-client` SHALL NOT be imported by the renderer or the
 browser platform layer.
 
-#### Scenario: Protocol stack runs in the bridge, not the browser
+The bridge SHALL connect to a CasparCG server from a connection config (AMCP
+host/port + OSC bind). In Phase 2 this is integration-tested **only against
+`tools/amcp-mock`**, NOT real hardware; real redundancy/failover across two
+sessions and on-hardware validation are Phase 3.
 
-- **WHEN** the Runtime drives a real server **THEN** command building, response
-  parsing, OSC reconciliation, and redundancy run in the bridge process, and no
-  `@cg/caspar-client` / `node:*` import crosses into browser code
+#### Scenario: Real stack runs in the bridge
 
-#### Scenario: Reversal of the thin-bridge assumption is recorded
+- **WHEN** the bridge starts with a connection config **THEN** it drives a real
+  `ServerSession` (AMCP over TCP, OSC over UDP) with `CommandQueue`, `Reconciler`,
+  and `LayerManager`, and no `@cg/caspar-client` / `node:*` import crosses into
+  browser code
 
-- **WHEN** the architecture is consulted **THEN** ADR 0008 records the
-  thick-bridge decision and ADR 0007's thin-bridge premise is marked reversed
+#### Scenario: The throwaway in-memory backing is gone
+
+- **WHEN** the bridge answers stack channels **THEN** it does so from the
+  `Reconciler`, not a hand-rolled in-memory state machine
 
 ### Requirement: Browser↔bridge wire protocol is `@cg/shared-ipc` over a WebSocket
 
@@ -34,6 +40,22 @@ the same contract `MockRuntime` implements. The system SHALL NOT define a
 low-level AMCP/OSC byte protocol over the WebSocket. Both ends SHALL validate
 each frame against the channel's Zod schema at the boundary.
 
+The wire **frame envelope** SHALL be defined once and shared by both ends (in
+`@cg/shared-ipc`), as JSON-serialized frames discriminated by `type`:
+
+- `request` — `{ type: 'request', id, channel, payload }`
+- `response` — `{ type: 'response', id, payload }` or `{ type: 'response', id, error }`
+- `publish` — `{ type: 'publish', channel, payload }`
+
+A request and its response SHALL be correlated by `id`. The inner `payload` of
+each frame SHALL be the existing channel's request / response / publish schema,
+validated against that channel before dispatch (request) and before send
+(response/publish).
+
+In Phase 1 the bridge answers from a throwaway in-memory backing (no
+`@cg/caspar-client`, no real sockets); Phase 2 replaces that backing behind the
+unchanged envelope.
+
 #### Scenario: Channel calls are relayed over the WebSocket
 
 - **WHEN** the renderer invokes a `RuntimeBridge` method **THEN** it is serialized
@@ -41,30 +63,65 @@ each frame against the channel's Zod schema at the boundary.
   response frame, and push channels arrive as `publish` frames — with the renderer
   unchanged
 
+#### Scenario: Round-trip is provable end to end through an in-memory backing
+
+- **WHEN** the bridge runs its in-memory backing and a `WebSocketRuntime` connects
+  **THEN** `stack.load` / `take` / `update` / `out` issued over the WebSocket are
+  reflected back to the browser via `stack.state-changed` publish frames, proving
+  the full request/response + publish round-trip without any real CasparCG
+
+#### Scenario: Frames are schema-validated at the boundary
+
+- **WHEN** a frame arrives whose inner payload does not match its channel schema
+  **THEN** it is rejected at the boundary (the request gets an `error` response;
+  a malformed publish is dropped) rather than reaching application logic
+
 ### Requirement: Commands reach a reachable CasparCG server
 
 The Runtime's take / update / out intents SHALL reach a reachable CasparCG server
 through the bridge's `ServerSession` + `CommandQueue` + `AmcpTransport` whenever
-the bridge is running and the server is reachable.
+the bridge is running and the server is reachable. The load path SHALL build the
+`CG ADD` template argument as the **served `/template/<id>` URL** (not the bare
+template id) and SHALL carry the item's **real field values** — the template's
+field-schema defaults at minimum, and operator-entered Inspector values when
+present — never an empty `"{}"`. The command-construction seam is unchanged; the
+caller supplies the served URL and the real field values.
 
 #### Scenario: Take/update/out reach the server
 
 - **WHEN** the bridge is running and a CasparCG server is reachable **THEN**
   take / update / out from the Runtime reach the server
 
+#### Scenario: Load issues CG ADD with the served URL and real fields
+
+- **WHEN** a registered template (with field defaults) is loaded **THEN** the
+  `CG ADD` template argument is its served `/template/<id>` URL and the data
+  argument is the seeded field values (not `"{}"`), so CasparCG fetches and renders
+  a real page; a subsequent `CG UPDATE` carries the operator's edited values
+
 ### Requirement: Stack state updates from real OSC confirmations
 
 The OSC firehose SHALL be consumed and reduced entirely inside the bridge
 (interest → rate-limit → change-track → `Reconciler`); only reconciled
 `StackItemState` deltas SHALL cross the WebSocket via `StackStateChangedChannel`.
-Stack item states SHALL reflect real OSC confirmations, not the mock state
-machine.
+Stack item states SHALL reflect real OSC confirmations from the server, with the
+`Reconciler` as the single source of truth — not an internal state machine.
+Outbound deltas SHALL be coalesced per `itemId` (last-write-wins) and SHALL NOT
+be unbounded-queued.
 
 #### Scenario: Real OSC drives stack state
 
-- **WHEN** CasparCG emits OSC **THEN** the stack item states update from real
-  confirmations (not the mock state machine), and raw OSC does not cross the
-  WebSocket
+- **WHEN** the server emits OSC (a layer's `foreground/producer` flips to
+  `html` / `empty`) **THEN** the affected item's reconciled status updates from
+  that real confirmation (e.g. `on-air` when the producer is live, `idle` when it
+  empties), routed via the `LayerManager`-driven interest set — and raw OSC does
+  not cross the WebSocket
+
+#### Scenario: Outbound deltas are coalesced, not unbounded-queued
+
+- **WHEN** OSC churns faster than the UI needs **THEN** the bridge coalesces
+  pending `StackItemState` changes per `itemId` (last-write-wins) into bounded
+  snapshot publishes rather than queuing every intermediate state
 
 ### Requirement: Bridge selection at boot
 
@@ -118,30 +175,292 @@ configuration and SHALL never be the default.
 
 ### Requirement: Failover to backup per the redundancy strategy
 
-WHEN the active (primary) server fails, the bridge's `RedundancyAdapter` SHALL
-switch to the backup per the configured redundancy strategy, and
-`connections.health` SHALL reflect the new current primary and the last failover
-event.
+The bridge SHALL run two `ServerSession`s (A/B) under the `@cg/caspar-client`
+`RedundancyAdapter`, each built from its own connection config (AMCP host/port +
+OSC bind). WHEN the active (primary) server fails — per the redundancy strategy's
+triggers (primary-session disconnect/degraded, the command-timeout budget, or a
+5xx burst) — the adapter SHALL switch to the backup, and subsequent commands SHALL
+continue to the new primary. The operator SHALL also be able to switch manually
+via the `connections.failover` channel (`adapter.failover('manual')`).
 
-#### Scenario: Primary fails → failover to backup
+`connections.health` SHALL reflect the **real** current primary, both sessions'
+live states, and the last failover event — replacing the earlier mock health. The
+Reconciler SHALL remain the source of truth across a switch: it consumes OSC from
+the **current primary** (both sessions receive mirrored commands and OSC interest
+is registered on both), so the new primary's OSC re-confirms state after failover.
 
-- **WHEN** primary fails **THEN** failover switches to backup per the redundancy
-  strategy and the reported connection health reflects the new primary
+The browser side and the `@cg/shared-ipc` wire SHALL remain unchanged, and the
+bridge SHALL stay bound to `127.0.0.1` by default.
+
+#### Scenario: Auto-failover on primary failure
+
+- **WHEN** the primary server fails (its session drops/degrades) **THEN** the
+  `RedundancyAdapter` switches to the backup per the configured strategy, commands
+  continue to the new primary, and `connections.health` reports the new current
+  primary plus a `lastFailover` event
+
+#### Scenario: Manual failover via the channel
+
+- **WHEN** the operator invokes `connections.failover` **THEN** the adapter performs
+  a real `manual` switch to the backup, and `connections.health` reflects the new
+  current primary with a `lastFailover` of reason `manual`
+
+#### Scenario: Stack state survives the switch
+
+- **WHEN** failover completes **THEN** the Reconciler keeps the stack state and
+  re-confirms it from the new primary's OSC (no reset to a mock), with the bridge
+  still loopback-bound and the browser/wire unchanged
 
 ### Requirement: AMCP command construction sits behind a verifiable seam
 
-The bridge SHALL construct AMCP commands (load / keep-alive / update / stop for
-HTML producers) behind a small command-construction seam, so the verified
-sequence is isolated from the session / queue / reconciler. The update sequence
-is now **hardware-validated on CasparCG 2.3.2 (`4de6d18f` Dev)** per ADR 0006:
-`load → CG ADD`, `take → CG PLAY`, **`update → CG UPDATE`**, `out → CLEAR`.
-`CG UPDATE` delivers a Persian-laden JSON payload to `window.update` intact; the
-disproven alternatives (`CALL "update"` never invokes it; `CG INVOKE` delivers an
-empty param) are not used.
+The bridge SHALL construct AMCP commands (load / play / update / clear for HTML
+producers) behind a small command-construction seam, so the verified sequence is
+isolated from the session / queue / reconciler. The sequence is:
+`load → CG ADD` **with play-on-load OFF** (loaded, not playing), `take → CG PLAY`
+(preceded by a re-issued `CG ADD` when no live producer exists on the slot),
+**`update → CG UPDATE`**, `out → CLEAR`. `CG UPDATE` remains the
+**hardware-validated** (CasparCG 2.3.2 `4de6d18f`, ADR 0006) way to deliver a
+Persian-laden JSON payload to `window.update` intact.
+
+Every AMCP string argument SHALL be quoted by a **single canonical quoter** (one
+source of truth), applied **exactly once** per argument. Because the data argument
+is already a `JSON.stringify` string (the JSON layer has escaped `"`, `\`, and
+newline), the AMCP layer SHALL escape **only what CasparCG 2.3.x's quoted-string
+parser requires** — a `"` → `\"` (the one escape CasparCG un-escapes) — and SHALL
+NOT re-escape backslashes (which would double them and corrupt the payload). A JSON
+payload containing `"`, `\` (any count), or a newline SHALL therefore survive
+`CG ADD` and `CG UPDATE` byte-exact to what the template's `JSON.parse` receives.
+The load/take/out/retake cycle AND the special-character payload SHALL be
+re-validated on real CasparCG before B-041 closes.
 
 #### Scenario: The verified update sequence is applied at the seam
 
 - **WHEN** the bridge updates a playing HTML producer **THEN** it issues the
-  hardware-validated `CG UPDATE` via the command-construction seam — established
-  on real CasparCG 2.3.2 (ADR 0006) — without changes to `ServerSession` /
+  hardware-validated `CG UPDATE` via the command-construction seam — established on
+  real CasparCG 2.3.2 (ADR 0006) — without changes to `ServerSession` /
   `CommandQueue` / `Reconciler`
+
+#### Scenario: Special characters survive the AMCP data argument
+
+- **WHEN** a field value contains a double-quote, a backslash (odd or even count),
+  or a newline **THEN** the canonical quoter (applied once over the JSON payload)
+  produces a `CG ADD` / `CG UPDATE` data argument that round-trips byte-exact: the
+  value reaches the template's `JSON.parse` unchanged (Persian intact), with no
+  double-escaping
+
+### Requirement: The single-file HTML exporter is a shared, browser-importable package
+
+The scene → self-contained-HTML single-file export SHALL live in one shared,
+browser-tier package (`@cg/single-file-export`) consumed by BOTH the Designer and
+the Runtime — exactly one exporter and one runtime bundle, no per-app copy. The
+package SHALL contain no Node-only APIs that would break browser bundling. This is
+the architectural precondition for the bridge to obtain render HTML (B-038
+Phase 2+); extracting it SHALL NOT change the produced HTML.
+
+#### Scenario: One exporter, both apps
+
+- **WHEN** the Designer's export feature and the Runtime both need the single-file
+  HTML **THEN** they import the same `@cg/single-file-export` package (one
+  exporter, one bundle), and both build green
+
+#### Scenario: Extraction preserves byte-identical export output
+
+- **WHEN** the Designer exports a composition after the extraction **THEN** the
+  produced HTML is byte-identical to before — same base64-inlined fonts and images,
+  same IIFE runtime, same scene literal — as proven by the existing single-file
+  export unit tests and the D-019 export E2E
+
+### Requirement: Imported templates deliver their rendered HTML to the bridge
+
+The `templates.import` channel SHALL carry the template's rendered **self-contained
+HTML** (a string) alongside its `TemplateInfo`. At import the browser SHALL produce
+that HTML from the unpacked `.vcg` via the shared single-file export (operator
+`asset-*` fonts and images inlined as base64 data URIs, so the page references no
+external resources) and deliver `{ template, html }` over the channel. The payload
+SHALL be validated at the channel boundary. This is a Runtime-only channel; the
+Designer does not consume it.
+
+The bundled app fonts (Vazirmatn / Exo 2) are **not** inlined in this phase — the
+Runtime ships no bundled faces — so a template relying on them renders with a
+fallback face until Phase 3 wires bundled-font inlining. The produced HTML
+nonetheless stays self-contained (no broken external font references).
+
+#### Scenario: Import produces and delivers the standalone HTML
+
+- **WHEN** the operator imports a verified `.vcg` **THEN** the browser produces the
+  self-contained single-file HTML (runtime + scene inlined; no external `<link>` or
+  `https:`/`/fonts/` references) and sends it over `templates.import` together with
+  the `TemplateInfo`
+
+#### Scenario: Image assets are inlined from the package
+
+- **WHEN** the imported `.vcg` contains an image element whose bytes are in the
+  package **THEN** the produced HTML inlines that image as a base64 `data:` URI
+  (resolved from the `.vcg`'s unpacked file map), so the delivered page carries the
+  image with no external fetch
+
+#### Scenario: A bad package delivers nothing
+
+- **WHEN** the uploaded file fails verification, cannot be unpacked, or the export
+  fails **THEN** a clear error is shown, `templates.import` is not called, and
+  nothing is registered (the R-001 invariant)
+
+### Requirement: The bridge retains delivered template HTML keyed by id
+
+The bridge's in-memory template registry SHALL store the delivered HTML keyed by
+`templateId` alongside the `TemplateInfo` it already holds. Re-importing the same
+id SHALL replace the stored HTML (and info). The registry SHALL expose the stored
+HTML by id so a later phase can serve it over HTTP (`GET /template/<id>`) and
+resolve the `CG ADD` URL to it. The registry holds the HTML only — it does **not**
+serve it in this phase. The store is in-memory (empty on bridge restart);
+browser-side retention + re-delivery on reconnect was descoped from B-038's
+close and is tracked as an open follow-up in `docs/prd/bugs-runtime.md` — until
+it lands, a bridge restart requires a manual re-import.
+
+#### Scenario: Import retains the HTML by template id
+
+- **WHEN** a `templates.import` for id `X` arrives over the WebSocket **THEN** the
+  bridge stores the HTML so the registry returns exactly that HTML for id `X`, and
+  `templateGet` / `templateList` still surface its `TemplateInfo`
+
+#### Scenario: Re-import replaces the stored HTML
+
+- **WHEN** a second `templates.import` for the same id `X` arrives with different
+  HTML **THEN** the registry returns the new HTML for id `X` (the prior HTML is
+  replaced, not duplicated)
+
+#### Scenario: Unknown id has no stored HTML
+
+- **WHEN** the registry is queried for the HTML of an id that was never imported
+  **THEN** it returns nothing (null), with no error
+
+### Requirement: The bridge serves retained template HTML over HTTP
+
+The bridge SHALL run a small HTTP server (separate from the control WebSocket)
+that serves each retained template at a stable URL `/template/<templateId>`,
+returning the stored HTML as `200 text/html; charset=utf-8`, and `404` for an id
+that is not registered. The HTML is served from the in-memory `TemplateRegistry`
+(the Phase-2 retention seam, `templateHtml(id)`). Re-importing an id SHALL serve
+the replacement HTML on the next fetch; removing/clearing a template SHALL stop
+serving it. The server holds template HTML only — it exposes no control surface.
+
+The served HTML SHALL be self-contained: the runtime, scene, images, AND the
+bundled app fonts (Vazirmatn / Exo 2) are inlined (base64), so CasparCG fetches
+nothing else — Persian text renders with the correct face and intact shaping.
+
+#### Scenario: A known template serves its stored HTML
+
+- **WHEN** a registered template's URL `/template/<id>` is fetched **THEN** the
+  server returns `200 text/html; charset=utf-8` with exactly the stored HTML
+
+#### Scenario: An unknown template id is 404
+
+- **WHEN** `/template/<id>` is fetched for an id that was never imported **THEN**
+  the server returns `404`
+
+#### Scenario: Re-import replaces the served HTML
+
+- **WHEN** a template id is re-imported with different HTML **THEN** the next fetch
+  of its URL returns the new HTML (the prior HTML is no longer served)
+
+#### Scenario: The served page is self-contained including fonts
+
+- **WHEN** the served HTML is inspected **THEN** it contains the bundled Persian
+  `@font-face` faces inlined as base64 `data:` URIs and references no external
+  `/fonts/…`, `https:` or `<link>` resource
+
+### Requirement: The bridge's template HTTP server is reachable by CasparCG
+
+The template HTTP server SHALL serve on a host CasparCG can reach, while the
+control WebSocket SHALL remain bound to `127.0.0.1`. WHEN CasparCG is local
+(connection host is loopback) the server SHALL bind `127.0.0.1` and the `CG ADD`
+URL SHALL use `127.0.0.1` (no LAN exposure). WHEN CasparCG is remote the server
+SHALL bind a routable interface **only by explicit opt-in** and the `CG ADD` URL
+host SHALL be the bridge's address as CasparCG sees it (configured, or a guessed
+LAN IPv4), logged loudly.
+
+#### Scenario: Local CasparCG stays loopback
+
+- **WHEN** CasparCG runs on the same machine **THEN** the template server serves on
+  `127.0.0.1`, the `CG ADD` URL uses `127.0.0.1`, and the control WebSocket stays
+  loopback
+
+#### Scenario: Remote CasparCG uses an opt-in routable serve host
+
+- **WHEN** CasparCG runs on another host **THEN** the template server binds a
+  routable interface by explicit configuration and the `CG ADD` URL uses the
+  bridge's CasparCG-reachable address (configured or guessed), while the control
+  WebSocket stays loopback
+
+### Requirement: Template resolution is validated, not blind-acked
+
+`tools/amcp-mock` SHALL stop blind-acking `CG ADD`: it SHALL resolve the template
+argument (for a URL, an HTTP `GET` — `404 CG ADD FAILED` when it does not return a
+page; a bare id → `404`) and SHALL expose the `CG ADD` / `CG UPDATE` data payload so
+tests can assert it. The mock SHALL decode quoted arguments per **real CasparCG
+2.3.x rules** (un-escape only `\"` → `"`; every other character, including `\`,
+literal), **independently of the bridge's own escaper**, so a double-escaped payload
+is decoded WRONG (caught) and only a correctly single-escaped payload decodes to the
+original. Integration tests SHALL `JSON.parse` the decoded data argument and assert
+it equals the original object.
+
+#### Scenario: Mock 404s an unresolvable template reference
+
+- **WHEN** `CG ADD` references a bare id or a URL the mock cannot `GET` **THEN** the
+  mock returns `404 CG ADD FAILED` (matching real CasparCG)
+
+#### Scenario: Mock decodes the data arg per real CasparCG and catches double-escaping
+
+- **WHEN** a `CG ADD` / `CG UPDATE` data argument is decoded by the mock **THEN** it
+  un-escapes only `\"`→`"` (backslashes literal) and the test `JSON.parse`s the
+  result: a correctly single-escaped payload equals the original object, while the
+  old double-escaped payload decodes to a different (corrupted) object — so the
+  regression fails the test instead of passing silently
+
+### Requirement: Playout verbs are chosen from producer state (prescriptive)
+
+The bridge SHALL choose the AMCP playout verb sequence from the **actual per-slot
+producer state**, not blindly. It SHALL track, bridge-side, whether a live producer
+currently exists on each stack item's slot — independent of the descriptive
+`Reconciler` status — and keep that bookkeeping consistent across load / take / out /
+remove and across a failover (commands fan out to both servers, so producer
+existence is identical on each).
+
+- **load** SHALL issue `CG ADD` only, with the **play-on-load flag OFF** — the
+  producer is loaded, NOT playing.
+- **take** SHALL issue `CG PLAY`; but WHEN no live producer exists on the slot (e.g.
+  a prior out destroyed it) it SHALL FIRST re-issue `CG ADD` (a fresh load), THEN
+  `CG PLAY`.
+- **out** SHALL exit + `CLEAR` (destroying the producer) and SHALL update the
+  producer-existence bookkeeping so a subsequent take re-ADDs. The slot stays
+  reserved to the (still-on-stack, idle) item until remove.
+- **remove** SHALL fully remove the item (clear + deallocate the layer + drop the
+  bookkeeping).
+
+#### Scenario: Load does not auto-play
+
+- **WHEN** the operator loads a template **THEN** the bridge issues `CG ADD` with
+  play-on-load OFF and the producer is loaded but NOT playing (nothing on air until
+  take)
+
+#### Scenario: Take plays the loaded producer
+
+- **WHEN** a loaded template is taken **THEN** the bridge issues `CG PLAY` and the
+  producer plays
+
+#### Scenario: Out destroys the producer
+
+- **WHEN** a playing template is taken out **THEN** the bridge issues `CLEAR`, the
+  producer is destroyed, and the bridge records that no producer exists on that slot
+
+#### Scenario: Take after Out re-ADDs then plays
+
+- **WHEN** a template that was taken out is taken again **THEN** the bridge — seeing
+  no live producer on the slot — FIRST re-issues `CG ADD` (a fresh load) and THEN
+  `CG PLAY`, so the template renders again (it does not `CG PLAY` an empty layer)
+
+#### Scenario: Producer existence drives the choice, not the descriptive status
+
+- **WHEN** the bridge decides between `CG PLAY` and re-ADD-then-`CG PLAY` **THEN** it
+  uses its own per-slot producer-existence bookkeeping (not the `Reconciler` status,
+  which is descriptive and does not choose verbs)

@@ -8,6 +8,16 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Fixed pasteboard extent — no grow-to-fit ([B-027](./prd/bugs-designer.md)) —
+  merged (#234) & archived (2026-07-07, `2026-07-07-fixed-pasteboard-extent`);
+  drag/nudge clamped to the extent, jitter-free by construction.
+- High zoom (6400%) + pixel grid ([D-120](./prd/designer.md)) — merged (#240) &
+  archived (2026-07-07, `2026-07-07-high-zoom-pixel-grid`);
+  device-pixel-snapped grid, crisp at fractional zoom.
+- Deterministic fit + center on project/template open and composition switch
+  ([B-035](./prd/bugs-designer.md)) — focused fix, merged (#229).
+- Inspector input icons vertically centered ([B-036](./prd/bugs-designer.md)) —
+  CSS-only focused fix, merged (#226).
 - Auto-size text + sizing=auto guard ([D-060](./prd/designer.md) +
   [D-046](./prd/designer.md)) — merged & archived (2026-06-29, design #218 + impl
   #223). A `text` element with `fitMode: 'autosize'` now hugs its content in BOTH
@@ -212,16 +222,16 @@ Done.)
 ### Designer — remaining, in order
 
 The concrete near-term Designer sequence (survives across sessions; the Runtime
-track is independent — see its own entries):
+track is independent — see "Runtime — next" below):
 
-1. **[B-036](./prd/bugs-designer.md) inspector icon align** (quick) — filed, fix pending.
-2. **[B-035](./prd/bugs-designer.md) fit-on-open** (medium) — filed, investigate the
-   timing/ordering race.
-3. **[B-037](./prd/bugs-designer.md) pen tool** (low, keep-or-remove decision) — filed.
-4. **[D-119](./prd/designer.md) rebuild starter templates** (5 showcases) — filed,
-   **BLOCKED until 1–3 are done** (templates should exercise healthy features);
-   supersedes the old "template cleanup" wave-tail note. (D-060 auto-size, its other
-   prerequisite, is now done — see Done.)
+1. **B-042 canvas-zoom bug** — PLACEHOLDER: to be filed separately with a repro
+   from the owner (number reserved; blocks D-119).
+2. **[B-037](./prd/bugs-designer.md) pen tool** (low, keep-or-remove decision) — filed.
+3. **[D-119](./prd/designer.md) rebuild starter templates** (5 showcases) — filed,
+   **BLOCKED only on B-042 + B-037** (templates should exercise healthy
+   features); supersedes the old "template cleanup" wave-tail note. (Its other
+   prerequisites — D-060 auto-size, B-035 fit-on-open, B-036 icon align — are
+   done, see Done.)
 
 Plus the existing queued / deprioritized items already in `designer.md`:
 [D-059](./prd/designer.md), [D-061](./prd/designer.md), [D-063](./prd/designer.md),
@@ -229,6 +239,19 @@ Plus the existing queued / deprioritized items already in `designer.md`:
 [D-102](./prd/designer.md) **Phase 2**, and
 [D-121](./prd/designer.md) (bundle fonts in `.vcg` export — fixes the
 content-driven crawl-duration drift).
+
+### Runtime — next
+
+The independent Runtime-track sequence (worked from the `cg-runtime` worktree):
+
+1. **B-041 v2** — the on-hardware escape-matrix sweep for the active
+   `fix-amcp-escaping-v2` change (B-041 stays `[~]`; take 1 #245 is archived as
+   superseded history — quotes-only rule disproven on hardware, #246).
+2. **B-040** — operator on-air validation of the structured list-field editor
+   (#243), then archive `fix-runtime-list-field-editor` and flip B-040 → `[x]`.
+3. **B-038 follow-up** — browser-side retention + re-delivery of template HTML
+   on bridge reconnect (descoped from B-038's close; tracked in
+   `docs/prd/bugs-runtime.md`).
 
 ## Then — hardening wave (after features)
 

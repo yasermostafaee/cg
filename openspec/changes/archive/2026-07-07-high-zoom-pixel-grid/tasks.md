@@ -48,5 +48,6 @@
 
 ## 6. Gate
 
-- [ ] `@cg/designer` typecheck + lint + test + build (uncached `turbo --force`), then E2E.
-- [ ] `pnpm openspec validate high-zoom-pixel-grid --strict`.
+- [x] `@cg/designer` typecheck + lint + test + build (uncached `turbo --force`), then E2E.
+      _(ran through #240's merged CI)_
+- [x] `pnpm openspec validate high-zoom-pixel-grid --strict`. _(ran through #240's merged CI)_
