@@ -95,12 +95,72 @@ the machine, then fix from the readings.
       gizmo layer rects + fractional device origins; judged-edge row (ideal / bitmap-read stroke /
       content / gizmo, with deltas in device px) + all-stroke min→max sweep; copy-as-text button
       (+ `console.table`).
-- [ ] Part C — owner loop: readings #1 (deselected, left + right of viewport) and #2 (selected)
-      pasted back, plus the Windows display-scale %. **PAUSED HERE awaiting the owner.**
-- [ ] Part D — act on the readings (H0 stale build / H1 gizmo overlay / H2 content raster phase /
-      H3 browser zoom / H4 nudge not applying); record the confirmed finding in `design.md`
-      (including the honest note if the emulated stage measurement is falsified on real hardware);
-      spec/E2E per the finding.
-- [ ] Part E — strip the probe + boot log (or keep behind the flag, documented in the canvas
-      README — decide); full uncached gate + `pnpm test:e2e`; `pnpm openspec validate --all
---strict`; push; owner re-verifies visually before any archive.
+- [x] Part C — owner loop: three readout batches received (2026-07-07) + an 86 s screen recording
+      (`bug1.mp4`, 1920×976 device px, build `8ed5a52+probe2` visible in-frame). Probe upgraded to
+      `+probe2` (Y edge/sweep blocks, deselected contentEdge from the first rendered element,
+      points-vs-bbox gizmo decomposition) — live in the served preview.
+- [x] Part D take 2 (2c) — layout-level analysis: H3/H4 ruled out; gizmo mechanism measured
+      (raw model vs 1/64-CSS LayoutUnit floor-quantized content; +1.0156 dev px at fractional
+      coords, 0 at integer). SUPERSEDED at the grid/content level by the 2d paint-truth reset —
+      the layout-phase-following grid direction is discarded (see `design.md` Take 3 retractions);
+      the uncommitted 2c grid edits were reverted.
+- [x] Part D take 3 (2d) — PAINT truth established with lossless screenshots on the affected
+      machine (native 125% Windows scaling): grid strokes paint crisp and layout-exact; content
+      edges paint as 1.6–3.5 dev px smears that do NOT track sub-pixel layout moves
+      (byte-identical paint across forced stage phases) → the prescribed sub-CSS-px stage pinning
+      is EMPIRICALLY DEAD; mechanism isolation in minimal mocks failed to reproduce the smear.
+      **STOP-LOSS invoked per the 2d process rules — numbers + candidate directions (sliding-window
+      re-anchor spike / zoom-dependent extent / upstream) recorded in `design.md`; awaiting
+      reassessment with the owner. NO commit/push until the owner confirms a direction.**
+- [x] Part D take 4 (spike A) — windowed stage prototyped and initially declared PASS, then
+      RETRACTED: the "content smear" driving it was measurement pollution (the profiles ran with
+      the shape silently SELECTED — the gizmo's 1-css-px accent border, luminance ≈ 148, sits on
+      the measured edge and is exactly the "smear" values). See `design.md` Take 5.
+- [x] Part D take 5 — VERIFIED-deselected dual-build paint profiles (baseline 8ed5a52 worktree vs
+      windowed tree; emulated + real native; owner phases forced): the DESELECTED content was
+      ALWAYS crisp (1 honest AA px per axis); the windowed stage changes nothing under emulation
+      and breaks real-native rendering → DROPPED. Final fix set implemented instead:
+      (1) containing-pixel (`floor`) grid snap — fixes the owner-visible +0.81 dev px Y stroke
+      offset at phase ≈ .68 (and X at phases > ½); (2) ruler marks snapped to the same pixel
+      (`snapMarkToGridPixel`, 1 device px); (3) gizmo `quantizeBoxToLayout` (≤ 0.25 dev px at
+      fractional coords, no-op at integer); (4) gizmo frame stroke 1 DEVICE px (was a fuzzy
+      1.25-device band at dpr 1.25 — what the owner stares at when working selected).
+- [x] Part E — full uncached gate + `pnpm test:e2e` (incl. the new `pixel-paint.spec.ts`
+      verified-selection screenshot acceptance); `pnpm openspec validate --all --strict`; serve
+      the preview; **PAUSE — owner verifies on their screen (deselected + selected, both axes,
+      after a drag) BEFORE any commit/push**; then strip or keep the probe (flag-gated,
+      README-documented) per the owner's call. DONE 2026-07-08: uncached turbo gate 79/79 green;
+      repo-wide `format:check` green; `openspec validate --all --strict` 31/31; full E2E green
+      (designer 175 incl. the B-045 red→green test, runtime 6); **owner CONFIRMED on their
+      screen** — arrow-key movement tracks live and lands on the grid lines; drag stays honestly
+      fractional (D-122 pending by design). Probe strip-or-keep still the owner's call (kept,
+      flag-gated behind `?b042probe=1`).
+- [x] Part F — B-045 stale raster (the owner's grid.jpg "not confirmed" round, 2026-07-08):
+  - [x] grid.jpg measured pixel-by-pixel: strokes + gizmo EXACT vs layout; the painted content
+        edge 22.5 dev px (exactly 18/64 scene px) behind layout — the PREVIOUS position. The
+        Take-5 fix set stands; the residual is a DISTINCT defect: paint does not follow small
+        position edits.
+  - [x] Defect isolated + filed as **B-045** (`docs/prd/bugs-designer.md`; B-042 entry
+        cross-linked; D-096 raised as the root fix with a rider): Chromium loses raster
+        invalidation for `left`/`top` deltas ≲ 2 CSS px inside the scaled subtree — reproduced
+        deterministically on BOTH compositors, survives idle/scroll/full-DOM-rebuild; standalone
+        minimal testbed reproduces WITHOUT the app (and without an iframe).
+  - [x] Mitigation candidates measured (design.md Take 6): every scoped repaint poke FAILS
+        (overlays, outline/opacity/visibility, will-change round-trip — both compositors);
+        `transform: translate()` is compositor-exact even over a stale base; decomposition
+        (box pinned at 0 + lattice-quantized translate) paints ≤ 0.001 dev px at EVERY gauntlet
+        step (2 envs × 2 variants).
+  - [x] Red-first E2E (`B-045` in `pixel-paint.spec.ts`): coverage-integral painted-edge
+        estimator; sub-pixel inspector edit (relative-motion assert) + 3 arrow-step nudges with
+        verified selection states. Shown RED on the pre-pin tree ("moved 80.0 of 22.5 device
+        px"), GREEN on the pinned build.
+  - [x] Fix implemented — authoring-only position pin in `platform/preview.ts`
+        (`REVEAL_ON_LOAD`-gated realm-local style Proxy; left/top → 0 + `translate(trunc(v·64)/64)`
+        prefix; RTL hug-text opt-out; childList safety net). Playout/export documents untouched.
+        Post-fix: native painted-edge Δ −0.008 dev px through idle + scroll (was −23.008); full
+        pixel-paint suite 7/7; drag frame-times mean 8.33 → 8.35 ms, p95 8.5 → 8.7, 0 frames > 25 ms (120 Hz display).
+  - [x] Spec delta: ADDED requirement "Position edits repaint the canvas preview (B-045)" with
+        sub-pixel / arrow-step / playout-untouched scenarios; canvas README engine-doc synced.
+  - [x] Chromium upstream package prepared for the owner to submit (session scratchpad
+        `b045-chromium-repro/`: `chromium-bug-repro.html` + `chromium-bug-report.md`; repro
+        verified headed-native — raw mode stale, workaround mode exact).

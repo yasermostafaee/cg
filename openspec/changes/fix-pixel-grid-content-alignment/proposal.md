@@ -39,13 +39,35 @@ round(screenCss·dpr)`) — so each line's stroke lands on the PHYSICAL pixel ne
   changed by < 1 device px), 1-px nudge still moves one cell. The stage / scroll pipeline (B-027
   pasteboard, B-035 fit+center) is UNTOUCHED — no stage-side snapping, no scroll behavior change.
 
+## What Changed in the owner-verification rounds (see `design.md` Takes 3–6)
+
+- **Containing-pixel convention** (owner round 2): strokes snap `floor(cssPos·dpr + phase) + 0.5`
+  — the pixel the lattice line passes THROUGH — because the stage composites at an arbitrary
+  device phase and nearest-rounding put whole strokes one pixel past every edge at phases > ½
+  (the owner-visible +0.81 device-px Y offset). Ruler tick marks share the stroke's pixel
+  (`snapMarkToGridPixel`).
+- **Selection gizmo fidelity**: the visual projection quantizes the box through the engine's
+  LayoutUnit lattice (`quantizeBoxToLayout`, 1/64 css px truncated) and the frame stroke is ONE
+  DEVICE pixel — the gizmo traces the RENDERED box ≤ 0.25 device px per side at integer AND
+  fractional coords. Interaction math stays on the raw model.
+- **B-045 — stale-raster position pin** (owner round 3, filed as its own bug): Chromium loses
+  raster invalidation for `left`/`top` deltas ≲ 2 CSS px inside the scaled canvas subtree (paint
+  frozen at the previous position through idle/scroll/rebuilds — the residual defect in the
+  owner's `grid.jpg` and the original arrow-key reports). The CANVAS preview document pins each
+  runtime element's box at `left/top: 0` and carries position in a lattice-quantized
+  `translate()` (compositor-tracked, never misses), via an authoring-gated realm-local style
+  Proxy in `platform/preview.ts`. Playout/exported outputs untouched; root fix queued as D-096;
+  upstream Chromium repro prepared for the owner to file.
+
 ## Capabilities
 
 - **`designer-canvas-viewport`** (MODIFIED): the "Pixel grid at high zoom" requirement gains
   CONTENT alignment — an edge at an integer scene coordinate renders within ≤ ½ device px of its
   grid line at every zoom ≥ the threshold and every dpr (including fractional 1.25 / 1.5), with no
   position-dependent growth across the viewport — plus the device-raster-aligned canvas layer
-  (backing = CSS·dpr exactly; integer-device-px layer origin) that makes the snap physical.
+  (backing = CSS·dpr exactly; integer-device-px layer origin) that makes the snap physical, the
+  containing-pixel stroke/ruler-mark convention, and TWO ADDED requirements: the selection overlay
+  traces the RENDERED content box, and position edits repaint the canvas preview (B-045).
 
 ## Impact
 
@@ -62,5 +84,13 @@ round(screenCss·dpr)`) — so each line's stroke lands on the PHYSICAL pixel ne
   rectangle edges at integer scene coords lie within ≤ ½ device px of their grid lines — asserted
   numerically from bounding rects + the drawn-line math; canvas layer device-aligned; ruler↔grid
   unchanged; 1-px nudge still moves one cell).
-- Docs: canvas feature `README.md` (grid contract: screen-raster snapping + device-aligned layer);
-  PRD `docs/prd/bugs-designer.md` B-042.
+- `apps/designer/src/renderer/features/canvas/Gizmo.tsx` — layout-lattice visual projection +
+  1-device-px frame stroke; `geometry.ts` — `layoutQuantize` / `quantizeBoxToLayout` /
+  `snapMarkToGridPixel`.
+- `apps/designer/src/platform/preview.ts` — the B-045 authoring-only position pin (style Proxy,
+  `REVEAL_ON_LOAD`-gated).
+- Tests: `pixel-paint.spec.ts` (NEW — screenshot-pixel paint truth with PROVEN selection states:
+  deselected content edges, gizmo tracing, and the B-045 stale-raster red→green test).
+- Docs: canvas feature `README.md` (grid contract: screen-raster snapping + device-aligned layer;
+  containing-pixel + gizmo fidelity; B-045 pin); PRD `docs/prd/bugs-designer.md` B-042 + B-045;
+  `docs/prd/designer.md` D-096 rider.

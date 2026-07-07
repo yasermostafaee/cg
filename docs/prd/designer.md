@@ -2639,7 +2639,15 @@ palette feels loud — and because it's per-recipe, it repeats on every new butt
   SAVE indicator (`TopToolbar.css.ts` `saveCtl` / `saveCtlDirty`). Change:
   `openspec/changes/restyle-buttons/`.
 
-## [ ] D-096 — Animate position via CSS transform (GPU compositor path) instead of left/top ⟨priority: low-medium; needs dedicated design⟩
+## [ ] D-096 — Animate position via CSS transform (GPU compositor path) instead of left/top ⟨priority: low-medium → RAISED: root fix for B-045; needs dedicated design⟩
+
+> **B-045 rider (2026-07-08):** this is also the ROOT fix for B-045 (stale raster: small
+> `left`/`top` position changes — ≤ ~1 CSS px inside the scaled canvas preview iframe — update
+> layout but not paint; Chromium misses the invalidation even across a full runtime DOM rebuild).
+> `transform: translate()` updates are compositor-tracked and never miss invalidation, so routing
+> position through the transform removes the defect class entirely. Until then an authoring-scoped
+> forced-invalidation mitigation lives in `apps/designer/src/platform/preview.ts` (see B-045 in
+> `bugs-designer.md`); remove that mitigation as part of this item's acceptance.
 
 **What:** In `@cg/template-runtime`'s animation applier, move element position
 (position.x / position.y) off `left` / `top` and into the composed CSS `transform`
