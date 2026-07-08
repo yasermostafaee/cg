@@ -209,6 +209,18 @@ transport changes.
 **Notes:** socket-close event timing under parallel-suite load — consider
 serializing the socket-bound tests or a longer per-test timeout for the
 peer-disconnect case.
+**Triage (B-044 recovery, 2026-07-08):** this transport unit test is the ONLY
+regression surfaced by that gate. The Designer pasteboard e2e some notes conflate
+with it — `apps/designer/tests/e2e/scene-size-vs-pasteboard.spec.ts` (the
+B-027/B-028 frame-page-vs-extent + Fit invariants) — was suspected but RULED OUT:
+green 3/3 on `main` (`56015ab`) AND 3/3 at the pre-#251 commit (`76a9334`, uncached
+rebuild), run isolated in a dedicated worktree on a private port. #251 (`b8ca72e`,
+B-042) is grid-only and touches neither that spec nor its stage/extent surface (the
+spec was last modified by #234/#184), so "healed by #251" is impossible by
+construction — it was never broken. (B-044 itself is the CLOSED `[x]` runtime
+pending-intent bug in `bugs-runtime.md`, not a designer e2e.) No invariant weakened
+and no retry added; the designer-e2e timing-flake home remains [[B-011]] if one ever
+surfaces there.
 
 ## [ ] B-050 — tooling drift: pnpm warns on every run — the `pnpm` field in `package.json` is no longer read ⟨priority: low⟩
 
