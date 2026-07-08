@@ -322,6 +322,25 @@ to grab. The `size === 1` path keeps the full `Gizmo` above, untouched.
   element's edges + centre, and the operator's ruler guides**, within ~6–7 screen px
   (converted to scene px by `/zoom`). Snapping is suppressed while rotated (H/V snap
   is undefined) and while Shift is held; matched snaps draw a guide line.
+- **Pixel snap at grid zoom (D-122)** — when the pixel grid is visible
+  (`pixelGridVisible(zoom)`, zoom ≥ 800%), the Snapping preference is on, and **Alt**
+  is not held, a MOVE lands on WHOLE scene pixels so a moved element's edges sit on the
+  grid lines. Three pure helpers in `geometry.ts` do the math and are shared by the drag
+  and nudge paths (and unit-tested): `pixelSnapActive(zoom, snappingEnabled, alt)` (the
+  gate), `snapDragToPixel(pos)` (round — the drag), `snapNudgeToPixel(coord, signedStep)`
+  (the nudge's direction-aware first-snap — a fractional coord's first nudge lands on the
+  NEXT integer in the direction, then steps by whole pixels). In `beginDrag` /
+  `beginGroupDrag` the pixel round SUPERSEDES the smart-guide `snapAxis` at grid zoom (the
+  ~6-screen-px threshold is sub-0.1 scene px there, and the always-visible grid is the
+  guide); the anchor is snapped for a group so relative offsets are preserved. The
+  arrow-key nudge (`nudgeSelection` in `state/slices/elements.ts`, driven by the App.tsx
+  window keydown) snaps the anchor's active axis. **Alt** bypasses all snapping (free
+  sub-pixel move); below the threshold nothing snaps; Inspector-typed values are always
+  free. The nudge path has no direct access to the CanvasArea-local zoom, so it reads a
+  `canvasZoom` MIRROR the store keeps (`view.setCanvasZoom`, published by a CanvasArea
+  effect); the drag path already has the zoom as its `scale`. Resize-handle snapping is a
+  deliberate follow-up (out of scope). Root: `openspec/specs/designer-canvas-view`
+  (D-122 delta).
 
 ## Tools system
 
