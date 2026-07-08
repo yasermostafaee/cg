@@ -12,16 +12,18 @@ import { buildApplyPayload, clearStagedMatching, snapshotDraft } from './draftSt
  * channel the stack intents use — never swallowed, never shown optimistically.
  * Sending with nothing staged re-sends the applied values (the B-048 workaround).
  */
-export function applyDraft(item: StackItemState): void {
+export function applyDraft(item: StackItemState): Promise<{ accepted: boolean }> {
   const sent = snapshotDraft(item.itemId);
   const fields = buildApplyPayload(item.itemId, item.fields);
-  window.cg.stack.update({ itemId: item.itemId, fields, mergeMode: 'merge' }).then(
+  return window.cg.stack.update({ itemId: item.itemId, fields, mergeMode: 'merge' }).then(
     (res) => {
       if (res.accepted) clearStagedMatching(item.itemId, sent);
       else reportCommandError('Update was not accepted.');
+      return res;
     },
     (err: unknown) => {
       reportCommandError(err instanceof Error ? err.message : 'Update failed.');
+      throw err instanceof Error ? err : new Error('Update failed.');
     },
   );
 }

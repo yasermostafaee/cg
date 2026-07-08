@@ -138,3 +138,50 @@ no recovery path in the UI.
   **Notes:** Keep the deliberate current model — no silent mid-session fallback to
   the mock; the gap is only visibility + recovery of the boot-time choice. Related:
   the B-038 open follow-up (re-deliver retained template HTML on reconnect).
+
+## [ ] R-007 — Runtime control styling + interaction feedback ⟨priority: medium⟩
+
+**What:** Give the Runtime a real design-system layer: professional, legible
+controls with unmistakable interaction feedback (hover / active-pressed /
+focus-visible / disabled), an async-feedback contract for every button whose
+action is a bridge round-trip (instant press → busy-while-in-flight → success →
+inline error on rejection), and a coherent visual language for every status /
+badge / chip state. Includes the **TAKE → PLAY** button label rename (label +
+aria text only — IPC channels and API names stay as-is) and styling the R-003
+dirty-dot / "● draft" chip / Discard control and the B-044 UNCONFIRMED badge.
+**Why:** Styling today is per-component inline `const styles` objects. Inline
+styles cannot express `:hover` / `:active` / `:focus-visible`, so controls feel
+dead — no press feedback, no hover, no focus rings — and there is no busy or
+success signal when a command round-trips to the bridge (observed across the
+2026-07-07/08 live sessions). The operator can't tell a click registered, can't
+tell a command is in flight, and a rejection is easy to miss.
+**Acceptance:**
+
+- WHEN the operator hovers / presses / tab-focuses any control THEN it shows a
+  distinct hover, pressed, and visible focus-visible state (no layout shift
+  between states)
+- WHEN a bridge-round-trip button is clicked THEN it shows instant pressed
+  feedback, becomes busy (disabled + `aria-busy`, double-fire guarded) while ITS
+  OWN request is in flight — a spinner-or-equivalent appearing only if the
+  request exceeds ~150ms and held ≥300ms once shown — a brief success affordance
+  on resolve, and a visible error near the control on rejection (never
+  console-only)
+- WHEN a request's WS ack clears the button's busy state THEN the stack badge may
+  still be settling (B-044) — the two are decoupled and read as distinct
+- WHEN every stack badge state renders (ON AIR / READY / IDLE / UPDATING /
+  UNCONFIRMED / ERROR / EXIT / TAKING) plus the R-003 dirty-dot and "● draft"
+  chip THEN each has a coherent, legible visual with adequate dark-theme contrast
+- WHEN `prefers-reduced-motion` is set THEN spinners / transitions are replaced
+  by a static busy affordance
+- WHEN the change ships THEN the "TAKE" button reads "PLAY" (label + aria); no
+  behavior changes (R-003 semantics, the B-044 lifecycle, verbs, escaping all
+  stay exactly as-is), and the existing Playwright specs stay green (the PLAY
+  selector update is the one deliberate change)
+  **Notes:** Introduces a styling MECHANISM (a global stylesheet with classes +
+  CSS custom properties fed from `theme.ts`, or shared styled primitives — no new
+  UI framework / styling dependency) and shared primitives (Button variants,
+  TextInput, TextArea, NumberField preserving R-003's in-progress-text behavior,
+  StatusBadge, DraftChip). Give PLAY / UPDATE / OUT / REMOVE a deliberate visual
+  hierarchy (an on-air action must not look like a neutral sibling of Remove).
+  Keeps the dark broadcast-console look and the sacred air-state colors.
+  Cross-refs: R-003 (dirty/Discard affordances), B-044 (UNCONFIRMED badge).

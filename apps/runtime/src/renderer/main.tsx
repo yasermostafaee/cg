@@ -1,4 +1,5 @@
 import '@cg/ui/theme.css';
+import './ui/controls.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';

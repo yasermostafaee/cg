@@ -135,9 +135,9 @@ test('Take plays the applied values, not the draft; the item stays dirty', async
   const row = app.stack
     .locator('div')
     .filter({ hasText: templateId })
-    .filter({ has: app.page.getByRole('button', { name: 'TAKE' }) })
+    .filter({ has: app.page.getByRole('button', { name: 'PLAY' }) })
     .last();
-  await row.getByRole('button', { name: 'TAKE' }).click();
+  await row.getByRole('button', { name: 'PLAY' }).click();
 
   // The draft did not reach air, and the row stays visibly dirty.
   expect(await readApplied(app, templateId)).toEqual(applied);
