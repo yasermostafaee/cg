@@ -542,6 +542,12 @@ export class DesignerApp {
     await field.press('Enter');
   }
 
+  /** Read a numeric inspector field's current value by its aria-label (e.g. 'X position'). */
+  async getInspectorNumber(label: string): Promise<number> {
+    const field = this.inspector.getByRole('spinbutton', { name: label, exact: true });
+    return Number(await field.inputValue());
+  }
+
   /** B-022 — the single-selection gizmo frame outline (the projected parallelogram). */
   get gizmoFrame(): Locator {
     return this.page.getByTestId('gizmo-frame');

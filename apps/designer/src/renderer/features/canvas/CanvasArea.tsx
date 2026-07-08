@@ -198,6 +198,11 @@ export function CanvasArea({
   // the current value without re-subscribing.
   const zoomRef = useRef<number>(zoom);
   zoomRef.current = zoom;
+  // D-122 — publish the live zoom into the store so the keyboard nudge path (App.tsx, which
+  // has no direct access to this local state) can gate pixel snapping on the grid threshold.
+  useEffect(() => {
+    designerStore.setCanvasZoom(zoom);
+  }, [zoom]);
   // A cursor-anchored zoom stashes the scene point under the pointer here; a layout
   // effect (post-zoom, pre-paint) consumes it to scroll the point back under the cursor.
   const pendingZoomAnchorRef = useRef<{

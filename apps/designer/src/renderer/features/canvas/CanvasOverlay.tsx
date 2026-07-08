@@ -24,8 +24,10 @@ import { drillTarget } from './drill.js';
 import {
   clampDeltaToPasteboard,
   pasteboardSceneBounds,
+  pixelSnapActive,
   screenToScene,
   snapAxis,
+  snapDragToPixel,
 } from './geometry.js';
 import { Gizmo, MultiGizmo, lockCursor } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
@@ -541,12 +543,25 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
   const onMove = (e: PointerEvent): void => {
     const dx = (e.clientX - startX) / scale;
     const dy = (e.clientY - startY) / scale;
-    if (!moved && Math.abs(dx) + Math.abs(dy) < 2) return; // click vs drag
+    // Click-vs-drag hysteresis in SCREEN px (constant at every zoom). A scene-px threshold
+    // would balloon at high zoom — 128 screen px at 6400% — so a pixel-perfect drag couldn't
+    // even engage (D-122). ~3 screen px swallows a shaky click without blocking a real drag.
+    if (!moved && Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY) < 3) return;
     moved = true;
     let nx = startPos.x + dx;
     let ny = startPos.y + dy;
     const guides: { x: number[]; y: number[] } = { x: [], y: [] };
-    if (designerStore.get().snappingEnabled) {
+    const snapping = designerStore.get().snappingEnabled;
+    if (e.altKey) {
+      // D-122 — Alt is the momentary free-placement bypass: no snapping of any kind.
+    } else if (pixelSnapActive(scale, snapping, false)) {
+      // D-122 — at pixel-grid zoom the grid IS the snap target: land the element on whole
+      // scene pixels (LIVE, so it steps pixel-by-pixel under the pointer). The always-visible
+      // grid is the guide, so no smart-guide lines are drawn. Supersedes the smart-guide
+      // element snapping below, whose ~6-screen-px threshold is sub-0.1 scene px at this zoom.
+      nx = snapDragToPixel(nx);
+      ny = snapDragToPixel(ny);
+    } else if (snapping) {
       const threshold = 6 / scale; // ~6 screen px regardless of zoom
       const sx = snapAxis(nx, w, xTargets, threshold);
       if (sx !== null) {
@@ -629,14 +644,24 @@ function beginGroupDrag(
   const onMove = (e: PointerEvent): void => {
     const dx = (e.clientX - startX) / scale;
     const dy = (e.clientY - startY) / scale;
-    if (!moved && Math.abs(dx) + Math.abs(dy) < 2) return; // click vs drag
+    // Click-vs-drag hysteresis in SCREEN px (constant at every zoom) — see beginDrag; a scene-px
+    // threshold is 128 screen px at 6400% and would block a pixel-perfect group drag (D-122).
+    if (!moved && Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY) < 3) return;
     moved = true;
     // Snap the ANCHOR, then apply its (snapped) delta to every member so the
     // selection's relative offsets are preserved.
     let ax = anc.x + dx;
     let ay = anc.y + dy;
     const guides: { x: number[]; y: number[] } = { x: [], y: [] };
-    if (designerStore.get().snappingEnabled) {
+    const snapping = designerStore.get().snappingEnabled;
+    if (e.altKey) {
+      // D-122 — Alt bypasses all snapping (free group placement).
+    } else if (pixelSnapActive(scale, snapping, false)) {
+      // D-122 — snap the ANCHOR to whole pixels; the snapped delta (below) moves every
+      // member, so the anchor lands on the grid and relative offsets are preserved.
+      ax = snapDragToPixel(ax);
+      ay = snapDragToPixel(ay);
+    } else if (snapping) {
       const threshold = 6 / scale; // ~6 screen px regardless of zoom
       const sx = snapAxis(ax, anc.w, xTargets, threshold);
       if (sx !== null) {

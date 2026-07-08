@@ -9,9 +9,12 @@ import {
   gizmoCorners,
   handleLocal,
   localToScene,
+  pixelSnapActive,
   rot,
   screenToScene,
   snapAxis,
+  snapDragToPixel,
+  snapNudgeToPixel,
   snapValue,
   type BoxTransform,
 } from '../src/renderer/features/canvas/geometry.js';
@@ -256,5 +259,65 @@ describe('fitZoom', () => {
   });
   it('returns null when the viewport is too small to fit anything', () => {
     expect(fitZoom(10, 10, 1920, 1080, 16)).toBeNull();
+  });
+});
+
+describe('D-122 — pixelSnapActive (move-snap gate)', () => {
+  it('is true only at/above the grid threshold with snapping on and Alt not held', () => {
+    // PIXEL_GRID_MIN_ZOOM = 8 (800%)
+    expect(pixelSnapActive(8, true, false)).toBe(true);
+    expect(pixelSnapActive(64, true, false)).toBe(true); // 6400%
+  });
+  it('is false below the grid threshold (today’s free move)', () => {
+    expect(pixelSnapActive(4, true, false)).toBe(false); // 400%
+    expect(pixelSnapActive(7.99, true, false)).toBe(false);
+  });
+  it('is false when the Snapping preference is off (master switch)', () => {
+    expect(pixelSnapActive(64, false, false)).toBe(false);
+  });
+  it('is false when Alt is held (momentary bypass)', () => {
+    expect(pixelSnapActive(64, true, true)).toBe(false);
+  });
+});
+
+describe('D-122 — snapDragToPixel', () => {
+  it('rounds a dragged position to the nearest whole pixel', () => {
+    expect(snapDragToPixel(6.4)).toBe(6);
+    expect(snapDragToPixel(6.6)).toBe(7);
+    expect(snapDragToPixel(6.69)).toBe(7);
+    expect(snapDragToPixel(-3.2)).toBe(-3);
+    expect(snapDragToPixel(12)).toBe(12); // already integer → unchanged
+  });
+  it('rounds half up (Math.round convention)', () => {
+    expect(snapDragToPixel(2.5)).toBe(3);
+    expect(snapDragToPixel(-2.5)).toBe(-2); // Math.round(-2.5) === -2
+  });
+});
+
+describe('D-122 — snapNudgeToPixel (direction-aware first-snap)', () => {
+  it('first nudge of a fractional coord lands on the next integer in the direction', () => {
+    expect(snapNudgeToPixel(6.69, 1)).toBe(7); // Right → ceil
+    expect(snapNudgeToPixel(6.69, -1)).toBe(6); // Left → floor
+    expect(snapNudgeToPixel(0.68, 1)).toBe(1);
+    expect(snapNudgeToPixel(0.68, -1)).toBe(0);
+    expect(snapNudgeToPixel(-2.3, 1)).toBe(-2); // ceil(-2.3)
+    expect(snapNudgeToPixel(-2.3, -1)).toBe(-3); // floor(-2.3)
+  });
+  it('an accelerated (Shift, |step|=10) nudge off a fractional value still lands on the next integer', () => {
+    expect(snapNudgeToPixel(6.69, 10)).toBe(7); // magnitude ignored on the first snap
+    expect(snapNudgeToPixel(6.69, -10)).toBe(6);
+  });
+  it('once on the grid, a nudge steps by the full signed step', () => {
+    expect(snapNudgeToPixel(7, 1)).toBe(8);
+    expect(snapNudgeToPixel(7, -1)).toBe(6);
+    expect(snapNudgeToPixel(7, 10)).toBe(17); // Shift stride resumes
+    expect(snapNudgeToPixel(7, -10)).toBe(-3);
+  });
+  it('treats a near-integer coord (float epsilon) as on the grid, not fractional', () => {
+    expect(snapNudgeToPixel(7 + 1e-9, -1)).toBe(6); // NOT floor(7.000000001)=7
+    expect(snapNudgeToPixel(7 - 1e-9, 1)).toBe(8); // NOT ceil(6.999999999)=7
+  });
+  it('is a no-op for a zero step (the un-nudged axis)', () => {
+    expect(snapNudgeToPixel(6.69, 0)).toBe(6.69);
   });
 });

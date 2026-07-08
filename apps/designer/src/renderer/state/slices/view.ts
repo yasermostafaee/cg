@@ -20,6 +20,15 @@ export const viewSlice = {
     set({ snappingEnabled: !current.snappingEnabled, snapGuides: { x: [], y: [] } });
   },
 
+  /**
+   * D-122 — mirror the canvas's live zoom into the store so the keyboard nudge path can
+   * gate pixel snapping on it (the pointer drag already receives the zoom directly). No-op
+   * when unchanged so it never churns subscribers.
+   */
+  setCanvasZoom(zoom: number): void {
+    if (current.canvasZoom !== zoom) set({ canvasZoom: zoom });
+  },
+
   /** Set the live snap guide lines (scene coords) shown during a snapped drag. */
   setSnapGuides(guides: { x: readonly number[]; y: readonly number[] }): void {
     const cur = current.snapGuides;

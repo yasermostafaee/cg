@@ -13,7 +13,12 @@ import {
 } from '../scene-doc.js';
 import { designerStore } from '../store.js';
 import { collectGroupMoveTargets } from '../../features/canvas/group-move.js';
-import { clampDeltaToPasteboard, pasteboardSceneBounds } from '../../features/canvas/geometry.js';
+import {
+  clampDeltaToPasteboard,
+  pasteboardSceneBounds,
+  pixelSnapActive,
+  snapNudgeToPixel,
+} from '../../features/canvas/geometry.js';
 
 /**
  * Deep-clone an element, assigning a fresh id to it and (recursively) to
@@ -573,7 +578,7 @@ export const elementsSlice = {
    * it sets NO history boundary: the caller (the App.tsx keydown) sets ONE per key-run so a
    * held key (auto-repeat) coalesces into one undo step.
    */
-  nudgeSelection(dx: number, dy: number): void {
+  nudgeSelection(dx: number, dy: number, opts?: { alt?: boolean }): void {
     if (current.scene === null) return;
     const selection = current.selection;
     if (selection.size === 0) return;
@@ -587,16 +592,40 @@ export const elementsSlice = {
       current.currentFrame,
       resolution,
     );
+    // D-122 — at pixel-grid zoom (Snapping on, Alt not held) an arrow nudge lands the ANCHOR
+    // on a whole scene pixel: the FIRST nudge of a fractional coordinate snaps to the next
+    // integer in the nudge direction (6.69 → right → 7, → left → 6), then steps by whole
+    // pixels. The snapped ANCHOR delta moves every member (relative offsets preserved), like a
+    // group drag. Below the threshold / with Alt / with Snapping off, the nudge is the raw
+    // relative ±step (today's behavior — fractions preserved).
+    let ndx = dx;
+    let ndy = dy;
+    if (pixelSnapActive(current.canvasZoom, current.snappingEnabled, opts?.alt === true)) {
+      const anchor = movers.find((m) => m.id === anchorId) ?? movers[0];
+      if (anchor !== undefined) {
+        if (dx !== 0) ndx = snapNudgeToPixel(anchor.x, dx) - anchor.x;
+        if (dy !== 0) ndy = snapNudgeToPixel(anchor.y, dy) - anchor.y;
+      }
+    }
     // B-027 — clamp the nudge so the whole selection box stays inside the pasteboard
     // (nudging can't push a shape past the edge into the clipped region either).
     const bounds = pasteboardSceneBounds(resolution);
     const cdx =
-      box === null ? dx : clampDeltaToPasteboard(dx, box.minX, box.maxX, bounds.minX, bounds.maxX);
+      box === null
+        ? ndx
+        : clampDeltaToPasteboard(ndx, box.minX, box.maxX, bounds.minX, bounds.maxX);
     const cdy =
-      box === null ? dy : clampDeltaToPasteboard(dy, box.minY, box.maxY, bounds.minY, bounds.maxY);
+      box === null
+        ? ndy
+        : clampDeltaToPasteboard(ndy, box.minY, box.maxY, bounds.minY, bounds.maxY);
+    // Commit ONLY the axis that actually moves. An arrow nudge is single-axis, so the other
+    // delta is 0 — and commitAnimatable is keyframe-aware: writing the unchanged value to an
+    // ANIMATED axis would upsert a PHANTOM keyframe at the playhead (same value, but stamped
+    // with default easing → it re-linearizes the segment and distorts the motion). Guarding on
+    // the applied (clamped) delta also skips an axis pinned to 0 at a pasteboard edge.
     for (const m of movers) {
-      designerStore.commitAnimatable(m.id, 'position.x', m.x + cdx);
-      designerStore.commitAnimatable(m.id, 'position.y', m.y + cdy);
+      if (cdx !== 0) designerStore.commitAnimatable(m.id, 'position.x', m.x + cdx);
+      if (cdy !== 0) designerStore.commitAnimatable(m.id, 'position.y', m.y + cdy);
     }
   },
 

@@ -520,4 +520,22 @@ describe('nudgeSelection — arrow-key nudge (D-073)', () => {
     designerStore.nudgeSelection(5, 5);
     expect(elById('el-1')!.transform.position).toEqual({ x: 100, y: 100 });
   });
+
+  it('a single-axis nudge does NOT phantom-keyframe the other, animated axis (D-122 review)', () => {
+    freshScene();
+    designerStore.addElement(defaultShape('el-1', 100, 50));
+    designerStore.setSelection(['el-1']);
+    // Animate position.y (keyframes at frame 0 and 10); park the playhead BETWEEN them.
+    designerStore.upsertKeyframe('el-1', 'position.y', 0, 50);
+    designerStore.upsertKeyframe('el-1', 'position.y', 10, 200);
+    designerStore.setCurrentFrame(5);
+    expect(hasKeyframeAt(elById('el-1')!, 'position.y', 5)).toBe(false);
+
+    designerStore.nudgeSelection(1, 0); // horizontal only (dy = 0)
+
+    // x moves (static, no track); the y track is UNTOUCHED — no phantom keyframe at frame 5
+    // (before the fix, the unconditional y-commit upserted one there and distorted the motion).
+    expect(elById('el-1')!.transform.position.x).toBe(101);
+    expect(hasKeyframeAt(elById('el-1')!, 'position.y', 5)).toBe(false);
+  });
 });

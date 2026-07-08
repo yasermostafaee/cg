@@ -77,7 +77,11 @@ test.describe('D-120 — high zoom + pixel grid', () => {
   }) => {
     await app.newProject('NudgeAtZoom');
     await app.addRectangle({ x: 240, y: 200 }); // auto-selected, placed at fit zoom
-    const x0 = await readX(app);
+    // D-122 — at pixel-grid zoom the nudge SNAPS to whole pixels, so start ON the grid (an
+    // integer X) so a 1px nudge is a clean +1 (one full cell) rather than a first-snap to the
+    // nearest integer. The placement lands on a fractional scene x; the inspector edit is free.
+    await app.setInspectorNumber('X position', 100);
+    const x0 = await readX(app); // 100
 
     // Zoom to a high level so the pixel grid is showing and a 1px move spans a full cell.
     expect(await zoomInUntil(app, 1600)).toBeGreaterThanOrEqual(1600);
@@ -315,7 +319,10 @@ test.describe('B-042 — 1px nudge at fractional dpr', () => {
     await app.addRectangle({ x: 240, y: 200 });
     const readX = async (): Promise<number> =>
       Number(await app.inspector.getByRole('spinbutton', { name: 'X position' }).inputValue());
-    const x0 = await readX();
+    // D-122 — start ON the grid (integer X) so the 1px nudge is a clean +1 (the nudge snaps to
+    // whole pixels at grid zoom; a fractional start would first-snap to the nearest integer).
+    await app.setInspectorNumber('X position', 100);
+    const x0 = await readX(); // 100
     const zoomIn = app.page.getByRole('button', { name: 'Zoom in', exact: true });
     for (let i = 0; i < 40; i++) {
       const pct = Number(
