@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { colors } from '../../theme.js';
+import { Button } from '../../ui/Button.js';
 
 interface Props {
   engaged: boolean;
@@ -51,26 +52,10 @@ const styles = {
     letterSpacing: '0.05em',
   },
   input: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
     padding: '0.6rem 0.75rem',
     fontSize: '1.2rem',
     letterSpacing: '0.5em',
     textAlign: 'center' as const,
-    width: '100%',
-  },
-  button: {
-    background: colors.ready,
-    color: '#FFF',
-    border: 'none',
-    padding: '0.6rem 1.25rem',
-    borderRadius: '0.25rem',
-    cursor: 'pointer',
-    fontSize: '0.95rem',
-    fontWeight: 700,
-    letterSpacing: '0.05em',
   },
   error: { color: colors.error, fontSize: '0.85rem', minHeight: '1rem' },
 } as const;
@@ -144,6 +129,7 @@ export function LockOverlay({ engaged, engagedAt, reason, onRelease }: Props): J
         </div>
         <input
           ref={inputRef}
+          className="cg-field"
           style={styles.input}
           type="password"
           inputMode="numeric"
@@ -154,9 +140,9 @@ export function LockOverlay({ engaged, engagedAt, reason, onRelease }: Props): J
           }}
           aria-label="PIN"
         />
-        <button style={styles.button} onClick={() => void submit()}>
+        <Button variant="primary" onClick={() => void submit()}>
           UNLOCK
-        </button>
+        </Button>
         <div style={styles.error}>{error}</div>
       </div>
     </div>

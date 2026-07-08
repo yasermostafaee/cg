@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ConnectionHealth, FailoverInfo } from '@cg/shared-ipc';
+import { Button } from '../../ui/Button.js';
 
 interface Props {
   health: ConnectionHealth | null;
@@ -30,15 +31,9 @@ const styles = {
     border: '1px solid rgba(254, 242, 242, 0.4)',
     fontSize: '0.7rem',
   },
-  dismiss: {
-    background: 'transparent',
-    color: '#FEF2F2',
-    border: '1px solid rgba(254, 242, 242, 0.4)',
-    padding: '0.1rem 0.5rem',
-    borderRadius: '0.25rem',
-    cursor: 'pointer',
-    fontSize: '0.72rem',
-  },
+  // Dismiss keeps the banner's light-on-red palette; the Button primitive adds
+  // the hover / active / focus-visible states on top.
+  dismiss: { color: '#FEF2F2', borderColor: 'rgba(254, 242, 242, 0.5)' },
 } as const;
 
 /**
@@ -82,13 +77,14 @@ export function FailoverBanner({ health }: Props): JSX.Element | null {
         <span style={styles.chip}>primary: {health.primary.label}</span>
         <span style={styles.chip}>strategy: {health.strategy}</span>
         {recent !== undefined && (
-          <button
+          <Button
+            variant="ghost"
             style={styles.dismiss}
             onClick={() => setDismissedAt(recent.at)}
             aria-label="Dismiss failover banner"
           >
             Dismiss
-          </button>
+          </Button>
         )}
       </span>
     </div>

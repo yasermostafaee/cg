@@ -21,11 +21,11 @@ test('the stack badge settles back to ON AIR after an update — UPDATING is tra
   const row = app.stack
     .locator('div')
     .filter({ hasText: templateId })
-    .filter({ has: app.page.getByRole('button', { name: 'TAKE' }) })
+    .filter({ has: app.page.getByRole('button', { name: 'PLAY' }) })
     .last();
 
-  // Take → the badge settles ON AIR (a transient TAKING beat is allowed).
-  await row.getByRole('button', { name: 'TAKE' }).click();
+  // Play → the badge settles ON AIR (a transient TAKING beat is allowed).
+  await row.getByRole('button', { name: 'PLAY' }).click();
   await expect(row.getByText('ON AIR')).toBeVisible();
 
   // Stage an edit and APPLY via Update (R-003 — blur no longer commits) →

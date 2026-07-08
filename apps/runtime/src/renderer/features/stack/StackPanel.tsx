@@ -2,7 +2,6 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
 import { useStack } from '../../hooks/useStack.js';
 import { colors } from '../../theme.js';
-import { runCommand } from '../status/commandFeedback.js';
 import { applyDraft } from '../inspector/applyDraft.js';
 import {
   draftsVersion,
@@ -82,15 +81,20 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
               selected={item.itemId === selected}
               dirty={isItemDirty(item.itemId, item.fields)}
               onSelect={select}
-              onTake={(id) => runCommand('Take', window.cg.stack.take({ itemId: id }))}
+              // R-007 — the handlers return the bridge round-trip promise so each
+              // AsyncButton tracks its OWN in-flight state (press → busy →
+              // success/error), decoupled from the B-044 badge settlement.
+              onPlay={(id) => window.cg.stack.take({ itemId: id })}
               onUpdate={(id) => {
                 // R-003 — apply the item's staged draft (the complete field-set)
                 // as one atomic stack.update; clears the draft on accepted.
                 const target = items.find((i) => i.itemId === id);
-                if (target !== undefined) applyDraft(target);
+                return target !== undefined
+                  ? applyDraft(target)
+                  : Promise.resolve({ accepted: false });
               }}
-              onOut={(id) => runCommand('Out', window.cg.stack.out({ itemId: id }))}
-              onRemove={(id) => runCommand('Remove', window.cg.stack.remove({ itemId: id }))}
+              onOut={(id) => window.cg.stack.out({ itemId: id })}
+              onRemove={(id) => window.cg.stack.remove({ itemId: id })}
             />
           ))
         )}

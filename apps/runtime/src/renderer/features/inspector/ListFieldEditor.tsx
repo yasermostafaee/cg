@@ -1,6 +1,7 @@
 import type { FieldValue, ListItem } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { uuid } from '../../lib/uuid.js';
+import { Button } from '../../ui/Button.js';
 import { addItem, itemText, moveItem, removeItem, setItemText, toListItems } from './listField.js';
 
 /**
@@ -21,41 +22,8 @@ const styles = {
   list: { display: 'flex', flexDirection: 'column' as const, gap: '0.3rem', minWidth: 0 },
   empty: { color: colors.textMuted, fontSize: '0.8rem', margin: 0 },
   row: { display: 'flex', gap: '0.25rem', alignItems: 'flex-start' },
-  input: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    padding: '0.25rem 0.5rem',
-    borderRadius: '0.2rem',
-    fontSize: '0.9rem',
-    fontFamily: 'inherit',
-    lineHeight: 1.4,
-    resize: 'vertical' as const,
-    flex: 1,
-    minWidth: 0,
-    boxSizing: 'border-box' as const,
-  },
-  btn: {
-    background: colors.panel,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.2rem',
-    cursor: 'pointer',
-    fontSize: '0.8rem',
-    padding: '0.2rem 0.4rem',
-    lineHeight: 1,
-  },
-  addBtn: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.2rem',
-    cursor: 'pointer',
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    padding: '0.3rem 0.5rem',
-    alignSelf: 'flex-start' as const,
-  },
+  input: { flex: 1, minWidth: 0 },
+  addWrap: { alignSelf: 'flex-start' as const },
 } as const;
 
 export function ListFieldEditor({
@@ -76,48 +44,47 @@ export function ListFieldEditor({
       {items.map((item, i) => (
         <div key={item.id} style={styles.row}>
           <textarea
+            className="cg-field"
             style={styles.input}
             value={itemText(item)}
             rows={Math.min(Math.max(itemText(item).split('\n').length, 2), 8)}
             aria-label={`${fieldId} item ${String(i + 1)}`}
             onChange={(e) => onStage(setItemText(items, i, e.target.value))}
           />
-          <button
-            type="button"
-            style={styles.btn}
+          <Button
+            variant="ghost"
             aria-label={`Move ${fieldId} item ${String(i + 1)} up`}
             disabled={i === 0}
             onClick={() => onStage(moveItem(items, i, i - 1))}
           >
             ↑
-          </button>
-          <button
-            type="button"
-            style={styles.btn}
+          </Button>
+          <Button
+            variant="ghost"
             aria-label={`Move ${fieldId} item ${String(i + 1)} down`}
             disabled={i === items.length - 1}
             onClick={() => onStage(moveItem(items, i, i + 1))}
           >
             ↓
-          </button>
-          <button
-            type="button"
-            style={styles.btn}
+          </Button>
+          <Button
+            variant="ghost"
             aria-label={`Remove ${fieldId} item ${String(i + 1)}`}
             onClick={() => onStage(removeItem(items, i))}
           >
             ×
-          </button>
+          </Button>
         </div>
       ))}
-      <button
-        type="button"
-        style={styles.addBtn}
-        aria-label={`Add ${fieldId} item`}
-        onClick={() => onStage(addItem(items, `item-${uuid()}`))}
-      >
-        Add item
-      </button>
+      <div style={styles.addWrap}>
+        <Button
+          variant="secondary"
+          aria-label={`Add ${fieldId} item`}
+          onClick={() => onStage(addItem(items, `item-${uuid()}`))}
+        >
+          Add item
+        </Button>
+      </div>
     </div>
   );
 }

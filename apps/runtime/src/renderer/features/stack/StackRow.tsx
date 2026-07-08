@@ -1,5 +1,11 @@
 import type { StackItemState } from '@cg/shared-schema';
-import { airStateVisual, colors } from '../../theme.js';
+import { colors } from '../../theme.js';
+import { AsyncButton } from '../../ui/AsyncButton.js';
+import { StatusBadge } from '../../ui/StatusBadge.js';
+import { DraftChip } from '../../ui/DraftChip.js';
+
+/** A stack action's bridge round-trip result (drives the button's async feedback). */
+type ActionResult = Promise<{ accepted: boolean; errorCode?: string | undefined }>;
 
 interface Props {
   item: StackItemState;
@@ -7,36 +13,22 @@ interface Props {
   /** R-003 — the item has staged-but-unapplied Inspector edits. */
   dirty: boolean;
   onSelect: (itemId: string) => void;
-  onTake: (itemId: string) => void;
-  onUpdate: (itemId: string) => void;
-  onOut: (itemId: string) => void;
-  onRemove: (itemId: string) => void;
+  onPlay: (itemId: string) => ActionResult;
+  onUpdate: (itemId: string) => ActionResult;
+  onOut: (itemId: string) => ActionResult;
+  onRemove: (itemId: string) => ActionResult;
 }
 
 const styles = {
   row: {
     display: 'grid',
-    gridTemplateColumns: '120px 1fr auto',
+    gridTemplateColumns: '150px 1fr auto',
     alignItems: 'center',
     gap: '1rem',
     padding: '0.75rem 1rem',
     borderBottom: `1px solid ${colors.border}`,
-    background: colors.panel,
-    cursor: 'pointer',
   },
-  rowSelected: {
-    background: colors.panelMuted,
-  },
-  status: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    fontSize: '0.85rem',
-    fontWeight: 700,
-    letterSpacing: '0.05em',
-  },
-  statusIcon: { fontSize: '1.2rem' },
-  body: { display: 'flex', flexDirection: 'column' as const, gap: '0.15rem' },
+  body: { display: 'flex', flexDirection: 'column' as const, gap: '0.15rem', minWidth: 0 },
   title: {
     fontSize: '1rem',
     fontWeight: 600,
@@ -44,114 +36,68 @@ const styles = {
     alignItems: 'center',
     gap: '0.4rem',
   },
-  draftChip: {
-    color: colors.pending,
-    fontSize: '0.7rem',
-    fontWeight: 700,
-    letterSpacing: '0.03em',
-  },
   subtitle: { fontSize: '0.8rem', color: colors.textMuted },
-  actions: { display: 'flex', gap: '0.5rem' },
-  button: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    padding: '0.35rem 0.75rem',
-    borderRadius: '0.25rem',
-    cursor: 'pointer',
-    fontSize: '0.85rem',
-    fontWeight: 600,
-  },
-  buttonDanger: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-  },
+  actions: { display: 'flex', gap: '0.5rem', alignItems: 'center' },
 } as const;
 
 /**
- * One operator-facing stack item. Per Phase 6 §3:
- *  - Status pill (color + icon + word — never hue alone).
- *  - Body shows title + slot.
- *  - Action buttons: TAKE, UPDATE, OUT, REMOVE (Phase 6 §3.2 keymap
- *    arrives with M5.4 alongside the lock screen).
+ * One operator-facing stack item (Phase 6 §3, restyled R-007):
+ *  - `StatusBadge` pill (color + icon + word — never hue alone), incl. the
+ *    B-044 UNCONFIRMED state and the transient UPDATING/TAKING spinner.
+ *  - Title + `● draft` chip (R-003) + slot subtitle.
+ *  - Action buttons — PLAY (on-air primary, renamed from TAKE), UPDATE
+ *    (secondary), OUT (caution), REMOVE (danger) — as `AsyncButton`s that show
+ *    press → busy → success/error for their own bridge round-trip, decoupled
+ *    from the badge's B-044 settlement.
  */
 export function StackRow({
   item,
   selected,
   dirty,
   onSelect,
-  onTake,
+  onPlay,
   onUpdate,
   onOut,
   onRemove,
 }: Props): JSX.Element {
-  const visual = airStateVisual(item.status, item.pending);
   const title = String(item.fields['title'] ?? item.itemId);
   const slot = item.slot ? `slot ${item.slot.channel}-${item.slot.layer}` : 'no slot';
+  const onAir = item.status === 'on-air' || item.status === 'playing';
 
   return (
     <div
-      style={selected ? { ...styles.row, ...styles.rowSelected } : styles.row}
+      className={`cg-row${selected ? ' is-selected' : ''}`}
+      style={styles.row}
       onClick={() => onSelect(item.itemId)}
     >
-      <div style={{ ...styles.status, color: visual.color }}>
-        <span style={styles.statusIcon}>{visual.icon}</span>
-        {visual.label}
-      </div>
+      <StatusBadge status={item.status} pending={item.pending} />
       <div style={styles.body}>
         <div style={styles.title}>
           {title}
-          {dirty && (
-            <span style={styles.draftChip} aria-label={`${title} has unapplied edits`}>
-              ● draft
-            </span>
-          )}
+          {dirty && <DraftChip label={`${title} has unapplied edits`} />}
         </div>
         <div style={styles.subtitle}>
           {item.templateId} • {slot}
         </div>
       </div>
-      <div style={styles.actions}>
-        <button
-          style={styles.button}
-          onClick={(e) => {
-            e.stopPropagation();
-            onTake(item.itemId);
-          }}
-          disabled={item.status === 'on-air' || item.status === 'playing'}
-        >
-          TAKE
-        </button>
-        <button
-          style={styles.button}
-          onClick={(e) => {
-            e.stopPropagation();
-            onUpdate(item.itemId);
-          }}
-          disabled={item.status !== 'on-air' && item.status !== 'playing'}
-        >
+      {/* Stop button clicks from also selecting the row (prior behavior). */}
+      <div style={styles.actions} onClick={(e) => e.stopPropagation()}>
+        <AsyncButton variant="play" run={() => onPlay(item.itemId)} disabled={onAir}>
+          PLAY
+        </AsyncButton>
+        <AsyncButton variant="secondary" run={() => onUpdate(item.itemId)} disabled={!onAir}>
           UPDATE
-        </button>
-        <button
-          style={styles.button}
-          onClick={(e) => {
-            e.stopPropagation();
-            onOut(item.itemId);
-          }}
+        </AsyncButton>
+        <AsyncButton
+          variant="caution"
+          run={() => onOut(item.itemId)}
           disabled={item.status === 'idle' || item.status === 'loaded'}
         >
           OUT
-        </button>
-        <button
-          style={styles.buttonDanger}
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove(item.itemId);
-          }}
-        >
+        </AsyncButton>
+        <AsyncButton variant="danger" run={() => onRemove(item.itemId)}>
           REMOVE
-        </button>
+        </AsyncButton>
       </div>
     </div>
   );

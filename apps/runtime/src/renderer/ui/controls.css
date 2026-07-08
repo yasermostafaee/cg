@@ -1,0 +1,344 @@
+/*
+ * R-007 — the Runtime control design system.
+ *
+ * A global class stylesheet driven by the `--r-*` custom properties below. The
+ * custom-property VALUES are mirrored from `theme.ts` `cssVars` (a parity test
+ * asserts they match) so the stylesheet and the TS primitives never drift.
+ *
+ * Why classes and not inline styles: inline styles cannot express :hover /
+ * :active / :focus-visible / :disabled / [aria-busy]. These classes carry every
+ * interaction state (R-007's whole point). DOM structure, roles, and aria-labels
+ * are unchanged — only the styling mechanism moves here.
+ */
+
+:root {
+  --r-surface: #111827;
+  --r-surface-raised: #1f2937;
+  --r-surface-sunken: #0f172a;
+  --r-border: #374151;
+  --r-border-strong: #4b5563;
+  --r-text: #e5e7eb;
+  --r-text-muted: #9ca3af;
+  --r-accent: #38bdf8;
+  --r-accent-strong: #0ea5e9;
+  --r-onair: #e11d48;
+  --r-caution: #f59e0b;
+  --r-danger: #dc2626;
+  --r-danger-strong: #b91c1c;
+  --r-success: #10b981;
+  --r-dirty: #f59e0b;
+  --r-ready: #0ea5e9;
+  --r-idle: #3f3f46;
+  --r-offline: #94a3b8;
+
+  --r-space-1: 4px;
+  --r-space-2: 8px;
+  --r-space-3: 12px;
+  --r-space-4: 16px;
+  --r-space-6: 24px;
+  --r-space-8: 32px;
+
+  --r-radius-sm: 4px;
+  --r-radius-md: 6px;
+  --r-radius-lg: 10px;
+  --r-radius-full: 9999px;
+
+  --r-text-xs: 0.72rem;
+  --r-text-sm: 0.8rem;
+  --r-text-md: 0.9rem;
+  --r-text-lg: 1rem;
+  --r-text-xl: 1.2rem;
+  --r-weight-medium: 500;
+  --r-weight-semibold: 600;
+  --r-weight-bold: 700;
+
+  --r-focus-ring: 2px;
+  --r-shadow-1: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --r-shadow-2: 0 4px 16px rgba(0, 0, 0, 0.4);
+
+  --r-dur-fast: 120ms;
+  --r-dur-med: 200ms;
+  --r-dur-spin: 700ms;
+}
+
+/* ── Button ─────────────────────────────────────────────────────────────── */
+
+.cg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--r-space-2);
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--r-radius-sm);
+  border: 1px solid var(--r-border);
+  background: var(--r-surface-raised);
+  color: var(--r-text);
+  font: inherit;
+  font-size: var(--r-text-sm);
+  font-weight: var(--r-weight-semibold);
+  line-height: 1.1;
+  cursor: pointer;
+  white-space: nowrap;
+  position: relative;
+  transition:
+    background var(--r-dur-fast) ease,
+    border-color var(--r-dur-fast) ease,
+    filter var(--r-dur-fast) ease,
+    transform var(--r-dur-fast) ease;
+}
+
+.cg-btn:hover:not(:disabled) {
+  border-color: var(--r-border-strong);
+  filter: brightness(1.12);
+}
+
+.cg-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  filter: brightness(0.92);
+}
+
+.cg-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 var(--r-focus-ring) var(--r-accent);
+}
+
+.cg-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Variants — deliberate hierarchy. PLAY (on-air) is loudest; Remove reads
+   destructive; Out cautions; Update is the interactive secondary. */
+.cg-btn--play {
+  background: var(--r-onair);
+  border-color: var(--r-onair);
+  color: #fff;
+  font-weight: var(--r-weight-bold);
+}
+.cg-btn--primary {
+  background: var(--r-accent-strong);
+  border-color: var(--r-accent-strong);
+  color: #04121f;
+  font-weight: var(--r-weight-bold);
+}
+.cg-btn--secondary {
+  background: var(--r-surface-raised);
+  border-color: var(--r-accent);
+  color: var(--r-accent);
+}
+.cg-btn--caution {
+  background: transparent;
+  border-color: var(--r-caution);
+  color: var(--r-caution);
+}
+.cg-btn--danger {
+  background: transparent;
+  border-color: var(--r-danger);
+  color: #fca5a5;
+}
+.cg-btn--danger:hover:not(:disabled) {
+  background: var(--r-danger-strong);
+  color: #fff;
+}
+.cg-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--r-text-muted);
+  padding: 0.2rem 0.4rem;
+}
+.cg-btn--ghost:hover:not(:disabled) {
+  background: var(--r-surface-raised);
+  color: var(--r-text);
+}
+
+/* Busy + success + error states (driven by AsyncButton). No layout shift: while
+   busy the label goes transparent (keeps the button's width) and the spinner
+   overlays centered; success/error are ring only. */
+.cg-btn[aria-busy='true'] {
+  cursor: progress;
+}
+.cg-btn[aria-busy='true'] .cg-btn__label {
+  opacity: 0;
+}
+.cg-btn.is-success {
+  box-shadow: 0 0 0 var(--r-focus-ring) var(--r-success);
+}
+.cg-btn.is-error {
+  box-shadow: 0 0 0 var(--r-focus-ring) var(--r-danger);
+}
+
+.cg-btn__spinner {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 0.9em;
+  height: 0.9em;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: var(--r-radius-full);
+  animation: cg-spin var(--r-dur-spin) linear infinite;
+}
+/* Static busy affordance (reduced motion): centered dots, no animation. */
+.cg-btn__busy-dots {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0.12em;
+}
+
+@keyframes cg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The inline, near-the-control error message (role="alert" only when shown). */
+.cg-btn-error {
+  color: #fca5a5;
+  font-size: var(--r-text-xs);
+  font-weight: var(--r-weight-semibold);
+}
+
+/* ── Fields (text / textarea / number / select) ─────────────────────────── */
+
+.cg-field {
+  background: var(--r-surface-raised);
+  color: var(--r-text);
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-radius-sm);
+  padding: 0.3rem 0.5rem;
+  font: inherit;
+  font-size: var(--r-text-md);
+  width: 100%;
+  box-sizing: border-box;
+  transition:
+    border-color var(--r-dur-fast) ease,
+    box-shadow var(--r-dur-fast) ease;
+}
+.cg-field:hover:not(:disabled):not(:focus) {
+  border-color: var(--r-border-strong);
+}
+.cg-field:focus,
+.cg-field:focus-visible {
+  outline: none;
+  border-color: var(--r-accent);
+  box-shadow: 0 0 0 var(--r-focus-ring) var(--r-accent);
+}
+.cg-field:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.cg-field.is-dirty {
+  border-color: var(--r-dirty);
+}
+textarea.cg-field {
+  resize: vertical;
+  line-height: 1.4;
+}
+
+/* ── Badge (stack status pill) ──────────────────────────────────────────── */
+
+.cg-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-space-2);
+  font-size: var(--r-text-sm);
+  font-weight: var(--r-weight-bold);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.cg-badge__icon {
+  font-size: 1.15em;
+  line-height: 1;
+}
+.cg-badge--onair {
+  color: var(--r-onair);
+}
+.cg-badge--transient {
+  color: var(--r-caution);
+}
+.cg-badge--transient .cg-badge__icon {
+  display: inline-block;
+  animation: cg-spin calc(var(--r-dur-spin) * 1.4) linear infinite;
+}
+.cg-badge--ready {
+  color: var(--r-ready);
+}
+.cg-badge--idle {
+  color: var(--r-text-muted);
+}
+.cg-badge--attention {
+  color: var(--r-caution);
+}
+.cg-badge--exit {
+  color: var(--r-caution);
+}
+.cg-badge--error {
+  color: #fca5a5;
+}
+
+/* ── Draft chip + dirty dot (R-003) ─────────────────────────────────────── */
+
+.cg-chip-draft {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--r-dirty);
+  font-size: var(--r-text-xs);
+  font-weight: var(--r-weight-bold);
+  letter-spacing: 0.03em;
+}
+.cg-dirty-dot {
+  color: var(--r-dirty);
+  font-weight: var(--r-weight-bold);
+}
+
+/* ── Pill (link / session indicators) ───────────────────────────────────── */
+
+.cg-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--r-radius-sm);
+  border: 1px solid var(--r-border);
+  background: var(--r-surface-raised);
+  font-weight: var(--r-weight-bold);
+  white-space: nowrap;
+}
+
+/* ── Stack row (interactive container) ──────────────────────────────────── */
+
+.cg-row {
+  cursor: pointer;
+  transition: background var(--r-dur-fast) ease;
+}
+.cg-row:hover {
+  background: var(--r-surface-raised);
+}
+.cg-row.is-selected {
+  background: var(--r-surface-raised);
+}
+.cg-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 var(--r-focus-ring) var(--r-accent);
+}
+
+/* ── Reduced motion: no spin / no transitions; static affordances only. ──── */
+
+@media (prefers-reduced-motion: reduce) {
+  .cg-btn,
+  .cg-field,
+  .cg-row {
+    transition: none;
+  }
+  .cg-btn:active:not(:disabled) {
+    transform: none;
+  }
+  .cg-btn__spinner,
+  .cg-badge--transient .cg-badge__icon {
+    animation: none;
+  }
+}

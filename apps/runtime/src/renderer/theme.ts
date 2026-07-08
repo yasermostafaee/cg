@@ -30,6 +30,87 @@ export const colors = {
   offline: '#94A3B8',
 } as const;
 
+/**
+ * R-007 design-system tokens. `cssVars` is the SINGLE SOURCE OF TRUTH for the
+ * `--r-*` custom properties declared in `controls.css` (a parity test asserts
+ * they match). TS consumers (primitives, `airStateVisual`) read the same values
+ * here so the stylesheet and the components never drift.
+ *
+ * The sacred air-state colors above are unchanged; the semantic roles below reuse
+ * them (on-air red stays PLAY + ON AIR only) and add the interactive accent, the
+ * caution/danger/success/dirty roles, and the spacing / radius / type / motion
+ * scales. The look stays a calm dark broadcast console.
+ */
+export const cssVars = {
+  // Semantic colors
+  '--r-surface': chrome.panel,
+  '--r-surface-raised': chrome.panelMuted,
+  '--r-surface-sunken': chrome.background,
+  '--r-border': chrome.border,
+  '--r-border-strong': '#4B5563',
+  '--r-text': chrome.text,
+  '--r-text-muted': chrome.textMuted,
+  '--r-accent': '#38BDF8', // sky — interactive / secondary
+  '--r-accent-strong': '#0EA5E9',
+  '--r-onair': colors.onAir, // sacred red — PLAY + ON AIR only
+  '--r-caution': '#F59E0B', // amber — Out / EXIT / UNCONFIRMED / dirty
+  '--r-danger': '#DC2626', // Remove
+  '--r-danger-strong': '#B91C1C',
+  '--r-success': '#10B981', // ack / healthy
+  '--r-dirty': '#F59E0B',
+  '--r-ready': colors.ready,
+  '--r-idle': colors.idle,
+  '--r-offline': colors.offline,
+  // Spacing (4px base)
+  '--r-space-1': '4px',
+  '--r-space-2': '8px',
+  '--r-space-3': '12px',
+  '--r-space-4': '16px',
+  '--r-space-6': '24px',
+  '--r-space-8': '32px',
+  // Radii
+  '--r-radius-sm': '4px',
+  '--r-radius-md': '6px',
+  '--r-radius-lg': '10px',
+  '--r-radius-full': '9999px',
+  // Type scale
+  '--r-text-xs': '0.72rem',
+  '--r-text-sm': '0.8rem',
+  '--r-text-md': '0.9rem',
+  '--r-text-lg': '1rem',
+  '--r-text-xl': '1.2rem',
+  '--r-weight-medium': '500',
+  '--r-weight-semibold': '600',
+  '--r-weight-bold': '700',
+  // Borders / elevation
+  '--r-focus-ring': '2px',
+  '--r-shadow-1': '0 1px 3px rgba(0, 0, 0, 0.35)',
+  '--r-shadow-2': '0 4px 16px rgba(0, 0, 0, 0.4)',
+  // Motion
+  '--r-dur-fast': '120ms',
+  '--r-dur-med': '200ms',
+  '--r-dur-spin': '700ms',
+} as const;
+
+/**
+ * Badge "tone" for a stack status — the `StatusBadge` maps this to a CSS class so
+ * every state has a coherent color role. Labels/icons still come from
+ * `airStateVisual` (kept verbatim so the Playwright badge-word hooks stay stable).
+ */
+export type BadgeTone = 'onair' | 'transient' | 'ready' | 'idle' | 'attention' | 'error' | 'exit';
+
+export function badgeTone(status: StackItemStatus, pending: boolean): BadgeTone {
+  if (status === 'disconnected') return 'error';
+  if (status === 'error') return 'error';
+  if (status === 'on-air') return 'onair';
+  if (status === 'playing') return pending ? 'transient' : 'onair';
+  if (status === 'updating') return 'transient';
+  if (status === 'unconfirmed') return 'attention';
+  if (status === 'exiting') return 'exit';
+  if (status === 'loaded') return 'ready';
+  return 'idle';
+}
+
 export interface AirStateVisual {
   color: string;
   icon: string;
