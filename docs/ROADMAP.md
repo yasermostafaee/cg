@@ -8,6 +8,12 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Pixel-snap drag + arrow-nudge at grid zoom ([D-122](./prd/designer.md)) —
+  merged (#264) & archived (2026-07-08, `2026-07-08-add-pixel-snap-drag`): full
+  pixel snap on drag and first-nudge-to-integer at pixel-grid zoom (direction-
+  aware), Alt bypass, the Snapping preference as the master switch; Inspector
+  values free and below-threshold unchanged. The pixel-perfect-editing companion
+  to B-042 (a dragged shape now lands ON the lines). Owner-verified.
 - Pixel-grid ↔ content alignment at high zoom ([B-042](./prd/bugs-designer.md)) —
   merged (#251) & archived (2026-07-08,
   `2026-07-07-fix-pixel-grid-content-alignment`); containing-pixel stroke snap +
@@ -232,15 +238,9 @@ Done.)
 The concrete near-term Designer sequence (survives across sessions; the Runtime
 track is independent — see "Runtime — next" below):
 
-1. **[D-122](./prd/designer.md) snap dragging to integer scene pixels while the
-   pixel grid is active** (medium) — filed with the owner's decided behavior:
-   full snap at pixel-grid zoom, first arrow-nudge lands on the integer lattice,
-   `Alt` bypasses, Inspector values stay free. The pixel-perfect-editing
-   companion to the merged B-042/B-045 work (a dragged shape now honestly PAINTS
-   at fractional spots — D-122 decides when placement itself snaps).
-2. **[B-037](./prd/bugs-designer.md) pen tool** (low, keep-or-remove decision) — filed.
-3. **[D-119](./prd/designer.md) rebuild starter templates** (5 showcases) — filed,
-   **BLOCKED only on B-037 + D-122** (B-042 is done — see Done; templates should
+1. **[B-037](./prd/bugs-designer.md) pen tool** (low, keep-or-remove decision) — filed.
+2. **[D-119](./prd/designer.md) rebuild starter templates** (5 showcases) — filed,
+   **BLOCKED only on B-037** (B-042 and D-122 are done — see Done; templates should
    exercise healthy features); supersedes the old "template cleanup" wave-tail
    note. (Its other prerequisites — D-060 auto-size, B-035 fit-on-open, B-036
    icon align — are done, see Done.)
