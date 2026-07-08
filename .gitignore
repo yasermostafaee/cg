@@ -68,3 +68,4 @@ blob-report/
 # Harness run output — written to cwd by @cg/caspar-amcp-probe (C-001 Phase 3b)
 caspar-amcp-probe-*.results.json
 caspar-amcp-probe-*.wire.ndjson
+vite.config.ts.timestamp-*.mjs

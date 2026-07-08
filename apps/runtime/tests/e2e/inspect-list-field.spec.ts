@@ -1,13 +1,13 @@
 import { buildListFieldVcg, expect, test } from './fixtures/runtime.js';
 
 /**
- * B-040 — a ticker `list` Data key (`_tickerTexts`) must render in the operator
- * Inspector as a STRUCTURED items editor, never "[object Object]", and edits must
- * round-trip as structure through `stack.update` (a stringified array would resurface
- * as "[object Object]" on re-read).
+ * B-040 + R-003 — a ticker `list` Data key (`_tickerTexts`) renders in the operator
+ * Inspector as a STRUCTURED items editor, never "[object Object]". Edits STAGE
+ * locally (R-003) and round-trip as structure only when APPLIED via the Update
+ * button (a stringified array would resurface as "[object Object]" on re-read).
  */
 
-test('a ticker list field renders an items editor (not "[object Object]") and edits round-trip as structure', async ({
+test('a ticker list field renders an items editor (not "[object Object]") and edits round-trip as structure when applied', async ({
   app,
 }) => {
   const templateId = 'tpl-e2e-list';
@@ -23,10 +23,10 @@ test('a ticker list field renders an items editor (not "[object Object]") and ed
   // …and the corrupted string never appears anywhere in the Inspector.
   await expect(app.inspector.getByText('[object Object]', { exact: false })).toHaveCount(0);
 
-  // Edit item 1 and commit (blur) → it must round-trip as STRUCTURE: re-reading the
-  // field shows the edited text (a stringified array would show "[object Object]").
+  // Edit item 1 (stages the draft) then APPLY → it must round-trip as STRUCTURE:
+  // the field shows the edited text (a stringified array would show "[object Object]").
   await item1.fill('خبر تازه');
-  await item1.blur();
+  await app.applyEdits();
   await expect(app.inspector.getByRole('textbox', { name: '_tickerTexts item 1' })).toHaveValue(
     'خبر تازه',
   );
@@ -36,7 +36,7 @@ test('a ticker list field renders an items editor (not "[object Object]") and ed
   await expect(app.inspector.getByText('[object Object]', { exact: false })).toHaveCount(0);
 });
 
-test('a two-line item keeps its newline: Enter inserts a line break and the \\n survives the committed payload', async ({
+test('a two-line item keeps its newline: Enter inserts a line break and the \\n survives the applied payload', async ({
   app,
 }) => {
   const templateId = 'tpl-e2e-list-ml';
@@ -52,8 +52,8 @@ test('a two-line item keeps its newline: Enter inserts a line break and the \\n 
   await item1.pressSequentially('خط دوم');
   await expect(item1).toHaveValue(twoLines);
 
-  // Commit on blur → the edited item round-trips as structure with the \n intact.
-  await item1.blur();
+  // Apply via Update → the edited item round-trips as structure with the \n intact.
+  await app.applyEdits();
   await expect(app.inspector.getByRole('textbox', { name: '_tickerTexts item 1' })).toHaveValue(
     twoLines,
   );
@@ -61,10 +61,9 @@ test('a two-line item keeps its newline: Enter inserts a line break and the \\n 
     'اخبار فوری',
   );
 
-  // The committed stack payload (what `stack.update` shipped) carries the newline —
-  // a flattening editor would have joined the lines before commit. Look the item up
-  // by templateId: the MockRuntime boots with a seeded demo stack, so index 0 is
-  // NOT the template this spec loaded.
+  // The applied stack payload (what `stack.update` shipped) carries the newline —
+  // a flattening editor would have joined the lines. Look the item up by templateId:
+  // the MockRuntime boots with a seeded demo stack, so index 0 is NOT this template.
   const readPayload = (): Promise<string> =>
     app.page.evaluate(async (tid) => {
       const cg = (

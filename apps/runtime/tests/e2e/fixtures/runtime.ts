@@ -67,6 +67,37 @@ export class RuntimeApp {
   async selectStackRow(templateId: string): Promise<void> {
     await this.stack.getByText(templateId, { exact: false }).first().click();
   }
+
+  /** R-003 — apply the selected item's staged edits via the Inspector's Update. */
+  async applyEdits(): Promise<void> {
+    await this.inspector.getByRole('button', { name: 'Apply staged edits' }).click();
+  }
+
+  /** R-003 — discard the selected item's staged edits. */
+  async discardEdits(): Promise<void> {
+    await this.inspector.getByRole('button', { name: 'Discard staged edits' }).click();
+  }
+
+  /** Count `stack.update` dispatches from now on (proves apply actually sends). */
+  async installUpdateSpy(): Promise<void> {
+    await this.page.evaluate(() => {
+      const w = window as unknown as {
+        __updateCount: number;
+        cg: { stack: { update: (req: unknown) => Promise<{ accepted: boolean }> } };
+      };
+      w.__updateCount = 0;
+      const orig = w.cg.stack.update.bind(w.cg.stack);
+      w.cg.stack.update = (req: unknown) => {
+        w.__updateCount += 1;
+        return orig(req);
+      };
+    });
+  }
+
+  /** The number of `stack.update` calls since `installUpdateSpy`. */
+  updateCount(): Promise<number> {
+    return this.page.evaluate(() => (window as unknown as { __updateCount: number }).__updateCount);
+  }
 }
 
 /**
@@ -212,6 +243,43 @@ export async function buildListFieldVcg(templateId = 'tpl-e2e-list'): Promise<Ui
   const manifestExtras = {
     id: templateId,
     name: 'e2e-lower-third-list',
+    authoring: {
+      designerVersion: '0.0.0',
+      createdAt: '2026-06-29T00:00:00.000Z',
+      exportedAt: '2026-06-29T00:01:00.000Z',
+    },
+    compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+    fontDeps,
+    assetIndex,
+  } satisfies Pick<Manifest, 'id' | 'name' | 'authoring' | 'compatibility'> & {
+    fontDeps: readonly FontReference[];
+    assetIndex: readonly AssetEntry[];
+  };
+  return pack({
+    scene,
+    manifestExtras,
+    indexHtml: '<!doctype html><html><body>placeholder</body></html>',
+    cgJs: '/* placeholder template runtime */',
+    cgCss: '/* placeholder template styles */',
+  });
+}
+
+/**
+ * R-003 — a verifiable `.vcg` that adds a `number` dynamic field (`fontSize`)
+ * alongside the text `anchor`, so the number control's staged multi-digit typing
+ * can be exercised (a remount-on-keystroke would drop focus and lose digits).
+ */
+export async function buildNumberFieldVcg(templateId = 'tpl-e2e-number'): Promise<Uint8Array> {
+  const scene = fixtureScene();
+  scene.fields = [
+    ...scene.fields,
+    { id: 'fontSize', label: 'Font size', required: false, type: 'number', default: 5, step: 1 },
+  ];
+  const fontDeps: readonly FontReference[] = scene.fonts;
+  const assetIndex: readonly AssetEntry[] = [];
+  const manifestExtras = {
+    id: templateId,
+    name: 'e2e-lower-third-number',
     authoring: {
       designerVersion: '0.0.0',
       createdAt: '2026-06-29T00:00:00.000Z',
