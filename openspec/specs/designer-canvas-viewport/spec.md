@@ -341,14 +341,16 @@ coordinates the quantization is a no-op). Each frame edge SHALL lie within ≤ 0
 corresponding rendered content edge, on all four sides, at any device-pixel ratio. The frame
 stroke SHALL be ONE DEVICE PIXEL wide (not one CSS px, which is a fuzzy 1.25-device band at dpr
 1.25), centered on the rendered edge — and it remains HONEST for fractional placement: a shape
-parked between grid lines shows its border between the lines (the D-122 drag-snap decision governs
-when placement itself snaps). Interaction math (resize/rotate/hit-testing) SHALL keep using the
-raw model values — the quantization is visual-projection-only.
+parked between grid lines shows its border between the lines. Fractional placement stays reachable
+even after D-122 makes plain dragging snap to whole pixels at grid zoom — an Inspector-typed value
+or an Alt (snap-bypass) drag/nudge still places a shape between the lines. Interaction math
+(resize/rotate/hit-testing) SHALL keep using the raw model values — the quantization is
+visual-projection-only.
 
 #### Scenario: The gizmo coincides with the rendered edges at fractional coords
 
-- **WHEN** an element sits at a fractional scene coordinate (e.g. x = 2.2749, the drag scenario)
-  and is selected at pixel-grid zoom
+- **WHEN** an element sits at a fractional scene coordinate (e.g. x = 2.2749, set via the Inspector
+  or placed by an Alt snap-bypass drag) and is selected at pixel-grid zoom
 - **THEN** every gizmo frame edge lies within ≤ 0.25 device px of the RENDERED content edge (the
   engine lays the box out at 2.265625 — the gizmo traces that, not the raw 2.2749)
 
@@ -362,7 +364,8 @@ raw model values — the quantization is visual-projection-only.
 
 - **WHEN** an element is selected at any device-pixel ratio (integer or fractional)
 - **THEN** the frame stroke is one physical device pixel wide, centered on the rendered edge, and
-  a fractionally-placed shape visibly shows its border BETWEEN grid lines (no false snapping)
+  a fractionally-placed shape (Inspector value or Alt-bypass move) visibly shows its border BETWEEN
+  grid lines (no false snapping of the border itself)
 
 ### Requirement: Position edits repaint the canvas preview (B-045)
 
