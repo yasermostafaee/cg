@@ -62,6 +62,12 @@
 
 ## 6. Live validation (operator) + wrap-up
 
-- [ ] Final STOP: one full-browser pass by the operator.
-- [ ] After PASS: tick tasks, flip R-007 → `[x]` (build 2.5.0 `69e8ad5`),
+- [x] Final full-browser pass — **PASS, CasparCG 2.5.0 (`69e8ad5`),
+      2026-07-08**: the design system reads well across the stack row, Library,
+      Inspector, and status bar / overlays; hover / press / focus, async
+      busy→success / error, and every badge state read correctly; PLAY renamed;
+      inputs type smoothly (multi-digit numbers keep every digit, editing only
+      stages, textareas keep newlines); buttons fire on first click; no state
+      visual regressed. Deferred (filed as R-008): a field sizing/density pass.
+- [x] After PASS: tick tasks, flip R-007 → `[x]` (build 2.5.0 `69e8ad5`),
       archive per the workflow, push, compare URL, report.

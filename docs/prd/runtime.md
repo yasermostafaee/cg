@@ -139,7 +139,26 @@ no recovery path in the UI.
   the mock; the gap is only visibility + recovery of the boot-time choice. Related:
   the B-038 open follow-up (re-deliver retained template HTML on reconnect).
 
-## [ ] R-007 — Runtime control styling + interaction feedback ⟨priority: medium⟩
+## [x] R-007 — Runtime control styling + interaction feedback ⟨priority: medium⟩ — merged via `polish-runtime-controls`, archived
+
+<!-- change: openspec/changes/archive/2026-07-08-polish-runtime-controls/ -->
+
+> **CLOSED — operator-validated.** A real design-system layer for the Runtime: a
+> `controls.css` class stylesheet driven by `--r-*` custom properties mirrored
+> from `theme.ts` (no new dependency), the `Button`/`AsyncButton`/`StatusBadge`/
+> `DraftChip` primitives, and the `.cg-field` class applied directly to the
+> existing controlled inputs. Every control now shows hover / active-pressed /
+> focus-visible / disabled; bridge-round-trip buttons show press → busy (spinner
+> after ~150ms, held ≥300ms) → success / inline error, decoupled from the B-044
+> badge; every badge state (incl. UNCONFIRMED) + the R-003 dirty-dot / `● draft`
+> have a coherent visual; `prefers-reduced-motion` honored; **TAKE renamed to
+> PLAY** (label + aria only). Styling-only — no behavior/verb/lifecycle/escaping/
+> schema/bridge change; R-003 input wiring untouched. A jsdom-StrictMode
+> `dom.test` + per-surface dispatch e2e guard against severed clicks (a real bug
+> caught + fixed during the slice). Operator-validated live on **CasparCG 2.5.0**
+> (`69e8ad5`, 2026-07-08): all surfaces read well, controls fire on first click,
+> inputs type smoothly (multi-digit numbers, staged edits, textarea newlines), no
+> state visual regressed. Follow-up: R-008 (field sizing/density pass).
 
 **What:** Give the Runtime a real design-system layer: professional, legible
 controls with unmistakable interaction feedback (hover / active-pressed /
@@ -185,3 +204,24 @@ tell a command is in flight, and a rejection is easy to miss.
   hierarchy (an on-air action must not look like a neutral sibling of Remove).
   Keeps the dark broadcast-console look and the sacred air-state colors.
   Cross-refs: R-003 (dirty/Discard affordances), B-044 (UNCONFIRMED badge).
+
+## [ ] R-008 — Runtime field sizing + spacing pass ⟨priority: low⟩
+
+**What:** Revisit the dimensions of the Runtime's input controls — text fields,
+the number field, and the ticker item textareas — plus their min-heights and the
+overall Inspector/Library density, now that the shared control primitives are in
+place (R-007).
+**Why:** After the R-007 design-system rollout the controls read well
+stylistically, but the operator finds the inputs still too small / cramped
+(final-pass feedback, 2026-07-08). This is a focused sizing-and-spacing
+follow-up, not a restyle.
+**Acceptance:**
+
+- WHEN the operator edits text / number / ticker-item fields THEN the fields are
+  comfortably sized (readable height + padding) without wasting vertical space
+- WHEN the sizing changes land THEN they build on R-007's `.cg-field` /
+  `--r-space-*` tokens (adjust the shared tokens/class, not per-component inline
+  styles) and no interaction state or R-003 input behavior regresses
+  **Notes:** Builds directly on R-007 (`.cg-field`, the `--r-*` spacing/type
+  scale). Symptom-level for now; measure comfortable field metrics during the
+  change.
