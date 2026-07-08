@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Repro: stale raster — small left changes inside a scale(64) subtree never repaint</title>
+<style>
+  html, body { margin: 0; background: #202430; color: #dde; font: 14px/1.5 sans-serif; }
+  #info { padding: 8px 12px; background: #12141c; }
+  #info button { font: inherit; padding: 2px 10px; }
+  #viewport { position: relative; width: 900px; height: 540px; overflow: scroll;
+              border: 1px solid #555; margin: 8px 12px; }
+  #sizer { width: 762880px; height: 431360px; position: relative; }
+  #scaledRoot { transform-origin: 0 0; transform: scale(64); width: 11920px; height: 6740px;
+                position: relative; background: #3d4253; }
+  #child { position: absolute; left: 6.4125px; top: 0; width: 320px; height: 120px;
+           background: #c9cdd8; }
+  #marker { position: absolute; width: 1px; top: 0; bottom: 0;
+            background: rgba(80,160,255,0.9); pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="info">
+  <div><b>Steps:</b> click a button below. Each writes <code>child.style.left</code> (a
+    0.2775&nbsp;px or 1&nbsp;px change — sub-2-CSS-px inside a <code>scale(64)</code> subtree).</div>
+  <div><b>Expected:</b> the grey box's painted right edge follows the blue marker (the marker is
+    positioned from <code>getBoundingClientRect()</code>, i.e. where LAYOUT puts the edge —
+    0.2775&nbsp;px ≈ 18 screen px here, 1&nbsp;px = 64 screen px).</div>
+  <div><b>Actual:</b> layout/DOM update but the paint does not — the grey edge stays behind the
+    marker, and stays there through idle time and scrolling. Only a move of ≳2&nbsp;CSS px
+    repaints. (Workaround button: carry the position in <code>transform: translate()</code>
+    with <code>left</code> pinned at 0 — then every step paints correctly.)</div>
+  <button id="mSmall">left += 0.2775px (sub-pixel)</button>
+  <button id="mOne">left += 1px (arrow-key step)</button>
+  <button id="mBig">left += 2px (repaints — control)</button>
+  <button id="mWorkaround">toggle workaround (position via translate)</button>
+  <span id="status"></span>
+</div>
+<div id="viewport">
+  <div id="sizer">
+    <div id="scaledRoot"><div id="child"></div></div>
+  </div>
+  <div id="marker"></div>
+</div>
+<script>
+  const viewport = document.getElementById('viewport');
+  const child = document.getElementById('child');
+  const marker = document.getElementById('marker');
+  let x = 6.4125;
+  let workaround = false;
+
+  // scroll the child's right edge (326.4 CSS px inside the scaled root → ~20890 px) into view
+  viewport.scrollLeft = 326.5 * 64 - 0.55 * viewport.clientWidth;
+
+  function apply() {
+    if (workaround) {
+      child.style.left = '0px';
+      child.style.transform = 'translate(' + x + 'px, 0px)';
+    } else {
+      child.style.transform = '';
+      child.style.left = x + 'px';
+    }
+    // marker at the LAYOUT edge (content coordinates of #viewport)
+    const r = child.getBoundingClientRect();
+    const v = viewport.getBoundingClientRect();
+    marker.style.left = (r.right - v.left + viewport.scrollLeft) + 'px';
+    document.getElementById('status').textContent =
+      ' left=' + x + 'px' + (workaround ? ' (translate mode)' : ' (left/top mode)');
+  }
+  document.getElementById('mSmall').onclick = () => { x += 0.2775; apply(); };
+  document.getElementById('mOne').onclick = () => { x += 1; apply(); };
+  document.getElementById('mBig').onclick = () => { x += 2; apply(); };
+  document.getElementById('mWorkaround').onclick = () => { workaround = !workaround; apply(); };
+  viewport.addEventListener('scroll', apply);
+  apply();
+</script>
+</body>
+</html>
