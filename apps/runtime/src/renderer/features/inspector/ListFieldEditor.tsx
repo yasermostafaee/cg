@@ -1,26 +1,21 @@
-import { useState } from 'react';
 import type { FieldValue, ListItem } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { uuid } from '../../lib/uuid.js';
 import { addItem, itemText, moveItem, removeItem, setItemText, toListItems } from './listField.js';
 
 /**
- * B-040 — the operator Inspector's editor for a `list` (array) dynamic field, e.g.
- * a ticker's Data key. Edits each item's `text` (preserving its stable `id` + any
- * other fields) and supports add / remove / reorder, committing the STRUCTURED
- * `ListItem[]` array — never a `String()`-coerced `"[object Object]"`. Matches the
- * Inspector's raw-element + inline-style conventions (the Runtime has no shared UI
- * primitives; see the change design for why this is Runtime-local, not extracted).
+ * R-003 — the operator Inspector's editor for a `list` (array) dynamic field.
+ * Edits STAGE: every item op (text, add, remove, reorder) is written back
+ * through `onStage` as the whole structured `ListItem[]`, which the draft store
+ * holds until the operator applies the item. There is NO local `useState` and
+ * NO remount key — the editor renders the draft-or-applied value the parent
+ * passes, so an incoming push updates un-staged siblings live while this field
+ * keeps its draft, and the first click on ↑/↓/×/Add always lands (the recorded
+ * R-003 hazard, removed).
  *
- * Item text may span multiple lines, so the per-item editor is an auto-growing
- * `<textarea>` — a single-line `<input>` strips line breaks on display AND commit
- * (the 2026-07-07 live finding). Enter inserts a newline (native textarea
- * behavior, no Enter→blur handler); commit stays on blur.
- *
- * Local state is seeded from `value` on mount; the parent re-mounts this editor
- * (via a value-signature `key`) when the selection or the upstream value changes,
- * mirroring the scalar inputs' `key={fieldId-value}` resync. Text edits commit on
- * blur; structural ops (add/remove/reorder) commit immediately.
+ * Item text is an auto-growing `<textarea>` so multi-line item text (newlines)
+ * survives display AND apply (B-040); Enter inserts a newline — it never
+ * commits or submits.
  */
 const styles = {
   list: { display: 'flex', flexDirection: 'column' as const, gap: '0.3rem', minWidth: 0 },
@@ -66,20 +61,14 @@ const styles = {
 export function ListFieldEditor({
   fieldId,
   value,
-  onCommit,
+  onStage,
 }: {
   fieldId: string;
   value: FieldValue | undefined;
-  /** Commit the structured array. A `ListItem[]` is a valid `FieldValue`. */
-  onCommit: (next: ListItem[]) => void;
+  /** Stage the whole structured array. A `ListItem[]` is a valid `FieldValue`. */
+  onStage: (next: ListItem[]) => void;
 }): JSX.Element {
-  const [items, setItems] = useState<ListItem[]>(() => toListItems(value));
-
-  /** Structural ops (add/remove/reorder): update local + ship immediately. */
-  const commitNow = (next: ListItem[]): void => {
-    setItems(next);
-    onCommit(next);
-  };
+  const items = toListItems(value);
 
   return (
     <div style={styles.list} aria-label={`${fieldId} items`}>
@@ -89,19 +78,16 @@ export function ListFieldEditor({
           <textarea
             style={styles.input}
             value={itemText(item)}
-            // Auto-grow with the content's line count: comfortable 2-row minimum,
-            // capped at 8 (beyond that the textarea scrolls).
             rows={Math.min(Math.max(itemText(item).split('\n').length, 2), 8)}
             aria-label={`${fieldId} item ${String(i + 1)}`}
-            onChange={(e) => setItems((cur) => setItemText(cur, i, e.target.value))}
-            onBlur={() => onCommit(items)}
+            onChange={(e) => onStage(setItemText(items, i, e.target.value))}
           />
           <button
             type="button"
             style={styles.btn}
             aria-label={`Move ${fieldId} item ${String(i + 1)} up`}
             disabled={i === 0}
-            onClick={() => commitNow(moveItem(items, i, i - 1))}
+            onClick={() => onStage(moveItem(items, i, i - 1))}
           >
             ↑
           </button>
@@ -110,7 +96,7 @@ export function ListFieldEditor({
             style={styles.btn}
             aria-label={`Move ${fieldId} item ${String(i + 1)} down`}
             disabled={i === items.length - 1}
-            onClick={() => commitNow(moveItem(items, i, i + 1))}
+            onClick={() => onStage(moveItem(items, i, i + 1))}
           >
             ↓
           </button>
@@ -118,7 +104,7 @@ export function ListFieldEditor({
             type="button"
             style={styles.btn}
             aria-label={`Remove ${fieldId} item ${String(i + 1)}`}
-            onClick={() => commitNow(removeItem(items, i))}
+            onClick={() => onStage(removeItem(items, i))}
           >
             ×
           </button>
@@ -128,7 +114,7 @@ export function ListFieldEditor({
         type="button"
         style={styles.addBtn}
         aria-label={`Add ${fieldId} item`}
-        onClick={() => commitNow(addItem(items, `item-${uuid()}`))}
+        onClick={() => onStage(addItem(items, `item-${uuid()}`))}
       >
         Add item
       </button>

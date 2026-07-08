@@ -1,8 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
 import { useStack } from '../../hooks/useStack.js';
 import { colors } from '../../theme.js';
 import { runCommand } from '../status/commandFeedback.js';
+import { applyDraft } from '../inspector/applyDraft.js';
+import {
+  draftsVersion,
+  isItemDirty,
+  pruneDrafts,
+  subscribeDrafts,
+} from '../inspector/draftStore.js';
 import { StackRow } from './StackRow.js';
 
 interface Props {
@@ -47,6 +54,13 @@ const styles = {
 export function StackPanel({ onSelectionChange }: Props): JSX.Element {
   const items = useStack();
   const [selected, setSelected] = useState<string | null>(null);
+  // Re-render on draft changes so the row draft chip stays live.
+  useSyncExternalStore(subscribeDrafts, draftsVersion);
+
+  // Drop drafts for items no longer on the stack (removed / cleared).
+  useEffect(() => {
+    pruneDrafts(items.map((i) => i.itemId));
+  }, [items]);
 
   const select = (itemId: string): void => {
     const next = itemId === selected ? null : itemId;
@@ -66,19 +80,14 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
               key={item.itemId}
               item={item}
               selected={item.itemId === selected}
+              dirty={isItemDirty(item.itemId, item.fields)}
               onSelect={select}
               onTake={(id) => runCommand('Take', window.cg.stack.take({ itemId: id }))}
               onUpdate={(id) => {
-                const item = items.find((i) => i.itemId === id);
-                if (item === undefined) return;
-                runCommand(
-                  'Update',
-                  window.cg.stack.update({
-                    itemId: id,
-                    fields: item.fields,
-                    mergeMode: 'merge',
-                  }),
-                );
+                // R-003 — apply the item's staged draft (the complete field-set)
+                // as one atomic stack.update; clears the draft on accepted.
+                const target = items.find((i) => i.itemId === id);
+                if (target !== undefined) applyDraft(target);
               }}
               onOut={(id) => runCommand('Out', window.cg.stack.out({ itemId: id }))}
               onRemove={(id) => runCommand('Remove', window.cg.stack.remove({ itemId: id }))}

@@ -28,11 +28,11 @@ test('the stack badge settles back to ON AIR after an update — UPDATING is tra
   await row.getByRole('button', { name: 'TAKE' }).click();
   await expect(row.getByText('ON AIR')).toBeVisible();
 
-  // Update via the Inspector's commit (blur) → transient UPDATING must settle
-  // back to ON AIR within the bound and REST there.
+  // Stage an edit and APPLY via Update (R-003 — blur no longer commits) →
+  // transient UPDATING must settle back to ON AIR within the bound and REST there.
   const field = app.inspector.getByRole('textbox', { name: 'anchor' });
   await field.fill('مجری جدید');
-  await field.blur();
+  await app.applyEdits();
   // Past the mock's settle beat (160ms) with margin:
   await expect(row.getByText('ON AIR')).toBeVisible({ timeout: 3000 });
   await app.page.waitForTimeout(400);

@@ -1,11 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { DynamicField, FieldValue, StackItemState } from '@cg/shared-schema';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
+import {
+  draftsVersion,
+  effectiveValue,
+  isFieldDirty,
+  isItemDirty,
+  stageField,
+  subscribeDrafts,
+} from './draftStore.js';
 
 interface Props {
   item: StackItemState | null;
+  /** Apply the item's staged draft as one atomic `stack.update`. */
+  onApply: (itemId: string) => void;
+  /** Discard the item's staged draft, reverting to applied values. */
+  onDiscard: (itemId: string) => void;
 }
 
 const styles = {
@@ -30,6 +42,32 @@ const styles = {
   empty: { color: colors.textMuted, fontSize: '0.9rem' },
   title: { fontSize: '1.1rem', fontWeight: 600, margin: 0 },
   meta: { color: colors.textMuted, fontSize: '0.85rem' },
+  draftChip: {
+    color: colors.pending,
+    fontSize: '0.8rem',
+    fontWeight: 700,
+    letterSpacing: '0.03em',
+  },
+  actions: { display: 'flex', gap: '0.5rem', marginTop: '0.25rem' },
+  applyBtn: {
+    background: colors.panelMuted,
+    color: colors.text,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '0.2rem',
+    padding: '0.3rem 0.7rem',
+    fontSize: '0.85rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  discardBtn: {
+    background: 'transparent',
+    color: colors.textMuted,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '0.2rem',
+    padding: '0.3rem 0.7rem',
+    fontSize: '0.85rem',
+    cursor: 'pointer',
+  },
   fieldRow: {
     display: 'grid',
     gridTemplateColumns: '120px 1fr',
@@ -38,7 +76,8 @@ const styles = {
     fontSize: '0.9rem',
     alignItems: 'center',
   },
-  fieldLabel: { color: colors.textMuted, fontWeight: 500 },
+  fieldLabel: { color: colors.textMuted, fontWeight: 500, display: 'flex', gap: '0.3rem' },
+  dirtyDot: { color: colors.pending, fontWeight: 700 },
   fieldInput: {
     background: colors.panelMuted,
     color: colors.text,
@@ -49,30 +88,27 @@ const styles = {
     width: '100%',
     boxSizing: 'border-box' as const,
   },
-  fieldStatic: { color: colors.text, fontWeight: 500 },
-  errorMsg: {
-    color: '#fda4af',
-    fontSize: '0.78rem',
-    marginTop: '0.25rem',
-  },
 } as const;
 
 /**
- * Inspector pane (Phase 6 §4 / Phase 8 M7.2). Fields are now editable;
- * commit-on-blur dispatches `stack.update` so CasparCG sees a CG INVOKE
- * UPDATE line on the wire.
+ * Inspector pane (Phase 6 §4 / R-003). Fields now STAGE locally: every edit
+ * writes to the per-item draft store, and NOTHING reaches the bridge on change,
+ * blur, or Enter. The item's staged field-set is applied as one atomic
+ * `stack.update` by the Update control (here + the stack row); Discard reverts
+ * drafts to the last applied values. Drafts are keyed by item and survive
+ * selection switches.
  *
- * Field metadata is fetched via `templates.get` on selection change. If
- * the registry doesn't know the template (item loaded before the .vcg
- * arrived, or template-only-known-by-id), we fall back to type inference
- * from the current values so the inspector is never empty.
+ * Field metadata is fetched via `templates.get` on selection change; if the
+ * registry doesn't know the template we fall back to type inference so the
+ * inspector is never empty.
  */
-export function Inspector({ item }: Props): JSX.Element {
+export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
   const [info, setInfo] = useState<TemplateInfo | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Re-render on any draft change so dirty markers + the draft-or-applied
+  // values stay live (a push to `item` also re-renders via props).
+  useSyncExternalStore(subscribeDrafts, draftsVersion);
 
   useEffect(() => {
-    setError(null);
     if (item === null) {
       setInfo(null);
       return;
@@ -95,29 +131,15 @@ export function Inspector({ item }: Props): JSX.Element {
     );
   }
 
+  const itemId = item.itemId;
   const schema = info?.fields ?? null;
   const valueEntries = Object.entries(item.fields);
-  // Fields the operator should see — schema-driven if available, else
-  // current values keyed alphabetically.
   const rows: { field: DynamicField | null; key: string; value: FieldValue | undefined }[] =
     schema !== null && schema.length > 0
       ? schema.map((f) => ({ field: f, key: f.id, value: item.fields[f.id] }))
       : valueEntries.map(([key, value]) => ({ field: null, key, value }));
 
-  async function commit(fieldId: string, next: FieldValue): Promise<void> {
-    if (item === null) return;
-    setError(null);
-    try {
-      const res = await window.cg.stack.update({
-        itemId: item.itemId,
-        fields: { [fieldId]: next },
-        mergeMode: 'merge',
-      });
-      if (!res.accepted) setError(`update rejected for ${fieldId}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }
+  const dirty = isItemDirty(itemId, item.fields);
 
   return (
     <aside style={styles.panel} aria-label="Inspector">
@@ -133,6 +155,32 @@ export function Inspector({ item }: Props): JSX.Element {
           Slot: {item.slot.channel}-{item.slot.layer} on {item.slot.server}
         </div>
       )}
+      <div style={styles.actions}>
+        {/* Apply stays enabled even with nothing staged — re-sending unchanged
+            values is the operator's documented B-048 recovery path. */}
+        <button
+          type="button"
+          style={styles.applyBtn}
+          aria-label="Apply staged edits"
+          onClick={() => onApply(itemId)}
+        >
+          Update
+        </button>
+        <button
+          type="button"
+          style={styles.discardBtn}
+          aria-label="Discard staged edits"
+          disabled={!dirty}
+          onClick={() => onDiscard(itemId)}
+        >
+          Discard
+        </button>
+        {dirty && (
+          <span style={styles.draftChip} aria-label="unapplied edits">
+            ● draft
+          </span>
+        )}
+      </div>
       <div
         style={{
           marginTop: '0.5rem',
@@ -145,16 +193,18 @@ export function Inspector({ item }: Props): JSX.Element {
           <p style={styles.empty}>No fields.</p>
         ) : (
           rows.map((row) => (
+            // Key by item+field so switching stack items remounts the controls
+            // (each re-seeds from the new item's draft-or-applied value) — no
+            // uncontrolled DOM node is ever reused across items.
             <FieldEditor
-              key={row.key}
+              key={`${itemId}-${row.key}`}
               field={row.field}
               fieldId={row.key}
-              value={row.value}
-              onCommit={(v) => void commit(row.key, v)}
+              itemId={itemId}
+              applied={row.value}
             />
           ))
         )}
-        {error !== null && <p style={styles.errorMsg}>{error}</p>}
       </div>
     </aside>
   );
@@ -163,20 +213,30 @@ export function Inspector({ item }: Props): JSX.Element {
 function FieldEditor({
   field,
   fieldId,
-  value,
-  onCommit,
+  itemId,
+  applied,
 }: {
   field: DynamicField | null;
   fieldId: string;
-  value: FieldValue | undefined;
-  onCommit: (next: FieldValue) => void;
+  itemId: string;
+  applied: FieldValue | undefined;
 }): JSX.Element {
   const label = field?.label ?? fieldId;
+  const value = effectiveValue(itemId, fieldId, applied);
   const kind = field?.type ?? inferKind(value);
+  const dirty = isFieldDirty(itemId, fieldId, applied);
+  const stage = (next: FieldValue): void => stageField(itemId, fieldId, next);
   return (
     <div style={styles.fieldRow}>
-      <span style={styles.fieldLabel}>{label}</span>
-      <FieldControl kind={kind} field={field} value={value} fieldId={fieldId} onCommit={onCommit} />
+      <span style={styles.fieldLabel}>
+        {label}
+        {dirty && (
+          <span style={styles.dirtyDot} aria-label={`${fieldId} has unapplied edits`}>
+            ●
+          </span>
+        )}
+      </span>
+      <FieldControl kind={kind} field={field} value={value} fieldId={fieldId} onStage={stage} />
     </div>
   );
 }
@@ -186,13 +246,13 @@ function FieldControl({
   field,
   value,
   fieldId,
-  onCommit,
+  onStage,
 }: {
   kind: DynamicField['type'] | 'unknown';
   field: DynamicField | null;
   value: FieldValue | undefined;
   fieldId: string;
-  onCommit: (next: FieldValue) => void;
+  onStage: (next: FieldValue) => void;
 }): JSX.Element {
   if (kind === 'boolean') {
     const v = typeof value === 'boolean' ? value : false;
@@ -200,32 +260,13 @@ function FieldControl({
       <input
         type="checkbox"
         checked={v}
-        onChange={(e) => onCommit(e.target.checked)}
+        onChange={(e) => onStage(e.target.checked)}
         aria-label={fieldId}
       />
     );
   }
   if (kind === 'number') {
-    const v = typeof value === 'number' ? value : 0;
-    return (
-      <input
-        style={styles.fieldInput}
-        type="number"
-        defaultValue={v}
-        step={field?.type === 'number' ? field.step : undefined}
-        min={field?.type === 'number' ? field.min : undefined}
-        max={field?.type === 'number' ? field.max : undefined}
-        onBlur={(e) => {
-          const n = Number(e.target.value);
-          if (Number.isFinite(n)) onCommit(n);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-        }}
-        aria-label={fieldId}
-        key={`${fieldId}-${String(v)}`}
-      />
-    );
+    return <NumberField field={field} value={value} fieldId={fieldId} onStage={onStage} />;
   }
   if (kind === 'color') {
     const v = typeof value === 'string' ? value : '#FFFFFF';
@@ -233,7 +274,7 @@ function FieldControl({
       <input
         type="color"
         value={v}
-        onChange={(e) => onCommit(e.target.value)}
+        onChange={(e) => onStage(e.target.value)}
         aria-label={fieldId}
       />
     );
@@ -244,7 +285,7 @@ function FieldControl({
       <select
         style={styles.fieldInput}
         value={v}
-        onChange={(e) => onCommit(e.target.value)}
+        onChange={(e) => onStage(e.target.value)}
         aria-label={fieldId}
       >
         {field.options.map((opt) => (
@@ -256,8 +297,8 @@ function FieldControl({
     );
   }
   if (kind === 'image') {
-    // Image fields ship as { assetId }. M7.2 keeps it as a plain text
-    // field on the assetId — the asset library picker lands later.
+    // Image fields ship as { assetId }; kept as a plain text field on the
+    // assetId (the asset library picker lands later).
     const v =
       typeof value === 'object' && value !== null && 'assetId' in value
         ? String((value as { assetId: string }).assetId)
@@ -266,14 +307,10 @@ function FieldControl({
       <input
         style={styles.fieldInput}
         type="text"
-        defaultValue={v}
+        value={v}
         placeholder="asset id"
-        onBlur={(e) => onCommit({ assetId: e.target.value })}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-        }}
+        onChange={(e) => onStage({ assetId: e.target.value })}
         aria-label={fieldId}
-        key={`${fieldId}-${v}`}
       />
     );
   }
@@ -282,41 +319,78 @@ function FieldControl({
     return (
       <textarea
         style={{ ...styles.fieldInput, minHeight: 60, resize: 'vertical' }}
-        defaultValue={v}
-        onBlur={(e) => onCommit(e.target.value)}
+        value={v}
+        onChange={(e) => onStage(e.target.value)}
         aria-label={fieldId}
-        key={`${fieldId}-${v}`}
       />
     );
   }
   if (kind === 'list') {
-    // B-040 — a `list` (array) field gets a structured items editor, never the
-    // default text input (which would `String()`-coerce the array to
-    // "[object Object]"). Keyed by the value signature so selecting a different
-    // stack item / an external update re-seeds the editor (mirrors the scalar
-    // inputs' `key`). The committed value stays a structured `ListItem[]`.
-    return (
-      <ListFieldEditor
-        key={`${fieldId}-${JSON.stringify(value)}`}
-        fieldId={fieldId}
-        value={value}
-        onCommit={onCommit}
-      />
-    );
+    // R-003 — the structured list editor stages its ops (no remount key).
+    return <ListFieldEditor fieldId={fieldId} value={value} onStage={onStage} />;
   }
-  // Default: text input.
+  // Default: text input (controlled — stages on change, no blur/Enter commit).
   const v = typeof value === 'string' ? value : value === undefined ? '' : String(value);
   return (
     <input
       style={styles.fieldInput}
       type="text"
-      defaultValue={v}
-      onBlur={(e) => onCommit(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+      value={v}
+      onChange={(e) => onStage(e.target.value)}
+      aria-label={fieldId}
+    />
+  );
+}
+
+/**
+ * A number field that STAGES on change while preserving in-progress text. It is
+ * controlled by a local raw string (so "-", "1.", and "" survive) and NEVER
+ * remounts on a keystroke — the text re-seeds only when the effective value
+ * changes from OUTSIDE our own edits (a push, Discard, apply, or item switch),
+ * via the standard "adjust state during render" pattern. This is the fix for
+ * the review finding that the old frozen-key trick dropped focus on the first
+ * digit and could diverge across same-id fields.
+ */
+function NumberField({
+  field,
+  value,
+  fieldId,
+  onStage,
+}: {
+  field: DynamicField | null;
+  value: FieldValue | undefined;
+  fieldId: string;
+  onStage: (next: FieldValue) => void;
+}): JSX.Element {
+  const external = typeof value === 'number' ? String(value) : '';
+  const [text, setText] = useState(external);
+  const [seen, setSeen] = useState(value);
+  if (value !== seen) {
+    setSeen(value);
+    // Keep the in-progress text if it already represents the new value; else
+    // reseed from outside (push / discard / apply changed the applied value).
+    const parsed = Number(text);
+    const represents = text.trim() !== '' && Number.isFinite(parsed) && parsed === value;
+    if (!represents) setText(external);
+  }
+  return (
+    <input
+      style={styles.fieldInput}
+      type="number"
+      value={text}
+      step={field?.type === 'number' ? field.step : undefined}
+      min={field?.type === 'number' ? field.min : undefined}
+      max={field?.type === 'number' ? field.max : undefined}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setText(raw);
+        const n = Number(raw);
+        if (raw.trim() !== '' && Number.isFinite(n)) {
+          setSeen(n); // our own edit — don't let the resync reseed over it
+          onStage(n);
+        }
       }}
       aria-label={fieldId}
-      key={`${fieldId}-${v}`}
     />
   );
 }
@@ -324,8 +398,6 @@ function FieldControl({
 function inferKind(value: FieldValue | undefined): DynamicField['type'] | 'unknown' {
   if (typeof value === 'boolean') return 'boolean';
   if (typeof value === 'number') return 'number';
-  // B-040 — an array value is a `list` field; route it to the items editor so it's
-  // never rendered (or committed) as a `String()`-coerced "[object Object]".
   if (Array.isArray(value)) return 'list';
   if (typeof value === 'string') {
     if (/^#[0-9a-f]{3,8}$/i.test(value)) return 'color';

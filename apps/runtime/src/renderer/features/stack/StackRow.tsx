@@ -4,6 +4,8 @@ import { airStateVisual, colors } from '../../theme.js';
 interface Props {
   item: StackItemState;
   selected: boolean;
+  /** R-003 — the item has staged-but-unapplied Inspector edits. */
+  dirty: boolean;
   onSelect: (itemId: string) => void;
   onTake: (itemId: string) => void;
   onUpdate: (itemId: string) => void;
@@ -35,7 +37,19 @@ const styles = {
   },
   statusIcon: { fontSize: '1.2rem' },
   body: { display: 'flex', flexDirection: 'column' as const, gap: '0.15rem' },
-  title: { fontSize: '1rem', fontWeight: 600 },
+  title: {
+    fontSize: '1rem',
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.4rem',
+  },
+  draftChip: {
+    color: colors.pending,
+    fontSize: '0.7rem',
+    fontWeight: 700,
+    letterSpacing: '0.03em',
+  },
   subtitle: { fontSize: '0.8rem', color: colors.textMuted },
   actions: { display: 'flex', gap: '0.5rem' },
   button: {
@@ -65,6 +79,7 @@ const styles = {
 export function StackRow({
   item,
   selected,
+  dirty,
   onSelect,
   onTake,
   onUpdate,
@@ -85,7 +100,14 @@ export function StackRow({
         {visual.label}
       </div>
       <div style={styles.body}>
-        <div style={styles.title}>{title}</div>
+        <div style={styles.title}>
+          {title}
+          {dirty && (
+            <span style={styles.draftChip} aria-label={`${title} has unapplied edits`}>
+              ● draft
+            </span>
+          )}
+        </div>
         <div style={styles.subtitle}>
           {item.templateId} • {slot}
         </div>

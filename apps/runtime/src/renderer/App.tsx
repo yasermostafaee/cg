@@ -5,6 +5,8 @@ import { FailoverBanner } from './features/connections/FailoverBanner.js';
 import { LibraryPanel } from './features/library/LibraryPanel.js';
 import { StackPanel } from './features/stack/StackPanel.js';
 import { Inspector } from './features/inspector/Inspector.js';
+import { applyDraft } from './features/inspector/applyDraft.js';
+import { clearDraft } from './features/inspector/draftStore.js';
 import { LockOverlay } from './features/lock/LockOverlay.js';
 import { CommandErrorToast } from './features/status/CommandErrorToast.js';
 import { StatusBar } from './features/status/StatusBar.js';
@@ -76,7 +78,14 @@ export function App(): JSX.Element {
           </div>
           <StackPanel onSelectionChange={setSelectedId} />
         </section>
-        <Inspector item={selected} />
+        <Inspector
+          item={selected}
+          onApply={(id) => {
+            const target = items.find((i) => i.itemId === id);
+            if (target !== undefined) applyDraft(target);
+          }}
+          onDiscard={(id) => clearDraft(id)}
+        />
       </div>
       <StatusBar onOpenAudit={() => setAuditOpen(true)} />
       <CommandErrorToast />
