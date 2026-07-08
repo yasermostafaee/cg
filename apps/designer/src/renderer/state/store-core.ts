@@ -125,6 +125,14 @@ export interface DesignerStoreState {
   /** View menu — snap element edges/centers while dragging on the canvas. */
   snappingEnabled: boolean;
   /**
+   * D-122 — the canvas's live zoom (scene-px → screen-px scale), MIRRORED from the
+   * CanvasArea-local zoom state so the store-side move paths (the arrow-key nudge) can
+   * decide whether the pixel grid is active. The pointer-drag path already has the zoom
+   * as its `scale` argument; the keyboard nudge (App.tsx) has no direct access, so it
+   * reads this. Session-only editor state (never saved into the scene).
+   */
+  canvasZoom: number;
+  /**
    * Active snap guide lines (scene coordinates) to draw while a drag is
    * snapped — `x` are vertical lines, `y` are horizontal. Empty when idle.
    */
@@ -165,6 +173,7 @@ export const initialState: DesignerStoreState = {
   timelineZoom: 1,
   rulerVisible: false,
   snappingEnabled: true,
+  canvasZoom: 1,
   snapGuides: { x: [], y: [] },
   guides: { x: [], y: [] },
   canUndo: false,

@@ -441,14 +441,17 @@ export function App(): JSX.Element {
   }, []);
 
   // D-073 — arrow-key nudge: move the selection 1px (Shift = 10px) in SPATIAL screen
-  // directions (Left = −x … independent of RTL). Cloned from the Delete handler: bail on
-  // a non-Shift modifier or an editable focus; do nothing (and DON'T preventDefault) when
-  // nothing is selected so the arrows keep their default behaviour. `nudgeSelection` reuses
-  // the keyframe-aware group-move path; one `markHistoryBoundary` on the first event of a
-  // run (`!e.repeat`) collapses a held key (auto-repeat) into ONE undo step.
+  // directions (Left = −x … independent of RTL). Bail on Ctrl/Cmd or an editable focus; do
+  // nothing (and DON'T preventDefault) when nothing is selected so the arrows keep their
+  // default behaviour. `nudgeSelection` reuses the keyframe-aware group-move path; one
+  // `markHistoryBoundary` on the first event of a run (`!e.repeat`) collapses a held key
+  // (auto-repeat) into ONE undo step.
+  // D-122 — at pixel-grid zoom the nudge SNAPS to whole scene pixels (a fractional coord's
+  // first nudge lands on the next integer in the direction); holding Alt bypasses the snap
+  // for a relative sub-pixel nudge. Alt is therefore no longer a bail-out modifier here.
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
-      if (e.ctrlKey || e.metaKey || e.altKey) return; // Shift is allowed (the larger step)
+      if (e.ctrlKey || e.metaKey) return; // Shift = larger step; D-122 — Alt = snap bypass
       let dx = 0;
       let dy = 0;
       if (e.key === 'ArrowLeft') dx = -1;
@@ -467,10 +470,14 @@ export function App(): JSX.Element {
         return; // let the focused field handle the arrow (e.g. a number spinner)
       }
       if (designerStore.get().selection.size === 0) return; // nothing selected → default behaviour
+      // preventDefault only on a real nudge (selection present) so Alt+Left/Right can't
+      // trigger the browser's history back/forward when nothing is selected.
       e.preventDefault();
       const step = e.shiftKey ? 10 : 1;
       if (!e.repeat) designerStore.markHistoryBoundary();
-      designerStore.nudgeSelection(dx * step, dy * step);
+      // D-122 — at pixel-grid zoom the nudge snaps to whole pixels (first fractional nudge
+      // lands on the next integer); Alt bypasses the snap for a relative sub-pixel nudge.
+      designerStore.nudgeSelection(dx * step, dy * step, { alt: e.altKey });
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

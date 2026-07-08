@@ -439,6 +439,45 @@ export function pixelGridVisible(zoom: number): boolean {
   return zoom >= PIXEL_GRID_MIN_ZOOM;
 }
 
+/**
+ * D-122 — whether a MOVE gesture (drag or arrow-nudge) should snap to whole scene pixels.
+ * True only when the pixel grid is visible (zoom ≥ the threshold, so there are lines to
+ * land on), the operator's Snapping preference is on (the master snap switch also governs
+ * pixel-grid snapping — so "snapping off" still drags freely), and `alt` — the momentary
+ * free-placement bypass — is NOT held. Pure so the drag path, the nudge path, and the unit
+ * tests share ONE gate. Below the threshold this is always false (today's free move).
+ */
+export function pixelSnapActive(zoom: number, snappingEnabled: boolean, alt: boolean): boolean {
+  return snappingEnabled && !alt && pixelGridVisible(zoom);
+}
+
+/**
+ * D-122 — snap a DRAGGED scene position to the nearest whole pixel (the pixel grid is the
+ * snap target at grid zoom). `Math.round` tracks the pointer to the closest line, so the
+ * element and its gizmo step whole pixels LIVE under the cursor. Applied to the single
+ * element's position, or to the group ANCHOR (its snapped delta then moves every member, so
+ * relative offsets are preserved). Caller gates on {@link pixelSnapActive}.
+ */
+export function snapDragToPixel(pos: number): number {
+  return Math.round(pos);
+}
+
+/**
+ * D-122 — the target scene coordinate for one arrow-NUDGE step at grid zoom. The FIRST
+ * nudge of a FRACTIONAL coordinate lands on the NEXT integer in the nudge direction
+ * (6.69 → right → 7, → left → 6), regardless of the step MAGNITUDE — so an accelerated
+ * (Shift) nudge off a fractional value still just lands on the grid. Once ON the grid, a
+ * nudge steps by the full signed step (±1, or ±10 with Shift). `signedStep` is the already
+ * signed, already scaled step (+1/−1/+10/−10). A near-integer coordinate (within a float
+ * epsilon) counts as on-grid so a whole-pixel value isn't nudged twice.
+ */
+export function snapNudgeToPixel(coord: number, signedStep: number): number {
+  if (signedStep === 0) return coord;
+  const rounded = Math.round(coord);
+  if (Math.abs(coord - rounded) < 1e-6) return rounded + signedStep; // already on the grid
+  return signedStep > 0 ? Math.ceil(coord) : Math.floor(coord); // first-snap to the next integer
+}
+
 /** D-120 — one visible pixel-grid line: its `scene` coordinate (for major/minor styling) and the
  *  DEVICE-pixel x/y at which a 1px stroke should be drawn (already snapped + half-pixel-offset). */
 export interface PixelGridLine {
