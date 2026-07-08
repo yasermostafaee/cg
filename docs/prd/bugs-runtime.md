@@ -440,3 +440,106 @@ apply); design the pending-update status handling with that item in mind, but th
 are separate changes. See also the blur-commit remount hazard recorded in R-003's
 Notes (swallowed first click / lost keystrokes) — adjacent Inspector behavior,
 not part of this bug.
+
+---
+
+## [ ] B-046 — phantom default backup B: spurious split-brain replays, UNBOUNDED journal growth, health churn ⟨priority: medium⟩
+
+> Found during the **B-044 investigation** (2026-07-07/08, subsystem mapping of
+> `@cg/caspar-client` redundancy + the default bridge config). Symptom-level —
+> consequences derived from code reading; no fix here.
+
+**Repro:**
+
+1. Run the bridge with the default connection (single local CasparCG): server B
+   defaults to `127.0.0.1:5251/6251`
+   (`tools/caspar-bridge/src/bridge.ts` `defaultConnection()`) — nothing
+   listens there.
+2. Drive normal playout (load/take/update/out) for a while; watch health events
+   and bridge memory.
+
+**Expected:** a single-server setup runs quietly; the redundancy machinery stays
+inert (or the config explicitly declares single-server operation).
+**Actual (from code, symptom-level):**
+
+- Session B reconnect-loops forever (~4 s cycles at the backoff cap) → ~2
+  `healthChanged` publishes per cycle, indefinitely (connection-health UI churn).
+- EVERY send records a divergence (backup code −1); every 3rd divergence within
+  30 s emits `split-brain-persistent` AND fires a corrective resend replaying
+  the ENTIRE ok-journal to the dead backup's queue — each replay rejects and is
+  swallowed. Unbounded event noise.
+- **`InMemoryJournal` grows without pruning — an explicit MEMORY RISK for a
+  long-running bridge process.**
+- `whenServerHealthy()` requires BOTH sessions healthy → can never resolve on
+  the default config (a test helper today, but a footgun).
+
+**Notes:** the fix space (a declared single-server mode, journal pruning, gating
+replays on a live backup) is for the fix change to design.
+
+---
+
+## [ ] B-047 — failover triggers keep watching the OLD primary: the "re-bound in failover-complete" listener rebinding doesn't exist ⟨priority: low⟩
+
+> Found during the **B-044 investigation** (2026-07-08). Latent — it needs a
+> real failover first, and two-server redundancy isn't in production use yet.
+
+**Finding (symptom-level):** the comment at
+`packages/caspar-client/src/redundancy/redundancy-adapter.ts:402-406` claims the
+primary state-change listener is "re-bound in failover-complete", but no
+rebinding code exists. After a failover A→B the auto-failover triggers still
+watch session A's state — a subsequent auto failover would key off the wrong
+server.
+
+**Regression test (for the fix):** drive a failover A→B against two mocks, then
+kill B and assert the auto trigger fires (today it would not — it is still bound
+to A).
+
+---
+
+## [ ] B-048 — first Load after a bridge restart renders NOTHING when the previous session's output is still on the layer; Update-then-Take recovers ⟨priority: medium⟩
+
+> Operator-observed on **2026-07-07** during the B-044 live session (bridge
+> built from the fix branch, pre-review-hardening — behavior ≡ `main`; CasparCG
+> 2.5.0 `69e8ad5`). Symptom-level; a workaround exists. All hypotheses below
+> are **UNVERIFIED**.
+
+**Repro (operator-confirmed precondition):**
+
+1. Have a template ON AIR from a bridge session, then kill that bridge with the
+   output still on the layer.
+2. Start a fresh bridge session; refresh the page; re-import the `.vcg`.
+3. FIRST Load of the template onto the stack; then Take.
+
+**Expected:** the template renders on the CasparCG output on Take.
+**Actual:** the first Take does nothing visible on the output; pressing Update
+flips the item to "ready"; the NEXT Take then plays correctly. Out (or Remove) +
+re-adding the template also cures it — everything works for the rest of the
+session.
+
+**Operator evidence (2026-07-07, informal):** a previous bridge session had been
+killed with its output still on the layer; in the fresh session the first Take
+did nothing visible, Update flipped the item to "ready", and the next Take
+played. No caspar log lines were captured during that repro — the protocol
+below carries the log-capture step.
+
+**Candidate hypotheses (UNVERIFIED):** (a) a STALE producer from the previous
+bridge session still occupies the layer, pointing at the dead previous
+template-serve port — the B-044 OSC probe log shows the serve port changes on
+every bridge restart and a producer already live on layer 60 BEFORE any Load in
+the fresh session; the first `CG ADD`/`PLAY` then interacts with the stale
+producer until a `CLEAR` destroys it; (b) an import/serve race — the first
+`CG ADD`'s URL fetched before template delivery/serve completed (`202` but the
+page 404s → blank producer); (c) CEF cold-start on the first html-producer
+spawn racing `CG PLAY`. The operator's behavioral detail suggests — unverified —
+that the bridge's own state machine believes the item never reached playing
+(consistent with an Update from a non-on-air state settling the item to
+"ready" under the B-044 completion semantics).
+
+**Repro protocol for whoever picks this up:** leave output on air → restart the
+bridge → refresh + re-import → first Load/Take → capture the caspar log during
+it: does the `CG ADD`/`PLAY` arrive? Any 404 / CEF error?
+
+**Cross-reference:** the registered B-038 open follow-up (re-deliver retained
+template HTML on reconnect). Bridge-restart amnesia has TWO faces — templates
+forgotten AND on-air producers orphaned; a reconnect/startup reconciliation
+should consider both (see also C-010).

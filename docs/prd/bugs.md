@@ -192,6 +192,39 @@ is informational runner noise — all actions in the file are on current majors;
 no change made for it.) Focused tooling fix, no OpenSpec change (the B-013
 rimraf `--glob` precedent).
 
+## [ ] B-049 — flaky: `@cg/caspar-client` `transport.test.ts` peer-disconnect times out under full-suite load ⟨priority: low⟩
+
+**Repro:**
+
+1. Run the full suite: `pnpm --filter @cg/caspar-client test` (Windows,
+   parallel test files).
+2. Occasionally `AmcpTransport > emits "close" when the peer disconnects` times
+   out (10 s).
+
+**Expected:** deterministic pass.
+**Actual:** timed out once during the B-044 uncached gate (2026-07-08); passes
+3/3 in isolation (14/14 tests); the diff that surfaced it contained ZERO
+transport changes.
+**Env:** Windows 10, vitest 2.1.9, full-suite parallel run.
+**Notes:** socket-close event timing under parallel-suite load — consider
+serializing the socket-bound tests or a longer per-test timeout for the
+peer-disconnect case.
+
+## [ ] B-050 — tooling drift: pnpm warns on every run — the `pnpm` field in `package.json` is no longer read ⟨priority: low⟩
+
+**Repro:**
+
+1. Run any `pnpm` command in the repo.
+
+**Expected:** clean output.
+**Actual:** every invocation prints
+`The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.onlyBuiltDependencies"`
+(observed throughout 2026-07-07/08 on pnpm 11.9.0).
+**Notes:** align the root `package.json` with the new settings location (per
+https://pnpm.io/settings — `onlyBuiltDependencies` moved to
+`pnpm-workspace.yaml` in current pnpm); verify against the installed pnpm's
+docs when fixing.
+
 <!-- Add new open bugs above this line using the format. Example:
 
 ## [ ] B-0NN — Export blocked dialog shows wrong error count
