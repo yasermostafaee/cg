@@ -82,7 +82,7 @@ export function App(): JSX.Element {
           item={selected}
           onApply={(id) => {
             const target = items.find((i) => i.itemId === id);
-            if (target !== undefined) applyDraft(target);
+            return target !== undefined ? applyDraft(target) : Promise.resolve({ accepted: false });
           }}
           onDiscard={(id) => clearDraft(id)}
         />

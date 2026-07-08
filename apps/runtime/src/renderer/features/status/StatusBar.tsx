@@ -1,6 +1,8 @@
 import { useConnections } from '../../hooks/useConnections.js';
 import { useLock } from '../../hooks/useLock.js';
 import { colors } from '../../theme.js';
+import { AsyncButton } from '../../ui/AsyncButton.js';
+import { Button } from '../../ui/Button.js';
 import { LinkIndicator } from './LinkIndicator.js';
 
 interface Props {
@@ -18,15 +20,6 @@ const styles = {
     fontSize: '0.85rem',
     color: colors.textMuted,
   },
-  pill: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '0.4rem',
-    padding: '0.15rem 0.5rem',
-    borderRadius: '0.25rem',
-    border: `1px solid ${colors.border}`,
-    background: colors.panelMuted,
-  },
   primary: { color: colors.ready },
   backup: { color: colors.textMuted },
   failed: { color: colors.offline },
@@ -39,15 +32,6 @@ const styles = {
     gap: '0.4rem',
     color: colors.pending,
     fontWeight: 700,
-  },
-  lockButton: {
-    background: 'transparent',
-    color: colors.textMuted,
-    border: `1px solid ${colors.border}`,
-    padding: '0.15rem 0.5rem',
-    borderRadius: '0.25rem',
-    cursor: 'pointer',
-    fontSize: '0.8rem',
   },
 } as const;
 
@@ -82,7 +66,7 @@ export function StatusBar({ onOpenAudit }: Props = {}): JSX.Element {
     return (
       <footer style={styles.bar} aria-label="Status bar">
         <LinkIndicator />
-        <span style={styles.pill}>Loading…</span>
+        <span className="cg-pill">Loading…</span>
       </footer>
     );
   }
@@ -93,34 +77,35 @@ export function StatusBar({ onOpenAudit }: Props = {}): JSX.Element {
   return (
     <footer style={styles.bar} aria-label="Status bar">
       <LinkIndicator />
-      <span style={styles.pill}>
+      <span className="cg-pill">
         <span style={styles.primary}>● PRIMARY {health.primary.label}</span>{' '}
         <span style={primary.style}>{primary.text}</span>
       </span>
-      <span style={styles.pill}>
+      <span className="cg-pill">
         <span style={styles.backup}>○ BACKUP {health.backup.label}</span>{' '}
         <span style={backup.style}>{backup.text}</span>
       </span>
-      <span style={styles.pill}>{health.strategy}</span>
+      <span className="cg-pill">{health.strategy}</span>
       <span style={styles.spacer} />
-      <button
-        style={styles.lockButton}
-        onClick={() => void window.cg.connections.failover({ reason: 'manual' })}
+      <AsyncButton
+        variant="caution"
         aria-label="Manual failover"
         title={`Switch primary to ${health.currentPrimary === 'A' ? 'B' : 'A'}`}
+        run={() =>
+          window.cg.connections.failover({ reason: 'manual' }).then((r) => ({ accepted: r.ok }))
+        }
       >
         ⇄ FAILOVER
-      </button>
+      </AsyncButton>
       {onOpenAudit !== undefined && (
-        <button style={styles.lockButton} onClick={onOpenAudit} aria-label="Open audit log">
+        <Button onClick={onOpenAudit} aria-label="Open audit log">
           AUDIT
-        </button>
+        </Button>
       )}
       {lock.engaged ? (
         <span style={styles.lock}>🔒 LOCKED</span>
       ) : (
-        <button
-          style={styles.lockButton}
+        <Button
           onClick={() => {
             const pin = window.prompt('Set a lock PIN (4–64 chars):');
             if (pin !== null && pin.length >= 4) {
@@ -129,7 +114,7 @@ export function StatusBar({ onOpenAudit }: Props = {}): JSX.Element {
           }}
         >
           🔒 Lock…
-        </button>
+        </Button>
       )}
     </footer>
   );

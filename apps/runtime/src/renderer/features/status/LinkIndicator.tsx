@@ -2,20 +2,6 @@ import { useLink } from '../../hooks/useLink.js';
 import { colors } from '../../theme.js';
 import type { BridgeLinkStatus } from '../../../shared/runtime-bridge.js';
 
-const styles = {
-  pill: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '0.4rem',
-    padding: '0.15rem 0.6rem',
-    borderRadius: '0.25rem',
-    border: `1px solid ${colors.border}`,
-    background: colors.panelMuted,
-    fontWeight: 700,
-    whiteSpace: 'nowrap' as const,
-  },
-} as const;
-
 interface Visual {
   color: string;
   text: string;
@@ -51,7 +37,7 @@ export function LinkIndicator(): JSX.Element {
   const status = useLink();
   const v = visual(status);
   return (
-    <span style={styles.pill} role="status" aria-label="Bridge link" title={v.title}>
+    <span className="cg-pill" role="status" aria-label="Bridge link" title={v.title}>
       <span style={{ color: v.color }}>●</span>
       <span style={{ color: v.color }}>{v.text}</span>
     </span>

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { AuditEntry } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
+import { AsyncButton } from '../../ui/AsyncButton.js';
+import { Button } from '../../ui/Button.js';
 
 interface Props {
   open: boolean;
@@ -53,38 +55,13 @@ const styles = {
     gap: '0.75rem',
   },
   title: { margin: 0, fontSize: '1rem', fontWeight: 700, letterSpacing: '0.05em' },
-  closeButton: {
-    background: 'transparent',
-    color: colors.textMuted,
-    border: `1px solid ${colors.border}`,
-    padding: '0.2rem 0.6rem',
-    borderRadius: '0.25rem',
-    cursor: 'pointer',
-    fontSize: '0.8rem',
-  },
   filters: {
     display: 'flex',
     gap: '0.5rem',
     alignItems: 'center',
     fontSize: '0.85rem',
   },
-  select: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
-    padding: '0.2rem 0.4rem',
-    fontSize: '0.85rem',
-  },
-  input: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
-    padding: '0.2rem 0.4rem',
-    fontSize: '0.85rem',
-    width: 140,
-  },
+  actorInput: { width: 140 },
   table: {
     flex: 1,
     overflowY: 'auto' as const,
@@ -136,20 +113,14 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   const [entries, setEntries] = useState<readonly AuditEntry[]>([]);
   const [actionFilter, setActionFilter] = useState<ActionFilter>('all');
   const [actorFilter, setActorFilter] = useState<string>('');
-  const [loading, setLoading] = useState(false);
 
   async function refresh(): Promise<void> {
-    setLoading(true);
-    try {
-      const req: { limit: number; action?: AuditEntry['action']; actor?: string } = { limit: 200 };
-      if (actionFilter !== 'all') req.action = actionFilter;
-      const trimmedActor = actorFilter.trim();
-      if (trimmedActor !== '') req.actor = trimmedActor;
-      const next = await window.cg.audit.recent(req);
-      setEntries(next);
-    } finally {
-      setLoading(false);
-    }
+    const req: { limit: number; action?: AuditEntry['action']; actor?: string } = { limit: 200 };
+    if (actionFilter !== 'all') req.action = actionFilter;
+    const trimmedActor = actorFilter.trim();
+    if (trimmedActor !== '') req.actor = trimmedActor;
+    const next = await window.cg.audit.recent(req);
+    setEntries(next);
   }
 
   useEffect(() => {
@@ -167,15 +138,16 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
       <div style={styles.modal}>
         <div style={styles.header}>
           <h2 style={styles.title}>AUDIT LOG</h2>
-          <button style={styles.closeButton} onClick={onClose} aria-label="Close audit panel">
+          <Button variant="ghost" onClick={onClose} aria-label="Close audit panel">
             Close
-          </button>
+          </Button>
         </div>
         <div style={styles.filters}>
           <label htmlFor="audit-action">Action</label>
           <select
             id="audit-action"
-            style={styles.select}
+            className="cg-field"
+            style={{ width: 'auto' }}
             value={actionFilter}
             onChange={(e) => setActionFilter(e.target.value as ActionFilter)}
           >
@@ -188,14 +160,13 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
           <label htmlFor="audit-actor">Actor</label>
           <input
             id="audit-actor"
-            style={styles.input}
+            className="cg-field"
+            style={styles.actorInput}
             placeholder="any"
             value={actorFilter}
             onChange={(e) => setActorFilter(e.target.value)}
           />
-          <button style={styles.closeButton} onClick={() => void refresh()} disabled={loading}>
-            {loading ? 'Loading…' : 'Refresh'}
-          </button>
+          <AsyncButton run={() => refresh().then(() => ({ accepted: true }))}>Refresh</AsyncButton>
         </div>
         <div style={styles.table}>
           <div style={styles.headerRow}>

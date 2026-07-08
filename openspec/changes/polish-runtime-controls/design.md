@@ -160,6 +160,27 @@ static busy + tint only. Hit areas ≥ 28px min in the action row.
   when a command is rejected (bridge down). Reduced-motion is asserted via the
   static busy affordance class.
 
+## Input primitives — the safest realization (rollout note)
+
+R-003 made every Inspector field a CONTROLLED element with delicate wiring (the
+`NumberField` raw-string in-progress behavior, the list textareas' `\n`
+round-trip, no remount-on-keystroke). To restyle inputs with ZERO risk to that
+wiring, the field "primitive" is the shared **`.cg-field` class applied directly
+to the existing native controlled elements** — the rollout changes only the
+`style`→`className` attribute and never touches `value`/`onChange`/`key`. No
+wrapper component is introduced around the Inspector fields (a wrapper could drop
+or reorder a prop); the class IS the primitive. A dirty field adds `is-dirty`.
+
+## The StrictMode lesson (enforced across the rollout)
+
+The slice's severed-click bug (AsyncButton disposed its controller on a
+StrictMode effect cleanup and never revived it — dev-only, invisible to the
+prod-build e2e) is now guarded by `tests/asyncButton.dom.test.ts` (jsdom +
+StrictMode, mounts the primitive as the app does). Because the same `Button` /
+`AsyncButton` primitives are newly applied to every surface here, the e2e
+dispatch guard is extended to click each rolled-out action (Import, Load, Update,
+Discard, list add/remove/reorder) and assert it fires.
+
 ## Out of scope
 
 Bridge/protocol/schema, the B-044 lifecycle + verbs + escaping, R-003 staging

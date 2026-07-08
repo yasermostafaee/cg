@@ -3,6 +3,8 @@ import type { TemplateInfo } from '@cg/shared-ipc';
 import { defaultFieldValue, type FieldValues } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { uuid } from '../../lib/uuid.js';
+import { Button } from '../../ui/Button.js';
+import { AsyncButton } from '../../ui/AsyncButton.js';
 import { importTemplateFromBytes } from './templateDelivery.js';
 // B-038 Phase 3 — the bundled app @font-face CSS (Vazirmatn / Exo 2) as a raw
 // string. Passed to the single-file export so the bundled faces inline as base64
@@ -28,16 +30,6 @@ const styles = {
     margin: 0,
   },
   hint: { fontSize: '0.8rem', color: colors.textMuted, lineHeight: 1.4, margin: 0 },
-  importButton: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    padding: '0.4rem 0.75rem',
-    borderRadius: '0.25rem',
-    cursor: 'pointer',
-    fontSize: '0.85rem',
-    fontWeight: 600,
-  },
   list: {
     display: 'flex',
     flexDirection: 'column' as const,
@@ -58,18 +50,8 @@ const styles = {
   itemBody: { display: 'flex', flexDirection: 'column' as const, gap: '0.1rem', minWidth: 0 },
   itemId: { fontSize: '0.85rem', fontWeight: 600, overflowWrap: 'anywhere' as const },
   itemType: { fontSize: '0.75rem', color: colors.textMuted },
-  loadButton: {
-    background: colors.panel,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    padding: '0.3rem 0.6rem',
-    borderRadius: '0.2rem',
-    cursor: 'pointer',
-    fontSize: '0.8rem',
-    fontWeight: 600,
-  },
   error: {
-    color: '#fda4af',
+    color: '#fca5a5',
     fontSize: '0.78rem',
     margin: 0,
     lineHeight: 1.4,
@@ -149,13 +131,13 @@ export function LibraryPanel(): JSX.Element {
     [importFile],
   );
 
-  const loadOntoStack = useCallback((template: TemplateInfo): void => {
+  const loadOntoStack = useCallback((template: TemplateInfo): Promise<{ accepted: boolean }> => {
     // B-038 Phase 3 — seed the item's fields from the template's field-schema
     // defaults (not `{}`), so `CG ADD` carries real data on load. Operator edits
     // from the Inspector flow as subsequent `stack.update` values.
     const fields: FieldValues = {};
     for (const field of template.fields) fields[field.id] = defaultFieldValue(field);
-    void window.cg.stack.load({
+    return window.cg.stack.load({
       itemId: `item-${uuid()}`,
       templateId: template.templateId,
       fields,
@@ -168,14 +150,13 @@ export function LibraryPanel(): JSX.Element {
       <p style={styles.hint}>
         Upload a <code>.vcg</code> to verify and register it as an available template.
       </p>
-      <button
-        type="button"
-        style={styles.importButton}
+      <Button
+        variant="secondary"
         onClick={() => fileRef.current?.click()}
         aria-label="Import .vcg template"
       >
         Import .vcg
-      </button>
+      </Button>
       <input
         ref={fileRef}
         type="file"
@@ -200,14 +181,13 @@ export function LibraryPanel(): JSX.Element {
                 <span style={styles.itemId}>{t.templateId}</span>
                 <span style={styles.itemType}>{t.templateType}</span>
               </div>
-              <button
-                type="button"
-                style={styles.loadButton}
-                onClick={() => loadOntoStack(t)}
+              <AsyncButton
+                variant="secondary"
+                run={() => loadOntoStack(t)}
                 aria-label={`Load ${t.templateId}`}
               >
                 Load
-              </button>
+              </AsyncButton>
             </div>
           ))
         )}

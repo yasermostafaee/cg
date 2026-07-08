@@ -2,6 +2,9 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { DynamicField, FieldValue, StackItemState } from '@cg/shared-schema';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
+import { AsyncButton } from '../../ui/AsyncButton.js';
+import { Button } from '../../ui/Button.js';
+import { DraftChip } from '../../ui/DraftChip.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
 import {
   draftsVersion,
@@ -12,10 +15,15 @@ import {
   subscribeDrafts,
 } from './draftStore.js';
 
+/** The shared field class, plus the dirty accent (border only — no layout shift). */
+function fieldClass(dirty: boolean): string {
+  return dirty ? 'cg-field is-dirty' : 'cg-field';
+}
+
 interface Props {
   item: StackItemState | null;
-  /** Apply the item's staged draft as one atomic `stack.update`. */
-  onApply: (itemId: string) => void;
+  /** Apply the item's staged draft as one atomic `stack.update` (the round-trip). */
+  onApply: (itemId: string) => Promise<{ accepted: boolean }>;
   /** Discard the item's staged draft, reverting to applied values. */
   onDiscard: (itemId: string) => void;
 }
@@ -42,32 +50,7 @@ const styles = {
   empty: { color: colors.textMuted, fontSize: '0.9rem' },
   title: { fontSize: '1.1rem', fontWeight: 600, margin: 0 },
   meta: { color: colors.textMuted, fontSize: '0.85rem' },
-  draftChip: {
-    color: colors.pending,
-    fontSize: '0.8rem',
-    fontWeight: 700,
-    letterSpacing: '0.03em',
-  },
-  actions: { display: 'flex', gap: '0.5rem', marginTop: '0.25rem' },
-  applyBtn: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.2rem',
-    padding: '0.3rem 0.7rem',
-    fontSize: '0.85rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  discardBtn: {
-    background: 'transparent',
-    color: colors.textMuted,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.2rem',
-    padding: '0.3rem 0.7rem',
-    fontSize: '0.85rem',
-    cursor: 'pointer',
-  },
+  actions: { display: 'flex', gap: '0.5rem', marginTop: '0.25rem', alignItems: 'center' },
   fieldRow: {
     display: 'grid',
     gridTemplateColumns: '120px 1fr',
@@ -77,17 +60,6 @@ const styles = {
     alignItems: 'center',
   },
   fieldLabel: { color: colors.textMuted, fontWeight: 500, display: 'flex', gap: '0.3rem' },
-  dirtyDot: { color: colors.pending, fontWeight: 700 },
-  fieldInput: {
-    background: colors.panelMuted,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
-    padding: '0.25rem 0.5rem',
-    borderRadius: '0.2rem',
-    fontSize: '0.9rem',
-    width: '100%',
-    boxSizing: 'border-box' as const,
-  },
 } as const;
 
 /**
@@ -158,28 +130,22 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
       <div style={styles.actions}>
         {/* Apply stays enabled even with nothing staged — re-sending unchanged
             values is the operator's documented B-048 recovery path. */}
-        <button
-          type="button"
-          style={styles.applyBtn}
+        <AsyncButton
+          variant="secondary"
           aria-label="Apply staged edits"
-          onClick={() => onApply(itemId)}
+          run={() => onApply(itemId)}
         >
           Update
-        </button>
-        <button
-          type="button"
-          style={styles.discardBtn}
+        </AsyncButton>
+        <Button
+          variant="ghost"
           aria-label="Discard staged edits"
           disabled={!dirty}
           onClick={() => onDiscard(itemId)}
         >
           Discard
-        </button>
-        {dirty && (
-          <span style={styles.draftChip} aria-label="unapplied edits">
-            ● draft
-          </span>
-        )}
+        </Button>
+        {dirty && <DraftChip label="unapplied edits" />}
       </div>
       <div
         style={{
@@ -231,12 +197,19 @@ function FieldEditor({
       <span style={styles.fieldLabel}>
         {label}
         {dirty && (
-          <span style={styles.dirtyDot} aria-label={`${fieldId} has unapplied edits`}>
+          <span className="cg-dirty-dot" aria-label={`${fieldId} has unapplied edits`}>
             ●
           </span>
         )}
       </span>
-      <FieldControl kind={kind} field={field} value={value} fieldId={fieldId} onStage={stage} />
+      <FieldControl
+        kind={kind}
+        field={field}
+        value={value}
+        fieldId={fieldId}
+        dirty={dirty}
+        onStage={stage}
+      />
     </div>
   );
 }
@@ -246,12 +219,14 @@ function FieldControl({
   field,
   value,
   fieldId,
+  dirty,
   onStage,
 }: {
   kind: DynamicField['type'] | 'unknown';
   field: DynamicField | null;
   value: FieldValue | undefined;
   fieldId: string;
+  dirty: boolean;
   onStage: (next: FieldValue) => void;
 }): JSX.Element {
   if (kind === 'boolean') {
@@ -266,7 +241,9 @@ function FieldControl({
     );
   }
   if (kind === 'number') {
-    return <NumberField field={field} value={value} fieldId={fieldId} onStage={onStage} />;
+    return (
+      <NumberField field={field} value={value} fieldId={fieldId} dirty={dirty} onStage={onStage} />
+    );
   }
   if (kind === 'color') {
     const v = typeof value === 'string' ? value : '#FFFFFF';
@@ -283,7 +260,7 @@ function FieldControl({
     const v = typeof value === 'string' ? value : field.default;
     return (
       <select
-        style={styles.fieldInput}
+        className={fieldClass(dirty)}
         value={v}
         onChange={(e) => onStage(e.target.value)}
         aria-label={fieldId}
@@ -305,7 +282,7 @@ function FieldControl({
         : '';
     return (
       <input
-        style={styles.fieldInput}
+        className={fieldClass(dirty)}
         type="text"
         value={v}
         placeholder="asset id"
@@ -318,7 +295,8 @@ function FieldControl({
     const v = typeof value === 'string' ? value : '';
     return (
       <textarea
-        style={{ ...styles.fieldInput, minHeight: 60, resize: 'vertical' }}
+        className={fieldClass(dirty)}
+        style={{ minHeight: 60 }}
         value={v}
         onChange={(e) => onStage(e.target.value)}
         aria-label={fieldId}
@@ -333,7 +311,7 @@ function FieldControl({
   const v = typeof value === 'string' ? value : value === undefined ? '' : String(value);
   return (
     <input
-      style={styles.fieldInput}
+      className={fieldClass(dirty)}
       type="text"
       value={v}
       onChange={(e) => onStage(e.target.value)}
@@ -355,11 +333,13 @@ function NumberField({
   field,
   value,
   fieldId,
+  dirty,
   onStage,
 }: {
   field: DynamicField | null;
   value: FieldValue | undefined;
   fieldId: string;
+  dirty: boolean;
   onStage: (next: FieldValue) => void;
 }): JSX.Element {
   const external = typeof value === 'number' ? String(value) : '';
@@ -375,7 +355,7 @@ function NumberField({
   }
   return (
     <input
-      style={styles.fieldInput}
+      className={fieldClass(dirty)}
       type="number"
       value={text}
       step={field?.type === 'number' ? field.step : undefined}
