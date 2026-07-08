@@ -113,3 +113,52 @@ D-028 `tickerRepeat` per-scope override / a driver-level "finish current pass"
 variant) and let `whenComplete()` → the content-driven hold → the outro run
 naturally. Depends on C-002 (rundown) + D-028; relates to C-003 (live
 per-scope overrides).
+
+## [ ] C-009 — OSC pipeline observability + operator setup doc (predefined-client → 6250) ⟨priority: medium⟩
+
+**What:** Make OSC delivery observable and documented: log the OSC bind +
+first-datagram arrival per server at bridge startup, surface session errors
+(today swallowed — a bind failure silently aborts the session loop), expose the
+pipeline's diagnostics counters — incl. a NEW counter on the change-tracker
+(the exact suppressing stage, currently the only unobservable one) — and write
+the operator doc pointing `casparcg.config`'s `<predefined-client>` at the
+bridge's OSC port (6250).
+**Why:** OSC delivery is entirely faith-based today: the bridge binds
+`127.0.0.1:6250` silently and no bridge doc tells the operator to configure
+CasparCG's OSC push (the only guidance lives in the retired spike docs). The
+B-044 live probe (2026-07-07, CasparCG 2.5.0 `69e8ad5`) measured the reality:
+~50 datagrams/s from this 2.5.0 box to 127.0.0.1:6250, zero parse failures
+(2.5's address format decodes on the 2.3-shaped pipeline), 0 datagrams to the
+phantom B port, ~10 event batches surviving the change-tracker over ~15 min
+(all producer/file transitions; Take → producer empty→html; Update → ZERO
+events). Without instrumentation, "OSC never arrives" and "reconciler bug" are
+indistinguishable at the operator's desk.
+**Acceptance:**
+
+- WHEN the bridge starts THEN it logs the OSC bind (host:port) per server and,
+  on the first datagram from each, an arrival line
+- WHEN an OSC session error occurs (e.g. bind failure) THEN it is surfaced to
+  the bridge log, not swallowed
+- WHEN diagnosing THEN pipeline counters (datagrams received, parse failures,
+  interest drops, change-tracker suppressions) are exposed
+- WHEN an operator sets up CasparCG THEN a bridge doc states the
+  `<predefined-client>` → 6250 configuration, incl. the loopback constraint
+  **Notes:** the OSC bind host is hardcoded `127.0.0.1`
+  (`tools/caspar-bridge/src/caspar-runtime.ts`) — a remote CasparCG's OSC can
+  never arrive today; fold that decision into the doc or make it configurable.
+
+## [ ] C-010 — dead production wiring: `beginResync`/`endResync` and `HeartbeatService` are never used ⟨priority: low⟩
+
+**What:** Decide and wire (or remove): the Reconciler's resync window
+(`beginResync`/`endResync` — no production caller, so a primary reconnect never
+suspends/replays intents) and `HeartbeatService` (exported from
+`@cg/caspar-client` but never instantiated in the bridge — no periodic VERSION
+ping; the `amcp-ping-fail` health axis derives only from session/TCP state).
+**Why:** Found in the B-044 investigation (2026-07-08): both exist, are
+unit-tested, and are documented as part of the design — but nothing calls them,
+so the behaviors they promise (post-reconnect state reconciliation, liveness
+pings) silently don't exist in production.
+**Acceptance to be detailed when scheduled.**
+**Notes:** relates to B-046 (phantom backup) and B-048's cross-referenced
+reconnect/startup reconciliation — one reconnect design should cover them
+together.
