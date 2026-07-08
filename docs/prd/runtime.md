@@ -35,7 +35,18 @@ template today.
   **Notes:** `bridge.settings.*` already implemented in the mock; pairs with P-002
   (routing) if Settings becomes its own route.
 
-## [ ] R-003 — stage Inspector edits locally; only the Update button applies them to air ⟨priority: medium⟩
+## [x] R-003 — stage Inspector edits locally; only the Update button applies them to air ⟨priority: medium⟩ — merged via `stage-inspector-edits`, archived
+
+<!-- change: openspec/changes/archive/2026-07-08-stage-inspector-edits/ -->
+
+> **CLOSED — live-validated.** Inspector edits stage in a per-item draft overlay
+> and reach the bridge only on an explicit Update (stack row + Inspector header)
+> as ONE atomic `stack.update`; nothing is sent on change/blur/Enter. Discard
+> reverts, dirty state is shown per-field + as a row/inspector "● draft" chip,
+> drafts are per-item and survive selection switches, and Take/Out/Remove never
+> auto-apply drafts. The recorded remount hazard is removed (controlled fields,
+> no `JSON.stringify(value)` key). Operator-validated live on **CasparCG 2.5.0**
+> (`69e8ad5`, 2026-07-08): all 7 checklist points pass, no regressions.
 
 **What:** Change the Inspector's commit model for a live item: field edits (text,
 list items, …) stage locally and are sent via `stack.update` ONLY when the operator

@@ -43,18 +43,34 @@
 
 ## 5. Gate
 
-- [ ] Full green gate UNCACHED (`turbo --force`) for `@cg/runtime` + repo
-      `format:check`; `pnpm test:e2e`.
-- [ ] `pnpm openspec validate stage-inspector-edits --strict`.
-- [ ] Confirm `MockRuntime` needed no behavior change (state it in the report).
+- [x] Full green gate UNCACHED (`turbo --force`) for `@cg/runtime` (17/17) + repo
+      `format:check`; `pnpm test:e2e` (runtime 16/16, designer 175/175).
+- [x] `pnpm openspec validate stage-inspector-edits --strict`.
+- [x] Confirmed `MockRuntime` needed NO behavior change: staging is
+      renderer-local and apply sends the same
+      `{ itemId, fields, mergeMode: 'merge' }` shape it already handled.
 
 ## 6. Live validation (operator) + wrap-up
 
-- [ ] STOP for the operator's live pass (CasparCG 2.5.0 `69e8ad5`): the 7-point
-      checklist (stage on blur/Enter → nothing on air + dirty; UPDATE applies the
-      set + badge settles + markers clear; ticker multi-line/reorder/add/remove
-      staged then one UPDATE, first ↑/↓/× click lands; Discard reverts; draft
-      survives selection switch; Take shows applied not draft; UPDATE with nothing
-      staged still sends).
-- [ ] After PASS: tick tasks, flip R-003 → `[x]` (note build 2.5.0 `69e8ad5`),
+- [x] Operator live pass — **PASS, CasparCG 2.5.0 (`69e8ad5`), 2026-07-08**: all
+      7 points verified — staged text/blur/Enter reach air only via Update; one
+      atomic Update applies the whole staged set and the badge settles per B-044;
+      ticker edit/reorder/add/remove all stage and the first ↑/↓/× click lands;
+      Discard reverts; drafts survive selection switches; Take on a dirty row
+      shows the last APPLIED values while the row stays visibly dirty; Update
+      with nothing staged still sends (B-048 workaround). No regressions observed.
+- [x] After PASS: tick tasks, flip R-003 → `[x]` (build 2.5.0 `69e8ad5`),
       archive per the workflow, push, compare URL.
+
+## 7. Adversarial-review fixes (applied before merge)
+
+- [x] Number field: replaced the focus-dropping frozen-key uncontrolled input
+      with a controlled `NumberField` (in-progress text preserved, no
+      keystroke remount); all `FieldEditor`s keyed by `itemId-fieldId` so no DOM
+      node is shared across items.
+- [x] `applyDraft` clears ONLY the sent fields (`clearStagedMatching` vs a
+      `snapshotDraft`) — an edit staged during the in-flight round-trip survives.
+- [x] Tests hardened: draft-survival asserts the edit stayed UNAPPLIED; apply
+      counts `stack.update` dispatches (exactly one, atomic + multi-field); a
+      number digit-by-digit e2e guards the remount regression; unit coverage for
+      `clearStagedMatching`/`snapshotDraft`.
