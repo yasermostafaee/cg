@@ -70,6 +70,15 @@ export class AsyncButtonController {
     return this.#view;
   }
 
+  /**
+   * True once `dispose()` has run. A disposed controller no-ops `press()` — the
+   * React wrapper reads this to REVIVE the controller after a StrictMode
+   * setup→cleanup→setup cycle (which would otherwise leave the button inert).
+   */
+  get isDisposed(): boolean {
+    return this.#disposed;
+  }
+
   /** Begin a request. Ignored (double-fire guard) while one is in flight. */
   press(run: () => Promise<AsyncResult>): void {
     if (this.#disposed || this.#view.inFlight) return;

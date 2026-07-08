@@ -20,6 +20,14 @@ export default [
     },
   },
   {
+    // React component tests (`*.dom.test.ts`) run in jsdom and legitimately
+    // render the renderer's React primitives, so they import react/react-dom.
+    files: ['tests/**/*.dom.test.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': 'off',
+    },
+  },
+  {
     // Config files run in Node but live outside the tier dirs above.
     files: ['*.config.{ts,mts,cts,js,mjs,cjs}'],
     languageOptions: {

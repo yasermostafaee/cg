@@ -15,6 +15,18 @@ const INITIAL: AsyncView = {
   inFlight: false,
 };
 
+/** Build a controller wired to real timers. Module-scope so the effect can
+ *  recreate one after a StrictMode dispose without re-declaring the config. */
+function createController(onChange: (view: AsyncView) => void): AsyncButtonController {
+  return new AsyncButtonController({
+    onChange,
+    schedule: (fn, ms) => {
+      const id = setTimeout(fn, ms);
+      return () => clearTimeout(id);
+    },
+  });
+}
+
 type Props = {
   /** The bridge round-trip. Its resolution drives busy → success / error. */
   run: () => Promise<AsyncResult>;
@@ -41,15 +53,17 @@ export function AsyncButton({
   const reduced = usePrefersReducedMotion();
   const ctrlRef = useRef<AsyncButtonController | null>(null);
   if (ctrlRef.current === null) {
-    ctrlRef.current = new AsyncButtonController({
-      onChange: setView,
-      schedule: (fn, ms) => {
-        const id = setTimeout(fn, ms);
-        return () => clearTimeout(id);
-      },
-    });
+    ctrlRef.current = createController(setView);
   }
-  useEffect(() => () => ctrlRef.current?.dispose(), []);
+  // StrictMode double-invokes effects in dev (setup → cleanup → setup); the
+  // cleanup disposes the controller, so REVIVE it on re-setup — otherwise every
+  // click no-ops against a disposed controller (the slice's severed-click bug).
+  useEffect(() => {
+    if (ctrlRef.current === null || ctrlRef.current.isDisposed) {
+      ctrlRef.current = createController(setView);
+    }
+    return () => ctrlRef.current?.dispose();
+  }, []);
 
   const stateClass = [
     className,
