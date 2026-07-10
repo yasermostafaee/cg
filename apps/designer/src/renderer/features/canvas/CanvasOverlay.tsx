@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import type { Element, Scene, TextElement } from '@cg/shared-schema';
+import { useEffect, useRef, useState } from 'react';
+import type { AnchorPoint, Element, Scene, TextElement } from '@cg/shared-schema';
 import type { AssetMeta } from '@cg/shared-ipc';
 import { designerStore, editSceneOf, type DesignerTool } from '../../state/store.js';
 import {
@@ -17,7 +17,16 @@ import { getActiveSharedImage } from '../sharedLibrary/activeSharedImage.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
 import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
-import { penPointerDown, finishPen, isPenDrawing } from './pen-draw.js';
+import {
+  PEN_CLOSE_PX,
+  cancelPen,
+  endPenSession,
+  finishPen,
+  isPenDrawing,
+  penDraftPoints,
+  penPointerDown,
+} from './pen-draw.js';
+import { colors } from '../../theme.js';
 import { PathEditor } from './PathEditor.js';
 import { collectGroupMoveTargets } from './group-move.js';
 import { drillTarget } from './drill.js';
@@ -89,6 +98,8 @@ async function insertSharedLogo(scenePoint: { x: number; y: number }): Promise<v
 
 interface Props {
   scene: Scene;
+  /** B-037 — the active composition's id: a switch mid-draw must end the pen session. */
+  activeCompositionId: string | null;
   tool: DesignerTool;
   selection: ReadonlySet<string>;
   editingTextId: string | null;
@@ -117,6 +128,7 @@ interface Props {
  */
 export function CanvasOverlay({
   scene,
+  activeCompositionId,
   tool,
   selection,
   editingTextId,
@@ -127,6 +139,9 @@ export function CanvasOverlay({
   onPan,
 }: Props): JSX.Element {
   const layerRef = useRef<HTMLDivElement>(null);
+  // B-037 — the pointer's scene position while a pen draft is live (null otherwise),
+  // driving the rubber-band + close-affordance feedback overlay.
+  const [penPointer, setPenPointer] = useState<{ x: number; y: number } | null>(null);
   // The frame-origin box (scene 0,0). The pointer LAYER spans the whole pasteboard;
   // this inner box is inset by `frameOffset`, so its rect is the scene origin used by
   // both the gizmo/`canvas-surface` positioning and click→scene mapping.
@@ -160,33 +175,59 @@ export function CanvasOverlay({
     return () => window.removeEventListener('keydown', onKey);
   }, [bindModeFieldId]);
 
+  // B-037 — a pen draft may not outlive the pen session. ANY exit — a tool switch
+  // (every setTool caller funnels through the store, so hooking the STATE covers the
+  // toolbar, the rail, and any future shortcut), a composition switch, or this
+  // overlay unmounting — ends the session: a ≥ 2-anchor draft finishes OPEN, a
+  // smaller one is dropped. endPenSession is idempotent, so running it on both the
+  // effect body and its cleanup is safe.
+  useEffect(() => {
+    if (tool !== 'pen') endPenSession();
+    return () => endPenSession();
+  }, [tool, activeCompositionId]);
+
   // Esc deselects the selected shape — unless something else owns Esc (bind
-  // mode, inline text editing) or the operator is typing in a field. D-109 — while
-  // the pen tool is mid-draw, Enter / Esc instead FINISH the path (open) and restore
-  // the cursor with it selected; this takes priority (checked first, same handler so
-  // there's no listener-ordering race).
+  // mode, inline text editing) or the operator is typing in a field. D-109/B-037 —
+  // pen keys: while mid-draw, Enter FINISHES the path (open) and Esc CANCELS the
+  // draft (removes the created element); with the pen armed but idle, Esc drops
+  // back to the cursor tool. The editable-target guard applies to the pen branch
+  // too, matching the app's other global shortcuts — and the bind-mode / inline
+  // text-editing owners come first EVEN over the pen, so a shared Esc press never
+  // both exits bind mode and cancels the draft (review-round finding).
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
-      if (isPenDrawing()) {
-        if (e.key === 'Enter' || e.key === 'Escape') {
-          e.preventDefault();
-          finishPen(false);
-        }
-        return;
-      }
-      if (e.key !== 'Escape') return;
-      if (bindModeFieldId !== null || editingTextId !== null) return;
       const t = e.target;
       if (t instanceof HTMLElement) {
         const tag = t.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable)
           return;
       }
+      if (bindModeFieldId !== null || editingTextId !== null) return;
+      if (tool === 'pen') {
+        if (isPenDrawing()) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            finishPen(false);
+            setPenPointer(null); // hide the feedback overlay even without a store write
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            cancelPen();
+            setPenPointer(null);
+          }
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          designerStore.setTool('cursor');
+        }
+        return;
+      }
+      if (e.key !== 'Escape') return;
       if (selection.size > 0) designerStore.setSelection([]);
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [bindModeFieldId, editingTextId, selection]);
+  }, [tool, bindModeFieldId, editingTextId, selection]);
 
   function viewportToScene(clientX: number, clientY: number): { x: number; y: number } {
     // Measure from the FRAME origin (scene 0,0) — inset into the pasteboard — not the
@@ -315,8 +356,9 @@ export function CanvasOverlay({
       return;
     }
     if (tool === 'pen') {
-      // D-109 — the pen accumulates anchors across clicks; click the first anchor to
-      // close. The tool is restored on finish (close / Enter / Esc / double-click).
+      // D-109/B-037 — the pen accumulates anchors across clicks; click the first
+      // anchor to close, Enter / double-click to finish open, Esc to cancel. The pen
+      // STAYS armed after a finish — the next pointer-down starts a NEW element.
       penPointerDown(scenePoint, scale, e.nativeEvent);
       return;
     }
@@ -325,6 +367,17 @@ export function CanvasOverlay({
       // logo. Empty library ⇒ a hint, never a silent insert (mirrors D-030).
       void insertSharedLogo(scenePoint);
       return;
+    }
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>): void {
+    // B-037 — track the pointer (scene coords) while a pen draft is live, driving
+    // the rubber-band + close-affordance feedback; cleared when idle so a stale
+    // position never paints.
+    if (tool === 'pen' && isPenDrawing()) {
+      setPenPointer(viewportToScene(e.clientX, e.clientY));
+    } else if (penPointer !== null) {
+      setPenPointer(null);
     }
   }
 
@@ -407,6 +460,8 @@ export function CanvasOverlay({
       className={s.layer}
       style={{ cursor: cursorStyle }}
       onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerLeave={() => setPenPointer(null)}
       onDoubleClick={onDoubleClick}
       onDragOver={onDragOver}
       onDrop={onDrop}
@@ -430,9 +485,15 @@ export function CanvasOverlay({
           height: scene.resolution.height * scale,
         }}
       >
+        {/* B-037 — no gizmo while the pen is armed: addElement auto-selects the
+            in-progress draft, and the gizmo's corner/edge/rotation hit-zones sit
+            exactly where pen clicks go (the first anchor is always on the draft's
+            bbox), eating the close-click and turning "draw shape 2" into a resize of
+            shape 1. Editing is a cursor-tool activity. */}
         {selectedEl !== null &&
           selectedEl.visible &&
           !selectedEl.locked &&
+          tool !== 'pen' &&
           editingEl === null &&
           bindModeFieldId === null && (
             <Gizmo element={selectedEl} scale={scale} currentFrame={currentFrame} />
@@ -450,6 +511,12 @@ export function CanvasOverlay({
         {selectedEls.length > 1 && editingEl === null && bindModeFieldId === null && (
           <MultiGizmo elements={selectedEls} scale={scale} currentFrame={currentFrame} />
         )}
+        {/* B-037 — draw-state feedback while a pen draft is live: placed-anchor
+            markers, the rubber band to the pointer, and the first-anchor close
+            affordance. Non-interactive by contract (pointer-events: none). */}
+        {tool === 'pen' && penPointer !== null && penDraftPoints().length > 0 && (
+          <PenDraftFeedback points={penDraftPoints()} pointer={penPointer} scale={scale} />
+        )}
         {editingEl !== null && editingEl.type === 'text' && (
           <TextEditor
             element={editingEl as TextElement}
@@ -464,6 +531,95 @@ export function CanvasOverlay({
       {/* D-071 Phase B — the snap/alignment guides moved to CanvasArea so they span
           the full visible canvas (the pasteboard), not just this frame-bound stage. */}
     </div>
+  );
+}
+
+/**
+ * B-037 — non-interactive draw-state feedback while a pen draft is live: markers on
+ * the placed anchors, a rubber band from the last anchor to the pointer (curved
+ * through the last anchor's out handle after a smooth drag, so the preview reflects
+ * the curve the drag will produce), and a close-affordance ring on the first anchor
+ * that highlights (and snaps the band home) when the pointer is within the close
+ * radius — the same `PEN_CLOSE_PX / scale` test `penPointerDown` closes on. Points
+ * are SCENE coords (the draft's), mapped by `scale` inside the frame box;
+ * `pointer-events: none` so this layer can never hijack a pen click (the gizmo
+ * lesson). Theme accent tokens; no icons.
+ */
+function PenDraftFeedback({
+  points,
+  pointer,
+  scale,
+}: {
+  points: readonly AnchorPoint[];
+  pointer: { x: number; y: number };
+  scale: number;
+}): JSX.Element {
+  const first = points[0];
+  const last = points[points.length - 1];
+  const toScreen = (p: { x: number; y: number }): { x: number; y: number } => ({
+    x: p.x * scale,
+    y: p.y * scale,
+  });
+  const canClose =
+    first !== undefined &&
+    points.length >= 2 &&
+    Math.hypot(pointer.x - first.x, pointer.y - first.y) <= PEN_CLOSE_PX / scale;
+
+  let band = '';
+  if (last !== undefined) {
+    const a = toScreen(last);
+    const b = toScreen(canClose && first !== undefined ? first : pointer);
+    band =
+      last.smooth && last.out !== undefined
+        ? `M ${String(a.x)} ${String(a.y)} C ${String(a.x + last.out.x * scale)} ${String(
+            a.y + last.out.y * scale,
+          )}, ${String(b.x)} ${String(b.y)}, ${String(b.x)} ${String(b.y)}`
+        : `M ${String(a.x)} ${String(a.y)} L ${String(b.x)} ${String(b.y)}`;
+  }
+  const firstScreen = first !== undefined ? toScreen(first) : null;
+  return (
+    <svg
+      data-testid="pen-draft-feedback"
+      style={{
+        position: 'absolute',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        overflow: 'visible',
+        pointerEvents: 'none',
+      }}
+    >
+      {band !== '' && (
+        <path d={band} fill="none" stroke={colors.accent} strokeWidth={1} strokeDasharray="4 3" />
+      )}
+      {points.map((p) => {
+        const c = toScreen(p);
+        return (
+          <circle
+            key={p.id}
+            cx={c.x}
+            cy={c.y}
+            r={3}
+            fill="#ffffff"
+            stroke={colors.accentMuted}
+            strokeWidth={1}
+          />
+        );
+      })}
+      {points.length >= 2 && firstScreen !== null && (
+        <circle
+          data-testid="pen-close-affordance"
+          data-active={canClose}
+          cx={firstScreen.x}
+          cy={firstScreen.y}
+          r={canClose ? 7 : 5}
+          fill={canClose ? colors.accent : 'none'}
+          fillOpacity={canClose ? 0.35 : 1}
+          stroke={colors.accent}
+          strokeWidth={canClose ? 2 : 1}
+        />
+      )}
+    </svg>
   );
 }
 

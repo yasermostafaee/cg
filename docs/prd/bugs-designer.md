@@ -761,7 +761,7 @@ guards. Capability: `designer-playout-lifecycle`.
 **Notes:** The user verified a local fix: setting `display: flex` on the inspector icon span (`.TransformSection_icon__*`) resolves it — the icon wrapper likely lacks `display: flex` / `align-items: center`. Fix the icon-wrapper CSS (vanilla-extract) so the icon is flex-centered against the input, and check every section reusing the same icon-input row pattern (TransformSection, opacity, etc.) so all rows are consistent.
 **Regression test:** a component / DOM test (or visual check) asserting the icon span uses the centered flex layout in the icon-input row, across the Transform and the other sections that reuse the pattern.
 
-## [ ] B-037 — pen tool is hard to use and only edits the first shape ⟨priority: low — pending a keep-or-remove decision⟩
+## [~] B-037 — pen tool is hard to use and only edits the first shape ⟨priority: medium — gates D-119 per the ROADMAP order⟩ — in progress on `fix/B-037-pen-multi-shape` (change dir `openspec/changes/fix-pen-multi-shape`); pending owner verification of the drawing feel before archive
 
 **Repro:**
 
@@ -771,7 +771,7 @@ guards. Capability: `designer-playout-lifecycle`.
 **Expected:** each pen draw creates a new, independent shape.
 **Actual:** subsequent draws only modify the FIRST shape; you cannot create multiple pen shapes.
 **Env:** Browser + Designer canvas.
-**Notes:** The owner finds the pen tool not useful in its current form and questions whether it should stay. Decide direction when scheduled: (a) fix the multi-shape bug and keep the pen, or (b) simplify / remove the pen tool, keeping only the existing "close" path behavior if that is sufficient. File now; decide at scheduling. Touch points: the pen / path tool in `CanvasOverlay` and the path-tool state (it likely never resets the "active path" after a draw completes, so the next draw keeps editing the first path).
+**Notes:** Owner decision 2026-07-07: **KEEP + fix (direction a)** — fix the multi-shape bug and keep the pen (this also keeps the queued D-110 path-morphing meaningful). Priority raised low → medium: it now gates D-119 (rebuild starter templates) per the ROADMAP Designer order. Touch points: the pen / path tool in `CanvasOverlay` and the path-tool state (`pen-draw.ts` keeps a module-level draft that only `finishPen` clears — a tool switch mid-draw leaks it into the next pen session, which then appends to the first path; `finishPen` also forces the tool back to `cursor` after every shape, and there is no draw-state feedback, so an unfinished path silently swallows the "second" shape's clicks).
 **Regression test:** (only if direction (a) is chosen) draw two pen shapes in sequence and assert two independent path elements exist, the second NOT mutating the first; if direction (b), the test/coverage follows the simplified behavior.
 
 ## [x] B-042 — at high zoom, rendered shape edges don't sit on the pixel-grid lines (sub-pixel misalignment in a repeating pattern) ⟨priority: medium⟩ — merged (#251, `b8ca72e`), archived (`openspec/changes/archive/2026-07-07-fix-pixel-grid-content-alignment`): device-raster-aligned grid layer + containing-pixel stroke snap, ruler-mark lockstep, gizmo layout-lattice fidelity (`quantizeBoxToLayout` + 1-device-px frame stroke); the residual stale-paint phenomenon split to B-045 (mitigated in the same PR). Owner-verified on the affected machine (arrow steps track live and land on the lines)

@@ -906,6 +906,7 @@ export function CanvasArea({
                 />
                 <CanvasOverlay
                   scene={scene}
+                  activeCompositionId={activeCompositionId}
                   tool={tool}
                   selection={selection}
                   editingTextId={editingTextId}

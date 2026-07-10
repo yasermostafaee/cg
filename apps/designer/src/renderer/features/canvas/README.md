@@ -351,17 +351,34 @@ to grab. The `size === 1` path keeps the full `Gizmo` above, untouched.
 [`state/element-defaults.ts`](../../state/element-defaults.ts) at the click point
 and snap back to `cursor`.
 
-D-109 — the `pen` tool is the multi-gesture exception: [`pen-draw.ts`](./pen-draw.ts)
-is a module-level pointer state machine (click = corner anchor, drag = smooth with
-mirrored handles, click-first-anchor = close, Enter/Esc/double-click = finish open),
-upserting the `path` element live (`pathFromScenePoints`) so preview == export
-mid-draw. A selected path's edit affordance is [`PathEditor`](./PathEditor.tsx) — an
-SVG overlay of draggable anchor squares + handle dots (Alt breaks a mirrored pair,
-click a segment to insert, Delete removes + re-stitches), shown **only with the
-select tool** so its dots don't intercept the pen's close-click. `hit-test.ts` adds
-the path branch (point-in-polygon for a closed interior + distance-to-stroke), and
-the B-022 gizmo is reused unchanged (size = the points' bbox; the runtime SVG
-`viewBox` makes a size-resize rescale the outline without re-baking points).
+D-109/B-037 — the `pen` tool is the multi-gesture exception:
+[`pen-draw.ts`](./pen-draw.ts) is a module-level pointer state machine (click =
+corner anchor, drag = smooth with mirrored handles, click-first-anchor = close,
+Enter/double-click = finish open, **Esc = cancel** — the created element is
+removed), upserting the `path` element live (`pathFromScenePoints`) so preview ==
+export mid-draw. B-037 — finishing keeps the pen **armed**: the next pointer-down
+starts a NEW element (`freshElementId`), N draws → N independent elements; exiting
+to the cursor is explicit (toolbar, or Esc while idle). The draft may not outlive
+the pen session: `CanvasOverlay` calls `endPenSession()` (finish a ≥ 2-anchor draft
+open / drop a smaller one — idempotent) from an effect watching the active tool +
+composition and on unmount, so a mid-draw tool or composition switch can never leak
+the draft into a later session (the original B-037 append-to-shape-1 bug). While
+drafting, the overlay renders non-interactive draw-state feedback (anchor markers, a
+rubber band from the last anchor to the pointer — curved through a smooth anchor's
+out handle — and a first-anchor close-affordance ring inside `PEN_CLOSE_PX`).
+
+A selected path's edit affordance is [`PathEditor`](./PathEditor.tsx) — an SVG
+overlay of draggable anchor squares + handle dots (Alt breaks a mirrored pair, click
+a segment to insert, Delete removes + re-stitches), shown **only with the select
+tool** so its dots don't intercept the pen's close-click. B-037 — the single-select
+**Gizmo is likewise gated off while the pen is armed**: `addElement` auto-selects
+the in-progress draft, and the gizmo's corner/edge/rotation hit-zones sit exactly on
+the draft's bbox (the first anchor is always there), so unmounting it is what makes
+the close-click and draw-over-a-selected-shape clicks reach the pen at all.
+`hit-test.ts` adds the path branch (point-in-polygon for a closed interior +
+distance-to-stroke), and the B-022 gizmo is reused unchanged for cursor-tool
+selection (size = the points' bbox; the runtime SVG `viewBox` makes a size-resize
+rescale the outline without re-baking points).
 
 D-040 — the `image` (logo) tool stamps a `source: 'shared'` image from the device
 **shared library** ([`features/sharedLibrary`](../sharedLibrary)): the operator's

@@ -238,7 +238,9 @@ Done.)
 The concrete near-term Designer sequence (survives across sessions; the Runtime
 track is independent — see "Runtime — next" below):
 
-1. **[B-037](./prd/bugs-designer.md) pen tool** (low, keep-or-remove decision) — filed.
+1. **[B-037](./prd/bugs-designer.md) pen tool** (medium; owner decision 2026-07-07:
+   KEEP + fix) — **in progress** on `fix/B-037-pen-multi-shape`
+   (change dir `openspec/changes/fix-pen-multi-shape`).
 2. **[D-119](./prd/designer.md) rebuild starter templates** (5 showcases) — filed,
    **BLOCKED only on B-037** (B-042 and D-122 are done — see Done; templates should
    exercise healthy features); supersedes the old "template cleanup" wave-tail
