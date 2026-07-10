@@ -55,7 +55,9 @@ const ServerEndpointSchema = z.object({
   oscPort: z.number().int().nonnegative(),
 });
 
-const ConnectionConfigSchema = z.object({
+// R-010 — exported: the bridge validates its persisted config file against
+// this exact schema, and `connections.set-config` takes it as the request.
+export const ConnectionConfigSchema = z.object({
   // B-046 — the backup is DECLARED, not assumed: a single-server station omits
   // it, and only declared intent distinguishes "no backup" (quiet) from
   // "backup down" (alarmed via health).
@@ -69,6 +71,45 @@ export type ConnectionConfig = z.infer<typeof ConnectionConfigSchema>;
 export const ConnectionsConfigChannel = defineChannel(
   'connections.config',
   z.void(),
+  ConnectionConfigSchema,
+);
+
+/**
+ * R-010 — where/how the template HTTP server ended up after an apply: the
+ * host CasparCG fetches templates from and whether the bind is LAN-exposed
+ * (a remote server legitimately exposes the DATA plane; the control WS stays
+ * loopback regardless).
+ */
+const TemplateServeInfoSchema = z.object({
+  serveHost: z.string().min(1),
+  port: z.number().int().nonnegative(),
+  exposed: z.boolean(),
+});
+
+export type TemplateServeInfo = z.infer<typeof TemplateServeInfoSchema>;
+
+/**
+ * R-010 — apply a new `ConnectionConfig` to the RUNNING bridge. Refused with
+ * `reason: 'on-air-block'` while anything is on air or unsettled;
+ * `'apply-failed'` only for the defined degraded case (template serve could
+ * not bind even after the loopback retry — sessions still run on the new
+ * config). An unreachable host is NOT an error: the apply succeeds and
+ * health honestly reports the disconnected state.
+ */
+export const ConnectionsSetConfigChannel = defineChannel(
+  'connections.set-config',
+  ConnectionConfigSchema,
+  z.object({
+    ok: z.boolean(),
+    reason: z.enum(['on-air-block', 'apply-failed']).optional(),
+    message: z.string().optional(),
+    templateServe: TemplateServeInfoSchema.optional(),
+  }),
+);
+
+/** R-010 — pushed to every client when a new config is applied. */
+export const ConnectionsConfigChangedChannel = definePublishChannel(
+  'connections.config-changed',
   ConnectionConfigSchema,
 );
 

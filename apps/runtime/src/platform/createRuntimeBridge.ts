@@ -90,15 +90,18 @@ function createMockBridge(): RuntimeBridge {
       update: (req) => Promise.resolve(mock.update(req.itemId, req.fields, req.mergeMode)),
       out: (req) => Promise.resolve(mock.out(req.itemId)),
       remove: (req) => Promise.resolve(mock.remove(req.itemId)),
+      removeAll: () => Promise.resolve(mock.removeAll()),
       snapshot: () => Promise.resolve(mock.stackSnapshot()),
       onStateChanged: (handler) => mock.stackChanged.subscribe(handler),
     },
 
     connections: {
       config: () => Promise.resolve(mock.config()),
+      setConfig: (req) => Promise.resolve(mock.setConfig(req)),
       health: () => Promise.resolve(mock.health()),
       failover: () => Promise.resolve(mock.failover()),
       onHealthChanged: (handler) => mock.healthChanged.subscribe(handler),
+      onConfigChanged: (handler) => mock.configChanged.subscribe(handler),
     },
 
     lock: {

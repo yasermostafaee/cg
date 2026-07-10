@@ -7,6 +7,8 @@ import { LinkIndicator } from './LinkIndicator.js';
 
 interface Props {
   onOpenAudit?: () => void;
+  /** R-010 — opens the server connection settings panel. */
+  onOpenSettings?: () => void;
 }
 
 const styles = {
@@ -58,7 +60,7 @@ function sessionLabel(state: string): SessionLabel {
 }
 
 /** Bottom-of-window status bar (Phase 6 §2). Never hidden, never re-flows. */
-export function StatusBar({ onOpenAudit }: Props = {}): JSX.Element {
+export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Element {
   const health = useConnections();
   const lock = useLock();
 
@@ -111,6 +113,11 @@ export function StatusBar({ onOpenAudit }: Props = {}): JSX.Element {
       >
         ⇄ FAILOVER
       </AsyncButton>
+      {onOpenSettings !== undefined && (
+        <Button onClick={onOpenSettings} aria-label="Open server settings">
+          SERVERS
+        </Button>
+      )}
       {onOpenAudit !== undefined && (
         <Button onClick={onOpenAudit} aria-label="Open audit log">
           AUDIT

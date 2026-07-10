@@ -8,6 +8,7 @@ import type {
   TemplateInfo,
 } from '@cg/shared-ipc';
 import { Emitter } from './emitter.js';
+import { isLoopbackHost } from '../shared/loopback.js';
 import { seedConfig, seedHealth, seedStack, seedTemplates } from './seed.js';
 
 type FieldValues = StackItemState['fields'];
@@ -29,6 +30,7 @@ async function sha256Hex(text: string): Promise<string> {
 export class MockRuntime {
   readonly stackChanged = new Emitter<readonly StackItemState[]>();
   readonly healthChanged = new Emitter<ConnectionHealth>();
+  readonly configChanged = new Emitter<ConnectionConfig>();
   readonly lockChanged = new Emitter<LockState>();
   readonly settingsChanged = new Emitter<Settings>();
   readonly updateChanged = new Emitter<PendingUpdate | null>();
@@ -106,9 +108,78 @@ export class MockRuntime {
     return { accepted: true };
   }
 
+  /** R-010 — OUT + REMOVE everything: clears (simulated) air, empties the list. */
+  removeAll(): { ok: boolean; removed: number } {
+    const removed = this.#stack.length;
+    for (const item of this.#stack) {
+      this.#audit.unshift(
+        auditEntry('remove', { itemId: item.itemId, templateId: item.templateId }),
+      );
+    }
+    this.#stack = [];
+    this.#emitStack();
+    return { ok: true, removed };
+  }
+
   // ── connections ─────────────────────────────────────────────────────
   config(): ConnectionConfig {
     return this.#config;
+  }
+
+  /**
+   * R-010 — mock parity with the bridge's `setConfig`: same on-air gate
+   * (playing/on-air/updating/exiting/unconfirmed or pending blocks), health
+   * re-derived with/without the backup, and a simulated `exposed` flag for a
+   * non-loopback primary. No real sockets — this is the offline mock.
+   */
+  setConfig(config: ConnectionConfig): {
+    ok: boolean;
+    reason?: 'on-air-block' | 'apply-failed';
+    message?: string;
+    templateServe?: { serveHost: string; port: number; exposed: boolean };
+  } {
+    const unsettled = this.#stack.filter(
+      (i) =>
+        i.pending ||
+        i.status === 'playing' ||
+        i.status === 'on-air' ||
+        i.status === 'updating' ||
+        i.status === 'exiting' ||
+        i.status === 'unconfirmed',
+    ).length;
+    if (unsettled > 0) {
+      return {
+        ok: false,
+        reason: 'on-air-block',
+        message: `${String(unsettled)} item(s) are on air or unsettled — Remove All (or Out each item) first.`,
+      };
+    }
+    this.#config = config;
+    this.#health = this.#healthFor(config);
+    this.#audit.unshift(auditEntry('reconnect', { server: 'primary' }));
+    this.configChanged.emit(config);
+    this.healthChanged.emit(this.#health);
+    return {
+      ok: true,
+      templateServe: {
+        serveHost: '127.0.0.1',
+        port: 0,
+        exposed: !isLoopbackHost(config.servers.A.host),
+      },
+    };
+  }
+
+  /** Health derived from the declared servers (backup card only when B exists). */
+  #healthFor(config: ConnectionConfig): ConnectionHealth {
+    const at = new Date().toISOString();
+    return {
+      primary: { label: 'A', state: 'healthy', amcpAxisOk: true, oscFreshAt: at },
+      ...(config.servers.B !== undefined
+        ? { backup: { label: 'B' as const, state: 'healthy' as const, amcpAxisOk: true } }
+        : {}),
+      currentPrimary: 'A',
+      strategy: config.strategy,
+    };
   }
 
   health(): ConnectionHealth {
@@ -116,6 +187,10 @@ export class MockRuntime {
   }
 
   failover(): { ok: boolean; newPrimary: 'A' | 'B' } {
+    // B-046 parity — nothing to fail over to without a declared backup.
+    if (this.#config.servers.B === undefined) {
+      return { ok: false, newPrimary: this.#health.currentPrimary };
+    }
     const newPrimary = this.#health.currentPrimary === 'A' ? 'B' : 'A';
     this.#health = {
       ...seedHealth(newPrimary),

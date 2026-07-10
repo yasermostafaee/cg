@@ -9,8 +9,10 @@ import {
 } from '@cg/caspar-client';
 import type { AuditEntry, FieldValues, StackItemState } from '@cg/shared-schema';
 import type {
+  ChannelResponse,
   ConnectionConfig,
   ConnectionHealth,
+  ConnectionsSetConfigChannel,
   LockState,
   PendingUpdate,
   Settings,
@@ -21,9 +23,25 @@ import { TemplateRegistry } from './template-registry.js';
 import {
   TemplateHttpServer,
   deriveServeOptions,
+  isLoopbackHost,
   type TemplateServeOptions,
   type TemplateServeOverride,
 } from './template-http-server.js';
+
+/** R-010 — the `connections.set-config` response shape. */
+type SetConfigResult = ChannelResponse<typeof ConnectionsSetConfigChannel>;
+
+/**
+ * R-010 — where the OSC UDP ingest binds, derived from the declared server's
+ * locality exactly like the template serve path: a LOCAL CasparCG pushes OSC
+ * to loopback; a REMOTE one pushes across the LAN, so the ingest must bind a
+ * routable interface or confirmations never arrive (render-but-never-confirm,
+ * the half-plumbed-remote gap found in the R-010 diagnosis). Data plane only —
+ * the control WebSocket bind is not derived from any of this.
+ */
+export function deriveOscBindHost(serverHost: string): string {
+  return isLoopbackHost(serverHost) ? '127.0.0.1' : '0.0.0.0';
+}
 
 /** CasparCG video channel the bridge drives (Phase 2: single channel). */
 const DEFAULT_CHANNEL = 1;
@@ -82,11 +100,14 @@ export class CasparRuntime {
   readonly lockChanged = new Emitter<LockState>();
   readonly settingsChanged = new Emitter<Settings>();
   readonly updateChanged = new Emitter<PendingUpdate | null>();
+  /** R-010 — emitted after every successful `setConfig` apply. */
+  readonly configChanged = new Emitter<ConnectionConfig>();
 
-  readonly #config: ConnectionConfig;
+  // R-010 — mutable: `setConfig` swaps the whole connection layer at runtime.
+  #config: ConnectionConfig;
   /** One session per DECLARED server (B-046: B exists only when configured). */
-  readonly #sessions: { A: ServerSession; B?: ServerSession };
-  readonly #adapter: RedundancyAdapter;
+  #sessions: { A: ServerSession; B?: ServerSession };
+  #adapter: RedundancyAdapter;
   readonly #reconciler = new Reconciler();
   readonly #layers = new LayerManager();
   readonly #builder = new CommandBuilder();
@@ -130,7 +151,9 @@ export class CasparRuntime {
   // HTML at `/template/<id>`, so `CG ADD` can reference a real, loadable URL.
   readonly #templates = new TemplateRegistry();
   readonly #templateServer = new TemplateHttpServer((id) => this.#templates.html(id));
-  readonly #serveOptions: TemplateServeOptions;
+  #serveOptions: TemplateServeOptions;
+  /** Kept for `setConfig`'s serve re-derivation (explicit overrides keep winning). */
+  readonly #serveOverride: TemplateServeOverride;
   #lock: LockState = { engaged: false };
   #lockPin: string | null = null;
   #audit: AuditEntry[] = [];
@@ -147,24 +170,13 @@ export class CasparRuntime {
   ) {
     this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
     this.#config = config;
+    this.#serveOverride = serveOverride;
     // B-038 Phase 3 — serve loopback when CasparCG is local; an opt-in routable
     // host (configured or guessed) when remote. The control WS stays loopback.
     this.#serveOptions = deriveServeOptions(config.servers.A.host, serveOverride);
-    const session = (name: ServerLabel, ep: ConnectionConfig['servers']['A']): ServerSession =>
-      new ServerSession({
-        name,
-        host: ep.host,
-        port: ep.amcpPort,
-        oscPort: ep.oscPort,
-        oscBindHost: '127.0.0.1',
-        resyncDurationMs: RESYNC_MS,
-      });
     // B-046 — only DECLARED servers get a session: no phantom backup, no
     // reconnect churn, no divergence noise under the single-server default.
-    this.#sessions = {
-      A: session('A', config.servers.A),
-      ...(config.servers.B !== undefined ? { B: session('B', config.servers.B) } : {}),
-    };
+    this.#sessions = this.#buildSessions(config);
     this.#adapter = new RedundancyAdapter({
       strategy: config.strategy,
       sessions: this.#sessions,
@@ -173,14 +185,37 @@ export class CasparRuntime {
     });
   }
 
-  /** Wire the stack and connect both sessions. Idempotent. */
-  start(): void {
-    if (this.#started) return;
-    this.#started = true;
+  /**
+   * Construct one `ServerSession` per declared server. Pure (no I/O —
+   * connecting happens in `start()`). R-010 — the OSC bind derives from each
+   * server's locality exactly like the template serve path: a LOCAL CasparCG
+   * pushes OSC to loopback; a REMOTE one pushes across the LAN, so the ingest
+   * must bind a routable interface or confirmations never arrive
+   * (render-but-never-confirm). Data-plane only; the control WS bind is
+   * untouched by any of this.
+   */
+  #buildSessions(config: ConnectionConfig): { A: ServerSession; B?: ServerSession } {
+    const session = (name: ServerLabel, ep: ConnectionConfig['servers']['A']): ServerSession =>
+      new ServerSession({
+        name,
+        host: ep.host,
+        port: ep.amcpPort,
+        oscPort: ep.oscPort,
+        oscBindHost: deriveOscBindHost(ep.host),
+        resyncDurationMs: RESYNC_MS,
+      });
+    return {
+      A: session('A', config.servers.A),
+      ...(config.servers.B !== undefined ? { B: session('B', config.servers.B) } : {}),
+    };
+  }
 
-    this.#reconciler.on('item-changed', (state) => this.#markDirty(state.itemId));
-    this.#reconciler.on('item-removed', (info) => this.#markDirty(info.itemId));
-
+  /**
+   * Bind the CURRENT sessions/adapter to the Reconciler + health surface.
+   * Called from `start()` and again after every `setConfig` rebuild (the old
+   * listeners die with the old session/adapter objects).
+   */
+  #wireAdapter(): void {
     // OSC firehose → Reconciler, but only from the **current primary** — the
     // backup mirrors the same commands, so after a failover the new primary's
     // OSC re-confirms state. Each OscTransport already ran interest →
@@ -205,6 +240,17 @@ export class CasparRuntime {
       };
       this.healthChanged.emit(this.health());
     });
+  }
+
+  /** Wire the stack and connect the declared sessions. Idempotent. */
+  start(): void {
+    if (this.#started) return;
+    this.#started = true;
+
+    this.#reconciler.on('item-changed', (state) => this.#markDirty(state.itemId));
+    this.#reconciler.on('item-removed', (info) => this.#markDirty(info.itemId));
+
+    this.#wireAdapter();
 
     this.#sessions.A.start();
     this.#sessions.B?.start();
@@ -413,6 +459,22 @@ export class CasparRuntime {
     return { accepted: ok };
   }
 
+  /**
+   * R-010 — Remove-All: OUT + REMOVE every stack item, clearing air and
+   * emptying the list. Sequentially reuses the per-item `remove()` (urgent
+   * CLEAR, interest removal, dealloc, adoption mark — B-039 CLEAR-destroys
+   * semantics): layer-ordered, no command burst, and a per-item failure
+   * doesn't abort the rest (`remove` drops the item regardless). The
+   * sanctioned path to unblock a server reconfiguration.
+   */
+  async removeAll(): Promise<{ ok: boolean; removed: number }> {
+    const items = this.#reconciler.snapshot();
+    for (const item of items) {
+      await this.remove(item.itemId);
+    }
+    return { ok: true, removed: items.length };
+  }
+
   async remove(itemId: string): Promise<{ accepted: boolean }> {
     const slot = this.#slots.get(itemId);
     // Drop it from the stack immediately (UI responsiveness), then best-effort
@@ -437,6 +499,147 @@ export class CasparRuntime {
   // ── connections ─────────────────────────────────────────────────────
   config(): ConnectionConfig {
     return this.#config;
+  }
+
+  /**
+   * R-010 — apply a new `ConnectionConfig` to the RUNNING bridge: tear down
+   * the declared sessions/adapter, rebuild from `next`, and reconnect —
+   * without restarting the WS bridge or dropping clients. Ordered so
+   * everything fallible happens as late as possible; failure semantics are
+   * LAND-ON-NEW-CONFIG (see the R-010 design): an unreachable host is NOT an
+   * error (sessions retry with backoff; health honestly reports
+   * disconnected), and the only `apply-failed` case is the template server
+   * failing to bind even after a loopback retry — sessions still run on the
+   * new config, a defined non-crashing degraded state.
+   *
+   * SECURITY invariant: this method touches ONLY the CasparCG-facing data
+   * plane (AMCP sessions out, template HTTP out, OSC UDP in). The control
+   * WebSocket's loopback bind lives in `createBridge` and is unreachable
+   * from here by construction — no ConnectionConfig, remote or not, can
+   * expose it.
+   */
+  async setConfig(next: ConnectionConfig): Promise<SetConfigResult> {
+    // 1. On-air gate — bridge-authoritative (the UI mirrors it; races lose here).
+    const unsettled = this.#onAirCount();
+    if (unsettled > 0) {
+      return {
+        ok: false,
+        reason: 'on-air-block',
+        message:
+          `${String(unsettled)} item(s) are on air or unsettled — ` +
+          `Remove All (or Out each item) first.`,
+      };
+    }
+
+    // 2. Construct the new sessions first (pure — nothing torn down yet;
+    //    connecting happens at start()).
+    const sessions = this.#buildSessions(next);
+
+    // 3. Teardown: old sessions (rejects their queued commands — safe,
+    //    nothing is on air), the old adapter (its listeners die with the old
+    //    objects), and the template server if it was serving.
+    const wasServing = this.#templateServer.listening;
+    await Promise.all([this.#sessions.A.stop(), this.#sessions.B?.stop() ?? Promise.resolve()]);
+    await this.#templateServer.stop();
+
+    // 4. Rebuild + rewire. The Reconciler, template registry, and #slots
+    //    survive (stack rows and imported templates are not
+    //    connection-scoped). #loaded/#adopted do NOT: both are per-server
+    //    knowledge — a producer/adoption on the OLD server says nothing
+    //    about the new one — so a later Take heals via adopt-CLEAR + re-ADD
+    //    (B-039 / reconnect-reconciliation semantics). OSC interest is
+    //    re-registered for every retained slot on the NEW sessions.
+    this.#config = next;
+    this.#sessions = sessions;
+    this.#adapter = new RedundancyAdapter({
+      strategy: next.strategy,
+      sessions,
+      initialPrimary: 'A',
+      autoFailoverEnabled: next.autoFailoverEnabled,
+    });
+    this.#wireAdapter();
+    for (const slot of this.#slots.values()) this.#addInterest(slot);
+    this.#loaded.clear();
+    this.#adopted.clear();
+    // The last failover described the old server pair — a new era starts clean.
+    this.#lastFailover = undefined;
+
+    // 5. Template serve — re-derive from the new primary's locality; the only
+    //    realistically fallible step (bind conflict). Retry ONCE on safe
+    //    loopback-ephemeral options; if that also fails, land on the new
+    //    config with serving down (loads fail loudly via the serve guards).
+    this.#serveOptions = deriveServeOptions(next.servers.A.host, this.#serveOverride);
+    let serveError: string | null = null;
+    if (wasServing) {
+      try {
+        await this.#templateServer.start(this.#serveOptions);
+      } catch {
+        this.#serveOptions = { bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' };
+        try {
+          await this.#templateServer.start(this.#serveOptions);
+        } catch (retryErr) {
+          serveError = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        }
+      }
+    }
+
+    // 6. Connect + surface: every client sees the new config and fresh health.
+    this.#sessions.A.start();
+    this.#sessions.B?.start();
+    this.#audit.unshift({
+      ts: new Date().toISOString(),
+      actor: 'operator',
+      action: 'reconnect',
+      server: 'primary',
+      outcome: serveError === null ? 'ok' : 'failed',
+    });
+    this.configChanged.emit(next);
+    this.healthChanged.emit(this.health());
+
+    if (serveError !== null) {
+      return {
+        ok: false,
+        reason: 'apply-failed',
+        message: `connected, but the template server failed to bind: ${serveError}`,
+      };
+    }
+    const serve = this.templateServe;
+    const exposed =
+      serve !== null && serve.bindHost !== '127.0.0.1' && serve.bindHost !== 'localhost';
+    if (exposed && serve !== null) {
+      process.stderr.write(
+        `[caspar-bridge] ⚠ template HTTP server LAN-EXPOSED on ` +
+          `${serve.bindHost}:${String(serve.port)} — CG ADD URL host is ${serve.serveHost}. ` +
+          `Control WebSocket remains loopback-bound.\n`,
+      );
+    }
+    return {
+      ok: true,
+      ...(serve !== null
+        ? { templateServe: { serveHost: serve.serveHost, port: serve.port, exposed } }
+        : {}),
+    };
+  }
+
+  /**
+   * R-010 — the on-air gate: anything visibly on air OR unsettled blocks a
+   * server switch. Stricter than the updateRequest precedent on purpose:
+   * `updating`/`exiting` ride an on-air producer, and B-044's `unconfirmed`
+   * means the on-air result is UNKNOWN — unknown must block. `idle`/`loaded`/
+   * `error`/`disconnected` rest states don't.
+   */
+  #onAirCount(): number {
+    return this.#reconciler
+      .snapshot()
+      .filter(
+        (i) =>
+          i.pending ||
+          i.status === 'playing' ||
+          i.status === 'on-air' ||
+          i.status === 'updating' ||
+          i.status === 'exiting' ||
+          i.status === 'unconfirmed',
+      ).length;
   }
 
   health(): ConnectionHealth {

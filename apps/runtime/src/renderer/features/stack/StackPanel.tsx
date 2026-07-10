@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
 import { useStack } from '../../hooks/useStack.js';
 import { colors } from '../../theme.js';
+import { Button } from '../../ui/Button.js';
 import { applyDraft } from '../inspector/applyDraft.js';
 import {
   draftsVersion,
@@ -26,12 +27,16 @@ const styles = {
     overflow: 'hidden',
   },
   header: {
-    padding: '0.75rem 1rem',
+    padding: '0.5rem 1rem',
     borderBottom: `1px solid ${colors.border}`,
     fontSize: '1rem',
     fontWeight: 700,
     color: colors.textMuted,
     letterSpacing: '0.05em',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '0.5rem',
   },
   list: { overflowY: 'auto' as const, flex: 1 },
   empty: {
@@ -69,7 +74,30 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
 
   return (
     <section style={styles.panel} aria-label="Stack">
-      <header style={styles.header}>STACK</header>
+      <header style={styles.header}>
+        <span>STACK</span>
+        {items.length > 0 && (
+          <Button
+            variant="caution"
+            aria-label="Remove all items"
+            title="Out + remove every item — clears anything on air and empties the stack"
+            onClick={() => {
+              // R-010 — the destructive on-air-clearing path (unblocks a
+              // server switch). Native confirm follows the lock-PIN
+              // precedent; the stack visibly empties via the state publish.
+              if (
+                window.confirm(
+                  `Remove all ${String(items.length)} item(s)? This clears anything on air.`,
+                )
+              ) {
+                void window.cg.stack.removeAll();
+              }
+            }}
+          >
+            REMOVE ALL
+          </Button>
+        )}
+      </header>
       <div style={styles.list}>
         {items.length === 0 ? (
           <div style={styles.empty}>No items loaded. Use the library to add one.</div>

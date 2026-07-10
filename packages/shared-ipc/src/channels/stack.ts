@@ -51,6 +51,17 @@ export const StackRemoveChannel = defineChannel(
   z.object({ accepted: z.boolean() }),
 );
 
+/**
+ * R-010 — clear EVERYTHING in one operation: every stack item is OUTed and
+ * REMOVEd (per-item CLEAR-destroys semantics, in sequence), clearing air and
+ * emptying the list. The sanctioned path to unblock a server reconfiguration.
+ */
+export const StackRemoveAllChannel = defineChannel(
+  'stack.remove-all',
+  z.void(),
+  z.object({ ok: z.boolean(), removed: z.number().int().nonnegative() }),
+);
+
 export const StackSnapshotChannel = defineChannel(
   'stack.snapshot',
   z.void(),

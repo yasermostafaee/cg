@@ -1,10 +1,12 @@
 import type { StackItemState } from '@cg/shared-schema';
 import {
   AuditRecentChannel,
+  ConnectionsConfigChangedChannel,
   ConnectionsConfigChannel,
   ConnectionsFailoverChannel,
   ConnectionsHealthChangedChannel,
   ConnectionsHealthChannel,
+  ConnectionsSetConfigChannel,
   LockEngageChannel,
   LockReleaseChannel,
   LockStateChangedChannel,
@@ -14,6 +16,7 @@ import {
   SettingsSetChannel,
   StackLoadChannel,
   StackOutChannel,
+  StackRemoveAllChannel,
   StackRemoveChannel,
   StackSnapshotChannel,
   StackStateChangedChannel,
@@ -138,6 +141,7 @@ export class WebSocketRuntime implements RuntimeBridge {
 
   readonly #stackSubs = new Subs<readonly StackItemState[]>();
   readonly #healthSubs = new Subs<ConnectionHealth>();
+  readonly #configSubs = new Subs<ConnectionConfig>();
   readonly #lockSubs = new Subs<LockState>();
   readonly #updateSubs = new Subs<PendingUpdate | null>();
   readonly #settingsSubs = new Subs<Settings>();
@@ -291,6 +295,11 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#healthSubs.emit(p.data);
         break;
       }
+      case ConnectionsConfigChangedChannel.name: {
+        const p = ConnectionsConfigChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#configSubs.emit(p.data);
+        break;
+      }
       case LockStateChangedChannel.name: {
         const p = LockStateChangedChannel.payload.safeParse(payload);
         if (p.success) this.#lockSubs.emit(p.data);
@@ -357,6 +366,7 @@ export class WebSocketRuntime implements RuntimeBridge {
     out: (req: ChannelRequest<typeof StackOutChannel>) => this.#invoke(StackOutChannel, req),
     remove: (req: ChannelRequest<typeof StackRemoveChannel>) =>
       this.#invoke(StackRemoveChannel, req),
+    removeAll: () => this.#invoke(StackRemoveAllChannel, undefined),
     snapshot: () => this.#invoke(StackSnapshotChannel, undefined),
     onStateChanged: (handler: (snapshot: readonly StackItemState[]) => void) =>
       this.#stackSubs.add(handler),
@@ -364,10 +374,13 @@ export class WebSocketRuntime implements RuntimeBridge {
 
   readonly connections = {
     config: (): Promise<ConnectionConfig> => this.#invoke(ConnectionsConfigChannel, undefined),
+    setConfig: (req: ChannelRequest<typeof ConnectionsSetConfigChannel>) =>
+      this.#invoke(ConnectionsSetConfigChannel, req),
     health: (): Promise<ConnectionHealth> => this.#invoke(ConnectionsHealthChannel, undefined),
     failover: (req: ChannelRequest<typeof ConnectionsFailoverChannel>) =>
       this.#invoke(ConnectionsFailoverChannel, req),
     onHealthChanged: (handler: (health: ConnectionHealth) => void) => this.#healthSubs.add(handler),
+    onConfigChanged: (handler: (config: ConnectionConfig) => void) => this.#configSubs.add(handler),
   };
 
   readonly lock = {
