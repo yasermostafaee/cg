@@ -8,6 +8,26 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Path point-edit mode + size==visualBBox model
+  ([D-124](./prd/designer.md) + [B-058](./prd/bugs-designer.md) menu chrome,
+  [B-059](./prd/bugs-designer.md) curve-aware bounds,
+  [B-060](./prd/bugs-designer.md) right-click draw-cancel,
+  [B-061](./prd/bugs-designer.md) rotated overlay + drift,
+  [B-062](./prd/bugs-designer.md) resize bake,
+  [B-063](./prd/bugs-designer.md) curved add affordance) — merged (#280) &
+  archived (2026-07-11, `2026-07-10-fix-pen-edit-mode-and-bbox`): single click =
+  box only, double-click = point edit (gizmo hidden; Esc/empty-click exits
+  keeping selection), Ctrl/Cmd-gated insertion + segment right-click Add point /
+  Add curve point on the real cubics; owner model — points fill their visual
+  bbox with `transform.size` == its extents, static resize bakes into the
+  points, ONE in-memory migration covers Designer load + runtime `.vcg`
+  ingestion (packages never rewritten), and the per-edit re-normalize is
+  render-neutral under rotation/scale (no drift). Owner-verified 2026-07-11.
+- Anchor context menu ([D-123](./prd/designer.md)) — merged (#275) & archived
+  (2026-07-11, `2026-07-10-add-anchor-context-menu`): right-click an anchor →
+  accessible Delete-point menu (keyboard-delete semantics, capture-owned Esc);
+  chrome converged onto the shared `ui/ContextMenu.css.ts` in B-058 and the
+  menu now opens inside D-124's point-edit mode. Owner-verified.
 - Pen curve trilogy ([B-057](./prd/bugs-designer.md) smooth-drag sticks,
   [B-056](./prd/bugs-designer.md) no smooth insert,
   [B-055](./prd/bugs-designer.md) curved shapes select only near center;
@@ -259,13 +279,7 @@ Done.)
 The concrete near-term Designer sequence (survives across sessions; the Runtime
 track is independent — see "Runtime — next" below):
 
-1. **[D-124](./prd/designer.md) path point-edit mode redesign** (+ bugs
-   [B-058](./prd/bugs-designer.md) menu chrome, [B-059](./prd/bugs-designer.md)
-   curve-aware selection bounds, [B-060](./prd/bugs-designer.md) right-click
-   draw-cancel) — **in progress** on `fix/pen-edit-mode-and-bbox`
-   (change dir `openspec/changes/fix-pen-edit-mode-and-bbox`). D-123 (anchor
-   context menu) merged #275, pending archive.
-2. **[D-119](./prd/designer.md) rebuild starter templates** (5 showcases) —
+1. **[D-119](./prd/designer.md) rebuild starter templates** (5 showcases) —
    **UNBLOCKED** (B-037, B-042 and D-122 are done — see Done; templates should
    exercise healthy features); supersedes the old "template cleanup" wave-tail
    note. (Its other prerequisites — D-060 auto-size, B-035 fit-on-open, B-036
