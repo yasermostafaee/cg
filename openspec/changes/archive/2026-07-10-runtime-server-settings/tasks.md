@@ -66,10 +66,15 @@
 
 ## 6. Wrap-up (Part C)
 
-- [ ] Optional live remote smoke checklist delivered (clearly non-gating).
-- [ ] Flip R-010 → [x] with the validation record (note whether a live smoke
-      ran); state the Remove-All PRD-line decision.
-- [ ] Archive with the shared-spec ordering check (loopback requirement +
-      runtime-ui ADD — verified not owned by the held pair; re-verify at
-      archive time).
-- [ ] Conventional commits, push, compare URL, final report.
+- [x] Optional live remote smoke checklist delivered (clearly non-gating;
+      recorded in `design.md` §Optional live smoke — no second machine this
+      session, so it was NOT run; mock/integration validation stands alone).
+- [x] Flip R-010 → [x] with the validation record (no live smoke ran).
+      Remove-All PRD decision: FOLDED into R-010's entry — it shipped as this
+      change's companion; the OpenSpec requirement carries its scenarios.
+- [x] Archive with the shared-spec ordering check — re-verified at archive
+      time: the held pair owns seven requirement headings (AMCP seam,
+      template resolution ×2, silent-downgrade, retained HTML, playout
+      verbs, browser re-delivery), none of which this delta touches, and
+      neither held change has a runtime-ui delta → archived independently.
+- [x] Conventional commits, push, compare URL, final report.

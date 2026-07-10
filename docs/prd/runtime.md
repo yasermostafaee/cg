@@ -1,4 +1,4 @@
-# Runtime — backlog
+﻿# Runtime — backlog
 
 Features for the playout controller (`apps/runtime`). The CasparCG control path
 itself lives in `caspar.md`. See `README.md` for the format.
@@ -264,7 +264,32 @@ the operator, not to a heuristic.
   designed stay-on-air behavior this makes controllable), [[B-053]] (fixing the
   producer⇒on-air mapping helps this warning's precision).
 
-## [ ] R-010 — server connection settings panel: configure primary (+ optional backup) CasparCG from the Runtime UI ⟨priority: medium⟩
+## [x] R-010 — server connection settings panel: configure primary (+ optional backup) CasparCG from the Runtime UI ⟨priority: medium⟩ — merged via `runtime-server-settings`, archived
+
+<!-- change: openspec/changes/archive/2026-07-10-runtime-server-settings/ -->
+
+> **CLOSED — implemented + mock/integration-validated 2026-07-11.** No live
+> remote smoke was run (no second machine in the session); the optional
+> checklist is recorded in the change's `design.md` and the change is fully
+> validated against `amcp-mock` regardless. What shipped:
+> `connections.set-config` applies a new `ConnectionConfig` to the RUNNING
+> bridge (sessions/adapter/template-serve rebuilt, land-on-new-config failure
+> semantics, an unreachable host is honest-not-fatal), REFUSED while anything
+> is on air or unsettled (playing/on-air/updating/exiting/unconfirmed or
+> pending — bridge-authoritative, mirrored in the panel); **Remove-All**
+> (`stack.remove-all`, confirm-gated REMOVE ALL in the stack header) OUTs +
+> REMOVEs every item as the sanctioned unblocking path — folded into this
+> entry rather than a separate PRD line (it shipped as this change's
+> companion; the OpenSpec requirement carries its scenarios);
+> `ServerSettingsPanel` (StatusBar SERVERS button) edits primary + optional
+> backup + strategy + auto-failover with the LAN-exposure warning; the config
+> persists bridge-side (`~/.cg-runtime/bridge-connection.json`, CLI flags >
+> file > default). **Bonus gap closed:** OSC ingest was hardcoded to bind
+> loopback — a remote CasparCG would render but never confirm; the bind now
+> derives per server locality like the serve path. **SECURITY invariant
+> asserted by test:** the control WebSocket stays loopback-bound regardless
+> of server config; only the data plane (template HTTP, OSC ingest) goes
+> routable for a declared remote server.
 
 > Filed 2026-07-11 from the B-046 fix (`harden-redundancy-single-and-two-server`).
 > Extends the thin R-002 "Settings panel UI" (telemetry toggle) with the
