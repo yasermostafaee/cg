@@ -3,6 +3,7 @@ import type { AnchorPoint, Element, PathElement } from '@cg/shared-schema';
 import { pathBBox } from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
 import { normalizePathPoints } from '../../state/element-defaults.js';
+import { AnchorContextMenu } from './AnchorContextMenu.js';
 
 interface Props {
   element: PathElement;
@@ -19,9 +20,11 @@ const newAnchorId = (): string => `pt-${Date.now().toString(36)}-i${(insertSeq++
  * handles mirrored, Alt breaks the pair into an independent corner); clicking a
  * segment inserts a CORNER anchor, click-DRAGGING a segment inserts a SMOOTH
  * anchor whose mirrored handles follow the drag (B-054 — the pen's drag-to-smooth
- * gesture on insertion); Delete removes the active anchor (re-stitching across
- * the gap, deleting the whole element below 2 anchors). Edits route through
- * `updateElement` (one undo per gesture via `markHistoryBoundary`).
+ * gesture on insertion); Delete removes the active anchor, and D-123 —
+ * right-clicking an anchor square opens a small context menu (Delete point →
+ * the SAME removeAnchor) — both re-stitch across the gap and delete the whole
+ * element below 2 anchors. Edits route through `updateElement` (one undo per
+ * gesture via `markHistoryBoundary`).
  *
  * Coordinates: points are a 0-origin local frame; `screen()` maps them through the
  * element's `position` + the viewBox scale (`size / bbox`) so a resized path still
@@ -29,6 +32,8 @@ const newAnchorId = (): string => `pt-${Date.now().toString(36)}-i${(insertSeq++
  */
 export function PathEditor({ element, scale }: Props): JSX.Element {
   const [active, setActive] = useState<string | null>(null);
+  // D-123 — the right-clicked anchor's context menu (viewport coords + target id).
+  const [menu, setMenu] = useState<{ x: number; y: number; anchorId: string } | null>(null);
   const pts = element.points;
   const bbox = pathBBox(pts);
   const { size, position: pos } = element.transform;
@@ -59,9 +64,11 @@ export function PathEditor({ element, scale }: Props): JSX.Element {
 
   // Delete / Backspace removes the active anchor. Capture phase + stopImmediate so it
   // pre-empts the global "delete selected element" shortcut while an anchor is active.
+  // D-123 — inert while the context menu is open (the menu owns the keyboard then;
+  // deleting under an open menu would leave it pointing at a removed anchor).
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
-      if (active === null) return;
+      if (active === null || menu !== null) return;
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
       const t = e.target;
       if (
@@ -76,9 +83,12 @@ export function PathEditor({ element, scale }: Props): JSX.Element {
     }
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [active, element]);
+  }, [active, menu, element]);
 
   function dragAnchor(id: string, e: React.PointerEvent): void {
+    // D-123 — only the primary button drags; a right-press routes to the context
+    // menu via onContextMenu (previously it ALSO started a move — a latent wart).
+    if (e.button !== 0) return;
     e.stopPropagation();
     setActive(id);
     const base = pts.find((p) => p.id === id);
@@ -195,87 +205,115 @@ export function PathEditor({ element, scale }: Props): JSX.Element {
 
   const segCount = element.closed ? pts.length : pts.length - 1;
   return (
-    <svg
-      data-testid="path-editor"
-      style={{
-        position: 'absolute',
-        inset: 0,
-        width: '100%',
-        height: '100%',
-        overflow: 'visible',
-        pointerEvents: 'none',
-      }}
-    >
-      {Array.from({ length: Math.max(segCount, 0) }, (_, i) => {
-        const a = pts[i];
-        const b = pts[(i + 1) % pts.length];
-        if (a === undefined || b === undefined) return null;
-        const pa = screen(a.x, a.y);
-        const pb = screen(b.x, b.y);
-        return (
-          <line
-            key={`seg-${String(i)}`}
-            x1={pa.x}
-            y1={pa.y}
-            x2={pb.x}
-            y2={pb.y}
-            stroke="transparent"
-            strokeWidth={10}
-            style={{ pointerEvents: 'stroke', cursor: 'copy' }}
-            onPointerDown={(e) => {
-              insertOnSegment(i, e);
-            }}
-          />
-        );
-      })}
-      {pts.map((p) =>
-        p.id === active
-          ? (['in', 'out'] as const).map((w) => {
-              const h = p[w];
-              if (h === undefined) return null;
-              const pa = screen(p.x, p.y);
-              const ph = screen(p.x + h.x, p.y + h.y);
-              return (
-                <g key={`${p.id}-${w}`}>
-                  <line x1={pa.x} y1={pa.y} x2={ph.x} y2={ph.y} stroke="#3b82f6" strokeWidth={1} />
-                  <circle
-                    cx={ph.x}
-                    cy={ph.y}
-                    r={4}
-                    fill="#ffffff"
-                    stroke="#3b82f6"
-                    style={{ pointerEvents: 'all', cursor: 'grab' }}
-                    onPointerDown={(e) => {
-                      dragHandle(p.id, w, e);
-                    }}
-                  />
-                </g>
-              );
-            })
-          : null,
+    // D-123 — the context menu is HTML and can't live inside the <svg>, so the
+    // fragment renders it as a sibling (position: fixed, viewport coords).
+    <>
+      {menu !== null && (
+        <AnchorContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={[{ label: 'Delete point', onSelect: () => removeAnchor(menu.anchorId) }]}
+          onClose={() => setMenu(null)}
+        />
       )}
-      {pts.map((p) => {
-        const c = screen(p.x, p.y);
-        const isActive = p.id === active;
-        return (
-          <rect
-            key={p.id}
-            data-cg-anchor={p.id}
-            x={c.x - 4}
-            y={c.y - 4}
-            width={8}
-            height={8}
-            rx={p.smooth ? 4 : 0}
-            fill={isActive ? '#3b82f6' : '#ffffff'}
-            stroke="#3b82f6"
-            strokeWidth={1}
-            style={{ pointerEvents: 'all', cursor: 'grab' }}
-            onPointerDown={(e) => {
-              dragAnchor(p.id, e);
-            }}
-          />
-        );
-      })}
-    </svg>
+      <svg
+        data-testid="path-editor"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          overflow: 'visible',
+          pointerEvents: 'none',
+        }}
+      >
+        {Array.from({ length: Math.max(segCount, 0) }, (_, i) => {
+          const a = pts[i];
+          const b = pts[(i + 1) % pts.length];
+          if (a === undefined || b === undefined) return null;
+          const pa = screen(a.x, a.y);
+          const pb = screen(b.x, b.y);
+          return (
+            <line
+              key={`seg-${String(i)}`}
+              x1={pa.x}
+              y1={pa.y}
+              x2={pb.x}
+              y2={pb.y}
+              stroke="transparent"
+              strokeWidth={10}
+              style={{ pointerEvents: 'stroke', cursor: 'copy' }}
+              onPointerDown={(e) => {
+                insertOnSegment(i, e);
+              }}
+            />
+          );
+        })}
+        {pts.map((p) =>
+          p.id === active
+            ? (['in', 'out'] as const).map((w) => {
+                const h = p[w];
+                if (h === undefined) return null;
+                const pa = screen(p.x, p.y);
+                const ph = screen(p.x + h.x, p.y + h.y);
+                return (
+                  <g key={`${p.id}-${w}`}>
+                    <line
+                      x1={pa.x}
+                      y1={pa.y}
+                      x2={ph.x}
+                      y2={ph.y}
+                      stroke="#3b82f6"
+                      strokeWidth={1}
+                    />
+                    <circle
+                      cx={ph.x}
+                      cy={ph.y}
+                      r={4}
+                      fill="#ffffff"
+                      stroke="#3b82f6"
+                      style={{ pointerEvents: 'all', cursor: 'grab' }}
+                      onPointerDown={(e) => {
+                        dragHandle(p.id, w, e);
+                      }}
+                    />
+                  </g>
+                );
+              })
+            : null,
+        )}
+        {pts.map((p) => {
+          const c = screen(p.x, p.y);
+          const isActive = p.id === active;
+          return (
+            <rect
+              key={p.id}
+              data-cg-anchor={p.id}
+              x={c.x - 4}
+              y={c.y - 4}
+              width={8}
+              height={8}
+              rx={p.smooth ? 4 : 0}
+              fill={isActive ? '#3b82f6' : '#ffffff'}
+              stroke="#3b82f6"
+              strokeWidth={1}
+              style={{ pointerEvents: 'all', cursor: 'grab' }}
+              onPointerDown={(e) => {
+                dragAnchor(p.id, e);
+              }}
+              onContextMenu={(e) => {
+                // D-123 — right-click opens the anchor menu at the pointer. The
+                // trigger surface is the anchor squares ONLY; local preventDefault
+                // is defense in depth over the app-wide native-menu suppression.
+                e.preventDefault();
+                e.stopPropagation();
+                setActive(p.id);
+                setMenu({ x: e.clientX, y: e.clientY, anchorId: p.id });
+              }}
+            />
+          );
+        })}
+      </svg>
+    </>
   );
 }

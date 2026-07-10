@@ -379,7 +379,15 @@ a segment to insert a CORNER, click-DRAG a segment to insert a SMOOTH anchor who
 mirrored handles follow the drag — B-054, the pen's drag-to-smooth on insertion,
 one undo entry with the corner/smooth decision at pointer-up — Delete removes +
 re-stitches), shown **only with the select tool** so its dots don't intercept the
-pen's close-click. B-037 — the single-select
+pen's close-click. D-123 — right-clicking an anchor square opens
+[`AnchorContextMenu`](./AnchorContextMenu.tsx) (first item **Delete point** → the
+SAME `removeAnchor`): a minimal menu pattern-matched to the timeline's
+LayerContextMenu (fixed backdrop + clamped `role="menu"`; no shared primitive
+exists) plus full keyboard support — focus-first on open, Arrow wrap,
+Enter/Space, and an Esc owned via a capture-phase stop so closing the menu never
+falls through to the canvas deselect/tool handling; outside click and wheel also
+dismiss. The trigger surface is the anchor squares ONLY, and items are an array so
+future entries (Convert to corner/smooth) are one line each. B-037 — the single-select
 **Gizmo is likewise gated off while the pen is armed**: `addElement` auto-selects
 the in-progress draft, and the gizmo's corner/edge/rotation hit-zones sit exactly on
 the draft's bbox (the first anchor is always there), so unmounting it is what makes

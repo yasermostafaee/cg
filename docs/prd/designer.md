@@ -3118,3 +3118,18 @@ The 5 templates:
 - WHEN the zoom is below the grid threshold THEN drag and nudge behave exactly as today (no new snapping)
 
 **Notes:** Queued, NOT scheduled — implementation is a later change, not part of B-042 (do not fold into `fix-pixel-grid-content-alignment`). Touch points when picked up: the drag-commit path and the arrow-nudge handler in the canvas feature (`CanvasOverlay`/group-move + the D-073 nudge), gated on `pixelGridVisible(zoom)`; Alt-bypass must not collide with existing Alt gestures; multi-select drags snap the anchor and preserve relative offsets (B-027 clamp still applies). Spec: extend the canvas-viewport (or a pointer-editing) capability with a snapping requirement mirroring the decision above.
+
+## [~] D-123 — right-click anchor context menu on paths (Delete point) ⟨priority: medium⟩ — implemented on `feat/D-123-anchor-context-menu` (change dir `openspec/changes/add-anchor-context-menu`); pending owner verification
+
+**What:** Right-clicking an anchor square on a FINISHED path (cursor tool, `PathEditor` overlay) opens a small context menu at the pointer whose first item, **Delete point**, removes that anchor with the exact keyboard-delete semantics (re-stitch across the gap; below 2 anchors deletes the whole element; one undo entry). Owner decision (2026-07-08): a MENU rather than a bare direct-delete, so future point actions (Convert to corner/smooth, …) are one entry each — but ONLY Delete point ships now (no disabled placeholders).
+
+**Why:** Deleting a point previously required knowing the keyboard path (activate the anchor, press Delete); a right-click menu is the discoverable, extensible pointer route.
+
+**Acceptance:**
+
+- WHEN the operator right-clicks an anchor square on a selected path THEN an accessible menu (menu/menuitem roles, focus moves in, Arrow/Enter/Esc work) opens at the pointer and no native browser menu shows
+- WHEN Delete point is selected THEN that anchor is removed with the keyboard-delete semantics (re-stitch; below-2 → element deleted; one undo restores)
+- WHEN the menu is open and the operator clicks elsewhere, scrolls, or presses Esc THEN it closes without acting — and the Esc does NOT also deselect the path or change the tool (B-037 Esc ownership)
+- WHEN the pen tool is armed THEN nothing changes (the edit overlay isn't mounted; right-click there stays today's behavior)
+
+**Notes:** Implemented in `PathEditor.tsx` (right-click wiring on the anchor rects ONLY — handles/segments untouched; `dragAnchor` now ignores non-primary buttons) + a minimal `AnchorContextMenu` in the canvas feature — no shared menu primitive exists (the timeline's `LayerContextMenu` is bespoke and mouse-only), so the new component follows that pattern (fixed backdrop + clamped `role="menu"`) and adds the keyboard support (focus-first, Arrow wrap, Esc via capture-phase stop — the same mechanism as PathEditor's Delete pre-empt). The deletion logic is the EXISTING `removeAnchor` — not duplicated. App-wide native-menu suppression (App.tsx) already covers the no-native-menu requirement; the anchor handler preventDefaults locally as defense in depth. Spec: `## MODIFIED` on `designer-path-element` ("A selected path is fully editable"). Tests: unit `apps/designer/tests/anchor-context-menu.test.ts` (wiring, below-2 branch, Esc ownership via a bubble-phase spy, wheel dismissal, Arrow focus); E2E `apps/designer/tests/e2e/anchor-context-menu.spec.ts` (menu → delete → re-stitch; undo restores; below-2 deletes the element; Esc keeps selection + tool).

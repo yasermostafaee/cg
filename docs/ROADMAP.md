@@ -257,7 +257,11 @@ Done.)
 The concrete near-term Designer sequence (survives across sessions; the Runtime
 track is independent — see "Runtime — next" below):
 
-1. **[D-119](./prd/designer.md) rebuild starter templates** (5 showcases) —
+1. **[D-123](./prd/designer.md) right-click anchor context menu (Delete point)**
+   (medium; owner decision 2026-07-08: menu over bare delete, extensible) —
+   **in progress** on `feat/D-123-anchor-context-menu`
+   (change dir `openspec/changes/add-anchor-context-menu`).
+2. **[D-119](./prd/designer.md) rebuild starter templates** (5 showcases) —
    **UNBLOCKED** (B-037, B-042 and D-122 are done — see Done; templates should
    exercise healthy features); supersedes the old "template cleanup" wave-tail
    note. (Its other prerequisites — D-060 auto-size, B-035 fit-on-open, B-036
