@@ -356,7 +356,13 @@ D-109/B-037 — the `pen` tool is the multi-gesture exception:
 corner anchor, drag = smooth with mirrored handles, click-first-anchor = close,
 Enter/double-click = finish open, **Esc = cancel** — the created element is
 removed), upserting the `path` element live (`pathFromScenePoints`) so preview ==
-export mid-draw. B-037 — finishing keeps the pen **armed**: the next pointer-down
+export mid-draw. B-053 — corner vs smooth is decided **at pointer-UP** from the
+gesture's total displacement against `PEN_SMOOTH_PX` (SCREEN px, zoom-independent —
+the D-122 hysteresis lesson): the mid-hold preview is live (corner restored when
+the pointer dips back under the guard), a click-sized release actively clears any
+jitter-set handles, and only the just-placed anchor is ever touched — a previous
+smooth anchor keeps its handles, so a corner's incoming side stays curved as the
+prior anchor defines (Illustrator semantics). B-037 — finishing keeps the pen **armed**: the next pointer-down
 starts a NEW element (`freshElementId`), N draws → N independent elements; exiting
 to the cursor is explicit (toolbar, or Esc while idle). The draft may not outlive
 the pen session: `CanvasOverlay` calls `endPenSession()` (finish a ≥ 2-anchor draft
@@ -369,16 +375,23 @@ out handle — and a first-anchor close-affordance ring inside `PEN_CLOSE_PX`).
 
 A selected path's edit affordance is [`PathEditor`](./PathEditor.tsx) — an SVG
 overlay of draggable anchor squares + handle dots (Alt breaks a mirrored pair, click
-a segment to insert, Delete removes + re-stitches), shown **only with the select
-tool** so its dots don't intercept the pen's close-click. B-037 — the single-select
+a segment to insert a CORNER, click-DRAG a segment to insert a SMOOTH anchor whose
+mirrored handles follow the drag — B-054, the pen's drag-to-smooth on insertion,
+one undo entry with the corner/smooth decision at pointer-up — Delete removes +
+re-stitches), shown **only with the select tool** so its dots don't intercept the
+pen's close-click. B-037 — the single-select
 **Gizmo is likewise gated off while the pen is armed**: `addElement` auto-selects
 the in-progress draft, and the gizmo's corner/edge/rotation hit-zones sit exactly on
 the draft's bbox (the first anchor is always there), so unmounting it is what makes
 the close-click and draw-over-a-selected-shape clicks reach the pen at all.
-`hit-test.ts` adds the path branch (point-in-polygon for a closed interior +
-distance-to-stroke), and the B-022 gizmo is reused unchanged for cursor-tool
-selection (size = the points' bbox; the runtime SVG `viewBox` makes a size-resize
-rescale the outline without re-baking points).
+`hit-test.ts` adds the path branch — B-055: both the closed-interior ray-cast and
+the stroke grab-margin run over the **flattened curved outline** (each segment
+sampled from the exact cubic the runtime renders, `c1 = a + a.out` /
+`c2 = b + b.in`, 16 sub-segments per curve; the display mapping mirrors the
+runtime viewBox's `max(bbox, 1)` clamp), so bézier bulges outside the anchor
+polygon hit and concavities inside it miss — and the B-022 gizmo is reused
+unchanged for cursor-tool selection (size = the points' bbox; the runtime SVG
+`viewBox` makes a size-resize rescale the outline without re-baking points).
 
 D-040 — the `image` (logo) tool stamps a `source: 'shared'` image from the device
 **shared library** ([`features/sharedLibrary`](../sharedLibrary)): the operator's

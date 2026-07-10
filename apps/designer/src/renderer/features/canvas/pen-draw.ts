@@ -5,7 +5,9 @@ import { pathFromScenePoints } from '../../state/element-defaults.js';
 
 /**
  * D-109 / B-037 — the Pen tool's pointer state machine. A click places a CORNER
- * anchor; a click-drag places a SMOOTH anchor whose two handles mirror the drag;
+ * anchor; a click-drag places a SMOOTH anchor whose two handles mirror the drag
+ * (corner vs smooth decided AT POINTER-UP by the total screen-px displacement —
+ * B-053, so click jitter never leaves a stray curve);
  * clicking the first anchor (within a screen-px threshold) CLOSES the path; Enter /
  * double-click FINISH an open path; Esc CANCELS the draft (removes the created
  * element). The draft renders live as the real path element once it has ≥ 2 anchors
@@ -21,6 +23,9 @@ import { pathFromScenePoints } from '../../state/element-defaults.js';
 /** Screen-px radius around the first anchor that closes the path (shared with the
  *  CanvasOverlay close-affordance so the highlight and the click agree). */
 export const PEN_CLOSE_PX = 12;
+/** B-053 — click-vs-drag guard for anchor placement, in SCREEN px (zoom-independent,
+ *  like the D-122 drag hysteresis): below it the anchor is a CORNER at release. */
+export const PEN_SMOOTH_PX = 3;
 let seq = 0;
 const anchorId = (): string => `pt-${Date.now().toString(36)}-${(seq++).toString(36)}`;
 
@@ -106,24 +111,55 @@ export function penPointerDown(
   commit(false);
 
   // Drag-to-smooth: a drag before pointer-up turns this anchor smooth with mirrored
-  // handles (out = drag vector in scene units, in = its negation).
+  // handles (out = drag vector in scene units, in = its negation). B-053 — corner vs
+  // smooth is DECIDED AT POINTER-UP by the total displacement (Illustrator
+  // semantics, owner decision 2026-07-08): a click-sized gesture places a CORNER
+  // even when jitter briefly crossed the guard mid-hold (the handles preview live
+  // but are actively cleared at release). The guard is in SCREEN px so it is
+  // constant at every zoom (the D-122 hysteresis lesson — a scene-px guard fired on
+  // a 1-screen-px slip at fit zoom, which is why every human click curved). Only
+  // THIS anchor is ever touched — a previous smooth anchor keeps its handles, so
+  // the incoming side of the new corner stays as the prior anchor defines.
   const originClientX = e.clientX;
   const originClientY = e.clientY;
+  const placed = anchor;
+  const screenDist = (ev: PointerEvent): number =>
+    Math.hypot(ev.clientX - originClientX, ev.clientY - originClientY);
+  const placedIsCurrent = (): boolean =>
+    draft !== null && draft.points[draft.points.length - 1] === placed;
   const onMove = (ev: PointerEvent): void => {
-    if (draft === null) return;
-    const dx = (ev.clientX - originClientX) / scale;
-    const dy = (ev.clientY - originClientY) / scale;
-    if (Math.hypot(dx, dy) < 3) return; // ignore micro-jitter
-    const a = draft.points[draft.points.length - 1];
-    if (a === undefined) return;
-    a.smooth = true;
-    a.out = { x: dx, y: dy };
-    a.in = { x: -dx, y: -dy };
+    if (!placedIsCurrent()) return;
+    if (screenDist(ev) < PEN_SMOOTH_PX) {
+      // Below the guard: keep (or restore) the corner so a wobble that dips back
+      // under the threshold previews what release would produce.
+      if (placed.smooth) {
+        placed.smooth = false;
+        delete placed.in;
+        delete placed.out;
+        commit(false);
+      }
+      return;
+    }
+    placed.smooth = true;
+    placed.out = {
+      x: (ev.clientX - originClientX) / scale,
+      y: (ev.clientY - originClientY) / scale,
+    };
+    placed.in = { x: -placed.out.x, y: -placed.out.y };
     commit(false);
   };
-  const onUp = (): void => {
+  const onUp = (ev: PointerEvent): void => {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
+    // The at-release decision: a click-sized total displacement is a CORNER —
+    // clear anything the mid-hold preview set.
+    if (!placedIsCurrent() || screenDist(ev) >= PEN_SMOOTH_PX) return;
+    if (placed.smooth || placed.in !== undefined || placed.out !== undefined) {
+      placed.smooth = false;
+      delete placed.in;
+      delete placed.out;
+      commit(false);
+    }
   };
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);
