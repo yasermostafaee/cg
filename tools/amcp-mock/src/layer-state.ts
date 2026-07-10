@@ -21,6 +21,7 @@ export class LayerRegistry {
       backgroundProducer: 'empty',
       paused: false,
       onAir: false,
+      pageResolution: 'resolved',
     };
     this.slots.set(key, fresh);
     return fresh;

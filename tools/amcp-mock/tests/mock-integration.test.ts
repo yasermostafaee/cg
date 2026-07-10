@@ -145,10 +145,12 @@ describe('createMock', () => {
     const reply = await sendAndReceive(mock.amcpPort, ['CG 1-10 ADD 0 "tmpl" 1 "{\\"a\\":1}"']);
     expect(reply).toContain('404');
     expect(mock.layerState({ channel: 1, layer: 10 })?.producer ?? 'empty').toBe('empty');
-    // …but the data payload is still recorded for assertion.
-    expect(mock.lastCgAdd({ channel: 1, layer: 10 })).toEqual({
+    // …but the data payload is still recorded for assertion, with the verdict
+    // settled 'failed' immediately (no fetch for a template-path miss).
+    expect(mock.lastCgAdd({ channel: 1, layer: 10 })).toMatchObject({
       template: 'tmpl',
       data: '{"a":1}',
+      resolution: 'failed',
     });
   });
 
@@ -164,27 +166,58 @@ describe('createMock', () => {
       const add = mock.lastCgAdd({ channel: 1, layer: 10 });
       expect(add?.template).toBe(url);
       expect(add?.data).toBe('{"title":"خبر"}');
+      // Reconnect-reconciliation — the async fetch verdict settles 'resolved'.
+      await expect(mock.waitForCgAddResolution({ channel: 1, layer: 10 })).resolves.toBe(
+        'resolved',
+      );
     } finally {
       await close();
     }
   });
 
-  it('CG ADD with a URL that 404s is itself 404 (renders nothing)', async () => {
+  // Reconnect-reconciliation — REAL CasparCG acks a URL CG ADD without fetching
+  // it; a dead URL is a SILENT blank (202 + empty frames), never an AMCP 404.
+  // The tripwire moved to the recorded verdict + the observable non-render.
+  it('CG ADD with a URL that 404s still 202s but settles a failed verdict and never renders', async () => {
     const { url, close } = await serveOnce('not found', 404);
     try {
       mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-      const reply = await sendAndReceive(mock.amcpPort, [`CG 1-10 ADD 0 "${url}" 1 "{}"`]);
-      expect(reply).toContain('404');
-      expect(mock.layerState({ channel: 1, layer: 10 })?.producer ?? 'empty').toBe('empty');
+      const slot = { channel: 1, layer: 10 };
+      const reply = await sendAndReceive(mock.amcpPort, [`CG 1-10 ADD 0 "${url}" 0 "{}"`]);
+      expect(reply).toContain('202 CG'); // real CasparCG: no fetch before the ack
+      expect(mock.layerState(slot)?.producer).toBe('html'); // the producer exists…
+      await expect(mock.waitForCgAddResolution(slot)).resolves.toBe('failed');
+      expect(mock.layerState(slot)?.pageResolution).toBe('failed');
+      // …but the failed page produces empty frames: PLAY 202s yet stays off air.
+      const play = await sendAndReceive(mock.amcpPort, ['CG 1-10 PLAY 0']);
+      expect(play).toContain('202 CG');
+      expect(mock.layerState(slot)?.onAir).toBe(false);
     } finally {
       await close();
     }
   });
 
-  it('CG UPDATE records its data payload', async () => {
+  it('CG UPDATE records its data payload even when the layer is empty (403)', async () => {
     mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-    await sendAndReceive(mock.amcpPort, ['CG 1-10 UPDATE 0 "{\\"title\\":\\"به‌روز\\"}"']);
+    const reply = await sendAndReceive(mock.amcpPort, [
+      'CG 1-10 UPDATE 0 "{\\"title\\":\\"به‌روز\\"}"',
+    ]);
+    // Reconnect-reconciliation — real CasparCG 403s an update on a layer with
+    // no cg producer (the original B-038 live log); the payload is still
+    // recorded for assertion (it observes what was SENT).
+    expect(reply).toContain('403');
     expect(mock.lastCgUpdate({ channel: 1, layer: 10 })?.data).toBe('{"title":"به‌روز"}');
+  });
+
+  it('CG UPDATE on a loaded layer is 202; on an empty layer 403', async () => {
+    mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+    expect(await sendAndReceive(mock.amcpPort, ['CG 1-10 UPDATE 0 "{}"'])).toContain('403');
+    const primedReply = await sendAndReceive(mock.amcpPort, [
+      'PLAY 1-10 "file:///x.html" HTML',
+      'CG 1-10 UPDATE 0 "{}"',
+    ]);
+    expect(primedReply).toContain('202 CG');
+    expect(primedReply).not.toContain('403');
   });
 
   // B-039 — the mock models the producer lifecycle so the broken playout cycle is
@@ -254,9 +287,16 @@ describe('createMock', () => {
     // The failed #245 rule (quotes-only) — the regression this class now catches.
     const quotesOnly = (s: string): string => s.replace(/"/g, '\\"');
 
+    // Each case primes the layer with a producer first — CG UPDATE on an empty
+    // layer is now a faithful 403 (reconnect-reconciliation).
+    const PRIME = 'PLAY 1-10 "file:///x.html" HTML';
+
     it('CG UPDATE with the canonical escaping delivers the JSON byte-exact', async () => {
       mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-      const reply = await sendAndReceive(mock.amcpPort, [`CG 1-10 UPDATE 0 "${twoLayer(json)}"`]);
+      const reply = await sendAndReceive(mock.amcpPort, [
+        PRIME,
+        `CG 1-10 UPDATE 0 "${twoLayer(json)}"`,
+      ]);
       expect(reply).toContain('202 CG');
       const upd = mock.lastCgUpdate({ channel: 1, layer: 10 });
       expect(upd?.rejected).toBeUndefined();
@@ -269,7 +309,10 @@ describe('createMock', () => {
       // The operator's exact DP2 payload (design.md): a two-line value, no other
       // special chars — decodes fully, and the bare backslash-n becomes a raw LF.
       const dp2 = JSON.stringify({ ttt: 'New text\nsecond text' });
-      const reply = await sendAndReceive(mock.amcpPort, [`CG 1-10 UPDATE 0 "${quotesOnly(dp2)}"`]);
+      const reply = await sendAndReceive(mock.amcpPort, [
+        PRIME,
+        `CG 1-10 UPDATE 0 "${quotesOnly(dp2)}"`,
+      ]);
       // Real CasparCG acks — the V8 SyntaxError is async and update never fires.
       expect(reply).toContain('202 CG');
       const upd = mock.lastCgUpdate({ channel: 1, layer: 10 });
@@ -285,7 +328,7 @@ describe('createMock', () => {
 
     it('a cleanly-decoding non-JSON data arg is flagged invalid-json over the wire', async () => {
       mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-      const reply = await sendAndReceive(mock.amcpPort, ['CG 1-10 UPDATE 0 "not-json"']);
+      const reply = await sendAndReceive(mock.amcpPort, [PRIME, 'CG 1-10 UPDATE 0 "not-json"']);
       expect(reply).toContain('202 CG'); // fires update("not-json"); the template's parse throws
       const upd = mock.lastCgUpdate({ channel: 1, layer: 10 });
       expect(upd?.data).toBeNull();
@@ -295,7 +338,7 @@ describe('createMock', () => {
     it('the pre-#245 double-escape emission is flagged too (V8 layer breaks it)', async () => {
       mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
       const doubleEscape = (s: string): string => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      await sendAndReceive(mock.amcpPort, [`CG 1-10 UPDATE 0 "${doubleEscape(json)}"`]);
+      await sendAndReceive(mock.amcpPort, [PRIME, `CG 1-10 UPDATE 0 "${doubleEscape(json)}"`]);
       const upd = mock.lastCgUpdate({ channel: 1, layer: 10 });
       expect(upd?.data).toBeNull();
       // The tokenizer restores the JSON byte-exact; the V8 layer then collapses

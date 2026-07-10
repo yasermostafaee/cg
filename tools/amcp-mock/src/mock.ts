@@ -5,6 +5,7 @@ import { LayerRegistry } from './layer-state.js';
 import { defaultHandlers } from './handlers.js';
 import type {
   AmcpHandler,
+  CgAddResolution,
   CgDataResult,
   HandlerContext,
   LayerSlot,
@@ -39,9 +40,22 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
   // B-038 — last CG ADD / CG UPDATE payload per slot, so tests can assert the
   // template arg was a real URL and the data was real (non-empty) field JSON.
   // B-041 — the recorded value is the full two-layer decode verdict.
+  // Reconnect-reconciliation — each add also carries its async fetch verdict
+  // (`resolution`), settled by `completeCgAdd`; waiters let tests await it.
   const slotKey = (slot: LayerSlot): string => `${String(slot.channel)}-${String(slot.layer)}`;
-  const cgAdds = new Map<string, { template: string } & CgDataResult>();
+  const cgAdds = new Map<
+    string,
+    { template: string; resolution: CgAddResolution } & CgDataResult
+  >();
   const cgUpdates = new Map<string, CgDataResult>();
+  const addWaiters = new Map<string, Set<() => void>>();
+  // Ownership token per slot's LATEST add — a stale fetch completion (an older
+  // add, possibly of the SAME URL) must never settle the newer add's verdict.
+  // pageTokens tracks which add OWNS the layer's current page (only URL adds
+  // create pages; a bare-id 404 add steals the record token but not the page).
+  let nextAddToken = 0;
+  const addTokens = new Map<string, number>();
+  const pageTokens = new Map<string, number>();
 
   const ctx: HandlerContext = {
     channelCount,
@@ -58,11 +72,60 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
         [registry.get(slot).producer],
       );
     },
-    recordCgAdd(slot: LayerSlot, template: string, result: CgDataResult): void {
-      cgAdds.set(slotKey(slot), { template, ...result });
+    recordCgAdd(slot: LayerSlot, template: string, result: CgDataResult): number {
+      const key = slotKey(slot);
+      const token = ++nextAddToken;
+      addTokens.set(key, token);
+      cgAdds.set(key, { template, resolution: 'pending', ...result });
+      return token;
     },
     recordCgUpdate(slot: LayerSlot, result: CgDataResult): void {
       cgUpdates.set(slotKey(slot), result);
+    },
+    loadCgPage(slot: LayerSlot, token: number, template: string, playOnLoad: boolean): void {
+      pageTokens.set(slotKey(slot), token);
+      ctx.setLayer(slot, {
+        producer: 'html',
+        filePath: template,
+        paused: false,
+        onAir: playOnLoad,
+        pageResolution: 'pending',
+      });
+    },
+    completeCgAdd(slot: LayerSlot, token: number, resolved: boolean): void {
+      const key = slotKey(slot);
+      // The RECORDED verdict settles only for the slot's LATEST add — a stale
+      // completion must never settle a newer add's verdict.
+      if (addTokens.get(key) === token) {
+        const rec = cgAdds.get(key);
+        if (rec !== undefined && rec.resolution === 'pending') {
+          cgAdds.set(key, { ...rec, resolution: resolved ? 'resolved' : 'failed' });
+          const waiters = addWaiters.get(key);
+          if (waiters !== undefined) {
+            addWaiters.delete(key);
+            for (const wake of waiters) wake();
+          }
+        }
+      }
+      // The LAYER settles only via the page's OWNING add (a bare-id 404 add
+      // steals the record token but never replaces the page; a CLEAR resets
+      // pageResolution so a stale owner can't touch an emptied layer). A
+      // failed page produces empty frames (master's OnLoadError) — off air,
+      // the queued play() never flushes. `producer` stays 'html' (real
+      // CasparCG keeps the producer; it just renders nothing) — no OSC
+      // transition.
+      const layer = registry.peek(slot);
+      if (
+        pageTokens.get(key) === token &&
+        layer !== undefined &&
+        layer.producer === 'html' &&
+        layer.pageResolution === 'pending'
+      ) {
+        registry.patch(slot, {
+          pageResolution: resolved ? 'resolved' : 'failed',
+          ...(resolved ? {} : { onAir: false }),
+        });
+      }
     },
   };
 
@@ -94,11 +157,43 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     layerState(slot: LayerSlot): LayerState | undefined {
       return registry.peek(slot);
     },
-    lastCgAdd(slot: LayerSlot): ({ template: string } & CgDataResult) | undefined {
+    lastCgAdd(
+      slot: LayerSlot,
+    ): ({ template: string; resolution: CgAddResolution } & CgDataResult) | undefined {
       return cgAdds.get(slotKey(slot));
     },
     lastCgUpdate(slot: LayerSlot): CgDataResult | undefined {
       return cgUpdates.get(slotKey(slot));
+    },
+    waitForCgAddResolution(slot: LayerSlot, timeoutMs = 2500): Promise<'resolved' | 'failed'> {
+      const key = slotKey(slot);
+      return new Promise((resolve, reject) => {
+        const settled = (): boolean => {
+          const rec = cgAdds.get(key);
+          if (rec !== undefined && rec.resolution !== 'pending') {
+            resolve(rec.resolution);
+            return true;
+          }
+          return false;
+        };
+        if (settled()) return;
+        const timer = setTimeout(() => {
+          addWaiters.get(key)?.delete(wake);
+          reject(
+            new Error(`CG ADD resolution for ${key} did not settle within ${String(timeoutMs)}ms`),
+          );
+        }, timeoutMs);
+        const wake = (): void => {
+          clearTimeout(timer);
+          void settled();
+        };
+        let set = addWaiters.get(key);
+        if (set === undefined) {
+          set = new Set();
+          addWaiters.set(key, set);
+        }
+        set.add(wake);
+      });
     },
     get amcpClientCount(): number {
       return server.clientCount;

@@ -4,6 +4,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
 import { createRuntimeBridge } from '../platform/createRuntimeBridge.js';
+import { reportCommandError } from './features/status/commandFeedback.js';
 
 /**
  * Browser entry point. The Electron preload used to inject `window.cg`
@@ -25,7 +26,9 @@ const root = createRoot(rootEl);
 root.render(<div className="cg-booting">Connecting to bridge…</div>);
 
 async function boot(): Promise<void> {
-  window.cg = await createRuntimeBridge();
+  // Reconnect-reconciliation — a failed template re-delivery during the
+  // post-reconnect resync surfaces on the operator's command-error toast.
+  window.cg = await createRuntimeBridge({ onResyncError: reportCommandError });
   root.render(
     <StrictMode>
       <App />

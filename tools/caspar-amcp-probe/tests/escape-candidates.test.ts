@@ -200,8 +200,12 @@ describe('amcp-mock — models the confirmed rule (winner passes, controls are f
     });
   }
 
+  // Each case primes the layer with a producer first — CG UPDATE on an empty
+  // layer is a faithful 403 now (reconnect-reconciliation); the escaping focus
+  // needs a producer on the slot.
   it('the winning candidate round-trips the hard payload byte-exact', async () => {
     mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+    await sendLine(mock.amcpPort, 'PLAY 1-10 "file:///x.html" HTML');
     const dataArg = byId('js-escape+amcp-escape').encodeArg(expectedJson());
     const reply = await sendLine(mock.amcpPort, `CG 1-10 UPDATE 0 ${dataArg}`);
     expect(reply).toContain('202 CG');
@@ -212,6 +216,7 @@ describe('amcp-mock — models the confirmed rule (winner passes, controls are f
 
   it('the failed control candidates are flagged (202 on the wire, no delivery)', async () => {
     mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+    await sendLine(mock.amcpPort, 'PLAY 1-10 "file:///x.html" HTML');
     for (const id of ['quotes-only', 'backslash-quote']) {
       const dataArg = byId(id).encodeArg(expectedJson());
       const reply = await sendLine(mock.amcpPort, `CG 1-10 UPDATE 0 ${dataArg}`);

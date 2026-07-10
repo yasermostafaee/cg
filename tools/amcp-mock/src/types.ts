@@ -26,6 +26,9 @@ export interface LayerSlot {
   readonly layer: number;
 }
 
+/** Reconnect-reconciliation — a `CG ADD` template fetch's asynchronous verdict. */
+export type CgAddResolution = 'pending' | 'resolved' | 'failed';
+
 /**
  * Observable layer state. Mirrors what CasparCG 2.3.x emits via OSC
  * (see ADR 0004) — `producer` is the load-bearing signal.
@@ -48,6 +51,16 @@ export interface LayerState {
    * nothing" — the exact gap the old blind-ack hid.
    */
   onAir: boolean;
+  /**
+   * Reconnect-reconciliation — the html page's async load outcome, mirroring the
+   * real producer's CEF load: a URL `CG ADD` acks `202` immediately and the page
+   * resolves asynchronously (`'pending'` → `'resolved' | 'failed'`). A `'failed'`
+   * page produces empty frames (master's `OnLoadError`; the queued `play()` never
+   * flushes): `CG PLAY` on it still `202`s but stays observably off air. Only
+   * meaningful when `producer === 'html'`; non-fetching producer paths
+   * (`LOAD`/`PLAY` media) are `'resolved'`.
+   */
+  pageResolution: CgAddResolution;
 }
 
 /** B-041 — why the mock's second-layer (html_cg_proxy → V8) emulation rejected a CG data arg. */
@@ -128,8 +141,20 @@ export interface MockHandle {
    * payload. Lets tests assert `CG ADD` carried a real URL + non-empty fields.
    * B-041 — `data` is what `window.update` would receive (post BOTH un-escape
    * layers); a framing/JSON-breaking argument is surfaced via `rejected`.
+   * Reconnect-reconciliation — `resolution` is the async template-fetch verdict
+   * (`'pending'` until the GET settles; a bare non-URL id settles `'failed'`
+   * immediately). Tests assert delivery through it, never through a synthetic
+   * AMCP failure.
    */
-  lastCgAdd(slot: LayerSlot): ({ template: string } & CgDataResult) | undefined;
+  lastCgAdd(
+    slot: LayerSlot,
+  ): ({ template: string; resolution: CgAddResolution } & CgDataResult) | undefined;
+  /**
+   * Reconnect-reconciliation — resolves with the slot's LAST `CG ADD` async
+   * fetch verdict once it settles (`'resolved' | 'failed'`); rejects on timeout
+   * (default 2500 ms) if no ADD was seen or the verdict never settles.
+   */
+  waitForCgAddResolution(slot: LayerSlot, timeoutMs?: number): Promise<'resolved' | 'failed'>;
   /** B-038/B-041 — the last `CG UPDATE` data payload seen on a slot (see `lastCgAdd`). */
   lastCgUpdate(slot: LayerSlot): CgDataResult | undefined;
   /** Number of currently-connected AMCP clients. */
@@ -148,10 +173,30 @@ export interface HandlerContext {
   getLayer(slot: LayerSlot): LayerState;
   /** Apply a partial update to a layer; emits OSC reflecting the new state. */
   setLayer(slot: LayerSlot, patch: Partial<Omit<LayerState, 'slot'>>): void;
-  /** B-038/B-041 — record a `CG ADD`'s template argument + decoded data verdict. */
-  recordCgAdd(slot: LayerSlot, template: string, result: CgDataResult): void;
+  /**
+   * B-038/B-041 — record a `CG ADD`'s template argument + decoded data verdict.
+   * Returns an ownership token identifying THIS add — its async completion
+   * passes the token back so a stale fetch can never settle a newer add's
+   * verdict (two ADDs of the same URL on one slot are otherwise ambiguous).
+   */
+  recordCgAdd(slot: LayerSlot, template: string, result: CgDataResult): number;
   /** B-038/B-041 — record a `CG UPDATE`'s decoded data verdict. */
   recordCgUpdate(slot: LayerSlot, result: CgDataResult): void;
+  /**
+   * Reconnect-reconciliation — load a URL `CG ADD`'s page onto the layer
+   * (producer exists immediately, resolution pending) and record the add
+   * (by its `recordCgAdd` token) as the page's owner: only the owning add's
+   * completion may settle the layer's `pageResolution`.
+   */
+  loadCgPage(slot: LayerSlot, token: number, template: string, playOnLoad: boolean): void;
+  /**
+   * Reconnect-reconciliation — settle a `CG ADD`'s async template resolution
+   * (identified by the token `recordCgAdd` returned). The RECORDED verdict
+   * settles only for the slot's latest add; the LAYER's `pageResolution`
+   * settles only for the page's owning add (a failed page also drops `onAir`
+   * — the queued `play()` never flushed). Anything staler is ignored.
+   */
+  completeCgAdd(slot: LayerSlot, token: number, resolved: boolean): void;
   /** Channel count the mock was started with. */
   readonly channelCount: number;
 }

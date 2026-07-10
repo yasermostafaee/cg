@@ -101,6 +101,17 @@ export class CasparRuntime {
    * (mirror-sync fans out ADD/CLEAR to both, so existence matches on each).
    */
   readonly #loaded = new Set<string>();
+  /**
+   * Reconnect-reconciliation — layers this process has CLEARed at least once
+   * (adoption, out, remove), i.e. layers whose producer state the bridge KNOWS.
+   * The first `CG ADD` onto a layer not in this set is preceded by a `CLEAR`
+   * ("adoption"), destroying any producer a previous bridge session orphaned
+   * there BEFORE the item's slot/OSC interest bind — the orphan's state can
+   * never route to the fresh item. Deliberately NOT a startup sweep: an orphan
+   * on a layer no load targets stays on air (on-air safety — a cold bridge
+   * cannot tell junk from a graphic ridden through a controller restart).
+   */
+  readonly #adopted = new Set<string>();
   #seq = 0;
   #lastFailover: ConnectionHealth['lastFailover'] = undefined;
 
@@ -274,6 +285,15 @@ export class CasparRuntime {
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields }, seq);
 
+    // Reconnect-reconciliation — never blind-ADD a URL the bridge can't serve:
+    // an unregistered template is a visible failed load. (Real CasparCG would
+    // 202 the ADD without fetching and CEF-load the 404 page — a silent blank
+    // on air; the guard is what makes the failure loud.)
+    if (!this.#templates.has(templateId)) {
+      this.#reconciler.applyAck(seq, false, 'unknown-template');
+      return { accepted: false };
+    }
+
     let slot: CommandSlot;
     try {
       slot = this.#allocate(templateId);
@@ -281,6 +301,21 @@ export class CasparRuntime {
       this.#reconciler.applyAck(seq, false, 'no-layer');
       return { accepted: false };
     }
+
+    // Reconnect-reconciliation — adopt the layer BEFORE binding the slot/OSC
+    // interest: destroy any producer a previous bridge session orphaned there,
+    // so its OSC state can never route to this fresh item.
+    await this.#adoptLayer(slot);
+
+    // The adopt-CLEAR awaited a real AMCP round-trip — a remove() may have
+    // landed meanwhile and, finding no slot yet, cleaned up nothing. If the
+    // item is gone, release the layer and bail instead of binding a ghost
+    // slot/interest and ADDing an ownerless producer.
+    if (this.#reconciler.get(itemId) === null) {
+      this.#layers.deallocate(slot);
+      return { accepted: false };
+    }
+
     this.#slots.set(itemId, slot);
     this.#reconciler.assignSlot(itemId, { ...slot, server: 'primary' });
     // Interest on BOTH sessions' OSC so whichever is primary, its confirmations
@@ -306,10 +341,17 @@ export class CasparRuntime {
     // non-intent seq so its ack doesn't perturb the take's status.
     if (!this.#loaded.has(itemId)) {
       const item = this.#reconciler.get(itemId);
+      const templateId = item?.templateId ?? itemId;
+      // Reconnect-reconciliation — the re-ADD is a fresh load: the same
+      // unknown-template guard applies (never blind-ADD an unservable URL).
+      if (!this.#templates.has(templateId)) {
+        this.#reconciler.applyAck(seq, false, 'unknown-template');
+        return { accepted: false, errorCode: 'unknown-template' };
+      }
       const addedOk = await this.#sendAdd(
         itemId,
         slot,
-        item?.templateId ?? itemId,
+        templateId,
         item?.fields ?? {},
         this.#nextSeq(),
       );
@@ -319,7 +361,7 @@ export class CasparRuntime {
       }
     }
 
-    const ok = await this.#send(this.#builder.take(slot), seq, 'normal');
+    const { ok } = await this.#send(this.#builder.take(slot), seq, 'normal');
     return ok ? { accepted: true } : { accepted: false, errorCode: 'amcp-error' };
   }
 
@@ -335,7 +377,7 @@ export class CasparRuntime {
     // Send the merged field set the Reconciler now holds.
     const merged = this.#reconciler.get(itemId)?.fields ?? fields;
     this.#armExpiry(seq);
-    const ok = await this.#send(this.#builder.update(slot, merged), seq, 'normal');
+    const { ok } = await this.#send(this.#builder.update(slot, merged), seq, 'normal');
     return { accepted: ok };
   }
 
@@ -345,12 +387,15 @@ export class CasparRuntime {
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'out', itemId }, seq);
     this.#armExpiry(seq);
-    const ok = await this.#send(this.#builder.out(slot), seq, 'urgent');
+    const { ok, onPrimary } = await this.#send(this.#builder.out(slot), seq, 'urgent');
     // B-039 — `CLEAR` DESTROYS the producer: record that no producer exists on the
     // slot so a subsequent take re-ADDs (instead of `CG PLAY`-ing an empty layer).
     // The slot stays RESERVED (the item is still on the stack, idle) until remove —
     // retake re-ADDs onto the same slot; OSC interest stays put so idle confirms.
     this.#loaded.delete(itemId);
+    // A CLEAR executed on the CURRENT PRIMARY counts as adoption — the layer's
+    // state is known there (a backup-only ack proves nothing about the primary).
+    if (ok && onPrimary) this.#adopted.add(adoptionKey(slot));
     return { accepted: ok };
   }
 
@@ -364,7 +409,13 @@ export class CasparRuntime {
       this.#slots.delete(itemId);
       this.#removeInterest(slot);
       this.#layers.deallocate(slot);
-      await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
+      const { ok, onPrimary } = await this.#send(
+        this.#builder.out(slot),
+        this.#nextSeq(),
+        'urgent',
+      );
+      // A CLEAR executed on the CURRENT PRIMARY counts as adoption (see out()).
+      if (ok && onPrimary) this.#adopted.add(adoptionKey(slot));
     }
     return { accepted: true };
   }
@@ -498,6 +549,27 @@ export class CasparRuntime {
     }
   }
 
+  /**
+   * Reconnect-reconciliation — the first `CG ADD` per layer per process is
+   * preceded by a `CLEAR` of that layer ("adoption"): deterministic allocation
+   * makes a collision with a dead session's orphan near-certain, and real
+   * CasparCG's `CG ADD` would destroy that producer anyway (stage replace) —
+   * the explicit CLEAR just does it BEFORE the fresh item binds its slot/OSC
+   * interest, versions/producer-types independent and mock-testable. Rides a
+   * non-intent seq so the item's status is settled only by its own ADD. A
+   * failed CLEAR (e.g. server down) leaves the layer unadopted — the next
+   * load retries; the ADD's own failure settles the intent honestly.
+   */
+  async #adoptLayer(slot: CommandSlot): Promise<void> {
+    const key = adoptionKey(slot);
+    if (this.#adopted.has(key)) return;
+    const { ok, onPrimary } = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'normal');
+    // A backup-only success (mirror-sync with the primary momentarily down)
+    // did NOT clear the primary's layer — leave it unadopted so a later load
+    // retries the CLEAR where the orphan actually lives.
+    if (ok && onPrimary) this.#adopted.add(key);
+  }
+
   #addInterest(slot: CommandSlot): void {
     this.#sessions.A.osc.interest.add(slot.channel, slot.layer);
     this.#sessions.B.osc.interest.add(slot.channel, slot.layer);
@@ -534,19 +606,26 @@ export class CasparRuntime {
   /**
    * Send an AMCP line through the `RedundancyAdapter` (strategy-aware fan-out to
    * primary/backup; drives the auto-failover triggers), await the ack, and feed
-   * it to the Reconciler.
+   * it to the Reconciler. `onPrimary` reports whether the server that is NOW the
+   * current primary executed the command — in mirror-sync a backup-only success
+   * still acks `ok`, but the primary's layer state was NOT touched (the
+   * adoption bookkeeping must not trust it).
    */
-  async #send(line: string, seq: number, priority: 'urgent' | 'normal'): Promise<boolean> {
+  async #send(
+    line: string,
+    seq: number,
+    priority: 'urgent' | 'normal',
+  ): Promise<{ ok: boolean; onPrimary: boolean }> {
     try {
       const result = await this.#adapter.send(line, { priority });
       this.#clearExpiry(seq);
       const ok = result.response.kind !== 'err';
       this.#reconciler.applyAck(seq, ok, ok ? undefined : `amcp-${String(result.response.code)}`);
-      return ok;
+      return { ok, onPrimary: result.winner === this.#adapter.currentPrimary };
     } catch {
       this.#clearExpiry(seq);
       this.#reconciler.applyAck(seq, false, 'amcp-send-failed');
-      return false;
+      return { ok: false, onPrimary: false };
     }
   }
 
@@ -566,7 +645,7 @@ export class CasparRuntime {
     const templateArg = this.#templateServer.listening
       ? this.#templateServer.urlFor(templateId)
       : templateId;
-    const ok = await this.#send(this.#builder.load(slot, templateArg, fields), seq, 'normal');
+    const { ok } = await this.#send(this.#builder.load(slot, templateArg, fields), seq, 'normal');
     if (ok) this.#loaded.add(itemId);
     return ok;
   }
@@ -582,4 +661,9 @@ export class CasparRuntime {
     timer.unref?.();
     this.#flushTimer = timer;
   }
+}
+
+/** Key for the per-process layer-adoption set (reconnect-reconciliation). */
+function adoptionKey(slot: CommandSlot): string {
+  return `${String(slot.channel)}:${String(slot.layer)}`;
 }
