@@ -1,8 +1,8 @@
-# Design — fix-pen-curve-and-hit-test (B-053 / B-054 / B-055)
+# Design — fix-pen-curve-and-hit-test (B-057 / B-056 / B-055)
 
 ## Recon findings (2026-07-10, post-B-037/B-051 main; red unit tests against the live store)
 
-### B-053 — the guard fires on every human click, and never resets
+### B-057 — the guard fires on every human click, and never resets
 
 `pen-draw.ts`'s `onMove` flipped the last anchor smooth once cumulative motion exceeded **3 SCENE
 px** and nothing ever cleared it. Two compounding defects, both proven red:
@@ -14,7 +14,7 @@ px** and nothing ever cleared it. Two compounding defects, both proven red:
   the handles of the largest excursion. Red test: move +20 px then back to +1 px, release →
   smooth.
 
-### B-054 — no smooth insertion path exists, and the fallback is a dead end
+### B-056 — no smooth insertion path exists, and the fallback is a dead end
 
 `insertOnSegment` created a corner mid-point only. The prompt's "acceptable alternative" (insert a
 corner, then pull handles out) was checked and REFUTED as a fallback: `PathEditor` renders handle
@@ -34,7 +34,7 @@ wrong for curves extending past the degenerate bbox; the runtime's viewBox clamp
 
 ## Decisions
 
-### D1 — decision at pointer-UP, screen-px guard, live preview kept (B-053)
+### D1 — decision at pointer-UP, screen-px guard, live preview kept (B-057)
 
 `PEN_SMOOTH_PX = 3` SCREEN px (exported), the same magnitude and unit as the D-122 drag
 hysteresis and beginDrag's click-vs-drag guard — constant at every zoom. During the hold, `onMove`
@@ -47,7 +47,7 @@ anchor's handles are never modified, which is exactly the owner's Illustrator ru
 a segment when EITHER side has a handle, so the corner's incoming side keeps the prior anchor's
 curve for free.
 
-### D2 — drag-on-insert, not handle-pulling (B-054)
+### D2 — drag-on-insert, not handle-pulling (B-056)
 
 Preferred interaction implemented: pointer-down on a segment inserts the corner mid-point
 immediately (as today, so a plain click is unchanged), then window move/up listeners run the pen's

@@ -8,9 +8,11 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
-- Pen curve trilogy ([B-053](./prd/bugs-designer.md) smooth-drag sticks,
-  [B-054](./prd/bugs-designer.md) no smooth insert,
-  [B-055](./prd/bugs-designer.md) curved shapes select only near center) —
+- Pen curve trilogy ([B-057](./prd/bugs-designer.md) smooth-drag sticks,
+  [B-056](./prd/bugs-designer.md) no smooth insert,
+  [B-055](./prd/bugs-designer.md) curved shapes select only near center;
+  B-057/B-056 renumbered from B-053/B-054 — the runtime track's #271/#273
+  filings hold those numbers) —
   merged (#272) & archived (2026-07-10, `2026-07-10-fix-pen-curve-and-hit-test`):
   corner-vs-smooth decided at pointer-up against a screen-px guard (previous
   smooth anchor's handles untouched, Illustrator semantics), segment click-drag

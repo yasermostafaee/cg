@@ -1,22 +1,22 @@
-# Tasks — fix-pen-curve-and-hit-test (B-053 / B-054 / B-055)
+# Tasks — fix-pen-curve-and-hit-test (B-057 / B-056 / B-055)
 
 ## 1. Recon (red-first, against the live store on post-B-051 main)
 
-- [x] B-053: red tests — a 2-screen-px slip at scale 0.5 places a smooth anchor (scene-px guard);
+- [x] B-057: red tests — a 2-screen-px slip at scale 0.5 places a smooth anchor (scene-px guard);
       drag-out-and-back keeps the excursion's handles (incremental, never reset).
-- [x] B-054: `insertOnSegment` is corner-only; the handle-pulling fallback REFUTED (corners render
+- [x] B-056: `insertOnSegment` is corner-only; the handle-pulling fallback REFUTED (corners render
       no handle dots; `dragHandle` never sets smooth).
 - [x] B-055: red tests — bulge outside the anchor polygon misses; concavity inside it false-hits;
       an open two-anchor arc grabs only at its straight chord; degenerate-bbox axis collapse found
       by the arc test.
-- [x] Free B numbers verified (B-051/B-052 landed in #270) → B-053, B-054, B-055.
+- [x] Free B numbers verified (B-051/B-052 landed in #270) → B-057, B-056, B-055.
 
 ## 2. Implementation
 
-- [x] `pen-draw.ts` (B-053): `PEN_SMOOTH_PX = 3` SCREEN px; live corner/smooth preview during the
+- [x] `pen-draw.ts` (B-057): `PEN_SMOOTH_PX = 3` SCREEN px; live corner/smooth preview during the
       hold; final decision at pointer-UP clears jitter-set handles; anchor captured by reference
       and re-validated (finish/cancel/stale-drop safe); previous anchor's handles never touched.
-- [x] `PathEditor.tsx` (B-054): segment pointer-down inserts the corner, drag before release pulls
+- [x] `PathEditor.tsx` (B-056): segment pointer-down inserts the corner, drag before release pulls
       mirrored smooth handles live; at-release decision; ONE history boundary at pointer-up.
 - [x] `hit-test.ts` (B-055): flatten each segment's exact rendered cubic (16 steps) into the
       ray-cast + grab-margin tests; display mapping mirrors the runtime viewBox's `max(bbox, 1)`
@@ -39,7 +39,7 @@
 
 ## 4. Docs
 
-- [x] PRD `docs/prd/bugs-designer.md`: B-053 (medium), B-054 (medium), B-055 (high) filed in
+- [x] PRD `docs/prd/bugs-designer.md`: B-057 (medium), B-056 (medium), B-055 (high) filed in
       canonical format with recon findings, `[~]` with branch + change dir.
 - [x] OpenSpec MODIFIED ×3 on `designer-path-element` (placement at pointer-up; segment
       click-drag smooth insert; curved-outline hit-test); `--strict` valid.
