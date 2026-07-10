@@ -149,7 +149,7 @@ export class Preview {
            iframe reload; the baked value is the load-time fallback. */
         top: var(--cg-frame-y, ${String(oy)}px) !important;
         left: var(--cg-frame-x, ${String(ox)}px) !important;
-        /* D-071 / B-0xx — the frame SIZE is a CSS variable too (like the offset), so a
+        /* D-071 / B-028 — the frame SIZE is a CSS variable too (like the offset), so a
            scene-size change (inspector W/H) re-sizes the frame page LIVE on the
            scene-replace path — no iframe reload. The baked value is the load-time
            fallback; without the var the !important literal would pin the frame to the
@@ -644,7 +644,7 @@ export class Preview {
             root.style.setProperty('--cg-frame-y', (o.y || 0) + 'px');
           }
         }
-        // B-0xx — the frame PAGE size tracks scene.resolution live: a scene-size change
+        // B-028 — the frame PAGE size tracks scene.resolution live: a scene-size change
         // (inspector W/H) arrives on the scene-replace path with no iframe reload, so set
         // the size CSS vars from the scene's resolution (the baked CSS value is only the
         // load-time fallback). Without this the !important frame width/height stay pinned
@@ -668,7 +668,7 @@ export class Preview {
                 // (same rAF-throttled channel); update the CSS vars on :root so the
                 // recreated .cg-stage picks up the new offset with no reload.
                 applyFrameOffset(msg.frameOffset);
-                // B-0xx — and the new frame SIZE (a scene-size edit travels here too).
+                // B-028 — and the new frame SIZE (a scene-size edit travels here too).
                 applyFrameSize(msg.scene.resolution);
                 if (msg.assetUrls && typeof msg.assetUrls === 'object') {
                   assetUrls = msg.assetUrls;

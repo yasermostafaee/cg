@@ -1,12 +1,12 @@
 import { test, expect, type DesignerApp } from './fixtures/designer.js';
 
 /**
- * B-0xx — the checkered FRAME page stays `scene.resolution`-sized; only the dark
+ * B-027/B-028 — the checkered FRAME page stays `scene.resolution`-sized; only the dark
  * pasteboard EXTENT grows with off-frame content; Fit fits the resolution-sized frame.
  * Guards the regression where dragging a shape off-frame appeared to grow the visible
  * page (the frame/extent/fit were conflated), even though scene.resolution is untouched.
  */
-test.describe('Scene size vs pasteboard extent — invariants (B-0xx)', () => {
+test.describe('Scene size vs pasteboard extent — invariants (B-027/B-028)', () => {
   // The checkered FRAME page = the runtime's `.cg-stage` inside the iframe; its layout
   // size is the scene resolution (transform: scale() doesn't change offset metrics).
   const frameW = (app: DesignerApp): Promise<number> =>
