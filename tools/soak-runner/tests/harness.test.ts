@@ -85,6 +85,8 @@ describe('runSoak (short scenario)', () => {
       errors: ['amcp send timed out'],
       passed: false,
       failovers: [],
+      events: { mirrorDivergence: 0, splitBrainPersistent: 0, correctiveResend: 0, health: 0 },
+      journalEndSize: 0,
     });
     expect(text).toContain('first error:');
     expect(text).toContain('amcp send timed out');
@@ -140,8 +142,67 @@ describe('runSoak (short scenario)', () => {
       errors: [],
       passed: true,
       failovers: [{ atMs: 1234, from: 'A', to: 'B' }],
+      events: { mirrorDivergence: 2, splitBrainPersistent: 1, correctiveResend: 3, health: 0 },
+      journalEndSize: 42,
     });
     expect(text).toContain('failovers:     1');
     expect(text).toContain('A → B');
+    expect(text).toContain('split-brains:  1');
+    expect(text).toContain('journal end:   42 entries');
+  });
+});
+
+describe('runSoak — B-046 backup fidelity modes', () => {
+  it("backup: 'absent' (declared single-server) is quiet and memory-bounded", async () => {
+    const report = await runSoak({
+      durationMs: 2500,
+      cycleMs: 30,
+      sampleMs: 200,
+      leakBudgetMb: 50,
+      backup: 'absent',
+    });
+    // The B-046 memory-risk proof: heap under budget over the sampled window…
+    expect(report.passed).toBe(true);
+    expect(report.errors).toEqual([]);
+    expect(report.cycles).toBeGreaterThan(0);
+    // …with ZERO split-brain / replay / divergence churn…
+    expect(report.events.mirrorDivergence).toBe(0);
+    expect(report.events.splitBrainPersistent).toBe(0);
+    expect(report.events.correctiveResend).toBe(0);
+    // …and a bounded journal (self-bounding cap, 500 default).
+    expect(report.journalEndSize).toBeLessThanOrEqual(500);
+  });
+
+  it("backup: 'dead' (declared but down — the old phantom default) is equally quiet and bounded", async () => {
+    const report = await runSoak({
+      durationMs: 2500,
+      cycleMs: 30,
+      sampleMs: 200,
+      leakBudgetMb: 50,
+      backup: 'dead',
+    });
+    expect(report.passed).toBe(true);
+    expect(report.errors).toEqual([]);
+    expect(report.cycles).toBeGreaterThan(0);
+    // Pre-fix this mode diverged on EVERY send and replayed the whole
+    // journal every 3rd one — all of it must now be gone.
+    expect(report.events.mirrorDivergence).toBe(0);
+    expect(report.events.splitBrainPersistent).toBe(0);
+    expect(report.events.correctiveResend).toBe(0);
+    expect(report.journalEndSize).toBeLessThanOrEqual(500);
+  });
+
+  it("backup: 'diverging' (LIVE but wrong) still escalates to split-brain + corrective resend", async () => {
+    const report = await runSoak({
+      durationMs: 2500,
+      cycleMs: 30,
+      sampleMs: 200,
+      leakBudgetMb: 50,
+      backup: 'diverging',
+    });
+    expect(report.cycles).toBeGreaterThan(0);
+    expect(report.events.mirrorDivergence).toBeGreaterThan(0);
+    expect(report.events.splitBrainPersistent).toBeGreaterThan(0);
+    expect(report.events.correctiveResend).toBeGreaterThan(0);
   });
 });

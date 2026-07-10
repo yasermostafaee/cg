@@ -12,16 +12,27 @@ import {
 import { EventEmitter } from 'node:events';
 
 /**
- * Soak harness. Boots two `@cg/amcp-mock` instances + a thin runtime
+ * Soak harness. Boots `@cg/amcp-mock` instances + a thin runtime
  * composition (transports + queues + adapter + Reconciler) in-process,
  * then runs a scripted scenario for a configurable duration. Memory and
  * queue depth are sampled at a fixed cadence.
  *
- * This is **not** the full Electron runtime — for that the soak would
- * need to spawn `apps/runtime` and drive it via IPC. The in-process
- * composition is the load-bearing thing we care about leaking; the
- * Electron shell's leaks are validated separately in M9.
+ * B-046 — the harness models the real dead-vs-live backup distinction
+ * (the B-041 lesson: model reality, not our assumption) via `backup`:
+ *
+ *   'live'      — two live mocks, both sessions healthy (the original soak)
+ *   'absent'    — declared single-server: NO backup session at all
+ *   'dead'      — backup declared but down: its session reports
+ *                 `disconnected` and its transport rejects every send,
+ *                 exactly like the phantom `127.0.0.1:5251` default did
+ *   'diverging' — backup live but genuinely diverging (PLAY acks 404)
+ *
+ * This is **not** the full runtime app — for that the soak would need to
+ * spawn `apps/runtime` and drive it via IPC. The in-process composition
+ * is the load-bearing thing we care about leaking.
  */
+
+export type SoakBackupMode = 'live' | 'absent' | 'dead' | 'diverging';
 
 export interface SoakOptions {
   /** Total soak duration in ms. CI default: 30 s. Production: 30 m. */
@@ -34,6 +45,8 @@ export interface SoakOptions {
   leakBudgetMb: number;
   /** Strategy to use. Default `'mirror-sync'`. */
   strategy?: RedundancyStrategy;
+  /** Backup fidelity mode (B-046). Default `'live'`. */
+  backup?: SoakBackupMode;
   /**
    * M9.4: schedule a manual failover at this many ms after soak start.
    * Used to validate the Phase 8 §12 exit criterion ("24h scenario
@@ -42,6 +55,14 @@ export interface SoakOptions {
    * are ignored.
    */
   scheduledFailoversAtMs?: readonly number[];
+}
+
+/** Redundancy-event counters observed over the soak (B-046 churn proof). */
+export interface SoakEventCounts {
+  mirrorDivergence: number;
+  splitBrainPersistent: number;
+  correctiveResend: number;
+  health: number;
 }
 
 export interface MemorySample {
@@ -78,12 +99,16 @@ export interface SoakReport {
   errors: readonly string[];
   /** Failovers that fired during the soak (M9.4). */
   failovers: readonly FailoverRecord[];
+  /** Redundancy-event counters (B-046: quiet modes must stay at zero). */
+  events: SoakEventCounts;
+  /** Journal entry count at soak end (B-046: bounded in every mode). */
+  journalEndSize: number;
 }
 
 interface Stack {
   mockA: MockHandle;
-  mockB: MockHandle;
-  sessions: { A: ServerSession; B: ServerSession };
+  mockB: MockHandle | null;
+  sessions: { A: ServerSession; B?: ServerSession };
   adapter: RedundancyAdapter;
   reconciler: Reconciler;
   layerManager: LayerManager;
@@ -91,49 +116,90 @@ interface Stack {
   dispose(): Promise<void>;
 }
 
-async function buildStack(strategy: RedundancyStrategy): Promise<Stack> {
+async function buildStack(strategy: RedundancyStrategy, backup: SoakBackupMode): Promise<Stack> {
   const mockA = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-  const mockB = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
 
   const transportA = new AmcpTransport();
   await transportA.connect(mockA.host, mockA.amcpPort);
-  const transportB = new AmcpTransport();
-  await transportB.connect(mockB.host, mockB.amcpPort);
   const queueA = new CommandQueue(transportA);
-  const queueB = new CommandQueue(transportB);
-
   const sessionA = makeFakeSession('A', queueA);
-  const sessionB = makeFakeSession('B', queueB);
+
+  let mockB: MockHandle | null = null;
+  let transportB: AmcpTransport | null = null;
+  let queueB: CommandQueue | null = null;
+  let sessionB: ServerSession | undefined;
+
+  if (backup === 'live' || backup === 'diverging') {
+    mockB = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+    if (backup === 'diverging') {
+      // A LIVE backup whose PLAY genuinely diverges from the primary's ack —
+      // the case that MUST still escalate to split-brain + corrective resend.
+      mockB.setHandler('PLAY', () => ({ kind: 'err', code: 404, verb: 'PLAY' }));
+    }
+    transportB = new AmcpTransport();
+    await transportB.connect(mockB.host, mockB.amcpPort);
+    queueB = new CommandQueue(transportB);
+    sessionB = makeFakeSession('B', queueB, 'healthy');
+  } else if (backup === 'dead') {
+    // Declared but DOWN: an unconnected transport (every enqueue rejects,
+    // like the phantom 127.0.0.1:5251 default) and a session that KNOWS it —
+    // the real dead-backup shape, not a healthy-looking fake.
+    transportB = new AmcpTransport();
+    queueB = new CommandQueue(transportB);
+    sessionB = makeFakeSession('B', queueB, 'disconnected');
+  }
+  // 'absent': declared single-server — no B session at all.
+
   const adapter = new RedundancyAdapter({
     strategy,
-    sessions: { A: sessionA, B: sessionB },
+    sessions: sessionB !== undefined ? { A: sessionA, B: sessionB } : { A: sessionA },
     autoFailoverEnabled: false,
   });
 
   return {
     mockA,
     mockB,
-    sessions: { A: sessionA, B: sessionB },
+    sessions: sessionB !== undefined ? { A: sessionA, B: sessionB } : { A: sessionA },
     adapter,
     reconciler: new Reconciler(),
     layerManager: new LayerManager(),
     async dispose() {
       queueA.dispose();
-      queueB.dispose();
+      queueB?.dispose();
       transportA.destroy();
-      transportB.destroy();
-      await Promise.all([mockA.stop(), mockB.stop()]);
+      transportB?.destroy();
+      await Promise.all([mockA.stop(), mockB?.stop() ?? Promise.resolve()]);
     },
   };
 }
 
-function makeFakeSession(label: 'A' | 'B', queue: CommandQueue): ServerSession {
+function makeFakeSession(
+  label: 'A' | 'B',
+  queue: CommandQueue,
+  initialState: 'healthy' | 'disconnected' = 'healthy',
+): ServerSession {
+  // Mutable state + real `state-change` emission so scenarios can model a
+  // session going down/up mid-soak (B-046 fidelity — the previous fake was
+  // hardcoded 'healthy' and could not represent a dead backup at all).
+  const holder = { state: initialState as string };
   const e = new EventEmitter() as unknown as ServerSession;
   Object.defineProperty(e, 'name', { value: label });
   Object.defineProperty(e, 'queue', { value: queue });
-  Object.defineProperty(e, 'state', { get: () => 'healthy', configurable: true });
+  Object.defineProperty(e, 'state', { get: () => holder.state, configurable: true });
+  Object.defineProperty(e, '__stateHolder', { value: holder });
   Object.defineProperty(e, 'osc', { value: new OscTransport() });
   return e;
+}
+
+/** Mutate a fake session's state, emitting the real `state-change` shape. */
+export function setFakeSessionState(
+  session: ServerSession,
+  to: 'healthy' | 'degraded' | 'disconnected' | 'connecting',
+): void {
+  const holder = (session as unknown as { __stateHolder: { state: string } }).__stateHolder;
+  const from = holder.state;
+  holder.state = to;
+  (session as unknown as EventEmitter).emit('state-change', { from, to, reason: 'soak' });
 }
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -161,10 +227,29 @@ async function runOneCycle(stack: Stack, cycleSeq: number): Promise<void> {
  * The harness disposes of all sockets + mocks before resolving.
  */
 export async function runSoak(options: SoakOptions): Promise<SoakReport> {
-  const stack = await buildStack(options.strategy ?? 'mirror-sync');
+  const stack = await buildStack(options.strategy ?? 'mirror-sync', options.backup ?? 'live');
   const errors: string[] = [];
   const samples: MemorySample[] = [];
   const failovers: FailoverRecord[] = [];
+  // B-046 — count every redundancy event so quiet modes are assertable.
+  const events: SoakEventCounts = {
+    mirrorDivergence: 0,
+    splitBrainPersistent: 0,
+    correctiveResend: 0,
+    health: 0,
+  };
+  stack.adapter.on('mirror-divergence', () => {
+    events.mirrorDivergence += 1;
+  });
+  stack.adapter.on('split-brain-persistent', () => {
+    events.splitBrainPersistent += 1;
+  });
+  stack.adapter.on('corrective-resend', () => {
+    events.correctiveResend += 1;
+  });
+  stack.adapter.on('health', () => {
+    events.health += 1;
+  });
   const start = Date.now();
 
   // Schedule failovers. Each fires once at its target offset; the
@@ -197,7 +282,7 @@ export async function runSoak(options: SoakOptions): Promise<SoakReport> {
       atMs: Date.now() - start,
       heapUsedMb: mem.heapUsed / (1024 * 1024),
       rssMb: mem.rss / (1024 * 1024),
-      queueDepth: stack.sessions.A.queue.depth + stack.sessions.B.queue.depth,
+      queueDepth: stack.sessions.A.queue.depth + (stack.sessions.B?.queue.depth ?? 0),
     });
   };
 
@@ -210,6 +295,7 @@ export async function runSoak(options: SoakOptions): Promise<SoakReport> {
   samplerHandle.unref?.();
 
   let cycles = 0;
+  let journalEndSize = 0;
   const deadline = start + options.durationMs;
   try {
     while (Date.now() < deadline) {
@@ -225,6 +311,7 @@ export async function runSoak(options: SoakOptions): Promise<SoakReport> {
     for (const t of failoverTimers) clearTimeout(t);
     clearInterval(samplerHandle);
     sample();
+    journalEndSize = stack.adapter.journal.all().length;
     await stack.dispose();
   }
 
@@ -248,5 +335,7 @@ export async function runSoak(options: SoakOptions): Promise<SoakReport> {
     passed: heapDeltaMb <= options.leakBudgetMb && errors.length === 0,
     errors,
     failovers,
+    events,
+    journalEndSize,
   };
 }

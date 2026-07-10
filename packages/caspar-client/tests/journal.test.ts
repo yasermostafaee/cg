@@ -40,3 +40,58 @@ describe('InMemoryJournal', () => {
     expect(j.all().map((e) => e.line)).toEqual(['new']);
   });
 });
+
+describe('InMemoryJournal — B-046 self-bounding', () => {
+  it('never holds more than maxEntries (oldest evicted first)', () => {
+    const j = new InMemoryJournal({ now: () => 1000, maxEntries: 5 });
+    for (let i = 1; i <= 20; i++) {
+      const seq = j.append(`PLAY ${String(i)}`, 'both');
+      j.resolve(seq, 'ok', 202);
+    }
+    expect(j.all()).toHaveLength(5);
+    expect(j.all().map((e) => e.line)).toEqual([
+      'PLAY 16',
+      'PLAY 17',
+      'PLAY 18',
+      'PLAY 19',
+      'PLAY 20',
+    ]);
+    // seq stays monotonic across evictions.
+    expect(j.lastSeq).toBe(20);
+  });
+
+  it('drops RESOLVED entries older than retentionMs on append', () => {
+    let now = 0;
+    const j = new InMemoryJournal({ now: () => now, retentionMs: 10_000 });
+    const oldSeq = j.append('PLAY old', 'both');
+    j.resolve(oldSeq, 'ok', 202);
+    now = 15_000; // past retention
+    j.append('PLAY new', 'both');
+    expect(j.all().map((e) => e.line)).toEqual(['PLAY new']);
+  });
+
+  it('retains entries younger than retentionMs — a briefly-lagged backup can still be replayed', () => {
+    let now = 0;
+    const j = new InMemoryJournal({ now: () => now, retentionMs: 300_000 });
+    const seq = j.append('PLAY recent', 'both');
+    j.resolve(seq, 'ok', 202);
+    now = 30_000; // one full divergence window later — 10× inside retention
+    j.append('PLAY current', 'both');
+    expect(j.all().map((e) => e.line)).toEqual(['PLAY recent', 'PLAY current']);
+  });
+
+  it('pending (in-flight) entries survive the retention pass but not the hard cap', () => {
+    let now = 0;
+    const j = new InMemoryJournal({ now: () => now, retentionMs: 1_000, maxEntries: 3 });
+    j.append('PLAY pending-old', 'both'); // never resolved
+    now = 5_000;
+    j.append('PLAY new', 'both');
+    // Age pass spares the pending entry.
+    expect(j.all().map((e) => e.line)).toEqual(['PLAY pending-old', 'PLAY new']);
+    // The hard cap does not (memory bound is absolute).
+    j.append('a', 'both');
+    j.append('b', 'both');
+    expect(j.all()).toHaveLength(3);
+    expect(j.all()[0]?.line).toBe('PLAY new');
+  });
+});

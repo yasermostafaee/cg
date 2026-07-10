@@ -88,12 +88,17 @@ interface Route {
  */
 const WS_MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
 
-/** Default connection — loopback CasparCG on the standard AMCP/OSC ports. */
+/**
+ * Default connection — a SINGLE loopback CasparCG on the standard AMCP/OSC
+ * ports. B-046: a backup is declared (CLI `--backup-*` flags / explicit
+ * config), never assumed — the old phantom `127.0.0.1:5251` default made
+ * every send diverge, replayed the journal at a dead queue, and churned
+ * health forever.
+ */
 function defaultConnection(): ConnectionConfig {
   return {
     servers: {
       A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 },
-      B: { host: '127.0.0.1', amcpPort: 5251, oscPort: 6251 },
     },
     strategy: 'mirror-sync',
     autoFailoverEnabled: true,

@@ -18,6 +18,10 @@ export function formatReport(r: SoakReport): string {
     `  rss delta:     ${signedMb(r.rssDeltaMb)}`,
     `  errors:        ${String(r.errors.length)}`,
     `  failovers:     ${String(r.failovers.length)}`,
+    `  divergences:   ${String(r.events.mirrorDivergence)}`,
+    `  split-brains:  ${String(r.events.splitBrainPersistent)}`,
+    `  resends:       ${String(r.events.correctiveResend)}`,
+    `  journal end:   ${String(r.journalEndSize)} entries`,
     `  result:        ${r.passed ? 'PASS' : 'FAIL'}`,
   ];
   if (r.errors.length > 0) {
