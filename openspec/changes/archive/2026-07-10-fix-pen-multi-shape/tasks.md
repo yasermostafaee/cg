@@ -77,9 +77,11 @@
 
 ## 8. Gate + ship (Part E)
 
-- [ ] `@cg/designer`: typecheck + lint + test + build, uncached at least once (`turbo --force`),
-      plus root `pnpm format:check`; `pnpm test:e2e` (built dist, never stale).
-- [ ] `pnpm openspec validate fix-pen-multi-shape --strict` and `--all --strict`.
-- [ ] Conventional commit, push, verify the remote head, open the PR (real URL or compare link),
-      flip B-037 → `[~]` with branch + change dir. Do NOT archive (owner verifies drawing feel
-      first).
+- [x] `@cg/designer`: typecheck + lint + test + build, uncached at least once (`turbo --force`,
+      15/15 incl. 621 unit tests), plus root `pnpm format:check`; `pnpm test:e2e` against the
+      fresh dist (187 passed).
+- [x] `pnpm openspec validate fix-pen-multi-shape --strict` and `--all --strict` (32/32).
+- [x] Conventional commit (`4cf9fce` + the pre-approved docs rider `92eb554`), pushed with the
+      remote head verified; `gh` unavailable so the compare link was handed to the owner (merged
+      as #267, `ade2f9f`); B-037 flipped `[~]` with branch + change dir. Archived 2026-07-10
+      after the owner verified the drawing feel by hand.

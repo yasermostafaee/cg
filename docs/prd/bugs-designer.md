@@ -761,7 +761,7 @@ guards. Capability: `designer-playout-lifecycle`.
 **Notes:** The user verified a local fix: setting `display: flex` on the inspector icon span (`.TransformSection_icon__*`) resolves it — the icon wrapper likely lacks `display: flex` / `align-items: center`. Fix the icon-wrapper CSS (vanilla-extract) so the icon is flex-centered against the input, and check every section reusing the same icon-input row pattern (TransformSection, opacity, etc.) so all rows are consistent.
 **Regression test:** a component / DOM test (or visual check) asserting the icon span uses the centered flex layout in the icon-input row, across the Transform and the other sections that reuse the pattern.
 
-## [~] B-037 — pen tool is hard to use and only edits the first shape ⟨priority: medium — gates D-119 per the ROADMAP order⟩ — in progress on `fix/B-037-pen-multi-shape` (change dir `openspec/changes/fix-pen-multi-shape`); pending owner verification of the drawing feel before archive
+## [x] B-037 — pen tool is hard to use and only edits the first shape ⟨priority: medium⟩ — merged (#267, `ade2f9f`), archived (`openspec/changes/archive/2026-07-10-fix-pen-multi-shape`): explicit draft lifecycle (any pen exit — tool switch, composition switch, unmount — finishes a ≥2-anchor draft open / cancels a smaller one), pen stays armed after a finish (N draws → N independent elements), Esc cancels the draft, the mid-draw gizmo hijack fixed (gizmo gated off while the pen is armed), rubber-band + first-anchor close affordance, stale-draft guard (Delete/undo mid-draw), collision-safe ids. Owner-verified drawing feel 2026-07-10. Unblocks D-119
 
 **Repro:**
 
