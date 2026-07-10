@@ -228,7 +228,39 @@ follow-up, not a restyle.
   scale). Symptom-level for now; measure comfortable field metrics during the
   change.
 
-## [ ] R-009 — surface orphaned/unknown on-air layers to the operator, with an explicit per-layer Clear control ⟨priority: medium⟩
+## [x] R-009 — surface orphaned/unknown on-air layers to the operator, with an explicit per-layer Clear control ⟨priority: medium⟩ — merged via `surface-orphan-layers`, archived
+
+<!-- change: openspec/changes/archive/2026-07-10-surface-orphan-layers/ -->
+
+> **CLOSED — implemented + mock/integration-validated 2026-07-11.** Built as
+> the operator-decided PERIODIC OCCUPANCY SWEEP, with the instrument
+> corrected by a read-only live capture on the actual build (CasparCG 2.5.0
+> `69e8ad5`): AMCP `INFO <channel>` returns NO per-layer data on the 2.3+
+> lineage, so the sweep samples a passive **`OscOccupancyTap`** instead —
+> one line in the OSC transport AFTER parsing, BEFORE the interest drop, so
+> it sees every layer WITHOUT widening interest; the B-044 firehose
+> protections are byte-for-byte untouched (asserted by a dedicated
+> independence test). Sweep: 5 s cadence, current-primary only (dynamic —
+> follows failover/setConfig), skips unless healthy (warnings FREEZE while
+> disconnected), 2-consecutive-sweeps surface / 1-sweep resolve,
+> change-only publishes, zero added AMCP traffic. Channels `layers.orphans`
+> / `layers.orphans-changed` / `layers.clear`; Clear refuses owned layers,
+> sends an urgent `CLEAR <ch>-<layer>`, marks adoption on primary success,
+> resolves only on the next sweep's observed empty; NEVER auto-clears.
+> Amber `OrphanLayersBanner` above the stack, idle-quiet, confirm-gated
+> per-row CLEAR. **The sketch below is superseded where it names signals:**
+> the diagnosis proved `unexpected-onair` structurally cannot see
+> never-loaded layers (interest drops them upstream of the Reconciler), so
+> it, `observe`/`collision`, `beginResync`, and `HeartbeatService` all STAY
+> DEAD — C-010 unchanged. **Live smoke (optional, non-gating): partially
+> run on 2.5.0 `69e8ad5`** — the foreign `PLAY 1-99 RED` + cleanup
+> `CLEAR 1-99` halves verified live over AMCP; the orphan-surfacing half was
+> environment-blocked (the operator's RUNNING pre-R-009 bridge held UDP
+> 6250, the OSC ingest) — to complete it: stop the old bridge, run the new
+> build, leave a graphic via a second AMCP client, watch the banner name it
+> within ~10 s, Clear, confirm idle-quiet. Mock/integration validation
+> stands regardless (the mock's OSC emitter reports per-layer producers
+> truthfully; the foreign-session scenario is integration-tested).
 
 **What:** Make server-side layer occupancy the bridge does NOT own visible to
 the operator, with an explicit, per-layer **Clear** affordance. Wire the

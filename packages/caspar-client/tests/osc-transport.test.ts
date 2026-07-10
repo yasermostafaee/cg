@@ -194,3 +194,45 @@ describe('OscTransport', () => {
     await expect(transport.close()).resolves.toBeUndefined();
   });
 });
+
+describe('OscTransport — R-009 occupancy tap independence (the firehose-untouched proof)', () => {
+  it('a NON-interest layer is dropped from the events pipeline exactly as before — while the tap records it', async () => {
+    const { transport, mock } = await setup({ interest: [{ channel: 1, layer: 20 }] });
+    const droppedBefore = transport.interest.droppedCount;
+
+    const eventsP = waitForEvent(transport);
+    // Layer 77 was never loaded by anyone — no interest, exactly the orphan case.
+    mock.emitOsc('/channel/1/stage/layer/77/foreground/producer', ['html']);
+    const events = await eventsP;
+
+    // The B-044 protections behave IDENTICALLY: the event never reaches the
+    // pipeline (interest drop) and the drop is counted, as before.
+    expect(events).toEqual([]);
+    expect(transport.interest.droppedCount).toBeGreaterThan(droppedBefore);
+
+    // …but the passive tap, sitting upstream of the drop, saw the producer.
+    const occupied = transport.occupancy.occupied(10_000);
+    expect(occupied).toHaveLength(1);
+    expect(occupied[0]).toMatchObject({ channel: 1, layer: 77, producer: 'html' });
+  });
+
+  it('the tap adds nothing to the pipeline for interest-passing layers either', async () => {
+    const { transport, mock } = await setup();
+    const eventsP = waitForEvent(transport);
+    mock.emitOsc('/channel/1/stage/layer/10/foreground/producer', ['html']);
+    const events = await eventsP;
+    // One event, exactly as the pre-tap pipeline emitted — the tap only observed.
+    expect(events).toHaveLength(1);
+    expect(transport.occupancy.occupied(10_000)).toHaveLength(1);
+  });
+
+  it('resetState() clears the tap along with the trackers (no cross-reconnect ghosts)', async () => {
+    const { transport, mock } = await setup();
+    const eventsP = waitForEvent(transport);
+    mock.emitOsc('/channel/1/stage/layer/77/foreground/producer', ['html']);
+    await eventsP;
+    expect(transport.occupancy.size).toBeGreaterThan(0);
+    transport.resetState();
+    expect(transport.occupancy.size).toBe(0);
+  });
+});

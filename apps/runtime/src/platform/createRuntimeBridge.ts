@@ -104,6 +104,12 @@ function createMockBridge(): RuntimeBridge {
       onConfigChanged: (handler) => mock.configChanged.subscribe(handler),
     },
 
+    layers: {
+      orphans: () => Promise.resolve(mock.orphans()),
+      clear: (req) => Promise.resolve(mock.clearLayer(req.channel, req.layer)),
+      onOrphansChanged: (handler) => mock.orphansChanged.subscribe(handler),
+    },
+
     lock: {
       engage: (req) => mock.engage(req.pin),
       release: (req) => mock.release(req.pin),

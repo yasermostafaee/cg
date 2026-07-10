@@ -7,6 +7,9 @@ import {
   ConnectionsHealthChangedChannel,
   ConnectionsHealthChannel,
   ConnectionsSetConfigChannel,
+  LayersClearChannel,
+  LayersOrphansChangedChannel,
+  LayersOrphansChannel,
   LockEngageChannel,
   LockReleaseChannel,
   LockStateChangedChannel,
@@ -37,6 +40,7 @@ import {
   type ConnectionConfig,
   type ConnectionHealth,
   type LockState,
+  type OrphanLayer,
   type PendingUpdate,
   type Settings,
 } from '@cg/shared-ipc';
@@ -142,6 +146,7 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #stackSubs = new Subs<readonly StackItemState[]>();
   readonly #healthSubs = new Subs<ConnectionHealth>();
   readonly #configSubs = new Subs<ConnectionConfig>();
+  readonly #orphanSubs = new Subs<OrphanLayer[]>();
   readonly #lockSubs = new Subs<LockState>();
   readonly #updateSubs = new Subs<PendingUpdate | null>();
   readonly #settingsSubs = new Subs<Settings>();
@@ -300,6 +305,11 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#configSubs.emit(p.data);
         break;
       }
+      case LayersOrphansChangedChannel.name: {
+        const p = LayersOrphansChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#orphanSubs.emit(p.data);
+        break;
+      }
       case LockStateChangedChannel.name: {
         const p = LockStateChangedChannel.payload.safeParse(payload);
         if (p.success) this.#lockSubs.emit(p.data);
@@ -381,6 +391,13 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(ConnectionsFailoverChannel, req),
     onHealthChanged: (handler: (health: ConnectionHealth) => void) => this.#healthSubs.add(handler),
     onConfigChanged: (handler: (config: ConnectionConfig) => void) => this.#configSubs.add(handler),
+  };
+
+  readonly layers = {
+    orphans: () => this.#invoke(LayersOrphansChannel, undefined),
+    clear: (req: ChannelRequest<typeof LayersClearChannel>) =>
+      this.#invoke(LayersClearChannel, req),
+    onOrphansChanged: (handler: (orphans: OrphanLayer[]) => void) => this.#orphanSubs.add(handler),
   };
 
   readonly lock = {

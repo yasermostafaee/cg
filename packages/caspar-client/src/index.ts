@@ -8,6 +8,8 @@ export type { OscTransportEvents, OscTransportOptions } from './osc/transport.js
 export { OscInterestFilter } from './osc/interest.js';
 export { OscRateLimiter } from './osc/rate-limiter.js';
 export { OscChangeTracker } from './osc/change-tracker.js';
+export { OscOccupancyTap } from './osc/occupancy-tap.js';
+export type { OccupiedLayer } from './osc/occupancy-tap.js';
 export { parsePacket, flatten } from './osc/parser.js';
 export type { OscPacket, OscBundle, OscMessage, OscArgValue } from './osc/parser.js';
 export { messageToEvent } from './osc/event-mapper.js';
