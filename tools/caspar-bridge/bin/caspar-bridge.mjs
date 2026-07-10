@@ -8,10 +8,22 @@
 //   caspar-bridge --backup-host 192.168.1.51          # declare a REAL backup (B-046: never assumed)
 //   caspar-bridge --backup-host 127.0.0.1 --backup-amcp-port 5251 --backup-osc-port 6251
 //   caspar-bridge --host 0.0.0.0 --port 5280          # opt-in LAN exposure of the WS (NOT default)
+//   caspar-bridge --persist-path C:\cg\conn.json      # R-010: where the applied config persists
+//
+// R-010 boot precedence: explicit --caspar-*/--backup-* flags > the persisted
+// config file (~/.cg-runtime/bridge-connection.json by default) > built-in
+// single-server default. The settings panel's Apply persists to that file.
 
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { createBridge } from '../dist/index.js';
 
 const args = parseArgs(process.argv.slice(2));
+
+const persistPath =
+  typeof args['persist-path'] === 'string'
+    ? args['persist-path']
+    : path.join(os.homedir(), '.cg-runtime', 'bridge-connection.json');
 
 // Build the CasparCG connection from flags, falling back to defaults.
 // B-046 — server B exists ONLY when a --backup-* flag declares it; the
@@ -58,6 +70,7 @@ const handle = await createBridge({
   host: args.host,
   port: args.port !== undefined ? Number(args.port) : undefined,
   connection,
+  persistPath,
 });
 
 console.error(`[caspar-bridge] WS listening on ${handle.url} → CasparCG via @cg/caspar-client`);

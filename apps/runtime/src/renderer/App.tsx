@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { RuntimeBridge } from '../shared/runtime-bridge.js';
 import { AuditPanel } from './features/audit/AuditPanel.js';
 import { FailoverBanner } from './features/connections/FailoverBanner.js';
+import { ServerSettingsPanel } from './features/connections/ServerSettingsPanel.js';
 import { LibraryPanel } from './features/library/LibraryPanel.js';
 import { StackPanel } from './features/stack/StackPanel.js';
 import { Inspector } from './features/inspector/Inspector.js';
@@ -62,6 +63,7 @@ export function App(): JSX.Element {
   const health = useConnections();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [auditOpen, setAuditOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const selected = useMemo(
     () => items.find((i) => i.itemId === selectedId) ?? null,
     [items, selectedId],
@@ -87,9 +89,13 @@ export function App(): JSX.Element {
           onDiscard={(id) => clearDraft(id)}
         />
       </div>
-      <StatusBar onOpenAudit={() => setAuditOpen(true)} />
+      <StatusBar
+        onOpenAudit={() => setAuditOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
       <CommandErrorToast />
       <AuditPanel open={auditOpen} onClose={() => setAuditOpen(false)} />
+      <ServerSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <LockOverlay
         engaged={lock.engaged}
         {...(lock.engagedAt !== undefined ? { engagedAt: lock.engagedAt } : {})}

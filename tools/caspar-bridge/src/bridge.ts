@@ -2,10 +2,12 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import {
   AppInfoChannel,
   AuditRecentChannel,
+  ConnectionsConfigChangedChannel,
   ConnectionsConfigChannel,
   ConnectionsFailoverChannel,
   ConnectionsHealthChangedChannel,
   ConnectionsHealthChannel,
+  ConnectionsSetConfigChannel,
   DEFAULT_BRIDGE_HOST,
   DEFAULT_BRIDGE_PORT,
   LockEngageChannel,
@@ -17,6 +19,7 @@ import {
   SettingsSetChannel,
   StackLoadChannel,
   StackOutChannel,
+  StackRemoveAllChannel,
   StackRemoveChannel,
   StackSnapshotChannel,
   StackStateChangedChannel,
@@ -38,6 +41,7 @@ import {
   type WsResponseFrame,
 } from '@cg/shared-ipc';
 import { CasparRuntime } from './caspar-runtime.js';
+import { loadPersistedConnection, savePersistedConnection } from './connection-store.js';
 import type { TemplateServeOverride } from './template-http-server.js';
 
 export interface BridgeOptions {
@@ -54,6 +58,13 @@ export interface BridgeOptions {
    * when remote. The control WebSocket is unaffected and stays loopback.
    */
   templateServe?: TemplateServeOverride;
+  /**
+   * R-010 — where the applied `ConnectionConfig` persists (JSON). When set,
+   * boot loads it (schema-validated; invalid → warned + ignored) unless an
+   * explicit `connection` was passed, and every successful
+   * `connections.set-config` apply is saved back. Omitted → no persistence.
+   */
+  persistPath?: string;
 }
 
 export interface BridgeHandle {
@@ -122,11 +133,15 @@ function defaultConnection(): ConnectionConfig {
 export async function createBridge(options: BridgeOptions = {}): Promise<BridgeHandle> {
   const host = options.host ?? DEFAULT_BRIDGE_HOST;
   const requestedPort = options.port ?? DEFAULT_BRIDGE_PORT;
-  const runtime = new CasparRuntime(
-    options.connection ?? defaultConnection(),
-    options.templateServe ?? {},
-  );
-  const routes = buildRoutes(runtime);
+  // R-010 boot precedence: explicit connection (CLI flags) > persisted file >
+  // the single-server default. Flags are session overrides — they win without
+  // clobbering the persisted file.
+  const connection =
+    options.connection ??
+    (options.persistPath !== undefined ? loadPersistedConnection(options.persistPath) : null) ??
+    defaultConnection();
+  const runtime = new CasparRuntime(connection, options.templateServe ?? {});
+  const routes = buildRoutes(runtime, options.persistPath);
 
   const wss = new WebSocketServer({
     host,
@@ -252,6 +267,7 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
   return [
     backing.stackChanged.subscribe((s) => push(StackStateChangedChannel, s)),
     backing.healthChanged.subscribe((h) => push(ConnectionsHealthChangedChannel, h)),
+    backing.configChanged.subscribe((c) => push(ConnectionsConfigChangedChannel, c)),
     backing.lockChanged.subscribe((l) => push(LockStateChangedChannel, l)),
     backing.updateChanged.subscribe((u) => push(UpdateStateChangedChannel, u)),
     backing.settingsChanged.subscribe((s) => push(SettingsChangedChannel, s)),
@@ -259,7 +275,7 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
 }
 
 /** Map every RuntimeBridge channel to its backing handler. */
-function buildRoutes(b: CasparRuntime): Map<string, Route> {
+function buildRoutes(b: CasparRuntime, persistPath?: string): Map<string, Route> {
   const route = (channel: AnyChannel, handle: (req: never) => unknown): Route => ({
     channel,
     handle: handle as (req: unknown) => unknown,
@@ -279,9 +295,17 @@ function buildRoutes(b: CasparRuntime): Map<string, Route> {
     ),
     route(StackOutChannel, (r: { itemId: string }) => b.out(r.itemId)),
     route(StackRemoveChannel, (r: { itemId: string }) => b.remove(r.itemId)),
+    // R-010 — the sanctioned clear-everything path (unblocks set-config).
+    route(StackRemoveAllChannel, () => b.removeAll()),
     route(StackSnapshotChannel, () => b.stackSnapshot()),
 
     route(ConnectionsConfigChannel, () => b.config()),
+    // R-010 — runtime reconfiguration; persisted only after a successful apply.
+    route(ConnectionsSetConfigChannel, async (r: ConnectionConfig) => {
+      const result = await b.setConfig(r);
+      if (result.ok && persistPath !== undefined) savePersistedConnection(persistPath, r);
+      return result;
+    }),
     route(ConnectionsHealthChannel, () => b.health()),
     route(ConnectionsFailoverChannel, () => b.failover()),
 

@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   ConnectionsConfigChannel,
+  ConnectionsConfigChangedChannel,
   ConnectionsFailoverChannel,
   ConnectionsHealthChangedChannel,
   ConnectionsHealthChannel,
+  ConnectionsSetConfigChannel,
+  StackRemoveAllChannel,
   LockEngageChannel,
   LockReleaseChannel,
   LockStateChangedChannel,
@@ -110,6 +113,82 @@ describe('connections.* channel schemas', () => {
     expect(ConnectionsHealthChangedChannel.payload.parse(healthSnapshot)).toMatchObject({
       currentPrimary: 'A',
     });
+  });
+});
+
+describe('connections.set-config + stack.remove-all channel schemas (R-010)', () => {
+  const twoServer = {
+    servers: {
+      A: { host: '192.168.1.50', amcpPort: 5250, oscPort: 6250 },
+      B: { host: '192.168.1.51', amcpPort: 5250, oscPort: 6250 },
+    },
+    strategy: 'mirror-sync' as const,
+    autoFailoverEnabled: true,
+  };
+
+  it('accepts a remote two-server config', () => {
+    expect(ConnectionsSetConfigChannel.request.parse(twoServer)).toMatchObject({
+      servers: { A: { host: '192.168.1.50' } },
+    });
+  });
+
+  it('accepts a backup-less (declared single-server) config', () => {
+    const single = {
+      servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+      strategy: 'mirror-sync' as const,
+      autoFailoverEnabled: true,
+    };
+    const parsed = ConnectionsSetConfigChannel.request.parse(single);
+    expect(parsed.servers.B).toBeUndefined();
+  });
+
+  it('rejects an empty host and a non-integer port', () => {
+    expect(() =>
+      ConnectionsSetConfigChannel.request.parse({
+        ...twoServer,
+        servers: { A: { host: '', amcpPort: 5250, oscPort: 6250 } },
+      }),
+    ).toThrow();
+    expect(() =>
+      ConnectionsSetConfigChannel.request.parse({
+        ...twoServer,
+        servers: { A: { host: '127.0.0.1', amcpPort: 52.5, oscPort: 6250 } },
+      }),
+    ).toThrow();
+  });
+
+  it('response carries ok, the optional refusal reason, and the serve info', () => {
+    expect(ConnectionsSetConfigChannel.response.parse({ ok: true })).toMatchObject({ ok: true });
+    expect(
+      ConnectionsSetConfigChannel.response.parse({
+        ok: false,
+        reason: 'on-air-block',
+        message: '2 item(s) are on air or unsettled',
+      }),
+    ).toMatchObject({ reason: 'on-air-block' });
+    expect(
+      ConnectionsSetConfigChannel.response.parse({
+        ok: true,
+        templateServe: { serveHost: '192.168.1.10', port: 5290, exposed: true },
+      }),
+    ).toMatchObject({ templateServe: { exposed: true } });
+    expect(() =>
+      ConnectionsSetConfigChannel.response.parse({ ok: false, reason: 'bogus' }),
+    ).toThrow();
+  });
+
+  it('config-changed publishes the config shape', () => {
+    expect(ConnectionsConfigChangedChannel.payload.parse(twoServer)).toMatchObject({
+      strategy: 'mirror-sync',
+    });
+  });
+
+  it('stack.remove-all is void in, { ok, removed } out', () => {
+    expect(StackRemoveAllChannel.request.parse(undefined)).toBeUndefined();
+    expect(StackRemoveAllChannel.response.parse({ ok: true, removed: 3 })).toMatchObject({
+      removed: 3,
+    });
+    expect(() => StackRemoveAllChannel.response.parse({ ok: true, removed: -1 })).toThrow();
   });
 });
 

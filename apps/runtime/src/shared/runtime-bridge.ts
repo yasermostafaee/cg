@@ -13,12 +13,14 @@ import type {
   ConnectionConfig,
   ConnectionHealth,
   ConnectionsFailoverChannel,
+  ConnectionsSetConfigChannel,
   LockEngageChannel,
   LockReleaseChannel,
   LockState,
   PendingUpdate,
   StackLoadChannel,
   StackOutChannel,
+  StackRemoveAllChannel,
   StackRemoveChannel,
   StackSnapshotChannel,
   StackTakeChannel,
@@ -82,17 +84,31 @@ export interface RuntimeBridge {
     remove(
       req: ChannelRequest<typeof StackRemoveChannel>,
     ): Promise<ChannelResponse<typeof StackRemoveChannel>>;
+    /**
+     * R-010 — OUT + REMOVE every stack item (clears air, empties the list).
+     * The sanctioned path to unblock a server reconfiguration.
+     */
+    removeAll(): Promise<ChannelResponse<typeof StackRemoveAllChannel>>;
     snapshot(): Promise<ChannelResponse<typeof StackSnapshotChannel>>;
     onStateChanged(handler: (snapshot: readonly StackItemState[]) => void): Unsubscribe;
   };
 
   connections: {
     config(): Promise<ConnectionConfig>;
+    /**
+     * R-010 — apply a new ConnectionConfig to the RUNNING bridge. Refused
+     * with `reason: 'on-air-block'` while anything is on air or unsettled.
+     */
+    setConfig(
+      req: ChannelRequest<typeof ConnectionsSetConfigChannel>,
+    ): Promise<ChannelResponse<typeof ConnectionsSetConfigChannel>>;
     health(): Promise<ConnectionHealth>;
     failover(
       req: ChannelRequest<typeof ConnectionsFailoverChannel>,
     ): Promise<ChannelResponse<typeof ConnectionsFailoverChannel>>;
     onHealthChanged(handler: (health: ConnectionHealth) => void): Unsubscribe;
+    /** R-010 — fired when any client applies a new config. */
+    onConfigChanged(handler: (config: ConnectionConfig) => void): Unsubscribe;
   };
 
   lock: {
