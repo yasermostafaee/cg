@@ -11,6 +11,7 @@ import {
   Image,
   Key,
   MoveHorizontal,
+  PenTool,
   Rows3,
   Spline,
   Square,
@@ -197,13 +198,19 @@ function ElementRowLabel(props: Props): JSX.Element {
 
 /**
  * The lucide icon for a layer's kind — matches the canvas-toolbar tool icons for
- * the shared kinds (text / shape / ellipse / image / ticker / clock / sequence /
- * repeater); kinds with no toolbar tool get a sensible lucide equivalent.
+ * the shared kinds (text / shape / ellipse / pen path / image / ticker / clock /
+ * sequence / repeater); kinds with no toolbar tool get a sensible lucide
+ * equivalent. Exported for the B-052 icon-mapping unit test.
  */
-function layerTypeIcon(element: Element): LucideIcon {
+export function layerTypeIcon(element: Element): LucideIcon {
   switch (element.type) {
     case 'text':
       return Type;
+    case 'path':
+      // B-052 — the D-109 pen path element (NOT the legacy `shape: 'path'`
+      // variant below) uses the toolbar's pen icon; it used to fall through to
+      // the rectangle default.
+      return PenTool;
     case 'image':
       // D-097 — a shared-library logo reads distinctly from a project-asset image.
       return element.source === 'shared' ? Stamp : Image;
