@@ -1,14 +1,20 @@
-# Pen curve placement, smooth insertion, curved hit-testing (B-053 / B-054 / B-055)
+# Pen curve placement, smooth insertion, curved hit-testing (B-057 / B-056 / B-055)
+
+> NOTE (2026-07-10): two of these bugs were RENUMBERED after cross-track collisions (owner rule:
+> the runtime track keeps its numbers). The smooth-drag bug was filed and merged (#272) as
+> **B-053** → now **B-057** (runtime's #271 filed its own B-053 first); the smooth-insertion bug
+> was filed as **B-054** → now **B-056** (runtime's #273 filed a different B-054). This archive's
+> docs were updated in place; #272's commit/PR text retains the historic numbers.
 
 ## Why
 
 Bézier curves were half-implemented across three seams (all owner-reported):
 
-1. **B-053 (medium)** — smooth-drag "sticks": the pen's drag-to-smooth flipped the last anchor
+1. **B-057 (medium)** — smooth-drag "sticks": the pen's drag-to-smooth flipped the last anchor
    smooth incrementally during the hold and NEVER reset it, with the guard measured in SCENE px —
    at fit zoom a 1-screen-px click slip already exceeded it, so virtually every human click placed
    a smooth anchor and curvature "carried over" to points meant as corners.
-2. **B-054 (medium)** — a finished path could only gain CORNER anchors: segment-click insertion
+2. **B-056 (medium)** — a finished path could only gain CORNER anchors: segment-click insertion
    had no drag-to-smooth, and the fallback (pulling handles out of a corner) doesn't exist — a
    corner renders no handle dots and `dragHandle` never sets `smooth`.
 3. **B-055 (high)** — clicking a curved shape only selected near its center: `hitsPath` ray-cast
@@ -18,13 +24,13 @@ Bézier curves were half-implemented across three seams (all owner-reported):
 
 ## What Changes
 
-- **B-053 — corner vs smooth decided AT POINTER-UP** (owner decision 2026-07-08, Illustrator
+- **B-057 — corner vs smooth decided AT POINTER-UP** (owner decision 2026-07-08, Illustrator
   semantics): the total displacement against a SCREEN-px guard (`PEN_SMOOTH_PX = 3`,
   zoom-independent — the D-122 hysteresis lesson) decides; a click-sized gesture actively CLEARS
   any jitter-set handles at release (the mid-hold preview stays live), and a corner placed after a
   smooth anchor leaves the previous anchor's handles untouched (the shared segment keeps its
   smooth side — `pathD` already curves on either side's handle).
-- **B-054 — click-DRAG on a segment inserts a SMOOTH anchor**: the pen's drag-to-smooth gesture on
+- **B-056 — click-DRAG on a segment inserts a SMOOTH anchor**: the pen's drag-to-smooth gesture on
   insertion (mirrored handles follow the drag, live), with the same at-release corner/smooth
   decision; a plain click stays a corner. One undo entry per insertion (the boundary moved to
   pointer-up).
@@ -52,4 +58,4 @@ Bézier curves were half-implemented across three seams (all owner-reported):
 - Tests: NEW unit `pen-smooth-placement.test.ts` (red pre-fix) and `path-hit-curved.test.ts`
   (red pre-fix); `path-tools.test.ts` extended (smooth-insert normalize round-trip); NEW E2E
   `pen-curve-edit.spec.ts` (slip-click corner, drag-insert smooth, curved-lens selection).
-- Docs: PRD B-053/B-054/B-055; canvas README pen + hit-test sections (engine doc-sync).
+- Docs: PRD B-057/B-056/B-055; canvas README pen + hit-test sections (engine doc-sync).
