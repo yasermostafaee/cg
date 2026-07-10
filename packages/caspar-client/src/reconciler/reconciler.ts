@@ -28,6 +28,20 @@ import type {
  *
  *   if pending && (now - pendingSince) > divergentAfterMs →
  *     emit 'item-divergent'
+ *
+ * B-053 — truthStatus is DERIVED at read time from the raw observation plus
+ * intent-side play evidence, because producer existence is not play evidence:
+ * CasparCG stage-plays the html producer at `CG ADD` (page hidden until the
+ * template's play()), and `CG PLAY` causes no OSC-observable transition — a
+ * load-only producer is wire-identical to a played one. So:
+ *
+ *   truthStatus = lastProducer === 'empty' ? 'idle'
+ *               : played ? 'on-air' : 'loaded'
+ *
+ * Deriving at read time keeps the optimistic take (a take inside the fresh
+ * window re-reads the same observation as 'on-air') and makes the value
+ * published at observation time equal the post-decay ladder value — the badge
+ * never reverts-and-sticks.
  */
 export interface ReconcilerOptions {
   /**
@@ -65,7 +79,21 @@ interface ItemRecord {
   fieldsHash: string;
   intentStatus: StackItemStatus;
   ackedStatus?: StackItemStatus;
-  truthStatus?: StackItemStatus;
+  /**
+   * B-053 — the raw last OSC observation for the slot ('empty' vs any
+   * producer). Stored raw, NOT pre-mapped to a status: what a non-empty
+   * producer means depends on `played` and is derived at read time
+   * (see the header merge-rule comment).
+   */
+  lastProducer?: 'empty' | 'present';
+  /**
+   * B-053 — intent-side play evidence: set by the `take` intent (at intent
+   * time, before the ack), false when a `load` creates the fresh record, and
+   * NEVER reset by update/out/unconfirmed — once taken, a surviving producer
+   * reads on-air (broadcast-safe; also load-bearing when an out-CLEAR landed
+   * only on the backup and the primary's producer is re-observed at resync).
+   */
+  played: boolean;
   slot?: LayerSlot;
   lastIntentSeq?: number;
   lastAckAt?: number;
@@ -194,7 +222,10 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
         const rec = this.items.get(itemId);
         if (rec !== undefined) {
           rec.lastOscAt = at;
-          rec.truthStatus = event.producer === 'empty' ? 'idle' : 'on-air';
+          // B-053 — store the raw observation; the status is derived at read
+          // time (freshTruth) from `played`, because a non-empty producer is
+          // NOT play evidence (CG ADD stage-plays the hidden page).
+          rec.lastProducer = event.producer === 'empty' ? 'empty' : 'present';
           return [this.emitChange(rec)];
         }
       } else if (event.producer !== 'empty') {
@@ -278,6 +309,8 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
           fields: intent.fields,
           fieldsHash: hashFields(intent.fields),
           intentStatus: 'loaded',
+          // B-053 — a fresh load carries no play evidence.
+          played: false,
           lastIntentSeq: seq,
         };
         this.items.set(rec.itemId, rec);
@@ -288,6 +321,9 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
         const rec = this.items.get(intent.itemId);
         if (rec === undefined) return null;
         rec.intentStatus = 'playing';
+        // B-053 — play evidence, set at intent time: a still-fresh load-time
+        // producer observation immediately re-derives as 'on-air'.
+        rec.played = true;
         rec.lastIntentSeq = seq;
         rec.pendingSince = this.now();
         // A new intent invalidates the PREVIOUS command's ack — without this
@@ -413,11 +449,16 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
     return rec.intentStatus;
   }
 
-  /** Returns the truth status if it exists and is fresh, otherwise null. */
+  /**
+   * Returns the truth status if an observation exists and is fresh, otherwise
+   * null. B-053 — derived at READ time: a non-empty producer reads 'on-air'
+   * only with intent-side play evidence, else it merely confirms the load.
+   */
   private freshTruth(rec: ItemRecord): StackItemStatus | null {
-    if (rec.truthStatus === undefined || rec.lastOscAt === undefined) return null;
+    if (rec.lastProducer === undefined || rec.lastOscAt === undefined) return null;
     if (this.now() - rec.lastOscAt >= this.truthTtlMs) return null;
-    return rec.truthStatus;
+    if (rec.lastProducer === 'empty') return 'idle';
+    return rec.played ? 'on-air' : 'loaded';
   }
 
   /**

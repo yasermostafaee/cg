@@ -364,6 +364,112 @@ describe('Reconciler — B-044 pending-intent completion (settle on ack, expire 
   });
 });
 
+describe('Reconciler — B-053 producer existence is not play evidence', () => {
+  const htmlOsc = (layer = 10): OscEvent => ({
+    kind: 'osc.layer.foreground.producer',
+    channel: 1,
+    layer,
+    producer: 'html',
+  });
+  const emptyOsc = (layer = 10): OscEvent => ({
+    kind: 'osc.layer.foreground.producer',
+    channel: 1,
+    layer,
+    producer: 'empty',
+  });
+
+  /** Load + OK ack + slot bound — the state right before the ADD's OSC report. */
+  function loadedItem(r: Reconciler, layer = 10): void {
+    r.applyIntent(loadIntent(1), 1);
+    r.applyAck(1, true);
+    r.assignSlot(itemId(1), { channel: 1, layer, server: 'primary' });
+  }
+
+  it("the first producer report on a load-only item reads 'loaded' (READY), never 'on-air' — and the published sequence proves it", () => {
+    const now = 1000;
+    const r = new Reconciler({ now: () => now });
+    const published: string[] = [];
+    r.on('item-changed', (s) => published.push(s.status));
+    loadedItem(r);
+
+    // CG ADD stage-played the hidden page; OSC reports producer='html'.
+    const [state] = r.applyOsc(htmlOsc());
+    expect(state).toMatchObject({ status: 'loaded', pending: false });
+    expect(published).not.toContain('on-air');
+    expect(published.at(-1)).toBe('loaded');
+  });
+
+  it("the badge does not revert-and-stick: still 'loaded' after truthTtlMs with NO further event", () => {
+    let now = 1000;
+    const r = new Reconciler({ now: () => now });
+    loadedItem(r);
+    r.applyOsc(htmlOsc());
+    expect(r.get(itemId(1))?.status).toBe('loaded');
+
+    // The pre-fix bug: published 'on-air', then the TTL decayed with no
+    // re-publish — the sticky false badge. Post-fix the fresh-truth value
+    // EQUALS the decayed value, so reads agree before and after.
+    now = 2500; // past the 1s TTL
+    expect(r.get(itemId(1))).toMatchObject({ status: 'loaded', pending: false });
+  });
+
+  it("a take within the fresh-observation window reads 'on-air' immediately (optimistic confirm preserved)", () => {
+    let now = 1000;
+    const r = new Reconciler({ now: () => now });
+    loadedItem(r);
+    r.applyOsc(htmlOsc());
+    expect(r.get(itemId(1))?.status).toBe('loaded');
+
+    now = 1500; // observation still fresh
+    const s = r.applyIntent({ kind: 'take', itemId: itemId(1) }, 2);
+    // The SAME observation now carries play evidence and confirms the take.
+    expect(s).toMatchObject({ status: 'on-air', pending: false });
+  });
+
+  it("a resync re-observation derives per item: loaded-not-taken reads 'loaded', taken reads 'on-air'", () => {
+    const r = new Reconciler();
+    // item-1: loaded only, on layer 10.
+    r.applyIntent(loadIntent(1), 1);
+    r.applyAck(1, true);
+    r.assignSlot(itemId(1), { channel: 1, layer: 10, server: 'primary' });
+    // item-2: loaded + taken, on layer 11.
+    r.applyIntent({ kind: 'load', itemId: itemId(2), templateId, fields: {} }, 2);
+    r.applyAck(2, true);
+    r.assignSlot(itemId(2), { channel: 1, layer: 11, server: 'primary' });
+    r.applyIntent({ kind: 'take', itemId: itemId(2) }, 3);
+    r.applyAck(3, true);
+
+    // Post-reconnect resync: the change-tracker reset re-emits both layers.
+    r.applyOsc(htmlOsc(10));
+    r.applyOsc(htmlOsc(11));
+    expect(r.get(itemId(1))?.status).toBe('loaded');
+    expect(r.get(itemId(2))?.status).toBe('on-air');
+  });
+
+  it("play evidence survives an out: a producer surviving a taken item's CLEAR reads 'on-air' (never hide a live graphic)", () => {
+    const r = new Reconciler();
+    loadedItem(r);
+    r.applyIntent({ kind: 'take', itemId: itemId(1) }, 2);
+    r.applyAck(2, true);
+    r.applyIntent({ kind: 'out', itemId: itemId(1) }, 3);
+    r.applyAck(3, true); // settled idle (B-044)
+    expect(r.get(itemId(1))?.status).toBe('idle');
+
+    // e.g. the CLEAR landed only on the backup; the primary re-observes html.
+    r.applyOsc(htmlOsc());
+    expect(r.get(itemId(1))?.status).toBe('on-air');
+  });
+
+  it("an 'empty' observation still reads 'idle' regardless of play evidence", () => {
+    const r = new Reconciler();
+    loadedItem(r);
+    r.applyIntent({ kind: 'take', itemId: itemId(1) }, 2);
+    r.applyAck(2, true);
+    r.applyOsc(emptyOsc());
+    expect(r.get(itemId(1))?.status).toBe('idle');
+  });
+});
+
 describe('Reconciler — B-044 settle provenance (review findings: out targets never leak into updates)', () => {
   function onAirItem(r: Reconciler): void {
     r.applyIntent(loadIntent(1), 1);
