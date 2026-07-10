@@ -1,10 +1,6 @@
-# designer-path-element Specification
+# designer-path-element (B-037 delta)
 
-## Purpose
-
-TBD - created by archiving change pen-path-element. Update Purpose after archive.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Pen tool draws a bézier path
 
@@ -72,23 +68,6 @@ receive a collision-safe unique id (the store's shared element-id generator).
 - **THEN** the draft is discarded — the next pointer-down starts a fresh element and the removed
   geometry is not resurrected
 
-### Requirement: Closed fills, open strokes — preview == export
-
-A CLOSED path SHALL render fill + stroke; an OPEN path SHALL render stroke only (fill ignored). The
-render SHALL be identical in the canvas preview, the `.vcg` package, and the single-file HTML export.
-A single-line (degenerate) path SHALL still render its stroke.
-
-#### Scenario: Closed renders fill + stroke
-
-- **WHEN** a path is closed
-- **THEN** it renders as `<svg><path>` with both a fill and a stroke
-
-#### Scenario: Open renders stroke only
-
-- **WHEN** a path is open
-- **THEN** it renders with `fill: none` (stroke only), identically across preview / `.vcg` /
-  single-file HTML
-
 ### Requirement: A selected path is fully editable
 
 When a path is selected with the select tool, its anchors and handles SHALL be shown. Dragging an
@@ -120,47 +99,7 @@ extends the draft and SHALL NOT insert an anchor into, resize, or otherwise edit
 - **THEN** the click goes to the pen (starting or extending a draft) — no anchor is inserted into
   the selected path and no resize/rotate gesture starts
 
-### Requirement: Transform / opacity / filter / stroke animate like a shape
-
-A path's transform / opacity / filter / stroke SHALL keyframe exactly like a rectangle or ellipse
-(same timeline rows, same diamonds, same gizmo). The point set SHALL NOT be keyframe-able in this item
-(per-point morphing is deferred to D-110).
-
-#### Scenario: Box-style + transform properties animate
-
-- **WHEN** a path's transform / opacity / filter / stroke is keyframed
-- **THEN** it animates like a shape, and the path's point set is not keyframe-able here
-
-### Requirement: Gizmo + outline hit-test
-
-A selected path SHALL be tracked by the B-022 scale-aware gizmo, its size the bounding box of its
-points; resizing SHALL apply a scaleX/scaleY transform and SHALL NOT re-bake the point coordinates.
-Selection SHALL hit the ACTUAL outline: clicking inside a closed path's outline (point-in-polygon)
-selects it, clicking near an open path's stroke (distance-to-stroke) selects it, and clicking inside
-the bounding box but outside the actual shape does NOT select it.
-
-#### Scenario: Gizmo resize scales without re-baking points
-
-- **WHEN** a selected path is resized via the gizmo
-- **THEN** the gizmo tracks it under scale + rotation and the resize applies a scaleX/scaleY transform
-  without changing the stored point coordinates
-
-#### Scenario: Outline hit-test
-
-- **WHEN** the operator clicks inside a closed path / near an open path's stroke / inside the bbox but
-  outside the shape
-- **THEN** the closed path selects (point-in-polygon) / the open path selects (distance-to-stroke) /
-  the bbox-but-outside click does NOT select it
-
-### Requirement: A path round-trips with stable ids
-
-A scene containing a path SHALL round-trip through save / reload / preview / `.vcg` / single-file HTML
-and validate, and every anchor SHALL keep its stable id.
-
-#### Scenario: Save / reload / export preserves anchors
-
-- **WHEN** a scene with a path is saved, reloaded, previewed, and exported
-- **THEN** it round-trips and validates, and every anchor keeps its stable id
+## ADDED Requirements
 
 ### Requirement: Pen draw-state feedback
 

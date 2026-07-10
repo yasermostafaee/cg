@@ -8,6 +8,15 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Pen tool multi-shape fix ([B-037](./prd/bugs-designer.md), owner decision
+  2026-07-07: KEEP + fix) — merged (#267) & archived (2026-07-10,
+  `2026-07-10-fix-pen-multi-shape`): explicit draft lifecycle (any pen exit
+  finishes a ≥2-anchor draft open / cancels a smaller one), pen stays armed
+  after a finish (N draws → N independent elements), Esc cancels the draft,
+  the gizmo no longer hijacks pen clicks (mount gated off while the pen is
+  armed), rubber-band + first-anchor close affordance, stale-draft guard
+  (Delete/undo mid-draw), collision-safe element ids. Owner-verified drawing
+  feel (2026-07-10). Unblocks D-119.
 - Pixel-snap drag + arrow-nudge at grid zoom ([D-122](./prd/designer.md)) —
   merged (#264) & archived (2026-07-08, `2026-07-08-add-pixel-snap-drag`): full
   pixel snap on drag and first-nudge-to-integer at pixel-grid zoom (direction-
@@ -238,9 +247,8 @@ Done.)
 The concrete near-term Designer sequence (survives across sessions; the Runtime
 track is independent — see "Runtime — next" below):
 
-1. **[B-037](./prd/bugs-designer.md) pen tool** (low, keep-or-remove decision) — filed.
-2. **[D-119](./prd/designer.md) rebuild starter templates** (5 showcases) — filed,
-   **BLOCKED only on B-037** (B-042 and D-122 are done — see Done; templates should
+1. **[D-119](./prd/designer.md) rebuild starter templates** (5 showcases) —
+   **UNBLOCKED** (B-037, B-042 and D-122 are done — see Done; templates should
    exercise healthy features); supersedes the old "template cleanup" wave-tail
    note. (Its other prerequisites — D-060 auto-size, B-035 fit-on-open, B-036
    icon align — are done, see Done.)

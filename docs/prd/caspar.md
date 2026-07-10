@@ -199,7 +199,7 @@ adopt-CLEAR target provably the layer being replaced.
 
 **Notes / cross-references:** builds on `reconnect-reconciliation`'s in-memory
 retention (its `design.md` names `@cg/storage` as this exact upgrade path);
-context: [[B-048]] (orphaned producers), [[B-051]] (first-observation badge wart —
+context: [[B-048]] (orphaned producers), [[B-053]] (first-observation badge wart —
 a layer-aware truth model would also ground its fix); C-010's dead
 `LayerManager.observe`/`beginResync` wiring is the machinery a real
 reconciliation would finally use — one reconnect/startup design should cover

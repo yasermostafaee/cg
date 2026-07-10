@@ -428,10 +428,12 @@ export const timelineSlice = {
     // The whole transform / numeric branch only handles numbers — the
     // color cases at the bottom of this switch handle strings.
     const numeric = typeof value === 'number' ? value : 0;
-    // D-056 — `stroke` is a box property: shape and text only. The content-driven
-    // kinds (ticker/clock/sequence) carry no box, so a static stroke write is a no-op
+    // D-056 — `stroke` is a box property: shape, text and path only (B-051 — the
+    // D-109 `path` carries a real stroke; it was left out of this guard, so every
+    // Path Style stroke edit silently no-oped). The content-driven kinds
+    // (ticker/clock/sequence) carry no box, so a static stroke write is a no-op
     // for them (strict — prevents writing dead `stroke` data to those kinds).
-    const boxKind = el.type === 'shape' || el.type === 'text';
+    const boxKind = el.type === 'shape' || el.type === 'text' || el.type === 'path';
     switch (property) {
       case 'position.x':
         designerStore.updateTransform(elementId, { position: { ...tx.position, x: numeric } });
@@ -597,9 +599,10 @@ export const timelineSlice = {
         designerStore.updateElement(elementId, { padding } as unknown as Partial<Element>);
         return;
       }
-      // D-010 colour properties (value is a hex string).
+      // D-010 colour properties (value is a hex string). B-051 — `path` fills like
+      // a shape (the Path Style FillField routes solid colours through here).
       case 'fill.color': {
-        if (el.type !== 'shape' || typeof value !== 'string') return;
+        if ((el.type !== 'shape' && el.type !== 'path') || typeof value !== 'string') return;
         designerStore.updateElement(elementId, {
           fill: { kind: 'solid', color: value },
         } as Partial<Element>);

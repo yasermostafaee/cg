@@ -547,9 +547,38 @@ template HTML on reconnect). Bridge-restart amnesia has TWO faces — templates
 forgotten AND on-air producers orphaned; a reconnect/startup reconciliation
 should consider both (see also C-010).
 
+**See also:** [[B-053]] — the false-ON-AIR badge observed during this bug's live
+validation was root-caused as a PRE-EXISTING first-load-per-layer wart (proven
+on `main` in a clean worktree), NOT part of this bug's mechanism.
+
+**Progress (2026-07-10 — `openspec/changes/reconnect-reconciliation`, stays
+`[~]` until live validation):** diagnosis (code + CasparCG server source
+v2.3.x-lts AND master + bridge→mock repros) **eliminated all three hypotheses**:
+(a) DISPROVEN — the html cg producer registers `reusable_producer_instance =
+false` on both branches, so `CG ADD` always creates a fresh CEF producer at the
+new URL and `stage.load()+play()` REPLACES the orphan (no hijack; the fresh URL
+IS fetched); (b) ruled out — `templateImport` registers synchronously within
+the WS message event and `startServing()` completes before `createBridge`
+returns; (c) unsupported — `play()` JS is QUEUED until `OnLoadEnd` (2.3), only
+dropped on master's `OnLoadError` (network-level, implausible here). The
+reconciler math further shows the reported READY-after-Update badge is only
+reachable if **no take intent ever reached the bridge** — a UI/link-layer miss
+on the pre-R-007 UI (no AsyncButton existed then; no concrete defect found).
+What the orphan DOES provably cause (mock-reproduced): a fresh session reuses
+the identical layer, and the orphan's OSC routed to the fresh item painted a
+**false ON AIR — even on a failed load**. Fixed by the change: browser
+re-delivers retained templates on reconnect; the bridge rejects unregistered
+loads (`unknown-template`) instead of blind-ADDing an unservable URL (real
+CasparCG 202s + renders a silent blank); the first `CG ADD` per layer per
+bridge process is preceded by an adopt-`CLEAR` issued before slot/OSC-interest
+binding (no blind startup clear — on-air safety). Live phase re-runs the exact
+repro on current main FIRST, with caspar log + bridge access log, to
+discriminate: no `CG PLAY` received ⇒ resolved-by-R-007; `CG PLAY` + GET 200 +
+blank ⇒ CEF/page timing (new PRD entry); reproduces ⇒ diagnose further.
+
 ---
 
-## [ ] B-051 — badge rests at a FALSE ON AIR after the FIRST Load onto a layer (per bridge process): change-tracker first-observation + "non-empty producer ⇒ on-air" + sticky last publish ⟨priority: medium⟩
+## [ ] B-053 — badge rests at a FALSE ON AIR after the FIRST Load onto a layer (per bridge process): change-tracker first-observation + "non-empty producer ⇒ on-air" + sticky last publish ⟨priority: medium⟩
 
 > Operator-observed **2026-07-10** during the reconnect-reconciliation live
 > session (CasparCG 2.5.0 `69e8ad5`); root-caused the same day with captured
@@ -559,6 +588,8 @@ should consider both (see also C-010).
 > adopt-CLEAR rides the same "first ADD per layer per process" trigger —
 > correlation, not causation (the CLEAR is sent before OSC interest binds and
 > a cleared layer emits nothing, so it contributes zero events).
+> (Originally filed as B-051; renumbered — main's PR #270 consumed B-051/B-052
+> for the designer pen-path fixes. B- numbers are global.)
 
 **Repro (deterministic, bridge→mock `disableOsc` AND live):**
 
@@ -614,32 +645,3 @@ empties a layer. The regression test must run the mock transition-only
 change's scope after the main-worktree discriminator proved it pre-existing.
 Until fixed, judge Load/Take pass-fail by the OUTPUT, not the badge, right
 after a first Load.
-
-**See also:** [[B-051]] — the false-ON-AIR badge observed during this bug's live
-validation was root-caused as a PRE-EXISTING first-load-per-layer wart (proven
-on `main` in a clean worktree), NOT part of this bug's mechanism.
-
-**Progress (2026-07-10 — `openspec/changes/reconnect-reconciliation`, stays
-`[~]` until live validation):** diagnosis (code + CasparCG server source
-v2.3.x-lts AND master + bridge→mock repros) **eliminated all three hypotheses**:
-(a) DISPROVEN — the html cg producer registers `reusable_producer_instance =
-false` on both branches, so `CG ADD` always creates a fresh CEF producer at the
-new URL and `stage.load()+play()` REPLACES the orphan (no hijack; the fresh URL
-IS fetched); (b) ruled out — `templateImport` registers synchronously within
-the WS message event and `startServing()` completes before `createBridge`
-returns; (c) unsupported — `play()` JS is QUEUED until `OnLoadEnd` (2.3), only
-dropped on master's `OnLoadError` (network-level, implausible here). The
-reconciler math further shows the reported READY-after-Update badge is only
-reachable if **no take intent ever reached the bridge** — a UI/link-layer miss
-on the pre-R-007 UI (no AsyncButton existed then; no concrete defect found).
-What the orphan DOES provably cause (mock-reproduced): a fresh session reuses
-the identical layer, and the orphan's OSC routed to the fresh item painted a
-**false ON AIR — even on a failed load**. Fixed by the change: browser
-re-delivers retained templates on reconnect; the bridge rejects unregistered
-loads (`unknown-template`) instead of blind-ADDing an unservable URL (real
-CasparCG 202s + renders a silent blank); the first `CG ADD` per layer per
-bridge process is preceded by an adopt-`CLEAR` issued before slot/OSC-interest
-binding (no blind startup clear — on-air safety). Live phase re-runs the exact
-repro on current main FIRST, with caspar log + bridge access log, to
-discriminate: no `CG PLAY` received ⇒ resolved-by-R-007; `CG PLAY` + GET 200 +
-blank ⇒ CEF/page timing (new PRD entry); reproduces ⇒ diagnose further.
