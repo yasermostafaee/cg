@@ -8,6 +8,16 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Pen curve trilogy ([B-053](./prd/bugs-designer.md) smooth-drag sticks,
+  [B-054](./prd/bugs-designer.md) no smooth insert,
+  [B-055](./prd/bugs-designer.md) curved shapes select only near center) —
+  merged (#272) & archived (2026-07-10, `2026-07-10-fix-pen-curve-and-hit-test`):
+  corner-vs-smooth decided at pointer-up against a screen-px guard (previous
+  smooth anchor's handles untouched, Illustrator semantics), segment click-drag
+  inserts a smooth anchor with mirrored handles, and path hit-testing follows
+  the flattened rendered cubics (bulges hit, concavities miss). Owner-verified
+  2026-07-10. With #270's B-051 (Path Style commits on paths) + B-052 (pen
+  layer icon), the D-109 pen is now fully healthy for D-119's templates.
 - Pen tool multi-shape fix ([B-037](./prd/bugs-designer.md), owner decision
   2026-07-07: KEEP + fix) — merged (#267) & archived (2026-07-10,
   `2026-07-10-fix-pen-multi-shape`): explicit draft lifecycle (any pen exit
