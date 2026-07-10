@@ -3,6 +3,7 @@ export type {
   AmcpHandler,
   AmcpRequest,
   AmcpResponse,
+  CgAddResolution,
   CgDataRejection,
   CgDataResult,
   HandlerContext,

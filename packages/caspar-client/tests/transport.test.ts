@@ -133,6 +133,15 @@ describe('AmcpTransport', () => {
 
   it('emits "close" when the peer disconnects', async () => {
     const { mock, transport } = await setup();
+    // connect() resolves on the CLIENT's connect event, which can beat the
+    // server's 'connection' handler registering the socket — closing before
+    // that registration destroys nothing and the close never arrives (a
+    // load-dependent flake). Wait until the server actually holds the socket.
+    const start = Date.now();
+    while (mock.amcpClientCount === 0) {
+      if (Date.now() - start > 2000) throw new Error('mock never registered the client socket');
+      await new Promise((r) => setTimeout(r, 5));
+    }
     const closeP = new Promise<{ wasError: boolean }>((resolve) =>
       transport.once('close', resolve),
     );

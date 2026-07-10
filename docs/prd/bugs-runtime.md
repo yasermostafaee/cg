@@ -99,7 +99,9 @@ the item's real fields) is tracked separately — see the C-001 follow-up.
 - Re-deliver each retained template's HTML to the bridge on **reconnect**, so live
   loads survive a bridge restart without a manual re-import (the bridge's in-memory
   store is empty after a bounce). Tracked as a future enhancement, not part of
-  B-038's closed scope.
+  B-038's closed scope. **In progress:**
+  `openspec/changes/reconnect-reconciliation` (implemented with B-048's
+  reconcile face; flips to resolved after its live validation).
 
 ---
 
@@ -496,12 +498,13 @@ to A).
 
 ---
 
-## [ ] B-048 — first Load after a bridge restart renders NOTHING when the previous session's output is still on the layer; Update-then-Take recovers ⟨priority: medium⟩
+## [~] B-048 — first Load after a bridge restart renders NOTHING when the previous session's output is still on the layer; Update-then-Take recovers ⟨priority: medium⟩
 
 > Operator-observed on **2026-07-07** during the B-044 live session (bridge
 > built from the fix branch, pre-review-hardening — behavior ≡ `main`; CasparCG
 > 2.5.0 `69e8ad5`). Symptom-level; a workaround exists. All hypotheses below
-> are **UNVERIFIED**.
+> are **UNVERIFIED** — see the diagnosis verdict in the Progress note at the
+> bottom of this entry.
 
 **Repro (operator-confirmed precondition):**
 
@@ -543,3 +546,28 @@ it: does the `CG ADD`/`PLAY` arrive? Any 404 / CEF error?
 template HTML on reconnect). Bridge-restart amnesia has TWO faces — templates
 forgotten AND on-air producers orphaned; a reconnect/startup reconciliation
 should consider both (see also C-010).
+
+**Progress (2026-07-10 — `openspec/changes/reconnect-reconciliation`, stays
+`[~]` until live validation):** diagnosis (code + CasparCG server source
+v2.3.x-lts AND master + bridge→mock repros) **eliminated all three hypotheses**:
+(a) DISPROVEN — the html cg producer registers `reusable_producer_instance =
+false` on both branches, so `CG ADD` always creates a fresh CEF producer at the
+new URL and `stage.load()+play()` REPLACES the orphan (no hijack; the fresh URL
+IS fetched); (b) ruled out — `templateImport` registers synchronously within
+the WS message event and `startServing()` completes before `createBridge`
+returns; (c) unsupported — `play()` JS is QUEUED until `OnLoadEnd` (2.3), only
+dropped on master's `OnLoadError` (network-level, implausible here). The
+reconciler math further shows the reported READY-after-Update badge is only
+reachable if **no take intent ever reached the bridge** — a UI/link-layer miss
+on the pre-R-007 UI (no AsyncButton existed then; no concrete defect found).
+What the orphan DOES provably cause (mock-reproduced): a fresh session reuses
+the identical layer, and the orphan's OSC routed to the fresh item painted a
+**false ON AIR — even on a failed load**. Fixed by the change: browser
+re-delivers retained templates on reconnect; the bridge rejects unregistered
+loads (`unknown-template`) instead of blind-ADDing an unservable URL (real
+CasparCG 202s + renders a silent blank); the first `CG ADD` per layer per
+bridge process is preceded by an adopt-`CLEAR` issued before slot/OSC-interest
+binding (no blind startup clear — on-air safety). Live phase re-runs the exact
+repro on current main FIRST, with caspar log + bridge access log, to
+discriminate: no `CG PLAY` received ⇒ resolved-by-R-007; `CG PLAY` + GET 200 +
+blank ⇒ CEF/page timing (new PRD entry); reproduces ⇒ diagnose further.

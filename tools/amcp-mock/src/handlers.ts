@@ -65,7 +65,14 @@ function handlePlay(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   if (!slot) return { kind: 'err', code: 401, verb: 'PLAY' };
   if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'PLAY' };
   const url = req.args[1] ?? '';
-  ctx.setLayer(slot, { producer: 'html', filePath: url, paused: false, onAir: true });
+  // Non-fetching media/producer path — the page state is inertly 'resolved'.
+  ctx.setLayer(slot, {
+    producer: 'html',
+    filePath: url,
+    paused: false,
+    onAir: true,
+    pageResolution: 'resolved',
+  });
   return { kind: 'ok', code: 202, verb: 'PLAY' };
 }
 
@@ -75,7 +82,13 @@ function handleLoad(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'LOAD' };
   const url = req.args[1] ?? '';
   // LOAD primes the foreground but pauses immediately — PLAY is required to resume.
-  ctx.setLayer(slot, { producer: 'html', filePath: url, paused: true, onAir: false });
+  ctx.setLayer(slot, {
+    producer: 'html',
+    filePath: url,
+    paused: true,
+    onAir: false,
+    pageResolution: 'resolved',
+  });
   return { kind: 'ok', code: 202, verb: 'LOAD' };
 }
 
@@ -88,7 +101,13 @@ function handleClear(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   if (slot) {
     if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'CLEAR' };
     // B-039 — CLEAR DESTROYS the producer (and takes it off air).
-    ctx.setLayer(slot, { producer: 'empty', filePath: '', paused: false, onAir: false });
+    ctx.setLayer(slot, {
+      producer: 'empty',
+      filePath: '',
+      paused: false,
+      onAir: false,
+      pageResolution: 'resolved',
+    });
     return { kind: 'ok', code: 202, verb: 'CLEAR' };
   }
   // `CLEAR <channel>` — clear all layers on the channel. Walk known slots.
@@ -123,7 +142,7 @@ function handleClear(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
  * argument. Like real CasparCG the command still `202`s — the V8 failure is
  * asynchronous — but the payload assertion in tests now catches it.
  */
-async function handleCg(req: AmcpRequest, ctx: HandlerContext): Promise<AmcpResponse> {
+function handleCg(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   const slot = parseChannelLayer(req.args[0]);
   if (!slot) return { kind: 'err', code: 401, verb: 'CG' };
   if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'CG' };
@@ -136,26 +155,38 @@ async function handleCg(req: AmcpRequest, ctx: HandlerContext): Promise<AmcpResp
       const playOnLoad = req.args[4] === '1';
       // B-041 — the data arg has passed layer 1 (the tokenizer); run the
       // layer-2 (html_cg_proxy → V8) emulation before recording.
-      ctx.recordCgAdd(slot, template, decodeCgData(req.args[5] ?? ''));
-      // Resolve the template argument instead of blind-acking. A served URL → 202;
-      // a bare id / unreachable URL → 404 CG ADD FAILED (matches real CasparCG).
-      const resolved = await resolveTemplateRef(template);
-      if (!resolved) return { kind: 'err', code: 404, verb: 'CG', detail: 'CG ADD FAILED' };
-      // B-039 — the producer is now LOADED; it is on air only if play-on-load is set
-      // (`… 1 …`). A load (`… 0 …`) loads it without playing — the operator's
-      // `CG PLAY` puts it on air.
-      ctx.setLayer(slot, {
-        producer: 'html',
-        filePath: template,
-        paused: false,
-        onAir: playOnLoad,
+      const token = ctx.recordCgAdd(slot, template, decodeCgData(req.args[5] ?? ''));
+      // Reconnect-reconciliation — model REAL CasparCG's acceptance: a bare
+      // (non-URL) reference is a template-path lookup → `404 CG ADD FAILED`,
+      // while a URL is accepted with NO fetch before the ack (CEF loads it
+      // asynchronously — a dead URL still `202`s and produces empty frames).
+      // The async fetch verdict is recorded per slot (`lastCgAdd().resolution`)
+      // so tests assert delivery through it, never through a synthetic AMCP
+      // failure — the "looks acked, renders nothing" tripwire lives on there.
+      if (!/^https?:\/\//i.test(template)) {
+        ctx.completeCgAdd(slot, token, false);
+        return { kind: 'err', code: 404, verb: 'CG', detail: 'CG ADD FAILED' };
+      }
+      // B-039 — the producer exists immediately (before the page finishes
+      // loading); it is on air only if play-on-load is set (`… 1 …`). A load
+      // (`… 0 …`) loads it without playing — the operator's `CG PLAY` plays.
+      ctx.loadCgPage(slot, token, template, playOnLoad);
+      void httpGetOk(template, 2000).then((ok) => {
+        ctx.completeCgAdd(slot, token, ok);
       });
       return { kind: 'ok', code: 202, verb: 'CG' };
     }
     case 'UPDATE': {
       // `CG <slot> UPDATE <flash-layer> "<data>"` — expose the two-layer decode
-      // verdict for assertion (B-041).
+      // verdict for assertion (B-041). Recorded even when the command fails:
+      // the recording observes what was SENT.
       ctx.recordCgUpdate(slot, decodeCgData(req.args[3] ?? ''));
+      // Reconnect-reconciliation — real CasparCG 403s an update on a layer with
+      // no cg producer (`get_expected_cg_proxy`; the B-038 live log showed
+      // exactly this). No more blind 202.
+      if (ctx.getLayer(slot).producer !== 'html') {
+        return { kind: 'err', code: 403, verb: 'CG', detail: 'CG UPDATE FAILED' };
+      }
       return { kind: 'ok', code: 202, verb: 'CG' };
     }
     case 'PLAY': {
@@ -163,7 +194,12 @@ async function handleCg(req: AmcpRequest, ctx: HandlerContext): Promise<AmcpResp
       // PLAY on an empty/destroyed layer is an observable NO-OP (onAir stays false),
       // though it still 202s — matching real CasparCG's blind ack. This is the exact
       // "looks acked, renders nothing" gap the old mock hid.
-      if (ctx.getLayer(slot).producer === 'html') ctx.setLayer(slot, { onAir: true });
+      // Reconnect-reconciliation — a 'failed' page produces empty frames (the
+      // queued play() never flushes): PLAY still 202s but stays off air.
+      const layer = ctx.getLayer(slot);
+      if (layer.producer === 'html' && layer.pageResolution !== 'failed') {
+        ctx.setLayer(slot, { onAir: true });
+      }
       return { kind: 'ok', code: 202, verb: 'CG' };
     }
     case 'STOP':
@@ -173,22 +209,18 @@ async function handleCg(req: AmcpRequest, ctx: HandlerContext): Promise<AmcpResp
     case 'NEXT':
       return { kind: 'ok', code: 202, verb: 'CG' };
     case 'REMOVE': {
-      ctx.setLayer(slot, { producer: 'empty', filePath: '', paused: false, onAir: false });
+      ctx.setLayer(slot, {
+        producer: 'empty',
+        filePath: '',
+        paused: false,
+        onAir: false,
+        pageResolution: 'resolved',
+      });
       return { kind: 'ok', code: 202, verb: 'CG' };
     }
     default:
       return { kind: 'err', code: 400, verb: 'CG' };
   }
-}
-
-/**
- * Resolve a `CG ADD` template argument the way real CasparCG must be able to: a
- * bare id / non-URL is unresolvable here (→ 404); an `http(s)://` URL is fetched
- * and resolves only when it returns a page.
- */
-async function resolveTemplateRef(ref: string): Promise<boolean> {
-  if (!/^https?:\/\//i.test(ref)) return false;
-  return httpGetOk(ref, 2000);
 }
 
 /** True iff `GET <url>` returns a 2xx within `timeoutMs`. Never throws. */

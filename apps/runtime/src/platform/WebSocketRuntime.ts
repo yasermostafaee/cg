@@ -66,6 +66,12 @@ export type WebSocketFactory = (url: string) => WebSocketLike;
 export interface WebSocketRuntimeOptions {
   /** Inject a WebSocket implementation (default: the global `WebSocket`). */
   createWebSocket?: WebSocketFactory;
+  /**
+   * Reconnect-reconciliation — called when a retained template's re-delivery
+   * fails during the post-reconnect resync (the resync itself continues). The
+   * renderer wires this to its command-error surface; default: console.error.
+   */
+  onResyncError?: (message: string) => void;
 }
 
 /** Thrown (as a rejected promise) when a command is issued while the link is down. */
@@ -110,6 +116,7 @@ class Subs<T> {
 export class WebSocketRuntime implements RuntimeBridge {
   readonly #url: string;
   readonly #createWs: WebSocketFactory;
+  readonly #onResyncError: (message: string) => void;
   #ws: WebSocketLike | null = null;
   #status: BridgeLinkStatus = 'disconnected';
   #everOpened = false;
@@ -118,6 +125,16 @@ export class WebSocketRuntime implements RuntimeBridge {
 
   #nextId = 0;
   readonly #pending = new Map<string, Pending>();
+
+  /**
+   * Reconnect-reconciliation — the exact `{ template, html }` payload of every
+   * successful `templates.import`, keyed by templateId (a re-import replaces
+   * it). The bridge's registry is in-memory and empty after a bridge restart;
+   * `#resync()` re-delivers this set FIRST on every reconnect so a subsequent
+   * load resolves against a populated registry. Page-lifetime only — a page
+   * reload starts empty (the bridge-side registry covers that case).
+   */
+  readonly #retained = new Map<string, ChannelRequest<typeof TemplatesImportChannel>>();
 
   readonly #stackSubs = new Subs<readonly StackItemState[]>();
   readonly #healthSubs = new Subs<ConnectionHealth>();
@@ -134,6 +151,8 @@ export class WebSocketRuntime implements RuntimeBridge {
     this.#url = url;
     this.#createWs =
       options.createWebSocket ?? ((u) => new WebSocket(u) as unknown as WebSocketLike);
+    this.#onResyncError =
+      options.onResyncError ?? ((message) => console.error(`[WebSocketRuntime] ${message}`));
     this.#connect();
   }
 
@@ -149,6 +168,7 @@ export class WebSocketRuntime implements RuntimeBridge {
   /** Stop reconnecting and close the socket. */
   dispose(): void {
     this.#disposed = true;
+    this.#retained.clear();
     if (this.#reconnectTimer !== null) clearTimeout(this.#reconnectTimer);
     this.#ws?.close();
   }
@@ -205,8 +225,29 @@ export class WebSocketRuntime implements RuntimeBridge {
     this.#statusSubs.emit(status);
   }
 
-  /** Re-pull the full snapshot after a reconnect and push it to subscribers. */
+  /**
+   * Post-reconnect resync: FIRST re-deliver every retained template — a bridge
+   * restart wiped its in-memory registry — THEN re-pull the full snapshot and
+   * push it to subscribers. All re-delivery frames are written before yielding,
+   * so single-socket FIFO plus the bridge's synchronous registration guarantee
+   * any operator load issued after the reconnect resolves against a populated
+   * registry. A failed re-delivery is surfaced and never aborts the rest.
+   */
   async #resync(): Promise<void> {
+    const redeliveries = [...this.#retained.values()].map(async (req) => {
+      try {
+        await this.#invoke(TemplatesImportChannel, req);
+      } catch (err) {
+        // A fresh drop mid-resync re-triggers the whole resync on the next
+        // reconnect — stay quiet; only a real per-template rejection surfaces.
+        if (err instanceof BridgeDisconnectedError) return;
+        this.#onResyncError(
+          `Re-delivery of template “${req.template.templateId}” failed on reconnect: ` +
+            `${err instanceof Error ? err.message : String(err)}. Re-import it manually.`,
+        );
+      }
+    });
+    await Promise.all(redeliveries);
     try {
       const [stack, health, lock] = await Promise.all([
         this.#invoke(StackSnapshotChannel, undefined),
@@ -341,8 +382,14 @@ export class WebSocketRuntime implements RuntimeBridge {
     get: (req: ChannelRequest<typeof TemplatesGetChannel>) =>
       this.#invoke(TemplatesGetChannel, req),
     list: () => this.#invoke(TemplatesListChannel, undefined),
-    import: (req: ChannelRequest<typeof TemplatesImportChannel>) =>
-      this.#invoke(TemplatesImportChannel, req),
+    import: async (req: ChannelRequest<typeof TemplatesImportChannel>) => {
+      const res = await this.#invoke(TemplatesImportChannel, req);
+      // Reconnect-reconciliation — retain the exact delivered payload (only
+      // after the bridge confirmed it) so a bridge restart is healed by
+      // re-delivery on reconnect. Keyed by id: a re-import replaces it.
+      this.#retained.set(req.template.templateId, req);
+      return res;
+    },
   };
 
   readonly audit = {

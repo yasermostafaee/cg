@@ -8,6 +8,15 @@ const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'bro
 /** Boot probe budget — reachable within this window → use the bridge (C-001). */
 const PROBE_TIMEOUT_MS = 1500;
 
+export interface CreateRuntimeBridgeOptions {
+  /**
+   * Reconnect-reconciliation — surface for a failed template re-delivery
+   * during the post-reconnect resync (the renderer passes its command-error
+   * reporter). Only used by the live `WebSocketRuntime` backend.
+   */
+  onResyncError?: (message: string) => void;
+}
+
 /**
  * Build the browser `RuntimeBridge`, deciding the backend **once** at boot
  * (C-001 Phase 1).
@@ -19,9 +28,14 @@ const PROBE_TIMEOUT_MS = 1500;
  * later drops surfaces as `disconnected` (handled in `WebSocketRuntime`), never
  * a silent fall-back to the mock.
  */
-export async function createRuntimeBridge(): Promise<RuntimeBridge> {
+export async function createRuntimeBridge(
+  options: CreateRuntimeBridgeOptions = {},
+): Promise<RuntimeBridge> {
   const url = resolveBridgeUrl();
-  const ws = new WebSocketRuntime(url);
+  const ws = new WebSocketRuntime(
+    url,
+    options.onResyncError !== undefined ? { onResyncError: options.onResyncError } : {},
+  );
   try {
     await withTimeout(ws.whenReady(), PROBE_TIMEOUT_MS);
     return ws;
