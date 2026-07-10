@@ -193,6 +193,24 @@ B-048 closes only via the Part C discriminator.
   on-air loss**. Orphans on never-reloaded layers stay on air by design;
   surfacing them (occupancy warning + explicit Clear control via
   `unexpected-onair`) is a filed follow-up (C-010-adjacent).
+- **KNOWN LIMITATION — adoption is per `(channel, layer)`, blind to WHAT it
+  clears.** The bridge has no cross-restart memory of which template was on
+  which layer, and the fresh session's LayerManager assigns layers purely by
+  allocation order. After a restart, the adopt-CLEAR on a newly-assigned layer
+  therefore wipes whatever the PREVIOUS session left there — which is the
+  graphic the operator is replacing only when the layouts happen to line up.
+  Live validation didn't hit the divergent case because the assignment order
+  repeated across sessions — that is luck of a stable layout, not a guarantee.
+  Scope of the risk, precisely: the adopt-CLEAR still never causes on-air loss
+  beyond what the real `CG ADD` would do ON THAT LAYER (the server replaces the
+  foreground either way); the specific hazard is clearing the WRONG on-air
+  layer when the fresh session's layout diverges from the dead session's (e.g.
+  different import/Load order). Safe under a stable layer layout; the correct
+  fix is persisted, layer-aware reconciliation — adopt by KNOWN occupancy
+  instead of by whatever layer a new Load lands on. Tracked as **C-011**
+  (`docs/prd/caspar.md`): persist the Loaded stack + template registry across
+  bridge restart AND page reload, which also eliminates the both-restart
+  manual re-import gap of this change's page-lifetime retention.
 
 ### Mock fidelity (the B-041 lesson)
 
