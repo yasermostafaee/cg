@@ -601,7 +601,14 @@ blank ⇒ CEF/page timing (new PRD entry); reproduces ⇒ diagnose further.
 
 ---
 
-## [ ] B-053 — badge rests at a FALSE ON AIR after the FIRST Load onto a layer (per bridge process): change-tracker first-observation + "non-empty producer ⇒ on-air" + sticky last publish ⟨priority: medium⟩
+## [~] B-053 — badge rests at a FALSE ON AIR after the FIRST Load onto a layer (per bridge process): change-tracker first-observation + "non-empty producer ⇒ on-air" + sticky last publish ⟨priority: medium⟩
+
+> **[~] 2026-07-10** — implemented in `openspec/changes/fix-false-onair-badge`
+> (option (a′): intent-side play evidence, raw observation, read-time
+> derivation; bridge `updateRequest` parity; StackRow gating asserted). Full
+> diagnosis + accepted residuals in that change's `design.md` ([[B-056]] filed
+> for the backup-only orphan window). Awaiting operator live validation on
+> CasparCG 2.5.0 before `[x]` + archive.
 
 > Operator-observed **2026-07-10** during the reconnect-reconciliation live
 > session (CasparCG 2.5.0 `69e8ad5`); root-caused the same day with captured
@@ -706,3 +713,43 @@ state instead of trusting process-lifetime memory.
 (dead resync wiring), C-011 (persisted layer-aware reconciliation — the
 structural home for a real fix). The B-044 settle semantics are unaffected
 (this is verb CHOICE, not badge lifecycle).
+
+---
+
+## [ ] B-056 — `load()` proceeds when the adopt-CLEAR didn't land on the PRIMARY: an unadopted live orphan can render under an owned slot with no UI tell ⟨priority: low⟩
+
+> Found by the adversarial design review of the B-053 fix (2026-07-10,
+> `fix-false-onair-badge` design.md §8); symptom-level, NOT reproduced live.
+> A multi-fault reconnect-window residual, ACCEPTED as out of the B-053 fix's
+> scope because the mitigation touches redundancy fault-mode semantics.
+
+**Scenario (from code):** in mirror-sync with the primary's AMCP link briefly
+down (no failover — e.g. `autoFailoverEnabled: false`), a load's adopt-CLEAR
+and its `CG ADD` can both succeed BACKUP-ONLY (`#send` returns `ok` on a
+backup win). `#adoptLayer` correctly refuses to mark the layer adopted
+(`tools/caspar-bridge/src/caspar-runtime.ts` — adoption requires
+`ok && onPrimary`), but `load()` **proceeds anyway**: it binds the slot + OSC
+interest and ADDs onto a layer where a previous bridge session's VISIBLE
+orphan producer may survive on the primary. When the primary's OSC
+flows/reconnects, the orphan's `html` report routes to the fresh, never-taken
+item.
+
+**Consequence:** post-B-053 the item honestly reads READY (a producer exists,
+no play evidence) — but there is NO tell that foreign content is live on the
+primary output under the item's own layer; `unexpected-onair` cannot fire (the
+slot IS owned). Pre-B-053 the same window showed a sticky, MISATTRIBUTED
+ON AIR ("your item is on air" — it wasn't; the orphan was) — also a lie, just
+an attention-drawing one. A subsequent Take would `CG PLAY` the orphan.
+
+**Fix space:** bail/flag the load when adoption did not land on the current
+primary (a loud failed load, mirroring the unknown-template guard — but this
+changes what a backup-only load means in every redundancy fault mode, hence
+its own change); or surface owned-slot occupancy observed BEFORE the item's
+own ADD ack as an operator warning.
+
+**Cross-reference:** [[B-053]] (the mapping fix whose review found this),
+`openspec/changes/reconnect-reconciliation` (the adopt-CLEAR mechanism and its
+spec mandate "the fresh item never shows `on-air` from the orphan's OSC before
+take" — this entry is about the missing WARNING, not the badge), B-054 (the
+adjacent server-restart staleness), C-011 (persisted layer-aware
+reconciliation — the structural home).

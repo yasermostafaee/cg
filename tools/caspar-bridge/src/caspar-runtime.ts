@@ -511,7 +511,12 @@ export class CasparRuntime {
     version: string,
     notes?: string,
   ): { accepted: true; deferred: boolean; pending: PendingUpdate } {
-    const onAir = this.#reconciler.snapshot().some((i) => i.status === 'on-air');
+    // B-053 parity — count acked 'playing' as on air (matches MockRuntime):
+    // post-fix 'on-air' exists only while OSC truth is fresh on a TAKEN item,
+    // and a playing item whose truth decayed must still defer the update.
+    const onAir = this.#reconciler
+      .snapshot()
+      .some((i) => i.status === 'on-air' || i.status === 'playing');
     const pending: PendingUpdate = {
       version,
       requestedAt: new Date().toISOString(),
