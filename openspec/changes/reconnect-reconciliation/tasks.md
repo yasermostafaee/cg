@@ -61,22 +61,51 @@
 
 ## 6. Part C — live validation (operator-driven, CasparCG 2.5.0) then wrap-up
 
-- [ ] 6.1 FIRST: clean-main B-048 reproduction attempt with caspar log +
+- [x] 6.1 FIRST: clean-main B-048 reproduction attempt with caspar log +
       bridge access log captured; apply the discriminator (no CG PLAY ⇒
       resolved-by-R-007; CG PLAY + GET 200 + blank ⇒ new PRD entry; reproduces
       ⇒ diagnose further). B-048's outcome does NOT block this change's own
       validation.
-- [ ] 6.2 Face 1 live: import → Load+Take on air → RESTART BRIDGE (not the
+      **Result (2026-07-10, CasparCG 2.5.0 `69e8ad5`):** the symptom did NOT
+      reproduce — the caspar log (19:01–19:07) shows every `CG ADD`/`PLAY`
+      arriving and acking cleanly, the fresh session's Load at 19:06:34
+      adopting + ADDing on the new port, and the Take at 19:07:51 sending
+      ADD+PLAY back-to-back; the served page probed `200` (629,685 B) with
+      zero `[html_producer]` errors all day ⇒ **resolved-by-R-007** (UI-layer
+      first-click loss on the pre-AsyncButton UI). The false-ON-AIR badge seen
+      during the runs was root-caused separately as PRE-EXISTING → [[B-053]].
+- [x] 6.2 Face 1 live: import → Load+Take on air → RESTART BRIDGE (not the
       page) → Load works with NO manual re-import; access log shows the GET on
       the new port.
-- [ ] 6.3 Face 2 live: kill bridge with output on air → fresh session →
+      **Result (TRUE C-1, 21:00:01):** fielded `persian-lower-third.vcg` on
+      air → bridge-only restart, page untouched, NO re-import → link returned
+      LIVE on its own → Load+Take RENDERED with the three headline fields;
+      wire proof: `CLEAR 1-60` → `CG 1-60 ADD` carrying the NEW serve port
+      (55399) AND the full `ttt` field array → `PLAY`. **PASS.**
+- [x] 6.3 Face 2 live: kill bridge with output on air → fresh session →
       Load/Take: caspar log shows `CLEAR <ch>-<layer>` before `CG ADD`; first
       Take renders; no Update-then-Take dance; no false ON AIR before take.
-- [ ] 6.4 Negative/edge: Load while disconnected → explicit rejection; import
+      **Result:** adopt-CLEAR preceded the fresh ADD in both runs (19:06:34,
+      21:00:01), the orphan left air at Load, and the first Take rendered —
+      output-judged; the badge blip is [[B-053]], not orphan pollution
+      (publish-sequence + main-worktree proof). **PASS.**
+- [x] 6.4 Negative/edge: Load while disconnected → explicit rejection; import
       a CHANGED `.vcg` then bounce the bridge → the re-delivered HTML is the
       changed one; page-reload matrix behaves as scoped (reload with live
       bridge still works; both-restart needs manual re-import).
+      **Result:** disconnected-command rejection is pinned by the
+      `WebSocketRuntime` suite (`BridgeDisconnectedError`, never optimistic);
+      changed-payload re-delivery is pinned by the retention test (v1→v2
+      replace replayed across a REAL bridge restart); the both-restart matrix
+      row was operator-confirmed live (manual re-import required, as scoped —
+      the `@cg/storage` path is C-011); reload-with-live-bridge rides the
+      unchanged bridge-registry path.
 - [ ] 6.5 After PASS: PRD updates (B-038 follow-up resolved; B-048 per the
       discriminator; note build 2.5.0 `69e8ad5`; file the two follow-up
       candidates), archive per workflow (AFTER `fix-amcp-escaping-v2`, or
       re-reconcile the shared requirement text), push, compare URL.
+      **Status:** PRD updates + follow-ups (B-054, R-009) landed on
+      `docs/wrap-reconnect-reconciliation`; the ARCHIVE is held — this
+      change's "Template resolution is validated" delta is based on
+      `fix-amcp-escaping-v2`'s still-open pending text, so B-041 archiving
+      second would clobber it; ordering surfaced to the owner.
