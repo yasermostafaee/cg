@@ -55,10 +55,11 @@ class Emitter<T> {
 
 /**
  * **Real** C-001 backing. Replaces the throwaway in-memory `RuntimeBacking` with
- * the actual `@cg/caspar-client` stack running in its native Node tier: TWO
- * `ServerSession`s (A/B) under a `RedundancyAdapter` (Phase 3a), a `Reconciler`
- * (the single source of truth for stack state), a `LayerManager` (slot
- * allocation), and the `CommandBuilder` seam.
+ * the actual `@cg/caspar-client` stack running in its native Node tier: one
+ * `ServerSession` per DECLARED server (A always, B only when the config
+ * declares a backup — B-046) under a `RedundancyAdapter` (Phase 3a), a
+ * `Reconciler` (the single source of truth for stack state), a `LayerManager`
+ * (slot allocation), and the `CommandBuilder` seam.
  *
  * Browser-side everything is unchanged: this answers the same `@cg/shared-ipc`
  * contract `bridge.ts` routes, exposes the same `*Changed` emitters, and the
@@ -83,7 +84,8 @@ export class CasparRuntime {
   readonly updateChanged = new Emitter<PendingUpdate | null>();
 
   readonly #config: ConnectionConfig;
-  readonly #sessions: Record<ServerLabel, ServerSession>;
+  /** One session per DECLARED server (B-046: B exists only when configured). */
+  readonly #sessions: { A: ServerSession; B?: ServerSession };
   readonly #adapter: RedundancyAdapter;
   readonly #reconciler = new Reconciler();
   readonly #layers = new LayerManager();
@@ -157,7 +159,12 @@ export class CasparRuntime {
         oscBindHost: '127.0.0.1',
         resyncDurationMs: RESYNC_MS,
       });
-    this.#sessions = { A: session('A', config.servers.A), B: session('B', config.servers.B) };
+    // B-046 — only DECLARED servers get a session: no phantom backup, no
+    // reconnect churn, no divergence noise under the single-server default.
+    this.#sessions = {
+      A: session('A', config.servers.A),
+      ...(config.servers.B !== undefined ? { B: session('B', config.servers.B) } : {}),
+    };
     this.#adapter = new RedundancyAdapter({
       strategy: config.strategy,
       sessions: this.#sessions,
@@ -179,7 +186,9 @@ export class CasparRuntime {
     // OSC re-confirms state. Each OscTransport already ran interest →
     // rate-limit → change-track and handed us typed events.
     for (const label of ['A', 'B'] as const) {
-      this.#sessions[label].osc.on('events', (events) => {
+      const session = this.#sessions[label];
+      if (session === undefined) continue;
+      session.osc.on('events', (events) => {
         if (this.#adapter.currentPrimary !== label) return;
         for (const event of events) this.#reconciler.applyOsc(event);
       });
@@ -198,7 +207,7 @@ export class CasparRuntime {
     });
 
     this.#sessions.A.start();
-    this.#sessions.B.start();
+    this.#sessions.B?.start();
   }
 
   /**
@@ -231,7 +240,7 @@ export class CasparRuntime {
     this.#flushTimer = null;
     for (const timer of this.#expiryTimers.values()) clearTimeout(timer);
     this.#expiryTimers.clear();
-    await Promise.all([this.#sessions.A.stop(), this.#sessions.B.stop()]);
+    await Promise.all([this.#sessions.A.stop(), this.#sessions.B?.stop() ?? Promise.resolve()]);
     await this.#templateServer.stop();
   }
 
@@ -245,29 +254,34 @@ export class CasparRuntime {
     return this.#adapter.primarySession.osc.port;
   }
 
-  /** Resolves when BOTH sessions reach HEALTHY (mirror needs both). */
+  /**
+   * Resolves when ALL DECLARED sessions reach HEALTHY — A alone under a
+   * single-server config, both under a mirror pair (B-046: the old
+   * both-always contract could never resolve without a real backup).
+   */
   whenServerHealthy(timeoutMs = 5000): Promise<void> {
-    const bothHealthy = (): boolean =>
-      this.#sessions.A.state === 'healthy' && this.#sessions.B.state === 'healthy';
-    if (bothHealthy()) return Promise.resolve();
+    const sessions: ServerSession[] = [
+      this.#sessions.A,
+      ...(this.#sessions.B !== undefined ? [this.#sessions.B] : []),
+    ];
+    const allHealthy = (): boolean => sessions.every((s) => s.state === 'healthy');
+    if (allHealthy()) return Promise.resolve();
     return new Promise<void>((resolve, reject) => {
       const cleanup = (): void => {
         clearTimeout(timer);
-        this.#sessions.A.off('healthy', check);
-        this.#sessions.B.off('healthy', check);
+        for (const s of sessions) s.off('healthy', check);
       };
       const check = (): void => {
-        if (bothHealthy()) {
+        if (allHealthy()) {
           cleanup();
           resolve();
         }
       };
       const timer = setTimeout(() => {
         cleanup();
-        reject(new Error('CasparCG servers did not both reach HEALTHY in time'));
+        reject(new Error('declared CasparCG server(s) did not reach HEALTHY in time'));
       }, timeoutMs);
-      this.#sessions.A.on('healthy', check);
-      this.#sessions.B.on('healthy', check);
+      for (const s of sessions) s.on('healthy', check);
       check();
     });
   }
@@ -318,8 +332,8 @@ export class CasparRuntime {
 
     this.#slots.set(itemId, slot);
     this.#reconciler.assignSlot(itemId, { ...slot, server: 'primary' });
-    // Interest on BOTH sessions' OSC so whichever is primary, its confirmations
-    // pass the filter (survives failover).
+    // Interest on every declared session's OSC so whichever is primary, its
+    // confirmations pass the filter (survives failover).
     this.#addInterest(slot);
 
     // B-039 — `CG ADD` only (play-on-load OFF in the builder): the producer is
@@ -428,26 +442,33 @@ export class CasparRuntime {
   health(): ConnectionHealth {
     // `primary`/`backup` reflect the current ROLES (after failover, `primary`
     // is the live server). ServerSessionState and ServerHealth.state share the
-    // same vocabulary.
+    // same vocabulary. `backup` is absent under a single-server config.
     const cur = this.#adapter.currentPrimary;
     const other: ServerLabel = cur === 'A' ? 'B' : 'A';
-    const snapshot = (label: ServerLabel): ConnectionHealth['primary'] => {
-      const state = this.#sessions[label].state;
+    const snapshot = (label: ServerLabel, session: ServerSession): ConnectionHealth['primary'] => {
+      const state = session.state;
       return { label, state, amcpAxisOk: state === 'healthy' };
     };
+    const primarySession = this.#sessions[cur];
+    const backupSession = this.#sessions[other];
     return {
-      primary: snapshot(cur),
-      backup: snapshot(other),
+      // The current primary is always a declared session (failover refuses
+      // to swap onto an undeclared backup); fall back to A defensively.
+      primary: snapshot(cur, primarySession ?? this.#sessions.A),
+      ...(backupSession !== undefined ? { backup: snapshot(other, backupSession) } : {}),
       currentPrimary: cur,
       strategy: this.#config.strategy,
       ...(this.#lastFailover !== undefined ? { lastFailover: this.#lastFailover } : {}),
     };
   }
 
-  /** Manual operator failover (the `connections.failover` channel). Real switch. */
+  /**
+   * Manual operator failover (the `connections.failover` channel). Real
+   * switch; refused (`ok: false`) when no backup is declared (B-046).
+   */
   async failover(): Promise<{ ok: boolean; newPrimary: ServerLabel }> {
-    await this.#adapter.failover('manual');
-    return { ok: true, newPrimary: this.#adapter.currentPrimary };
+    const ok = await this.#adapter.failover('manual');
+    return { ok, newPrimary: this.#adapter.currentPrimary };
   }
 
   // ── lock / templates / audit / settings / update (in-memory stubs) ──
@@ -577,12 +598,12 @@ export class CasparRuntime {
 
   #addInterest(slot: CommandSlot): void {
     this.#sessions.A.osc.interest.add(slot.channel, slot.layer);
-    this.#sessions.B.osc.interest.add(slot.channel, slot.layer);
+    this.#sessions.B?.osc.interest.add(slot.channel, slot.layer);
   }
 
   #removeInterest(slot: CommandSlot): void {
     this.#sessions.A.osc.interest.remove(slot.channel, slot.layer);
-    this.#sessions.B.osc.interest.remove(slot.channel, slot.layer);
+    this.#sessions.B?.osc.interest.remove(slot.channel, slot.layer);
   }
 
   /**

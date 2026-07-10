@@ -35,7 +35,8 @@ export type FailoverInfo = z.infer<typeof FailoverInfoSchema>;
 
 const ConnectionHealthSchema = z.object({
   primary: ServerHealthSchema,
-  backup: ServerHealthSchema,
+  /** Absent when the connection config declares no backup (single-server). */
+  backup: ServerHealthSchema.optional(),
   currentPrimary: ServerLabelSchema,
   strategy: z.enum(['mirror-sync', 'mirror-async', 'journal-replay']),
   /**
@@ -55,7 +56,10 @@ const ServerEndpointSchema = z.object({
 });
 
 const ConnectionConfigSchema = z.object({
-  servers: z.object({ A: ServerEndpointSchema, B: ServerEndpointSchema }),
+  // B-046 — the backup is DECLARED, not assumed: a single-server station omits
+  // it, and only declared intent distinguishes "no backup" (quiet) from
+  // "backup down" (alarmed via health).
+  servers: z.object({ A: ServerEndpointSchema, B: ServerEndpointSchema.optional() }),
   strategy: z.enum(['mirror-sync', 'mirror-async', 'journal-replay']),
   autoFailoverEnabled: z.boolean(),
 });

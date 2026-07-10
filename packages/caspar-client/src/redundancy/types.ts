@@ -20,7 +20,12 @@ export interface SendOptions extends EnqueueOptions {
 
 export interface PairedSessions {
   readonly A: ServerSession;
-  readonly B: ServerSession;
+  /**
+   * B-046 — OPTIONAL: absent under a declared single-server config. With no
+   * backup the adapter sends primary-only, refuses failover, and never
+   * engages the divergence/split-brain/replay machinery.
+   */
+  readonly B?: ServerSession;
 }
 
 /** Reasons the adapter can trigger an automatic failover (Phase 5 §7.5). */

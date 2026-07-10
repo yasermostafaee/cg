@@ -1,4 +1,4 @@
-# Bugs — Runtime / CasparCG
+﻿# Bugs — Runtime / CasparCG
 
 Bug reports for the **Runtime** app (`apps/runtime`, the CasparCG playout controller)
 and its client stack (`@cg/caspar-client`, AMCP/OSC). For the bug format and Claude's
@@ -450,7 +450,35 @@ not part of this bug.
 
 ---
 
-## [ ] B-046 — phantom default backup B: spurious split-brain replays, UNBOUNDED journal growth, health churn ⟨priority: medium⟩
+## [x] B-046 — phantom default backup B: spurious split-brain replays, UNBOUNDED journal growth, health churn ⟨priority: medium⟩ — merged via `harden-redundancy-single-and-two-server`, archived
+
+<!-- change: openspec/changes/archive/2026-07-10-harden-redundancy-single-and-two-server/ -->
+
+> **CLOSED — fixed + mock/soak-validated 2026-07-11** (no hardware gate; this
+> is redundancy-machinery behavior, fully exercisable against `amcp-mock`).
+> Every consequence below was first confirmed with file:line (see the change's
+> `design.md`), then fixed via three owner-approved decisions:
+> **(1) declared single-server** — `servers.B` and `ConnectionHealth.backup`
+> are optional; the bridge default and CLI build only declared servers (new
+> `--backup-*` flags); with no B the adapter sends primary-only, refuses
+> failover, and has no divergence/split-brain surface; StatusBar shows
+> NO BACKUP and disables manual failover.
+> **(2) self-bounding `InMemoryJournal`** — 500 entries / 5 min (tunable),
+> enforced on append; retention is 10× the divergence window so a corrective
+> resend for a briefly-lagged LIVE backup never needs an evicted entry;
+> full-history cold-backup rebuild formally belongs to a persistent journal.
+> **(3) liveness-gated divergence/replay** — backup-unreachable failures count
+> only while the backup believes itself live (healthy/degraded); code-vs-code
+> divergences always count; resend/failover-replay skip a dead target.
+> Plus: `whenServerHealthy()` = all DECLARED servers healthy; `emitHealth`
+> dedupes by effective liveness (churn + primary double-emit gone).
+> **Soak record (tools/soak-runner, new `backup` fidelity modes):** `absent`
+> and `dead` (the old phantom shape) runs pass under `leakBudgetMb` with ZERO
+> mirror-divergence / split-brain-persistent / corrective-resend events and a
+> capped journal; `diverging` (LIVE backup, wrong acks) still escalates to
+> split-brain + resend; the two-server + scheduled-failover soak stays green.
+> Bridge integration: single-server boot is healthy on A alone, playout works,
+> health has no backup entry, steady state publishes zero health churn.
 
 > Found during the **B-044 investigation** (2026-07-07/08, subsystem mapping of
 > `@cg/caspar-client` redundancy + the default bridge config). Symptom-level —
@@ -485,10 +513,20 @@ replays on a live backup) is for the fix change to design.
 
 ---
 
-## [ ] B-047 — failover triggers keep watching the OLD primary: the "re-bound in failover-complete" listener rebinding doesn't exist ⟨priority: low⟩
+## [x] B-047 — failover triggers keep watching the OLD primary: the "re-bound in failover-complete" listener rebinding doesn't exist ⟨priority: low⟩ — merged via `harden-redundancy-single-and-two-server`, archived
 
-> Found during the **B-044 investigation** (2026-07-08). Latent — it needs a
-> real failover first, and two-server redundancy isn't in production use yet.
+<!-- change: openspec/changes/archive/2026-07-10-harden-redundancy-single-and-two-server/ -->
+
+> **CLOSED — fixed + mock-validated 2026-07-11** (folded into the B-046
+> change). Confirmed worse than filed: besides B's death being invisible after
+> A→B, the demoted dead A's reconnect churn kept firing `maybeFailover` and
+> flipped primary BACK onto the corpse (ping-pong). Fix: no rebinding at all —
+> one `state-change` handler bound to BOTH sessions at construction that
+> checks `label === currentPrimary` AT EVENT TIME (rebinding-in-
+> failover-complete would have recreated the bug class with a race window).
+> The PRD regression below was written FIRST and confirmed failing on the
+> pre-change adapter, then green: failover A→B, kill B → auto trigger fires
+> (from B, to A); A's churn triggers nothing.
 
 **Finding (symptom-level):** the comment at
 `packages/caspar-client/src/redundancy/redundancy-adapter.ts:402-406` claims the

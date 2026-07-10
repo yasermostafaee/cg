@@ -72,7 +72,10 @@ export function StatusBar({ onOpenAudit }: Props = {}): JSX.Element {
   }
 
   const primary = sessionLabel(health.primary.state);
-  const backup = sessionLabel(health.backup.state);
+  // B-046 — `backup` is absent under a declared single-server config: render
+  // the honest "no backup" state instead of a phantom card, and disable the
+  // manual failover (the bridge refuses it anyway — nothing to switch to).
+  const backup = health.backup !== undefined ? sessionLabel(health.backup.state) : null;
 
   return (
     <footer style={styles.bar} aria-label="Status bar">
@@ -81,16 +84,27 @@ export function StatusBar({ onOpenAudit }: Props = {}): JSX.Element {
         <span style={styles.primary}>● PRIMARY {health.primary.label}</span>{' '}
         <span style={primary.style}>{primary.text}</span>
       </span>
-      <span className="cg-pill">
-        <span style={styles.backup}>○ BACKUP {health.backup.label}</span>{' '}
-        <span style={backup.style}>{backup.text}</span>
-      </span>
+      {health.backup !== undefined && backup !== null ? (
+        <span className="cg-pill">
+          <span style={styles.backup}>○ BACKUP {health.backup.label}</span>{' '}
+          <span style={backup.style}>{backup.text}</span>
+        </span>
+      ) : (
+        <span className="cg-pill">
+          <span style={styles.backup}>○ NO BACKUP</span>
+        </span>
+      )}
       <span className="cg-pill">{health.strategy}</span>
       <span style={styles.spacer} />
       <AsyncButton
         variant="caution"
         aria-label="Manual failover"
-        title={`Switch primary to ${health.currentPrimary === 'A' ? 'B' : 'A'}`}
+        disabled={health.backup === undefined}
+        title={
+          health.backup === undefined
+            ? 'No backup configured'
+            : `Switch primary to ${health.currentPrimary === 'A' ? 'B' : 'A'}`
+        }
         run={() =>
           window.cg.connections.failover({ reason: 'manual' }).then((r) => ({ accepted: r.ok }))
         }

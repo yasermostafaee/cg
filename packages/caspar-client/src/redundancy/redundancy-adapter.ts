@@ -55,8 +55,12 @@ export interface RedundancyAdapterEvents {
   ];
   /** M9.1: emitted for each journal entry replayed to the backup. */
   'corrective-resend': [info: { seq: number; line: string; target: ServerLabel }];
-  /** Re-emits aggregated health derived from both sessions. */
-  health: [info: { primary: HealthSnapshot; backup: HealthSnapshot }];
+  /**
+   * Re-emits aggregated health derived from the declared sessions. `backup`
+   * is absent under a single-server config. Deduped: an unchanged aggregate
+   * (by effective liveness) is never re-emitted (B-046 health churn).
+   */
+  health: [info: { primary: HealthSnapshot; backup?: HealthSnapshot }];
   error: [err: Error];
 }
 
@@ -66,10 +70,16 @@ export interface HealthSnapshot {
 }
 
 /**
- * RedundancyAdapter — wraps two ServerSessions and presents a single
- * `send()` interface to higher layers. Implements all three Phase 5 §7
- * strategies. Auto-failover triggers off the OSC + ping + timeout +
- * 5xx-burst signals from the underlying sessions.
+ * RedundancyAdapter — wraps the DECLARED ServerSessions (A always, B only
+ * when the station really has a backup) and presents a single `send()`
+ * interface to higher layers. Implements all three Phase 5 §7 strategies.
+ * Auto-failover triggers off the OSC + ping + timeout + 5xx-burst signals
+ * from the underlying sessions — evaluated against the CURRENT primary at
+ * event time (B-047).
+ *
+ * B-046 — with no declared backup the adapter is inert redundancy-wise:
+ * every strategy sends primary-only, `failover()` refuses, and no
+ * divergence / split-brain / corrective-resend event can fire.
  *
  * `failover()` is also exposed for manual operator-driven swaps.
  *
@@ -97,12 +107,15 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   private divergenceTimestamps: number[] = [];
   private correctiveResendInFlight = false;
   private failoverInProgress = false;
+  /** Last emitted aggregate-health key — unchanged aggregates are not re-emitted. */
+  private lastHealthKey: string | null = null;
 
   constructor(options: RedundancyAdapterOptions) {
     super();
     this.strategy = options.strategy;
     this.sessions = options.sessions;
-    this.primary = options.initialPrimary ?? 'A';
+    // A single-server config can only start on A — there is no B to prefer.
+    this.primary = options.sessions.B === undefined ? 'A' : (options.initialPrimary ?? 'A');
     this.journal = options.journal ?? new InMemoryJournal();
     this.autoFailoverEnabled = options.autoFailoverEnabled ?? true;
     this.commandTimeoutBudget = options.commandTimeoutBudget ?? 3;
@@ -124,12 +137,19 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
 
   /** Convenience: the ServerSession instance that's currently primary. */
   get primarySession(): ServerSession {
-    return this.sessions[this.primary];
+    const session = this.sessions[this.primary];
+    // Unreachable: primary starts at 'A' (always declared) and failover
+    // refuses to swap onto an undeclared backup.
+    if (session === undefined) throw new Error(`primary session ${this.primary} not declared`);
+    return session;
   }
 
-  /** Convenience: the ServerSession instance that's currently backup. */
-  get backupSession(): ServerSession {
-    return this.sessions[this.primary === 'A' ? 'B' : 'A'];
+  /**
+   * Convenience: the ServerSession instance that's currently backup, or
+   * `null` when no backup is declared (single-server config).
+   */
+  get backupSession(): ServerSession | null {
+    return this.sessions[this.primary === 'A' ? 'B' : 'A'] ?? null;
   }
 
   /**
@@ -140,6 +160,10 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
    *   journal-replay : send to primary only; journal
    */
   async send(line: string, options: SendOptions = {}): Promise<RedundancySendResult> {
+    // B-046 — no declared backup: every strategy degenerates to primary-only.
+    if (this.backupSession === null) {
+      return this.sendJournalReplay(line, options);
+    }
     if (this.strategy === 'journal-replay') {
       return this.sendJournalReplay(line, options);
     }
@@ -152,11 +176,14 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   /**
    * Trigger a failover. Manual reason flips primary/backup immediately.
    * Auto reasons go through the same path; the adapter de-dupes if one is
-   * already in progress.
+   * already in progress. Returns whether the switch happened — `false` when
+   * one is already in progress, auto-failover is disabled, or no backup is
+   * declared (B-046: nothing to fail over to).
    */
-  async failover(reason: FailoverReason): Promise<void> {
-    if (this.failoverInProgress) return;
-    if (reason !== 'manual' && !this.autoFailoverEnabled) return;
+  async failover(reason: FailoverReason): Promise<boolean> {
+    if (this.failoverInProgress) return false;
+    if (this.backupSession === null) return false;
+    if (reason !== 'manual' && !this.autoFailoverEnabled) return false;
     this.failoverInProgress = true;
     const from = this.primary;
     const to: ServerLabel = from === 'A' ? 'B' : 'A';
@@ -164,15 +191,15 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     this.emit('failover-requested', event);
     try {
       // Strategy-specific catch-up before swapping primary.
-      if (this.strategy === 'journal-replay') {
-        await this.replayJournalTo(this.sessions[to].queue);
-      } else if (this.strategy === 'mirror-async') {
-        // Backup may be lagging — drain the journal tail to it.
-        await this.replayJournalTo(this.sessions[to].queue);
+      if (this.strategy === 'journal-replay' || this.strategy === 'mirror-async') {
+        // Backup may be cold/lagging — drain the retained journal to it
+        // (skipped when the target session is not live at fire time).
+        await this.replayJournalTo(this.sessions[to]);
       }
       this.primary = to;
       this.resetFailoverCounters();
       this.emit('failover-complete', { ...event, at: this.now() });
+      return true;
     } finally {
       this.failoverInProgress = false;
     }
@@ -190,6 +217,8 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     primaryView: ReadonlyMap<string, string>,
     backupView: ReadonlyMap<string, string>,
   ): number {
+    // B-046 — no declared backup: there is no second brain to split.
+    if (this.backupSession === null) return 0;
     const keys = new Set([...primaryView.keys(), ...backupView.keys()]);
     let diff = 0;
     for (const k of keys) {
@@ -212,9 +241,11 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   // ──────────────────────────────────────────────────────────────────────
 
   private async sendMirrorSync(line: string, options: SendOptions): Promise<RedundancySendResult> {
+    const backup = this.backupSession;
+    if (backup === null) return this.sendJournalReplay(line, options);
     const seq = this.journal.append(line, 'both');
     const primaryQ = this.primarySession.queue;
-    const backupQ = this.backupSession.queue;
+    const backupQ = backup.queue;
     const [pRes, bRes] = await Promise.allSettled([
       primaryQ.enqueue(line, options),
       backupQ.enqueue(line, options),
@@ -246,9 +277,11 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   }
 
   private async sendMirrorAsync(line: string, options: SendOptions): Promise<RedundancySendResult> {
+    const backup = this.backupSession;
+    if (backup === null) return this.sendJournalReplay(line, options);
     const seq = this.journal.append(line, 'both');
     const primaryQ = this.primarySession.queue;
-    const backupQ = this.backupSession.queue;
+    const backupQ = backup.queue;
     try {
       const result = await primaryQ.enqueue(line, options);
       this.journal.resolve(seq, 'ok', result.response.code);
@@ -324,11 +357,29 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   }
 
   /**
+   * B-046 — a backup counts as LIVE when its session believes its AMCP axis
+   * is up: `healthy`, or `degraded` (OSC-silent but connected). A session in
+   * disconnected/connecting/handshaking/resyncing already knows it is not a
+   * functioning peer.
+   */
+  private backupIsLive(): boolean {
+    const backup = this.backupSession;
+    return backup !== null && isLiveState(backup.state);
+  }
+
+  /**
    * Record + emit a single divergence. If the cumulative count inside
    * `divergenceWindowMs` crosses `divergenceBudget`, escalate to
    * 'split-brain-persistent' and trigger a corrective resend (if enabled).
+   *
+   * Liveness gate (B-046): a backup-UNREACHABLE failure (`backupCode < 0`)
+   * counts only while the backup session believes itself live — a rejected
+   * send to a down backup is EXPECTED, and session health (not per-send
+   * divergence noise) is the operator's signal for that. An answered-but-
+   * different ack always counts: an answering backup is live by definition.
    */
   private reportDivergence(seq: number, primaryCode: number, backupCode: number): void {
+    if (backupCode < 0 && !this.backupIsLive()) return;
     this.emit('mirror-divergence', { seq, primaryCode, backupCode });
     const now = this.now();
     this.divergenceTimestamps.push(now);
@@ -353,15 +404,21 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
 
   /**
    * Replay the journal's recently-accepted commands to the backup
-   * queue. M9.1's first cut: replay every 'ok'-resolved entry. M10
+   * queue. M9.1's first cut: replay every retained 'ok'-resolved entry
+   * (the journal is memory-bounded — see `InMemoryJournal`). M10
    * narrows this to the slot the divergence touched once the
    * Reconciler exposes which slot diverged.
+   *
+   * B-046 — skipped entirely when the target session is not live at fire
+   * time: replaying a journal at a dead queue is pure churn.
    */
   private async triggerCorrectiveResend(target: ServerLabel): Promise<void> {
     if (this.correctiveResendInFlight) return;
+    const session = this.sessions[target];
+    if (session === undefined || !isLiveState(session.state)) return;
     this.correctiveResendInFlight = true;
     try {
-      const queue = this.sessions[target].queue;
+      const queue = session.queue;
       const entries = this.journal.all().filter((e) => e.outcome === 'ok');
       for (const entry of entries) {
         this.emit('corrective-resend', { seq: entry.seq, line: entry.line, target });
@@ -386,39 +443,54 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   // ──────────────────────────────────────────────────────────────────────
 
   private wireSessionEvents(): void {
-    const onPrimaryStateChange = (info: {
-      from: ServerSessionState;
-      to: ServerSessionState;
-    }): void => {
-      if (info.to === 'disconnected' || info.to === 'degraded') {
-        // OSC silence + AMCP TCP loss surface as session state.
-        // Either is grounds for auto-failover.
-        const reason: FailoverReason = info.to === 'degraded' ? 'osc-silence' : 'amcp-ping-fail';
-        void this.maybeFailover(reason);
-      }
-      this.emitHealth();
-    };
-    this.sessions[this.primary].on('state-change', onPrimaryStateChange);
-    // The "current primary" can change after failover. We re-bind in
-    // failover-complete; for the initial primary the listener above
-    // suffices. The backup's state changes are interesting too but the
-    // adapter doesn't act on them directly — the health event is what
-    // surfaces them.
-    this.sessions.A.on('state-change', () => this.emitHealth());
-    this.sessions.B.on('state-change', () => this.emitHealth());
+    // B-047 — ONE handler per declared session, bound at construction, that
+    // decides "is this the current primary?" AT EVENT TIME. No re-binding on
+    // failover (the previous code promised a re-bind in failover-complete
+    // that never existed: the triggers kept watching the INITIAL primary, so
+    // after A→B the death of B was invisible while a dead, reconnect-looping
+    // A could ping-pong the primary back onto itself).
+    for (const label of ['A', 'B'] as const) {
+      const session = this.sessions[label];
+      if (session === undefined) continue;
+      session.on('state-change', (info: { from: ServerSessionState; to: ServerSessionState }) => {
+        if (label === this.primary && (info.to === 'disconnected' || info.to === 'degraded')) {
+          // OSC silence + AMCP TCP loss surface as session state. Either is
+          // grounds for auto-failover — off the CURRENT primary only.
+          const reason: FailoverReason = info.to === 'degraded' ? 'osc-silence' : 'amcp-ping-fail';
+          void this.maybeFailover(reason);
+        }
+        this.emitHealth();
+      });
+    }
   }
 
   private emitHealth(): void {
-    this.emit('health', {
-      primary: { label: this.primary, state: this.primarySession.state },
-      backup: {
-        label: this.primary === 'A' ? 'B' : 'A',
-        state: this.backupSession.state,
-      },
-    });
+    const backup = this.backupSession;
+    const primary: HealthSnapshot = { label: this.primary, state: this.primarySession.state };
+    const info: { primary: HealthSnapshot; backup?: HealthSnapshot } =
+      backup === null
+        ? { primary }
+        : { primary, backup: { label: this.primary === 'A' ? 'B' : 'A', state: backup.state } };
+    // Dedupe by effective liveness (B-046): a down session's reconnect loop
+    // flaps connecting↔disconnected forever — those micro-transitions are one
+    // unchanged fact ("down") and are published once, not ~2 per backoff
+    // cycle. Whenever a publish does happen it carries the exact states.
+    const key = `${primary.label}:${effectiveState(primary.state)}|${
+      info.backup === undefined ? 'none' : effectiveState(info.backup.state)
+    }`;
+    if (key === this.lastHealthKey) return;
+    this.lastHealthKey = key;
+    this.emit('health', info);
   }
 
-  private async replayJournalTo(queue: CommandQueue): Promise<void> {
+  /**
+   * Drain the retained ok-journal to a session's queue (failover catch-up
+   * for the journal-replay / mirror-async strategies). Skipped when the
+   * target is not live at fire time (B-046).
+   */
+  private async replayJournalTo(session: ServerSession | undefined): Promise<void> {
+    if (session === undefined || !isLiveState(session.state)) return;
+    const queue: CommandQueue = session.queue;
     const entries = this.journal.all().filter((e) => e.outcome === 'ok');
     for (const entry of entries) {
       try {
@@ -428,6 +500,21 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
       }
     }
   }
+}
+
+/** A session whose AMCP axis is believed up: healthy, or degraded (OSC-silent). */
+function isLiveState(state: ServerSessionState): boolean {
+  return state === 'healthy' || state === 'degraded';
+}
+
+/**
+ * Collapse the session FSM onto the axis health CHANGES care about: the
+ * reconnect loop's transient states are all one "down" fact.
+ */
+function effectiveState(state: ServerSessionState): 'up' | 'degraded' | 'down' {
+  if (state === 'healthy') return 'up';
+  if (state === 'degraded') return 'degraded';
+  return 'down';
 }
 
 function noop(): void {

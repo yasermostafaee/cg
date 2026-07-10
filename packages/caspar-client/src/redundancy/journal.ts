@@ -10,6 +10,12 @@
  * implementation is WAL'd SQLite in `@cg/persistence` (Phase 5 §11 / §7.7).
  * The in-memory implementation in this file is what tests use and what
  * ships before the persistence package exists.
+ *
+ * Durability contract (B-046): full-history replay for a COLD backup —
+ * `journal-replay` strategy's "rebuild on failover from everything since
+ * boot" — requires a persistent implementation with its own retention
+ * policy. The in-memory journal is memory-bounded and only guarantees the
+ * recent tail (see `InMemoryJournal`).
  */
 
 export type JournalOutcome = 'pending' | 'ok' | 'err' | 'timeout';
@@ -48,22 +54,48 @@ export interface CommandJournal {
  * Minimal in-memory journal. Suitable for tests and for the initial
  * adapter runtime before `@cg/persistence` is wired in.
  *
- * No size cap — caller should `prune()` periodically. Phase 5 §7.7
- * specifies a 7-day rolling window in the production journal.
+ * B-046 — SELF-BOUNDING: every `append()` first drops RESOLVED entries older
+ * than `retentionMs`, then evicts oldest entries over `maxEntries` (pending
+ * entries survive the age pass but not the hard cap). Memory is bounded in
+ * every configuration — healthy pair, dead backup, or single-server.
+ *
+ * Retention contract: the corrective resend targets a BRIEFLY-LAGGED LIVE
+ * backup (a divergence burst inside the adapter's `divergenceWindowMs`, 30 s
+ * default); `retentionMs` defaults to 10× that, so every entry a legitimate
+ * resend needs is still held. Full-history rebuild of a long-cold backup is
+ * explicitly NOT this journal's job — a process restart already loses it —
+ * it belongs to a persistent `CommandJournal` implementation (Phase 5 §7.7's
+ * WAL'd SQLite, 7-day rolling window).
  */
 export class InMemoryJournal implements CommandJournal {
   private entries: JournalEntry[] = [];
   private nextSeq = 1;
   private readonly now: () => number;
+  private readonly maxEntries: number;
+  private readonly retentionMs: number;
 
-  constructor(options: { now?: () => number } = {}) {
+  constructor(options: { now?: () => number; maxEntries?: number; retentionMs?: number } = {}) {
     this.now = options.now ?? (() => Date.now());
+    this.maxEntries = options.maxEntries ?? 500;
+    this.retentionMs = options.retentionMs ?? 300_000;
   }
 
   append(line: string, target: 'primary' | 'backup' | 'both'): number {
     const seq = this.nextSeq++;
     this.entries.push({ seq, at: this.now(), line, target, outcome: 'pending' });
+    this.bound();
     return seq;
+  }
+
+  /** Enforce the retention age (resolved entries only), then the hard cap. */
+  private bound(): void {
+    const cutoff = this.now() - this.retentionMs;
+    if (this.entries.some((e) => e.outcome !== 'pending' && e.at < cutoff)) {
+      this.entries = this.entries.filter((e) => e.outcome === 'pending' || e.at >= cutoff);
+    }
+    if (this.entries.length > this.maxEntries) {
+      this.entries.splice(0, this.entries.length - this.maxEntries);
+    }
   }
 
   resolve(seq: number, outcome: JournalOutcome, code?: number): void {
