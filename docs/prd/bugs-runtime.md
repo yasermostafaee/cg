@@ -99,9 +99,14 @@ the item's real fields) is tracked separately — see the C-001 follow-up.
 - Re-deliver each retained template's HTML to the bridge on **reconnect**, so live
   loads survive a bridge restart without a manual re-import (the bridge's in-memory
   store is empty after a bounce). Tracked as a future enhancement, not part of
-  B-038's closed scope. **In progress:**
-  `openspec/changes/reconnect-reconciliation` (implemented with B-048's
-  reconcile face; flips to resolved after its live validation).
+  B-038's closed scope. **RESOLVED (2026-07-10):**
+  `openspec/changes/reconnect-reconciliation` — `WebSocketRuntime` retains every
+  delivered `{ template, html }` and re-delivers on reconnect before the snapshot
+  re-pull; output-validated live on CasparCG 2.5.0 `69e8ad5` (bridge-only
+  restart, page untouched, NO re-import → the fresh `CG ADD` carried the new
+  serve port AND the full field payload, and the Take rendered). Scope:
+  reconnect-without-reload — a restart of BOTH bridge and page still needs a
+  manual re-import until C-011 (persisted `.vcg` bytes) lands.
 
 ---
 
@@ -498,13 +503,30 @@ to A).
 
 ---
 
-## [~] B-048 — first Load after a bridge restart renders NOTHING when the previous session's output is still on the layer; Update-then-Take recovers ⟨priority: medium⟩
+## [x] B-048 — first Load after a bridge restart renders NOTHING when the previous session's output is still on the layer; Update-then-Take recovers ⟨priority: medium⟩
 
-> Operator-observed on **2026-07-07** during the B-044 live session (bridge
-> built from the fix branch, pre-review-hardening — behavior ≡ `main`; CasparCG
-> 2.5.0 `69e8ad5`). Symptom-level; a workaround exists. All hypotheses below
-> are **UNVERIFIED** — see the diagnosis verdict in the Progress note at the
-> bottom of this entry.
+> **CLOSED — resolved-by-R-007, live-discriminated 2026-07-10 (CasparCG 2.5.0
+> `69e8ad5`).** The clean-main reproduction attempt did NOT reproduce: the
+> caspar log (19:01–19:07) shows every `CG ADD`/`PLAY` arriving and acking
+> cleanly — the fresh session's Load at 19:06:34 adopting + ADDing on the new
+> serve port, the Take at 19:07:51 sending ADD+PLAY back-to-back — the served
+> page probed `200` (629,685 B), and zero `[html_producer]` errors were logged
+> all day. Combined with the code proof below (the documented READY-after-Update
+> badge is only reachable if no take intent ever reached the bridge, and the
+> 2026-07-07 UI predated AsyncButton), the original symptom was a **UI-layer
+> first-click loss fixed by R-007** (`8cd03ef`, #266). The mechanical
+> bridge-restart faces the entry surfaced (templates forgotten; producers
+> orphaned) were fixed by `reconnect-reconciliation` and **output-validated
+> live 2026-07-10** (adopt-CLEAR → fresh ADD → first Take renders; reconnect
+> re-delivery with zero manual re-import at 21:00:01). Root cause is
+> build-independent (server-source parity v2.3.x-lts/master) — no extra 2.3.2
+> gate beyond the standing B-041 one. Residual, separately tracked: [[B-053]]
+> (pre-existing badge wart), C-011 (persisted layer-aware reconciliation).
+>
+> Originally operator-observed on **2026-07-07** during the B-044 live session
+> (bridge built from the fix branch, pre-review-hardening — behavior ≡ `main`).
+> The hypotheses below are preserved as filed; the Progress note at the bottom
+> records their verdicts.
 
 **Repro (operator-confirmed precondition):**
 
@@ -551,8 +573,9 @@ should consider both (see also C-010).
 validation was root-caused as a PRE-EXISTING first-load-per-layer wart (proven
 on `main` in a clean worktree), NOT part of this bug's mechanism.
 
-**Progress (2026-07-10 — `openspec/changes/reconnect-reconciliation`, stays
-`[~]` until live validation):** diagnosis (code + CasparCG server source
+**Progress (2026-07-10 — `openspec/changes/reconnect-reconciliation`; the
+closure verdict at the top of this entry supersedes the "stays `[~]`"
+status):** diagnosis (code + CasparCG server source
 v2.3.x-lts AND master + bridge→mock repros) **eliminated all three hypotheses**:
 (a) DISPROVEN — the html cg producer registers `reusable_producer_instance =
 false` on both branches, so `CG ADD` always creates a fresh CEF producer at the
@@ -645,3 +668,41 @@ empties a layer. The regression test must run the mock transition-only
 change's scope after the main-worktree discriminator proved it pre-existing.
 Until fixed, judge Load/Take pass-fail by the OUTPUT, not the badge, right
 after a first Load.
+
+---
+
+## [ ] B-054 — `#loaded` (producer-existence bookkeeping) goes stale across a CASPARCG restart: the next Take `CG PLAY`s an empty layer (202 no-op, blank take) ⟨priority: medium⟩
+
+> Found by code reading during the `reconnect-reconciliation` review
+> (2026-07-10); symptom-level, NOT yet reproduced live. The inverse amnesia of
+> B-048: there the BRIDGE restarted and forgot the server's state; here the
+> SERVER restarts and the bridge's memory becomes a lie.
+
+**Repro (expected, from code):**
+
+1. Run LIVE; import, Load, Take — item on air (`#loaded` holds the itemId).
+2. Restart **CasparCG** (not the bridge, not the page); the AMCP session
+   reconnects on its own (`ServerSession` backoff → handshake → healthy).
+3. Click Take (or Take after the reconnect settles).
+
+**Expected:** the take re-renders the template (a fresh `CG ADD` first, since
+the restarted server has NO producers).
+**Actual (from code):** `CasparRuntime.#loaded` still contains the itemId —
+it is only ever cleared by `out()`/`remove()`, never on an AMCP session
+reconnect (`tools/caspar-bridge/src/caspar-runtime.ts`; the session reader
+confirmed no reconnect hook touches it). So `take()` skips the B-039 re-ADD
+branch and sends a bare `CG PLAY` onto the restarted server's EMPTY layer →
+`202` blind ack → nothing renders. The `#adopted` set has the same staleness
+but is harmless in this direction (the restarted server's layers are empty —
+an unnecessary re-adopt is skipped, and a skipped CLEAR on an empty layer
+changes nothing).
+
+**Fix space:** clear `#loaded` (per session, or wholesale) when a session
+transitions through disconnected→healthy — or fold into the C-010/C-011
+reconnect reconciliation, which would re-derive producer existence from known
+state instead of trusting process-lifetime memory.
+
+**Cross-reference:** [[B-048]] (the mirrored bridge-restart amnesia), C-010
+(dead resync wiring), C-011 (persisted layer-aware reconciliation — the
+structural home for a real fix). The B-044 settle semantics are unaffected
+(this is verb CHOICE, not badge lifecycle).

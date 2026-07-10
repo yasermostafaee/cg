@@ -225,3 +225,39 @@ follow-up, not a restyle.
   **Notes:** Builds directly on R-007 (`.cg-field`, the `--r-*` spacing/type
   scale). Symptom-level for now; measure comfortable field metrics during the
   change.
+
+## [ ] R-009 — surface orphaned/unknown on-air layers to the operator, with an explicit per-layer Clear control ⟨priority: medium⟩
+
+**What:** Make server-side layer occupancy the bridge does NOT own visible to
+the operator, with an explicit, per-layer **Clear** affordance. Wire the
+already-emitted-but-unheard signals — `Reconciler`'s `unexpected-onair` and
+`LayerManager.observe`/`collision` (both currently have no production caller;
+see C-010) — over a new `@cg/shared-ipc` publish channel into a Runtime warning
+surface ("layer 1-60 is on air but not on your stack"), where the operator can
+Clear that layer deliberately.
+
+**Why:** `reconnect-reconciliation` (B-048) deliberately ships **no blind
+startup CLEAR** — an orphan from a dead bridge session stays on air until a
+Load happens to target its layer (on-air safety: a cold bridge cannot tell junk
+from a graphic ridden through a controller restart). The flip side, confirmed
+in the 2026-07-10 live session: an orphan on a layer no Load targets stays up
+INDEFINITELY with zero operator visibility or control. The decision belongs to
+the operator, not to a heuristic.
+
+**Acceptance (sketch — refine when scheduled):**
+
+- WHEN OSC reports a non-empty producer on a layer the bridge does not own
+  THEN the Runtime surfaces a visible occupancy warning naming the
+  channel-layer (never silently, never auto-clearing)
+- WHEN the operator invokes Clear on a surfaced layer THEN the bridge sends
+  `CLEAR <ch>-<layer>` and the warning resolves on the observed empty
+  transition
+- WHEN nothing foreign is on air THEN no warning surface is shown (no idle
+  noise)
+  **Notes:** interest-gating today drops OSC for never-loaded layers — the
+  design must widen interest (or add a periodic occupancy sweep) WITHOUT
+  regressing the B-044-era firehose protections. Builds on C-010's dead wiring;
+  C-011's persisted occupancy would upgrade "unknown layer" to "layer X held
+  template Y last session — resume or clear?". Cross-refs: [[B-048]] (the
+  designed stay-on-air behavior this makes controllable), [[B-053]] (fixing the
+  producer⇒on-air mapping helps this warning's precision).
