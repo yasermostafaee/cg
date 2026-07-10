@@ -6,6 +6,9 @@ import {
   ConnectionsHealthChangedChannel,
   ConnectionsHealthChannel,
   ConnectionsSetConfigChannel,
+  LayersClearChannel,
+  LayersOrphansChangedChannel,
+  LayersOrphansChannel,
   StackRemoveAllChannel,
   LockEngageChannel,
   LockReleaseChannel,
@@ -189,6 +192,43 @@ describe('connections.set-config + stack.remove-all channel schemas (R-010)', ()
       removed: 3,
     });
     expect(() => StackRemoveAllChannel.response.parse({ ok: true, removed: -1 })).toThrow();
+  });
+});
+
+describe('layers.* channel schemas (R-009)', () => {
+  const orphan = {
+    channel: 1,
+    layer: 60,
+    producer: 'html',
+    since: '2026-07-11T12:00:00.000Z',
+  };
+
+  it('layers.orphans pulls an orphan array (empty is valid — idle-quiet)', () => {
+    expect(LayersOrphansChannel.request.parse(undefined)).toBeUndefined();
+    expect(LayersOrphansChannel.response.parse([])).toEqual([]);
+    expect(LayersOrphansChannel.response.parse([orphan])).toHaveLength(1);
+  });
+
+  it('layers.orphans-changed publishes the same shape', () => {
+    expect(LayersOrphansChangedChannel.payload.parse([orphan])).toMatchObject([
+      { channel: 1, layer: 60 },
+    ]);
+    expect(() =>
+      LayersOrphansChangedChannel.payload.parse([{ ...orphan, producer: '' }]),
+    ).toThrow();
+  });
+
+  it('layers.clear takes a channel-layer and answers ok/reason', () => {
+    expect(LayersClearChannel.request.parse({ channel: 1, layer: 60 })).toEqual({
+      channel: 1,
+      layer: 60,
+    });
+    expect(() => LayersClearChannel.request.parse({ channel: 0, layer: 60 })).toThrow();
+    expect(LayersClearChannel.response.parse({ ok: true })).toEqual({ ok: true });
+    expect(LayersClearChannel.response.parse({ ok: false, reason: 'owned' })).toMatchObject({
+      reason: 'owned',
+    });
+    expect(() => LayersClearChannel.response.parse({ ok: false, reason: 'nope' })).toThrow();
   });
 });
 

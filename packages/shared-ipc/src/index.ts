@@ -34,6 +34,7 @@ export type { WsFrame, WsRequestFrame, WsResponseFrame, WsPublishFrame } from '.
 export * from './channels/common.js';
 export * from './channels/stack.js';
 export * from './channels/connections.js';
+export * from './channels/layers.js';
 export * from './channels/lock.js';
 export * from './channels/projects.js';
 export * from './channels/assets.js';

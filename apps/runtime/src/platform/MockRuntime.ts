@@ -3,6 +3,7 @@ import type {
   ConnectionConfig,
   ConnectionHealth,
   LockState,
+  OrphanLayer,
   PendingUpdate,
   Settings,
   TemplateInfo,
@@ -31,6 +32,7 @@ export class MockRuntime {
   readonly stackChanged = new Emitter<readonly StackItemState[]>();
   readonly healthChanged = new Emitter<ConnectionHealth>();
   readonly configChanged = new Emitter<ConnectionConfig>();
+  readonly orphansChanged = new Emitter<OrphanLayer[]>();
   readonly lockChanged = new Emitter<LockState>();
   readonly settingsChanged = new Emitter<Settings>();
   readonly updateChanged = new Emitter<PendingUpdate | null>();
@@ -43,6 +45,9 @@ export class MockRuntime {
   #lockHash: string | null = null;
   #audit: AuditEntry[] = [];
   #pendingUpdate: PendingUpdate | null = null;
+  // R-009 — the offline mock has no real server, so no orphans, EXCEPT a
+  // test-only seed (CG_E2E_ORPHAN) so Playwright can drive the visible flow.
+  #orphans: OrphanLayer[] = seedOrphans();
 
   // ── stack ───────────────────────────────────────────────────────────
   stackSnapshot(): StackItemState[] {
@@ -208,6 +213,25 @@ export class MockRuntime {
     return { ok: true, newPrimary };
   }
 
+  // ── layers (R-009) ──────────────────────────────────────────────────
+  orphans(): OrphanLayer[] {
+    return [...this.#orphans];
+  }
+
+  /**
+   * R-009 parity — the mock "clears" a surfaced orphan (removes it and
+   * publishes the change), matching the bridge's resolve-on-observed-empty
+   * from the operator's point of view. Owned-layer refusal can't be
+   * modeled (the mock has no layer slots); the bridge integration tests
+   * carry that guard.
+   */
+  clearLayer(channel: number, layer: number): { ok: boolean; reason?: 'owned' | 'amcp-error' } {
+    const before = this.#orphans.length;
+    this.#orphans = this.#orphans.filter((o) => !(o.channel === channel && o.layer === layer));
+    if (this.#orphans.length !== before) this.orphansChanged.emit(this.orphans());
+    return { ok: true };
+  }
+
   // ── lock ────────────────────────────────────────────────────────────
   lockState(): LockState {
     return this.#lock;
@@ -350,4 +374,17 @@ export class MockRuntime {
 
 function auditEntry(action: AuditEntry['action'], extra: Partial<AuditEntry>): AuditEntry {
   return { ts: new Date().toISOString(), actor: 'operator', action, outcome: 'ok', ...extra };
+}
+
+/**
+ * R-009 — e2e-only orphan seed: with `window.CG_E2E_ORPHAN` armed (via
+ * addInitScript, alongside the CG_E2E flag) the offline mock boots with one
+ * surfaced orphan so Playwright can drive the banner + Clear flow. The
+ * bridge-side truth (real OSC tap + sweep) is integration-tested.
+ */
+function seedOrphans(): OrphanLayer[] {
+  const flagged = (globalThis as { CG_E2E_ORPHAN?: boolean }).CG_E2E_ORPHAN === true;
+  return flagged
+    ? [{ channel: 1, layer: 60, producer: 'html', since: new Date().toISOString() }]
+    : [];
 }

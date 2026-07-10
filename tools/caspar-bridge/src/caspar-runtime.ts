@@ -14,11 +14,13 @@ import type {
   ConnectionHealth,
   ConnectionsSetConfigChannel,
   LockState,
+  OrphanLayer,
   PendingUpdate,
   Settings,
   TemplateInfo,
 } from '@cg/shared-ipc';
 import { CommandBuilder, type CommandSlot } from './command-builder.js';
+import { OrphanTracker } from './orphan-tracker.js';
 import { TemplateRegistry } from './template-registry.js';
 import {
   TemplateHttpServer,
@@ -56,6 +58,20 @@ const RESYNC_MS = 150;
  * `updating`/`exiting` badge, never a silent revert).
  */
 const INTENT_TIMEOUT_MS = 5000;
+/**
+ * R-009 — orphan-sweep cadence: how often the bridge samples the primary's
+ * OSC occupancy tap and compares it against the layers it owns. Zero AMCP
+ * traffic per sweep (the tap is passive); an orphan surfaces within two
+ * cycles (~10 s worst case at the default).
+ */
+const SWEEP_MS = 5000;
+/**
+ * R-009 — an occupancy entry older than this is treated as unoccupied: real
+ * CasparCG goes SILENT for a CLEARed layer (B-053) rather than reporting
+ * `empty`, so ageing-out IS the empty signal. Far above the wire's per-tick
+ * repetition (~50 Hz), far below the sweep cadence doubling.
+ */
+const OCCUPANCY_STALE_MS = 2500;
 
 /** Minimal typed pub-sub backing the bridge's `on*` publish channels. */
 class Emitter<T> {
@@ -102,6 +118,8 @@ export class CasparRuntime {
   readonly updateChanged = new Emitter<PendingUpdate | null>();
   /** R-010 — emitted after every successful `setConfig` apply. */
   readonly configChanged = new Emitter<ConnectionConfig>();
+  /** R-009 — emitted ONLY when the surfaced orphan-layer set changes. */
+  readonly orphansChanged = new Emitter<OrphanLayer[]>();
 
   // R-010 — mutable: `setConfig` swaps the whole connection layer at runtime.
   #config: ConnectionConfig;
@@ -145,6 +163,14 @@ export class CasparRuntime {
   // B-044 — per-seq expiry timers for in-flight transient intents (update/out).
   readonly #expiryTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
+  // R-009 — the periodic orphan sweep: unref'd interval armed in start(),
+  // cleared in stop() (the B-053 dispose caution); the tick reads the
+  // CURRENT primary dynamically, so failover/setConfig need no rewiring.
+  #sweepTimer: ReturnType<typeof setInterval> | null = null;
+  readonly #sweepMs: number;
+  readonly #occupancyStaleMs: number;
+  readonly #orphanTracker = new OrphanTracker();
+
   // ── non-playout stub state ──────────────────────────────────────────
   // B-038 Phase 2 — holds each imported template's info + the browser-produced
   // self-contained HTML, keyed by id. B-038 Phase 3 — the HTTP server serves that
@@ -166,9 +192,11 @@ export class CasparRuntime {
   constructor(
     config: ConnectionConfig,
     serveOverride: TemplateServeOverride = {},
-    options: { intentTimeoutMs?: number } = {},
+    options: { intentTimeoutMs?: number; sweepMs?: number; occupancyStaleMs?: number } = {},
   ) {
     this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
+    this.#sweepMs = options.sweepMs ?? SWEEP_MS;
+    this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
     this.#config = config;
     this.#serveOverride = serveOverride;
     // B-038 Phase 3 — serve loopback when CasparCG is local; an opt-in routable
@@ -252,6 +280,13 @@ export class CasparRuntime {
 
     this.#wireAdapter();
 
+    // R-009 — arm the orphan sweep. Unref'd so it never keeps the process
+    // alive; the tick self-gates on the primary session's health.
+    this.#sweepTimer = setInterval(() => {
+      this.#sweepOccupancy();
+    }, this.#sweepMs);
+    this.#sweepTimer.unref?.();
+
     this.#sessions.A.start();
     this.#sessions.B?.start();
   }
@@ -284,6 +319,8 @@ export class CasparRuntime {
   async stop(): Promise<void> {
     if (this.#flushTimer !== null) clearTimeout(this.#flushTimer);
     this.#flushTimer = null;
+    if (this.#sweepTimer !== null) clearInterval(this.#sweepTimer);
+    this.#sweepTimer = null;
     for (const timer of this.#expiryTimers.values()) clearTimeout(timer);
     this.#expiryTimers.clear();
     await Promise.all([this.#sessions.A.stop(), this.#sessions.B?.stop() ?? Promise.resolve()]);
@@ -459,6 +496,61 @@ export class CasparRuntime {
     return { accepted: ok };
   }
 
+  // ── R-009: orphan-layer sweep + explicit per-layer Clear ────────────
+
+  /** The currently surfaced orphan layers (stable-sorted). */
+  orphans(): OrphanLayer[] {
+    return this.#orphanTracker.orphans();
+  }
+
+  /**
+   * One sweep tick: sample the CURRENT primary's passive OSC occupancy tap
+   * and diff it against the layers this bridge owns (#slots). Reads the
+   * primary dynamically — after a failover or setConfig the next tick
+   * sweeps the new primary with zero rewiring. Skips unless the primary
+   * session is healthy: while disconnected the sweep neither runs nor
+   * resolves — existing warnings FREEZE (absence of knowledge is not
+   * knowledge of absence). Publishes only when the surfaced set changes;
+   * no per-tick logging.
+   */
+  #sweepOccupancy(): void {
+    const session = this.#adapter.primarySession;
+    if (session.state !== 'healthy') return;
+    const occupied = session.osc.occupancy.occupied(this.#occupancyStaleMs);
+    const owned = new Set<string>();
+    for (const slot of this.#slots.values()) {
+      owned.add(`${String(slot.channel)}:${String(slot.layer)}`);
+    }
+    const { changed } = this.#orphanTracker.update(occupied, owned);
+    if (changed) this.orphansChanged.emit(this.orphans());
+  }
+
+  /**
+   * Explicit operator Clear of a surfaced (UNOWNED) layer: sends an urgent
+   * `CLEAR <ch>-<layer>` through the adapter (mirror-sync fans it out so a
+   * real pair clears everywhere). REFUSED for a layer the bridge owns —
+   * clearing owned layers is Out/Remove's job (guards a UI race where the
+   * operator clicks Clear just as a load claims the layer). Touches no
+   * slots and no OSC interest (it owns neither); a CLEAR executed on the
+   * current primary counts as adoption (consistent with out/remove). The
+   * warning resolves via the next sweep's observed empty — never
+   * optimistically, and NEVER without this explicit operator request.
+   */
+  async clearLayer(
+    channel: number,
+    layer: number,
+  ): Promise<{ ok: boolean; reason?: 'owned' | 'amcp-error' }> {
+    for (const slot of this.#slots.values()) {
+      if (slot.channel === channel && slot.layer === layer) {
+        return { ok: false, reason: 'owned' };
+      }
+    }
+    const slot: CommandSlot = { channel, layer };
+    const { ok, onPrimary } = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
+    if (ok && onPrimary) this.#adopted.add(adoptionKey(slot));
+    return ok ? { ok: true } : { ok: false, reason: 'amcp-error' };
+  }
+
   /**
    * R-010 — Remove-All: OUT + REMOVE every stack item, clearing air and
    * emptying the list. Sequentially reuses the per-item `remove()` (urgent
@@ -563,6 +655,9 @@ export class CasparRuntime {
     this.#adopted.clear();
     // The last failover described the old server pair — a new era starts clean.
     this.#lastFailover = undefined;
+    // R-009 — surfaced orphans described the OLD server too; the new
+    // sessions' taps re-accumulate and the sweep re-surfaces what's real.
+    if (this.#orphanTracker.reset().changed) this.orphansChanged.emit([]);
 
     // 5. Template serve — re-derive from the new primary's locality; the only
     //    realistically fallible step (bind conflict). Retry ONCE on safe

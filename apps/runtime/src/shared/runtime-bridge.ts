@@ -14,7 +14,10 @@ import type {
   ConnectionHealth,
   ConnectionsFailoverChannel,
   ConnectionsSetConfigChannel,
+  LayersClearChannel,
+  LayersOrphansChannel,
   LockEngageChannel,
+  OrphanLayer,
   LockReleaseChannel,
   LockState,
   PendingUpdate,
@@ -109,6 +112,16 @@ export interface RuntimeBridge {
     onHealthChanged(handler: (health: ConnectionHealth) => void): Unsubscribe;
     /** R-010 — fired when any client applies a new config. */
     onConfigChanged(handler: (config: ConnectionConfig) => void): Unsubscribe;
+  };
+
+  /** R-009 — orphaned/unknown on-air layers (the bridge's occupancy sweep). */
+  layers: {
+    orphans(): Promise<ChannelResponse<typeof LayersOrphansChannel>>;
+    /** Explicit operator Clear of a surfaced layer. Refused for owned layers. */
+    clear(
+      req: ChannelRequest<typeof LayersClearChannel>,
+    ): Promise<ChannelResponse<typeof LayersClearChannel>>;
+    onOrphansChanged(handler: (orphans: OrphanLayer[]) => void): Unsubscribe;
   };
 
   lock: {

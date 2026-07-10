@@ -6,6 +6,7 @@ import { messageToEvent } from './event-mapper.js';
 import { OscRateLimiter } from './rate-limiter.js';
 import { OscChangeTracker } from './change-tracker.js';
 import { OscInterestFilter } from './interest.js';
+import { OscOccupancyTap } from './occupancy-tap.js';
 
 /**
  * OscTransport — UDP receiver for CasparCG 2.3.x's pushed OSC stream.
@@ -15,6 +16,8 @@ import { OscInterestFilter } from './interest.js';
  *     → parsePacket          (decode OSC bundle/message)
  *     → flatten              (atomic burst → flat message list)
  *     → messageToEvent       (drop addresses we don't model)
+ *     → occupancy tap        (R-009: passive note of producer state — NOT a
+ *                             filter, adds nothing to the pipeline)
  *     → interest filter      (drop out-of-interest channel/layer)
  *     → rate limiter         (suppress per-kind floods, default 1Hz framerate)
  *     → change tracker       (dispatch-on-change only)
@@ -37,12 +40,19 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
   readonly interest: OscInterestFilter;
   readonly rateLimiter: OscRateLimiter;
   readonly changeTracker: OscChangeTracker;
+  /**
+   * R-009 — passive occupancy tap, fed BEFORE the interest drop so it sees
+   * every layer's producer state. Emits nothing into the pipeline; the
+   * bridge's periodic orphan sweep samples it.
+   */
+  readonly occupancy: OscOccupancyTap;
 
   constructor(options: OscTransportOptions = {}) {
     super();
     this.interest = options.interest ?? new OscInterestFilter();
     this.rateLimiter = options.rateLimiter ?? new OscRateLimiter();
     this.changeTracker = options.changeTracker ?? new OscChangeTracker();
+    this.occupancy = options.occupancy ?? new OscOccupancyTap();
     this.on('error', noop);
   }
 
@@ -89,6 +99,9 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
     this.changeTracker.reset();
     this.rateLimiter.reset();
     this.interest.resetDroppedCount();
+    // R-009 — occupancy re-accumulates from the fresh session's stream
+    // within a tick; carrying pre-reconnect ghosts would fake orphans.
+    this.occupancy.reset();
   }
 
   get port(): number {
@@ -112,6 +125,7 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
   private attachHandlers(sock: dgram.Socket): void {
     sock.on('message', (buf: Buffer) => {
       this.packetsReceived++;
+      const recvAt = Date.now();
       const packet = parsePacket(buf);
       if (packet === null) {
         this.parseFailures++;
@@ -122,6 +136,9 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
       for (const msg of messages) {
         const event = messageToEvent(msg);
         if (event === null) continue;
+        // R-009 — the passive occupancy tap sees EVERY parsed producer
+        // event, BEFORE the interest drop; it never adds to `events`.
+        this.occupancy.note(event, recvAt);
         if (!this.interest.shouldEmit(event)) continue;
         if (!this.rateLimiter.shouldEmit(event)) continue;
         if (!this.changeTracker.shouldEmit(event)) continue;
@@ -129,7 +146,7 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
       }
       // Emit once per UDP packet — even when the burst is empty — so the
       // Reconciler can treat freshness as "we heard from the server."
-      this.emit('events', events, { recvAt: Date.now() });
+      this.emit('events', events, { recvAt });
     });
     sock.on('error', (err) => {
       this.emit('error', err);
@@ -141,6 +158,7 @@ export interface OscTransportOptions {
   interest?: OscInterestFilter;
   rateLimiter?: OscRateLimiter;
   changeTracker?: OscChangeTracker;
+  occupancy?: OscOccupancyTap;
 }
 
 export interface OscTransportEvents {

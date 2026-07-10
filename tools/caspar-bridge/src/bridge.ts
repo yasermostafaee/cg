@@ -10,6 +10,9 @@ import {
   ConnectionsSetConfigChannel,
   DEFAULT_BRIDGE_HOST,
   DEFAULT_BRIDGE_PORT,
+  LayersClearChannel,
+  LayersOrphansChangedChannel,
+  LayersOrphansChannel,
   LockEngageChannel,
   LockReleaseChannel,
   LockStateChangedChannel,
@@ -268,6 +271,7 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
     backing.stackChanged.subscribe((s) => push(StackStateChangedChannel, s)),
     backing.healthChanged.subscribe((h) => push(ConnectionsHealthChangedChannel, h)),
     backing.configChanged.subscribe((c) => push(ConnectionsConfigChangedChannel, c)),
+    backing.orphansChanged.subscribe((o) => push(LayersOrphansChangedChannel, o)),
     backing.lockChanged.subscribe((l) => push(LockStateChangedChannel, l)),
     backing.updateChanged.subscribe((u) => push(UpdateStateChangedChannel, u)),
     backing.settingsChanged.subscribe((s) => push(SettingsChangedChannel, s)),
@@ -308,6 +312,12 @@ function buildRoutes(b: CasparRuntime, persistPath?: string): Map<string, Route>
     }),
     route(ConnectionsHealthChannel, () => b.health()),
     route(ConnectionsFailoverChannel, () => b.failover()),
+
+    // R-009 — orphan-layer surface + explicit per-layer Clear.
+    route(LayersOrphansChannel, () => b.orphans()),
+    route(LayersClearChannel, (r: { channel: number; layer: number }) =>
+      b.clearLayer(r.channel, r.layer),
+    ),
 
     route(LockEngageChannel, (r: { pin: string }) => b.engage(r.pin)),
     route(LockReleaseChannel, (r: { pin: string }) => b.release(r.pin)),
