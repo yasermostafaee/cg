@@ -601,14 +601,18 @@ blank ⇒ CEF/page timing (new PRD entry); reproduces ⇒ diagnose further.
 
 ---
 
-## [~] B-053 — badge rests at a FALSE ON AIR after the FIRST Load onto a layer (per bridge process): change-tracker first-observation + "non-empty producer ⇒ on-air" + sticky last publish ⟨priority: medium⟩
+## [x] B-053 — badge rests at a FALSE ON AIR after the FIRST Load onto a layer (per bridge process): change-tracker first-observation + "non-empty producer ⇒ on-air" + sticky last publish ⟨priority: medium⟩
 
-> **[~] 2026-07-10** — implemented in `openspec/changes/fix-false-onair-badge`
-> (option (a′): intent-side play evidence, raw observation, read-time
-> derivation; bridge `updateRequest` parity; StackRow gating asserted). Full
-> diagnosis + accepted residuals in that change's `design.md` ([[B-056]] filed
-> for the backup-only orphan window). Awaiting operator live validation on
-> CasparCG 2.5.0 before `[x]` + archive.
+> **[x] 2026-07-10** — fixed in `fix-false-onair-badge` (archived): intent-side
+> play evidence (`played`, set by the take intent), raw producer observation,
+> read-time truth derivation (`present → played ? 'on-air' : 'loaded'`); bridge
+> `updateRequest` parity (`'on-air' || 'playing'`); StackRow gating corrected +
+> asserted. **Live-validated by the operator on CasparCG 2.5.0 (`69e8ad5`)**:
+> first Load per layer rests READY across and beyond the 1 s window (no flash,
+> no revert-and-stick, second fresh layer clean), Take → ON AIR, Out → IDLE,
+> B-044 settle + UNCONFIRMED unchanged. Full diagnosis + accepted residuals in
+> the archived change's `design.md` ([[B-056]] filed for the backup-only
+> orphan window).
 
 > Operator-observed **2026-07-10** during the reconnect-reconciliation live
 > session (CasparCG 2.5.0 `69e8ad5`); root-caused the same day with captured

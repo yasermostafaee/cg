@@ -57,17 +57,23 @@
       (23/23 tasks, prettier clean).
 - [x] `pnpm openspec validate --all --strict` (33/33).
 - [x] Full e2e (`pnpm test:e2e`): designer 191 passed, runtime 18 passed.
-- [ ] Conventional commits + push; verify remote head. Then STOP.
+- [x] Conventional commits + push; verify remote head (`a11ddbe` verified via
+      `git ls-remote`). Then STOP.
 
 ## 6. Live validation (operator drives, CasparCG 2.5.0 `69e8ad5`) — Part C
 
-- [ ] Fresh import → Load (no Take): badge READY, no revert-and-stick across
-      the ~1 s window; PLAY enabled.
-- [ ] Take: badge → ON AIR, output renders. Out: badge → IDLE, no stick.
-- [ ] Second fresh template (new layer): first Load also rests READY.
-- [ ] B-044 spot-check: Update settles at ack speed; stop CasparCG mid-update
-      → UNCONFIRMED.
-- [ ] After PASS: flip B-053 → `[x]` (build 2.5.0 `69e8ad5`); archive (delta
+**Operator PASS 2026-07-10** (bridge restarted from this branch, page
+refreshed, template re-imported):
+
+- [x] Fresh import → Load (no Take): badge read READY and STAYED READY across
+      and beyond the ~1 s window — no ON AIR flash, no revert-and-stick; PLAY
+      enabled.
+- [x] Take: badge → ON AIR, output rendered. Out: badge → IDLE, no stick.
+- [x] Second fresh template (new layer): first Load also rested READY — the
+      first-per-layer case is clean.
+- [x] B-044 spot-check: Update settled back to ON AIR at ack speed; CasparCG
+      stopped mid-update → UNCONFIRMED. Unchanged.
+- [x] After PASS: flip B-053 → `[x]` (build 2.5.0 `69e8ad5`); archive (delta
       touches no requirement owned by the held fix-amcp-escaping-v2 /
-      reconnect-reconciliation archives — ordering-independent, may archive
-      cleanly).
+      reconnect-reconciliation archives — ordering-independent, re-confirmed at
+      archive time; archived cleanly).
