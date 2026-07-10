@@ -827,3 +827,42 @@ guards. Capability: `designer-playout-lifecycle`.
 **Env:** Browser + Designer timeline.
 **Notes:** RECON confirmed in `ElementRow.tsx` `layerTypeIcon`: the switch has no top-level `case 'path'` for the D-109 path ELEMENT type, so it falls to the `default: Square`. (The `case 'path'` that does exist sits inside the SHAPE sub-switch — the legacy `shape: 'path'` variant → `Spline`, a different thing.) Fix: top-level `case 'path'` → `PenTool` via the shared `Icon` (no new SVG). Audited the mapping while there: every other element type (text/image±shared/ticker/clock/sequence/repeater/lottie/video-placeholder/container/composition/shape variants) is correctly iconed — only `path` was missing.
 **Regression test:** unit `apps/designer/tests/layer-type-icon.test.ts` — a `path` element maps to `PenTool` (and not `Square`); the other kinds keep their established icons (the helper is exported for the test).
+
+## [~] B-053 — pen smooth-drag "sticks": points meant as corners come out curved ⟨priority: medium⟩ — fixed on `fix/pen-curve-and-hit-test` (change dir `openspec/changes/fix-pen-curve-and-hit-test`); pending owner verification
+
+**Repro:**
+
+1. Pen tool: place a point, then press-drag on the second point (segment curves — correct).
+2. Place a third point with a plain click.
+
+**Expected:** the third point is a CORNER (its side of the segments is straight; the previous smooth anchor keeps its handle — Illustrator semantics, owner decision 2026-07-08).
+**Actual:** the third point comes out smooth too — with a real mouse, virtually every click curls.
+**Env:** Browser + Designer canvas, main @ `c62c0be`.
+**Notes:** RECON (red unit tests): two compounding defects in `pen-draw.ts` drag-to-smooth. (1) The jitter guard was 3 SCENE px — at fit zoom (~0.3) a 1-screen-px click slip is already ~3.2 scene px, so ordinary clicks fired the smooth branch (proved: a 2-screen-px slip at scale 0.5 → smooth). (2) The decision was incremental and never revisited: once `onMove` crossed the guard the anchor stayed smooth (proved: drag out 20 px, return to 1 px, release → smooth with the excursion's handles). Fix: corner-vs-smooth decided AT POINTER-UP from the total displacement against a SCREEN-px guard (`PEN_SMOOTH_PX = 3`, zoom-independent — the D-122 hysteresis lesson); the mid-hold preview stays live (corner restored when the pointer dips back under the guard); jitter-set handles actively cleared at release; only the just-placed anchor is touched (captured by reference, re-validated against the live draft) so a previous smooth anchor's handles survive — its segment side keeps the curve, per the owner's rule (`pathD` curves on either side's handle).
+**Regression test:** unit `apps/designer/tests/pen-smooth-placement.test.ts` (red pre-fix); E2E `pen-curve-edit.spec.ts` — corner/smooth/corner/corner drawn with 2-px click slips → the final segment is a straight `L` and the d-string has exactly two `C`s.
+
+## [~] B-054 — can't add a SMOOTH point to a finished path (segment insert is corner-only) ⟨priority: medium⟩ — fixed on `fix/pen-curve-and-hit-test` (same branch/change dir as B-053); pending owner verification
+
+**Repro:**
+
+1. Finish a pen path; with the Select tool, click one of its segments (an anchor is inserted — good).
+2. Try to make that inserted point curved.
+
+**Expected:** an inserted point can be smooth — press-DRAG on the segment pulls out mirrored handles (the pen's drag-to-smooth gesture on insertion); a plain click still inserts a corner.
+**Actual:** only corners can be inserted; there is no gesture that yields a smooth point.
+**Env:** Browser + Designer canvas (PathEditor).
+**Notes:** RECON: `PathEditor.insertOnSegment` created a corner mid-point only. The "insert a corner then pull its handles" fallback was checked and REFUTED: handle dots render only for an anchor's EXISTING `in`/`out` (a fresh corner has neither — nothing to grab), and `dragHandle` computes `smooth = breakPair ? false : p.smooth` — it never converts a corner TO smooth. Fix (approach stated in `design.md`): drag-on-insert — pointer-down inserts the corner as today, window move/up listeners run the pen's gesture (mirrored handles follow the drag live, in point-space units via the same `/scale/sx|sy` mapping `dragHandle` uses), corner-vs-smooth decided at release by the B-053 screen-px guard, ONE history boundary at pointer-up (the whole insertion = one undo entry), still routed through `applyPoints` → `normalizePathPoints` → `updateElement`.
+**Regression test:** unit `path-tools.test.ts` (an inserted smooth anchor round-trips `normalizePathPoints`; a corner insert carries no handles); E2E `pen-curve-edit.spec.ts` — a plain segment click inserts a corner (no `C` in the d-string), a segment click-drag inserts a smooth anchor (the path gains a `C`).
+
+## [~] B-055 — clicking a curved shape only selects near its center (hit-test ignores bézier curvature) ⟨priority: high⟩ — fixed on `fix/pen-curve-and-hit-test` (same branch/change dir as B-053); pending owner verification
+
+**Repro:**
+
+1. Draw a curved pen shape (e.g. two anchors, second placed with a big smooth drag, closed).
+2. With the Select tool, click on the shape away from its center (under a curved bulge).
+
+**Expected:** the shape selects from anywhere on its rendered area.
+**Actual:** only clicks near the center (near the straight chord between anchors) select; the curved regions miss.
+**Env:** Browser + Designer canvas.
+**Notes:** RECON (red unit tests): `hit-test.ts` `hitsPath` ray-cast the ANCHORS-ONLY polygon and measured stroke distance to the straight chords — curvature was invisible: a bulge outside the anchor polygon missed, a concavity inside it FALSE-hit, and a two-anchor closed arc (zero-area anchor "polygon") was selectable only within the ~7-px grab margin of its chord — exactly the "only near center" symptom. Bonus defect found by the open-arc red test: the display mapping collapsed a degenerate anchors-bbox axis to factor 0, flattening a horizontal arc's curve extent. Fix: flatten each segment from the exact cubic the runtime renders (`c1 = a + a.out`, `c2 = b + b.in`, straight only when both absent — mirrors `pathD`) into 16 line sub-segments and run the SAME ray-cast + grab-margin over the flattened outline; the display mapping now mirrors the runtime viewBox's `max(bbox, 1)` clamp. Module stays pure (no `Path2D`/canvas — jsdom-testable); chord deviation shrinks ~1/N², so 16 steps stay within ~2 px of the true curve even for frame-spanning segments (well inside the grab margin) at negligible cost. The resized-path bbox mapping and open-path stroke-margin behavior are preserved.
+**Regression test:** unit `apps/designer/tests/path-hit-curved.test.ts` (red pre-fix: bulge hits, concavity misses, interior hits, open arc grabs at the real curve, straight-path guard); E2E `pen-curve-edit.spec.ts` — a two-anchor closed curved lens selects from a click 15 px off its chord.

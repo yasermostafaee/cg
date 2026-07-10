@@ -17,7 +17,9 @@ const newAnchorId = (): string => `pt-${Date.now().toString(36)}-i${(insertSeq++
  * and bézier handle dots over the selected path. Dragging an anchor moves it;
  * dragging a handle reshapes the adjacent segments (a SMOOTH anchor keeps its two
  * handles mirrored, Alt breaks the pair into an independent corner); clicking a
- * segment inserts an anchor; Delete removes the active anchor (re-stitching across
+ * segment inserts a CORNER anchor, click-DRAGGING a segment inserts a SMOOTH
+ * anchor whose mirrored handles follow the drag (B-054 — the pen's drag-to-smooth
+ * gesture on insertion); Delete removes the active anchor (re-stitching across
  * the gap, deleting the whole element below 2 anchors). Edits route through
  * `updateElement` (one undo per gesture via `markHistoryBoundary`).
  *
@@ -150,8 +152,45 @@ export function PathEditor({ element, scale }: Props): JSX.Element {
     const next = [...pts];
     next.splice(i + 1, 0, mid);
     applyPoints(next);
-    designerStore.markHistoryBoundary();
     setActive(mid.id);
+    // B-054 — drag before release pulls out mirrored handles, inserting a SMOOTH
+    // anchor (the pen's drag-to-smooth gesture, on insertion). A plain click stays
+    // a corner; corner vs smooth is decided at pointer-UP by the total SCREEN-px
+    // displacement (the B-053 rule), and the whole gesture is ONE undo entry (the
+    // boundary moves to pointer-up).
+    const sX = e.clientX;
+    const sY = e.clientY;
+    const withMid = (make: (p: AnchorPoint) => AnchorPoint): void => {
+      applyPoints(next.map((p) => (p.id === mid.id ? make(p) : p)));
+    };
+    const asCorner = (p: AnchorPoint): AnchorPoint => ({
+      id: p.id,
+      x: p.x,
+      y: p.y,
+      smooth: false,
+    });
+    const handleFrom = (ev: PointerEvent): { x: number; y: number } => ({
+      x: (ev.clientX - sX) / scale / sx,
+      y: (ev.clientY - sY) / scale / sy,
+    });
+    const belowGuard = (ev: PointerEvent): boolean =>
+      Math.hypot(ev.clientX - sX, ev.clientY - sY) < 3;
+    const onMove = (ev: PointerEvent): void => {
+      if (belowGuard(ev)) {
+        withMid(asCorner);
+        return;
+      }
+      const h = handleFrom(ev);
+      withMid((p) => ({ ...p, smooth: true, out: h, in: { x: -h.x, y: -h.y } }));
+    };
+    const onUp = (ev: PointerEvent): void => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      if (belowGuard(ev)) withMid(asCorner);
+      designerStore.markHistoryBoundary();
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
   }
 
   const segCount = element.closed ? pts.length : pts.length - 1;

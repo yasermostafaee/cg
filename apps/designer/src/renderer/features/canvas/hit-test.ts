@@ -1,4 +1,4 @@
-import type { Element, PathElement } from '@cg/shared-schema';
+import type { AnchorPoint, Element, PathElement } from '@cg/shared-schema';
 import { pathBBox } from '@cg/shared-schema';
 
 interface Pt {
@@ -66,34 +66,84 @@ export function hitsElement(element: Element, scenePoint: { x: number; y: number
   return local.x >= 0 && local.x <= size.w && local.y >= 0 && local.y <= size.h;
 }
 
+/** B-055 — line sub-segments each cubic flattens into for hit-testing. 16 keeps the
+ *  flattened outline within a fraction of the ~6px grab margin for any on-screen
+ *  curve (max deviation of a chord ≈ curve extent / N², far below 1px here) at a
+ *  negligible cost — the whole outline is rebuilt per hit-test call, not cached. */
+const CURVE_STEPS = 16;
+
 /**
- * D-109 — hit-test a path. The click arrives in the element's unscaled box space
- * (`local`, `0..size`); map it into the points' bbox space (so a RESIZED path,
- * whose `size` ≠ its points bbox because the viewBox rescales, still hits), then:
- * a CLOSED path hits its filled interior (ray-cast point-in-polygon over the
- * anchors) OR its outline; an OPEN path hits within a grab margin of its stroke.
+ * D-109 / B-055 — hit-test a path. The click arrives in the element's unscaled box
+ * space (`local`, `0..size`); map it into the points' bbox space (so a RESIZED
+ * path, whose `size` ≠ its points bbox because the viewBox rescales, still hits),
+ * then: a CLOSED path hits its filled interior OR its outline; an OPEN path hits
+ * within a grab margin of its stroke. B-055 — both tests run over the ACTUAL
+ * curved outline: each segment is flattened from the exact cubic the runtime
+ * renders (`c1 = a + a.out`, `c2 = b + b.in`; straight only when BOTH handles are
+ * absent — mirrors `pathD` in template-runtime), so a bézier bulge outside the
+ * anchor polygon hits and a concavity inside it misses.
  */
 function hitsPath(el: PathElement, local: Pt, sizeW: number, sizeH: number): boolean {
   const pts = el.points;
   if (pts.length < 2) return false;
-  // Project the points into the same DISPLAY space as `local` (the unscaled box,
-  // `0..size`): the runtime viewBox maps the points' bbox onto the box, so display =
-  // (point − bbox.min) · (size / bbox.extent). A degenerate axis (bbox.extent 0 — a
-  // straight horizontal/vertical line) collapses to 0, which is correct: all points
-  // share that coordinate, so distance is measured purely in the other axis.
+  // Project into the same DISPLAY space as `local` (the unscaled box, `0..size`):
+  // the runtime viewBox maps the points' bbox onto the box, so display =
+  // (point − bbox.min) · (size / viewBoxExtent) with the SAME `max(bbox, 1)` clamp
+  // the runtime applies to the viewBox (B-055 — the old `extent 0 → factor 0`
+  // collapse was fine for straight lines, whose points all share the coordinate,
+  // but flattened CURVE samples extend past a degenerate anchors-bbox — e.g. a
+  // two-anchor horizontal arc — and must keep their real extent, exactly as the
+  // clamped viewBox renders them). The bbox stays the ANCHORS' bbox, so flattened
+  // curve points may land outside `0..size` (a bulge past the bbox renders via
+  // `overflow: visible` and hits here the same way).
   const bbox = pathBBox(pts);
-  const fx = bbox.w === 0 ? 0 : sizeW / bbox.w;
-  const fy = bbox.h === 0 ? 0 : sizeH / bbox.h;
-  const poly: Pt[] = pts.map((p) => ({ x: (p.x - bbox.x) * fx, y: (p.y - bbox.y) * fy }));
-  if (el.closed && pointInPolygon(local, poly)) return true;
-  const tol = (el.stroke?.width ?? 0) / 2 + 6; // grab margin in display px
-  const segCount = el.closed ? poly.length : poly.length - 1;
+  const fx = sizeW / Math.max(bbox.w, 1);
+  const fy = sizeH / Math.max(bbox.h, 1);
+  const toDisplay = (x: number, y: number): Pt => ({ x: (x - bbox.x) * fx, y: (y - bbox.y) * fy });
+  const firstPt = pts[0];
+  if (firstPt === undefined) return false;
+  const outline: Pt[] = [toDisplay(firstPt.x, firstPt.y)];
+  const segCount = el.closed ? pts.length : pts.length - 1;
   for (let i = 0; i < segCount; i++) {
-    const a = poly[i];
-    const b = poly[(i + 1) % poly.length];
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    if (a === undefined || b === undefined) continue;
+    appendSegment(outline, a, b, toDisplay);
+  }
+  if (el.closed && pointInPolygon(local, outline)) return true;
+  const tol = (el.stroke?.width ?? 0) / 2 + 6; // grab margin in display px
+  for (let i = 0; i < outline.length - 1; i++) {
+    const a = outline[i];
+    const b = outline[i + 1];
     if (a !== undefined && b !== undefined && distToSegment(local, a, b) <= tol) return true;
   }
   return false;
+}
+
+/** Append segment `a`→`b` to the flattened outline (`b`'s side only; `a` is already
+ *  there): one point for a straight segment, `CURVE_STEPS` samples of the cubic
+ *  otherwise — sampled in POINT space, then mapped per-axis to display space. */
+function appendSegment(
+  outline: Pt[],
+  a: AnchorPoint,
+  b: AnchorPoint,
+  toDisplay: (x: number, y: number) => Pt,
+): void {
+  if (a.out === undefined && b.in === undefined) {
+    outline.push(toDisplay(b.x, b.y));
+    return;
+  }
+  const c1x = a.x + (a.out?.x ?? 0);
+  const c1y = a.y + (a.out?.y ?? 0);
+  const c2x = b.x + (b.in?.x ?? 0);
+  const c2y = b.y + (b.in?.y ?? 0);
+  for (let s = 1; s <= CURVE_STEPS; s++) {
+    const t = s / CURVE_STEPS;
+    const mt = 1 - t;
+    const x = mt * mt * mt * a.x + 3 * mt * mt * t * c1x + 3 * mt * t * t * c2x + t * t * t * b.x;
+    const y = mt * mt * mt * a.y + 3 * mt * mt * t * c1y + 3 * mt * t * t * c2y + t * t * t * b.y;
+    outline.push(toDisplay(x, y));
+  }
 }
 
 /** Ray-cast point-in-polygon over a list of {x,y} vertices. */
