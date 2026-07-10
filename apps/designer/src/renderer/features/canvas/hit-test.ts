@@ -1,5 +1,5 @@
 import type { AnchorPoint, Element, PathElement } from '@cg/shared-schema';
-import { pathBBox } from '@cg/shared-schema';
+import { pathVisualBBox } from '@cg/shared-schema';
 
 interface Pt {
   x: number;
@@ -87,16 +87,10 @@ function hitsPath(el: PathElement, local: Pt, sizeW: number, sizeH: number): boo
   const pts = el.points;
   if (pts.length < 2) return false;
   // Project into the same DISPLAY space as `local` (the unscaled box, `0..size`):
-  // the runtime viewBox maps the points' bbox onto the box, so display =
-  // (point − bbox.min) · (size / viewBoxExtent) with the SAME `max(bbox, 1)` clamp
-  // the runtime applies to the viewBox (B-055 — the old `extent 0 → factor 0`
-  // collapse was fine for straight lines, whose points all share the coordinate,
-  // but flattened CURVE samples extend past a degenerate anchors-bbox — e.g. a
-  // two-anchor horizontal arc — and must keep their real extent, exactly as the
-  // clamped viewBox renders them). The bbox stays the ANCHORS' bbox, so flattened
-  // curve points may land outside `0..size` (a bulge past the bbox renders via
-  // `overflow: visible` and hits here the same way).
-  const bbox = pathBBox(pts);
+  // the runtime viewBox maps the points' VISUAL (curve-aware) bbox onto the box
+  // (B-059/B-062 — size==visualBBox model; conforming content maps at scale 1,
+  // and this mirrors the runtime's `max(bbox, 1)` clamp for degenerate axes).
+  const bbox = pathVisualBBox(pts, el.closed);
   const fx = sizeW / Math.max(bbox.w, 1);
   const fy = sizeH / Math.max(bbox.h, 1);
   const toDisplay = (x: number, y: number): Pt => ({ x: (x - bbox.x) * fx, y: (y - bbox.y) * fy });

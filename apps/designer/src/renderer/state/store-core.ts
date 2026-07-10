@@ -74,6 +74,8 @@ export interface DesignerStoreState {
   selection: ReadonlySet<string>;
   /** When set, the canvas shows an inline TextEditor for this element. */
   editingTextId: string | null;
+  /** D-124 — the path in point-edit mode (anchors/handles shown); null = plain selection. */
+  editingPathId: string | null;
   /**
    * When set, the next canvas click binds this field to the clicked
    * element instead of selecting it. Set by the Fields panel's
@@ -165,6 +167,7 @@ export const initialState: DesignerStoreState = {
   tool: 'cursor',
   selection: new Set<string>(),
   editingTextId: null,
+  editingPathId: null,
   bindModeFieldId: null,
   currentFrame: 0,
   selectedKeyframe: null,
@@ -523,6 +526,7 @@ export function _resetCore(): void {
     ...initialState,
     selection: new Set<string>(),
     editingTextId: null,
+    editingPathId: null,
     bindModeFieldId: null,
     currentFrame: 0,
     selectedKeyframe: null,

@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AnchorPoint, Element, Scene, TextElement } from '@cg/shared-schema';
 import type { AssetMeta } from '@cg/shared-ipc';
-import { designerStore, editSceneOf, type DesignerTool } from '../../state/store.js';
+import {
+  designerStore,
+  editSceneOf,
+  useDesignerSelector,
+  type DesignerTool,
+} from '../../state/store.js';
 import {
   defaultClock,
   defaultEllipse,
@@ -138,6 +143,9 @@ export function CanvasOverlay({
   currentFrame,
   onPan,
 }: Props): JSX.Element {
+  // D-124 — the path in point-edit mode (anchors/handles shown, gizmo hidden).
+  // Self-subscribed (like TransformSection's currentFrame) rather than drilled.
+  const editingPathId = useDesignerSelector((s) => s.editingPathId);
   const layerRef = useRef<HTMLDivElement>(null);
   // B-037 — the pointer's scene position while a pen draft is live (null otherwise),
   // driving the rubber-band + close-affordance feedback overlay.
@@ -186,6 +194,13 @@ export function CanvasOverlay({
     return () => endPenSession();
   }, [tool, activeCompositionId]);
 
+  // D-124 — point-edit mode is a cursor-tool mode: leaving the cursor tool (or
+  // unmounting) exits it. Composition switches clear it in the slice itself.
+  useEffect(() => {
+    if (tool !== 'cursor') designerStore.setEditingPath(null);
+    return () => designerStore.setEditingPath(null);
+  }, [tool]);
+
   // Esc deselects the selected shape — unless something else owns Esc (bind
   // mode, inline text editing) or the operator is typing in a field. D-109/B-037 —
   // pen keys: while mid-draw, Enter FINISHES the path (open) and Esc CANCELS the
@@ -223,11 +238,20 @@ export function CanvasOverlay({
         return;
       }
       if (e.key !== 'Escape') return;
+      // D-124 — exit path point-edit mode BEFORE deselect: the first Esc leaves
+      // edit mode (selection kept), the next deselects. Menu-Esc never reaches
+      // here (the anchor menu owns it in the capture phase); the pen branch
+      // returned above, so the two modes can't collide.
+      if (editingPathId !== null) {
+        e.preventDefault();
+        designerStore.setEditingPath(null);
+        return;
+      }
       if (selection.size > 0) designerStore.setSelection([]);
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [tool, bindModeFieldId, editingTextId, selection]);
+  }, [tool, bindModeFieldId, editingTextId, editingPathId, selection]);
 
   function viewportToScene(clientX: number, clientY: number): { x: number; y: number } {
     // Measure from the FRAME origin (scene 0,0) — inset into the pasteboard — not the
@@ -272,8 +296,16 @@ export function CanvasOverlay({
       const hit = topmostHit(allElementsAtFrame, scenePoint);
       if (hit === null) {
         // A plain click on empty space clears; a modifier-click on empty space
-        // is a no-op (it must not wipe an in-progress multi-selection).
-        if (!modifier) designerStore.setSelection([]);
+        // is a no-op (it must not wipe an in-progress multi-selection). D-124 —
+        // while a path is in point-edit mode, the FIRST empty click only exits
+        // the mode (selection kept, mirroring Esc); the next one deselects.
+        if (!modifier) {
+          if (editingPathId !== null) {
+            designerStore.setEditingPath(null);
+            return;
+          }
+          designerStore.setSelection([]);
+        }
         return;
       }
       if (modifier) {
@@ -370,6 +402,20 @@ export function CanvasOverlay({
     }
   }
 
+  function onContextMenu(e: React.MouseEvent<HTMLDivElement>): void {
+    // B-060 — a right-click while DRAWING cancels the in-progress pen draft,
+    // identical to the drawing-Esc (element removed, one undo restores the whole
+    // path). Guards keep the two right-click meanings apart by construction: the
+    // edit-mode anchor menu lives in PathEditor (cursor tool only, and it stops
+    // propagation), and this handler requires the pen tool, which unmounts
+    // PathEditor entirely. Pen armed but idle — or any other tool — falls through
+    // unchanged (the app-wide suppression still eats the native menu).
+    if (tool !== 'pen' || !isPenDrawing()) return;
+    e.preventDefault(); // defense in depth over the App.tsx global suppression
+    cancelPen();
+    setPenPointer(null);
+  }
+
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>): void {
     // B-037 — track the pointer (scene coords) while a pen draft is live, driving
     // the rubber-band + close-affordance feedback; cleared when idle so a stale
@@ -393,6 +439,13 @@ export function CanvasOverlay({
     if (hit.type === 'text') {
       designerStore.setSelection([hit.id]);
       designerStore.setEditingText(hit.id);
+      return;
+    }
+    // D-124 — double-click a path: enter point-edit mode (anchors/handles show,
+    // the gizmo hides). Single click stays plain selection (box only).
+    if (hit.type === 'path') {
+      designerStore.setSelection([hit.id]);
+      designerStore.setEditingPath(hit.id);
       return;
     }
     // D-024 — double-click a nested child-composition instance: drill into that
@@ -462,6 +515,7 @@ export function CanvasOverlay({
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerLeave={() => setPenPointer(null)}
+      onContextMenu={onContextMenu}
       onDoubleClick={onDoubleClick}
       onDragOver={onDragOver}
       onDrop={onDrop}
@@ -489,21 +543,27 @@ export function CanvasOverlay({
             in-progress draft, and the gizmo's corner/edge/rotation hit-zones sit
             exactly where pen clicks go (the first anchor is always on the draft's
             bbox), eating the close-click and turning "draw shape 2" into a resize of
-            shape 1. Editing is a cursor-tool activity. */}
+            shape 1. Editing is a cursor-tool activity. D-124 — the gizmo also hides
+            while a path is in point-edit mode (a dedicated mode, like inline text
+            editing; a live gizmo's hit-zones over the anchors would recreate the
+            same hijack class). */}
         {selectedEl !== null &&
           selectedEl.visible &&
           !selectedEl.locked &&
           tool !== 'pen' &&
+          editingPathId === null &&
           editingEl === null &&
           bindModeFieldId === null && (
             <Gizmo element={selectedEl} scale={scale} currentFrame={currentFrame} />
           )}
-        {/* D-109 — the path edit overlay (anchors + handles) sits over the gizmo, but
-            only with the SELECT tool: while the pen is mid-draw its anchor dots must
-            not intercept the click that closes the path. */}
+        {/* D-109/D-124 — the path edit overlay (anchors + handles) mounts ONLY in
+            point-edit mode (double-click the path to enter; a single click shows the
+            selection box alone) and only with the SELECT tool: while the pen is
+            mid-draw its anchor dots must not intercept the close-click. */}
         {selectedEl !== null &&
           selectedEl.type === 'path' &&
           tool === 'cursor' &&
+          editingPathId === selectedEl.id &&
           selectedEl.visible &&
           !selectedEl.locked &&
           editingEl === null &&

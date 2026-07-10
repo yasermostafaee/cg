@@ -63,7 +63,7 @@ describe('normalizePathPoints (D-109)', () => {
   });
 });
 
-describe('inserted smooth anchors (B-054)', () => {
+describe('inserted smooth anchors (B-056)', () => {
   it('an inserted anchor with mirrored smooth handles round-trips normalizePathPoints', () => {
     const el = pathFromScenePoints('p', triangle, true); // position (0,0), 0-origin points
     const mid: AnchorPoint = {
@@ -78,13 +78,19 @@ describe('inserted smooth anchors (B-054)', () => {
     next.splice(1, 0, mid); // between 'a' (0,0) and 'b' (100,0)
     const n = normalizePathPoints({ ...el, points: next });
     const m = n.points.find((p) => p.id === 'm');
-    // The midpoint is inside the anchors' bbox, so normalize is an identity here:
-    // handles, smooth flag, ids and scene positions all survive.
-    expect(m).toMatchObject({ x: 50, y: 0, smooth: true });
+    // B-059/B-062 model — normalize re-anchors against the VISUAL bbox (the
+    // smooth handles bulge above the anchors, so points shift down and position
+    // compensates): handles, smooth flag, ids, and every anchor's SCENE spot
+    // survive exactly.
+    expect(m?.smooth).toBe(true);
     expect(m?.out).toEqual({ x: 10, y: -20 });
     expect(m?.in).toEqual({ x: -10, y: 20 });
     expect(n.points.map((p) => p.id)).toEqual(['a', 'm', 'b', 'c']);
-    expect(n.transform.position).toEqual(el.transform.position);
+    expect(n.transform.position.x + (m?.x ?? NaN)).toBeCloseTo(50, 9); // scene x
+    expect(n.transform.position.y + (m?.y ?? NaN)).toBeCloseTo(0, 9); // scene y
+    const a2 = n.points.find((p) => p.id === 'a');
+    expect(n.transform.position.x + (a2?.x ?? NaN)).toBeCloseTo(0, 9);
+    expect(n.transform.position.y + (a2?.y ?? NaN)).toBeCloseTo(0, 9);
   });
 
   it('a plain inserted corner carries no handles', () => {

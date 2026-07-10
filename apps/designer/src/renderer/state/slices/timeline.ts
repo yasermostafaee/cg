@@ -53,6 +53,43 @@ function sameKeyframeRef(a: KeyframeRef, b: KeyframeRef): boolean {
   return a.elementId === b.elementId && a.property === b.property && a.frame === b.frame;
 }
 
+/**
+ * B-062 — bake a static W/H resize into a path's POINT coordinates (anchors +
+ * handle vectors scale by `next/current` on the axis), preserving the
+ * size==visualBBox invariant. Idempotent per call — each gizmo-drag tick scales
+ * current→next. The min clamp mirrors the size fields' non-negative meta.
+ */
+function bakePathSize(elementId: string, el: Element, axis: 'w' | 'h', next: number): void {
+  if (el.type !== 'path') return;
+  const cur = axis === 'w' ? el.transform.size.w : el.transform.size.h;
+  const target = Math.max(next, 1);
+  if (!(cur > 0) || Math.abs(target - cur) < 1e-9) return;
+  const r = target / cur;
+  const points = el.points.map((p) => ({
+    ...p,
+    x: axis === 'w' ? p.x * r : p.x,
+    y: axis === 'h' ? p.y * r : p.y,
+    ...(p.in !== undefined
+      ? { in: { x: axis === 'w' ? p.in.x * r : p.in.x, y: axis === 'h' ? p.in.y * r : p.in.y } }
+      : {}),
+    ...(p.out !== undefined
+      ? {
+          out: { x: axis === 'w' ? p.out.x * r : p.out.x, y: axis === 'h' ? p.out.y * r : p.out.y },
+        }
+      : {}),
+  }));
+  designerStore.updateElement(elementId, {
+    points,
+    transform: {
+      ...el.transform,
+      size: {
+        w: axis === 'w' ? target : el.transform.size.w,
+        h: axis === 'h' ? target : el.transform.size.h,
+      },
+    },
+  } as Partial<Element>);
+}
+
 /** After a keyframe moves frame, keep the selection (primary + set) pointing at it. */
 function syncSelectionAfterMove(
   elementId: string,
@@ -442,9 +479,22 @@ export const timelineSlice = {
         designerStore.updateTransform(elementId, { position: { ...tx.position, y: numeric } });
         return;
       case 'size.w':
+        // B-062 (owner model) — a STATIC path resize BAKES the scale into the
+        // point coordinates (like a rectangle's corners), keeping the
+        // size==visualBBox invariant so a later anchor-drag normalize never
+        // snaps the shape back. size.* KEYFRAMES are untouched (the keyframe
+        // branch above) — animated size stays a render stretch.
+        if (el.type === 'path') {
+          bakePathSize(elementId, el, 'w', numeric);
+          return;
+        }
         designerStore.updateTransform(elementId, { size: { ...tx.size, w: numeric } });
         return;
       case 'size.h':
+        if (el.type === 'path') {
+          bakePathSize(elementId, el, 'h', numeric);
+          return;
+        }
         designerStore.updateTransform(elementId, { size: { ...tx.size, h: numeric } });
         return;
       case 'scale.x':

@@ -1,4 +1,5 @@
 import type { Playout, Scene } from '@cg/shared-schema';
+import { migrateScenePaths } from '@cg/shared-schema';
 import { activeRangeOf, playoutOf } from '@cg/shared-schema';
 import {
   current,
@@ -37,7 +38,9 @@ export const documentSlice = {
     let activeId: string | null = null;
     let normalized: Scene | null = null;
     if (scene !== null) {
-      const ensured = ensureCompositions(normalizeKeyframeIds(scene));
+      // B-059/B-062 — migrate legacy paths to the size==visualBBox convention
+      // FIRST (identity for conforming scenes, so a clean load stays clean).
+      const ensured = ensureCompositions(normalizeKeyframeIds(migrateScenePaths(scene)));
       normalized = ensured.scene;
       activeId = ensured.activeId;
     }

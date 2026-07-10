@@ -1,9 +1,11 @@
 import { current, set } from '../store-core.js';
 
 /**
- * Selection slice — the element selection set and the inline-text-edit target.
- * Replacing the selection also drops the keyframe selection unless the selected
- * keyframe's element survives the new selection. See `state/README.md`.
+ * Selection slice — the element selection set, the inline-text-edit target, and
+ * the path point-edit target (D-124). Replacing the selection also drops the
+ * keyframe selection unless the selected keyframe's element survives the new
+ * selection, and drops a path edit mode whose element leaves the selection.
+ * See `state/README.md`.
  */
 export const selectionSlice = {
   /** Replace selection. Pass `[]` to deselect. */
@@ -14,6 +16,12 @@ export const selectionSlice = {
     set({
       selection: nextSel,
       editingTextId: null,
+      // D-124 — point-edit mode follows its element: selecting something else
+      // (or deselecting) exits the mode; re-selecting the same path keeps it.
+      editingPathId:
+        current.editingPathId !== null && nextSel.has(current.editingPathId)
+          ? current.editingPathId
+          : null,
       selectedKeyframe: keepKey ? current.selectedKeyframe : null,
       selectedKeyframes: keepKey ? current.selectedKeyframes : [],
       keyframeInspectorOpen: keepKey ? current.keyframeInspectorOpen : false,
@@ -35,6 +43,10 @@ export const selectionSlice = {
     set({
       selection: nextSel,
       editingTextId: null,
+      editingPathId:
+        current.editingPathId !== null && nextSel.has(current.editingPathId)
+          ? current.editingPathId
+          : null,
       selectedKeyframe: keepKey ? current.selectedKeyframe : null,
       selectedKeyframes: keepKey ? current.selectedKeyframes : [],
       keyframeInspectorOpen: keepKey ? current.keyframeInspectorOpen : false,
@@ -44,5 +56,15 @@ export const selectionSlice = {
   /** Enter inline edit mode for a text element. Pass null to exit. */
   setEditingText(elementId: string | null): void {
     set({ editingTextId: elementId });
+  },
+
+  /**
+   * D-124 — enter point-edit mode for a path (double-click on the canvas); pass
+   * null to exit back to plain selection. Session-only editor state — never part
+   * of the scene or the undo history.
+   */
+  setEditingPath(elementId: string | null): void {
+    if (current.editingPathId === elementId) return;
+    set({ editingPathId: elementId });
   },
 } as const;

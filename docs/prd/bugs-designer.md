@@ -866,3 +866,78 @@ guards. Capability: `designer-playout-lifecycle`.
 **Env:** Browser + Designer canvas.
 **Notes:** RECON (red unit tests): `hit-test.ts` `hitsPath` ray-cast the ANCHORS-ONLY polygon and measured stroke distance to the straight chords — curvature was invisible: a bulge outside the anchor polygon missed, a concavity inside it FALSE-hit, and a two-anchor closed arc (zero-area anchor "polygon") was selectable only within the ~7-px grab margin of its chord — exactly the "only near center" symptom. Bonus defect found by the open-arc red test: the display mapping collapsed a degenerate anchors-bbox axis to factor 0, flattening a horizontal arc's curve extent. Fix: flatten each segment from the exact cubic the runtime renders (`c1 = a + a.out`, `c2 = b + b.in`, straight only when both absent — mirrors `pathD`) into 16 line sub-segments and run the SAME ray-cast + grab-margin over the flattened outline; the display mapping now mirrors the runtime viewBox's `max(bbox, 1)` clamp. Module stays pure (no `Path2D`/canvas — jsdom-testable); chord deviation shrinks ~1/N², so 16 steps stay within ~2 px of the true curve even for frame-spanning segments (well inside the grab margin) at negligible cost. The resized-path bbox mapping and open-path stroke-margin behavior are preserved.
 **Regression test:** unit `apps/designer/tests/path-hit-curved.test.ts` (red pre-fix: bulge hits, concavity misses, interior hits, open arc grabs at the real curve, straight-path guard); E2E `pen-curve-edit.spec.ts` — a two-anchor closed curved lens selects from a click 15 px off its chord.
+
+## [~] B-058 — the anchor "Delete point" menu is styled unlike the app's other context menus ⟨priority: low⟩ — fixed on `fix/pen-edit-mode-and-bbox` (change dir `openspec/changes/fix-pen-edit-mode-and-bbox`); pending owner verification
+
+**Repro:**
+
+1. In a path's point-edit mode, right-click an anchor.
+
+**Expected:** the menu looks like every other right-click menu (the timeline layer menu's chrome).
+**Actual (owner, on the D-123 preview):** one-off chrome — rounder corners (6px vs 0.3rem), larger text (0.8 vs 0.74rem), and a GRAY hover instead of the app's cyan tint (the bare `Control`'s hover selector out-specified the menu item's).
+**Env:** Browser + Designer canvas, main @ `c47e3bf`.
+**Notes:** RECON found SIX hand-rolled context menus with drifted chrome (radius 0.3 vs 0.25rem, shadow 8/24 vs 6/18, three item paddings, two danger reds, one hard-coded background, z-index 40→3000) and NO shared primitive — the owner's "the shared component it builds on" didn't exist. Fix: the timeline `LayerContextMenu` values extracted as canonical into a NEW shared `renderer/ui/ContextMenu.css.ts` (backdrop/menu/item/itemDisabled/shortcut/divider, + the button resets and an equal-specificity hover override so the cyan tint wins on `Control bare` items); `AnchorContextMenu` consumes it (own css deleted, keyboard/aria layer kept — focus-first, arrow wrap, capture-owned Esc); `LayerContextMenu.css` re-exports the shared pieces (timeline markup untouched). The four other drifted menus converge in a follow-up (noted in the change's `design.md`).
+**Regression test:** E2E `anchor-context-menu.spec.ts` (menu still opens/deletes/dismisses); the chrome share is structural (one stylesheet), asserted by the shared-class import.
+
+## [~] B-059 — the selection box and Inspector W/H hug a path's ANCHORS, ignoring curve extents ⟨priority: high⟩ — fixed on `fix/pen-edit-mode-and-bbox` (same branch/change dir as B-058); pending owner verification
+
+**Repro:**
+
+1. Pen: place a point; place a second with a big smooth drag; close (a two-anchor lens).
+2. Select it and look at the selection box and the Inspector H.
+
+**Expected:** the box and W/H enclose the whole visible curved shape.
+**Actual (owner, screenshot):** the box hugs only the anchors — a ~1-px band across the middle — and Inspector H reads ~1.
+**Env:** Browser + Designer canvas.
+**Notes:** RECON (4-reader sweep, findings in the change's `design.md`): `pathBBox` is anchors-only BY CONVENTION — stored `transform.size` and the runtime viewBox are defined against it, so making it curve-aware globally re-scales every legacy path; a load-time re-bake is impossible for `.vcg` packages (integrity/signing hash `template.json`) and inexact for animated/rotated transforms — option (a) DISQUALIFIED. Fix (option b, the gizmo's auto-text display-override precedent): NEW `pathVisualBBox` in `@cg/shared-schema` (exact cubic extrema via derivative roots, the runtime's control-point convention) + closed-form display↔stored mapping (`features/canvas/path-bounds.ts`); the gizmo (single + multi) traces the visual box, resize maps back through the exact inverse, Inspector W/H shows/edits visual extents, and the off-frame export filter — found sharing the defect (a bulge-visible path with off-frame anchors was WRONGLY DROPPED from export) — folds the visual box. Stored schema, runtime render, hit-test, `.vcg`/HTML export: byte-identical.
+**Regression test:** unit `packages/shared-schema/tests/path-visual-bbox.test.ts` (exact extrema incl. one-sided handles, closing segments, inward dips) + `apps/designer/tests/path-bounds.test.ts` (mapping round-trip, resize-through-display exactness, off-frame keep/drop); E2E `pen-edit-mode.spec.ts` (a curved lens's Inspector H and gizmo-polygon extent).
+
+## [~] B-060 — right-click while drawing a pen draft should cancel it (like Esc) ⟨priority: medium⟩ — fixed on `fix/pen-edit-mode-and-bbox` (same branch/change dir as B-058); pending owner verification
+
+**Repro:**
+
+1. Pen: place two or three points (draft in progress).
+2. Right-click the canvas.
+
+**Expected (owner decision):** the in-progress path cancels exactly like the drawing-Esc (element removed, one undo restores the whole path), no browser menu; with the pen armed but idle, nothing changes.
+**Actual:** nothing (the native menu is suppressed app-wide; the draft stays).
+**Env:** Browser + Designer canvas.
+**Notes:** Implemented as `onContextMenu` on the CanvasOverlay pointer LAYER (spans the pasteboard; the pen feedback SVG is pointer-inert), guarded exactly `tool === 'pen' && isPenDrawing()` → `preventDefault` + `cancelPen()` + feedback clear. Disambiguation from the edit-mode anchor menu is structural (table in `design.md`): the anchor menu lives in `PathEditor` (cursor tool + point-edit mode only, stops propagation) and this handler requires the pen tool, which unmounts `PathEditor` — the two right-click meanings cannot cross; everywhere else right-click is untouched.
+**Regression test:** E2E `pen-edit-mode.spec.ts` — right-click mid-draw cancels (element gone, pen stays armed, redraw works, undo restores the canceled path); pen-armed-idle right-click is a no-op.
+
+## [~] B-061 — the point-edit overlay ignores rotation: anchors/handles sit on the unrotated shape ⟨priority: high⟩ — fixed on `fix/pen-edit-mode-and-bbox` (same branch/change dir as B-058); pending owner verification
+
+**Repro:**
+
+1. Draw a path, rotate it (Inspector Rotation), double-click into point-edit mode.
+
+**Expected:** anchors, handle dots, and the segment affordances sit ON the rotated outline; drags track the pointer.
+**Actual:** the overlay stays unrotated while the SVG rotates — anchors float off the shape (the D-109 `screen()` applied position + viewBox scale but no rotation term).
+**Env:** Browser + Designer canvas.
+**Notes:** `PathEditor.screen()` now maps point space → box-local → the element's FULL `Scale·Rotate`-about-anchor transform (reusing `geometry.localToScene`), and every drag (anchor, handle, insert) runs the exact inverse on pointer deltas (unzoom → unscale → unrotate → unmap); positions invert via the shared `hit-test.inverseToLocal`. Filed with the Prompt-11 owner batch (Issue A). **Owner re-verify round (2026-07-11):** verification found a second rotated-editing defect in this scope — dragging ONE anchor of a rotated path drifted every OTHER anchor per move tick (the per-edit re-normalize keeps `size == bbox`, which moves the pivot `anchor⊙size`; probe: 2.07 scene px per 8-px bbox tick at 30°). Fixed by making the `normalizePathPoints` reframe render-neutral under the full transform — `position' = position + (I − M)(A − A') + M·vmin`, reducing to the old `position += vmin` at rotation 0 / scale 1; reconciliation stays continuous (decision + derivation in the change's design.md).
+**Regression test:** unit — the anchor-drag inverse under rotation (a dragged anchor lands under the pointer on a 30°-rotated path, `anchor-context-menu.test.ts` harness family) + `path-rotated-edit.test.ts` (drift: 30°, 90°+non-uniform scale over 3 ticks, rotated handle drag — untouched anchors render-stable to 1e-9; rotation-0 identity limit); E2E `pen-edit-mode.spec.ts` (rotated path: anchors render on the rotated outline; dragging one anchor leaves the others stationary within 1 px).
+
+## [~] B-062 — resize-then-edit snap-back: dragging an anchor after a W/H resize reverts the size ⟨priority: high⟩ — fixed on `fix/pen-edit-mode-and-bbox` (same branch/change dir as B-058); pending owner verification
+
+**Repro:**
+
+1. Draw a path; resize it via the gizmo or Inspector W/H.
+2. Double-click into point-edit mode and drag any anchor.
+
+**Expected:** the shape keeps its resized scale; only the dragged anchor moves.
+**Actual:** the whole shape snaps back to its pre-resize size (points lived in a fixed local frame; W/H only wrote `transform.size`, and the anchor-drag normalize reset size to the points' bbox).
+**Env:** Browser + Designer canvas.
+**Notes:** OWNER MODEL DECISION (2026-07-10): converge on **size == visualBBox** — a static W/H resize now BAKES the scale into the anchor coordinates + handle vectors (like a rectangle's corners; `writeStaticAnimatable` path branch), `normalizePathPoints` re-anchors against the curve-aware `pathVisualBBox`, the runtime viewBox becomes the visual bbox, and ONE pure migration (`migratePathGeometry`/`migrateScenePaths` in `@cg/shared-schema`) converts legacy content at Designer scene load AND runtime ingestion — old projects and signed `.vcg` packages render pixel-identically (anchors keep scene spots; `size.*` keyframes scale by the constant ratio, `position.*` shift by the constant delta, static rotation/scale pivots compensated exactly; animated-rotation + legacy-resize + curves is a documented corner). `size.*` KEYFRAMES keep render-stretch semantics. This also delivers B-059's fix structurally (size IS the visual box — no display-mapping layer). Filed with the Prompt-11 owner batch (Issue B).
+**Regression test:** unit `packages/shared-schema/tests/path-migration.test.ts` (conforming identity; resized-legacy pixel-fidelity; curved-arc migration; rotated-pivot compensation; keyframe compensation) + `apps/designer/tests/path-resize-bake.test.ts` (bake scales points/handles; invariant holds; anchor-drag after resize keeps the size — the exact symptom); E2E `pen-edit-mode.spec.ts` (resize → edit → no snap).
+
+## [~] B-063 — the Ctrl add-point affordance sits off the real edge on curved/rotated paths ⟨priority: medium⟩ — fixed on `fix/pen-edit-mode-and-bbox` (same branch/change dir as B-058); pending owner verification
+
+**Repro:**
+
+1. Draw a curved path; double-click into edit mode; hold Ctrl and hover where the add affordance appears.
+
+**Expected:** the affordance (and the insert hit surface) hugs the visible curved outline.
+**Actual:** the hit-lines were straight chords between anchors in the unrotated anchor-bbox mapping — the affordance activated inside/off the shape (same root as B-059).
+**Env:** Browser + Designer canvas.
+**Notes:** The segment hit surfaces are now per-segment cubic `<path>`s built from the SAME control points the runtime renders, mapped through the rotation-aware `screen()` (B-061) — the affordance and inserts follow the true curved, rotated outline, and insertion lands at the NEAREST point on the curve under the cursor (32-sample search) rather than the straight midpoint. Segments stay pointer-interactive always (a plain left press falls through to normal select/drag; Ctrl/Cmd inserts; right-press opens the Issue-D Add menu). Filed with the Prompt-11 owner batch (Issue C).
+**Regression test:** unit `anchor-context-menu.test.ts` (segment `data-cg-segment` surfaces; nearest-point inserts via the Add menu); E2E `pen-curve-edit.spec.ts` (Ctrl-gated insert on the curve) + `pen-edit-mode.spec.ts`.

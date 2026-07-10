@@ -356,7 +356,7 @@ D-109/B-037 — the `pen` tool is the multi-gesture exception:
 corner anchor, drag = smooth with mirrored handles, click-first-anchor = close,
 Enter/double-click = finish open, **Esc = cancel** — the created element is
 removed), upserting the `path` element live (`pathFromScenePoints`) so preview ==
-export mid-draw. B-053 — corner vs smooth is decided **at pointer-UP** from the
+export mid-draw. B-057 — corner vs smooth is decided **at pointer-UP** from the
 gesture's total displacement against `PEN_SMOOTH_PX` (SCREEN px, zoom-independent —
 the D-122 hysteresis lesson): the mid-hold preview is live (corner restored when
 the pointer dips back under the guard), a click-sized release actively clears any
@@ -374,20 +374,55 @@ rubber band from the last anchor to the pointer — curved through a smooth anch
 out handle — and a first-anchor close-affordance ring inside `PEN_CLOSE_PX`).
 
 A selected path's edit affordance is [`PathEditor`](./PathEditor.tsx) — an SVG
-overlay of draggable anchor squares + handle dots (Alt breaks a mirrored pair, click
-a segment to insert a CORNER, click-DRAG a segment to insert a SMOOTH anchor whose
-mirrored handles follow the drag — B-054, the pen's drag-to-smooth on insertion,
-one undo entry with the corner/smooth decision at pointer-up — Delete removes +
-re-stitches), shown **only with the select tool** so its dots don't intercept the
-pen's close-click. D-123 — right-clicking an anchor square opens
+overlay of draggable anchor squares + handle dots (Alt breaks a mirrored pair;
+Delete removes + re-stitches). D-124 — it mounts only in **POINT-EDIT MODE**
+(`editingPathId`, the `editingTextId` pattern): a single click selects a path with
+the box ONLY; double-click enters the mode (the transform gizmo hides — a live
+gizmo over the anchors would recreate the B-037 hijack class); Esc or an
+empty-pasteboard click exits back to plain selection (selection kept — the next
+Esc/empty click deselects), and selecting anything else / switching composition or
+tool clears it. Esc precedence: anchor-menu close (capture-owned) → bind/text-edit
+owners → pen branch → edit-mode exit → deselect — all decided in CanvasOverlay's
+single dispatcher. Point INSERTION is Ctrl/Cmd-gated (D-124): the segment
+hit-lines + copy cursor exist only while the modifier is held; then click = CORNER,
+click-DRAG = SMOOTH with mirrored drag-defined handles (B-056 — the pen's
+drag-to-smooth on insertion, one undo entry with the corner/smooth decision at
+pointer-up); without the modifier segment clicks fall through to normal behavior.
+D-123/B-058 — right-clicking an anchor square opens
 [`AnchorContextMenu`](./AnchorContextMenu.tsx) (first item **Delete point** → the
-SAME `removeAnchor`): a minimal menu pattern-matched to the timeline's
-LayerContextMenu (fixed backdrop + clamped `role="menu"`; no shared primitive
-exists) plus full keyboard support — focus-first on open, Arrow wrap,
+SAME `removeAnchor`), rendered with the SHARED context-menu chrome
+(`ui/ContextMenu.css.ts` — extracted from the timeline LayerContextMenu, which now
+re-exports it) plus full keyboard support — focus-first on open, Arrow wrap,
 Enter/Space, and an Esc owned via a capture-phase stop so closing the menu never
-falls through to the canvas deselect/tool handling; outside click and wheel also
-dismiss. The trigger surface is the anchor squares ONLY, and items are an array so
-future entries (Convert to corner/smooth) are one line each. B-037 — the single-select
+falls through to the edit-mode exit or deselect; outside click and wheel also
+dismiss. The trigger surface for Delete point is the anchor squares; right-clicking
+a SEGMENT opens the same menu with **Add point** / **Add curve point** (Issue D —
+inserted at the nearest spot on the real curve, smooth gets tangent-aligned
+mirrored handles), and items are an array so future entries are one line each.
+B-060 — while the PEN is drawing, a right-click on the canvas CANCELS the draft
+(identical to the drawing-Esc; wired on the overlay layer, guards
+`tool==='pen' && isPenDrawing()`, structurally disjoint from the anchor menu).
+B-059/B-062 — paths follow the **size==visualBBox model** (owner decision
+2026-07-10): points live with their curve-aware visual bbox (`pathVisualBBox`,
+exact cubic extrema) at local (0,0), `transform.size` equals its extents
+(`normalizePathPoints` keeps the invariant), a STATIC W/H resize BAKES the scale
+into the point coordinates (`writeStaticAnimatable` path branch — no more
+resize-then-edit snap-back), `size.*` keyframes keep render-stretch semantics, and
+ONE pure migration (`migratePathGeometry`/`migrateScenePaths`, shared-schema)
+converts legacy scenes at Designer load + runtime ingestion so old projects and
+signed `.vcg` packages render pixel-identically. The gizmo/Inspector/off-frame
+filter need no path special-casing — `transform.size` IS the visible box. Because
+`size` tracks the bbox, every point edit's re-normalize MOVES the rotation pivot
+(`anchor⊙size`), so `normalizePathPoints` compensates `position` render-neutrally
+under the full transform — `position' = position + (I − M)(A − A') + M·vmin`,
+`M = Scale·Rotate` — which reduces to `position += vmin` at rotation 0; without the
+pivot term, dragging one anchor of a ROTATED path drifted every other anchor each
+move tick (reconciliation stays continuous — deferring it would let the runtime's
+viewBox stretch distort the shape mid-drag). B-061 —
+`PathEditor.screen()` maps through the element's full Scale·Rotate-about-anchor
+transform (`localToScene`; drags run the exact inverse), and B-063 — the segment
+hit surfaces are per-segment cubic `<path>`s, so the add affordance hugs the true
+curved, rotated outline. B-037 — the single-select
 **Gizmo is likewise gated off while the pen is armed**: `addElement` auto-selects
 the in-progress draft, and the gizmo's corner/edge/rotation hit-zones sit exactly on
 the draft's bbox (the first anchor is always there), so unmounting it is what makes

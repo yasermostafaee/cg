@@ -55,6 +55,10 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
     (v: number): void =>
       designerStore.commitAnimatable(id, property, v);
 
+  // B-059/B-062 — no path special-casing needed: `transform.size` IS the visual
+  // curve-aware bbox under the owner model, and a static W/H commit bakes the
+  // points via `writeStaticAnimatable` (generic `commitAnimatable` routing).
+
   return (
     <div className={s.col}>
       {/* Position X/Y — one combined field, each axis editable separately. */}

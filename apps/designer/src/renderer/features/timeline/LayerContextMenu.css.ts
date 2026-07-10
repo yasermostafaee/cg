@@ -1,54 +1,11 @@
 import { style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
 
-export const backdrop = style({
-  position: 'fixed',
-  inset: 0,
-  zIndex: 1000,
-});
-
-// `minWidth`, `left` and `top` are applied inline (sourced from the JS clamp
-// constants / pointer position).
-export const menu = style({
-  position: 'fixed',
-  background: colors.panel,
-  border: `1px solid ${colors.border}`,
-  borderRadius: '0.3rem',
-  padding: '0.25rem',
-  boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
-  fontSize: '0.74rem',
-  color: colors.text,
-  userSelect: 'none',
-});
-
-export const item = style({
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: '0.5rem',
-  padding: '0.3rem 0.5rem',
-  borderRadius: '0.2rem',
-  cursor: 'pointer',
-  whiteSpace: 'nowrap',
-});
-
-export const itemDisabled = style({
-  opacity: 0.4,
-  cursor: 'default',
-});
-
-// Keyboard-shortcut hint at the row's trailing edge (flex space-between) — in parentheses,
-// smaller, muted gray.
-export const shortcut = style({
-  fontSize: '0.85em',
-  color: '#9CA3AF',
-});
-
-export const divider = style({
-  height: '1px',
-  background: colors.border,
-  margin: '0.25rem 0.2rem',
-});
+// B-058 — the menu chrome moved to the SHARED `ui/ContextMenu.css.ts` (these
+// values were adopted as canonical there); this module re-exports it so the
+// timeline markup is untouched and keeps only its layer-menu-specific extras
+// (chevron / submenu / swatches) local.
+export { backdrop, menu, item, itemDisabled, shortcut, divider } from '../../ui/ContextMenu.css.js';
 
 export const chevron = style({
   color: colors.textMuted,

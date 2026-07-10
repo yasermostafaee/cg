@@ -51,6 +51,7 @@ export const compositionSlice = {
     set({
       activeCompositionId: id,
       selection: new Set<string>(),
+      editingPathId: null, // D-124 — a composition switch exits point-edit mode
       selectedKeyframe: null,
       selectedKeyframes: [],
       keyframeInspectorOpen: false,
@@ -98,6 +99,7 @@ export const compositionSlice = {
     set({
       activeCompositionId: childId,
       selection: shapeId !== null ? new Set<string>([shapeId]) : new Set<string>(),
+      editingPathId: null, // D-124 — drilling into a composition exits point-edit mode
       selectedKeyframe: null,
       selectedKeyframes: [],
       keyframeInspectorOpen: false,
