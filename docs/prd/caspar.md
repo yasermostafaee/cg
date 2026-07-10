@@ -162,3 +162,47 @@ pings) silently don't exist in production.
 **Notes:** relates to B-046 (phantom backup) and B-048's cross-referenced
 reconnect/startup reconciliation — one reconnect design should cover them
 together.
+
+## [ ] C-011 — persist the Loaded stack + template registry: durable, LAYER-AWARE reconciliation across bridge restart AND page reload ⟨priority: medium⟩
+
+**What:** Persist the runtime's playout state — the template registry (delivered
+`{ template, html }` or the raw `.vcg` bytes) AND the Loaded stack with its
+layer occupancy (which template/item sits on which `(channel, layer)`) — behind
+`@cg/storage` (a database later), surviving BOTH a bridge restart and a page
+reload. On startup/reconnect the bridge reconciles by KNOWN occupancy: adoption
+targets layers it can NAME the previous occupant of, instead of blindly clearing
+whatever layer a fresh Load happens to be assigned.
+
+**Why:** `reconnect-reconciliation` (B-038 follow-up + B-048) deliberately shipped
+the in-memory precursor with two accepted gaps, both operator-confirmed live
+(2026-07-10):
+
+1. **Both-restart re-import gap** — browser retention is page-lifetime and the
+   bridge registry is process-lifetime, so a bridge restart PLUS a page reload
+   still needs a manual re-import (the change's documented scope matrix).
+2. **Wrong-layer adopt risk** — the adopt-CLEAR is per `(channel, layer)` with
+   NO cross-restart memory of what was where. After a restart, the fresh
+   session's LayerManager assigns layers purely by allocation order; if that
+   order diverges from the dead session's, the adopt-CLEAR wipes a DIFFERENT
+   orphaned graphic than the one being replaced. Live testing didn't hit it only
+   because the layout happened to repeat — luck of a stable layout, not a
+   guarantee (recorded as a KNOWN LIMITATION in that change's `design.md`). The
+   CLEAR never exceeds what the real `CG ADD` would do on that layer; the hazard
+   is specifically choosing the WRONG layer when layouts diverge.
+
+**Acceptance to be detailed when scheduled** (symptom/design-level entry — do not
+start without a scheduling decision). Sketch: registry + stack/occupancy
+persisted and restored; post-restart reconciliation adopts by known occupancy
+(offering the operator resume-or-clear rather than silent luck); the manual
+re-import is gone in ALL restart combinations; the persisted layout makes the
+adopt-CLEAR target provably the layer being replaced.
+
+**Notes / cross-references:** builds on `reconnect-reconciliation`'s in-memory
+retention (its `design.md` names `@cg/storage` as this exact upgrade path);
+context: [[B-048]] (orphaned producers), [[B-051]] (first-observation badge wart —
+a layer-aware truth model would also ground its fix); C-010's dead
+`LayerManager.observe`/`beginResync` wiring is the machinery a real
+reconciliation would finally use — one reconnect/startup design should cover
+C-010 + C-011 together. Placement note: filed as a single C- item (the bridge is
+the center of gravity); the renderer/Library face (persisted `.vcg` bytes for
+re-import-free page reloads) is part of THIS item, not a separate R- entry.
