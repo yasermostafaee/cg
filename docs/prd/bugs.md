@@ -192,7 +192,19 @@ is informational runner noise — all actions in the file are on current majors;
 no change made for it.) Focused tooling fix, no OpenSpec change (the B-013
 rimraf `--glob` precedent).
 
-## [ ] B-049 — flaky: `@cg/caspar-client` `transport.test.ts` peer-disconnect times out under full-suite load ⟨priority: low⟩
+## [~] B-049 — flaky: `@cg/caspar-client` `transport.test.ts` peer-disconnect times out under full-suite load ⟨priority: low⟩
+
+> **Root-caused + hardened (2026-07-10, `fix/B-038-B-048-reconnect-reconciliation`):**
+> the test called `closeAllAmcpConnections()` immediately after
+> `transport.connect()` resolved — but `connect()` resolves on the CLIENT's
+> connect event, which under load can beat the mock server's `'connection'`
+> handler registering the socket in its Set (`tools/amcp-mock/src/server.ts`),
+> so the close destroyed NOTHING and the `close` event never fired (the same
+> race the mock's own suite works around with a 10 ms delay before asserting
+> `amcpClientCount`). Reproduced 2/2 under parallel turbo load on 2026-07-10;
+> passes standalone. Fix: the test now waits for `mock.amcpClientCount > 0`
+> before closing. Green through the branch's full uncached gate; flips `[x]`
+> when that branch merges and the flake stays gone.
 
 **Repro:**
 

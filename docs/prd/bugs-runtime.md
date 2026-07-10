@@ -547,6 +547,78 @@ template HTML on reconnect). Bridge-restart amnesia has TWO faces — templates
 forgotten AND on-air producers orphaned; a reconnect/startup reconciliation
 should consider both (see also C-010).
 
+---
+
+## [ ] B-051 — badge rests at a FALSE ON AIR after the FIRST Load onto a layer (per bridge process): change-tracker first-observation + "non-empty producer ⇒ on-air" + sticky last publish ⟨priority: medium⟩
+
+> Operator-observed **2026-07-10** during the reconnect-reconciliation live
+> session (CasparCG 2.5.0 `69e8ad5`); root-caused the same day with captured
+> reconciler publish sequences and **CONFIRMED PRE-EXISTING on `main`**
+> (`6d1e3b0`, clean worktree — identical sequences with none of the
+> reconnect-reconciliation code). NOT a Face-2/adopt-CLEAR regression: the
+> adopt-CLEAR rides the same "first ADD per layer per process" trigger —
+> correlation, not causation (the CLEAR is sent before OSC interest binds and
+> a cleared layer emits nothing, so it contributes zero events).
+
+**Repro (deterministic, bridge→mock `disableOsc` AND live):**
+
+1. Fresh bridge; import a `.vcg`; **Load** it (the first `CG ADD` onto its
+   layer this process). → the stack badge shows **ON AIR** with no Take, and
+   STAYS there.
+2. Remove the item; Load again (same layer). → badge correctly rests READY.
+3. Load an additional item (fresh layer). → false ON AIR again.
+
+A page refresh changes nothing — the state is **bridge-process**-lifetime. In
+the field this reads as "first Load of every newly-imported template": each new
+template's first Load allocates a fresh, never-tracked layer; a
+delete-and-reload reuses a tracked one.
+
+**Mechanism (file:line):**
+
+- At `CG ADD`, real CasparCG stage-loads AND stage-plays the new producer
+  (server source, `cg_proxy.cpp` create_new branch) — the page stays hidden
+  until `play()`, but the layer's foreground producer flips `empty → html`
+  and OSC reports it.
+- The OSC pipeline runs interest → rate-limit → change-tracker
+  (`packages/caspar-client/src/osc/transport.ts`); dropped events never prime
+  the tracker, and its per-`(kind,channel,layer)` memory lives for the whole
+  bridge process (`osc/change-tracker.ts:14-21`; reset only on session
+  resync).
+- The FIRST `producer='html'` observation on a layer passes the tracker →
+  `Reconciler.applyOsc` maps ANY non-empty producer to truth `'on-air'`
+  (`reconciler/reconciler.ts:197`) → published. The 1 s truth TTL decays
+  internally but **nothing re-publishes** — the last published state (ON AIR)
+  sticks on the badge until the next command.
+- `remove()` drops OSC interest BEFORE its CLEAR (`caspar-runtime.ts`), and a
+  cleared layer goes silent on real CasparCG (`stage.clear` erases it) — so
+  the tracker keeps `'html'` for that layer forever, and every LATER ADD's
+  `'html'` report is suppressed as a repeat → no truth publish → later loads
+  rest READY.
+
+**Evidence:** captured `stackChanged` sequences (bridge→amcp-mock,
+transition-only `disableOsc` mode — the periodic tick re-broadcasts erased
+layers as `'empty'`, which real CasparCG never does, masking the asymmetry):
+first load `["on-air"]`, re-load same layer `["loaded"]`, fresh layer
+`["on-air"]` — **identical on the reconnect-reconciliation branch and on
+`main@6d1e3b0`**.
+
+**Fix space (for the fix change to design):** stop mapping a producer's mere
+existence to `'on-air'` without play evidence (the deeper wart —
+B-044/C-010-adjacent); and/or re-publish when fresh truth decays past
+`truthTtlMs`; and/or reset the layer's tracker key when the bridge itself
+empties a layer. The regression test must run the mock transition-only
+(`disableOsc`) — tick mode cannot show the suppression asymmetry.
+
+**Cross-reference:** found while live-validating
+`openspec/changes/reconnect-reconciliation` ([[B-048]]); judged out of that
+change's scope after the main-worktree discriminator proved it pre-existing.
+Until fixed, judge Load/Take pass-fail by the OUTPUT, not the badge, right
+after a first Load.
+
+**See also:** [[B-051]] — the false-ON-AIR badge observed during this bug's live
+validation was root-caused as a PRE-EXISTING first-load-per-layer wart (proven
+on `main` in a clean worktree), NOT part of this bug's mechanism.
+
 **Progress (2026-07-10 — `openspec/changes/reconnect-reconciliation`, stays
 `[~]` until live validation):** diagnosis (code + CasparCG server source
 v2.3.x-lts AND master + bridge→mock repros) **eliminated all three hypotheses**:
