@@ -83,13 +83,13 @@
 
 ## 8. Wrap-up (Part C)
 
-- [ ] File the server-connection-settings-panel PRD item (next free R-number
+- [x] File the server-connection-settings-panel PRD item (next free R-number
       vs merged main; extends R-002; cross-refs B-046; infrastructure notes:
       `ConnectionConfig`, CLI `--caspar-host`, `deriveServeOptions`' routable
-      serve path); do NOT start it.
-- [ ] Flip B-046 → [x] and B-047 → [x] with the mock/soak-validation record.
-- [ ] Archive with the shared-spec ordering check (delta owns only "Failover
+      serve path); do NOT start it. → Filed as **R-010** in `docs/prd/runtime.md`.
+- [x] Flip B-046 → [x] and B-047 → [x] with the mock/soak-validation record.
+- [x] Archive with the shared-spec ordering check (delta owns only "Failover
       to backup per the redundancy strategy" [MODIFIED] + the new
       single-server requirement — neither owned by the held
       fix-amcp-escaping-v2 / reconnect-reconciliation pair → archive cleanly).
-- [ ] Conventional commits, push, compare URL, final report.
+- [x] Conventional commits, push, compare URL, final report.

@@ -33,7 +33,9 @@ template today.
 - WHEN the operator opens Settings and changes telemetry mode THEN it persists
   (localStorage) and survives reload
   **Notes:** `bridge.settings.*` already implemented in the mock; pairs with P-002
-  (routing) if Settings becomes its own route.
+  (routing) if Settings becomes its own route. Extended by [[R-010]] (server
+  connection settings panel), which is where the settings view's real payload
+  lives.
 
 ## [x] R-003 — stage Inspector edits locally; only the Update button applies them to air ⟨priority: medium⟩ — merged via `stage-inspector-edits`, archived
 
@@ -261,3 +263,57 @@ the operator, not to a heuristic.
   template Y last session — resume or clear?". Cross-refs: [[B-048]] (the
   designed stay-on-air behavior this makes controllable), [[B-053]] (fixing the
   producer⇒on-air mapping helps this warning's precision).
+
+## [ ] R-010 — server connection settings panel: configure primary (+ optional backup) CasparCG from the Runtime UI ⟨priority: medium⟩
+
+> Filed 2026-07-11 from the B-046 fix (`harden-redundancy-single-and-two-server`).
+> Extends the thin R-002 "Settings panel UI" (telemetry toggle) with the
+> connection page it was always going to need. Symptom/feature-level — do not
+> start without scheduling.
+
+**What:** A Runtime settings view for the CasparCG connection: edit the
+primary server's host / AMCP port / OSC port, optionally ADD or REMOVE a
+backup server (the B-046 declared shape — `servers: { A, B? }`, no mode
+enum), and push the resulting `ConnectionConfig` to the bridge at runtime.
+This includes pointing the bridge at a REMOTE CasparCG on another machine,
+not just `127.0.0.1`.
+
+**Why:** Today the connection is fixed at bridge boot: the config shape,
+validation, and remote-host plumbing all exist, but the only way to change
+servers is restarting the bridge with CLI flags — invisible to the operator.
+The B-046 change made the config shape UI-ready (primary + optional backup);
+this item is the UI plus a runtime path to apply it.
+
+**Infrastructure that already exists (this item is UI + one channel):**
+
+- `ConnectionConfig` in `@cg/shared-ipc` (Zod-validated; `servers.B`
+  optional since B-046) and the read-only `connections.config` channel.
+- The bridge CLI already builds arbitrary hosts/ports: `--caspar-host` /
+  `--amcp-port` / `--osc-port` and (B-046) `--backup-host` /
+  `--backup-amcp-port` / `--backup-osc-port`.
+- `deriveServeOptions` (`tools/caspar-bridge/src/template-http-server.ts`)
+  already derives the routable template-serve host when CasparCG is remote —
+  the serve path is solved; the panel only changes where the config comes
+  from.
+
+**Missing:** the settings UI itself and a `connections.configure`-style
+channel that applies a new `ConnectionConfig` to a RUNNING bridge
+(tear down / rebuild the declared sessions safely — never mid-Take).
+
+**Acceptance (sketch — refine when scheduled):**
+
+- WHEN the operator edits the primary host/ports and applies THEN the bridge
+  reconnects to the new server and `connections.health` reflects it, without
+  a bridge process restart
+- WHEN the operator adds a backup THEN a B session appears (health shows it;
+  failover enabled); WHEN they remove it THEN the runtime returns to declared
+  single-server (no phantom churn — the B-046 guarantees hold)
+- WHEN the primary host is a remote machine THEN templates still render
+  (the serve path derives a routable host as it does for `--caspar-host`)
+- WHEN a config is invalid or unreachable THEN the operator gets a visible
+  error and the previous connection keeps running (never silently dropped)
+  **Notes:** cross-refs [[B-046]] (the config shape + single-server semantics
+  this panel edits), R-002 (this page lives in / supersedes that settings
+  view), R-006 (boot-time backend choice surface — adjacent but distinct).
+  Apply-while-on-air policy needs design care (likely: defer apply or require
+  confirmation while anything is ON AIR).
