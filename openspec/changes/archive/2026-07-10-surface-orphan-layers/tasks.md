@@ -69,11 +69,18 @@
 
 ## 7. Wrap-up (Part C)
 
-- [ ] Optional live smoke checklist delivered (probe script is step 0;
-      clearly non-gating; note whether it ran + build).
-- [ ] Flip R-009 → [x] with the validation record; note the tap superseding
-      the PRD's unexpected-onair sketch and what stays dead for C-010.
-- [ ] Archive with the shared-spec ordering check (this delta ADDs new
-      requirement headings only; re-verify the held pair's seven headings at
-      archive time — STOP if changed).
-- [ ] Conventional commits, push, compare URL, final report.
+- [x] Optional live smoke: PARTIALLY RUN on CasparCG 2.5.0 `69e8ad5`
+      (non-gating) — foreign `PLAY 1-99 RED` + cleanup `CLEAR 1-99` verified
+      live over AMCP (202s, no residue); the orphan-surfacing half was
+      environment-blocked: the operator's RUNNING pre-R-009 bridge (PID
+      holding UDP 6250) owns the OSC ingest. Completion checklist recorded
+      in the R-009 PRD entry (stop the old bridge → run the new build →
+      foreign graphic → banner within ~10 s → Clear → idle-quiet).
+- [x] Flip R-009 → [x] with the validation record; noted the tap superseding
+      the PRD's unexpected-onair sketch (structurally unable to see
+      never-loaded layers) and that observe/collision, beginResync, and
+      HeartbeatService stay dead for C-010.
+- [x] Archive with the shared-spec ordering check — re-verified at archive
+      time: the held pair's owned headings are unchanged and this delta only
+      ADDs two new ones → archived independently.
+- [x] Conventional commits, push, compare URL, final report.
