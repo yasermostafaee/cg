@@ -43,8 +43,8 @@ test('two sequential draws yield two independent elements; shape 1 untouched', a
   await expect(paths(app)).toHaveCount(2);
   // Shape 1's geometry is byte-identical — the second draw never touched it.
   expect(await paths(app).first().getAttribute('d')).toBe(shape1D);
-  // And it still has exactly its 3 anchors (edit overlay count via the Select tool).
-  await app.clickCanvas({ x: 210, y: 165 });
+  // And it still has exactly its 3 anchors (point-edit overlay via dblclick, D-124).
+  await app.enterPathEdit({ x: 210, y: 165 });
   await expect(app.page.locator('[data-cg-anchor]')).toHaveCount(3);
 });
 
@@ -70,8 +70,8 @@ test('mid-draw tool switch finishes the draft; the next pen session starts fresh
 
   await expect(paths(app)).toHaveCount(2);
   expect(await paths(app).first().getAttribute('d')).toBe(shape1D);
-  // Shape 1 keeps exactly the 2 anchors it had when the tool switched.
-  await app.clickCanvas({ x: 210, y: 130 });
+  // Shape 1 keeps exactly the 2 anchors it had when the tool switched (D-124 dblclick).
+  await app.enterPathEdit({ x: 210, y: 130 });
   await expect(app.page.locator('[data-cg-anchor]')).toHaveCount(2);
 });
 
@@ -99,7 +99,7 @@ test('pen armed over a selected shape: clicks start shape 2, never edit shape 1'
   const box1After = await app.firstCanvasElement.boundingBox();
   expect(Math.abs((box1After?.x ?? 0) - (box1?.x ?? 0))).toBeLessThan(0.5);
   expect(Math.abs((box1After?.width ?? 0) - (box1?.width ?? 0))).toBeLessThan(0.5);
-  await app.clickCanvas({ x: 210, y: 165 });
+  await app.enterPathEdit({ x: 210, y: 165 });
   await expect(app.page.locator('[data-cg-anchor]')).toHaveCount(3);
 });
 
@@ -153,7 +153,7 @@ test('a composition switch mid-draw ends the pen session; nothing leaks across',
   await app.openComposition('comp1');
   await expect(paths(app)).toHaveCount(1);
   await expect(paths(app).first()).toHaveAttribute('fill', 'none');
-  await app.clickCanvas({ x: 210, y: 130 });
+  await app.enterPathEdit({ x: 210, y: 130 });
   await expect(app.page.locator('[data-cg-anchor]')).toHaveCount(2);
 });
 
@@ -170,15 +170,14 @@ test('deleting the in-progress element mid-draw kills the draft; clicks start fr
   await expect(paths(app)).toHaveCount(0);
 
   // The stale draft died with its element: the next clicks draw a FRESH 2-anchor
-  // path — the deleted anchors are never resurrected. The finished path is already
-  // selected, so switch to Select and count its edit-overlay anchors directly
-  // (clicking its stroke would hit the PathEditor segment and INSERT an anchor —
-  // the intended D-109 edit gesture, not what this test measures).
+  // path — the deleted anchors are never resurrected. Count its anchors in
+  // point-edit mode (D-124 — dblclick the stroke; segment inserts are Ctrl-gated
+  // now, so a plain interaction can't accidentally add a point).
   await app.canvas.click({ position: { x: 200, y: 100 } });
   await app.canvas.click({ position: { x: 320, y: 160 } });
   await app.page.keyboard.press('Enter');
   await expect(paths(app)).toHaveCount(1);
-  await app.selectTool('Select');
+  await app.enterPathEdit({ x: 260, y: 130 });
   await expect(app.page.locator('[data-cg-anchor]')).toHaveCount(2);
 });
 

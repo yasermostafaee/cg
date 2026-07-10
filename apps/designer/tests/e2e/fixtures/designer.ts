@@ -290,6 +290,17 @@ export class DesignerApp {
     await this.canvas.click({ position: { x: 6, y: 6 } });
   }
 
+  /**
+   * D-124 — enter a path's POINT-EDIT mode: Select tool + double-click the path
+   * at `pos` (a point that hits it — interior for closed, on the stroke for open).
+   * A single click only selects (box, no anchors); the anchor/handle overlay
+   * mounts in edit mode.
+   */
+  async enterPathEdit(pos: { x: number; y: number }): Promise<void> {
+    await this.selectTool('Select');
+    await this.canvas.dblclick({ position: pos });
+  }
+
   // ── multi-select (D-041) ──────────────────────────────────────────────────
 
   /** The canvas's live preview iframe (same-origin srcDoc — readable). */

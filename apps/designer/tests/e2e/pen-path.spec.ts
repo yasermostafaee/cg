@@ -37,8 +37,9 @@ test('pen draws a path → renders, selects, is editable, and can be closed', as
   await expect(app.inspector.getByText('points')).toBeVisible();
   await expect(app.inspector.getByText('3', { exact: true })).toBeVisible();
 
-  // Editable with the SELECT tool: the edit overlay draws one square per anchor.
-  await app.selectTool('Select');
+  // Editable in POINT-EDIT mode (D-124 — double-click the path; a single click
+  // shows the selection box only): the edit overlay draws one square per anchor.
+  await app.enterPathEdit({ x: 210, y: 130 });
   await expect(app.page.locator('[data-cg-anchor]')).toHaveCount(3);
 
   // Closing it from the inspector fills the path (closed ⇒ fill + stroke).

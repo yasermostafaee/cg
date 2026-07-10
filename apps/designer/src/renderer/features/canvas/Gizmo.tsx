@@ -155,6 +155,11 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
       t = { ...t, size: { w: m.w, h: m.h }, position: { ...t.position, x: leftX } };
     }
   }
+  // B-059/B-062 — paths need NO display override here: under the owner model the
+  // stored `transform.size` IS the visual (curve-aware) bbox (normalize keeps the
+  // invariant; legacy scenes are migrated at load), so the generic box below
+  // already encloses the curved outline, and resize commits bake into the points
+  // via `writeStaticAnimatable`.
   // Project the element's RENDERED box (`Scale·Rotate` about the anchor — a parallelogram
   // under non-uniform scale) into overlay/screen space, so the frame + handles trace the
   // SAME geometry the renderer draws (matches `hit-test.inverseToLocal`). Fixes B-022,

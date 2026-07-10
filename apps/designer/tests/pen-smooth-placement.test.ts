@@ -7,7 +7,7 @@ import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 import { endPenSession, penPointerDown } from '../src/renderer/features/canvas/pen-draw.js';
 
 /**
- * B-053 — corner-vs-smooth is decided at pointer-UP (Illustrator semantics,
+ * B-057 — corner-vs-smooth is decided at pointer-UP (Illustrator semantics,
  * owner decision 2026-07-08): a plain click (total drag under the jitter guard,
  * in SCREEN px so it is zoom-independent) places a CORNER anchor even when
  * micro-jitter briefly crossed the old incremental threshold; a genuine drag
@@ -46,7 +46,7 @@ const up = (cx: number, cy: number): void => {
   window.dispatchEvent(new MouseEvent('pointerup', { clientX: cx, clientY: cy }));
 };
 
-describe('pen anchor placement — corner vs smooth at pointer-up (B-053)', () => {
+describe('pen anchor placement — corner vs smooth at pointer-up (B-057)', () => {
   it('a 2-screen-px click slip at low zoom places a CORNER (zoom-independent guard)', () => {
     freshScene();
     const scale = 0.5; // 2 screen px = 4 scene px — the old 3-SCENE-px guard fired

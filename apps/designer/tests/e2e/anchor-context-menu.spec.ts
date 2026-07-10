@@ -18,7 +18,7 @@ async function drawTriangle(app: DesignerApp): Promise<void> {
   await app.canvas.click({ position: { x: 280, y: 130 } });
   await app.canvas.click({ position: { x: 210, y: 240 } });
   await app.page.keyboard.press('Enter'); // open path, selected, pen stays armed
-  await app.selectTool('Select'); // PathEditor mounts
+  await app.enterPathEdit({ x: 210, y: 130 }); // D-124 — dblclick enters point-edit
   await expect(anchors(app)).toHaveCount(3);
 }
 
@@ -41,10 +41,10 @@ test('right-click an anchor → menu → Delete point removes it; undo restores;
   expect(await paths(app).first().getAttribute('d')).not.toBe(dBefore);
 
   // One undo restores the pre-delete path (undo clears the selection by design,
-  // so assert the scene truth via the rendered d, then re-select to edit again).
+  // so assert the scene truth via the rendered d, then re-enter edit mode).
   await app.undo();
   await expect(paths(app).first()).toHaveAttribute('d', dBefore ?? '');
-  await app.clickCanvas({ x: 210, y: 130 }); // re-select on the top segment's stroke
+  await app.enterPathEdit({ x: 210, y: 130 }); // D-124 — dblclick back into edit mode
   await expect(anchors(app)).toHaveCount(3);
 
   // Delete down past the 2-anchor floor: the whole element goes.

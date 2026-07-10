@@ -1,4 +1,4 @@
-import { pathBBox } from '@cg/shared-schema';
+import { pathVisualBBox } from '@cg/shared-schema';
 import type {
   AnchorPoint,
   BoxStyle,
@@ -1088,9 +1088,12 @@ function buildPath(element: PathElement, doc: Document): HTMLElement {
   const svg = doc.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('width', '100%');
   svg.setAttribute('height', '100%');
-  // viewBox = the points' bbox + non-uniform fit, so resizing the box (gizmo →
-  // transform.size) rescales the outline without re-baking points (B-022).
-  const bbox = pathBBox(element.points);
+  // B-059/B-062 — viewBox = the points' VISUAL (curve-aware) bbox + non-uniform
+  // fit. Under the size==visualBBox convention this is (0,0,size) — scale 1 — and
+  // ANIMATED size.w/h still stretches the drawing (the wrapper resizes over the
+  // fixed viewBox, unchanged semantics). Legacy content is migrated at ingestion
+  // (`migrateScenePaths` in createRuntime), so this mapping is always conforming.
+  const bbox = pathVisualBBox(element.points, element.closed);
   const n = (v: number): string => String(Math.round(v * 1000) / 1000);
   svg.setAttribute(
     'viewBox',

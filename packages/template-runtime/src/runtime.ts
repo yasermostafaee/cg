@@ -1,6 +1,7 @@
 import {
   activeRangeOf,
   listBoundSequenceIds,
+  migrateScenePaths,
   playoutOf,
   sequenceItemInstanceId,
   sequenceItemTextFieldIds,
@@ -323,6 +324,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
   ensureBaselineCss(doc);
   doc.body.classList.add('cg-pending');
+
+  // B-059/B-062 — legacy paths (pre size==visualBBox convention) are migrated
+  // IN MEMORY at ingestion, so old `.vcg` packages render pixel-identically under
+  // the new viewBox mapping without touching the signed package. Identity for
+  // conforming scenes (the Designer migrates at load, so its streams are no-ops).
+  scene = migrateScenePaths(scene);
 
   const built = buildScene(scene, doc);
   root.appendChild(built.container);

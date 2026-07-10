@@ -67,7 +67,10 @@ interface Aabb {
 }
 
 /** Frame-space AABB of `el`, folding its 4 local corners outward through the static
- *  ancestor container transforms (`ancestors` is outermost→innermost). */
+ *  ancestor container transforms (`ancestors` is outermost→innermost). B-059/B-062
+ *  — a path needs no special box here: under the size==visualBBox model (legacy
+ *  scenes migrated at load) `transform.size` IS the curve-aware visible box, so a
+ *  path whose bézier bulge is in-frame is never wrongly dropped from export. */
 function frameAabb(el: Element, ancestors: readonly Transform[]): Aabb {
   const { w, h } = el.transform.size;
   const corners: readonly [number, number][] = [

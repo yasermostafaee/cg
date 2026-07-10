@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Control } from '../../ui/Control.js';
-import * as s from './AnchorContextMenu.css.js';
+import * as s from '../../ui/ContextMenu.css.js';
 
 export interface AnchorMenuItem {
   label: string;
@@ -17,21 +17,22 @@ interface Props {
 }
 
 const MENU_WIDTH = 148;
-const ITEM_HEIGHT = 28;
+const ITEM_HEIGHT = 26;
 const EDGE = 8;
 
 /**
- * D-123 — the path-anchor context menu (first item: Delete point). Minimal by
- * design: the app has no shared menu primitive (the timeline's LayerContextMenu is
- * bespoke and mouse-only), so this follows that component's established pattern —
- * a fixed full-viewport backdrop (outside click closes; native menu suppressed) +
- * a viewport-clamped `role="menu"` box — and adds the keyboard support a menu
- * needs: items are real `Control` buttons (focus/Enter/Space for free), focus
- * moves to the first item on open, ArrowUp/Down cycle with wrap, and Esc closes
- * via a CAPTURE-phase window listener that stops the event so it never falls
- * through to the canvas Esc handling (deselect / pen exit — the B-037 ownership
- * pattern, same mechanism as PathEditor's capture-phase Delete). A wheel/scroll
- * also closes (the menu would otherwise float over a scrolled-away anchor).
+ * D-123/B-058 — the path-anchor context menu (first item: Delete point). Chrome
+ * comes from the SHARED `ui/ContextMenu.css.ts` (the same classes the timeline
+ * layer menu renders with), so it looks exactly like the app's other right-click
+ * menus; on top of that chrome it keeps the keyboard support a menu needs (which
+ * the mouse-only layer menu lacks): items are real `Control` buttons (focus /
+ * Enter / Space for free), focus moves to the first item on open, ArrowUp/Down
+ * cycle with wrap, and Esc closes via a CAPTURE-phase window listener that stops
+ * the event so it never falls through to the canvas Esc handling (edit-mode
+ * exit / deselect / pen — the B-037 ownership pattern, same mechanism as
+ * PathEditor's capture-phase Delete). A wheel/scroll also closes (the menu would
+ * otherwise float over a scrolled-away anchor); the backdrop closes on outside
+ * pointer-down and suppresses the native menu.
  */
 export function AnchorContextMenu({ x, y, items, onClose }: Props): JSX.Element {
   const firstItemRef = useRef<HTMLButtonElement>(null);
@@ -46,7 +47,7 @@ export function AnchorContextMenu({ x, y, items, onClose }: Props): JSX.Element 
       if (e.key !== 'Escape') return;
       // The menu OWNS this Esc: capture phase runs before the canvas overlay's
       // bubble-phase window handler, and the stop keeps the close from ALSO
-      // deselecting the path or exiting a tool.
+      // exiting point-edit mode or deselecting the path.
       e.preventDefault();
       e.stopImmediatePropagation();
       onClose();

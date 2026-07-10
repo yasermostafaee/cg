@@ -12,7 +12,7 @@ import type {
   TickerElement,
   Transform,
 } from '@cg/shared-schema';
-import { pathBBox } from '@cg/shared-schema';
+import { pathVisualBBox } from '@cg/shared-schema';
 
 /**
  * Default element factories — what we drop on the canvas when the
@@ -265,28 +265,60 @@ export function defaultEllipse(id: string, x: number, y: number): ShapeElement {
 }
 
 /**
- * D-109 — re-derive a path's transform from its points: shift the points so their
- * bounding box starts at the local origin `(0,0)` and move `position` by the same
- * amount (scene-stable — every point keeps its on-screen spot), then set `size` to
- * the bbox. Keeping points in a 0-origin local frame decouples them from
- * `position`, so moving the element (position only) and editing a point (points
- * only) never interfere. Called after every pen/edit gesture; resize does NOT call
- * it (the gizmo changes `size`, the runtime viewBox rescales, points are untouched).
+ * D-109/B-059/B-062 — re-derive a path's transform from its points: shift the
+ * points so their VISUAL (curve-aware) bbox starts at the local origin `(0,0)`,
+ * set `size` to its extents, and compensate `position` so every unchanged point
+ * keeps its rendered scene spot. Keeping points in a 0-origin local frame
+ * decouples them from `position`, so moving the element (position only) and
+ * editing a point (points only) never interfere. Called after every pen/edit
+ * gesture (each PathEditor tick funnels through it); a static W/H resize keeps
+ * the same invariant by BAKING the scale into the points instead
+ * (`bakePathSize`, timeline slice), so a later normalize is a no-op.
  */
 export function normalizePathPoints(el: PathElement): PathElement {
   if (el.points.length === 0) return el;
-  const bbox = pathBBox(el.points);
+  // B-059/B-062 (owner model) — normalize against the VISUAL (curve-aware) bbox:
+  // points live with the visual bbox at (0,0) and `size` == its extents, so the
+  // selection box / Inspector W/H are the visible bounds and a W/H resize (which
+  // bakes the points) is never snapped back by a later normalize.
+  const bbox = pathVisualBBox(el.points, el.closed);
+  const t = el.transform;
+  const size = { w: Math.max(bbox.w, 1), h: Math.max(bbox.h, 1) };
   const points =
     bbox.x === 0 && bbox.y === 0
       ? el.points
       : el.points.map((p) => ({ ...p, x: p.x - bbox.x, y: p.y - bbox.y }));
+  // Normalize is a RENDER-NEUTRAL change of frame — every unchanged point must keep
+  // its rendered scene spot. The renderer maps local -> scene as
+  // `position + A + M·(local − A)` with pivot `A = anchor⊙size` and `M = Scale·Rotate`
+  // (see `localToScene`), and a re-normalize changes BOTH `A` (size tracks the bbox,
+  // so the pivot moves) and the local frame (points shift by `vmin`). Solving
+  // `S'(p − vmin) = S(p)` gives `position' = position + (I − M)(A − A') + M·vmin`,
+  // which reduces to the plain `position += vmin` exactly when rotation = 0 and
+  // scale = 1. Without the `(I − M)` pivot term, dragging one anchor of a ROTATED
+  // path re-projected every OTHER anchor each move tick (probe: 2.07 scene px of
+  // drift per 8 px of bbox growth at 30°).
+  const rad = (t.rotation * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const m = (vx: number, vy: number): { x: number; y: number } => ({
+    x: t.scale.x * (vx * cos - vy * sin),
+    y: t.scale.y * (vx * sin + vy * cos),
+  });
+  const dax = t.anchor.x * (t.size.w - size.w); // A − A'
+  const day = t.anchor.y * (t.size.h - size.h);
+  const md = m(dax, day);
+  const mv = m(bbox.x, bbox.y);
   return {
     ...el,
     points,
     transform: {
-      ...el.transform,
-      position: { x: el.transform.position.x + bbox.x, y: el.transform.position.y + bbox.y },
-      size: { w: Math.max(bbox.w, 1), h: Math.max(bbox.h, 1) },
+      ...t,
+      position: {
+        x: t.position.x + (dax - md.x) + mv.x,
+        y: t.position.y + (day - md.y) + mv.y,
+      },
+      size,
     },
   };
 }

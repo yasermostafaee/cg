@@ -2,7 +2,7 @@ import { test, expect } from './fixtures/designer.js';
 import type { DesignerApp } from './fixtures/designer.js';
 
 /**
- * B-053 / B-054 / B-055 — bézier curves across placement, insertion, and
+ * B-057 / B-056 / B-055 — bézier curves across placement, insertion, and
  * hit-testing. Placement decides corner-vs-smooth at pointer-UP by total SCREEN-px
  * displacement (a click-sized slip stays a corner); a segment click-DRAG inserts a
  * SMOOTH anchor; hit-testing follows the flattened curved outline. Click targets
@@ -17,7 +17,7 @@ async function canvasBox(app: DesignerApp): Promise<{ x: number; y: number }> {
   return box;
 }
 
-/** A human-like click with a 2-px slip between down and up — under the B-053
+/** A human-like click with a 2-px slip between down and up — under the B-057
  *  screen-px guard, so it must place a CORNER anchor. */
 async function slipClick(app: DesignerApp, x: number, y: number): Promise<void> {
   const box = await canvasBox(app);
@@ -42,7 +42,7 @@ async function dragSmooth(
   await app.page.mouse.up();
 }
 
-test('corner after a smooth drag stays a corner — even with click slip (B-053)', async ({
+test('corner after a smooth drag stays a corner — even with click slip (B-057)', async ({
   app,
 }) => {
   await app.newProject('PenCorner');
@@ -61,7 +61,7 @@ test('corner after a smooth drag stays a corner — even with click slip (B-053)
   expect((d?.match(/C /g) ?? []).length).toBe(2);
 });
 
-test('a segment click-DRAG inserts a SMOOTH anchor; a plain click inserts a corner (B-054)', async ({
+test('Ctrl-gated insertion: Ctrl+click = corner, Ctrl+drag = smooth, plain click inert (B-056/D-124)', async ({
   app,
 }) => {
   await app.newProject('PenInsert');
@@ -72,16 +72,23 @@ test('a segment click-DRAG inserts a SMOOTH anchor; a plain click inserts a corn
   await app.page.keyboard.press('Enter'); // open path, 3 corners — d has no C
   expect(await paths(app).first().getAttribute('d')).not.toContain('C ');
 
-  await app.selectTool('Select'); // PathEditor mounts on the selected path
+  await app.enterPathEdit({ x: 210, y: 130 }); // D-124 — dblclick enters edit mode
   await expect(app.page.locator('[data-cg-anchor]')).toHaveCount(3);
 
-  // Plain click on the FIRST segment's midpoint → a corner insert, still no curve.
+  // D-124 — WITHOUT the modifier a segment click does nothing special.
   await app.canvas.click({ position: { x: 210, y: 130 } });
+  await expect(app.page.locator('[data-cg-anchor]')).toHaveCount(3);
+  expect(await paths(app).first().getAttribute('d')).not.toContain('C ');
+
+  // Ctrl+click on the FIRST segment's midpoint → a corner insert, still no curve.
+  await app.canvas.click({ position: { x: 210, y: 130 }, modifiers: ['Control'] });
   await expect(app.page.locator('[data-cg-anchor]')).toHaveCount(4);
   expect(await paths(app).first().getAttribute('d')).not.toContain('C ');
 
-  // Click-DRAG on the SECOND segment's midpoint → a smooth insert, the path curves.
+  // Ctrl+DRAG on the SECOND segment's midpoint → a smooth insert, the path curves.
+  await app.page.keyboard.down('Control');
   await dragSmooth(app, 245, 185, 30, -20);
+  await app.page.keyboard.up('Control');
   await expect(app.page.locator('[data-cg-anchor]')).toHaveCount(5);
   expect(await paths(app).first().getAttribute('d')).toContain('C ');
 });

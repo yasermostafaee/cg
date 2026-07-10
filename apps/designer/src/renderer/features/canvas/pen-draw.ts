@@ -7,7 +7,7 @@ import { pathFromScenePoints } from '../../state/element-defaults.js';
  * D-109 / B-037 — the Pen tool's pointer state machine. A click places a CORNER
  * anchor; a click-drag places a SMOOTH anchor whose two handles mirror the drag
  * (corner vs smooth decided AT POINTER-UP by the total screen-px displacement —
- * B-053, so click jitter never leaves a stray curve);
+ * B-057, so click jitter never leaves a stray curve);
  * clicking the first anchor (within a screen-px threshold) CLOSES the path; Enter /
  * double-click FINISH an open path; Esc CANCELS the draft (removes the created
  * element). The draft renders live as the real path element once it has ≥ 2 anchors
@@ -23,7 +23,7 @@ import { pathFromScenePoints } from '../../state/element-defaults.js';
 /** Screen-px radius around the first anchor that closes the path (shared with the
  *  CanvasOverlay close-affordance so the highlight and the click agree). */
 export const PEN_CLOSE_PX = 12;
-/** B-053 — click-vs-drag guard for anchor placement, in SCREEN px (zoom-independent,
+/** B-057 — click-vs-drag guard for anchor placement, in SCREEN px (zoom-independent,
  *  like the D-122 drag hysteresis): below it the anchor is a CORNER at release. */
 export const PEN_SMOOTH_PX = 3;
 let seq = 0;
@@ -111,7 +111,7 @@ export function penPointerDown(
   commit(false);
 
   // Drag-to-smooth: a drag before pointer-up turns this anchor smooth with mirrored
-  // handles (out = drag vector in scene units, in = its negation). B-053 — corner vs
+  // handles (out = drag vector in scene units, in = its negation). B-057 — corner vs
   // smooth is DECIDED AT POINTER-UP by the total displacement (Illustrator
   // semantics, owner decision 2026-07-08): a click-sized gesture places a CORNER
   // even when jitter briefly crossed the guard mid-hold (the handles preview live

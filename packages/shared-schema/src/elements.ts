@@ -600,6 +600,186 @@ export function pathBBox(points: readonly AnchorPoint[]): {
   return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
 }
 
+/** Evaluate one cubic-bézier component at `t`. */
+function cubicAt(t: number, p0: number, c1: number, c2: number, p3: number): number {
+  const mt = 1 - t;
+  return mt * mt * mt * p0 + 3 * mt * mt * t * c1 + 3 * mt * t * t * c2 + t * t * t * p3;
+}
+
+/**
+ * Interior extremum parameters (0 < t < 1) of one cubic component — the roots of
+ * the derivative `3[(c1−p0) + 2t(c2−2c1+p0) + t²(p3−3c2+3c1−p0)]` (quadratic in t,
+ * linear fallback when the t² coefficient degenerates).
+ */
+function cubicExtremaT(p0: number, c1: number, c2: number, p3: number): number[] {
+  const a = p3 - 3 * c2 + 3 * c1 - p0;
+  const b = 2 * (c2 - 2 * c1 + p0);
+  const c = c1 - p0;
+  const out: number[] = [];
+  if (Math.abs(a) < 1e-12) {
+    if (Math.abs(b) > 1e-12) {
+      const t = -c / b;
+      if (t > 0 && t < 1) out.push(t);
+    }
+    return out;
+  }
+  const disc = b * b - 4 * a * c;
+  if (disc < 0) return out;
+  const s = Math.sqrt(disc);
+  for (const t of [(-b + s) / (2 * a), (-b - s) / (2 * a)]) {
+    if (t > 0 && t < 1) out.push(t);
+  }
+  return out;
+}
+
+/**
+ * B-059 — the axis-aligned bounding box of a path's VISIBLE outline: the union of
+ * each cubic segment's exact bézier extents (endpoints + derivative-root extrema),
+ * using the SAME control-point convention the runtime renders (`c1 = a + a.out`,
+ * `c2 = b + b.in`; a segment is straight only when BOTH handles are absent; a
+ * closed path includes the closing segment). Under the owner-decided model
+ * (2026-07-10) this IS the stored convention: points live with their visual bbox
+ * at local (0,0) and `transform.size` equals its extents (see
+ * {@link migratePathGeometry} for legacy content). Anchors-only input degrades to
+ * exactly `pathBBox`. An empty set is a zero box.
+ */
+export function pathVisualBBox(
+  points: readonly AnchorPoint[],
+  closed: boolean,
+): { x: number; y: number; w: number; h: number } {
+  if (points.length === 0) return { x: 0, y: 0, w: 0, h: 0 };
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const fold = (x: number, y: number): void => {
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  };
+  for (const p of points) fold(p.x, p.y);
+  const segCount = closed ? points.length : points.length - 1;
+  for (let i = 0; i < segCount; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    if (a === undefined || b === undefined) continue;
+    if (a.out === undefined && b.in === undefined) continue; // straight — endpoints suffice
+    const c1x = a.x + (a.out?.x ?? 0);
+    const c1y = a.y + (a.out?.y ?? 0);
+    const c2x = b.x + (b.in?.x ?? 0);
+    const c2y = b.y + (b.in?.y ?? 0);
+    for (const t of cubicExtremaT(a.x, c1x, c2x, b.x)) {
+      fold(cubicAt(t, a.x, c1x, c2x, b.x), cubicAt(t, a.y, c1y, c2y, b.y));
+    }
+    for (const t of cubicExtremaT(a.y, c1y, c2y, b.y)) {
+      fold(cubicAt(t, a.x, c1x, c2x, b.x), cubicAt(t, a.y, c1y, c2y, b.y));
+    }
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
+const MIGRATE_EPS = 1e-6;
+
+/**
+ * B-059/B-062 (owner model, 2026-07-10) — migrate ONE path element from the
+ * legacy D-109 convention (anchors bbox at local (0,0); the render mapped it onto
+ * `transform.size` via the viewBox, so a resize never touched the points) to the
+ * CURRENT convention: the points' VISUAL (curve-aware) bbox sits at local (0,0)
+ * and `transform.size` equals its extents — a resize scales the coordinates like
+ * a rectangle's. Pure and deterministic, so it runs in BOTH the Designer (scene
+ * load) and the runtime (scene ingestion — legacy `.vcg` packages render
+ * pixel-identically without rewriting the signed package). Conforming elements
+ * return unchanged (identity).
+ *
+ * The bake: scale points + handle vectors by the legacy render factor
+ * `f = size / max(anchorExtent, 1)` per axis, re-anchor to the new visual bbox,
+ * shift `position` by the visual offset, and set `size` to the visual extents.
+ * Fidelity compensations: `size.w/h` keyframe values scale by the constant
+ * per-axis ratio and `position.x/y` keyframe values shift by the constant delta
+ * (both exact); a STATIC rotation/scale keeps its rendered geometry via a pivot
+ * correction `(I − S·R)(pivotOld − pivotNew)` (the anchor is a box FRACTION, so a
+ * bigger box moves the pivot). Known corner: an ANIMATED rotation combined with a
+ * legacy-resized curved path cannot be compensated with independent tracks — the
+ * pivot correction uses the static rotation (documented in the change design).
+ */
+export function migratePathGeometry(el: PathElement): PathElement {
+  const v0 = pathVisualBBox(el.points, el.closed);
+  const { size, position, rotation, anchor, scale } = el.transform;
+  if (
+    Math.abs(v0.x) < MIGRATE_EPS &&
+    Math.abs(v0.y) < MIGRATE_EPS &&
+    Math.abs(size.w - Math.max(v0.w, 1)) < MIGRATE_EPS &&
+    Math.abs(size.h - Math.max(v0.h, 1)) < MIGRATE_EPS
+  ) {
+    return el; // already conforming
+  }
+  const a = pathBBox(el.points);
+  const fx = size.w / Math.max(a.w, 1);
+  const fy = size.h / Math.max(a.h, 1);
+  const scaled: AnchorPoint[] = el.points.map((p) => ({
+    ...p,
+    x: (p.x - a.x) * fx,
+    y: (p.y - a.y) * fy,
+    ...(p.in !== undefined ? { in: { x: p.in.x * fx, y: p.in.y * fy } } : {}),
+    ...(p.out !== undefined ? { out: { x: p.out.x * fx, y: p.out.y * fy } } : {}),
+  }));
+  const v = pathVisualBBox(scaled, el.closed);
+  const points: AnchorPoint[] = scaled.map((p) => ({ ...p, x: p.x - v.x, y: p.y - v.y }));
+  const newSize = { w: Math.max(v.w, 1), h: Math.max(v.h, 1) };
+  // Unrotated fidelity: legacy rendered the scaled drawing's anchor-origin at
+  // `position`, so the visual min sat at position + v.min — the new origin.
+  let pos = { x: position.x + v.x, y: position.y + v.y };
+  // Pivot correction for a static rotation/scale about the anchor fraction.
+  if (rotation !== 0 || scale.x !== 1 || scale.y !== 1) {
+    const pivO = { x: position.x + anchor.x * size.w, y: position.y + anchor.y * size.h };
+    const pivN = { x: pos.x + anchor.x * newSize.w, y: pos.y + anchor.y * newSize.h };
+    const dx = pivO.x - pivN.x;
+    const dy = pivO.y - pivN.y;
+    const rad = (rotation * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    // M = S·R (the renderer's scale(sx,sy) rotate(r) order): M·d.
+    const mdx = scale.x * (dx * cos - dy * sin);
+    const mdy = scale.y * (dx * sin + dy * cos);
+    pos = { x: pos.x + (dx - mdx), y: pos.y + (dy - mdy) };
+  }
+  // Track compensation: size values scale by the ratio; position values shift by
+  // the same constant delta the base position took.
+  let animation = el.animation;
+  if (animation !== undefined) {
+    const ratioW = newSize.w / size.w;
+    const ratioH = newSize.h / size.h;
+    const dPosX = pos.x - position.x;
+    const dPosY = pos.y - position.y;
+    const tracks = { ...animation.tracks };
+    const mapTrack = (
+      prop: 'size.w' | 'size.h' | 'position.x' | 'position.y',
+      fn: (v: number) => number,
+    ): void => {
+      const track = tracks[prop];
+      if (track === undefined) return;
+      tracks[prop] = {
+        ...track,
+        keyframes: track.keyframes.map((k) =>
+          typeof k.value === 'number' ? { ...k, value: fn(k.value) } : k,
+        ),
+      };
+    };
+    mapTrack('size.w', (n) => n * ratioW);
+    mapTrack('size.h', (n) => n * ratioH);
+    mapTrack('position.x', (n) => n + dPosX);
+    mapTrack('position.y', (n) => n + dPosY);
+    animation = { ...animation, tracks };
+  }
+  return {
+    ...el,
+    points,
+    ...(animation !== undefined ? { animation } : {}),
+    transform: { ...el.transform, position: pos, size: newSize },
+  };
+}
+
 /** Lottie animation element. */
 export const LottieElementSchema = ElementBaseSchema.extend({
   type: z.literal('lottie'),

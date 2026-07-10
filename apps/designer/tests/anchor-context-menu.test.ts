@@ -159,6 +159,71 @@ describe('anchor context menu (D-123)', () => {
     expect(livePath()?.points).toHaveLength(3);
   });
 
+  it('right-click a SEGMENT opens Add point / Add curve point; both insert at the curve (Issue D)', () => {
+    render(
+      seedPath([
+        ['a', 0, 0],
+        ['b', 100, 0],
+        ['c', 50, 100],
+      ]),
+    );
+    const seg = document.querySelector('[data-cg-segment="0"]');
+    expect(seg).not.toBeNull();
+    act(() =>
+      seg!.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          clientX: 50,
+          clientY: 0,
+        }),
+      ),
+    );
+    expect(menu()).not.toBeNull();
+    const addCorner = document.body.querySelector<HTMLButtonElement>(
+      'button[role="menuitem"][aria-label="Add point"]',
+    );
+    const addSmooth = document.body.querySelector<HTMLButtonElement>(
+      'button[role="menuitem"][aria-label="Add curve point"]',
+    );
+    expect(addCorner).not.toBeNull();
+    expect(addSmooth).not.toBeNull();
+
+    act(() => addCorner!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    let el = livePath()!;
+    expect(el.points).toHaveLength(4); // corner inserted into segment 0
+    const inserted = el.points[1]!;
+    expect(inserted.smooth).toBe(false);
+    expect(inserted.in).toBeUndefined();
+
+    // Again with the smooth option on the (new) first segment. Re-render with the
+    // FRESH element first — in the app CanvasOverlay re-renders PathEditor after
+    // every store update; this harness must do the same or the second insert
+    // would work from a stale 3-point prop.
+    act(() => root!.render(createElement(PathEditor, { element: livePath()!, scale: 1 })));
+    act(() =>
+      document.querySelector('[data-cg-segment="0"]')!.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          clientX: 20,
+          clientY: 0,
+        }),
+      ),
+    );
+    act(() =>
+      document.body
+        .querySelector<HTMLButtonElement>('button[role="menuitem"][aria-label="Add curve point"]')!
+        .dispatchEvent(new MouseEvent('click', { bubbles: true })),
+    );
+    el = livePath()!;
+    expect(el.points).toHaveLength(5);
+    const smooth = el.points.find((p) => p.smooth && p.in !== undefined && p.out !== undefined);
+    expect(smooth).toBeDefined(); // tangent-aligned mirrored handles seeded
+    expect(smooth?.in?.x).toBeCloseTo(-(smooth?.out?.x ?? 0), 9);
+    expect(smooth?.in?.y).toBeCloseTo(-(smooth?.out?.y ?? 0), 9);
+  });
+
   it('ArrowDown keeps focus cycling within the menu (single item wraps to itself)', () => {
     render(
       seedPath([
