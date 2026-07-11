@@ -91,6 +91,8 @@ export type TemplateServeInfo = z.infer<typeof TemplateServeInfoSchema>;
 /**
  * R-010 — apply a new `ConnectionConfig` to the RUNNING bridge. Refused with
  * `reason: 'on-air-block'` while anything is on air or unsettled;
+ * `'apply-in-progress'` when another apply is still executing (applies are
+ * SERIALIZED — two can never interleave their teardown/rebuild);
  * `'apply-failed'` only for the defined degraded case (template serve could
  * not bind even after the loopback retry — sessions still run on the new
  * config). An unreachable host is NOT an error: the apply succeeds and
@@ -101,7 +103,7 @@ export const ConnectionsSetConfigChannel = defineChannel(
   ConnectionConfigSchema,
   z.object({
     ok: z.boolean(),
-    reason: z.enum(['on-air-block', 'apply-failed']).optional(),
+    reason: z.enum(['on-air-block', 'apply-in-progress', 'apply-failed']).optional(),
     message: z.string().optional(),
     templateServe: TemplateServeInfoSchema.optional(),
   }),

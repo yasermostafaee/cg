@@ -139,7 +139,9 @@ export class MockRuntime {
    */
   setConfig(config: ConnectionConfig): {
     ok: boolean;
-    reason?: 'on-air-block' | 'apply-failed';
+    // 'apply-in-progress' exists for parity with the serialized bridge apply
+    // (fix-setconfig-serve-restart); the synchronous mock can never emit it.
+    reason?: 'on-air-block' | 'apply-in-progress' | 'apply-failed';
     message?: string;
     templateServe?: { serveHost: string; port: number; exposed: boolean };
   } {
