@@ -680,6 +680,11 @@ declared server's locality exactly like the template serve path (loopback
 host → loopback bind; remote host → routable bind), so a remote server's
 confirmations arrive.
 
+Applies SHALL be SERIALIZED: at most one `set-config` executes at a time,
+and a concurrent request is refused loudly (`reason: 'apply-in-progress'`)
+with nothing changed — two applies can never interleave their
+teardown/rebuild.
+
 Reconfiguration SHALL be REFUSED (bridge-authoritative) while anything is on
 air or unsettled: any stack item with status `playing`, `on-air`, `updating`,
 `exiting`, or `unconfirmed`, or with a pending intent, blocks the switch with
@@ -693,6 +698,16 @@ error (sessions retry with backoff and health honestly reports
 retry, the bridge reports `apply-failed` and remains running on the new
 config in a defined, non-crashing state. Every applied config SHALL be
 published to all connected clients (`connections.config-changed`).
+
+Template-serve INTEGRITY across applies: the serve teardown SHALL be bounded
+(held client connections — e.g. CasparCG CEF keep-alive or preconnect
+sockets — are force-destroyed, on every Node version), and whenever serving
+has been started for the process, a completed apply SHALL leave the template
+server genuinely listening or SHALL report `apply-failed` — never `ok` with
+the serve down. A load issued while serving is intended but down SHALL be
+refused loudly (`template-serve-down` on the item), and the bridge SHALL
+NEVER emit a bare template id as the `CG ADD` argument in that state (an
+unservable bare id is a silent 404 on real CasparCG).
 
 The stack list SHALL be clearable in one operation (`stack.remove-all`): every
 item is OUTed and REMOVEd with the per-item CLEAR-destroys semantics, in
@@ -720,6 +735,23 @@ reconfiguration.
   **THEN** the apply succeeds, the sessions enter their normal
   reconnect/backoff loop, health reports the disconnected state, and the
   bridge neither crashes nor drops WS clients
+
+#### Scenario: Concurrent applies cannot interleave
+
+- **WHEN** a second `set-config` arrives while one is executing **THEN** it
+  is refused with `reason: 'apply-in-progress'` and nothing changes, and a
+  subsequent sequential apply succeeds with uncorrupted sessions and a
+  listening template serve
+
+#### Scenario: An apply cycle never strands the template serve silently
+
+- **WHEN** any apply cycle completes (including one whose predecessor was
+  interrupted or slow) and serving was started for this process **THEN** the
+  template server is genuinely listening, or the apply reported
+  `apply-failed` — never `ok` with the serve down
+- **WHEN** a Load is issued while serving is intended but down **THEN** the
+  load is refused with a clear `template-serve-down` reason and NO `CG ADD`
+  reaches the wire (never a silent bare-id 404)
 
 ### Requirement: The connection config persists across bridge restarts
 

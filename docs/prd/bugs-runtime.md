@@ -11,6 +11,44 @@ per-bug loop, see [bugs.md](bugs.md).
 
 ---
 
+## [x] B-064 — R-010 regression: after an OSC-port change Apply cycle, the template server stays down and every Load ships a bare-id 404 ⟨priority: high⟩ — fixed via `fix-setconfig-serve-restart`, archived
+
+<!-- change: openspec/changes/archive/2026-07-11-fix-setconfig-serve-restart/ -->
+
+> **CLOSED — fixed + mock/integration-validated 2026-07-11** (operator repro
+> was live on CasparCG 2.5.0 `69e8ad5`; the fix is mock-verified with the
+> operator's own live smoke optional). **Repro:** SERVERS → change the OSC
+> port to a wrong value → Apply (UI times out at 8 s) → change it back →
+> Apply → every Load fails; the caspar log shows the bridge sending the BARE
+> template id (`CG 1-60 ADD 0 "362b1285-…" 0 "{}"` → File not found → 404
+> CG ADD FAILED). **Root cause — ONE flaw, two failure modes:** `setConfig`
+> was not serialized. The first Apply wedged inside
+> `TemplateHttpServer.stop()` (`server.close()` waits on held CEF keep-alive/
+> preconnect sockets; reaping is Node-version-dependent), which nulls the
+> server immediately, so `listening === false` for the whole wedge; the
+> second Apply ran CONCURRENTLY, read the transient `wasServing = false`,
+> SKIPPED the serve restart, and returned ok — serve down forever while
+> sends work (mode A, the operator's log). Interleaved applies could also
+> leave the adapter holding already-stopped sessions — every send dead with
+> zero wire traffic (mode B, demonstrated in-test). Deeper contract bug:
+> `#sendAdd`'s `listening ? url : bare id` fallback silently shipped an
+> unservable ADD — R-010's "fail loudly, never a silent bare-id" was never
+> enforced. **Fix (four parts):** (1) `setConfig` serialized via
+> `#applyInFlight` — a concurrent apply refuses loudly
+> (`'apply-in-progress'`, new response-enum value, shown by the panel);
+> (2) bounded forceful serve stop — the server tracks sockets and destroys
+> them (+ `closeAllConnections?.()`), teardown bounded on every Node/CEF
+> combination; (3) `#servingDesired` (set once by `startServing()`) replaces
+> the transient `wasServing` read — the serve always restarts when intended,
+> and an apply can never return ok with it down (`apply-failed` otherwise);
+> (4) the loud bare-id contract — serving desired but down ⇒ the load acks
+> `'template-serve-down'` and NOTHING reaches the wire (bare id survives
+> only the never-served unit path). **Regression suite** (2 of 4 verified
+> failing pre-fix): concurrent applies (pre-fix both returned ok), the
+> injected-failing-server bare-id contract, CEF-wedge stop() boundedness
+> (idle + mid-request + preconnect sockets → <1 s), and the sequential-cycle
+> baseline.
+
 ## [x] B-038 — LIVE bridge renders nothing: CG ADD references the template by UUID and sends empty fields ⟨priority: high⟩
 
 > **CLOSED — hardware-validated.** The Runtime is now on-air-capable. Verified live
