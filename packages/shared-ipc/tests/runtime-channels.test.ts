@@ -175,6 +175,14 @@ describe('connections.set-config + stack.remove-all channel schemas (R-010)', ()
         templateServe: { serveHost: '192.168.1.10', port: 5290, exposed: true },
       }),
     ).toMatchObject({ templateServe: { exposed: true } });
+    // Serialized applies: a concurrent request is refused with its own reason.
+    expect(
+      ConnectionsSetConfigChannel.response.parse({
+        ok: false,
+        reason: 'apply-in-progress',
+        message: 'another apply is in progress — retry in a moment',
+      }),
+    ).toMatchObject({ reason: 'apply-in-progress' });
     expect(() =>
       ConnectionsSetConfigChannel.response.parse({ ok: false, reason: 'bogus' }),
     ).toThrow();

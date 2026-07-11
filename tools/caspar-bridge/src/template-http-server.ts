@@ -1,4 +1,5 @@
 import * as http from 'node:http';
+import type * as net from 'node:net';
 import * as os from 'node:os';
 
 /** Where/how the template HTTP server binds + the host CasparCG uses to reach it. */
@@ -74,6 +75,14 @@ export class TemplateHttpServer {
   #port = 0;
   #serveHost = '127.0.0.1';
   readonly #getHtml: (templateId: string) => string | null;
+  /**
+   * Every live client socket (fix-setconfig-serve-restart): CasparCG's CEF
+   * holds keep-alive / preconnect / mid-request sockets that `server.close()`
+   * waits on (Node-version-dependent reaping — Node <19 never reaps them).
+   * `stop()` force-destroys these so teardown is BOUNDED on every Node/CEF
+   * combination; an unbounded stop wedged R-010's setConfig live.
+   */
+  readonly #sockets = new Set<net.Socket>();
 
   constructor(getHtml: (templateId: string) => string | null) {
     this.#getHtml = getHtml;
@@ -85,6 +94,12 @@ export class TemplateHttpServer {
     this.#serveHost = options.serveHost;
     const server = http.createServer((req, res) => {
       this.#handle(req, res);
+    });
+    server.on('connection', (socket) => {
+      this.#sockets.add(socket);
+      socket.on('close', () => {
+        this.#sockets.delete(socket);
+      });
     });
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);
@@ -139,6 +154,13 @@ export class TemplateHttpServer {
     const server = this.#server;
     this.#server = null;
     if (server === null) return;
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    const closed = new Promise<void>((resolve) => server.close(() => resolve()));
+    // Bounded teardown (fix-setconfig-serve-restart): `close()` alone waits
+    // for held client connections — force-destroy them so `stop()` resolves
+    // promptly regardless of what CEF (or any client) is holding open.
+    (server as { closeAllConnections?: () => void }).closeAllConnections?.();
+    for (const socket of this.#sockets) socket.destroy();
+    this.#sockets.clear();
+    await closed;
   }
 }

@@ -176,10 +176,21 @@ export class CasparRuntime {
   // self-contained HTML, keyed by id. B-038 Phase 3 — the HTTP server serves that
   // HTML at `/template/<id>`, so `CG ADD` can reference a real, loadable URL.
   readonly #templates = new TemplateRegistry();
-  readonly #templateServer = new TemplateHttpServer((id) => this.#templates.html(id));
+  readonly #templateServer: TemplateHttpServer;
   #serveOptions: TemplateServeOptions;
   /** Kept for `setConfig`'s serve re-derivation (explicit overrides keep winning). */
   readonly #serveOverride: TemplateServeOverride;
+  /**
+   * fix-setconfig-serve-restart — TRUE once `startServing()` has run for
+   * this process: serving is INTENDED, so every apply must leave the
+   * template server genuinely listening (or say `apply-failed`), and a load
+   * while it is down must fail loudly — never ship a bare id. Replaces the
+   * old transient `listening` snapshot, which read FALSE mid-teardown and
+   * let a concurrent apply skip the restart entirely.
+   */
+  #servingDesired = false;
+  /** fix-setconfig-serve-restart — applies are SERIALIZED; see setConfig(). */
+  #applyInFlight = false;
   #lock: LockState = { engaged: false };
   #lockPin: string | null = null;
   #audit: AuditEntry[] = [];
@@ -192,11 +203,19 @@ export class CasparRuntime {
   constructor(
     config: ConnectionConfig,
     serveOverride: TemplateServeOverride = {},
-    options: { intentTimeoutMs?: number; sweepMs?: number; occupancyStaleMs?: number } = {},
+    options: {
+      intentTimeoutMs?: number;
+      sweepMs?: number;
+      occupancyStaleMs?: number;
+      /** TEST-ONLY seam: inject a template server (e.g. one whose start() fails). */
+      templateServer?: TemplateHttpServer;
+    } = {},
   ) {
     this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
+    this.#templateServer =
+      options.templateServer ?? new TemplateHttpServer((id) => this.#templates.html(id));
     this.#config = config;
     this.#serveOverride = serveOverride;
     // B-038 Phase 3 — serve loopback when CasparCG is local; an opt-in routable
@@ -297,6 +316,10 @@ export class CasparRuntime {
    * served URL instead of the bare template id.
    */
   async startServing(): Promise<void> {
+    // Serving is now INTENDED for the life of the process — every later
+    // apply must restart it (or fail loudly), and #sendAdd must never fall
+    // back to a bare id (fix-setconfig-serve-restart).
+    this.#servingDesired = true;
     await this.#templateServer.start(this.#serveOptions);
   }
 
@@ -611,6 +634,27 @@ export class CasparRuntime {
    * expose it.
    */
   async setConfig(next: ConnectionConfig): Promise<SetConfigResult> {
+    // 0. SERIALIZE (fix-setconfig-serve-restart) — two applies interleaving
+    //    was the regression's root cause: the second read the mid-teardown
+    //    `listening=false`, skipped the serve restart, and could leave the
+    //    adapter holding already-stopped sessions. At most one apply runs;
+    //    a concurrent request is refused loudly with nothing changed.
+    if (this.#applyInFlight) {
+      return {
+        ok: false,
+        reason: 'apply-in-progress',
+        message: 'Another apply is still in progress — wait for it and retry.',
+      };
+    }
+    this.#applyInFlight = true;
+    try {
+      return await this.#applyConfig(next);
+    } finally {
+      this.#applyInFlight = false;
+    }
+  }
+
+  async #applyConfig(next: ConnectionConfig): Promise<SetConfigResult> {
     // 1. On-air gate — bridge-authoritative (the UI mirrors it; races lose here).
     const unsettled = this.#onAirCount();
     if (unsettled > 0) {
@@ -629,8 +673,8 @@ export class CasparRuntime {
 
     // 3. Teardown: old sessions (rejects their queued commands — safe,
     //    nothing is on air), the old adapter (its listeners die with the old
-    //    objects), and the template server if it was serving.
-    const wasServing = this.#templateServer.listening;
+    //    objects), and the template server (bounded: held CEF sockets are
+    //    force-destroyed in stop()).
     await Promise.all([this.#sessions.A.stop(), this.#sessions.B?.stop() ?? Promise.resolve()]);
     await this.#templateServer.stop();
 
@@ -663,9 +707,13 @@ export class CasparRuntime {
     //    realistically fallible step (bind conflict). Retry ONCE on safe
     //    loopback-ephemeral options; if that also fails, land on the new
     //    config with serving down (loads fail loudly via the serve guards).
+    //    fix-setconfig-serve-restart: gate on the PROCESS-LEVEL intent
+    //    (#servingDesired, set once by startServing()) — never on the
+    //    transient `listening`, which reads false during any in-flight
+    //    teardown and previously let a concurrent apply skip this step.
     this.#serveOptions = deriveServeOptions(next.servers.A.host, this.#serveOverride);
     let serveError: string | null = null;
-    if (wasServing) {
+    if (this.#servingDesired) {
       try {
         await this.#templateServer.start(this.#serveOptions);
       } catch {
@@ -675,6 +723,11 @@ export class CasparRuntime {
         } catch (retryErr) {
           serveError = retryErr instanceof Error ? retryErr.message : String(retryErr);
         }
+      }
+      // Belt-and-braces: whatever the path above did, an apply may never
+      // conclude ok with serving desired but down.
+      if (serveError === null && !this.#templateServer.listening) {
+        serveError = 'template server is not listening after restart';
       }
     }
 
@@ -966,6 +1019,15 @@ export class CasparRuntime {
     fields: FieldValues,
     seq: number,
   ): Promise<boolean> {
+    // fix-setconfig-serve-restart — the loud-failure contract: when serving
+    // is INTENDED for this process but the server is down, a load must fail
+    // with a clear reason (mirroring the unknown-template guard) — NEVER
+    // ship a bare template id (real CasparCG 404s it: a silent blank ADD).
+    // The bare-id fallback survives ONLY for the never-served unit-test path.
+    if (!this.#templateServer.listening && this.#servingDesired) {
+      this.#reconciler.applyAck(seq, false, 'template-serve-down');
+      return false;
+    }
     const templateArg = this.#templateServer.listening
       ? this.#templateServer.urlFor(templateId)
       : templateId;
