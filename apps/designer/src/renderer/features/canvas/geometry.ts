@@ -100,25 +100,97 @@ export function localToScene(t: BoxTransform, lx: number, ly: number): { x: numb
 }
 
 /**
+ * A rectangle in element-LOCAL coordinates — an offset (possibly non-zero-origin)
+ * box inside the element's unscaled frame. `{0, 0, size.w, size.h}` is the plain
+ * element box; D-110 uses an offset rect for a keyframed path's LIVE morph bounds.
+ */
+export interface LocalRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** The element's own box as a {@link LocalRect}. */
+export function boxRect(t: BoxTransform): LocalRect {
+  return { x: 0, y: 0, w: t.size.w, h: t.size.h };
+}
+
+/** Local coords of a named corner of a {@link LocalRect}. */
+export function rectCorner(c: Corner, r: LocalRect): { x: number; y: number } {
+  switch (c) {
+    case 'tl':
+      return { x: r.x, y: r.y };
+    case 'tr':
+      return { x: r.x + r.w, y: r.y };
+    case 'bl':
+      return { x: r.x, y: r.y + r.h };
+    case 'br':
+      return { x: r.x + r.w, y: r.y + r.h };
+  }
+}
+
+/** Local grab point for each handle on a {@link LocalRect} (corner, or edge midpoint). */
+export function rectHandleLocal(handle: Handle, r: LocalRect): { x: number; y: number } {
+  switch (handle) {
+    case 'r':
+      return { x: r.x + r.w, y: r.y + r.h / 2 };
+    case 'l':
+      return { x: r.x, y: r.y + r.h / 2 };
+    case 't':
+      return { x: r.x + r.w / 2, y: r.y };
+    case 'b':
+      return { x: r.x + r.w / 2, y: r.y + r.h };
+    default:
+      return rectCorner(handle, r);
+  }
+}
+
+/**
  * Compute the new `{position, size}` for a resize: the pointer (in scene coords)
  * grabs `handle`; the opposite corner stays put. Works in the element's rotated
  * frame — project the pointer→fixed-corner vector onto the element's local axes to
  * get the new width/height, clamp to {@link MIN_SIZE}, then recompute the top-left
  * so the fixed corner doesn't move. Single-axis edge handles keep the other size.
+ * Delegates to {@link computeRectResize} over the element's own box.
  */
 export function computeResize(
   t: BoxTransform,
   handle: Handle,
   pointerScene: { x: number; y: number },
 ): { position: { x: number; y: number }; size: { w: number; h: number } } {
+  const r = computeRectResize(t, boxRect(t), handle, pointerScene);
+  return { position: r.position, size: r.size };
+}
+
+/**
+ * D-110 — the resize math generalized to an arbitrary LOCAL rect (a keyframed
+ * path's LIVE morph bounds; `boxRect(t)` reproduces {@link computeResize}
+ * exactly). The pointer projects onto the rotated local axes against the FIXED
+ * rect corner → new rect extents (clamped to {@link MIN_SIZE}) → per-axis ratios
+ * against the starting rect. The commit model is a uniform about-the-local-origin
+ * scale (the path bake / the box resize both are), so:
+ *   - `size` = the element's base size × ratio (what `size.w/h` should commit);
+ *   - `position` compensates so the FIXED rect corner stays put under the
+ *     post-scale pivot (`anchor⊙size'`) — correct under rotation + element scale.
+ */
+export function computeRectResize(
+  t: BoxTransform,
+  rect: LocalRect,
+  handle: Handle,
+  pointerScene: { x: number; y: number },
+): {
+  position: { x: number; y: number };
+  size: { w: number; h: number };
+  ratioW: number;
+  ratioH: number;
+} {
   const { size, rotation, anchor, scale } = t;
-  const w0 = size.w;
-  const h0 = size.h;
   const rad = (rotation * Math.PI) / 180;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
   const cfg = RESIZE_CFG[handle];
-  const fc = cornerLocal(cfg.fixed, w0, h0);
+  const fc = rectCorner(cfg.fixed, rect);
   const fixedScene = localToScene(t, fc.x, fc.y);
   // Element-local unit axes expressed in scene space.
   const ux = { x: cos, y: sin };
@@ -127,20 +199,26 @@ export function computeResize(
   // size delta is measured in the element's OWN units — `Δscene = Scale·Rotate·Δlocal`.
   const vx = (pointerScene.x - fixedScene.x) / scale.x;
   const vy = (pointerScene.y - fixedScene.y) / scale.y;
-  const wNew = cfg.freeW ? Math.max(MIN_SIZE, Math.abs(vx * ux.x + vy * ux.y)) : w0;
-  const hNew = cfg.freeH ? Math.max(MIN_SIZE, Math.abs(vx * uy.x + vy * uy.y)) : h0;
-  // Keep the fixed corner anchored: solve for the top-left given the new size. The
-  // re-anchoring offset is rotated THEN scaled (scene axes), mirroring `localToScene`.
-  const qf = cornerLocal(cfg.fixed, wNew, hNew);
-  const pvx = anchor.x * wNew;
-  const pvy = anchor.y * hNew;
+  const wNew = cfg.freeW ? Math.max(MIN_SIZE, Math.abs(vx * ux.x + vy * ux.y)) : rect.w;
+  const hNew = cfg.freeH ? Math.max(MIN_SIZE, Math.abs(vx * uy.x + vy * uy.y)) : rect.h;
+  const ratioW = wNew / Math.max(rect.w, 1e-6);
+  const ratioH = hNew / Math.max(rect.h, 1e-6);
+  const sizeNew = { w: size.w * ratioW, h: size.h * ratioH };
+  // Keep the fixed rect corner anchored: after the about-origin scale it sits at
+  // `fc × ratio`; solve for the position under the NEW pivot. The re-anchoring
+  // offset is rotated THEN scaled (scene axes), mirroring `localToScene`.
+  const qf = { x: fc.x * ratioW, y: fc.y * ratioH };
+  const pvx = anchor.x * sizeNew.w;
+  const pvy = anchor.y * sizeNew.h;
   const ro = rot(qf.x - pvx, qf.y - pvy, cos, sin);
   return {
     position: {
       x: fixedScene.x - pvx - scale.x * ro.x,
       y: fixedScene.y - pvy - scale.y * ro.y,
     },
-    size: { w: wNew, h: hNew },
+    size: sizeNew,
+    ratioW,
+    ratioH,
   };
 }
 
@@ -185,17 +263,30 @@ export function gizmoCorners(
   t: BoxTransform,
   zoom: number,
 ): { tl: ScreenPoint; tr: ScreenPoint; bl: ScreenPoint; br: ScreenPoint; center: ScreenPoint } {
-  const { w, h } = t.size;
+  return gizmoCornersOfRect(t, boxRect(t), zoom);
+}
+
+/**
+ * D-110 — {@link gizmoCorners} generalized to an arbitrary LOCAL rect: projects the
+ * rect's corners through the SAME `Scale·Rotate about anchor` map (the pivot stays
+ * `anchor⊙size` — the true CSS transform-origin — regardless of the rect), so a
+ * keyframed path's LIVE morph bounds compose correctly with rotation + scale.
+ */
+export function gizmoCornersOfRect(
+  t: BoxTransform,
+  rect: LocalRect,
+  zoom: number,
+): { tl: ScreenPoint; tr: ScreenPoint; bl: ScreenPoint; br: ScreenPoint; center: ScreenPoint } {
   const at = (lx: number, ly: number): ScreenPoint => {
     const p = localToScene(t, lx, ly);
     return { x: p.x * zoom, y: p.y * zoom };
   };
   return {
-    tl: at(0, 0),
-    tr: at(w, 0),
-    bl: at(0, h),
-    br: at(w, h),
-    center: at(w / 2, h / 2),
+    tl: at(rect.x, rect.y),
+    tr: at(rect.x + rect.w, rect.y),
+    bl: at(rect.x, rect.y + rect.h),
+    br: at(rect.x + rect.w, rect.y + rect.h),
+    center: at(rect.x + rect.w / 2, rect.y + rect.h / 2),
   };
 }
 

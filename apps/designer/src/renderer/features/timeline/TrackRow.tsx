@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AnimatableProperty, Element, Keyframe } from '@cg/shared-schema';
+import {
+  isPathKeyframeValue,
+  type AnimatableProperty,
+  type Element,
+  type Keyframe,
+  type KeyframeValue,
+} from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { RealtimeNumberInput } from '../inspector/controls.js';
@@ -359,11 +365,21 @@ function ValueCell({
   ariaLabel,
   onCommit,
 }: {
-  value: number | string;
+  value: KeyframeValue;
   unit?: string | undefined;
   ariaLabel: string;
   onCommit: (next: number | string) => void;
 }): JSX.Element {
+  // D-110 — a path snapshot has no inline-editable scalar; the value column
+  // shows the anchor count read-only (edits happen on the canvas overlay).
+  if (isPathKeyframeValue(value)) {
+    return (
+      <span className={s.valueUnitWrap} aria-label={ariaLabel}>
+        {value.points.length}
+        <span className="cg-unit">pts</span>
+      </span>
+    );
+  }
   if (typeof value === 'string') {
     const hex = value.startsWith('#') ? value : `#${value}`;
     const hexLabel = hex.replace(/^#/, '').toUpperCase();
@@ -414,7 +430,7 @@ function ValueCell({
 }
 
 /** Display = stored × factor (so scale / opacity store 0–1, show 0–100). */
-function toDisplay(v: number | string, factor: number | undefined): number | string {
+function toDisplay(v: KeyframeValue, factor: number | undefined): KeyframeValue {
   return typeof v === 'number' ? Number((v * (factor ?? 1)).toFixed(4)) : v;
 }
 function fromDisplay(v: number, factor: number | undefined): number {

@@ -38,18 +38,23 @@ ElementAnimation
 
 | Type                 | Shape / contract                                                                                                                                                          |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Keyframe`           | `frame` (int ≥ 0), `value` (number **or** `#RRGGBB[AA]`), `easing`, optional custom `bezier`, optional stable `id`.                                                       |
+| `Keyframe`           | `frame` (int ≥ 0), `value` (number, `#RRGGBB[AA]`, **or** a D-110 path snapshot), `easing`, optional custom `bezier`, optional stable `id`.                               |
 | `Easing`             | `linear · step · ease-in · ease-out · ease-in-out` — the keyframe's **outgoing** curve (per-keyframe, so adjacent points can differ).                                     |
 | `BezierEasing`       | `[x1,y1,x2,y2]` CSS `cubic-bezier()` form (P0=(0,0), P3=(1,1)). When present it **overrides** the named `easing` (except `step`, which snaps).                            |
 | `Track`              | `keyframes: Keyframe[]` (`.min(1)`); frames are kept **strictly ascending** by the editor (the runtime stable-sorts and Designer's preflight surfaces violations).        |
 | `AnimatableProperty` | The enum of property paths the runtime can write (transform/opacity + D-010 numeric styles + colours). **The contract between schema, timeline UI, and runtime applier.** |
 | `FrameRange`         | Scene-level `{ in, out }` — the playhead loops `in → out`; the dock sizes its ruler from it.                                                                              |
 
-**Value space is deliberately narrow** — numbers and hex colours only. Booleans,
-asset ids and select-strings don't interpolate (a toggle is a `step`-eased 0/1
-track). Two keyframes may share a `frame` (an instant "step"): the stable `id`
-lets the editor track and stack them; the runtime sorts by frame and jumps from
-the first value to the second.
+**Value space is deliberately narrow** — numbers and hex colours, plus ONE
+structured variant: the D-110 **path snapshot** (`{ kind: 'path', points }`,
+`PathKeyframeValueSchema` in `path-points.ts`) carried only by the `path`
+property. It interpolates per anchor by stable id through the schema's
+`lerpPathSnapshot` — the single shared implementation the runtime evaluator and
+this feature's display mirror both call. Booleans, asset ids and select-strings
+still don't interpolate (a toggle is a `step`-eased 0/1 track). Two keyframes may
+share a `frame` (an instant "step"): the stable `id` lets the editor track and
+stack them; the runtime sorts by frame and jumps from the first value to the
+second.
 
 `animation.ts` also exports `cubicBezierEase(p, t)` — the Newton-Raphson +
 bisection solver browsers use for CSS `cubic-bezier()`. It is the **single bézier
@@ -118,11 +123,15 @@ never divides by zero.
 ### Keyframe authoring — diamond, drag, stack, select
 
 - **Add via the diamond** (`addOrToggleKeyframeAtFrame` in `TrackRow.tsx`) — the
-  single path for every property kind. Adding **captures the evaluated value at
-  the playhead** (`effectiveRowValue`, exactly what the row readout shows and the
-  canvas renders), **not** the element's static base. Reading the static base is
-  the root cause of the diamond-reverts-position jump (B-005/B-007) — keep this
-  invariant. Clicking an existing diamond's frame toggles it off.
+  single path for every property kind, INCLUDING the D-110 path row (whose
+  captured value is the whole anchor snapshot). Adding **captures the evaluated
+  value at the playhead** (`effectiveRowValue`, exactly what the row readout
+  shows and the canvas renders), **not** the element's static base. Reading the
+  static base is the root cause of the diamond-reverts-position jump
+  (B-005/B-007) — keep this invariant. Clicking an existing diamond's frame
+  toggles it off. A path row's value cell is read-only (`N pts`) — the shape is
+  edited on the canvas overlay, which routes track-aware through
+  `commitAnimatable` exactly like transform (see the canvas README).
 - **Drag** a lane diamond → `frameFromClientX` gives the new (snapped) frame; the
   point moves by `id` (`moveKeyframeById`, stacking-aware) or by frame for legacy
   id-less points. Listeners live on `window`, not the diamond, because React

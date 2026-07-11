@@ -90,7 +90,16 @@ function hitsPath(el: PathElement, local: Pt, sizeW: number, sizeH: number): boo
   // the runtime viewBox maps the points' VISUAL (curve-aware) bbox onto the box
   // (B-059/B-062 — size==visualBBox model; conforming content maps at scale 1,
   // and this mirrors the runtime's `max(bbox, 1)` clamp for degenerate axes).
-  const bbox = pathVisualBBox(pts, el.closed);
+  // D-110 — a KEYFRAMED path arrives as the CanvasOverlay clone carrying the
+  // EVALUATED points already in BOX space (`effectivePathBoxPoints`): the render
+  // keeps the STATIC viewBox while the morph overflows it, so re-deriving the
+  // mapping from the morphed points' own bbox would squeeze the grown outline
+  // back into the box and clicks in the grown region would miss. The mapping is
+  // identity by construction — skip the re-derivation.
+  const bbox =
+    el.animation?.tracks['path'] !== undefined
+      ? { x: 0, y: 0, w: sizeW, h: sizeH }
+      : pathVisualBBox(pts, el.closed);
   const fx = sizeW / Math.max(bbox.w, 1);
   const fy = sizeH / Math.max(bbox.h, 1);
   const toDisplay = (x: number, y: number): Pt => ({ x: (x - bbox.x) * fx, y: (y - bbox.y) * fy });

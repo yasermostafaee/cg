@@ -238,6 +238,18 @@ function PathSections({
   );
   return (
     <>
+      {/* D-110 — the whole-shape morph track: ONE row (never per-anchor) whose
+          diamond keyframes the full anchor snapshot; the shape itself is edited
+          on the canvas overlay. Mirrors the timeline's "Path" section (D-051
+          registry parity). */}
+      <CollapseSection title="Path" pinned>
+        <div className={fieldCss.row}>
+          <span className={fieldCss.label}>shape</span>
+          <span>{`${String(element.points.length)} pts`}</span>
+          {KeyframeDot(element, 'path', currentFrame, selectedKeyframe)}
+        </div>
+      </CollapseSection>
+
       <CollapseSection title="Path Style" pinned>
         <div className={fieldCss.row}>
           <span className={fieldCss.label}>path</span>

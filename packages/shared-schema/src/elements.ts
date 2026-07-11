@@ -14,6 +14,7 @@ import {
   ZIndexSchema,
 } from './primitives.js';
 import { ElementAnimationSchema, FrameRangeSchema } from './animation.js';
+import { AnchorPointSchema, type AnchorPoint } from './path-points.js';
 import { ListItemSchema } from './fields.js';
 
 const TextDirectionSchema = z.enum(['auto', 'ltr', 'rtl']);
@@ -535,23 +536,9 @@ export const ShapeElementSchema = ElementBaseSchema.extend({
 }).merge(BoxStyleSchema);
 export type ShapeElement = z.infer<typeof ShapeElementSchema>;
 
-/**
- * D-109 — a Bézier anchor on a `path` element. `in`/`out` are the two control
- * handles expressed as DELTAS from the anchor (`{x,y}` offsets), so they stay
- * correct under the element transform and give D-110 a clean per-point morph
- * target. `smooth` records corner (independent handles) vs smooth (mirrored
- * pair) so the editor can re-mirror a handle on drag. `id` is a stable id (the
- * editor mints a nanoid) — the reconciliation key D-110 matches anchors by.
- */
-export const AnchorPointSchema = z.object({
-  id: IdSchema,
-  x: z.number(),
-  y: z.number(),
-  in: Vec2Schema.optional(),
-  out: Vec2Schema.optional(),
-  smooth: z.boolean(),
-});
-export type AnchorPoint = z.infer<typeof AnchorPointSchema>;
+// D-110 — `AnchorPointSchema` lives in `path-points.ts` (a leaf module) so the
+// animation model can hold path snapshots without an elements↔animation cycle.
+// Re-exported from the package index; imported here for the path element.
 
 /**
  * D-109 — an editable Bézier `path` element (distinct from the legacy

@@ -1,12 +1,15 @@
-import type {
-  AnimatableProperty,
-  Element as SceneElement,
-  ElementAnimation,
-  KeyframeValue,
-  Track,
-  Transform,
+import {
+  isPathKeyframeValue,
+  pathKeyframeValuesEqual,
+  type AnimatableProperty,
+  type Element as SceneElement,
+  type ElementAnimation,
+  type KeyframeValue,
+  type Track,
+  type Transform,
 } from '@cg/shared-schema';
 import { interpolateAtFrame } from './keyframe-eval.js';
+import { pathD } from './scene-builder.js';
 import { textRenderNode } from './text-render-node.js';
 
 /**
@@ -80,6 +83,18 @@ export function applyAnimationAtFrame(entry: AnimatedElement, frame: number): vo
     const v = interpolateAtFrame(tracks['fill.color'], frame);
     const p = entry.node.querySelector('path');
     if (typeof v === 'string' && p !== null) p.setAttribute('fill', v);
+  }
+  // D-110 — the whole-shape morph: the interpolated snapshot (id-matched
+  // per-anchor lerp, eased upstream) feeds the SAME `d` builder the static
+  // render uses, so closed/fill and stroke semantics hold every frame. The
+  // viewBox stays the STATIC geometry's box (snapshots live in the same local
+  // space; `buildPath` sets `overflow: visible` for outgrowing shapes).
+  if (tracks['path'] !== undefined && entry.source.type === 'path') {
+    const v = interpolateAtFrame(tracks['path'], frame);
+    const p = entry.node.querySelector('path');
+    if (isPathKeyframeValue(v) && p !== null) {
+      p.setAttribute('d', pathD(v.points, entry.source.closed));
+    }
   }
   // D-052 — text colour animates on text AND the time-driven kinds (it inherits to
   // the ticker items / clock digit span / sequence items, as the static colour does).
@@ -630,8 +645,12 @@ export function entranceSettleFrame(
   return settle;
 }
 
-/** Value equality for the settle scan — numbers within an epsilon, colors exact. */
+/**
+ * Value equality for the settle scan — numbers within an epsilon, colors exact,
+ * D-110 path snapshots structurally (id + coords + handles, epsilon).
+ */
 function sameKeyframeValue(a: KeyframeValue, b: KeyframeValue): boolean {
   if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) < 1e-6;
+  if (isPathKeyframeValue(a) && isPathKeyframeValue(b)) return pathKeyframeValuesEqual(a, b);
   return a === b;
 }

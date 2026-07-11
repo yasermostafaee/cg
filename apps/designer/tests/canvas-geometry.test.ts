@@ -2,14 +2,17 @@ import { describe, expect, it } from 'vitest';
 import type { Element } from '@cg/shared-schema';
 import {
   clampZoom,
+  computeRectResize,
   computeResize,
   computeRotationAngle,
   cornerLocal,
   fitZoom,
   gizmoCorners,
+  gizmoCornersOfRect,
   handleLocal,
   localToScene,
   pixelSnapActive,
+  rectCorner,
   rot,
   screenToScene,
   snapAxis,
@@ -17,6 +20,7 @@ import {
   snapNudgeToPixel,
   snapValue,
   type BoxTransform,
+  type LocalRect,
 } from '../src/renderer/features/canvas/geometry.js';
 import { inverseToLocal } from '../src/renderer/features/canvas/hit-test.js';
 
@@ -33,6 +37,70 @@ const box = (over: Partial<BoxTransform> = {}): BoxTransform => ({
   anchor: { x: 0, y: 0 },
   scale: { x: 1, y: 1 },
   ...over,
+});
+
+describe('D-110 — live morph rect geometry (gizmoCornersOfRect / computeRectResize)', () => {
+  it('matches gizmoCorners for the element box rect', () => {
+    const t = box({ position: { x: 5, y: 7 }, rotation: 30, anchor: { x: 0.5, y: 0.5 } });
+    const plain = gizmoCorners(t, 2);
+    const viaRect = gizmoCornersOfRect(t, { x: 0, y: 0, w: 100, h: 100 }, 2);
+    for (const k of ['tl', 'tr', 'bl', 'br', 'center'] as const) {
+      expect(viaRect[k].x).toBeCloseTo(plain[k].x);
+      expect(viaRect[k].y).toBeCloseTo(plain[k].y);
+    }
+  });
+
+  it('projects an OFFSET rect through the rotation about the ORIGINAL anchor pivot (rotated+morphing)', () => {
+    // 90° about anchor (0,0): local (lx, ly) → scene (pos.x − ly, pos.y + lx).
+    const t = box({ position: { x: 10, y: 20 }, size: { w: 100, h: 80 }, rotation: 90 });
+    const rect: LocalRect = { x: -20, y: 0, w: 150, h: 80 }; // morph grew left + right
+    const c = gizmoCornersOfRect(t, rect, 1);
+    expect(c.tl.x).toBeCloseTo(10); // local (−20, 0)
+    expect(c.tl.y).toBeCloseTo(0);
+    expect(c.tr.x).toBeCloseTo(10); // local (130, 0)
+    expect(c.tr.y).toBeCloseTo(150);
+    expect(c.br.x).toBeCloseTo(-70); // local (130, 80)
+    expect(c.br.y).toBeCloseTo(150);
+    expect(c.bl.x).toBeCloseTo(-70); // local (−20, 80)
+    expect(c.bl.y).toBeCloseTo(0);
+  });
+
+  it('computeRectResize keeps the FIXED live corner anchored under rotation + centre anchor', () => {
+    const t = box({
+      position: { x: 40, y: 60 },
+      size: { w: 100, h: 80 },
+      rotation: 37,
+      anchor: { x: 0.5, y: 0.5 },
+      scale: { x: 1.5, y: 0.75 },
+    });
+    const rect: LocalRect = { x: 15, y: -10, w: 140, h: 100 }; // an offset live rect
+    const fc = rectCorner('tl', rect); // dragging 'br' pins 'tl'
+    const fixedScene = localToScene(t, fc.x, fc.y);
+    // Pointer at the projection of "double the rect extents from the fixed corner".
+    const pointer = localToScene(t, rect.x + 2 * rect.w, rect.y + 2 * rect.h);
+    const r = computeRectResize(t, rect, 'br', pointer);
+    expect(r.ratioW).toBeCloseTo(2);
+    expect(r.ratioH).toBeCloseTo(2);
+    expect(r.size.w).toBeCloseTo(200); // base size × ratio
+    expect(r.size.h).toBeCloseTo(160);
+    // Applying the commit (about-origin scale + new position/pivot) keeps the
+    // fixed rect corner exactly where it was on screen.
+    const t2: BoxTransform = { ...t, size: r.size, position: r.position };
+    const after = localToScene(t2, fc.x * r.ratioW, fc.y * r.ratioH);
+    expect(after.x).toBeCloseTo(fixedScene.x);
+    expect(after.y).toBeCloseTo(fixedScene.y);
+  });
+
+  it('computeRectResize over the box rect equals computeResize', () => {
+    const t = box({ rotation: 20, anchor: { x: 0.25, y: 0.75 }, scale: { x: 2, y: 1 } });
+    const pointer = { x: 260, y: 140 };
+    const viaRect = computeRectResize(t, { x: 0, y: 0, w: 100, h: 100 }, 'br', pointer);
+    const plain = computeResize(t, 'br', pointer);
+    expect(viaRect.size.w).toBeCloseTo(plain.size.w);
+    expect(viaRect.size.h).toBeCloseTo(plain.size.h);
+    expect(viaRect.position.x).toBeCloseTo(plain.position.x);
+    expect(viaRect.position.y).toBeCloseTo(plain.position.y);
+  });
 });
 
 describe('rot', () => {

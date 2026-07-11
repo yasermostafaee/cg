@@ -1,5 +1,7 @@
 import {
   cubicBezierEase,
+  isPathKeyframeValue,
+  lerpPathSnapshot,
   type AnimatableProperty,
   type Easing,
   type Keyframe,
@@ -68,6 +70,9 @@ export function applyEasing(easing: Easing, t: number): number {
 function lerpValue(a: KeyframeValue, b: KeyframeValue, t: number): KeyframeValue {
   if (typeof a === 'number' && typeof b === 'number') return a + (b - a) * t;
   if (typeof a === 'string' && typeof b === 'string') return lerpHexColor(a, b, t);
+  // D-110 — path snapshots: id-matched per-anchor lerp (the single shared
+  // implementation in @cg/shared-schema; `t` is already eased here).
+  if (isPathKeyframeValue(a) && isPathKeyframeValue(b)) return lerpPathSnapshot(a, b, t);
   // Mixed types — schema doesn't allow this, but be defensive: snap to `a`.
   return a;
 }

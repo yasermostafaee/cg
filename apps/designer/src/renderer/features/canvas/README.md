@@ -436,6 +436,52 @@ polygon hit and concavities inside it miss — and the B-022 gizmo is reused
 unchanged for cursor-tool selection (size = the points' bbox; the runtime SVG
 `viewBox` makes a size-resize rescale the outline without re-baking points).
 
+D-110 — **path morphing makes PathEditor frame-aware.** The overlay renders (and
+every gesture starts from) `effectivePathPoints(el, currentFrame)` — the
+interpolated snapshot when a `path` track exists, else the static points — while
+the point-space ↔ screen mapping stays pinned to the STATIC visual bbox (the
+runtime's viewBox doesn't move during a morph, so mapping through the morphed
+bbox would drift the overlay off the rendered shape). SHAPE edits (move anchor /
+drag handle) route track-aware via `applyPoints`: with NO `path` track it keeps
+the pre-D-110 static route (`normalizePathPoints` + `updateElement`, bbox
+reframe included); with a track it calls `commitAnimatable(id, 'path', { kind:
+'path', points })` with the RAW edited points and **no normalize** — the static
+base, and with it the local space (size / position / viewBox), stays frozen
+while animated, otherwise every keyframe edit would re-anchor the space all
+other snapshots live in. STRUCTURAL edits are the **structure lock** (owner
+decision 2026-07-11): a path's anchor SET (ids + count) is identical across the
+static base and every keyframe at all times. Insert (Ctrl-click / Ctrl-drag /
+segment menu) and delete route through the store's `insertPathAnchorAll` /
+`removePathAnchorAll` / `setPathAnchorShapeAll` (pure math in
+`state/path-structure.ts`): one shared new id lands on each set's OWN segment at
+the same parametric t (`nearestOnSegment` supplies t); a Ctrl-drag smooth insert
+streams the same drag-defined mirrored handles into every set; the menu's Add
+curve point derives tangent handles from each set's own curve; Alt-break
+propagates the `smooth` FLAG while handle VALUES stay per-keyframe; below-2
+still deletes the whole element. Each structural op re-normalizes the static
+base and shifts every snapshot by the same local-frame delta (render-neutral,
+invariant kept), so Designer-authored scenes can never desync anchor sets — the
+runtime hold/pop fallback and the preflight mismatch warning remain only as
+defensive guards for hand-edited/legacy input. The CanvasOverlay hit-test clone
+substitutes `effectivePathBoxPoints` (the evaluated anchors pre-mapped into BOX
+space) for keyframed paths, and `hitsPath` tests them 1:1 (identity mapping —
+the morph renders through the FIXED static viewBox, so re-deriving the mapping
+from the morphed points' own bbox would squeeze a grown outline back into the
+box): single-click selection AND double-click-to-enter-edit follow the morphed
+outline, including regions grown beyond the base shape.
+
+D-110 — **live morph bounds** (owner decision 2026-07-11): for a keyframed path
+the selection gizmo box and the Inspector W/H follow the LIVE interpolated
+outline — `effectivePathLocalRect(el, frame)` (keyframe-helpers) yields the
+morphed outline's local-box rect, `gizmoCornersOfRect` projects it through the
+same Scale·Rotate-about-anchor map (rotation-correct; the pivot stays
+`anchor⊙size`), and resize gestures / typed W/H run through `computeRectResize`
+— ratio-based against the live rect, committed as the equivalent base size so
+the existing bake / size-keyframe routes scale the live extent by exactly the
+gesture's ratio, with the fixed LIVE corner position-compensated under rotation.
+Path-specific by design: a path is the one kind whose LOCAL geometry changes
+over time; every other kind keeps the plain `[0, size]` box.
+
 D-040 — the `image` (logo) tool stamps a `source: 'shared'` image from the device
 **shared library** ([`features/sharedLibrary`](../sharedLibrary)): the operator's
 selected library thumbnail (`activeSharedImage`), else the first, sized to the

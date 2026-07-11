@@ -137,6 +137,30 @@ time-coalescing a drag relies on. The single-selection path, `commitAnimatable`,
 callers. Group move/delete reuse the existing per-element drag/`deleteSelection`
 paths.
 
+D-110 — keyframe values are the full `KeyframeValue` union (number, hex colour,
+or the path snapshot `{ kind: 'path', points }`); `upsertKeyframe` /
+`setKeyframeValue` / `commitAnimatable` / `writeStaticAnimatable` carry it
+verbatim. The `path` property routes like any other: `commitAnimatable` lands the
+snapshot as a keyframe when a track exists (PathEditor's edit route), else
+`writeStaticAnimatable`'s `path` case writes the element's static points through
+`normalizePathPoints`. `bakePathSize` (the static W/H bake) also rescales EVERY
+path-track snapshot by the same per-axis factor — the bake rescales the element's
+local space, and all keyframes must stay in it or a resize would shear the
+keyframed shapes (covered in `tests/store-path-morph.test.ts`).
+
+D-110 structure lock (owner decision 2026-07-11) — STRUCTURAL path edits apply to
+the static base AND every path keyframe: `insertPathAnchorAll(elementId,
+segIndex, t, id, spec)` splits each set's own segment at the same parametric t
+with one shared id, `removePathAnchorAll` removes an id everywhere (below-2
+removes the element), and `setPathAnchorShapeAll` patches an anchor's `smooth`
+flag / handle deltas across all sets (the Alt-break flag propagation and the
+Ctrl-drag smooth-insert handle stream). All three funnel through
+`applyPathStructure`, which re-normalizes the static base and shifts every
+snapshot by the same local-frame delta — render-neutral at every frame, and the
+size==visualBBox invariant holds. The pure per-set math lives in
+[`path-structure.ts`](path-structure.ts) (unit-tested via
+`tests/store-path-morph.test.ts`).
+
 ## Adding to the store
 
 - **A new action on an existing domain** → add the method to that slice's object.

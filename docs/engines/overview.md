@@ -62,7 +62,10 @@ the editor UI and the runtime renderer (the "Where features go" map in
 - **builds** the DOM tree from the scene (scene-builder),
 - **applies** the current field values onto that DOM by walking the scene's
   declared bindings (`applyFieldValues`),
-- **animates** keyframed properties per frame (animation-applier + keyframe-eval),
+- **animates** keyframed properties per frame (animation-applier + keyframe-eval;
+  values are numbers, hex colours, or D-110 whole-shape path snapshots — the
+  path morph interpolates anchors by stable id via the schema's shared
+  `lerpPathSnapshot` and feeds the same `pathD` builder the static render uses),
 - **drives** the broadcast lifecycle and playout timing — entrance → hold → exit,
   auto-out / loop cycles with timed or content-driven holds (PlayoutController +
   FrameDriver; the ticker's TickerDriver, the countdown clock's ClockDriver, and

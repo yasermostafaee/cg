@@ -522,7 +522,19 @@ rebuild and every writer follows it).
 extrapolation); `frame ≥ last` → last value; otherwise interpolate between the two
 surrounding keyframes using the **earlier** keyframe's outgoing easing (`step`
 holds; a per-keyframe cubic `bezier` overrides the named easing). Numbers lerp;
-`#RRGGBB(AA)` colours lerp componentwise.
+`#RRGGBB(AA)` colours lerp componentwise; D-110 **path snapshots**
+(`{ kind: 'path', points }` on the `path` property) lerp **per anchor by stable
+id** via the schema's shared `lerpPathSnapshot` — leading keyframe's order, an
+absent handle tweens from the zero vector. The Designer structure-locks a path's
+anchor set across its keyframes (structural edits propagate), so authored scenes
+always interpolate over matching ids; mismatched sets (hand-edited/legacy
+external input only) hit the DEFENSIVE fallback — a leading-only id holds, a
+trailing-only id appears at its keyframe, never a crash. The applier's `path`
+branch feeds the interpolated point set into the SAME `pathD` builder the static
+render uses (closed/fill semantics hold); the viewBox stays the STATIC geometry's
+box — snapshots live in that fixed local space and the path SVG is
+`overflow: visible`, so a morph outgrowing the static bounds still renders and
+`size.w/h` keyframes keep their stretch semantics.
 
 ### caspar-globals — the CasparCG adapter
 
@@ -607,8 +619,10 @@ payloads are dropped silently (a broadcast frame can't write logs).
    `applyNumeric(...)` / track read; for a property that composes with siblings
    (another `transform`/`shadow`/`filter`/`stroke` axis), extend the relevant
    `*_PROPS` list and its recompose helper so static + animated values combine.
-3. `keyframe-eval` already interpolates numbers and hex colours — extend `lerpValue`
-   only for a genuinely new value type.
+3. `keyframe-eval` already interpolates numbers, hex colours, and D-110 path
+   snapshots — extend `lerpValue` only for a genuinely new value type, and put
+   the lerp itself in `@cg/shared-schema` (like `lerpPathSnapshot`) so the
+   Designer's display-time mirror shares the one implementation.
 
 ### Add a new playout mode / lifecycle behaviour
 
