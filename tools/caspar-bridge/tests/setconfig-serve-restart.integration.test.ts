@@ -156,6 +156,56 @@ it('CEF-wedge boundedness: stop() force-destroys held idle/mid-request/preconnec
   preconnect.destroy();
 }, 15000);
 
+it('stop() lets an IN-FLIGHT response flush (never severs an active template fetch) yet stays bounded for a stalled client', async () => {
+  // A big response so the transfer takes real time — the in-flight fetch a
+  // dying bridge must not sever (severing settles the CEF page FAILED and
+  // killed the reconnect fixtures' on-air orphan on CI).
+  const bigHtml = `<html><body>${'x'.repeat(4 * 1024 * 1024)}</body></html>`;
+  const server = new TemplateHttpServer(() => bigHtml);
+  await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
+  const port = server.port;
+
+  // (a) an ACTIVE fetch that reads normally — must complete despite stop().
+  const fetching = new Promise<number>((resolve, reject) => {
+    const req = http.get(`http://127.0.0.1:${String(port)}/template/x`, (res) => {
+      let bytes = 0;
+      res.on('data', (chunk: Buffer) => {
+        bytes += chunk.length;
+      });
+      res.on('end', () => resolve(bytes));
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+  });
+  // Let the request reach the server so the response is genuinely in flight.
+  await new Promise((r) => setTimeout(r, 30));
+
+  const t0 = Date.now();
+  await server.stop();
+  const elapsed = Date.now() - t0;
+  // The active response flushed (no severed fetch)…
+  await expect(fetching).resolves.toBeGreaterThan(4 * 1024 * 1024);
+  // …and teardown stayed bounded (grace, not forever).
+  expect(elapsed).toBeLessThan(1500);
+
+  // (b) a STALLED client (sends a request, never reads the response) — the
+  // grace deadline force-destroys it; stop() is still bounded.
+  const server2 = new TemplateHttpServer(() => bigHtml);
+  await server2.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
+  const stalled = net.connect(server2.port, '127.0.0.1');
+  await new Promise<void>((resolve, reject) => {
+    stalled.once('connect', resolve);
+    stalled.once('error', reject);
+  });
+  stalled.pause(); // never read — the server's response backpressures
+  stalled.write('GET /template/x HTTP/1.1\r\nHost: stall\r\n\r\n');
+  await new Promise((r) => setTimeout(r, 50)); // request lands, response stalls
+  const t1 = Date.now();
+  await server2.stop();
+  expect(Date.now() - t1).toBeLessThan(1500); // grace (500ms) + margin
+  stalled.destroy();
+}, 20000);
+
 /** start() succeeds once (boot), then always throws — the injected bind failure. */
 class FailingRestartServer extends TemplateHttpServer {
   #starts = 0;
