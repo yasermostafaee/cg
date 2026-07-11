@@ -1,10 +1,16 @@
-import type {
-  AnimatableProperty,
-  Easing,
-  Element,
-  ElementAnimation,
-  Keyframe,
-  Layer,
+import {
+  clonePathPoints,
+  isPathKeyframeValue,
+  pathVisualBBox,
+  type AnchorPoint,
+  type AnimatableProperty,
+  type Easing,
+  type Element,
+  type ElementAnimation,
+  type Keyframe,
+  type KeyframeValue,
+  type Layer,
+  type PathElement,
 } from '@cg/shared-schema';
 import { current, set, type KeyframeRef } from '../store-core.js';
 import {
@@ -14,6 +20,14 @@ import {
   locate,
   withActiveLayers,
 } from '../scene-doc.js';
+import { normalizePathPoints } from '../element-defaults.js';
+import {
+  patchAnchorShape,
+  removeAnchorById,
+  splitSegmentAt,
+  type AnchorShapePatch,
+  type PathInsertSpec,
+} from '../path-structure.js';
 import { designerStore } from '../store.js';
 
 /**
@@ -65,21 +79,47 @@ function bakePathSize(elementId: string, el: Element, axis: 'w' | 'h', next: num
   const target = Math.max(next, 1);
   if (!(cur > 0) || Math.abs(target - cur) < 1e-9) return;
   const r = target / cur;
-  const points = el.points.map((p) => ({
-    ...p,
-    x: axis === 'w' ? p.x * r : p.x,
-    y: axis === 'h' ? p.y * r : p.y,
-    ...(p.in !== undefined
-      ? { in: { x: axis === 'w' ? p.in.x * r : p.in.x, y: axis === 'h' ? p.in.y * r : p.in.y } }
-      : {}),
-    ...(p.out !== undefined
+  const scaleAxis = (pts: readonly AnchorPoint[]): AnchorPoint[] =>
+    pts.map((p) => ({
+      ...p,
+      x: axis === 'w' ? p.x * r : p.x,
+      y: axis === 'h' ? p.y * r : p.y,
+      ...(p.in !== undefined
+        ? { in: { x: axis === 'w' ? p.in.x * r : p.in.x, y: axis === 'h' ? p.in.y * r : p.in.y } }
+        : {}),
+      ...(p.out !== undefined
+        ? {
+            out: {
+              x: axis === 'w' ? p.out.x * r : p.out.x,
+              y: axis === 'h' ? p.out.y * r : p.out.y,
+            },
+          }
+        : {}),
+    }));
+  // D-110 — a static bake rescales the element's LOCAL space, so every path
+  // keyframe snapshot (stored in that same space) must scale by the same
+  // factor, or the resize would silently shear every keyframed shape.
+  const pathTrack = el.animation?.tracks['path'];
+  const animation =
+    el.animation !== undefined && pathTrack !== undefined
       ? {
-          out: { x: axis === 'w' ? p.out.x * r : p.out.x, y: axis === 'h' ? p.out.y * r : p.out.y },
+          animation: {
+            ...el.animation,
+            tracks: {
+              ...el.animation.tracks,
+              path: {
+                keyframes: pathTrack.keyframes.map((k) =>
+                  isPathKeyframeValue(k.value)
+                    ? { ...k, value: { kind: 'path' as const, points: scaleAxis(k.value.points) } }
+                    : k,
+                ),
+              },
+            },
+          },
         }
-      : {}),
-  }));
+      : {};
   designerStore.updateElement(elementId, {
-    points,
+    points: scaleAxis(el.points),
     transform: {
       ...el.transform,
       size: {
@@ -87,7 +127,67 @@ function bakePathSize(elementId: string, el: Element, axis: 'w' | 'h', next: num
         h: axis === 'h' ? target : el.transform.size.h,
       },
     },
+    ...animation,
   } as Partial<Element>);
+}
+
+/**
+ * D-110 structure lock (owner decision 2026-07-11) — apply a STRUCTURAL point-set
+ * transform to a path's static base AND every path keyframe snapshot, then
+ * re-normalize the static base (size==visualBBox at local (0,0)) and shift every
+ * snapshot by the SAME local-frame delta. The normalize's position compensation
+ * is an affine identity of the local→scene map, so shifting all sets together is
+ * render-neutral at EVERY frame while keeping the invariant the bake, the live
+ * bounds, and the hit-test rely on. One `updateElement` → one undo entry (or one
+ * coalesced gesture). Defensive on malformed external sets: `apply` no-ops on a
+ * set it can't transform, and a snapshot is never dropped below the schema's
+ * 2-anchor minimum.
+ */
+function applyPathStructure(
+  elementId: string,
+  el: PathElement,
+  apply: (points: readonly AnchorPoint[]) => AnchorPoint[],
+): void {
+  const newStatic = apply(el.points);
+  if (newStatic.length < 2) return; // callers gate; last-ditch guard
+  // The normalize shift (vmin) the static base is about to undergo — snapshots
+  // must shift by the same delta to stay in the one local space.
+  const vb = pathVisualBBox(newStatic, el.closed);
+  const norm = normalizePathPoints({ ...el, points: newStatic });
+  const pathTrack = el.animation?.tracks['path'];
+  const animation =
+    el.animation !== undefined && pathTrack !== undefined
+      ? {
+          animation: {
+            ...el.animation,
+            tracks: {
+              ...el.animation.tracks,
+              path: {
+                keyframes: pathTrack.keyframes.map((k) => {
+                  if (!isPathKeyframeValue(k.value)) return k;
+                  const applied = apply(k.value.points);
+                  if (applied.length < 2) return k; // defensive: never break min(2)
+                  const points = applied.map((p) => ({ ...p, x: p.x - vb.x, y: p.y - vb.y }));
+                  return { ...k, value: { kind: 'path' as const, points } };
+                }),
+              },
+            },
+          },
+        }
+      : {};
+  designerStore.updateElement(elementId, {
+    points: norm.points,
+    transform: norm.transform,
+    ...animation,
+  } as Partial<Element>);
+}
+
+/** Locate a path element for the D-110 structural actions (null otherwise). */
+function locatePath(elementId: string): PathElement | null {
+  if (current.scene === null) return null;
+  const found = locate(current.scene, elementId);
+  const el = found?.layer.children[found.elIdx];
+  return el !== undefined && el.type === 'path' ? el : null;
 }
 
 /** After a keyframe moves frame, keep the selection (primary + set) pointing at it. */
@@ -144,7 +244,7 @@ export const timelineSlice = {
     elementId: string,
     property: AnimatableProperty,
     frame: number,
-    value: number | string,
+    value: KeyframeValue,
     easing: Easing = 'linear',
   ): void {
     mutateAnimation(elementId, (anim) => {
@@ -308,6 +408,54 @@ export const timelineSlice = {
   },
 
   /**
+   * D-110 structure lock — insert ONE anchor (the caller-minted shared `id`)
+   * into segment `segIndex` at parametric `t`, on the static base AND every
+   * path keyframe snapshot: each set's OWN cubic is evaluated at `t`, so the
+   * anchor sits on the corresponding segment everywhere and (id-shared) tweens
+   * between keyframes. `spec` shapes it per set (corner / drag-defined smooth /
+   * per-set tangent smooth — see `path-structure.ts`).
+   */
+  insertPathAnchorAll(
+    elementId: string,
+    segIndex: number,
+    t: number,
+    id: string,
+    spec: PathInsertSpec,
+  ): void {
+    const el = locatePath(elementId);
+    if (el === null) return;
+    applyPathStructure(elementId, el, (pts) => splitSegmentAt(pts, segIndex, t, id, spec));
+  },
+
+  /**
+   * D-110 structure lock — remove the anchor `id` from the static base AND
+   * every path keyframe snapshot. Below 2 remaining anchors the WHOLE element
+   * is removed (the D-109 rule, now across all keyframes).
+   */
+  removePathAnchorAll(elementId: string, anchorId: string): void {
+    const el = locatePath(elementId);
+    if (el === null) return;
+    if (removeAnchorById(el.points, anchorId).length < 2) {
+      designerStore.removeElement(elementId);
+      return;
+    }
+    applyPathStructure(elementId, el, (pts) => removeAnchorById(pts, anchorId));
+  },
+
+  /**
+   * D-110 structure lock — patch one anchor's `smooth` flag / handle deltas on
+   * the static base AND every snapshot. Used for the Alt-break propagation
+   * (the FLAG is structure and propagates; when the patch carries no handle
+   * fields, each keyframe's handle VALUES stay its own) and for streaming the
+   * Ctrl-drag smooth insert's mirrored handles into every set.
+   */
+  setPathAnchorShapeAll(elementId: string, anchorId: string, patch: AnchorShapePatch): void {
+    const el = locatePath(elementId);
+    if (el === null) return;
+    applyPathStructure(elementId, el, (pts) => patchAnchorShape(pts, anchorId, patch));
+  },
+
+  /**
    * Commit a value for an animatable numeric property. The "track-aware"
    * routing rule (D-006):
    *
@@ -321,7 +469,7 @@ export const timelineSlice = {
    *   - Otherwise the property has never been animated, so the edit
    *     flows to the element's static value as before.
    */
-  commitAnimatable(elementId: string, property: AnimatableProperty, value: number | string): void {
+  commitAnimatable(elementId: string, property: AnimatableProperty, value: KeyframeValue): void {
     if (current.scene === null) return;
     const found = locate(current.scene, elementId);
     if (found === null) return;
@@ -385,7 +533,7 @@ export const timelineSlice = {
     elementId: string,
     property: AnimatableProperty,
     frame: number,
-    value: number | string,
+    value: KeyframeValue,
   ): void {
     mutateAnimation(elementId, (anim) => {
       const existing = anim.tracks[property];
@@ -454,7 +602,7 @@ export const timelineSlice = {
   writeStaticAnimatable(
     elementId: string,
     property: AnimatableProperty,
-    value: number | string,
+    value: KeyframeValue,
   ): void {
     if (current.scene === null) return;
     const found = locate(current.scene, elementId);
@@ -465,6 +613,19 @@ export const timelineSlice = {
     // The whole transform / numeric branch only handles numbers — the
     // color cases at the bottom of this switch handle strings.
     const numeric = typeof value === 'number' ? value : 0;
+    // D-110 — the path snapshot writes the element's static points through the
+    // normalize route (bbox reframe, size==visualBBox). Reached when the LAST
+    // path keyframe was removed and an edit flows static again; the PathEditor
+    // itself routes through `commitAnimatable`.
+    if (property === 'path') {
+      if (el.type !== 'path' || !isPathKeyframeValue(value) || value.points.length < 2) return;
+      const next = normalizePathPoints({ ...el, points: clonePathPoints(value.points) });
+      designerStore.updateElement(elementId, {
+        points: next.points,
+        transform: next.transform,
+      } as Partial<Element>);
+      return;
+    }
     // D-056 — `stroke` is a box property: shape, text and path only (B-051 — the
     // D-109 `path` carries a real stroke; it was left out of this guard, so every
     // Path Style stroke edit silently no-oped). The content-driven kinds

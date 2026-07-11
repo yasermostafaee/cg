@@ -1,5 +1,13 @@
 import { pack, sha256Hex } from '@cg/vcg-format';
-import type { AssetEntry, BindingTransform, DynamicField, Element, Scene } from '@cg/shared-schema';
+import {
+  isPathKeyframeValue,
+  type AnchorPoint,
+  type AssetEntry,
+  type BindingTransform,
+  type DynamicField,
+  type Element,
+  type Scene,
+} from '@cg/shared-schema';
 import type { ExportIssue, ExportProgress } from '@cg/shared-ipc';
 import type { AssetStore } from './AssetStore.js';
 import {
@@ -128,6 +136,30 @@ export class Exporter {
         message: `This package contains ${String(tickers.length)} ticker element(s) but .vcg exports don't bundle font files yet — on a machine without the fonts, the crawl measures fallback glyphs and its content-driven duration will be wrong. Prefer the single-file HTML export (fonts inlined).`,
         elementId: tickers[0]?.id ?? '',
       });
+    }
+
+    // D-110 — adjacent path keyframes whose anchor-id sets differ: the morph
+    // HOLDS/POPS the unmatched anchors across that segment (the defined Phase-1
+    // fallback, never an error) — warn so the operator knows which segment
+    // won't tween smoothly.
+    for (const el of elementsById.values()) {
+      if (el.type !== 'path') continue;
+      const track = el.animation?.tracks['path'];
+      if (track === undefined) continue;
+      for (let i = 1; i < track.keyframes.length; i++) {
+        const a = track.keyframes[i - 1];
+        const b = track.keyframes[i];
+        if (a === undefined || b === undefined) continue;
+        if (!isPathKeyframeValue(a.value) || !isPathKeyframeValue(b.value)) continue;
+        if (!sameAnchorIdSet(a.value.points, b.value.points)) {
+          issues.push({
+            severity: 'warning',
+            code: 'path-morph-anchor-mismatch',
+            message: `Path "${el.name}" has different anchor sets on the keyframes at frames ${String(a.frame)} and ${String(b.frame)} — unmatched anchors hold/pop across that segment instead of tweening (matching anchors still morph).`,
+            elementId: el.id,
+          });
+        }
+      }
     }
 
     const fieldsById = new Map(scene.fields.map((f) => [f.id, f]));
@@ -328,6 +360,13 @@ function buildIndexHtml(scene: Scene, assetIndex: AssetEntry[]): string {
   </body>
 </html>
 `;
+}
+
+/** D-110 — same anchor ids on both snapshots (order-insensitive)? */
+function sameAnchorIdSet(a: readonly AnchorPoint[], b: readonly AnchorPoint[]): boolean {
+  if (a.length !== b.length) return false;
+  const ids = new Set(a.map((p) => p.id));
+  return b.every((p) => ids.has(p.id));
 }
 
 function fieldHasMeaningfulDefault(field: DynamicField): boolean {

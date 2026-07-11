@@ -154,6 +154,70 @@ function fixtureScene(): Scene {
             fitMode: 'autosize',
             overflow: 'ellipsis',
           },
+          // D-110 — a path element with a MORPH track. The runtime app's built
+          // bundle bakes the scene schema in at build time; carrying the newest
+          // animatable track in the E2E fixture means a stale/missed schema
+          // rebuild fails the import E2E loudly (the owner-reported 2026-07-11
+          // gap: a Designer path-morph .vcg was rejected by a runtime instance
+          // built before the schema gained the `path` track).
+          {
+            id: 'el-morph',
+            name: 'Morph',
+            type: 'path',
+            transform: {
+              position: { x: 200, y: 200 },
+              size: { w: 100, h: 80 },
+              scale: { x: 1, y: 1 },
+              rotation: 0,
+              anchor: { x: 0, y: 0 },
+            },
+            opacity: 1,
+            visible: true,
+            locked: false,
+            zIndex: 1,
+            closed: true,
+            points: [
+              { id: 'a', x: 0, y: 0, smooth: false },
+              { id: 'b', x: 100, y: 0, smooth: false },
+              { id: 'c', x: 100, y: 80, smooth: false },
+            ],
+            fill: { kind: 'solid', color: '#22C55E' },
+            stroke: { width: 2, color: '#101010' },
+            animation: {
+              tracks: {
+                path: {
+                  keyframes: [
+                    {
+                      id: 'k1',
+                      frame: 0,
+                      value: {
+                        kind: 'path',
+                        points: [
+                          { id: 'a', x: 0, y: 0, smooth: false },
+                          { id: 'b', x: 100, y: 0, smooth: false },
+                          { id: 'c', x: 100, y: 80, smooth: false },
+                        ],
+                      },
+                      easing: 'ease-in-out',
+                    },
+                    {
+                      id: 'k2',
+                      frame: 40,
+                      value: {
+                        kind: 'path',
+                        points: [
+                          { id: 'a', x: 0, y: 20, smooth: false },
+                          { id: 'b', x: 160, y: 0, smooth: true, out: { x: 20, y: 10 } },
+                          { id: 'c', x: 60, y: 80, smooth: false },
+                        ],
+                      },
+                      easing: 'linear',
+                    },
+                  ],
+                },
+              },
+            },
+          },
         ],
       },
     ],

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { AnchorPoint, Element, PathElement } from '@cg/shared-schema';
-import { pathVisualBBox } from '@cg/shared-schema';
-import { designerStore } from '../../state/store.js';
+import { clonePathPoints, pathVisualBBox } from '@cg/shared-schema';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { normalizePathPoints } from '../../state/element-defaults.js';
+import { segmentPointAt } from '../../state/path-structure.js';
+import { effectivePathPoints } from '../timeline/keyframe-helpers.js';
 import { inverseToLocal } from './hit-test.js';
 import { localToScene } from './geometry.js';
 import { AnchorContextMenu, type AnchorMenuItem } from './AnchorContextMenu.js';
@@ -23,40 +25,7 @@ const INSERT_SMOOTH_PX = 3;
 /** The context menu's target: an anchor (Delete point) or a segment (Add …). */
 type MenuState =
   | { kind: 'anchor'; x: number; y: number; anchorId: string }
-  | {
-      kind: 'segment';
-      x: number;
-      y: number;
-      segIndex: number;
-      point: { x: number; y: number };
-      tangent: { x: number; y: number };
-    };
-
-/** Evaluate the segment a→b (runtime control-point convention) at `t`. */
-function segmentAt(a: AnchorPoint, b: AnchorPoint, t: number): { x: number; y: number } {
-  const c1x = a.x + (a.out?.x ?? 0);
-  const c1y = a.y + (a.out?.y ?? 0);
-  const c2x = b.x + (b.in?.x ?? 0);
-  const c2y = b.y + (b.in?.y ?? 0);
-  const mt = 1 - t;
-  return {
-    x: mt * mt * mt * a.x + 3 * mt * mt * t * c1x + 3 * mt * t * t * c2x + t * t * t * b.x,
-    y: mt * mt * mt * a.y + 3 * mt * mt * t * c1y + 3 * mt * t * t * c2y + t * t * t * b.y,
-  };
-}
-
-/** The segment's derivative (tangent direction) at `t`. */
-function segmentTangentAt(a: AnchorPoint, b: AnchorPoint, t: number): { x: number; y: number } {
-  const c1x = a.x + (a.out?.x ?? 0);
-  const c1y = a.y + (a.out?.y ?? 0);
-  const c2x = b.x + (b.in?.x ?? 0);
-  const c2y = b.y + (b.in?.y ?? 0);
-  const mt = 1 - t;
-  return {
-    x: 3 * mt * mt * (c1x - a.x) + 6 * mt * t * (c2x - c1x) + 3 * t * t * (b.x - c2x),
-    y: 3 * mt * mt * (c1y - a.y) + 6 * mt * t * (c2y - c1y) + 3 * t * t * (b.y - c2y),
-  };
-}
+  | { kind: 'segment'; x: number; y: number; segIndex: number; t: number };
 
 /**
  * D-109/D-123/D-124/B-061/B-063 — the path edit overlay (POINT-EDIT MODE only,
@@ -112,9 +81,17 @@ export function PathEditor({ element, scale }: Props): JSX.Element {
     };
   }, []);
 
-  const pts = element.points;
+  // D-110 — the overlay shows (and every gesture starts from) the EFFECTIVE
+  // anchors at the playhead: the interpolated snapshot when a `path` track
+  // exists, else the static points — exactly what the iframe preview renders.
+  const currentFrame = useDesignerSelector((s) => s.currentFrame);
+  const pts = effectivePathPoints(element, currentFrame);
   const t = element.transform;
-  const vb = pathVisualBBox(pts, element.closed);
+  // The local coordinate space is defined by the STATIC geometry (the runtime's
+  // viewBox stays the static visual bbox while the shape morphs), so the
+  // point-space ↔ screen mapping must use the STATIC bbox — never the morphed
+  // one — or the overlay would drift off the rendered shape between keyframes.
+  const vb = pathVisualBBox(element.points, element.closed);
   const fx = t.size.w / Math.max(vb.w, 1);
   const fy = t.size.h / Math.max(vb.h, 1);
 
@@ -156,6 +133,19 @@ export function PathEditor({ element, scale }: Props): JSX.Element {
   };
 
   function applyPoints(next: readonly AnchorPoint[]): void {
+    // D-110 — track-aware routing (the D-006 rule, owner decision 4): with a
+    // `path` track the edit lands as a WHOLE-SHAPE snapshot keyframe at the
+    // playhead (replace-on-keyframe / auto-record-off-keyframe via
+    // `commitAnimatable`), and the static base — and with it the local space:
+    // size / position / viewBox — stays FROZEN, so NO normalize here (a bbox
+    // reframe would re-anchor the space every other snapshot lives in).
+    if (element.animation?.tracks['path'] !== undefined) {
+      designerStore.commitAnimatable(element.id, 'path', {
+        kind: 'path',
+        points: clonePathPoints(next),
+      });
+      return;
+    }
     const normalized = normalizePathPoints({ ...element, points: [...next] });
     designerStore.updateElement(element.id, {
       points: normalized.points,
@@ -164,40 +154,15 @@ export function PathEditor({ element, scale }: Props): JSX.Element {
   }
 
   function removeAnchor(id: string): void {
-    if (pts.length <= 2) {
-      designerStore.removeElement(element.id); // below 2 anchors → delete the element
-      return;
-    }
-    applyPoints(pts.filter((p) => p.id !== id));
+    // D-110 structure lock — the id is removed from the static base AND every
+    // keyframe snapshot (below 2 anchors the whole element is removed).
+    designerStore.removePathAnchorAll(element.id, id);
     designerStore.markHistoryBoundary();
     setActive(null);
   }
 
-  /** Insert an anchor into segment `i` at the given point-space spot. */
-  function insertAnchorAt(
-    i: number,
-    at: { x: number; y: number },
-    handles?: { in: { x: number; y: number }; out: { x: number; y: number } },
-  ): AnchorPoint {
-    const mid: AnchorPoint = {
-      id: newAnchorId(),
-      x: at.x,
-      y: at.y,
-      smooth: handles !== undefined,
-      ...(handles !== undefined ? { in: handles.in, out: handles.out } : {}),
-    };
-    const next = [...pts];
-    next.splice(i + 1, 0, mid);
-    applyPoints(next);
-    setActive(mid.id);
-    return mid;
-  }
-
-  /** Nearest sampled point on segment `i` to `pt` (point space) + its tangent. */
-  function nearestOnSegment(
-    i: number,
-    pt: { x: number; y: number },
-  ): { point: { x: number; y: number }; tangent: { x: number; y: number } } | null {
+  /** Nearest sampled point on segment `i` to `pt` (point space) + its parametric t. */
+  function nearestOnSegment(i: number, pt: { x: number; y: number }): { t: number } | null {
     const a = pts[i];
     const b = pts[(i + 1) % pts.length];
     if (a === undefined || b === undefined) return null;
@@ -205,14 +170,14 @@ export function PathEditor({ element, scale }: Props): JSX.Element {
     let bestD = Infinity;
     for (let s = 1; s < NEAREST_STEPS; s++) {
       const tt = s / NEAREST_STEPS;
-      const p = segmentAt(a, b, tt);
+      const p = segmentPointAt(a, b, tt);
       const d = Math.hypot(p.x - pt.x, p.y - pt.y);
       if (d < bestD) {
         bestD = d;
         bestT = tt;
       }
     }
-    return { point: segmentAt(a, b, bestT), tangent: segmentTangentAt(a, b, bestT) };
+    return { t: bestT };
   }
 
   // Delete / Backspace removes the active anchor. Capture phase + stopImmediate so it
@@ -235,7 +200,9 @@ export function PathEditor({ element, scale }: Props): JSX.Element {
     }
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [active, menu, element]);
+    // `pts` (not just `element`) — the effective points move with the playhead
+    // while a path track exists, and Delete must act on the CURRENT shape.
+  }, [active, menu, element, pts]);
 
   function dragAnchor(id: string, e: React.PointerEvent): void {
     if (e.button !== 0) return; // right-press routes to the context menu
@@ -265,6 +232,12 @@ export function PathEditor({ element, scale }: Props): JSX.Element {
     const breakPair = e.altKey;
     const base = pts.find((p) => p.id === id);
     if (base === undefined) return;
+    // D-110 structure lock — Alt-break is STRUCTURAL: the `smooth` flag
+    // propagates to the static base and every keyframe (each keyframe's handle
+    // VALUES stay its own); the drag below then shapes the current frame only.
+    if (breakPair && element.animation?.tracks['path'] !== undefined) {
+      designerStore.setPathAnchorShapeAll(element.id, id, { smooth: false });
+    }
     const h0 = base[which] ?? { x: 0, y: 0 };
     const sX = e.clientX;
     const sY = e.clientY;
@@ -302,41 +275,40 @@ export function PathEditor({ element, scale }: Props): JSX.Element {
     if (!e.ctrlKey && !e.metaKey) return;
     e.stopPropagation();
     const clickPt = clientToPointSpace(e);
-    const near = clickPt !== null ? nearestOnSegment(i, clickPt) : null;
-    const a = pts[i];
-    const b = pts[(i + 1) % pts.length];
-    if (a === undefined || b === undefined) return;
-    const at = near?.point ?? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-    const mid = insertAnchorAt(i, at);
+    const tParam = (clickPt !== null ? nearestOnSegment(i, clickPt) : null)?.t ?? 0.5;
+    // D-110 structure lock — ONE shared id, inserted at the same parametric t
+    // into the static base and EVERY keyframe (each set's own curve).
+    const id = newAnchorId();
+    designerStore.insertPathAnchorAll(element.id, i, tParam, id, { kind: 'corner' });
+    setActive(id);
     // B-056 — drag before release pulls out mirrored handles (SMOOTH insert);
     // corner vs smooth decided at pointer-UP by the total SCREEN-px displacement
-    // (the B-057 rule); ONE undo entry (boundary at pointer-up).
+    // (the B-057 rule); ONE undo entry (boundary at pointer-up). The drag-defined
+    // handles stream into every set (same deltas — the drag feedback IS the
+    // interpolated shape), via the structural shape-patch action.
     const sX = e.clientX;
     const sY = e.clientY;
-    const nextIds = [...pts.slice(0, i + 1), mid, ...pts.slice(i + 1)];
-    const withMid = (make: (p: AnchorPoint) => AnchorPoint): void => {
-      applyPoints(nextIds.map((p) => (p.id === mid.id ? make(p) : p)));
+    const asCorner = (): void => {
+      designerStore.setPathAnchorShapeAll(element.id, id, { smooth: false, in: null, out: null });
     };
-    const asCorner = (p: AnchorPoint): AnchorPoint => ({
-      id: p.id,
-      x: p.x,
-      y: p.y,
-      smooth: false,
-    });
     const belowGuard = (ev: PointerEvent): boolean =>
       Math.hypot(ev.clientX - sX, ev.clientY - sY) < INSERT_SMOOTH_PX;
     const onMove = (ev: PointerEvent): void => {
       if (belowGuard(ev)) {
-        withMid(asCorner);
+        asCorner();
         return;
       }
       const h = deltaToPointSpace(ev.clientX - sX, ev.clientY - sY);
-      withMid((p) => ({ ...p, smooth: true, out: h, in: { x: -h.x, y: -h.y } }));
+      designerStore.setPathAnchorShapeAll(element.id, id, {
+        smooth: true,
+        out: h,
+        in: { x: -h.x, y: -h.y },
+      });
     };
     const onUp = (ev: PointerEvent): void => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
-      if (belowGuard(ev)) withMid(asCorner);
+      if (belowGuard(ev)) asCorner();
       designerStore.markHistoryBoundary();
     };
     window.addEventListener('pointermove', onMove);
@@ -351,43 +323,25 @@ export function PathEditor({ element, scale }: Props): JSX.Element {
     const clickPt = clientToPointSpace(e as unknown as React.PointerEvent);
     const near = clickPt !== null ? nearestOnSegment(i, clickPt) : null;
     if (near === null) return;
-    setMenu({
-      kind: 'segment',
-      x: e.clientX,
-      y: e.clientY,
-      segIndex: i,
-      point: near.point,
-      tangent: near.tangent,
-    });
+    setMenu({ kind: 'segment', x: e.clientX, y: e.clientY, segIndex: i, t: near.t });
   }
 
   function menuItems(m: MenuState): AnchorMenuItem[] {
     if (m.kind === 'anchor') {
       return [{ label: 'Delete point', onSelect: () => removeAnchor(m.anchorId) }];
     }
-    const addCorner = (): void => {
-      insertAnchorAt(m.segIndex, m.point);
+    // D-110 structure lock — both inserts go to every set: the corner as a
+    // handle-less anchor at each set's own curve point; the curve point with
+    // tangent-aligned mirrored handles derived from EACH set's local curve.
+    const insert = (spec: Parameters<typeof designerStore.insertPathAnchorAll>[4]): void => {
+      const id = newAnchorId();
+      designerStore.insertPathAnchorAll(element.id, m.segIndex, m.t, id, spec);
       designerStore.markHistoryBoundary();
-    };
-    const addSmooth = (): void => {
-      // Tangent-aligned mirrored handles, sized to a modest fraction of the
-      // segment chord — pull-out-able afterwards via the handle dots.
-      const a = pts[m.segIndex];
-      const b = pts[(m.segIndex + 1) % pts.length];
-      const chord = a !== undefined && b !== undefined ? Math.hypot(b.x - a.x, b.y - a.y) : 24;
-      const len = Math.hypot(m.tangent.x, m.tangent.y) || 1;
-      const ux = m.tangent.x / len;
-      const uy = m.tangent.y / len;
-      const mag = Math.max(chord / 6, 4);
-      insertAnchorAt(m.segIndex, m.point, {
-        out: { x: ux * mag, y: uy * mag },
-        in: { x: -ux * mag, y: -uy * mag },
-      });
-      designerStore.markHistoryBoundary();
+      setActive(id);
     };
     return [
-      { label: 'Add point', onSelect: addCorner },
-      { label: 'Add curve point', onSelect: addSmooth },
+      { label: 'Add point', onSelect: () => insert({ kind: 'corner' }) },
+      { label: 'Add curve point', onSelect: () => insert({ kind: 'smooth-tangent' }) },
     ];
   }
 

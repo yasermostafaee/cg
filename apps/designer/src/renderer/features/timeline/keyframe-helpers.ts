@@ -1,9 +1,14 @@
 import {
   cubicBezierEase,
+  isPathKeyframeValue,
+  lerpPathSnapshot,
+  pathVisualBBox,
+  type AnchorPoint,
   type AnimatableProperty,
   type Easing,
   type Element,
   type Keyframe,
+  type KeyframeValue,
   type Track,
   type Transform,
 } from '@cg/shared-schema';
@@ -34,10 +39,10 @@ export interface TimelineRow {
    * Current static value for the row, used to:
    *  - format the value column ("100", "100%", "BEBEBE", …);
    *  - seed a freshly-added keyframe when the diamond is clicked.
-   * Returns a number for numeric properties and a hex string for
-   * colour properties (D-010).
+   * Returns a number for numeric properties, a hex string for colour
+   * properties (D-010), and a snapshot for the D-110 `path` row.
    */
-  readonly read: (el: Element) => number | string;
+  readonly read: (el: Element) => KeyframeValue;
   /** Dim unit shown after the value in the timeline / inspector (e.g. "%", "°"). */
   readonly unit?: string;
   /**
@@ -144,7 +149,7 @@ export function hasKeyframeAt(el: Element, property: AnimatableProperty, frame: 
  * in an ambient `Window.cg?: TemplateRuntime` declaration that collides with the
  * Designer's `Window.cg: DesignerBridge` typing.
  */
-function interpolateTrack(track: Track, frame: number): number | string | null {
+function interpolateTrack(track: Track, frame: number): KeyframeValue | null {
   const kfs = track.keyframes;
   const first = kfs[0];
   const last = kfs[kfs.length - 1];
@@ -177,9 +182,12 @@ function interpolateNumericTrack(track: Track, frame: number): number | null {
   return typeof v === 'number' ? v : null;
 }
 
-function lerpKeyframeValue(a: number | string, b: number | string, t: number): number | string {
+function lerpKeyframeValue(a: KeyframeValue, b: KeyframeValue, t: number): KeyframeValue {
   if (typeof a === 'number' && typeof b === 'number') return a + (b - a) * t;
   if (typeof a === 'string' && typeof b === 'string') return lerpHexColor(a, b, t);
+  // D-110 — path snapshots delegate to the schema's single shared interpolator
+  // (the same one the runtime evaluator calls; `t` is already eased here).
+  if (isPathKeyframeValue(a) && isPathKeyframeValue(b)) return lerpPathSnapshot(a, b, t);
   // Mixed types — schema doesn't allow this, but be defensive: snap to `a`.
   return a;
 }
@@ -270,7 +278,7 @@ export function effectiveOpacityAt(el: Element, frame: number): number {
  * shows — so editing a keyframe's value reflects immediately. (Colour tracks
  * fall back to the static value; numeric interpolation only.)
  */
-export function effectiveRowValue(el: Element, row: TimelineRow, frame: number): number | string {
+export function effectiveRowValue(el: Element, row: TimelineRow, frame: number): KeyframeValue {
   return effectiveAnimatableValue(el, row.property, frame, row.read(el));
 }
 
@@ -287,12 +295,82 @@ export function effectiveAnimatableValue(
   el: Element,
   property: AnimatableProperty,
   frame: number,
-  fallback: number | string,
-): number | string {
+  fallback: KeyframeValue,
+): KeyframeValue {
   const track = trackOf(el, property);
   if (track === undefined) return fallback;
   const v = interpolateTrack(track, frame);
   return v ?? fallback;
+}
+
+/**
+ * D-110 — the visually-effective anchor set for a path element at `frame`: the
+ * interpolated snapshot when a `path` track exists, else the static points.
+ * This is what the edit overlay renders and starts every drag from (so an edit
+ * between keyframes begins at the interpolated shape, exactly what the iframe
+ * preview shows), and what the outline hit-test must follow.
+ */
+export function effectivePathPoints(el: Element, frame: number): readonly AnchorPoint[] {
+  if (el.type !== 'path') return [];
+  const track = trackOf(el, 'path');
+  if (track === undefined) return el.points;
+  const v = interpolateTrack(track, frame);
+  return isPathKeyframeValue(v) ? v.points : el.points;
+}
+
+/**
+ * D-110 (owner decision 2026-07-11) — the LIVE morph bounds of a keyframed path
+ * at `frame`, as a rect in the element's LOCAL box space: the curve-aware visual
+ * bbox of the EVALUATED point set, mapped through the static-viewBox → evaluated-
+ * size stretch (identity under the size==visualBBox invariant with no size
+ * keyframes). `null` for non-paths and trackless paths — the callers (gizmo,
+ * Inspector W/H) then use the plain element box, so every other element kind
+ * keeps its existing bounds behavior. One interpolation + one bbox per call —
+ * callers evaluate once per render/gesture tick, so scrubbing stays O(anchors).
+ */
+export function effectivePathLocalRect(
+  el: Element,
+  frame: number,
+): { x: number; y: number; w: number; h: number } | null {
+  if (el.type !== 'path') return null;
+  if (trackOf(el, 'path') === undefined) return null;
+  const mb = pathVisualBBox(effectivePathPoints(el, frame), el.closed);
+  const vb = pathVisualBBox(el.points, el.closed);
+  const t = effectiveTransformAt(el, frame);
+  const fx = t.size.w / Math.max(vb.w, 1);
+  const fy = t.size.h / Math.max(vb.h, 1);
+  return {
+    x: (mb.x - vb.x) * fx,
+    y: (mb.y - vb.y) * fy,
+    w: Math.max(mb.w * fx, 1),
+    h: Math.max(mb.h * fy, 1),
+  };
+}
+
+/**
+ * D-110 — the EVALUATED anchor set mapped into the element's BOX space (the
+ * `0..size` frame `hit-test` and the renderer's viewBox mapping share): each
+ * anchor through the static-viewBox → evaluated-size stretch, handle deltas
+ * scaled per axis. Identity for conforming content without size keyframes.
+ * This is what the CanvasOverlay hit-test clone substitutes for a keyframed
+ * path, so ALL spatial targeting (single-click select, double-click-to-edit)
+ * follows the LIVE morphed outline — including regions that grew beyond the
+ * static base shape. `null` for non-paths / trackless paths.
+ */
+export function effectivePathBoxPoints(el: Element, frame: number): AnchorPoint[] | null {
+  if (el.type !== 'path') return null;
+  if (trackOf(el, 'path') === undefined) return null;
+  const vb = pathVisualBBox(el.points, el.closed);
+  const t = effectiveTransformAt(el, frame);
+  const fx = t.size.w / Math.max(vb.w, 1);
+  const fy = t.size.h / Math.max(vb.h, 1);
+  return effectivePathPoints(el, frame).map((p) => ({
+    ...p,
+    x: (p.x - vb.x) * fx,
+    y: (p.y - vb.y) * fy,
+    ...(p.in !== undefined ? { in: { x: p.in.x * fx, y: p.in.y * fy } } : {}),
+    ...(p.out !== undefined ? { out: { x: p.out.x * fx, y: p.out.y * fy } } : {}),
+  }));
 }
 
 /** {@link effectiveAnimatableValue} narrowed to numbers (static `fallback` if unanimated). */

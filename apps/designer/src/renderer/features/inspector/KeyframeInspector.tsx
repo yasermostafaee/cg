@@ -1,5 +1,6 @@
 import {
   EASING_PRESETS,
+  isPathKeyframeValue,
   type BezierEasing,
   type Element as SceneElement,
   type Keyframe,
@@ -132,6 +133,11 @@ function KeyframeValueField({
 }): JSX.Element {
   if (typeof keyframe.value === 'number') {
     return <NumberField label="value" value={keyframe.value} step={1} onCommit={onCommit} />;
+  }
+  // D-110 — a path snapshot shows its anchor count read-only; the shape itself
+  // is edited on the canvas overlay, never through this field.
+  if (isPathKeyframeValue(keyframe.value)) {
+    return <StaticRow label="value" value={`${String(keyframe.value.points.length)} pts`} />;
   }
   // Color keyframes — not exposed in the v1 dock but render read-only.
   return (

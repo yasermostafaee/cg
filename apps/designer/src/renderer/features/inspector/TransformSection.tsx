@@ -5,6 +5,7 @@ import {
   TIMELINE_ROWS,
   effectiveAnimatableValue,
   effectiveOpacityAt,
+  effectivePathLocalRect,
   effectiveTransformAt,
   hasKeyframeAt,
   keyframeVariantFor,
@@ -55,9 +56,20 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
     (v: number): void =>
       designerStore.commitAnimatable(id, property, v);
 
-  // B-059/B-062 — no path special-casing needed: `transform.size` IS the visual
-  // curve-aware bbox under the owner model, and a static W/H commit bakes the
-  // points via `writeStaticAnimatable` (generic `commitAnimatable` routing).
+  // B-059/B-062 — a STATIC path needs no special-casing: `transform.size` IS the
+  // visual curve-aware bbox under the owner model. D-110 (owner decision
+  // 2026-07-11) — a KEYFRAMED path's W/H are LIVE: they display the morphed
+  // outline's extents at the playhead, and a typed value scales the shape so the
+  // LIVE extent matches it (committed as the equivalent base size — the uniform
+  // static+snapshot bake / size keyframe then scales the live extent by exactly
+  // that ratio). `null` for every other kind — behavior unchanged.
+  const liveRect = effectivePathLocalRect(element, currentFrame);
+  const sizeW = liveRect?.w ?? t.size.w;
+  const sizeH = liveRect?.h ?? t.size.h;
+  const commitW = (v: number): void =>
+    commit('size.w')(liveRect === null ? v : t.size.w * (v / Math.max(liveRect.w, 1e-6)));
+  const commitH = (v: number): void =>
+    commit('size.h')(liveRect === null ? v : t.size.h * (v / Math.max(liveRect.h, 1e-6)));
 
   return (
     <div className={s.col}>
@@ -72,16 +84,10 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
           point={indicatorFor('position.y')}
         />
       </div>
-      {/* Size W/H */}
+      {/* Size W/H — live morph extents for a keyframed path (D-110). */}
       <div className="cg-input-group">
-        <Seg
-          {...transformFieldProps('size.w', t.size.w, commit('size.w'))}
-          point={indicatorFor('size.w')}
-        />
-        <Seg
-          {...transformFieldProps('size.h', t.size.h, commit('size.h'))}
-          point={indicatorFor('size.h')}
-        />
+        <Seg {...transformFieldProps('size.w', sizeW, commitW)} point={indicatorFor('size.w')} />
+        <Seg {...transformFieldProps('size.h', sizeH, commitH)} point={indicatorFor('size.h')} />
       </div>
       {/* Scale X/Y (percent) */}
       <div className="cg-input-group">

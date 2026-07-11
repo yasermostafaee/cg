@@ -2,6 +2,7 @@
 // internal. Apps and other packages import only from this entry point.
 
 export * from './primitives.js';
+export * from './path-points.js';
 export * from './animation.js';
 export * from './elements.js';
 export * from './fields.js';

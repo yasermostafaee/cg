@@ -20,7 +20,7 @@ import {
 import { COMPOSITION_DND_TYPE } from '../compositions/CompositionsPanel.js';
 import { getActiveSharedImage } from '../sharedLibrary/activeSharedImage.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
-import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
+import { effectivePathBoxPoints, effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
 import {
   PEN_CLOSE_PX,
@@ -162,10 +162,20 @@ export function CanvasOverlay({
   // For hit-testing: clone each element with its *visually effective*
   // transform at the current frame, so the bounding boxes the
   // `topmostHit` function checks are the ones the operator can see.
-  const allElementsAtFrame: Element[] = allElements.map((el) => ({
-    ...el,
-    transform: effectiveTransformAt(el, currentFrame),
-  }));
+  // D-110 — a keyframed path also substitutes its effective (interpolated)
+  // POINTS, pre-mapped into BOX space (`effectivePathBoxPoints`): `hitsPath`
+  // then tests them 1:1 (identity mapping — the render keeps the STATIC
+  // viewBox while the morph overflows it), so EVERY spatial target —
+  // single-click select, double-click-to-edit — follows the morphed outline,
+  // including regions grown beyond the static base shape.
+  const allElementsAtFrame: Element[] = allElements.map((el) => {
+    const boxPoints = el.type === 'path' ? effectivePathBoxPoints(el, currentFrame) : null;
+    return {
+      ...el,
+      transform: effectiveTransformAt(el, currentFrame),
+      ...(boxPoints !== null ? { points: boxPoints } : {}),
+    };
+  });
   const selectedEl =
     selection.size === 1 ? (allElements.find((e) => selection.has(e.id)) ?? null) : null;
   // D-041 — the selected elements for the multi-selection gizmo (size > 1).

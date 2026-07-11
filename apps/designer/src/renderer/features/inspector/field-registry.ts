@@ -1,4 +1,11 @@
-import type { AnimatableProperty, Element, Shadow, Stroke } from '@cg/shared-schema';
+import {
+  clonePathPoints,
+  type AnimatableProperty,
+  type Element,
+  type KeyframeValue,
+  type Shadow,
+  type Stroke,
+} from '@cg/shared-schema';
 
 /**
  * D-051 — the central inspector-field registry: the SINGLE source of
@@ -32,6 +39,7 @@ import type { AnimatableProperty, Element, Shadow, Stroke } from '@cg/shared-sch
 
 /** Inspector section a property groups under (the CollapseSection / timeline group title). */
 export type InspectorSection =
+  | 'Path'
   | 'Transform'
   | 'Path Style'
   | 'Text'
@@ -43,7 +51,7 @@ export type InspectorSection =
   | 'Filter';
 
 /** The input primitive a property edits with (used by the multi-select editor). */
-export type FieldKind = 'number' | 'color' | 'fill';
+export type FieldKind = 'number' | 'color' | 'fill' | 'path';
 
 export interface PropertyDescriptor {
   /** Canonical animatable property path (schema enum) — also the multi-select `key`. */
@@ -60,9 +68,9 @@ export interface PropertyDescriptor {
    * The element's CURRENT STATIC value. Used as the timeline value-column display,
    * the keyframe-capture fallback (the value a freshly-added keyframe holds), and
    * the multi-select agree/mixed comparison. Returns a number for numeric
-   * properties and a hex string for colours.
+   * properties, a hex string for colours, and a D-110 snapshot for `path`.
    */
-  readonly read: (el: Element) => number | string;
+  readonly read: (el: Element) => KeyframeValue;
   /**
    * Multi-select value override when the static value isn't uniformly representable
    * (null ⇒ show the neutral "mixed" state). Defaults to {@link read}.
@@ -358,6 +366,29 @@ const BOX_DESCS: readonly PropertyDescriptor[] = [...STROKE_DESCS, ...RADIUS_DES
 // border-radius now come from the shared BOX_DESCS above.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Path-specific — the D-110 whole-shape morph track. ONE descriptor for the
+// whole point set (per-anchor rows were explicitly rejected): the keyframe
+// value is a `PathKeyframeValue` snapshot, captured through the same evaluated-
+// value code path as every other property. Not multi-selectable (a whole-shape
+// snapshot has no shared-edit representation).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PATH_MORPH: PropertyDescriptor = {
+  property: 'path',
+  section: 'Path',
+  fieldKind: 'path',
+  label: 'path',
+  timelineLabel: 'Path',
+  // Deep-cloned so a stored keyframe never aliases `element.points`. Only ever
+  // read for path elements (the registry maps it to the `path` kind only).
+  read: (el) => ({
+    kind: 'path',
+    points: el.type === 'path' ? clonePathPoints(el.points) : [],
+  }),
+  keyframeable: (el) => el.type === 'path',
+};
+
 const SHAPE_FILL: PropertyDescriptor = {
   property: 'fill.color',
   section: 'Path Style',
@@ -640,7 +671,9 @@ export const FIELD_REGISTRY: Record<Element['type'], readonly PropertyDescriptor
   shape: [...TRANSFORM, SHAPE_FILL, ...BOX_DESCS, ...SHAPE_SHADOW, ...FILTER],
   // D-109 — a path has fill + stroke (Path Style) but NO border radius (not a box)
   // and no drop shadow; transform/opacity/filter/fill/stroke animate like a shape.
-  path: [...TRANSFORM, SHAPE_FILL, ...STROKE_DESCS, ...FILTER],
+  // D-110 — PATH_MORPH first: the row order matches the Loopic reference
+  // (Path · Transform · Path Style · Filter).
+  path: [PATH_MORPH, ...TRANSFORM, SHAPE_FILL, ...STROKE_DESCS, ...FILTER],
   // D-057 — text adds an independent box-shadow set (BOX_SHADOW_DESCS, `boxShadow.*`)
   // beside its text-shadow (in TEXT_SPECIFIC via SHADOW_DESCS).
   text: [...TRANSFORM, ...TEXT_SPECIFIC, ...BOX_DESCS, ...BOX_SHADOW_DESCS, ...FILTER],
@@ -701,7 +734,7 @@ export function multiSelectDescriptors(el: Element): readonly PropertyDescriptor
 export function readStaticValue(
   el: Element,
   property: AnimatableProperty,
-  fallback: number | string,
-): number | string {
+  fallback: KeyframeValue,
+): KeyframeValue {
   return descriptorFor(el, property)?.read(el) ?? fallback;
 }

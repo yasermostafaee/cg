@@ -56,6 +56,9 @@ export interface SharedPropertyDescriptor {
  */
 function toSharedSection(section: InspectorSection): SharedSection {
   switch (section) {
+    // D-110 — the path morph descriptor is never multi-exposed (multiSelect is
+    // false), so this mapping is unreachable for it; exhaustiveness only.
+    case 'Path':
     case 'Transform':
       return 'Transform';
     case 'Border Radius':
@@ -80,10 +83,18 @@ function toShared(d: PropertyDescriptor): SharedPropertyDescriptor {
   return {
     key: d.property,
     label: d.label,
-    kind: d.fieldKind,
+    // 'path' never reaches the multi editor (PATH_MORPH is not multiSelect);
+    // the narrowing keeps SharedFieldKind scalar-only.
+    kind: d.fieldKind === 'path' ? 'number' : d.fieldKind,
     section: toSharedSection(d.section),
     prop: d.property,
-    read: (el) => read(el),
+    // A non-scalar value (the D-110 path snapshot) has no shared-edit
+    // representation → null ("mixed"); unreachable today (path is never
+    // multi-exposed) but keeps the narrowing total.
+    read: (el) => {
+      const v = read(el);
+      return typeof v === 'object' && v !== null ? null : v;
+    },
     step: d.step,
     min: d.min,
     max: d.max,

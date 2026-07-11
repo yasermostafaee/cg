@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DurationFramesSchema, HexColorSchema } from './primitives.js';
+import { PathKeyframeValueSchema } from './path-points.js';
 
 /**
  * Phase 9 / M12 keyframe-based animation model.
@@ -88,15 +89,18 @@ export function cubicBezierEase(p: BezierEasing, t: number): number {
 }
 
 /**
- * A single keyframe value. v2.0 keeps the value space narrow:
+ * A single keyframe value. The value space stays narrow:
  *   - `number` for numeric properties (position, size, rotation, opacity, scale)
  *   - hex `#RRGGBB[AA]` for colors
+ *   - a D-110 path snapshot (`{ kind: 'path', points }`) for the `path`
+ *     property ONLY — the whole ordered anchor set, interpolated per anchor
+ *     by stable id (`lerpPathSnapshot` in `path-points.ts`).
  *
  * Booleans, image assetIds, and select-string values are intentionally
  * excluded — they don't interpolate. Toggles are still possible via
  * step easing on a numeric 0/1 track if the property is exposed that way.
  */
-export const KeyframeValueSchema = z.union([z.number(), HexColorSchema]);
+export const KeyframeValueSchema = z.union([z.number(), HexColorSchema, PathKeyframeValueSchema]);
 export type KeyframeValue = z.infer<typeof KeyframeValueSchema>;
 
 export const KeyframeSchema = z.object({
@@ -198,6 +202,9 @@ export const AnimatablePropertySchema = z.enum([
   'shadow.color',
   'boxShadow.color',
   'backgroundColor',
+  // D-110 — the path element's whole-shape morph track (ONE row for the whole
+  // point set; the value is a PathKeyframeValue snapshot, never per-anchor).
+  'path',
 ]);
 export type AnimatableProperty = z.infer<typeof AnimatablePropertySchema>;
 

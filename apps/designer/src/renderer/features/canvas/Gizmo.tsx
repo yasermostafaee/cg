@@ -1,24 +1,27 @@
 import { useSyncExternalStore } from 'react';
 import type { Element } from '@cg/shared-schema';
 import { designerStore, editSceneOf } from '../../state/store.js';
-import { effectiveTransformAt } from '../timeline/keyframe-helpers.js';
+import { effectivePathLocalRect, effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { measureElementSceneSize, subscribeMeasure, getMeasureVersion } from './measure-element.js';
 import { cx } from '../../cx.js';
 import {
-  cornerLocal,
-  computeResize,
+  boxRect,
+  computeRectResize,
   computeRotationAngle,
   gizmoCorners,
-  handleLocal,
+  gizmoCornersOfRect,
   localToScene,
   pivotClientFromGrab,
   quantizeBoxToLayout,
+  rectCorner,
+  rectHandleLocal,
   screenAngleDeg,
   screenDistance,
   snapValue,
   RESIZE_CFG,
   type Corner,
   type Handle,
+  type LocalRect,
   type ScreenPoint,
 } from './geometry.js';
 import { colors } from '../../theme.js';
@@ -155,11 +158,13 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
       t = { ...t, size: { w: m.w, h: m.h }, position: { ...t.position, x: leftX } };
     }
   }
-  // B-059/B-062 — paths need NO display override here: under the owner model the
-  // stored `transform.size` IS the visual (curve-aware) bbox (normalize keeps the
-  // invariant; legacy scenes are migrated at load), so the generic box below
-  // already encloses the curved outline, and resize commits bake into the points
-  // via `writeStaticAnimatable`.
+  // B-059/B-062 — a STATIC path needs no display override: under the owner model the
+  // stored `transform.size` IS the visual (curve-aware) bbox. D-110 (owner decision
+  // 2026-07-11) — a KEYFRAMED path's box is LIVE: the morph bounds at the playhead
+  // (`effectivePathLocalRect`, an OFFSET local rect), projected through the same
+  // pivot/rotation map so a rotated, morphing path's box stays glued to the shape.
+  // Other element kinds keep the plain [0,size] box.
+  const liveRect = effectivePathLocalRect(element, currentFrame);
   // Project the element's RENDERED box (`Scale·Rotate` about the anchor — a parallelogram
   // under non-uniform scale) into overlay/screen space, so the frame + handles trace the
   // SAME geometry the renderer draws (matches `hit-test.inverseToLocal`). Fixes B-022,
@@ -168,8 +173,12 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   // (1/64 css px, truncated) because that's where the preview ACTUALLY lays the element
   // out: at fractional model coords the raw model sat up to zoom·dpr/64 device px (1.25 at
   // 6400%/dpr 1.25 — owner-measured +1.0156) OUTSIDE the rendered edge. No-op at integer
-  // coords; interaction math below stays on the raw model.
-  const c = gizmoCorners(quantizeBoxToLayout(t), scale);
+  // coords; interaction math below stays on the raw model. The live morph rect is a
+  // virtual overlay box (not an engine-laid-out edge), so it skips the quantization.
+  const c =
+    liveRect !== null
+      ? gizmoCornersOfRect(t, liveRect, scale)
+      : gizmoCorners(quantizeBoxToLayout(t), scale);
   const center = c.center;
   // B-042 — a 1-DEVICE-px frame stroke: 1 css px is 1.25 device px at dpr 1.25 — a fuzzy band
   // straddling the very edge the operator is judging at pixel-grid zoom. One device pixel,
@@ -318,12 +327,15 @@ export function MultiGizmo({ elements, scale, currentFrame }: MultiProps): JSX.E
   const boxes = elements.map((el) => {
     // B-042 — same LayoutUnit quantization as the single-selection gizmo (visual only).
     const t = quantizeBoxToLayout(effectiveTransformAt(el, currentFrame));
+    // D-110 — a keyframed path's member box follows its live morph rect (same
+    // axis-aligned fidelity as the other members — rotation is ignored here).
+    const r = effectivePathLocalRect(el, currentFrame) ?? boxRect(t);
     return {
       id: el.id,
-      x: t.position.x * scale,
-      y: t.position.y * scale,
-      w: t.size.w * t.scale.x * scale,
-      h: t.size.h * t.scale.y * scale,
+      x: (t.position.x + r.x * t.scale.x) * scale,
+      y: (t.position.y + r.y * t.scale.y) * scale,
+      w: r.w * t.scale.x * scale,
+      h: r.h * t.scale.y * scale,
     };
   });
   return (
@@ -379,12 +391,17 @@ function beginResize(
   ev: PointerEvent,
 ): void {
   const t0 = effectiveTransformAt(element, currentFrame);
+  // D-110 — a keyframed path resizes from its LIVE morph rect (what the handles
+  // sit on); everything else from the plain element box. `computeRectResize`'s
+  // ratio-based commits make either box mean "scale the shape so THIS extent
+  // matches the gesture" (bake / size-keyframe, both scale the live extent).
+  const rect0: LocalRect = effectivePathLocalRect(element, currentFrame) ?? boxRect(t0);
   const cfg = RESIZE_CFG[handle];
   // The grabbed handle's start position in scene coords — the pointer delta is
-  // added to this each move, then `computeResize` does the rotated-frame math.
-  const grab = handleLocal(handle, t0.size.w, t0.size.h);
+  // added to this each move, then `computeRectResize` does the rotated-frame math.
+  const grab = rectHandleLocal(handle, rect0);
   const grabScene = localToScene(t0, grab.x, grab.y);
-  const centerScene = localToScene(t0, t0.size.w / 2, t0.size.h / 2);
+  const centerScene = localToScene(t0, rect0.x + rect0.w / 2, rect0.y + rect0.h / 2);
   const startX = ev.clientX;
   const startY = ev.clientY;
   // Hold this handle's cursor for the whole gesture (don't flip over others). The arrow
@@ -419,7 +436,7 @@ function beginResize(
         }
       }
     }
-    const next = computeResize(t0, handle, pScene);
+    const next = computeRectResize(t0, rect0, handle, pScene);
     designerStore.commitAnimatable(element.id, 'position.x', next.position.x);
     designerStore.commitAnimatable(element.id, 'position.y', next.position.y);
     designerStore.commitAnimatable(element.id, 'size.w', next.size.w);
@@ -451,7 +468,10 @@ function beginRotate(
 ): void {
   const t0 = effectiveTransformAt(element, currentFrame);
   const startAngle = t0.rotation;
-  const cl = cornerLocal(corner, t0.size.w, t0.size.h);
+  // D-110 — the rotate zones sit just outside the LIVE rect corners for a
+  // keyframed path; the pivot stays the element anchor (transform-origin).
+  const rect0: LocalRect = effectivePathLocalRect(element, currentFrame) ?? boxRect(t0);
+  const cl = rectCorner(corner, rect0);
   // Recover the anchor's client position from the grabbed corner — the corner's offset is
   // rotated AND scaled (the renderer's `Scale·Rotate`) before the zoom, so the pivot lands
   // on the anchor regardless of a prior non-uniform scale.
@@ -467,7 +487,7 @@ function beginRotate(
   );
   const startCursor = Math.atan2(ev.clientY - pivot.y, ev.clientX - pivot.x) * (180 / Math.PI);
   const cornerScene = localToScene(t0, cl.x, cl.y);
-  const centerScene = localToScene(t0, t0.size.w / 2, t0.size.h / 2);
+  const centerScene = localToScene(t0, rect0.x + rect0.w / 2, rect0.y + rect0.h / 2);
   const unlock = lockCursor(rotateCursor(screenAngleDeg(centerScene, cornerScene) + 90));
   const snapping = designerStore.get().snappingEnabled;
 
