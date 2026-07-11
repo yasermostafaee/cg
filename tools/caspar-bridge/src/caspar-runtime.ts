@@ -140,6 +140,10 @@ export class CasparRuntime {
    * and no later `CLEAR` destroyed it). The prescriptive signal: `take` plays when
    * present, else re-issues `CG ADD` (a fresh load) before `CG PLAY`. Server-agnostic
    * (mirror-sync fans out ADD/CLEAR to both, so existence matches on each).
+   * B-054 — invalidated wholesale whenever a declared session completes an AMCP
+   * reconnect cycle (see #wireAdapter): a restarted CasparCG comes back with
+   * EMPTY layers, so this memory would otherwise be a lie and the next take
+   * would bare-PLAY nothing.
    */
   readonly #loaded = new Set<string>();
   /**
@@ -273,6 +277,19 @@ export class CasparRuntime {
       session.osc.on('events', (events) => {
         if (this.#adapter.currentPrimary !== label) return;
         for (const event of events) this.#reconciler.applyOsc(event);
+      });
+      // B-054 — 'healthy' fires only when a session completes a full AMCP
+      // (re)connect cycle (never on degraded→healthy OSC recovery): the
+      // server behind it may have restarted with EMPTY layers, so producer
+      // existence can no longer be vouched for. Clear wholesale — commands
+      // fan out to every declared server, so the next take's B-039 re-ADD
+      // heals whichever side lost its producers and benignly stage-replaces
+      // on one that kept them. Sends nothing itself; #adopted stays (a
+      // restarted server's layers are empty — the skipped adopt-CLEAR is a
+      // no-op by construction).
+      session.on('healthy', () => {
+        if (this.#sessions[label] !== session) return; // torn-down era
+        this.#loaded.clear();
       });
     }
 
