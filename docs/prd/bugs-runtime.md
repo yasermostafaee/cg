@@ -11,6 +11,47 @@ per-bug loop, see [bugs.md](bugs.md).
 
 ---
 
+## [x] B-065 — B-064's bounded serve stop severs an ARRIVED-but-unparsed template fetch (RST) — red main CI via the reconnect fixtures + its own in-flight test ⟨priority: high⟩ — fixed on `fix/ci-test-stability`
+
+> **CLOSED — root-caused with a deterministic repro, fixed + revalidated
+> 2026-07-12.** **Symptom:** main CI red from the #283 merge onward —
+> `reconnect-reconciliation.integration.test.ts:133/:243` (`onAir` false,
+> producer still `html`) and `setconfig-serve-restart.integration.test.ts:187`
+> (in-flight GET rejected `ECONNRESET`), CI-only (2/2 Linux runs red;
+> 10×25 fixture iterations under 10-core local load never reproduced).
+> **Root cause (production, found by forcing the ordering deterministically):**
+> a socket joins `TemplateHttpServer.stop()`'s `#busy` set only when Node
+> fires `'request'` (headers parsed). A fetch whose request bytes have
+> ARRIVED but are not yet parsed is indistinguishable from an idle socket —
+> and since Node 19 `server.close()` itself destroys idle keep-alive
+> connections synchronously, RST-ing the unread request (closing a socket
+> with unread inbound data sends RST). The severed GET settles the mock's
+> (and real CEF's) page FAILED → `onAir:false` — silently deleting the
+> on-air orphan the reconnect fixtures hand over. The window is event-loop-
+> lag-scaled: effectively unreachable on a fast idle box, hit consistently
+> on a contended 4-vCPU CI runner. **Fix (production):** `stop()` defers the
+> whole teardown — `server.close()`, `closeIdleConnections()`, and the
+> request-less destroy pass — by ONE full event-loop iteration (double
+> `setImmediate`, spanning the next poll phase) so an arrived request joins
+> `#busy` and flushes within the existing 500 ms grace; the grace deadline
+> arms at `stop()` entry, so teardown stays bounded exactly as B-064
+> requires, and a keep-alive socket whose response completes mid-teardown is
+> reaped via `destroySoon()` (never a hard `destroy()`, which discards the
+> queued response). **Fix (tests):** the fixtures now stage deterministically
+> instead of racing — `orphanedSession` settles the page
+> (`waitForCgAddResolution`) before killing the bridge (its stated scenario
+> is "dies WITH OUTPUT ON AIR", i.e. a rendered page, not a mid-flight
+> fetch); the in-flight-flush test replaces its fixed 30 ms sleep with a
+> first-byte barrier; the NDJSON trace reads replace a fixed 150 ms sleep
+> with a real write barrier (`mock.traceFlush()`, new amcp-mock seam); the
+> held-CLEAR staging polls for BOTH mirror-sync CLEARs. **New regression
+> test:** keep-alive next-fetch parse window — a second request written and
+> `stop()` called in the SAME synchronous tick must still flush a complete
+> response (deterministic on every OS/Node; failed pre-fix, passes post-fix).
+> **Validation:** deterministic repros flipped red→green on Node 22.23.1
+> (CI's exact version) and 26; 15×3-spec loop under 10-core load green;
+> 3× full uncached parallel `pnpm test` green (one under 8 burners).
+
 ## [x] B-064 — R-010 regression: after an OSC-port change Apply cycle, the template server stays down and every Load ships a bare-id 404 ⟨priority: high⟩ — fixed via `fix-setconfig-serve-restart`, archived
 
 <!-- change: openspec/changes/archive/2026-07-11-fix-setconfig-serve-restart/ -->

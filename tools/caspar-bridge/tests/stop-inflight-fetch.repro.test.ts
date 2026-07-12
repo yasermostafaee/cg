@@ -5,15 +5,18 @@ import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig } from '@cg/shared-ipc';
 
 /**
- * REPRO (CI-deterministic failure of reconnect-reconciliation :133/:243) —
- * the B-064 forceful stop() can sever the mock's IN-FLIGHT template GET
- * when the bridge dies right after take; the mock then faithfully settles
- * the page 'failed' → onAir:false with producer still 'html'
- * (mock.ts completeCgAdd), silently deleting the ON-AIR ORPHAN the
- * reconnect fixtures depend on. The race is scheduling-dependent (loopback
- * headers usually win on a fast idle box, lose under CI contention), so
- * this repro runs the exact fixture shape in a tight loop and requires the
- * orphan to survive EVERY iteration.
+ * REGRESSION canary (CI failure of reconnect-reconciliation :133/:243) —
+ * the B-064 forceful stop() severed the mock's IN-FLIGHT template GET when
+ * the bridge died right after take: a socket joins stop()'s #busy set only
+ * once Node fires 'request', so request bytes ARRIVED but not yet parsed
+ * (an event-loop-lag window, contention-scaled) were instantly destroyed →
+ * ECONNRESET → the mock faithfully settles the page 'failed' → onAir:false
+ * with producer still 'html' (mock.ts completeCgAdd), silently deleting the
+ * ON-AIR ORPHAN the reconnect fixtures depend on. stop() now defers the whole
+ * teardown (including `server.close()`, which itself reaps "idle" sockets on
+ * Node ≥19) one full event-loop iteration, so an arrived fetch always joins
+ * #busy and flushes within the grace; this loop runs the exact fixture shape
+ * and requires the orphan to survive EVERY iteration.
  */
 
 let mock: MockHandle | null = null;
@@ -66,8 +69,9 @@ it(`the orphan survives a bridge death racing the template fetch — ${String(IT
     await r.stop();
     runtime = null;
 
-    // Give the (possibly severed) GET time to settle either way.
-    await new Promise((res) => setTimeout(res, 120));
+    // Deterministic settle barrier (either verdict) — a fixed sleep can read
+    // the layer while the GET verdict is still pending under contention.
+    await mock.waitForCgAddResolution(SLOT);
     const layer = mock.layerState(SLOT);
     if (layer?.onAir !== true) failures.push(i);
 
@@ -76,4 +80,6 @@ it(`the orphan survives a bridge death racing the template fetch — ${String(IT
   }
   // On failure the diff shows exactly which iterations lost the orphan.
   expect(failures).toEqual([]);
-}, 120000);
+  // Budget covers the legitimate per-iteration worst case (5s healthy deadline
+  // + acked round-trips + the 2.5s settle barrier) × 25 under contention.
+}, 240000);

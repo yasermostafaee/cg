@@ -67,6 +67,11 @@ it('load→take→out→take: load does not auto-play, out destroys, retake re-A
   expect(mock.layerState(slot)?.producer).toBe('html');
   expect(mock.layerState(slot)?.onAir).toBe(false); // <- did NOT auto-play
 
+  // Settle the ADD's async page fetch before PLAY: a pending fetch spuriously
+  // timing out under CI contention settles the page 'failed', and a failed
+  // page stays off air through PLAY (the reconnect :133/:243 failure class).
+  await expect(mock.waitForCgAddResolution(slot)).resolves.toBe('resolved');
+
   // ── take → CG PLAY: now on air ──
   expect((await runtime.take('item1')).accepted).toBe(true);
   expect(mock.layerState(slot)?.onAir).toBe(true);
@@ -80,6 +85,11 @@ it('load→take→out→take: load does not auto-play, out destroys, retake re-A
   // (a bare CG PLAY here would be a no-op on the empty layer — the B-039 bug).
   expect((await runtime.take('item1')).accepted).toBe(true);
   expect(mock.layerState(slot)?.producer).toBe('html'); // re-ADDed: only CG ADD recreates the producer
+  // The retake's internal re-ADD + PLAY are one bridge intent: PLAY lands on a
+  // 'pending' page (not 'failed'), so onAir flips deterministically; settle the
+  // re-ADD's fetch before asserting so a late spurious 'failed' cannot flip it
+  // back between the ack and the read.
+  await expect(mock.waitForCgAddResolution(slot)).resolves.toBe('resolved');
   expect(mock.layerState(slot)?.onAir).toBe(true); // …and it renders again
 });
 
@@ -96,6 +106,9 @@ it('a fresh take (item loaded but never played) plays without auto-play on load'
   await runtime.load('item1', 'lower-third', {});
   // Loaded, idle on the wire — nothing on air until take.
   expect(mock.layerState(slot)?.onAir).toBe(false);
+  // Settle the page fetch before PLAY (see the first test) so onAir cannot be
+  // flipped by a contention-induced spurious 'failed' verdict.
+  await expect(mock.waitForCgAddResolution(slot)).resolves.toBe('resolved');
   await runtime.take('item1');
   expect(mock.layerState(slot)?.onAir).toBe(true);
 });

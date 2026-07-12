@@ -76,6 +76,14 @@ async function orphanedSession(m: MockHandle, oscPort: number): Promise<void> {
   r.templateImport(TEMPLATE, HTML);
   await r.whenServerHealthy(5000);
   expect((await r.load('item1', 'lower-third', { headline: 'قدیمی' })).accepted).toBe(true);
+  // The orphan this fixture hands over is a SETTLED, rendering page ("the
+  // bridge dies WITH OUTPUT ON AIR") — wait for the mock's template GET to
+  // resolve BEFORE the take (PLAY on a settled page deterministically flips
+  // onAir) and before killing the bridge. Stopping mid-fetch is a DIFFERENT
+  // scenario (the page legitimately settles failed → empty frames, off air):
+  // under CI contention that race lost often enough to kill the orphan and
+  // red the asserts at :133/:243.
+  await expect(m.waitForCgAddResolution(SLOT)).resolves.toBe('resolved');
   expect((await r.take('item1')).accepted).toBe(true);
   expect(m.layerState(SLOT)?.onAir).toBe(true);
   await r.stop(); // nothing clears the layer — the producer is orphaned ON AIR
@@ -83,9 +91,12 @@ async function orphanedSession(m: MockHandle, oscPort: number): Promise<void> {
 }
 
 /** The mock's NDJSON wire trace: recv'd AMCP lines, in arrival order. */
-async function recvLines(file: string): Promise<string[]> {
-  // The trace stream flushes asynchronously; give it a beat.
-  await new Promise((r) => setTimeout(r, 150));
+async function recvLines(m: MockHandle, file: string): Promise<string[]> {
+  // The trace stream flushes asynchronously — await the mock's write barrier
+  // (every line queued so far is in the file) instead of sleeping: a fixed
+  // sleep under CI contention read TRUNCATED traces, which both misses lines
+  // and misaligns the session1Count slicing below.
+  await m.traceFlush();
   return fs
     .readFileSync(file, 'utf-8')
     .split('\n')
@@ -111,7 +122,7 @@ it('the fresh session ADOPTS the orphaned layer: CLEAR precedes its first CG ADD
   // and its take left the producer playing; nothing cleared it at death.)
   expect(mock.layerState(SLOT)?.producer).toBe('html');
   expect(mock.layerState(SLOT)?.onAir).toBe(true);
-  const session1Lines = await recvLines(tracePath);
+  const session1Lines = await recvLines(mock, tracePath);
   const s1Clear = session1Lines.findIndex((l) => l.startsWith('CLEAR 1-10'));
   const s1Add = session1Lines.findIndex((l) => l.startsWith('CG 1-10 ADD'));
   expect(s1Clear).toBeGreaterThanOrEqual(0); // adoption is unconditional, clean session included
@@ -128,13 +139,13 @@ it('the fresh session ADOPTS the orphaned layer: CLEAR precedes its first CG ADD
 
   // Startup itself issues NO CLEAR — the orphan stays on air until a load
   // targets its layer (on-air safety: no blind startup sweep).
-  const preLoadLines = (await recvLines(tracePath)).slice(session1Count);
+  const preLoadLines = (await recvLines(mock, tracePath)).slice(session1Count);
   expect(preLoadLines.some((l) => l.startsWith('CLEAR'))).toBe(false);
   expect(mock.layerState(SLOT)?.onAir).toBe(true);
 
   // The load adopts the layer: CLEAR 1-10 arrives BEFORE the fresh CG ADD.
   expect((await r2.load('item2', 'lower-third', { headline: 'جدید' })).accepted).toBe(true);
-  const session2Lines = (await recvLines(tracePath)).slice(session1Count);
+  const session2Lines = (await recvLines(mock, tracePath)).slice(session1Count);
   const firstClear = session2Lines.findIndex((l) => l.startsWith('CLEAR 1-10'));
   const firstAdd = session2Lines.findIndex((l) => l.startsWith('CG 1-10 ADD'));
   expect(firstClear).toBeGreaterThanOrEqual(0);
@@ -155,7 +166,7 @@ it('the fresh session ADOPTS the orphaned layer: CLEAR precedes its first CG ADD
   // while 1-10 is never re-adopted.
   const clears1to10 = session2Lines.filter((l) => l.startsWith('CLEAR 1-10')).length;
   expect((await r2.load('item3', 'lower-third', {})).accepted).toBe(true);
-  const afterThird = (await recvLines(tracePath)).slice(session1Count);
+  const afterThird = (await recvLines(mock, tracePath)).slice(session1Count);
   expect(afterThird.filter((l) => l.startsWith('CLEAR 1-10')).length).toBe(clears1to10);
   expect(afterThird.some((l) => l.startsWith('CLEAR 1-11'))).toBe(true);
 });
@@ -194,7 +205,12 @@ it('a remove landing during the adopt-CLEAR window neither leaks the layer nor A
   // The load blocks inside the adopt-CLEAR; the remove lands mid-window and,
   // finding no slot bound yet, cleans up nothing.
   const loadP = r.load('item1', 'lower-third', {});
-  await new Promise((res) => setTimeout(res, 50));
+  // Poll until BOTH sessions' adopt-CLEARs are genuinely held open — a fixed
+  // sleep is contention-fragile (50ms was not always enough for the load to
+  // reach the CLEAR handler), and releasing before the SECOND session's CLEAR
+  // arrives would strand it un-released: the load (awaiting both mirror-sync
+  // acks) then deadlocks into the test timeout.
+  await expect.poll(() => releases.length, { timeout: 5000 }).toBeGreaterThanOrEqual(2);
   expect(releases.length).toBeGreaterThan(0); // the adopt-CLEAR is in flight
   expect((await r.remove('item1')).accepted).toBe(true);
 
@@ -211,6 +227,10 @@ it('a remove landing during the adopt-CLEAR window neither leaks the layer nor A
   expect(mock.lastCgAdd(SLOT)?.template).toMatch(
     /^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third$/,
   );
+  // Settle the page before the take so PLAY deterministically flips onAir
+  // (a pending fetch spuriously timing out under contention would flip the
+  // layer off air between the take-ack and the assert).
+  await expect(mock.waitForCgAddResolution(SLOT)).resolves.toBe('resolved');
   expect((await r.take('item2')).accepted).toBe(true);
   expect(mock.layerState(SLOT)?.onAir).toBe(true);
 });

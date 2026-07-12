@@ -105,7 +105,11 @@ it('drives load/take/update/out as AMCP (acked) and confirms state from real OSC
   await waitFor(() =>
     runtime!.stackSnapshot().some((i) => i.itemId === 'item1' && i.status === 'idle'),
   );
-});
+  // The internal bounds (5000ms healthy + four 2000ms-ack commands + two
+  // 4000ms waitFors) legitimately sum past the package's 10s default under
+  // contention — give the test a budget that covers its own deadlines so a
+  // slow-but-correct run cannot be killed mid-flight.
+}, 30000);
 
 it('reports health from the real session state', async () => {
   const oscPort = await freeUdpPort();
