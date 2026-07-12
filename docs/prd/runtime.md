@@ -377,9 +377,9 @@ channel that applies a new `ConnectionConfig` to a RUNNING bridge
 
 ---
 
-## [~] R-011 — operator-chosen on-air POSITION for a loaded graphic ("author small, place anywhere" — the runtime half) ⟨priority: medium⟩
+## [x] R-011 — operator-chosen on-air POSITION for a loaded graphic ("author small, place anywhere" — the runtime half) ⟨priority: medium⟩ — merged via `runtime-onair-positioning`, archived
 
-<!-- change: openspec/changes/runtime-onair-positioning/ -->
+<!-- change: openspec/changes/archive/2026-07-12-runtime-onair-positioning/ -->
 
 > **Implemented + mock/integration/e2e-validated 2026-07-12** as **Option A
 > (runtime offset)** — a `MIXER` path was REJECTED (hard requirement: no new

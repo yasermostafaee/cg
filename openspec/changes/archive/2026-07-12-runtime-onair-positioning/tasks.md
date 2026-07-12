@@ -65,23 +65,32 @@
 
 ## 6. Gate
 
-- [ ] caspar-bridge suite green in ISOLATION and under the full parallel
-      `pnpm test` (both mandatory); full uncached `turbo run typecheck
-lint test build --force`; root `pnpm format:check`.
-- [ ] `pnpm test:e2e` (full run, runtime suite verified uncached).
-- [ ] `pnpm openspec validate --all --strict`.
+- [x] caspar-bridge suite green in ISOLATION (21 files / 79 tests) and
+      under the full parallel `pnpm test` (both mandatory); full uncached
+      `turbo run typecheck lint test build --force` (exit 0); root
+      `pnpm format:check`.
+- [x] `pnpm test:e2e` (full run): runtime 22/22 forced uncached incl.
+      `onair-position.spec.ts`; designer 199/199 uncached. (One earlier
+      designer run flaked 2–6 SHIFTING preview-timing tests under machine
+      contention — an orphaned vite server from a prior session + this
+      session's concurrent commands; killed the orphan, re-ran quiet →
+      199/199. The failure set was disjoint across runs and each test
+      passes in isolation; no R-011 code touches the preview path, which
+      is regression-guarded by unit test.)
+- [x] `pnpm openspec validate --all --strict` (34 passed).
 
 ## 7. Wrap-up
 
-- [ ] File R-011 in `docs/prd/runtime.md` as implemented +
+- [x] File R-011 in `docs/prd/runtime.md` as implemented +
       mock/integration/e2e-validated; live smoke PENDING hardware (real
       1920×1080 channel: small comp loads CENTERED with no override / at
       the chosen anchor+offset with one; Designer preview unchanged).
       Cross-ref D-119 (Designer half: auto-populate `defaultPosition`,
       small-comp export) and note the dependency. ROADMAP tracks no
       R-items (verified) — no update.
-- [ ] GUARDED pre-archive shared-spec ordering check: held pair's owned
-      headings (incl. "Template resolution is validated") untouched; all
-      deltas are ADDs of new headings (one brand-new capability) →
-      archive; else leave ACTIVE and report.
-- [ ] Conventional commits, push, PR, verify remote.
+- [x] GUARDED pre-archive shared-spec ordering check PASSED (re-verified
+      this session): held pair's owned headings (incl. "Template
+      resolution is validated") untouched; all deltas are ADDs of new
+      headings (one brand-new capability, zero living-spec collisions) →
+      archived ordering-independent of the pair.
+- [x] Conventional commits, push, PR, verify remote.
