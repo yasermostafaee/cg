@@ -54,6 +54,10 @@ describe('ExporterSingleFile', () => {
     expect(html).toContain('var scene =');
     expect(html).toContain('CG.createRuntime(scene, { assetUrls:');
     expect(html).toContain('CG.installCasparGlobals');
+    // B-066 — a boot failure must be VISIBLE on the output (try/catch +
+    // "cg boot error" pre), never a silent blank whose only trace is
+    // "update is not defined" in the CEF log.
+    expect(html).toContain("'cg boot error: '");
   });
 
   it('embeds a parseable GDD schema with the dynamic fields', async () => {

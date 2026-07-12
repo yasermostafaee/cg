@@ -33,7 +33,11 @@ async function bundleRuntime() {
     bundle: true,
     format: 'esm',
     platform: 'browser',
-    target: 'es2022',
+    // B-066 — this cg.js is loaded by CasparCG's CEF (baseline Chromium 71,
+    // the 2.3 LTS floor); es2022 syntax would SyntaxError there. `target`
+    // covers syntax only — method compat is guarded by the cef-compat lint
+    // + @cg/single-file-export's bundle-artifact scan.
+    target: 'chrome71',
     write: false,
     minify: false,
     sourcemap: false,

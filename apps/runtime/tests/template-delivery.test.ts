@@ -228,6 +228,26 @@ describe('produceTemplateDelivery', () => {
   });
 });
 
+describe('produceTemplateDelivery — B-066 Persian UTF-8 integrity (upstream hops)', () => {
+  it('a packed .vcg with Persian field defaults keeps the exact codepoints through unpack + delivery', async () => {
+    // The upstream half of the "????" trace: .vcg pack → verify/unpack →
+    // TemplateInfo fields + the served scene literal. Byte-exact or red.
+    const persianDefault = 'سارا نادری';
+    const { template, html } = await produceTemplateDelivery(await buildVcgWithImage('tpl-fa'));
+
+    const delivered = template.fields.find((f) => f.id === 'anchor');
+    expect(delivered?.type).toBe('text');
+    const deliveredDefault = (delivered as { default?: string } | undefined)?.default;
+    expect([...(deliveredDefault ?? '')].map((c) => c.codePointAt(0))).toEqual(
+      [...persianDefault].map((c) => c.codePointAt(0)),
+    );
+    // The served page's inlined scene literal carries the Persian raw (UTF-8
+    // meta charset page) — no "?" downconversion anywhere in the default.
+    expect(html).toContain(persianDefault);
+    expect(deliveredDefault).not.toContain('?');
+  });
+});
+
 describe('importTemplateFromBytes', () => {
   it('delivers { template, html } to the bridge and returns the registered id', async () => {
     const sent: { template: unknown; html: string }[] = [];

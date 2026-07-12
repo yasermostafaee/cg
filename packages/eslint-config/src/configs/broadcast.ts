@@ -1,6 +1,7 @@
 import globals from 'globals';
 import type { Linter } from 'eslint';
 import { base } from './base.js';
+import { cefCompatSyntaxRestrictions } from '../rules/cef-compat.js';
 import {
   ELECTRON_PACKAGE,
   MAIN_ONLY_PACKAGES,
@@ -15,6 +16,12 @@ import type { TierOptions } from './node.js';
  * @cg/lottie-bridge. This code ships *inside* exported .vcg index.html and
  * must be hermetic — no Node, no electron, no Main-tier services, no React,
  * no @cg/shared-ui. Only domain types and pure utilities.
+ *
+ * B-066 — broadcast code also runs on CasparCG's CEF (baseline Chromium 71,
+ * the 2.3 LTS floor), NOT a modern browser: built-in methods newer than the
+ * baseline are banned (`no-restricted-syntax` below), because esbuild
+ * targets down-level syntax only. See `../rules/cef-compat.ts` for the one
+ * curated list this shares with the bundle-artifact scan.
  */
 export function broadcast(options: TierOptions = {}): Linter.Config {
   const config: Linter.Config = {
@@ -22,6 +29,7 @@ export function broadcast(options: TierOptions = {}): Linter.Config {
       globals: { ...globals.browser },
     },
     rules: {
+      'no-restricted-syntax': ['error', ...cefCompatSyntaxRestrictions()],
       'no-restricted-imports': [
         'error',
         {

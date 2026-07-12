@@ -11,6 +11,68 @@ per-bug loop, see [bugs.md](bugs.md).
 
 ---
 
+## [~] B-066 — CEF-incompatible `replaceAll` in the served runtime bundle aborts every template at boot on real CasparCG — "update/play is not defined" and Persian "????" are downstream effects ⟨priority: high⟩
+
+<!-- change: openspec/changes/persian-onair-cef-compat/ -->
+
+> Found live via the D-119 starter-template work (hard blocker for D-119 —
+> no Persian template airs). ONE root cause behind three observed symptoms,
+> confirmed by a parallel trace on the Designer track AND by this change's
+> CEF-emulation tests. Filed as ONE bug per the owner's direction (next
+> free number on merged main; the brief's provisional B-065 was already
+> taken by the serve-stop fix, #286).
+
+**Root cause:** `packages/template-runtime/src/bindings.ts` called
+`String.prototype.replaceAll` — Chromium 85+, absent in CasparCG's CEF
+(baseline **Chromium 71** = CasparCG 2.3 LTS, the repo's declared floor).
+`createRuntime()` applies field DEFAULTS through that binding walk during
+construction, so the served template ABORTED at boot ("replaceAll is not a
+function"). The bundler was not wrong: the IIFE already targeted
+`chrome71` — but esbuild `target` lowers SYNTAX only; built-in METHODS pass
+straight through. **Downstream effect 1** — "update is not defined" /
+"play is not defined" on `CG ADD`: the boot runs `createRuntime()` BEFORE
+`installCasparGlobals()`, so the throw meant the bare CasparCG entrypoints
+were never installed. **Downstream effect 2** — Persian as "????": nothing
+rendered at all; the payload path is clean — every UTF-8 hop was verified
+(`.vcg` unpack `TextDecoder`; browser WS text frames; bridge
+`data.toString()`; Node socket write default UTF-8 — `setEncoding` is
+read-side only) and the B-041 matrix already proves Persian byte-exact
+through the wire. `quote()`/the escape rule untouched.
+
+**Fix + durable guard** (implemented + test-validated 2026-07-12,
+`openspec/changes/persian-onair-cef-compat/`): CEF-safe
+`split(placeholder).join(value)` (literal replace-all; regex metacharacters
+inert; a value's `$&` stays literal); full bundle audit — `replaceAll` was
+the ONLY banned built-in (zod included); the boot gains the fixtures'
+try/catch + visible "cg boot error" `<pre>`; guard = a bundle-ARTIFACT scan
+(`@cg/single-file-export tests/cef-compat.test.ts`) + broadcast-tier
+`no-restricted-syntax` bans (`@cg/eslint-config` `cef-compat`, one curated
+list — it already caught a real `matchAll` in the exporter during rollout,
+correctly opted out as non-CEF-facing code) + every CasparCG-facing esbuild
+target pinned `chrome71` (the `.vcg`'s `cgJs` and `tools/template-fixtures`
+were es2022). Verb sequence untouched: `CG ADD`/`PLAY`/`UPDATE` per
+ADR-0006; `CG INVOKE`/`CALL` remain hardware-disproven and NOT adopted.
+Regression nets: CEF-emulation boot test (no `replaceAll` in the env →
+boots, bare globals defined, `update(json)` renders Persian); Persian
+byte-exact `.vcg`→delivery and bridge→`CG ADD`-decode tests (zero "?").
+
+**LIVE CONFIRMATION — PENDING (the real gate; owner's CasparCG):**
+
+1. Export any Persian template from the Designer → import into the Runtime
+   app → Load on real CasparCG.
+2. `CG ADD`: NO "replaceAll is not a function", NO "cg boot error" pre on
+   the output, NO "update/play is not defined" in the CEF log.
+3. `window.play`/`window.update` DEFINED; the template RENDERS.
+4. Rendered Persian is correct — no "?". (CasparCG's own console/log may
+   still transliterate Persian to "?" in its display — that is the log's
+   ANSI codepage, not the payload; the render is the ground truth.)
+5. Note the CEF/Chromium version from the CasparCG logs (expected ∈
+   [71, 84]).
+6. Unblocks the **D-119** Persian starter-template re-test.
+
+**Cross-refs:** [[B-041]] (escape rule — frozen, reconfirmed byte-exact),
+ADR 0006 (verb provenance), D-119 (the blocked Designer track).
+
 ## [x] B-065 — B-064's bounded serve stop severs an ARRIVED-but-unparsed template fetch (RST) — red main CI via the reconnect fixtures + its own in-flight test ⟨priority: high⟩ — fixed on `fix/ci-test-stability`
 
 > **CLOSED — root-caused with a deterministic repro, fixed + revalidated
