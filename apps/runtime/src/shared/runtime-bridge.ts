@@ -16,8 +16,10 @@ import type {
   ConnectionsSetConfigChannel,
   LayersClearChannel,
   LayersOrphansChannel,
+  LayersOwnedOccupancyChannel,
   LockEngageChannel,
   OrphanLayer,
+  OwnedOccupancyWarning,
   LockReleaseChannel,
   LockState,
   PendingUpdate,
@@ -122,6 +124,13 @@ export interface RuntimeBridge {
       req: ChannelRequest<typeof LayersClearChannel>,
     ): Promise<ChannelResponse<typeof LayersClearChannel>>;
     onOrphansChanged(handler: (orphans: OrphanLayer[]) => void): Unsubscribe;
+    /**
+     * B-056 — owned-slot occupancy warnings (a load's adopt-CLEAR missed the
+     * primary over observed foreign content). No direct Clear — the remedy
+     * is Out/Remove of the named item.
+     */
+    ownedOccupancy(): Promise<ChannelResponse<typeof LayersOwnedOccupancyChannel>>;
+    onOwnedOccupancyChanged(handler: (warnings: OwnedOccupancyWarning[]) => void): Unsubscribe;
   };
 
   lock: {

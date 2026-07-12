@@ -4,6 +4,7 @@ import type {
   ConnectionHealth,
   LockState,
   OrphanLayer,
+  OwnedOccupancyWarning,
   PendingUpdate,
   Settings,
   TemplateInfo,
@@ -33,6 +34,7 @@ export class MockRuntime {
   readonly healthChanged = new Emitter<ConnectionHealth>();
   readonly configChanged = new Emitter<ConnectionConfig>();
   readonly orphansChanged = new Emitter<OrphanLayer[]>();
+  readonly ownedOccupancyChanged = new Emitter<OwnedOccupancyWarning[]>();
   readonly lockChanged = new Emitter<LockState>();
   readonly settingsChanged = new Emitter<Settings>();
   readonly updateChanged = new Emitter<PendingUpdate | null>();
@@ -48,6 +50,9 @@ export class MockRuntime {
   // R-009 — the offline mock has no real server, so no orphans, EXCEPT a
   // test-only seed (CG_E2E_ORPHAN) so Playwright can drive the visible flow.
   #orphans: OrphanLayer[] = seedOrphans();
+  // B-056 — same shape: no real primary to miss, EXCEPT a test-only seed
+  // (CG_E2E_OWNED_OCCUPANCY) so Playwright can drive the warning + remedy.
+  #ownedOccupancy: OwnedOccupancyWarning[] = seedOwnedOccupancy();
 
   // ── stack ───────────────────────────────────────────────────────────
   stackSnapshot(): StackItemState[] {
@@ -101,6 +106,9 @@ export class MockRuntime {
     this.#transition(itemId, 'exiting', true);
     this.#audit.unshift(auditEntry('out', { itemId, templateId: item.templateId }));
     this.#settle(itemId, 'idle');
+    // B-056 parity — the mock's simulated servers are healthy, so an out's
+    // CLEAR "lands on the primary": the item's warning provably resolves.
+    this.#resolveOwnedOccupancy(itemId);
     return { accepted: true };
   }
 
@@ -110,6 +118,8 @@ export class MockRuntime {
     if (item !== null)
       this.#audit.unshift(auditEntry('remove', { itemId, templateId: item.templateId }));
     this.#emitStack();
+    // B-056 parity — the item is gone / its layer deallocated.
+    this.#resolveOwnedOccupancy(itemId);
     return { accepted: true };
   }
 
@@ -120,6 +130,8 @@ export class MockRuntime {
       this.#audit.unshift(
         auditEntry('remove', { itemId: item.itemId, templateId: item.templateId }),
       );
+      // B-056 parity — every item's removal resolves its warning.
+      this.#resolveOwnedOccupancy(item.itemId);
     }
     this.#stack = [];
     this.#emitStack();
@@ -232,6 +244,24 @@ export class MockRuntime {
     this.#orphans = this.#orphans.filter((o) => !(o.channel === channel && o.layer === layer));
     if (this.#orphans.length !== before) this.orphansChanged.emit(this.orphans());
     return { ok: true };
+  }
+
+  /** B-056 — the currently surfaced owned-slot warnings (offline: seed-only). */
+  ownedOccupancy(): OwnedOccupancyWarning[] {
+    return [...this.#ownedOccupancy];
+  }
+
+  /**
+   * B-056 parity — drop an item's warning and publish the change. In the
+   * offline mock the simulated servers are always healthy, so every
+   * out/remove counts as a CLEAR provably landing on the primary.
+   */
+  #resolveOwnedOccupancy(itemId: string): void {
+    const before = this.#ownedOccupancy.length;
+    this.#ownedOccupancy = this.#ownedOccupancy.filter((w) => w.itemId !== itemId);
+    if (this.#ownedOccupancy.length !== before) {
+      this.ownedOccupancyChanged.emit(this.ownedOccupancy());
+    }
   }
 
   // ── lock ────────────────────────────────────────────────────────────
@@ -388,5 +418,27 @@ function seedOrphans(): OrphanLayer[] {
   const flagged = (globalThis as { CG_E2E_ORPHAN?: boolean }).CG_E2E_ORPHAN === true;
   return flagged
     ? [{ channel: 1, layer: 60, producer: 'html', since: new Date().toISOString() }]
+    : [];
+}
+
+/**
+ * B-056 — e2e-only owned-slot warning seed: with `window.CG_E2E_OWNED_OCCUPANCY`
+ * armed the offline mock boots with one warning against a seeded stack item so
+ * Playwright can drive the banner + Out/Remove remedy. The bridge-side truth
+ * (load-time detection off the real OSC tap) is integration-tested.
+ */
+function seedOwnedOccupancy(): OwnedOccupancyWarning[] {
+  const flagged =
+    (globalThis as { CG_E2E_OWNED_OCCUPANCY?: boolean }).CG_E2E_OWNED_OCCUPANCY === true;
+  return flagged
+    ? [
+        {
+          channel: 1,
+          layer: 10,
+          itemId: 'item-lower-third',
+          producer: 'html',
+          since: new Date().toISOString(),
+        },
+      ]
     : [];
 }

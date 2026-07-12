@@ -15,6 +15,7 @@ import { StatusBar } from './features/status/StatusBar.js';
 import { useConnections } from './hooks/useConnections.js';
 import { useLock } from './hooks/useLock.js';
 import { useOrphans } from './hooks/useOrphans.js';
+import { useOwnedOccupancy } from './hooks/useOwnedOccupancy.js';
 import { useStack } from './hooks/useStack.js';
 import { colors } from './theme.js';
 
@@ -64,6 +65,7 @@ export function App(): JSX.Element {
   const lock = useLock();
   const health = useConnections();
   const orphans = useOrphans();
+  const ownedOccupancy = useOwnedOccupancy();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [auditOpen, setAuditOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -81,7 +83,7 @@ export function App(): JSX.Element {
           <div style={styles.monitor}>
             PVW / PGM monitor strip will live here. Full monitor with frame grabs is M9.
           </div>
-          <OrphanLayersBanner orphans={orphans} />
+          <OrphanLayersBanner orphans={orphans} ownedOccupancy={ownedOccupancy} />
           <StackPanel onSelectionChange={setSelectedId} />
         </section>
         <Inspector

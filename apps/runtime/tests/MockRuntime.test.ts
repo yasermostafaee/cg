@@ -43,6 +43,41 @@ describe('MockRuntime stack', () => {
   });
 });
 
+describe('MockRuntime owned-slot occupancy (B-056 parity)', () => {
+  it('starts empty without the e2e seed and never publishes on unrelated ops', () => {
+    const rt = new MockRuntime();
+    let calls = 0;
+    rt.ownedOccupancyChanged.subscribe(() => (calls += 1));
+    expect(rt.ownedOccupancy()).toEqual([]);
+    const id = rt.stackSnapshot()[0]!.itemId;
+    rt.take(id);
+    rt.out(id);
+    rt.remove(id);
+    expect(calls).toBe(0);
+  });
+
+  it('boots with the seeded warning under CG_E2E_OWNED_OCCUPANCY and resolves it on remove', () => {
+    (globalThis as { CG_E2E_OWNED_OCCUPANCY?: boolean }).CG_E2E_OWNED_OCCUPANCY = true;
+    try {
+      const rt = new MockRuntime();
+      const emissions: unknown[][] = [];
+      rt.ownedOccupancyChanged.subscribe((w) => emissions.push(w));
+      expect(rt.ownedOccupancy()).toMatchObject([
+        { channel: 1, layer: 10, itemId: 'item-lower-third' },
+      ]);
+      // A take does NOT resolve (bridge parity).
+      rt.take('item-lower-third');
+      expect(rt.ownedOccupancy()).toHaveLength(1);
+      // The remedy resolves it and publishes the change.
+      rt.remove('item-lower-third');
+      expect(rt.ownedOccupancy()).toEqual([]);
+      expect(emissions[emissions.length - 1]).toEqual([]);
+    } finally {
+      delete (globalThis as { CG_E2E_OWNED_OCCUPANCY?: boolean }).CG_E2E_OWNED_OCCUPANCY;
+    }
+  });
+});
+
 describe('MockRuntime lock', () => {
   it('engages and releases with the matching PIN', async () => {
     const rt = new MockRuntime();

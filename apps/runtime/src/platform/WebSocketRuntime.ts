@@ -10,6 +10,8 @@ import {
   LayersClearChannel,
   LayersOrphansChangedChannel,
   LayersOrphansChannel,
+  LayersOwnedOccupancyChangedChannel,
+  LayersOwnedOccupancyChannel,
   LockEngageChannel,
   LockReleaseChannel,
   LockStateChangedChannel,
@@ -41,6 +43,7 @@ import {
   type ConnectionHealth,
   type LockState,
   type OrphanLayer,
+  type OwnedOccupancyWarning,
   type PendingUpdate,
   type Settings,
 } from '@cg/shared-ipc';
@@ -147,6 +150,7 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #healthSubs = new Subs<ConnectionHealth>();
   readonly #configSubs = new Subs<ConnectionConfig>();
   readonly #orphanSubs = new Subs<OrphanLayer[]>();
+  readonly #ownedOccupancySubs = new Subs<OwnedOccupancyWarning[]>();
   readonly #lockSubs = new Subs<LockState>();
   readonly #updateSubs = new Subs<PendingUpdate | null>();
   readonly #settingsSubs = new Subs<Settings>();
@@ -310,6 +314,11 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#orphanSubs.emit(p.data);
         break;
       }
+      case LayersOwnedOccupancyChangedChannel.name: {
+        const p = LayersOwnedOccupancyChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#ownedOccupancySubs.emit(p.data);
+        break;
+      }
       case LockStateChangedChannel.name: {
         const p = LockStateChangedChannel.payload.safeParse(payload);
         if (p.success) this.#lockSubs.emit(p.data);
@@ -398,6 +407,9 @@ export class WebSocketRuntime implements RuntimeBridge {
     clear: (req: ChannelRequest<typeof LayersClearChannel>) =>
       this.#invoke(LayersClearChannel, req),
     onOrphansChanged: (handler: (orphans: OrphanLayer[]) => void) => this.#orphanSubs.add(handler),
+    ownedOccupancy: () => this.#invoke(LayersOwnedOccupancyChannel, undefined),
+    onOwnedOccupancyChanged: (handler: (warnings: OwnedOccupancyWarning[]) => void) =>
+      this.#ownedOccupancySubs.add(handler),
   };
 
   readonly lock = {

@@ -13,6 +13,8 @@ import {
   LayersClearChannel,
   LayersOrphansChangedChannel,
   LayersOrphansChannel,
+  LayersOwnedOccupancyChangedChannel,
+  LayersOwnedOccupancyChannel,
   LockEngageChannel,
   LockReleaseChannel,
   LockStateChangedChannel,
@@ -272,6 +274,7 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
     backing.healthChanged.subscribe((h) => push(ConnectionsHealthChangedChannel, h)),
     backing.configChanged.subscribe((c) => push(ConnectionsConfigChangedChannel, c)),
     backing.orphansChanged.subscribe((o) => push(LayersOrphansChangedChannel, o)),
+    backing.ownedOccupancyChanged.subscribe((w) => push(LayersOwnedOccupancyChangedChannel, w)),
     backing.lockChanged.subscribe((l) => push(LockStateChangedChannel, l)),
     backing.updateChanged.subscribe((u) => push(UpdateStateChangedChannel, u)),
     backing.settingsChanged.subscribe((s) => push(SettingsChangedChannel, s)),
@@ -318,6 +321,8 @@ function buildRoutes(b: CasparRuntime, persistPath?: string): Map<string, Route>
     route(LayersClearChannel, (r: { channel: number; layer: number }) =>
       b.clearLayer(r.channel, r.layer),
     ),
+    // B-056 — owned-slot occupancy warnings (no Clear: the remedy is Out/Remove).
+    route(LayersOwnedOccupancyChannel, () => b.ownedOccupancy()),
 
     route(LockEngageChannel, (r: { pin: string }) => b.engage(r.pin)),
     route(LockReleaseChannel, (r: { pin: string }) => b.release(r.pin)),

@@ -108,6 +108,8 @@ function createMockBridge(): RuntimeBridge {
       orphans: () => Promise.resolve(mock.orphans()),
       clear: (req) => Promise.resolve(mock.clearLayer(req.channel, req.layer)),
       onOrphansChanged: (handler) => mock.orphansChanged.subscribe(handler),
+      ownedOccupancy: () => Promise.resolve(mock.ownedOccupancy()),
+      onOwnedOccupancyChanged: (handler) => mock.ownedOccupancyChanged.subscribe(handler),
     },
 
     lock: {
