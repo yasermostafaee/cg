@@ -11,9 +11,9 @@ per-bug loop, see [bugs.md](bugs.md).
 
 ---
 
-## [~] B-066 — CEF-incompatible `replaceAll` in the served runtime bundle aborts every template at boot on real CasparCG — "update/play is not defined" and Persian "????" are downstream effects ⟨priority: high⟩
+## [x] B-066 — CEF-incompatible `replaceAll` in the served runtime bundle aborts every template at boot on real CasparCG — "update/play is not defined" and Persian "????" are downstream effects ⟨priority: high⟩ — fixed via `persian-onair-cef-compat`, archived; LIVE CONFIRMATION PENDING
 
-<!-- change: openspec/changes/persian-onair-cef-compat/ -->
+<!-- change: openspec/changes/archive/2026-07-12-persian-onair-cef-compat/ -->
 
 > Found live via the D-119 starter-template work (hard blocker for D-119 —
 > no Persian template airs). ONE root cause behind three observed symptoms,
