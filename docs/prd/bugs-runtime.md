@@ -847,14 +847,15 @@ structural home for a real fix). The B-044 settle semantics are unaffected
 
 ---
 
-## [~] B-056 — `load()` proceeds when the adopt-CLEAR didn't land on the PRIMARY: an unadopted live orphan can render under an owned slot with no UI tell ⟨priority: low⟩
+## [x] B-056 — `load()` proceeds when the adopt-CLEAR didn't land on the PRIMARY: an unadopted live orphan can render under an owned slot with no UI tell ⟨priority: low⟩
 
 > Found by the adversarial design review of the B-053 fix (2026-07-10,
 > `fix-false-onair-badge` design.md §8); symptom-level, NOT reproduced live.
 > A multi-fault reconnect-window residual, ACCEPTED as out of the B-053 fix's
 > scope because the mitigation touches redundancy fault-mode semantics.
 
-> **Implemented 2026-07-12** (`openspec/changes/owned-slot-occupancy-warning`)
+> **Implemented 2026-07-12** — archived as
+> `openspec/changes/archive/2026-07-12-owned-slot-occupancy-warning/` —
 > as **Option B — an additive operator warning**; the loud-fail alternative
 > was REJECTED (it would change what a backup-only load means in every
 > redundancy fault mode; `load()`'s proceed-after-adopt is frozen
