@@ -81,8 +81,14 @@ async function verifiedDeselect(app: DesignerApp): Promise<void> {
       return { x: o.left + 0.85 * o.width, y: o.top + 0.6 * o.height };
     });
     await app.page.mouse.click(pt.x, pt.y);
-    await app.page.waitForTimeout(250);
-    if ((await app.gizmoFrame.count()) === 0) return;
+    // Auto-retrying count (not sleep + instant count(): the selection update
+    // can land after any fixed sleep on a contended runner).
+    try {
+      await expect(app.gizmoFrame).toHaveCount(0, { timeout: 2000 });
+      return;
+    } catch {
+      // not yet — click again
+    }
   }
   throw new Error('could not verifiably deselect');
 }
@@ -104,8 +110,12 @@ async function verifiedSelect(app: DesignerApp): Promise<void> {
       { FRAME, EXTENT_W },
     );
     await app.page.mouse.click(pt.x, pt.y);
-    await app.page.waitForTimeout(300);
-    if ((await app.gizmoFrame.count()) === 1) return;
+    try {
+      await expect(app.gizmoFrame).toHaveCount(1, { timeout: 2000 });
+      return;
+    } catch {
+      // not yet — click again
+    }
   }
   throw new Error('could not verifiably select');
 }
@@ -526,13 +536,32 @@ for (const dpr of [1, 1.25, 2]) {
           };
         });
 
-      let d = await gizmoDeltas();
+      /** An inspector edit propagates state → iframe reflow → gizmo re-render
+       *  ASYNCHRONOUSLY: under a contended runner a fixed post-edit sleep read
+       *  the pair mid-transition (one side off by the whole move distance —
+       *  dL≈290 device px, the exact X-move). Poll the JOINT measurement until
+       *  it settles inside the bound, then assert each side at full strictness
+       *  — the contract is the SETTLED gizmo/render agreement. */
+      const settledGizmoDeltas = async (label: string): Promise<Record<string, number>> => {
+        let d: Record<string, number> = {};
+        await expect
+          .poll(
+            async () => {
+              d = await gizmoDeltas();
+              return Math.max(...Object.values(d).map((v) => Math.abs(v)));
+            },
+            { timeout: 10_000, message: `${label}: gizmo never settled onto the rendered box` },
+          )
+          .toBeLessThanOrEqual(0.25);
+        return d;
+      };
+
+      let d = await settledGizmoDeltas('integer coords');
       for (const [side, v] of Object.entries(d)) {
         expect(Math.abs(v), `integer coords, side ${side}`).toBeLessThanOrEqual(0.25);
       }
       await app.setInspectorNumber('X position', 2.2749);
-      await app.page.waitForTimeout(400);
-      d = await gizmoDeltas();
+      d = await settledGizmoDeltas('fractional coords');
       for (const [side, v] of Object.entries(d)) {
         expect(Math.abs(v), `fractional coords, side ${side}`).toBeLessThanOrEqual(0.25);
       }

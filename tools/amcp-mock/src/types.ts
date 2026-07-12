@@ -155,6 +155,14 @@ export interface MockHandle {
    * (default 2500 ms) if no ADD was seen or the verdict never settles.
    */
   waitForCgAddResolution(slot: LayerSlot, timeoutMs?: number): Promise<'resolved' | 'failed'>;
+  /**
+   * Flush barrier for the NDJSON wire trace (`tracePath`): resolves once every
+   * trace line queued so far has reached the file. The trace stream writes
+   * asynchronously, so a test must await this before reading the file — a
+   * fixed sleep is contention-fragile (a truncated read misses lines or
+   * misaligns offset-based slicing). No-op without a `tracePath`.
+   */
+  traceFlush(): Promise<void>;
   /** B-038/B-041 — the last `CG UPDATE` data payload seen on a slot (see `lastCgAdd`). */
   lastCgUpdate(slot: LayerSlot): CgDataResult | undefined;
   /** Number of currently-connected AMCP clients. */

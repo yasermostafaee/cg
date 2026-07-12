@@ -165,6 +165,18 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     lastCgUpdate(slot: LayerSlot): CgDataResult | undefined {
       return cgUpdates.get(slotKey(slot));
     },
+    traceFlush(): Promise<void> {
+      if (traceStream === null) return Promise.resolve();
+      // A write callback fires only after every previously-queued chunk hit
+      // the file (fs.WriteStream preserves order) — a true read barrier. The
+      // newline payload is invisible to readers (blank lines are filtered).
+      return new Promise((resolve, reject) => {
+        traceStream.write('\n', (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    },
     waitForCgAddResolution(slot: LayerSlot, timeoutMs = 2500): Promise<'resolved' | 'failed'> {
       const key = slotKey(slot);
       return new Promise((resolve, reject) => {

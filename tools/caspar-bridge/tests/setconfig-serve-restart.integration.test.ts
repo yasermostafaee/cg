@@ -157,39 +157,47 @@ it('CEF-wedge boundedness: stop() force-destroys held idle/mid-request/preconnec
 }, 15000);
 
 it('stop() lets an IN-FLIGHT response flush (never severs an active template fetch) yet stays bounded for a stalled client', async () => {
-  // A big response so the transfer takes real time — the in-flight fetch a
-  // dying bridge must not sever (severing settles the CEF page FAILED and
-  // killed the reconnect fixtures' on-air orphan on CI).
-  const bigHtml = `<html><body>${'x'.repeat(4 * 1024 * 1024)}</body></html>`;
+  // A multi-chunk response so the flush is genuinely streamed. In-flight-ness
+  // is guaranteed by the FIRST-BYTE BARRIER below, not by size — the old
+  // fixed-30ms staging left the request UNPARSED at stop() under CI
+  // contention, and the socket (not yet in #busy) was instantly severed:
+  // this test's own ECONNRESET failure on the red main runs.
+  const bigHtml = `<html><body>${'x'.repeat(512 * 1024)}</body></html>`;
   const server = new TemplateHttpServer(() => bigHtml);
   await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
   const port = server.port;
 
   // (a) an ACTIVE fetch that reads normally — must complete despite stop().
+  let firstByte: () => void = () => undefined;
+  const firstByteSeen = new Promise<void>((resolve) => {
+    firstByte = resolve;
+  });
   const fetching = new Promise<number>((resolve, reject) => {
     const req = http.get(`http://127.0.0.1:${String(port)}/template/x`, (res) => {
       let bytes = 0;
       res.on('data', (chunk: Buffer) => {
         bytes += chunk.length;
+        firstByte();
       });
       res.on('end', () => resolve(bytes));
       res.on('error', reject);
     });
     req.on('error', reject);
   });
-  // Let the request reach the server so the response is genuinely in flight.
-  await new Promise((r) => setTimeout(r, 30));
+  // Deterministic staging: once the client holds response bytes, the server
+  // HAS parsed the request and is mid-response — genuinely in flight.
+  await firstByteSeen;
 
   const t0 = Date.now();
   await server.stop();
   const elapsed = Date.now() - t0;
   // The active response flushed (no severed fetch)…
-  await expect(fetching).resolves.toBeGreaterThan(4 * 1024 * 1024);
+  await expect(fetching).resolves.toBeGreaterThan(512 * 1024);
   // …and teardown stayed bounded (grace, not forever).
   expect(elapsed).toBeLessThan(1500);
 
-  // (b) a STALLED client (sends a request, never reads the response) — the
-  // grace deadline force-destroys it; stop() is still bounded.
+  // (b) a STALLED client (receives the response start, then never reads
+  // again) — the grace deadline force-destroys it; stop() is still bounded.
   const server2 = new TemplateHttpServer(() => bigHtml);
   await server2.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
   const stalled = net.connect(server2.port, '127.0.0.1');
@@ -197,13 +205,72 @@ it('stop() lets an IN-FLIGHT response flush (never severs an active template fet
     stalled.once('connect', resolve);
     stalled.once('error', reject);
   });
-  stalled.pause(); // never read — the server's response backpressures
+  stalled.on('error', () => undefined); // the deadline destroy may RST — expected
+  // Deterministic stall: wait for the response to START (request parsed, the
+  // socket is genuinely mid-response), then stop reading forever. The old
+  // pause-before-request staging could race the parse and "stall" a socket
+  // the server never saw a request on.
+  const stallStarted = new Promise<void>((resolve) => {
+    stalled.once('data', () => {
+      stalled.pause(); // never read again — the response backpressures
+      resolve();
+    });
+  });
   stalled.write('GET /template/x HTTP/1.1\r\nHost: stall\r\n\r\n');
-  await new Promise((r) => setTimeout(r, 50)); // request lands, response stalls
+  await stallStarted;
   const t1 = Date.now();
   await server2.stop();
   expect(Date.now() - t1).toBeLessThan(1500); // grace (500ms) + margin
   stalled.destroy();
+}, 20000);
+
+it('stop() never severs a request that has ARRIVED but is not yet parsed — the keep-alive next-fetch window', async () => {
+  // The CI failure mode distilled (reconnect :133/:243 + the in-flight test's
+  // ECONNRESET): a socket joins #busy only when Node fires 'request' (headers
+  // parsed), so request bytes still in the kernel buffer at stop() looked
+  // "request-less" and were instantly destroyed. Staging is race-free: a
+  // completed first request proves the socket is accepted and tracked (an
+  // idle keep-alive socket, CEF-pool-shaped); the second request is written
+  // and stop() is called in the SAME synchronous tick — no event-loop turn in
+  // between, so 'request' cannot have fired yet. stop()'s destroy pass defers
+  // one full loop iteration, letting the arrived request join #busy and
+  // flush; pre-fix this was a deterministic ECONNRESET.
+  const body = '<html><body>parse-window</body></html>';
+  const server = new TemplateHttpServer(() => body);
+  await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
+
+  const sock = net.connect(server.port, '127.0.0.1');
+  await new Promise<void>((resolve, reject) => {
+    sock.once('connect', resolve);
+    sock.once('error', reject);
+  });
+  sock.setEncoding('utf-8');
+  let received = '';
+  sock.on('data', (chunk: string) => {
+    received += chunk;
+  });
+  sock.on('error', () => undefined); // a sever surfaces as a missing body below
+  const closed = new Promise<void>((resolve) => sock.on('close', () => resolve()));
+
+  // First request-response cycle: proves the server accepted and tracked the
+  // socket; afterwards it sits idle keep-alive, exactly like a CEF pool socket.
+  sock.write('GET /template/x HTTP/1.1\r\nHost: t\r\n\r\n');
+  await expect
+    .poll(() => received.split(body).length - 1, { timeout: 5000 })
+    .toBeGreaterThanOrEqual(1);
+
+  // SAME TICK: the next fetch's bytes + stop(). No loop turn in between —
+  // the server cannot have parsed the second request when stop() begins.
+  sock.write('GET /template/x HTTP/1.1\r\nHost: t\r\nConnection: close\r\n\r\n');
+  const t0 = Date.now();
+  await server.stop();
+  const elapsed = Date.now() - t0;
+  await closed;
+
+  // The arrived request flushed a complete second response (no ECONNRESET,
+  // no truncation), and teardown stayed bounded.
+  expect(received.split(body).length - 1).toBe(2);
+  expect(elapsed).toBeLessThan(1500);
 }, 20000);
 
 /** start() succeeds once (boot), then always throws — the injected bind failure. */

@@ -129,6 +129,13 @@ export class TemplateHttpServer {
       // 'close' fires on both finish and abort — the response is over either way.
       res.on('close', () => {
         this.#busy.delete(socket);
+        // Mid-teardown, a keep-alive socket whose response just completed
+        // would otherwise idle until the grace deadline (the destroy passes
+        // already ran) — reap it so stop() resolves as soon as the flush is
+        // over. destroySoon (never destroy): 'close' fires when the response
+        // is handed to the socket, and a hard destroy discards bytes still
+        // queued for the client.
+        if (this.#server === null) socket.destroySoon();
       });
     });
     await new Promise<void>((resolve, reject) => {
@@ -184,26 +191,44 @@ export class TemplateHttpServer {
     const server = this.#server;
     this.#server = null;
     if (server === null) return;
-    const closed = new Promise<void>((resolve) => server.close(() => resolve()));
-    // Bounded teardown (fix-setconfig-serve-restart): `close()` alone waits
-    // for held client connections — Node <19 never reaps even idle ones, and
-    // that wedge is what broke R-010's setConfig live. Destroy the
-    // REQUEST-LESS sockets immediately (idle keep-alive, preconnect,
-    // never-completed request headers — the actual wedge-makers)…
-    (server as { closeIdleConnections?: () => void }).closeIdleConnections?.();
-    for (const socket of this.#sockets) {
-      if (!this.#busy.has(socket)) socket.destroy();
-    }
-    // …but give IN-FLIGHT responses a short bounded grace: severing an
-    // active template fetch makes the fetching CEF settle the page FAILED
-    // (a real on-air consequence — the amcp-mock models it, which is how the
-    // reconnect-reconciliation fixtures caught this on CI). Active responses
-    // flush in milliseconds; a stalled client hits the deadline.
+    // The grace deadline arms FIRST so the whole teardown is bounded from the
+    // moment stop() is entered: a stalled client is force-destroyed at
+    // STOP_GRACE_MS no matter what the passes below decide.
     const deadline = setTimeout(() => {
       (server as { closeAllConnections?: () => void }).closeAllConnections?.();
       for (const socket of this.#sockets) socket.destroy();
     }, STOP_GRACE_MS);
     deadline.unref?.();
+    // Teardown begins ONE FULL EVENT-LOOP ITERATION later (double
+    // setImmediate spans the next poll phase): a fetch whose request bytes
+    // have ARRIVED but are not yet parsed ('request' not fired → not in
+    // #busy) is indistinguishable from an idle socket until the loop polls —
+    // and `server.close()` itself destroys idle keep-alive connections since
+    // Node 19, RST-ing the unread request (the CI-only ECONNRESET that
+    // settled the fetching CEF's page FAILED and silently killed the
+    // reconnect fixtures' on-air orphan: the :133/:243 + setconfig :187
+    // failures). After the poll, an arrived request has joined #busy and
+    // flushes within the grace; `listening` is already false so no new URLs
+    // are handed out during the deferral.
+    await new Promise<void>((resolve) => {
+      setImmediate(() => {
+        setImmediate(resolve);
+      });
+    });
+    const closed = new Promise<void>((resolve) => server.close(() => resolve()));
+    // Bounded teardown (fix-setconfig-serve-restart): `close()` alone waits
+    // for held client connections — Node <19 never reaps even idle ones, and
+    // that wedge is what broke R-010's setConfig live. Destroy the
+    // REQUEST-LESS sockets (idle keep-alive, preconnect, never-completed
+    // request headers — the actual wedge-makers) immediately; IN-FLIGHT
+    // responses flush within the grace (severing an active template fetch
+    // has a real on-air consequence — the amcp-mock models CEF settling the
+    // page FAILED). Active loopback/LAN responses flush in milliseconds;
+    // only a stalled client rides the deadline.
+    (server as { closeIdleConnections?: () => void }).closeIdleConnections?.();
+    for (const socket of this.#sockets) {
+      if (!this.#busy.has(socket)) socket.destroy();
+    }
     await closed;
     clearTimeout(deadline);
     this.#sockets.clear();

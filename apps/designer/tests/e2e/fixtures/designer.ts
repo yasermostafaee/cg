@@ -28,12 +28,21 @@ export class DesignerApp {
   /** Load the app at `/` (test mode is armed by the fixture's init script). */
   async goto(): Promise<void> {
     await this.page.goto('/');
-    await expect(this.page.getByRole('button', { name: 'New project' })).toBeVisible();
+    // Boot barrier with a boot-appropriate ceiling: fixture setup runs before
+    // any in-test setTimeout, and under a parallel local run (N workers against
+    // ONE single-threaded `vite preview`) first paint can exceed the config's
+    // 7s expect default — the flake then reports under the TEST's name with
+    // this line as its top frame.
+    await expect(this.page.getByRole('button', { name: 'New project' })).toBeVisible({
+      timeout: 30_000,
+    });
   }
 
   /** Wait until the studio (canvas) is showing — a composition is open. */
   async expectStudio(): Promise<void> {
-    await expect(this.canvas).toBeVisible();
+    // Same boot-shaped ceiling: the canvas mounts only after the async preview
+    // load resolves, which competes with every parallel worker's boot.
+    await expect(this.canvas).toBeVisible({ timeout: 30_000 });
   }
 
   /**
