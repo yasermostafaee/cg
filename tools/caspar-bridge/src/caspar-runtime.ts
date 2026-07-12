@@ -7,7 +7,7 @@ import {
   type FailoverEvent,
   type ServerLabel,
 } from '@cg/caspar-client';
-import type { AuditEntry, FieldValues, StackItemState } from '@cg/shared-schema';
+import type { AuditEntry, FieldValues, Position, StackItemState } from '@cg/shared-schema';
 import type {
   ChannelResponse,
   ConnectionConfig,
@@ -169,6 +169,16 @@ export class CasparRuntime {
    * server swap). Never resolved optimistically; never triggers a CLEAR.
    */
   readonly #ownedOccupancy = new Map<string, OwnedOccupancyWarning>();
+  /**
+   * R-011 — itemId → the operator's on-air position override. Appended as a
+   * query onto the RESOLVED served URL in #sendAdd (never a bare id — the
+   * B-064 serve contract is untouched). Process-memory like #slots; survives
+   * setConfig (an operator placement is not server knowledge), deleted at
+   * remove. The manifest default stays OPAQUE to the bridge — the runtime
+   * reads it from the scene inside the served HTML; the bridge only ever
+   * knows explicit operator overrides.
+   */
+  readonly #positions = new Map<string, Position>();
   #seq = 0;
   #lastFailover: ConnectionHealth['lastFailover'] = undefined;
 
@@ -487,6 +497,41 @@ export class CasparRuntime {
     return { accepted: ok };
   }
 
+  /**
+   * R-011 — store the operator's per-item position override. Refused while
+   * the item is on air or unsettled (the R-010 predicate — `unconfirmed`
+   * blocks because the on-air result is UNKNOWN); position is fixed once
+   * taken (Option A can't reposition on air without a re-serve flash). A
+   * LOADED-not-taken item is re-ADDed immediately — an invisible re-serve
+   * with the new query, on a non-intent seq (the take re-ADD precedent) so
+   * the item's status is never perturbed; the re-ADD is best-effort (the
+   * override is stored regardless and the next ADD carries it). An idle
+   * item just stores it for the next load.
+   */
+  async setPosition(
+    itemId: string,
+    position: Position,
+  ): Promise<{ ok: boolean; reason?: 'on-air' | 'unknown-item' }> {
+    const item = this.#reconciler.get(itemId);
+    if (item === null) return { ok: false, reason: 'unknown-item' };
+    if (
+      item.pending ||
+      item.status === 'playing' ||
+      item.status === 'on-air' ||
+      item.status === 'updating' ||
+      item.status === 'exiting' ||
+      item.status === 'unconfirmed'
+    ) {
+      return { ok: false, reason: 'on-air' };
+    }
+    this.#positions.set(itemId, position);
+    const slot = this.#slots.get(itemId);
+    if (slot !== undefined && this.#loaded.has(itemId) && this.#templates.has(item.templateId)) {
+      await this.#sendAdd(itemId, slot, item.templateId, item.fields, this.#nextSeq());
+    }
+    return { ok: true };
+  }
+
   async take(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
@@ -644,6 +689,8 @@ export class CasparRuntime {
     // clear the slot on the server.
     this.#reconciler.applyIntent({ kind: 'remove', itemId }, this.#nextSeq());
     this.#loaded.delete(itemId);
+    // R-011 — the override dies with the ITEM (a re-used itemId starts clean).
+    this.#positions.delete(itemId);
     if (slot !== undefined) {
       this.#slots.delete(itemId);
       this.#removeInterest(slot);
@@ -1133,9 +1180,21 @@ export class CasparRuntime {
       this.#reconciler.applyAck(seq, false, 'template-serve-down');
       return false;
     }
-    const templateArg = this.#templateServer.listening
+    let templateArg = this.#templateServer.listening
       ? this.#templateServer.urlFor(templateId)
       : templateId;
+    // R-011 — a stored operator position rides the RESOLVED served URL's
+    // query (the single permitted touch in the B-064 serve path: the guard
+    // above already ran, and a bare id — the never-served unit-test branch —
+    // is NEVER given a query). Both load's ADD and take's B-039 re-ADD flow
+    // through here, so both inherit the override. The position never touches
+    // the data payload — the AMCP escape rule is unaffected.
+    const position = this.#positions.get(itemId);
+    if (position !== undefined && this.#templateServer.listening) {
+      templateArg +=
+        `?pos=${position.anchor}` +
+        `&dx=${String(position.offset.x)}&dy=${String(position.offset.y)}`;
+    }
     const { ok } = await this.#send(this.#builder.load(slot, templateArg, fields), seq, 'normal');
     if (ok) this.#loaded.add(itemId);
     return ok;

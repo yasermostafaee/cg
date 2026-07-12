@@ -289,6 +289,11 @@ ${playoutJson}
         var scene = ${sceneLiteral};
         var runtime = CG.createRuntime(scene, { assetUrls: ${assetUrlsJson} });
         CG.installCasparGlobals(runtime);
+        // R-011 — output-only placement: operator query override (appended by
+        // the bridge onto the served URL) ?? scene.defaultPosition ?? centered.
+        // This boot script is the ONE page CasparCG loads; the Designer
+        // preview never calls applyOutputPosition, so authoring is untouched.
+        CG.applyOutputPosition(scene, { search: location.search });
         // No auto-play — the operator / AMCP drives play(). Mark readiness for
         // hosts that poll for it.
         if (runtime.ready && runtime.ready.then) {

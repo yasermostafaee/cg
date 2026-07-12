@@ -365,6 +365,39 @@ export async function buildNumberFieldVcg(templateId = 'tpl-e2e-number'): Promis
   });
 }
 
+/**
+ * R-011 — a verifiable `.vcg` whose scene carries a manifest default on-air
+ * position, so the Inspector's position picker must seed from it.
+ */
+export async function buildPositionedVcg(templateId = 'tpl-e2e-pos'): Promise<Uint8Array> {
+  const scene = fixtureScene();
+  scene.defaultPosition = { anchor: 'bottom-right', offset: { x: -10, y: -20 } };
+  const fontDeps: readonly FontReference[] = scene.fonts;
+  const assetIndex: readonly AssetEntry[] = [];
+  const manifestExtras = {
+    id: templateId,
+    name: 'e2e-positioned',
+    authoring: {
+      designerVersion: '0.0.0',
+      createdAt: '2026-06-29T00:00:00.000Z',
+      exportedAt: '2026-06-29T00:01:00.000Z',
+    },
+    compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+    fontDeps,
+    assetIndex,
+  } satisfies Pick<Manifest, 'id' | 'name' | 'authoring' | 'compatibility'> & {
+    fontDeps: readonly FontReference[];
+    assetIndex: readonly AssetEntry[];
+  };
+  return pack({
+    scene,
+    manifestExtras,
+    indexHtml: '<!doctype html><html><body>placeholder</body></html>',
+    cgJs: '/* placeholder template runtime */',
+    cgCss: '/* placeholder template styles */',
+  });
+}
+
 /** Bytes that are NOT a valid `.vcg` — `verify()` fails to even unpack them. */
 export function buildInvalidVcg(): Uint8Array {
   return new TextEncoder().encode('this is not a .vcg archive');
