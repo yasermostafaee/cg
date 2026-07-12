@@ -847,12 +847,56 @@ structural home for a real fix). The B-044 settle semantics are unaffected
 
 ---
 
-## [ ] B-056 — `load()` proceeds when the adopt-CLEAR didn't land on the PRIMARY: an unadopted live orphan can render under an owned slot with no UI tell ⟨priority: low⟩
+## [x] B-056 — `load()` proceeds when the adopt-CLEAR didn't land on the PRIMARY: an unadopted live orphan can render under an owned slot with no UI tell ⟨priority: low⟩
 
 > Found by the adversarial design review of the B-053 fix (2026-07-10,
 > `fix-false-onair-badge` design.md §8); symptom-level, NOT reproduced live.
 > A multi-fault reconnect-window residual, ACCEPTED as out of the B-053 fix's
 > scope because the mitigation touches redundancy fault-mode semantics.
+
+> **Implemented 2026-07-12** — archived as
+> `openspec/changes/archive/2026-07-12-owned-slot-occupancy-warning/` —
+> as **Option B — an additive operator warning**; the loud-fail alternative
+> was REJECTED (it would change what a backup-only load means in every
+> redundancy fault mode; `load()`'s proceed-after-adopt is frozen
+> reconnect-reconciliation behavior and is byte-for-byte unchanged).
+> Detection is load-time and one-shot: `#adoptLayer` now RETURNS the
+> primary-landing result it always computed, and when adoption missed the
+> primary while the primary's passive OSC occupancy tap OBSERVED the target
+> layer non-empty (fresh, R-009 staleness contract), the bridge raises an
+> owned-slot warning `{channel, layer, itemId, producer, since}` over new
+> channels `layers.owned-occupancy` / `layers.owned-occupancy-changed` —
+> R-009's channels/sweep/`clearLayer` owned-refusal untouched. Unknown
+> occupancy (primary OSC silent — a restarted machine boots empty)
+> deliberately does NOT warn: observed-occupancy only (alarm-fatigue
+> rationale + residuals in the change's `design.md` §3/§6). The Runtime
+> banner renders the warning as a distinct strip naming the channel-layer
+> AND the item, with NO Clear button — the remedy is Out/Remove of the item.
+> Resolution is event-driven and provable only: a bridge CLEAR for that
+> layer landing on the current primary (`ok && onPrimary` — the adoption
+> sites), the item's removal (handoff to the R-009 sweep once the primary is
+> observable), or a `setConfig` server swap. A Take does NOT resolve it (it
+> may `CG PLAY` the surviving orphan once the primary reconnects), and
+> nothing is ever auto-cleared.
+>
+> **Mock/integration-validated** (red-first):
+> `tools/caspar-bridge/tests/owned-slot-occupancy.integration.test.ts` —
+> mirror pair with server A dialing a DEAD AMCP port while a real mock emits
+> A's OSC (machine alive, link down), foreign producer planted via a second
+> AMCP client, `autoFailoverEnabled: false`: warning surfaces naming
+> channel-layer + item AND the load is unchanged (accepted, slot bound, own
+> `CG ADD` reached the backup); unknown occupancy → no warning; out
+> backup-only → persists; revived primary + out → resolves; remove while
+> primary down → resolves; take → does NOT resolve. Plus schema, jsdom
+> banner, MockRuntime-parity, and Playwright (`owned-occupancy.spec.ts`)
+> coverage.
+>
+> **Live smoke — PENDING hardware**: mirror pair on real CasparCG; take the
+> PRIMARY's AMCP down while the backup stays up (machine keeps rendering /
+> pushing OSC); leave a graphic on a layer via a 2nd AMCP client; Load an
+> item onto that layer → the warning names the channel-layer + item (and no
+> Clear button is offered); restore the primary and Out the item (or Remove
+> it) → the warning resolves.
 
 **Scenario (from code):** in mirror-sync with the primary's AMCP link briefly
 down (no failover — e.g. `autoFailoverEnabled: false`), a load's adopt-CLEAR

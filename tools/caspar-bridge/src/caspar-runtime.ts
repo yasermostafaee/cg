@@ -15,6 +15,7 @@ import type {
   ConnectionsSetConfigChannel,
   LockState,
   OrphanLayer,
+  OwnedOccupancyWarning,
   PendingUpdate,
   Settings,
   TemplateInfo,
@@ -120,6 +121,8 @@ export class CasparRuntime {
   readonly configChanged = new Emitter<ConnectionConfig>();
   /** R-009 — emitted ONLY when the surfaced orphan-layer set changes. */
   readonly orphansChanged = new Emitter<OrphanLayer[]>();
+  /** B-056 — emitted ONLY when the owned-slot warning set changes. */
+  readonly ownedOccupancyChanged = new Emitter<OwnedOccupancyWarning[]>();
 
   // R-010 — mutable: `setConfig` swaps the whole connection layer at runtime.
   #config: ConnectionConfig;
@@ -157,6 +160,15 @@ export class CasparRuntime {
    * cannot tell junk from a graphic ridden through a controller restart).
    */
   readonly #adopted = new Set<string>();
+  /**
+   * B-056 — owned-slot occupancy warnings, keyed `ch:layer` (a layer has at
+   * most one owner). Raised at load time when the adopt-CLEAR missed the
+   * current primary while the primary's occupancy tap OBSERVED the layer
+   * non-empty; resolved only on provable events (a CLEAR landing on the
+   * primary — every `#markAdoptedOnPrimary` site — the item's removal, or a
+   * server swap). Never resolved optimistically; never triggers a CLEAR.
+   */
+  readonly #ownedOccupancy = new Map<string, OwnedOccupancyWarning>();
   #seq = 0;
   #lastFailover: ConnectionHealth['lastFailover'] = undefined;
 
@@ -442,7 +454,7 @@ export class CasparRuntime {
     // Reconnect-reconciliation — adopt the layer BEFORE binding the slot/OSC
     // interest: destroy any producer a previous bridge session orphaned there,
     // so its OSC state can never route to this fresh item.
-    await this.#adoptLayer(slot);
+    const { adopted } = await this.#adoptLayer(slot);
 
     // The adopt-CLEAR awaited a real AMCP round-trip — a remove() may have
     // landed meanwhile and, finding no slot yet, cleaned up nothing. If the
@@ -458,6 +470,16 @@ export class CasparRuntime {
     // Interest on every declared session's OSC so whichever is primary, its
     // confirmations pass the filter (survives failover).
     this.#addInterest(slot);
+
+    // B-056 — the adopt-CLEAR did NOT land on the current primary (backup-only
+    // success, or a failed CLEAR): if the primary's occupancy tap OBSERVES the
+    // layer non-empty, a previous session's producer is visibly live on the
+    // primary output under this item's own layer — warn the operator. Sampled
+    // BEFORE our own ADD (after it, an owned-layer producer report is
+    // indistinguishable from our own). Purely additive: the load proceeds
+    // exactly as before either way. Unknown occupancy (tap silent/stale)
+    // deliberately does NOT warn — observed occupancy only (design §3).
+    if (!adopted) this.#detectOwnedOccupancy(slot, itemId);
 
     // B-039 — `CG ADD` only (play-on-load OFF in the builder): the producer is
     // loaded, NOT playing. The operator's take issues the `CG PLAY`.
@@ -531,8 +553,10 @@ export class CasparRuntime {
     // retake re-ADDs onto the same slot; OSC interest stays put so idle confirms.
     this.#loaded.delete(itemId);
     // A CLEAR executed on the CURRENT PRIMARY counts as adoption — the layer's
-    // state is known there (a backup-only ack proves nothing about the primary).
-    if (ok && onPrimary) this.#adopted.add(adoptionKey(slot));
+    // state is known there (a backup-only ack proves nothing about the primary)
+    // — and provably resolves any B-056 owned-slot warning; a backup-only out
+    // leaves the warning standing (the primary's orphan may still be live).
+    if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
     return { accepted: ok };
   }
 
@@ -541,6 +565,13 @@ export class CasparRuntime {
   /** The currently surfaced orphan layers (stable-sorted). */
   orphans(): OrphanLayer[] {
     return this.#orphanTracker.orphans();
+  }
+
+  /** B-056 — the currently surfaced owned-slot warnings (stable-sorted). */
+  ownedOccupancy(): OwnedOccupancyWarning[] {
+    return [...this.#ownedOccupancy.values()].sort(
+      (a, b) => a.channel - b.channel || a.layer - b.layer,
+    );
   }
 
   /**
@@ -587,7 +618,7 @@ export class CasparRuntime {
     }
     const slot: CommandSlot = { channel, layer };
     const { ok, onPrimary } = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
-    if (ok && onPrimary) this.#adopted.add(adoptionKey(slot));
+    if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
     return ok ? { ok: true } : { ok: false, reason: 'amcp-error' };
   }
 
@@ -617,13 +648,18 @@ export class CasparRuntime {
       this.#slots.delete(itemId);
       this.#removeInterest(slot);
       this.#layers.deallocate(slot);
+      // B-056 — the layer is deallocated: resolve its warning REGARDLESS of
+      // the CLEAR below landing. The layer is unowned from here — whatever
+      // survives on the primary is the R-009 sweep's to surface (as a
+      // regular, clearable orphan) once the primary is observable again.
+      this.#resolveOwnedOccupancy(slot);
       const { ok, onPrimary } = await this.#send(
         this.#builder.out(slot),
         this.#nextSeq(),
         'urgent',
       );
       // A CLEAR executed on the CURRENT PRIMARY counts as adoption (see out()).
-      if (ok && onPrimary) this.#adopted.add(adoptionKey(slot));
+      if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
     }
     return { accepted: true };
   }
@@ -719,6 +755,11 @@ export class CasparRuntime {
     // R-009 — surfaced orphans described the OLD server too; the new
     // sessions' taps re-accumulate and the sweep re-surfaces what's real.
     if (this.#orphanTracker.reset().changed) this.orphansChanged.emit([]);
+    // B-056 — owned-slot warnings described the OLD primary; drop wholesale.
+    if (this.#ownedOccupancy.size > 0) {
+      this.#ownedOccupancy.clear();
+      this.ownedOccupancyChanged.emit([]);
+    }
 
     // 5. Template serve — re-derive from the new primary's locality; the only
     //    realistically fallible step (bind conflict). Retry ONCE on safe
@@ -953,15 +994,62 @@ export class CasparRuntime {
    * non-intent seq so the item's status is settled only by its own ADD. A
    * failed CLEAR (e.g. server down) leaves the layer unadopted — the next
    * load retries; the ADD's own failure settles the intent honestly.
+   *
+   * B-056 — returns the primary-landing result it already computes
+   * (`adopted`: the layer is in `#adopted` after the call), so `load()` can
+   * warn when the CLEAR missed the primary. Return value only — the CLEAR,
+   * the `ok && onPrimary` gate, and the backup-only-stays-unadopted rule are
+   * behaviorally unchanged.
    */
-  async #adoptLayer(slot: CommandSlot): Promise<void> {
+  async #adoptLayer(slot: CommandSlot): Promise<{ adopted: boolean }> {
     const key = adoptionKey(slot);
-    if (this.#adopted.has(key)) return;
+    if (this.#adopted.has(key)) return { adopted: true };
     const { ok, onPrimary } = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'normal');
     // A backup-only success (mirror-sync with the primary momentarily down)
     // did NOT clear the primary's layer — leave it unadopted so a later load
     // retries the CLEAR where the orphan actually lives.
-    if (ok && onPrimary) this.#adopted.add(key);
+    if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
+    return { adopted: this.#adopted.has(key) };
+  }
+
+  /**
+   * B-056 — a CLEAR for this layer executed on the CURRENT PRIMARY: mark it
+   * adopted (reconnect-reconciliation bookkeeping, unchanged) AND resolve any
+   * owned-slot occupancy warning — the primary's layer state is now provably
+   * clean. Shared by every adoption-marking site (adopt / out / remove /
+   * operator clearLayer) so "adopted" and "provably cleared" can never drift.
+   */
+  #markAdoptedOnPrimary(slot: CommandSlot): void {
+    this.#adopted.add(adoptionKey(slot));
+    this.#resolveOwnedOccupancy(slot);
+  }
+
+  /**
+   * B-056 — load-time, one-shot detection (deliberately NOT a sweep: only
+   * between a failed/backup-only adopt and our own ADD is a producer report
+   * on this layer provably FOREIGN). Warns only on occupancy OBSERVED fresh
+   * on the current primary's passive tap — the same freshness contract as
+   * the R-009 sweep (an aged-out entry is the empty signal, B-053).
+   */
+  #detectOwnedOccupancy(slot: CommandSlot, itemId: string): void {
+    const occupied = this.#adapter.primarySession.osc.occupancy.occupied(this.#occupancyStaleMs);
+    const hit = occupied.find((o) => o.channel === slot.channel && o.layer === slot.layer);
+    if (hit === undefined) return;
+    this.#ownedOccupancy.set(adoptionKey(slot), {
+      channel: slot.channel,
+      layer: slot.layer,
+      itemId,
+      producer: hit.producer,
+      since: new Date().toISOString(),
+    });
+    this.ownedOccupancyChanged.emit(this.ownedOccupancy());
+  }
+
+  /** B-056 — drop a layer's warning (provable resolution only); publish on change. */
+  #resolveOwnedOccupancy(slot: CommandSlot): void {
+    if (this.#ownedOccupancy.delete(adoptionKey(slot))) {
+      this.ownedOccupancyChanged.emit(this.ownedOccupancy());
+    }
   }
 
   #addInterest(slot: CommandSlot): void {

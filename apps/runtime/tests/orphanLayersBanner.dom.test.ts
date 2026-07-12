@@ -3,13 +3,17 @@ import { StrictMode, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
-import type { OrphanLayer } from '@cg/shared-ipc';
+import type { OrphanLayer, OwnedOccupancyWarning } from '@cg/shared-ipc';
 import { OrphanLayersBanner } from '../src/renderer/features/layers/OrphanLayersBanner.js';
 
 /**
  * R-009 — the orphan-layer warning surface: renders NOTHING when the set is
  * empty (idle-quiet), names each channel-layer, and Clear is confirm-gated
  * (accept → exactly one layers.clear for that layer; cancel → nothing).
+ *
+ * B-056 — the owned-slot occupancy variant: a DISTINCT strip naming the
+ * channel-layer AND the item, with NO Clear control (the remedy is
+ * Out/Remove of the item), rendered alongside — not instead of — R-009 rows.
  */
 
 let container: HTMLDivElement | null = null;
@@ -31,12 +35,21 @@ function stubBridge(): { clear: Mock } {
   return { clear };
 }
 
-async function renderBanner(orphans: OrphanLayer[]): Promise<HTMLDivElement> {
+async function renderBanner(
+  orphans: OrphanLayer[],
+  ownedOccupancy: OwnedOccupancyWarning[] = [],
+): Promise<HTMLDivElement> {
   container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
   await act(async () => {
-    root.render(createElement(StrictMode, null, createElement(OrphanLayersBanner, { orphans })));
+    root.render(
+      createElement(
+        StrictMode,
+        null,
+        createElement(OrphanLayersBanner, { orphans, ownedOccupancy }),
+      ),
+    );
   });
   return container;
 }
@@ -80,5 +93,50 @@ describe('OrphanLayersBanner — R-009', () => {
       el.querySelector<HTMLButtonElement>('button[aria-label="Clear layer 1-60"]')?.click();
     });
     expect(clear).not.toHaveBeenCalled();
+  });
+});
+
+describe('OrphanLayersBanner — B-056 owned-slot occupancy variant', () => {
+  const warning: OwnedOccupancyWarning = {
+    channel: 1,
+    layer: 10,
+    itemId: 'item1',
+    producer: 'html',
+    since: '2026-07-12T12:00:00.000Z',
+  };
+
+  it('renders nothing when both sets are empty', async () => {
+    stubBridge();
+    const el = await renderBanner([], []);
+    expect(el.querySelector('[role="alert"]')).toBeNull();
+    expect(el.textContent).toBe('');
+  });
+
+  it('names the channel-layer AND the item, with the Out/Remove remedy and NO Clear control', async () => {
+    stubBridge();
+    const el = await renderBanner([], [warning]);
+    const alert = el.querySelector('[aria-label="Owned-layer occupancy warnings"]');
+    expect(alert).not.toBeNull();
+    expect(alert?.getAttribute('role')).toBe('alert');
+    expect(el.textContent).toContain('Layer 1-10');
+    expect(el.textContent).toContain('item1');
+    expect(el.textContent).toContain('Out or Remove the item');
+    // No direct Clear on an owned layer — the strip has no buttons at all.
+    expect(alert?.querySelector('button')).toBeNull();
+  });
+
+  it('renders BOTH strips when orphans and owned warnings coexist — R-009 rows unchanged', async () => {
+    stubBridge();
+    const el = await renderBanner([orphan(2, 15)], [warning]);
+    expect(el.querySelector('[aria-label="Orphaned on-air layers"]')).not.toBeNull();
+    expect(el.querySelector('[aria-label="Owned-layer occupancy warnings"]')).not.toBeNull();
+    expect(el.textContent).toContain('Layer 2-15 is on air but not on your stack');
+    expect(
+      el.querySelector<HTMLButtonElement>('button[aria-label="Clear layer 2-15"]'),
+    ).not.toBeNull();
+    // …and the owned strip still offers no buttons.
+    expect(
+      el.querySelector('[aria-label="Owned-layer occupancy warnings"]')?.querySelector('button'),
+    ).toBeNull();
   });
 });

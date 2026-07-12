@@ -9,6 +9,8 @@ import {
   LayersClearChannel,
   LayersOrphansChangedChannel,
   LayersOrphansChannel,
+  LayersOwnedOccupancyChangedChannel,
+  LayersOwnedOccupancyChannel,
   StackRemoveAllChannel,
   LockEngageChannel,
   LockReleaseChannel,
@@ -237,6 +239,36 @@ describe('layers.* channel schemas (R-009)', () => {
       reason: 'owned',
     });
     expect(() => LayersClearChannel.response.parse({ ok: false, reason: 'nope' })).toThrow();
+  });
+});
+
+describe('layers.owned-occupancy channel schemas (B-056)', () => {
+  const warning = {
+    channel: 1,
+    layer: 10,
+    itemId: 'item1',
+    producer: 'html',
+    since: '2026-07-12T12:00:00.000Z',
+  };
+
+  it('layers.owned-occupancy pulls a warning array (empty is valid — idle-quiet)', () => {
+    expect(LayersOwnedOccupancyChannel.request.parse(undefined)).toBeUndefined();
+    expect(LayersOwnedOccupancyChannel.response.parse([])).toEqual([]);
+    expect(LayersOwnedOccupancyChannel.response.parse([warning])).toMatchObject([
+      { channel: 1, layer: 10, itemId: 'item1' },
+    ]);
+  });
+
+  it('layers.owned-occupancy-changed publishes the same shape and names the item', () => {
+    expect(LayersOwnedOccupancyChangedChannel.payload.parse([warning])).toMatchObject([
+      { itemId: 'item1' },
+    ]);
+    expect(() =>
+      LayersOwnedOccupancyChangedChannel.payload.parse([{ ...warning, itemId: '' }]),
+    ).toThrow();
+    expect(() =>
+      LayersOwnedOccupancyChangedChannel.payload.parse([{ ...warning, producer: '' }]),
+    ).toThrow();
   });
 });
 
