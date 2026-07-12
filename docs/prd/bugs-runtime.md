@@ -799,7 +799,17 @@ after a first Load.
 
 ---
 
-## [ ] B-054 — `#loaded` (producer-existence bookkeeping) goes stale across a CASPARCG restart: the next Take `CG PLAY`s an empty layer (202 no-op, blank take) ⟨priority: medium⟩
+## [x] B-054 — `#loaded` (producer-existence bookkeeping) goes stale across a CASPARCG restart: the next Take `CG PLAY`s an empty layer (202 no-op, blank take) ⟨priority: medium⟩
+
+> RESOLVED (2026-07-11) by `openspec/changes/archive/`
+> `clear-loaded-on-session-reconnect`: `#wireAdapter` subscribes each declared
+> session's `'healthy'` (fires only on a completed AMCP reconnect cycle, never
+> on degraded→healthy OSC recovery) and wholesale-clears `#loaded`, so the
+> next Take re-verifies via the B-039 re-ADD and renders. `#adopted` is
+> deliberately kept (restarted layers are empty — the skipped adopt-CLEAR is
+> a no-op). Mock-validated only (mock restart on the same ports = genuinely
+> empty per-instance layer state); NO live smoke ran — no CasparCG on the dev
+> machine (optional/non-gating per the brief).
 
 > Found by code reading during the `reconnect-reconciliation` review
 > (2026-07-10); symptom-level, NOT yet reproduced live. The inverse amnesia of

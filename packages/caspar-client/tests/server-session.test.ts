@@ -158,6 +158,27 @@ describe('ServerSession', () => {
     expect(states).toContain('healthy');
   });
 
+  it("degraded→healthy recovery never re-emits 'healthy' — only a full reconnect cycle does (B-054 trigger precision)", async () => {
+    const { session, states } = await setupHealthy();
+    await once(session, 'healthy');
+
+    // Count 'healthy' emissions AFTER the initial connect: B-054 clears
+    // producer-existence bookkeeping on this event, so an OSC blip with the
+    // AMCP connection intact (producers untouched) must never fire it.
+    let healthyEmits = 0;
+    session.on('healthy', () => healthyEmits++);
+
+    (session as unknown as { lastOscAt: number }).lastOscAt = Date.now() - 5000;
+    await delay(200);
+    expect(session.state).toBe('degraded');
+
+    (session as unknown as { lastOscAt: number }).lastOscAt = Date.now();
+    await delay(200);
+    expect(session.state).toBe('healthy'); // recovered via state-change…
+    expect(states.filter((s) => s === 'healthy').length).toBe(2);
+    expect(healthyEmits).toBe(0); // …but the reconnect-cycle event did NOT fire
+  });
+
   it('stop() ends the loop and disposes everything', async () => {
     const { session } = await setupHealthy();
     await once(session, 'healthy');
