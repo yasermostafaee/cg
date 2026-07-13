@@ -1034,7 +1034,7 @@ The Reconciler was deliberately NOT touched (B-044 + reconnect-reconciliation st
 - [ ] Edit a nested field → **Update** → the change renders on air (proves the value reached the binding under its namespaced key).
 - [ ] A flat, single-composition template still behaves exactly as before (regression).
 
-## [~] B-070 — Inspector "Update" on an idle/producerless item is refused ("Not accepted"), and the refusal permanently poisons the item (zombie `pending` → R-011 `setPosition` blocked for life) ⟨priority: high⟩
+## [x] B-070 — Inspector "Update" on an idle/producerless item is refused ("Not accepted"), and the refusal permanently poisons the item (zombie `pending` → R-011 `setPosition` blocked for life) ⟨priority: high⟩ — **live-confirmed on CasparCG 2.3.2 / `4de6d18f`** (2026-07-13), archived: `openspec/changes/archive/2026-07-13-reconnect-reconciliation/`
 
 **Repro:**
 
@@ -1057,11 +1057,11 @@ The poisoning is a second, independent defect: a failed ack moved only `ackedSta
 
 **Fixed by:** `openspec/changes/reconnect-reconciliation` §7 (folded in: that change introduced the mock's `403`-on-producerless-`CG UPDATE` but never gave `update` a bullet in the prescriptive-verb requirement it rewrites — B-070 is its missing half). `update` now branches on producer existence (`#loaded`): live producer → `CG UPDATE` byte-identical (ADR-0006 frozen); no producer → commit the fields, send nothing, settle the intent in-process (B-044), report `accepted` — the next take's B-039 re-ADD carries them to air. A failed ack now settles terminally, `stack.update` answers with an `errorCode` (mirroring `stack.take`), and the Runtime shows the real reason instead of "Not accepted.".
 
-**LIVE CONFIRMATION — PENDING HARDWARE** (owner has real CasparCG; the archive is held behind the same gate as the rest of `reconnect-reconciliation`):
+**LIVE CONFIRMATION — PASSED on CasparCG 2.3.2 (build `4de6d18f`), 2026-07-13** (the same build ADR-0006 was validated against):
 
-- [ ] Basic repro: load → out → edit fields → **Update** succeeds (no "Not accepted"); take → the edit renders on air.
-- [ ] A refused update (force an AMCP error) no longer poisons the item: it settles, and `setPosition` still works afterwards.
-- [ ] **The decisive question (ADR-0006 caveat):** ADR-0006 validated `CG UPDATE` against a producer ADDed with **play-on-load = 1** (playing), but B-039 later flipped load to **play-on-load = OFF** — so there is NO in-repo hardware proof that `CG UPDATE` succeeds on an ADDed-but-never-PLAYED producer. Load an item, do **NOT** take it, edit fields, press Update: does `CG UPDATE` land on the play-on-load=off producer, or does it `403` too? If it `403`s, producer-existence must mean **"loaded AND playing"**, and the loaded-not-playing case ALSO takes the no-send commit path.
+- [x] Basic repro: load → out → edit fields → **Update** succeeds (no "Not accepted"); take → the edit renders on air.
+- [x] A refused update (force an AMCP error) no longer poisons the item: it settles, and `setPosition` still works afterwards.
+- [x] **The decisive question (ADR-0006 caveat) — ANSWERED: `CG UPDATE` LANDS on a play-on-load=off producer.** ADR-0006 validated `CG UPDATE` against a producer ADDed with **play-on-load = 1** (playing), but B-039 later flipped load to **play-on-load = OFF**, leaving no in-repo hardware proof for the ADDed-but-never-PLAYED case. Confirmed live: loading an item WITHOUT taking it, editing fields and pressing Update sends `CG UPDATE` and it applies — CasparCG does **not** `403` a loaded-not-playing producer. So **producer-existence means LOADED**, not "loaded AND playing": the shipped `#loaded` branch is correct as written, the loaded-not-playing case does NOT need the no-send commit path, and no code change followed from this confirmation. The ADR-0006 open question is closed.
 
 ---
 

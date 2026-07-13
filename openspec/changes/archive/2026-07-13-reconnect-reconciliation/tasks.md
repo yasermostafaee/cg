@@ -100,15 +100,16 @@
       row was operator-confirmed live (manual re-import required, as scoped —
       the `@cg/storage` path is C-011); reload-with-live-bridge rides the
       unchanged bridge-registry path.
-- [ ] 6.5 After PASS: PRD updates (B-038 follow-up resolved; B-048 per the
+- [x] 6.5 After PASS: PRD updates (B-038 follow-up resolved; B-048 per the
       discriminator; note build 2.5.0 `69e8ad5`; file the two follow-up
       candidates), archive per workflow (AFTER `fix-amcp-escaping-v2`, or
       re-reconcile the shared requirement text), push, compare URL.
       **Status:** PRD updates + follow-ups (B-054, R-009) landed on
-      `docs/wrap-reconnect-reconciliation`; the ARCHIVE is held — this
-      change's "Template resolution is validated" delta is based on
-      `fix-amcp-escaping-v2`'s still-open pending text, so B-041 archiving
-      second would clobber it; ordering surfaced to the owner.
+      `docs/wrap-reconnect-reconciliation`. The ARCHIVE hold is **RELEASED**
+      (2026-07-13): `fix-amcp-escaping-v2` archived FIRST (its B-041 clauses are
+      now the living-spec base), so this change's "Template resolution is
+      validated" delta — a SUPERSET of that text — folds on top without
+      clobbering it. Archived SECOND, per the held-pair ordering pin.
 
 ## 7. B-070 — `update` gets the producer-state rule it never had
 
@@ -140,7 +141,7 @@ refused on air ("Not accepted") — and the refusal then POISONED the item.
       take's re-ADD carrying the fields, the live-producer regression guard, and
       a genuine AMCP-error update that settles terminally and no longer blocks
       `setPosition`. Reconciler units for the failed-ack settlement.
-- [ ] 7.6 LIVE CONFIRMATION on real CasparCG (owner has hardware) — the decisive
+- [x] 7.6 LIVE CONFIRMATION on real CasparCG (owner has hardware) — the decisive
       question is in `design.md` §7: ADR-0006 validated `CG UPDATE` against a
       producer ADDed with **play-on-load=1** (playing), but B-039 later flipped
       load to **play-on-load=off**. There is therefore NO in-repo hardware proof
@@ -148,3 +149,9 @@ refused on air ("Not accepted") — and the refusal then POISONED the item.
       item (do NOT take it) → edit fields → Update. If CasparCG `403`s even that
       loaded producer, then producer-existence must mean "loaded AND playing" and
       the loaded-not-playing case ALSO takes the no-send commit path.
+      — **ANSWERED on real CasparCG 2.3.2 / `4de6d18f` (2026-07-13, B-070):
+      `CG UPDATE` on a play-on-load=off producer WORKS.** The ADR-0006 open
+      question is closed in favour of the shipped rule: producer-existence means
+      LOADED (not "loaded AND playing"), so a loaded-not-taken item updates on the
+      wire like any other — no fallback to the no-send commit path was needed. The
+      `#loaded` branch as written is correct; no code change followed from this.
