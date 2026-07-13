@@ -273,8 +273,19 @@ describe('§10 row: command-channel reachable but OSC silent → Reconciler dive
     r.applyIntent({ kind: 'load', itemId: 'i1', templateId: 't1', fields: {} }, 1);
     r.applyIntent({ kind: 'take', itemId: 'i1' }, 2);
     now += 200;
-    // Trigger a re-evaluation by applying any change.
-    r.applyAck(2, false);
+    // §10 is "command channel reachable but OSC SILENT": the take's ack never
+    // settles it. Drive the re-evaluation with an observation that CONTRADICTS
+    // the intent (layer reports empty; we intended to play) — a genuine
+    // divergence. B-070: a failed ack can no longer serve as "any change" here,
+    // because it now SETTLES the intent (an errored command is a known terminal
+    // failure, not a silent divergence).
+    r.assignSlot('i1', { channel: 1, layer: 10, server: 'primary' });
+    r.applyOsc({
+      kind: 'osc.layer.foreground.producer',
+      channel: 1,
+      layer: 10,
+      producer: 'empty',
+    });
     expect(events.length).toBeGreaterThan(0);
 
     void reconciler; // satisfy unused-binding lint on the stack reconciler

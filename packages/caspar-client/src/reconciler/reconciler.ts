@@ -178,6 +178,21 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
       }
       delete rec.errorCode;
     } else {
+      // B-070 — a FAILED ack SETTLES the intent too. Pre-B-070 only
+      // `ackedStatus` moved to `error` while `intentStatus` stayed at the
+      // TRANSIENT `updating`/`playing`/`exiting` forever, so `pending` never
+      // cleared: ONE refused command poisoned the item for the rest of its life
+      // — and R-011's `setPosition`, which refuses while `pending`, was blocked
+      // for good. B-044's rule is that no intent may rest non-terminal; an
+      // error is a SETTLEMENT, not limbo.
+      //
+      // The errored command did not take effect, so the item lands back on the
+      // resting status it came from when that target is evidenced-terminal;
+      // otherwise the honest landing is `unconfirmed` — B-044's explicit "we
+      // cannot claim what the wire did" state — never a silent claim.
+      const settleTo = rec.settle?.to;
+      rec.intentStatus =
+        settleTo !== undefined && isTerminalStatus(settleTo) ? settleTo : 'unconfirmed';
       rec.ackedStatus = 'error';
       delete rec.settle;
       if (errorCode !== undefined) rec.errorCode = errorCode;

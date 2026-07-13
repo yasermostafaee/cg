@@ -573,16 +573,34 @@ export class CasparRuntime {
     itemId: string,
     fields: FieldValues,
     mergeMode: 'merge' | 'replace',
-  ): Promise<{ accepted: boolean }> {
+  ): Promise<{ accepted: boolean; errorCode?: string }> {
     const slot = this.#slots.get(itemId);
-    if (slot === undefined) return { accepted: false };
+    if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'update', itemId, fields, mergeMode }, seq);
+
+    // B-070 — PRESCRIPTIVE, the rule `update` never had (take has it since
+    // B-039; setPosition checks the same set). `CG UPDATE` needs a live
+    // PRODUCER, not air: real CasparCG 403s it on a layer whose producer is
+    // empty. When the slot holds no producer — a prior `out` destroyed it, a
+    // reconnect/setConfig cleared the bookkeeping — the operator's edit is
+    // COMMITTED to the authoritative field-set and NOTHING goes on the wire.
+    // The next take's B-039 re-ADD replays exactly these fields through
+    // `CG ADD`'s data payload, so the edit reaches air.
+    //
+    // The intent is settled IN-PROCESS: a no-send path has no wire ack, and
+    // B-044 forbids resting non-terminal (an unsettled `updating` is precisely
+    // the zombie `pending` that used to block R-011's setPosition forever).
+    if (!this.#loaded.has(itemId)) {
+      this.#reconciler.applyAck(seq, true);
+      return { accepted: true };
+    }
+
     // Send the merged field set the Reconciler now holds.
     const merged = this.#reconciler.get(itemId)?.fields ?? fields;
     this.#armExpiry(seq);
-    const { ok } = await this.#send(this.#builder.update(slot, merged), seq, 'normal');
-    return { accepted: ok };
+    const { ok, errorCode } = await this.#send(this.#builder.update(slot, merged), seq, 'normal');
+    return ok ? { accepted: true } : { accepted: false, errorCode: errorCode ?? 'amcp-error' };
   }
 
   async out(itemId: string): Promise<{ accepted: boolean }> {
@@ -1144,17 +1162,28 @@ export class CasparRuntime {
     line: string,
     seq: number,
     priority: 'urgent' | 'normal',
-  ): Promise<{ ok: boolean; onPrimary: boolean }> {
+  ): Promise<{ ok: boolean; onPrimary: boolean; errorCode?: string }> {
     try {
       const result = await this.#adapter.send(line, { priority });
+      // A response ARRIVED, so the B-044 bounded timeout no longer applies —
+      // and the ack below settles the intent either way (B-070: a failed ack
+      // settles too), so no expiry is needed to rescue it.
       this.#clearExpiry(seq);
       const ok = result.response.kind !== 'err';
-      this.#reconciler.applyAck(seq, ok, ok ? undefined : `amcp-${String(result.response.code)}`);
-      return { ok, onPrimary: result.winner === this.#adapter.currentPrimary };
+      // B-070 — surface the REAL AMCP code so a refusal can explain itself
+      // (`stack.update` used to answer a bare `{ accepted: false }`, which the
+      // Inspector could only render as the generic "Not accepted.").
+      const errorCode = ok ? undefined : `amcp-${String(result.response.code)}`;
+      this.#reconciler.applyAck(seq, ok, errorCode);
+      return {
+        ok,
+        onPrimary: result.winner === this.#adapter.currentPrimary,
+        ...(errorCode !== undefined && { errorCode }),
+      };
     } catch {
       this.#clearExpiry(seq);
       this.#reconciler.applyAck(seq, false, 'amcp-send-failed');
-      return { ok: false, onPrimary: false };
+      return { ok: false, onPrimary: false, errorCode: 'amcp-send-failed' };
     }
   }
 

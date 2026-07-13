@@ -12,6 +12,8 @@
 
 export type AsyncPhase = 'idle' | 'busy' | 'success' | 'error';
 
+import { errorCodeMessage } from './errorCodeMessage.js';
+
 export interface AsyncView {
   phase: AsyncPhase;
   showSpinner: boolean;
@@ -103,7 +105,13 @@ export class AsyncButtonController {
 
     run().then(
       (res) => {
-        this.#settled = { error: res.accepted ? null : this.#cfg.notAcceptedMessage };
+        // B-070 — prefer the bridge's REASON over the generic fallback: a
+        // refusal that cannot explain itself is the bug the operator hit.
+        this.#settled = {
+          error: res.accepted
+            ? null
+            : (errorCodeMessage(res.errorCode) ?? this.#cfg.notAcceptedMessage),
+        };
         this.#tryFinish();
       },
       (err: unknown) => {

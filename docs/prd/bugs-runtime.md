@@ -1002,3 +1002,32 @@ reconciliation — the structural home).
 **Actual:** `produceTemplateDelivery` builds `TemplateInfo.fields` from the ROOT `scene.fields` only (apps/runtime/src/renderer/features/library/templateDelivery.ts:127). A scoped per-composition export whose fields live on a nested comp yields `fields: []` — the Inspector shows nothing to edit, even though the playing template fully supports namespaced updates (`values[instanceName]`, `applyScopedFieldValues`).
 **Env:** Runtime app (mock + bridge paths share the import); found 2026-07-12 during D-119.
 **Notes:** Fix direction: aggregate at import (reuse `aggregateCompositionFields`) and teach the Inspector to render namespace groups + emit NESTED payloads (`{ instanceName: { fieldId: value } }`) — the runtime side already consumes them. Scope it with the Runtime operator-positioning work that will also flip D-119 starters to footprint-comp export.
+
+## [~] B-070 — Inspector "Update" on an idle/producerless item is refused ("Not accepted"), and the refusal permanently poisons the item (zombie `pending` → R-011 `setPosition` blocked for life) ⟨priority: high⟩
+
+**Repro:**
+
+1. Runtime, connected to a real bridge. Load an item onto the stack, then take it OUT (or reconnect the bridge) — the item now reads `idle`.
+2. Select it in the Inspector, edit a field (e.g. Channel/Tag). The dirty chip appears.
+3. Press the inner **Update**.
+
+**Expected:** the staged edits commit (R-003: Update is the ONLY commit path) and ride the next Take to air.
+**Actual:** "Not accepted." Nothing commits on the wire. Worse, the item is now permanently poisoned: it rests at `idle (pending)` forever, and because R-011's `setPosition` refuses while `item.pending`, the operator can never reposition that item again.
+
+**Root cause (NOT the obvious one):** the refusal is NOT the `slot === undefined` guard — `pending` is derived from a non-terminal `intentStatus`, and every intent early-returns BEFORE `applyIntent` when the slot is missing, so `idle (pending)` PROVES the item has a slot. The refusal is `return { accepted: ok }` with `ok === false` because **real CasparCG `403`s a `CG UPDATE` on a layer with no cg producer**. On a slotted item, status `idle` IS the OSC report that the producer is empty — the UI was displaying the exact reason for its own refusal.
+
+`CG UPDATE` needs a **PRODUCER, not AIR**, and `update` was the ONE playout verb with no producer-state rule: `take` re-ADDs when the producer is gone (B-039), `setPosition` checks the same bookkeeping, `update` fired blind. (This also rules out "make Update on-air-only": a _loaded_ item has a live producer, is not on air, and updates fine.)
+
+The poisoning is a second, independent defect: a failed ack moved only `ackedStatus`, leaving `intentStatus` at the transient `updating` forever, so `pending` never cleared. Not update-specific — a failed take zombied identically.
+
+**Env:** Runtime + caspar-bridge; long-standing since #227 (2026-06-29) — NOT a regression from R-011 / B-066 / D-119. Found 2026-07-13.
+
+**Why no test caught it:** `MockRuntime.update` accepted an update on ANY item (no producer model at all), and every bridge integration test staged `load → take → update` — i.e. always ON a live producer. The producerless path existed in neither, so the R-003 Inspector UX was built and tested against semantics the real bridge does not have.
+
+**Fixed by:** `openspec/changes/reconnect-reconciliation` §7 (folded in: that change introduced the mock's `403`-on-producerless-`CG UPDATE` but never gave `update` a bullet in the prescriptive-verb requirement it rewrites — B-070 is its missing half). `update` now branches on producer existence (`#loaded`): live producer → `CG UPDATE` byte-identical (ADR-0006 frozen); no producer → commit the fields, send nothing, settle the intent in-process (B-044), report `accepted` — the next take's B-039 re-ADD carries them to air. A failed ack now settles terminally, `stack.update` answers with an `errorCode` (mirroring `stack.take`), and the Runtime shows the real reason instead of "Not accepted.".
+
+**LIVE CONFIRMATION — PENDING HARDWARE** (owner has real CasparCG; the archive is held behind the same gate as the rest of `reconnect-reconciliation`):
+
+- [ ] Basic repro: load → out → edit fields → **Update** succeeds (no "Not accepted"); take → the edit renders on air.
+- [ ] A refused update (force an AMCP error) no longer poisons the item: it settles, and `setPosition` still works afterwards.
+- [ ] **The decisive question (ADR-0006 caveat):** ADR-0006 validated `CG UPDATE` against a producer ADDed with **play-on-load = 1** (playing), but B-039 later flipped load to **play-on-load = OFF** — so there is NO in-repo hardware proof that `CG UPDATE` succeeds on an ADDed-but-never-PLAYED producer. Load an item, do **NOT** take it, edit fields, press Update: does `CG UPDATE` land on the play-on-load=off producer, or does it `403` too? If it `403`s, producer-existence must mean **"loaded AND playing"**, and the loaded-not-playing case ALSO takes the no-send commit path.

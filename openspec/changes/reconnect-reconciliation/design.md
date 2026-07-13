@@ -239,3 +239,79 @@ attribution is wrong; the captured logs discriminate (no `CG PLAY` ⇒ UI/link;
 `CG PLAY` + GET ok + no render ⇒ CEF/page → new PRD entry). The shipped
 mechanics (re-delivery, guard, adoption) remain correct and necessary under
 every candidate mechanism.
+
+## 7. B-070 — `update` was the one verb with no producer-state rule
+
+### 7.1 The corrected diagnosis
+
+The operator's report was: Inspector "Update" on an item reading `idle (pending)`
+fails with "Not accepted." The obvious suspect — `update()`'s
+`if (slot === undefined) return { accepted: false }` — is **NOT** the culprit, and
+proving that is what unlocked the bug.
+
+`pending` is derived from a non-terminal `intentStatus`, and the only writers of
+one are the take/update/out intents — each of which returns BEFORE `applyIntent`
+when the slot is missing. So a slot-less item can never render `(pending)` at all:
+**`idle (pending)` proves the item HAS a slot.** The refusal came from the other
+exit, `return { accepted: ok }`, with `ok === false` because CasparCG **`403`s a
+`CG UPDATE` on a layer with no cg producer** — the very behavior this change
+taught the mock (from the B-038 live log).
+
+And on a slotted item, status `idle` IS the OSC report that the layer's producer
+is empty (`lastProducer === 'empty' → 'idle'`). **The UI was displaying the exact
+reason for its own refusal.**
+
+So `CG UPDATE` needs a **PRODUCER, not AIR** — and `update` was the only playout
+verb with no producer-state rule: `take` re-ADDs when the producer is gone (B-039)
+and `setPosition` checks the same bookkeeping, while `update` fired blind. That
+omission is visible in this change's own prescriptive-verb requirement, which
+enumerated load / adoption / take / out / remove and simply had no **update**
+bullet. B-070 adds it.
+
+This also rules out the tempting "make Update on-air-only" fix: a **loaded** item
+(ADD with play-on-load OFF) has a live producer and is NOT on air, and it updates
+fine. Gating on air would amputate that case — which is exactly the bug in the
+stack row's twin control (`disabled={!onAir}`), left for a follow-up.
+
+### 7.2 The zombie `pending` (the cascade)
+
+A failed ack set `ackedStatus = 'error'` but never touched `intentStatus`, leaving
+it at the transient `updating` **forever**. `pending` therefore never cleared, and
+because R-011's `setPosition` refuses while `item.pending`, **one refused Update
+made the item permanently un-positionable**. The `idle (pending)` the operator saw
+was not a resting state — it was the SCAR of an earlier refused Update.
+
+The fix settles the intent on failure (B-044's rule is that nothing rests
+non-terminal): the item lands back on its evidenced resting status, or on
+`unconfirmed` when there is no evidenced target, with the failure surfaced as
+`errorCode`. It was never update-specific — a failed take zombied identically.
+
+**Deliberate deviation from the brief:** we did NOT also stop `#send` from clearing
+the B-044 expiry timer before a failed ack. Once the failed ack settles the intent
+itself, `expireIntent` has nothing to rescue (it only acts on a still-transient
+`updating`/`exiting`), so keeping the timer armed would leave a stray timer on an
+already-settled intent. A response ARRIVING is precisely when a bounded timeout
+stops applying. The genuine no-ack timeout path is untouched.
+
+### 7.3 Why the green suite never caught it
+
+`MockRuntime.update` accepted an update on ANY item — it had no producer model at
+all — so update-on-idle always succeeded offline, and every bridge integration test
+staged `load → take → update`, i.e. always ON a live producer. The producerless
+path existed in neither. The R-003 Inspector UX was thus built and tested against
+semantics the real bridge does not have. The mock now carries the producer model.
+
+### 7.4 ADR-0006 caveat — the decisive LIVE question
+
+ADR-0006 hardware-validated `CG UPDATE` on CasparCG 2.3.2, but against a producer
+`CG ADD`ed with **play-on-load = 1** (i.e. PLAYING). B-039 later flipped load to
+**play-on-load = OFF**. There is therefore **no in-repo hardware proof** that
+`CG UPDATE` succeeds on an ADDed-but-never-PLAYED producer — only the mock's
+producer-based guard and B-048's field anecdote.
+
+The live checklist (task 7.6) must answer: load an item, do NOT take it, edit
+fields, press Update. If real CasparCG `403`s even that loaded-not-playing
+producer, then producer-existence must be read as **"loaded AND playing"**, and
+the loaded-not-playing case ALSO takes the no-send commit path (fields ride the
+next take's re-ADD). The code change for that is a one-line predicate; the spec
+bullet would narrow to match.

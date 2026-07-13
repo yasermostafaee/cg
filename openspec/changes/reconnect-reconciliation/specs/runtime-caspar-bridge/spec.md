@@ -148,6 +148,15 @@ existence is identical on each).
   reserved to the (still-on-stack, idle) item until remove.
 - **remove** SHALL fully remove the item (clear + deallocate the layer + drop the
   bookkeeping).
+- **update** (B-070) SHALL issue `CG UPDATE` ONLY while a live producer exists on
+  the slot — `CG UPDATE` needs a PRODUCER, not air, and real CasparCG `403`s it on
+  a producerless layer. WHEN no live producer exists (a prior out destroyed it; a
+  reconnect or `setConfig` rebuilt the bookkeeping), the update SHALL still COMMIT
+  the operator's fields to the authoritative field-set, SHALL send NO AMCP command,
+  SHALL settle its transient intent in-process, and SHALL be reported as
+  `accepted` — the next take's re-ADD carries exactly those fields to air through
+  `CG ADD`'s data payload. An update is NEVER gated on the item being ON AIR: a
+  loaded-not-taken item has a live producer and updates on the wire like any other.
 
 #### Scenario: Load does not auto-play
 
@@ -196,7 +205,64 @@ existence is identical on each).
   **THEN** the load is rejected with `errorCode: 'unknown-template'` and no AMCP
   command is sent
 
+#### Scenario: Update on a producerless slot commits without touching the wire
+
+- **WHEN** the operator applies field edits to an item whose slot holds NO live
+  producer (e.g. it was taken out) **THEN** the bridge commits the fields to the
+  authoritative field-set, sends NO `CG UPDATE`, settles the intent, and answers
+  `accepted: true` — it does not fire a `CG UPDATE` that CasparCG would `403`
+
+#### Scenario: The committed fields reach air on the next take
+
+- **WHEN** a producerless item whose fields were updated is then taken **THEN**
+  the B-039 re-ADD's `CG ADD` data payload carries exactly those updated fields,
+  so the edit made while the item was idle renders on air
+
+#### Scenario: Update on a live producer still rides CG UPDATE
+
+- **WHEN** the item's slot holds a live producer (loaded, or on air) **THEN** the
+  update is sent as `CG UPDATE` exactly as before — the AMCP line and the
+  canonical quoter are unchanged (ADR-0006)
+
+#### Scenario: A refused update explains itself and never poisons the item
+
+- **WHEN** CasparCG errors a `CG UPDATE` on a producer-bearing slot **THEN** the
+  bridge answers `accepted: false` WITH an `errorCode` carrying the real AMCP
+  reason **AND** the item's transient intent SETTLES to a terminal state — it
+  never rests `pending`, so a single refused update cannot permanently block the
+  item's later intents (R-011's `setPosition` refuses while `pending`)
+
 ## ADDED Requirements
+
+### Requirement: A refused playout command reports a machine-readable reason
+
+Every playout channel that can refuse SHALL answer with an `errorCode` naming the
+cause, so the operator sees WHY rather than a bare "not accepted". `stack.update`
+SHALL carry `errorCode` alongside `accepted` (mirroring `stack.take`), and the
+Runtime SHALL surface that reason at the control that was pressed.
+
+A transient intent SHALL reach a terminal state on EVERY outcome — an OK ack, a
+failed ack, or the bounded-timeout expiry. A failed ack is a SETTLEMENT (a known,
+reported failure), never an indefinitely-`pending` limbo: an item may not be left
+in a state where a later intent is refused because an earlier command failed.
+
+#### Scenario: A refused update names its cause
+
+- **WHEN** an update is refused because CasparCG errored the command **THEN** the
+  response carries `errorCode` (e.g. `amcp-403`) **AND** the Runtime shows a
+  reason at the Update control, not the generic "Not accepted."
+
+#### Scenario: A failed ack settles the item
+
+- **WHEN** any playout command's ack reports failure **THEN** the item's intent
+  settles to a terminal state and `pending` clears, with the failure surfaced as
+  the item's `errorCode`
+
+#### Scenario: An errored command is not a divergence
+
+- **WHEN** a command fails with an explicit error **THEN** the item is NOT reported
+  as divergent — divergence detection is for intents left SILENTLY unconfirmed,
+  and an errored command is a known, terminal failure
 
 ### Requirement: The browser re-delivers retained templates on reconnect
 
