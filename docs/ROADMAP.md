@@ -250,8 +250,10 @@ the order changes. Strategic / non-engineering notes live in
   device-level shared image library + logo element (the `source: 'shared'` image, two-source resolver
   across preview / `.vcg` / HTML, library panel + canvas logo tool + inspector combo). Living specs:
   `designer-image-export`, `designer-shared-image-library`. Follow-ups filed:
-  [D-063](./prd/designer.md) (drag a library image → canvas) and [D-064](./prd/designer.md) (re-wire
-  repeater-stamped image `src` at playout).
+  [D-064](./prd/designer.md) (re-wire repeater-stamped image `src` at playout). ([D-063](./prd/designer.md),
+  drag a library image → canvas, was **DROPPED** 2026-07-13 as redundant given
+  [D-066](./prd/designer.md) — the device-level library panel is moving out of the per-project UI, so a
+  drag-from-panel-onto-canvas gesture has no stable home; ID retired, not reused.)
 - Owner UX-feature wave ([D-042](./prd/designer.md) → [D-048](./prd/designer.md) + [D-052](./prd/designer.md)) —
   complete. The final batch ([D-043](./prd/designer.md) box-shadow spread+inset, [D-044](./prd/designer.md)
   font-weight, [D-045](./prd/designer.md) unified alignment + vertical align, [D-047](./prd/designer.md)
@@ -296,7 +298,7 @@ are not yet filed):
 > exists, so new control-bearing items reuse it.
 
 Previously-listed designer items not in this order — D-059, D-060 (unblocks the parked
-[D-046](./prd/designer.md)), D-061, D-063, D-064, D-065, D-066,
+[D-046](./prd/designer.md)), D-061, D-064, D-065 (sequence AFTER D-066), D-066,
 [D-096](./prd/designer.md) (perf — animate position via CSS transform; belongs
 to the hardening wave), and [D-102](./prd/designer.md) **Phase 2** (per-element preview timing for
 SEQUENCES + COUNTDOWN clocks, plus surfacing repeater-stamped tickers in the timing tree — which
@@ -314,10 +316,12 @@ item in the sequence and is done — merged #290, archived 2026-07-13 (see Done)
 next Designer item is an owner call from the queued list below.
 
 The queued / deprioritized items already in `designer.md`:
-[D-059](./prd/designer.md), [D-061](./prd/designer.md), [D-063](./prd/designer.md),
-[D-064](./prd/designer.md), [D-096](./prd/designer.md), and
-[D-102](./prd/designer.md) **Phase 2**. ([D-121](./prd/designer.md), bundle fonts in
-`.vcg` export, is done — merged #298, archived 2026-07-13; see Done.)
+[D-059](./prd/designer.md), [D-061](./prd/designer.md), [D-064](./prd/designer.md),
+[D-096](./prd/designer.md), [D-126](./prd/designer.md) (shared FONT library — device-level fonts in
+every project's font picker; builds on D-040 + D-121), and [D-102](./prd/designer.md) **Phase 2**.
+([D-121](./prd/designer.md), bundle fonts in `.vcg` export, is done — merged #298, archived
+2026-07-13; see Done. [D-063](./prd/designer.md) is **DROPPED** — see the shared-image-library epic
+under Done.)
 
 ### Runtime — next
 

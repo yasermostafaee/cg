@@ -1942,33 +1942,16 @@ exporters. Known limitation: images stamped into repeater rows at play time aren
 tree only) — now filed as D-064. Capabilities: designer-image-export (new). Change:
 `openspec/changes/render-image-assets-in-exports/`.
 
-## [ ] D-063 — Drag a shared-library image onto the canvas ⟨priority: low-medium⟩
+## [x] D-063 — Drag a shared-library image onto the canvas ⟨priority: low-medium⟩ — DROPPED (2026-07-13), never implemented; ID retired, NOT reused
 
-**What:** Make Shared Library panel thumbnails draggable onto the canvas to
-place a logo, mirroring the Project Assets panel's drag-drop (D-001). After
-D-040 the library is **click-to-select** (the canvas logo tool stamps the
-selected / first image) plus the inspector combo — there is no drag-drop
-placement. The drop inserts an image element with `source: 'shared'`
-referencing the dragged library image, default-sized to its aspect, at the
-drop point, and selects it.
-**Why:** D-040 shipped the library + logo tool + inspector combo but
-**deferred** drag-drop placement. Operators expect the same drag-from-panel
-gesture the Project Assets panel already offers; this closes that parity gap.
-**Acceptance:**
-
-- WHEN the operator drags a Shared Library thumbnail onto the canvas THEN an
-  image element with `source: 'shared'` referencing that library image is
-  inserted at the drop point (sized to the image's aspect) and selected
-- WHEN dropped THEN it renders in the live preview via the two-source resolver
-  and exports inline its bytes — identical to a logo placed via the tool
-- WHILE the existing Project Assets drag-drop
-  (`application/x-cg-asset-id` → `source: 'project'`) is unchanged — the shared
-  drag uses a DISTINCT dataTransfer type so the drop sets the right `source`
-  **Notes:** Builds on D-040 (`designer-shared-image-library`). Make
-  `SharedImageThumb` draggable (e.g. `application/x-cg-shared-image-id`) and add
-  a `source`-aware branch to `CanvasOverlay.onDrop` reusing `defaultImage(…, {
-source: 'shared', width, height })`. Relates to D-001 (per-project drag,
-  unchanged).
+> **Dropped as redundant, not deferred.** The Shared Library panel is
+> **device-level** and is slated to move OUT of the per-project UI to the
+> landing / home screen (**D-066**), so a "drag a thumbnail from the Shared
+> Library panel onto this project's canvas" gesture has no stable home — after
+> D-066 the panel no longer sits beside the canvas. Shared images stay placeable
+> through the canvas logo tool + the inspector combo (D-040), which do not depend
+> on panel adjacency. **Project Assets keeps its own canvas drag-drop (D-001),
+> unchanged** — that panel is per-project and stays in the left rail.
 
 ## [ ] D-064 — Re-wire repeater-stamped image `src` at play time ⟨priority: medium⟩
 
@@ -2020,7 +2003,11 @@ delete-selection muscle memory and makes the panel selection meaningful.
   **Notes:** **Confirm the exact Delete target at scheduling** — the Shared
   Library PANEL item vs the canvas LOGO element (the canvas Delete handler
   already deletes the selected element; scope the panel's Delete to panel focus
-  so they don't collide). Builds on D-040 (`designer-shared-image-library`).
+  so they don't collide). **Sequence AFTER D-066** (the panel relocation): this
+  item assumes the library panel's CURRENT location, and both the exact Delete
+  target and its focus scoping depend on where the library UI ends up — schedule
+  it once that home is settled, so the focus scope is written against the final
+  surface rather than re-done. Builds on D-040 (`designer-shared-image-library`).
 
 ## [ ] D-066 — Relocate shared-library management out of the per-project UI ⟨priority: low⟩
 
@@ -3196,3 +3183,57 @@ The 5 templates (owner-refreshed 2026-07-12; supersedes the original list):
 - WHEN the same template is viewed in Designer preview, exported to `.vcg`, and exported to single-file HTML THEN all three render identically, and the single-file HTML runs under CasparCG's CEF from `file://` with the player JS bundled/inlined and ZERO external requests
 
 **Notes:** **OUT OF SCOPE v1:** converting a Lottie into editable native paths/keyframes; editing the animation internals; AE expressions (already rejected by the importer's allowlist); mask / matte / trim-path fidelity guarantees beyond what the player itself renders (precedent: D-109 deferred "importing external SVG paths"). **Design decisions for `design.md`:** (a) phase mapping — bodymovin `markers` when present, else manual Inspector marking (recommended); note the shipped composition lifecycle is a single `outPoint` + optional `contentStart`, NOT the intro-end/outro-start pair D-020's prose implied, so the element's own phase frames are mapped ONTO the composition's phases rather than replacing them. (b) Hold behavior — freeze at the hold frame vs. loop a mapped idle segment; support both, default freeze. (c) Player choice — **recon done, `lottie-web`'s `lottie_light` build is the leading CANDIDATE**: `lottie-web` 5.13.0 scans CLEAN against all ten `CEF_BANNED_BUILTINS` needles, is ES5-era (its only `??` is inside a regex literal), needs NO WebAssembly, and its only `XMLHttpRequest` is the `path:` loader we never use (we pass `animationData` inline). The decisive property is that `lottie_light` contains **zero `eval(` / `new Function`** — eval-based code is the real on-hardware blocker under CasparCG's CEF from `file://`, not merely a CSP nicety (the single-file export's own `script-src 'unsafe-inline'` with NO `'unsafe-eval'` forbids it too, but the hardware is the reason). The full build carries the AE expression evaluator and therefore `eval`; the importer already rejects expressions, so dropping it costs nothing and the two decisions agree. `@lottiefiles/dotlottie-web` is the WRONG bet: its WASM core must be fetched and instantiated, which `file://` and `default-src 'none'` both forbid. Per the B-066 lesson this stays a CANDIDATE until a real smoke test on 2.3.x CEF **hardware** confirms it — modern Chrome proves nothing here. (d) Bundle cost — `bundle-runtime.mjs` runs `minify: false`, so a naive add ships ~390KB of player into EVERY export. That figure is the **unminified** size, before minify/gzip and before the inline pass that bakes the bundle (and the Lottie JSON asset) into the single-file HTML; the **post-inline HTML size** is the number that actually affects CEF boot from `file://`, so measure that, not the raw file. Decide between an unconditional bundle and a conditional second esbuild entry (there is no export size budget today). **The real gap:** the runtime has NO cascade hook telling an element "play your outro now" — `out()` blanket-fades every `[data-cg-content]` root for 400ms and `stop()` hard-hides it, and only then do the controllers play the BACKGROUND outro; the sole precedent for an element-owned exit is `SequenceDriver`'s D-116 `'exit'` phase, which resolves `whenComplete()` LATE. Expect to add an element-outro seam, and to join the duck-typed content-driver contract (`reset`/`start`/`pause`/`resume`/`stop`/`destroy`/`whenComplete`) plus the `data-cg-content` marker D-105's exit selects on. Touches schema + runtime + BOTH exporters ⇒ **RECON-FIRST, needs its own `design.md`.** Spec: new capability `designer-lottie-element` + `## MODIFIED Requirements` on `designer-playout-lifecycle` (the Lottie participates in IN/HOLD/OUT). Tests: marker→segment mapping in `@cg/lottie-bridge`; a `@cg/template-runtime` lifecycle test (intro → hold → ticker-driven hold → outro → CLEARED) on the injected `RuntimeClock`; exporter tests for `.vcg` (asset bytes packed) and single-file (JSON + player inlined, no external requests) plus the existing `cef-compat.test.ts` artifact scan, which already covers bundled dependencies and is the gate this change must pass; E2E import → place → preview → export.
+
+## [ ] D-126 — Shared FONT library (device-level fonts in every project's font picker) ⟨priority: medium⟩
+
+**What:** A **device-level shared FONT library**, mirroring D-040's shared IMAGE library. The operator
+adds a font ONCE; it then appears in **every** project's font picker (the font-family combo), listed
+alongside that project's own fonts. Today fonts are strictly **per-project**: they're imported through
+the ProjectAssetsPanel font import into the per-project `AssetStore`, so the same channel font must be
+re-imported into every project. A scene that uses a shared font REFERENCES it; at **export** the
+resolved font bytes are **INLINED** (base64 / packaged) into the `.vcg` / single-file HTML **exactly
+like a per-project font (D-121)** and like a shared image (D-040) — so the played file stays
+self-contained under CasparCG's CEF on `file://`, with **no external / library reference at runtime**.
+**Why:** a channel / brand font is reused across every project. Re-importing it per project is wasteful
+and **drifts** (two projects end up with different bytes of "the" brand font). This is the same
+rationale D-040 used for shared IMAGES, now applied to fonts. Pairs with **D-121** (fonts already
+bundle correctly in export, so the inline path exists) and **P-001** (offline / air-gapped
+inline-everything).
+**Acceptance:**
+
+- WHEN the operator adds a font to the shared font library THEN it is stored in a **shared
+  `@cg/storage` namespace** (not in any project), persists across projects and sessions, and appears in
+  **EVERY** project's font picker
+- WHEN the operator removes a shared font THEN it leaves every project's picker; projects that already
+  **EXPORTED** it are unaffected (its bytes were inlined at export); a still-open project that only
+  **REFERENCES** it falls back gracefully — a clear missing-font warning / system fallback, **never a
+  crash**
+- WHEN a scene using a shared font is **PREVIEWED** THEN the preview resolves and renders that face
+  (the font resolver tries the shared library AND the project fonts)
+- WHEN a scene using a shared font is **EXPORTED** (`.vcg` or single-file HTML) THEN the face bytes are
+  inlined / packaged exactly like a per-project font — self-contained, no network / `file://` access —
+  and a content-driven crawl measures the correct width (consistent with D-121)
+- WHEN the same shared font is used in TWO projects THEN each resolves and inlines it independently
+  from the ONE shared source (no per-project re-import)
+- WHEN a scene references a shared font id that no longer resolves at export THEN export reports it via
+  the **existing preflight / validation path** (consistent with unresolved-asset handling), not a
+  silent broken export
+
+**Notes:** **Storage-first:** add a shared-FONT namespace + API to `@cg/storage` mirroring the
+per-project font import / list / get / remove surface, project-independent; reuse the existing font
+byte/blob handling and the **D-121 export-inline path** — do NOT invent a parallel encoding.
+**CENTRAL refactor + the main risk:** the FONT resolver becomes **TWO-SOURCE** (shared library first,
+then project) **everywhere fonts resolve** — the Designer font picker / preview AND **both** exporters
+(`@cg/vcg-format` packaging + `ExporterSingleFile` base64 inlining) — mirroring D-040's two-source
+IMAGE resolver. This MUST be covered by tests on **all three** paths (preview, `.vcg`, HTML); it is
+where the change most easily breaks. Font import already exists per-project (ProjectAssetsPanel font
+import → `AssetStore`) — reuse that ingestion, just targeting the shared namespace. **OPEN DESIGN
+DECISION (record, don't resolve now):** whether the shared FONT library is a SEPARATE library or lives
+under ONE unified "Shared Library" surface with image / font tabs — this ties into **D-066** (the
+Shared Library UI is relocating to the landing screen). Decide in `design.md`. **OUT OF SCOPE v1:**
+cross-machine / central sync (no backend); font subsetting; variable-font axis UI beyond what the font
+schema already supports; per-project overrides of a shared font. **RECON-FIRST, needs its own
+`design.md`** — touches storage + schema/resolver + BOTH exporters. Spec: new capability
+`designer-shared-font-library` (+ likely `## MODIFIED Requirements` on the font-export capability
+`designer-font-export` from D-121). Builds on **D-040** (the shared-image pattern) and **D-121** (font
+export).
