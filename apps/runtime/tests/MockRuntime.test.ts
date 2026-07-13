@@ -134,3 +134,59 @@ describe('MockRuntime templates + audit', () => {
     expect(recent[0]?.outcome).toBe('ok');
   });
 });
+
+/**
+ * B-072 parity — the mock must publish the stored override in item state, the
+ * same way the real bridge does. The B-070 lesson: the mock must not be the
+ * only one that models (or fails to model) a path the UI depends on, or the UI
+ * gets built against semantics the bridge does not have.
+ */
+describe('MockRuntime position read-back (B-072 parity)', () => {
+  const OVERRIDE = { anchor: 'bottom-right' as const, offset: { x: -10, y: -20 } };
+
+  function idleItemId(rt: MockRuntime): string {
+    const item = rt.stackSnapshot().find((i) => i.status === 'idle' && !i.pending);
+    expect(item).toBeDefined();
+    return item!.itemId;
+  }
+
+  it('publishes an applied override in the item state', () => {
+    const rt = new MockRuntime();
+    const id = idleItemId(rt);
+    expect(rt.stackSnapshot().find((i) => i.itemId === id)?.position).toBeUndefined();
+
+    expect(rt.setPosition(id, OVERRIDE)).toEqual({ ok: true });
+    expect(rt.stackSnapshot().find((i) => i.itemId === id)?.position).toEqual(OVERRIDE);
+    // Idempotent — a re-read (the reselect analogue) still yields it.
+    expect(rt.stackSnapshot().find((i) => i.itemId === id)?.position).toEqual(OVERRIDE);
+  });
+
+  it('pushes the override on the state-changed stream too', () => {
+    const rt = new MockRuntime();
+    const id = idleItemId(rt);
+    const pushes: (readonly { itemId: string; position?: unknown }[])[] = [];
+    const off = rt.stackChanged.subscribe((s) => pushes.push(s));
+    try {
+      // set-position republishes: an IDLE item's override reaches CasparCG on
+      // no wire at all, so the push is the ONLY way the SPA can learn it.
+      rt.setPosition(id, OVERRIDE);
+      expect(pushes.at(-1)?.find((i) => i.itemId === id)?.position).toEqual(OVERRIDE);
+      // and it survives the next mutation's republish
+      rt.load(id, 'tpl-1', {});
+      expect(pushes.at(-1)?.find((i) => i.itemId === id)?.position).toEqual(OVERRIDE);
+    } finally {
+      off();
+    }
+  });
+
+  it('a removed item drops its published override', () => {
+    const rt = new MockRuntime();
+    const id = idleItemId(rt);
+    rt.setPosition(id, OVERRIDE);
+    expect(rt.stackSnapshot().find((i) => i.itemId === id)?.position).toEqual(OVERRIDE);
+    rt.remove(id);
+    expect(rt.stackSnapshot().find((i) => i.itemId === id)).toBeUndefined();
+    rt.load(id, 'tpl-1', {});
+    expect(rt.stackSnapshot().find((i) => i.itemId === id)?.position).toBeUndefined();
+  });
+});

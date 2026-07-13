@@ -1031,3 +1031,32 @@ The poisoning is a second, independent defect: a failed ack moved only `ackedSta
 - [ ] Basic repro: load → out → edit fields → **Update** succeeds (no "Not accepted"); take → the edit renders on air.
 - [ ] A refused update (force an AMCP error) no longer poisons the item: it settles, and `setPosition` still works afterwards.
 - [ ] **The decisive question (ADR-0006 caveat):** ADR-0006 validated `CG UPDATE` against a producer ADDed with **play-on-load = 1** (playing), but B-039 later flipped load to **play-on-load = OFF** — so there is NO in-repo hardware proof that `CG UPDATE` succeeds on an ADDed-but-never-PLAYED producer. Load an item, do **NOT** take it, edit fields, press Update: does `CG UPDATE` land on the play-on-load=off producer, or does it `403` too? If it `403`s, producer-existence must mean **"loaded AND playing"**, and the loaded-not-playing case ALSO takes the no-send commit path.
+
+---
+
+## [~] B-072 — Runtime PositionPicker forgets an applied position override on reselect: the UI lies about what is on air, and an innocent re-Apply then REVERTS the correct position to the manifest default ⟨priority: high⟩
+
+**Repro:**
+
+1. Runtime. Select a loaded item, pick a position override in the Inspector's POSITION picker, press **Apply position**, then **Play**.
+2. The graphic renders on air at the NEW position — correct.
+3. DESELECT the item, then RESELECT it.
+
+**Expected:** the picker shows the override that is actually applied.
+**Actual:** the picker shows the template's **manifest DEFAULT** again. The override is live on air but the UI has forgotten it.
+
+**Root cause (NOT a persistence failure — the override is never lost):** the bridge stores the override for the item's whole life and honours it on every ADD. `CasparRuntime` holds `#positions: Map<itemId, Position>`; `setPosition` writes it, `#sendAdd` reads it on EVERY `CG ADD` (load AND take's B-039 re-ADD) to append `?pos=&dx=&dy=` to the resolved served URL, and only `remove()` deletes it. What R-011 never built is the **read-back**: `stack.set-position` answers `{ok, reason?}` — write-only — and the two channels that carry item state to the SPA (`stack.snapshot`, `stack.state-changed`) carry `StackItemState`, whose shape had **no `position` field**. The item's state structurally could not carry the override home. So `PositionPicker` seeded from the only source it had — `defaultPositionOf(item.templateId)`, the manifest default recorded at `.vcg` import, keyed by templateId and blind to overrides. The picker is mounted `key={pos-${itemId}}`, so deselect→reselect remounts it and re-seeds from that default.
+
+**Why it is high, not cosmetic:** the picker is not a read-only display — it has an Apply button, and after a reselect it displays a value that is NOT what is applied. An operator who reselects, sees the default, and re-presses **Apply position** — reasonably concluding the override never stuck — sends the manifest default and **silently destroys the correct on-air position**. A stale display plus one innocent re-Apply reverts a good placement. Blast radius = destruction of operator state.
+
+**Env:** Runtime + caspar-bridge; long-standing since R-011 (#288) — the on-air half always worked; only the read-back was missing. Found 2026-07-13.
+
+**Why no test caught it:** every position test asserted the WIRE (does the ADD URL carry the query?) or the picker's seed from the manifest default. Nothing asserted what the picker shows for an item that HAS an override, because item state could not carry one — so the gap was invisible to both the bridge suite and the DOM suite. `MockRuntime` stored overrides too but never published them either, so the offline path modelled the same blind spot.
+
+**Fixed by:** `openspec/changes/position-override-readback`. `StackItemState` gains an OPTIONAL `position`; the bridge joins `#positions` into the state at the two renderer-facing emit sites (`stackSnapshot()` and the `stackChanged` push) — ownership does not move, and delete-on-remove is inherited for free; `set-position` republishes so an IDLE item's override (which sends nothing to CasparCG) still reaches the SPA; the picker seeds from `item.position ?? defaultPositionOf(item.templateId)`. No new IPC channel and no renderer-side store (the B-070 anti-pattern). No AMCP verb, no payload change — the B-064 serve contract and ADR-0006 escaping are untouched.
+
+**LIVE CONFIRMATION — PENDING HARDWARE** (most of this is verifiable in-app without CasparCG, since the on-air half already worked and this is a read-back fix; the live check is recorded anyway):
+
+- [ ] Apply a position → **Play** → the graphic renders at the override (regression guard: the on-air half still works).
+- [ ] Deselect → reselect → the picker **SHOWS the override**, not the manifest default.
+- [ ] Re-Apply without changing anything → the on-air position is **unchanged** (NOT reverted to the default) — the blast-radius guard.

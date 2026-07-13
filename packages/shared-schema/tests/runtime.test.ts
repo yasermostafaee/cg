@@ -208,4 +208,43 @@ describe('StackItemState', () => {
     };
     expect(StackItemStateSchema.parse(s)).toEqual(s);
   });
+
+  // B-072 — the operator's applied position override is READ-BACK on the item
+  // state stream (the bridge stored it all along but nothing carried it home).
+  it('carries an applied position override', () => {
+    const s = {
+      itemId: 'i1',
+      templateId: 't1',
+      fields: {},
+      status: 'loaded' as const,
+      pending: false,
+      position: { anchor: 'bottom-right' as const, offset: { x: -10, y: -20 } },
+    };
+    expect(StackItemStateSchema.parse(s)).toEqual(s);
+  });
+
+  it('back-compat — an item with NO position still validates (absent = no override)', () => {
+    const s = {
+      itemId: 'i1',
+      templateId: 't1',
+      fields: {},
+      status: 'idle' as const,
+      pending: false,
+    };
+    const parsed = StackItemStateSchema.parse(s);
+    expect(parsed).toEqual(s);
+    expect(parsed.position).toBeUndefined();
+  });
+
+  it('rejects a malformed position (unknown anchor)', () => {
+    const s = {
+      itemId: 'i1',
+      templateId: 't1',
+      fields: {},
+      status: 'loaded' as const,
+      pending: false,
+      position: { anchor: 'nowhere', offset: { x: 0, y: 0 } },
+    };
+    expect(() => StackItemStateSchema.parse(s)).toThrow();
+  });
 });

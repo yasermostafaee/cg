@@ -1,6 +1,7 @@
 import * as dgram from 'node:dgram';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
+import type { StackItemState } from '@cg/shared-schema';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 
@@ -129,6 +130,60 @@ it('set-position on an unknown item is refused; a removed item drops its overrid
   expect((await runtime!.remove('item1')).accepted).toBe(true);
   expect((await runtime!.load('item1', 'lower-third', {})).accepted).toBe(true);
   expect(mock!.lastCgAdd(SLOT)?.template).not.toContain('?');
+}, 30000);
+
+/**
+ * B-072 — the stored override is READ-BACK on the item-state stream. R-011
+ * stored it and honoured it on air, but nothing carried it home: the picker
+ * re-seeded from the manifest default on every reselect, so the UI lied about
+ * what was applied — and an innocent re-Apply then overwrote the good on-air
+ * override with the default. The override must ride BOTH renderer-facing
+ * exits (`stackSnapshot()` and the `stackChanged` push), survive re-reads, and
+ * disappear on remove (inheriting R-011's delete-on-remove, not re-doing it).
+ */
+it('B-072: the stored override is published in item state on BOTH snapshot and state-changed', async () => {
+  await boot();
+
+  const pushes: (readonly StackItemState[])[] = [];
+  const off = runtime!.stackChanged.subscribe((s) => pushes.push(s));
+  try {
+    expect((await runtime!.load('item1', 'lower-third', {})).accepted).toBe(true);
+
+    // Before any override: published state carries NO position (the consumer
+    // falls back to the template's manifest default).
+    const before = runtime!.stackSnapshot().find((i) => i.itemId === 'item1');
+    expect(before).toBeDefined();
+    expect(before?.position).toBeUndefined();
+
+    expect(await runtime!.setPosition('item1', POSITION)).toEqual({ ok: true });
+
+    // 1. The SNAPSHOT channel carries the override.
+    const snap = runtime!.stackSnapshot().find((i) => i.itemId === 'item1');
+    expect(snap?.position).toEqual(POSITION);
+
+    // 2. The STATE-CHANGED push carries it too (same join, both exits).
+    await vi.waitFor(() => {
+      const latest = pushes.at(-1)?.find((i) => i.itemId === 'item1');
+      expect(latest?.position).toEqual(POSITION);
+    });
+
+    // 3. Re-reading (the deselect → reselect analogue) still yields it: the
+    //    read is idempotent, never consumed by the ADD that used it.
+    expect(runtime!.stackSnapshot().find((i) => i.itemId === 'item1')?.position).toEqual(POSITION);
+    expect(runtime!.stackSnapshot().find((i) => i.itemId === 'item1')?.position).toEqual(POSITION);
+
+    // 4. A second item with no override publishes none (per-item, not global).
+    expect((await runtime!.load('item2', 'lower-third', {})).accepted).toBe(true);
+    expect(runtime!.stackSnapshot().find((i) => i.itemId === 'item2')?.position).toBeUndefined();
+
+    // 5. Removal clears it — the published state inherits delete-on-remove.
+    expect((await runtime!.remove('item1')).accepted).toBe(true);
+    expect(runtime!.stackSnapshot().find((i) => i.itemId === 'item1')).toBeUndefined();
+    expect((await runtime!.load('item1', 'lower-third', {})).accepted).toBe(true);
+    expect(runtime!.stackSnapshot().find((i) => i.itemId === 'item1')?.position).toBeUndefined();
+  } finally {
+    off();
+  }
 }, 30000);
 
 it('set-position on an IDLE item stores for the next load (no immediate re-ADD)', async () => {
