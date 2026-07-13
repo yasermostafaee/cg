@@ -409,6 +409,80 @@ on the same number.
 **Regression test:** the guard is its own regression test — injecting a duplicate heading turns
 it red (verified), and removing it turns it green.
 
+## [ ] B-076 — nothing enforces that a MERGED fix flips its PRD item to `[x]`: shipping a fix and closing its item are two separate acts, and the second is routinely skipped ⟨priority: low-medium⟩
+
+Sibling of [[B-075]], same shape and same lesson: a rule that lives only in the workflow prose is
+a rule that silently rots. B-075 made B-number **uniqueness** enforceable in CI; nothing makes
+item-state **closure** enforceable, so the backlog drifts out of sync with the code.
+
+**Repro:**
+
+1. Fix a bug on a branch, mark its PRD item `[~]` ("implemented, not yet archived"), and cite the
+   branch in the heading — the house style, e.g. `— fixed on \`fix/test-infra-batch\``.
+2. Merge the PR. The fix is now on `main`; the code, tests and E2E all ship.
+3. Run the full gate: `pnpm turbo run typecheck lint test build` + `pnpm format:check`.
+4. Never come back to flip the item.
+
+**Expected:** the gate fails — a `[~]` item whose fix is already merged into `main` is a lie about
+the state of the repo, and should be impossible to leave sitting there.
+
+**Actual:** everything is green, forever. The item stays `[~]` (and any unarchived OpenSpec change
+dir stays unarchived) with nothing to notice or complain. `[~]` means _"implemented, not yet
+archived"_ — **not** _"in progress"_ — so a stale `[~]` reads exactly like open work.
+
+**Why this matters (it is not bookkeeping):** the backlog is what we pick work from. A shipped item
+still marked `[~]` gets picked up as if it were open — we have repeatedly started work on things
+that were already merged, and the only thing that catches it is a human noticing mid-task. The
+2026-07-13 `[~]` audit (PR #304) had to reconcile **~10 items by hand**: B-003, B-049, B-051, B-052,
+B-068, B-069, B-073, B-074, B-075 and D-110 had all shipped and merged, and two OpenSpec change dirs
+(`fix-pen-path-style-commits`, `add-path-morph`) sat unarchived with their spec deltas never folded
+into the living capability. That audit is exactly the manual `grep` B-075 replaced with a test —
+this item asks for the same move, one level up.
+
+**Env:** Docs/tooling/CI. Not app-specific.
+
+**Notes / proposed direction (NOT implemented — this is the filing):**
+
+Mirror B-075's disposition: **DETECT, not prevent.** A pre-merge check that fails the gate when an
+item's cited fix is already on `main` but the item is still `[~]`. Sizing is a small-to-medium
+tooling task (a real test in the ordinary `turbo run test` gate, next to
+`tools/soak-runner/tests/bug-number-audit.test.ts`), not a docs fix.
+
+The design question is **how an item cites its shipping fix**, because the check can only be as
+reliable as the citation it parses. Today's headings use at least three shapes:
+
+- `— fixed on \`fix/test-infra-batch\`` (a BRANCH name — B-073 / B-074 / B-075 pre-flip)
+- `— merged (#293, \`aede129\`)` (a PR number + commit — the post-flip house style)
+- `— \`openspec/changes/add-path-morph\`` (an unarchived CHANGE DIR — D-110 pre-flip)
+
+Three candidate signals, in rough order of robustness:
+
+1. **Change-dir state (most reliable, zero new convention).** A `[~]` item citing
+   `openspec/changes/<name>` where that dir no longer exists under `openspec/changes/` (it moved to
+   `archive/`) is unambiguously due a flip. Likewise a `[~]` item whose change dir still exists but
+   whose `tasks.md` is 100 % checked is due an archive. Both are pure filesystem facts.
+2. **A commit on `main` citing the B-number.** Grep merged `main`'s log for the item's number; if a
+   commit on `main` claims to fix `B-NNN` and the item is still `[~]`, flag it.
+3. **Branch ancestry — TRAP, do not rely on it naively.** "Is the cited branch merged into `main`?"
+   fails under **squash-merge**, which is what this repo does: during the audit, `d9a82de` and
+   `487cd74` (the real branch commits for B-075 / B-073) are **NOT** ancestors of `main`, while
+   their squashes `1ff6b4b` / `052863a` are. A `git merge-base --is-ancestor <branch> main` check
+   would therefore report "not merged" for work that shipped weeks ago and pass a stale item
+   straight through. Any branch-based signal must resolve the squash, or be dropped.
+
+Likely the check wants ONE canonical, machine-readable citation on a `[~]` heading (decide the
+shape when scheduling — a PR number is the most stable thing that survives squashing) rather than
+parsing all three shapes above. Whatever is chosen, the existing headings need a one-time
+normalisation pass, and that pass is most of the work.
+
+**Open call for whoever takes it:** decide whether the check also enforces the OpenSpec half (an
+unarchived change dir whose tasks are all `[x]`), or whether that stays a separate guard. They are
+the same defect wearing two hats — the audit found both together — but they fail in different
+places (`docs/prd/*.md` vs `openspec/changes/`).
+
+**Regression test:** the guard is its own regression test (the B-075 precedent) — a `[~]` item
+whose cited fix is merged turns it red; flipping that item to `[x]` turns it green.
+
 <!-- Add new open bugs above this line using the format. Example:
 
 ## [ ] B-0NN — Export blocked dialog shows wrong error count
