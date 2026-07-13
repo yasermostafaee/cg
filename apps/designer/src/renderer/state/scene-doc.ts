@@ -239,6 +239,13 @@ export function ensureCompositions(scene: Scene): { scene: Scene; activeId: stri
       resolution: scene.resolution,
       frameRange: scene.frameRange,
       ...(scene.activeRange !== undefined ? { activeRange: scene.activeRange } : {}),
+      // B-068 — the root's lifecycle/playout govern the layers being migrated, so they
+      // move WITH them. Dropping them left the comp with no out-point and the default
+      // mode, which `playoutOf` resolves to `static`: the authored exit plays as part of
+      // the entrance and the hold freezes on the post-exit pose. Conditional, so an
+      // absent one stays absent rather than materializing an `undefined` key.
+      ...(scene.lifecycle !== undefined ? { lifecycle: scene.lifecycle } : {}),
+      ...(scene.playout !== undefined ? { playout: scene.playout } : {}),
       background: scene.background,
       layers: rootLayers,
       fields: [],
