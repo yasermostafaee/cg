@@ -6,6 +6,7 @@ import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
+import { PositionPicker } from './PositionPicker.js';
 import {
   draftsVersion,
   effectiveValue,
@@ -147,6 +148,8 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
         </Button>
         {dirty && <DraftChip label="unapplied edits" />}
       </div>
+      {/* R-011 — per-item on-air position; keyed so item switches re-seed. */}
+      <PositionPicker key={`pos-${itemId}`} item={item} />
       <div
         style={{
           marginTop: '0.5rem',

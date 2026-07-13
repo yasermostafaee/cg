@@ -12,6 +12,7 @@ import {
   LayersOwnedOccupancyChangedChannel,
   LayersOwnedOccupancyChannel,
   StackRemoveAllChannel,
+  StackSetPositionChannel,
   LockEngageChannel,
   LockReleaseChannel,
   LockStateChangedChannel,
@@ -202,6 +203,25 @@ describe('connections.set-config + stack.remove-all channel schemas (R-010)', ()
       removed: 3,
     });
     expect(() => StackRemoveAllChannel.response.parse({ ok: true, removed: -1 })).toThrow();
+  });
+
+  it('stack.set-position takes a 9-point anchor + offset and answers ok/reason (R-011)', () => {
+    const req = {
+      itemId: 'item1',
+      position: { anchor: 'bottom-right', offset: { x: -10, y: -20 } },
+    };
+    expect(StackSetPositionChannel.request.parse(req)).toEqual(req);
+    expect(() =>
+      StackSetPositionChannel.request.parse({
+        itemId: 'item1',
+        position: { anchor: 'upper-middle', offset: { x: 0, y: 0 } },
+      }),
+    ).toThrow();
+    expect(StackSetPositionChannel.response.parse({ ok: true })).toEqual({ ok: true });
+    expect(StackSetPositionChannel.response.parse({ ok: false, reason: 'on-air' })).toMatchObject({
+      reason: 'on-air',
+    });
+    expect(() => StackSetPositionChannel.response.parse({ ok: false, reason: 'nope' })).toThrow();
   });
 });
 

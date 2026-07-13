@@ -5,7 +5,7 @@ import type {
   TemplateInfo,
   TemplatesImportChannel,
 } from '@cg/shared-ipc';
-import type { Manifest } from '@cg/shared-schema';
+import type { Manifest, Position } from '@cg/shared-schema';
 import { unpack, verify } from '@cg/vcg-format';
 import { ExporterSingleFile, cgCss, cgJsIife, type ImageAssetSource } from '@cg/single-file-export';
 
@@ -29,6 +29,14 @@ export interface TemplateDelivery {
   html: string;
   /** Non-blocking export preflight messages (e.g. an image whose bytes didn't resolve). */
   warnings: string[];
+  /**
+   * R-011 — the scene's manifest default on-air position, surfaced at the
+   * ONE moment the app holds the unpacked scene (import). The Library
+   * records it so the Inspector's position picker can seed from it;
+   * `TemplateInfo` deliberately does NOT carry it (the runtime applies the
+   * default from the scene inside the served HTML regardless).
+   */
+  defaultPosition?: Position;
 }
 
 /** Inputs that vary by caller/environment (kept out of this React-free module). */
@@ -140,7 +148,12 @@ export async function produceTemplateDelivery(
     if (errors.length > 0) {
       throw new Error(errors.map((i) => i.message).join('; '));
     }
-    return { template, html: produced.html, warnings: produced.issues.map((i) => i.message) };
+    return {
+      template,
+      html: produced.html,
+      warnings: produced.issues.map((i) => i.message),
+      ...(scene.defaultPosition !== undefined ? { defaultPosition: scene.defaultPosition } : {}),
+    };
   } catch (err) {
     throw new Error(`could not be rendered: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -155,8 +168,12 @@ export async function importTemplateFromBytes(
   bridge: TemplateImportBridge,
   bytes: Uint8Array,
   opts: ProduceOptions = {},
-): Promise<{ templateId: string; warnings: string[] }> {
-  const { template, html, warnings } = await produceTemplateDelivery(bytes, opts);
+): Promise<{ templateId: string; warnings: string[]; defaultPosition?: Position }> {
+  const { template, html, warnings, defaultPosition } = await produceTemplateDelivery(bytes, opts);
   await bridge.templates.import({ template, html });
-  return { templateId: template.templateId, warnings };
+  return {
+    templateId: template.templateId,
+    warnings,
+    ...(defaultPosition !== undefined ? { defaultPosition } : {}),
+  };
 }

@@ -27,6 +27,7 @@ import type {
   StackOutChannel,
   StackRemoveAllChannel,
   StackRemoveChannel,
+  StackSetPositionChannel,
   StackSnapshotChannel,
   StackTakeChannel,
   StackUpdateChannel,
@@ -89,6 +90,14 @@ export interface RuntimeBridge {
     remove(
       req: ChannelRequest<typeof StackRemoveChannel>,
     ): Promise<ChannelResponse<typeof StackRemoveChannel>>;
+    /**
+     * R-011 — the operator's per-item on-air position override. Refused
+     * (`reason: 'on-air'`) while the item is on air/unsettled — the picker
+     * mirrors the lock.
+     */
+    setPosition(
+      req: ChannelRequest<typeof StackSetPositionChannel>,
+    ): Promise<ChannelResponse<typeof StackSetPositionChannel>>;
     /**
      * R-010 — OUT + REMOVE every stack item (clears air, empties the list).
      * The sanctioned path to unblock a server reconfiguration.

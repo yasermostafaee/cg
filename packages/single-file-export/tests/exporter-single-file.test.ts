@@ -54,6 +54,10 @@ describe('ExporterSingleFile', () => {
     expect(html).toContain('var scene =');
     expect(html).toContain('CG.createRuntime(scene, { assetUrls:');
     expect(html).toContain('CG.installCasparGlobals');
+    // R-011 — the ON-AIR boot applies the output position (query override ??
+    // scene.defaultPosition ?? centered). This boot script is the ONLY caller;
+    // the Designer preview never applies positioning.
+    expect(html).toContain('CG.applyOutputPosition(scene, { search: location.search })');
     // B-066 — a boot failure must be VISIBLE on the output (try/catch +
     // "cg boot error" pre), never a silent blank whose only trace is
     // "update is not defined" in the CEF log.

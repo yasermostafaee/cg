@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { FieldValuesSchema, IdSchema, StackItemStateSchema } from '@cg/shared-schema';
+import {
+  FieldValuesSchema,
+  IdSchema,
+  PositionSchema,
+  StackItemStateSchema,
+} from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
 
@@ -49,6 +54,24 @@ export const StackRemoveChannel = defineChannel(
   'stack.remove',
   z.object({ itemId: IdSchema }),
   z.object({ accepted: z.boolean() }),
+);
+
+/**
+ * R-011 — the operator's per-item on-air position override. REFUSED
+ * (`reason: 'on-air'`) while the item is on air or unsettled — position is
+ * fixed once taken (Option A cannot reposition on air without a re-serve
+ * flash); the UI mirrors the lock. A loaded-not-taken item is invisibly
+ * re-served with the new position; an idle item stores it for the next
+ * load. The override rides the served template URL's query — never a new
+ * AMCP verb, never the data payload.
+ */
+export const StackSetPositionChannel = defineChannel(
+  'stack.set-position',
+  z.object({ itemId: IdSchema, position: PositionSchema }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.enum(['on-air', 'unknown-item']).optional(),
+  }),
 );
 
 /**
