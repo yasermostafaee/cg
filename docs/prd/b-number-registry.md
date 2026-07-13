@@ -51,20 +51,24 @@ why `main` itself stays clean. Documented instances:
 The rule that has actually held the line: **merged `main` numbers always win**; an in-flight
 branch renumbers itself.
 
-## Recommendation (a suggestion, not a rule)
+## Enforcement — ADOPTED (B-075)
 
 The collisions all share one cause: "next free number" is read from a snapshot of `main` that
-is already stale by the time a second branch reads it. Two cheap ways to remove the race —
-**neither is enforced today; adopt if the churn justifies it:**
+is already stale by the time a second branch reads it. Two ways to remove the race were
+considered:
 
-1. **Per-track number bands.** Give each bug file its own range so two tracks can never pick
-   the same number without noticing — e.g. cross-cutting/tooling `B-500+`, designer `B-600+`,
-   runtime `B-700+` (continuing the existing sequence, not renumbering history). A branch then
-   only races branches in its own track, which is far rarer.
-2. **Audit in CI.** Run the duplicate-audit command above as a check, allowlisting the single
-   known `B-056`. This does not prevent a collision but makes it impossible to merge one — which
-   is all that has ever actually mattered, since in-flight collisions are cheap to fix and merged
-   ones are not.
+1. **Per-track number bands** — give each bug file its own range (e.g. tooling `B-500+`,
+   designer `B-600+`, runtime `B-700+`) so two tracks can never pick the same number. This
+   **prevents**, but it renumbers the future and buys little: cross-track collisions are only
+   half the problem, and it does nothing about two branches on the SAME track.
+2. **Audit in CI** — **CHOSEN, and now enforced.** It does not prevent a collision, but it
+   makes one impossible to MERGE, which is the only thing that has ever actually mattered: an
+   in-flight collision is cheap to renumber, a merged one is not (it ripples into archived
+   change dirs, PR/commit text and code comments — see B-056).
 
-(1) prevents; (2) detects. (2) is the smaller change and directly enforces the invariant this
-file documents.
+The guard is `tools/soak-runner/tests/bug-number-audit.test.ts` ([B-075](bugs.md)). It runs in
+the ordinary `turbo run test` gate, fails with the offending number and the two files that
+claim it, and allowlists exactly one accepted duplicate (`B-056`) — with a second assertion
+that the allowlist itself cannot go stale.
+
+**If it fails on your branch: renumber YOUR bug.** Merged `main` numbers always win.

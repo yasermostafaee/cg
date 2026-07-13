@@ -370,6 +370,45 @@ post-fix suites are **3/3 green** (bridge 87 tests / 24 files, client 246 tests 
 isolated and under the parallel run. Note the flake is probabilistic — 3/3 green is the agreed bar,
 not a proof of absence; the causal fix for the one observed signature is what carries the claim.
 
+## [~] B-075 — nothing stops a duplicate B-number from being MERGED: the global-uniqueness rule was enforced only by remembering to run the audit ⟨priority: low⟩ — fixed on `fix/B-067-nested-fields`
+
+**Repro:**
+
+1. On a branch, add a bug heading reusing a `B-` number that already exists in another bug file
+   (exactly what happens when two branches each read "the next free number" from a different
+   snapshot of `main`).
+2. Run the full gate: `pnpm turbo run typecheck lint test build`.
+
+**Expected:** the gate fails — a `B-` number names exactly one bug, globally, forever.
+**Actual (pre-fix):** everything is green. The rule lived in prose (the note at the top of this
+file, `README.md`, [b-number-registry.md](b-number-registry.md)) and in a `grep` someone had to
+remember to run. **Five collisions happened in a single session.** Every one was caught by hand
+and renumbered before merge — which is the ONLY reason `main`'s number space is clean — but
+nothing made that guaranteed.
+**Env:** Docs/tooling. Not app-specific.
+
+**Why this matters more than it looks:** an IN-FLIGHT collision is cheap (renumber the branch).
+A MERGED one is not — renumbering a closed bug ripples into archived change dirs, commit/PR
+text, and code comments that cite the old number, so the standing owner call is to leave it
+alone and disambiguate by file (see [[B-069]] and the `B-056` pair). Prevention after the fact
+is not available; the only lever is to never merge one.
+
+**Fix — DETECT, not prevent (the trade-off recorded in [b-number-registry.md](b-number-registry.md)):**
+`tools/soak-runner/tests/bug-number-audit.test.ts` runs the duplicate audit as a real test in
+the ordinary `turbo run test` gate. It matches only the number that OPENS a heading
+(`^## [x] B-NNN`) — matching anywhere in the line produces false hits, since headings
+cross-reference other bugs — and fails naming the offending number and both files that claim it
+(`B-067 claimed by 2: bugs-designer.md + bugs-runtime.md`). Filed here rather than as per-track
+number bands: bands renumber the future and still don't stop two branches on the SAME track.
+
+`B-056` is the one allowlisted exemption (dual-owned, both merged + archived), and a second
+assertion pins that the allowlist cannot go stale — if that duplicate is ever resolved, the
+exemption must be dropped rather than left as a blanket hole that would hide a future collision
+on the same number.
+
+**Regression test:** the guard is its own regression test — injecting a duplicate heading turns
+it red (verified), and removing it turns it green.
+
 <!-- Add new open bugs above this line using the format. Example:
 
 ## [ ] B-0NN — Export blocked dialog shows wrong error count

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DynamicFieldSchema, IdSchema } from '@cg/shared-schema';
+import { CompositionFieldGroupSchema, DynamicFieldSchema, IdSchema } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 
 /**
@@ -13,7 +13,15 @@ import { defineChannel } from '../channel.js';
 const TemplateInfoSchema = z.object({
   templateId: IdSchema,
   templateType: z.string(),
+  /** The ENTRY composition's own flat fields. */
   fields: z.array(DynamicFieldSchema),
+  /**
+   * B-067 — the nested-composition field namespaces (recursive). A D-119 starter is a
+   * graphic composition nested in a full-frame one, and its authored fields live on the
+   * NESTED comp — so `fields` alone is empty and the operator saw "No fields." Additive:
+   * absent/`[]` means a flat, single-composition template, exactly as before.
+   */
+  groups: z.array(CompositionFieldGroupSchema).optional(),
 });
 export type TemplateInfo = z.infer<typeof TemplateInfoSchema>;
 
