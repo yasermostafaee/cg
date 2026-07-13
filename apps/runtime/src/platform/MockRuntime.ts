@@ -1,4 +1,4 @@
-import type { AuditEntry, StackItemState, StackItemStatus } from '@cg/shared-schema';
+import type { AuditEntry, Position, StackItemState, StackItemStatus } from '@cg/shared-schema';
 import type {
   ConnectionConfig,
   ConnectionHealth,
@@ -53,6 +53,8 @@ export class MockRuntime {
   // B-056 — same shape: no real primary to miss, EXCEPT a test-only seed
   // (CG_E2E_OWNED_OCCUPANCY) so Playwright can drive the warning + remedy.
   #ownedOccupancy: OwnedOccupancyWarning[] = seedOwnedOccupancy();
+  // R-011 — per-item operator position overrides (bridge parity).
+  readonly #positions = new Map<string, Position>();
 
   // ── stack ───────────────────────────────────────────────────────────
   stackSnapshot(): StackItemState[] {
@@ -120,7 +122,40 @@ export class MockRuntime {
     this.#emitStack();
     // B-056 parity — the item is gone / its layer deallocated.
     this.#resolveOwnedOccupancy(itemId);
+    // R-011 parity — the override dies with the item.
+    this.#positions.delete(itemId);
     return { accepted: true };
+  }
+
+  /**
+   * R-011 parity — the bridge's set-position contract: refused while the
+   * item is on air or unsettled (position is fixed once taken), stored
+   * otherwise. The offline mock renders nothing, so storing is the whole
+   * effect; the on-air runtime behavior is integration-tested bridge-side.
+   */
+  setPosition(
+    itemId: string,
+    position: Position,
+  ): { ok: boolean; reason?: 'on-air' | 'unknown-item' } {
+    const item = this.#find(itemId);
+    if (item === null) return { ok: false, reason: 'unknown-item' };
+    if (
+      item.pending ||
+      item.status === 'playing' ||
+      item.status === 'on-air' ||
+      item.status === 'updating' ||
+      item.status === 'exiting' ||
+      item.status === 'unconfirmed'
+    ) {
+      return { ok: false, reason: 'on-air' };
+    }
+    this.#positions.set(itemId, position);
+    return { ok: true };
+  }
+
+  /** R-011 — the stored override for an item (test/diagnostic surface). */
+  positionOf(itemId: string): Position | undefined {
+    return this.#positions.get(itemId);
   }
 
   /** R-010 — OUT + REMOVE everything: clears (simulated) air, empties the list. */

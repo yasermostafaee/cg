@@ -214,6 +214,32 @@ const SceneMetadataSchema = z.object({
   tags: z.array(z.string()).optional(),
 });
 
+/**
+ * R-011 — a 9-point on-air position: the anchor aligns the graphic's
+ * matching handle to the OUTPUT frame's matching handle (corners are 4 of
+ * the 9), and the offset is a pixel nudge in output space (x→right,
+ * y→down). Authored/applied against the 1920×1080 reference output frame;
+ * non-1080 channels are documented future work.
+ */
+export const PositionAnchorSchema = z.enum([
+  'top-left',
+  'top-center',
+  'top-right',
+  'mid-left',
+  'center',
+  'mid-right',
+  'bottom-left',
+  'bottom-center',
+  'bottom-right',
+]);
+export type PositionAnchor = z.infer<typeof PositionAnchorSchema>;
+
+export const PositionSchema = z.object({
+  anchor: PositionAnchorSchema,
+  offset: z.object({ x: z.number(), y: z.number() }),
+});
+export type Position = z.infer<typeof PositionSchema>;
+
 /** Scene — root of the editor's domain model. */
 export const SceneSchema = z
   .object({
@@ -248,6 +274,15 @@ export const SceneSchema = z
     lifecycle: LifecycleSchema.optional(),
     /** D-020 no-code playout timing (optional; absent = `manual`). */
     playout: PlayoutSchema.optional(),
+    /**
+     * R-011 — the template's default ON-AIR position (the manifest default
+     * the operator can override per item). Consumed by the on-air runtime
+     * only — the Designer preview shows the comp at its own resolution.
+     * Optional + backward-compatible: absent ⇒ the runtime centers the
+     * graphic on the output frame. Auto-populating it from the nested
+     * instance position is the D-119 Designer track.
+     */
+    defaultPosition: PositionSchema.optional(),
     background: z.union([z.literal('transparent'), HexColorSchema]),
     layers: z.array(LayerSchema),
     fields: z.array(DynamicFieldSchema),

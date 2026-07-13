@@ -26,6 +26,7 @@ import {
   StackOutChannel,
   StackRemoveAllChannel,
   StackRemoveChannel,
+  StackSetPositionChannel,
   StackSnapshotChannel,
   StackStateChangedChannel,
   StackTakeChannel,
@@ -302,6 +303,10 @@ function buildRoutes(b: CasparRuntime, persistPath?: string): Map<string, Route>
     ),
     route(StackOutChannel, (r: { itemId: string }) => b.out(r.itemId)),
     route(StackRemoveChannel, (r: { itemId: string }) => b.remove(r.itemId)),
+    // R-011 — the operator's per-item on-air position override.
+    route(StackSetPositionChannel, (r: { itemId: string; position: never }) =>
+      b.setPosition(r.itemId, r.position),
+    ),
     // R-010 — the sanctioned clear-everything path (unblocks set-config).
     route(StackRemoveAllChannel, () => b.removeAll()),
     route(StackSnapshotChannel, () => b.stackSnapshot()),

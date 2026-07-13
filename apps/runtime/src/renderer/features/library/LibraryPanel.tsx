@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TemplateInfo } from '@cg/shared-ipc';
-import { defaultFieldValue, type FieldValues } from '@cg/shared-schema';
+import { defaultFieldValue, type FieldValues, type Position } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { uuid } from '../../lib/uuid.js';
 import { Button } from '../../ui/Button.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { importTemplateFromBytes } from './templateDelivery.js';
+import { recordDefaultPosition } from '../stack/defaultPositionStore.js';
 // B-038 Phase 3 — the bundled app @font-face CSS (Vazirmatn / Exo 2) as a raw
 // string. Passed to the single-file export so the bundled faces inline as base64
 // and the template HTML CasparCG loads renders Persian with the correct face.
@@ -96,7 +97,7 @@ export function LibraryPanel(): JSX.Element {
         return;
       }
 
-      let imported: { templateId: string; warnings: string[] };
+      let imported: { templateId: string; warnings: string[]; defaultPosition?: Position };
       try {
         // B-038 Phase 2 — produce the self-contained standalone HTML from the
         // unpacked `.vcg` and deliver it with the `TemplateInfo` over
@@ -110,6 +111,10 @@ export function LibraryPanel(): JSX.Element {
         setError(`“${file.name}” ${err instanceof Error ? err.message : String(err)}`);
         return;
       }
+
+      // R-011 — record the manifest default position (the one moment the app
+      // holds the unpacked scene) so the Inspector's picker seeds from it.
+      recordDefaultPosition(imported.templateId, imported.defaultPosition);
 
       await refresh();
       setStatus(

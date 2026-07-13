@@ -8,6 +8,14 @@
 
 export { createRuntime } from './runtime.js';
 export { installCasparGlobals } from './adapters/caspar-globals.js';
+export {
+  applyOutputPosition,
+  outputTranslate,
+  parsePositionQuery,
+  resolveOutputPosition,
+  OUTPUT_FRAME,
+  type ApplyOutputPositionOptions,
+} from './position.js';
 export { buildScene } from './scene-builder.js';
 export { applyFieldValues } from './bindings.js';
 export { applyTransform, stringifyValue } from './transforms.js';

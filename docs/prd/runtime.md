@@ -374,3 +374,67 @@ channel that applies a new `ConnectionConfig` to a RUNNING bridge
   view), R-006 (boot-time backend choice surface — adjacent but distinct).
   Apply-while-on-air policy needs design care (likely: defer apply or require
   confirmation while anything is ON AIR).
+
+---
+
+## [x] R-011 — operator-chosen on-air POSITION for a loaded graphic ("author small, place anywhere" — the runtime half) ⟨priority: medium⟩ — merged via `runtime-onair-positioning`, archived
+
+<!-- change: openspec/changes/archive/2026-07-12-runtime-onair-positioning/ -->
+
+> **Implemented + mock/integration/e2e-validated 2026-07-12** as **Option A
+> (runtime offset)** — a `MIXER` path was REJECTED (hard requirement: no new
+> hardware-gated AMCP verb; the corner math lives where the footprint is
+> known; MIXER resamples the rendered raster). What shipped: an optional
+> scene-level `defaultPosition: Position` (9-point anchor + output-space
+> pixel offset, `@cg/shared-schema`, backward-compatible);
+> `applyOutputPosition` in `@cg/template-runtime` called ONLY from the
+> exported single-file boot (the one page CasparCG loads — bridge-served AND
+> file-drop) — effective = URL-query override
+> (`?pos=<anchor>&dx=<x>&dy=<y>`) ?? `scene.defaultPosition` ?? CENTERED
+> (never 0,0), placed by sizing the page to the 1920×1080 reference frame +
+> translating the scene-sized `.cg-stage` (the Designer preview never calls
+> it — regression-guarded untouched); `stack.set-position` + a per-item
+> Inspector picker (3×3 anchor grid + dx/dy) seeded from the manifest
+> default recorded at import, LOCKED while on air (bridge-authoritative
+> refusal, mirrored in the UI); the bridge stores per-item overrides
+> (`#positions`), re-serves a loaded-not-taken item invisibly, appends the
+> query onto the RESOLVED served URL in `#sendAdd` ONLY (the B-064
+> serve-down/bare-id contract byte-for-byte; take's B-039 re-ADD inherits
+> it), keeps overrides across `setConfig`, and drops them at remove.
+> Residuals (change `design.md` §8): non-1080 channels are future work
+> (offsets author against 1920×1080); no on-air repositioning by design;
+> overrides are process-memory.
+>
+> **Live smoke — PENDING hardware**: on a real 1920×1080 CasparCG channel,
+> load a small-comp template → renders CENTERED (no override) / at the
+> chosen anchor+offset (override applied before take); confirm the Designer
+> preview shows the comp unchanged at its own resolution.
+
+**What:** A manifest default position, an operator per-item position picker
+
+- override, and RUNTIME-SIDE application of the position (no CasparCG MIXER
+  — positioning stays out of AMCP).
+
+**Why:** A small-canvas template (e.g. a 300×300 comp) renders at output
+(0,0): the served page's stage sits at the top-left of the 1920×1080 CEF
+frame and the bridge applies no positioning. "Author small, place anywhere"
+needs the runtime half: place the authored footprint at an operator-chosen
+anchor+offset on the output.
+
+**Acceptance:**
+
+- WHEN a small-comp template with no default and no override is loaded THEN
+  it renders CENTERED on the output (never 0,0)
+- WHEN the scene carries `defaultPosition` THEN the output honors it and
+  the picker seeds from it
+- WHEN the operator applies an anchor+offset override THEN the served URL
+  carries it as a query and the output renders there (load AND retake)
+- WHEN the item is on air THEN `stack.set-position` is refused and the
+  picker is locked; editable while loaded-not-taken and idle
+- WHEN the Designer previews the same scene THEN no positioning applies
+
+**Notes:** cross-ref **D-119** (the Designer half: auto-populates
+`defaultPosition` from the nested-instance position and switches to
+small-comp export — depends on this change's schema field + runtime
+application). The reference output frame is 1920×1080; non-1080 channels
+are a documented follow-up.
