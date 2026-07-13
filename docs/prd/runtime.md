@@ -377,7 +377,7 @@ channel that applies a new `ConnectionConfig` to a RUNNING bridge
 
 ---
 
-## [x] R-011 — operator-chosen on-air POSITION for a loaded graphic ("author small, place anywhere" — the runtime half) ⟨priority: medium⟩ — merged via `runtime-onair-positioning`, archived
+## [x] R-011 — operator-chosen on-air POSITION for a loaded graphic ("author small, place anywhere" — the runtime half) ⟨priority: medium⟩ — merged via `runtime-onair-positioning`, archived; **live-confirmed on CasparCG 2.3.2 / `4de6d18f`** (2026-07-13)
 
 <!-- change: openspec/changes/archive/2026-07-12-runtime-onair-positioning/ -->
 
@@ -405,10 +405,14 @@ channel that applies a new `ConnectionConfig` to a RUNNING bridge
 > (offsets author against 1920×1080); no on-air repositioning by design;
 > overrides are process-memory.
 >
-> **Live smoke — PENDING hardware**: on a real 1920×1080 CasparCG channel,
-> load a small-comp template → renders CENTERED (no override) / at the
-> chosen anchor+offset (override applied before take); confirm the Designer
-> preview shows the comp unchanged at its own resolution.
+> **Live smoke — PASSED on CasparCG 2.3.2 (build `4de6d18f`), 2026-07-13**: on a
+> real 1920×1080 CasparCG channel, a small-comp template renders **CENTERED** with
+> no override (the "never 0,0" default holds on hardware) and at the **chosen
+> anchor + offset** when an override is applied before take; the Designer preview
+> shows the comp unchanged at its own resolution (the preview never calls
+> `applyOutputPosition`, as designed). Both halves of the effective-position chain
+> are confirmed live. The read-back half was a separate defect — see [[B-072]],
+> also live-confirmed on this build.
 
 **What:** A manifest default position, an operator per-item position picker
 
