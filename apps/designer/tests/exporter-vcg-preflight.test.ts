@@ -41,12 +41,17 @@ function makeExporter(): Exporter {
 }
 
 describe('Exporter (.vcg) preflight — D-028 ticker', () => {
-  it('warns that .vcg ships no font bytes, so a ticker measures fallback glyphs', async () => {
+  /**
+   * D-121 SUPERSEDES the original D-028 assertion here (".vcg ships no font bytes,
+   * so ANY ticker warns"). The `.vcg` now bundles the fonts it can, and this scene's
+   * ticker uses `Vazirmatn` — a face the RUNTIME app ships and inlines itself, so it
+   * IS present on air and its crawl measures real glyphs. Warning on it would be a
+   * lie. The re-scoped warning (fires only for a font that genuinely can't be
+   * bundled, e.g. a system face) is covered in `exporter-vcg-fonts.test.ts`.
+   */
+  it('no longer warns for a ticker whose face the runtime already ships (D-121)', async () => {
     const issues = await makeExporter().preflight(makeScene());
-    const warn = issues.find((i) => i.code === 'vcg-ticker-fonts-not-bundled');
-    expect(warn).toBeDefined();
-    expect(warn?.severity).toBe('warning'); // warn, don't block
-    expect(warn?.elementId).toBe('tk-1');
+    expect(issues.some((i) => i.code === 'vcg-ticker-fonts-not-bundled')).toBe(false);
   });
 
   it('stays silent for scenes without tickers', async () => {
