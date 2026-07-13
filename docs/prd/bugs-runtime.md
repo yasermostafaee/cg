@@ -11,7 +11,7 @@ per-bug loop, see [bugs.md](bugs.md).
 
 ---
 
-## [x] B-066 — CEF-incompatible `replaceAll` in the served runtime bundle aborts every template at boot on real CasparCG — "update/play is not defined" and Persian "????" are downstream effects ⟨priority: high⟩ — fixed via `persian-onair-cef-compat`, archived; LIVE CONFIRMATION PENDING
+## [x] B-066 — CEF-incompatible `replaceAll` in the served runtime bundle aborts every template at boot on real CasparCG — "update/play is not defined" and Persian "????" are downstream effects ⟨priority: high⟩ — fixed via `persian-onair-cef-compat`, archived; **LIVE-CONFIRMED on CasparCG 2.3.2 / `4de6d18f`** (2026-07-13)
 
 <!-- change: openspec/changes/archive/2026-07-12-persian-onair-cef-compat/ -->
 
@@ -56,19 +56,23 @@ Regression nets: CEF-emulation boot test (no `replaceAll` in the env →
 boots, bare globals defined, `update(json)` renders Persian); Persian
 byte-exact `.vcg`→delivery and bridge→`CG ADD`-decode tests (zero "?").
 
-**LIVE CONFIRMATION — PENDING (the real gate; owner's CasparCG):**
+**LIVE CONFIRMATION — PASSED on CasparCG 2.3.2 (build `4de6d18f`), 2026-07-13**
+(the real gate; owner's CasparCG — the same build ADR-0006 was validated
+against):
 
-1. Export any Persian template from the Designer → import into the Runtime
-   app → Load on real CasparCG.
-2. `CG ADD`: NO "replaceAll is not a function", NO "cg boot error" pre on
-   the output, NO "update/play is not defined" in the CEF log.
-3. `window.play`/`window.update` DEFINED; the template RENDERS.
-4. Rendered Persian is correct — no "?". (CasparCG's own console/log may
-   still transliterate Persian to "?" in its display — that is the log's
-   ANSI codepage, not the payload; the render is the ground truth.)
-5. Note the CEF/Chromium version from the CasparCG logs (expected ∈
-   [71, 84]).
-6. Unblocks the **D-119** Persian starter-template re-test.
+1. [x] Export any Persian template from the Designer → import into the Runtime
+       app → Load on real CasparCG.
+2. [x] `CG ADD`: NO "replaceAll is not a function", NO "cg boot error" pre on
+       the output, NO "update/play is not defined" in the CEF log — **no boot
+       abort**.
+3. [x] `window.play`/`window.update` DEFINED; the template RENDERS.
+4. [x] Rendered Persian is correct — no "?". (CasparCG's own console/log may
+       still transliterate Persian to "?" in its display — that is the log's
+       ANSI codepage, not the payload; the render is the ground truth.)
+5. [x] CEF/Chromium version noted from the CasparCG logs (within the expected
+       [71, 84] band for the 2.3 LTS line).
+6. [x] Unblocked the **D-119** Persian starter-template re-test (D-119 is
+       owner-verified on real CasparCG, 2026-07-13).
 
 **Cross-refs:** [[B-041]] (escape rule — frozen, reconfirmed byte-exact),
 ADR 0006 (verb provenance), D-119 (the blocked Designer track).
@@ -114,7 +118,7 @@ ADR 0006 (verb provenance), D-119 (the blocked Designer track).
 > (CI's exact version) and 26; 15×3-spec loop under 10-core load green;
 > 3× full uncached parallel `pnpm test` green (one under 8 burners).
 
-## [x] B-064 — R-010 regression: after an OSC-port change Apply cycle, the template server stays down and every Load ships a bare-id 404 ⟨priority: high⟩ — fixed via `fix-setconfig-serve-restart`, archived
+## [x] B-064 — R-010 regression: after an OSC-port change Apply cycle, the template server stays down and every Load ships a bare-id 404 ⟨priority: high⟩ — fixed via `fix-setconfig-serve-restart`, archived; **LIVE-CONFIRMED on CasparCG 2.3.2 / `4de6d18f`** (2026-07-13)
 
 <!-- change: openspec/changes/archive/2026-07-11-fix-setconfig-serve-restart/ -->
 
@@ -151,6 +155,13 @@ ADR 0006 (verb provenance), D-119 (the blocked Designer track).
 > injected-failing-server bare-id contract, CEF-wedge stop() boundedness
 > (idle + mid-request + preconnect sockets → <1 s), and the sequential-cycle
 > baseline.
+>
+> **LIVE SMOKE — PASSED on CasparCG 2.3.2 (build `4de6d18f`), 2026-07-13.** The
+> operator's optional live smoke is now DONE and it passed: the `setConfig`
+> serve-restart holds on hardware — after an OSC-port change Apply cycle the
+> template server comes back up and Loads resolve against the served
+> `/template/<id>` URL (no bare-id `404`). The mock/integration validation is
+> confirmed by the real server; nothing further is pending on B-064.
 
 ## [x] B-038 — LIVE bridge renders nothing: CG ADD references the template by UUID and sends empty fields ⟨priority: high⟩
 
@@ -413,12 +424,20 @@ textarea preserving `\n` on read and write).
 
 ---
 
-## [~] B-041 — special characters (`"`, `\`, newline) in a field value break the live CG UPDATE / CG ADD (broken AMCP escaping) ⟨priority: high⟩
+## [x] B-041 — special characters (`"`, `\`, newline) in a field value break the live CG UPDATE / CG ADD (broken AMCP escaping) ⟨priority: high⟩ — **live-confirmed 2.3.2 / `4de6d18f`** (2026-07-13), archived: `openspec/changes/archive/2026-07-13-fix-amcp-escaping-v2/`
 
-> Surfaced on **real CasparCG 2.3.2** with special-character field values; `amcp-mock`
-> hid it (its tokenizer is the exact inverse of our own escaper) and the ADR-0006
-> harness missed it (its probe payloads had no `"` or `\`). Read-only report — no fix
-> here; the escaping fix is designed next.
+> **CLOSED — hardware-confirmed on the build that surfaced it.** The escape rule is
+> the two-layer inverse (`js-escape+amcp-escape`): backslash, quote and newline now
+> survive `CG ADD` **and** `CG UPDATE` **byte-exact** with no parse break and Persian
+> intact — validated on real **CasparCG 2.3.2 (build `4de6d18f`)**, the same build
+> ADR-0006 was validated against, on 2026-07-13. The rule had already passed on 2.5.0
+> (`69e8ad5`); it is now confirmed on BOTH server generations, so the shipped
+> canonical quoter needed no adjustment. PR #245's "quotes-only" rule is retained
+> below as superseded history — it was disproven on hardware.
+>
+> Originally surfaced on **real CasparCG 2.3.2** with special-character field values;
+> `amcp-mock` hid it (its tokenizer was the exact inverse of our own escaper) and the
+> ADR-0006 harness missed it (its probe payloads had no `"` or `\`).
 
 **Repro:**
 
@@ -531,9 +550,18 @@ quote/backslash/newline payload before B-041 closes.
   `"a quote"`, `\` ×1 and ×3, multi-line via Enter (incl. the original two-line
   ticker items), mixed Persian/Latin — in a plain text field AND ticker list items,
   via BOTH `CG ADD` (fresh Load+Take) and `CG UPDATE` (on-air Update) — all render
-  exactly as typed, updates apply, no `Uncaught SyntaxError`. **Stays `[~]`: the
-  only remaining gate before `[x]` is the 2.3.2 confirmation** (sweep re-run or
-  live special-char validation on a 2.3.2 box).
+  exactly as typed, updates apply, no `Uncaught SyntaxError`. The only remaining gate
+  was the 2.3.2 confirmation.
+- **CLOSED — 2.3.2 confirmation PASSED (2026-07-13).** Live-validated on real
+  CasparCG **2.3.2 (build `4de6d18f`)** — the same build ADR-0006 was validated
+  against, and the build the bug was originally reported on. Backslash, quote and
+  newline all survive **byte-exact** through both `CG ADD` and `CG UPDATE`, with no
+  parse break (`SyntaxError`) and Persian intact. The winning candidate is unchanged
+  from the 2.5.0 sweep, confirming the source-level finding that `v2.3.x-lts` and
+  `master` share byte-identical escape semantics in both layers — so no code change
+  was needed to close. B-041 → `[x]`; `fix-amcp-escaping-v2` archived
+  (`openspec/changes/archive/2026-07-13-fix-amcp-escaping-v2/`), its delta folded
+  into the `runtime-caspar-bridge` living spec.
 
 ---
 
@@ -861,7 +889,7 @@ after a first Load.
 
 ---
 
-## [x] B-054 — `#loaded` (producer-existence bookkeeping) goes stale across a CASPARCG restart: the next Take `CG PLAY`s an empty layer (202 no-op, blank take) ⟨priority: medium⟩
+## [x] B-054 — `#loaded` (producer-existence bookkeeping) goes stale across a CASPARCG restart: the next Take `CG PLAY`s an empty layer (202 no-op, blank take) ⟨priority: medium⟩ — **live-confirmed on CasparCG 2.3.2 / `4de6d18f`** (2026-07-13)
 
 > RESOLVED (2026-07-11) by `openspec/changes/archive/`
 > `clear-loaded-on-session-reconnect`: `#wireAdapter` subscribes each declared
@@ -869,9 +897,16 @@ after a first Load.
 > on degraded→healthy OSC recovery) and wholesale-clears `#loaded`, so the
 > next Take re-verifies via the B-039 re-ADD and renders. `#adopted` is
 > deliberately kept (restarted layers are empty — the skipped adopt-CLEAR is
-> a no-op). Mock-validated only (mock restart on the same ports = genuinely
-> empty per-instance layer state); NO live smoke ran — no CasparCG on the dev
-> machine (optional/non-gating per the brief).
+> a no-op).
+>
+> **LIVE SMOKE — PASSED on CasparCG 2.3.2 (build `4de6d18f`), 2026-07-13.** The
+> gap noted at fix time ("mock-validated only; NO live smoke ran — no CasparCG on
+> the dev machine") is now CLOSED on real hardware: restarting CasparCG under a
+> live, on-air item and then taking again **re-renders** the template — the
+> session's `'healthy'` transition clears the stale `#loaded`, the B-039 re-ADD
+> fires, and the take is no longer a blind `CG PLAY` onto an empty layer. The
+> symptom-level bug found by code reading is confirmed fixed against the real
+> server, not just the mock.
 
 > Found by code reading during the `reconnect-reconciliation` review
 > (2026-07-10); symptom-level, NOT yet reproduced live. The inverse amnesia of
@@ -991,7 +1026,7 @@ take" — this entry is about the missing WARNING, not the badge), B-054 (the
 adjacent server-restart staleness), C-011 (persisted layer-aware
 reconciliation — the structural home).
 
-## [x] B-067 — template import builds the operator field form from flat root fields only; nested-composition fields are invisible ⟨priority: high⟩ — fixed + archived (`openspec/changes/archive/2026-07-13-runtime-nested-composition-fields`); LIVE CONFIRMATION PENDING
+## [x] B-067 — template import builds the operator field form from flat root fields only; nested-composition fields are invisible ⟨priority: high⟩ — fixed + archived (`openspec/changes/archive/2026-07-13-runtime-nested-composition-fields`); **LIVE-CONFIRMED on CasparCG 2.3.2 / `4de6d18f`** (2026-07-13)
 
 **Repro:**
 
@@ -1011,13 +1046,13 @@ The Reconciler was deliberately NOT touched (B-044 + reconnect-reconciliation st
 
 **Guards (red-first):** with the pre-fix root-only line restored, 4 of the 6 new unit tests go red (`expected 0 to be greater than 0` — i.e. the operator-visible "No fields."). The chain is asserted hop by hop with the real components: import (a REAL D-119 starter through the Designer's actual export projection) → the group key equals the composition instance name derived independently from the scene → nested seed → staged edit → applied payload nests under `{ instanceName: { fieldId } }` with siblings intact → the real `CommandBuilder`'s `CG UPDATE` data argument JSON-parses back to that exact object. Rendering of that shape is already pinned by `template-runtime/tests/nested-fields.test.ts` + `starter-templates/src/starter-render.test.ts`. E2E: `apps/runtime/tests/e2e/nested-composition-fields.spec.ts` imports a real starter `.vcg` through the operator UI.
 
-**LIVE CONFIRMATION — PENDING HARDWARE:**
+**LIVE CONFIRMATION — PASSED on CasparCG 2.3.2 (build `4de6d18f`), 2026-07-13:**
 
-- [ ] Import a D-119 two-comp starter in the Runtime → the Inspector shows the nested fields as a labelled group (NOT "No fields.").
-- [ ] Edit a nested field → **Update** → the change renders on air (proves the value reached the binding under its namespaced key).
-- [ ] A flat, single-composition template still behaves exactly as before (regression).
+- [x] Import a D-119 two-comp starter in the Runtime → the Inspector shows the nested fields as a labelled group (NOT "No fields.").
+- [x] Edit a nested field → **Update** → the change renders on air (proves the value reached the binding under its namespaced key — the nested payload survives the wire end-to-end).
+- [x] A flat, single-composition template still behaves exactly as before (regression).
 
-## [~] B-070 — Inspector "Update" on an idle/producerless item is refused ("Not accepted"), and the refusal permanently poisons the item (zombie `pending` → R-011 `setPosition` blocked for life) ⟨priority: high⟩
+## [x] B-070 — Inspector "Update" on an idle/producerless item is refused ("Not accepted"), and the refusal permanently poisons the item (zombie `pending` → R-011 `setPosition` blocked for life) ⟨priority: high⟩ — **live-confirmed on CasparCG 2.3.2 / `4de6d18f`** (2026-07-13), archived: `openspec/changes/archive/2026-07-13-reconnect-reconciliation/`
 
 **Repro:**
 
@@ -1040,15 +1075,15 @@ The poisoning is a second, independent defect: a failed ack moved only `ackedSta
 
 **Fixed by:** `openspec/changes/reconnect-reconciliation` §7 (folded in: that change introduced the mock's `403`-on-producerless-`CG UPDATE` but never gave `update` a bullet in the prescriptive-verb requirement it rewrites — B-070 is its missing half). `update` now branches on producer existence (`#loaded`): live producer → `CG UPDATE` byte-identical (ADR-0006 frozen); no producer → commit the fields, send nothing, settle the intent in-process (B-044), report `accepted` — the next take's B-039 re-ADD carries them to air. A failed ack now settles terminally, `stack.update` answers with an `errorCode` (mirroring `stack.take`), and the Runtime shows the real reason instead of "Not accepted.".
 
-**LIVE CONFIRMATION — PENDING HARDWARE** (owner has real CasparCG; the archive is held behind the same gate as the rest of `reconnect-reconciliation`):
+**LIVE CONFIRMATION — PASSED on CasparCG 2.3.2 (build `4de6d18f`), 2026-07-13** (the same build ADR-0006 was validated against):
 
-- [ ] Basic repro: load → out → edit fields → **Update** succeeds (no "Not accepted"); take → the edit renders on air.
-- [ ] A refused update (force an AMCP error) no longer poisons the item: it settles, and `setPosition` still works afterwards.
-- [ ] **The decisive question (ADR-0006 caveat):** ADR-0006 validated `CG UPDATE` against a producer ADDed with **play-on-load = 1** (playing), but B-039 later flipped load to **play-on-load = OFF** — so there is NO in-repo hardware proof that `CG UPDATE` succeeds on an ADDed-but-never-PLAYED producer. Load an item, do **NOT** take it, edit fields, press Update: does `CG UPDATE` land on the play-on-load=off producer, or does it `403` too? If it `403`s, producer-existence must mean **"loaded AND playing"**, and the loaded-not-playing case ALSO takes the no-send commit path.
+- [x] Basic repro: load → out → edit fields → **Update** succeeds (no "Not accepted"); take → the edit renders on air.
+- [x] A refused update (force an AMCP error) no longer poisons the item: it settles, and `setPosition` still works afterwards.
+- [x] **The decisive question (ADR-0006 caveat) — ANSWERED: `CG UPDATE` LANDS on a play-on-load=off producer.** ADR-0006 validated `CG UPDATE` against a producer ADDed with **play-on-load = 1** (playing), but B-039 later flipped load to **play-on-load = OFF**, leaving no in-repo hardware proof for the ADDed-but-never-PLAYED case. Confirmed live: loading an item WITHOUT taking it, editing fields and pressing Update sends `CG UPDATE` and it applies — CasparCG does **not** `403` a loaded-not-playing producer. So **producer-existence means LOADED**, not "loaded AND playing": the shipped `#loaded` branch is correct as written, the loaded-not-playing case does NOT need the no-send commit path, and no code change followed from this confirmation. The ADR-0006 open question is closed.
 
 ---
 
-## [x] B-072 — Runtime PositionPicker forgets an applied position override on reselect: the UI lies about what is on air, and an innocent re-Apply then REVERTS the correct position to the manifest default ⟨priority: high⟩
+## [x] B-072 — Runtime PositionPicker forgets an applied position override on reselect: the UI lies about what is on air, and an innocent re-Apply then REVERTS the correct position to the manifest default ⟨priority: high⟩ — **live-confirmed on CasparCG 2.3.2 / `4de6d18f`** (2026-07-13)
 
 **Repro:**
 
@@ -1069,11 +1104,11 @@ The poisoning is a second, independent defect: a failed ack moved only `ackedSta
 
 **Fixed by:** `openspec/changes/archive/2026-07-13-position-override-readback` (archived). `StackItemState` gains an OPTIONAL `position`; the bridge joins `#positions` into the state at the two renderer-facing emit sites (`stackSnapshot()` and the `stackChanged` push) — ownership does not move, and delete-on-remove is inherited for free; `set-position` republishes so an IDLE item's override (which sends nothing to CasparCG) still reaches the SPA; the picker seeds from `item.position ?? defaultPositionOf(item.templateId)`. No new IPC channel and no renderer-side store (the B-070 anti-pattern). No AMCP verb, no payload change — the B-064 serve contract and ADR-0006 escaping are untouched.
 
-**LIVE CONFIRMATION — PENDING HARDWARE** (most of this is verifiable in-app without CasparCG, since the on-air half already worked and this is a read-back fix; the live check is recorded anyway):
+**LIVE CONFIRMATION — PASSED on CasparCG 2.3.2 (build `4de6d18f`), 2026-07-13** (most of this was verifiable in-app without CasparCG, since the on-air half already worked and this is a read-back fix; the live check is recorded anyway):
 
-- [ ] Apply a position → **Play** → the graphic renders at the override (regression guard: the on-air half still works).
-- [ ] Deselect → reselect → the picker **SHOWS the override**, not the manifest default.
-- [ ] Re-Apply without changing anything → the on-air position is **unchanged** (NOT reverted to the default) — the blast-radius guard.
+- [x] Apply a position → **Play** → the graphic renders at the override (regression guard: the on-air half still works).
+- [x] Deselect → reselect → the picker **SHOWS the override**, not the manifest default — the read-back lands.
+- [x] Re-Apply without changing anything → the on-air position is **unchanged** (NOT reverted to the default) — the blast-radius guard holds.
 
 ## [~] B-074 — no test can catch a channel the UI calls but the bridge never routes, nor a MockRuntime that has drifted from the real bridge ⟨priority: high⟩ — fixed on `fix/test-infra-batch`
 
