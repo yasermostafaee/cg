@@ -34,6 +34,13 @@ export const StackTakeChannel = defineChannel(
   z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
 );
 
+/**
+ * B-070 — `update` answers with an `errorCode` (mirroring `stack.take`) so a
+ * refusal can EXPLAIN itself: the bare `{ accepted: boolean }` could only ever
+ * surface as the Inspector's generic "Not accepted.". An update onto a slot
+ * with NO live producer is no longer a refusal at all — it commits to the
+ * authoritative field-set and the next take's re-ADD carries it to air.
+ */
 export const StackUpdateChannel = defineChannel(
   'stack.update',
   z.object({
@@ -41,7 +48,7 @@ export const StackUpdateChannel = defineChannel(
     fields: FieldValuesSchema,
     mergeMode: z.enum(['merge', 'replace']),
   }),
-  z.object({ accepted: z.boolean() }),
+  z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
 );
 
 export const StackOutChannel = defineChannel(

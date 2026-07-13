@@ -55,6 +55,14 @@ export class MockRuntime {
   #ownedOccupancy: OwnedOccupancyWarning[] = seedOwnedOccupancy();
   // R-011 — per-item operator position overrides (bridge parity).
   readonly #positions = new Map<string, Position>();
+  // B-070 — producer-existence bookkeeping (bridge parity: the bridge's
+  // `#loaded`). A producer lives from load/take until out/remove destroys it.
+  // A seeded item that is not idle already has one.
+  readonly #loaded = new Set<string>(
+    seedStack()
+      .filter((i) => i.status !== 'idle')
+      .map((i) => i.itemId),
+  );
 
   // ── stack ───────────────────────────────────────────────────────────
   stackSnapshot(): StackItemState[] {
@@ -66,6 +74,8 @@ export class MockRuntime {
     const idx = this.#stack.findIndex((i) => i.itemId === itemId);
     if (idx === -1) this.#stack.push(next);
     else this.#stack[idx] = next;
+    // B-070 parity — CG ADD creates the producer.
+    this.#loaded.add(itemId);
     this.#audit.unshift(auditEntry('load', { itemId, templateId }));
     this.#emitStack();
     return { accepted: true };
@@ -74,20 +84,45 @@ export class MockRuntime {
   take(itemId: string): { accepted: boolean; errorCode?: string } {
     const item = this.#find(itemId);
     if (item === null) return { accepted: false, errorCode: 'unknown-item' };
+    // B-070/B-039 parity — a take with no live producer re-ADDs first, so a
+    // producer always exists afterwards.
+    this.#loaded.add(itemId);
     this.#transition(itemId, 'playing', true);
     this.#audit.unshift(auditEntry('take', { itemId, templateId: item.templateId }));
     this.#settle(itemId, 'on-air');
     return { accepted: true };
   }
 
+  /**
+   * B-070 parity — the bridge's PRODUCER-STATE rule. `CG UPDATE` needs a live
+   * producer, not air: with no producer on the slot the bridge COMMITS the
+   * fields and sends nothing (the next take's re-ADD carries them). The mock
+   * used to accept an update on ANY item with no producer model at all — which
+   * is precisely why the R-003 Inspector UX was built and tested against
+   * semantics the real bridge does not have, and why this bug reached air.
+   *
+   * `#loaded` mirrors the bridge's producer bookkeeping: a producer exists from
+   * `load`/`take` until `out`/`remove` destroys it.
+   */
   update(
     itemId: string,
     fields: FieldValues,
     mergeMode: 'merge' | 'replace',
-  ): { accepted: boolean } {
+  ): { accepted: boolean; errorCode?: string } {
     const item = this.#find(itemId);
-    if (item === null) return { accepted: false };
+    if (item === null) return { accepted: false, errorCode: 'unknown-item' };
     const merged = mergeMode === 'merge' ? { ...item.fields, ...fields } : fields;
+
+    // No producer on the slot ⇒ commit only, nothing "sent", intent settled
+    // (B-044: never rest non-terminal — an unsettled `updating` is the zombie
+    // `pending` that used to block setPosition for the item's whole life).
+    if (!this.#loaded.has(itemId)) {
+      this.#patch(itemId, { fields: merged, pending: false });
+      this.#audit.unshift(auditEntry('update', { itemId, templateId: item.templateId }));
+      this.#emitStack();
+      return { accepted: true };
+    }
+
     const wasOnAir = item.status === 'on-air' || item.status === 'playing';
     this.#patch(itemId, {
       fields: merged,
@@ -106,6 +141,9 @@ export class MockRuntime {
     const item = this.#find(itemId);
     if (item === null) return { accepted: false };
     this.#transition(itemId, 'exiting', true);
+    // B-070 parity — out's CLEAR DESTROYS the producer, so a later update
+    // commits without a wire send and a later take re-ADDs.
+    this.#loaded.delete(itemId);
     this.#audit.unshift(auditEntry('out', { itemId, templateId: item.templateId }));
     this.#settle(itemId, 'idle');
     // B-056 parity — the mock's simulated servers are healthy, so an out's
@@ -124,6 +162,8 @@ export class MockRuntime {
     this.#resolveOwnedOccupancy(itemId);
     // R-011 parity — the override dies with the item.
     this.#positions.delete(itemId);
+    // B-070 parity — the producer dies with the item.
+    this.#loaded.delete(itemId);
     return { accepted: true };
   }
 

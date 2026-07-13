@@ -123,15 +123,47 @@ describe('Reconciler — divergence detection', () => {
     r.applyIntent(loadIntent(1), 1);
     r.applyIntent({ kind: 'take', itemId: itemId(1) }, 2);
 
-    // The ack hasn't arrived AND OSC hasn't reported. We force a re-evaluation
-    // by applying an irrelevant ack on a different seq; pendingSince is set.
+    // The take's ack never arrives. pendingSince was set at intent time (1000).
     now = 1500;
-    r.applyAck(99, false); // unrelated
-    // pendingSince was set at intent time (1000), now is 1500 → > 100 → divergent.
-    // But emit only fires on item-changed; trigger another change:
-    r.applyAck(2, false);
+    r.applyAck(99, false); // unrelated seq — no item, no change, no emit
+
+    // Divergence emits on an item-changed, so drive one that does NOT settle
+    // the intent: the layer reports its producer EMPTY while we intended to
+    // play — intent and truth have genuinely diverged (1500 - 1000 > 100).
+    //
+    // B-070 — this used to be triggered with `r.applyAck(2, false)` purely as
+    // "any change". A failed ack no longer works as that trigger, because it
+    // now SETTLES the intent: an errored command is a known, terminal failure
+    // (surfaced as `error` + `errorCode`), not a silent divergence. Leaving it
+    // non-terminal is exactly the zombie `pending` B-070 removed.
+    r.assignSlot(itemId(1), { channel: 1, layer: 10, server: 'primary' });
+    const contradicts: OscEvent = {
+      kind: 'osc.layer.foreground.producer',
+      channel: 1,
+      layer: 10,
+      producer: 'empty',
+    };
+    r.applyOsc(contradicts);
 
     expect(events.length).toBeGreaterThan(0);
+    expect(events[0]).toMatchObject({ itemId: itemId(1), intent: 'playing' });
+  });
+
+  it('B-070 — an ERRORED command is a settled failure, NOT a divergence', () => {
+    let now = 1000;
+    const r = new Reconciler({ divergentAfterMs: 100, now: () => now });
+    const events: { itemId: string }[] = [];
+    r.on('item-divergent', (info) => events.push(info));
+
+    r.applyIntent(loadIntent(1), 1);
+    r.applyIntent({ kind: 'take', itemId: itemId(1) }, 2);
+    now = 1500;
+    r.applyAck(2, false, 'amcp-error');
+
+    // The operator SEES the error; the item is settled and no longer pending,
+    // so the divergence alarm (for SILENTLY unconfirmed intents) stays quiet.
+    expect(r.get(itemId(1))).toMatchObject({ status: 'error', pending: false });
+    expect(events).toEqual([]);
   });
 });
 
@@ -516,5 +548,46 @@ describe('Reconciler — B-044 settle provenance (review findings: out targets n
     r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '2' }, mergeMode: 'merge' }, 5);
     r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '3' }, mergeMode: 'merge' }, 6);
     expect(r.applyAck(6, true)).toMatchObject({ status: 'idle', pending: false });
+  });
+});
+
+describe('Reconciler — B-070 a FAILED ack settles the intent (no zombie `pending`)', () => {
+  it('a failed update ack lands terminal: status reports the error, pending CLEARS', () => {
+    const r = new Reconciler();
+    r.applyIntent(loadIntent(1), 1);
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '1' }, mergeMode: 'merge' }, 2);
+    expect(r.get(itemId(1))).toMatchObject({ status: 'updating', pending: true });
+
+    // Pre-B-070 this moved ONLY `ackedStatus`, leaving `intentStatus` at the
+    // transient 'updating' FOREVER — `pending` never cleared, and R-011's
+    // setPosition (which refuses while pending) was blocked for the item's life.
+    const s = r.applyAck(2, false, 'amcp-403');
+    expect(s).toMatchObject({ status: 'error', errorCode: 'amcp-403', pending: false });
+  });
+
+  it('a failed TAKE ack settles too — the zombie was never update-specific', () => {
+    const r = new Reconciler();
+    r.applyIntent(loadIntent(1), 1);
+    r.applyIntent({ kind: 'take', itemId: itemId(1) }, 2);
+    expect(r.get(itemId(1))).toMatchObject({ pending: true });
+
+    expect(r.applyAck(2, false, 'amcp-error')).toMatchObject({
+      status: 'error',
+      errorCode: 'amcp-error',
+      pending: false,
+    });
+  });
+
+  it('a settled failure does not block the NEXT intent (the item is still usable)', () => {
+    const r = new Reconciler();
+    r.applyIntent(loadIntent(1), 1);
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '1' }, mergeMode: 'merge' }, 2);
+    r.applyAck(2, false, 'amcp-403');
+
+    // A fresh update after the failure behaves normally — and its OK ack
+    // settles it back to the underlying resting state.
+    r.applyIntent({ kind: 'update', itemId: itemId(1), fields: { a: '2' }, mergeMode: 'merge' }, 3);
+    expect(r.get(itemId(1))).toMatchObject({ status: 'updating', pending: true });
+    expect(r.applyAck(3, true)).toMatchObject({ status: 'loaded', pending: false });
   });
 });

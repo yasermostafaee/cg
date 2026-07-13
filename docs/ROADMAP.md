@@ -317,7 +317,15 @@ The independent Runtime-track sequence (worked from the `cg-runtime` worktree):
    (#243), then archive `fix-runtime-list-field-editor` and flip B-040 → `[x]`.
 3. **B-038 follow-up** — browser-side retention + re-delivery of template HTML
    on bridge reconnect (descoped from B-038's close; tracked in
-   `docs/prd/bugs-runtime.md`).
+   `docs/prd/bugs-runtime.md`). **[B-070](./prd/bugs-runtime.md) is folded into
+   this change** (`reconnect-reconciliation` §7): it introduced the mock's
+   `403`-on-a-producerless-`CG UPDATE` but never gave `update` a bullet in the
+   prescriptive-verb requirement it rewrites, so `update` was the one playout
+   verb firing blind — an idle/producerless item's field edits were refused on
+   air, and the refusal then poisoned the item (zombie `pending` → R-011
+   `setPosition` blocked for life). Code + tests landed; B-070 stays `[~]`
+   behind the SAME hardware gate as the rest of the change (see the ADR-0006
+   caveat: `CG UPDATE` on a play-on-load=off producer is unproven on hardware).
 
 ## Then — hardening wave (after features)
 

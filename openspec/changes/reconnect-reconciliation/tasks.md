@@ -109,3 +109,42 @@
       change's "Template resolution is validated" delta is based on
       `fix-amcp-escaping-v2`'s still-open pending text, so B-041 archiving
       second would clobber it; ordering surfaced to the owner.
+
+## 7. B-070 — `update` gets the producer-state rule it never had
+
+This change introduced the mock's `403`-on-a-producerless-`CG UPDATE` (matching
+real CasparCG, from the B-038 live log) but never gave `update` a bullet in the
+prescriptive-verb requirement it rewrites. B-070 is the missing half: `update`
+was the ONE verb firing blind, so an idle/producerless item's field edits were
+refused on air ("Not accepted") — and the refusal then POISONED the item.
+
+- [x] 7.1 Bridge: `update()` branches on producer existence (`#loaded` — the same
+      signal `take()`'s B-039 re-ADD and `setPosition()` already use; no new
+      source of truth). Live producer → `CG UPDATE`, byte-identical (ADR-0006
+      frozen). No producer → commit the fields, send NOTHING, settle the intent
+      in-process (B-044), answer `accepted: true`.
+- [x] 7.2 Reconciler: a FAILED ack now SETTLES the intent. It used to move only
+      `ackedStatus`, leaving `intentStatus` at the transient `updating`, so
+      `pending` never cleared — one refused update poisoned the item for life and
+      permanently blocked R-011's `setPosition` (which refuses while `pending`).
+      Not update-specific: a failed take zombied identically.
+- [x] 7.3 Wire contract: `stack.update` answers `{ accepted, errorCode? }`
+      (mirroring `stack.take`); `#send` surfaces the real AMCP code. The Runtime
+      renders the reason at the control instead of the generic "Not accepted.".
+- [x] 7.4 `MockRuntime` gains the producer model (`#loaded`) so the offline mock
+      stops lying about this path — it used to accept an update on ANY item,
+      which is exactly why the R-003 Inspector UX was built against semantics the
+      real bridge does not have.
+- [x] 7.5 Tests (red-first): bridge integration over the PRODUCERLESS path the
+      suite never had — commit-without-wire-send, the settled intent, the next
+      take's re-ADD carrying the fields, the live-producer regression guard, and
+      a genuine AMCP-error update that settles terminally and no longer blocks
+      `setPosition`. Reconciler units for the failed-ack settlement.
+- [ ] 7.6 LIVE CONFIRMATION on real CasparCG (owner has hardware) — the decisive
+      question is in `design.md` §7: ADR-0006 validated `CG UPDATE` against a
+      producer ADDed with **play-on-load=1** (playing), but B-039 later flipped
+      load to **play-on-load=off**. There is therefore NO in-repo hardware proof
+      that `CG UPDATE` succeeds on an ADDed-but-never-PLAYED producer. Load an
+      item (do NOT take it) → edit fields → Update. If CasparCG `403`s even that
+      loaded producer, then producer-existence must mean "loaded AND playing" and
+      the loaded-not-playing case ALSO takes the no-send commit path.

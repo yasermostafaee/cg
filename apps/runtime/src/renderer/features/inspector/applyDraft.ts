@@ -1,5 +1,6 @@
 import type { StackItemState } from '@cg/shared-schema';
 import { reportCommandError } from '../status/commandFeedback.js';
+import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { buildApplyPayload, clearStagedMatching, snapshotDraft } from './draftStore.js';
 
 /**
@@ -12,13 +13,18 @@ import { buildApplyPayload, clearStagedMatching, snapshotDraft } from './draftSt
  * channel the stack intents use — never swallowed, never shown optimistically.
  * Sending with nothing staged re-sends the applied values (the B-048 workaround).
  */
-export function applyDraft(item: StackItemState): Promise<{ accepted: boolean }> {
+export function applyDraft(
+  item: StackItemState,
+): Promise<{ accepted: boolean; errorCode?: string | undefined }> {
   const sent = snapshotDraft(item.itemId);
   const fields = buildApplyPayload(item.itemId, item.fields);
   return window.cg.stack.update({ itemId: item.itemId, fields, mergeMode: 'merge' }).then(
     (res) => {
       if (res.accepted) clearStagedMatching(item.itemId, sent);
-      else reportCommandError('Update was not accepted.');
+      // B-070 — say WHY. An update onto a producerless slot is no longer
+      // refused at all (the bridge commits it), so a refusal that reaches here
+      // is a real one and must name its cause, not just "not accepted".
+      else reportCommandError(errorCodeMessage(res.errorCode) ?? 'Update was not accepted.');
       return res;
     },
     (err: unknown) => {
