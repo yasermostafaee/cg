@@ -71,3 +71,10 @@
       workspaces; `pnpm format:check` clean.
 - [x] 7.3 `pnpm openspec validate runtime-library-remove-template --strict`.
 - [x] 7.4 Mark R-005 `[~]` with the change dir; flip to `[x]` on archive.
+
+## 8. E2E (CLAUDE.md — user-facing behavior)
+
+- [x] 8.1 `library-name-and-remove.spec.ts` maps the removal scenarios to Playwright against
+      the MockRuntime: removing a template a SEEDED STACK ITEM references is refused with
+      the bridge's message (row survives, still loadable); removing an unreferenced one
+      drops the row. Runtime 25 / Designer 202 passed.

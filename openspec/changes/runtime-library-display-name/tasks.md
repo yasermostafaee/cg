@@ -51,3 +51,13 @@
 - [x] 6.2 `pnpm format:check` clean.
 - [x] 6.3 `pnpm openspec validate runtime-library-display-name --strict`.
 - [x] 6.4 Mark R-004 `[~]` with the change dir; flip to `[x]` on archive.
+
+## 7. E2E (CLAUDE.md — user-facing behavior)
+
+- [x] 7.1 `apps/runtime/tests/e2e/library-name-and-remove.spec.ts` — rows show display
+      names; the id stays the row's tooltip. Also pins that a Persian/RTL starter label
+      survives import→registry→row (a raw UUID never could).
+- [x] 7.2 Re-anchor `RuntimeApp` on the id (`data-testid` per row): the accessible label is
+      now the NAME, and names are NOT unique — a name-keyed locator is latently ambiguous.
+      Two specs asserting the superseded `Load <id>` label updated. Runtime 25 / Designer
+      202 passed.
