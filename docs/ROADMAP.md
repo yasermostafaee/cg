@@ -8,6 +8,22 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Rebuild starter templates ([D-119](./prd/designer.md)) — merged (#290) &
+  archived (2026-07-13, `2026-07-13-rebuild-starter-templates`): the 8 legacy
+  starters are replaced by five Persian broadcast demos — `logo-bug`, `ticker`,
+  `sequence`, `title`, `irib-news` — each a two-comp structure (a small on-air
+  footprint comp, `onair:<compId>`-tagged with its own lifecycle/playout, nested
+  in a full 1920×1080 entry comp), every bound field carrying a real Persian
+  DEFAULT plus its data-key binding (base text IS the default and the binding
+  carries no placeholder — the Designer shows broadcast copy, an operator value
+  substitutes at playout, no value falls back to the default). The on-air gate —
+  [B-066](./prd/bugs-runtime.md), CEF-incompatible `replaceAll` aborting every
+  Persian template at boot — was fixed on the Runtime track (#289); D-119 rebased
+  onto it and the owner verified the real CasparCG import. Left open:
+  [B-067](./prd/bugs-runtime.md) (Runtime inspector sees flat root fields only, so
+  two-comp templates' nested fields are invisible) and
+  [B-068](./prd/bugs-designer.md) (`ensureCompositions` drops root
+  lifecycle/playout). Owner-verified 2026-07-13.
 - Path point-edit mode + size==visualBBox model
   ([D-124](./prd/designer.md) + [B-058](./prd/bugs-designer.md) menu chrome,
   [B-059](./prd/bugs-designer.md) curve-aware bounds,
@@ -277,21 +293,13 @@ Done.)
 ### Designer — remaining, in order
 
 The concrete near-term Designer sequence (survives across sessions; the Runtime
-track is independent — see "Runtime — next" below):
+track is independent — see "Runtime — next" below).
 
-1. **[D-119](./prd/designer.md) rebuild starter templates** (5 showcases) —
-   **UNBLOCKED** (B-037, B-042 and D-122 are done — see Done; templates should
-   exercise healthy features); supersedes the old "template cleanup" wave-tail
-   note. (Its other prerequisites — D-060 auto-size, B-035 fit-on-open, B-036
-   icon align — are done, see Done.) **On-air gate:**
-   [B-066](./prd/bugs-runtime.md) (CEF-incompatible `replaceAll` aborted every
-   Persian template at boot on real CasparCG) is fixed on the Runtime track —
-   durable lesson: **the served bundle must run on CasparCG's CEF (Chromium 71
-   baseline), not a modern browser**; esbuild targets cover syntax only, so the
-   cef-compat lint + bundle-artifact scan guard built-in METHODS. D-119's live
-   re-test resumes once B-066 merges to main.
+**Nothing is sequenced right now:** D-119 (rebuild starter templates) was the last
+item in the sequence and is done — merged #290, archived 2026-07-13 (see Done). The
+next Designer item is an owner call from the queued list below.
 
-Plus the existing queued / deprioritized items already in `designer.md`:
+The queued / deprioritized items already in `designer.md`:
 [D-059](./prd/designer.md), [D-061](./prd/designer.md), [D-063](./prd/designer.md),
 [D-064](./prd/designer.md), [D-096](./prd/designer.md),
 [D-102](./prd/designer.md) **Phase 2**, and
