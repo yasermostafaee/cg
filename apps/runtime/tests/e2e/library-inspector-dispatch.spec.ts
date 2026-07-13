@@ -14,9 +14,8 @@ test('Library + Inspector controls each dispatch on click', async ({ app }) => {
   // IMPORT — clicking Import opens the file chooser; a successful import registers
   // the template (proves the Import button → chooser → templates.import round-trip).
   await app.importVcg('li.vcg', await buildListFieldVcg(templateId));
-  await expect(
-    app.library.getByRole('button', { name: `Load ${templateId}`, exact: true }),
-  ).toBeVisible();
+  // R-004 — the row is addressed by id (its stable anchor); it is HEADED by the display name.
+  await expect(app.templateRow(templateId)).toBeVisible();
 
   // LOAD — clicking Load puts the item on the stack.
   await app.loadTemplate(templateId);

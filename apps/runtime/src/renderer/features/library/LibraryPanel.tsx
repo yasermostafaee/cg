@@ -228,7 +228,14 @@ export function LibraryPanel(): JSX.Element {
             const label = templateDisplayName(t);
             const idIsSecondary = label !== t.templateId;
             return (
-              <div style={styles.item} key={t.templateId}>
+              <div
+                style={styles.item}
+                key={t.templateId}
+                // R-004 — the row's stable anchor stays the ID, never the display name:
+                // names are not unique (two templates may legitimately share one), so
+                // anything that must address ONE row keys on the id.
+                data-testid={`library-template-${t.templateId}`}
+              >
                 <div style={styles.itemBody}>
                   <span style={styles.itemName} title={t.templateId}>
                     {label}

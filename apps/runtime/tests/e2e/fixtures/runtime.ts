@@ -67,9 +67,30 @@ export class RuntimeApp {
     return this.library.getByRole('button', { name: /^Load / });
   }
 
+  /**
+   * The Library row for `templateId`.
+   *
+   * R-004 — the row is anchored on the ID, not the visible text: the Library now shows the
+   * template's DISPLAY NAME (a UUID meant nothing to the operator), and display names are
+   * not unique — two templates may legitimately share one. So anything that must address
+   * exactly one row keys on the id, which the row carries as a stable test anchor.
+   */
+  templateRow(templateId: string): Locator {
+    return this.page.getByTestId(`library-template-${templateId}`);
+  }
+
   /** Click the Library's "Load" action for `templateId`, putting it on the stack. */
   async loadTemplate(templateId: string): Promise<void> {
-    await this.library.getByRole('button', { name: `Load ${templateId}`, exact: true }).click();
+    await this.templateRow(templateId)
+      .getByRole('button', { name: /^Load / })
+      .click();
+  }
+
+  /** R-005 — click the Library's "Remove" action for `templateId`. Confirm-gated. */
+  async removeTemplate(templateId: string): Promise<void> {
+    await this.templateRow(templateId)
+      .getByRole('button', { name: /^Remove / })
+      .click();
   }
 
   /** Select the stack row for `templateId` (so the Inspector shows its fields). */
