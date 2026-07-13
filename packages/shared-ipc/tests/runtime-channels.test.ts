@@ -25,6 +25,7 @@ import {
   StackTakeChannel,
   StackUpdateChannel,
   TemplatesImportChannel,
+  TemplatesRemoveChannel,
 } from '../src/index.js';
 
 /**
@@ -320,6 +321,48 @@ describe('templates.import channel schema (B-038 Phase 2)', () => {
     expect(
       TemplatesImportChannel.response.parse({ registered: true, templateId: 'tpl-1' }),
     ).toMatchObject({ registered: true, templateId: 'tpl-1' });
+  });
+
+  // R-004 — the display name rides along, and is OPTIONAL so every payload written before
+  // it existed still parses (that back-compat is the whole reason it is optional).
+  it('carries an optional display name, and still accepts a template without one', () => {
+    const named = TemplatesImportChannel.request.parse({
+      template: { ...template, name: 'Lower Third — News' },
+      html: '<html></html>',
+    });
+    expect(named.template.name).toBe('Lower Third — News');
+
+    const unnamed = TemplatesImportChannel.request.parse({ template, html: '<html></html>' });
+    expect(unnamed.template.name).toBeUndefined();
+  });
+});
+
+describe('templates.remove channel schema (R-005)', () => {
+  it('requests a removal by template id', () => {
+    expect(TemplatesRemoveChannel.request.parse({ templateId: 'tpl-1' })).toEqual({
+      templateId: 'tpl-1',
+    });
+    expect(() => TemplatesRemoveChannel.request.parse({})).toThrow();
+  });
+
+  it('response carries the refusal reason + an operator-readable message', () => {
+    expect(TemplatesRemoveChannel.response.parse({ ok: true })).toMatchObject({ ok: true });
+    expect(
+      TemplatesRemoveChannel.response.parse({
+        ok: false,
+        reason: 'in-use',
+        message: '2 stack item(s) still use this template — remove them (or Remove All) first.',
+      }),
+    ).toMatchObject({ ok: false, reason: 'in-use' });
+    expect(
+      TemplatesRemoveChannel.response.parse({ ok: false, reason: 'unknown-template' }),
+    ).toMatchObject({ reason: 'unknown-template' });
+  });
+
+  it('rejects a reason outside the contract', () => {
+    expect(() =>
+      TemplatesRemoveChannel.response.parse({ ok: false, reason: 'on-air-block' }),
+    ).toThrow();
   });
 });
 

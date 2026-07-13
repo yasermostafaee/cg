@@ -1015,6 +1015,46 @@ export class CasparRuntime {
     return this.#templates.html(templateId);
   }
 
+  /**
+   * R-005 — remove a template from the library. Refused while ANY stack item references it.
+   *
+   * The predicate is deliberately "any reference", not "any ON-AIR reference" (the R-010
+   * gate's shape). Removal never takes a graphic off air — CasparCG already pulled the
+   * self-contained HTML into CEF — so the damage is invisible at the click and deferred:
+   * `load()` and `take()`'s B-039 re-ADD both guard on `#templates.has(...)` and would
+   * refuse with `unknown-template` forever, and `setPosition`'s re-ADD would silently stop
+   * re-ADDing. An `idle`/`loaded` row is poisoned exactly as badly as an on-air one, so
+   * both block. Removing the referencing items (stack.remove / Remove-All) is the unblock
+   * path — the same one R-010 points at.
+   */
+  templateRemove(templateId: string): {
+    ok: boolean;
+    reason?: 'in-use' | 'unknown-template';
+    message?: string;
+  } {
+    if (!this.#templates.has(templateId)) {
+      return {
+        ok: false,
+        reason: 'unknown-template',
+        message: `Template “${templateId}” is not registered.`,
+      };
+    }
+
+    const referencing = this.#reconciler
+      .snapshot()
+      .filter((i) => i.templateId === templateId).length;
+    if (referencing > 0) {
+      return {
+        ok: false,
+        reason: 'in-use',
+        message: `${String(referencing)} stack item(s) still use this template — remove them (or Remove All) first.`,
+      };
+    }
+
+    this.#templates.remove(templateId);
+    return { ok: true };
+  }
+
   auditRecent(limit = 200, action?: AuditEntry['action'], actor?: string): AuditEntry[] {
     let rows = this.#audit;
     if (action !== undefined) rows = rows.filter((r) => r.action === action);

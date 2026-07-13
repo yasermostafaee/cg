@@ -31,6 +31,7 @@ import {
   TemplatesGetChannel,
   TemplatesImportChannel,
   TemplatesListChannel,
+  TemplatesRemoveChannel,
   UpdateCancelChannel,
   UpdateRequestChannel,
   UpdateStateChangedChannel,
@@ -433,6 +434,17 @@ export class WebSocketRuntime implements RuntimeBridge {
       // after the bridge confirmed it) so a bridge restart is healed by
       // re-delivery on reconnect. Keyed by id: a re-import replaces it.
       this.#retained.set(req.template.templateId, req);
+      return res;
+    },
+    remove: async (req: ChannelRequest<typeof TemplatesRemoveChannel>) => {
+      const res = await this.#invoke(TemplatesRemoveChannel, req);
+      // R-005 — prune the retention ONLY on a confirmed removal. `#resync()` re-delivers
+      // this set on every reconnect, so a registry-only delete would be undone by the very
+      // next bridge blip. Symmetrically, a REFUSED removal must keep the payload: the
+      // bridge still has the template registered, and dropping it here would make a
+      // reconnect silently de-register a template the operator was told they could not
+      // remove.
+      if (res.ok) this.#retained.delete(req.templateId);
       return res;
     },
   };

@@ -110,7 +110,7 @@ const BRIDGE_SURFACE: {
     ],
     layers: ['orphans', 'clear', 'onOrphansChanged', 'ownedOccupancy', 'onOwnedOccupancyChanged'],
     lock: ['engage', 'release', 'state', 'onStateChanged'],
-    templates: ['get', 'list', 'import'],
+    templates: ['get', 'list', 'import', 'remove'],
     audit: ['recent'],
     update: ['request', 'state', 'cancel', 'onStateChanged'],
     settings: ['get', 'set', 'onChanged'],

@@ -99,7 +99,7 @@ explicit apply step.
   import (`templateDelivery.ts`), and pass it through both registries (bridge
   `TemplateRegistry` + `MockRuntime`).
 
-## [ ] R-005 — delete a template from the Library ⟨priority: low⟩
+## [~] R-005 — delete a template from the Library ⟨priority: low⟩ — remove BUTTON + refuse-while-referenced implemented on `fix/runtime-library-ux`, change: `runtime-library-remove-template`; the context-menu affordance is still OPEN (needs a Runtime context-menu primitive — owner decision, see the change's proposal)
 
 **What:** Let the operator remove a registered template — a per-row delete button
 AND a context-menu entry.

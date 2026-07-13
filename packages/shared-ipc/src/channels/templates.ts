@@ -68,3 +68,30 @@ export const TemplatesImportChannel = defineChannel(
   z.object({ template: TemplateInfoSchema, html: z.string() }),
   z.object({ registered: z.boolean(), templateId: IdSchema }),
 );
+
+/**
+ * R-005 — remove a template from the library. The bridge is AUTHORITATIVE: it decides
+ * whether the removal is allowed and returns the operator-facing reason, exactly as R-010's
+ * on-air block does. The UI surfaces the refusal; it does not pre-judge it.
+ *
+ * Refused while ANY stack item references the template — on air or not. Removal does not
+ * take a live graphic off air (CasparCG already fetched the self-contained HTML into CEF),
+ * so a naive delete looks harmless and is not: the item's next out→take resolves against a
+ * missing template and the row can NEVER be brought back, and `setPosition`'s re-ADD stops
+ * silently. An idle/loaded row is just as poisoned as an on-air one, so the predicate is
+ * "any reference", not "any on-air reference". Remove the referencing items first
+ * (`stack.remove` / Remove-All) — the same unblock path R-010 uses.
+ *
+ * A confirmed removal must also prune the client's reconnect-reconciliation retention, or
+ * the next reconnect re-imports what the operator just deleted. A REFUSED removal must
+ * leave it intact.
+ */
+export const TemplatesRemoveChannel = defineChannel(
+  'templates.remove',
+  z.object({ templateId: IdSchema }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.enum(['in-use', 'unknown-template']).optional(),
+    message: z.string().optional(),
+  }),
+);

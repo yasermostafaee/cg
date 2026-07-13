@@ -398,6 +398,38 @@ export class MockRuntime {
     return { registered: true, templateId: template.templateId };
   }
 
+  /**
+   * R-005 — remove a template. Mirrors the bridge's refuse-while-referenced predicate
+   * against the mock's OWN stack, so offline behaves exactly like a live bridge (the B-074
+   * parity guard exists because a drifted mock is how a UI ships against a contract the
+   * bridge never honors).
+   */
+  templateRemove(templateId: string): {
+    ok: boolean;
+    reason?: 'in-use' | 'unknown-template';
+    message?: string;
+  } {
+    if (!this.#templates.has(templateId)) {
+      return {
+        ok: false,
+        reason: 'unknown-template',
+        message: `Template “${templateId}” is not registered.`,
+      };
+    }
+
+    const referencing = this.#stack.filter((i) => i.templateId === templateId).length;
+    if (referencing > 0) {
+      return {
+        ok: false,
+        reason: 'in-use',
+        message: `${String(referencing)} stack item(s) still use this template — remove them (or Remove All) first.`,
+      };
+    }
+
+    this.#templates.delete(templateId);
+    return { ok: true };
+  }
+
   // ── audit ───────────────────────────────────────────────────────────
   auditRecent(limit = 200, action?: AuditEntry['action'], actor?: string): AuditEntry[] {
     let rows = this.#audit;

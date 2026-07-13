@@ -50,6 +50,7 @@ const styles = {
     border: `1px solid ${colors.border}`,
   },
   itemBody: { display: 'flex', flexDirection: 'column' as const, gap: '0.1rem', minWidth: 0 },
+  itemActions: { display: 'flex', gap: '0.3rem', alignItems: 'center' },
   itemName: { fontSize: '0.85rem', fontWeight: 600, overflowWrap: 'anywhere' as const },
   itemMeta: { fontSize: '0.75rem', color: colors.textMuted, overflowWrap: 'anywhere' as const },
   error: {
@@ -143,6 +144,33 @@ export function LibraryPanel(): JSX.Element {
     [importFile],
   );
 
+  /**
+   * R-005 — remove a template. Confirm-gated (destructive and not undoable: the operator
+   * must re-import the `.vcg`), mirroring the StackPanel Remove-All gate.
+   *
+   * The BRIDGE decides whether this is allowed — it refuses while any stack item still
+   * references the template, because a removal there would silently poison the row (the
+   * graphic stays on air, but its next out→take could never resolve the template again).
+   * The panel surfaces the bridge's message verbatim rather than pre-judging the outcome.
+   */
+  const removeTemplate = useCallback(
+    async (template: TemplateInfo): Promise<void> => {
+      setError(null);
+      setStatus(null);
+      const label = templateDisplayName(template);
+      if (!window.confirm(`Remove “${label}” from the library? This cannot be undone.`)) return;
+
+      const result = await window.cg.templates.remove({ templateId: template.templateId });
+      if (!result.ok) {
+        setError(result.message ?? `Could not remove “${label}”.`);
+        return;
+      }
+      await refresh();
+      setStatus(`Removed “${label}”.`);
+    },
+    [refresh],
+  );
+
   const loadOntoStack = useCallback((template: TemplateInfo): Promise<{ accepted: boolean }> => {
     // B-038 Phase 3 — seed the item's fields from the template's field-schema
     // defaults (not `{}`), so `CG ADD` carries real data on load. Operator edits
@@ -209,13 +237,23 @@ export function LibraryPanel(): JSX.Element {
                     {idIsSecondary ? `${t.templateType} · ${t.templateId}` : t.templateType}
                   </span>
                 </div>
-                <AsyncButton
-                  variant="secondary"
-                  run={() => loadOntoStack(t)}
-                  aria-label={`Load ${label}`}
-                >
-                  Load
-                </AsyncButton>
+                <div style={styles.itemActions}>
+                  <AsyncButton
+                    variant="secondary"
+                    run={() => loadOntoStack(t)}
+                    aria-label={`Load ${label}`}
+                  >
+                    Load
+                  </AsyncButton>
+                  <Button
+                    variant="danger"
+                    aria-label={`Remove ${label}`}
+                    title="Remove this template from the library"
+                    onClick={() => void removeTemplate(t)}
+                  >
+                    Remove
+                  </Button>
+                </div>
               </div>
             );
           })

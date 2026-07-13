@@ -46,4 +46,27 @@ describe('TemplateRegistry', () => {
     expect(reg.get('missing')).toBeNull();
     expect(reg.has('missing')).toBe(false);
   });
+
+  // R-005 — the registry drops info AND html. `TemplateHttpServer` keeps no map of its
+  // own (it reads through `html(id)` per request), so a null here is what makes
+  // `GET /template/<id>` 404 with no serve-side change at all.
+  it('remove drops the info AND the retained HTML, so the served URL stops resolving', () => {
+    const reg = new TemplateRegistry();
+    reg.import(info('tpl-1'), '<html><body>v1</body></html>');
+    reg.import(info('tpl-2'), '<html><body>v2</body></html>');
+
+    expect(reg.remove('tpl-1')).toBe(true);
+
+    expect(reg.has('tpl-1')).toBe(false);
+    expect(reg.get('tpl-1')).toBeNull();
+    expect(reg.html('tpl-1')).toBeNull();
+    // The other template is untouched.
+    expect(reg.list().map((t) => t.templateId)).toEqual(['tpl-2']);
+    expect(reg.html('tpl-2')).toBe('<html><body>v2</body></html>');
+  });
+
+  it('remove reports false for an id that was never registered', () => {
+    const reg = new TemplateRegistry();
+    expect(reg.remove('missing')).toBe(false);
+  });
 });

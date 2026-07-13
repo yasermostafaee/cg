@@ -45,6 +45,19 @@ export class TemplateRegistry {
     return this.#byId.get(templateId)?.html ?? null;
   }
 
+  /**
+   * R-005 — drop a template (info + retained HTML). Returns whether it was registered.
+   *
+   * Un-serving is free: `TemplateHttpServer` keeps no map of its own, it reads through
+   * `html(id)` on every request — so `GET /template/<id>` 404s the moment this returns.
+   *
+   * The registry does NOT decide whether a removal is allowed; `CasparRuntime.templateRemove`
+   * owns the refuse-while-referenced policy, because only it can see the stack.
+   */
+  remove(templateId: string): boolean {
+    return this.#byId.delete(templateId);
+  }
+
   /** Whether a template id is registered. */
   has(templateId: string): boolean {
     return this.#byId.has(templateId);

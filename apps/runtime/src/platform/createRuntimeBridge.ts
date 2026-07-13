@@ -130,6 +130,8 @@ export function createMockBridge(): RuntimeBridge {
       // HTTP server and no CasparCG, so there is nothing to serve. Only the live
       // bridge retains the HTML; offline stays "OFFLINE (mock) — nothing renders".
       import: (req) => Promise.resolve(mock.templateImport(req.template)),
+      // R-005 — the mock applies the same refuse-while-referenced predicate as the bridge.
+      remove: (req) => Promise.resolve(mock.templateRemove(req.templateId)),
     },
 
     audit: {

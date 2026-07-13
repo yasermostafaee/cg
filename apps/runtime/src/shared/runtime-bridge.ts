@@ -34,6 +34,7 @@ import type {
   TemplatesGetChannel,
   TemplatesImportChannel,
   TemplatesListChannel,
+  TemplatesRemoveChannel,
   UpdateCancelChannel,
   UpdateRequestChannel,
   UpdateStateChannel,
@@ -166,6 +167,15 @@ export interface RuntimeBridge {
     import(
       req: ChannelRequest<typeof TemplatesImportChannel>,
     ): Promise<ChannelResponse<typeof TemplatesImportChannel>>;
+    /**
+     * Remove a template from the library (R-005). The bridge is authoritative: it refuses
+     * while any stack item references the template and returns the operator-facing reason.
+     * A confirmed removal also prunes the reconnect-reconciliation retention, so the
+     * template does not come back on the next bridge blip.
+     */
+    remove(
+      req: ChannelRequest<typeof TemplatesRemoveChannel>,
+    ): Promise<ChannelResponse<typeof TemplatesRemoveChannel>>;
   };
 
   audit: {
