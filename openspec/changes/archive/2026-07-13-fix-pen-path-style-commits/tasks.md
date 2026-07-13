@@ -49,5 +49,7 @@ validate --all --strict` (33/33).
 - [x] Preview served (`vite preview`, fresh dist); PAUSED for owner verification with no
       commit/push. Owner CONFIRMED 2026-07-10 (fill/stroke/width/dash apply on a fresh pen path;
       timeline row shows the pen icon).
-- [ ] Then conventional commits (one per bug), push, verify the remote head, give the compare
-      URL. `[x]`/archive after owner confirm + merge.
+- [x] Then conventional commits (one per bug), push, verify the remote head, give the compare
+      URL. `[x]`/archive after owner confirm + merge. — **DONE:** merged as `c62c0be` (PR #270,
+      "Fix/pen path style and layer icon"), confirmed on `main`; owner re-confirmed the Designer
+      verification 2026-07-13. Archiving now.
