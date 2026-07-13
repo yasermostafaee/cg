@@ -132,3 +132,89 @@ describe('PositionPicker — R-011', () => {
     }
   });
 });
+
+/**
+ * B-072 — the picker seeds from the APPLIED override (published in item state
+ * by the bridge), falling back to the manifest default only when the item has
+ * none. Before this, the default was the ONLY seed source: a reselect
+ * re-seeded the picker to the default even though the override was live on
+ * air, so the UI lied — and a re-Apply of that stale display silently
+ * overwrote the correct on-air position with the default.
+ */
+describe('PositionPicker — B-072 override read-back', () => {
+  const OVERRIDE = { anchor: 'bottom-right' as const, offset: { x: -10, y: -20 } };
+
+  function withOverride(): StackItemState {
+    return { ...item('loaded'), position: OVERRIDE };
+  }
+
+  it('seeds from the APPLIED override, not the manifest default', async () => {
+    stubBridge();
+    // The template ALSO has a manifest default — the override must win.
+    recordDefaultPosition('tpl-pos', { anchor: 'top-left', offset: { x: 5, y: 5 } });
+    const el = await render(withOverride());
+    expect(
+      el.querySelector('button[aria-label="Anchor bottom-right"]')?.getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(
+      el.querySelector('button[aria-label="Anchor top-left"]')?.getAttribute('aria-pressed'),
+    ).toBe('false');
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Position offset X"]')?.value).toBe(
+      '-10',
+    );
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Position offset Y"]')?.value).toBe(
+      '-20',
+    );
+  });
+
+  it('an item with NO override still seeds from the manifest default', async () => {
+    stubBridge();
+    recordDefaultPosition('tpl-pos', { anchor: 'top-left', offset: { x: 5, y: 5 } });
+    const el = await render(item('loaded'));
+    expect(
+      el.querySelector('button[aria-label="Anchor top-left"]')?.getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Position offset X"]')?.value).toBe(
+      '5',
+    );
+  });
+
+  it('survives a deselect → reselect (the remount re-seeds from the override)', async () => {
+    stubBridge();
+    recordDefaultPosition('tpl-pos', { anchor: 'top-left', offset: { x: 5, y: 5 } });
+    // Mount, unmount (deselect), mount again (reselect) — the picker is keyed
+    // by itemId, so this is exactly what the Inspector does.
+    await render(withOverride());
+    container?.remove();
+    container = null;
+    const el = await render(withOverride());
+    expect(
+      el.querySelector('button[aria-label="Anchor bottom-right"]')?.getAttribute('aria-pressed'),
+    ).toBe('true');
+  });
+
+  it('BLAST-RADIUS GUARD: re-Apply without editing sends the OVERRIDE, never the default', async () => {
+    const { setPosition } = stubBridge();
+    recordDefaultPosition('tpl-pos', { anchor: 'top-left', offset: { x: 5, y: 5 } });
+    const el = await render(withOverride());
+
+    // The operator reselects and — touching nothing — presses Apply. This used
+    // to send the manifest default and destroy the correct on-air position.
+    await act(async () => {
+      el.querySelector<HTMLButtonElement>('button[aria-label="Apply position"]')?.click();
+      await Promise.resolve();
+    });
+
+    expect(setPosition).toHaveBeenCalledTimes(1);
+    expect(setPosition).toHaveBeenCalledWith({ itemId: 'item-1', position: OVERRIDE });
+    // Explicitly NOT the manifest default, and NOT centered.
+    expect(setPosition).not.toHaveBeenCalledWith({
+      itemId: 'item-1',
+      position: { anchor: 'top-left', offset: { x: 5, y: 5 } },
+    });
+    expect(setPosition).not.toHaveBeenCalledWith({
+      itemId: 'item-1',
+      position: { anchor: 'center', offset: { x: 0, y: 0 } },
+    });
+  });
+});

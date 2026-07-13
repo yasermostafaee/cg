@@ -65,8 +65,20 @@ export class MockRuntime {
   );
 
   // ── stack ───────────────────────────────────────────────────────────
+
+  /**
+   * B-072 parity — the published item state joins the stored position
+   * override, exactly as the real bridge's `#published()` does. `#emitStack()`
+   * routes through here, so one join covers BOTH channels (snapshot and
+   * state-changed). Without this the mock would be the only runtime that
+   * fails to model the read-back, and the UI would once again be built against
+   * semantics the bridge does not have (the B-070 lesson).
+   */
   stackSnapshot(): StackItemState[] {
-    return this.#stack.map((i) => ({ ...i }));
+    return this.#stack.map((i) => {
+      const position = this.#positions.get(i.itemId);
+      return position === undefined ? { ...i } : { ...i, position };
+    });
   }
 
   load(itemId: string, templateId: string, fields: FieldValues): { accepted: boolean } {
@@ -190,6 +202,9 @@ export class MockRuntime {
       return { ok: false, reason: 'on-air' };
     }
     this.#positions.set(itemId, position);
+    // B-072 parity — republish so the renderer learns the applied override
+    // (the bridge marks dirty here for the same reason).
+    this.#emitStack();
     return { ok: true };
   }
 

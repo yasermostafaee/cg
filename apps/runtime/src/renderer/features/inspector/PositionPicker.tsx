@@ -47,16 +47,29 @@ export function isPositionLocked(item: StackItemState): boolean {
 
 /**
  * R-011 — the per-item on-air position picker: a 3×3 anchor grid + x/y
- * pixel-offset nudge, seeded from the template's manifest default (recorded
- * at import; centered when the template declares none). An explicit Apply
- * sends ONE `stack.set-position` to the bridge — refusals surface inline.
- * LOCKED while the item is on air/unsettled (position is fixed once taken —
- * Option A cannot reposition on air without a re-serve flash), mirroring
- * the bridge's authoritative refusal; editable while loaded-not-taken and
- * idle. Callers key this component by itemId so switching items re-seeds.
+ * pixel-offset nudge. An explicit Apply sends ONE `stack.set-position` to the
+ * bridge — refusals surface inline. LOCKED while the item is on air/unsettled
+ * (position is fixed once taken — Option A cannot reposition on air without a
+ * re-serve flash), mirroring the bridge's authoritative refusal; editable
+ * while loaded-not-taken and idle. Callers key this component by itemId so
+ * switching items re-seeds.
+ *
+ * B-072 — it seeds from the item's APPLIED override (published in its state by
+ * the bridge), and from the template's manifest default (recorded at import;
+ * centered when the template declares none) only when there is no override. It
+ * used to seed from the default ALWAYS: a reselect then re-seeded the picker to
+ * the default even though the override was live on air, so the UI lied about
+ * what was applied — and a re-Apply of that stale display silently overwrote a
+ * correct on-air position with the default.
  */
 export function PositionPicker({ item }: { item: StackItemState }): JSX.Element {
-  const seed = defaultPositionOf(item.templateId);
+  // B-072 — seed from the APPLIED override the bridge publishes, falling back
+  // to the manifest default only when the item has none. Same precedence as
+  // the on-air boot (override → manifest default → centered), so the picker
+  // shows what the graphic actually does. The override comes from the item's
+  // published state — never a renderer-local store, which would go stale on
+  // reload/reconnect and miss delete-on-remove.
+  const seed = item.position ?? defaultPositionOf(item.templateId);
   const [anchor, setAnchor] = useState<PositionAnchor>(seed.anchor);
   const [dx, setDx] = useState(String(seed.offset.x));
   const [dy, setDy] = useState(String(seed.offset.y));

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { IdSchema, ISODateSchema } from '../primitives.js';
 import { FieldValuesSchema } from '../fields.js';
+import { PositionSchema } from '../scene.js';
 
 /** A CasparCG (channel, layer) coordinate plus which server it lives on. */
 export const LayerSlotSchema = z.object({
@@ -37,5 +38,12 @@ export const StackItemStateSchema = z.object({
   lastOscAt: ISODateSchema.optional(),
   slot: LayerSlotSchema.optional(),
   errorCode: z.string().optional(),
+  /**
+   * B-072 — the operator's APPLIED on-air position override, published so the
+   * UI can show what is actually on air. The bridge owns it (R-011); this is
+   * the read-back. ABSENT means no override — the consumer falls back to the
+   * template's manifest default, exactly as before the field existed.
+   */
+  position: PositionSchema.optional(),
 });
 export type StackItemState = z.infer<typeof StackItemStateSchema>;

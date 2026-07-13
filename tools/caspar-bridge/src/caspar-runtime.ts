@@ -432,8 +432,30 @@ export class CasparRuntime {
   }
 
   // ── stack (real: Reconciler + AMCP via the seam) ────────────────────
+
+  /**
+   * B-072 — the item state as PUBLISHED to the renderer: the Reconciler's
+   * snapshot joined with the operator's stored position overrides.
+   *
+   * Ownership deliberately does not move. The Reconciler owns reconciled item
+   * state (it answers to acks and OSC, and a position override is neither);
+   * `#positions` stays operator UI state owned here. They meet only at the
+   * point of publication, which is the ONLY place both are needed. Every
+   * renderer-facing exit — `stackSnapshot()` and the `stackChanged` push —
+   * goes through here; internal `#reconciler.snapshot()` callers stay raw.
+   *
+   * `remove()` already drops the override, so a removed item's state simply
+   * has no `position`: delete-on-remove is inherited, not re-implemented.
+   */
+  #published(): readonly StackItemState[] {
+    return this.#reconciler.snapshot().map((item) => {
+      const position = this.#positions.get(item.itemId);
+      return position === undefined ? item : { ...item, position };
+    });
+  }
+
   stackSnapshot(): readonly StackItemState[] {
-    return this.#reconciler.snapshot();
+    return this.#published();
   }
 
   async load(
@@ -525,6 +547,13 @@ export class CasparRuntime {
       return { ok: false, reason: 'on-air' };
     }
     this.#positions.set(itemId, position);
+    // B-072 — republish so the renderer learns the applied override. Essential
+    // for an IDLE item, whose set-position sends nothing to CasparCG and would
+    // otherwise never reach the SPA: the picker would re-seed from the manifest
+    // default on the next reselect and an innocent re-Apply would revert it.
+    // This is a STATE publish only — no intent, no status change, no wire
+    // traffic (the R-011 refusal predicate and the AMCP path are untouched).
+    this.#markDirty(itemId);
     const slot = this.#slots.get(itemId);
     if (slot !== undefined && this.#loaded.has(itemId) && this.#templates.has(item.templateId)) {
       await this.#sendAdd(itemId, slot, item.templateId, item.fields, this.#nextSeq());
@@ -1235,7 +1264,7 @@ export class CasparRuntime {
     const timer = setTimeout(() => {
       this.#flushTimer = null;
       this.#dirty.clear();
-      this.stackChanged.emit(this.#reconciler.snapshot());
+      this.stackChanged.emit(this.#published());
     }, COALESCE_MS);
     timer.unref?.();
     this.#flushTimer = timer;

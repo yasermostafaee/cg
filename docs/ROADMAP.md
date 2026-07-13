@@ -326,6 +326,16 @@ The independent Runtime-track sequence (worked from the `cg-runtime` worktree):
    `setPosition` blocked for life). Code + tests landed; B-070 stays `[~]`
    behind the SAME hardware gate as the rest of the change (see the ADR-0006
    caveat: `CG UPDATE` on a play-on-load=off producer is unproven on hardware).
+4. **[B-072](./prd/bugs-runtime.md)** — R-011 position override read-back
+   (`position-override-readback`): the bridge stored and honoured the operator's
+   override all along, but nothing carried it back to the SPA, so the picker
+   re-seeded from the manifest default on every reselect — the UI lied about what
+   was on air, and an innocent re-Apply then REVERTED the good position to the
+   default. `StackItemState` gains an optional `position`, the bridge joins its
+   override store into the published state at the emit sites, and the picker seeds
+   from the applied override. Code + tests landed; live confirmation is a nice-to-
+   have (the on-air half already worked — this is a read-back fix, verifiable
+   in-app).
 
 ## Then — hardening wave (after features)
 
