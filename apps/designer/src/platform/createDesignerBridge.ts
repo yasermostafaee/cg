@@ -111,7 +111,12 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
       if (el.type === 'image') {
         const next = imageRemap.get(el.assetId);
         if (next !== undefined) el.assetId = next;
-      } else if (el.type === 'text') {
+      } else if (
+        el.type === 'text' ||
+        el.type === 'ticker' ||
+        el.type === 'clock' ||
+        el.type === 'sequence'
+      ) {
         const next = fontRemap.get(el.font.family);
         if (next !== undefined) el.font.family = next;
       } else if (el.type === 'container') {

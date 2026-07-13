@@ -26,7 +26,7 @@ test('a seeded owned-slot warning names the layer and item, offers no Clear, and
   const banner = page.getByRole('alert', { name: 'Owned-layer occupancy warnings' });
   await expect(banner).toBeVisible();
   await expect(banner).toContainText('Layer 1-10');
-  await expect(banner).toContainText('item-lower-third');
+  await expect(banner).toContainText('item-irib-news');
   await expect(banner).toContainText('Out or Remove the item');
   // No direct Clear on an owned layer — the strip offers no controls at all.
   await expect(banner.getByRole('button')).toHaveCount(0);
@@ -34,10 +34,10 @@ test('a seeded owned-slot warning names the layer and item, offers no Clear, and
   // The remedy: REMOVE the named item from the stack → the warning resolves.
   const row = app.stack
     .locator('div')
-    .filter({ hasText: 'item-lower-third' })
+    .filter({ hasText: 'item-irib-news' })
     .filter({ has: page.getByRole('button', { name: 'REMOVE' }) })
     .last();
   await row.getByRole('button', { name: 'REMOVE' }).click();
-  await expect(app.stack.getByText('item-lower-third', { exact: false })).toHaveCount(0);
+  await expect(app.stack.getByText('item-irib-news', { exact: false })).toHaveCount(0);
   await expect(page.getByRole('alert', { name: 'Owned-layer occupancy warnings' })).toHaveCount(0);
 });

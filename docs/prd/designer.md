@@ -3047,38 +3047,55 @@ OpenSpec: `## MODIFIED` the D-108 requirement (read-only → writable per-instan
 
 **Notes:** UI/editor only — NO runtime/schema/render change (rendering is D-117). Lives in the SEQUENCE item editor (the shared `ListItemsEditor`, used by the inspector AND the preview field form). Reuse a shared textarea primitive (add one to the renderer `ui/` controls if none exists). Mind the keybinding: Enter must insert a newline, not trigger commit/submit; keep commit-on-change consistent with the other inspector fields. Spec: `## ADDED` on the sequence capability. Tests: a designer/E2E test that Enter inserts a newline (not commit), the value round-trips with embedded `\n`, it commits via the normal path (one undo), and the preview field form uses the same textarea — incl. an RTL case. The ticker input is untouched.
 
-## [ ] D-119 — Rebuild starter templates (5 professional showcases) ⟨priority: high⟩
+## [~] D-119 — Rebuild starter templates (5 professional showcases) ⟨priority: high⟩ — change dir `openspec/changes/rebuild-starter-templates` (branch `feat/D-119-starter-templates`)
+
+> **ON HOLD (owner, 2026-07-12) — do NOT commit.** All five starters are built and
+> owner-verified in the Designer, but the real-CasparCG import surfaced ONE
+> infrastructure root cause on the export→runtime path (not a template-quality
+> issue): ES2021 `String.replaceAll` at `packages/template-runtime/src/bindings.ts:133`
+> crashes template boot on CasparCG 2.3's CEF (≈ Chromium 71; the chrome71
+> esbuild target lowers syntax only, never runtime APIs). The boot TypeError
+> aborts the top-level script before `installCasparGlobals`, so the observed
+> `update is not defined` / `play is not defined` and the `????` Persian are
+> downstream CASCADE symptoms (every UTF-8 hop was verified clean; the AMCP
+> `CG UPDATE` path per ADR 0006 is correct as-is). **The RUNTIME track owns
+> filing + fixing this bug** (shared `@cg/template-runtime` package, verified
+> on real hardware there) — deliberately NOT filed/fixed in this session to
+> avoid a two-session collision. When that fix lands on `main`: rebase this
+> branch, owner re-tests the real CasparCG import (acceptance = Persian
+> renders on air + data keys resolve), then D-119 commits. The branch stays
+> uncommitted as-is.
 
 **What:** Delete all current starter templates and author 5 new, highly polished Persian-language templates, each showcasing a distinct app capability so a professional designer immediately understands what the tool can do.
 
-The 5 templates:
+The 5 templates (owner-refreshed 2026-07-12; supersedes the original list):
 
-1. **Logo sting** — entrance animation, a few seconds hold, close + reopen, then loop the cycle.
-2. **Lower-third (ticker style)** — infinite ticker, PLUS a sequence panel cycling: Tehran clock, GMT clock, and "@IRIBNEWS" text.
-3. **Lower-third (sequence style)** — infinite sequence, PLUS the same Tehran / GMT / @IRIBNEWS sequence panel.
-4. **Guest / expert name title** — shows for a few seconds then self-closes.
-5. **Program schedule / time announce** — shows for a few seconds then self-closes.
+1. **`irib-news` — میان‌برنامهٔ خبر (marquee composite):** two-deck full-bleed strap; the red right panel is a SEQUENCE rotating ONE state at a time — live Tehran wall clock → live Greenwich wall clock → "@IRIBNEWS" text (owner correction 2026-07-12: never all three at once) — beside a bound program title and a content-driven RTL headline crawl; `manual` (stays on air).
+2. **`ticker` — نوار اخبار:** full-bleed strap, red «خبر فوری» plate flush against the navy bar, content-driven RTL crawl (measured, never timed), ever-blinking live dot (nested loop-cycle pulse comp), list data key; `manual` + authored exit.
+3. **`logo-bug` — آرم شبکه:** corner bug whose pen-path mark morphs square → circle → compass star (D-110 whole-shape track); sting re-plays ~every 10 s via `loop-cycle` on the footprint comp; wordmark «شبکه جدید».
+4. **`title` — زیرنویس معرفی:** guest/expert two-tier lower third, bound name/role keys; `auto-out` 6 s — self-closes.
+5. **`sequence` — توالی خبر:** the ticker strap silhouette with a FINITE sequence element rotating headlines (first in, last out per D-116), list data key; content-driven `auto-out` — self-closes after the last item.
 
 **Why:** Current templates are early/rough and don't demonstrate the app's real capabilities (child compositions, ticker/sequence, self-closing lifecycle, shared library/assets, rich animation). New showcase templates double as documentation-by-example and as a quality bar.
 **Acceptance:**
 
 - WHEN the app's starter templates are listed THEN only these 5 (no legacy templates) appear
 - WHEN each template is previewed THEN it runs its full lifecycle (entrance → hold → exit, with loops where specified) with polished animation
-- WHEN templates 2 and 3 run THEN the sequence panel cycles Tehran clock / GMT clock / @IRIBNEWS, and the lower-third runs as ticker (t2) / sequence (t3) respectively
-- WHEN templates 4 and 5 run THEN they self-close after their hold without operator action
+- WHEN the `irib-news` composite runs THEN its right panel rotates Tehran clock / GMT clock / @IRIBNEWS one at a time (live wall clocks, Persian digits) while the crawl rolls
+- WHEN `title` and `sequence` run THEN they self-close after their hold without operator action
 - WHEN any template renders Persian text THEN it shapes correctly (RTL, ZWNJ) in preview, exported HTML, and CEF
 
 **Notes — design constraints (locked with owner):**
 
-- Maximum visual beauty and animation quality — these are the showcase / quality bar.
+- Maximum visual beauty and animation quality — these are the showcase / quality bar. Style bar approved on `ticker` + `logo-bug` 2026-07-12.
 - NO "new" tags on any template.
 - All text in Persian.
-- Use CHILD COMPOSITIONS where it makes sense (the sequence panels are natural candidates).
-- Use the SHARED LIBRARY and ASSETS where possible.
-- Full-screen / large-background templates are NOT needed for now — just these 5.
-- @IRIBNEWS / any logo: IRIB is a real brand; do NOT reproduce their real logo. Use a clear PLACEHOLDER (simple SVG/text mark) the owner can swap for the real asset later. Note this in the template.
-- **SEQUENCING — dependency:** **UNBLOCKED as of 2026-07-10** — **B-037** (pen tool KEEP + fix) is merged (#267) and archived, and **B-042** is done/archived (see `bugs-designer.md`); templates can now exercise healthy features. (The other prerequisites — **D-060** auto-size, **B-035** fit-on-open, **B-036** icon align — are done as of 2026-07-07.)
-- **OPEN QUESTIONS to resolve with owner before implementation:** (a) resolution(s) — all 1920×1080, or some vertical 1080×1920? (b) colour palette — specific (e.g. news red/white) or designer's choice? (c) storage location — bundled `@cg/starter-templates` package vs sample projects? (d) real logo asset availability.
+- **Two-comp structure (owner decision 2026-07-12):** every starter = a SMALL footprint comp (the graphic itself, named «… (روی آنتن)», recorded via the `onair:<compId>` scene tag) nested inside a FULL 1920×1080 comp. FOR NOW the full comp is `entryCompositionId` and the export/preview root (a small-canvas export renders top-left of the channel — no runtime positioning yet); when Runtime operator-positioning ships, flip entry/export to the footprint comp.
+- Owner style notes applied (2026-07-12): strap full-bleed, no side margins, red plate flush to the navy bar, no gold hairlines on straps, no crawl side padding, taller bar, live dot keeps blinking on air (nested loop-cycle comp — keyframes freeze during hold).
+- @IRIBNEWS / any logo: IRIB is a real brand; do NOT reproduce their real logo. The composite uses the plain TEXT "@IRIBNEWS" (a bound data key) as the placeholder.
+- **RESOLVED open questions:** (a) all 1920×1080 full comps (+ small footprint comps); (b) shared broadcast family palette — ink navy `#0A1733` / red `#D5192E` / gold `#E3B04B`, Vazirmatn; (c) bundled `@cg/starter-templates` package; (d) placeholder text mark, owner swaps later.
+- Boundary guard: `apps/runtime/tests/import-starter-vcg.test.ts` packs every starter the way the Designer scopes exports and drives the runtime's real `verify → unpack → render` import; landing E2E `apps/designer/tests/e2e/starter-landing.spec.ts`.
+- Platform ripple fixed in-change: starter font seeding now rewrites `font.family` on ticker/clock/sequence elements too (`createDesignerBridge.rewriteAssetRefs`). Related bugs filed: **B-068** (ensureCompositions drops root lifecycle/playout), **B-067** (Runtime inspector reads only flat root fields).
 
 ## [x] D-120 — High zoom + pixel grid for pixel-perfect editing ⟨priority: medium⟩ — merged (#240, `9f4654a`), archived `openspec/changes/archive/2026-07-07-high-zoom-pixel-grid/`
 

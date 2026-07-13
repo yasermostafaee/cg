@@ -23,8 +23,8 @@ export function seedStack(): StackItemState[] {
   const pick = (id: string): string => STARTER_TEMPLATES.find((s) => s.id === id)?.id ?? id;
   return [
     {
-      itemId: 'item-lower-third',
-      templateId: pick('persian-reference'),
+      itemId: 'item-irib-news',
+      templateId: pick('irib-news'),
       fields: {},
       status: 'loaded',
       pending: false,
@@ -37,8 +37,8 @@ export function seedStack(): StackItemState[] {
       pending: false,
     },
     {
-      itemId: 'item-breaking',
-      templateId: pick('breaking-news'),
+      itemId: 'item-logo-bug',
+      templateId: pick('logo-bug'),
       fields: {},
       status: 'idle',
       pending: false,

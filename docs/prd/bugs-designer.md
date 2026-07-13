@@ -941,3 +941,19 @@ guards. Capability: `designer-playout-lifecycle`.
 **Env:** Browser + Designer canvas.
 **Notes:** The segment hit surfaces are now per-segment cubic `<path>`s built from the SAME control points the runtime renders, mapped through the rotation-aware `screen()` (B-061) — the affordance and inserts follow the true curved, rotated outline, and insertion lands at the NEAREST point on the curve under the cursor (32-sample search) rather than the straight midpoint. Segments stay pointer-interactive always (a plain left press falls through to normal select/drag; Ctrl/Cmd inserts; right-press opens the Issue-D Add menu). Filed with the Prompt-11 owner batch (Issue C).
 **Regression test:** unit `anchor-context-menu.test.ts` (segment `data-cg-segment` surfaces; nearest-point inserts via the Add menu); E2E `pen-curve-edit.spec.ts` (Ctrl-gated insert on the curve) + `pen-edit-mode.spec.ts`.
+
+## [ ] B-068 — ensureCompositions drops scene-root lifecycle/playout when migrating a legacy root-layers scene ⟨priority: medium⟩
+
+> (Originally filed as B-066 during D-119; renumbered — main's merged PR #289
+> consumed B-066 for the CEF `replaceAll` boot abort. Main's merged numbers win.)
+
+**Repro:**
+
+1. Author (or import) a scene whose content lives in top-level `scene.layers` (no `compositions`), with `lifecycle: { outPoint }` and `playout` set at the scene root — a schema-valid shape.
+2. Open it in the Designer (`designerStore.setScene` → `ensureCompositions`).
+3. Preview the migrated composition and Play.
+
+**Expected:** the migrated composition preserves the scene's `lifecycle`/`playout`, so the graphic enters, HOLDS at the out-point, and plays its authored exit per its playout mode.
+**Actual:** `ensureCompositions` (apps/designer/src/renderer/state/scene-doc.ts) copies resolution/frameRange/activeRange/background/layers into the migrated composition but **silently drops `lifecycle` and `playout`** — `playoutOf` then resolves the comp to `static`: the whole timeline plays as one entrance (exit keyframes included), the hold freezes on the post-exit (typically fully transparent) pose, and stop is a hard cut. The graphic simply "disappears" after its intro.
+**Env:** Browser / Designer dev; found 2026-07-12 during D-119 (the first-cut root-layer starters hit exactly this — rebuilt composition-centric as the fix).
+**Notes:** One-line-ish fix: carry `...(scene.lifecycle !== undefined ? { lifecycle: scene.lifecycle } : {})` and same for `playout` into the migrated comp, + a unit test on `ensureCompositions`. The Zod schema deliberately allows root lifecycle/playout, so load must not lose them.

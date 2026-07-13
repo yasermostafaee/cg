@@ -38,7 +38,7 @@ describe('MockRuntime stack', () => {
     const rt = new MockRuntime();
     let calls = 0;
     rt.stackChanged.subscribe(() => (calls += 1));
-    rt.load('new-1', 'persian-reference', {});
+    rt.load('new-1', 'ticker', {});
     expect(calls).toBe(1);
   });
 });
@@ -62,14 +62,17 @@ describe('MockRuntime owned-slot occupancy (B-056 parity)', () => {
       const rt = new MockRuntime();
       const emissions: unknown[][] = [];
       rt.ownedOccupancyChanged.subscribe((w) => emissions.push(w));
+      // The seeded warning names a row `seedStack()` actually creates — the
+      // E2E's remedy is removing that row (D-119 rebuilt the starter seed).
       expect(rt.ownedOccupancy()).toMatchObject([
-        { channel: 1, layer: 10, itemId: 'item-lower-third' },
+        { channel: 1, layer: 10, itemId: 'item-irib-news' },
       ]);
+      expect(rt.stackSnapshot().map((i) => i.itemId)).toContain('item-irib-news');
       // A take does NOT resolve (bridge parity).
-      rt.take('item-lower-third');
+      rt.take('item-irib-news');
       expect(rt.ownedOccupancy()).toHaveLength(1);
       // The remedy resolves it and publishes the change.
-      rt.remove('item-lower-third');
+      rt.remove('item-irib-news');
       expect(rt.ownedOccupancy()).toEqual([]);
       expect(emissions[emissions.length - 1]).toEqual([]);
     } finally {

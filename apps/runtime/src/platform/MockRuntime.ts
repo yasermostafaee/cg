@@ -461,6 +461,9 @@ function seedOrphans(): OrphanLayer[] {
  * armed the offline mock boots with one warning against a seeded stack item so
  * Playwright can drive the banner + Out/Remove remedy. The bridge-side truth
  * (load-time detection off the real OSC tap) is integration-tested.
+ *
+ * The itemId MUST name a row that `seedStack()` actually creates — the remedy
+ * the E2E drives is removing that row.
  */
 function seedOwnedOccupancy(): OwnedOccupancyWarning[] {
   const flagged =
@@ -470,7 +473,7 @@ function seedOwnedOccupancy(): OwnedOccupancyWarning[] {
         {
           channel: 1,
           layer: 10,
-          itemId: 'item-lower-third',
+          itemId: 'item-irib-news',
           producer: 'html',
           since: new Date().toISOString(),
         },
