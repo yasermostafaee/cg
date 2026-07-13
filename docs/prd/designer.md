@@ -3047,24 +3047,26 @@ OpenSpec: `## MODIFIED` the D-108 requirement (read-only → writable per-instan
 
 **Notes:** UI/editor only — NO runtime/schema/render change (rendering is D-117). Lives in the SEQUENCE item editor (the shared `ListItemsEditor`, used by the inspector AND the preview field form). Reuse a shared textarea primitive (add one to the renderer `ui/` controls if none exists). Mind the keybinding: Enter must insert a newline, not trigger commit/submit; keep commit-on-change consistent with the other inspector fields. Spec: `## ADDED` on the sequence capability. Tests: a designer/E2E test that Enter inserts a newline (not commit), the value round-trips with embedded `\n`, it commits via the normal path (one undo), and the preview field form uses the same textarea — incl. an RTL case. The ticker input is untouched.
 
-## [~] D-119 — Rebuild starter templates (5 professional showcases) ⟨priority: high⟩ — change dir `openspec/changes/rebuild-starter-templates` (branch `feat/D-119-starter-templates`)
+## [x] D-119 — Rebuild starter templates (5 professional showcases) ⟨priority: high⟩ — merged (#290, `e6f9876`), archived (`openspec/changes/archive/2026-07-13-rebuild-starter-templates`): five Persian broadcast starter demos — `logo-bug`, `ticker`, `sequence`, `title`, `irib-news` — each a two-comp structure (a small on-air footprint comp, `onair:<compId>`-tagged with its own lifecycle/playout, nested in a full 1920×1080 entry comp), with real Persian DEFAULT values on every bound field plus its data-key binding (base text is the default, binding carries no placeholder — so the Designer shows broadcast copy, an operator value substitutes at playout, and no value falls back to the Persian default). Verified on real CasparCG. Owner-verified 2026-07-13
 
-> **ON HOLD (owner, 2026-07-12) — do NOT commit.** All five starters are built and
-> owner-verified in the Designer, but the real-CasparCG import surfaced ONE
-> infrastructure root cause on the export→runtime path (not a template-quality
-> issue): ES2021 `String.replaceAll` at `packages/template-runtime/src/bindings.ts:133`
-> crashes template boot on CasparCG 2.3's CEF (≈ Chromium 71; the chrome71
-> esbuild target lowers syntax only, never runtime APIs). The boot TypeError
-> aborts the top-level script before `installCasparGlobals`, so the observed
-> `update is not defined` / `play is not defined` and the `????` Persian are
-> downstream CASCADE symptoms (every UTF-8 hop was verified clean; the AMCP
-> `CG UPDATE` path per ADR 0006 is correct as-is). **The RUNTIME track owns
-> filing + fixing this bug** (shared `@cg/template-runtime` package, verified
-> on real hardware there) — deliberately NOT filed/fixed in this session to
-> avoid a two-session collision. When that fix lands on `main`: rebase this
-> branch, owner re-tests the real CasparCG import (acceptance = Persian
-> renders on air + data keys resolve), then D-119 commits. The branch stays
-> uncommitted as-is.
+> **Resolved (2026-07-13).** The earlier on-hold — ES2021 `String.replaceAll` in
+> `@cg/template-runtime` crashing template boot on CasparCG 2.3's CEF (≈ Chromium 71;
+> esbuild's `chrome71` target lowers syntax only, never runtime APIs), whose boot
+> TypeError aborted the script before `installCasparGlobals` and produced the
+> `update is not defined` / `????`-Persian cascade — was fixed on the Runtime track as
+> [B-066](./bugs-runtime.md) (#289). D-119 rebased onto it and the owner re-tested the
+> real import: Persian renders on air and data keys resolve. Durable lesson kept in
+> `docs/engines/overview.md`: **the served bundle runs on CasparCG's CEF, not a modern
+> browser** — the cef-compat lint + bundle-artifact scan now guard built-in METHODS.
+>
+> **Still open, filed out of this change (not fixed here):**
+> [B-067](./bugs-runtime.md) — the Runtime inspector builds its operator field form from
+> flat root `scene.fields` only, so a two-comp template's fields (which live on the
+> footprint comp and must be namespaced by the composition-instance name) are invisible;
+> [B-068](./bugs-designer.md) — `ensureCompositions` drops scene-root `lifecycle`/`playout`
+> when migrating a legacy root-layers scene (the starters sidestep it by being
+> composition-centric). Filed as B-066 and renumbered — main's #289 took B-066; merged
+> numbers win. See also [B-069](./bugs.md) (cosmetic: B-056 is double-assigned).
 
 **What:** Delete all current starter templates and author 5 new, highly polished Persian-language templates, each showcasing a distinct app capability so a professional designer immediately understands what the tool can do.
 
