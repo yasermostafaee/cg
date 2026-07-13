@@ -6,6 +6,7 @@ import { uuid } from '../../lib/uuid.js';
 import { Button } from '../../ui/Button.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { importTemplateFromBytes } from './templateDelivery.js';
+import { templateDisplayName } from './templateName.js';
 import { recordDefaultPosition } from '../stack/defaultPositionStore.js';
 // B-038 Phase 3 — the bundled app @font-face CSS (Vazirmatn / Exo 2) as a raw
 // string. Passed to the single-file export so the bundled faces inline as base64
@@ -49,8 +50,8 @@ const styles = {
     border: `1px solid ${colors.border}`,
   },
   itemBody: { display: 'flex', flexDirection: 'column' as const, gap: '0.1rem', minWidth: 0 },
-  itemId: { fontSize: '0.85rem', fontWeight: 600, overflowWrap: 'anywhere' as const },
-  itemType: { fontSize: '0.75rem', color: colors.textMuted },
+  itemName: { fontSize: '0.85rem', fontWeight: 600, overflowWrap: 'anywhere' as const },
+  itemMeta: { fontSize: '0.75rem', color: colors.textMuted, overflowWrap: 'anywhere' as const },
   error: {
     color: '#fca5a5',
     fontSize: '0.78rem',
@@ -97,7 +98,12 @@ export function LibraryPanel(): JSX.Element {
         return;
       }
 
-      let imported: { templateId: string; warnings: string[]; defaultPosition?: Position };
+      let imported: {
+        templateId: string;
+        displayName: string;
+        warnings: string[];
+        defaultPosition?: Position;
+      };
       try {
         // B-038 Phase 2 — produce the self-contained standalone HTML from the
         // unpacked `.vcg` and deliver it with the `TemplateInfo` over
@@ -117,10 +123,11 @@ export function LibraryPanel(): JSX.Element {
       recordDefaultPosition(imported.templateId, imported.defaultPosition);
 
       await refresh();
+      // R-004 — name the template the operator just imported, not its UUID.
       setStatus(
         imported.warnings.length > 0
-          ? `Imported “${imported.templateId}” (${String(imported.warnings.length)} warning(s): ${imported.warnings.join('; ')}).`
-          : `Imported “${imported.templateId}”.`,
+          ? `Imported “${imported.displayName}” (${String(imported.warnings.length)} warning(s): ${imported.warnings.join('; ')}).`
+          : `Imported “${imported.displayName}”.`,
       );
     },
     [refresh],
@@ -185,21 +192,33 @@ export function LibraryPanel(): JSX.Element {
         {templates.length === 0 ? (
           <p style={styles.hint}>No templates yet. Import a .vcg to get started.</p>
         ) : (
-          templates.map((t) => (
-            <div style={styles.item} key={t.templateId}>
-              <div style={styles.itemBody}>
-                <span style={styles.itemId}>{t.templateId}</span>
-                <span style={styles.itemType}>{t.templateType}</span>
+          templates.map((t) => {
+            // R-004 — the operator reads the display name; the id stays discoverable on the
+            // secondary line (and as a tooltip) so a row can still be correlated with a
+            // stack item's `templateId` or a served `/template/<id>` URL. When the template
+            // has no usable name the id IS the primary line — don't then repeat it below.
+            const label = templateDisplayName(t);
+            const idIsSecondary = label !== t.templateId;
+            return (
+              <div style={styles.item} key={t.templateId}>
+                <div style={styles.itemBody}>
+                  <span style={styles.itemName} title={t.templateId}>
+                    {label}
+                  </span>
+                  <span style={styles.itemMeta}>
+                    {idIsSecondary ? `${t.templateType} · ${t.templateId}` : t.templateType}
+                  </span>
+                </div>
+                <AsyncButton
+                  variant="secondary"
+                  run={() => loadOntoStack(t)}
+                  aria-label={`Load ${label}`}
+                >
+                  Load
+                </AsyncButton>
               </div>
-              <AsyncButton
-                variant="secondary"
-                run={() => loadOntoStack(t)}
-                aria-label={`Load ${t.templateId}`}
-              >
-                Load
-              </AsyncButton>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </nav>

@@ -12,6 +12,17 @@ import { defineChannel } from '../channel.js';
 
 const TemplateInfoSchema = z.object({
   templateId: IdSchema,
+  /**
+   * R-004 — the human-readable display name (the `.vcg` manifest's `name`; a bundled
+   * starter's label). The Library shows this instead of the raw `templateId`, which for a
+   * Designer-authored package is a UUID and means nothing to an operator.
+   *
+   * Optional and DISPLAY-ONLY: `templateId` remains the sole identity everywhere (the
+   * registry key, the stack item's `templateId`, the served `/template/<id>` URL), and the
+   * name never reaches an AMCP argument. Absent — or blank, which the manifest schema
+   * permits since its `name` has no `.min(1)` — means "fall back to the id".
+   */
+  name: z.string().optional(),
   templateType: z.string(),
   /** The ENTRY composition's own flat fields. */
   fields: z.array(DynamicFieldSchema),

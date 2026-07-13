@@ -135,7 +135,10 @@ function fixtureScene(): Scene {
 }
 
 /** Build a verifiable `.vcg` (id = `templateId`) carrying the 1×1 PNG image asset. */
-async function buildVcgWithImage(templateId = 'tpl-delivery-1'): Promise<Uint8Array> {
+async function buildVcgWithImage(
+  templateId = 'tpl-delivery-1',
+  manifestName = 'delivery-lower-third',
+): Promise<Uint8Array> {
   const scene = fixtureScene();
   const assetPath = `assets/image/${sha256Hex(PNG_1X1)}.png`;
   const assetIndex: readonly AssetEntry[] = [
@@ -151,7 +154,7 @@ async function buildVcgWithImage(templateId = 'tpl-delivery-1'): Promise<Uint8Ar
   const fontDeps: readonly FontReference[] = [];
   const manifestExtras = {
     id: templateId,
-    name: 'delivery-lower-third',
+    name: manifestName,
     authoring: {
       designerVersion: '0.0.0',
       createdAt: '2026-06-30T00:00:00.000Z',
@@ -181,6 +184,8 @@ describe('produceTemplateDelivery', () => {
     expect(template.templateId).toBe('tpl-x');
     expect(template.templateType).toBe('lower-third');
     expect(template.fields[0]?.id).toBe('anchor');
+    // R-004 — the manifest's display name crosses the import boundary onto TemplateInfo.
+    expect(template.name).toBe('delivery-lower-third');
 
     expect(html).toContain('<!doctype html');
     // The REAL @cg/template-runtime IIFE + the scene literal are inlined.
@@ -202,6 +207,19 @@ describe('produceTemplateDelivery', () => {
   it('throws (registers nothing) for bytes that fail verification', async () => {
     const notAVcg = new TextEncoder().encode('this is not a .vcg archive');
     await expect(produceTemplateDelivery(notAVcg)).rejects.toThrow(/failed verification/i);
+  });
+
+  // R-004 — `ManifestSchema.name` is `z.string()` with no `.min(1)`, so a blank name is a
+  // packageable reality. It must leave `name` unset (NOT set it to "") so the Library falls
+  // back to the id rather than rendering an empty row.
+  it('falls back to the scene name when the packaged manifest name is blank', async () => {
+    const { template } = await produceTemplateDelivery(await buildVcgWithImage('tpl-blank', '  '));
+
+    expect(template.templateId).toBe('tpl-blank');
+    // The fixture scene's own name is the fallback source, so a blank manifest name still
+    // yields a usable display name — what must NOT happen is a recorded empty string.
+    expect(template.name).not.toBe('');
+    expect(template.name).toBe('delivery-lower-third');
   });
 
   // B-038 Phase 3 — the bundled Persian/Latin faces inline as base64; the HTML
@@ -263,9 +281,12 @@ describe('importTemplateFromBytes', () => {
     const result = await importTemplateFromBytes(bridge, await buildVcgWithImage('tpl-deliver'));
 
     expect(result.templateId).toBe('tpl-deliver');
+    // R-004 — the caller gets what to TELL the operator, not the UUID it just registered.
+    expect(result.displayName).toBe('delivery-lower-third');
     expect(sent).toHaveLength(1);
     expect(sent[0]?.html).toContain('CG.createRuntime');
     expect((sent[0]?.template as { templateId: string }).templateId).toBe('tpl-deliver');
+    expect((sent[0]?.template as { name?: string }).name).toBe('delivery-lower-third');
   });
 
   it('does not call the bridge when the package is invalid (registers nothing)', async () => {

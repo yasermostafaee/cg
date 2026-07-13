@@ -81,7 +81,7 @@ explicit apply step.
   value changes reconcile with in-progress local edits without a destructive
   remount.
 
-## [ ] R-004 — template Library shows the manifest display name, not the raw id ⟨priority: low⟩
+## [~] R-004 — template Library shows the manifest display name, not the raw id ⟨priority: low⟩ — implemented on `fix/runtime-library-ux`, change: `runtime-library-display-name`
 
 **What:** Library rows (and the import/Load copy) show the template's display
 **name** from the `.vcg` manifest; the id stays discoverable as secondary info

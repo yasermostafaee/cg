@@ -13,6 +13,9 @@ import { STARTER_TEMPLATES } from '@cg/starter-templates';
 export function seedTemplates(): TemplateInfo[] {
   return STARTER_TEMPLATES.map((s) => ({
     templateId: s.id,
+    // R-004 — the starter's own display label, so the mock Library reads like the real one
+    // (a name, not a raw id) instead of dropping the name the starter pack already carries.
+    name: s.label,
     templateType: s.scene.templateType,
     fields: s.scene.fields,
   }));
