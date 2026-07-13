@@ -70,8 +70,11 @@ function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
  * Offline fallback: the existing in-memory simulation, wrapped to satisfy the
  * `RuntimeBridge` contract. Its link status is a constant `offline-mock` — an
  * explicit, persistent offline mode the indicator surfaces unmistakably.
+ *
+ * Exported for the B-074 mock↔bridge parity guard (`tests/mock-bridge-parity.test.ts`),
+ * which compares this adapter's method tree against `WebSocketRuntime`'s.
  */
-function createMockBridge(): RuntimeBridge {
+export function createMockBridge(): RuntimeBridge {
   const mock = new MockRuntime();
   const OFFLINE: BridgeLinkStatus = 'offline-mock';
 

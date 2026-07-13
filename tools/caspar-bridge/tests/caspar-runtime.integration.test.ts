@@ -3,6 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig } from '@cg/shared-ipc';
+import { HEALTH_MS } from './support/harness.js';
 
 /**
  * C-001 Phase 2 — the real `@cg/caspar-client` stack inside the bridge, driven
@@ -70,7 +71,7 @@ it('drives load/take/update/out as AMCP (acked) and confirms state from real OSC
     { templateId: 'lower-third', templateType: 'lower-third', fields: [] },
     '<!doctype html><html><body>served</body></html>',
   );
-  await runtime.whenServerHealthy(5000);
+  await runtime.whenServerHealthy(HEALTH_MS);
 
   // lower-third allocates the first slot in its policy range (channel 1, layer 10).
   const slot = { channel: 1, layer: 10 };
@@ -116,7 +117,7 @@ it('reports health from the real session state', async () => {
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 20 });
   runtime = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
   runtime.start();
-  await runtime.whenServerHealthy(5000);
+  await runtime.whenServerHealthy(HEALTH_MS);
 
   expect(runtime.health().primary.state).toBe('healthy');
   expect(runtime.health().primary.amcpAxisOk).toBe(true);

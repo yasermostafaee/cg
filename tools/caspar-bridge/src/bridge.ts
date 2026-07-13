@@ -282,8 +282,15 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
   ];
 }
 
-/** Map every RuntimeBridge channel to its backing handler. */
-function buildRoutes(b: CasparRuntime, persistPath?: string): Map<string, Route> {
+/**
+ * Map every RuntimeBridge channel to its backing handler.
+ *
+ * Exported for the B-074 route-coverage guard: a channel the UI declares and calls but
+ * that is never routed here answers `unknown channel` at runtime and NOTHING in the
+ * suite goes red (this is how R-011's `stack.set-position` could silently break). The
+ * guard enumerates `@cg/shared-ipc` and asserts this map covers every runtime channel.
+ */
+export function buildRoutes(b: CasparRuntime, persistPath?: string): Map<string, Route> {
   const route = (channel: AnyChannel, handle: (req: never) => unknown): Route => ({
     channel,
     handle: handle as (req: unknown) => unknown,

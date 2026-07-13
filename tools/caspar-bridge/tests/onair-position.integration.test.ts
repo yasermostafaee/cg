@@ -4,6 +4,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { StackItemState } from '@cg/shared-schema';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
+import { HEALTH_MS } from './support/harness.js';
 
 /**
  * R-011 — operator position overrides ride the served URL query, through the
@@ -62,7 +63,7 @@ async function boot(): Promise<void> {
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);
-  await runtime.whenServerHealthy(6000);
+  await runtime.whenServerHealthy(HEALTH_MS);
 }
 
 it('R-011: a stored position rides the ADD URL query; no override, no query; the take re-ADD inherits it; setConfig survives', async () => {
@@ -102,7 +103,7 @@ it('R-011: a stored position rides the ADD URL query; no override, no query; the
   expect((await runtime!.out('item1')).accepted).toBe(true);
   const applied = await runtime!.setConfig(runtime!.config());
   expect(applied.ok).toBe(true);
-  await runtime!.whenServerHealthy(6000);
+  await runtime!.whenServerHealthy(HEALTH_MS);
   expect((await runtime!.take('item1')).accepted).toBe(true);
   expect(mock!.lastCgAdd(SLOT)?.template).toContain(QUERY);
 

@@ -68,3 +68,14 @@ pass is the only remaining gate._
 Implement only after the diagnosis is reviewed; then hardware-validate the matrix on
 real CasparCG 2.3.2 (type `"`, `\`, and a newline → Update → applies on air, Persian
 intact). B-041 flips to `[x]` only after that.
+
+## Archive ordering — this change archives FIRST
+
+- [ ] When archiving: **archive `fix-amcp-escaping-v2` BEFORE `reconnect-reconciliation`.**
+      Both hold a delta on the same `runtime-caspar-bridge` requirement ("Template
+      resolution is validated, not blind-acked"), and `reconnect-reconciliation`'s
+      version is based on THIS change's pending text — so archiving them in the wrong
+      order makes this change's older text clobber the reconciliation delta. See the
+      "Archive ordering" section in `proposal.md` for the full rationale, and the
+      counterpart note in `reconnect-reconciliation` (`proposal.md` "Spec-delta
+      coexistence" + `tasks.md` §6.5).

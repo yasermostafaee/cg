@@ -8,9 +8,9 @@ import { chromium, defineConfig, devices } from '@playwright/test';
  * headless. The app boots in test mode (no native dialogs) because the fixture sets
  * `window.CG_E2E` before app JS — see `tests/e2e/fixtures/designer.ts`.
  *
- * Local: `pnpm test:e2e` (turbo builds first); `reuseExistingServer` lets you keep a
- * `vite preview` running for fast iteration. CI: a separate `e2e` job builds, caches
- * the browser, then runs this.
+ * Local: `pnpm test:e2e` (turbo builds first) starts a FRESH preview of that build;
+ * export `PW_REUSE_SERVER=1` to keep one running for fast iteration. CI: a separate
+ * `e2e` job builds, caches the browser, then runs this.
  */
 const PORT = 4321;
 
@@ -67,7 +67,15 @@ export default defineConfig({
   webServer: {
     command: `pnpm exec vite preview --port ${String(PORT)} --strictPort`,
     url: `http://127.0.0.1:${String(PORT)}`,
-    reuseExistingServer: !process.env.CI,
+    // B-073 — do NOT silently adopt whatever is already on PORT. `reuseExistingServer`
+    // used to be on for every local run, so an ORPHANED `vite preview` left over from an
+    // EARLIER build kept serving a stale `dist/` — the suite then tested old code and the
+    // same commit passed or failed depending on which server happened to be listening
+    // (the "identical runs, different results" flake). Default to a fresh preview of the
+    // build turbo just produced; `--strictPort` makes an occupied port a LOUD failure
+    // instead of a silent stale serve. Opt back in with PW_REUSE_SERVER=1 for fast
+    // iteration when you know the running server matches your build.
+    reuseExistingServer: process.env.PW_REUSE_SERVER === '1',
     timeout: 120_000,
   },
 });

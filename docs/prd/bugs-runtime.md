@@ -1060,3 +1060,54 @@ The poisoning is a second, independent defect: a failed ack moved only `ackedSta
 - [ ] Apply a position → **Play** → the graphic renders at the override (regression guard: the on-air half still works).
 - [ ] Deselect → reselect → the picker **SHOWS the override**, not the manifest default.
 - [ ] Re-Apply without changing anything → the on-air position is **unchanged** (NOT reverted to the default) — the blast-radius guard.
+
+## [~] B-074 — no test can catch a channel the UI calls but the bridge never routes, nor a MockRuntime that has drifted from the real bridge ⟨priority: high⟩ — fixed on `fix/test-infra-batch`
+
+Two **structural** gaps in the suite (not a single defect): both are the _reason_ recent
+runtime bugs shipped, and both would let the same class ship again. Filed as one item
+because both are closed by the same idea — a guard that compares two surfaces that must
+agree, instead of testing each in isolation.
+
+**Gap (a) — unrouted channels are invisible.**
+**Repro:** delete `route(StackSetPositionChannel, ...)` from `tools/caspar-bridge/src/bridge.ts`
+and run the full suite.
+**Expected:** something goes red.
+**Actual (pre-fix):** **nothing goes red.** Recon confirmed it. The renderer reaches the bridge
+over a WebSocket, so an unrouted channel is not a type error — the bridge just answers
+`unknown channel: stack.set-position` to a call no test makes. This is exactly the shape of the
+[[B-072]] / R-011 `stack.set-position` failure: the channel was declared and called in the UI
+while the bridge half was, from the suite's point of view, free to not exist.
+
+**Gap (b) — MockRuntime drifts from the real bridge.**
+The Runtime SPA is developed against `MockRuntime`, so UX gets built on mock semantics the real
+bridge does not have. Twice now: [[B-070]] (the mock **accepted** `update` on an idle/producerless
+item; the bridge **refuses** it) and [[B-072]] (the mock lacked the position **read-back** the bridge
+performs). Nothing compared the two, so each divergence was found on air.
+
+**Fix — two guards, each verified against the real bug it would have caught:**
+
+- `tools/caspar-bridge/tests/route-coverage.test.ts` — enumerates the channels `@cg/shared-ipc`
+  actually **exports** (no hand-maintained list to drift) and asserts `buildRoutes()` covers every
+  one the _runtime_ owns. Designer-only namespaces (`projects.` `assets.` `sharedImages.` `export.`
+  `preview.`) are an explicit, default-**deny** exemption: anything outside it must be routed, so a
+  new runtime channel is covered the moment it is exported. Also guards the reverse (a route keyed
+  on a name no channel exports is dead code) and keeps the exemption list honest.
+  **Proof it works:** deleting the `stack.set-position` route now fails with
+  `expected [ 'stack.set-position' ] to deeply equal []`.
+- `apps/runtime/tests/mock-bridge-parity.test.ts` — asserts the two surfaces the renderer depends on
+  agree, **without real AMCP/sockets**: (1) every backing method `buildRoutes()` calls on
+  `CasparRuntime`, plus the 8 emitters `wirePublishes()` subscribes to, exists on **both**
+  `CasparRuntime` and `MockRuntime` (the list is anchored to the real runtime first, so it cannot
+  drift into fiction); (2) `createMockBridge()` and the real `WebSocketRuntime` expose the **same**
+  `RuntimeBridge` method tree (walked recursively; `WebSocketRuntime` is built with an inert injected
+  socket, so nothing connects); (3) driving the mock through `load → setPosition` republishes a
+  `StackItemState` carrying the applied `position` on **both** `stackSnapshot()` and the `stackChanged`
+  emission, and the item parses against `StackItemStateSchema`.
+  **Proof it works:** reintroducing the B-072 divergence (mock stops merging `position`) fails with
+  `expected undefined to deeply equal { anchor: 'bottom-left', ... }`.
+
+**Source impact:** two **additive exports** only — `buildRoutes` (caspar-bridge) and `createMockBridge`
+(runtime platform) were module-private and are now exported for the guards. No behavior change, no
+AMCP verb, no channel or schema change.
+
+**Env:** `@cg/caspar-bridge` + `@cg/runtime`. Found while reviewing why B-070/B-071/B-072 all shipped green.

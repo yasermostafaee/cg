@@ -3,6 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig } from '@cg/shared-ipc';
+import { HEALTH_MS } from './support/harness.js';
 
 /**
  * REGRESSION canary (CI failure of reconnect-reconciliation :133/:243) —
@@ -61,7 +62,7 @@ it(`the orphan survives a bridge death racing the template fetch — ${String(IT
       { templateId: 'lower-third', templateType: 'lower-third', fields: [] },
       '<!doctype html><html><body>x</body></html>',
     );
-    await r.whenServerHealthy(5000);
+    await r.whenServerHealthy(HEALTH_MS);
 
     // The reconnect fixtures' exact shape: load → take → IMMEDIATE death.
     expect((await r.load('item1', 'lower-third', {})).accepted).toBe(true);

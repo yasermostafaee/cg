@@ -7,6 +7,7 @@ import {
   type WsFrame,
 } from '@cg/shared-ipc';
 import { createBridge, type BridgeHandle } from '../src/index.js';
+import { track } from './support/harness.js';
 
 /**
  * Server-independent WebSocket framing tests. They exercise the `@cg/shared-ipc`
@@ -36,7 +37,12 @@ function deadConnection(): ConnectionConfig {
 
 function connect(url: string): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
+    // Tracked at CREATION, not closed on the test's last line: an assertion that
+    // threw earlier used to skip the trailing `ws.close()` and leak the client
+    // into every later test in the file.
+    const ws = track(new WebSocket(url), (w) => {
+      w.close();
+    });
     ws.once('open', () => resolve(ws));
     ws.once('error', reject);
   });
@@ -81,7 +87,6 @@ it('round-trips a request/response over the WS (connections.config)', async () =
       resp.payload !== null &&
       'servers' in resp.payload,
   ).toBe(true);
-  ws.close();
 });
 
 it('rejects an unknown channel with an error response', async () => {
@@ -96,7 +101,6 @@ it('rejects an unknown channel with an error response', async () => {
   await waitFor(() => frames.some((f) => f.type === 'response' && f.id === '9'));
   const resp = frames.find((f) => f.type === 'response' && f.id === '9');
   expect(resp?.type === 'response' && resp.error?.message).toContain('unknown channel');
-  ws.close();
 });
 
 it('retains the delivered template HTML keyed by id over the WS (B-038 Phase 2)', async () => {
@@ -151,8 +155,6 @@ it('retains the delivered template HTML keyed by id over the WS (B-038 Phase 2)'
   await waitFor(() => frames.some((f) => f.type === 'response' && f.id === 'imp2'));
   expect(handle.runtime.templateHtml('tpl-ws')).toBe(htmlV2);
   expect(handle.runtime.templateList()).toHaveLength(1);
-
-  ws.close();
 });
 
 it('rejects a templates.import missing the html payload (B-038 Phase 2)', async () => {
@@ -177,7 +179,6 @@ it('rejects a templates.import missing the html payload (B-038 Phase 2)', async 
   const resp = frames.find((f) => f.type === 'response' && f.id === 'imp-bad');
   expect(resp?.type === 'response' && resp.error?.message).toContain('invalid request');
   expect(handle.runtime.templateHtml('tpl-nohtml')).toBeNull();
-  ws.close();
 });
 
 it('rejects a request whose payload fails the channel schema', async () => {
@@ -194,5 +195,4 @@ it('rejects a request whose payload fails the channel schema', async () => {
   await waitFor(() => frames.some((f) => f.type === 'response' && f.id === '10'));
   const resp = frames.find((f) => f.type === 'response' && f.id === '10');
   expect(resp?.type === 'response' && resp.error?.message).toContain('invalid request');
-  ws.close();
 });

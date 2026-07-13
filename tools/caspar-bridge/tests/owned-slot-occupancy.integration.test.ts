@@ -5,6 +5,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
 import type { OwnedOccupancyWarning, TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
+import { HEALTH_MS } from './support/harness.js';
 
 /**
  * B-056 — the owned-slot occupancy warning. Mirror pair where the PRIMARY's
@@ -231,7 +232,7 @@ it('an out resolves the warning ONLY when its CLEAR lands on the primary', async
     oscHost: '127.0.0.1',
     oscHz: 30,
   });
-  await runtime!.whenServerHealthy(15000);
+  await runtime!.whenServerHealthy(HEALTH_MS);
 
   // A later out for the same layer now executes on the current primary
   // (ok && onPrimary) — provably cleared, the warning resolves.

@@ -3,6 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
+import { HEALTH_MS } from './support/harness.js';
 
 /**
  * B-038 Phase 3 — the regression that hid B-038, closed end-to-end. The bridge
@@ -64,7 +65,7 @@ it('serves the template URL, CG ADDs it with real Persian fields, and CG UPDATE 
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);
-  await runtime.whenServerHealthy(5000);
+  await runtime.whenServerHealthy(HEALTH_MS);
 
   const slot = { channel: 1, layer: 10 };
   const fields = { headline: 'خبر فوری', ticker: 'اخبار' };
@@ -101,7 +102,7 @@ it('a load of an UNREGISTERED template 404s (the bridge serves nothing for it)',
   runtime = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
   runtime.start();
   await runtime.startServing();
-  await runtime.whenServerHealthy(5000);
+  await runtime.whenServerHealthy(HEALTH_MS);
 
   // No templateImport → the bridge's /template/<id> returns 404 → the mock cannot
   // resolve the CG ADD reference → load is rejected (this is the B-038 failure mode

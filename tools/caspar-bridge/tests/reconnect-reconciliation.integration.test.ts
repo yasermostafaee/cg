@@ -6,6 +6,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
+import { HEALTH_MS } from './support/harness.js';
 
 /**
  * Reconnect-reconciliation (Face 2 + the load guard) — a killed bridge leaves
@@ -74,7 +75,7 @@ async function orphanedSession(m: MockHandle, oscPort: number): Promise<void> {
   r.start();
   await r.startServing();
   r.templateImport(TEMPLATE, HTML);
-  await r.whenServerHealthy(5000);
+  await r.whenServerHealthy(HEALTH_MS);
   expect((await r.load('item1', 'lower-third', { headline: 'قدیمی' })).accepted).toBe(true);
   // The orphan this fixture hands over is a SETTLED, rendering page ("the
   // bridge dies WITH OUTPUT ON AIR") — wait for the mock's template GET to
@@ -135,7 +136,7 @@ it('the fresh session ADOPTS the orphaned layer: CLEAR precedes its first CG ADD
   r2.start();
   await r2.startServing();
   r2.templateImport(TEMPLATE, HTML);
-  await r2.whenServerHealthy(5000);
+  await r2.whenServerHealthy(HEALTH_MS);
 
   // Startup itself issues NO CLEAR — the orphan stays on air until a load
   // targets its layer (on-air safety: no blind startup sweep).
@@ -200,7 +201,7 @@ it('a remove landing during the adopt-CLEAR window neither leaks the layer nor A
   r.start();
   await r.startServing();
   r.templateImport(TEMPLATE, HTML);
-  await r.whenServerHealthy(5000);
+  await r.whenServerHealthy(HEALTH_MS);
 
   // The load blocks inside the adopt-CLEAR; the remove lands mid-window and,
   // finding no slot bound yet, cleans up nothing.
@@ -245,7 +246,7 @@ it('EXP-A regression: a post-restart load with an EMPTY registry fails fast (unk
   runtime2 = r2;
   r2.start();
   await r2.startServing();
-  await r2.whenServerHealthy(5000);
+  await r2.whenServerHealthy(HEALTH_MS);
 
   expect(r2.templateHtml('lower-third')).toBeNull();
   const loaded = await r2.load('item2', 'lower-third', { headline: 'جدید' });

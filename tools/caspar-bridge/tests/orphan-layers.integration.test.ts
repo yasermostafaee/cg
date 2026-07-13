@@ -4,6 +4,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
 import type { ConnectionConfig, OrphanLayer } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
+import { HEALTH_MS } from './support/harness.js';
 
 /**
  * R-009 — orphan-layer sweep against the mock's REAL OSC stream (the mock's
@@ -87,7 +88,7 @@ async function bootSingle(): Promise<{ emissions: OrphanLayer[][] }> {
     { templateId: 'lower-third', templateType: 'lower-third', fields: [] },
     '<!doctype html><html><body>served</body></html>',
   );
-  await runtime.whenServerHealthy(6000);
+  await runtime.whenServerHealthy(HEALTH_MS);
   return { emissions };
 }
 
@@ -177,7 +178,7 @@ it('the sweep follows the CURRENT primary across a failover', async () => {
   );
   runtime.start();
   await runtime.startServing();
-  await runtime.whenServerHealthy(6000);
+  await runtime.whenServerHealthy(HEALTH_MS);
 
   // The orphan exists ONLY on B (a foreign client played it there).
   await foreignPlay(mockB!, 'PLAY 1-88 "foreign" HTML');

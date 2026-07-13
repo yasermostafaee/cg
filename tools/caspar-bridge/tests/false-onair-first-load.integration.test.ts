@@ -3,6 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
+import { HEALTH_MS } from './support/harness.js';
 
 /**
  * B-053 — the false ON AIR badge on the FIRST Load per (channel, layer) per
@@ -77,7 +78,7 @@ it(
     runtime.start();
     await runtime.startServing();
     runtime.templateImport(TEMPLATE, HTML);
-    await runtime.whenServerHealthy(5000);
+    await runtime.whenServerHealthy(HEALTH_MS);
 
     // Every published status per itemId — the sticky badge is exactly "the
     // last published word", so the SEQUENCE is what the regression pins.

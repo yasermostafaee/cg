@@ -1,0 +1,70 @@
+# B-number registry — the source of truth for bug IDs
+
+`B-` numbers are **global** across the three bug files
+([bugs.md](bugs.md) · [bugs-designer.md](bugs-designer.md) · [bugs-runtime.md](bugs-runtime.md))
+and are **never reused**. Concurrent branches kept picking "the next free number" from
+different snapshots of `main` and colliding, so this file records the **verified** state of
+the number space and how to keep it clean.
+
+Resolves the housekeeping half of [B-069](bugs.md).
+
+## The audit — run this before filing
+
+```bash
+grep -rhoE "^## \[.\] B-[0-9]+" docs/prd/ | grep -oE "B-[0-9]+" | sort | uniq -d
+```
+
+It must print **exactly one line: `B-056`** (the single known, accepted duplicate, below).
+Anything else is a NEW collision and must be renumbered **before merge**.
+
+Match only the number that **opens** a heading (`^## [.] B-NNN`). Trailing prose produces
+false hits — the `B-056` heading itself cites "renumbered from B-054".
+
+## Verified state of the number space
+
+Audited against merged `main` (`2cb9299`, 2026-07-13). `B-001` … `B-074` are allocated,
+contiguous, with no gaps.
+
+**Exactly one number is ambiguous. Every other number names exactly one bug.**
+
+| Number     | Status                                | Who owns it                                                                                                                                                                                                                             |
+| ---------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **B-056**  | **DUAL-OWNED — both entries keep it** | [bugs-designer.md](bugs-designer.md) — "can't add a SMOOTH point to a finished path" (#272, archived) **and** [bugs-runtime.md](bugs-runtime.md) — "`load()` proceeds when the adopt-CLEAR didn't land on the PRIMARY" (#287, archived) |
+| all others | unambiguous                           | one bug each                                                                                                                                                                                                                            |
+
+**B-056 is deliberately NOT renumbered** (owner call, recorded in [B-069](bugs.md)): both
+entries are merged, archived and `[x]`, so nothing is blocked and no live work is ambiguous.
+Renumbering a closed bug would ripple into archived change dirs, commit/PR text, and code
+comments that cite the old number. **Disambiguate by file**, not by renumbering — cite
+"B-056 (designer)" or "B-056 (runtime)" when it matters.
+
+### Why the number space on `main` is otherwise clean
+
+Collisions have happened repeatedly, but **in flight** — two branches picking the same next
+number from different snapshots — and each was caught and renumbered before merge, which is
+why `main` itself stays clean. Documented instances:
+
+- The designer path bug was renumbered **B-054 → B-056** when a runtime bug concurrently took
+  B-054 (#273). It then re-collided with #287, producing the B-056 pair above.
+- D-119's bug was renumbered **B-066 → B-068** by the duplicate audit.
+
+The rule that has actually held the line: **merged `main` numbers always win**; an in-flight
+branch renumbers itself.
+
+## Recommendation (a suggestion, not a rule)
+
+The collisions all share one cause: "next free number" is read from a snapshot of `main` that
+is already stale by the time a second branch reads it. Two cheap ways to remove the race —
+**neither is enforced today; adopt if the churn justifies it:**
+
+1. **Per-track number bands.** Give each bug file its own range so two tracks can never pick
+   the same number without noticing — e.g. cross-cutting/tooling `B-500+`, designer `B-600+`,
+   runtime `B-700+` (continuing the existing sequence, not renumbering history). A branch then
+   only races branches in its own track, which is far rarer.
+2. **Audit in CI.** Run the duplicate-audit command above as a check, allowlisting the single
+   known `B-056`. This does not prevent a collision but makes it impossible to merge one — which
+   is all that has ever actually mattered, since in-flight collisions are cheap to fix and merged
+   ones are not.
+
+(1) prevents; (2) detects. (2) is the smaller change and directly enforces the invariant this
+file documents.
