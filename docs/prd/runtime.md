@@ -81,7 +81,7 @@ explicit apply step.
   value changes reconcile with in-progress local edits without a destructive
   remount.
 
-## [~] R-004 — template Library shows the manifest display name, not the raw id ⟨priority: low⟩ — implemented on `fix/runtime-library-ux`, change: `runtime-library-display-name`
+## [~] R-004 — template Library shows the manifest display name, not the raw id ⟨priority: medium⟩ — implemented on `fix/runtime-library-ux`, change: `runtime-library-display-name`
 
 **What:** Library rows (and the import/Load copy) show the template's display
 **name** from the `.vcg` manifest; the id stays discoverable as secondary info
@@ -99,7 +99,7 @@ explicit apply step.
   import (`templateDelivery.ts`), and pass it through both registries (bridge
   `TemplateRegistry` + `MockRuntime`).
 
-## [~] R-005 — delete a template from the Library ⟨priority: low⟩ — remove BUTTON + refuse-while-referenced implemented on `fix/runtime-library-ux`, change: `runtime-library-remove-template`; the context-menu affordance is still OPEN (needs a Runtime context-menu primitive — owner decision, see the change's proposal)
+## [~] R-005 — delete a template from the Library ⟨priority: medium⟩ — remove BUTTON + refuse-while-referenced implemented on `fix/runtime-library-ux`, change: `runtime-library-remove-template`; the context-menu affordance is still OPEN (needs a Runtime context-menu primitive — owner decision, see the change's proposal)
 
 **What:** Let the operator remove a registered template — a per-row delete button
 AND a context-menu entry.
@@ -111,11 +111,32 @@ AND a context-menu entry.
   from the Library and from `templates.list`
 - WHEN a template is deleted THEN the backend registry drops it too — incl. the
   bridge `TemplateRegistry` retained HTML and its served `/template/<id>` endpoint
-- WHEN a stack item still references the template THEN deletion warns or is refused
-  (decide in the change) — never silently broken stack rows
+- WHEN a stack item still references the template THEN deletion is REFUSED with a reason
+  naming how many items use it — never silently broken stack rows
   **Notes:** Needs a new `templates.remove` channel in `@cg/shared-ipc`, removal
   semantics in `tools/caspar-bridge` (`template-registry.ts` + the HTTP serve list),
   the `MockRuntime` equivalent, and the `LibraryPanel` UI (button + context menu).
+
+  **Recon corrections (2026-07-13), both load-bearing:**
+  1. **Refuse-while-referenced is RESOLVED, not an open question.** The original
+     "warns or is refused (decide in the change)" is settled: **refuse**. Deleting a
+     referenced template does NOT take the graphic off air (CasparCG already fetched the
+     self-contained HTML into CEF) and nothing appears to break — but the item's next
+     `out()` → `take()` hits the `unknown-template` guard
+     (`caspar-runtime.ts` `take()`, B-039 re-ADD) and the row can NEVER come back, while
+     `setPosition`'s re-ADD stops silently. The predicate is **any** reference, not just
+     on-air: an `idle`/`loaded` row is poisoned exactly as badly. Mirror R-010's
+     on-air-block shape (`#onAirCount` → `{ ok, reason, message }`); the unblock path is
+     the same (`stack.remove` / Remove-All).
+  2. **The retained-payload resurrection path.** `WebSocketRuntime` keeps a page-lifetime
+     `#retained` map of every `templates.import` payload and **re-delivers the whole set on
+     every reconnect** (that is what heals a bridge restart). Pruning it on a confirmed
+     removal is **required**, or the template resurrects on the next bridge blip. A
+     **refused** removal must leave it intact.
+
+  Un-serving needs **no** serve-side change: `TemplateHttpServer` holds no map, it reads
+  through the injected `getHtml` per request, so dropping the registry entry 404s
+  `GET /template/<id>` on its own.
 
 ## [ ] R-006 — surface + recover the boot-time backend choice (no silent per-session mock) ⟨priority: low⟩
 
@@ -207,7 +228,7 @@ tell a command is in flight, and a rejection is easy to miss.
   Keeps the dark broadcast-console look and the sacred air-state colors.
   Cross-refs: R-003 (dirty/Discard affordances), B-044 (UNCONFIRMED badge).
 
-## [ ] R-008 — Runtime field sizing + spacing pass ⟨priority: low⟩
+## [ ] R-008 — Runtime field sizing + spacing pass ⟨priority: medium⟩
 
 **What:** Revisit the dimensions of the Runtime's input controls — text fields,
 the number field, and the ticker item textareas — plus their min-heights and the
