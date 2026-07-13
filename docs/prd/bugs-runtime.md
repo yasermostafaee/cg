@@ -1034,7 +1034,7 @@ The poisoning is a second, independent defect: a failed ack moved only `ackedSta
 
 ---
 
-## [~] B-072 — Runtime PositionPicker forgets an applied position override on reselect: the UI lies about what is on air, and an innocent re-Apply then REVERTS the correct position to the manifest default ⟨priority: high⟩
+## [x] B-072 — Runtime PositionPicker forgets an applied position override on reselect: the UI lies about what is on air, and an innocent re-Apply then REVERTS the correct position to the manifest default ⟨priority: high⟩
 
 **Repro:**
 
@@ -1053,7 +1053,7 @@ The poisoning is a second, independent defect: a failed ack moved only `ackedSta
 
 **Why no test caught it:** every position test asserted the WIRE (does the ADD URL carry the query?) or the picker's seed from the manifest default. Nothing asserted what the picker shows for an item that HAS an override, because item state could not carry one — so the gap was invisible to both the bridge suite and the DOM suite. `MockRuntime` stored overrides too but never published them either, so the offline path modelled the same blind spot.
 
-**Fixed by:** `openspec/changes/position-override-readback`. `StackItemState` gains an OPTIONAL `position`; the bridge joins `#positions` into the state at the two renderer-facing emit sites (`stackSnapshot()` and the `stackChanged` push) — ownership does not move, and delete-on-remove is inherited for free; `set-position` republishes so an IDLE item's override (which sends nothing to CasparCG) still reaches the SPA; the picker seeds from `item.position ?? defaultPositionOf(item.templateId)`. No new IPC channel and no renderer-side store (the B-070 anti-pattern). No AMCP verb, no payload change — the B-064 serve contract and ADR-0006 escaping are untouched.
+**Fixed by:** `openspec/changes/archive/2026-07-13-position-override-readback` (archived). `StackItemState` gains an OPTIONAL `position`; the bridge joins `#positions` into the state at the two renderer-facing emit sites (`stackSnapshot()` and the `stackChanged` push) — ownership does not move, and delete-on-remove is inherited for free; `set-position` republishes so an IDLE item's override (which sends nothing to CasparCG) still reaches the SPA; the picker seeds from `item.position ?? defaultPositionOf(item.templateId)`. No new IPC channel and no renderer-side store (the B-070 anti-pattern). No AMCP verb, no payload change — the B-064 serve contract and ADR-0006 escaping are untouched.
 
 **LIVE CONFIRMATION — PENDING HARDWARE** (most of this is verifiable in-app without CasparCG, since the on-air half already worked and this is a read-back fix; the live check is recorded anyway):
 
