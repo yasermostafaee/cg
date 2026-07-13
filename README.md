@@ -54,7 +54,7 @@ pnpm build     # build all @cg/* workspace packages so the apps can import them
 Run an app — each is a Vite dev server in the browser:
 
 ```bash
-pnpm --filter @cg/designer dev   # visual editor  → http://127.0.0.1:5173
+pnpm --filter @cg/designer dev   # visual editor  → http://127.0.0.1:4000
 pnpm --filter @cg/runtime  dev   # playout controller → http://127.0.0.1:5174
 ```
 

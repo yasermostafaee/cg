@@ -40,7 +40,7 @@ Persian / RTL is a core requirement.
 ```bash
 pnpm install
 pnpm build                              # turbo: build all @cg/* packages
-pnpm --filter @cg/designer dev          # Designer SPA → http://127.0.0.1:5173
+pnpm --filter @cg/designer dev          # Designer SPA → http://127.0.0.1:4000
 pnpm --filter @cg/runtime  dev          # Runtime  SPA → http://127.0.0.1:5174
 pnpm turbo run typecheck lint test build && pnpm format:check   # full green gate (format:check is a ROOT prettier script, not a turbo task)
 pnpm test:e2e                           # Playwright E2E via turbo (builds first — never run against a stale dist)
