@@ -287,17 +287,32 @@ ${playoutJson}
     <script>
       (function () {
         var scene = ${sceneLiteral};
-        var runtime = CG.createRuntime(scene, { assetUrls: ${assetUrlsJson} });
-        CG.installCasparGlobals(runtime);
-        // R-011 — output-only placement: operator query override (appended by
-        // the bridge onto the served URL) ?? scene.defaultPosition ?? centered.
-        // This boot script is the ONE page CasparCG loads; the Designer
-        // preview never calls applyOutputPosition, so authoring is untouched.
-        CG.applyOutputPosition(scene, { search: location.search });
-        // No auto-play — the operator / AMCP drives play(). Mark readiness for
-        // hosts that poll for it.
-        if (runtime.ready && runtime.ready.then) {
-          runtime.ready.then(function () { document.documentElement.setAttribute('data-cg-ready', '1'); });
+        try {
+          var runtime = CG.createRuntime(scene, { assetUrls: ${assetUrlsJson} });
+          CG.installCasparGlobals(runtime);
+          // R-011 — output-only placement: operator query override (appended by
+          // the bridge onto the served URL) ?? scene.defaultPosition ?? centered.
+          // This boot script is the ONE page CasparCG loads; the Designer
+          // preview never calls applyOutputPosition, so authoring is untouched.
+          CG.applyOutputPosition(scene, { search: location.search });
+          // No auto-play — the operator / AMCP drives play(). Mark readiness for
+          // hosts that poll for it.
+          if (runtime.ready && runtime.ready.then) {
+            runtime.ready.then(function () { document.documentElement.setAttribute('data-cg-ready', '1'); });
+          }
+        } catch (e) {
+          // B-066 — surface a boot failure ON THE OUTPUT (the fixtures' proven
+          // pattern): without this, a boot throw dies silent — a blank page
+          // whose only trace is a mystifying "update is not defined" in the
+          // CEF log (createRuntime threw before installCasparGlobals could
+          // define the CasparCG entrypoints). Positioning boots INSIDE the
+          // guard: a mis-placed graphic is still a boot failure, and on air it
+          // must be seen, not guessed at.
+          var pre = document.createElement('pre');
+          pre.style.cssText = 'color:#F87171;background:#000;padding:16px;font:14px monospace;white-space:pre-wrap;';
+          pre.textContent = 'cg boot error: ' + (e && e.message ? e.message : String(e));
+          document.body.appendChild(pre);
+          document.body.classList.remove('cg-pending');
         }
       })();
     </script>

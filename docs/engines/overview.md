@@ -84,8 +84,8 @@ built and how to extend it.
 ### 3. `Scene` → preview / export (same runtime, three outputs)
 
 The runtime source is bundled once into two payloads
-(`apps/designer/scripts/bundle-runtime.mjs` → `cg-runtime.js` ESM +
-`cg-runtime.iife.js` IIFE) so all three consumers run identical logic:
+(`packages/single-file-export/scripts/bundle-runtime.mjs` → `cgJs` ESM +
+`cgJsIife` IIFE) so all three consumers run identical logic:
 
 | Output               | Who runs it                   | How the runtime is delivered                                                  |
 | -------------------- | ----------------------------- | ----------------------------------------------------------------------------- |
@@ -97,6 +97,16 @@ The exported `index.html` calls `createRuntime(scene)` then
 `installCasparGlobals(runtime)`, which wires CasparCG's bare global calls
 (`play`/`update`/`stop`/`next`/`remove`, JSON **or** legacy XML payloads) to the
 typed runtime.
+
+**The served bundle runs on CasparCG's CEF, not a modern browser (B-066).**
+The compat baseline is **Chromium 71** (CasparCG 2.3 LTS). esbuild `target`
+lowers SYNTAX only — newer built-in METHODS (`replaceAll` et al.) pass
+straight through a correctly-targeted bundle and abort the template at boot
+on air. Guards: the broadcast-tier lint bans post-baseline built-ins at the
+source line (`@cg/eslint-config` `cef-compat`, one curated list) and
+`@cg/single-file-export`'s `cef-compat.test.ts` scans the exact emitted
+bundle artifacts (covers bundled dependencies too); every CasparCG-facing
+esbuild target is pinned to `chrome71`.
 
 **Image assets (D-062 + D-040).** The runtime emits `<img data-cg-asset-id>` and
 takes an `assetUrls` boot option that wires each `src`. Image bytes are resolved

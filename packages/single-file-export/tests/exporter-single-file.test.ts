@@ -58,6 +58,10 @@ describe('ExporterSingleFile', () => {
     // scene.defaultPosition ?? centered). This boot script is the ONLY caller;
     // the Designer preview never applies positioning.
     expect(html).toContain('CG.applyOutputPosition(scene, { search: location.search })');
+    // B-066 — a boot failure must be VISIBLE on the output (try/catch +
+    // "cg boot error" pre), never a silent blank whose only trace is
+    // "update is not defined" in the CEF log.
+    expect(html).toContain("'cg boot error: '");
   });
 
   it('embeds a parseable GDD schema with the dynamic fields', async () => {

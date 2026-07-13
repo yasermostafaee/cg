@@ -283,7 +283,13 @@ track is independent — see "Runtime — next" below):
    **UNBLOCKED** (B-037, B-042 and D-122 are done — see Done; templates should
    exercise healthy features); supersedes the old "template cleanup" wave-tail
    note. (Its other prerequisites — D-060 auto-size, B-035 fit-on-open, B-036
-   icon align — are done, see Done.)
+   icon align — are done, see Done.) **On-air gate:**
+   [B-066](./prd/bugs-runtime.md) (CEF-incompatible `replaceAll` aborted every
+   Persian template at boot on real CasparCG) is fixed on the Runtime track —
+   durable lesson: **the served bundle must run on CasparCG's CEF (Chromium 71
+   baseline), not a modern browser**; esbuild targets cover syntax only, so the
+   cef-compat lint + bundle-artifact scan guard built-in METHODS. D-119's live
+   re-test resumes once B-066 merges to main.
 
 Plus the existing queued / deprioritized items already in `designer.md`:
 [D-059](./prd/designer.md), [D-061](./prd/designer.md), [D-063](./prd/designer.md),

@@ -130,7 +130,13 @@ function applyOne(
       // text, else the host (solid). Resolved fresh so a solid↔gradient switch follows.
       const glyph = textRenderNode(el);
       if (target.placeholder && original !== undefined) {
-        glyph.textContent = original.replaceAll(target.placeholder, stringValue);
+        // B-066 — CEF-safe literal replace-all: CasparCG's CEF (baseline
+        // Chromium 71) has no String.prototype.replaceAll (Chromium 85+) and
+        // the call ABORTED the template at boot on air. split/join replaces
+        // every occurrence, keeps regex metacharacters in the placeholder
+        // inert, and never expands `$`-patterns in the VALUE (replaceAll
+        // would — an operator's literal "$&" must render exactly as typed).
+        glyph.textContent = original.split(target.placeholder).join(stringValue);
       } else {
         glyph.textContent = stringValue;
       }

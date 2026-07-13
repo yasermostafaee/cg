@@ -2,11 +2,21 @@
 // Bundles @cg/template-runtime into `src/generated/cg-runtime-bundles.ts` — a
 // generated TS module exporting the runtime as two strings:
 //
-//   cgJs      ESM  (es2022) — the preview iframe + the .vcg (modern browsers).
+//   cgJs      ESM  (chrome71) — the preview iframe + the .vcg. B-066: the
+//                               .vcg's own index.html is a CasparCG-loadable
+//                               page, so its bundle must PARSE on the CEF
+//                               baseline too (es2022 syntax would SyntaxError
+//                               on CEF 71 before any boot error could show);
+//                               the preview runs the same output unchanged.
 //   cgJsIife  IIFE (chrome71) — the file://-safe single-file CasparCG export
 //                               (D-019). Targets the oldest supported CEF
 //                               (CasparCG 2.3 LTS ≈ Chromium 71) and exposes
 //                               `window.CG = { createRuntime, installCasparGlobals, … }`.
+//
+// B-066 — `target` lowers SYNTAX only: newer BUILT-IN METHODS (replaceAll…)
+// pass through untouched. Method compat is enforced separately by the
+// cef-compat lint (@cg/eslint-config) + the bundle-artifact scan
+// (tests/cef-compat.test.ts), sharing one curated banned list.
 //
 // Emitting a TS module of string consts (vs a Vite `?raw` import) keeps the
 // package bundler-agnostic — it builds to plain `dist` consumed by both apps.
@@ -45,7 +55,7 @@ async function bundle({ format, target, globalName }) {
   return out.text;
 }
 
-const cgJs = await bundle({ format: 'esm', target: 'es2022' });
+const cgJs = await bundle({ format: 'esm', target: 'chrome71' });
 const cgJsIife = await bundle({ format: 'iife', target: 'chrome71', globalName: 'CG' });
 
 // JSON.stringify yields a valid, fully-escaped JS string literal — bundle text
