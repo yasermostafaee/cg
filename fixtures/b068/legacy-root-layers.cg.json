@@ -1,0 +1,220 @@
+{
+  "schemaVersion": 1,
+  "id": "legacy-root-layers",
+  "name": "Legacy root-layers (B-068)",
+  "templateType": "lower-third",
+  "resolution": {
+    "width": 1920,
+    "height": 1080
+  },
+  "frameRate": 50,
+  "safeAreas": {
+    "title": 10,
+    "action": 5
+  },
+  "frameRange": {
+    "in": 0,
+    "out": 100
+  },
+  "activeRange": {
+    "in": 0,
+    "out": 100
+  },
+  "lifecycle": {
+    "outPoint": 60
+  },
+  "playout": {
+    "mode": "auto-out",
+    "holdSource": "timed",
+    "holdMs": 3000
+  },
+  "background": "transparent",
+  "layers": [
+    {
+      "id": "root-l",
+      "name": "main",
+      "visible": true,
+      "locked": false,
+      "children": [
+        {
+          "id": "bar",
+          "name": "Lower-third bar",
+          "transform": {
+            "position": {
+              "x": 360,
+              "y": 820
+            },
+            "size": {
+              "w": 1200,
+              "h": 140
+            },
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "rotation": 0,
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "opacity": 1,
+          "visible": true,
+          "locked": false,
+          "zIndex": 0,
+          "animation": {
+            "tracks": {
+              "opacity": {
+                "keyframes": [
+                  {
+                    "frame": 0,
+                    "value": 0,
+                    "easing": "ease-out"
+                  },
+                  {
+                    "frame": 20,
+                    "value": 1,
+                    "easing": "linear"
+                  },
+                  {
+                    "frame": 60,
+                    "value": 1,
+                    "easing": "ease-in"
+                  },
+                  {
+                    "frame": 90,
+                    "value": 0,
+                    "easing": "linear"
+                  }
+                ]
+              },
+              "position.y": {
+                "keyframes": [
+                  {
+                    "frame": 0,
+                    "value": 940,
+                    "easing": "ease-out"
+                  },
+                  {
+                    "frame": 20,
+                    "value": 820,
+                    "easing": "linear"
+                  },
+                  {
+                    "frame": 60,
+                    "value": 820,
+                    "easing": "ease-in"
+                  },
+                  {
+                    "frame": 90,
+                    "value": 940,
+                    "easing": "linear"
+                  }
+                ]
+              }
+            }
+          },
+          "type": "shape",
+          "shape": "rect",
+          "fill": {
+            "kind": "solid",
+            "color": "#0B5FFF"
+          }
+        },
+        {
+          "id": "accent",
+          "name": "Accent",
+          "transform": {
+            "position": {
+              "x": 360,
+              "y": 820
+            },
+            "size": {
+              "w": 16,
+              "h": 140
+            },
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "rotation": 0,
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            }
+          },
+          "opacity": 1,
+          "visible": true,
+          "locked": false,
+          "zIndex": 0,
+          "animation": {
+            "tracks": {
+              "opacity": {
+                "keyframes": [
+                  {
+                    "frame": 0,
+                    "value": 0,
+                    "easing": "ease-out"
+                  },
+                  {
+                    "frame": 20,
+                    "value": 1,
+                    "easing": "linear"
+                  },
+                  {
+                    "frame": 60,
+                    "value": 1,
+                    "easing": "ease-in"
+                  },
+                  {
+                    "frame": 90,
+                    "value": 0,
+                    "easing": "linear"
+                  }
+                ]
+              },
+              "position.y": {
+                "keyframes": [
+                  {
+                    "frame": 0,
+                    "value": 940,
+                    "easing": "ease-out"
+                  },
+                  {
+                    "frame": 20,
+                    "value": 820,
+                    "easing": "linear"
+                  },
+                  {
+                    "frame": 60,
+                    "value": 820,
+                    "easing": "ease-in"
+                  },
+                  {
+                    "frame": 90,
+                    "value": 940,
+                    "easing": "linear"
+                  }
+                ]
+              }
+            }
+          },
+          "type": "shape",
+          "shape": "rect",
+          "fill": {
+            "kind": "solid",
+            "color": "#FFC400"
+          }
+        }
+      ],
+      "blendMode": "normal"
+    }
+  ],
+  "fields": [],
+  "bindings": [],
+  "fonts": [],
+  "metadata": {
+    "createdAt": "2026-07-13T00:00:00.000Z",
+    "updatedAt": "2026-07-13T00:00:00.000Z"
+  }
+}

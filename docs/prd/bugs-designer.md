@@ -942,7 +942,7 @@ guards. Capability: `designer-playout-lifecycle`.
 **Notes:** The segment hit surfaces are now per-segment cubic `<path>`s built from the SAME control points the runtime renders, mapped through the rotation-aware `screen()` (B-061) — the affordance and inserts follow the true curved, rotated outline, and insertion lands at the NEAREST point on the curve under the cursor (32-sample search) rather than the straight midpoint. Segments stay pointer-interactive always (a plain left press falls through to normal select/drag; Ctrl/Cmd inserts; right-press opens the Issue-D Add menu). Filed with the Prompt-11 owner batch (Issue C).
 **Regression test:** unit `anchor-context-menu.test.ts` (segment `data-cg-segment` surfaces; nearest-point inserts via the Add menu); E2E `pen-curve-edit.spec.ts` (Ctrl-gated insert on the curve) + `pen-edit-mode.spec.ts`.
 
-## [ ] B-068 — ensureCompositions drops scene-root lifecycle/playout when migrating a legacy root-layers scene ⟨priority: medium⟩
+## [~] B-068 — ensureCompositions drops scene-root lifecycle/playout when migrating a legacy root-layers scene ⟨priority: medium⟩
 
 > (Originally filed as B-066 during D-119; renumbered — main's merged PR #289
 > consumed B-066 for the CEF `replaceAll` boot abort. Main's merged numbers win.)
