@@ -8,6 +8,20 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Bundle fonts in `.vcg` export ([D-121](./prd/designer.md)) — merged (#298) &
+  archived (2026-07-13, `2026-07-13-bundle-fonts-in-vcg-export`): the Exporter now
+  resolves each `scene.fonts` entry's bytes into `pack()`'s existing `fonts` seam
+  (`fonts/` dir + a `kind: 'font'` assetIndex entry) and bakes a package-relative
+  `@font-face` per bundled face into the package's own `index.html` — so an
+  unzipped `.vcg` renders the correct face under CasparCG's CEF with no external or
+  `file://` request, and a content-driven ticker measures real glyph widths instead
+  of fallback ones (the crawl-derived hold duration finally matches the authoring
+  machine — the same "playout-critical input lost in export" class as B-032's
+  `holdMs`). A face with no shippable bytes (a `system`/licensed family) is skipped
+  and the `vcg-ticker-fonts-not-bundled` preflight warning is re-scoped to fire only
+  for that font, rather than merely because a scene contains a ticker. Single-file
+  HTML export is unchanged (it already inlines fonts); no `@cg/vcg-format`, Runtime,
+  or bridge change. New living spec: `designer-font-export`.
 - Rebuild starter templates ([D-119](./prd/designer.md)) — merged (#290) &
   archived (2026-07-13, `2026-07-13-rebuild-starter-templates`): the 8 legacy
   starters are replaced by five Persian broadcast demos — `logo-bug`, `ticker`,
@@ -301,10 +315,9 @@ next Designer item is an owner call from the queued list below.
 
 The queued / deprioritized items already in `designer.md`:
 [D-059](./prd/designer.md), [D-061](./prd/designer.md), [D-063](./prd/designer.md),
-[D-064](./prd/designer.md), [D-096](./prd/designer.md),
-[D-102](./prd/designer.md) **Phase 2**, and
-[D-121](./prd/designer.md) (bundle fonts in `.vcg` export — fixes the
-content-driven crawl-duration drift).
+[D-064](./prd/designer.md), [D-096](./prd/designer.md), and
+[D-102](./prd/designer.md) **Phase 2**. ([D-121](./prd/designer.md), bundle fonts in
+`.vcg` export, is done — merged #298, archived 2026-07-13; see Done.)
 
 ### Runtime — next
 
