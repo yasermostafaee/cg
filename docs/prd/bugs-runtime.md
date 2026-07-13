@@ -991,7 +991,7 @@ take" — this entry is about the missing WARNING, not the badge), B-054 (the
 adjacent server-restart staleness), C-011 (persisted layer-aware
 reconciliation — the structural home).
 
-## [ ] B-067 — template import builds the operator field form from flat root fields only; nested-composition fields are invisible ⟨priority: medium⟩
+## [~] B-067 — template import builds the operator field form from flat root fields only; nested-composition fields are invisible ⟨priority: high⟩ — fixed on `fix/B-067-nested-fields` (`openspec/changes/runtime-nested-composition-fields`)
 
 **Repro:**
 
@@ -1002,6 +1002,20 @@ reconciliation — the structural home).
 **Actual:** `produceTemplateDelivery` builds `TemplateInfo.fields` from the ROOT `scene.fields` only (apps/runtime/src/renderer/features/library/templateDelivery.ts:127). A scoped per-composition export whose fields live on a nested comp yields `fields: []` — the Inspector shows nothing to edit, even though the playing template fully supports namespaced updates (`values[instanceName]`, `applyScopedFieldValues`).
 **Env:** Runtime app (mock + bridge paths share the import); found 2026-07-12 during D-119.
 **Notes:** Fix direction: aggregate at import (reuse `aggregateCompositionFields`) and teach the Inspector to render namespace groups + emit NESTED payloads (`{ instanceName: { fieldId: value } }`) — the runtime side already consumes them. Scope it with the Runtime operator-positioning work that will also flip D-119 starters to footprint-comp export.
+
+**FIXED** — `openspec/changes/runtime-nested-composition-fields`. The filed fix direction was confirmed by recon and taken verbatim: aggregate at import with the EXISTING `aggregateCompositionFields` (the same collector `packages/vcg-format/src/gdd.ts` already uses — so `TemplateInfo` and the package's own GDD manifest can no longer disagree about which fields exist), render namespace groups in the Inspector, and emit the nested payload.
+
+No field identity was invented and **no AMCP/wire change was needed**: the instance-name namespace is already the canonical address (the GDD advertises it, `bindings.ts` resolves `values[child.name]` at render, `CommandBuilder.serialize()` is a plain `JSON.stringify` and is depth-transparent, and the Designer preview already drives it). The one real blocker was plumbing, not identity — `FieldValuesSchema` was a flat `z.record(string, FieldValue)`, so a nested payload was **rejected by Zod at the IPC boundary**; it is now recursive (a strict SUPERSET, so every existing flat payload still validates, which is why the bridge / Reconciler / journal / Designer needed no edits).
+
+The Reconciler was deliberately NOT touched (B-044 + reconnect-reconciliation stay frozen): the Inspector applies the COMPLETE field set, so each namespace arrives whole and the existing shallow top-level merge stays correct. `buildApplyPayload` deep-merges so an edit to one nested field cannot drop that comp's un-edited siblings.
+
+**Guards (red-first):** with the pre-fix root-only line restored, 4 of the 6 new unit tests go red (`expected 0 to be greater than 0` — i.e. the operator-visible "No fields."). The chain is asserted hop by hop with the real components: import (a REAL D-119 starter through the Designer's actual export projection) → the group key equals the composition instance name derived independently from the scene → nested seed → staged edit → applied payload nests under `{ instanceName: { fieldId } }` with siblings intact → the real `CommandBuilder`'s `CG UPDATE` data argument JSON-parses back to that exact object. Rendering of that shape is already pinned by `template-runtime/tests/nested-fields.test.ts` + `starter-templates/src/starter-render.test.ts`. E2E: `apps/runtime/tests/e2e/nested-composition-fields.spec.ts` imports a real starter `.vcg` through the operator UI.
+
+**LIVE CONFIRMATION — PENDING HARDWARE:**
+
+- [ ] Import a D-119 two-comp starter in the Runtime → the Inspector shows the nested fields as a labelled group (NOT "No fields.").
+- [ ] Edit a nested field → **Update** → the change renders on air (proves the value reached the binding under its namespaced key).
+- [ ] A flat, single-composition template still behaves exactly as before (regression).
 
 ## [~] B-070 — Inspector "Update" on an idle/producerless item is refused ("Not accepted"), and the refusal permanently poisons the item (zombie `pending` → R-011 `setPosition` blocked for life) ⟨priority: high⟩
 

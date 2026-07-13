@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TemplateInfo } from '@cg/shared-ipc';
-import { defaultFieldValue, type FieldValues, type Position } from '@cg/shared-schema';
+import { defaultNestedValues, type FieldValues, type Position } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { uuid } from '../../lib/uuid.js';
 import { Button } from '../../ui/Button.js';
@@ -140,8 +140,13 @@ export function LibraryPanel(): JSX.Element {
     // B-038 Phase 3 — seed the item's fields from the template's field-schema
     // defaults (not `{}`), so `CG ADD` carries real data on load. Operator edits
     // from the Inspector flow as subsequent `stack.update` values.
-    const fields: FieldValues = {};
-    for (const field of template.fields) fields[field.id] = defaultFieldValue(field);
+    // B-067 — seed the NESTED shape: a two-comp starter's fields live under the nested
+    // instance's namespace, which is the address the template's binding reads at render.
+    // `defaultNestedValues` is the same seeder the Designer's preview uses.
+    const fields: FieldValues = defaultNestedValues({
+      fields: template.fields,
+      groups: template.groups ?? [],
+    });
     return window.cg.stack.load({
       itemId: `item-${uuid()}`,
       templateId: template.templateId,

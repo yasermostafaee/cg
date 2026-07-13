@@ -1,5 +1,14 @@
 import { test as base, expect, type Locator, type Page } from '@playwright/test';
-import type { AssetEntry, FontReference, Manifest, Scene } from '@cg/shared-schema';
+import {
+  aggregateCompositionFields,
+  compositionClosure,
+  migrateGlobalFieldsToCompositions,
+  type AssetEntry,
+  type FontReference,
+  type Manifest,
+  type Scene,
+} from '@cg/shared-schema';
+import { STARTER_TEMPLATES } from '@cg/starter-templates';
 import { pack } from '@cg/vcg-format';
 
 /**
@@ -422,3 +431,75 @@ export const test = base.extend<{ app: RuntimeApp }>({
 });
 
 export { expect };
+
+/**
+ * B-067 — a REAL D-119 starter packaged the way the Designer actually exports it: the
+ * graphic composition nested inside a full-frame positioning composition, with the
+ * authored fields living on the NESTED comp (so the entry comp's own `fields` is empty).
+ *
+ * This is the exact shape that used to render "No fields." in the operator Inspector.
+ * Built from `@cg/starter-templates` rather than hand-rolled, so the fixture cannot drift
+ * from the starters the operator actually loads.
+ */
+export async function buildNestedCompVcg(
+  templateId = 'tpl-e2e-nested',
+): Promise<{ bytes: Uint8Array; groupLabel: string; fieldId: string }> {
+  const starter = STARTER_TEMPLATES.map((s) => {
+    const migrated = migrateGlobalFieldsToCompositions({ ...s.scene, layers: [] });
+    const comps = migrated.compositions ?? [];
+    const entryId = migrated.entryCompositionId ?? comps[0]?.id;
+    const entry = comps.find((c) => c.id === entryId);
+    if (entry === undefined) return null;
+    const closure = compositionClosure(migrated, entry.id);
+    const scoped: Scene = {
+      ...migrated,
+      name: entry.name,
+      resolution: entry.resolution,
+      frameRange: entry.frameRange,
+      ...(entry.activeRange !== undefined ? { activeRange: entry.activeRange } : {}),
+      ...(entry.lifecycle !== undefined ? { lifecycle: entry.lifecycle } : {}),
+      ...(entry.playout !== undefined ? { playout: entry.playout } : {}),
+      background: entry.background,
+      layers: entry.layers,
+      fields: entry.fields ?? [],
+      bindings: entry.bindings ?? [],
+      compositions: comps.filter((c) => closure.has(c.id)),
+    };
+    const aggregate = aggregateCompositionFields(scoped, scoped);
+    const group = aggregate.groups[0];
+    const field = group?.aggregate.fields[0];
+    if (aggregate.fields.length > 0 || group === undefined || field === undefined) return null;
+    return { scoped, group, field };
+  }).find((s) => s !== null);
+
+  if (starter === null || starter === undefined) {
+    throw new Error('no D-119 starter with fields exclusively in a nested composition');
+  }
+
+  const { scoped, group, field } = starter;
+  const fontDeps: readonly FontReference[] = scoped.fonts;
+  const assetIndex: readonly AssetEntry[] = [];
+  const manifestExtras = {
+    id: templateId,
+    name: scoped.name,
+    authoring: {
+      designerVersion: '0.0.0',
+      createdAt: '2026-07-13T00:00:00.000Z',
+      exportedAt: '2026-07-13T00:01:00.000Z',
+    },
+    compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+    fontDeps,
+    assetIndex,
+  } satisfies Pick<Manifest, 'id' | 'name' | 'authoring' | 'compatibility'> & {
+    fontDeps: readonly FontReference[];
+    assetIndex: readonly AssetEntry[];
+  };
+  const bytes = await pack({
+    scene: scoped,
+    manifestExtras,
+    indexHtml: '<!doctype html><html><body>placeholder</body></html>',
+    cgJs: '/* placeholder template runtime */',
+    cgCss: '/* placeholder template styles */',
+  });
+  return { bytes, groupLabel: group.label ?? group.name, fieldId: field.id };
+}

@@ -118,6 +118,24 @@ export const FieldValueSchema = z.union([
 ]);
 export type FieldValue = z.infer<typeof FieldValueSchema>;
 
-/** Map of field id → value. Operator-side `fields` payload. */
-export const FieldValuesSchema = z.record(z.string(), FieldValueSchema);
-export type FieldValues = z.infer<typeof FieldValuesSchema>;
+/**
+ * Operator-side `fields` payload: field id → value, PLUS a sub-object per nested
+ * composition instance, keyed by that instance's stable namespace name.
+ *
+ * B-067 — this used to be a flat `z.record(string, FieldValue)`, which silently made
+ * nested-composition fields unreachable: the address they already have EVERYWHERE else
+ * (the GDD advertises `{ instanceName: { fieldId } }`, and `@cg/template-runtime`
+ * resolves a binding via `values[child.name]`) could not even be expressed here, so a
+ * nested payload was REJECTED by Zod at the IPC boundary. Widening is a strict
+ * SUPERSET — every existing flat payload still validates unchanged.
+ *
+ * A namespace is disambiguated from an image value the same way the template runtime
+ * does it: an image is `{ assetId }`, and `FieldValueSchema` is tried first, so only
+ * objects that are NOT a field value fall through to the namespace branch.
+ */
+export interface FieldValues {
+  [key: string]: FieldValue | FieldValues;
+}
+export const FieldValuesSchema: z.ZodType<FieldValues> = z.lazy(() =>
+  z.record(z.string(), z.union([FieldValueSchema, FieldValuesSchema])),
+);

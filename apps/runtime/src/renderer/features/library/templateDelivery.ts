@@ -5,7 +5,7 @@ import type {
   TemplateInfo,
   TemplatesImportChannel,
 } from '@cg/shared-ipc';
-import type { Manifest, Position } from '@cg/shared-schema';
+import { aggregateCompositionFields, type Manifest, type Position } from '@cg/shared-schema';
 import { unpack, verify } from '@cg/vcg-format';
 import { ExporterSingleFile, cgCss, cgJsIife, type ImageAssetSource } from '@cg/single-file-export';
 
@@ -129,10 +129,20 @@ export async function produceTemplateDelivery(
     throw new Error(`could not be unpacked: ${err instanceof Error ? err.message : String(err)}`);
   }
 
+  // B-067 — the operator's field form must be the template's FULL field closure, not the
+  // entry composition's flat fields. A D-119 starter is a graphic composition nested in a
+  // full-frame positioning composition, and the authored fields live on the NESTED comp:
+  // `migrateGlobalFieldsToCompositions` relocates each field to the comp that owns its
+  // bound element, and the Designer exports the ENTRY comp scoped — so `scene.fields` is
+  // `[]` and the Inspector rendered "No fields." This is the same collector the GDD
+  // exporter already uses (`gdd.ts`), so `TemplateInfo` and the package's own GDD manifest
+  // finally agree on which fields exist and how they are addressed.
+  const aggregate = aggregateCompositionFields(scene, scene);
   const template: TemplateInfo = {
     templateId: manifest.id,
     templateType: scene.templateType,
-    fields: scene.fields ?? [],
+    fields: [...aggregate.fields],
+    groups: [...aggregate.groups],
   };
 
   try {

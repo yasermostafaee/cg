@@ -1,4 +1,4 @@
-import type { FieldValue, FieldValues } from '@cg/shared-schema';
+import { isFieldNamespace, type FieldValue, type FieldValues } from '@cg/shared-schema';
 
 /**
  * R-003 — the Inspector's per-item DRAFT overlay. Edits stage here (renderer-
@@ -13,9 +13,17 @@ import type { FieldValue, FieldValues } from '@cg/shared-schema';
  * `stack.state-changed`); a field renders draft-or-applied, so an incoming push
  * updates un-staged fields live while staged fields keep their draft (no
  * clobber — the recorded R-003 hazard).
+ *
+ * B-067 — a field is now addressed by a PATH, not a bare id: a nested composition's
+ * fields live under that instance's namespace (`['زیرنویس', 'name']`), which is the same
+ * address the GDD advertises and `@cg/template-runtime` resolves at render. A top-level
+ * field is just a path of length 1, so flat templates behave exactly as before.
  */
 
-const drafts = new Map<string, Record<string, FieldValue>>();
+/** Address of one editable field: the namespace chain, then the field id. */
+export type FieldPath = readonly string[];
+
+const drafts = new Map<string, FieldValues>();
 let version = 0;
 const listeners = new Set<() => void>();
 
@@ -37,22 +45,80 @@ export function draftsVersion(): number {
   return version;
 }
 
+/** The value at `path`, or undefined when the path doesn't resolve to a leaf value. */
+export function valueAt(values: FieldValues | undefined, path: FieldPath): FieldValue | undefined {
+  // `unknown` cursor: an image value `{ assetId }` is structurally assignable to the
+  // namespace type, so narrowing a `FieldValue | FieldValues` union keeps it in play and
+  // the index is rejected. Walking from `unknown` lets the guard narrow cleanly.
+  let node: unknown = values;
+  for (const key of path) {
+    if (!isFieldNamespace(node)) return undefined;
+    node = node[key];
+  }
+  return isFieldNamespace(node) ? undefined : (node as FieldValue | undefined);
+}
+
+/** True iff `path` has a staged draft value. */
+function hasDraftAt(values: FieldValues | undefined, path: FieldPath): boolean {
+  let node: unknown = values;
+  for (const key of path) {
+    if (!isFieldNamespace(node) || !(key in node)) return false;
+    node = node[key];
+  }
+  return true;
+}
+
+/** Set `value` at `path`, creating the intermediate namespaces. Mutates `root`. */
+function setAt(root: FieldValues, path: FieldPath, value: FieldValue): void {
+  let node = root;
+  for (const key of path.slice(0, -1)) {
+    const next = node[key];
+    if (!isFieldNamespace(next)) node[key] = {};
+    node = node[key] as FieldValues;
+  }
+  node[path[path.length - 1]!] = value;
+}
+
+/**
+ * Deep-merge `overlay` onto `base`. Namespaces merge recursively; a leaf value REPLACES.
+ * (Shallow spread would drop a namespace's un-staged siblings.)
+ */
+function deepMerge(base: FieldValues, overlay: FieldValues): FieldValues {
+  const out: FieldValues = { ...base };
+  for (const [key, value] of Object.entries(overlay)) {
+    const prev = out[key];
+    out[key] = isFieldNamespace(value) && isFieldNamespace(prev) ? deepMerge(prev, value) : value;
+  }
+  return out;
+}
+
+/** Every leaf path in a nested value object. */
+function leafPaths(values: FieldValues, prefix: FieldPath = []): FieldPath[] {
+  const out: FieldPath[] = [];
+  for (const [key, value] of Object.entries(values)) {
+    const path = [...prefix, key];
+    if (isFieldNamespace(value)) out.push(...leafPaths(value, path));
+    else out.push(path);
+  }
+  return out;
+}
+
 /** Stage (or overwrite) one field's draft value for an item. */
-export function stageField(itemId: string, fieldId: string, value: FieldValue): void {
+export function stageField(itemId: string, path: FieldPath, value: FieldValue): void {
   const item = drafts.get(itemId) ?? {};
-  item[fieldId] = value;
+  setAt(item, path, value);
   drafts.set(itemId, item);
   bump();
 }
 
 /** True iff the field currently has a staged draft value. */
-export function hasStaged(itemId: string, fieldId: string): boolean {
-  return drafts.get(itemId)?.[fieldId] !== undefined;
+export function hasStaged(itemId: string, path: FieldPath): boolean {
+  return hasDraftAt(drafts.get(itemId), path);
 }
 
 /** The staged draft value, or `undefined` when nothing is staged for the field. */
-export function stagedValue(itemId: string, fieldId: string): FieldValue | undefined {
-  return drafts.get(itemId)?.[fieldId];
+export function stagedValue(itemId: string, path: FieldPath): FieldValue | undefined {
+  return valueAt(drafts.get(itemId), path);
 }
 
 /**
@@ -61,11 +127,11 @@ export function stagedValue(itemId: string, fieldId: string): FieldValue | undef
  */
 export function effectiveValue(
   itemId: string,
-  fieldId: string,
+  path: FieldPath,
   applied: FieldValue | undefined,
 ): FieldValue | undefined {
   const item = drafts.get(itemId);
-  if (item !== undefined && fieldId in item) return item[fieldId];
+  if (item !== undefined && hasDraftAt(item, path)) return valueAt(item, path);
   return applied;
 }
 
@@ -77,20 +143,20 @@ export function effectiveValue(
  */
 export function isFieldDirty(
   itemId: string,
-  fieldId: string,
+  path: FieldPath,
   applied: FieldValue | undefined,
 ): boolean {
   const item = drafts.get(itemId);
-  if (item === undefined || !(fieldId in item)) return false;
-  return !valuesEqual(item[fieldId], applied);
+  if (item === undefined || !hasDraftAt(item, path)) return false;
+  return !valuesEqual(valueAt(item, path), applied);
 }
 
 /** True iff any staged field of the item differs from its applied value. */
 export function isItemDirty(itemId: string, applied: FieldValues): boolean {
   const item = drafts.get(itemId);
   if (item === undefined) return false;
-  for (const fieldId of Object.keys(item)) {
-    if (!valuesEqual(item[fieldId], applied[fieldId])) return true;
+  for (const path of leafPaths(item)) {
+    if (!valuesEqual(valueAt(item, path), valueAt(applied, path))) return true;
   }
   return false;
 }
@@ -98,12 +164,14 @@ export function isItemDirty(itemId: string, applied: FieldValues): boolean {
 /**
  * The complete field-set for the ONE atomic `stack.update`: applied values with
  * every staged draft overlaid. Sending this (vs just the drafts) keeps the wire
- * payload identical to today's full-field update and is robust to `mergeMode`.
+ * payload identical to today's full-field update and is robust to `mergeMode` —
+ * and it is why the Reconciler's shallow top-level merge stays correct for nested
+ * templates: each namespace arrives WHOLE, never as a partial patch.
  */
 export function buildApplyPayload(itemId: string, applied: FieldValues): FieldValues {
   const item = drafts.get(itemId);
   if (item === undefined) return { ...applied };
-  return { ...applied, ...item };
+  return deepMerge(applied, item);
 }
 
 /** Drop an item's entire draft (on Discard). */
@@ -111,10 +179,10 @@ export function clearDraft(itemId: string): void {
   if (drafts.delete(itemId)) bump();
 }
 
-/** A shallow copy of the item's current draft (the fields an apply will send). */
-export function snapshotDraft(itemId: string): Record<string, FieldValue> {
+/** A deep copy of the item's current draft (the fields an apply will send). */
+export function snapshotDraft(itemId: string): FieldValues {
   const item = drafts.get(itemId);
-  return item === undefined ? {} : { ...item };
+  return item === undefined ? {} : structuredClone(item);
 }
 
 /**
@@ -123,18 +191,32 @@ export function snapshotDraft(itemId: string): Record<string, FieldValue> {
  * in-flight round-trip (not in the sent payload, or re-edited to a newer value)
  * survives instead of being silently dropped.
  */
-export function clearStagedMatching(itemId: string, snapshot: Record<string, FieldValue>): void {
+export function clearStagedMatching(itemId: string, snapshot: FieldValues): void {
   const item = drafts.get(itemId);
   if (item === undefined) return;
   let changed = false;
-  for (const fieldId of Object.keys(snapshot)) {
-    if (fieldId in item && valuesEqual(item[fieldId], snapshot[fieldId])) {
-      delete item[fieldId];
+  for (const path of leafPaths(snapshot)) {
+    if (hasDraftAt(item, path) && valuesEqual(valueAt(item, path), valueAt(snapshot, path))) {
+      deleteAt(item, path);
       changed = true;
     }
   }
   if (Object.keys(item).length === 0) drafts.delete(itemId);
   if (changed) bump();
+}
+
+/** Delete the leaf at `path`, pruning namespaces it leaves empty. Mutates `root`. */
+function deleteAt(root: FieldValues, path: FieldPath): void {
+  const [head, ...rest] = path;
+  if (head === undefined) return;
+  if (rest.length === 0) {
+    delete root[head];
+    return;
+  }
+  const child = root[head];
+  if (!isFieldNamespace(child)) return;
+  deleteAt(child, rest);
+  if (Object.keys(child).length === 0) delete root[head];
 }
 
 /** Drop drafts for items no longer on the stack (wired to the snapshot). */

@@ -1,5 +1,12 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import type { DynamicField, FieldValue, StackItemState } from '@cg/shared-schema';
+import {
+  isFieldNamespace,
+  type CompositionFieldGroup,
+  type DynamicField,
+  type FieldValue,
+  type FieldValues,
+  type StackItemState,
+} from '@cg/shared-schema';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -14,6 +21,8 @@ import {
   isItemDirty,
   stageField,
   subscribeDrafts,
+  valueAt,
+  type FieldPath,
 } from './draftStore.js';
 
 /** The shared field class, plus the dirty accent (border only — no layout shift). */
@@ -61,6 +70,20 @@ const styles = {
     alignItems: 'center',
   },
   fieldLabel: { color: colors.textMuted, fontWeight: 500, display: 'flex', gap: '0.3rem' },
+  // B-067 — a nested composition's fields, indented under the instance's label.
+  group: {
+    marginTop: '0.5rem',
+    paddingInlineStart: '0.5rem',
+    borderInlineStart: `2px solid ${colors.border}`,
+  },
+  groupHeading: {
+    fontSize: '0.75rem',
+    fontWeight: 700,
+    color: colors.textMuted,
+    letterSpacing: '0.05em',
+    textTransform: 'uppercase' as const,
+    margin: '0 0 0.25rem',
+  },
 } as const;
 
 /**
@@ -106,13 +129,19 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
 
   const itemId = item.itemId;
   const schema = info?.fields ?? null;
-  const valueEntries = Object.entries(item.fields);
-  const rows: { field: DynamicField | null; key: string; value: FieldValue | undefined }[] =
-    schema !== null && schema.length > 0
-      ? schema.map((f) => ({ field: f, key: f.id, value: item.fields[f.id] }))
-      : valueEntries.map(([key, value]) => ({ field: null, key, value }));
+  const groups = info?.groups ?? [];
+  // The schema-less fallback (registry doesn't know the template) stays FLAT: with no
+  // schema there are no namespaces to infer, so every top-level VALUE is a field.
+  const inferredRows: { field: DynamicField | null; key: string }[] = Object.keys(item.fields)
+    .filter((key) => !isFieldNamespace(item.fields[key]))
+    .map((key) => ({ field: null, key }));
+  const hasSchema = (schema !== null && schema.length > 0) || groups.length > 0;
+  const rootFields: { field: DynamicField | null; key: string }[] = hasSchema
+    ? (schema ?? []).map((f) => ({ field: f, key: f.id }))
+    : inferredRows;
 
   const dirty = isItemDirty(itemId, item.fields);
+  const isEmpty = rootFields.length === 0 && groups.length === 0;
 
   return (
     <aside style={styles.panel} aria-label="Inspector">
@@ -158,43 +187,101 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
         }}
       >
         <h2 style={styles.heading}>FIELDS</h2>
-        {rows.length === 0 ? (
+        {isEmpty ? (
           <p style={styles.empty}>No fields.</p>
         ) : (
-          rows.map((row) => (
-            // Key by item+field so switching stack items remounts the controls
-            // (each re-seeds from the new item's draft-or-applied value) — no
-            // uncontrolled DOM node is ever reused across items.
-            <FieldEditor
-              key={`${itemId}-${row.key}`}
-              field={row.field}
-              fieldId={row.key}
-              itemId={itemId}
-              applied={row.value}
-            />
-          ))
+          <>
+            {rootFields.map((row) => (
+              // Key by item+path so switching stack items remounts the controls
+              // (each re-seeds from the new item's draft-or-applied value) — no
+              // uncontrolled DOM node is ever reused across items.
+              <FieldEditor
+                key={`${itemId}-${row.key}`}
+                field={row.field}
+                path={[row.key]}
+                itemId={itemId}
+                applied={valueAt(item.fields, [row.key])}
+              />
+            ))}
+            {groups.map((group) => (
+              <FieldGroup
+                key={`${itemId}-${group.name}`}
+                group={group}
+                path={[group.name]}
+                itemId={itemId}
+                applied={item.fields}
+              />
+            ))}
+          </>
         )}
       </div>
     </aside>
   );
 }
 
+/**
+ * B-067 — one nested composition instance's fields, under its namespace.
+ *
+ * The group's `name` is the STABLE namespace key the value object is addressed by (and the
+ * one `@cg/template-runtime` resolves at render); `label` is what the operator reads. Two
+ * instances of the same composition therefore stay independent, and two same-id fields in
+ * different compositions never collide — each lives at its own path. Recurses to any depth.
+ */
+function FieldGroup({
+  group,
+  path,
+  itemId,
+  applied,
+}: {
+  group: CompositionFieldGroup;
+  path: FieldPath;
+  itemId: string;
+  applied: FieldValues;
+}): JSX.Element {
+  return (
+    <section style={styles.group} aria-label={`${group.label ?? group.name} fields`}>
+      <h3 style={styles.groupHeading}>{group.label ?? group.name}</h3>
+      {group.aggregate.fields.map((f) => (
+        <FieldEditor
+          key={`${itemId}-${[...path, f.id].join('/')}`}
+          field={f}
+          path={[...path, f.id]}
+          itemId={itemId}
+          applied={valueAt(applied, [...path, f.id])}
+        />
+      ))}
+      {group.aggregate.groups.map((child) => (
+        <FieldGroup
+          key={`${itemId}-${[...path, child.name].join('/')}`}
+          group={child}
+          path={[...path, child.name]}
+          itemId={itemId}
+          applied={applied}
+        />
+      ))}
+    </section>
+  );
+}
+
 function FieldEditor({
   field,
-  fieldId,
+  path,
   itemId,
   applied,
 }: {
   field: DynamicField | null;
-  fieldId: string;
+  path: FieldPath;
   itemId: string;
   applied: FieldValue | undefined;
 }): JSX.Element {
+  // The control's accessible name stays the FIELD id (not the full path): the operator
+  // sees it inside its group, and the group's own label carries the namespace.
+  const fieldId = path[path.length - 1] ?? '';
   const label = field?.label ?? fieldId;
-  const value = effectiveValue(itemId, fieldId, applied);
+  const value = effectiveValue(itemId, path, applied);
   const kind = field?.type ?? inferKind(value);
-  const dirty = isFieldDirty(itemId, fieldId, applied);
-  const stage = (next: FieldValue): void => stageField(itemId, fieldId, next);
+  const dirty = isFieldDirty(itemId, path, applied);
+  const stage = (next: FieldValue): void => stageField(itemId, path, next);
   return (
     <div style={styles.fieldRow}>
       <span style={styles.fieldLabel}>

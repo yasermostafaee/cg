@@ -1,4 +1,5 @@
-import type { DynamicField, FieldValue } from './fields.js';
+import { z } from 'zod';
+import { DynamicFieldSchema, type DynamicField, type FieldValue } from './fields.js';
 import type { FieldBinding } from './bindings.js';
 import type { Element } from './elements.js';
 import type { Composition, Layer, Scene } from './scene.js';
@@ -32,8 +33,14 @@ export interface CompositionFieldGroup {
    * rename never orphans values. UI/GDD display the {@link label} (falling back to this).
    */
   name: string;
-  /** Friendly display label (defaults to {@link name} when absent). */
-  label?: string;
+  /**
+   * Friendly display label (defaults to {@link name} when absent).
+   *
+   * `| undefined` is explicit because the repo runs `exactOptionalPropertyTypes` and this
+   * type is now also produced by a Zod schema (B-067 — it crosses the IPC boundary in
+   * `TemplateInfo`), whose `.optional()` models an absent key as `string | undefined`.
+   */
+  label?: string | undefined;
   /** The referenced child composition id. */
   compositionId: string;
   /** The child's own aggregate (recursive — arbitrary depth). */
@@ -50,6 +57,47 @@ export interface AggregatedFields {
 export interface NestedFieldValues {
   [key: string]: FieldValue | NestedFieldValues;
 }
+
+/**
+ * A namespace sub-object — NOT a scalar field value, NOT a list, NOT an image `{assetId}`.
+ *
+ * The one rule that separates "a nested composition's values" from "a field value that
+ * happens to be an object". It was copy-pasted in `@cg/template-runtime` (the render side),
+ * the Designer's preview form and the preview modal; B-067 needs it a fourth time on the
+ * Runtime side and it also decides the `FieldValuesSchema` union, so it lives here now —
+ * one definition all of them share.
+ */
+export function isFieldNamespace(v: unknown): v is NestedFieldValues {
+  return typeof v === 'object' && v !== null && !Array.isArray(v) && !('assetId' in v);
+}
+
+/**
+ * B-067 — Zod mirrors of the two aggregate types above, so the field CLOSURE (not just
+ * the entry composition's flat fields) can cross the IPC boundary in `TemplateInfo`.
+ * The types are the source of truth; these only let them be validated on the wire.
+ */
+// `unknown` in the INPUT position: the types declare `readonly` arrays, which a mutable
+// `z.array` output cannot satisfy contravariantly. Parsing from `unknown` is what a wire
+// boundary actually does anyway.
+export const CompositionFieldGroupSchema: z.ZodType<CompositionFieldGroup, z.ZodTypeDef, unknown> =
+  z.lazy(() =>
+    z.object({
+      instanceId: z.string().min(1),
+      name: z.string().min(1),
+      label: z.string().optional(),
+      compositionId: z.string().min(1),
+      aggregate: AggregatedFieldsSchema,
+    }),
+  );
+
+/** A composition's own flat fields plus its nested-instance namespaces. */
+export const AggregatedFieldsSchema: z.ZodType<AggregatedFields, z.ZodTypeDef, unknown> = z.lazy(
+  () =>
+    z.object({
+      fields: z.array(DynamicFieldSchema),
+      groups: z.array(CompositionFieldGroupSchema),
+    }),
+);
 
 const MAX_DEPTH = 8;
 
