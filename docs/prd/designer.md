@@ -1761,7 +1761,7 @@ inspector — i.e. multi == single, fanned out.
   diamond only if keyframe-able for every selected kind. Change:
   `openspec/changes/archive/2026-06-14-keyframe-aware-group-move/`.
 
-## [~] D-055 — border-radius UI visual polish (match Loopic) ⟨priority: medium⟩
+## [x] D-055 — border-radius UI visual polish (match Loopic) ⟨priority: medium⟩ — shipped (`ddc1829`, #104); no OpenSpec change (focused visual fix, as the note predicted), so nothing to archive. Layout pinned by `apps/designer/tests/border-radius-layout.test.ts`
 
 **What:** اصلاح ظاهرِ کنترلِ border-radius در inspector تا با تصاویرِ مرجعِ Loopic بخواند. عملکرد (از D-042) درست است؛ این فقط ظاهر/چیدمان است.
 **Why:** کنترلِ فعلی کار می‌کند ولی ظاهرش با مرجع نمی‌خواند: حالتِ چهارگوشه فشرده است، toggle یک نوارِ جدا اضافه کرده، و آیکونِ حالتِ یکنواخت تودرتوست.
@@ -1847,7 +1847,7 @@ UI نمایش داده نمی‌شود و در scene-builder/applier برای te
 render/keyframe-touching → **دو-فازی (recon اول)**. احتمالاً `## MODIFIED` روی
 capabilityِ مربوط به shadow/styling. Change: `openspec/changes/separate-text-box-shadow/`.
 
-## [~] D-058 — Per-corner border-radius two-row layout ⟨priority: medium⟩
+## [x] D-058 — Per-corner border-radius two-row layout ⟨priority: medium⟩ — shipped (`191dafc`, #115); no OpenSpec change (focused layout fix, as the note predicted), so nothing to archive. Layout pinned by `apps/designer/tests/border-radius-layout.test.ts`
 
 **What:** در حالتِ per-corner، چهار اینپوتِ border-radius را در **دو ردیف** بچین:
 ردیفِ بالا گوشه‌های بالا (top-left / top-right)، ردیفِ پایین گوشه‌های پایین
