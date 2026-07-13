@@ -3,6 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig } from '@cg/shared-ipc';
+import { HEALTH_MS } from './support/harness.js';
 
 /**
  * C-001 Phase 3a — real redundancy/failover, driven against TWO `amcp-mock`
@@ -77,7 +78,7 @@ async function bootPair(autoFailoverEnabled: boolean): Promise<void> {
     { templateId: 'lower-third', templateType: 'lower-third', fields: [] },
     '<!doctype html><html><body>served</body></html>',
   );
-  await runtime.whenServerHealthy(6000);
+  await runtime.whenServerHealthy(HEALTH_MS);
 }
 
 it('auto-failover: killing the primary switches to backup; commands + health follow', async () => {

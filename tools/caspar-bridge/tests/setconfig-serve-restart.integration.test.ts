@@ -6,6 +6,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { TemplateHttpServer, type TemplateServeOptions } from '../src/template-http-server.js';
+import { BOUNDED_STOP_MS, HEALTH_MS, track } from './support/harness.js';
 
 /**
  * fix-setconfig-serve-restart — R-010 regression (operator repro, live on
@@ -64,7 +65,7 @@ async function boot(options: { templateServer?: TemplateHttpServer } = {}): Prom
     { templateId: 'lower-third', templateType: 'lower-third', fields: [] },
     '<!doctype html><html><body>served</body></html>',
   );
-  await runtime.whenServerHealthy(6000);
+  await runtime.whenServerHealthy(HEALTH_MS);
   // Prove the serve path works before the cycle (and leave the mock's GET
   // socket behind, like CEF would).
   expect((await runtime.load('warm', 'lower-third', {})).accepted).toBe(true);
@@ -80,7 +81,7 @@ it('BASELINE sequential operator cycle: bad-OSC apply then good apply → serve 
   expect(first.ok).toBe(true); // an unreachable OSC target is honest-not-fatal
   const second = await runtime!.setConfig(config(mock!.amcpPort, goodOsc));
   expect(second.ok).toBe(true);
-  await runtime!.whenServerHealthy(6000);
+  await runtime!.whenServerHealthy(HEALTH_MS);
 
   expect(runtime!.templateServe).not.toBeNull();
   expect((await runtime!.load('item1', 'lower-third', {})).accepted).toBe(true);
@@ -109,7 +110,7 @@ it('REGRESSION concurrent applies: exactly one executes, the other is refused ap
   // config succeeds, the serve is listening, and a Load ships a served URL.
   const third = await runtime!.setConfig(config(mock!.amcpPort, goodOsc));
   expect(third.ok).toBe(true);
-  await runtime!.whenServerHealthy(6000);
+  await runtime!.whenServerHealthy(HEALTH_MS);
   expect(runtime!.templateServe).not.toBeNull();
   expect((await runtime!.load('item2', 'lower-third', {})).accepted).toBe(true);
   const cg = mock!.lastCgAdd(SLOT);
@@ -118,12 +119,14 @@ it('REGRESSION concurrent applies: exactly one executes, the other is refused ap
 }, 30000);
 
 it('CEF-wedge boundedness: stop() force-destroys held idle/mid-request/preconnect sockets and resolves fast on every Node', async () => {
-  const server = new TemplateHttpServer(() => '<html>x</html>');
+  const server = track(new TemplateHttpServer(() => '<html>x</html>'), (s) => s.stop());
   await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
   const port = server.port;
 
   // (a) idle keep-alive socket with a completed request (CEF pool);
-  const agent = new http.Agent({ keepAlive: true });
+  const agent = track(new http.Agent({ keepAlive: true }), (a) => {
+    a.destroy();
+  });
   await new Promise<void>((resolve, reject) => {
     const req = http.get(`http://127.0.0.1:${String(port)}/template/x`, { agent }, (res) => {
       res.resume();
@@ -132,14 +135,18 @@ it('CEF-wedge boundedness: stop() force-destroys held idle/mid-request/preconnec
     req.on('error', reject);
   });
   // (b) a MID-REQUEST socket (partial headers, never completed);
-  const midRequest = net.connect(port, '127.0.0.1');
+  const midRequest = track(net.connect(port, '127.0.0.1'), (s) => {
+    s.destroy();
+  });
   await new Promise<void>((resolve, reject) => {
     midRequest.once('connect', resolve);
     midRequest.once('error', reject);
   });
   midRequest.write('GET /template/x HTTP/1.1\r\nHost: wedge\r\n'); // no final CRLF
   // (c) a raw PRECONNECT socket that never sent a byte.
-  const preconnect = net.connect(port, '127.0.0.1');
+  const preconnect = track(net.connect(port, '127.0.0.1'), (s) => {
+    s.destroy();
+  });
   await new Promise<void>((resolve, reject) => {
     preconnect.once('connect', resolve);
     preconnect.once('error', reject);
@@ -148,12 +155,8 @@ it('CEF-wedge boundedness: stop() force-destroys held idle/mid-request/preconnec
   const t0 = Date.now();
   await server.stop();
   const elapsed = Date.now() - t0;
-  expect(elapsed).toBeLessThan(1000); // bounded — the wedge is impossible
+  expect(elapsed).toBeLessThan(BOUNDED_STOP_MS); // bounded — the wedge is impossible
   expect(server.listening).toBe(false);
-
-  agent.destroy();
-  midRequest.destroy();
-  preconnect.destroy();
 }, 15000);
 
 it('stop() lets an IN-FLIGHT response flush (never severs an active template fetch) yet stays bounded for a stalled client', async () => {
@@ -163,7 +166,7 @@ it('stop() lets an IN-FLIGHT response flush (never severs an active template fet
   // contention, and the socket (not yet in #busy) was instantly severed:
   // this test's own ECONNRESET failure on the red main runs.
   const bigHtml = `<html><body>${'x'.repeat(512 * 1024)}</body></html>`;
-  const server = new TemplateHttpServer(() => bigHtml);
+  const server = track(new TemplateHttpServer(() => bigHtml), (s) => s.stop());
   await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
   const port = server.port;
 
@@ -194,13 +197,15 @@ it('stop() lets an IN-FLIGHT response flush (never severs an active template fet
   // The active response flushed (no severed fetch)…
   await expect(fetching).resolves.toBeGreaterThan(512 * 1024);
   // …and teardown stayed bounded (grace, not forever).
-  expect(elapsed).toBeLessThan(1500);
+  expect(elapsed).toBeLessThan(BOUNDED_STOP_MS);
 
   // (b) a STALLED client (receives the response start, then never reads
   // again) — the grace deadline force-destroys it; stop() is still bounded.
-  const server2 = new TemplateHttpServer(() => bigHtml);
+  const server2 = track(new TemplateHttpServer(() => bigHtml), (s) => s.stop());
   await server2.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
-  const stalled = net.connect(server2.port, '127.0.0.1');
+  const stalled = track(net.connect(server2.port, '127.0.0.1'), (s) => {
+    s.destroy();
+  });
   await new Promise<void>((resolve, reject) => {
     stalled.once('connect', resolve);
     stalled.once('error', reject);
@@ -220,8 +225,7 @@ it('stop() lets an IN-FLIGHT response flush (never severs an active template fet
   await stallStarted;
   const t1 = Date.now();
   await server2.stop();
-  expect(Date.now() - t1).toBeLessThan(1500); // grace (500ms) + margin
-  stalled.destroy();
+  expect(Date.now() - t1).toBeLessThan(BOUNDED_STOP_MS); // grace (500ms), not forever
 }, 20000);
 
 it('stop() never severs a request that has ARRIVED but is not yet parsed — the keep-alive next-fetch window', async () => {
@@ -236,10 +240,12 @@ it('stop() never severs a request that has ARRIVED but is not yet parsed — the
   // one full loop iteration, letting the arrived request join #busy and
   // flush; pre-fix this was a deterministic ECONNRESET.
   const body = '<html><body>parse-window</body></html>';
-  const server = new TemplateHttpServer(() => body);
+  const server = track(new TemplateHttpServer(() => body), (s) => s.stop());
   await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
 
-  const sock = net.connect(server.port, '127.0.0.1');
+  const sock = track(net.connect(server.port, '127.0.0.1'), (s) => {
+    s.destroy();
+  });
   await new Promise<void>((resolve, reject) => {
     sock.once('connect', resolve);
     sock.once('error', reject);
@@ -270,7 +276,7 @@ it('stop() never severs a request that has ARRIVED but is not yet parsed — the
   // The arrived request flushed a complete second response (no ECONNRESET,
   // no truncation), and teardown stayed bounded.
   expect(received.split(body).length - 1).toBe(2);
-  expect(elapsed).toBeLessThan(1500);
+  expect(elapsed).toBeLessThan(BOUNDED_STOP_MS);
 }, 20000);
 
 /** start() succeeds once (boot), then always throws — the injected bind failure. */
@@ -293,7 +299,7 @@ it('REGRESSION loud-failure contract: serve down while desired → apply-failed 
   expect(applied.ok).toBe(false);
   expect(applied.reason).toBe('apply-failed');
   expect(runtime!.templateServe).toBeNull();
-  await runtime!.whenServerHealthy(6000);
+  await runtime!.whenServerHealthy(HEALTH_MS);
 
   // The bare-id contract: the load is REFUSED with a clear reason and no
   // NEW CG ADD reaches the wire (pre-fix: a bare id went out and 404'd).

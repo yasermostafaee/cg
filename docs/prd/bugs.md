@@ -288,6 +288,77 @@ It should print exactly one line — the known, accepted `B-056`. Anything else 
 
 **Regression test:** a lint run over a tree that contains a stray `apps/designer/vite.config.ts.timestamp-x.mjs` must not fail — drop such a file in, run `pnpm --filter @cg/designer lint`, and expect 0 errors (today it reports the file / races on it).
 
+## [~] B-073 — the recurring test-flakiness family: socket/timer integration reds under parallel CPU load + an E2E that silently tests a STALE build ⟨priority: high⟩ — fixed on `fix/test-infra-batch`
+
+Filed here (not in the app files) because the family spans `@cg/caspar-bridge`,
+`@cg/caspar-client` and the Playwright tooling. [[B-071]] (turbo/vite lint race) is a
+sibling: same shape — green code, red CI, nothing wrong with the source.
+
+**Repro (cluster 1 — socket/timer integration):**
+
+1. Load the box so the vitest forks are genuinely starved (this is the whole point — an
+   idle machine will NOT reproduce it): `node -e "const{Worker}=require('node:worker_threads');const s='const u=Date.now()+3e5;while(Date.now()<u){Math.sqrt(Math.random()*1e9)}';for(let i=0;i<24;i++)new Worker(s,{eval:true})"`
+2. `pnpm turbo run test --filter=@cg/caspar-bridge --filter=@cg/caspar-client --force`, 3×.
+3. On `main` (pre-fix) **2 of 3 runs went red**; the same runs pass on an idle box.
+
+**Expected:** both suites pass isolated AND under full parallel `pnpm test`, repeatably.
+**Actual (pre-fix):** nondeterministic reds, always the SAME signature —
+`Error: declared CasparCG server(s) did not reach HEALTHY in time` — in
+`pending-update-completion.integration.test.ts` and `setconfig-serve-restart.integration.test.ts`.
+
+**Root cause — wall-clock budgets on SETUP, not a leak.** Reaching `healthy` is
+`connect → AMCP handshake → 150 ms resync` (`RESYNC_MS = 150`), and the handshake's own
+`VERSION` timeout is **1 s**. On a contended fork one missed round-trip costs a timeout
+**plus** a backoff **plus** a whole reconnect cycle — two of those blow the `whenServerHealthy(5000)`
+budget the tests hardcoded. None of those tests is asserting "the handshake completes within
+5 s"; health is _setup_. The 5 s ceiling encoded "and this box schedules promptly", which a
+loaded CI box does not.
+
+A second, independent defect in the same family: **cleanup an assertion can skip.** Many
+tests bound a server/socket/`setInterval` and released it on the _trailing lines_ of the test
+body, so the first failing `expect` leaked a listening server, a TCP socket, or a live
+`HeartbeatService` interval for the rest of the fork — turning one honest red into a cascade
+of unrelated ones.
+
+**Ruled out (measured, not assumed):** the `freeUdpPort()` TOCTOU (bind :0 → close → hand the
+number out). It _looks_ like the classic leaked-port race, but a 1000-cycle alloc→bind churn
+measured **0 EADDRINUSE** — Windows does not immediately recycle a just-closed ephemeral port.
+No fix was made on that theory.
+
+**Repro (cluster 2 — Designer clock/sequence E2E, "2→1→0 failures across identical runs"):**
+`reuseExistingServer: !process.env.CI` meant every local run silently adopted **whatever** was
+already listening on the port — including an orphaned `vite preview` still serving an **older
+`dist/`**. The suite then tested stale code, so the same commit passed or failed depending on
+which server happened to be up. Not a timing bug at all.
+
+**Fix (all test-infra; no on-air behavior, no AMCP verbs, no quoter/escaping):**
+
+- `HEALTH_MS = 15_000` (`tools/caspar-bridge/tests/support/harness.ts`) replaces every hardcoded
+  `whenServerHealthy(5000|6000|15000)`. A liveness bound, not a performance assert — a server
+  that never goes healthy still fails, just later and with the right message.
+- `testTimeout` 10 s → 45 s (bridge) / 30 s (client): the old default sat _below_ the internal
+  budgets several tests already spend, so a contended fork hit the _test_ timeout before its own
+  assertions could speak.
+- `track(resource, release)` in both suites' `tests/support/harness.ts`: registers the release at
+  **creation** time and runs it from `afterEach` (LIFO), so cleanup cannot be skipped by a failing
+  assertion. Applied to every server/socket/agent/queue/heartbeat bound inside a test body.
+- `BOUNDED_STOP_MS = 5_000` replaces `expect(elapsed).toBeLessThan(1000|1500)`. The property is
+  "`stop()` is bounded, not wedged" — the wedge it guards would hang forever, so any finite ceiling
+  proves it; the old ones also asserted machine speed.
+- `server-restart-retake`: fixed `delay(150)` → the mock's real `traceFlush()` write barrier (a
+  truncated NDJSON read was misaligning offset-based slicing).
+- `single-server`: the "no health churn" assert now compares consecutive published values instead
+  of counting events in a 1.5 s wall-clock window — a starvation flap is a _distinct_ value and is
+  correctly ignored; the B-046 phantom loop (a **redundant, identical** publish) is still caught.
+- Playwright (both apps): `reuseExistingServer` now defaults **off** (`PW_REUSE_SERVER=1` opts back
+  in). Every run gets a fresh preview of the build turbo just produced, and `--strictPort` turns an
+  occupied port into a LOUD failure instead of a silent stale serve.
+
+**Verification:** under the identical 24-hog starvation that reddened 2 of 3 baseline runs, the
+post-fix suites are **3/3 green** (bridge 87 tests / 24 files, client 246 tests / 19 files), both
+isolated and under the parallel run. Note the flake is probabilistic — 3/3 green is the agreed bar,
+not a proof of absence; the causal fix for the one observed signature is what carries the claim.
+
 <!-- Add new open bugs above this line using the format. Example:
 
 ## [ ] B-0NN — Export blocked dialog shows wrong error count

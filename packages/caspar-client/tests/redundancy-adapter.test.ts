@@ -9,6 +9,7 @@ import {
   type ServerSession,
   type ServerSessionState,
 } from '../src/index.js';
+import { track } from './support/harness.js';
 
 /**
  * RedundancyAdapter integration tests against two parallel amcp-mock
@@ -204,14 +205,26 @@ describe('RedundancyAdapter — failover', () => {
   });
 
   it('does not auto-failover when autoFailoverEnabled=false', async () => {
-    const mockA = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-    const mockB = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-    const transportA = new AmcpTransport();
+    const mockA = track(await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true }), (m) =>
+      m.stop(),
+    );
+    const mockB = track(await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true }), (m) =>
+      m.stop(),
+    );
+    const transportA = track(new AmcpTransport(), (t) => {
+      t.destroy();
+    });
     await transportA.connect(mockA.host, mockA.amcpPort);
-    const transportB = new AmcpTransport();
+    const transportB = track(new AmcpTransport(), (t) => {
+      t.destroy();
+    });
     await transportB.connect(mockB.host, mockB.amcpPort);
-    const queueA = new CommandQueue(transportA);
-    const queueB = new CommandQueue(transportB);
+    const queueA = track(new CommandQueue(transportA), (q) => {
+      q.dispose();
+    });
+    const queueB = track(new CommandQueue(transportB), (q) => {
+      q.dispose();
+    });
     const sessionA = makeFakeSession('A', queueA);
     const sessionB = makeFakeSession('B', queueB);
     const adapter = new RedundancyAdapter({
@@ -226,13 +239,6 @@ describe('RedundancyAdapter — failover', () => {
     // Manual still works.
     await adapter.failover('manual');
     expect(adapter.currentPrimary).toBe('B');
-
-    queueA.dispose();
-    queueB.dispose();
-    transportA.destroy();
-    transportB.destroy();
-    await mockA.stop();
-    await mockB.stop();
   });
 
   it('detectSplitBrain returns 0 when views agree', async () => {
@@ -268,15 +274,25 @@ describe('RedundancyAdapter — failover', () => {
 
 describe('RedundancyAdapter — B-046 dead backup is quiet and memory-bounded', () => {
   it('a declared-but-dead backup produces no divergence/split-brain/replay; journal stays capped', async () => {
-    const mockA = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-    const transportA = new AmcpTransport();
+    const mockA = track(await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true }), (m) =>
+      m.stop(),
+    );
+    const transportA = track(new AmcpTransport(), (t) => {
+      t.destroy();
+    });
     await transportA.connect(mockA.host, mockA.amcpPort);
-    const queueA = new CommandQueue(transportA);
+    const queueA = track(new CommandQueue(transportA), (q) => {
+      q.dispose();
+    });
     // B is declared but DOWN: an unconnected transport (every enqueue rejects
     // with "socket not writable", like the real bridge's dead 5251) and a
     // session that knows it is disconnected.
-    const transportB = new AmcpTransport();
-    const queueB = new CommandQueue(transportB);
+    const transportB = track(new AmcpTransport(), (t) => {
+      t.destroy();
+    });
+    const queueB = track(new CommandQueue(transportB), (q) => {
+      q.dispose();
+    });
     const sessionA = makeFakeSession('A', queueA);
     const sessionB = makeFakeSession('B', queueB, 'disconnected');
     const adapter = new RedundancyAdapter({
@@ -306,23 +322,27 @@ describe('RedundancyAdapter — B-046 dead backup is quiet and memory-bounded', 
     expect(persistent).toHaveLength(0);
     expect(resends).toHaveLength(0);
     expect(adapter.journal.all().length).toBeLessThanOrEqual(10);
-
-    queueA.dispose();
-    queueB.dispose();
-    transportA.destroy();
-    transportB.destroy();
-    await mockA.stop();
   });
 
   it('a LIVE backup that fails a send still counts as divergence', async () => {
-    const mockA = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-    const transportA = new AmcpTransport();
+    const mockA = track(await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true }), (m) =>
+      m.stop(),
+    );
+    const transportA = track(new AmcpTransport(), (t) => {
+      t.destroy();
+    });
     await transportA.connect(mockA.host, mockA.amcpPort);
-    const queueA = new CommandQueue(transportA);
+    const queueA = track(new CommandQueue(transportA), (q) => {
+      q.dispose();
+    });
     // B claims to be healthy but its transport is gone — a live peer failing
     // a mirrored command is REAL evidence, not expected downtime.
-    const transportB = new AmcpTransport();
-    const queueB = new CommandQueue(transportB);
+    const transportB = track(new AmcpTransport(), (t) => {
+      t.destroy();
+    });
+    const queueB = track(new CommandQueue(transportB), (q) => {
+      q.dispose();
+    });
     const sessionA = makeFakeSession('A', queueA);
     const sessionB = makeFakeSession('B', queueB, 'healthy');
     const adapter = new RedundancyAdapter({
@@ -337,21 +357,21 @@ describe('RedundancyAdapter — B-046 dead backup is quiet and memory-bounded', 
     await adapter.send('PLAY 1-10 "x" HTML');
     expect(divergences).toHaveLength(1);
     expect(divergences[0]?.backupCode).toBe(-1);
-
-    queueA.dispose();
-    queueB.dispose();
-    transportA.destroy();
-    transportB.destroy();
-    await mockA.stop();
   });
 });
 
 describe('RedundancyAdapter — B-046 single-server (no declared backup)', () => {
   it('sends primary-only, refuses failover, and has no split-brain surface', async () => {
-    const mockA = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-    const transportA = new AmcpTransport();
+    const mockA = track(await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true }), (m) =>
+      m.stop(),
+    );
+    const transportA = track(new AmcpTransport(), (t) => {
+      t.destroy();
+    });
     await transportA.connect(mockA.host, mockA.amcpPort);
-    const queueA = new CommandQueue(transportA);
+    const queueA = track(new CommandQueue(transportA), (q) => {
+      q.dispose();
+    });
     const sessionA = makeFakeSession('A', queueA);
     const adapter = new RedundancyAdapter({
       strategy: 'mirror-sync',
@@ -384,10 +404,6 @@ describe('RedundancyAdapter — B-046 single-server (no declared backup)', () =>
     // No second brain to split.
     expect(adapter.detectSplitBrain(new Map([['1:10', 'html']]), new Map())).toBe(0);
     expect(events).toEqual([]);
-
-    queueA.dispose();
-    transportA.destroy();
-    await mockA.stop();
   });
 });
 
@@ -502,14 +518,26 @@ describe('RedundancyAdapter — M9.1 persistent divergence + corrective resend',
   });
 
   it('replays the RIGHT entries: every retained ok line, in order, to the live backup', async () => {
-    const mockA = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-    const mockB = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-    const transportA = new AmcpTransport();
+    const mockA = track(await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true }), (m) =>
+      m.stop(),
+    );
+    const mockB = track(await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true }), (m) =>
+      m.stop(),
+    );
+    const transportA = track(new AmcpTransport(), (t) => {
+      t.destroy();
+    });
     await transportA.connect(mockA.host, mockA.amcpPort);
-    const transportB = new AmcpTransport();
+    const transportB = track(new AmcpTransport(), (t) => {
+      t.destroy();
+    });
     await transportB.connect(mockB.host, mockB.amcpPort);
-    const queueA = new CommandQueue(transportA);
-    const queueB = new CommandQueue(transportB);
+    const queueA = track(new CommandQueue(transportA), (q) => {
+      q.dispose();
+    });
+    const queueB = track(new CommandQueue(transportB), (q) => {
+      q.dispose();
+    });
     const adapter = new RedundancyAdapter({
       strategy: 'mirror-sync',
       sessions: { A: makeFakeSession('A', queueA), B: makeFakeSession('B', queueB) },
@@ -531,24 +559,29 @@ describe('RedundancyAdapter — M9.1 persistent divergence + corrective resend',
     // ok-resolved journal entry, in order, and only at the backup.
     expect(resends.map((r) => r.line)).toEqual(lines);
     expect(resends.every((r) => r.target === 'B')).toBe(true);
-
-    queueA.dispose();
-    queueB.dispose();
-    transportA.destroy();
-    transportB.destroy();
-    await mockA.stop();
-    await mockB.stop();
   });
 
   it('with a capped journal, the resend replays exactly the retained tail', async () => {
-    const mockA = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-    const mockB = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-    const transportA = new AmcpTransport();
+    const mockA = track(await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true }), (m) =>
+      m.stop(),
+    );
+    const mockB = track(await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true }), (m) =>
+      m.stop(),
+    );
+    const transportA = track(new AmcpTransport(), (t) => {
+      t.destroy();
+    });
     await transportA.connect(mockA.host, mockA.amcpPort);
-    const transportB = new AmcpTransport();
+    const transportB = track(new AmcpTransport(), (t) => {
+      t.destroy();
+    });
     await transportB.connect(mockB.host, mockB.amcpPort);
-    const queueA = new CommandQueue(transportA);
-    const queueB = new CommandQueue(transportB);
+    const queueA = track(new CommandQueue(transportA), (q) => {
+      q.dispose();
+    });
+    const queueB = track(new CommandQueue(transportB), (q) => {
+      q.dispose();
+    });
     const adapter = new RedundancyAdapter({
       strategy: 'mirror-sync',
       sessions: { A: makeFakeSession('A', queueA), B: makeFakeSession('B', queueB) },
@@ -569,24 +602,29 @@ describe('RedundancyAdapter — M9.1 persistent divergence + corrective resend',
 
     // maxEntries=2 evicted the first line — the replay is the retained tail.
     expect(resends.map((r) => r.line)).toEqual(['PLAY 1-11 "b" HTML', 'PLAY 1-12 "c" HTML']);
-
-    queueA.dispose();
-    queueB.dispose();
-    transportA.destroy();
-    transportB.destroy();
-    await mockA.stop();
-    await mockB.stop();
   });
 
   it('correctiveResendEnabled=false leaves the journal alone', async () => {
-    const mockA = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-    const mockB = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
-    const transportA = new AmcpTransport();
+    const mockA = track(await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true }), (m) =>
+      m.stop(),
+    );
+    const mockB = track(await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true }), (m) =>
+      m.stop(),
+    );
+    const transportA = track(new AmcpTransport(), (t) => {
+      t.destroy();
+    });
     await transportA.connect(mockA.host, mockA.amcpPort);
-    const transportB = new AmcpTransport();
+    const transportB = track(new AmcpTransport(), (t) => {
+      t.destroy();
+    });
     await transportB.connect(mockB.host, mockB.amcpPort);
-    const queueA = new CommandQueue(transportA);
-    const queueB = new CommandQueue(transportB);
+    const queueA = track(new CommandQueue(transportA), (q) => {
+      q.dispose();
+    });
+    const queueB = track(new CommandQueue(transportB), (q) => {
+      q.dispose();
+    });
     const adapter = new RedundancyAdapter({
       strategy: 'mirror-sync',
       sessions: { A: makeFakeSession('A', queueA), B: makeFakeSession('B', queueB) },
@@ -604,12 +642,5 @@ describe('RedundancyAdapter — M9.1 persistent divergence + corrective resend',
     await new Promise((r) => setTimeout(r, 50));
     expect(persistent).toHaveLength(1);
     expect(resends).toHaveLength(0);
-
-    queueA.dispose();
-    queueB.dispose();
-    transportA.destroy();
-    transportB.destroy();
-    await mockA.stop();
-    await mockB.stop();
   });
 });

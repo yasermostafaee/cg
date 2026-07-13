@@ -3,6 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
+import { HEALTH_MS } from './support/harness.js';
 
 /**
  * B-070 — `update` gets the PRODUCER-STATE rule it never had.
@@ -71,7 +72,7 @@ async function boot(): Promise<void> {
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);
-  await runtime.whenServerHealthy(6000);
+  await runtime.whenServerHealthy(HEALTH_MS);
 }
 
 function itemOf(itemId: string) {

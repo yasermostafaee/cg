@@ -4,6 +4,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import type { FieldValues } from '@cg/shared-schema';
+import { HEALTH_MS } from './support/harness.js';
 
 /**
  * B-041 (take 2) — the full special-character matrix (`"`, `\` ×1–4, newline, tab,
@@ -82,7 +83,7 @@ it('CG ADD + CG UPDATE carry the full B-041 matrix byte-exact (Persian + lists i
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);
-  await runtime.whenServerHealthy(5000);
+  await runtime.whenServerHealthy(HEALTH_MS);
 
   const slot = { channel: 1, layer: 10 };
 

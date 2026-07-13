@@ -17,6 +17,7 @@ import {
 } from '@cg/shared-ipc';
 import { CasparRuntime, deriveOscBindHost } from '../src/caspar-runtime.js';
 import { createBridge, type BridgeHandle } from '../src/index.js';
+import { HEALTH_MS } from './support/harness.js';
 
 /**
  * R-010 — runtime server reconfiguration. Two amcp-mocks stand in for the
@@ -83,12 +84,16 @@ function wsInvoke<C extends AnyChannel>(
 ): Promise<ChannelResponse<C>> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(url);
+    // EVERY exit path clears the timer AND disposes the socket. The error path
+    // used to reject while leaving the WebSocket open — a leaked client (with
+    // its reconnect noise) outlived the test that created it.
     const timer = setTimeout(() => {
-      ws.terminate();
+      ws.terminate(); // a graceful close can itself hang on a wedged socket
       reject(new Error(`wsInvoke timed out: ${channel.name}`));
     }, 8000);
     ws.on('error', (err) => {
       clearTimeout(timer);
+      ws.terminate(); // an errored socket may never complete a graceful close
       reject(err);
     });
     ws.on('open', () => {
@@ -127,7 +132,7 @@ it('re-points the running bridge: refused on air, Remove-All clears + unblocks, 
   runtime.start();
   await runtime.startServing();
   runtime.templateImport({ ...TEMPLATE }, HTML);
-  await runtime.whenServerHealthy(6000);
+  await runtime.whenServerHealthy(HEALTH_MS);
 
   // Put something on air.
   expect((await runtime.load('item1', 'lower-third', {})).accepted).toBe(true);
@@ -152,7 +157,7 @@ it('re-points the running bridge: refused on air, Remove-All clears + unblocks, 
   expect(applied.ok).toBe(true);
   expect(applied.templateServe?.exposed).toBe(false);
   expect(runtime.config().servers.A.amcpPort).toBe(mockB.amcpPort);
-  await runtime.whenServerHealthy(6000);
+  await runtime.whenServerHealthy(HEALTH_MS);
 
   // The template registry survived the switch — no re-import needed. The
   // CG ADD reaches B (recorded via its resolving handler seeing the URL).
@@ -210,7 +215,7 @@ it('persists the applied config across a bridge restart; explicit connection fla
   // config and reaches HEALTHY against mock B.
   bridge = await createBridge({ port: 0, persistPath });
   expect(bridge.runtime.config()).toEqual(persisted);
-  await bridge.runtime.whenServerHealthy(6000);
+  await bridge.runtime.whenServerHealthy(HEALTH_MS);
   await bridge.close();
   bridge = null;
 

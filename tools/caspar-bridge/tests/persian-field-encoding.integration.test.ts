@@ -4,6 +4,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import type { FieldValues } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
+import { HEALTH_MS } from './support/harness.js';
 
 /**
  * B-066 (the "????" downstream symptom) — UTF-8 INTEGRITY of the field
@@ -68,7 +69,7 @@ it('a Persian field payload reaches the CG ADD wire byte-exact — exact codepoi
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);
-  await runtime.whenServerHealthy(6000);
+  await runtime.whenServerHealthy(HEALTH_MS);
 
   expect((await runtime.load('item1', 'lower-third', PERSIAN)).accepted).toBe(true);
 

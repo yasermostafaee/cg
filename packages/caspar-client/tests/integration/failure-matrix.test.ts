@@ -11,6 +11,7 @@ import {
   type RedundancyStrategy,
   type ServerSession,
 } from '../../src/index.js';
+import { track } from '../support/harness.js';
 
 /**
  * Integration tests that exercise the failure rows of Phase 5 §10.
@@ -228,21 +229,27 @@ describe('§10 row: backpressure → failover trigger', () => {
       return { kind: 'ok', code: 202, verb: 'SLOW' };
     });
 
-    const queueA = new CommandQueue(transports[0], {
-      backpressureThreshold: 3,
-      failoverSuggestedThreshold: 5,
-    });
+    // The stalled sends only settle once the queue is disposed, so dispose +
+    // drain is the queue's release — registered here, at creation, so a failing
+    // expect below can't leak the queue (or leave the sends dangling).
+    const pending: Promise<unknown>[] = [];
+    const queueA = track(
+      new CommandQueue(transports[0], {
+        backpressureThreshold: 3,
+        failoverSuggestedThreshold: 5,
+      }),
+      async (q) => {
+        q.dispose();
+        for (const p of pending) await p;
+      },
+    );
     const events: string[] = [];
     queueA.on('backpressure', () => events.push('bp'));
     queueA.on('failover-suggested', () => events.push('fs'));
 
-    const pending: Promise<unknown>[] = [];
     for (let i = 0; i < 6; i++) pending.push(queueA.enqueue('SLOW 1-10').catch(() => undefined));
     expect(events).toContain('bp');
     expect(events).toContain('fs');
-
-    queueA.dispose();
-    for (const p of pending) await p;
   });
 });
 
@@ -323,15 +330,19 @@ describe('§10 row: heartbeat → AMCP axis failure', () => {
       await delay(200);
       return { kind: 'ok-line', code: 201, verb: 'VERSION', data: '2.3.2 Stable' };
     });
-    const hb = new HeartbeatService(queues[0], {
-      intervalMs: 50,
-      timeoutMs: 30,
-      missBudget: 2,
-    });
+    const hb = track(
+      new HeartbeatService(queues[0], {
+        intervalMs: 50,
+        timeoutMs: 30,
+        missBudget: 2,
+      }),
+      (h) => {
+        h.stop();
+      },
+    );
     const failed = new Promise<void>((resolve) => hb.once('amcp-axis-failed', () => resolve()));
     hb.start();
     await failed;
     expect(hb.status.axisFailed).toBe(true);
-    hb.stop();
   });
 });

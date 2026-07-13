@@ -9,8 +9,9 @@ import { chromium, defineConfig, devices } from '@playwright/test';
  * app boots in test mode because the fixture sets `window.CG_E2E` before app JS
  * — see `tests/e2e/fixtures/runtime.ts`.
  *
- * Local: `pnpm test:e2e` (turbo builds first); `reuseExistingServer` lets you
- * keep a `vite preview` running for fast iteration. Mirrors the Designer config.
+ * Local: `pnpm test:e2e` (turbo builds first) starts a FRESH preview of that build;
+ * export `PW_REUSE_SERVER=1` to keep one running for fast iteration. Mirrors the
+ * Designer config.
  */
 const PORT = 4174;
 
@@ -62,7 +63,10 @@ export default defineConfig({
   webServer: {
     command: `pnpm exec vite preview --port ${String(PORT)} --strictPort`,
     url: `http://127.0.0.1:${String(PORT)}`,
-    reuseExistingServer: !process.env.CI,
+    // B-073 — never adopt an orphaned server serving a stale `dist/` (see the Designer
+    // config for the full rationale). Fresh preview by default; `--strictPort` fails loudly
+    // on an occupied port. PW_REUSE_SERVER=1 opts back into reuse for fast iteration.
+    reuseExistingServer: process.env.PW_REUSE_SERVER === '1',
     timeout: 120_000,
   },
 });

@@ -3,6 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig } from '@cg/shared-ipc';
+import { HEALTH_MS } from './support/harness.js';
 
 /**
  * B-046 — declared single-server operation. The operator's default is ONE
@@ -55,7 +56,7 @@ it('single-server: healthy on A alone, playout works, no backup in health, failo
 
   // The B-046 footgun: with the old both-sessions contract this could never
   // resolve without a phantom backup connecting.
-  await runtime.whenServerHealthy(5000);
+  await runtime.whenServerHealthy(HEALTH_MS);
 
   const health = runtime.health();
   expect(health.currentPrimary).toBe('A');
@@ -74,11 +75,32 @@ it('single-server: healthy on A alone, playout works, no backup in health, failo
 
   // Steady state is QUIET: no reconnect-looping phantom session publishing
   // unchanged health ~2×/cycle (the B-046 churn).
-  let publishes = 0;
-  const off = runtime.healthChanged.subscribe(() => {
-    publishes += 1;
+  //
+  // The property is asserted on the VALUE of what was published, never on a
+  // count of events inside a wall-clock window. The old `publishes === 0` after
+  // a 1.5 s sleep also encoded "and this fork is scheduled promptly": a starved
+  // fork lets the OSC stream go stale, HONESTLY flaps A to 'degraded' and back,
+  // and that state-CHANGING publish reddened the test for something it never
+  // meant to assert. The churn's signature is the exact opposite — a REDUNDANT
+  // publish: the phantom backup never appears in a single-server snapshot, so
+  // its reconnect loop re-emits an IDENTICAL ConnectionHealth. That value is
+  // pure (label/state/currentPrimary/strategy — no timestamps, no counters), so
+  // "identical to the previously published snapshot" is an exact comparison, not
+  // a tolerance. The window now bounds only how much evidence we gather; it can
+  // no longer decide the verdict.
+  const redundant: string[] = [];
+  let last = JSON.stringify(runtime.health());
+  const off = runtime.healthChanged.subscribe((next) => {
+    const published = JSON.stringify(next);
+    if (published === last) redundant.push(published); // a no-op publish IS the churn
+    last = published;
   });
   await new Promise((r) => setTimeout(r, 1500));
   off();
-  expect(publishes).toBe(0);
+  expect(redundant).toEqual([]);
+
+  // …and the declared session converged back to HEALTHY with still no backup:
+  // a starvation blip is transient, a phantom reconnect loop would not be.
+  await runtime.whenServerHealthy(HEALTH_MS);
+  expect(runtime.health().backup).toBeUndefined();
 }, 20000);

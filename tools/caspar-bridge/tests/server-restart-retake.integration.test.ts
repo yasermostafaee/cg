@@ -6,6 +6,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
+import { HEALTH_MS } from './support/harness.js';
 
 /**
  * B-054 — `#loaded` (producer-existence bookkeeping) must not survive an AMCP
@@ -94,10 +95,12 @@ async function waitFor(cond: () => boolean, timeoutMs: number, what: string): Pr
 }
 
 /** The mock's NDJSON wire trace: recv'd AMCP lines, in arrival order. */
-async function recvLines(file: string): Promise<string[]> {
-  // The trace stream flushes asynchronously; give it a beat.
-  await delay(150);
-  if (!fs.existsSync(file)) return [];
+async function recvLines(m: MockHandle, file: string): Promise<string[]> {
+  // The trace stream flushes asynchronously — await the mock's write barrier
+  // (every line queued so far is in the file) instead of sleeping: a fixed
+  // sleep under CI contention read TRUNCATED traces, which both misses lines
+  // and misaligns the offset-based slicing below.
+  await m.traceFlush();
   return fs
     .readFileSync(file, 'utf-8')
     .split('\n')
@@ -113,7 +116,7 @@ async function bootRuntime(config: ConnectionConfig): Promise<CasparRuntime> {
   r.start();
   await r.startServing();
   r.templateImport(TEMPLATE, HTML);
-  await r.whenServerHealthy(6000);
+  await r.whenServerHealthy(HEALTH_MS);
   return r;
 }
 
@@ -166,7 +169,7 @@ it('B-054 repro: a take after a CasparCG restart re-ADDs and renders — never a
   expect(mock.layerState(SLOT)?.onAir).toBe(true);
   await expect(mock.waitForCgAddResolution(SLOT)).resolves.toBe('resolved');
 
-  const lines = await recvLines(trace2);
+  const lines = await recvLines(mock, trace2);
   const add = lines.findIndex((l) => l.startsWith('CG 1-10 ADD'));
   const play = lines.findIndex((l) => l.startsWith('CG 1-10 PLAY'));
   expect(add).toBeGreaterThanOrEqual(0);
@@ -193,7 +196,7 @@ it('transient blip: the reconnect itself sends nothing beyond the handshake, air
   await expect(mock.waitForCgAddResolution(SLOT)).resolves.toBe('resolved');
   expect((await r.take('item1')).accepted).toBe(true);
   expect(mock.layerState(SLOT)?.onAir).toBe(true);
-  const preBlipCount = (await recvLines(trace)).length;
+  const preBlipCount = (await recvLines(mock, trace)).length;
 
   // ── TCP reset; the SAME server keeps its producers ──
   mock.closeAllAmcpConnections();
@@ -203,7 +206,7 @@ it('transient blip: the reconnect itself sends nothing beyond the handshake, air
   // The invalidation is bookkeeping-only: between reconnect and the next
   // operator action the bridge sent nothing but the session handshake, and
   // what was on air is still on air.
-  const sinceBlip = (await recvLines(trace)).slice(preBlipCount);
+  const sinceBlip = (await recvLines(mock, trace)).slice(preBlipCount);
   expect(sinceBlip.every((l) => l.startsWith('VERSION') || l.startsWith('INFO'))).toBe(true);
   expect(mock.layerState(SLOT)?.producer).toBe('html');
   expect(mock.layerState(SLOT)?.onAir).toBe(true);
@@ -212,7 +215,7 @@ it('transient blip: the reconnect itself sends nothing beyond the handshake, air
   // producer — the designed harmless extra ADD), then plays. No CLEAR:
   // adoption memory survives the blip too.
   expect((await r.take('item1')).accepted).toBe(true);
-  const afterTake = (await recvLines(trace)).slice(preBlipCount);
+  const afterTake = (await recvLines(mock, trace)).slice(preBlipCount);
   const add = afterTake.findIndex((l) => l.startsWith('CG 1-10 ADD'));
   const play = afterTake.findIndex((l) => l.startsWith('CG 1-10 PLAY'));
   expect(add).toBeGreaterThanOrEqual(0);
@@ -257,7 +260,7 @@ it('wholesale rule: a BACKUP-only restart heals through the next take — the pa
   expect(mockB.layerState(SLOT)?.onAir).toBe(true);
   expect(mock.layerState(SLOT)?.producer).toBe('html');
   expect(mock.layerState(SLOT)?.onAir).toBe(true);
-  const linesB = await recvLines(traceB2);
+  const linesB = await recvLines(mockB, traceB2);
   const add = linesB.findIndex((l) => l.startsWith('CG 1-10 ADD'));
   const play = linesB.findIndex((l) => l.startsWith('CG 1-10 PLAY'));
   expect(add).toBeGreaterThanOrEqual(0);
@@ -274,7 +277,7 @@ it('the invalidation survives setConfig rewiring: a restart of the NEWLY configu
   // Re-point the RUNNING bridge to server B (sessions + adapter rebuilt,
   // #wireAdapter re-run against the NEW session objects).
   expect((await r.setConfig(singleServer(mockB.amcpPort, oscB))).ok).toBe(true);
-  await r.whenServerHealthy(6000);
+  await r.whenServerHealthy(HEALTH_MS);
 
   expect((await r.load('item1', 'lower-third', { headline: 'سلام' })).accepted).toBe(true);
   await expect(mockB.waitForCgAddResolution(SLOT)).resolves.toBe('resolved');
@@ -293,7 +296,7 @@ it('the invalidation survives setConfig rewiring: a restart of the NEWLY configu
   expect((await r.take('item1')).accepted).toBe(true);
   expect(mockB.layerState(SLOT)?.producer).toBe('html');
   expect(mockB.layerState(SLOT)?.onAir).toBe(true);
-  const lines = await recvLines(traceB2);
+  const lines = await recvLines(mockB, traceB2);
   expect(lines.findIndex((l) => l.startsWith('CG 1-10 ADD'))).toBeGreaterThanOrEqual(0);
   expect(lines.findIndex((l) => l.startsWith('CG 1-10 PLAY'))).toBeGreaterThan(
     lines.findIndex((l) => l.startsWith('CG 1-10 ADD')),
@@ -344,7 +347,7 @@ it('the invalidation survives failover (no rewiring needed) and a stopped runtim
   expect((await r.take('item1')).accepted).toBe(true);
   expect(mock.layerState(SLOT)?.producer).toBe('html');
   expect(mock.layerState(SLOT)?.onAir).toBe(true);
-  const lines = await recvLines(trace2);
+  const lines = await recvLines(mock, trace2);
   const add = lines.findIndex((l) => l.startsWith('CG 1-10 ADD'));
   const play = lines.findIndex((l) => l.startsWith('CG 1-10 PLAY'));
   expect(add).toBeGreaterThanOrEqual(0);

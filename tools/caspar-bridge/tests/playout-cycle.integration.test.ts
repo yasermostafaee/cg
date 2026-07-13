@@ -3,6 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
+import { HEALTH_MS } from './support/harness.js';
 
 /**
  * B-039 — the playout state model is PRESCRIPTIVE: the bridge chooses CG ADD vs
@@ -58,7 +59,7 @@ it('load→take→out→take: load does not auto-play, out destroys, retake re-A
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);
-  await runtime.whenServerHealthy(5000);
+  await runtime.whenServerHealthy(HEALTH_MS);
 
   const slot = { channel: 1, layer: 10 }; // 'lower-third' policy slot
 
@@ -100,7 +101,7 @@ it('a fresh take (item loaded but never played) plays without auto-play on load'
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);
-  await runtime.whenServerHealthy(5000);
+  await runtime.whenServerHealthy(HEALTH_MS);
 
   const slot = { channel: 1, layer: 10 };
   await runtime.load('item1', 'lower-third', {});

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
+import { HEALTH_MS } from './support/harness.js';
 
 /**
  * B-044 — pending-intent completion. The regression this pins: `updating` /
@@ -84,7 +85,7 @@ async function bootOnAir(opts: { disableOsc: boolean; intentTimeoutMs?: number }
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);
-  await runtime.whenServerHealthy(5000);
+  await runtime.whenServerHealthy(HEALTH_MS);
 
   const item = (): { status: string; pending: boolean } => {
     const s = runtime?.stackSnapshot().find((i) => i.itemId === 'item1');
