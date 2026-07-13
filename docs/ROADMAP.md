@@ -325,34 +325,45 @@ under Done.)
 
 ### Runtime — next
 
-The independent Runtime-track sequence (worked from the `cg-runtime` worktree):
+The independent Runtime-track sequence (worked from the `cg-runtime` worktree).
 
-1. **B-041 v2** — the on-hardware escape-matrix sweep for the active
-   `fix-amcp-escaping-v2` change (B-041 stays `[~]`; take 1 #245 is archived as
-   superseded history — quotes-only rule disproven on hardware, #246).
-2. **B-040** — operator on-air validation of the structured list-field editor
-   (#243), then archive `fix-runtime-list-field-editor` and flip B-040 → `[x]`.
-3. **B-038 follow-up** — browser-side retention + re-delivery of template HTML
-   on bridge reconnect (descoped from B-038's close; tracked in
-   `docs/prd/bugs-runtime.md`). **[B-070](./prd/bugs-runtime.md) is folded into
-   this change** (`reconnect-reconciliation` §7): it introduced the mock's
-   `403`-on-a-producerless-`CG UPDATE` but never gave `update` a bullet in the
-   prescriptive-verb requirement it rewrites, so `update` was the one playout
-   verb firing blind — an idle/producerless item's field edits were refused on
-   air, and the refusal then poisoned the item (zombie `pending` → R-011
-   `setPosition` blocked for life). Code + tests landed; B-070 stays `[~]`
-   behind the SAME hardware gate as the rest of the change (see the ADR-0006
-   caveat: `CG UPDATE` on a play-on-load=off producer is unproven on hardware).
-4. **[B-072](./prd/bugs-runtime.md)** — R-011 position override read-back
-   (`position-override-readback`): the bridge stored and honoured the operator's
-   override all along, but nothing carried it back to the SPA, so the picker
-   re-seeded from the manifest default on every reselect — the UI lied about what
-   was on air, and an innocent re-Apply then REVERTED the good position to the
-   default. `StackItemState` gains an optional `position`, the bridge joins its
-   override store into the published state at the emit sites, and the picker seeds
-   from the applied override. Code + tests landed; live confirmation is a nice-to-
-   have (the on-air half already worked — this is a read-back fix, verifiable
-   in-app).
+**The whole previously-sequenced list is CLEARED (2026-07-13).** The hardware smoke
+pass on real **CasparCG 2.3.2 (build `4de6d18f`** — the build ADR-0006 was validated
+against**)** closed every item that was held on a live gate:
+
+- **[B-041](./prd/bugs-runtime.md)** — the escape-matrix sweep PASSED on 2.3.2:
+  backslash / quote / newline survive `CG ADD` + `CG UPDATE` byte-exact, no parse
+  break, Persian intact. The winner is unchanged from the 2.5.0 sweep, so no code
+  change followed. `fix-amcp-escaping-v2` archived (FIRST, per the held-pair
+  ordering pin); B-041 → `[x]`. Take 1 (#245) remains archived as superseded history
+  — the quotes-only rule was disproven on hardware (#246).
+- **[B-040](./prd/bugs-runtime.md)** — DONE, not pending: the structured list-field
+  editor (#243) was operator-validated on air (CasparCG 2.5.0 `69e8ad5`, 2026-07-07),
+  `fix-runtime-list-field-editor` is archived and B-040 is `[x]`. (This line
+  previously still asked for that validation — stale, now corrected.)
+- **B-038 follow-up** (browser-side retention + re-delivery of template HTML on
+  bridge reconnect) and the **[B-070](./prd/bugs-runtime.md)** half folded into it
+  — `reconnect-reconciliation` archived (SECOND, after B-041, so its superset delta
+  on "Template resolution is validated" folds on top of B-041's clauses rather than
+  being clobbered by them). B-070 → `[x]`: the ADR-0006 open question is ANSWERED on
+  hardware — `CG UPDATE` **does** land on a play-on-load=off producer, so
+  producer-existence means LOADED, not "loaded AND playing"; the shipped `#loaded`
+  branch is correct as written.
+- **[B-072](./prd/bugs-runtime.md)** — R-011 position-override read-back
+  (`position-override-readback`), live-confirmed: the picker now shows the applied
+  override on reselect, and a re-Apply no longer reverts a good on-air position.
+- Also live-confirmed on the same pass: **[B-066](./prd/bugs-runtime.md)** (no CEF
+  `replaceAll` boot abort; Persian renders), **[B-067](./prd/bugs-runtime.md)**
+  (nested-composition fields reach the operator form and edits reach air),
+  **[R-011](./prd/runtime.md)** (centered default + anchor/offset override),
+  **[B-064](./prd/bugs-runtime.md)** (`setConfig` serve-restart), and
+  **[B-054](./prd/bugs-runtime.md)** (CasparCG restart → the next take re-renders).
+
+**Nothing is sequenced right now** — the next Runtime item is an owner call. Still
+open and NOT covered by this pass: **[B-056](./prd/bugs-runtime.md)**'s live smoke
+(owned-slot occupancy under a downed primary — needs a mirror pair; not run),
+**[R-009](./prd/runtime.md)** (not run this session), and **[R-010](./prd/runtime.md)**
+(deferred — needs a second machine + JWT auth, tracked separately).
 
 ## Then — hardening wave (after features)
 
