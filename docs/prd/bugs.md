@@ -8,6 +8,10 @@ and cross-platform issues. App-specific bugs live in
 > When filing a new bug, pick the next unused `B-` number regardless of which file
 > it goes in. Bug files: [bugs-designer.md](bugs-designer.md) ·
 > [bugs-runtime.md](bugs-runtime.md) · [bugs.md](bugs.md) (cross-cutting / tooling).
+>
+> **Before filing, run the duplicate audit and check the number space:**
+> [b-number-registry.md](b-number-registry.md) — the source of truth for which numbers
+> are taken, the one accepted duplicate (`B-056`), and why collisions keep happening.
 
 Bug reports. Unlike features, every bug needs a **repro** — that's what lets
 Claude reproduce, fix, and add a regression test. See `README.md` for IDs and
@@ -249,7 +253,14 @@ https://pnpm.io/settings — `onlyBuiltDependencies` moved to
 `pnpm-workspace.yaml` in current pnpm); verify against the installed pnpm's
 docs when fixing.
 
-## [ ] B-069 — docs housekeeping: B-056 is double-assigned across the bug files ⟨priority: low⟩
+## [~] B-069 — docs housekeeping: B-056 is double-assigned across the bug files ⟨priority: low⟩ — reconciled on `fix/test-infra-batch` via [b-number-registry.md](b-number-registry.md)
+
+> **Resolved as documentation, not renumbering** — exactly the disposition this item's own
+> owner-call below asked for. [b-number-registry.md](b-number-registry.md) is now the source of
+> truth: it records the audited state of the number space (on merged `main`, `B-056` is the
+> **only** ambiguous number — every other number names exactly one bug), keeps both B-056 entries
+> in place with a disambiguating note, and recommends (does not enforce) a way to stop the
+> in-flight collisions recurring. Nothing was renumbered; no archived history was rewritten.
 
 **Repro:**
 

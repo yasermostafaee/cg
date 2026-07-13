@@ -63,3 +63,27 @@ escape()`), applied once by `command-builder` to both `CG ADD` + `CG UPDATE`.
   `@cg/caspar-client` `escape.ts`, `tools/amcp-mock` (`amcp-parser` + control-char
   rejection), tests. PR #245's quotes-only escaping is superseded.
 - B-041 closes only after on-hardware matrix validation.
+
+## Archive ordering — ARCHIVE THIS CHANGE **FIRST** (held-pair pin)
+
+**This change MUST be archived BEFORE `reconnect-reconciliation`.**
+
+Both changes hold an open delta on the SAME requirement in
+`runtime-caspar-bridge` — `### Requirement: Template resolution is validated, not
+blind-acked`. `reconnect-reconciliation`'s version of that requirement is **based on
+this change's still-pending text** (it preserves the decode-rule sentences and
+scenarios verbatim and builds on them). Archiving folds a change's delta into
+`openspec/specs/`, so **whichever archives second overwrites the other's edits**:
+
+- ✅ `fix-amcp-escaping-v2` → then `reconnect-reconciliation`: the later, richer text
+  lands last. Correct.
+- ❌ `reconnect-reconciliation` → then `fix-amcp-escaping-v2`: this change's OLDER
+  text clobbers the reconciliation delta, silently reverting it.
+
+Both changes are held on hardware gates, so the order is not forced by anything else —
+it has to be remembered. It was previously only ever surfaced verbally (the original pin
+commit was lost), which is why it is now recorded in BOTH changes' docs.
+
+If the order is ever broken, do not hand-patch `openspec/specs/` — re-reconcile that
+requirement's text from both deltas at archive time. The counterpart note lives in
+`reconnect-reconciliation/proposal.md` ("Spec-delta coexistence") and its `tasks.md` §6.5.

@@ -108,3 +108,25 @@ surfacing (wire `unexpected-onair` → operator warning + Clear control), and
   untouched. **Archive ordering note:** archive `reconnect-reconciliation`
   AFTER `fix-amcp-escaping-v2`, or re-reconcile that requirement's text at
   archive time — whichever archives second must not clobber the other's edits.
+
+## Archive ordering — ARCHIVE THIS CHANGE **SECOND** (held-pair pin)
+
+**`fix-amcp-escaping-v2` MUST be archived BEFORE this change.**
+
+Restating the "Spec-delta coexistence" bullet above as its own section, because the
+pin is easy to miss inside an Impact list and the original pin commit was lost — it has
+since only ever been surfaced verbally. Both changes hold an open delta on the SAME
+requirement in `runtime-caspar-bridge` (`### Requirement: Template resolution is
+validated, not blind-acked`), and THIS change's version is **based on
+`fix-amcp-escaping-v2`'s still-pending text**. Archiving folds a delta into
+`openspec/specs/`, so whichever archives second overwrites the other's edits:
+
+- ✅ `fix-amcp-escaping-v2` → then `reconnect-reconciliation`: this change's later,
+  richer text lands last. Correct.
+- ❌ this change → then `fix-amcp-escaping-v2`: B-041's OLDER text clobbers this
+  change's reconciliation delta, silently reverting it.
+
+Both changes are held on hardware gates, so nothing else forces the order — it has to be
+remembered. If it is ever broken, do not hand-patch `openspec/specs/`; re-reconcile that
+requirement's text from both deltas at archive time. Counterpart note:
+`fix-amcp-escaping-v2/proposal.md` ("Archive ordering") + its `tasks.md`.
