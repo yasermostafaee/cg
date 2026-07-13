@@ -991,7 +991,7 @@ take" — this entry is about the missing WARNING, not the badge), B-054 (the
 adjacent server-restart staleness), C-011 (persisted layer-aware
 reconciliation — the structural home).
 
-## [~] B-067 — template import builds the operator field form from flat root fields only; nested-composition fields are invisible ⟨priority: high⟩ — fixed on `fix/B-067-nested-fields` (`openspec/changes/runtime-nested-composition-fields`)
+## [x] B-067 — template import builds the operator field form from flat root fields only; nested-composition fields are invisible ⟨priority: high⟩ — fixed + archived (`openspec/changes/archive/2026-07-13-runtime-nested-composition-fields`); LIVE CONFIRMATION PENDING
 
 **Repro:**
 
