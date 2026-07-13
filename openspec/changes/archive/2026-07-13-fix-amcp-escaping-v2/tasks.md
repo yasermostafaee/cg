@@ -18,17 +18,24 @@
 
 ## 1. Escape-matrix hardware harness (follow-up — after review)
 
-- [ ] Extend `tools/caspar-amcp-probe` to sweep candidate AMCP escapings of a fixed
+- [x] Extend `tools/caspar-amcp-probe` to sweep candidate AMCP escapings of a fixed
       payload (`"`, `\` ×1–4, newline, tab, combos, Persian) against real CasparCG
       2.3.2, recording per candidate whether the template's `window.update` value
       `JSON.parse`s byte-exact to the original. The winning candidate is the rule.
+      — **live-confirmed on 2.3.2 / 4de6d18f** (2026-07-13): backslash / quote /
+      newline survive byte-exact through `CG ADD` + `CG UPDATE`, no parse break,
+      Persian intact. The `js-escape+amcp-escape` rule that won on 2.5.0 holds on
+      2.3.2 — the escape rule is now confirmed on BOTH server generations.
 
 _Note (2026-07-07): the harness pre-existed (#247); this session added the two
 two-layer-model candidates (operator pre-approved) and swept the local
 `2.5.0 69e8ad5 Stable` — winner `js-escape+amcp-escape` (all 7 old candidates
-fail, both new ones pass; see `design.md` → "Hardware sweep results"). The 2.5
-pass is done; the 2.3.2 pass is pending and the harness is ready to re-run. The
-box stays unticked because its text requires real 2.3.2._
+fail, both new ones pass; see `design.md` → "Hardware sweep results")._
+
+_Note (2026-07-13): the 2.3.2 pass is DONE — swept against real CasparCG
+**2.3.2 (build `4de6d18f`)**, the same build ADR-0006 was validated against.
+The winning candidate is unchanged from the 2.5.0 sweep, so the shipped
+canonical quoter needs no adjustment. This was B-041's last gate._
 
 ## 2. Implement the empirical rule (follow-up)
 
@@ -63,15 +70,15 @@ via BOTH `CG ADD` (fresh Load+Take) and `CG UPDATE` (on-air Update) — render
 exactly as typed with no `Uncaught SyntaxError`. B-041 stays `[~]`: §1's 2.3.2
 pass is the only remaining gate._
 
-## DO NOT close B-041
+## B-041 close-out — gate SATISFIED
 
-Implement only after the diagnosis is reviewed; then hardware-validate the matrix on
-real CasparCG 2.3.2 (type `"`, `\`, and a newline → Update → applies on air, Persian
-intact). B-041 flips to `[x]` only after that.
+The hold ("hardware-validate the matrix on real CasparCG 2.3.2 — type `"`, `\`, and a
+newline → Update → applies on air, Persian intact") is **MET**: live-confirmed on
+2.3.2 / `4de6d18f` on 2026-07-13. B-041 flips to `[x]` with this archive.
 
 ## Archive ordering — this change archives FIRST
 
-- [ ] When archiving: **archive `fix-amcp-escaping-v2` BEFORE `reconnect-reconciliation`.**
+- [x] When archiving: **archive `fix-amcp-escaping-v2` BEFORE `reconnect-reconciliation`.**
       Both hold a delta on the same `runtime-caspar-bridge` requirement ("Template
       resolution is validated, not blind-acked"), and `reconnect-reconciliation`'s
       version is based on THIS change's pending text — so archiving them in the wrong

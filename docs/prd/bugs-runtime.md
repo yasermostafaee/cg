@@ -413,12 +413,20 @@ textarea preserving `\n` on read and write).
 
 ---
 
-## [~] B-041 — special characters (`"`, `\`, newline) in a field value break the live CG UPDATE / CG ADD (broken AMCP escaping) ⟨priority: high⟩
+## [x] B-041 — special characters (`"`, `\`, newline) in a field value break the live CG UPDATE / CG ADD (broken AMCP escaping) ⟨priority: high⟩ — **live-confirmed 2.3.2 / `4de6d18f`** (2026-07-13), archived: `openspec/changes/archive/2026-07-13-fix-amcp-escaping-v2/`
 
-> Surfaced on **real CasparCG 2.3.2** with special-character field values; `amcp-mock`
-> hid it (its tokenizer is the exact inverse of our own escaper) and the ADR-0006
-> harness missed it (its probe payloads had no `"` or `\`). Read-only report — no fix
-> here; the escaping fix is designed next.
+> **CLOSED — hardware-confirmed on the build that surfaced it.** The escape rule is
+> the two-layer inverse (`js-escape+amcp-escape`): backslash, quote and newline now
+> survive `CG ADD` **and** `CG UPDATE` **byte-exact** with no parse break and Persian
+> intact — validated on real **CasparCG 2.3.2 (build `4de6d18f`)**, the same build
+> ADR-0006 was validated against, on 2026-07-13. The rule had already passed on 2.5.0
+> (`69e8ad5`); it is now confirmed on BOTH server generations, so the shipped
+> canonical quoter needed no adjustment. PR #245's "quotes-only" rule is retained
+> below as superseded history — it was disproven on hardware.
+>
+> Originally surfaced on **real CasparCG 2.3.2** with special-character field values;
+> `amcp-mock` hid it (its tokenizer was the exact inverse of our own escaper) and the
+> ADR-0006 harness missed it (its probe payloads had no `"` or `\`).
 
 **Repro:**
 
@@ -531,9 +539,18 @@ quote/backslash/newline payload before B-041 closes.
   `"a quote"`, `\` ×1 and ×3, multi-line via Enter (incl. the original two-line
   ticker items), mixed Persian/Latin — in a plain text field AND ticker list items,
   via BOTH `CG ADD` (fresh Load+Take) and `CG UPDATE` (on-air Update) — all render
-  exactly as typed, updates apply, no `Uncaught SyntaxError`. **Stays `[~]`: the
-  only remaining gate before `[x]` is the 2.3.2 confirmation** (sweep re-run or
-  live special-char validation on a 2.3.2 box).
+  exactly as typed, updates apply, no `Uncaught SyntaxError`. The only remaining gate
+  was the 2.3.2 confirmation.
+- **CLOSED — 2.3.2 confirmation PASSED (2026-07-13).** Live-validated on real
+  CasparCG **2.3.2 (build `4de6d18f`)** — the same build ADR-0006 was validated
+  against, and the build the bug was originally reported on. Backslash, quote and
+  newline all survive **byte-exact** through both `CG ADD` and `CG UPDATE`, with no
+  parse break (`SyntaxError`) and Persian intact. The winning candidate is unchanged
+  from the 2.5.0 sweep, confirming the source-level finding that `v2.3.x-lts` and
+  `master` share byte-identical escape semantics in both layers — so no code change
+  was needed to close. B-041 → `[x]`; `fix-amcp-escaping-v2` archived
+  (`openspec/changes/archive/2026-07-13-fix-amcp-escaping-v2/`), its delta folded
+  into the `runtime-caspar-bridge` living spec.
 
 ---
 
