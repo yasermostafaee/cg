@@ -435,12 +435,18 @@ importers:
       '@cg/eslint-config':
         specifier: workspace:*
         version: link:../eslint-config
+      '@cg/template-runtime':
+        specifier: workspace:*
+        version: link:../template-runtime
       '@vitest/coverage-v8':
         specifier: ^2.1.8
         version: 2.1.9(vitest@2.1.9(@types/node@22.19.19)(happy-dom@15.11.7)(jsdom@25.0.1)(lightningcss@1.32.0))
       eslint:
         specifier: ^9.17.0
         version: 9.39.4
+      happy-dom:
+        specifier: ^15.11.7
+        version: 15.11.7
       rimraf:
         specifier: ^6.0.1
         version: 6.1.3

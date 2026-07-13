@@ -21,7 +21,7 @@ describe('ProjectStore', () => {
   });
 
   it('loads a starter as a fresh, validated clone', () => {
-    const result = makeStore().loadStarter('persian-reference');
+    const result = makeStore().loadStarter('ticker');
     expect(result).not.toBeNull();
     expect(() => SceneSchema.parse(result?.scene)).not.toThrow();
   });
@@ -65,7 +65,7 @@ describe('ProjectStore', () => {
     const seen: (string | null)[] = [];
     store.activeChanged.subscribe((p) => seen.push(p.scene?.name ?? null));
     store.newScene('One', 'fullscreen');
-    store.loadStarter('persian-reference');
+    store.loadStarter('ticker');
     expect(seen.length).toBe(2);
     expect(seen[0]).toBe('One');
   });

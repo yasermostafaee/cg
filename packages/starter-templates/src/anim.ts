@@ -1,4 +1,5 @@
 import type {
+  AnchorPoint,
   AnimatableProperty,
   BezierEasing,
   ElementAnimation,
@@ -44,6 +45,19 @@ export function kfLinear(frame: number, value: number | string): Keyframe {
 /** A stepped keyframe — value snaps with no interpolation (blinks, holds). */
 export function kfStep(frame: number, value: number | string): Keyframe {
   return { frame, value, easing: 'step' };
+}
+
+/**
+ * A D-110 whole-shape path keyframe: the value snapshots the FULL ordered
+ * anchor set. Every pose in a track must keep the same anchor ids so the
+ * morph reconciles point-to-point (the exporter preflights this).
+ */
+export function kfPath(
+  frame: number,
+  points: AnchorPoint[],
+  bezier: BezierEasing = EASE.outCubic,
+): Keyframe {
+  return { frame, value: { kind: 'path', points }, easing: 'ease-out', bezier };
 }
 
 export function track(...keyframes: Keyframe[]): Track {

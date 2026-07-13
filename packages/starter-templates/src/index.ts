@@ -1,14 +1,9 @@
 import type { Scene } from '@cg/shared-schema';
-import { breakingNewsScene } from './breaking-news.js';
-import { fullscreenScene } from './fullscreen.js';
+import { iribNewsScene } from './irib-news.js';
 import { logoBugScene } from './logo-bug.js';
-import { lowerThirdScene } from './lower-third.js';
-import { newsPackageScene } from './news.js';
-import { persianReferenceScene } from './persian-reference.js';
-import { quoteCardScene } from './quote-card.js';
-import { scoreboardScene } from './scoreboard.js';
-import { showcaseScene } from './showcase.js';
+import { sequenceScene } from './sequence.js';
 import { tickerScene } from './ticker.js';
+import { titleScene } from './title.js';
 
 /**
  * A binary asset a starter ships (font or image). On load the Designer fetches
@@ -45,7 +40,8 @@ export interface StarterTemplate {
   preview?: string;
   /**
    * Marks a freshly-added template so the landing page can flag it with a
-   * "New" badge. Optional — absent means an established template.
+   * "New" badge. Optional — absent means an established template. The D-119
+   * starter set deliberately omits it everywhere (owner decision).
    */
   isNew?: boolean;
   /**
@@ -59,119 +55,95 @@ export interface StarterTemplate {
   scene: Scene;
 }
 
+/** The bundled Vazirmatn woff2 every Persian starter seeds as an asset font. */
+const VAZIRMATN_URL = '/fonts/vazirmatn/vazirmatn-arabic-500-normal.woff2';
+
 /**
- * All starter templates exposed to the Designer. Each is a fully animated,
- * schema-valid Scene (validated in this package's tests). Order is the
- * order they appear on the landing page.
+ * All starter templates exposed to the Designer — the D-119 set: professional
+ * Persian broadcast demos, each a fully animated, schema-valid Scene
+ * (validated in this package's tests) with a real playout lifecycle.
+ * Order is the order they appear on the landing page.
  */
 export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
   {
-    id: 'showcase',
-    label: 'Aurora Network — Showcase',
+    id: 'irib-news',
+    label: 'میان‌برنامهٔ خبر — News Composite',
     description:
-      'A 7-second title sequence built from five nested compositions — drifting aurora backdrop, spinning logo-bug, glass lower third, RTL Persian, bound fields.',
-    preview: '/starters/showcase.png',
-    isNew: true,
+      'The marquee: a two-deck IRIB-style strap with live Tehran + Greenwich wall clocks (Persian digits, blinking colons), @IRIBNEWS brand tag, bound program title, and a content-driven RTL headline crawl. Stays on air until stopped.',
+    preview: '/starters/irib-news.png',
     assets: [
       {
-        key: 'showcase-vazir',
+        key: 'irib-vazir',
         kind: 'font',
         filename: 'Vazirmatn.woff2',
-        url: '/fonts/vazirmatn/vazirmatn-arabic-500-normal.woff2',
-      },
-      {
-        key: 'showcase-texture',
-        kind: 'image',
-        filename: 'aurora-texture.jpg',
-        url: '/starters/showcase/texture.jpg',
-      },
-      {
-        key: 'showcase-emblem',
-        kind: 'image',
-        filename: 'aurora-mark.svg',
-        url: '/starters/showcase/aurora-mark.svg',
+        url: VAZIRMATN_URL,
       },
     ],
-    scene: showcaseScene,
-  },
-  {
-    id: 'news-package',
-    label: 'پکیج خبری فارسی — Persian News',
-    description:
-      'Full Persian (RTL) news package: logo, digital clock, two-tier lower third, headline strap, “آخرین اخبار” panel, live badge, and a scrolling breaking ticker.',
-    preview: '/starters/news-package.png',
-    isNew: true,
-    assets: [
-      {
-        key: 'news-vazir',
-        kind: 'font',
-        filename: 'Vazirmatn.woff2',
-        url: '/fonts/vazirmatn/vazirmatn-arabic-500-normal.woff2',
-      },
-      {
-        key: 'news-emblem',
-        kind: 'image',
-        filename: 'news-mark.svg',
-        url: '/starters/irinn/news-mark.svg',
-      },
-    ],
-    scene: newsPackageScene,
-  },
-  {
-    id: 'lower-third',
-    label: 'Aurora Lower Third',
-    description: 'Glassy gradient plate with an accent wipe and slide-in name & title.',
-    preview: '/starters/lower-third.png',
-    scene: lowerThirdScene,
-  },
-  {
-    id: 'persian-reference',
-    label: 'Persian Lower Third',
-    description: 'RTL Vazirmatn lower third — gradient plate, accent wipe, QA reference.',
-    preview: '/starters/persian-reference.png',
-    scene: persianReferenceScene,
-  },
-  {
-    id: 'breaking-news',
-    label: 'Breaking News',
-    description: 'Bottom-third alert: slide-up panel, accent wipe, pulsing LIVE.',
-    preview: '/starters/breaking-news.png',
-    scene: breakingNewsScene,
+    scene: iribNewsScene,
   },
   {
     id: 'ticker',
-    label: 'Breaking Ticker',
-    description: 'Full-width scrolling headline with a pulsing LIVE badge.',
+    label: 'نوار اخبار — News Ticker',
+    description:
+      'Persian news strap with a content-driven RTL crawl: measured (never timed), holds on air until the operator stops it, then plays its authored exit. Headlines are an editable list data key.',
     preview: '/starters/ticker.png',
+    assets: [
+      {
+        key: 'ticker-vazir',
+        kind: 'font',
+        filename: 'Vazirmatn.woff2',
+        url: VAZIRMATN_URL,
+      },
+    ],
     scene: tickerScene,
   },
   {
-    id: 'fullscreen',
-    label: 'Fullscreen Title',
-    description: 'Cinematic title card — radial stage, blur focus-in, letter-spacing reveal.',
-    preview: '/starters/fullscreen.png',
-    scene: fullscreenScene,
-  },
-  {
     id: 'logo-bug',
-    label: 'Logo Bug',
-    description: 'Corner channel ID with a spinning dashed ring and pulsing dot.',
+    label: 'آرم شبکه — Logo Sting',
+    description:
+      'Corner channel bug: a pen-path mark morphing square → circle → compass star beside a Persian wordmark, re-playing its sting every ~10 seconds via loop-cycle playout.',
     preview: '/starters/logo-bug.png',
+    assets: [
+      {
+        key: 'logo-bug-vazir',
+        kind: 'font',
+        filename: 'Vazirmatn.woff2',
+        url: VAZIRMATN_URL,
+      },
+    ],
     scene: logoBugScene,
   },
   {
-    id: 'quote-card',
-    label: 'Quote Card',
-    description: 'Editorial citation — oversized mark, rising quote, author underline wipe.',
-    preview: '/starters/quote-card.png',
-    scene: quoteCardScene,
+    id: 'title',
+    label: 'زیرنویس معرفی — Guest Title',
+    description:
+      'Self-closing guest / expert title: two-tier plate flush right with the compass-star brand square, bound name/role data keys, auto-out playout — enters, holds 6 s, exits by itself.',
+    preview: '/starters/title.png',
+    assets: [
+      {
+        key: 'title-vazir',
+        kind: 'font',
+        filename: 'Vazirmatn.woff2',
+        url: VAZIRMATN_URL,
+      },
+    ],
+    scene: titleScene,
   },
   {
-    id: 'scoreboard',
-    label: 'Scoreboard',
-    description: 'Top-centre score bug with team colours and a popping score.',
-    preview: '/starters/scoreboard.png',
-    scene: scoreboardScene,
+    id: 'sequence',
+    label: 'توالی خبر — Headline Rotator',
+    description:
+      'Sequence-style strap: headlines rotate one at a time (first transitions in, the last transitions out), then the strap closes itself via a content-driven hold. Items are an editable list data key.',
+    preview: '/starters/sequence.png',
+    assets: [
+      {
+        key: 'sequence-vazir',
+        kind: 'font',
+        filename: 'Vazirmatn.woff2',
+        url: VAZIRMATN_URL,
+      },
+    ],
+    scene: sequenceScene,
   },
 ];
 
@@ -180,15 +152,4 @@ export function getStarter(id: string): StarterTemplate | null {
   return STARTER_TEMPLATES.find((s) => s.id === id) ?? null;
 }
 
-export {
-  breakingNewsScene,
-  fullscreenScene,
-  logoBugScene,
-  lowerThirdScene,
-  newsPackageScene,
-  persianReferenceScene,
-  quoteCardScene,
-  scoreboardScene,
-  showcaseScene,
-  tickerScene,
-};
+export { iribNewsScene, logoBugScene, sequenceScene, tickerScene, titleScene };

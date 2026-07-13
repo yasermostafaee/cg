@@ -990,3 +990,15 @@ spec mandate "the fresh item never shows `on-air` from the orphan's OSC before
 take" — this entry is about the missing WARNING, not the badge), B-054 (the
 adjacent server-restart staleness), C-011 (persisted layer-aware
 reconciliation — the structural home).
+
+## [ ] B-067 — template import builds the operator field form from flat root fields only; nested-composition fields are invisible ⟨priority: medium⟩
+
+**Repro:**
+
+1. In the Designer, author a template whose bound elements live in a NESTED composition (e.g. any D-119 two-comp starter: the data-key fields migrate to the footprint comp per D-025), export the entry comp as `.vcg`.
+2. Import it in the Runtime app and open the item's Inspector.
+
+**Expected:** the operator sees and edits the template's data keys (name/label/headlines …), matching the Designer preview form, which aggregates nested-instance fields under the instance's namespace (`aggregateCompositionFields`, D-025) — as does the `.vcg` GDD manifest (`packages/vcg-format/src/gdd.ts`).
+**Actual:** `produceTemplateDelivery` builds `TemplateInfo.fields` from the ROOT `scene.fields` only (apps/runtime/src/renderer/features/library/templateDelivery.ts:127). A scoped per-composition export whose fields live on a nested comp yields `fields: []` — the Inspector shows nothing to edit, even though the playing template fully supports namespaced updates (`values[instanceName]`, `applyScopedFieldValues`).
+**Env:** Runtime app (mock + bridge paths share the import); found 2026-07-12 during D-119.
+**Notes:** Fix direction: aggregate at import (reuse `aggregateCompositionFields`) and teach the Inspector to render namespace groups + emit NESTED payloads (`{ instanceName: { fieldId: value } }`) — the runtime side already consumes them. Scope it with the Runtime operator-positioning work that will also flip D-119 starters to footprint-comp export.
