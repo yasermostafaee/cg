@@ -1110,7 +1110,7 @@ The poisoning is a second, independent defect: a failed ack moved only `ackedSta
 - [x] Deselect → reselect → the picker **SHOWS the override**, not the manifest default — the read-back lands.
 - [x] Re-Apply without changing anything → the on-air position is **unchanged** (NOT reverted to the default) — the blast-radius guard holds.
 
-## [~] B-074 — no test can catch a channel the UI calls but the bridge never routes, nor a MockRuntime that has drifted from the real bridge ⟨priority: high⟩ — fixed on `fix/test-infra-batch`
+## [x] B-074 — no test can catch a channel the UI calls but the bridge never routes, nor a MockRuntime that has drifted from the real bridge ⟨priority: high⟩ — merged (#297, `052863a`): both structural gaps are now guarded — channel-route coverage (a channel the UI calls but the bridge never routes fails the gate) and MockRuntime↔bridge parity (drift between the mock and the real bridge is caught, so the offline path can no longer model semantics the bridge does not have — the blind spot behind [[B-070]]). Focused fix, no change dir. Confirmed shipped by the 2026-07-13 `[~]` audit
 
 Two **structural** gaps in the suite (not a single defect): both are the _reason_ recent
 runtime bugs shipped, and both would let the same class ship again. Filed as one item

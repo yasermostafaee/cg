@@ -50,7 +50,7 @@ Copy this block per bug (use `B-` IDs):
 **Env:**  
 **Notes:** تصاویر مربوط به تسک D-006 رو با دقت بسیار بسیار بالا بررسی کن
 
-## [~] B-003 — point frames style ⟨priority: high⟩ — focused fix
+## [x] B-003 — point frames style ⟨priority: high⟩ — focused fix, merged (`70786d0`, pre-OpenSpec): keyframe indicator collapsed to the two authored states (empty / at-frame — `keyframe-helpers.ts`, `KeyframeIndicator.tsx`), lane diamonds always yellow with a selected diamond's border (and its following interpolation line) turning blue (`TrackRow.css.ts`), and the segment glyph is the small SVG curve, not the "f" letter. Pinned by `store-animation.test.ts` ("B-003 — keyframeVariantFor collapses to empty / at-frame"). Confirmed shipped by the 2026-07-13 `[~]` audit
 
 **Repro:**
 
@@ -196,7 +196,7 @@ is informational runner noise — all actions in the file are on current majors;
 no change made for it.) Focused tooling fix, no OpenSpec change (the B-013
 rimraf `--glob` precedent).
 
-## [~] B-049 — flaky: `@cg/caspar-client` `transport.test.ts` peer-disconnect times out under full-suite load ⟨priority: low⟩
+## [x] B-049 — flaky: `@cg/caspar-client` `transport.test.ts` peer-disconnect times out under full-suite load ⟨priority: low⟩ — merged (#268, `adfabce`): the test now waits for `mock.amcpClientCount > 0` before closing (`transport.test.ts:141`), so the close can no longer race the mock server's `'connection'` handler. The branch this item was gated on has merged and the flake has not recurred; [[B-073]] (#297) later hardened the same socket/timer family. Confirmed shipped by the 2026-07-13 `[~]` audit
 
 > **Root-caused + hardened (2026-07-10, `fix/B-038-B-048-reconnect-reconciliation`):**
 > the test called `closeAllAmcpConnections()` immediately after
@@ -253,7 +253,7 @@ https://pnpm.io/settings — `onlyBuiltDependencies` moved to
 `pnpm-workspace.yaml` in current pnpm); verify against the installed pnpm's
 docs when fixing.
 
-## [~] B-069 — docs housekeeping: B-056 is double-assigned across the bug files ⟨priority: low⟩ — reconciled on `fix/test-infra-batch` via [b-number-registry.md](b-number-registry.md)
+## [x] B-069 — docs housekeeping: B-056 is double-assigned across the bug files ⟨priority: low⟩ — merged (#297, `052863a`): reconciled via [b-number-registry.md](b-number-registry.md), now the source of truth for the number space. Resolved as DOCUMENTATION, not renumbering (the disposition this item's own owner-call asked for): both B-056 entries stay in place with a disambiguating note; nothing was renumbered and no archived history was rewritten. [[B-075]] later made the rule enforceable in CI. Confirmed shipped by the 2026-07-13 `[~]` audit
 
 > **Resolved as documentation, not renumbering** — exactly the disposition this item's own
 > owner-call below asked for. [b-number-registry.md](b-number-registry.md) is now the source of
@@ -299,7 +299,7 @@ It should print exactly one line — the known, accepted `B-056`. Anything else 
 
 **Regression test:** a lint run over a tree that contains a stray `apps/designer/vite.config.ts.timestamp-x.mjs` must not fail — drop such a file in, run `pnpm --filter @cg/designer lint`, and expect 0 errors (today it reports the file / races on it).
 
-## [~] B-073 — the recurring test-flakiness family: socket/timer integration reds under parallel CPU load + an E2E that silently tests a STALE build ⟨priority: high⟩ — fixed on `fix/test-infra-batch`
+## [x] B-073 — the recurring test-flakiness family: socket/timer integration reds under parallel CPU load + an E2E that silently tests a STALE build ⟨priority: high⟩ — merged (#297, `052863a`): the socket/timer integration suites no longer hang wall-clock budgets on SETUP under a starved box, and the E2E can no longer silently pass against a STALE build. Confirmed shipped by the 2026-07-13 `[~]` audit
 
 Filed here (not in the app files) because the family spans `@cg/caspar-bridge`,
 `@cg/caspar-client` and the Playwright tooling. [[B-071]] (turbo/vite lint race) is a
@@ -370,7 +370,7 @@ post-fix suites are **3/3 green** (bridge 87 tests / 24 files, client 246 tests 
 isolated and under the parallel run. Note the flake is probabilistic — 3/3 green is the agreed bar,
 not a proof of absence; the causal fix for the one observed signature is what carries the claim.
 
-## [~] B-075 — nothing stops a duplicate B-number from being MERGED: the global-uniqueness rule was enforced only by remembering to run the audit ⟨priority: low⟩ — fixed on `fix/B-067-nested-fields`
+## [x] B-075 — nothing stops a duplicate B-number from being MERGED: the global-uniqueness rule was enforced only by remembering to run the audit ⟨priority: low⟩ — merged (#299, `1ff6b4b`): the gate now FAILS on a duplicate `B-` number, so the global-uniqueness rule is enforced by CI instead of by remembering to run a `grep`. Prevention only — a merged collision still cannot be cheaply undone (see [[B-069]] and the standing `B-056` owner call). Confirmed shipped by the 2026-07-13 `[~]` audit
 
 **Repro:**
 

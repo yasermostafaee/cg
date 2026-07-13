@@ -258,9 +258,12 @@ the order changes. Strategic / non-engineering notes live in
   complete. The final batch ([D-043](./prd/designer.md) box-shadow spread+inset, [D-044](./prd/designer.md)
   font-weight, [D-045](./prd/designer.md) unified alignment + vertical align, [D-047](./prd/designer.md)
   layer-reorder drag, [D-048](./prd/designer.md) inspector visual polish, + the [B-018](./prd/bugs-designer.md)
-  spread static-write fix) merged & archived (2026-06-17); D-042 and D-052 landed earlier. Only
-  [D-046](./prd/designer.md) (sizing=auto guard) is NOT done — PARKED, blocked on the new D-060
-  (auto-size rendering); see Next.
+  spread static-write fix) merged & archived (2026-06-17); D-042 and D-052 landed earlier. The wave
+  is now fully closed: [D-046](./prd/designer.md) (sizing=auto guard) — for a long time the wave's one
+  parked item, blocked on [D-060](./prd/designer.md) (auto-size rendering) — is **done**: D-060 shipped
+  and archived (`2026-06-29-consume-fitmode-auto-size-text`, which covers D-046), and D-046 is `[x]` and
+  archived. (This line previously still called D-046 "NOT done — PARKED"; corrected by the 2026-07-13
+  `[~]` audit.)
 - Multi-select chain ([D-041](./prd/designer.md) + follow-ups D-049 / D-050 /
   D-051 / D-053 / D-054 + [B-014](./prd/bugs-designer.md)) — merged & archived
   (2026-06-14); multi-select editing now reaches single-selection parity "fanned
@@ -297,14 +300,14 @@ are not yet filed):
 > **Ordering note:** the icon-pack (D-092) is done — the shared `Icon` set now
 > exists, so new control-bearing items reuse it.
 
-Previously-listed designer items not in this order — D-059, D-060 (unblocks the parked
-[D-046](./prd/designer.md)), D-061, D-064, D-065 (sequence AFTER D-066), D-066,
-[D-096](./prd/designer.md) (perf — animate position via CSS transform; belongs
-to the hardening wave), and [D-102](./prd/designer.md) **Phase 2** (per-element preview timing for
-SEQUENCES + COUNTDOWN clocks, plus surfacing repeater-stamped tickers in the timing tree — which
-currently walks only authored composition instances; Phase 1 tickers shipped, see Done) — remain
-**queued** in the PRD but are deprioritized below the above. (D-097–D-101 shipped in Group A — see
-Done.)
+Previously-listed designer items not in this order — D-059, D-061, D-064,
+D-065 (sequence AFTER D-066), D-066, [D-096](./prd/designer.md) (perf — animate position via CSS
+transform; belongs to the hardening wave), and [D-102](./prd/designer.md) **Phase 2** (per-element
+preview timing for SEQUENCES + COUNTDOWN clocks, plus surfacing repeater-stamped tickers in the timing
+tree — which currently walks only authored composition instances; Phase 1 tickers shipped, see Done) —
+remain **queued** in the PRD but are deprioritized below the above. (D-097–D-101 shipped in Group A —
+see Done. **D-060 and D-046 are NOT queued** — both shipped and archived 2026-06-29; this line used to
+list D-060 as queued and D-046 as parked, corrected by the 2026-07-13 `[~]` audit.)
 
 ### Designer — remaining, in order
 
