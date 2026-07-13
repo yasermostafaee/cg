@@ -124,17 +124,34 @@ export class Exporter {
       }
     }
 
-    // D-028 — the .vcg currently ships NO font bytes; a ticker on a machine
-    // without the face measures fallback glyphs, so its content-driven pass
-    // duration is silently wrong. The single-file HTML export inlines all
-    // fonts and is the font-complete on-air path.
-    const tickers = [...elementsById.values()].filter((el) => el.type === 'ticker');
-    if (tickers.length > 0) {
+    // D-121 — the .vcg now SHIPS the fonts it can (see `#gatherFonts`), so this
+    // warning no longer fires merely because the scene has a ticker. It fires only
+    // for a ticker whose face we genuinely cannot put in the package: a
+    // system/licensed font (no shippable bytes), or an `asset-*` font whose project
+    // asset is gone. Those still measure fallback glyphs on air, and a ticker's
+    // measured width is what ends its content-driven hold.
+    const bundleableFamilies = new Set(
+      scene.fonts
+        .filter((f) => bundleableAssetId(f.family, knownAssetIds) !== null)
+        .map((f) => f.family),
+    );
+    // Ticker family → the first ticker using it, so one message per offending font.
+    const unbundled = new Map<string, string>();
+    for (const el of elementsById.values()) {
+      if (el.type !== 'ticker') continue;
+      const family = el.font.family;
+      if (bundleableFamilies.has(family)) continue;
+      // The Runtime app ships these faces itself and inlines its `fonts.css` when it
+      // imports a package, so they ARE present on air — no drift, nothing to warn about.
+      if (RUNTIME_SELF_HOSTED_FAMILIES.has(family)) continue;
+      if (!unbundled.has(family)) unbundled.set(family, el.id);
+    }
+    for (const [family, elementId] of unbundled) {
       issues.push({
         severity: 'warning',
         code: 'vcg-ticker-fonts-not-bundled',
-        message: `This package contains ${String(tickers.length)} ticker element(s) but .vcg exports don't bundle font files yet — on a machine without the fonts, the crawl measures fallback glyphs and its content-driven duration will be wrong. Prefer the single-file HTML export (fonts inlined).`,
-        elementId: tickers[0]?.id ?? '',
+        message: `Ticker font "${family}" can't be bundled into the .vcg — a system/licensed face has no shippable bytes (and an imported font needs its asset still in the project). On a machine without it the crawl measures fallback glyphs, so its content-driven duration will be wrong. Import the font as a project asset so the package can ship it.`,
+        elementId,
       });
     }
 
@@ -232,9 +249,12 @@ export class Exporter {
     this.progress.emit({ step: 'manifest', progress: 0.2 });
     this.progress.emit({ step: 'assets', progress: 0.4 });
     const { assetsMap, assetIndex } = await this.#gatherBinaries(scene);
+    // D-121 — the fonts ride the same content-addressed shape as the images, but in
+    // `fonts/` via the packer's dedicated `fonts` seam.
+    const { fontsMap, fontIndex } = await this.#gatherFonts(scene);
 
     this.progress.emit({ step: 'template', progress: 0.6 });
-    const indexHtml = buildIndexHtml(scene, assetIndex);
+    const indexHtml = buildIndexHtml(scene, assetIndex, fontIndex);
 
     const nowIso = new Date().toISOString();
     this.progress.emit({ step: 'pack', progress: 0.8 });
@@ -251,12 +271,17 @@ export class Exporter {
         },
         compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
         fontDeps: scene.fonts,
-        assetIndex,
+        // Fonts join the asset index so a host re-rendering the package resolves a
+        // face BY ASSET ID — the lookup the Runtime's re-render already performs.
+        // Bytes without an index entry would render a standalone package but still
+        // mis-measure on air, which is the whole bug.
+        assetIndex: [...assetIndex, ...fontIndex],
       },
       indexHtml,
       cgJs: this.#cgJs,
       cgCss: this.#cgCss,
       assets: assetsMap,
+      fonts: fontsMap,
     });
 
     this.progress.emit({ step: 'sign', progress: 0.95 });
@@ -309,6 +334,87 @@ export class Exporter {
     }
     return { assetsMap, assetIndex };
   }
+
+  /**
+   * D-121 — resolve the bytes of every font the scene declares that we can legally
+   * and physically ship, and key them into the packer's `fonts` map.
+   *
+   * "Can ship" means an operator-imported / starter-seeded font, which the scene
+   * expresses as `family: 'asset-<assetId>'` — the same convention the single-file
+   * exporter has always resolved by. A `system` (licensed/OS-installed) face has no
+   * shippable bytes, and an `asset-*` font whose asset was deleted has none either:
+   * both are SKIPPED, never fatal — an export must not fail because the author
+   * picked Arial. Preflight names each skipped font instead.
+   */
+  async #gatherFonts(
+    scene: Scene,
+  ): Promise<{ fontsMap: Map<string, Uint8Array>; fontIndex: AssetEntry[] }> {
+    const fontsMap = new Map<string, Uint8Array>();
+    const fontIndex: AssetEntry[] = [];
+    const seen = new Set<string>();
+    for (const font of scene.fonts) {
+      const assetId = assetIdOfFamily(font.family);
+      if (assetId === null || seen.has(assetId)) continue;
+      seen.add(assetId);
+      const meta = await this.#assets.get(assetId);
+      if (meta === null) continue;
+      const bytes = await this.#assets.bytes(assetId);
+      if (bytes === null) continue;
+      const ext = meta.filename.slice(meta.filename.lastIndexOf('.'));
+      // Content-addressed, mirroring D-062's `assets/<kind>/<sha><ext>`: re-exporting
+      // is deterministic, and a face shared by two families is stored once.
+      const relativePath = `fonts/${meta.sha256}${ext}`;
+      fontsMap.set(relativePath, bytes);
+      fontIndex.push({
+        id: meta.assetId,
+        path: relativePath,
+        kind: 'font',
+        bytes: bytes.byteLength,
+        sha256: meta.sha256,
+        mime: mimeFor(ext),
+      });
+    }
+    return { fontsMap, fontIndex };
+  }
+}
+
+/**
+ * The `asset-<assetId>` family convention — the ONLY way a scene names a font whose
+ * bytes we hold. (`FontReference.source`/`bundledPath` are not the mechanism: no code
+ * has ever dereferenced `bundledPath`, and the starters set it to a family label.)
+ */
+function assetIdOfFamily(family: string): string | null {
+  const prefix = 'asset-';
+  return family.startsWith(prefix) ? family.slice(prefix.length) : null;
+}
+
+/** An `asset-*` family whose asset is actually present → we can ship its bytes. */
+function bundleableAssetId(family: string, knownAssetIds: ReadonlySet<string>): string | null {
+  const assetId = assetIdOfFamily(family);
+  return assetId !== null && knownAssetIds.has(assetId) ? assetId : null;
+}
+
+/**
+ * Faces the RUNTIME app bundles itself (`apps/runtime/public/fonts`) and base64-inlines
+ * from its own `fonts.css` when it imports a package. They are present on air without
+ * riding in the `.vcg`, so a ticker using one measures real glyphs and needs no warning.
+ */
+const RUNTIME_SELF_HOSTED_FAMILIES: ReadonlySet<string> = new Set(['Vazirmatn', 'Exo 2']);
+
+/** The `@font-face` `format(…)` hint matching a packaged font's extension. */
+function fontFormatFor(ext: string): string {
+  switch (ext.toLowerCase()) {
+    case '.woff2':
+      return 'woff2';
+    case '.woff':
+      return 'woff';
+    case '.ttf':
+      return 'truetype';
+    case '.otf':
+      return 'opentype';
+    default:
+      return 'woff2';
+  }
 }
 
 function downloadName(outputPath: string, sceneName: string): string {
@@ -331,20 +437,31 @@ function triggerDownload(bytes: Uint8Array, filename: string): void {
   }, 10_000);
 }
 
-function buildIndexHtml(scene: Scene, assetIndex: AssetEntry[]): string {
+function buildIndexHtml(scene: Scene, assetIndex: AssetEntry[], fontIndex: AssetEntry[]): string {
   // D-062 — bake the image assetId → packaged relative path map so the served
   // runtime sets each `<img>` src to its packaged bytes (no external/file:// ref;
   // the .vcg is http-served, so a relative path resolves to the bundled file).
   // Escape `<` for safety though sha-based paths never contain it.
   const assetUrls = Object.fromEntries(assetIndex.map((e) => [e.id, e.path]));
   const assetUrlsJson = JSON.stringify(assetUrls).replace(/</g, '\\u003c');
+  // D-121 — declare each packaged font PACKAGE-RELATIVE, so an unzipped-and-served
+  // `.vcg` renders with the real face and issues no external / `file://` request
+  // (it has to run under CasparCG's CEF). The family is the `asset-<id>` name the
+  // scene's elements already reference.
+  const fontFaces = fontIndex
+    .map((e) => {
+      const ext = e.path.slice(e.path.lastIndexOf('.'));
+      return `      @font-face { font-family: "asset-${e.id}"; font-display: swap; src: url('./${e.path}') format('${fontFormatFor(ext)}'); }`;
+    })
+    .join('\n');
+  const fontStyle = fontFaces === '' ? '' : `\n    <style>\n${fontFaces}\n    </style>`;
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=${String(scene.resolution.width)}, initial-scale=1" />
     <title>${escapeHtml(scene.name)}</title>
-    <link rel="stylesheet" href="./cg.css" />
+    <link rel="stylesheet" href="./cg.css" />${fontStyle}
   </head>
   <body class="cg-pending">
     <script type="module">

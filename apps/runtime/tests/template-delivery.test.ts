@@ -279,3 +279,132 @@ describe('importTemplateFromBytes', () => {
     expect(importSpy).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * D-121 — a `.vcg` that BUNDLES its font must put that face on air.
+ *
+ * This is the on-air half of the fix, asserted against the REAL delivery path
+ * (verify → unpack → single-file re-render → the HTML the bridge serves to CEF).
+ * It needs no Runtime/bridge change: `vcgImageAssetSource` resolves an `assetId`
+ * through `manifest.assetIndex` → `files`, path- and kind-agnostically, so a
+ * `fonts/…` entry resolves exactly as an `assets/…` one does.
+ *
+ * The payoff is a content-driven ticker's crawl measuring REAL glyph widths — which
+ * is what ends its hold — on a playout machine where the font isn't installed.
+ * Note `fontsCss` is deliberately omitted: nothing but the package can supply the
+ * face, so a pass here cannot be a system-install false positive.
+ */
+const FONT_WOFF2 = new Uint8Array([0x77, 0x4f, 0x46, 0x32, 0x00, 0x01, 0x00, 0x00, 9, 8, 7, 6, 5]);
+const FONT_ASSET_ID = 'vazir-pkg';
+const FONT_FAMILY = `asset-${FONT_ASSET_ID}`;
+
+/** A `.vcg` carrying a content-driven ticker whose face ships INSIDE the package. */
+async function buildVcgWithFont(templateId = 'tpl-font-1'): Promise<Uint8Array> {
+  const scene = {
+    schemaVersion: 1,
+    id: 'scene-font-1',
+    name: 'crawl-with-packaged-font',
+    templateType: 'ticker',
+    resolution: { width: 1920, height: 1080 },
+    frameRate: 50,
+    safeAreas: { title: 10, action: 5 },
+    frameRange: { in: 0, out: 100 },
+    background: 'transparent',
+    layers: [
+      {
+        id: 'layer-1',
+        name: 'band',
+        visible: true,
+        locked: false,
+        blendMode: 'normal',
+        children: [
+          {
+            id: 'tk-1',
+            name: 'Ticker',
+            type: 'ticker',
+            visible: true,
+            locked: false,
+            opacity: 1,
+            zIndex: 0,
+            transform: {
+              position: { x: 0, y: 980 },
+              size: { w: 1920, h: 72 },
+              scale: { x: 1, y: 1 },
+              rotation: 0,
+              anchor: { x: 0, y: 0 },
+            },
+            font: {
+              family: FONT_FAMILY,
+              weight: 500,
+              style: 'normal',
+              size: 36,
+              lineHeight: 1.4,
+              letterSpacing: 0,
+            },
+            color: '#FFFFFF',
+            direction: 'rtl',
+            verticalAlign: 'middle',
+            speed: 120,
+            gap: 64,
+            items: [{ id: 'it-1', text: 'خبر فوری' }],
+          },
+        ],
+      },
+    ],
+    fields: [],
+    bindings: [],
+    fonts: [{ family: FONT_FAMILY, weights: [500], styles: ['normal'], source: 'bundled' }],
+    metadata: { createdAt: '2026-07-13T00:00:00.000Z', updatedAt: '2026-07-13T00:00:00.000Z' },
+  } as unknown as Scene;
+
+  const fontPath = `fonts/${sha256Hex(FONT_WOFF2)}.woff2`;
+  const assetIndex: readonly AssetEntry[] = [
+    {
+      id: FONT_ASSET_ID,
+      path: fontPath,
+      kind: 'font',
+      bytes: FONT_WOFF2.byteLength,
+      sha256: sha256Hex(FONT_WOFF2),
+      mime: 'font/woff2',
+    },
+  ];
+  const fontDeps: readonly FontReference[] = [
+    { family: FONT_FAMILY, weights: [500], styles: ['normal'], source: 'bundled' },
+  ];
+
+  return pack({
+    scene,
+    manifestExtras: {
+      id: templateId,
+      name: 'crawl-with-packaged-font',
+      authoring: {
+        designerVersion: '0.0.0',
+        createdAt: '2026-07-13T00:00:00.000Z',
+        exportedAt: '2026-07-13T00:01:00.000Z',
+      },
+      compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+      fontDeps,
+      assetIndex,
+    } satisfies Pick<Manifest, 'id' | 'name' | 'authoring' | 'compatibility'> & {
+      fontDeps: readonly FontReference[];
+      assetIndex: readonly AssetEntry[];
+    },
+    indexHtml: '<!doctype html><html><body>placeholder</body></html>',
+    cgJs: '/* placeholder template runtime */',
+    cgCss: '/* placeholder template styles */',
+    fonts: new Map([[fontPath, FONT_WOFF2]]),
+  });
+}
+
+describe('produceTemplateDelivery — D-121 packaged fonts reach the on-air HTML', () => {
+  it("inlines the PACKAGE's font as base64 so the crawl measures real glyphs off-machine", async () => {
+    const { html } = await produceTemplateDelivery(await buildVcgWithFont());
+
+    // The face the ticker renders with comes from the package — not the OS.
+    const expected = `data:font/woff2;base64,${Buffer.from(FONT_WOFF2).toString('base64')}`;
+    expect(html).toContain(`@font-face{font-family:"${FONT_FAMILY}"`);
+    expect(html).toContain(expected);
+    // Self-contained: CEF fetches nothing (the served page's CSP is `font-src data:`).
+    expect(html).not.toMatch(/url\(['"]?(https?:|file:|\/fonts\/)/);
+  });
+});
