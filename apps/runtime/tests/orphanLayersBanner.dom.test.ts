@@ -5,6 +5,7 @@ import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { OrphanLayer, OwnedOccupancyWarning } from '@cg/shared-ipc';
 import { OrphanLayersBanner } from '../src/renderer/features/layers/OrphanLayersBanner.js';
+import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
 
 /**
  * R-009 — the orphan-layer warning surface: renders NOTHING when the set is
@@ -21,6 +22,7 @@ let container: HTMLDivElement | null = null;
 afterEach(() => {
   container?.remove();
   container = null;
+  clearPortals();
   vi.restoreAllMocks();
 });
 
@@ -71,28 +73,40 @@ describe('OrphanLayersBanner — R-009', () => {
     expect(el.textContent).toContain('Layer 2-15 is on air but not on your stack');
   });
 
-  it('confirm-accept sends exactly one layers.clear for that layer', async () => {
+  it('confirming in the modal sends exactly one layers.clear for that layer', async () => {
     const { clear } = stubBridge();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const nativeConfirm = vi.spyOn(window, 'confirm');
     const el = await renderBanner([orphan(1, 60)]);
     const btn = el.querySelector<HTMLButtonElement>('button[aria-label="Clear layer 1-60"]');
     expect(btn).not.toBeNull();
+
     await act(async () => {
       btn?.click();
       await Promise.resolve();
     });
+
+    expect(openDialog()?.textContent).toContain('Clear layer 1-60');
+    expect(nativeConfirm).not.toHaveBeenCalled();
+    expect(clear).not.toHaveBeenCalled();
+
+    await clickDialogButton('Clear layer');
+
     expect(clear).toHaveBeenCalledTimes(1);
     expect(clear).toHaveBeenCalledWith({ channel: 1, layer: 60 });
   });
 
-  it('confirm-cancel sends nothing', async () => {
+  it('cancelling the modal sends nothing', async () => {
     const { clear } = stubBridge();
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
     const el = await renderBanner([orphan(1, 60)]);
+
     await act(async () => {
       el.querySelector<HTMLButtonElement>('button[aria-label="Clear layer 1-60"]')?.click();
+      await Promise.resolve();
     });
+    await clickDialogButton('Cancel');
+
     expect(clear).not.toHaveBeenCalled();
+    expect(openDialog()).toBeNull();
   });
 });
 

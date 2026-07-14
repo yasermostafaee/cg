@@ -481,6 +481,9 @@ export const test = base.extend<{ app: RuntimeApp }>({
       // import flow exercises the offline MockRuntime deterministically.
       (window as unknown as { __CG_BRIDGE_URL__: string }).__CG_BRIDGE_URL__ = 'ws://127.0.0.1:1';
     });
+    // The app no longer opens native dialogs — every confirm/prompt is an in-app modal, so
+    // specs click a real button. This stays as a backstop: if a `window.confirm` ever
+    // creeps back in, it is dismissed rather than hanging the run on an unanswered dialog.
     page.on('dialog', (d) => void d.dismiss());
     const app = new RuntimeApp(page);
     await app.goto();

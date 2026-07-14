@@ -4,6 +4,7 @@ import { useStack } from '../../hooks/useStack.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { useConfirm } from '../../ui/useDialog.js';
 import { templateDisplayName } from '../library/templateName.js';
 import { isOnAir } from './onAir.js';
 import { applyDraft } from '../inspector/applyDraft.js';
@@ -73,6 +74,7 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
   // `templateId` stays the sole identity), so it is joined from the registry here, once for
   // the whole list, rather than fetched per row.
   const templates = useTemplateIndex(items.map((i) => i.templateId));
+  const { confirm, confirmDialog } = useConfirm();
   const [selected, setSelected] = useState<string | null>(null);
   // Newest first. The item the operator just loaded is the one they are about to act on, so
   // it belongs at the top — not below everything they loaded an hour ago.
@@ -107,7 +109,9 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
         {/* One right-aligned group. The colour pairing is the point: CLEAR ALL carries the
             same `caution` treatment as the row's own CLEAR, and REMOVE ALL the same `danger`
             as the row's REMOVE — so the "clear" family reads as one thing and the "remove"
-            family as another, and the more destructive one (it drops the rows) is the red. */}
+            family as another, and the more destructive one (it drops the rows) is the red.
+            Each button's confirm modal carries the same variant, so the colour the operator
+            pressed is the colour that asks them to press again. */}
         <div style={styles.headerActions}>
           {onAirCount > 0 && (
             <Button
@@ -119,13 +123,15 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
                 // the rows, so recovering is a re-take — not a re-import and re-typing every
                 // field, which is what Remove-All costs. Confirm-gated all the same: it is
                 // still an on-air action.
-                if (
-                  window.confirm(
-                    `Clear all ${String(onAirCount)} on-air item(s)? They come off air and stay on the stack, idle.`,
-                  )
-                ) {
-                  void window.cg.stack.clearAll();
-                }
+                void (async () => {
+                  const ok = await confirm({
+                    title: 'Clear all on-air items?',
+                    body: `All ${String(onAirCount)} on-air item(s) come off air. They stay on the stack, idle, and can be taken again.`,
+                    confirmLabel: 'Clear all',
+                    variant: 'caution',
+                  });
+                  if (ok) await window.cg.stack.clearAll();
+                })();
               }}
             >
               CLEAR ALL
@@ -139,16 +145,16 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
               aria-label="Remove all items"
               title="Out + remove every item — clears anything on air and empties the stack"
               onClick={() => {
-                // R-010 — the destructive on-air-clearing path (unblocks a
-                // server switch). Native confirm follows the lock-PIN
-                // precedent; the stack visibly empties via the state publish.
-                if (
-                  window.confirm(
-                    `Remove all ${String(items.length)} item(s)? This clears anything on air.`,
-                  )
-                ) {
-                  void window.cg.stack.removeAll();
-                }
+                // R-010 — the destructive on-air-clearing path (unblocks a server switch).
+                // The stack visibly empties via the state publish.
+                void (async () => {
+                  const ok = await confirm({
+                    title: 'Remove all items?',
+                    body: `This clears anything on air and empties the stack — all ${String(items.length)} item(s).`,
+                    confirmLabel: 'Remove all',
+                  });
+                  if (ok) await window.cg.stack.removeAll();
+                })();
               }}
             >
               REMOVE ALL
@@ -189,6 +195,7 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
           })
         )}
       </div>
+      {confirmDialog}
     </section>
   );
 }

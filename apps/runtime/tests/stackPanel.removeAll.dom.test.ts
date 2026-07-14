@@ -5,10 +5,14 @@ import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
 import { StackPanel } from '../src/renderer/features/stack/StackPanel.js';
+import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
 
 /**
  * R-010 — the StackPanel header's Remove-All: confirm-gated (accept → one
  * stack.removeAll call; cancel → none), hidden on an empty stack.
+ *
+ * The gate is now the app's own modal, not `window.confirm` — so these drive the dialog's
+ * real buttons, and assert that no native dialog is reached for at all.
  */
 
 let container: HTMLDivElement | null = null;
@@ -16,6 +20,7 @@ let container: HTMLDivElement | null = null;
 afterEach(() => {
   container?.remove();
   container = null;
+  clearPortals();
   vi.restoreAllMocks();
 });
 
@@ -72,27 +77,44 @@ function removeAllButton(el: HTMLElement): HTMLButtonElement | null {
 }
 
 describe('StackPanel Remove-All — R-010', () => {
-  it('accepting the confirm calls stack.removeAll once', async () => {
+  it('confirming in the modal calls stack.removeAll once', async () => {
     const { removeAll } = stubBridge(items(3));
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const confirmSpy = vi.spyOn(window, 'confirm');
     const el = await renderPanel();
     const btn = removeAllButton(el);
     expect(btn).not.toBeNull();
+
     await act(async () => {
       btn?.click();
+      await Promise.resolve();
     });
-    expect(confirmSpy).toHaveBeenCalledWith('Remove all 3 item(s)? This clears anything on air.');
+
+    // The app's own dialog, naming the consequence — not the browser's.
+    const dialog = openDialog();
+    expect(dialog).not.toBeNull();
+    expect(dialog?.textContent).toContain('This clears anything on air');
+    expect(dialog?.textContent).toContain('3 item(s)');
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(removeAll).not.toHaveBeenCalled();
+
+    await clickDialogButton('Remove all');
+
     expect(removeAll).toHaveBeenCalledTimes(1);
+    expect(openDialog()).toBeNull();
   });
 
-  it('cancelling the confirm removes nothing', async () => {
+  it('cancelling the modal removes nothing', async () => {
     const { removeAll } = stubBridge(items(2));
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
     const el = await renderPanel();
+
     await act(async () => {
       removeAllButton(el)?.click();
+      await Promise.resolve();
     });
+    await clickDialogButton('Cancel');
+
     expect(removeAll).not.toHaveBeenCalled();
+    expect(openDialog()).toBeNull();
   });
 
   it('is hidden when the stack is empty (nothing to destroy)', async () => {

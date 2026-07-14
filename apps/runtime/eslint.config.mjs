@@ -22,7 +22,9 @@ export default [
   {
     // React component tests (`*.dom.test.ts`) run in jsdom and legitimately
     // render the renderer's React primitives, so they import react/react-dom.
-    files: ['tests/**/*.dom.test.{ts,tsx}'],
+    // `tests/support/**` is their shared harness (e.g. driving the in-app modal,
+    // which is portalled outside the panel's container) and needs the same.
+    files: ['tests/**/*.dom.test.{ts,tsx}', 'tests/support/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': 'off',
     },

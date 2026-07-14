@@ -25,13 +25,16 @@ test('a seeded orphan surfaces the banner naming the layer; confirm-gated Clear 
   await expect(banner).toBeVisible();
   await expect(banner).toContainText('Layer 1-60 is on air but not on your stack');
 
-  // Cancel first: the fixture's default dialog handler dismisses — nothing happens.
+  // The gate is the app's own modal. Cancel first — nothing happens.
+  const confirmClear = page.getByRole('dialog', { name: 'Clear layer 1-60?' });
   await banner.getByRole('button', { name: 'Clear layer 1-60' }).click();
+  await expect(confirmClear).toBeVisible();
+  await confirmClear.getByRole('button', { name: 'Cancel' }).click();
+  await expect(confirmClear).toHaveCount(0);
   await expect(banner).toBeVisible();
 
-  // Accept: replace the dialog handler, Clear resolves, the banner disappears.
-  page.removeAllListeners('dialog');
-  page.on('dialog', (d) => void d.accept());
+  // Confirm: Clear resolves, the banner disappears.
   await banner.getByRole('button', { name: 'Clear layer 1-60' }).click();
+  await confirmClear.getByRole('button', { name: 'Clear layer', exact: true }).click();
   await expect(page.getByRole('alert', { name: 'Orphaned on-air layers' })).toHaveCount(0);
 });

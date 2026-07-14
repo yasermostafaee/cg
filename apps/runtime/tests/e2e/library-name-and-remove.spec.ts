@@ -29,12 +29,13 @@ test('library shows display names, refuses removing a referenced template, and r
   await expect(library.getByTitle('title')).toHaveText(UNREFERENCED);
 
   // ── R-005: removing a REFERENCED template is refused ──
-  // The confirm gate is deliberate (removal is destructive + not undoable); the fixture's
-  // default handler dismisses dialogs, so accept them for this path.
-  page.removeAllListeners('dialog');
-  page.on('dialog', (d) => void d.accept());
+  // The confirm gate is deliberate (removal is destructive + not undoable). It is the app's
+  // own modal now, not the browser's — so it is clicked, not "accepted".
+  const confirmRemove = page.getByRole('dialog', { name: 'Remove this template?' });
 
   await library.getByRole('button', { name: `Remove ${REFERENCED}` }).click();
+  await expect(confirmRemove).toBeVisible();
+  await confirmRemove.getByRole('button', { name: 'Remove', exact: true }).click();
 
   // The bridge's message, verbatim — the panel does not pre-judge the outcome.
   await expect(library.getByRole('alert')).toContainText(/1 stack item\(s\) still use this/);
@@ -44,6 +45,7 @@ test('library shows display names, refuses removing a referenced template, and r
 
   // ── R-005: removing an UNREFERENCED template goes through ──
   await library.getByRole('button', { name: `Remove ${UNREFERENCED}` }).click();
+  await confirmRemove.getByRole('button', { name: 'Remove', exact: true }).click();
 
   await expect(library.getByText(`Removed “${UNREFERENCED}”`)).toBeVisible();
   await expect(library.getByRole('button', { name: `Load ${UNREFERENCED}` })).toHaveCount(0);
