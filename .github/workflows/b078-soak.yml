@@ -1,0 +1,164 @@
+name: B-078 soak (temporary — evidence gathering, NOT a gate)
+
+# B-078 — measure the DESIGNER E2E flake rate on a real 2-core runner.
+#
+# Why this exists: the normal `e2e` job runs `pnpm test:e2e` -> `turbo run test:e2e`
+# WITHOUT --force, so `@cg/designer#test:e2e` is usually a turbo CACHE HIT and the
+# suite never actually executes (it replays a cached "209 passed (5.5m)" log). That
+# makes the historical CI record useless as a flake denominator. Here we invoke the
+# Playwright suites DIRECTLY (no turbo), so the designer suite really runs every leg.
+#
+# `--retries=0` is a MEASUREMENT choice, not a proposed config: the real gate keeps
+# `retries: 1`, which would mask exactly the single-assertion flake B-078 describes.
+# At retries=0 any contention hiccup becomes a visible red, so we can count it.
+#
+# Three arms, same commit, same runner class:
+#   parallel — designer ∥ runtime            (== today's `turbo run test:e2e`)
+#   serial   — designer, THEN runtime        (== the proposed `--concurrency=1` bound)
+#   stress   — designer ∥ runtime-on-a-loop  (co-tenancy for the WHOLE designer run,
+#              not just the ~35s the runtime suite normally takes; this tests the
+#              contention MECHANISM at maximum strength)
+#
+# Read: if contention flakes the designer suite, `stress` goes red while `serial`
+# stays green. If `stress` stays green, contention does not flake this suite and a
+# concurrency bound cannot be shown to help.
+#
+# DELETE THIS FILE once B-078 is settled.
+
+on:
+  push:
+    branches: ['fix/B-078-**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CI: 'true'
+
+jobs:
+  soak:
+    name: soak ${{ matrix.arm }} #${{ matrix.leg }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [parallel, serial, stress]
+        leg: [1, 2, 3, 4, 5, 6]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # Restore ONLY (no save) so the soak can never clobber the real e2e turbo cache.
+      - name: Restore Turbo cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .turbo
+          key: turbo-e2e-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-e2e-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve Playwright version
+        id: pw
+        working-directory: apps/designer
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Playwright Chromium (+ deps)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @cg/designer exec playwright install --with-deps chromium
+
+      - name: Install system deps for cached browser
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @cg/designer exec playwright install-deps chromium
+
+      # Same as the real e2e job: build first, then run the suites against `dist/`.
+      - name: Build (workspace)
+        run: pnpm build
+
+      - name: Report runner size
+        run: |
+          echo "cores=$(nproc)  availableParallelism=$(node -p 'require("os").availableParallelism()')"
+          free -m || true
+
+      - name: Soak — ${{ matrix.arm }}
+        id: soak
+        run: |
+          set -uo pipefail
+          DESIGNER="pnpm --filter @cg/designer exec playwright test --retries=0 --reporter=line"
+          RUNTIME="pnpm --filter @cg/runtime  exec playwright test --retries=0 --reporter=line"
+
+          case "${{ matrix.arm }}" in
+            parallel)
+              # Exactly what `turbo run test:e2e` does at its default concurrency.
+              $DESIGNER > designer.log 2>&1 &
+              DPID=$!
+              $RUNTIME > runtime.log 2>&1 &
+              RPID=$!
+              wait $DPID; DRC=$?
+              wait $RPID; RRC=$?
+              ;;
+            serial)
+              # Exactly what `turbo run test:e2e --concurrency=1` does.
+              $DESIGNER > designer.log 2>&1; DRC=$?
+              $RUNTIME  > runtime.log  2>&1; RRC=$?
+              ;;
+            stress)
+              # Keep a co-tenant on the box for the WHOLE designer run.
+              ( until [ -f .designer-done ]; do
+                  $RUNTIME >> runtime.log 2>&1 || true
+                done ) &
+              LPID=$!
+              $DESIGNER > designer.log 2>&1; DRC=$?
+              touch .designer-done
+              wait $LPID 2>/dev/null || true
+              RRC=0
+              ;;
+          esac
+
+          echo "### arm=${{ matrix.arm }} leg=${{ matrix.leg }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "designer_rc=$DRC runtime_rc=$RRC" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '--- designer tail ---'
+          tail -n 25 designer.log
+          {
+            echo '```'
+            grep -E "^\s+[0-9]+ (passed|failed|flaky)|✘|Error:|expect\(" designer.log | head -n 30 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # The DESIGNER suite is the measured subject. The runtime suite is only the
+          # co-tenant; its result does not decide this leg.
+          echo "designer_rc=$DRC" >> "$GITHUB_OUTPUT"
+          exit $DRC
+
+      - name: Upload logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-${{ matrix.arm }}-${{ matrix.leg }}
+          path: |
+            designer.log
+            runtime.log
+          retention-days: 5
