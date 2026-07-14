@@ -3237,3 +3237,65 @@ schema already supports; per-project overrides of a shared font. **RECON-FIRST, 
 `designer-shared-font-library` (+ likely `## MODIFIED Requirements` on the font-export capability
 `designer-font-export` from D-121). Builds on **D-040** (the shared-image pattern) and **D-121** (font
 export).
+
+## [ ] D-127 — Rename the open project (double-click the name + File → "Rename Project…") ⟨priority: medium⟩
+
+**What:** Let the operator rename the OPEN project via two entry points that resolve to the **same**
+inline-edit affordance on the TopToolbar project name: (1) **double-click** the centered project name
+in the TopToolbar → it becomes an editable inline text input (focused, current name selected); (2) a
+**File menu → "Rename Project…"** entry that triggers the exact same inline edit (focus + select).
+Commit on **Enter or blur**, cancel on **Escape** (restores the previous name). The commit writes
+`scene.name` through the existing scene-update path as **ONE** undo step. **DECISION (owner):** rename
+changes ONLY the internal display name (`scene.name`) — it does **NOT** rename the on-disk file (the
+D-088 `FileSystemFileHandle` is untouched); the operator can **Save As** separately for a different
+filename.
+**Why:** the project name is visible but not editable after creation, so a mistaken or default name
+(e.g. typed into New Project) is stuck for the life of the project. Renaming an open document is a
+basic editor affordance (Figma, VS Code) that the Designer is simply missing.
+**Acceptance:**
+
+- WHEN the operator double-clicks the project name in the TopToolbar THEN it becomes an editable
+  inline input, focused with the current name selected
+- WHEN the operator picks **File → "Rename Project…"** THEN the same inline edit on the TopToolbar name
+  is activated (focus + select) — behavior identical to the double-click path (one affordance, two
+  entry points); the entry is disabled when no project is open
+- WHEN the operator confirms with **Enter** or by **blurring** THEN `scene.name` is updated via the
+  normal scene-update path as **one** undo entry, and both the TopToolbar name and the browser tab
+  title reflect the new name
+- WHEN the operator presses **Escape** THEN the edit is cancelled and the previous name is restored —
+  no change, no undo entry
+- WHEN the name is changed THEN the document becomes **dirty** (the content hash includes `scene.name`)
+  so SAVE enables and the tab shows the unsaved marker (`* <name>`); the on-disk **FILE is NOT renamed**
+- WHEN the operator enters an **empty / whitespace-only** name THEN it is rejected (the previous name is
+  kept, no undo entry) rather than saving a blank project name
+- WHEN the project is previewed / exported THEN nothing about rendering changes — `scene.name` is
+  display metadata only (no export / runtime impact)
+
+**Notes:** **UI-only, export-neutral — NO schema change** (`scene.name` already exists), NO runtime /
+exporter change. **Recon (done):** (a) the name renders in
+`apps/designer/src/renderer/features/shell/TopToolbar.tsx` as the `s.projectName` span inside
+`s.centerCluster` (`data-testid="project-name"`, `title={scene.name}`), with SAVE adjacent — the D-095 /
+D-086 chrome relocation; the File dropdown right there is the `FileMenuItem` list (New / Open · Save /
+Save As · Close project) whose actions run through `runFileAction` / `runFileSwitch`. (b) The tab title
+is `App.tsx`'s `document.title` effect (`* <name>` dirty / `<name>` clean / `cg Designer` when nothing
+is open), keyed off `scene?.name` — so it follows a rename for free. (c) The dirty hash is
+`state/scene-hash.ts` `hashScene()`, which canonically hashes the WHOLE scene minus `metadata.updatedAt`
+— top-level `scene.name` **IS** in the hashed model, so a rename correctly marks the doc dirty
+(confirmed). (d) Undo is automatic in `state/store-core.ts` `set()`: any write of a NEW scene object
+pushes the prior one onto the undo stack, time-coalesced (`COALESCE_MS = 300`) — so hold the in-progress
+text in LOCAL component state and call the store **once** on commit; a per-keystroke write would
+otherwise risk multiple undo entries for one rename. **⚠️ THE TRAP — `updateScene({ name })` does NOT
+rename the project when a composition is active:** in `state/slices/document.ts` `updateScene()`,
+`'name'` is one of the **`docKeys`**, so with `activeCompositionId !== null` the patch is routed to the
+ACTIVE COMPOSITION and renames _that_, not the scene root. The rename must therefore target the scene
+**ROOT** name unconditionally — add a small root-targeted action (e.g. `renameProject(name)` /
+`setProjectName`) on the document slice rather than calling `updateScene({ name })` naively, and do NOT
+introduce a parallel name model. Reuse the existing `Control`/`Button` primitives + `Icon` for any new
+control (no raw `<input>` styling ad-hoc — follow the design-system rule), and match Escape/Enter on the
+layout-stable `e.key` (allowed for `Enter`/`Escape`). Capabilities: **`designer-shell`** (TopToolbar +
+File menu) — confirm at change time; possibly `## MODIFIED Requirements` on
+`designer-project-persistence` for the dirty / tab-title interaction. Tests: store test for the
+root-vs-composition routing + single undo entry; **E2E** for both entry points (double-click and File →
+Rename Project…), Enter/blur commit, Escape restore, empty-name rejection, and the dirty marker.
+Verification is the **Designer preview** (no CasparCG). Sequence: independent of the Shared-Library
+relocation (**D-066**) and of the big features (**D-125** / **D-126**).
