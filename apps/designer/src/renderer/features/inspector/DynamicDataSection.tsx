@@ -11,6 +11,13 @@ import type {
 import { designerStore, type ElementFieldMetaPatch } from '../../state/store.js';
 import { CollapseSection } from './CollapseSection.js';
 import { NumberField, SelectField, TextField } from './controls.js';
+import {
+  CUSTOM_PATTERN,
+  PATTERN_PRESET_ORDER,
+  PATTERN_PRESETS,
+  patternForPresetKey,
+  patternPresetKeyFor,
+} from './pattern-presets.js';
 import * as cs from './controls.css.js';
 import * as s from './DynamicDataSection.css.js';
 
@@ -260,11 +267,13 @@ function FieldMeta({
               onCommit={(n) => patch({ maxLength: Math.max(0, Math.round(n)) })}
             />
           )}
-          <TextField
-            label="Pattern"
-            value={patternOf(field)}
-            onCommit={(v) => patch({ pattern: v })}
+          <PatternField
+            // Re-mount when the edited field changes so the Custom escape (local
+            // UI state) never leaks onto the next element/field (B-009).
+            key={`pattern-${element.id}-${field.id}`}
+            pattern={patternOf(field)}
             resetKey={element.id}
+            onCommit={(p) => patch({ pattern: p })}
           />
         </>
       )}
@@ -282,6 +291,57 @@ function FieldMeta({
           onCommit={(v) => patch({ default: v })}
           resetKey={element.id}
         />
+      )}
+    </>
+  );
+}
+
+/**
+ * D-059 — the field's `pattern` behind named validation presets. The select
+ * shows what the STORED regex spells (None / a named shape / Custom); picking a
+ * preset writes its vetted anchored regex through the same `pattern` patch, and
+ * "Custom (advanced)" reveals the raw regex box — today's UI — pre-filled with
+ * the current pattern, so any regex stays authorable. Custom is a DISPLAY state
+ * (an empty pattern still spells None, an email regex still spells Email), hence
+ * the local escape flag.
+ */
+function PatternField({
+  pattern,
+  resetKey,
+  onCommit,
+}: {
+  pattern: string;
+  resetKey: string;
+  onCommit: (pattern: string) => void;
+}): JSX.Element {
+  const [customEscape, setCustomEscape] = useState(false);
+  const stored = patternPresetKeyFor(pattern);
+  const selected = stored === CUSTOM_PATTERN || customEscape ? CUSTOM_PATTERN : stored;
+  const example = PATTERN_PRESETS[selected]?.example;
+
+  return (
+    <>
+      <SelectField
+        label="Pattern"
+        value={selected}
+        options={PATTERN_PRESET_ORDER.map((p) => p.key)}
+        labels={PATTERN_PRESET_ORDER.map((p) => p.label)}
+        onCommit={(key) => {
+          setCustomEscape(key === CUSTOM_PATTERN);
+          const next = patternForPresetKey(key);
+          if (next !== null) onCommit(next); // Custom keeps the current regex
+        }}
+      />
+      {selected === CUSTOM_PATTERN ? (
+        <TextField
+          label="Regex"
+          ariaLabel="Custom pattern regex"
+          value={pattern}
+          onCommit={onCommit}
+          resetKey={resetKey}
+        />
+      ) : (
+        example !== undefined && <p className={s.hint}>Accepts e.g. {example}</p>
       )}
     </>
   );

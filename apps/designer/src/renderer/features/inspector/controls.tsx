@@ -455,6 +455,12 @@ interface TextFieldProps {
   label: string;
   value: string;
   onCommit: (s: string) => void;
+  /**
+   * Accessible name for the input, when the row's short label isn't enough on
+   * its own (e.g. "Regex" → "Custom pattern regex"). Defaults to none — the
+   * visible label already sits beside the input.
+   */
+  ariaLabel?: string;
   /** Optional element rendered in a trailing column (e.g. KeyframeIndicator). */
   trailing?: JSX.Element | undefined;
   /**
@@ -476,6 +482,7 @@ export function TextField(props: TextFieldProps): JSX.Element {
           className={s.inputInner}
           type="text"
           defaultValue={props.value}
+          aria-label={props.ariaLabel}
           onFocus={(e) => e.currentTarget.select()}
           onBlur={(e) => props.onCommit(e.target.value)}
           onKeyDown={(e) => {
