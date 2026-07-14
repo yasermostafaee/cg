@@ -27,6 +27,12 @@
 - [x] 3.1 CLEAR ALL beside REMOVE ALL in the stack header; confirm names the outcome ("come off air and stay on the stack, idle").
 - [x] 3.2 Hidden when nothing is on air; Remove-All still shown (the rows can still be dropped).
 
+## 3b. The per-item label
+
+- [x] 3b.1 The row's OUT button is relabelled **CLEAR** — it sends `CLEAR`, and "OUT" read like the authored outro (which it is not). LABEL ONLY: same `stack.out` intent, same channel, same AMCP command.
+- [x] 3b.2 `clearLabel.dom.test.ts` pins that the rename changed nothing on the wire (the same `out` intent still fires with the same itemId).
+- [x] 3b.3 The E2E specs and the gating DOM test address the button by its new label.
+
 ## 4. Tests
 
 - [x] 4.1 `clearAll.test.ts` — the `isOnAir` predicate; the mock clears air, KEEPS the rows, leaves a `loaded` item alone, no-ops on an idle stack, and a cleared item can be re-taken. Explicitly asserts clear ≠ remove.

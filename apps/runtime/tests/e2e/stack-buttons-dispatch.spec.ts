@@ -32,7 +32,7 @@ test('PLAY / UPDATE / OUT / REMOVE each dispatch their action on click', async (
   await expect(row.getByText('ON AIR')).toBeVisible({ timeout: 3000 });
 
   // OUT → out dispatched → the item leaves air (settles IDLE).
-  await row.getByRole('button', { name: 'OUT' }).click();
+  await row.getByRole('button', { name: 'CLEAR', exact: true }).click();
   await expect(row.getByText('IDLE')).toBeVisible({ timeout: 3000 });
 
   // REMOVE → remove dispatched → the row is gone from the stack.

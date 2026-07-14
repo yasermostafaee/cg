@@ -63,7 +63,7 @@ test('the picker seeds from the manifest default, applies one override, and lock
   await expect(picker.getByText('locked while on air')).toBeVisible();
 
   // OUT settles the item back to IDLE → editable again.
-  await row.getByRole('button', { name: 'OUT' }).click();
+  await row.getByRole('button', { name: 'CLEAR', exact: true }).click();
   await expect(row.getByText('IDLE')).toBeVisible({ timeout: 3000 });
   await expect(picker.getByRole('button', { name: 'Apply position' })).toBeEnabled();
 });

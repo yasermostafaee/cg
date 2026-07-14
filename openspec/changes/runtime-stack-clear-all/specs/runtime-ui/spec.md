@@ -90,3 +90,27 @@ offline mock — so the mock cannot present a bulk action the bridge does not ha
 
 - **WHEN** the parity guard compares the two backends **THEN** `clearAll` is present on both,
   and the bridge routes `stack.clear-all` to it
+
+### Requirement: The per-item off-air action is labelled CLEAR
+
+The stack row's off-air action SHALL be labelled **CLEAR**, because `CLEAR` is what it sends.
+
+It was labelled **OUT**, which reads like the authored outro — an animated exit. It is not:
+it dispatches a `CLEAR <channel>-<layer>`, a hard cut that destroys the producer. An operator
+choosing between "OUT" and "REMOVE" had no way to tell that the gentle-sounding one was the
+abrupt one. The label now matches the wire, and matches the Clear-All beside it.
+
+This is a LABEL change only. The underlying intent, IPC channel, API names and AMCP command
+SHALL be unchanged — the button still dispatches the same `stack.out`. An animated-out STOP
+(playing the authored outro before removing) is a separate, future capability and is NOT what
+this control does.
+
+#### Scenario: The off-air button reads CLEAR
+
+- **WHEN** the operator views a stack row **THEN** the off-air action reads "CLEAR", distinct
+  from the destructive "REMOVE" beside it
+
+#### Scenario: The rename changes nothing on the wire
+
+- **WHEN** the operator presses CLEAR **THEN** the same `stack.out` intent is dispatched over
+  the same channel and the same `CLEAR <channel>-<layer>` reaches CasparCG

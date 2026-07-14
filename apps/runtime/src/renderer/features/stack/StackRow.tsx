@@ -57,7 +57,8 @@ const styles = {
  *    B-044 UNCONFIRMED state and the transient UPDATING/TAKING spinner.
  *  - Template label + `● draft` chip (R-003), over a content/slot subtitle.
  *  - Action buttons — PLAY (on-air primary, renamed from TAKE), UPDATE
- *    (secondary), OUT (caution), REMOVE (danger) — as `AsyncButton`s that show
+ *    (secondary), CLEAR (caution — it sends `CLEAR`, so it says so; renamed from
+ *    OUT), REMOVE (danger) — as `AsyncButton`s that show
  *    press → busy → success/error for their own bridge round-trip, decoupled
  *    from the badge's B-044 settlement.
  */
@@ -146,7 +147,7 @@ export function StackRow({
           disabled={!isOnAir(item) || linkDown}
           {...(offlineReason !== undefined ? { title: offlineReason } : {})}
         >
-          OUT
+          CLEAR
         </AsyncButton>
         <AsyncButton variant="danger" run={() => onRemove(item.itemId)}>
           REMOVE
