@@ -8,6 +8,26 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Runtime Library UX — display names + template removal
+  ([R-004](./prd/runtime.md), [R-005](./prd/runtime.md)) — merged (#306). R-004
+  archived (2026-07-14, `2026-07-14-runtime-library-display-name`): the Library
+  showed the raw `templateId` — a UUID for any Designer-authored `.vcg`. The name
+  was never missing from the data (`ManifestSchema.name` and `SceneSchema.name` are
+  both required and the exporter writes them); it was dropped at the two hops that
+  build a `TemplateInfo`. `TemplateInfo.name` is additive + optional, so a template
+  registered without one still renders exactly as before, and a blank name (the
+  manifest schema has no `.min(1)`, so `""` is packageable) falls through to the id
+  rather than rendering an empty row. R-005 shipped its per-row **Remove** control
+  with a **refuse-while-referenced** policy: deleting a template a stack item uses
+  does not take the graphic off air (CEF already holds the HTML) but silently
+  poisons the row — its next out→take can never resolve the template again — so any
+  reference blocks, not just an on-air one, and the bridge is authoritative for the
+  refusal (mirroring R-010's on-air block). A confirmed removal also prunes the
+  reconnect-reconciliation retention, or the template walks back in on the next
+  bridge blip. No AMCP verb added; ADR-0006 untouched — removal sends nothing to the
+  wire. **R-005 is NOT closed**: its context-menu affordance is still an owner call
+  (the Runtime has no context-menu primitive), so the item stays `[~]` and
+  `runtime-library-remove-template` stays active.
 - Bundle fonts in `.vcg` export ([D-121](./prd/designer.md)) — merged (#298) &
   archived (2026-07-13, `2026-07-13-bundle-fonts-in-vcg-export`): the Exporter now
   resolves each `scene.fonts` entry's bytes into `pack()`'s existing `fonts` seam
