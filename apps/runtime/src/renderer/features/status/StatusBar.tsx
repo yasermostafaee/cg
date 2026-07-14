@@ -4,6 +4,7 @@ import { useLock } from '../../hooks/useLock.js';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
+import { usePrompt } from '../../ui/useDialog.js';
 import { LinkIndicator } from './LinkIndicator.js';
 
 interface Props {
@@ -93,6 +94,8 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
   const simulated = link === 'offline-mock';
   // B-081 — the link that DELIVERS health is down, so every reading below is unverifiable.
   const stale = link === 'disconnected';
+  // Above the loading early return: a hook cannot be called conditionally.
+  const { prompt, promptDialog } = usePrompt();
 
   if (health === null) {
     return (
@@ -181,15 +184,27 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
       ) : (
         <Button
           onClick={() => {
-            const pin = window.prompt('Set a lock PIN (4–64 chars):');
-            if (pin !== null && pin.length >= 4) {
-              void window.cg.lock.engage({ pin });
-            }
+            void (async () => {
+              // The native prompt let a too-short PIN through and this handler then dropped
+              // it on the floor — the operator pressed Lock, nothing happened, and nothing
+              // said why. The dialog now holds the rule itself: submit stays disabled until
+              // the PIN is long enough.
+              const pin = await prompt({
+                title: 'Lock the Runtime',
+                body: 'While locked, every on-air control is disabled until the PIN is re-entered.',
+                label: 'Lock PIN (4–64 characters)',
+                submitLabel: 'Lock',
+                type: 'password',
+                minLength: 4,
+              });
+              if (pin !== null) await window.cg.lock.engage({ pin });
+            })();
           }}
         >
           🔒 Lock…
         </Button>
       )}
+      {promptDialog}
     </footer>
   );
 }

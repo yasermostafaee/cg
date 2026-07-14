@@ -5,6 +5,7 @@ import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { LibraryPanel } from '../src/renderer/features/library/LibraryPanel.js';
+import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
 
 /**
  * R-004 — the Library row names the template. The operator scans this panel under time
@@ -18,6 +19,7 @@ let container: HTMLDivElement | null = null;
 afterEach(() => {
   container?.remove();
   container = null;
+  clearPortals();
   vi.restoreAllMocks();
 });
 
@@ -128,8 +130,8 @@ function removeButton(el: HTMLElement, label: string): HTMLButtonElement | null 
 }
 
 describe('LibraryPanel remove — R-005', () => {
-  it('confirms, calls templates.remove, and drops the row', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('confirms in the modal, calls templates.remove, and drops the row', async () => {
+    const nativeConfirm = vi.spyOn(window, 'confirm');
     const el = await renderPanel([NAMED]);
 
     await act(async () => {
@@ -137,7 +139,14 @@ describe('LibraryPanel remove — R-005', () => {
       await Promise.resolve();
     });
 
-    expect(confirm).toHaveBeenCalledOnce();
+    // The app's dialog names the template and the consequence; the browser's is never used.
+    expect(openDialog()?.textContent).toContain('Breaking News — Lower Third');
+    expect(openDialog()?.textContent).toContain('cannot be undone');
+    expect(nativeConfirm).not.toHaveBeenCalled();
+    expect(removeSpy).not.toHaveBeenCalled();
+
+    await clickDialogButton('Remove');
+
     expect(removeSpy).toHaveBeenCalledWith({ templateId: NAMED.templateId });
     // The ROW is gone (the panel re-listed). The name still appears in the status line —
     // that is the confirmation, not a leftover row — so assert on the row, not the text.
@@ -147,21 +156,21 @@ describe('LibraryPanel remove — R-005', () => {
     expect(el.textContent).toContain('Removed “Breaking News — Lower Third”');
   });
 
-  it('does nothing when the operator cancels the confirm', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('does nothing when the operator cancels the modal', async () => {
     const el = await renderPanel([NAMED]);
 
     await act(async () => {
       removeButton(el, 'Breaking News — Lower Third')?.click();
       await Promise.resolve();
     });
+    await clickDialogButton('Cancel');
 
     expect(removeSpy).not.toHaveBeenCalled();
     expect(el.textContent).toContain('Breaking News — Lower Third');
+    expect(openDialog()).toBeNull();
   });
 
   it('surfaces the bridge refusal verbatim and keeps the row (refuse-while-referenced)', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const message = '2 stack item(s) still use this template — remove them (or Remove All) first.';
     const el = await renderPanel([NAMED], { ok: false, reason: 'in-use', message });
 
@@ -169,6 +178,7 @@ describe('LibraryPanel remove — R-005', () => {
       removeButton(el, 'Breaking News — Lower Third')?.click();
       await Promise.resolve();
     });
+    await clickDialogButton('Remove');
 
     // The panel does not pre-judge — it says exactly what the bridge said…
     expect(el.querySelector('[role="alert"]')?.textContent).toBe(message);

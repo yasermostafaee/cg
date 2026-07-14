@@ -5,6 +5,7 @@ import { colors } from '../../theme.js';
 import { uuid } from '../../lib/uuid.js';
 import { Button } from '../../ui/Button.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
+import { useConfirm } from '../../ui/useDialog.js';
 import { importTemplateFromBytes } from './templateDelivery.js';
 import { templateDisplayName } from './templateName.js';
 import { recordDefaultPosition } from '../stack/defaultPositionStore.js';
@@ -77,6 +78,7 @@ export function LibraryPanel(): JSX.Element {
   const [templates, setTemplates] = useState<readonly TemplateInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
   const fileRef = useRef<HTMLInputElement>(null);
   // Newest first — the template the operator just imported is at the top, where they are
   // already looking, rather than below every bundled starter. RENDER-SIDE ONLY: the registry
@@ -170,7 +172,12 @@ export function LibraryPanel(): JSX.Element {
       setError(null);
       setStatus(null);
       const label = templateDisplayName(template);
-      if (!window.confirm(`Remove “${label}” from the library? This cannot be undone.`)) return;
+      const ok = await confirm({
+        title: 'Remove this template?',
+        body: `“${label}” will be removed from the library. This cannot be undone — the .vcg must be re-imported.`,
+        confirmLabel: 'Remove',
+      });
+      if (!ok) return;
 
       const result = await window.cg.templates.remove({ templateId: template.templateId });
       if (!result.ok) {
@@ -180,7 +187,7 @@ export function LibraryPanel(): JSX.Element {
       await refresh();
       setStatus(`Removed “${label}”.`);
     },
-    [refresh],
+    [confirm, refresh],
   );
 
   const loadOntoStack = useCallback((template: TemplateInfo): Promise<{ accepted: boolean }> => {
@@ -276,6 +283,7 @@ export function LibraryPanel(): JSX.Element {
           })
         )}
       </div>
+      {confirmDialog}
     </nav>
   );
 }

@@ -1,6 +1,7 @@
 import type { OrphanLayer, OwnedOccupancyWarning } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { useConfirm } from '../../ui/useDialog.js';
 import { runCommand } from '../status/commandFeedback.js';
 
 interface Props {
@@ -50,6 +51,9 @@ const styles = {
  * of the item, and the row disappears only on the bridge's provable resolve.
  */
 export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Element | null {
+  // Above the idle-quiet early return: a hook cannot be called conditionally.
+  const { confirm, confirmDialog } = useConfirm();
+
   if (orphans.length === 0 && ownedOccupancy.length === 0) return null;
 
   return (
@@ -75,18 +79,21 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
                     // the operator decides, never a heuristic). Errors surface
                     // via the command-error toast; success shows as the row
                     // disappearing when the sweep observes the layer empty.
-                    if (
-                      window.confirm(
-                        `Clear layer ${name}? This removes whatever is on it from air.`,
-                      )
-                    ) {
+                    void (async () => {
+                      const ok = await confirm({
+                        title: `Clear layer ${name}?`,
+                        body: 'This removes whatever is on that layer from air.',
+                        confirmLabel: 'Clear layer',
+                        variant: 'caution',
+                      });
+                      if (!ok) return;
                       runCommand(
                         `Clear layer ${name}`,
                         window.cg.layers
                           .clear({ channel: o.channel, layer: o.layer })
                           .then((r) => ({ accepted: r.ok })),
                       );
-                    }
+                    })();
                   }}
                 >
                   CLEAR
@@ -115,6 +122,7 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
           })}
         </div>
       )}
+      {confirmDialog}
     </>
   );
 }

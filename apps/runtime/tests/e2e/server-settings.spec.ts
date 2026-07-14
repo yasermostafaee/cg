@@ -26,11 +26,12 @@ test('settings panel: blocked while on air, Remove-All clears + unblocks, remote
   await expect(panel.getByRole('button', { name: 'Apply server settings' })).toBeDisabled();
   await panel.getByRole('button', { name: 'Close server settings' }).click();
 
-  // 2. Remove-All: accept the confirm (the fixture's default handler dismisses
-  //    dialogs — replace it for this deliberate destructive path).
-  page.removeAllListeners('dialog');
-  page.on('dialog', (d) => void d.accept());
+  // 2. Remove-All: confirm the app's modal (a deliberate destructive path).
   await page.getByRole('button', { name: 'Remove all items' }).click();
+  await page
+    .getByRole('dialog', { name: 'Remove all items?' })
+    .getByRole('button', { name: 'Remove all', exact: true })
+    .click();
   await expect(
     page.getByRole('region', { name: 'Stack' }).getByText('No items loaded', { exact: false }),
   ).toBeVisible();

@@ -5,6 +5,7 @@ import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
 import { StackPanel } from '../src/renderer/features/stack/StackPanel.js';
+import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
 
 /**
  * The stack header's Clear-All, beside Remove-All.
@@ -12,6 +13,9 @@ import { StackPanel } from '../src/renderer/features/stack/StackPanel.js';
  * The two must stay visibly distinct, because confusing them is expensive in opposite
  * directions: Remove-All empties the list (recovering costs a re-import and re-typing every
  * field), Clear-All only takes the graphics off air and leaves the rows idle and re-takeable.
+ *
+ * The gate is the app's own modal, not `window.confirm` — so these drive the dialog's real
+ * buttons, and assert that no native dialog is reached for at all.
  */
 
 let container: HTMLDivElement | null = null;
@@ -19,6 +23,7 @@ let container: HTMLDivElement | null = null;
 afterEach(() => {
   container?.remove();
   container = null;
+  clearPortals();
   vi.restoreAllMocks();
 });
 
@@ -72,7 +77,7 @@ const removeAllButton = (el: HTMLElement): HTMLButtonElement | null =>
 describe('StackPanel Clear-All', () => {
   it('confirming clears air — and does NOT remove anything', async () => {
     const { clearAll, removeAll } = stubBridge([item('a', 'on-air'), item('b', 'on-air')]);
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const confirmSpy = vi.spyOn(window, 'confirm');
     const el = await renderPanel();
 
     await act(async () => {
@@ -80,24 +85,33 @@ describe('StackPanel Clear-All', () => {
       await Promise.resolve();
     });
 
-    expect(confirm).toHaveBeenCalledWith(
-      'Clear all 2 on-air item(s)? They come off air and stay on the stack, idle.',
-    );
+    // The app's own dialog, saying what clearing costs — and what it does not cost.
+    const dialog = openDialog();
+    expect(dialog?.textContent).toContain('2 on-air item(s)');
+    expect(dialog?.textContent).toContain('stay on the stack');
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(clearAll).not.toHaveBeenCalled();
+
+    await clickDialogButton('Clear all');
+
     expect(clearAll).toHaveBeenCalledTimes(1);
     // The whole point: clearing is not removing.
     expect(removeAll).not.toHaveBeenCalled();
+    expect(openDialog()).toBeNull();
   });
 
-  it('cancelling the confirm clears nothing', async () => {
+  it('cancelling the modal clears nothing', async () => {
     const { clearAll } = stubBridge([item('a', 'on-air')]);
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
     const el = await renderPanel();
 
     await act(async () => {
       clearAllButton(el)?.click();
+      await Promise.resolve();
     });
+    await clickDialogButton('Cancel');
 
     expect(clearAll).not.toHaveBeenCalled();
+    expect(openDialog()).toBeNull();
   });
 
   it('is hidden when nothing is on air — there would be nothing to clear', async () => {
@@ -111,17 +125,15 @@ describe('StackPanel Clear-All', () => {
 
   it('counts only the on-air items, not the whole stack', async () => {
     stubBridge([item('a', 'on-air'), item('b', 'loaded'), item('c', 'idle')]);
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const el = await renderPanel();
 
     await act(async () => {
       clearAllButton(el)?.click();
+      await Promise.resolve();
     });
 
     // One on air out of three rows — a `loaded` item was ADDed but never PLAYed.
-    expect(confirm).toHaveBeenCalledWith(
-      'Clear all 1 on-air item(s)? They come off air and stay on the stack, idle.',
-    );
+    expect(openDialog()?.textContent).toContain('1 on-air item(s)');
   });
 
   it('offers both actions, distinctly, when items are on air', async () => {
