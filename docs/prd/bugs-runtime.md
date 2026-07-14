@@ -1160,3 +1160,99 @@ performs). Nothing compared the two, so each divergence was found on air.
 AMCP verb, no channel or schema change.
 
 **Env:** `@cg/caspar-bridge` + `@cg/runtime`. Found while reviewing why B-070/B-071/B-072 all shipped green.
+
+---
+
+## [ ] B-077 — the rundown never enforces a dynamic field's `pattern`: a malformed value (bad email/time/phone) is accepted without a word and goes to air ⟨priority: medium⟩
+
+Found during the D-059 session (which made `pattern` **authorable** in the Designer via friendly
+validation presets). D-059 is not the cause — this is a **pre-existing** gap in the operator-facing
+Runtime and is filed separately: `field.pattern` is **never read anywhere in `apps/runtime/src`**.
+The only "pattern" hit in the whole app is an unrelated code comment
+(`apps/runtime/src/renderer/features/inspector/Inspector.tsx:418`, "adjust state during render
+pattern").
+
+**Repro:**
+
+1. In the **Designer**, give a dynamic text field a `pattern` — e.g. pick the **Email** preset
+   from D-059 — and export the `.vcg`.
+2. In the **Runtime** app, load that template into the rundown and select the item.
+3. As operator, type a value that clearly violates the pattern (`not-an-email`, `99:99`, `abc`).
+4. Hit **Update** / Apply.
+
+**Expected:** the operator is **warned** that the value doesn't match the field's declared pattern —
+a per-field error/tint, consistent with how the Designer's `PreviewFieldForm` already surfaces it
+(`role="alert"` on the offending row).
+
+**Actual:** no validation at all. Nothing is read, nothing is shown, nothing is flagged. The value is
+staged, applied, and sent to CasparCG — a malformed email/time/phone **goes on air** unchallenged.
+
+**Where it's missing (traced):**
+
+- **Value entry — `FieldControl`** (`Inspector.tsx`, ~307-411). The `text` (~400-410) and
+  `multiline` (~384-395) branches are a bare `input`/`textarea` calling `onStage(value)` on every
+  keystroke: no regex test, no error, no block. Sibling branches DO read their constraints —
+  `NumberField` reads `min`/`max`/`step` (~451-453), `select` reads `options` — but **nothing reads
+  `pattern`, `minLength`, or `required`.**
+- **The value still ships.** staged → `applyDraft.ts` (~16-21) → `window.cg.stack.update({ fields })`
+  with no validation gate anywhere on the path.
+- **The IPC boundary won't catch it either.** `FieldValuesSchema`
+  (`packages/shared-schema/src/fields.ts` ~111-141) accepts any `z.string()`, so a pattern-violating
+  string validates cleanly, crosses the boundary and reaches CasparCG. (Correct as designed — the
+  payload schema carries values, not per-field constraints — but it means there is no backstop.)
+
+**DECISION (owner, this session) — WARN-ONLY, NOT BLOCKING.** The rundown SHOWS a per-field mismatch
+warning but **STILL allows Apply/Update to send the value**. Rationale: during live playout an
+over-strict regex must never stop a graphic from reaching air — the cost of a blocked lower-third is
+far higher than the cost of a malformed one. **Warn, don't gate.** Recorded explicitly so the
+implementation does not build a blocking gate: `applyDraft` / `stack.update` stay ungated.
+
+**Scope:**
+
+- Read `field.pattern` in `FieldControl` and render a per-field warning mirroring the Designer's
+  `PreviewFieldForm` affordance (per-field message + tint; a header summary is optional).
+- Do **NOT** gate `applyDraft` / `stack.update`. No schema change — `pattern` already exists and
+  already reaches the Runtime.
+- Spec: likely a `## MODIFIED` on the Runtime inspector/fields capability.
+
+**Proposed direction — lift `validateField`, don't rewrite it (resolves the `required`/`minLength`
+question):** the Designer **already has the exact validator this needs** —
+`validateField(field, value): string | null` at
+`apps/designer/src/renderer/features/fields/PreviewFieldForm.tsx:497`. It already covers
+`required`, `minLength`, `maxLength` **and** `pattern` (including the `try/catch` that treats an
+invalid regex as a field-config issue, not a value error), and it already returns operator-ready
+strings (`Required`, `Min N characters`, `Doesn't match <pattern>`). It is **app-local**, so the
+Runtime cannot import it (cross-app import; the lint tiers forbid it).
+
+Recommendation: **lift `validateField` into a shared package and consume it from both apps.**
+`@cg/shared-schema` is the natural home — it already owns `DynamicField` / `FieldValue`, the helper
+is pure over exactly those two types, and **`apps/runtime` already depends on it**. This makes the
+open design question moot: `required` and `minLength` come along **for free**, so the Runtime gets
+constraint-consistent warnings in one move rather than a pattern-only special case, and the two apps
+cannot drift into two different notions of "invalid".
+
+**Constraints are enforced inconsistently today** (the real shape of the problem — `pattern` is just
+the loudest instance):
+
+| Constraint                         | Enforced where                                                                                |
+| ---------------------------------- | --------------------------------------------------------------------------------------------- |
+| `maxLength`                        | **truncated at render** (`packages/template-runtime/src/bindings.ts` ~125-126, by code point) |
+| `min` / `max` / `step`, `options`  | by **control construction** (number input bounds; select can only offer valid options)        |
+| `pattern`, `minLength`, `required` | **nothing** — not in the Runtime, not at the IPC boundary                                     |
+
+**Nuance worth recording — it's only OUR runtime that ignores it.** `pattern` **is** exported into
+the GDD (`packages/vcg-format/src/gdd.ts` ~179, ~188), so a third-party MOS client consuming our
+template can enforce it. The constraint is published and honored downstream; our own operator app is
+the one that drops it.
+
+**Precedent for warn-only:** even the Designer's `PreviewFieldForm` is warn-only today — an invalid
+field shows a `role="alert"` message and a "N fields need attention before this looks right on air"
+callout, but the **Update button still applies the value**. So warn-only is not a compromise invented
+here; it is the house behavior this item extends to the Runtime.
+
+**Env:** `apps/runtime` (Inspector / `FieldControl`). Reproduces on latest `main`. Runtime-only —
+no Designer change beyond (optionally) re-pointing it at the lifted helper.
+
+**Notes:** Builds on **D-059** (which made `pattern` authorable). Filed as a BUG, not a feature: the
+fields already work, the correctness check is missing. Implementation happens in the `cg-runtime`
+worktree in its own chat — this entry is the filing only.
