@@ -22,7 +22,9 @@ const styles = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '0.5rem',
+    // Clip, so the template list below is what scrolls — never the page.
     minHeight: 0,
+    overflow: 'hidden',
   },
   heading: {
     fontSize: '0.85rem',

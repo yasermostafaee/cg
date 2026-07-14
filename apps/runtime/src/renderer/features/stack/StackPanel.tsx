@@ -25,6 +25,10 @@ const styles = {
     background: colors.panel,
     borderRadius: '0.25rem',
     border: `1px solid ${colors.border}`,
+    // Takes the height the centre column has left over, and clips: the row list inside is
+    // what scrolls. Without `flex: 1` the panel sizes to its content, its inner list never
+    // gets a height to scroll AGAINST, and a long stack pushes the whole page instead.
+    flex: 1,
     minHeight: 0,
     overflow: 'hidden',
   },

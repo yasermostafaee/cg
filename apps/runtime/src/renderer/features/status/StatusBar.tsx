@@ -18,6 +18,8 @@ const styles = {
     alignItems: 'center',
     gap: '1.25rem',
     padding: '0.5rem 1rem',
+    // Content-sized in the shell's flex column: never stretched, never squeezed away.
+    flexShrink: 0,
     background: colors.panel,
     borderTop: `1px solid ${colors.border}`,
     fontSize: '0.85rem',
