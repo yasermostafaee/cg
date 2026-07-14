@@ -3238,7 +3238,7 @@ schema already supports; per-project overrides of a shared font. **RECON-FIRST, 
 `designer-font-export` from D-121). Builds on **D-040** (the shared-image pattern) and **D-121** (font
 export).
 
-## [ ] D-127 — Rename the open project (double-click the name + File → "Rename Project…") ⟨priority: medium⟩
+## [~] D-127 — Rename the open project (double-click the name + File → "Rename Project…") ⟨priority: medium⟩ — branch: `feat/D-127-rename-project`, change dir: `openspec/changes/rename-open-project/`
 
 **What:** Let the operator rename the OPEN project via two entry points that resolve to the **same**
 inline-edit affordance on the TopToolbar project name: (1) **double-click** the centered project name

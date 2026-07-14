@@ -26,6 +26,17 @@ export const centerCluster = style({
   maxWidth: '60%',
 });
 
+// D-127 — the rename slot. The name span stays mounted while renaming (hidden,
+// holding the DRAFT text) and the input is laid over it, so the slot's width is
+// always the text's width: swapping in and out of edit mode never shifts the
+// cluster, and the box grows with what's typed.
+export const nameSlot = style({
+  position: 'relative',
+  display: 'inline-flex',
+  alignItems: 'center',
+  minWidth: '4rem',
+});
+
 export const projectName = style({
   fontSize: '0.8rem',
   fontWeight: 600,
@@ -34,6 +45,31 @@ export const projectName = style({
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   maxWidth: '24rem',
+  cursor: 'text',
+});
+
+/** The name span while its input is up: keeps the slot's width, shows nothing. */
+export const projectNameSizing = style({
+  visibility: 'hidden',
+});
+
+// The inset/padding pair is deliberate: the box is pulled OUT by exactly the
+// padding it adds, so the glyphs land on the same pixels as the span's — the
+// text doesn't move when the input appears.
+export const projectNameInput = style({
+  position: 'absolute',
+  insetBlock: '-0.2rem',
+  insetInline: '-0.4rem',
+  fontSize: '0.8rem',
+  fontWeight: 600,
+  fontFamily: 'inherit',
+  color: colors.text,
+  background: colors.panelMuted,
+  border: `1px solid ${colors.accent}`,
+  borderRadius: '0.2rem',
+  padding: '0 0.4rem',
+  outline: 'none',
+  minWidth: 0,
 });
 
 export const group = style({

@@ -153,6 +153,27 @@ export const documentSlice = {
   },
 
   /**
+   * D-127 — rename the open PROJECT: set the scene-ROOT `name`.
+   *
+   * Deliberately NOT `updateScene({ name })`: `'name'` is one of that method's
+   * `docKeys`, so with a composition active the patch is routed to the ACTIVE
+   * COMPOSITION and renames *that* instead of the project. This targets the root
+   * unconditionally. Do not "simplify" it back.
+   *
+   * The write goes through the normal `set()` path, so undo and the dirty flag
+   * behave like any other edit (top-level `name` is in `hashScene`). Callers hold
+   * the in-progress text in local state and call this ONCE on commit — a
+   * per-keystroke call would push several history entries for one rename. An
+   * empty / whitespace-only name is rejected (previous name kept, no undo entry).
+   */
+  renameProject(name: string): void {
+    if (current.scene === null) return;
+    const next = name.trim();
+    if (next === '' || next === current.scene.name) return;
+    set({ scene: { ...current.scene, name: next } });
+  },
+
+  /**
    * Set the scene's **total** duration in frames. Updates `frameRange.out`
    * to `frameRange.in + frames` and clamps the authoring `currentFrame` so
    * the playhead can't sit past the new end. When an `activeRange` exists it
