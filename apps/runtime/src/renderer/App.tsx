@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { RuntimeBridge } from '../shared/runtime-bridge.js';
 import { AuditPanel } from './features/audit/AuditPanel.js';
 import { FailoverBanner } from './features/connections/FailoverBanner.js';
+import { ConnectionBanner } from './features/status/ConnectionBanner.js';
 import { ServerSettingsPanel } from './features/connections/ServerSettingsPanel.js';
 import { LibraryPanel } from './features/library/LibraryPanel.js';
 import { OrphanLayersBanner } from './features/layers/OrphanLayersBanner.js';
@@ -76,6 +77,10 @@ export function App(): JSX.Element {
 
   return (
     <main style={styles.page}>
+      {/* R-006 — a not-live link means NOTHING can reach air. That is a full-width alert,
+          not a pill: the pill lost to the green HEALTHY pill beside it, and the operator
+          believed a graphic was on air. Renders nothing when the link is live. */}
+      <ConnectionBanner />
       <FailoverBanner health={health} />
       <div style={styles.shell}>
         <LibraryPanel />
