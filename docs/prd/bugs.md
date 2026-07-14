@@ -283,7 +283,7 @@ grep -rhoE "^## \[.\] B-[0-9]+" docs/prd/ | grep -oE "B-[0-9]+" | sort | uniq -d
 
 It should print exactly one line — the known, accepted `B-056`. Anything else is a NEW collision and must be renumbered before merge (merged `main` numbers always win).
 
-## [ ] B-071 — turbo lint/build race: ESLint globs Vite's transient `vite.config.ts.timestamp-*.mjs` and dies with ENOENT ⟨priority: low⟩
+## [~] B-071 — turbo lint/build race: ESLint globs Vite's transient `vite.config.ts.timestamp-*.mjs` and dies with ENOENT ⟨priority: low⟩ — fixed on `fix/b071-eslint-ignore-vite-timestamp`: `vite.config.ts.timestamp-*.mjs` added to the GLOBAL-ignores block of `apps/designer/eslint.config.mjs` (the bare-`ignores` object, so it applies during traversal — a scoped `files`+`ignores` entry would not stop the glob). Tooling only — no OpenSpec change, no source/runtime/export/schema change. Pinned by `apps/designer/tests/eslint-ignore-vite-timestamp.test.ts`, which asserts the BEHAVIOR via ESLint's own resolver (`isPathIgnored`, lints nothing — fast) rather than shelling out to a full `eslint .` run; verified to FAIL without the ignore. Manual proof: a deliberately lint-violating stray `vite.config.ts.timestamp-regression.mjs` lints 0 errors, while the identical file under a non-ignored name errors (`no-unused-vars`) — so root `.mjs` IS in lint scope and the clean run is the ignore working, not the file being out of scope
 
 **Repro:**
 
