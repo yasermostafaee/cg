@@ -25,9 +25,12 @@ name: B-078 soak (temporary — evidence gathering, NOT a gate)
 #
 # DELETE THIS FILE once B-078 is settled.
 
+# DISARMED. The soak has RUN (run 29356423188, 18/18 green — see B-078 in
+# docs/prd/bugs.md); the `push:` trigger is removed so it cannot silently spend
+# ~250 runner-minutes again on the next push to this branch. To re-arm, restore:
+#   push:
+#     branches: ['fix/B-078-**']
 on:
-  push:
-    branches: ['fix/B-078-**']
   workflow_dispatch:
 
 permissions:

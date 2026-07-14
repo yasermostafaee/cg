@@ -483,7 +483,7 @@ places (`docs/prd/*.md` vs `openspec/changes/`).
 **Regression test:** the guard is its own regression test (the B-075 precedent) — a `[~]` item
 whose cited fix is merged turns it red; flipping that item to `[x]` turns it green.
 
-## [ ] B-078 — flaky: a DESIGNER Playwright E2E assertion fails intermittently on CI, in shifting tests (the B-073 family's remaining half) ⟨priority: medium⟩ — a budget bump was TRIED and REVERTED in #317; see "Attempted fix" below
+## [ ] B-078 — flaky: a DESIGNER Playwright E2E assertion fails intermittently on CI, in shifting tests (the B-073 family's remaining half) ⟨priority: medium⟩ — TWO levers now tried and rejected: a budget bump (REVERTED, #317) and a concurrency bound (DISPROVEN by an 18-leg soak, 2026-07-14). Read "THE CONFOUND" below BEFORE attempting a third — the bug's evidence base is corrupted by turbo cache replay.
 
 **Repro:** (intermittent — 1 red in 12 observed full runs; not reproducible on demand)
 
@@ -545,11 +545,57 @@ what remains of this bug once B-084 has landed and E2E runs to completion uncont
 
 The reverted diff is recoverable from #317's history if someone wants to pursue it deliberately.
 
-**Next lever (better than budgets):** bound the CONCURRENCY rather than inflate the budgets —
-`pnpm test:e2e` runs BOTH Playwright suites at once under turbo on a 2-core runner. Capping E2E
-worker count (or serialising the two suites in the turbo pipeline) attacks the contention itself.
-That is a deliberate harness change and deserves its own PR, its own evidence, and a soak loop
-under artificial CPU load to prove it — **not** a drive-by inside a feature batch.
+**Next lever (bound the CONCURRENCY) — TRIED AND DISPROVEN 2026-07-14. Do NOT ship it.**
+The theory was: `pnpm test:e2e` runs BOTH Playwright suites at once under turbo on a 2-core
+runner, so serialising them (`--concurrency=1`) or capping workers attacks the contention itself.
+It was measured on the real 2-core runner and **the contention does not flake this suite**:
+
+| arm                                               | co-tenant on the box     | designer wall time | designer result |
+| ------------------------------------------------- | ------------------------ | ------------------ | --------------- |
+| `serial` (the proposed bound, `--concurrency=1`)  | none                     | 4.7–5.5m (μ 5.3m)  | **6/6 green**   |
+| `parallel` (today's config)                       | runtime suite once, ~35s | 5.5–5.8m (μ 5.7m)  | **6/6 green**   |
+| `stress` (runtime suite LOOPED for the whole run) | 14 back-to-back runs     | 8.1–8.5m (μ 8.3m)  | **6/6 green**   |
+
+18 legs, designer suite genuinely EXECUTING (not cached, see below), `--retries=0` so any hiccup
+is a hard red instead of being masked by the gate's `retries: 1`. **3,762 test executions, zero
+failures.** The `stress` arm proves the load really landed — sustained co-tenancy slowed the suite
+by **+56%** (8.3m vs 5.3m) and it still passed 209/209. A bound cannot be shown to reduce a flake
+that does not occur, so shipping one would repeat exactly the #317 mistake. Harness + evidence:
+`.github/workflows/b078-soak.yml` (disarmed), CI run `29356423188`, branch
+`fix/B-078-concurrency-bound-v2` (no fix, unmerged).
+
+**THE CONFOUND — why this bug's whole evidence base is unreliable (read this first):**
+The `e2e` job runs `turbo run test:e2e` **without `--force`**, so `@cg/designer#test:e2e` is
+usually a turbo **CACHE HIT**: the suite never executes and turbo replays a stale
+`209 passed (5.5m)` log. Census of 12 recent parseable runs: the designer suite actually ran in
+only **5**; the other 7 replayed the identical cached line. The `ci` job is the same — one green
+`main` run executed **2 of 40** `test` tasks and replayed 38 (the whole `pnpm test` step: 32s).
+Consequences:
+
+- **"Not reproducible (0/12)" and "`main` is 8/8 green" are artifacts** — those runs mostly did not
+  run the suite. The historical green record is not a flake denominator.
+- **#317's "it correlated with NEW designer reds" is confounded.** #317 edited both
+  `playwright.config.ts` files — and `playwright.config.*` is a turbo `test:e2e` **cache input**.
+  Bumping the budgets therefore _invalidated the cache and forced the designer suite to actually
+  execute_, probably for the first time in many PRs. The reds it "caused" were the suite finally
+  running. This is corroborated by the red itself: `zoom-readout → Received: ""` **in 730ms** is
+  far too fast to be a timeout, i.e. not a budget effect at all. #317 may have been reverted for a
+  reason that does not exist.
+- The contention IS real, just harmless: the runtime suite takes ~22s when the designer suite is
+  cached but **34–37s when both truly execute** (+57%) — measurable CPU pressure, zero reds.
+
+**Where the original red actually came from:** it was observed **locally on Windows**, where
+`workers: undefined` gives Playwright ~half the cores (6 on a 12-core box) **per suite × 2 suites
+concurrently**, plus the builds — a far heavier oversubscription than CI ever sees (CI is
+`workers: 1` per suite). CI is not the environment that produced it.
+
+**Still open because:** the one observed red has never been reproduced under measurement. The next
+lever is NOT concurrency and NOT budgets — both are now disproven or unfalsifiable. It is to make
+the suite's true reliability **observable**: the E2E gate largely does not execute (see the
+confound), so nobody knows the designer suite's real flake rate. Worth filing separately: decide
+whether the E2E task should be cache-exempt (`"cache": false`) or `--force`d on CI, at a cost of
+~6 min/PR. Only once the suite actually runs every time can a flake rate be measured — and only
+then can any fix be validated.
 
 **Env:** Windows, local (`retries: 0`, `workers: undefined`). CI is far less exposed —
 `retries: CI ? 1 : 0`, `workers: CI ? 1 : undefined` — which is why this surfaces locally first.
