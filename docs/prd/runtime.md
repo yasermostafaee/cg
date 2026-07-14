@@ -81,7 +81,9 @@ explicit apply step.
   value changes reconcile with in-progress local edits without a destructive
   remount.
 
-## [~] R-004 — template Library shows the manifest display name, not the raw id ⟨priority: medium⟩ — implemented on `fix/runtime-library-ux`, change: `runtime-library-display-name`
+## [x] R-004 — template Library shows the manifest display name, not the raw id ⟨priority: medium⟩ — merged via `runtime-library-display-name` (#306), archived
+
+<!-- change: openspec/changes/archive/2026-07-14-runtime-library-display-name/ -->
 
 **What:** Library rows (and the import/Load copy) show the template's display
 **name** from the `.vcg` manifest; the id stays discoverable as secondary info
@@ -99,7 +101,7 @@ explicit apply step.
   import (`templateDelivery.ts`), and pass it through both registries (bridge
   `TemplateRegistry` + `MockRuntime`).
 
-## [~] R-005 — delete a template from the Library ⟨priority: medium⟩ — remove BUTTON + refuse-while-referenced implemented on `fix/runtime-library-ux`, change: `runtime-library-remove-template`; the context-menu affordance is still OPEN (needs a Runtime context-menu primitive — owner decision, see the change's proposal)
+## [~] R-005 — delete a template from the Library ⟨priority: medium⟩ — remove BUTTON + refuse-while-referenced MERGED (#306); the context-menu half is still OPEN, so the change `runtime-library-remove-template` is deliberately left ACTIVE (unarchived) and this item stays `[~]`
 
 **What:** Let the operator remove a registered template — a per-row delete button
 AND a context-menu entry.
