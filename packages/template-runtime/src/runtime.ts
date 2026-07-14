@@ -5,6 +5,7 @@ import {
   playoutOf,
   sequenceItemInstanceId,
   sequenceItemTextFieldIds,
+  type ClockTarget,
   type Element,
   type FrameRange,
   type ListItem,
@@ -88,6 +89,7 @@ import {
 } from './sequence-driver.js';
 import { TickerDriver, registerTickerDriver, type TickerSeparatorImage } from './ticker-driver.js';
 import type {
+  ElementTimingOverrides,
   FieldScope,
   PlayOptions,
   PlayoutOverride,
@@ -445,11 +447,19 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
    * the same machinery the static tree uses; behavior-preserving for the
    * static tree (`isRootSubtree` gates the root-only hooks: the external
    * `contentHold` override and the global machine/event wiring).
+   *
+   * D-102 Phase 2 — `inheritedTiming` carries the HOST scope's per-element timing maps into a
+   * STAMPED subtree (a repeater row / a sequence composition item). Those subtrees are wired under
+   * a synthetic path (`…#<elementId>[i]`) that no `scopeOverrides` key addresses, and every stamped
+   * row is built from the SAME authored element (the same element id) — so the authored element's
+   * override reaches each stamp's own driver only by inheriting the map. ONLY the element maps are
+   * inherited: the per-scope LIFECYCLE axes are not, so a row keeps its own independent lifecycle.
    */
   const wireScopeSubtree = (
     subtreeScope: FieldScope,
     subtreePath: string,
     isRootSubtree: boolean,
+    inheritedTiming?: ElementTimingOverrides,
   ): WiredSubtree => {
     const tickers: TickerDriver[] = [];
     const clocks: ClockDriver[] = [];
@@ -464,6 +474,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       hasContentDrivingAncestor: boolean,
     ): ScopeNode => {
       const scopeOverride = overrides[path];
+      // D-102 — this scope's PER-ELEMENT timing maps: its own scope override, layered over any
+      // inherited (stamped-subtree) map. An element id is unique within the scene, so the merge is
+      // unambiguous; the scope's own entry wins where both address the same element.
+      const elementTiming: ElementTimingOverrides = {
+        tickers: { ...inheritedTiming?.tickers, ...scopeOverride?.tickers },
+        sequences: { ...inheritedTiming?.sequences, ...scopeOverride?.sequences },
+        countdowns: { ...inheritedTiming?.countdowns, ...scopeOverride?.countdowns },
+      };
       // D-028 — one treadmill driver per ticker element, per scope (the same
       // child composition instanced twice gets two independent drivers).
       // Instantiated BEFORE the initial field application so a `list` field
@@ -479,8 +497,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       const scopeTickers = scope.tickers.map((t) => {
         // D-028 inner loop — the element's authored repeat/boundary. D-102 Phase 1 — the session
         // override is PER-ELEMENT (keyed by the ticker's element id), so two tickers in one scope
-        // are tuned independently; each maps to its OWN driver here.
-        const tickerOverride = scopeOverride?.tickers?.[t.element.id];
+        // are tuned independently; each maps to its OWN driver here. D-102 Phase 2 — for a
+        // repeater-stamped row the map is INHERITED from the host scope, so the authored (template)
+        // ticker's override reaches every stamp's own driver.
+        const tickerOverride = elementTiming.tickers?.[t.element.id];
         const effRepeat = tickerOverride?.repeat ?? t.element.repeat;
         const effBoundary = tickerOverride?.cycleBoundary ?? t.element.cycleBoundary;
         // D-056 — the ticker has no box padding; the crawl viewport is full-bleed, so
@@ -534,15 +554,27 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         }
         return driver;
       });
-      // D-027 — clock drivers (no overrides and no bindings: no fields in v1).
+      // D-027 — clock drivers (no bindings: no fields in v1). D-102 Phase 2 — a COUNTDOWN takes a
+      // session-only per-element duration override: it REPLACES the authored target (a duration OR
+      // an absolute datetime deadline) with a duration target for this run, which is the only way to
+      // rehearse a countdown to a wall-clock time. `wall`/`countup` never complete — no timing to
+      // tune, so they are never overridden (and never listed in the preview panel).
       const holdCountdowns: ClockDriver[] = [];
       const scopeClocks = scope.clocks.map((c) => {
+        const durationOverride =
+          c.element.mode === 'countdown'
+            ? elementTiming.countdowns?.[c.element.id]?.durationMs
+            : undefined;
+        const effTarget: ClockTarget | undefined =
+          durationOverride !== undefined
+            ? { kind: 'duration', ms: durationOverride }
+            : c.element.target;
         const driver = new ClockDriver({
           node: c.node,
           mode: c.element.mode,
           format: c.element.format,
           digits: c.element.digits,
-          target: c.element.target,
+          target: effTarget,
           timezone: c.element.timezone,
           blinkColon: c.element.blinkColon,
           blinkPeriodMs: c.element.blinkPeriodMs,
@@ -550,6 +582,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         });
         // D-105 — mark the content root for the coordinated exit (out/stop).
         c.node.dataset['cgContent'] = 'clock';
+        // D-102 Phase 2 — stamp the EFFECTIVE (post-override) countdown duration so the operator
+        // (and the tests) can see what each countdown is actually counting down this session. Only
+        // a duration target has an ms value; a datetime deadline carries none.
+        if (c.element.mode === 'countdown' && effTarget?.kind === 'duration') {
+          c.node.dataset['cgCountdownMs'] = String(effTarget.ms);
+        }
         clocks.push(driver);
         // D-107 — only a COUNTDOWN drives the hold (wall/countup never complete), and only
         // when not explicitly excluded. D-112 — a countdown is also exposed UNFILTERED.
@@ -568,6 +606,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // `sequence-items` bindings, and `runtime.next()` dispatches per scope.
       const holdSequences: SequenceDriver[] = [];
       const scopeSequences = scope.sequences.map((s) => {
+        // D-102 Phase 2 — the session override is PER-ELEMENT (keyed by the sequence's element id),
+        // so two sequences in one scope are tuned independently; each maps to its OWN driver. The
+        // dwell override wins over every authored dwell (see `dwellOverrideMs`).
+        const seqOverride = elementTiming.sequences?.[s.element.id];
+        const effSeqRepeat = seqOverride?.repeat ?? s.element.repeat;
+        const effDwellMs = seqOverride?.dwellMs;
         // D-083 — a COMPOSITION item renders the referenced composition's HELD content
         // with LIVE inner drivers (a clock ticks): build the comp subtree and wire it
         // through the SAME machinery as repeater rows (`wireScopeSubtree`), then drive
@@ -588,10 +632,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             const noop = (): void => undefined;
             return { node: empty, show: noop, pause: noop, resume: noop, hide: noop };
           }
+          // D-102 Phase 2 — a sequence composition item is a STAMPED subtree (a synthetic path no
+          // scope override addresses): it inherits this scope's per-element timing maps, so an
+          // authored element's preview override reaches the drivers built inside the item.
           const itemSub = wireScopeSubtree(
             built.scope,
             `${path}#${s.element.id}:item:${item.id}`,
             false,
+            elementTiming,
           );
           // D-083 — apply this item's namespaced field values (so the operator can edit
           // e.g. the label next to a clock INSIDE the composition item), applying the
@@ -641,12 +689,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           direction: s.element.direction,
           items: s.element.items,
           defaultDwellMs: s.element.defaultDwellMs,
+          dwellOverrideMs: effDwellMs,
           advance: s.element.advance,
           transitionIn: s.element.transitionIn,
           transitionOut: s.element.transitionOut,
           transitionTiming: s.element.transitionTiming,
           transitionMs: s.element.transitionMs,
-          repeat: s.element.repeat,
+          repeat: effSeqRepeat,
           glyphGradientCss: s.glyphGradientCss,
           renderComposition,
           // D-083 follow-up — per-item TEXT override is EXPLICIT: an item is operator-editable
@@ -671,6 +720,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         registerSequenceDriver(s.host, driver);
         // D-105 — mark the content root for the coordinated exit (out/stop).
         s.host.dataset['cgContent'] = 'sequence';
+        // D-102 Phase 2 — stamp the EFFECTIVE (post-override) timing on the host so the operator
+        // (and the tests) can see which passes/dwell each sequence is actually running this session.
+        s.host.dataset['cgSequenceRepeat'] = String(effSeqRepeat);
+        s.host.dataset['cgSequenceDwell'] = String(effDwellMs ?? s.element.defaultDwellMs);
         sequences.push(driver);
         // B-034 — a HIDDEN sequence is fully inert (never drives the hold, own or via an override).
         if (s.element.visible !== false) {
@@ -913,10 +966,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             doc,
           );
           return rows.map((row, i) => {
+            // D-102 Phase 2 — a repeater row is a STAMPED subtree: every row is built from the SAME
+            // child-composition layers, so its ticker/sequence/countdown carries the SAME authored
+            // element id, and its synthetic path is addressed by no scope override. Inheriting this
+            // scope's per-element timing maps is what makes the AUTHORED (template) element's
+            // preview override govern EVERY stamped row's own driver.
             const rowSub = wireScopeSubtree(
               row.scope,
               `${path}#${entry.element.id}[${String(i)}]`,
               false,
+              elementTiming,
             );
             node.children.push(rowSub.node);
             const rowAnimated: AnimatedElement[] = [];

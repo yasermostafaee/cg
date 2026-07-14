@@ -1,9 +1,13 @@
 import { compositionInstancesOf, type Element, type Scene } from '@cg/shared-schema';
 import {
   effectiveMode,
+  PreviewCountdownTimingRow,
+  PreviewSequenceTimingRow,
   PreviewTickerTimingRow,
   PreviewTimingControls,
   TIMING_RELEVANT_MODES,
+  type CountdownTimingOverride,
+  type SequenceTimingOverride,
   type TickerTimingOverride,
   type TimingOverride,
   type TimingSource,
@@ -24,6 +28,10 @@ export interface TimingScopeNode {
   depth: number;
   /** D-102 Phase 1 — EVERY ticker in the scope (recursing containers); each is tuned on its own row. */
   tickers: TickerInfo[];
+  /** D-102 Phase 2 — EVERY sequence in the scope; each is tuned on its own row. */
+  sequences: SequenceInfo[];
+  /** D-102 Phase 2 — EVERY COUNTDOWN clock in the scope (wall / countup are never listed). */
+  countdowns: CountdownInfo[];
   /**
    * B-031 — whether the scope has ANY content source (ticker / countdown clock /
    * sequence) — directly OR inside a nested composition instance (cycle-guarded) — so a
@@ -39,6 +47,33 @@ export interface TickerInfo {
   name: string;
   repeat: number | 'infinite';
   cycleBoundary: 'seamless' | 'drain';
+}
+
+/** D-102 Phase 2 — a sequence in a scope: element id + name + authored passes / per-item dwell. */
+export interface SequenceInfo {
+  id: string;
+  name: string;
+  repeat: number | 'infinite';
+  defaultDwellMs: number;
+}
+
+/**
+ * D-102 Phase 2 — a COUNTDOWN clock in a scope: element id + name + its authored target, either a
+ * `durationMs` or an absolute `deadline` (ISO). `wall` / `countup` clocks never complete, so they
+ * have no timing to tune and are never collected.
+ */
+export interface CountdownInfo {
+  id: string;
+  name: string;
+  durationMs?: number | undefined;
+  deadline?: string | undefined;
+}
+
+/** D-102 Phase 2 — the tunable content elements of ONE scope, by kind. */
+export interface ScopeContent {
+  tickers: TickerInfo[];
+  sequences: SequenceInfo[];
+  countdowns: CountdownInfo[];
 }
 
 const MAX_DEPTH = 8;
@@ -61,21 +96,65 @@ export function disambiguateNames(names: readonly string[]): string[] {
   });
 }
 
-/** D-102 Phase 1 — every ticker element of a doc (recursing containers), in document order. */
-function tickersOf(doc: { layers: Scene['layers'] }): TickerInfo[] {
-  const out: TickerInfo[] = [];
-  const walk = (children: readonly Element[]): void => {
+/**
+ * D-102 — every TUNABLE content element of a doc, in document order: tickers (Phase 1) plus
+ * sequences and COUNTDOWN clocks (Phase 2). Recurses containers, and — Phase 2 — descends a
+ * REPEATER into its child composition (depth-/cycle-guarded like the scene-builder), because the
+ * runtime STAMPS that composition's content into row subtrees that the composition-instance tree
+ * below never visits: without this descent a ticker that exists only inside a repeater's child is
+ * invisible in the panel and cannot be tuned. Every stamped row is built from the SAME authored
+ * element, so ONE row governs them all (see the runtime's inherited element-timing map).
+ *
+ * Composition INSTANCES are deliberately NOT descended — each is its own scope node with its own
+ * timing section. `wall` / `countup` clocks are never collected: they never complete, so there is
+ * no timing to tune (the same rule the content-driven hold uses).
+ */
+function contentOf(doc: { layers: Scene['layers'] }, scene: Scene): ScopeContent {
+  const out: ScopeContent = { tickers: [], sequences: [], countdowns: [] };
+  const walk = (
+    children: readonly Element[],
+    depth: number,
+    visited: ReadonlySet<string>,
+  ): void => {
     for (const el of children) {
-      // B-034 — a HIDDEN ticker (`visible: false`) is inert: not shown in the preview timing list.
-      if (el.type === 'ticker' && el.visible !== false) {
-        out.push({ id: el.id, name: el.name, repeat: el.repeat, cycleBoundary: el.cycleBoundary });
-      } else if (el.type === 'container' && el.visible !== false) {
-        // B-034 — a HIDDEN container's whole subtree is inert (not shown in preview timing).
-        walk(el.children);
+      // B-034 — a HIDDEN element (`visible: false`) is inert: neither it nor (for a container /
+      // repeater) its whole subtree is shown in the preview timing list.
+      if (el.visible === false) continue;
+      if (el.type === 'ticker') {
+        out.tickers.push({
+          id: el.id,
+          name: el.name,
+          repeat: el.repeat,
+          cycleBoundary: el.cycleBoundary,
+        });
+      } else if (el.type === 'sequence') {
+        out.sequences.push({
+          id: el.id,
+          name: el.name,
+          repeat: el.repeat,
+          defaultDwellMs: el.defaultDwellMs,
+        });
+      } else if (el.type === 'clock' && el.mode === 'countdown') {
+        out.countdowns.push({
+          id: el.id,
+          name: el.name,
+          durationMs: el.target?.kind === 'duration' ? el.target.ms : undefined,
+          deadline: el.target?.kind === 'datetime' ? el.target.iso : undefined,
+        });
+      } else if (el.type === 'container') {
+        walk(el.children, depth, visited);
+      } else if (el.type === 'repeater') {
+        // D-102 Phase 2 — descend the stamped child composition (the rows the runtime builds), with
+        // the scene-builder's depth + cycle guards so a self/mutually-referencing repeater can't loop.
+        if (depth >= MAX_DEPTH || visited.has(el.compositionId)) continue;
+        const comp = scene.compositions?.find((c) => c.id === el.compositionId);
+        if (comp === undefined) continue;
+        const nested = new Set([...visited, el.compositionId]);
+        for (const layer of comp.layers) walk(layer.children, depth + 1, nested);
       }
     }
   };
-  for (const layer of doc.layers) walk(layer.children);
+  for (const layer of doc.layers) walk(layer.children, 0, new Set<string>());
   return out;
 }
 
@@ -124,7 +203,7 @@ export function timingScopeList(scene: Scene): TimingScopeNode[] {
       label: scene.name,
       source: scene,
       depth: 0,
-      tickers: tickersOf(scene),
+      ...contentOf(scene, scene),
       hasContent: hasAnyContentIn(scene, scene),
     },
   ];
@@ -147,7 +226,7 @@ export function timingScopeList(scene: Scene): TimingScopeNode[] {
         label: inst.name,
         source: comp,
         depth,
-        tickers: tickersOf(comp),
+        ...contentOf(comp, scene),
         hasContent: hasAnyContentIn(comp, scene),
       });
       walk(comp, path, depth + 1, new Set([...visited, inst.compositionId]));
@@ -160,11 +239,13 @@ export function timingScopeList(scene: Scene): TimingScopeNode[] {
 /**
  * D-026 / D-102 — PER-SCOPE session-only timing controls, grouped by the
  * composition-instance tree. Each scope gets its own LIFECYCLE override (mode /
- * holdMs / repeat); D-102 Phase 1 — EVERY ticker of a scope gets its OWN repeat +
- * cycle-seam row, nested under the scope's lifecycle controls, addressed by the
- * ticker's element id, so two tickers in one composition are tuned independently.
- * All session-only (stored defaults untouched). The active composition (root) is
- * always shown; a NESTED scope is shown only when its mode is timing-relevant.
+ * holdMs / repeat); D-102 — every CONTENT element of a scope gets its own timing row,
+ * nested under the scope's lifecycle controls and addressed by the element's id, so
+ * two content elements in one composition are tuned independently: tickers (Phase 1 —
+ * repeat + cycle-seam), sequences (Phase 2 — passes + item dwell) and COUNTDOWN clocks
+ * (Phase 2 — preview duration; wall / countup are never listed). All session-only
+ * (stored defaults untouched). The active composition (root) is always shown; a NESTED
+ * scope is shown only when its mode is timing-relevant.
  */
 export function PreviewScopeTiming({
   scene,
@@ -185,8 +266,11 @@ export function PreviewScopeTiming({
     <>
       {visible.map((node, i) => {
         const scopeOverride = overrides[node.path] ?? {};
-        // Display labels only — the override is always keyed by the ticker's element id below.
+        // Display labels only — the override is always keyed by the element's id below. Names are
+        // disambiguated WITHIN each kind (the row labels carry the axis, e.g. "— passes"/"— dwell").
         const tickerLabels = disambiguateNames(node.tickers.map((tk) => tk.name));
+        const sequenceLabels = disambiguateNames(node.sequences.map((sq) => sq.name));
+        const countdownLabels = disambiguateNames(node.countdowns.map((cd) => cd.name));
         // D-102 Phase 1 — deep-merge a per-ticker patch into the scope override's `tickers` map so
         // editing ticker B never clobbers ticker A; the modal's per-scope shallow merge carries it.
         const setTickerOverride = (tickerId: string, patch: TickerTimingOverride): void => {
@@ -194,6 +278,23 @@ export function PreviewScopeTiming({
             tickers: {
               ...(scopeOverride.tickers ?? {}),
               [tickerId]: { ...(scopeOverride.tickers?.[tickerId] ?? {}), ...patch },
+            },
+          });
+        };
+        // D-102 Phase 2 — same deep-merge, per kind: one element's patch never clobbers another's.
+        const setSequenceOverride = (sequenceId: string, patch: SequenceTimingOverride): void => {
+          onChange(node.path, {
+            sequences: {
+              ...(scopeOverride.sequences ?? {}),
+              [sequenceId]: { ...(scopeOverride.sequences?.[sequenceId] ?? {}), ...patch },
+            },
+          });
+        };
+        const setCountdownOverride = (clockId: string, patch: CountdownTimingOverride): void => {
+          onChange(node.path, {
+            countdowns: {
+              ...(scopeOverride.countdowns ?? {}),
+              [clockId]: { ...(scopeOverride.countdowns?.[clockId] ?? {}), ...patch },
             },
           });
         };
@@ -215,6 +316,24 @@ export function PreviewScopeTiming({
                   defaults={{ repeat: tk.repeat, cycleBoundary: tk.cycleBoundary }}
                   override={scopeOverride.tickers?.[tk.id] ?? {}}
                   onChange={(patch) => setTickerOverride(tk.id, patch)}
+                />
+              ))}
+              {node.sequences.map((sq, si) => (
+                <PreviewSequenceTimingRow
+                  key={sq.id}
+                  name={sequenceLabels[si] ?? sq.name}
+                  defaults={{ repeat: sq.repeat, defaultDwellMs: sq.defaultDwellMs }}
+                  override={scopeOverride.sequences?.[sq.id] ?? {}}
+                  onChange={(patch) => setSequenceOverride(sq.id, patch)}
+                />
+              ))}
+              {node.countdowns.map((cd, ci) => (
+                <PreviewCountdownTimingRow
+                  key={cd.id}
+                  name={countdownLabels[ci] ?? cd.name}
+                  defaults={{ durationMs: cd.durationMs, deadline: cd.deadline }}
+                  override={scopeOverride.countdowns?.[cd.id] ?? {}}
+                  onChange={(patch) => setCountdownOverride(cd.id, patch)}
                 />
               ))}
             </PreviewTimingControls>

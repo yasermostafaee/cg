@@ -212,8 +212,30 @@ export interface TickerTimingOverride {
 }
 
 /**
+ * D-102 Phase 2 — a single sequence's session-only timing override, addressed by the sequence
+ * element's id. `repeat` counts full passes; `dwellMs` is the PER-ITEM display time and wins over
+ * BOTH the item's own authored `dwellMs` and the element's `defaultDwellMs` (a preview dwell that
+ * skipped items carrying their own dwell would be a dead control). Absent fields fall back to the
+ * element's authored values.
+ */
+export interface SequenceTimingOverride {
+  repeat?: number | 'infinite';
+  dwellMs?: number;
+}
+
+/**
+ * D-102 Phase 2 — a single COUNTDOWN clock's session-only timing override, addressed by the clock
+ * element's id. `durationMs` replaces the clock's authored `target` — a `duration` OR a `datetime`
+ * deadline — with a duration target for this run, which is the only way to rehearse a countdown to
+ * an absolute wall-clock time. `wall` / `countup` clocks never complete and are never overridden.
+ */
+export interface CountdownTimingOverride {
+  durationMs?: number;
+}
+
+/**
  * D-020/D-028 — overridable playout knobs (non-persistent). They override the
- * stored `scene.playout` (and, per element, each ticker's own repeat/boundary)
+ * stored `scene.playout` (and, per element, each content element's own timing)
  * for this run only. There is no continuous-loop flag: a looping playout is
  * `mode: 'loop-cycle'` with `repeat: 'infinite'`.
  */
@@ -228,6 +250,29 @@ export interface PlayoutOverride {
    * scope). Each ticker's override applies to its OWN driver. Session-only.
    */
   tickers?: Record<string, TickerTimingOverride>;
+  /**
+   * D-102 Phase 2 — PER-ELEMENT sequence timing, keyed by the sequence element's id. Same shape,
+   * keying and session-only lifetime as {@link PlayoutOverride.tickers}.
+   */
+  sequences?: Record<string, SequenceTimingOverride>;
+  /**
+   * D-102 Phase 2 — PER-ELEMENT countdown timing, keyed by the clock element's id (countdowns
+   * only — `wall`/`countup` have no timing to tune). Session-only.
+   */
+  countdowns?: Record<string, CountdownTimingOverride>;
+}
+
+/**
+ * D-102 Phase 2 — the per-element timing maps of a scope override, resolved for one scope. Split
+ * out because a STAMPED subtree (a repeater row / a sequence composition item) is wired under a
+ * synthetic path no `scopeOverrides` key addresses: it INHERITS its host scope's maps so the
+ * authored element's override reaches the stamped element's own driver. Only these ELEMENT maps are
+ * inherited — the per-scope LIFECYCLE axes are not, so a stamped row keeps its own lifecycle.
+ */
+export interface ElementTimingOverrides {
+  tickers?: Record<string, TickerTimingOverride>;
+  sequences?: Record<string, SequenceTimingOverride>;
+  countdowns?: Record<string, CountdownTimingOverride>;
 }
 
 /** Injectable rAF + timer clock for deterministic lifecycle/timing tests. */
