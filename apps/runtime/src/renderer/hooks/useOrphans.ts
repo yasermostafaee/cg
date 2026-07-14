@@ -1,23 +1,15 @@
-import { useEffect, useState } from 'react';
 import type { OrphanLayer } from '@cg/shared-ipc';
+import type { Unsubscribe } from '../../shared/runtime-bridge.js';
+import { useBridgeSnapshot } from './useBridgeSnapshot.js';
 
-/** R-009 — subscribes to layers.orphans-changed; emits the current orphan set. */
+const NONE: OrphanLayer[] = [];
+
+const fetchOrphans = (): Promise<OrphanLayer[]> => window.cg.layers.orphans();
+
+const subscribeOrphans = (handler: (next: OrphanLayer[]) => void): Unsubscribe =>
+  window.cg.layers.onOrphansChanged(handler);
+
+/** R-009 — the current orphan set (B-080: re-pulled whenever the link becomes usable). */
 export function useOrphans(): OrphanLayer[] {
-  const [orphans, setOrphans] = useState<OrphanLayer[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void window.cg.layers.orphans().then((initial) => {
-      if (!cancelled) setOrphans(initial);
-    });
-    const unsubscribe = window.cg.layers.onOrphansChanged((next) => {
-      setOrphans(next);
-    });
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, []);
-
-  return orphans;
+  return useBridgeSnapshot(fetchOrphans, subscribeOrphans, NONE);
 }
