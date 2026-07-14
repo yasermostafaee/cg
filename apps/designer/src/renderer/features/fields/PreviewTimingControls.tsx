@@ -57,11 +57,11 @@ export interface TimingOverride {
 }
 
 const MODE_LABELS: Record<PlayoutMode, string> = {
+  // D-114 — the no-out-point mode (the preview reflects it; it's resolved by `playoutOf`).
+  static: 'Static — plays in, holds, cut on stop',
   manual: 'Manual — hold until stop',
   'auto-out': 'Auto-out — outro after hold',
   'loop-cycle': 'Loop cycle — repeat in → hold → out',
-  // D-114 — the no-out-point mode (the preview reflects it; it's resolved by `playoutOf`).
-  static: 'Static — plays in, holds, cut on stop',
 };
 
 const HOLD_LABELS: Record<HoldSource, string> = {
