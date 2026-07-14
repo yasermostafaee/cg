@@ -4,6 +4,7 @@ import { AsyncButton } from '../../ui/AsyncButton.js';
 import { StatusBadge } from '../../ui/StatusBadge.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { useLink } from '../../hooks/useLink.js';
+import { layerLabel } from './layerLabel.js';
 
 /** A stack action's bridge round-trip result (drives the button's async feedback). */
 type ActionResult = Promise<{ accepted: boolean; errorCode?: string | undefined }>;
@@ -80,7 +81,7 @@ export function StackRow({
   const rawTitle = item.fields['title'];
   const contentTitle = typeof rawTitle === 'string' ? rawTitle.trim() : '';
   const label = templateLabel ?? 'Unnamed template';
-  const slot = item.slot ? `slot ${item.slot.channel}-${item.slot.layer}` : 'no slot';
+  const layer = layerLabel(item.slot);
   const onAir = item.status === 'on-air' || item.status === 'playing';
 
   // R-006 — the UI mirrors the bridge's connection refusal instead of inviting a command it
@@ -115,7 +116,7 @@ export function StackRow({
           {dirty && <DraftChip label={`${label} has unapplied edits`} />}
         </div>
         <div style={styles.subtitle}>
-          {contentTitle !== '' ? `${contentTitle} • ${slot}` : slot}
+          {contentTitle !== '' ? `${contentTitle} • ${layer}` : layer}
         </div>
       </div>
       {/* Stop button clicks from also selecting the row (prior behavior). */}

@@ -13,6 +13,7 @@ import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { templateDisplayName } from '../library/templateName.js';
+import { layerDetail } from '../stack/layerLabel.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
 import { PositionPicker } from './PositionPicker.js';
 import {
@@ -162,11 +163,11 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
         Status: {item.status}
         {item.pending ? ' (pending)' : ''}
       </div>
-      {item.slot && (
-        <div style={styles.meta}>
-          Slot: {item.slot.channel}-{item.slot.layer} on {item.slot.server}
-        </div>
-      )}
+      {/* Always shown, including the empty case: "no layer" is not an absence of
+          information, it is the answer to "why is this not on air?". The old line rendered
+          only when a slot existed, so it went blank exactly when the operator was trying to
+          diagnose that. */}
+      <div style={styles.meta}>{layerDetail(item.slot)}</div>
       <div style={styles.actions}>
         {/* Apply stays enabled even with nothing staged — re-sending unchanged
             values is the operator's documented B-048 recovery path. */}
