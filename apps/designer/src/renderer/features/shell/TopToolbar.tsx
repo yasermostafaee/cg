@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import type { Scene } from '@cg/shared-schema';
 import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
@@ -44,6 +44,51 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
   // "store a function in state" pattern.
   const [pendingSwitch, setPendingSwitch] = useState<(() => Promise<void>) | null>(null);
   const fileBtnRef = useRef<HTMLButtonElement | null>(null);
+  // D-127 — inline rename of the project name. ONE piece of edit state shared by both
+  // entry points (double-click on the name, File → "Rename Project…"), so they resolve
+  // to the same affordance. The in-progress text lives here, NOT in the store: the
+  // store is written ONCE on commit, so a rename is a single undo entry (a
+  // per-keystroke write would push several through `set`'s coalescing window).
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState('');
+  // Escape discards the draft; this guards the blur that may follow the input
+  // unmounting so the cancelled text can't be committed on the way out.
+  const cancelledRef = useRef(false);
+
+  function startRename(): void {
+    if (scene === null) return;
+    cancelledRef.current = false;
+    setDraft(scene.name);
+    setRenaming(true);
+  }
+
+  function commitRename(): void {
+    if (cancelledRef.current) return;
+    // Empty / whitespace-only is rejected by the store action (previous name kept,
+    // no undo entry). `renameProject` — NOT `updateScene({ name })`, which routes
+    // `name` to the ACTIVE COMPOSITION and would rename that instead of the project.
+    designerStore.renameProject(draft);
+    setRenaming(false);
+  }
+
+  function cancelRename(): void {
+    cancelledRef.current = true;
+    setRenaming(false);
+  }
+
+  // Focus the input and select its text as soon as it mounts, so typing replaces the
+  // current name. A stable ref callback runs exactly once per mount.
+  const renameInputRef = useCallback((el: HTMLInputElement | null) => {
+    if (el === null) return;
+    el.focus();
+    el.select();
+  }, []);
+
+  // Closing the project mid-rename (Home / Close / a guarded switch) drops the edit —
+  // otherwise the flag would still be set when the next project opens.
+  useEffect(() => {
+    if (scene === null && renaming) setRenaming(false);
+  }, [scene, renaming]);
 
   // D-100 — once a top menu is open (by click), hovering another top-menu button switches to it
   // (standard menubar behavior). When none is open, hover only highlights — a click still opens
@@ -271,6 +316,13 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
                 onClick={() => runFileAction(saveAs)}
               />
               <div className={s.dropdownDivider} aria-hidden />
+              {/* D-127 — second entry point to the SAME inline edit on the top-bar name. */}
+              <FileMenuItem
+                label="Rename Project…"
+                disabled={scene === null}
+                onClick={() => runFileAction(startRename)}
+              />
+              <div className={s.dropdownDivider} aria-hidden />
               <FileMenuItem
                 label="Close project"
                 disabled={scene === null}
@@ -375,8 +427,42 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
           moved to the per-composition bar; the right side is otherwise empty. */}
       <div className={s.centerCluster}>
         {scene !== null && (
-          <span className={s.projectName} title={scene.name} data-testid="project-name">
-            {scene.name}
+          // D-127 — double-click the name to rename the project in place. The span stays
+          // mounted while renaming (hidden, sized by the DRAFT) and the input sits over it,
+          // so the swap doesn't shift the cluster.
+          <span className={s.nameSlot}>
+            <span
+              className={cx(s.projectName, renaming && s.projectNameSizing)}
+              title={renaming ? undefined : `${scene.name} — double-click to rename`}
+              data-testid="project-name"
+              onDoubleClick={startRename}
+            >
+              {renaming ? draft : scene.name}
+            </span>
+            {renaming && (
+              <input
+                ref={renameInputRef}
+                className={s.projectNameInput}
+                aria-label="Project name"
+                data-testid="project-name-input"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  // `Enter` / `Escape` are layout-stable key values (CLAUDE.md), so `e.key`
+                  // is correct here — no `e.code` mapping needed.
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitRename();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    // Don't let the menubar's window-level Escape handler see this.
+                    e.stopPropagation();
+                    cancelRename();
+                  }
+                }}
+              />
+            )}
           </span>
         )}
         <Button
