@@ -70,6 +70,13 @@ export default [
     },
   },
   {
-    ignores: ['dist/**', '.vite/**', 'src/generated/**', '*.tsbuildinfo'],
+    ignores: [
+      'dist/**',
+      '.vite/**',
+      'src/generated/**',
+      '*.tsbuildinfo',
+      // B-071: Vite writes+deletes this transient during build; keep ESLint from globbing it (turbo lint/build race → ENOENT).
+      'vite.config.ts.timestamp-*.mjs',
+    ],
   },
 ];
