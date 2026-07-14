@@ -43,8 +43,15 @@ export class RuntimeApp {
     return this.page.getByRole('button', { name: 'Import .vcg template' });
   }
   /** The Library's verification-error message (role="alert"). */
+  /**
+   * A command/import error surfaced in the app body.
+   *
+   * R-006 — scoped to the Library: `role="alert"` is no longer unique on the page. The
+   * connection banner (test mode / disconnected) is deliberately an alert too, because
+   * "nothing can reach air" IS an alert. A bare `getByRole('alert')` now matches several.
+   */
   get error(): Locator {
-    return this.page.getByRole('alert');
+    return this.library.getByRole('alert');
   }
 
   // ── actions ───────────────────────────────────────────────────────────────

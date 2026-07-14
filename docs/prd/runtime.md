@@ -140,29 +140,56 @@ AND a context-menu entry.
   through the injected `getHtml` per request, so dropping the registry entry 404s
   `GET /template/<id>` on its own.
 
-## [ ] R-006 — surface + recover the boot-time backend choice (no silent per-session mock) ⟨priority: low⟩
+## [~] R-006 — the Runtime never pretends to be on air: no silent mock, refuse offline, explicit test mode ⟨priority: high⟩ — implemented on `fix/offline-mock-safety`, change: `runtime-offline-safety`
 
-**What:** When the boot-time bridge probe fails and the session pins to
-`offline-mock`, make that state prominent and recoverable — e.g. a **Reconnect**
-affordance that re-probes the bridge and attaches LIVE (or guides the operator
-through an explicit reload + re-import) instead of requiring the operator to
-discover a manual refresh.
-**Why:** The backend is chosen once at boot (`createRuntimeBridge.ts`: probe
-refused/timed out → persistent `offline-mock` for the whole session). In the
-2026-07-07 live session the page had booted on the mock — commands "never reached
-CasparCG" and only a page refresh + re-import attached the real bridge. The
-`LinkIndicator` does show `offline-mock`, but the mode is easy to miss and there is
-no recovery path in the UI.
+**What:** Four parts, all required — this is a **broadcast-safety** item, not a
+visibility nit:
+
+1. **No silent fallback.** An unreachable bridge NEVER becomes the mock. The app
+   lands in an explicit, loud DISCONNECTED state that keeps reconnecting.
+2. **Refuse the on-air verbs while no server is reachable.** `take`/`update`/`out`
+   are refused (`errorCode: 'disconnected'`) BEFORE any intent is applied, so no
+   optimistic status can exist. Refuse, never defer — a queued command would be
+   stranded (reconnect-reconciliation replays template HTML, not stack intents).
+3. **Test mode is an EXPLICIT operator switch** with a loud, persistent indicator.
+   Never entered automatically, never mid-show.
+4. **No fake ON AIR / no fake HEALTHY.** A simulation may simulate playout; it may
+   not claim the broadcast-red ON AIR badge or a healthy link to hardware that is
+   not there.
+
+**Why:** Escalated from ⟨low⟩ after it was hit as a **safety failure** (2026-07-13):
+the operator pressed PLAY, the row went solid-red **ON AIR**, both servers read
+**HEALTHY** — and nothing was on air. The bridge had not been reachable at boot, so
+`createRuntimeBridge` silently pinned the session to `MockRuntime`, which _simulates a
+successful playout_ (`take()` → `playing` → `on-air`, `accepted: true`) and seeds both
+servers `healthy`. The only tell was one amber pill sitting beside a green
+"PRIMARY A HEALTHY" that contradicted it — and the reassuring claim won. Meanwhile
+nothing anywhere refused a command because the server was absent (a repo-wide grep for a
+`disconnected`/`offline` refusal reason returned zero hits), even though the orphan sweep
+had gated on exactly that predicate all along.
+
+This is the same incident the original R-006 recorded ("commands _never reached
+CasparCG_") — it was simply scoped to visibility and left at ⟨low⟩.
 **Acceptance:**
 
-- WHEN the session is on `offline-mock` THEN the UI states it prominently and
-  offers a reconnect/retry affordance
-- WHEN the operator triggers reconnect and the bridge is reachable THEN the session
-  attaches LIVE (or is explicitly guided to reload), and the operator is told which
-  templates need re-import (the bridge's in-memory registry starts empty)
-  **Notes:** Keep the deliberate current model — no silent mid-session fallback to
-  the mock; the gap is only visibility + recovery of the boot-time choice. Related:
-  the B-038 open follow-up (re-deliver retained template HTML on reconnect).
+- WHEN the bridge probe fails at boot THEN the app stays on the live backend in a loud
+  DISCONNECTED state — it does NOT construct the mock, does NOT report any server healthy,
+  and shows no item as on air
+- WHEN the operator issues take/update/out while no declared server is reachable THEN the
+  bridge refuses with a clear reason, no intent is recorded, the item's status is unchanged,
+  and the command is NOT queued for later
+- WHEN a mirror pair's PRIMARY is down but a BACKUP is healthy THEN the verbs still work
+  (the command reaches a real, rendering server — refusing would deny air that exists; see
+  [B-056](bugs-runtime.md))
+- WHEN the operator enters test mode THEN it is a deliberate act, a persistent full-width
+  TEST MODE banner states nothing is on air, and no CasparCG server is reported healthy
+- WHEN an item is "played" in test mode THEN its badge reads SIM, visually distinct from the
+  broadcast-red ON AIR badge a real on-air item carries
+  **Notes:** The mock stays a valuable test tool — it keeps its state machine, so the on-air
+  gates (R-010's block, R-011's position lock, the B-044 badge settle) remain exercisable
+  offline. What it loses is the ability to make a claim the operator would trust: real air.
+  Related: [B-079](bugs-runtime.md) — the second, independent path to a false ON AIR (a
+  failed take outranked by stale OSC), fixed alongside.
 
 ## [x] R-007 — Runtime control styling + interaction feedback ⟨priority: medium⟩ — merged via `polish-runtime-controls`, archived
 

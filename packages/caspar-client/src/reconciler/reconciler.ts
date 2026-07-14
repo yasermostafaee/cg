@@ -94,6 +94,22 @@ interface ItemRecord {
    * only on the backup and the primary's producer is re-observed at resync).
    */
   played: boolean;
+  /**
+   * B-079 — the play evidence the CURRENT take intent overwrote, so a take whose command
+   * FAILED can give back the claim it made and nothing more.
+   *
+   * Play evidence is set at INTENT time (B-053's contract, deliberately). But the truth
+   * derivation sits ABOVE the ack in the merge ladder, and OSC keeps arriving across a dead
+   * AMCP link — so a take that set `played` and then failed on the wire would read `on-air`
+   * off an unrelated producer (an orphan, or the producer from an earlier ADD). A solid red
+   * ON AIR badge for a `CG PLAY` that never reached CasparCG.
+   *
+   * Restoring the PRIOR value (rather than forcing `false`) is what keeps this safe in both
+   * directions: a failed re-take of an item that is genuinely on air must NOT demote it —
+   * a false `loaded`/`idle` would HIDE a live graphic, which this file's own doctrine calls
+   * the more dangerous error.
+   */
+  playedBeforeIntent?: boolean;
   slot?: LayerSlot;
   lastIntentSeq?: number;
   lastAckAt?: number;
@@ -169,6 +185,9 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
 
     rec.lastAckAt = this.now();
     if (ok) {
+      // B-079 — the command landed, so the take's claim is now proven: there is nothing
+      // left to retract.
+      delete rec.playedBeforeIntent;
       if (rec.settle !== undefined) {
         rec.intentStatus = rec.settle.to;
         rec.ackedStatus = rec.settle.to;
@@ -190,6 +209,18 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
       // resting status it came from when that target is evidenced-terminal;
       // otherwise the honest landing is `unconfirmed` — B-044's explicit "we
       // cannot claim what the wire did" state — never a silent claim.
+      // B-079 — a FAILED take RETRACTS the play evidence it claimed. `freshTruth` sits
+      // ABOVE the ack in the merge ladder and OSC keeps arriving across a dead AMCP link,
+      // so without this the item reads `on-air` off an unrelated producer even though its
+      // `CG PLAY` never reached the wire. Restoring the PRIOR value (not forcing `false`)
+      // is what makes it safe both ways: a failed RE-take of a genuinely on-air item leaves
+      // it on air — a false `loaded` would hide a live graphic, the worse error direction.
+      // Only a take is retracted; a failed update/out never touched play evidence.
+      if (rec.intentStatus === 'playing') {
+        rec.played = rec.playedBeforeIntent ?? false;
+      }
+      delete rec.playedBeforeIntent;
+
       const settleTo = rec.settle?.to;
       rec.intentStatus =
         settleTo !== undefined && isTerminalStatus(settleTo) ? settleTo : 'unconfirmed';
@@ -216,7 +247,25 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
     const rec = this.items.get(itemId);
     if (rec === undefined) return null;
     if (rec.lastIntentSeq !== seq) return null; // a newer intent owns the item
-    if (rec.intentStatus !== 'updating' && rec.intentStatus !== 'exiting') return null;
+    // B-079 — an IN-FLIGHT take joins the expirable set. A take used to arm no timer at
+    // all, and this guard refused to expire one anyway, so an unsettled take rested on its
+    // optimistic `playing`/`on-air` claim FOREVER with nothing to bound it.
+    //
+    // "In flight" must be `ackedStatus === undefined`, NOT merely `intentStatus === 'playing'`:
+    // a settled UPDATE legitimately RESTS at `playing` (that is its settle target), and
+    // expiring that would break B-044's "a settled intent is never expirable" invariant.
+    // `applyIntent` deletes `ackedStatus`, so only a command still awaiting its ack qualifies.
+    const takeInFlight = rec.intentStatus === 'playing' && rec.ackedStatus === undefined;
+    if (rec.intentStatus !== 'updating' && rec.intentStatus !== 'exiting' && !takeInFlight) {
+      return null;
+    }
+
+    // B-079 — an expired take never proved its claim either: retract it, exactly as a
+    // failed ack does (restore the prior evidence, so a real on-air item is never demoted).
+    if (rec.intentStatus === 'playing') {
+      rec.played = rec.playedBeforeIntent ?? false;
+    }
+    delete rec.playedBeforeIntent;
 
     rec.intentStatus = 'unconfirmed';
     delete rec.ackedStatus;
@@ -338,6 +387,9 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
         rec.intentStatus = 'playing';
         // B-053 — play evidence, set at intent time: a still-fresh load-time
         // producer observation immediately re-derives as 'on-air'.
+        // B-079 — remember what it OVERWROTE, so a take that fails on the wire can hand
+        // back exactly the claim it made (and not one made by an earlier, successful take).
+        rec.playedBeforeIntent = rec.played;
         rec.played = true;
         rec.lastIntentSeq = seq;
         rec.pendingSince = this.now();

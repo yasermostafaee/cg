@@ -2,6 +2,7 @@ import { DEFAULT_BRIDGE_WS_URL } from '@cg/shared-ipc';
 import type { AppInfo, BridgeLinkStatus, RuntimeBridge } from '../shared/runtime-bridge.js';
 import { MockRuntime } from './MockRuntime.js';
 import { WebSocketRuntime } from './WebSocketRuntime.js';
+import { isTestMode } from './testMode.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
 
@@ -18,19 +19,31 @@ export interface CreateRuntimeBridgeOptions {
 }
 
 /**
- * Build the browser `RuntimeBridge`, deciding the backend **once** at boot
- * (C-001 Phase 1).
+ * Build the browser `RuntimeBridge`, deciding the backend **once** at boot (C-001 Phase 1).
  *
- * Probes the configured bridge WebSocket with a short timeout: reachable →
- * `WebSocketRuntime` (live, real round-trips to the local bridge); refused or
- * timed out → the in-memory `MockRuntime` in an explicit, persistent
- * **offline-mock** mode. The choice is fixed for the session — a live link that
- * later drops surfaces as `disconnected` (handled in `WebSocketRuntime`), never
- * a silent fall-back to the mock.
+ * R-006 — **an unreachable bridge NEVER selects the mock.** It used to: the probe failed,
+ * a bare `catch` swapped in `MockRuntime`, and the session was pinned for its whole life to
+ * an in-memory simulation that reports SUCCESS for commands that reach nothing. The
+ * operator pressed PLAY, the row went solid-red ON AIR beside a green "PRIMARY A HEALTHY",
+ * and no graphic existed. That is a broadcast-safety failure, and it was observed live.
+ *
+ * Now:
+ * - **Test mode requested explicitly** (operator, or a test harness) → the mock, and the UI
+ *   says so unmistakably at all times.
+ * - **Otherwise** → the LIVE backend, always. If the probe fails we still return it: the
+ *   `WebSocketRuntime` reconnects on its own and REJECTS every command while it is down
+ *   ("Bridge disconnected — command rejected. Not sent to CasparCG."), which is the honest
+ *   behavior. The probe now only decides how fast the first paint knows the truth.
+ *
+ * The backend is fixed for the session either way — a live link that later drops surfaces
+ * as `disconnected`, never a silent fall-back to a simulation.
  */
 export async function createRuntimeBridge(
   options: CreateRuntimeBridgeOptions = {},
 ): Promise<RuntimeBridge> {
+  // The ONLY door to the mock. Never inferred from a failed probe.
+  if (isTestMode()) return createMockBridge();
+
   const url = resolveBridgeUrl();
   const ws = new WebSocketRuntime(
     url,
@@ -38,11 +51,12 @@ export async function createRuntimeBridge(
   );
   try {
     await withTimeout(ws.whenReady(), PROBE_TIMEOUT_MS);
-    return ws;
   } catch {
-    ws.dispose();
-    return createMockBridge();
+    // Unreachable at boot. Keep the live backend and let it reconnect — do NOT dispose it,
+    // and do NOT substitute the mock. The app lands in an explicit, loud DISCONNECTED state
+    // where commands are refused, which is the truth.
   }
+  return ws;
 }
 
 function resolveBridgeUrl(): string {
@@ -67,9 +81,12 @@ function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
 }
 
 /**
- * Offline fallback: the existing in-memory simulation, wrapped to satisfy the
- * `RuntimeBridge` contract. Its link status is a constant `offline-mock` — an
- * explicit, persistent offline mode the indicator surfaces unmistakably.
+ * The in-memory simulation, wrapped to satisfy the `RuntimeBridge` contract. Its link
+ * status is a constant `offline-mock`, which the UI renders as a loud, persistent TEST MODE
+ * banner — not a pill among pills.
+ *
+ * R-006 — this is NO LONGER a fallback. It is reached only from an explicit test-mode
+ * request (`isTestMode()`); nothing infers it from an unreachable bridge.
  *
  * Exported for the B-074 mock↔bridge parity guard (`tests/mock-bridge-parity.test.ts`),
  * which compares this adapter's method tree against `WebSocketRuntime`'s.

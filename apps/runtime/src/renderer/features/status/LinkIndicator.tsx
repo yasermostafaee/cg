@@ -20,10 +20,13 @@ function visual(status: BridgeLinkStatus): Visual {
       };
     case 'offline-mock':
     default:
+      // R-006 — test mode is now an EXPLICIT operator choice, never a fallback from a
+      // failed probe, so the wording says what it is rather than how we ended up here.
+      // The full-width TEST MODE banner carries the weight; this pill just agrees with it.
       return {
         color: colors.pending,
-        text: 'OFFLINE (mock) — not connected to CasparCG',
-        title: 'No bridge found at boot; running the in-memory mock',
+        text: 'TEST MODE (mock) — nothing reaches CasparCG',
+        title: 'Explicit test mode: an in-memory simulation. Nothing is on air.',
       };
   }
 }

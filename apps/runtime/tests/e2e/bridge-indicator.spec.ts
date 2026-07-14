@@ -33,7 +33,13 @@ test.describe('bridge link indicator', () => {
     bridge = null;
   });
 
-  test('boot with no bridge → OFFLINE (mock) indicator', async ({ page }) => {
+  /**
+   * R-006 — this test used to assert "boot with no bridge → OFFLINE (mock)". That was the
+   * BUG, pinned: an unreachable bridge silently became a simulation that reports successful
+   * playouts, so the operator saw ON AIR for a graphic that never existed. An unreachable
+   * bridge must land in a loud DISCONNECTED state and must NOT construct the mock.
+   */
+  test('boot with no bridge → loud DISCONNECTED, and NEVER the mock', async ({ page }) => {
     // Claim a free port, then release it so nothing answers there.
     const probe = await createBridge({ port: 0, connection: ephemeralConnection() });
     const deadUrl = probe.url;
@@ -43,7 +49,19 @@ test.describe('bridge link indicator', () => {
     await page.goto('/');
 
     const link = page.getByRole('status', { name: 'Bridge link' });
-    await expect(link).toContainText('OFFLINE (mock)');
+    await expect(link).toContainText('DISCONNECTED');
+    await expect(link).not.toContainText('OFFLINE (mock)');
+
+    // A pill is not enough for "nothing can reach air" — the alert is unmissable.
+    const alert = page.getByRole('alert', { name: 'Bridge disconnected' });
+    await expect(alert).toContainText('NOTHING CAN REACH AIR');
+    await expect(alert).toContainText('refused, not');
+
+    // No server is claimed healthy while nothing is reachable (the green pill that used to
+    // sit beside the amber one, and won). Scoped + case-sensitive: a bare
+    // getByText('HEALTHY') is a substring, case-INsensitive match, so it also hits
+    // "unhealthy" and would pass for the wrong reason.
+    await expect(page.getByLabel('Status bar')).not.toContainText('HEALTHY');
   });
 
   test('boot with a reachable bridge → LIVE indicator', async ({ page }) => {

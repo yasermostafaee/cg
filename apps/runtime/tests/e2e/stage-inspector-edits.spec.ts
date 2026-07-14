@@ -178,7 +178,8 @@ test('Update with nothing staged still sends (the B-048 recovery workaround)', a
   await app.installUpdateSpy();
   await app.applyEdits();
   await expect.poll(() => app.updateCount()).toBe(1);
-  await expect(app.page.getByRole('alert')).toHaveCount(0);
+  // No command error. (R-006 — name the toast: the connection banner is an alert too now.)
+  await expect(app.page.getByRole('alert', { name: 'Command error' })).toHaveCount(0);
 });
 
 test('Update applies MULTIPLE staged fields as exactly ONE atomic stack.update', async ({
