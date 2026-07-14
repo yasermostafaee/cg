@@ -16,11 +16,8 @@ test('PLAY / UPDATE / OUT / REMOVE each dispatch their action on click', async (
   await app.loadTemplate(templateId);
   await app.selectStackRow(templateId);
 
-  const row = app.stack
-    .locator('div')
-    .filter({ hasText: templateId })
-    .filter({ has: app.page.getByRole('button', { name: 'PLAY' }) })
-    .last();
+  // R-004 — the row no longer prints its templateId; it carries it as a stable data anchor.
+  const row = app.stackRow(templateId).last();
 
   // PLAY → take dispatched → the badge settles ON AIR.
   await row.getByRole('button', { name: 'PLAY' }).click();

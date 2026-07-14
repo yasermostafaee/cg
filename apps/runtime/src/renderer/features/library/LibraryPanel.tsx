@@ -113,7 +113,13 @@ export function LibraryPanel(): JSX.Element {
         // are pre-formatted (e.g. "failed verification: …"); the file name is
         // added here for the operator-facing error. The bundled fonts are inlined
         // (Phase 3) so the delivered HTML renders Persian with the correct face.
-        imported = await importTemplateFromBytes(window.cg, bytes, { fontsCss: appFontsCss });
+        // R-004 — `file.name` is the label the operator recognises, and this is the only
+        // place it exists (the bytes cannot carry it). It was already being read here for
+        // the error message and thrown away on the success path.
+        imported = await importTemplateFromBytes(window.cg, bytes, {
+          fontsCss: appFontsCss,
+          sourceFileName: file.name,
+        });
       } catch (err) {
         setError(`“${file.name}” ${err instanceof Error ? err.message : String(err)}`);
         return;
@@ -221,12 +227,12 @@ export function LibraryPanel(): JSX.Element {
           <p style={styles.hint}>No templates yet. Import a .vcg to get started.</p>
         ) : (
           templates.map((t) => {
-            // R-004 — the operator reads the display name; the id stays discoverable on the
-            // secondary line (and as a tooltip) so a row can still be correlated with a
-            // stack item's `templateId` or a served `/template/<id>` URL. When the template
-            // has no usable name the id IS the primary line — don't then repeat it below.
+            // R-004 — the operator reads the label (the imported file name, else the
+            // manifest name). The raw id is NOT shown: a UUID is not information an
+            // operator can act on, and printing it beside every row was noise. It stays
+            // reachable as the row's tooltip, which is where a correlation key belongs —
+            // enough to match a row against a served `/template/<id>` URL when debugging.
             const label = templateDisplayName(t);
-            const idIsSecondary = label !== t.templateId;
             return (
               <div
                 style={styles.item}
@@ -240,9 +246,7 @@ export function LibraryPanel(): JSX.Element {
                   <span style={styles.itemName} title={t.templateId}>
                     {label}
                   </span>
-                  <span style={styles.itemMeta}>
-                    {idIsSecondary ? `${t.templateType} · ${t.templateId}` : t.templateType}
-                  </span>
+                  <span style={styles.itemMeta}>{t.templateType}</span>
                 </div>
                 <div style={styles.itemActions}>
                   <AsyncButton

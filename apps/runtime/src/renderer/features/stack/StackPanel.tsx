@@ -1,8 +1,10 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
 import { useStack } from '../../hooks/useStack.js';
+import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { templateDisplayName } from '../library/templateName.js';
 import { applyDraft } from '../inspector/applyDraft.js';
 import {
   draftsVersion,
@@ -57,6 +59,10 @@ const styles = {
  */
 export function StackPanel({ onSelectionChange }: Props): JSX.Element {
   const items = useStack();
+  // R-004 — a row names its template. `StackItemState` carries no label (and must not:
+  // `templateId` stays the sole identity), so it is joined from the registry here, once for
+  // the whole list, rather than fetched per row.
+  const templates = useTemplateIndex(items.map((i) => i.templateId));
   const [selected, setSelected] = useState<string | null>(null);
   // Re-render on draft changes so the row draft chip stays live.
   useSyncExternalStore(subscribeDrafts, draftsVersion);
@@ -102,29 +108,33 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
         {items.length === 0 ? (
           <div style={styles.empty}>No items loaded. Use the library to add one.</div>
         ) : (
-          items.map((item) => (
-            <StackRow
-              key={item.itemId}
-              item={item}
-              selected={item.itemId === selected}
-              dirty={isItemDirty(item.itemId, item.fields)}
-              onSelect={select}
-              // R-007 — the handlers return the bridge round-trip promise so each
-              // AsyncButton tracks its OWN in-flight state (press → busy →
-              // success/error), decoupled from the B-044 badge settlement.
-              onPlay={(id) => window.cg.stack.take({ itemId: id })}
-              onUpdate={(id) => {
-                // R-003 — apply the item's staged draft (the complete field-set)
-                // as one atomic stack.update; clears the draft on accepted.
-                const target = items.find((i) => i.itemId === id);
-                return target !== undefined
-                  ? applyDraft(target)
-                  : Promise.resolve({ accepted: false });
-              }}
-              onOut={(id) => window.cg.stack.out({ itemId: id })}
-              onRemove={(id) => window.cg.stack.remove({ itemId: id })}
-            />
-          ))
+          items.map((item) => {
+            const info = templates.get(item.templateId);
+            return (
+              <StackRow
+                key={item.itemId}
+                item={item}
+                selected={item.itemId === selected}
+                dirty={isItemDirty(item.itemId, item.fields)}
+                templateLabel={info !== undefined ? templateDisplayName(info) : undefined}
+                onSelect={select}
+                // R-007 — the handlers return the bridge round-trip promise so each
+                // AsyncButton tracks its OWN in-flight state (press → busy →
+                // success/error), decoupled from the B-044 badge settlement.
+                onPlay={(id) => window.cg.stack.take({ itemId: id })}
+                onUpdate={(id) => {
+                  // R-003 — apply the item's staged draft (the complete field-set)
+                  // as one atomic stack.update; clears the draft on accepted.
+                  const target = items.find((i) => i.itemId === id);
+                  return target !== undefined
+                    ? applyDraft(target)
+                    : Promise.resolve({ accepted: false });
+                }}
+                onOut={(id) => window.cg.stack.out({ itemId: id })}
+                onRemove={(id) => window.cg.stack.remove({ itemId: id })}
+              />
+            );
+          })
         )}
       </div>
     </section>

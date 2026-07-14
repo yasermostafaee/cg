@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { STARTER_TEMPLATES } from '@cg/starter-templates';
 import {
+  cleanFileName,
   pickTemplateName,
   templateDisplayName,
 } from '../src/renderer/features/library/templateName.js';
@@ -41,18 +42,63 @@ describe('pickTemplateName — what gets recorded at import', () => {
   });
 });
 
-describe('templateDisplayName — what the operator reads', () => {
-  it('shows the name when there is one', () => {
+describe('cleanFileName — the imported file name, made readable', () => {
+  it('strips the .vcg extension and turns separators into spaces', () => {
+    expect(cleanFileName('news-lower-third.vcg')).toBe('news lower third');
+    expect(cleanFileName('news_lower_third.vcg')).toBe('news lower third');
+    expect(cleanFileName('news-lower_third.vcg')).toBe('news lower third');
+  });
+
+  it('does NOT change case — these names are Persian, or mixed', () => {
+    // There is no correct "capitalize" for an Arabic-script string, and title-casing the
+    // Latin half would make the two halves disagree. Leave the operator's text alone.
+    expect(cleanFileName('زیرنویس-خبر.vcg')).toBe('زیرنویس خبر');
+    expect(cleanFileName('BBC-news_LOWER-third.vcg')).toBe('BBC news LOWER third');
+    expect(cleanFileName('news-lower-third.vcg')).not.toBe('News Lower Third');
+  });
+
+  it('strips the extension case-insensitively, and only at the end', () => {
+    expect(cleanFileName('promo.VCG')).toBe('promo');
+    // A ".vcg" inside the name is part of the name, not an extension.
+    expect(cleanFileName('my.vcg.backup.vcg')).toBe('my.vcg.backup');
+  });
+
+  it('collapses the runs a separator sweep leaves behind', () => {
+    expect(cleanFileName('news--lower__third.vcg')).toBe('news lower third');
+    expect(cleanFileName('  padded-name.vcg  ')).toBe('padded name');
+  });
+
+  it('yields undefined for nothing usable, so the caller falls through', () => {
+    expect(cleanFileName(undefined)).toBeUndefined();
+    expect(cleanFileName('.vcg')).toBeUndefined();
+    expect(cleanFileName('---.vcg')).toBeUndefined();
+  });
+});
+
+describe('templateDisplayName — what the operator reads, on every surface', () => {
+  it('prefers the imported FILE NAME over the manifest name', () => {
+    // The file name is the string the operator chose and recognises. The manifest's name is
+    // the entry composition's — frequently a Designer-internal label.
+    const t = info({ name: 'Comp 1', sourceFileName: 'news-lower-third.vcg' });
+    expect(templateDisplayName(t)).toBe('news lower third');
+  });
+
+  it('uses the manifest name when there is no file — a bundled starter keeps its label', () => {
     expect(templateDisplayName(info({ name: 'Breaking News' }))).toBe('Breaking News');
   });
 
-  it('falls back to the id when the name is absent — a row is never blank', () => {
-    // A TemplateInfo registered before the field existed: `name` is optional for this case.
-    expect(templateDisplayName(info())).toBe('tpl-uuid-1');
+  it('falls through an unusable file name to the manifest name', () => {
+    expect(templateDisplayName(info({ name: 'Breaking News', sourceFileName: '.vcg' }))).toBe(
+      'Breaking News',
+    );
   });
 
-  it('falls back to the id when the name is blank after trimming', () => {
-    expect(templateDisplayName(info({ name: '   ' }))).toBe('tpl-uuid-1');
+  it('NEVER shows the raw id — a UUID is not a label', () => {
+    // This is the whole point of the item. A row with neither a file nor a usable name says
+    // so in words, rather than showing an identifier the operator cannot act on.
+    expect(templateDisplayName(info())).toBe('Unnamed template');
+    expect(templateDisplayName(info({ name: '   ' }))).toBe('Unnamed template');
+    expect(templateDisplayName(info())).not.toBe('tpl-uuid-1');
   });
 });
 

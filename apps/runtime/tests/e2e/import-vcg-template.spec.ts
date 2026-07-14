@@ -15,16 +15,19 @@ test('a verified .vcg is registered, loads onto the stack, and shows its fields'
 
   await app.importVcg('valid.vcg', await buildValidVcg(templateId));
 
-  // It appears in the Library as a new row. R-004 — the row is headed by the manifest's
-  // DISPLAY NAME, not the raw id; the id remains the row's stable anchor (and its tooltip).
+  // It appears in the Library as a new row, headed by the FILE the operator imported —
+  // `valid.vcg` → "valid" — not the scene's internal name ('e2e-lower-third') and never the
+  // raw id. The id remains the row's stable anchor (and its tooltip).
   await expect(app.templateRow(templateId)).toBeVisible();
-  await expect(app.templateRow(templateId)).toContainText('e2e-lower-third');
+  await expect(app.templateRow(templateId)).toContainText('valid');
+  await expect(app.templateRow(templateId)).not.toContainText(templateId);
   await expect(app.loadButtons()).toHaveCount(before + 1);
   await expect(app.error).toHaveCount(0);
 
-  // It loads onto the stack…
+  // It loads onto the stack, labelled the same way — and the row does not print its id.
   await app.loadTemplate(templateId);
-  await expect(app.stack.getByText(templateId, { exact: false })).toBeVisible();
+  await expect(app.stack.getByText('valid')).toBeVisible();
+  await expect(app.stack.getByText(templateId, { exact: false })).toHaveCount(0);
 
   // …and selecting it surfaces its field schema in the Inspector.
   await app.selectStackRow(templateId);

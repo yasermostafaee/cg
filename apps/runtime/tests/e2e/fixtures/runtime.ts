@@ -100,9 +100,24 @@ export class RuntimeApp {
       .click();
   }
 
+  /**
+   * The stack row(s) for `templateId`.
+   *
+   * R-004 — the row no longer PRINTS its `templateId`: a UUID is not an operator-facing
+   * label. The id remains the row's stable ANCHOR (labels are not unique — two templates may
+   * legitimately share one), carried as a data attribute. Specs that used to find a row by
+   * filtering on the id as visible TEXT compose this instead.
+   *
+   * Several rows can share a `templateId` (the same template loaded twice), so callers that
+   * need exactly one still pick — conventionally `.last()`, the most recently loaded.
+   */
+  stackRow(templateId: string): Locator {
+    return this.stack.locator(`[data-template-id="${templateId}"]`);
+  }
+
   /** Select the stack row for `templateId` (so the Inspector shows its fields). */
   async selectStackRow(templateId: string): Promise<void> {
-    await this.stack.getByText(templateId, { exact: false }).first().click();
+    await this.stackRow(templateId).first().click();
   }
 
   /** R-003 — apply the selected item's staged edits via the Inspector's Update. */

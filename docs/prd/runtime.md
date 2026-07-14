@@ -81,9 +81,26 @@ explicit apply step.
   value changes reconcile with in-progress local edits without a destructive
   remount.
 
-## [x] R-004 — template Library shows the manifest display name, not the raw id ⟨priority: medium⟩ — merged via `runtime-library-display-name` (#306), archived
+## [~] R-004 — every panel labels a template by the imported file name, never the raw id ⟨priority: medium⟩ — Library half merged via `runtime-library-display-name` (#306, archived); REOPENED and completed on `fix/runtime-ux-batch-2`, change: `runtime-item-label-from-file`
 
 <!-- change: openspec/changes/archive/2026-07-14-runtime-library-display-name/ -->
+<!-- change: openspec/changes/runtime-item-label-from-file/ -->
+
+**Reopened (2026-07-14).** The first pass looked right in testing because the bundled
+starters carry real labels, and was wrong on the packages operators actually import:
+
+- Only ONE human name survives into a `.vcg` — the entry COMPOSITION's (the export
+  projection overwrites the scene name with it; the project name never enters the package).
+  For a real package that is frequently a Designer-internal label like "Comp 1", and since
+  `ManifestSchema.name` permits a blank, the rule could fall all the way back to the UUID.
+- The STACK row and the INSPECTOR were never in scope: both labelled a row
+  `fields['title'] ?? item.itemId` — a field most templates lack — and printed the raw
+  `templateId` beneath it.
+
+The fix: the label is the **imported file name** (cleaned; case preserved for Persian/mixed
+script), else the manifest name, else "Unnamed template" — on all three panels, and the raw
+id is never rendered as text (tooltip only). `TemplateInfo` gains an optional
+`sourceFileName`, captured from `File.name` at import.
 
 **What:** Library rows (and the import/Load copy) show the template's display
 **name** from the `.vcg` manifest; the id stays discoverable as secondary info

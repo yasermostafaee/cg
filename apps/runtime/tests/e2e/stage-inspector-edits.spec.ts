@@ -132,11 +132,8 @@ test('Take plays the applied values, not the draft; the item stays dirty', async
   const applied = await readApplied(app, templateId);
   await app.inspector.getByRole('textbox', { name: 'anchor' }).fill('نباید پخش شود');
 
-  const row = app.stack
-    .locator('div')
-    .filter({ hasText: templateId })
-    .filter({ has: app.page.getByRole('button', { name: 'PLAY' }) })
-    .last();
+  // R-004 — the row no longer prints its templateId; it carries it as a stable data anchor.
+  const row = app.stackRow(templateId).last();
   await row.getByRole('button', { name: 'PLAY' }).click();
 
   // The draft did not reach air, and the row stays visibly dirty.
