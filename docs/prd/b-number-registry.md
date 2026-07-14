@@ -25,6 +25,13 @@ false hits — the `B-056` heading itself cites "renumbered from B-054".
 Audited against merged `main` (`2cb9299`, 2026-07-13). `B-001` … `B-074` are allocated,
 contiguous, with no gaps.
 
+**Re-audited 2026-07-14** against `main` (`ec13c8a`) + PR #317. `B-075` … `B-079` have since
+been allocated. `B-078` was briefly the number space's only GAP — `B-079` was taken while it was
+not — which is precisely the "two branches, two snapshots" pattern this file exists to catch. It
+was verified free before use (absent from every remote branch, and #317 was the only open PR) and
+is now taken by **B-078** (the E2E contention flake, [bugs.md](bugs.md)). The space is contiguous
+again: `B-001` … `B-079`, no gaps. **Next free: `B-080`.**
+
 **Exactly one number is ambiguous. Every other number names exactly one bug.**
 
 | Number     | Status                                | Who owns it                                                                                                                                                                                                                             |
