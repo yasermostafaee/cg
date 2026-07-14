@@ -3238,7 +3238,7 @@ schema already supports; per-project overrides of a shared font. **RECON-FIRST, 
 `designer-font-export` from D-121). Builds on **D-040** (the shared-image pattern) and **D-121** (font
 export).
 
-## [~] D-127 — Rename the open project (double-click the name + File → "Rename Project…") ⟨priority: medium⟩ — branch: `feat/D-127-rename-project`, change dir: `openspec/changes/rename-open-project/`
+## [x] D-127 — Rename the open project (double-click the name + File → "Rename Project…") ⟨priority: medium⟩ — merged (#311, `9be2aec`), archived (`openspec/changes/archive/2026-07-14-rename-open-project`): the centered TopToolbar project name becomes an inline text input on double-click (focused, current name selected) and File → "Rename Project…" activates the SAME edit (one affordance, two entry points, one `renaming` flag; disabled with no project). Commit on Enter or blur, cancel on Escape (no store write). The new `renameProject(name)` document-slice action writes the SCENE-ROOT `name` through the normal `set()` path — deliberately NOT `updateScene({ name })`, whose `docKeys` would route `name` to the ACTIVE COMPOSITION and rename that instead — so a rename with a composition open renames the project, as exactly ONE undo entry. Empty/whitespace-only is rejected (previous name kept). Display-name only: the D-088 file handle is untouched, so the on-disk file is NOT renamed (Save As remains the way to change the filename); the tab title follows for free off `scene?.name` and the document correctly goes dirty (`hashScene()` covers the root `name`)
 
 **What:** Let the operator rename the OPEN project via two entry points that resolve to the **same**
 inline-edit affordance on the TopToolbar project name: (1) **double-click** the centered project name

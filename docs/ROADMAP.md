@@ -8,6 +8,23 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Rename the open project ([D-127](./prd/designer.md)) — merged (#311) & archived
+  (2026-07-14, `2026-07-14-rename-open-project`): the centered TopToolbar project
+  name is now editable in place — double-click swaps it for a focused text input
+  (current name selected), and File → "Rename Project…" activates the SAME inline
+  edit, so the two entry points share one `renaming` flag rather than growing a
+  second affordance (a modal). Enter or blur commits, Escape cancels with no store
+  write. The commit goes through a new `renameProject(name)` document-slice action
+  that writes the scene-ROOT `name` — deliberately NOT `updateScene({ name })`,
+  whose `docKeys` route `name` to the ACTIVE COMPOSITION, which would have renamed
+  the composition instead of the project whenever one was open. The draft lives in
+  local component state and reaches the store once, so a rename is exactly ONE undo
+  entry (a per-keystroke write would have pushed several through `set()`'s 300 ms
+  coalescing window). Empty/whitespace-only input is rejected. Display-name only:
+  the D-088 file handle is untouched, so the on-disk file is NOT renamed (Save As
+  remains the way to change the filename); the tab title follows for free off
+  `scene?.name` and the document goes dirty because `hashScene()` covers the root
+  `name`. UI-only — no schema, exporter, or Runtime change.
 - Runtime Library UX — display names + template removal
   ([R-004](./prd/runtime.md), [R-005](./prd/runtime.md)) — merged (#306). R-004
   archived (2026-07-14, `2026-07-14-runtime-library-display-name`): the Library
