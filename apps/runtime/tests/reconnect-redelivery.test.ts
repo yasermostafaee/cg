@@ -243,3 +243,97 @@ it('resync re-delivers each retained template exactly once, BEFORE the snapshot 
   expect(String(onResyncError.mock.calls[0]?.[0])).toContain('t-fail');
   expect(pullIdx.length).toBe(3);
 });
+
+// ── R-005 — removal must survive a reconnect (the resurrection guard) ──
+
+/**
+ * The retention that heals a bridge restart is also the thing that can UNDO a removal:
+ * `#resync()` re-delivers every retained import payload on each reconnect, so a template
+ * dropped from the registry alone walks right back in on the next blip. A confirmed
+ * removal must prune the retention — and a REFUSED one must not, or a reconnect would
+ * silently de-register a template the operator was just told they could not remove.
+ */
+function respondWithRemove(sock: FakeSocket, removeResult: unknown): void {
+  sock.respond = (channel, payload) => {
+    switch (channel) {
+      case 'templates.import': {
+        const req = payload as { template: TemplateInfo };
+        return { registered: true, templateId: req.template.templateId };
+      }
+      case 'templates.remove':
+        return removeResult;
+      case 'stack.snapshot':
+        return [];
+      case 'connections.health':
+        return HEALTH;
+      case 'lock.state':
+        return { engaged: false };
+      default:
+        return undefined;
+    }
+  };
+}
+
+async function reimportedIdsAfterReconnect(removeResult: {
+  ok: boolean;
+  reason?: string;
+  message?: string;
+}): Promise<{ result: unknown; reimported: string[] }> {
+  const sockets: FakeSocket[] = [];
+  runtime = new WebSocketRuntime('ws://fake', {
+    createWebSocket: () => {
+      const s = new FakeSocket();
+      respondWithRemove(s, removeResult);
+      sockets.push(s);
+      return s;
+    },
+  });
+
+  sockets[0]?.open();
+  await runtime.whenReady();
+  await runtime.templates.import({ template: { ...TEMPLATE, templateId: 't-keep' }, html: 'A' });
+  await runtime.templates.import({ template: { ...TEMPLATE, templateId: 't-gone' }, html: 'B' });
+
+  const result = await runtime.templates.remove({ templateId: 't-gone' });
+
+  sockets[0]?.drop();
+  await awaitStatus(runtime, 'disconnected');
+  await waitFor(() => sockets.length >= 2);
+  sockets[1]?.open();
+  await awaitStatus(runtime, 'live');
+
+  const resyncSock = sockets[1];
+  // Wait for the 3 snapshot pulls, which resync sends AFTER every re-delivery — so once
+  // they have landed, the re-delivery set is complete and can be asserted on.
+  await waitFor(
+    () => (resyncSock?.sent.filter((f) => f.channel === 'stack.snapshot').length ?? 0) >= 1,
+  );
+
+  return {
+    result,
+    reimported: (resyncSock?.sent ?? [])
+      .filter((f) => f.channel === 'templates.import')
+      .map((f) => (f.payload as { template: TemplateInfo }).template.templateId)
+      .sort(),
+  };
+}
+
+it('a CONFIRMED removal prunes the retention — the template does NOT come back on reconnect', async () => {
+  const { result, reimported } = await reimportedIdsAfterReconnect({ ok: true });
+
+  expect(result).toEqual({ ok: true });
+  // 't-gone' is gone for good; the untouched template still heals a bridge restart.
+  expect(reimported).toEqual(['t-keep']);
+});
+
+it('a REFUSED removal keeps the retention — the template is still re-delivered on reconnect', async () => {
+  const { result, reimported } = await reimportedIdsAfterReconnect({
+    ok: false,
+    reason: 'in-use',
+    message: '1 stack item(s) still use this template — remove them (or Remove All) first.',
+  });
+
+  expect(result).toMatchObject({ ok: false, reason: 'in-use' });
+  // Nothing was removed, so nothing may be dropped from the retention either.
+  expect(reimported).toEqual(['t-gone', 't-keep']);
+});

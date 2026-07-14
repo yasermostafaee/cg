@@ -34,6 +34,7 @@ import {
   TemplatesGetChannel,
   TemplatesImportChannel,
   TemplatesListChannel,
+  TemplatesRemoveChannel,
   UpdateCancelChannel,
   UpdateRequestChannel,
   UpdateStateChangedChannel,
@@ -347,6 +348,8 @@ export function buildRoutes(b: CasparRuntime, persistPath?: string): Map<string,
     route(TemplatesImportChannel, (r: { template: never; html: string }) =>
       b.templateImport(r.template, r.html),
     ),
+    // R-005 — the bridge is authoritative for the refusal (refuse-while-referenced).
+    route(TemplatesRemoveChannel, (r: { templateId: string }) => b.templateRemove(r.templateId)),
 
     route(AuditRecentChannel, (r: { limit?: number; action?: never; actor?: string }) =>
       b.auditRecent(r.limit, r.action, r.actor),

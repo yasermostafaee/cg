@@ -8,6 +8,7 @@ import type {
 import { aggregateCompositionFields, type Manifest, type Position } from '@cg/shared-schema';
 import { unpack, verify } from '@cg/vcg-format';
 import { ExporterSingleFile, cgCss, cgJsIife, type ImageAssetSource } from '@cg/single-file-export';
+import { pickTemplateName, templateDisplayName } from './templateName.js';
 
 /**
  * B-038 Phase 2 — produce the rendered template HTML in the browser and deliver
@@ -138,8 +139,14 @@ export async function produceTemplateDelivery(
   // exporter already uses (`gdd.ts`), so `TemplateInfo` and the package's own GDD manifest
   // finally agree on which fields exist and how they are addressed.
   const aggregate = aggregateCompositionFields(scene, scene);
+  // R-004 — carry the display name the package already ships (`ManifestSchema.name` is
+  // required; the Designer's exporter writes `scene.name` into it). The Library showed the
+  // raw `templateId` — a UUID — because this was the one hop that dropped it. Omitted when
+  // neither name is usable, so the UI falls back to the id.
+  const name = pickTemplateName(manifest.name, scene.name);
   const template: TemplateInfo = {
     templateId: manifest.id,
+    ...(name !== undefined ? { name } : {}),
     templateType: scene.templateType,
     fields: [...aggregate.fields],
     groups: [...aggregate.groups],
@@ -178,11 +185,18 @@ export async function importTemplateFromBytes(
   bridge: TemplateImportBridge,
   bytes: Uint8Array,
   opts: ProduceOptions = {},
-): Promise<{ templateId: string; warnings: string[]; defaultPosition?: Position }> {
+): Promise<{
+  templateId: string;
+  /** R-004 — what the operator should be told they imported (falls back to the id). */
+  displayName: string;
+  warnings: string[];
+  defaultPosition?: Position;
+}> {
   const { template, html, warnings, defaultPosition } = await produceTemplateDelivery(bytes, opts);
   await bridge.templates.import({ template, html });
   return {
     templateId: template.templateId,
+    displayName: templateDisplayName(template),
     warnings,
     ...(defaultPosition !== undefined ? { defaultPosition } : {}),
   };

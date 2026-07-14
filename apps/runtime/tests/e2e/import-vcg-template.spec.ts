@@ -15,10 +15,10 @@ test('a verified .vcg is registered, loads onto the stack, and shows its fields'
 
   await app.importVcg('valid.vcg', await buildValidVcg(templateId));
 
-  // It appears in the Library (a new "Load <id>" entry).
-  await expect(
-    app.library.getByRole('button', { name: `Load ${templateId}`, exact: true }),
-  ).toBeVisible();
+  // It appears in the Library as a new row. R-004 — the row is headed by the manifest's
+  // DISPLAY NAME, not the raw id; the id remains the row's stable anchor (and its tooltip).
+  await expect(app.templateRow(templateId)).toBeVisible();
+  await expect(app.templateRow(templateId)).toContainText('e2e-lower-third');
   await expect(app.loadButtons()).toHaveCount(before + 1);
   await expect(app.error).toHaveCount(0);
 

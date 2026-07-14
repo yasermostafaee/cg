@@ -12,6 +12,17 @@ import { defineChannel } from '../channel.js';
 
 const TemplateInfoSchema = z.object({
   templateId: IdSchema,
+  /**
+   * R-004 — the human-readable display name (the `.vcg` manifest's `name`; a bundled
+   * starter's label). The Library shows this instead of the raw `templateId`, which for a
+   * Designer-authored package is a UUID and means nothing to an operator.
+   *
+   * Optional and DISPLAY-ONLY: `templateId` remains the sole identity everywhere (the
+   * registry key, the stack item's `templateId`, the served `/template/<id>` URL), and the
+   * name never reaches an AMCP argument. Absent — or blank, which the manifest schema
+   * permits since its `name` has no `.min(1)` — means "fall back to the id".
+   */
+  name: z.string().optional(),
   templateType: z.string(),
   /** The ENTRY composition's own flat fields. */
   fields: z.array(DynamicFieldSchema),
@@ -56,4 +67,31 @@ export const TemplatesImportChannel = defineChannel(
   'templates.import',
   z.object({ template: TemplateInfoSchema, html: z.string() }),
   z.object({ registered: z.boolean(), templateId: IdSchema }),
+);
+
+/**
+ * R-005 — remove a template from the library. The bridge is AUTHORITATIVE: it decides
+ * whether the removal is allowed and returns the operator-facing reason, exactly as R-010's
+ * on-air block does. The UI surfaces the refusal; it does not pre-judge it.
+ *
+ * Refused while ANY stack item references the template — on air or not. Removal does not
+ * take a live graphic off air (CasparCG already fetched the self-contained HTML into CEF),
+ * so a naive delete looks harmless and is not: the item's next out→take resolves against a
+ * missing template and the row can NEVER be brought back, and `setPosition`'s re-ADD stops
+ * silently. An idle/loaded row is just as poisoned as an on-air one, so the predicate is
+ * "any reference", not "any on-air reference". Remove the referencing items first
+ * (`stack.remove` / Remove-All) — the same unblock path R-010 uses.
+ *
+ * A confirmed removal must also prune the client's reconnect-reconciliation retention, or
+ * the next reconnect re-imports what the operator just deleted. A REFUSED removal must
+ * leave it intact.
+ */
+export const TemplatesRemoveChannel = defineChannel(
+  'templates.remove',
+  z.object({ templateId: IdSchema }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.enum(['in-use', 'unknown-template']).optional(),
+    message: z.string().optional(),
+  }),
 );
