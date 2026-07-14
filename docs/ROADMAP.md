@@ -199,8 +199,17 @@ the order changes. Strategic / non-engineering notes live in
   element id), so two tickers in one composition are tuned independently — each ticker's own
   repeat / cycle-seam applies to its OWN driver; the timing panel shows one row per ticker
   (duplicate names disambiguated) and scrolls; session-only (the stored template is untouched).
-  Archive: `openspec/changes/archive/2026-06-26-per-element-preview-timing/`. Phase 2 (sequences +
-  countdown clocks) + the repeater-stamped-ticker gap remain OPEN (see Next).
+  Archive: `openspec/changes/archive/2026-06-26-per-element-preview-timing/`.
+- Per-element preview timing — Phase 2 ([D-102](./prd/designer.md)) — merged & archived
+  (2026-07-14, PR #320, `6c55b70`). The same session-only mechanism now covers SEQUENCES (own passes
+  - per-item dwell) and COUNTDOWN clocks (a preview duration — the only way to rehearse a `datetime`
+    deadline; wall/countup stay unlisted), and the timing tree finally DESCENDS a repeater into its
+    child composition, so a ticker that exists only as repeater-stamped rows is visible and tunable —
+    one control governs every stamped row (they all carry the same authored element id). Session-only:
+    no schema / runtime / export / on-air change. Archive:
+    `openspec/changes/archive/2026-07-14-extend-preview-timing-sequence-countdown/`. Follow-up
+    [B-080](./prd/bugs-designer.md) (#322, `1002fdb`) put those new duration controls in SECONDS to
+    match the element properties (internal model still ms).
 - Sequence/clock wave ([D-084](./prd/designer.md), [D-039](./prd/designer.md) ext,
   [D-103](./prd/designer.md)) — merged & archived (2026-06-26, PR #177). D-084 clock selectable
   IANA time zone (wall mode via `Intl`, Persian digits preserved; invalid zone degrades to local),
@@ -338,13 +347,12 @@ are not yet filed):
 > exists, so new control-bearing items reuse it.
 
 Previously-listed designer items not in this order — D-059, D-061, D-064,
-D-065 (sequence AFTER D-066), D-066, [D-096](./prd/designer.md) (perf — animate position via CSS
-transform; belongs to the hardening wave), and [D-102](./prd/designer.md) **Phase 2** (per-element
-preview timing for SEQUENCES + COUNTDOWN clocks, plus surfacing repeater-stamped tickers in the timing
-tree — which currently walks only authored composition instances; Phase 1 tickers shipped, see Done) —
-remain **queued** in the PRD but are deprioritized below the above. (D-097–D-101 shipped in Group A —
-see Done. **D-060 and D-046 are NOT queued** — both shipped and archived 2026-06-29; this line used to
-list D-060 as queued and D-046 as parked, corrected by the 2026-07-13 `[~]` audit.)
+D-065 (sequence AFTER D-066), D-066, and [D-096](./prd/designer.md) (perf — animate position via CSS
+transform; belongs to the hardening wave) — remain **queued** in the PRD but are deprioritized below
+the above. (D-097–D-101 shipped in Group A — see Done. **D-102 is NOT queued** — Phase 2 shipped and
+archived 2026-07-14 (#320), so BOTH phases are done; see Done. **D-060 and D-046 are NOT queued** —
+both shipped and archived 2026-06-29; this line used to list D-060 as queued and D-046 as parked,
+corrected by the 2026-07-13 `[~]` audit.)
 
 ### Designer — remaining, in order
 
@@ -357,10 +365,11 @@ next Designer item is an owner call from the queued list below.
 
 The queued / deprioritized items already in `designer.md`:
 [D-059](./prd/designer.md), [D-061](./prd/designer.md), [D-064](./prd/designer.md),
-[D-096](./prd/designer.md), [D-126](./prd/designer.md) (shared FONT library — device-level fonts in
-every project's font picker; builds on D-040 + D-121), and [D-102](./prd/designer.md) **Phase 2**.
+[D-096](./prd/designer.md), and [D-126](./prd/designer.md) (shared FONT library — device-level fonts
+in every project's font picker; builds on D-040 + D-121).
 ([D-121](./prd/designer.md), bundle fonts in `.vcg` export, is done — merged #298, archived
-2026-07-13; see Done. [D-063](./prd/designer.md) is **DROPPED** — see the shared-image-library epic
+2026-07-13; see Done. [D-102](./prd/designer.md) **Phase 2** is done — merged #320, archived
+2026-07-14; see Done. [D-063](./prd/designer.md) is **DROPPED** — see the shared-image-library epic
 under Done.)
 
 ### Runtime — next
