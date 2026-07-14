@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { RuntimeBridge } from '../shared/runtime-bridge.js';
 import { AuditPanel } from './features/audit/AuditPanel.js';
 import { FailoverBanner } from './features/connections/FailoverBanner.js';
@@ -46,6 +46,22 @@ export function App(): JSX.Element {
     () => items.find((i) => i.itemId === selectedId) ?? null,
     [items, selectedId],
   );
+
+  // Suppress the browser's own context menu app-wide. On a playout machine its entries are
+  // never what the operator wants and some are actively dangerous — Reload and Back leave the
+  // running show, and none of it says anything about the graphics on air.
+  //
+  // Our own menus (the library card, the stack row) open from React `onContextMenu` handlers
+  // that call `preventDefault` themselves, so they are unaffected by this. Everywhere else,
+  // right-click now does nothing at all — which is the intent: no browser chrome, and no
+  // half-menu the app cannot stand behind.
+  useEffect(() => {
+    function suppressNativeMenu(e: MouseEvent): void {
+      e.preventDefault();
+    }
+    window.addEventListener('contextmenu', suppressNativeMenu);
+    return () => window.removeEventListener('contextmenu', suppressNativeMenu);
+  }, []);
 
   return (
     <main style={styles.page}>
