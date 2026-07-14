@@ -22,11 +22,11 @@ import * as s from './InspectorPanel.css.js';
 import * as cls from './PlayoutSection.css.js';
 
 const MODE_LABELS: Record<PlayoutMode, string> = {
+  // D-114 — the no-out-point mode: play in → hold → hard cut on stop, no animated exit.
+  static: 'Static — plays in, holds, cut on stop (no out-point)',
   manual: 'Manual — hold until stop',
   'auto-out': 'Auto-out — outro after hold',
   'loop-cycle': 'Loop cycle — repeat in → hold → out',
-  // D-114 — the no-out-point mode: play in → hold → hard cut on stop, no animated exit.
-  static: 'Static — plays in, holds, cut on stop (no out-point)',
 };
 
 const HOLD_LABELS: Record<HoldSource, string> = {
