@@ -1256,3 +1256,53 @@ no Designer change beyond (optionally) re-pointing it at the lifted helper.
 **Notes:** Builds on **D-059** (which made `pattern` authorable). Filed as a BUG, not a feature: the
 fields already work, the correctness check is missing. Implementation happens in the `cg-runtime`
 worktree in its own chat — this entry is the filing only.
+
+## [~] B-079 — a FAILED take is outranked by stale OSC: the row badges ON AIR for a `CG PLAY` that never reached CasparCG ⟨priority: high⟩ — fixed on `fix/offline-mock-safety`, change: `runtime-failed-take-truth`
+
+The second, independent path to a false ON AIR (found while tracing [R-006](runtime.md)'s
+live incident — this one needs no mock, and it is reachable on real hardware).
+
+`Reconciler.reconcileStatus()` consults OSC truth **above** the ack:
+
+```ts
+const fresh = this.freshTruth(rec);
+if (fresh !== null) return fresh; // OSC wins
+if (rec.ackedStatus !== undefined) return rec.ackedStatus;
+```
+
+and `freshTruth()` derives `rec.played ? 'on-air' : 'loaded'` — where `played` is set at
+**intent** time (B-053's deliberate contract), before any wire confirmation.
+
+OSC is bound **independently of AMCP**: `ServerSession` binds it once for the session
+lifetime, _before_ the connect loop, and keeps it bound across every failed AMCP cycle; the
+bridge feeds it to the Reconciler with no health gate. So producer evidence outlives the
+ability to command the server.
+
+**Repro:** AMCP link dead (or the send otherwise rejected) while OSC still arrives, and any
+producer sits on the item's layer — an orphan, or the producer from a `CG ADD` that landed
+before the drop. Press PLAY.
+
+**Expected:** the item does not claim air — the `CG PLAY` never reached CasparCG.
+**Actual:** `applyIntent('take')` sets `played = true`; the send is rejected →
+`ackedStatus = 'error'`; `freshTruth` sees producer-present + `played` → returns `'on-air'`;
+`reconcileStatus` returns it **without ever consulting the failed ack**. Published as
+`{ status: 'on-air', pending: false, errorCode: 'amcp-send-failed' }` — solid red ON AIR,
+and `StackRow` never renders `errorCode`. The failed ack is recorded and then outranked:
+B-044's unconfirmed discipline is not broken here, it is **bypassed** by the OSC branch.
+
+**Fix:** a failed take retracts the play evidence **it** claimed — `applyIntent('take')`
+records the prior evidence and a failed ack (or an expiry) restores it. Scoped deliberately:
+a failed re-take of a genuinely on-air item still reads `on-air`, because a false
+`loaded`/`idle` would HIDE a live graphic — the more dangerous direction, and the one this
+file's own doctrine names. A blanket "error outranks OSC" short-circuit was rejected for
+exactly that reason.
+
+**Also fixed here:** `take` armed **no** expiry (`#armExpiry` was called for update/out
+only) and `expireIntent` refused to expire anything but `updating`/`exiting` — so an
+unsettled take rested on its optimistic claim **forever**, with nothing to bound it. A take
+now arms the same bounded timer; the expirable predicate is "still in flight"
+(`ackedStatus === undefined`), NOT `intentStatus === 'playing'`, because a settled _update_
+legitimately rests at `playing` and must never be expirable (B-044).
+
+**Frozen, verified unchanged:** B-053's read-time derivation (producer present but never
+taken still reads `loaded`), B-070's failed-ack settlement, B-072's position read-back.

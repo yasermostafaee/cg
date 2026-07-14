@@ -625,6 +625,10 @@ export class CasparRuntime {
       }
     }
 
+    // B-079 — bounded completion for a take, which it never had: #armExpiry was called for
+    // update and out only, so a take whose ack never settled rested on its optimistic
+    // playing/on-air claim forever, with nothing to bound it.
+    this.#armExpiry(seq);
     const { ok } = await this.#send(this.#builder.take(slot), seq, 'normal');
     return ok ? { accepted: true } : { accepted: false, errorCode: 'amcp-error' };
   }
