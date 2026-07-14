@@ -228,6 +228,28 @@ export class MockRuntime {
     return { ok: true, removed };
   }
 
+  /**
+   * Take every ON-AIR item off air, and KEEP it on the stack (it settles to idle).
+   *
+   * Parity with the real bridge: the same status predicate (everything not `idle`/`loaded` —
+   * the row's own Clear gating) and the same per-item `out()`, which in the mock runs the
+   * same B-070/B-056 bookkeeping a single Clear does. No new verb, and the list is untouched
+   * — that is the whole difference from `removeAll`.
+   *
+   * It deliberately does NOT also filter on "holds a slot", which the bridge does for
+   * broadcast safety (clear only the layers we allocated; never a channel-wide clear). The
+   * mock allocates NO slots and reaches NO server — there is no wire, no channel and no
+   * program feed to protect here. Adding that filter would simply make Clear-All a no-op in
+   * test mode, which is the one place it needs to be exercisable.
+   */
+  clearAll(): { ok: boolean; cleared: number } {
+    const onAir = this.#stack.filter((i) => i.status !== 'idle' && i.status !== 'loaded');
+    for (const item of onAir) {
+      this.out(item.itemId);
+    }
+    return { ok: true, cleared: onAir.length };
+  }
+
   // ── connections ─────────────────────────────────────────────────────
   config(): ConnectionConfig {
     return this.#config;

@@ -102,21 +102,31 @@ script), else the manifest name, else "Unnamed template" — on all three panels
 id is never rendered as text (tooltip only). `TemplateInfo` gains an optional
 `sourceFileName`, captured from `File.name` at import.
 
-**What:** Library rows (and the import/Load copy) show the template's display
-**name** from the `.vcg` manifest; the id stays discoverable as secondary info
-(tooltip or small secondary text).
-**Why:** The Library renders the raw template id (`LibraryPanel.tsx` shows
-`t.templateId`) — a UUID for a real `.vcg` — which is meaningless to the operator
-(observed in the 2026-07-07 live session).
+**What:** Every operator-facing panel — the Library card, the stack row, the Inspector
+header — labels a template by the **imported file name** (cleaned), else the manifest name,
+else "Unnamed template". The raw `templateId` is never rendered as text; it stays reachable
+as the row's tooltip.
+**Why:** The Library rendered a UUID (observed in the 2026-07-07 live session), and the
+first fix only half-solved it. The manifest name is the entry COMPOSITION's — often a
+Designer-internal label, and permitted to be blank — while the stack row and the Inspector
+were never in scope at all and still labelled a row `fields['title'] ?? item.itemId`, i.e.
+`item-<uuid>`. The file name is the one string the operator chose and recognises.
 **Acceptance:**
 
-- WHEN a `.vcg` is imported THEN its Library row shows the manifest's display name,
-  with the id available as a tooltip / secondary line
-- WHEN a template has no usable name THEN the row falls back to the id
-  **Notes:** `TemplateInfo` (`@cg/shared-ipc` `channels/templates.ts`) carries no
-  name today — extend the schema (add `name`), populate it from the manifest at
-  import (`templateDelivery.ts`), and pass it through both registries (bridge
-  `TemplateRegistry` + `MockRuntime`).
+- WHEN a `.vcg` is imported THEN all three panels show its cleaned file name
+  (`news-lower-third.vcg` → `news lower third`), not the manifest's internal comp name
+- WHEN the file name is cleaned THEN the case is PRESERVED — these names are Persian, or
+  mixed Persian/English, and there is no correct "capitalize" for an Arabic-script string
+- WHEN a bundled starter (which has no source file) is shown THEN it keeps its manifest name
+- WHEN a template has neither a file nor a usable name THEN it reads "Unnamed template" —
+  never the id, never blank
+- WHEN any panel renders a template THEN the raw `templateId` appears nowhere as text; it is
+  reachable only as the row's tooltip
+  **Notes:** `TemplateInfo` gains an optional, display-only `sourceFileName`, captured from
+  `File.name` at import (`templateDelivery.ts`) and carried through both registries — no new
+  channel, no new bridge op, and `templateId` remains the sole identity. The stack row joins
+  `templateId` against the registry (`useTemplateIndex`) because `StackItemState` carries no
+  label and must not.
 
 ## [~] R-005 — delete a template from the Library ⟨priority: medium⟩ — remove BUTTON + refuse-while-referenced MERGED (#306); the context-menu half is still OPEN, so the change `runtime-library-remove-template` is deliberately left ACTIVE (unarchived) and this item stays `[~]`
 
@@ -509,3 +519,37 @@ anchor+offset on the output.
 small-comp export — depends on this change's schema field + runtime
 application). The reference output frame is 1920×1080; non-1080 channels
 are a documented follow-up.
+
+## [~] R-012 — Clear-All: take every on-air item off air, and keep it on the stack ⟨priority: medium⟩ — implemented on `fix/runtime-ux-batch-2`, change: `runtime-stack-clear-all`
+
+<!-- change: openspec/changes/runtime-stack-clear-all/ -->
+
+**What:** A **Clear-All** control beside Remove-All in the stack header. It sends the
+per-item CLEAR to every ON-AIR item and leaves every row on the stack, idle and
+re-takeable.
+**Why:** The stack's only bulk escape hatch is Remove-All, which is the wrong shape for what
+operators need in a hurry. "Get it off the screen" is not "throw it away": Remove-All OUTs
+**and** REMOVEs, so recovering from it means re-importing the templates and re-typing every
+staged field. The one control available for "everything off, now" therefore charges a
+rebuild for a moment of panic. And there is no bulk way to do the safe half — clearing five
+on-air graphics means pressing Clear on five rows, one at a time, while they are on air.
+**Acceptance:**
+
+- WHEN the operator confirms Clear-All THEN every on-air item receives a
+  `CLEAR <channel>-<layer>` and every item REMAINS on the stack (the cleared ones settle to
+  idle; a merely-loaded item is untouched)
+- WHEN a cleared item is taken again THEN the bridge re-ADDs it onto its still-reserved slot
+  and it renders
+- WHEN no item is on air THEN Clear-All is not offered (Remove-All still is)
+- WHEN the confirmation is shown THEN it counts only the ON-AIR items, and says they stay on
+  the stack
+- **(broadcast safety)** WHEN Clear-All runs THEN every command sent is a per-layer
+  `CLEAR <channel>-<layer>` for an item's OWN slot — NEVER a channel-level `CLEAR <channel>`,
+  which would wipe the whole channel including the program/background feed this app does not
+  manage. A producer on a layer we never allocated stays on air, untouched; an item holding
+  no slot gets no CLEAR; an empty stack sends no command at all
+  **Notes:** NO new AMCP verb — `clearAll()` reuses the same per-item `out()` (`CLEAR`) the
+  row's Clear button sends. One shared `isOnAir` predicate (not `idle`, not `loaded`) backs
+  the row's Clear gating, the header's count, and the bridge, so Clear-All means exactly
+  "press Clear on every row where Clear is enabled". Implemented on both backends so the
+  B-074 parity + route-coverage guards stay green.

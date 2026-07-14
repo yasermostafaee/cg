@@ -770,6 +770,45 @@ export class CasparRuntime {
     return { ok: true, removed: items.length };
   }
 
+  /**
+   * Take every ON-AIR item off air, and KEEP them on the stack (they settle to idle).
+   *
+   * **BROADCAST SAFETY — this is per-LAYER, never per-channel.**
+   *
+   * It clears ONLY the layers this app itself allocated, and only each item's OWN layer:
+   * `CLEAR <ch>-<layer>` per on-air item (`CLEAR 1-10`, `CLEAR 1-20`, …). It MUST NEVER emit
+   * a channel-level `CLEAR <channel>` — that wipes the ENTIRE channel, including the
+   * program/background signal this app does not manage and must never touch. Taking our
+   * graphics off air must leave the program feed on air.
+   *
+   * The iteration is therefore over items that actually HOLD a slot. An item with no slot
+   * holds no layer of ours, so there is nothing for us to clear and nothing is sent. (`out()`
+   * refuses a slotless item anyway, but the safety property should be visible HERE, not
+   * inherited from a guard three call-levels away.)
+   *
+   * NO new AMCP verb: it issues the SAME per-item `out()` the row's Clear button sends, on
+   * the urgent (air-safety) lane, with the same B-039 CLEAR-destroys bookkeeping — so the
+   * slot stays reserved and a later take re-ADDs. Sequential, like `removeAll`: no command
+   * burst. A per-item failure does not abort the rest — a stuck item must not strand the
+   * graphics behind it on air.
+   *
+   * The status predicate mirrors the row's Clear gating exactly (everything that is not
+   * `idle` or `loaded`), so this IS "press Clear on every row where Clear is enabled".
+   */
+  async clearAll(): Promise<{ ok: boolean; cleared: number }> {
+    const clearable = this.#reconciler
+      .snapshot()
+      .filter(
+        (i) =>
+          i.status !== 'idle' && i.status !== 'loaded' && this.#slots.get(i.itemId) !== undefined,
+      );
+    for (const item of clearable) {
+      // → `CLEAR <ch>-<layer>` for THIS item's own slot. Never a channel-wide clear.
+      await this.out(item.itemId);
+    }
+    return { ok: true, cleared: clearable.length };
+  }
+
   async remove(itemId: string): Promise<{ accepted: boolean }> {
     const slot = this.#slots.get(itemId);
     // Drop it from the stack immediately (UI responsiveness), then best-effort

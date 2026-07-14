@@ -5,6 +5,7 @@ import { StatusBadge } from '../../ui/StatusBadge.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { useLink } from '../../hooks/useLink.js';
 import { layerLabel } from './layerLabel.js';
+import { isOnAir } from './onAir.js';
 
 /** A stack action's bridge round-trip result (drives the button's async feedback). */
 type ActionResult = Promise<{ accepted: boolean; errorCode?: string | undefined }>;
@@ -140,7 +141,9 @@ export function StackRow({
         <AsyncButton
           variant="caution"
           run={() => onOut(item.itemId)}
-          disabled={item.status === 'idle' || item.status === 'loaded' || linkDown}
+          // The same `isOnAir` predicate the header's Clear-All counts on, so the two can
+          // never disagree about what "on air" means.
+          disabled={!isOnAir(item) || linkDown}
           {...(offlineReason !== undefined ? { title: offlineReason } : {})}
         >
           OUT
