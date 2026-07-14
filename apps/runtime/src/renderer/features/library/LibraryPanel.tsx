@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { defaultNestedValues, type FieldValues, type Position } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
@@ -76,6 +76,10 @@ export function LibraryPanel(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Newest first — the template the operator just imported is at the top, where they are
+  // already looking, rather than below every bundled starter. RENDER-SIDE ONLY: the registry
+  // still lists in insertion order and the wire is untouched.
+  const ordered = useMemo(() => [...templates].reverse(), [templates]);
 
   const refresh = useCallback(async (): Promise<void> => {
     setTemplates(await window.cg.templates.list());
@@ -226,7 +230,7 @@ export function LibraryPanel(): JSX.Element {
         {templates.length === 0 ? (
           <p style={styles.hint}>No templates yet. Import a .vcg to get started.</p>
         ) : (
-          templates.map((t) => {
+          ordered.map((t) => {
             // R-004 — the operator reads the label (the imported file name, else the
             // manifest name). The raw id is NOT shown: a UUID is not information an
             // operator can act on, and printing it beside every row was noise. It stays

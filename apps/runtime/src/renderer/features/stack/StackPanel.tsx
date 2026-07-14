@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
 import { useStack } from '../../hooks/useStack.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
@@ -64,6 +64,14 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
   // the whole list, rather than fetched per row.
   const templates = useTemplateIndex(items.map((i) => i.templateId));
   const [selected, setSelected] = useState<string | null>(null);
+  // Newest first. The item the operator just loaded is the one they are about to act on, so
+  // it belongs at the top — not below everything they loaded an hour ago.
+  //
+  // RENDER-SIDE ONLY. The bridge publishes in insertion order (a Map), and that order is the
+  // authority on when each item arrived: it is not touched here. Nothing changes on the wire,
+  // and nothing changes about playout — each item carries its own layer, so the list's order
+  // has never meant anything to CasparCG.
+  const ordered = useMemo(() => [...items].reverse(), [items]);
   // Re-render on draft changes so the row draft chip stays live.
   useSyncExternalStore(subscribeDrafts, draftsVersion);
 
@@ -108,7 +116,7 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
         {items.length === 0 ? (
           <div style={styles.empty}>No items loaded. Use the library to add one.</div>
         ) : (
-          items.map((item) => {
+          ordered.map((item) => {
             const info = templates.get(item.templateId);
             return (
               <StackRow
