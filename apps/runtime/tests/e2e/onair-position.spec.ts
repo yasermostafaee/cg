@@ -93,12 +93,17 @@ test('B-072: an applied override survives deselect → reselect, and re-Apply do
   // R-004 — the rows no longer print the templateId; they carry it as a data anchor. A and B
   // are simply the two rows of this template (the list renders newest-first, which is
   // immaterial here: the test only needs two DISTINCT rows to move selection between).
+  //
+  // Click each row's LABEL BODY, never the row root — the root's geometric centre can land in
+  // the actions column (which stops propagation) or straight on a button. See
+  // `RuntimeApp.selectStackRow`: that is the bug which failed all the row-selecting specs on
+  // CI while passing locally by 19 pixels.
   const rows = app.stackRow(templateId);
   const selectA = async (): Promise<void> => {
-    await rows.nth(0).click();
+    await rows.nth(0).locator('[data-row-body]').click();
   };
   const selectB = async (): Promise<void> => {
-    await rows.nth(1).click();
+    await rows.nth(1).locator('[data-row-body]').click();
   };
 
   // Item A seeds from the manifest default (bottom-right, −10/−20), then the

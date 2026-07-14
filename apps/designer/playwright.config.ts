@@ -47,22 +47,8 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
-  // B-073 family — BUDGETS, not retries.
-  //
-  // `pnpm test:e2e` runs the Designer and Runtime Playwright suites CONCURRENTLY under
-  // turbo, each `fullyParallel`, alongside the builds. On a contended box a correct
-  // assertion can simply not be reached inside a 7s `expect` budget: the observed red was a
-  // single `expect(locator).toBeAttached()` timing out while its 206 siblings passed — the
-  // page was fine, the machine was busy. `retries: 0` locally then turns that into a hard
-  // red. Raising the budget is the same treatment B-073 applied to the socket/timer
-  // integration suites (`testTimeout: 45_000`, `hookTimeout: 30_000`): give a SLOW machine
-  // room to be slow.
-  //
-  // This is deliberately NOT a retry and NOT a `waitFor` bolted onto whichever test loses
-  // the race. A wrong assertion still fails — it just takes longer to say so, which is the
-  // right trade: a false red costs far more than a slow true red.
-  timeout: 60_000,
-  expect: { timeout: 15_000 },
+  timeout: 30_000,
+  expect: { timeout: 7_000 },
   use: {
     baseURL: `http://127.0.0.1:${String(PORT)}`,
     headless: true,
@@ -90,11 +76,6 @@ export default defineConfig({
     // instead of a silent stale serve. Opt back in with PW_REUSE_SERVER=1 for fast
     // iteration when you know the running server matches your build.
     reuseExistingServer: process.env.PW_REUSE_SERVER === '1',
-    // Startup budget for a COLD `vite preview` while the other suite and the builds are
-    // still competing for the box. This is not what produced the observed red (a webServer
-    // timeout kills the whole run — "Timed out waiting …from config.webServer" — rather than
-    // failing one test among 207), but the same contention that starves an assertion can
-    // starve a first boot, and a slow start must never read as a broken build.
-    timeout: 240_000,
+    timeout: 120_000,
   },
 });

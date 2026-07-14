@@ -483,7 +483,7 @@ places (`docs/prd/*.md` vs `openspec/changes/`).
 **Regression test:** the guard is its own regression test (the B-075 precedent) — a `[~]` item
 whose cited fix is merged turns it red; flipping that item to `[x]` turns it green.
 
-## [~] B-078 — flaky: a Playwright E2E assertion times out under CROSS-SUITE CPU contention (the B-073 family's remaining half) ⟨priority: medium⟩ — budget fix on `fix/runtime-ux-batch-2` (#317)
+## [ ] B-078 — flaky: a DESIGNER Playwright E2E assertion fails intermittently on CI, in shifting tests (the B-073 family's remaining half) ⟨priority: medium⟩ — a budget bump was TRIED and REVERTED in #317; see "Attempted fix" below
 
 **Repro:** (intermittent — 1 red in 12 observed full runs; not reproducible on demand)
 
@@ -519,12 +519,26 @@ test's logic.
 - **A product regression** — the branch that surfaced it changes zero designer files, and the
   designer references none of the schemas/channels it does change.
 
-**Fix (this PR):** raise the BUDGETS, in both Playwright configs — `expect` 7s → 15s, test 30s →
-60s, `webServer` 120s → 240s. This is the same treatment [[B-073]] applied to the socket/timer
-integration suites (`testTimeout: 45_000`, `hookTimeout: 30_000`): give a slow machine room to be
-slow. Deliberately **NOT** a retry and **NOT** a `waitFor` bolted onto whichever test loses the
-race — a wrong assertion still fails, it just takes longer to say so, which is the right trade (a
-false red costs more than a slow true red).
+**Attempted fix — TRIED AND REVERTED (do not simply retry it):** #317 raised the BUDGETS in both
+Playwright configs (`expect` 7s → 15s, test 30s → 60s, `webServer` 120s → 240s), by analogy with
+[[B-073]]'s treatment of the socket/timer suites. It was **backed out**, for two reasons:
+
+1. **It was never shown to help.** The original red never reproduced (0/12), so there was nothing
+   to demonstrate a fix against — the bump was a plausible story, not a validated one.
+2. **It correlated with NEW designer reds on CI.** With the bump in, CI failed
+   `fit-on-open.spec.ts` (`zoom-readout` → `Received: ""`, in **730ms** — far too fast to be a
+   timeout at all) and, on the merge run, `hidden-content-inert.spec.ts`. Different tests each
+   run — the shifting-set signature. `main`'s own CI is 8/8 green with the ORIGINAL budgets, so
+   the conservative move was to return the harness to the known-good configuration rather than
+   ship an unvalidated change inside an unrelated PR.
+
+The reverted diff is recoverable from #317's history if someone wants to pursue it deliberately.
+
+**Next lever (better than budgets):** bound the CONCURRENCY rather than inflate the budgets —
+`pnpm test:e2e` runs BOTH Playwright suites at once under turbo on a 2-core runner. Capping E2E
+worker count (or serialising the two suites in the turbo pipeline) attacks the contention itself.
+That is a deliberate harness change and deserves its own PR, its own evidence, and a soak loop
+under artificial CPU load to prove it — **not** a drive-by inside a feature batch.
 
 **Env:** Windows, local (`retries: 0`, `workers: undefined`). CI is far less exposed —
 `retries: CI ? 1 : 0`, `workers: CI ? 1 : undefined` — which is why this surfaces locally first.
