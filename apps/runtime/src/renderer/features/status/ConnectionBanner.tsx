@@ -22,19 +22,43 @@ import { setTestMode } from '../../../platform/testMode.js';
  * Runtime can actually reach air.
  */
 
+/**
+ * The banner is a STRIP: as tall as a heading, one line of detail, and its buttons — no
+ * taller.
+ *
+ * It used to eat half the viewport, and not because of anything in this file. It was the
+ * FIRST in-flow child of an app shell whose grid declared `gridTemplateRows: '1fr auto'`, so
+ * whenever it rendered it took the flexible `1fr` track and `align-items: stretch` inflated
+ * it to fill the screen — pushing the three-panel shell into a content-sized row beneath.
+ * That is fixed in the shell (`layout.ts`), which is now a flex column.
+ *
+ * What is fixed HERE is the banner's own box: tightened to the content, and `flexShrink: 0`
+ * so it can neither be inflated by a greedy track nor squeezed away when the stack is long.
+ * There is deliberately no `height` or `minHeight` — it sizes to what it says.
+ *
+ * Loud is not the same as large. The colour, the hazard stripes and the shouted heading do
+ * the work; the height never did.
+ */
 const styles = {
   banner: {
     display: 'flex',
     alignItems: 'center',
     gap: '0.75rem',
-    padding: '0.6rem 1rem',
-    fontSize: '0.85rem',
+    padding: '0.4rem 0.9rem',
+    fontSize: '0.8rem',
     fontWeight: 700,
     letterSpacing: '0.04em',
     color: '#0B0B0C',
+    flexShrink: 0,
   },
-  text: { flex: 1, minWidth: 0 },
-  detail: { display: 'block', fontWeight: 500, letterSpacing: 0, opacity: 0.85 },
+  text: { flex: 1, minWidth: 0, lineHeight: 1.35 },
+  detail: {
+    display: 'block',
+    fontWeight: 500,
+    letterSpacing: 0,
+    opacity: 0.85,
+    fontSize: '0.75rem',
+  },
 } as const;
 
 /** Repeating hazard stripes — deliberately unlike any live-air surface in the app. */
