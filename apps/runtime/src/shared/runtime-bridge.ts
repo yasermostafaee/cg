@@ -25,6 +25,7 @@ import type {
   PendingUpdate,
   StackLoadChannel,
   StackOutChannel,
+  StackClearAllChannel,
   StackRemoveAllChannel,
   StackRemoveChannel,
   StackSetPositionChannel,
@@ -104,6 +105,12 @@ export interface RuntimeBridge {
      * The sanctioned path to unblock a server reconfiguration.
      */
     removeAll(): Promise<ChannelResponse<typeof StackRemoveAllChannel>>;
+    /**
+     * Take every ON-AIR item off air, and KEEP them all on the stack (they go idle).
+     * Reuses the per-item `out()` CLEAR — no new AMCP verb. The counterpart to `removeAll`:
+     * that one empties the list, this one only clears the screen.
+     */
+    clearAll(): Promise<ChannelResponse<typeof StackClearAllChannel>>;
     snapshot(): Promise<ChannelResponse<typeof StackSnapshotChannel>>;
     onStateChanged(handler: (snapshot: readonly StackItemState[]) => void): Unsubscribe;
   };

@@ -10,7 +10,7 @@ import { StackRow } from '../src/renderer/features/stack/StackRow.js';
  * B-053 — the button-gating half of the false-ON-AIR bug. StackRow computes
  * `onAir = status === 'on-air' || 'playing'`; pre-fix, a merely-loaded item's
  * false `on-air` DISABLED PLAY (the operator could not take the item they just
- * loaded) and wrongly enabled UPDATE/OUT. This pins the gating per status so
+ * loaded) and wrongly enabled UPDATE/CLEAR. This pins the gating per status so
  * the reconciler fix's operator-visible contract stays asserted.
  */
 
@@ -79,11 +79,11 @@ async function renderRow(
 }
 
 describe('StackRow gating (B-053 contract)', () => {
-  it('a loaded (READY, never-taken) item: PLAY enabled, UPDATE and OUT disabled', async () => {
+  it('a loaded (READY, never-taken) item: PLAY enabled, UPDATE and CLEAR disabled', async () => {
     const buttons = await renderRow('loaded');
     expect(buttons.get('PLAY')).toBe(false);
     expect(buttons.get('UPDATE')).toBe(true);
-    expect(buttons.get('OUT')).toBe(true);
+    expect(buttons.get('CLEAR')).toBe(true);
     expect(buttons.get('REMOVE')).toBe(false);
   });
 
@@ -94,14 +94,14 @@ describe('StackRow gating (B-053 contract)', () => {
     const loaded = await renderRow('loaded', 'disconnected');
     expect(loaded.get('PLAY')).toBe(true);
     expect(loaded.get('UPDATE')).toBe(true);
-    expect(loaded.get('OUT')).toBe(true);
+    expect(loaded.get('CLEAR')).toBe(true);
     // REMOVE is local bookkeeping, not a wire command — it stays available.
     expect(loaded.get('REMOVE')).toBe(false);
 
     const onAir = await renderRow('on-air', 'disconnected');
     expect(onAir.get('PLAY')).toBe(true);
     expect(onAir.get('UPDATE')).toBe(true);
-    expect(onAir.get('OUT')).toBe(true);
+    expect(onAir.get('CLEAR')).toBe(true);
   });
 
   it('TEST MODE: the verbs stay enabled — simulating them is the point (R-006)', async () => {
@@ -112,11 +112,11 @@ describe('StackRow gating (B-053 contract)', () => {
     expect(buttons.get('PLAY')).toBe(false);
   });
 
-  it('an on-air item: PLAY disabled, UPDATE and OUT enabled', async () => {
+  it('an on-air item: PLAY disabled, UPDATE and CLEAR enabled', async () => {
     const buttons = await renderRow('on-air');
     expect(buttons.get('PLAY')).toBe(true);
     expect(buttons.get('UPDATE')).toBe(false);
-    expect(buttons.get('OUT')).toBe(false);
+    expect(buttons.get('CLEAR')).toBe(false);
     expect(buttons.get('REMOVE')).toBe(false);
   });
 });

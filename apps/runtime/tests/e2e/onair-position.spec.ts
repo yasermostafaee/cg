@@ -55,18 +55,15 @@ test('the picker seeds from the manifest default, applies one override, and lock
     ]);
 
   // Take the item on air → the picker locks (bridge-mirrored refusal).
-  const row = app.stack
-    .locator('div')
-    .filter({ hasText: templateId })
-    .filter({ has: page.getByRole('button', { name: 'PLAY' }) })
-    .last();
+  // R-004 — the row no longer prints its templateId; it carries it as a stable data anchor.
+  const row = app.stackRow(templateId).last();
   await row.getByRole('button', { name: 'PLAY' }).click();
   await expect(row.getByText('ON AIR')).toBeVisible({ timeout: 3000 });
   await expect(picker.getByRole('button', { name: 'Apply position' })).toBeDisabled();
   await expect(picker.getByText('locked while on air')).toBeVisible();
 
   // OUT settles the item back to IDLE → editable again.
-  await row.getByRole('button', { name: 'OUT' }).click();
+  await row.getByRole('button', { name: 'CLEAR', exact: true }).click();
   await expect(row.getByText('IDLE')).toBeVisible({ timeout: 3000 });
   await expect(picker.getByRole('button', { name: 'Apply position' })).toBeEnabled();
 });
@@ -93,7 +90,10 @@ test('B-072: an applied override survives deselect → reselect, and re-Apply do
   await app.loadTemplate(templateId);
 
   const picker = app.inspector;
-  const rows = app.stack.getByText(templateId, { exact: false });
+  // R-004 — the rows no longer print the templateId; they carry it as a data anchor. A and B
+  // are simply the two rows of this template (the list renders newest-first, which is
+  // immaterial here: the test only needs two DISTINCT rows to move selection between).
+  const rows = app.stackRow(templateId);
   const selectA = async (): Promise<void> => {
     await rows.nth(0).click();
   };

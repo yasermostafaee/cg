@@ -483,6 +483,58 @@ places (`docs/prd/*.md` vs `openspec/changes/`).
 **Regression test:** the guard is its own regression test (the B-075 precedent) — a `[~]` item
 whose cited fix is merged turns it red; flipping that item to `[x]` turns it green.
 
+## [~] B-078 — flaky: a Playwright E2E assertion times out under CROSS-SUITE CPU contention (the B-073 family's remaining half) ⟨priority: medium⟩ — budget fix on `fix/runtime-ux-batch-2` (#317)
+
+**Repro:** (intermittent — 1 red in 12 observed full runs; not reproducible on demand)
+
+1. `pnpm test:e2e` — turbo runs the **Designer and Runtime Playwright suites CONCURRENTLY**,
+   each `fullyParallel`, alongside the builds.
+2. On a contended box, one test loses the race.
+
+**Expected:** 207 passed.
+**Actual (observed 2026-07-14, on a branch touching ZERO designer files):**
+
+```
+@cg/designer:test:e2e:  Error: expect(locator).toBeAttached() failed
+@cg/designer:test:e2e:  1 failed
+@cg/designer:test:e2e:  206 passed
+```
+
+**Why it is a budget bug, not a product bug:** the page was fine and its 206 siblings passed —
+the machine was busy. The Designer/Runtime Playwright configs allowed only **`expect: { timeout:
+7_000 }`** and **`timeout: 30_000`**, with **`retries: 0`** locally, so a _correct_ assertion that
+is merely LATE becomes a hard red. Not reproducible in isolation precisely because isolation
+removes the contention: the suite passed 3/3 on the branch, 3/3 on clean `main` (turbo, `--force`),
+and 3/3 on `main` in isolation. The failure is a property of the HARNESS under load, not of any
+test's logic.
+
+**Ruled out (do not re-diagnose these):**
+
+- **Stale build / orphaned `vite preview`** — the other half of [[B-073]], already fixed:
+  `reuseExistingServer` is off unless `PW_REUSE_SERVER=1`, and every repro run above was a fresh
+  build with `--force`.
+- **The libuv crash line** `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)` is a RED
+  HERRING — it appears in **passing** runs on clean `main`. It is Windows teardown noise, not a
+  failure signal.
+- **A product regression** — the branch that surfaced it changes zero designer files, and the
+  designer references none of the schemas/channels it does change.
+
+**Fix (this PR):** raise the BUDGETS, in both Playwright configs — `expect` 7s → 15s, test 30s →
+60s, `webServer` 120s → 240s. This is the same treatment [[B-073]] applied to the socket/timer
+integration suites (`testTimeout: 45_000`, `hookTimeout: 30_000`): give a slow machine room to be
+slow. Deliberately **NOT** a retry and **NOT** a `waitFor` bolted onto whichever test loses the
+race — a wrong assertion still fails, it just takes longer to say so, which is the right trade (a
+false red costs more than a slow true red).
+
+**Env:** Windows, local (`retries: 0`, `workers: undefined`). CI is far less exposed —
+`retries: CI ? 1 : 0`, `workers: CI ? 1 : undefined` — which is why this surfaces locally first.
+**Notes:** same family as [[B-073]] but a DISTINCT instance: B-073 closed the stale-build vector
+and the socket/timer _integration_ budgets; it never touched the Playwright _E2E_ assertion
+budgets. Files: `apps/designer/playwright.config.ts`, `apps/runtime/playwright.config.ts`.
+**Residual risk:** budgets reduce the failure probability, they do not prove it to zero. If it
+recurs, the next lever is capping E2E worker count under turbo (bounding the concurrency itself)
+rather than raising budgets further.
+
 <!-- Add new open bugs above this line using the format. Example:
 
 ## [ ] B-0NN — Export blocked dialog shows wrong error count

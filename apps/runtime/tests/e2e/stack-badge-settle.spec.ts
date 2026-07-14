@@ -16,13 +16,10 @@ test('the stack badge settles back to ON AIR after an update — UPDATING is tra
   await app.loadTemplate(templateId);
   await app.selectStackRow(templateId);
 
-  // The seeded demo stack has its own rows — scope every badge assertion to
-  // THIS template's row (the deepest div holding both the id and its buttons).
-  const row = app.stack
-    .locator('div')
-    .filter({ hasText: templateId })
-    .filter({ has: app.page.getByRole('button', { name: 'PLAY' }) })
-    .last();
+  // The seeded demo stack has its own rows — scope every badge assertion to THIS template's
+  // row. R-004: the row no longer prints its templateId, so it is addressed by the stable
+  // data anchor it carries instead.
+  const row = app.stackRow(templateId).last();
 
   // Play → the badge settles ON AIR (a transient TAKING beat is allowed).
   await row.getByRole('button', { name: 'PLAY' }).click();

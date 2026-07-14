@@ -34,6 +34,8 @@ function stubBridge(stack: StackItemState[]): { removeAll: Mock } {
   const stub = {
     // R-006 — StackRow mirrors the connection refusal, so it reads the link status.
     link: { status: () => 'live' as const, onStatusChanged: () => () => undefined },
+    // R-004 — the panel joins each row against the registry to label its template.
+    templates: { list: () => Promise.resolve([]) },
     stack: {
       snapshot: () => Promise.resolve(stack),
       onStateChanged: () => () => undefined,

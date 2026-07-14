@@ -100,9 +100,39 @@ export class RuntimeApp {
       .click();
   }
 
-  /** Select the stack row for `templateId` (so the Inspector shows its fields). */
+  /**
+   * The stack row(s) for `templateId`.
+   *
+   * R-004 — the row no longer PRINTS its `templateId`: a UUID is not an operator-facing
+   * label. The id remains the row's stable ANCHOR (labels are not unique — two templates may
+   * legitimately share one), carried as a data attribute. Specs that used to find a row by
+   * filtering on the id as visible TEXT compose this instead.
+   *
+   * Several rows can share a `templateId` (the same template loaded twice), so callers that
+   * need exactly one still pick — conventionally `.last()`, the most recently loaded.
+   */
+  stackRow(templateId: string): Locator {
+    return this.stack.locator(`[data-template-id="${templateId}"]`);
+  }
+
+  /**
+   * Select the stack row for `templateId` (so the Inspector shows its fields).
+   *
+   * Clicks the row's LABEL BODY, never the row ROOT. Playwright clicks an element's geometric
+   * CENTRE, and the row is a `[badge] [1fr body] [auto actions]` grid — so the root's centre
+   * lands wherever the columns happen to fall. The actions column calls `stopPropagation()`
+   * (button clicks must not also select the row), so a centre landing there selects NOTHING;
+   * land a few pixels further and it presses PLAY.
+   *
+   * That is exactly what broke CI: on Windows/system-Chrome the centre cleared the actions
+   * column by 19px and every local run passed, while on CI's Linux/bundled-Chromium the wider
+   * buttons dragged the column left across the centre — so the row never selected, the
+   * Inspector stayed empty, and all 8 row-selecting specs failed deterministically. The body
+   * is the row's one guaranteed non-interactive region; clicking it bubbles to the row's own
+   * handler exactly as an operator's click does.
+   */
   async selectStackRow(templateId: string): Promise<void> {
-    await this.stack.getByText(templateId, { exact: false }).first().click();
+    await this.stackRow(templateId).first().locator('[data-row-body]').click();
   }
 
   /** R-003 — apply the selected item's staged edits via the Inspector's Update. */

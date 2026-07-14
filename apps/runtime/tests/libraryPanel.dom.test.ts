@@ -8,9 +8,9 @@ import { LibraryPanel } from '../src/renderer/features/library/LibraryPanel.js';
 
 /**
  * R-004 — the Library row names the template. The operator scans this panel under time
- * pressure; a UUID is unreadable. The id must stay discoverable (secondary line + tooltip)
- * so a row can still be correlated with a stack item's `templateId` or a served URL, and a
- * template with no usable name must fall back to the id — never an empty row.
+ * pressure; a UUID is unreadable. The label is the imported file name, else the manifest
+ * name, and NEVER the id — the id stays reachable as the row's tooltip, which is enough to
+ * correlate a row with a served `/template/<id>` URL when debugging.
  */
 
 let container: HTMLDivElement | null = null;
@@ -88,32 +88,32 @@ describe('LibraryPanel display name — R-004', () => {
     expect(el.querySelector(`button[aria-label="Load ${NAMED.templateId}"]`)).toBeNull();
   });
 
-  it('keeps the id discoverable as secondary text and as a tooltip', async () => {
+  it('keeps the id reachable as a tooltip, and OFF the row as text', async () => {
     const el = await renderPanel([NAMED]);
 
-    // Still correlatable with a stack item's templateId / a served /template/<id> URL.
-    expect(el.textContent).toContain(NAMED.templateId);
+    // A UUID is not information the operator can act on, so it is not printed beside every
+    // row. It stays correlatable with a served /template/<id> URL via the tooltip — which
+    // is where a correlation key belongs.
+    expect(el.textContent).not.toContain(NAMED.templateId);
     const heading = [...el.querySelectorAll('span')].find(
       (s) => s.textContent === 'Breaking News — Lower Third',
     );
     expect(heading?.getAttribute('title')).toBe(NAMED.templateId);
   });
 
-  it('falls back to the id when the template has no name — the row is never blank', async () => {
+  it('says so in words when a template has no name — never the id, never blank', async () => {
     const el = await renderPanel([UNNAMED]);
 
-    expect(el.textContent).toContain(UNNAMED.templateId);
-    expect(el.querySelector(`button[aria-label="Load ${UNNAMED.templateId}"]`)).not.toBeNull();
-    // The id is the PRIMARY line here, so it must not also be repeated on the meta line.
-    const occurrences = (el.textContent ?? '').split(UNNAMED.templateId).length - 1;
-    expect(occurrences).toBe(1);
+    expect(el.textContent).toContain('Unnamed template');
+    expect(el.textContent).not.toContain(UNNAMED.templateId);
+    expect(el.querySelector('button[aria-label="Load Unnamed template"]')).not.toBeNull();
   });
 
   it('renders a mixed library without losing either row', async () => {
     const el = await renderPanel([NAMED, UNNAMED]);
 
     expect(el.textContent).toContain('Breaking News — Lower Third');
-    expect(el.textContent).toContain(UNNAMED.templateId);
+    expect(el.textContent).toContain('Unnamed template');
     expect(el.querySelectorAll('button[aria-label^="Load "]')).toHaveLength(2);
   });
 });

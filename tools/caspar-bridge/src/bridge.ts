@@ -24,6 +24,7 @@ import {
   SettingsSetChannel,
   StackLoadChannel,
   StackOutChannel,
+  StackClearAllChannel,
   StackRemoveAllChannel,
   StackRemoveChannel,
   StackSetPositionChannel,
@@ -317,6 +318,7 @@ export function buildRoutes(b: CasparRuntime, persistPath?: string): Map<string,
     ),
     // R-010 — the sanctioned clear-everything path (unblocks set-config).
     route(StackRemoveAllChannel, () => b.removeAll()),
+    route(StackClearAllChannel, () => b.clearAll()),
     route(StackSnapshotChannel, () => b.stackSnapshot()),
 
     route(ConnectionsConfigChannel, () => b.config()),

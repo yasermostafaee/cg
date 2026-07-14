@@ -46,8 +46,13 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
-  timeout: 30_000,
-  expect: { timeout: 7_000 },
+  // B-073 family — BUDGETS, not retries. Kept in lockstep with the Designer config, which
+  // carries the same rationale in full: `pnpm test:e2e` runs BOTH Playwright suites
+  // concurrently under turbo, each `fullyParallel`, so a correct assertion can miss a 7s
+  // `expect` budget on a contended box and (with `retries: 0` locally) turn into a hard red.
+  // A slow machine gets room to be slow; a wrong assertion still fails, just later.
+  timeout: 60_000,
+  expect: { timeout: 15_000 },
   use: {
     baseURL: `http://127.0.0.1:${String(PORT)}`,
     headless: true,
@@ -67,6 +72,9 @@ export default defineConfig({
     // config for the full rationale). Fresh preview by default; `--strictPort` fails loudly
     // on an occupied port. PW_REUSE_SERVER=1 opts back into reuse for fast iteration.
     reuseExistingServer: process.env.PW_REUSE_SERVER === '1',
-    timeout: 120_000,
+    // Startup budget for a COLD `vite preview` under the same cross-suite contention. Not
+    // the cause of the observed red (a webServer timeout fails the whole run, not one test),
+    // but a slow first boot must never read as a broken build.
+    timeout: 240_000,
   },
 });

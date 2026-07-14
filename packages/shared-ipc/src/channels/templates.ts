@@ -23,6 +23,22 @@ const TemplateInfoSchema = z.object({
    * permits since its `name` has no `.min(1)` — means "fall back to the id".
    */
   name: z.string().optional(),
+  /**
+   * The name of the `.vcg` FILE the operator imported, verbatim (e.g. `news-lower-third.vcg`).
+   *
+   * R-004 shipped `name` from the manifest, but for an operator-authored package that name
+   * is the entry COMPOSITION's name — often a Designer-internal label like "Comp 1", and
+   * for a manifest with a blank name the UI fell all the way back to the raw UUID. The one
+   * string the operator actually chose, and the one they recognise in the Library, is the
+   * file name they picked in the file dialog. It reaches the browser on `File.name` and was
+   * simply being dropped at import.
+   *
+   * Optional and DISPLAY-ONLY, exactly like `name`: `templateId` remains the sole identity
+   * (registry key, stack item's `templateId`, the served `/template/<id>` URL) and this never
+   * reaches an AMCP argument. Absent for a bundled starter (there is no file) — those keep
+   * their manifest name.
+   */
+  sourceFileName: z.string().optional(),
   templateType: z.string(),
   /** The ENTRY composition's own flat fields. */
   fields: z.array(DynamicFieldSchema),

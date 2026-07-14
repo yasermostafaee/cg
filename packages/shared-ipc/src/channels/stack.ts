@@ -92,6 +92,33 @@ export const StackRemoveAllChannel = defineChannel(
   z.object({ ok: z.boolean(), removed: z.number().int().nonnegative() }),
 );
 
+/**
+ * Take everything OFF AIR, but KEEP it on the stack.
+ *
+ * The distinction from `remove-all` is the whole point, and it is the operator's most common
+ * need: "get it off the screen" is not "throw it away". Remove-All empties the list, so
+ * recovering means re-importing/reloading and re-typing every field. Clear-All leaves the
+ * rows exactly where they were, idle and re-takeable.
+ *
+ * NO new AMCP verb. It iterates the items that are actually on air and issues the SAME
+ * per-item `out()` the row's Clear button sends — a `CLEAR <ch>-<layer>` on the urgent
+ * (air-safety) lane, with the same B-039 CLEAR-destroys bookkeeping, so a later take re-ADDs.
+ * The predicate matches the row's Clear gating exactly: everything that is not `idle` or
+ * `loaded`. Clear-All IS "press Clear on every row where Clear is enabled".
+ *
+ * **BROADCAST SAFETY — per-LAYER, never per-channel.** It clears only the layers this app
+ * itself allocated, one `CLEAR <ch>-<layer>` per on-air item. It MUST NEVER emit a
+ * channel-level `CLEAR <channel>`: that wipes the entire channel, including the
+ * program/background signal this app does not manage and must never touch. Taking our
+ * graphics off air has to leave the program feed ON AIR. An item holding no slot holds no
+ * layer of ours, so nothing is sent for it.
+ */
+export const StackClearAllChannel = defineChannel(
+  'stack.clear-all',
+  z.void(),
+  z.object({ ok: z.boolean(), cleared: z.number().int().nonnegative() }),
+);
+
 export const StackSnapshotChannel = defineChannel(
   'stack.snapshot',
   z.void(),

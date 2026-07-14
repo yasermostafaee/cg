@@ -55,6 +55,13 @@ export interface ProduceOptions {
    * against the SPA). Tests inject a node-fs reader so they can run off-DOM.
    */
   fetchUrl?: (url: string) => Promise<ArrayBuffer>;
+  /**
+   * R-004 — the name of the `.vcg` file the operator picked (`File.name`), verbatim. It is
+   * the label they recognise, and it outranks the manifest name at display. The bytes alone
+   * cannot tell us this, so the caller that HAS the `File` must pass it; omitted for a
+   * bundled starter or a byte-only import (those keep their manifest name).
+   */
+  sourceFileName?: string;
 }
 
 /** The minimal `window.cg` surface this module needs (the extended import channel). */
@@ -139,14 +146,19 @@ export async function produceTemplateDelivery(
   // exporter already uses (`gdd.ts`), so `TemplateInfo` and the package's own GDD manifest
   // finally agree on which fields exist and how they are addressed.
   const aggregate = aggregateCompositionFields(scene, scene);
-  // R-004 — carry the display name the package already ships (`ManifestSchema.name` is
-  // required; the Designer's exporter writes `scene.name` into it). The Library showed the
-  // raw `templateId` — a UUID — because this was the one hop that dropped it. Omitted when
-  // neither name is usable, so the UI falls back to the id.
+  // R-004 — carry BOTH labels the package can offer, and let the display rule choose.
+  //
+  // `name` is the manifest's (the Designer's exporter writes `scene.name` into it). It is
+  // the entry COMPOSITION's name, which for a real operator package is often a
+  // Designer-internal label — or blank, since `ManifestSchema.name` has no `.min(1)`.
+  //
+  // `sourceFileName` is the file the operator actually picked. It outranks the manifest at
+  // display (see `templateName.ts`), and this is the one hop where it is still in hand.
   const name = pickTemplateName(manifest.name, scene.name);
   const template: TemplateInfo = {
     templateId: manifest.id,
     ...(name !== undefined ? { name } : {}),
+    ...(opts.sourceFileName !== undefined ? { sourceFileName: opts.sourceFileName } : {}),
     templateType: scene.templateType,
     fields: [...aggregate.fields],
     groups: [...aggregate.groups],

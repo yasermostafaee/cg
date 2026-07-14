@@ -19,7 +19,7 @@ import { useLock } from './hooks/useLock.js';
 import { useOrphans } from './hooks/useOrphans.js';
 import { useOwnedOccupancy } from './hooks/useOwnedOccupancy.js';
 import { useStack } from './hooks/useStack.js';
-import { colors } from './theme.js';
+import { appShell } from './layout.js';
 
 declare global {
   interface Window {
@@ -27,39 +27,9 @@ declare global {
   }
 }
 
-const styles = {
-  page: {
-    fontFamily:
-      'Inter, system-ui, -apple-system, "Segoe UI", Vazirmatn, "Noto Sans Arabic", sans-serif',
-    color: colors.text,
-    background: colors.background,
-    minHeight: '100vh',
-    margin: 0,
-    display: 'grid',
-    gridTemplateRows: '1fr auto',
-  },
-  shell: {
-    display: 'grid',
-    gridTemplateColumns: '240px 1fr 320px',
-    gap: '0.75rem',
-    padding: '0.75rem',
-    minHeight: 0,
-  },
-  workspace: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.75rem',
-    minHeight: 0,
-  },
-  monitor: {
-    background: colors.panel,
-    borderRadius: '0.25rem',
-    border: `1px solid ${colors.border}`,
-    padding: '1rem',
-    color: colors.textMuted,
-    fontSize: '0.9rem',
-  },
-} as const;
+// The shell's layout contract — the PAGE never scrolls, the PANELS do. It lives in
+// `layout.ts`, where the two defects it replaces are documented and pinned by a test.
+const styles = appShell;
 
 /** Root Runtime layout — four regions per Phase 6 §2. */
 export function App(): JSX.Element {
@@ -95,7 +65,9 @@ export function App(): JSX.Element {
           <div style={styles.monitor}>
             PVW / PGM monitor strip will live here. Full monitor with frame grabs is M9.
           </div>
-          <OrphanLayersBanner orphans={orphans} ownedOccupancy={ownedOccupancy} />
+          <div style={styles.chrome}>
+            <OrphanLayersBanner orphans={orphans} ownedOccupancy={ownedOccupancy} />
+          </div>
           <StackPanel onSelectionChange={setSelectedId} />
         </section>
         <Inspector

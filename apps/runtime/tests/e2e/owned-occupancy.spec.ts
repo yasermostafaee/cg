@@ -32,12 +32,11 @@ test('a seeded owned-slot warning names the layer and item, offers no Clear, and
   await expect(banner.getByRole('button')).toHaveCount(0);
 
   // The remedy: REMOVE the named item from the stack → the warning resolves.
-  const row = app.stack
-    .locator('div')
-    .filter({ hasText: 'item-irib-news' })
-    .filter({ has: page.getByRole('button', { name: 'REMOVE' }) })
-    .last();
+  // R-004 — a row no longer prints its ids (neither is an operator-facing label), so the row
+  // is addressed by the stable data anchor it carries, and its disappearance is asserted the
+  // same way.
+  const row = app.stack.locator('[data-item-id="item-irib-news"]');
   await row.getByRole('button', { name: 'REMOVE' }).click();
-  await expect(app.stack.getByText('item-irib-news', { exact: false })).toHaveCount(0);
+  await expect(row).toHaveCount(0);
   await expect(page.getByRole('alert', { name: 'Owned-layer occupancy warnings' })).toHaveCount(0);
 });

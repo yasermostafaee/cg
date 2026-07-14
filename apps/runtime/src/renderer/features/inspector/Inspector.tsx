@@ -12,6 +12,8 @@ import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { DraftChip } from '../../ui/DraftChip.js';
+import { templateDisplayName } from '../library/templateName.js';
+import { layerDetail } from '../stack/layerLabel.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
 import { PositionPicker } from './PositionPicker.js';
 import {
@@ -58,7 +60,7 @@ const styles = {
     margin: 0,
   },
   empty: { color: colors.textMuted, fontSize: '0.9rem' },
-  title: { fontSize: '1.1rem', fontWeight: 600, margin: 0 },
+  title: { fontSize: '1.1rem', fontWeight: 700, margin: 0, overflowWrap: 'anywhere' as const },
   meta: { color: colors.textMuted, fontSize: '0.85rem' },
   actions: { display: 'flex', gap: '0.5rem', marginTop: '0.25rem', alignItems: 'center' },
   fieldRow: {
@@ -143,20 +145,29 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
   const dirty = isItemDirty(itemId, item.fields);
   const isEmpty = rootFields.length === 0 && groups.length === 0;
 
+  // R-004 — the header names the template. The `TemplateInfo` was already in hand here and
+  // its label was dropped on the floor in favour of the raw `templateId`. The id is a
+  // correlation key, not a label: tooltip only, never text.
+  const rawTitle = item.fields['title'];
+  const contentTitle = typeof rawTitle === 'string' ? rawTitle.trim() : '';
+  const label = info !== null ? templateDisplayName(info) : 'Unnamed template';
+
   return (
     <aside style={styles.panel} aria-label="Inspector">
       <h2 style={styles.heading}>INSPECTOR</h2>
-      <h3 style={styles.title}>{String(item.fields['title'] ?? item.itemId)}</h3>
-      <div style={styles.meta}>{item.templateId}</div>
+      <h3 style={styles.title} title={item.templateId}>
+        {label}
+      </h3>
+      {contentTitle !== '' && <div style={styles.meta}>{contentTitle}</div>}
       <div style={styles.meta}>
         Status: {item.status}
         {item.pending ? ' (pending)' : ''}
       </div>
-      {item.slot && (
-        <div style={styles.meta}>
-          Slot: {item.slot.channel}-{item.slot.layer} on {item.slot.server}
-        </div>
-      )}
+      {/* Always shown, including the empty case: "no layer" is not an absence of
+          information, it is the answer to "why is this not on air?". The old line rendered
+          only when a slot existed, so it went blank exactly when the operator was trying to
+          diagnose that. */}
+      <div style={styles.meta}>{layerDetail(item.slot)}</div>
       <div style={styles.actions}>
         {/* Apply stays enabled even with nothing staged — re-sending unchanged
             values is the operator's documented B-048 recovery path. */}
