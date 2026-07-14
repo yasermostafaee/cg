@@ -1,9 +1,12 @@
 import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
+import { ContextMenu } from '../../ui/ContextMenu.js';
+import { useContextMenu } from '../../ui/useContextMenu.js';
 import { StatusBadge } from '../../ui/StatusBadge.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { useLink } from '../../hooks/useLink.js';
+import { runCommand } from '../status/commandFeedback.js';
 import { layerLabel } from './layerLabel.js';
 import { isOnAir } from './onAir.js';
 
@@ -98,10 +101,48 @@ export function StackRow({
     ? 'Not connected — this command cannot reach CasparCG. Reconnect and reissue it.'
     : undefined;
 
+  const { menu, open: openMenu, close: closeMenu } = useContextMenu<string>();
+
+  // The row's four actions, as the right-click menu sees them. Each `disabled` is the SAME
+  // expression as the button it mirrors — deliberately, not coincidentally: PLAY/UPDATE/CLEAR
+  // are refused while the link is down (R-006), and a menu that re-derived that gate could
+  // drift from the buttons and hand the operator an unguarded route to air. They are read off
+  // the same variables, so they cannot disagree.
+  const menuItems = [
+    {
+      label: 'Play',
+      disabled: onAir || linkDown,
+      ...(offlineReason !== undefined ? { title: offlineReason } : {}),
+      onSelect: () => runCommand('Play', onPlay(item.itemId)),
+    },
+    {
+      label: 'Update',
+      disabled: !onAir || linkDown,
+      ...(offlineReason !== undefined ? { title: offlineReason } : {}),
+      onSelect: () => runCommand('Update', onUpdate(item.itemId)),
+    },
+    {
+      label: 'Clear',
+      variant: 'caution' as const,
+      disabled: !isOnAir(item) || linkDown,
+      ...(offlineReason !== undefined ? { title: offlineReason } : {}),
+      onSelect: () => runCommand('Clear', onOut(item.itemId)),
+    },
+    {
+      label: 'Remove',
+      variant: 'danger' as const,
+      onSelect: () => runCommand('Remove', onRemove(item.itemId)),
+    },
+  ];
+
   return (
     <div
       className={`cg-row${selected ? ' is-selected' : ''}`}
       style={styles.row}
+      // Right-click acts on THIS row, whichever row is selected — the menu carries the item's
+      // id, so it never retargets to the selection. It deliberately does not select the row
+      // either: opening a menu should not swap what the Inspector is editing underneath it.
+      onContextMenu={(e) => openMenu(e, item.itemId)}
       // R-004 — the row's stable anchor is the ID, never the visible label: the row no longer
       // PRINTS its templateId (a UUID is not an operator-facing label), and labels are not
       // unique anyway — two templates may legitimately share one. Anything that must address
@@ -157,6 +198,15 @@ export function StackRow({
           REMOVE
         </AsyncButton>
       </div>
+      {menu !== null && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={closeMenu}
+          ariaLabel={`Stack item actions — ${label}`}
+          items={menuItems}
+        />
+      )}
     </div>
   );
 }

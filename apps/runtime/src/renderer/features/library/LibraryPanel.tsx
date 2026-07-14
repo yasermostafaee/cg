@@ -5,10 +5,13 @@ import { colors } from '../../theme.js';
 import { uuid } from '../../lib/uuid.js';
 import { Button } from '../../ui/Button.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
+import { ContextMenu } from '../../ui/ContextMenu.js';
+import { useContextMenu } from '../../ui/useContextMenu.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { importTemplateFromBytes } from './templateDelivery.js';
 import { templateDisplayName } from './templateName.js';
 import { recordDefaultPosition } from '../stack/defaultPositionStore.js';
+import { runCommand } from '../status/commandFeedback.js';
 // B-038 Phase 3 — the bundled app @font-face CSS (Vazirmatn / Exo 2) as a raw
 // string. Passed to the single-file export so the bundled faces inline as base64
 // and the template HTML CasparCG loads renders Persian with the correct face.
@@ -79,6 +82,7 @@ export function LibraryPanel(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const { confirm, confirmDialog } = useConfirm();
+  const { menu, open: openMenu, close: closeMenu } = useContextMenu<TemplateInfo>();
   const fileRef = useRef<HTMLInputElement>(null);
   // Newest first — the template the operator just imported is at the top, where they are
   // already looking, rather than below every bundled starter. RENDER-SIDE ONLY: the registry
@@ -254,6 +258,10 @@ export function LibraryPanel(): JSX.Element {
                 // names are not unique (two templates may legitimately share one), so
                 // anything that must address ONE row keys on the id.
                 data-testid={`library-template-${t.templateId}`}
+                // The card's two actions are also on its right-click menu — the same two, on
+                // the same template. The menu is a shortcut to the buttons beside it, not a
+                // second, differently-gated way in.
+                onContextMenu={(e) => openMenu(e, t)}
               >
                 <div style={styles.itemBody}>
                   <span style={styles.itemName} title={t.templateId}>
@@ -283,6 +291,30 @@ export function LibraryPanel(): JSX.Element {
           })
         )}
       </div>
+      {menu !== null && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={closeMenu}
+          ariaLabel={`Template actions — ${templateDisplayName(menu.target)}`}
+          items={[
+            {
+              label: 'Load onto stack',
+              // The same call the card's Load button makes. `runCommand` surfaces a refusal as
+              // the same toast the button's own round-trip would have shown.
+              onSelect: () => runCommand('Load', loadOntoStack(menu.target)),
+            },
+            {
+              label: 'Remove from library',
+              variant: 'danger',
+              // R-005 — still confirm-gated, and still the BRIDGE that decides whether the
+              // removal is allowed. The menu is another way to press Remove, not a way around
+              // it.
+              onSelect: () => void removeTemplate(menu.target),
+            },
+          ]}
+        />
+      )}
       {confirmDialog}
     </nav>
   );
