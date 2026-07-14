@@ -1869,7 +1869,7 @@ capabilityِ مربوط به shadow/styling. Change: `openspec/changes/separate-
 D-056 دیگر border-radius ندارند). در `BorderRadiusSection` (`StyleSection.tsx`).
 مرجع برای مقایسه: `docs/designer-guide/sample-assets/D-042-radius-1.png` (چهارگوشه).
 
-## [ ] D-059 — Friendly validation presets for dynamic text fields ⟨priority: low⟩
+## [~] D-059 — Friendly validation presets for dynamic text fields ⟨priority: low⟩ — branch: `feat/D-059-field-validation-presets`, change dir: `openspec/changes/add-field-validation-presets/`
 
 **What:** Replace the raw-regex `pattern` input on text/multiline dynamic fields with a
 named-preset dropdown (e.g. Email, Phone, Digits only, Letters only, Uppercase code,
