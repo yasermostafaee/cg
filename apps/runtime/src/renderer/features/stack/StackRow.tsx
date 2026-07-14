@@ -3,6 +3,7 @@ import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { StatusBadge } from '../../ui/StatusBadge.js';
 import { DraftChip } from '../../ui/DraftChip.js';
+import { useLink } from '../../hooks/useLink.js';
 
 /** A stack action's bridge round-trip result (drives the button's async feedback). */
 type ActionResult = Promise<{ accepted: boolean; errorCode?: string | undefined }>;
@@ -64,6 +65,16 @@ export function StackRow({
   const slot = item.slot ? `slot ${item.slot.channel}-${item.slot.layer}` : 'no slot';
   const onAir = item.status === 'on-air' || item.status === 'playing';
 
+  // R-006 — the UI mirrors the bridge's connection refusal instead of inviting a command it
+  // knows will be refused. The bridge stays authoritative (it refuses regardless); this only
+  // stops the operator from believing a click did something. Test mode is deliberately NOT
+  // gated — simulating the on-air verbs is the whole point of it, and the TEST MODE banner
+  // makes it impossible to mistake for air.
+  const linkDown = useLink() === 'disconnected';
+  const offlineReason = linkDown
+    ? 'Not connected — this command cannot reach CasparCG. Reconnect and reissue it.'
+    : undefined;
+
   return (
     <div
       className={`cg-row${selected ? ' is-selected' : ''}`}
@@ -82,16 +93,27 @@ export function StackRow({
       </div>
       {/* Stop button clicks from also selecting the row (prior behavior). */}
       <div style={styles.actions} onClick={(e) => e.stopPropagation()}>
-        <AsyncButton variant="play" run={() => onPlay(item.itemId)} disabled={onAir}>
+        <AsyncButton
+          variant="play"
+          run={() => onPlay(item.itemId)}
+          disabled={onAir || linkDown}
+          {...(offlineReason !== undefined ? { title: offlineReason } : {})}
+        >
           PLAY
         </AsyncButton>
-        <AsyncButton variant="secondary" run={() => onUpdate(item.itemId)} disabled={!onAir}>
+        <AsyncButton
+          variant="secondary"
+          run={() => onUpdate(item.itemId)}
+          disabled={!onAir || linkDown}
+          {...(offlineReason !== undefined ? { title: offlineReason } : {})}
+        >
           UPDATE
         </AsyncButton>
         <AsyncButton
           variant="caution"
           run={() => onOut(item.itemId)}
-          disabled={item.status === 'idle' || item.status === 'loaded'}
+          disabled={item.status === 'idle' || item.status === 'loaded' || linkDown}
+          {...(offlineReason !== undefined ? { title: offlineReason } : {})}
         >
           OUT
         </AsyncButton>

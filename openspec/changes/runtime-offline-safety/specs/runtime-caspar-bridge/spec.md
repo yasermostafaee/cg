@@ -40,8 +40,15 @@ bridge being absent, and never mid-session.
 ### Requirement: On-air verbs are refused while the server is not connected
 
 The bridge SHALL refuse the playout verbs that must reach the wire — `take`, `update`,
-`out` — while the current primary session is not `healthy`, returning the machine-readable
-refusal `{ accepted: false, errorCode: 'disconnected' }` rather than attempting the send.
+`out` — while **no declared server is reachable**, returning the machine-readable refusal
+`{ accepted: false, errorCode: 'disconnected' }` rather than attempting the send.
+
+The predicate SHALL be "no declared session is `healthy`", NOT "the current primary is not
+healthy". In a mirror pair whose PRIMARY's AMCP link is dead while the BACKUP is healthy
+(auto-failover off — B-056's human-in-the-loop scenario), every send still lands
+backup-only on a real, rendering CasparCG: a graphic genuinely IS on air there. Refusing in
+that window would break the redundancy contract AND lie in the opposite direction (denying
+air that exists). The gate closes only when the command can reach no server at all.
 
 The refusal SHALL happen **before any intent is applied to the Reconciler**. This is the
 load-bearing detail: an intent applied optimistically and only then failed is what produces
@@ -57,16 +64,23 @@ This mirrors the existing on-air block (a counted, reasoned `{ ok, reason }` ref
 the UI surfaces verbatim) and the orphan sweep's `session.state !== 'healthy'` gate. It
 introduces no AMCP verb and sends nothing to the wire.
 
-#### Scenario: PLAY while the server is disconnected is refused, not optimistically shown
+#### Scenario: PLAY while no server is reachable is refused, not optimistically shown
 
-- **WHEN** the operator takes an item while the primary session is not healthy **THEN** the
+- **WHEN** the operator takes an item while no declared server is healthy **THEN** the
   bridge refuses with `errorCode: 'disconnected'`, no `take` intent is recorded, the item's
   status is unchanged, and the item is never shown as playing or on air
 
 #### Scenario: Update and out are refused the same way
 
-- **WHEN** the operator updates or outs an item while the primary session is not healthy
+- **WHEN** the operator updates or outs an item while no declared server is healthy
   **THEN** each is refused with `errorCode: 'disconnected'` and no intent is applied
+
+#### Scenario: A dead primary with a healthy backup is NOT refused (B-056)
+
+- **WHEN** the primary's AMCP link is down but a declared backup is healthy **THEN** the
+  verbs are still accepted and land backup-only, exactly as the redundancy strategy
+  specifies — the command reaches a real, rendering server, so refusing it would deny air
+  that genuinely exists
 
 #### Scenario: A refused command is not deferred
 

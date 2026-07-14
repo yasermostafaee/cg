@@ -561,9 +561,40 @@ export class CasparRuntime {
     return { ok: true };
   }
 
+  /**
+   * R-006 — the connection gate the on-air verbs never had.
+   *
+   * `take`/`update`/`out` must reach CasparCG to mean anything. Issuing one at a dead
+   * primary used to apply the intent OPTIMISTICALLY and only then discover the send had
+   * failed — which is how an item ends up wearing a status no wire ever confirmed. The
+   * orphan sweep has gated on exactly this predicate all along (`#sweepOccupancy`); the
+   * verbs simply never did.
+   *
+   * Refusing BEFORE `applyIntent` is the load-bearing part: an intent that is never applied
+   * cannot produce an optimistic status, so there is nothing to lie about. And it is a
+   * REFUSAL, not a deferral — a queued command would be stranded (reconnect-reconciliation
+   * re-delivers template HTML, never stack intents), which is the same false belief one
+   * step later.
+   *
+   * The predicate is "**no declared server is reachable**", NOT "the primary is down".
+   * That distinction is load-bearing and B-056 owns it: in a mirror pair whose PRIMARY's
+   * AMCP link is dead while the BACKUP is healthy (auto-failover off — the human-in-the-loop
+   * scenario), every send still lands backup-only on a real, rendering CasparCG. Something
+   * genuinely IS on air there, so refusing would be both a regression of the redundancy
+   * contract and a lie in the opposite direction. We refuse only when the command can reach
+   * no server at all.
+   */
+  #linkDown(): boolean {
+    const sessions = [this.#sessions.A, this.#sessions.B].filter(
+      (s): s is ServerSession => s !== undefined,
+    );
+    return sessions.every((s) => s.state !== 'healthy');
+  }
+
   async take(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
+    if (this.#linkDown()) return { accepted: false, errorCode: 'disconnected' };
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'take', itemId }, seq);
 
@@ -605,6 +636,8 @@ export class CasparRuntime {
   ): Promise<{ accepted: boolean; errorCode?: string }> {
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
+    // R-006 — see #linkDown(): refuse before the intent exists.
+    if (this.#linkDown()) return { accepted: false, errorCode: 'disconnected' };
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'update', itemId, fields, mergeMode }, seq);
 
@@ -632,9 +665,12 @@ export class CasparRuntime {
     return ok ? { accepted: true } : { accepted: false, errorCode: errorCode ?? 'amcp-error' };
   }
 
-  async out(itemId: string): Promise<{ accepted: boolean }> {
+  async out(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { accepted: false };
+    // R-006 — see #linkDown(). An out cannot reach a dead server either; claiming it
+    // succeeded would be the mirror-image lie (an operator believing a graphic came OFF).
+    if (this.#linkDown()) return { accepted: false, errorCode: 'disconnected' };
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'out', itemId }, seq);
     this.#armExpiry(seq);

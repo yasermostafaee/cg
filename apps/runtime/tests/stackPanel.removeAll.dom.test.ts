@@ -32,6 +32,8 @@ function items(n: number): StackItemState[] {
 function stubBridge(stack: StackItemState[]): { removeAll: Mock } {
   const removeAll = vi.fn(() => Promise.resolve({ ok: true, removed: stack.length }));
   const stub = {
+    // R-006 — StackRow mirrors the connection refusal, so it reads the link status.
+    link: { status: () => 'live' as const, onStatusChanged: () => () => undefined },
     stack: {
       snapshot: () => Promise.resolve(stack),
       onStateChanged: () => () => undefined,
