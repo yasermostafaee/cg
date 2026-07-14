@@ -112,7 +112,11 @@ export function StackRow({
     >
       {/* R-006 — in test mode an air-claim is badged SIM, never the broadcast red. */}
       <StatusBadge status={item.status} pending={item.pending} simulated={simulated} />
-      <div style={styles.body} title={item.templateId}>
+      {/* The row's label area — and the one part of the row that is guaranteed NOT to be a
+          control. Tests select a row by clicking THIS, never the row root: the root spans the
+          action buttons too, and a click on the root's geometric centre lands wherever the
+          grid happens to put it. */}
+      <div style={styles.body} title={item.templateId} data-row-body="">
         <div style={styles.title}>
           <span style={styles.name}>{label}</span>
           {dirty && <DraftChip label={`${label} has unapplied edits`} />}
