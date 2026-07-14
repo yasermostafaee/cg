@@ -36,17 +36,16 @@ test.describe('Per-element preview timing — sequences, countdowns, repeater-st
     await app.openPreviewModal();
 
     // Each content element gets its OWN row in the timing panel, labelled by its element name.
-    const dwell = app.previewDialog.getByLabel(
-      'Preview Sequence sequence item dwell in milliseconds',
-    );
-    const duration = app.previewDialog.getByLabel(
-      'Preview Clock countdown duration in milliseconds',
-    );
-    await expect(dwell).toHaveValue('5000');
-    await expect(duration).toHaveValue('60000');
+    // B-080 — the durations are shown in SECONDS, the same unit the element properties use, even
+    // though the session override and the drivers keep milliseconds (asserted on the stamps below).
+    const dwell = app.previewDialog.getByLabel('Preview Sequence sequence item dwell in seconds');
+    const duration = app.previewDialog.getByLabel('Preview Clock countdown duration in seconds');
+    await expect(dwell).toHaveValue('5'); // 5000 ms authored default
+    await expect(duration).toHaveValue('60'); // the 60s countdown target
 
     // Tune the sequence: only ITS driver changes — the countdown keeps its authored duration.
-    await dwell.fill('800');
+    // 0.8s in → 800ms out (the driver's unit is unchanged).
+    await dwell.fill('0.8');
     await expect(app.previewFrame.locator('[data-cg-sequence-dwell]')).toHaveAttribute(
       'data-cg-sequence-dwell',
       '800',
@@ -57,7 +56,7 @@ test.describe('Per-element preview timing — sequences, countdowns, repeater-st
     );
 
     // Tune the countdown: rehearse the 60s break in 3s — the sequence keeps its 800ms dwell.
-    await duration.fill('3000');
+    await duration.fill('3');
     await expect(app.previewFrame.locator('[data-cg-countdown-ms]')).toHaveAttribute(
       'data-cg-countdown-ms',
       '3000',

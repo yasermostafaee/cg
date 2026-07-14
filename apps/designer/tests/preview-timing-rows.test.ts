@@ -157,34 +157,36 @@ function typeNumber(el: HTMLInputElement, value: string): void {
   });
 }
 
+/** B-080 — the duration controls are labelled (and read) in SECONDS, as the inspector shows them. */
+const DWELL_A = 'Preview Now/Next sequence item dwell in seconds';
+const DWELL_B = 'Preview Lineup sequence item dwell in seconds';
+const DURATION = 'Preview Break countdown duration in seconds';
+
 describe('D-102 Phase 2 — the preview timing panel’s sequence / countdown rows', () => {
   it('renders one row per sequence and per countdown (labelled by element name)', () => {
     render();
-    expect(input('Preview Now/Next sequence item dwell in milliseconds')).toBeTruthy();
-    expect(input('Preview Lineup sequence item dwell in milliseconds')).toBeTruthy();
-    expect(input('Preview Break countdown duration in milliseconds')).toBeTruthy();
-    // The authored values are the resting display.
-    expect(input('Preview Now/Next sequence item dwell in milliseconds').value).toBe('5000');
-    expect(input('Preview Break countdown duration in milliseconds').value).toBe('60000');
+    expect(input(DWELL_A)).toBeTruthy();
+    expect(input(DWELL_B)).toBeTruthy();
+    expect(input(DURATION)).toBeTruthy();
   });
 
   it('a sequence dwell edit patches ONLY that sequence’s map (not the other, not the lifecycle)', () => {
     render();
-    typeNumber(input('Preview Now/Next sequence item dwell in milliseconds'), '800');
+    typeNumber(input(DWELL_A), '0.8');
     expect(overrides['']?.sequences).toEqual({ 'sq-a': { dwellMs: 800 } });
     // The other sequence is untouched, and no lifecycle axis was written.
     expect(overrides['']?.sequences?.['sq-b']).toBeUndefined();
     expect(overrides['']?.mode).toBeUndefined();
     expect(overrides['']?.holdMs).toBeUndefined();
-    // The second sequence's row still shows ITS authored dwell.
-    expect(input('Preview Lineup sequence item dwell in milliseconds').value).toBe('5000');
+    // The second sequence's row still shows ITS authored dwell (5000ms ⇒ 5s).
+    expect(input(DWELL_B).value).toBe('5');
   });
 
   it('editing a second element deep-merges — it never clobbers the first', () => {
     render();
-    typeNumber(input('Preview Now/Next sequence item dwell in milliseconds'), '800');
-    typeNumber(input('Preview Lineup sequence item dwell in milliseconds'), '1200');
-    typeNumber(input('Preview Break countdown duration in milliseconds'), '3000');
+    typeNumber(input(DWELL_A), '0.8');
+    typeNumber(input(DWELL_B), '1.2');
+    typeNumber(input(DURATION), '3');
     expect(overrides['']?.sequences).toEqual({
       'sq-a': { dwellMs: 800 },
       'sq-b': { dwellMs: 1200 },
@@ -194,9 +196,41 @@ describe('D-102 Phase 2 — the preview timing panel’s sequence / countdown ro
 
   it('a countdown duration of 0 CLEARS the override (back to the authored target)', () => {
     render();
-    typeNumber(input('Preview Break countdown duration in milliseconds'), '3000');
+    typeNumber(input(DURATION), '3');
     expect(overrides['']?.countdowns).toEqual({ cd: { durationMs: 3000 } });
-    typeNumber(input('Preview Break countdown duration in milliseconds'), '0');
+    typeNumber(input(DURATION), '0');
     expect(overrides['']?.countdowns?.['cd']?.durationMs).toBeUndefined();
+  });
+});
+
+describe('B-080 — preview timing durations display SECONDS, the session override stays in ms', () => {
+  it('DISPLAYS the internal ms values as seconds (5000 ⇒ 5, 60000 ⇒ 60) — matching the inspector', () => {
+    render();
+    // The element's authored `defaultDwellMs: 5000` / countdown target `60_000` ms.
+    expect(input(DWELL_A).value).toBe('5');
+    expect(input(DURATION).value).toBe('60');
+  });
+
+  it('ACCEPTS seconds and stores MILLISECONDS (6 ⇒ 6000) — the driver’s unit never changes', () => {
+    render();
+    typeNumber(input(DURATION), '6');
+    expect(overrides['']?.countdowns).toEqual({ cd: { durationMs: 6000 } });
+    typeNumber(input(DWELL_A), '6');
+    expect(overrides['']?.sequences).toEqual({ 'sq-a': { dwellMs: 6000 } });
+  });
+
+  it('round-trips FRACTIONAL dwell seconds (the sequence inspector allows 0.5s steps)', () => {
+    render();
+    typeNumber(input(DWELL_A), '0.5');
+    expect(overrides['']?.sequences).toEqual({ 'sq-a': { dwellMs: 500 } });
+    // …and an override redisplays in seconds, not raw ms.
+    expect(input(DWELL_A).value).toBe('0.5');
+  });
+
+  it('an overridden countdown redisplays in seconds', () => {
+    render();
+    typeNumber(input(DURATION), '12');
+    expect(input(DURATION).value).toBe('12');
+    expect(overrides['']?.countdowns?.['cd']?.durationMs).toBe(12_000);
   });
 });

@@ -326,6 +326,9 @@ export function PreviewTickerTimingRow({
  * values and the patch carries only what the operator changed. The dwell is the time EVERY item is
  * shown for in the preview (it wins over an item's own authored dwell — a preview dwell that a
  * per-item dwell could silently veto would be a dead control).
+ *
+ * B-080 — the dwell control DISPLAYS and ACCEPTS SECONDS (matching the sequence inspector's
+ * `default dwell`); {@link SequenceTimingOverride.dwellMs} stays in milliseconds.
  */
 export function PreviewSequenceTimingRow({
   name,
@@ -373,13 +376,16 @@ export function PreviewSequenceTimingRow({
         <div className={t.inline}>
           <RealtimeNumberInput
             className={t.num}
-            min={100}
-            step={100}
-            value={dwellMs}
-            onCommit={(n) => onChange({ dwellMs: Math.max(100, Math.round(n)) })}
-            ariaLabel={`Preview ${name} sequence item dwell in milliseconds`}
+            // B-080 — SECONDS, exactly as the sequence inspector's "default dwell" shows it
+            // (fractional: step 0.5, floor 0.1s = the stored 100ms floor). The session override
+            // itself stays in MILLISECONDS — this is display/input conversion only.
+            min={0.1}
+            step={0.5}
+            value={dwellMs / 1000}
+            onCommit={(secs) => onChange({ dwellMs: Math.max(100, Math.round(secs * 1000)) })}
+            ariaLabel={`Preview ${name} sequence item dwell in seconds`}
           />
-          <span className={t.muted}>ms</span>
+          <span className={t.muted}>s</span>
         </div>
       </div>
     </>
@@ -389,10 +395,13 @@ export function PreviewSequenceTimingRow({
 /**
  * D-102 Phase 2 — one COUNTDOWN clock's session-only timing row: the duration it counts down from
  * in the preview, addressed by the clock's element id. `0` clears the override (back to the
- * element's authored target), so a duration-target countdown starts at its authored ms and a
+ * element's authored target), so a duration-target countdown starts at its authored duration and a
  * datetime-target countdown starts at 0 (= keep the deadline) with its deadline shown as a hint —
  * setting a duration is the only way to rehearse it without waiting for the wall clock. `wall` /
  * `countup` clocks are never listed (they never complete: nothing to tune).
+ *
+ * B-080 — the control DISPLAYS and ACCEPTS SECONDS (matching the clock inspector's `duration`);
+ * {@link CountdownTimingOverride.durationMs} stays in milliseconds.
  */
 export function PreviewCountdownTimingRow({
   name,
@@ -414,16 +423,22 @@ export function PreviewCountdownTimingRow({
         <div className={t.inline}>
           <RealtimeNumberInput
             className={t.num}
+            // B-080 — SECONDS, exactly as the clock inspector's "duration" shows it (INTEGER
+            // seconds: step 1). `min` stays 0 — unlike the inspector, 0 is this row's "no
+            // override" value (below). The session override stays in MILLISECONDS: this is
+            // display/input conversion only.
             min={0}
-            step={1000}
-            value={durationMs}
+            step={1}
+            value={Math.round(durationMs / 1000)}
             // 0 = no override: the clock keeps its authored target for the run.
-            onCommit={(n) =>
-              onChange({ durationMs: n > 0 ? Math.max(1, Math.round(n)) : undefined })
+            onCommit={(secs) =>
+              onChange({
+                durationMs: secs > 0 ? Math.max(1, Math.round(secs)) * 1000 : undefined,
+              })
             }
-            ariaLabel={`Preview ${name} countdown duration in milliseconds`}
+            ariaLabel={`Preview ${name} countdown duration in seconds`}
           />
-          <span className={t.muted}>ms</span>
+          <span className={t.muted}>s</span>
         </div>
       </div>
       {defaults.deadline !== undefined && (

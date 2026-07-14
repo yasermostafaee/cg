@@ -957,3 +957,17 @@ guards. Capability: `designer-playout-lifecycle`.
 **Actual:** `ensureCompositions` (apps/designer/src/renderer/state/scene-doc.ts) copies resolution/frameRange/activeRange/background/layers into the migrated composition but **silently drops `lifecycle` and `playout`** — `playoutOf` then resolves the comp to `static`: the whole timeline plays as one entrance (exit keyframes included), the hold freezes on the post-exit (typically fully transparent) pose, and stop is a hard cut. The graphic simply "disappears" after its intro.
 **Env:** Browser / Designer dev; found 2026-07-12 during D-119 (the first-cut root-layer starters hit exactly this — rebuilt composition-centric as the fix).
 **Notes:** One-line-ish fix: carry `...(scene.lifecycle !== undefined ? { lifecycle: scene.lifecycle } : {})` and same for `playout` into the migrated comp, + a unit test on `ensureCompositions`. The Zod schema deliberately allows root lifecycle/playout, so load must not lose them.
+
+## [~] B-080 — preview timing durations show MILLISECONDS while the element properties show SECONDS ⟨priority: medium⟩ — fixed on `fix/b080-preview-timing-seconds` (display/input conversion only; no change dir)
+
+**Repro:**
+
+1. Author a composition with a countdown clock (duration target, e.g. 60s) and a sequence (default dwell e.g. 5s).
+2. Note the values in the element properties / inspector: countdown `duration` = `60 s`, sequence `default dwell` = `5 s`.
+3. Open the preview and look at the per-element timing rows (D-102 Phase 2, #320): the countdown's "duration" and the sequence's "item dwell".
+
+**Expected:** the preview timing controls DISPLAY (and accept) the same unit as the element properties — SECONDS — so the operator reads `60` / `5`, edits in seconds, and never has to convert in their head.
+**Actual:** both preview controls render raw MILLISECONDS (`60000` / `5000`, labelled "ms"), so the same quantity reads `6` in properties but `6000` in the preview — an operator setting a 6-second rehearsal duration can trivially type `6` and get a 6-millisecond countdown.
+**Env:** Browser / Designer preview modal; post-#320.
+**Notes:** Introduced by #320 (D-102 Phase 2 — per-element preview timing). UI display/input-conversion ONLY: the session override, the drivers and the schema keep milliseconds; only the two controls convert (ms ÷ 1000 to display, × 1000 on commit). Each preview row mirrors its inspector counterpart's rounding exactly — the countdown duration is INTEGER seconds (`step 1`), the sequence dwell allows FRACTIONAL seconds (`step 0.5`, `min 0.1`), as `StyleSection` does. The preview's per-scope HOLD control is deliberately NOT changed: the inspector's Playout section shows hold in milliseconds too, so it is already consistent — converting it would create the very mismatch this bug is about. No schema / session-shape / runtime / export / on-air change ⇒ no CasparCG hardware validation needed.
+**Regression test:** unit `preview-timing-rows.test.ts` (a 60000 ms countdown DISPLAYS `60`; a 5000 ms dwell DISPLAYS `5`; typing `6` writes `durationMs: 6000`; typing `0.8` writes `dwellMs: 800`); E2E `preview-timing-phase2.spec.ts` (drive the seconds inputs, assert the runtime's EFFECTIVE ms stamps `data-cg-countdown-ms` / `data-cg-sequence-dwell` are unchanged in ms).
