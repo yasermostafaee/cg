@@ -2721,7 +2721,7 @@ before implementation — do later, not in the current feature queue.
 
 **Notes:** InspectorPanel.css.ts `bindRemove` + features/fields/ListItemsEditor.tsx remove button — unify (red, same dimensions/icon). Match whatever icon D-092 left the row remove-item as.
 
-## [x] D-102 — Per-element timing overrides in preview ⟨priority: medium⟩ — Phase 1 (tickers) archived: `openspec/changes/archive/2026-06-26-per-element-preview-timing/`. Phase 2 (sequences + countdown clocks + the repeater-stamped-ticker gap) `[~]` — change dir: `openspec/changes/extend-preview-timing-sequence-countdown/`.
+## [x] D-102 — Per-element timing overrides in preview ⟨priority: medium⟩ — Phase 1 (tickers) archived: `openspec/changes/archive/2026-06-26-per-element-preview-timing/`. Phase 2 (sequences + countdown clocks + the repeater-stamped-ticker gap) merged (#320, `6c55b70`), archived: `openspec/changes/archive/2026-07-14-extend-preview-timing-sequence-countdown/`. Both phases shipped.
 
 **What:** The preview's session-only timing panel can override timing PER ELEMENT, not just per
 scope. **Phase 1 (tickers only):** each ticker in a composition gets its OWN repeat + cycle-seam
@@ -2743,7 +2743,7 @@ map (replacing the per-scope `tickerRepeat`/`tickerBoundary`); the runtime resol
 own `TickerDriver` (the `WiredSubtree` already holds per-element drivers); `PreviewScopeTiming`
 enumerates every ticker of a scope (recursing containers). Session-only; stored template untouched.
 
-### [~] Phase 2 — sequences + countdown clocks + repeater-stamped tickers
+### [x] Phase 2 — sequences + countdown clocks + repeater-stamped tickers — merged (#320, `6c55b70`), archived (`openspec/changes/archive/2026-07-14-extend-preview-timing-sequence-countdown/`)
 
 **What:** The SAME per-element mechanism covers two more content kinds and closes a tree-walk gap:
 `PlayoutOverride`/`TimingOverride` gain `sequences: Record<elementId, { repeat?, dwellMs? }>` and
@@ -2771,7 +2771,10 @@ dwell would have a dead control, and a bound-list `update()` would clobber a rew
 countdown's `durationMs` substitutes a `{ kind: 'duration' }` target for the run; `wireScopeSubtree`
 inherits the host scope's per-element timing maps into STAMPED subtrees (repeater rows / sequence
 composition items), which is how the authored element's override reaches each stamp's own driver —
-the LIFECYCLE axes are NOT inherited, so a row keeps its own lifecycle.
+the LIFECYCLE axes are NOT inherited, so a row keeps its own lifecycle. **Follow-up:**
+[B-080](./bugs-designer.md) (#322, `1002fdb`) — the new duration controls shipped displaying raw
+milliseconds while the element properties show seconds; they now display/accept seconds (internal
+model still ms).
 
 ## [x] D-103 — Clock: blinking colon separator at an adjustable rate ⟨priority: low⟩ — archived: `openspec/changes/archive/2026-06-26-clock-blink-colon/`
 

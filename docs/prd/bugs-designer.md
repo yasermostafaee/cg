@@ -958,7 +958,7 @@ guards. Capability: `designer-playout-lifecycle`.
 **Env:** Browser / Designer dev; found 2026-07-12 during D-119 (the first-cut root-layer starters hit exactly this — rebuilt composition-centric as the fix).
 **Notes:** One-line-ish fix: carry `...(scene.lifecycle !== undefined ? { lifecycle: scene.lifecycle } : {})` and same for `playout` into the migrated comp, + a unit test on `ensureCompositions`. The Zod schema deliberately allows root lifecycle/playout, so load must not lose them.
 
-## [~] B-080 — preview timing durations show MILLISECONDS while the element properties show SECONDS ⟨priority: medium⟩ — fixed on `fix/b080-preview-timing-seconds` (display/input conversion only; no change dir)
+## [x] B-080 — preview timing durations show MILLISECONDS while the element properties show SECONDS ⟨priority: medium⟩ — merged (#322, `1002fdb`): the preview's countdown-duration and sequence-dwell controls now DISPLAY and ACCEPT seconds, each mirroring its inspector counterpart's rounding (INTEGER seconds for the countdown, fractional `step 0.5` for the dwell); the session override, the drivers and the schema still speak milliseconds. Display/input conversion only, no change dir. Follow-up to #320 (D-102 Phase 2)
 
 **Repro:**
 
