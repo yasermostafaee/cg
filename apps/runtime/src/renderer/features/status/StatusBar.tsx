@@ -30,6 +30,8 @@ const styles = {
   failed: { color: colors.offline },
   failedHard: { color: colors.error },
   ok: { color: '#10B981' },
+  // B-081 — the look of health we CANNOT currently verify: muted, never a confident color.
+  stale: { color: colors.textMuted },
   spacer: { flex: 1 },
   lock: {
     display: 'inline-flex',
@@ -44,6 +46,19 @@ interface SessionLabel {
   text: string;
   style: { color: string };
 }
+
+/**
+ * B-081 — what a server's health reads as while the BRIDGE is down.
+ *
+ * Server health only ever reaches the Runtime **through** the bridge (AMCP handshake +
+ * OSC). Once the link is gone, the last snapshot is not "still true" — it is unverifiable,
+ * and it ages with every second the bridge stays down. Rendering it as a confident green
+ * HEALTHY next to R-006's "NOT CONNECTED — NOTHING CAN REACH AIR" is the same species of lie
+ * that R-006 itself was filed to kill: the reassuring claim wins over the alarming one.
+ * So while disconnected the pills say UNKNOWN, muted — and the last-known state survives
+ * only in the tooltip, explicitly labelled as stale.
+ */
+const UNKNOWN: SessionLabel = { text: 'UNKNOWN', style: styles.stale };
 
 function sessionLabel(state: string): SessionLabel {
   switch (state) {
@@ -62,26 +77,42 @@ function sessionLabel(state: string): SessionLabel {
   }
 }
 
+/** The tooltip that keeps the last-known reading available without asserting it. */
+function staleTitle(state: string): string {
+  return (
+    `Bridge disconnected — the server's health cannot be read. ` +
+    `Last known before the link dropped: ${sessionLabel(state).text}.`
+  );
+}
+
 /** Bottom-of-window status bar (Phase 6 §2). Never hidden, never re-flows. */
 export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Element {
   const health = useConnections();
   const lock = useLock();
-  const simulated = useLink() === 'offline-mock';
+  const link = useLink();
+  const simulated = link === 'offline-mock';
+  // B-081 — the link that DELIVERS health is down, so every reading below is unverifiable.
+  const stale = link === 'disconnected';
 
   if (health === null) {
     return (
       <footer style={styles.bar} aria-label="Status bar">
         <LinkIndicator />
-        <span className="cg-pill">Loading…</span>
+        {/* Nothing has answered yet. While the link is down that is not "loading" — there
+            is nobody to load from (B-080/B-081). */}
+        <span className="cg-pill" style={stale ? styles.stale : undefined}>
+          {stale ? 'SERVER HEALTH UNKNOWN' : 'Loading…'}
+        </span>
       </footer>
     );
   }
 
-  const primary = sessionLabel(health.primary.state);
+  const primary = stale ? UNKNOWN : sessionLabel(health.primary.state);
   // B-046 — `backup` is absent under a declared single-server config: render
   // the honest "no backup" state instead of a phantom card, and disable the
   // manual failover (the bridge refuses it anyway — nothing to switch to).
-  const backup = health.backup !== undefined ? sessionLabel(health.backup.state) : null;
+  const backup =
+    health.backup === undefined ? null : stale ? UNKNOWN : sessionLabel(health.backup.state);
 
   return (
     <footer style={styles.bar} aria-label="Status bar">
@@ -95,12 +126,18 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
         </span>
       ) : (
         <>
-          <span className="cg-pill">
-            <span style={styles.primary}>● PRIMARY {health.primary.label}</span>{' '}
+          {/* B-081 — while `stale`, the whole pill mutes: the green ● dot is a claim too. */}
+          <span className="cg-pill" {...(stale ? { title: staleTitle(health.primary.state) } : {})}>
+            <span style={stale ? styles.stale : styles.primary}>
+              ● PRIMARY {health.primary.label}
+            </span>{' '}
             <span style={primary.style}>{primary.text}</span>
           </span>
           {health.backup !== undefined && backup !== null ? (
-            <span className="cg-pill">
+            <span
+              className="cg-pill"
+              {...(stale ? { title: staleTitle(health.backup.state) } : {})}
+            >
               <span style={styles.backup}>○ BACKUP {health.backup.label}</span>{' '}
               <span style={backup.style}>{backup.text}</span>
             </span>
@@ -109,6 +146,7 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
               <span style={styles.backup}>○ NO BACKUP</span>
             </span>
           )}
+          {/* The strategy is CONFIG, not health — it does not go stale with the link. */}
           <span className="cg-pill">{health.strategy}</span>
         </>
       )}

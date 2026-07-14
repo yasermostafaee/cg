@@ -1306,3 +1306,94 @@ legitimately rests at `playing` and must never be expirable (B-044).
 
 **Frozen, verified unchanged:** B-053's read-time derivation (producer present but never
 taken still reads `loaded`), B-070's failed-ack settlement, B-072's position read-back.
+
+---
+
+## [~] B-080 — the StatusBar sits on "Loading…" beside a green ● LIVE until the operator refreshes: every bridge snapshot is pulled ONCE at mount, and nothing re-pulls it when the link comes up ⟨priority: medium⟩ — fixed on `fix/footer-loading-stuck`, no change dir
+
+A display-subscription regression from **R-006 ([#312](https://github.com/yasermostafaee/cg/pull/312))**,
+found live: start the Runtime before the bridge, then start the bridge. The link indicator
+goes green **● LIVE**, the stack takes and shows ON AIR, data flows — and the footer's
+health pill stays on **"Loading…"** for the whole life of the page. A full refresh clears it.
+
+**Root cause — the invariant #312 removed, and the six hooks still leaning on it.** Every
+`window.cg` snapshot hook (`useConnections`, `useStack`, `useLock`, `useOrphans`,
+`useOwnedOccupancy`, `useTemplateIndex`) does a **one-shot** `fetch().then(setState)` in a
+`useEffect(…, [])` and then relies on its publish channel for everything after. That was only
+ever correct because `createRuntimeBridge` guaranteed a **settled** backend at mount: the boot
+probe either connected (`live`) or handed the renderer the **mock** — and either way the
+mount-time pull resolved.
+
+R-006 deleted the mock fallback (rightly — it is what put a green "PRIMARY A HEALTHY" beside
+a graphic that was not on air). An unreachable-at-boot bridge now mounts the **live**
+`WebSocketRuntime` in `disconnected`, where `#invoke` **refuses every request** by design.
+So the mount-time pull **rejects** — unhandled, silently — and nothing ever re-pulls it:
+
+- the bridge publishes `connections.health-changed` only when health **CHANGES**
+  (`wirePublishes` forwards `healthChanged`; it pushes no snapshot on connect), and
+- `WebSocketRuntime.#resync()` re-pulls stack/health/lock only when `reconnected` is true —
+  i.e. on a **RE**-connect, never on the first open.
+
+`useConnections` therefore holds `null` forever → `StatusBar` renders its `health === null`
+branch → "Loading…", next to a `useLink()` pill that correctly reads LIVE (link status IS
+pushed, on every transition). A refresh fixes it because the fresh mount finally pulls while
+the link is `live`. Same defect, quieter symptom, in the siblings: the stack can sit **empty**
+on a live link while the bridge holds retained items, until the next push happens to arrive.
+
+**Why no test caught it:** every StatusBar test and the whole Playwright harness mount against
+an **already-settled** bridge (`link.status() === 'live'`, `health()` resolves). A fresh mount
+is precisely the refresh that masks the bug — the suite could only ever see the healed state.
+
+**Fix:** tie the pull to the **link**, not to the mount. `useBridgeSnapshot` (new, shared)
+re-pulls on every transition into a usable link, skips the pull while `disconnected` (a
+refusal there is the contract, not an error — and never an unhandled rejection), and keeps
+pushes authoritative: a pull still in flight when a publish lands is **dropped**, so a slow
+round-trip can never overwrite fresher state with staler state. The six hooks now sit on it.
+
+**Frozen, verified unchanged:** this is a display-subscription fix **on top of** R-006's
+connection-state model, not a change to it. The `disconnected`/`live`/`offline-mock` model,
+the refuse-while-disconnected contract, the NOT CONNECTED / TEST MODE banners and the
+test-mode door are all untouched — `createRuntimeBridge`, `WebSocketRuntime` and the bridge
+have **no diff**. Regression test mounts DISCONNECTED and drives the transition on the live
+root (no remount).
+
+---
+
+## [~] B-081 — the footer keeps a confident green "PRIMARY A HEALTHY" after the bridge DROPS, beside "NOT CONNECTED — NOTHING CAN REACH AIR" ⟨priority: high⟩ — fixed on `fix/footer-loading-stuck` (with [[B-080]]), no change dir
+
+The mirror of [[B-080]], found in the same live session and fixed with it. B-080 is the
+footer failing to react to `disconnected → live`; this is the footer failing to **distrust**
+what it already has on `live → disconnected`. Same footer, same connection-state model,
+opposite direction — and this direction is the dangerous one.
+
+**Repro:** connect the Runtime to the bridge, then stop the bridge.
+**Expected:** the server-health pills stop asserting a health they can no longer read.
+**Actual:** they keep rendering the last snapshot as a confident **green ● PRIMARY A
+HEALTHY**, indefinitely, directly beneath R-006's red **NOT CONNECTED — NOTHING CAN REACH
+AIR** banner. Only a refresh clears it.
+
+**Root cause — not a missing subscription; a missing INVALIDATION.** Unlike B-080, the
+StatusBar _does_ re-render on the drop (it already called `useLink()`, and the banner appears
+on the same transition — the subscription was never the problem here). The bug is that it
+kept treating the last `ConnectionHealth` as current. Server health only ever reaches the
+Runtime **through** the bridge (the AMCP handshake + OSC). The moment the bridge is gone we
+have no channel by which health could be known at all — so the last snapshot is not "still
+true", it is **unverifiable**, and it ages with every second the link stays down.
+
+This is precisely the failure mode **R-006** was filed to kill, one surface over: a green
+HEALTHY pill sitting next to an alarming truth, and **the reassuring claim wins**. R-006 fixed
+it for the mock ("⚠ NO SERVER — SIMULATED"); the same pill was still lying whenever the link
+merely dropped.
+
+**Fix:** health is trustworthy only while the link is. While `disconnected`, the pills read a
+muted **UNKNOWN** (word AND color — a green ● dot is a claim too), and the last-known reading
+survives only in a tooltip that says so in as many words ("Last known before the link
+dropped: HEALTHY"). On reconnect, real health resumes — no refresh (B-080's re-pull). The
+gate is the LINK, never "a state I would rather not show": a genuine DEGRADED on a live link
+keeps its own word and color, which the spec pins.
+
+**Frozen, verified unchanged:** the connection-state model is untouched (this reads it, it
+does not change it) — `createRuntimeBridge`, `WebSocketRuntime` and the bridge have **no
+diff**. The `strategy` pill stays as-is: it is CONFIG, not health, and does not go stale with
+the link. R-006's banners and test-mode honesty (`⚠ NO SERVER — SIMULATED`) are unchanged and
+still asserted by their own specs.

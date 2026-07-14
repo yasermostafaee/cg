@@ -1,29 +1,22 @@
-import { useEffect, useState } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
+import type { Unsubscribe } from '../../shared/runtime-bridge.js';
+import { useBridgeSnapshot } from './useBridgeSnapshot.js';
+
+const EMPTY: readonly StackItemState[] = [];
+
+const fetchStack = (): Promise<readonly StackItemState[]> => window.cg.stack.snapshot();
+
+const subscribeStack = (handler: (next: readonly StackItemState[]) => void): Unsubscribe =>
+  window.cg.stack.onStateChanged(handler);
 
 /**
- * Snapshot the stack on mount and re-render on every push from Main.
+ * The playout stack, re-rendered on every push from the bridge.
  *
- * `window.cg.stack.onStateChanged` returns an unsubscribe handle that's
- * tied to the React effect's cleanup. The first frame is filled from
- * `stack.snapshot()` so the UI never starts empty.
+ * B-080 — the snapshot is pulled whenever the link becomes usable, not once at mount. A
+ * Runtime opened before the bridge is up mounts DISCONNECTED (R-006), where the pull is
+ * refused; reading it once at mount left the operator looking at an EMPTY stack, on a live
+ * link, while the bridge held retained items — until the next push happened to arrive.
  */
 export function useStack(): readonly StackItemState[] {
-  const [items, setItems] = useState<readonly StackItemState[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void window.cg.stack.snapshot().then((snap) => {
-      if (!cancelled) setItems(snap);
-    });
-    const unsubscribe = window.cg.stack.onStateChanged((next) => {
-      setItems(next);
-    });
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, []);
-
-  return items;
+  return useBridgeSnapshot(fetchStack, subscribeStack, EMPTY);
 }

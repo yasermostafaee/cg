@@ -30,7 +30,15 @@ been allocated. `B-078` was briefly the number space's only GAP — `B-079` was 
 not — which is precisely the "two branches, two snapshots" pattern this file exists to catch. It
 was verified free before use (absent from every remote branch, and #317 was the only open PR) and
 is now taken by **B-078** (the E2E contention flake, [bugs.md](bugs.md)). The space is contiguous
-again: `B-001` … `B-079`, no gaps. **Next free: `B-080`.**
+again: `B-001` … `B-079`, no gaps.
+
+**Re-audited 2026-07-14** against `main` (`6c55b70`, i.e. after #319 + #320). `B-080` and
+`B-081` were verified free before use — no heading claimed either in any of the three bug
+files, and `B-080`'s only occurrence anywhere was this file's own "next free" pointer. Both
+are now taken, by the two directions of the same footer defect
+([bugs-runtime.md](bugs-runtime.md)): **B-080** (the health pill stuck on "Loading…" after the
+bridge connects) and **B-081** (the health pills still claiming a green HEALTHY after it
+disconnects). The space stays contiguous: `B-001` … `B-081`, no gaps. **Next free: `B-082`.**
 
 **Exactly one number is ambiguous. Every other number names exactly one bug.**
 

@@ -46,6 +46,13 @@ function stubBridge(
       snapshot: () => Promise.resolve(items),
       onStateChanged: () => () => undefined,
     },
+    // B-080 — the snapshot hooks pull against the LINK now (a disconnected bridge refuses
+    // reads, so asking is wrong there). The panel reads the stack, so its bridge stub owes
+    // a link like the real one: this suite is about the on-air gate, so it stays connected.
+    link: {
+      status: () => 'live' as const,
+      onStatusChanged: () => () => undefined,
+    },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
   return { setConfig };
