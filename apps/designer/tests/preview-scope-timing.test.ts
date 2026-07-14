@@ -7,6 +7,7 @@ import {
 import {
   disambiguateNames,
   timingScopeList,
+  type TimingScopeNode,
 } from '../src/renderer/features/fields/PreviewScopeTiming.js';
 
 const baseTransform = {
@@ -216,6 +217,216 @@ describe('D-102 Phase 1 — per-element ticker enumeration', () => {
       'Ticker (2)',
     ]);
     expect(disambiguateNames(['Crawl A', 'Crawl B'])).toEqual(['Crawl A', 'Crawl B']);
+  });
+});
+
+describe('D-102 Phase 2 — sequence / countdown enumeration + the repeater-stamped gap', () => {
+  function ticker(id: string, name: string): Element {
+    return {
+      id,
+      name,
+      type: 'ticker',
+      transform: baseTransform,
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 0,
+      font: {
+        family: 'Vazirmatn',
+        weight: 500,
+        style: 'normal',
+        size: 36,
+        lineHeight: 1.4,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      direction: 'rtl',
+      speed: 100,
+      gap: 10,
+      repeat: 'infinite',
+      cycleBoundary: 'seamless',
+      items: [],
+    } as unknown as Element;
+  }
+  function sequence(
+    id: string,
+    name: string,
+    over: { repeat?: number | 'infinite'; defaultDwellMs?: number; visible?: boolean } = {},
+  ): Element {
+    return {
+      id,
+      name,
+      type: 'sequence',
+      transform: baseTransform,
+      opacity: 1,
+      visible: over.visible ?? true,
+      locked: false,
+      zIndex: 0,
+      font: {
+        family: 'Vazirmatn',
+        weight: 500,
+        style: 'normal',
+        size: 36,
+        lineHeight: 1.4,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      direction: 'rtl',
+      items: [],
+      repeat: over.repeat ?? 'infinite',
+      defaultDwellMs: over.defaultDwellMs ?? 5000,
+      advance: 'auto',
+      transitionIn: 'bottom',
+      transitionOut: 'top',
+      transitionTiming: 'simultaneous',
+      transitionMs: 400,
+    } as unknown as Element;
+  }
+  function clock(id: string, name: string, over: Record<string, unknown> = {}): Element {
+    return {
+      id,
+      name,
+      type: 'clock',
+      transform: baseTransform,
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 0,
+      font: {
+        family: 'Vazirmatn',
+        weight: 600,
+        style: 'normal',
+        size: 24,
+        lineHeight: 1.2,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      align: 'center',
+      mode: 'countdown',
+      format: 'mm:ss',
+      digits: 'latin',
+      target: { kind: 'duration', ms: 60_000 },
+      ...over,
+    } as unknown as Element;
+  }
+  function repeater(id: string, name: string, compositionId: string): Element {
+    return {
+      id,
+      name,
+      type: 'repeater',
+      transform: baseTransform,
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 0,
+      compositionId,
+      direction: 'column',
+      flow: 'rtl',
+      gap: 10,
+      items: [{ id: 'r1' }, { id: 'r2' }],
+    } as unknown as Element;
+  }
+  /** A scene whose ROOT layer holds `children` (the `team` child comp is left in place). */
+  function sceneWith(children: Element[], extraComps: Composition[] = []): Scene {
+    const base = parentScene();
+    return {
+      ...base,
+      layers: [
+        { id: 'pl', name: 'main', visible: true, locked: false, blendMode: 'normal', children },
+      ],
+      compositions: [...(base.compositions ?? []), ...extraComps],
+    } as unknown as Scene;
+  }
+  const root = (scene: Scene): TimingScopeNode =>
+    timingScopeList(scene).find((n) => n.path === '') as TimingScopeNode;
+
+  it('enumerates EVERY sequence (id + name + authored passes / dwell)', () => {
+    const node = root(
+      sceneWith([
+        sequence('sq-a', 'Now/Next', { repeat: 2, defaultDwellMs: 3000 }),
+        sequence('sq-b', 'Lineup', { repeat: 'infinite', defaultDwellMs: 5000 }),
+      ]),
+    );
+    expect(node.sequences).toEqual([
+      { id: 'sq-a', name: 'Now/Next', repeat: 2, defaultDwellMs: 3000 },
+      { id: 'sq-b', name: 'Lineup', repeat: 'infinite', defaultDwellMs: 5000 },
+    ]);
+  });
+
+  it('lists COUNTDOWN clocks (duration + datetime targets) and NEVER wall / countup', () => {
+    const node = root(
+      sceneWith([
+        clock('cd-dur', 'Break', { target: { kind: 'duration', ms: 90_000 } }),
+        clock('cd-iso', 'Kickoff', { target: { kind: 'datetime', iso: '2030-01-01T20:00:00Z' } }),
+        clock('wall', 'Wall', { mode: 'wall', target: undefined }),
+        clock('up', 'Stopwatch', { mode: 'countup', target: undefined }),
+      ]),
+    );
+    expect(node.countdowns).toEqual([
+      { id: 'cd-dur', name: 'Break', durationMs: 90_000, deadline: undefined },
+      { id: 'cd-iso', name: 'Kickoff', durationMs: undefined, deadline: '2030-01-01T20:00:00Z' },
+    ]);
+  });
+
+  it('a HIDDEN sequence is inert — not listed (B-034)', () => {
+    const node = root(sceneWith([sequence('sq-h', 'Hidden', { visible: false })]));
+    expect(node.sequences).toEqual([]);
+  });
+
+  it('duplicate sequence names are disambiguated (as the rows label them)', () => {
+    const node = root(sceneWith([sequence('sq-1', 'Sequence'), sequence('sq-2', 'Sequence')]));
+    expect(disambiguateNames(node.sequences.map((s) => s.name))).toEqual([
+      'Sequence (1)',
+      'Sequence (2)',
+    ]);
+  });
+
+  it('surfaces a ticker that exists ONLY inside a repeater’s child composition', () => {
+    // The repeater's child holds the ticker; the parent has no ticker of its own. The tree used to
+    // walk authored composition INSTANCES only, so this ticker was invisible (and untunable).
+    const rowComp = comp('rowc', 'Row', {
+      layers: [
+        {
+          id: 'rl',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [ticker('row-tk', 'Row Crawl'), clock('row-cd', 'Row Countdown')],
+        },
+      ],
+    } as unknown as Partial<Composition>);
+    const node = root(sceneWith([repeater('rep', 'Repeater', 'rowc')], [rowComp]));
+    // ONE row per AUTHORED element (not one per stamped data row) — element-id keyed, so the
+    // control governs every stamp.
+    expect(node.tickers).toEqual([
+      { id: 'row-tk', name: 'Row Crawl', repeat: 'infinite', cycleBoundary: 'seamless' },
+    ]);
+    expect(node.countdowns).toEqual([
+      { id: 'row-cd', name: 'Row Countdown', durationMs: 60_000, deadline: undefined },
+    ]);
+  });
+
+  it('a repeater whose child is missing / self-referencing is guarded (no crash, no rows)', () => {
+    // Missing child composition.
+    expect(root(sceneWith([repeater('rep', 'Repeater', 'nope')])).tickers).toEqual([]);
+    // A composition that repeats ITSELF — the visited guard stops the walk.
+    const selfComp = comp('selfc', 'Self', {
+      layers: [
+        {
+          id: 'sl',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [ticker('self-tk', 'Self Crawl'), repeater('inner', 'Inner', 'selfc')],
+        },
+      ],
+    } as unknown as Partial<Composition>);
+    const node = root(sceneWith([repeater('rep', 'Repeater', 'selfc')], [selfComp]));
+    expect(node.tickers).toEqual([
+      { id: 'self-tk', name: 'Self Crawl', repeat: 'infinite', cycleBoundary: 'seamless' },
+    ]);
   });
 });
 

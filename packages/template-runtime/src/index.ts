@@ -91,4 +91,7 @@ export type {
   RuntimeClock,
   PlayoutOverride,
   TickerTimingOverride,
+  SequenceTimingOverride,
+  CountdownTimingOverride,
+  ElementTimingOverrides,
 } from './types.js';

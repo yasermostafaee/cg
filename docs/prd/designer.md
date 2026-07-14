@@ -2721,7 +2721,7 @@ before implementation — do later, not in the current feature queue.
 
 **Notes:** InspectorPanel.css.ts `bindRemove` + features/fields/ListItemsEditor.tsx remove button — unify (red, same dimensions/icon). Match whatever icon D-092 left the row remove-item as.
 
-## [x] D-102 — Per-element timing overrides in preview ⟨priority: medium⟩ — Phase 1 (tickers) archived: `openspec/changes/archive/2026-06-26-per-element-preview-timing/`. PHASE 2 (sequences + countdown clocks) + the repeater-stamped-ticker gap (the timing tree only walks authored composition instances) remain OPEN.
+## [x] D-102 — Per-element timing overrides in preview ⟨priority: medium⟩ — Phase 1 (tickers) archived: `openspec/changes/archive/2026-06-26-per-element-preview-timing/`. Phase 2 (sequences + countdown clocks + the repeater-stamped-ticker gap) `[~]` — change dir: `openspec/changes/extend-preview-timing-sequence-countdown/`.
 
 **What:** The preview's session-only timing panel can override timing PER ELEMENT, not just per
 scope. **Phase 1 (tickers only):** each ticker in a composition gets its OWN repeat + cycle-seam
@@ -2742,7 +2742,36 @@ can't be set separately.
 map (replacing the per-scope `tickerRepeat`/`tickerBoundary`); the runtime resolves `elementId` → its
 own `TickerDriver` (the `WiredSubtree` already holds per-element drivers); `PreviewScopeTiming`
 enumerates every ticker of a scope (recursing containers). Session-only; stored template untouched.
-Phase 2 (sequences + countdown) is a later change.
+
+### [~] Phase 2 — sequences + countdown clocks + repeater-stamped tickers
+
+**What:** The SAME per-element mechanism covers two more content kinds and closes a tree-walk gap:
+`PlayoutOverride`/`TimingOverride` gain `sequences: Record<elementId, { repeat?, dwellMs? }>` and
+`countdowns: Record<elementId, { durationMs? }>`; `PreviewScopeTiming` lists one row per sequence
+(passes + per-item dwell) and per COUNTDOWN clock (preview duration — the only way to rehearse a
+`datetime` deadline), and its walk now DESCENDS a repeater into its child composition so a
+repeater-stamped ticker is visible and tunable at last.
+**Why:** A sequence's dwell/passes and a countdown's target decide how long a scope holds, yet
+neither could be rehearsed without waiting them out in real time; and a ticker that lives only
+inside a repeater's child composition was invisible to the panel (the tree walked authored
+composition instances only, never `scope.repeaters`).
+**Acceptance:**
+
+- WHEN the timing panel is shown for a scope with a sequence THEN it shows a row per sequence (duplicate names disambiguated) with its own repeat + per-item dwell override
+- WHEN a sequence's override is changed THEN only that sequence's driver uses it this session; other sequences/tickers are unaffected and the stored template is unchanged
+- WHEN the scope has a countdown clock THEN it shows a row with a preview-duration override; wall / countup clocks are NEVER listed
+- WHEN a countdown's override is changed THEN only that countdown's driver counts down from it this session (authored duration OR datetime target), stored template unchanged
+- WHEN a composition contains a repeater whose child composition includes a ticker THEN the timing tree surfaces that ticker so it is visible and tunable
+- WHEN the AUTHORED (template) ticker inside a repeater child is tuned THEN every stamped instance uses it in preview — one control, no separate per-data-row control (every stamped row is built from the same authored element id)
+
+**Notes:** Session-only — no schema change, no migration, no exporter / runtime / on-air change (so
+no CasparCG hardware validation is needed). Runtime: `SequenceDriver` gains a `dwellOverrideMs` that
+wins over an item's own `dwellMs` AND `defaultDwellMs` (else a sequence whose items carry their own
+dwell would have a dead control, and a bound-list `update()` would clobber a rewritten item list); a
+countdown's `durationMs` substitutes a `{ kind: 'duration' }` target for the run; `wireScopeSubtree`
+inherits the host scope's per-element timing maps into STAMPED subtrees (repeater rows / sequence
+composition items), which is how the authored element's override reaches each stamp's own driver —
+the LIFECYCLE axes are NOT inherited, so a row keeps its own lifecycle.
 
 ## [x] D-103 — Clock: blinking colon separator at an adjustable rate ⟨priority: low⟩ — archived: `openspec/changes/archive/2026-06-26-clock-blink-colon/`
 

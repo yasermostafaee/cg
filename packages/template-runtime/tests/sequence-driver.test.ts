@@ -98,6 +98,43 @@ describe('SequenceDriver (D-029)', () => {
     expect(visible(h.host)).toEqual(['C']);
   });
 
+  it('D-102 Phase 2 — a session dwellOverrideMs wins over BOTH the item dwell and the default', () => {
+    const h = make({
+      // Every item carries its OWN (long) dwell: a preview dwell that only replaced
+      // `defaultDwellMs` would be a dead control here — the override must win over both.
+      items: [
+        { id: 'a', text: 'A', dwellMs: 5000 },
+        { id: 'b', text: 'B', dwellMs: 5000 },
+        { id: 'c', text: 'C' }, // no own dwell — the default (1000) would apply
+      ],
+      defaultDwellMs: 1000,
+      dwellOverrideMs: 500,
+    });
+    h.driver.start();
+    expect(visible(h.host)).toEqual(['A']);
+    h.clock.advance(499);
+    expect(visible(h.host)).toEqual(['A']); // the override dwell, not the item's 5000
+    h.clock.advance(1);
+    h.clock.advance(400); // transition completes
+    expect(visible(h.host)).toEqual(['B']);
+    h.clock.advance(500); // B's own 5000ms dwell is overridden too
+    h.clock.advance(400);
+    expect(visible(h.host)).toEqual(['C']);
+  });
+
+  it('D-102 Phase 2 — no dwellOverrideMs ⇒ the authored dwells are untouched', () => {
+    const h = make({
+      items: [
+        { id: 'a', text: 'A', dwellMs: 500 },
+        { id: 'b', text: 'B' },
+      ],
+    });
+    h.driver.start();
+    h.clock.advance(500);
+    h.clock.advance(400);
+    expect(visible(h.host)).toEqual(['B']); // a's own 500ms dwell, exactly as before
+  });
+
   it('manual: no dwell timers run — only next() advances', () => {
     const h = make({ advance: 'manual' });
     h.driver.start();

@@ -40,13 +40,35 @@ export interface TickerTimingOverride {
 }
 
 /**
+ * D-102 Phase 2 — a single sequence's session-only timing override (its own `repeat` + per-item
+ * `dwellMs`), addressed by the sequence's element id within {@link TimingOverride.sequences}. The
+ * dwell applies to EVERY item (it wins over an item's own authored dwell in the runtime).
+ */
+export interface SequenceTimingOverride {
+  repeat?: number | 'infinite';
+  dwellMs?: number;
+}
+
+/**
+ * D-102 Phase 2 — a single COUNTDOWN clock's session-only timing override: the duration it counts
+ * down from in the preview, addressed by the clock's element id within
+ * {@link TimingOverride.countdowns}. It replaces the element's authored target — a duration OR an
+ * absolute datetime deadline — for this run, which is the only way to rehearse a countdown to a
+ * wall-clock time. `wall` / `countup` clocks never complete and are never listed.
+ */
+export interface CountdownTimingOverride {
+  /** `undefined` = no override (the element keeps its authored target for the run). */
+  durationMs?: number | undefined;
+}
+
+/**
  * D-020/D-028 — a session-only playout override. Held by the preview modal,
  * applied by rebuilding the preview runtime (`playoutOverride`/`scopeOverrides`),
  * and never written back to the stored template. Per-scope LIFECYCLE axes: `mode`
  * (open/close cycles), `holdSource` (timed `holdMs` vs. content completing), and
- * `repeat`. D-102 Phase 1 — ticker timing is PER-ELEMENT: `tickers` maps a ticker's
- * element id to its own `repeat`/`cycleBoundary`, so two tickers in one scope are
- * tuned independently.
+ * `repeat`. D-102 — CONTENT timing is PER-ELEMENT, keyed by the element's id: `tickers`
+ * (Phase 1 — repeat / cycle-seam), `sequences` and `countdowns` (Phase 2), so two content
+ * elements in one scope are tuned independently.
  */
 export interface TimingOverride {
   mode?: PlayoutMode;
@@ -54,6 +76,8 @@ export interface TimingOverride {
   holdMs?: number;
   repeat?: number | 'infinite';
   tickers?: Record<string, TickerTimingOverride>;
+  sequences?: Record<string, SequenceTimingOverride>;
+  countdowns?: Record<string, CountdownTimingOverride>;
 }
 
 const MODE_LABELS: Record<PlayoutMode, string> = {
@@ -291,6 +315,123 @@ export function PreviewTickerTimingRow({
           <option value="drain">Drain — empty band between passes</option>
         </Select>
       </div>
+    </>
+  );
+}
+
+/**
+ * D-102 Phase 2 — one SEQUENCE's session-only timing row (passes + per-item dwell), addressed by
+ * the sequence's element id. Mirrors {@link PreviewTickerTimingRow}: one row per sequence, so two
+ * sequences in a scope are tuned independently; `defaults` are the element's authored resting
+ * values and the patch carries only what the operator changed. The dwell is the time EVERY item is
+ * shown for in the preview (it wins over an item's own authored dwell — a preview dwell that a
+ * per-item dwell could silently veto would be a dead control).
+ */
+export function PreviewSequenceTimingRow({
+  name,
+  defaults,
+  override,
+  onChange,
+}: {
+  name: string;
+  defaults: { repeat: number | 'infinite'; defaultDwellMs: number };
+  override: SequenceTimingOverride;
+  onChange: (patch: SequenceTimingOverride) => void;
+}): JSX.Element {
+  const repeat = override.repeat ?? defaults.repeat;
+  const repeatInfinite = repeat === 'infinite';
+  const dwellMs = override.dwellMs ?? defaults.defaultDwellMs;
+  return (
+    <>
+      <div className={s.row}>
+        <span className={s.label}>{name} — passes</span>
+        <div className={t.repeatControls}>
+          {repeatInfinite ? (
+            <span className={t.muted}>∞ until stop</span>
+          ) : (
+            <RealtimeNumberInput
+              className={t.num}
+              min={1}
+              step={1}
+              value={typeof repeat === 'number' ? repeat : 1}
+              onCommit={(n) => onChange({ repeat: Math.max(1, Math.round(n)) })}
+              ariaLabel={`Preview ${name} sequence repeat count`}
+            />
+          )}
+          <label className={t.checkLabel}>
+            <input
+              type="checkbox"
+              checked={repeatInfinite}
+              onChange={(e) => onChange({ repeat: e.target.checked ? 'infinite' : 1 })}
+            />
+            infinite
+          </label>
+        </div>
+      </div>
+      <div className={s.row}>
+        <span className={s.label}>{name} — item dwell</span>
+        <div className={t.inline}>
+          <RealtimeNumberInput
+            className={t.num}
+            min={100}
+            step={100}
+            value={dwellMs}
+            onCommit={(n) => onChange({ dwellMs: Math.max(100, Math.round(n)) })}
+            ariaLabel={`Preview ${name} sequence item dwell in milliseconds`}
+          />
+          <span className={t.muted}>ms</span>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * D-102 Phase 2 — one COUNTDOWN clock's session-only timing row: the duration it counts down from
+ * in the preview, addressed by the clock's element id. `0` clears the override (back to the
+ * element's authored target), so a duration-target countdown starts at its authored ms and a
+ * datetime-target countdown starts at 0 (= keep the deadline) with its deadline shown as a hint —
+ * setting a duration is the only way to rehearse it without waiting for the wall clock. `wall` /
+ * `countup` clocks are never listed (they never complete: nothing to tune).
+ */
+export function PreviewCountdownTimingRow({
+  name,
+  defaults,
+  override,
+  onChange,
+}: {
+  name: string;
+  /** The authored target: `durationMs` for a duration target, `deadline` (ISO) for a datetime one. */
+  defaults: { durationMs?: number | undefined; deadline?: string | undefined };
+  override: CountdownTimingOverride;
+  onChange: (patch: CountdownTimingOverride) => void;
+}): JSX.Element {
+  const durationMs = override.durationMs ?? defaults.durationMs ?? 0;
+  return (
+    <>
+      <div className={s.row}>
+        <span className={s.label}>{name} — duration</span>
+        <div className={t.inline}>
+          <RealtimeNumberInput
+            className={t.num}
+            min={0}
+            step={1000}
+            value={durationMs}
+            // 0 = no override: the clock keeps its authored target for the run.
+            onCommit={(n) =>
+              onChange({ durationMs: n > 0 ? Math.max(1, Math.round(n)) : undefined })
+            }
+            ariaLabel={`Preview ${name} countdown duration in milliseconds`}
+          />
+          <span className={t.muted}>ms</span>
+        </div>
+      </div>
+      {defaults.deadline !== undefined && (
+        <p className={t.hint}>
+          {name} counts down to {defaults.deadline} — set a duration to rehearse it now (0 keeps the
+          deadline).
+        </p>
+      )}
     </>
   );
 }

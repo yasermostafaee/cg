@@ -84,6 +84,13 @@ export interface SequenceDriverOptions {
   items: SequenceDriverItem[];
   /** Per-item display time when the item carries no own `dwellMs`. */
   defaultDwellMs: number;
+  /**
+   * D-102 Phase 2 — a session-only PREVIEW dwell that wins over BOTH the item's own `dwellMs` and
+   * `defaultDwellMs`, so it applies to EVERY item (a preview dwell that skipped items carrying
+   * their own dwell would be a dead control) and survives a bound-list `update()` (which replaces
+   * the items, and with them any per-item dwell). Absent ⇒ the authored dwells (the default).
+   */
+  dwellOverrideMs?: number | undefined;
   /** `auto` = dwell timer + next(); `manual` = only next() advances. */
   advance: 'auto' | 'manual';
   transitionIn: SequenceEdge;
@@ -373,9 +380,12 @@ export class SequenceDriver {
     this.phasePausedAccum = 0;
   }
 
-  /** The dwell for the on-screen item: its own dwellMs, else the element's. */
+  /**
+   * The dwell for the on-screen item: D-102 Phase 2 — the session `dwellOverrideMs` if set (it wins
+   * over every authored dwell), else the item's own `dwellMs`, else the element's default.
+   */
   private currentDwellMs(): number {
-    return this.current?.dwellMs ?? this.o.defaultDwellMs;
+    return this.o.dwellOverrideMs ?? this.current?.dwellMs ?? this.o.defaultDwellMs;
   }
 
   private transitionSpec(): SequenceTransitionSpec {
