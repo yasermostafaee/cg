@@ -513,6 +513,25 @@ export class CasparRuntime {
     // deliberately does NOT warn — observed occupancy only (design §3).
     if (!adopted) this.#detectOwnedOccupancy(slot, itemId);
 
+    // B-082 — a load is NOT an on-air action, so a dead link is not a load FAILURE.
+    // With no reachable server there is simply nothing to pre-roll: skip the `CG ADD`
+    // instead of attempting it and failing. Attempting it acked `amcp-send-failed` and
+    // parked the row in ERROR — which told the operator "this item is broken" when the
+    // only true statement was "the server isn't there". The item stays on the stack at
+    // the `loaded` its intent already set, and nothing is on air to hide (no server is
+    // reachable), so the Reconciler's "never claim idle/loaded over a live graphic"
+    // doctrine is untouched.
+    //
+    // This is NOT the deferral R-006 forbids: nothing is queued for later delivery. The
+    // item just has no live producer — the SAME condition every item is in after a
+    // reconnect (`#loaded` is per-server and cleared on drop, :314/:924). `take`/`update`
+    // already recover from it by lazily re-issuing the `CG ADD` before the `CG PLAY`
+    // (B-039, :606/:660), pulling template + current fields from the Reconciler at the
+    // moment of use rather than replaying a stored command. So the item plays normally
+    // once the link is back, and until then the on-air verbs stay REFUSED by `#linkDown()`.
+    // No AMCP verb is added and the ADD→PLAY order is preserved.
+    if (this.#linkDown()) return { accepted: true };
+
     // B-039 — `CG ADD` only (play-on-load OFF in the builder): the producer is
     // loaded, NOT playing. The operator's take issues the `CG PLAY`.
     const ok = await this.#sendAdd(itemId, slot, templateId, fields, seq);

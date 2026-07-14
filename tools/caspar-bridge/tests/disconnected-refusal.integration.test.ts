@@ -139,3 +139,88 @@ describe('on-air verbs while disconnected — R-006', () => {
     expect(mock.layerState({ channel: 1, layer: 10 })?.onAir).toBe(true);
   });
 });
+
+/**
+ * B-082 — a LOAD is not an on-air action, and a dead link is not a load failure.
+ *
+ * The counterpart to R-006 above, and its boundary: `take`/`update`/`out` must reach the
+ * wire to mean anything, so they are refused. A load only puts the item on the operator's
+ * stack — nothing reaches air — so refusing it (or, as it did, ATTEMPTING the pre-roll
+ * `CG ADD`, failing on the dead link, and acking `amcp-send-failed`) parked every row in
+ * ERROR. "This item is broken" was never true; "the server isn't there" was.
+ *
+ * The fix skips the pre-roll rather than deferring it. Nothing is queued — the item merely
+ * has no live producer, which is the SAME condition every item is in after a reconnect
+ * (`#loaded` is per-server, cleared on drop). B-039's lazy re-ADD already covers exactly
+ * that: `take` re-issues the `CG ADD` before the `CG PLAY`, pulling the template and the
+ * CURRENT fields from the Reconciler at the moment of use rather than replaying a stored
+ * command. So the offline-loaded item plays normally once the link is back — and until then
+ * the on-air verbs stay refused.
+ */
+describe('load while disconnected — B-082', () => {
+  it('ACCEPTS the load and rests the item at `loaded` — never ERROR', async () => {
+    const rt = await bootDisconnected();
+
+    await expect(rt.load('item1', 'lower-third', {})).resolves.toEqual({ accepted: true });
+
+    const item = rt.stackSnapshot().find((i) => i.itemId === 'item1');
+    expect(item?.status).toBe('loaded');
+    // The regression, stated as the assertion that would have caught it.
+    expect(item?.status).not.toBe('error');
+    expect(item?.errorCode).toBeUndefined();
+    expect(item?.pending).toBe(false);
+  });
+
+  it('does not make the item playable — the on-air verbs stay REFUSED', async () => {
+    const rt = await bootDisconnected();
+    await rt.load('item1', 'lower-third', {});
+
+    // Offline safety is NARROWED to the on-air verbs, not removed.
+    await expect(rt.take('item1')).resolves.toEqual({
+      accepted: false,
+      errorCode: 'disconnected',
+    });
+    expect(rt.stackSnapshot().find((i) => i.itemId === 'item1')?.status).toBe('loaded');
+  });
+
+  it('queues NOTHING: reconnecting does not put the skipped pre-roll on air by itself', async () => {
+    const oscPort = await freeUdpPort();
+    const rt = new CasparRuntime(connectionFor(1, oscPort));
+    runtime = rt;
+    rt.start();
+    await rt.startServing();
+    rt.templateImport(TEMPLATE, HTML);
+    await rt.load('item1', 'lower-third', {});
+
+    mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
+    await rt.setConfig(connectionFor(mock.amcpPort, oscPort));
+    await rt.whenServerHealthy(HEALTH_MS);
+
+    // The load was not deferred and replayed — coming back does not, by itself, put a
+    // graphic on air. Only the operator's take does (R-006's "refuse, never queue" holds).
+    expect(mock.layerState({ channel: 1, layer: 10 })?.onAir).not.toBe(true);
+  });
+
+  it('PLAYS normally once the server is back — the take lazily re-ADDs before the PLAY', async () => {
+    const oscPort = await freeUdpPort();
+    const rt = new CasparRuntime(connectionFor(1, oscPort));
+    runtime = rt;
+    rt.start();
+    await rt.startServing();
+    rt.templateImport(TEMPLATE, HTML);
+
+    await rt.load('item1', 'lower-third', {});
+    expect(rt.stackSnapshot().find((i) => i.itemId === 'item1')?.status).toBe('loaded');
+
+    mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
+    await rt.setConfig(connectionFor(mock.amcpPort, oscPort));
+    await rt.whenServerHealthy(HEALTH_MS);
+
+    // The item the operator loaded while the server was down takes exactly like any other.
+    // `CG PLAY` only renders over a live producer (B-039), so an on-air layer here IS the
+    // proof that the lazy re-ADD supplied the pre-roll the offline load never sent.
+    expect((await rt.take('item1')).accepted).toBe(true);
+    await expect(mock.waitForCgAddResolution({ channel: 1, layer: 10 })).resolves.toBe('resolved');
+    expect(mock.layerState({ channel: 1, layer: 10 })?.onAir).toBe(true);
+  });
+});
