@@ -70,7 +70,9 @@ export function StackRow({
   // stops the operator from believing a click did something. Test mode is deliberately NOT
   // gated — simulating the on-air verbs is the whole point of it, and the TEST MODE banner
   // makes it impossible to mistake for air.
-  const linkDown = useLink() === 'disconnected';
+  const link = useLink();
+  const linkDown = link === 'disconnected';
+  const simulated = link === 'offline-mock';
   const offlineReason = linkDown
     ? 'Not connected — this command cannot reach CasparCG. Reconnect and reissue it.'
     : undefined;
@@ -81,7 +83,8 @@ export function StackRow({
       style={styles.row}
       onClick={() => onSelect(item.itemId)}
     >
-      <StatusBadge status={item.status} pending={item.pending} />
+      {/* R-006 — in test mode an air-claim is badged SIM, never the broadcast red. */}
+      <StatusBadge status={item.status} pending={item.pending} simulated={simulated} />
       <div style={styles.body}>
         <div style={styles.title}>
           {title}

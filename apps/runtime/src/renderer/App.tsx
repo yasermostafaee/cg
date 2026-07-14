@@ -14,6 +14,7 @@ import { LockOverlay } from './features/lock/LockOverlay.js';
 import { CommandErrorToast } from './features/status/CommandErrorToast.js';
 import { StatusBar } from './features/status/StatusBar.js';
 import { useConnections } from './hooks/useConnections.js';
+import { useLink } from './hooks/useLink.js';
 import { useLock } from './hooks/useLock.js';
 import { useOrphans } from './hooks/useOrphans.js';
 import { useOwnedOccupancy } from './hooks/useOwnedOccupancy.js';
@@ -65,6 +66,7 @@ export function App(): JSX.Element {
   const items = useStack();
   const lock = useLock();
   const health = useConnections();
+  const link = useLink();
   const orphans = useOrphans();
   const ownedOccupancy = useOwnedOccupancy();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -81,7 +83,12 @@ export function App(): JSX.Element {
           not a pill: the pill lost to the green HEALTHY pill beside it, and the operator
           believed a graphic was on air. Renders nothing when the link is live. */}
       <ConnectionBanner />
-      <FailoverBanner health={health} />
+      {/* R-006 — the failover banner describes REAL servers. In test mode there are none,
+          and the mock now honestly reports them `disconnected`, so it would shout
+          "PRIMARY A unhealthy" about hardware that does not exist — new noise, and a fresh
+          implication that a real server is out there, broken. The TEST MODE banner is the
+          truth in that mode and supersedes it. */}
+      {link !== 'offline-mock' && <FailoverBanner health={health} />}
       <div style={styles.shell}>
         <LibraryPanel />
         <section style={styles.workspace}>

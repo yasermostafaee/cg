@@ -1,4 +1,5 @@
 import { useConnections } from '../../hooks/useConnections.js';
+import { useLink } from '../../hooks/useLink.js';
 import { useLock } from '../../hooks/useLock.js';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -63,6 +64,7 @@ function sessionLabel(state: string): SessionLabel {
 export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Element {
   const health = useConnections();
   const lock = useLock();
+  const simulated = useLink() === 'offline-mock';
 
   if (health === null) {
     return (
@@ -82,21 +84,32 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
   return (
     <footer style={styles.bar} aria-label="Status bar">
       <LinkIndicator />
-      <span className="cg-pill">
-        <span style={styles.primary}>● PRIMARY {health.primary.label}</span>{' '}
-        <span style={primary.style}>{primary.text}</span>
-      </span>
-      {health.backup !== undefined && backup !== null ? (
-        <span className="cg-pill">
-          <span style={styles.backup}>○ BACKUP {health.backup.label}</span>{' '}
-          <span style={backup.style}>{backup.text}</span>
+      {simulated ? (
+        // R-006 — in test mode there is no server to describe. The per-server pills used to
+        // read "PRIMARY A HEALTHY" in green here, straight from the mock's seed, which is
+        // the claim that convinced the operator a graphic was on air. Say the true thing.
+        <span className="cg-pill" aria-label="Server status">
+          <span style={styles.failedHard}>⚠ NO SERVER — SIMULATED</span>
         </span>
       ) : (
-        <span className="cg-pill">
-          <span style={styles.backup}>○ NO BACKUP</span>
-        </span>
+        <>
+          <span className="cg-pill">
+            <span style={styles.primary}>● PRIMARY {health.primary.label}</span>{' '}
+            <span style={primary.style}>{primary.text}</span>
+          </span>
+          {health.backup !== undefined && backup !== null ? (
+            <span className="cg-pill">
+              <span style={styles.backup}>○ BACKUP {health.backup.label}</span>{' '}
+              <span style={backup.style}>{backup.text}</span>
+            </span>
+          ) : (
+            <span className="cg-pill">
+              <span style={styles.backup}>○ NO BACKUP</span>
+            </span>
+          )}
+          <span className="cg-pill">{health.strategy}</span>
+        </>
       )}
-      <span className="cg-pill">{health.strategy}</span>
       <span style={styles.spacer} />
       <AsyncButton
         variant="caution"

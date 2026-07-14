@@ -61,14 +61,21 @@ export function seedConfig(): ConnectionConfig {
 }
 
 /**
- * Simulated "both servers healthy" snapshot. This is mock state — there is
- * no real CasparCG behind it until the bridge tool is wired up.
+ * R-006 — the mock reports NO connected server, because there is none.
+ *
+ * This used to seed BOTH servers as `state: 'healthy', amcpAxisOk: true`. So in test mode
+ * the footer showed an amber "OFFLINE (mock)" pill sitting directly beside a green
+ * "PRIMARY A HEALTHY" — two contradictory claims, same size, same row — and the reassuring
+ * one won. The operator pressed PLAY, saw ON AIR, and believed a graphic was up. Nothing
+ * was, and no server had ever existed to put it there.
+ *
+ * A simulation may simulate playout. It may NOT claim a healthy link to hardware that is
+ * not there: that is the claim the operator actually trusts.
  */
 export function seedHealth(currentPrimary: 'A' | 'B' = 'A'): ConnectionHealth {
-  const at = new Date().toISOString();
   return {
-    primary: { label: 'A', state: 'healthy', amcpAxisOk: true, oscFreshAt: at },
-    backup: { label: 'B', state: 'healthy', amcpAxisOk: true, oscFreshAt: at },
+    primary: { label: 'A', state: 'disconnected', amcpAxisOk: false },
+    backup: { label: 'B', state: 'disconnected', amcpAxisOk: false },
     currentPrimary,
     strategy: 'mirror-sync',
   };

@@ -58,8 +58,10 @@ test.describe('bridge link indicator', () => {
     await expect(alert).toContainText('refused, not');
 
     // No server is claimed healthy while nothing is reachable (the green pill that used to
-    // sit beside the amber one, and won).
-    await expect(page.getByText('HEALTHY')).toHaveCount(0);
+    // sit beside the amber one, and won). Scoped + case-sensitive: a bare
+    // getByText('HEALTHY') is a substring, case-INsensitive match, so it also hits
+    // "unhealthy" and would pass for the wrong reason.
+    await expect(page.getByLabel('Status bar')).not.toContainText('HEALTHY');
   });
 
   test('boot with a reachable bridge → LIVE indicator', async ({ page }) => {

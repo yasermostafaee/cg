@@ -41,7 +41,10 @@ export function CommandErrorToast(): JSX.Element | null {
 
   if (message === null) return null;
   return (
-    <div style={styles.toast} role="alert">
+    // R-006 — named, because `role="alert"` is no longer unique: the connection banner is
+    // deliberately an alert too ("nothing can reach air" IS an alert). Callers that mean
+    // THIS toast must be able to say so.
+    <div style={styles.toast} role="alert" aria-label="Command error">
       {message}
     </div>
   );
