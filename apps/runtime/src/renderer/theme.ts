@@ -106,6 +106,9 @@ export function badgeTone(status: StackItemStatus, pending: boolean): BadgeTone 
   if (status === 'playing') return pending ? 'transient' : 'onair';
   if (status === 'updating') return 'transient';
   if (status === 'unconfirmed') return 'attention';
+  // B-086 — link down, on-air claim unverifiable: muted grey (the health-UNKNOWN
+  // tone), NEVER the broadcast red and NEVER the amber of `unconfirmed`.
+  if (status === 'unverified') return 'idle';
   if (status === 'exiting') return 'exit';
   if (status === 'loaded') return 'ready';
   return 'idle';
@@ -134,6 +137,10 @@ export function airStateVisual(status: StackItemStatus, pending: boolean): AirSt
   // time; the on-air result is unknown. Minimal visual for now (the queued
   // runtime UI-polish item restyles all badge states).
   if (status === 'unconfirmed') return { color: colors.pending, icon: '?', label: 'UNCONFIRMED' };
+  // B-086 — the CasparCG link is down: this item WAS on air, but the wire can no
+  // longer confirm it. Muted grey (health-UNKNOWN tone); the last-known "ON AIR"
+  // lives in the row's tooltip. Restores to on-air or resets to idle on reconnect.
+  if (status === 'unverified') return { color: colors.textMuted, icon: '◌', label: 'WAS ON AIR' };
   if (status === 'exiting') return { color: colors.exit, icon: '◐', label: 'EXIT' };
   if (status === 'loaded') return { color: colors.ready, icon: '▸', label: 'READY' };
   return { color: colors.idle, icon: '○', label: 'IDLE' };

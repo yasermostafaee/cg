@@ -22,6 +22,13 @@ export const StackItemStatusSchema = z.enum([
   // command and no AMCP ack arrived within the bound; the on-air result is
   // unknown. A resting state (never a spinner); the next intent overwrites it.
   'unconfirmed',
+  // B-086 — the CasparCG LINK is down, so an ON AIR claim can no longer be
+  // verified: the item WAS on air but the wire no longer backs it. Distinct from
+  // `unconfirmed` (one command's ack timed out on a LIVE link) — this is the
+  // whole link. Rendered muted "WAS ON AIR" (never red, never amber). On
+  // reconnect it restores to on-air (producer still there) or resets to idle
+  // (layer empty), per the occupancy check.
+  'unverified',
   'error',
   'disconnected',
 ]);

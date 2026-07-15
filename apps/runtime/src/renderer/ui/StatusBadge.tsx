@@ -29,9 +29,19 @@ export function StatusBadge({
   const claimsAir = tone === 'onair';
   const label = simulated && claimsAir ? `SIM ${visual.label}` : visual.label;
   const shownTone = simulated && claimsAir ? 'attention' : tone;
+  // B-086 — the muted "WAS ON AIR" keeps the last-known reading in the tooltip, the way
+  // B-081's health pill keeps "Last known before the link dropped: HEALTHY".
+  const title =
+    status === 'unverified'
+      ? 'Last confirmed ON AIR before the CasparCG link dropped — reconnect to re-verify.'
+      : undefined;
 
   return (
-    <span className={`cg-badge cg-badge--${shownTone}`} aria-label={`status ${label}`}>
+    <span
+      className={`cg-badge cg-badge--${shownTone}`}
+      aria-label={`status ${label}`}
+      title={title}
+    >
       <span className="cg-badge__icon" aria-hidden="true">
         {visual.icon}
       </span>

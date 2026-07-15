@@ -55,6 +55,13 @@ the SPA↔bridge WS is down), [bugs-runtime.md](bugs-runtime.md), change dir
 any of the three bug files; its only prior occurrence was this file's own "next free" pointer).
 The space stays contiguous: `B-001` … `B-085`, no gaps. **Next free: `B-086`.**
 
+**Re-audited 2026-07-15** against `main` (`89c1163`, after #334). `B-086` has since been taken —
+the honest-ON-AIR-across-CasparCG-link-loss fix (the stack kept a confident red ● ON AIR after
+the link dropped), [bugs-runtime.md](bugs-runtime.md), change dir
+`openspec/changes/runtime-onair-honest-linkloss/`. Verified free before use (no heading claimed
+it in any of the three bug files; its only prior occurrence was this file's own "next free"
+pointer). The space stays contiguous: `B-001` … `B-086`, no gaps. **Next free: `B-087`.**
+
 **Exactly two numbers are ambiguous. Every other number names exactly one bug.**
 
 | Number     | Status                                | Who owns it                                                                                                                                                                                                                             |
