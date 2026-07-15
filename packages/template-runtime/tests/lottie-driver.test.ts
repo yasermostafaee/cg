@@ -95,6 +95,25 @@ describe('LottieDriver — driven-frame render', () => {
     expect(last(handle)).toBe(3);
   });
 
+  it('poster() paints the settled hold frame (introEnd), not the in-frame', () => {
+    // The static editor canvas must show the settled graphic, not the invisible
+    // intro-start (frame `ip`, where an AE intro has scaled the graphic to nothing).
+    const { driver, handle } = makeDriver({ ip: 0, introEnd: 5 });
+    driver.poster();
+    expect(last(handle)).toBe(5);
+  });
+
+  it('a subsequent play (reset + start) overrides the poster and plays from the in-frame', () => {
+    const { driver, handle, clock } = makeDriver({ ip: 0, introEnd: 5 });
+    driver.poster(); // canvas poster at introEnd
+    expect(last(handle)).toBe(5);
+    driver.reset(); // play() path re-arms from ip
+    expect(last(handle)).toBe(0);
+    driver.start();
+    clock.advance(20); // intro advances from ip
+    expect(last(handle)).toBe(2);
+  });
+
   it('start() paints the in-frame synchronously and advances by the injected clock', () => {
     const { driver, handle, clock } = makeDriver();
     driver.reset();

@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures/designer.js';
+import type { DesignerApp } from './fixtures/designer.js';
 
 /**
  * D-125 Phase 1 — the Lottie element driven through the real UI: import a bodymovin
@@ -72,6 +73,106 @@ const BODYMOVIN = JSON.stringify({
   ],
 });
 
+// A bodymovin export whose INTRO animates the graphic ON from nothing: the layer
+// scale keyframes 0 → 100 over frames 0..10 (intro-end at 10). So frame 0 (`ip`) is
+// visually EMPTY (scale 0) and the settled/hold frame (intro-end = 10) is full-size —
+// the shape a real AE "furniture" export has. The editor canvas must show the settled
+// frame, not the invisible intro-start.
+const ANIMATED_INTRO = JSON.stringify({
+  v: '5.7.0',
+  fr: 30,
+  ip: 0,
+  op: 60,
+  w: 400,
+  h: 200,
+  nm: 'intro-furniture',
+  ddd: 0,
+  assets: [],
+  layers: [
+    {
+      ddd: 0,
+      ind: 1,
+      ty: 4,
+      nm: 'bar',
+      sr: 1,
+      ks: {
+        o: { a: 0, k: 100 },
+        r: { a: 0, k: 0 },
+        p: { a: 0, k: [200, 100, 0] },
+        a: { a: 0, k: [0, 0, 0] },
+        // Intro: scale 0 → 100 over frames 0..10 (frame 0 is invisible).
+        s: {
+          a: 1,
+          k: [
+            {
+              t: 0,
+              s: [0, 0, 100],
+              i: { x: [0.5, 0.5, 0.5], y: [1, 1, 1] },
+              o: { x: [0.5, 0.5, 0.5], y: [0, 0, 0] },
+            },
+            { t: 10, s: [100, 100, 100] },
+          ],
+        },
+      },
+      ao: 0,
+      shapes: [
+        {
+          ty: 'gr',
+          it: [
+            {
+              ty: 'rc',
+              d: 1,
+              s: { a: 0, k: [300, 80] },
+              p: { a: 0, k: [0, 0] },
+              r: { a: 0, k: 0 },
+            },
+            { ty: 'fl', c: { a: 0, k: [1, 0.2, 0.2, 1] }, o: { a: 0, k: 100 }, r: 1 },
+            {
+              ty: 'tr',
+              p: { a: 0, k: [0, 0] },
+              a: { a: 0, k: [0, 0] },
+              s: { a: 0, k: [100, 100] },
+              r: { a: 0, k: 0 },
+              o: { a: 0, k: 100 },
+            },
+          ],
+          nm: 'Group',
+        },
+      ],
+      ip: 0,
+      op: 60,
+      st: 0,
+      bm: 0,
+    },
+  ],
+  markers: [
+    { tm: 10, cm: 'intro-end', dr: 0 },
+    { tm: 50, cm: 'outro-start', dr: 0 },
+  ],
+});
+
+/** Import a bodymovin JSON via Project Assets and drag it onto the canvas. */
+async function importAndPlaceLottie(
+  app: DesignerApp,
+  filename: string,
+  json: string,
+): Promise<void> {
+  await app.page.getByRole('button', { name: 'Project assets', exact: true }).click();
+  await app.page.getByRole('button', { name: 'Add asset', exact: true }).click();
+  const chooser = app.page.waitForEvent('filechooser');
+  await app.page.getByRole('menuitem', { name: /Lottie/ }).click();
+  await (
+    await chooser
+  ).setFiles({ name: filename, mimeType: 'application/json', buffer: Buffer.from(json) });
+  const panel = app.page.locator('aside[aria-label="Project assets"]');
+  const tile = panel
+    .locator('[draggable="true"]')
+    .filter({ hasText: filename.replace(/\.json$/, '') })
+    .first();
+  await expect(tile).toBeVisible();
+  await tile.dragTo(app.canvas, { targetPosition: { x: 220, y: 130 } });
+}
+
 test.describe('Lottie element (D-125 Phase 1)', () => {
   test('import → place → renders a player in the canvas + preview; the inspector is opaque', async ({
     app,
@@ -119,5 +220,37 @@ test.describe('Lottie element (D-125 Phase 1)', () => {
     await app.play();
     await expect(previewLottie).toBeVisible(); // revealed + playing on the injected clock
     await app.stop();
+  });
+
+  test('a placed Lottie whose intro animates ON renders a settled frame on the EDITOR canvas (not the invisible frame 0)', async ({
+    app,
+  }) => {
+    await app.newProject('Lottie canvas');
+    await importAndPlaceLottie(app, 'intro-furniture.json', ANIMATED_INTRO);
+
+    // The player mounts (an <svg> exists) — Phase 1 already guaranteed this.
+    const svg = app.canvasFrame.locator('[data-cg-element-id] svg').first();
+    await expect(svg).toBeAttached();
+
+    // The DESIGN SURFACE is static (it never plays), so it must park on a
+    // REPRESENTATIVE frame — the settled hold frame (intro-end), where the graphic is
+    // fully ON — not `ip` (frame 0), where the intro has scaled the graphic to nothing.
+    // Assert the RENDERED CONTENT has a non-zero painted size: getBBox() collapses to
+    // ~0 at the scale-0 intro-start and is full-size at the settled frame. This bites
+    // the pre-fix "empty box on the canvas" state.
+    await expect
+      .poll(
+        async () =>
+          svg.evaluate((el) => {
+            try {
+              const b = (el as unknown as SVGGraphicsElement).getBBox();
+              return Math.min(b.width, b.height);
+            } catch {
+              return 0;
+            }
+          }),
+        { timeout: 5000 },
+      )
+      .toBeGreaterThan(5);
   });
 });

@@ -123,11 +123,12 @@ beforeEach(() => {
 });
 
 describe('createRuntime — Lottie element wiring (D-125 Phase 1)', () => {
-  it('mounts the player from lottieAssets and paints the in-frame for the static preview', () => {
+  it('mounts the player from lottieAssets and paints the settled poster frame for the static canvas', () => {
     createRuntime(lottieScene(), { skipFontLoad: true, installGlobals: false, lottieAssets });
     expect(handles).toHaveLength(1);
-    // reset() at mount paints the in-frame (ip = 0).
-    expect(handles[0]?.frames.at(-1)).toBe(0);
+    // D-125 — poster() at mount paints the HOLD frame (introEnd = 5), NOT `ip`: the
+    // static editor canvas must show the settled graphic, not the invisible intro-start.
+    expect(handles[0]?.frames.at(-1)).toBe(5);
     // The mount container is a real element node (not a placeholder).
     const node = document.querySelector<HTMLElement>('[data-cg-element-id="lot"]');
     expect(node).not.toBeNull();
