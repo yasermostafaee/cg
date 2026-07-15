@@ -38,7 +38,8 @@
         "$TURBO_ROOT$/pnpm-workspace.yaml",
         "$TURBO_ROOT$/apps/*/package.json",
         "$TURBO_ROOT$/packages/*/package.json",
-        "$TURBO_ROOT$/tools/*/package.json"
+        "$TURBO_ROOT$/tools/*/package.json",
+        "$TURBO_ROOT$/docs/prd/**"
       ]
     },
     "test:integration": {
