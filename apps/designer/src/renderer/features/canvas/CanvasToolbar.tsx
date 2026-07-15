@@ -3,7 +3,6 @@ import {
   ArrowDownUp,
   Circle,
   Clock,
-  Film,
   Hand,
   Image,
   MousePointer2,
@@ -45,9 +44,10 @@ const TOOLS: readonly ToolEntry[] = [
   // D-040 — the logo/image tool stamps the selected Shared Library image (the
   // shared source it needed now exists); empty library ⇒ a hint, no silent insert.
   { id: 'image', label: 'Image (logo)', icon: Image },
-  // D-125 — the Lottie tool: drag a .json from Project Assets is the primary path;
-  // the tool click surfaces a hint pointing there (a Lottie needs an imported asset).
-  { id: 'lottie', label: 'Lottie', icon: Film },
+  // D-125 — there is deliberately NO Lottie drawing tool: a Lottie is asset-backed,
+  // so it enters via Project Assets (import → allowlist-validated) and drag-drop onto
+  // the canvas, not a toolbar button (which would be a redundant no-op needing an
+  // imported asset first).
   { id: 'ticker', label: 'Ticker', icon: MoveHorizontal },
   { id: 'sequence', label: 'Sequence', icon: ArrowDownUp },
   { id: 'clock', label: 'Clock', icon: Clock },

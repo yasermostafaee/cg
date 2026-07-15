@@ -471,16 +471,8 @@ export function CanvasOverlay({
       void insertSharedLogo(scenePoint);
       return;
     }
-    if (tool === 'lottie') {
-      // D-125 — a Lottie needs an imported asset, so (like the D-040 logo tool's empty
-      // case) clicking the tool points the operator to the drag-drop path rather than
-      // inserting a placeholder with no animation.
-      designerStore.showNotice(
-        'Drag a Lottie (.json) from Project Assets onto the canvas to place it.',
-      );
-      designerStore.setTool('cursor');
-      return;
-    }
+    // D-125 — a Lottie has NO drawing tool (it is asset-backed): it enters via the
+    // drag-drop path in `onDrop` below, not a canvas click.
   }
 
   function onContextMenu(e: React.MouseEvent<HTMLDivElement>): void {
