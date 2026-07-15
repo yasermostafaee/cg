@@ -126,13 +126,27 @@ describe('createRuntime — Lottie element wiring (D-125 Phase 1)', () => {
   it('mounts the player from lottieAssets and paints the settled poster frame for the static canvas', () => {
     createRuntime(lottieScene(), { skipFontLoad: true, installGlobals: false, lottieAssets });
     expect(handles).toHaveLength(1);
-    // D-125 — poster() at mount paints the HOLD frame (introEnd = 5), NOT `ip`: the
+    // D-125 — poster() at mount paints the marked HOLD frame (introEnd = 5), NOT `ip`: the
     // static editor canvas must show the settled graphic, not the invisible intro-start.
     expect(handles[0]?.frames.at(-1)).toBe(5);
     // The mount container is a real element node (not a placeholder).
     const node = document.querySelector<HTMLElement>('[data-cg-element-id="lot"]');
     expect(node).not.toBeNull();
     expect(node?.dataset['cgPlaceholderFor']).toBeUndefined();
+  });
+
+  it('a MARKER-LESS clip posters the clip MIDPOINT, not `op` (the invisible outro-end)', () => {
+    // The canonical furniture bug: with no phase markers `introEnd` falls back to `op`
+    // (the LAST frame = outro-END, where the graphic has animated OFF → invisible), so
+    // parking there leaves the editor canvas empty. The runtime must poster the MIDPOINT
+    // of [ip, op] instead — squarely in the held/visible region. ip:0, op:100 → 50.
+    const scene = lottieScene();
+    const lottie = scene.layers[0]?.children[0];
+    if (lottie === undefined || lottie.type !== 'lottie') throw new Error('bad fixture');
+    delete (lottie as { phases?: unknown }).phases; // a marker-less import: no phases at all
+    createRuntime(scene, { skipFontLoad: true, installGlobals: false, lottieAssets });
+    expect(handles).toHaveLength(1);
+    expect(handles[0]?.frames.at(-1)).toBe(50);
   });
 
   it('an UNRESOLVED asset renders an empty container and no driver', () => {

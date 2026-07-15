@@ -780,6 +780,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         const introEnd = l.element.phases?.introEnd ?? meta.op;
         const idleIn = l.element.phases?.idle?.[0] ?? introEnd;
         const idleOut = l.element.phases?.idle?.[1] ?? l.element.phases?.outroStart ?? meta.op;
+        // D-125 — the STATIC canvas poster frame. When phase markers define the hold
+        // start (`introEnd`, fully ON) park there. ABSENT markers `introEnd` fell back to
+        // `op` (the LAST frame): for a real AE furniture clip that animates OFF in its
+        // outro, `op` is the outro-END (invisible), so parking there leaves the editor
+        // canvas EMPTY (the bug). The clip MIDPOINT sits in the held/visible region, so it
+        // is the representative "settled" look; never `op`. Only the poster frame — the
+        // always-revealed canvas — changes; play() still resets()→`ip`.
+        const posterFrame = l.element.phases?.introEnd ?? Math.round((meta.ip + meta.op) / 2);
         const driver = new LottieDriver({
           handle,
           fr: meta.fr,
@@ -790,14 +798,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           idleIn,
           idleOut,
           holdBehavior: l.element.holdBehavior,
+          posterFrame,
           clock: options.clock,
         });
-        // D-125 — paint a REPRESENTATIVE static frame (the settled hold frame), NOT
-        // frame `ip`: the editor canvas is a static design surface that never plays,
-        // and an AE intro that animates the graphic ON from nothing renders empty at
-        // `ip`. On play() the lotties reset()→`ip` and play the intro from the start,
-        // and the exported/on-air stage stays blank (cg-pending) until then, so this
-        // only affects the always-revealed editor canvas.
+        // D-125 — paint a REPRESENTATIVE, VISIBLE static frame (`posterFrame`), NOT an END
+        // frame: the editor canvas is a static design surface that never plays, and a
+        // furniture clip is blank at BOTH `ip` (intro-start) and `op` (outro-end). On
+        // play() the lotties reset()→`ip` and play the intro from the start, and the
+        // exported/on-air stage stays blank (cg-pending) until then, so this only affects
+        // the always-revealed editor canvas.
         driver.poster();
         scopeLotties.push(driver);
         lotties.push(driver);

@@ -37,6 +37,15 @@ export interface LottieDriverOptions {
   idleOut: number;
   /** HOLD behaviour after the intro: freeze at `introEnd`, or loop the idle segment. */
   holdBehavior: 'freeze' | 'idle-loop';
+  /**
+   * D-125 — the frame the STATIC editor canvas parks on (a design surface that never
+   * plays). Defaults to {@link introEnd}. The runtime passes the clip MIDPOINT for a
+   * MARKER-LESS clip, whose {@link introEnd} falls back to `op` (the LAST frame) — often
+   * the outro-END, where a real AE "furniture" clip has animated the graphic OFF
+   * (invisible). Parking there shows an empty box; the midpoint sits in the visible held
+   * region. See {@link LottieDriver.poster}.
+   */
+  posterFrame?: number | undefined;
   /** Injected rAF/timer clock for deterministic tests; defaults to the platform. */
   clock?: RuntimeClock | undefined;
 }
@@ -73,20 +82,21 @@ export class LottieDriver {
   }
 
   /**
-   * D-125 — paint a REPRESENTATIVE static frame — the settled HOLD frame
-   * (`introEnd`) — for a design surface that never plays (the editor canvas). Frame
-   * `ip` is the intro-START, where a typical AE "furniture" export has animated the
-   * graphic ON from nothing (scale / opacity 0), so parking at `ip` shows an empty
-   * box. `introEnd` is the on-air "settled" look — exactly what the operator wants
-   * while designing, and what Preview shows during the hold. The play() path calls
-   * {@link reset} (→ `ip`), so the intro still plays from the start when played.
+   * D-125 — paint a REPRESENTATIVE, VISIBLE static frame for a design surface that never
+   * plays (the editor canvas). Both ENDS of a furniture clip are commonly blank: `ip` is
+   * the intro-START (animated ON from nothing) and `op` is the outro-END (animated OFF to
+   * nothing), so parking at either shows an empty box. The runtime supplies
+   * {@link LottieDriverOptions.posterFrame} — the marked hold-start (`introEnd`) when the
+   * clip has phase markers, else the clip MIDPOINT (in the held/visible region), NEVER
+   * `op`. Absent an explicit poster frame this falls back to `introEnd`. The play() path
+   * calls {@link reset} (→ `ip`), so the intro still plays from the start when played.
    */
   poster(): void {
     this.cancelFrame();
     this.running = false;
     this.settledHold = false;
     this.pausedElapsed = 0;
-    this.paint(this.o.introEnd);
+    this.paint(this.o.posterFrame ?? this.o.introEnd);
   }
 
   /** Begin the intro from the in-frame. Idempotent while running or already frozen. */

@@ -95,12 +95,21 @@ describe('LottieDriver — driven-frame render', () => {
     expect(last(handle)).toBe(3);
   });
 
-  it('poster() paints the settled hold frame (introEnd), not the in-frame', () => {
+  it('poster() falls back to the hold frame (introEnd) when no posterFrame is given', () => {
     // The static editor canvas must show the settled graphic, not the invisible
     // intro-start (frame `ip`, where an AE intro has scaled the graphic to nothing).
     const { driver, handle } = makeDriver({ ip: 0, introEnd: 5 });
     driver.poster();
     expect(last(handle)).toBe(5);
+  });
+
+  it('poster() paints the explicit posterFrame (the runtime midpoint for a marker-less clip)', () => {
+    // A marker-less furniture clip's `introEnd` falls back to `op` (the LAST frame) —
+    // the outro-END, where the graphic has animated OFF (invisible). The runtime passes
+    // the clip MIDPOINT as `posterFrame` so the canvas parks on a VISIBLE held frame.
+    const { driver, handle } = makeDriver({ ip: 0, introEnd: 60, posterFrame: 30 });
+    driver.poster();
+    expect(last(handle)).toBe(30);
   });
 
   it('a subsequent play (reset + start) overrides the poster and plays from the in-frame', () => {
