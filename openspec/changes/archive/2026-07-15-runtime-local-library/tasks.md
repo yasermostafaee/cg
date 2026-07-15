@@ -17,11 +17,11 @@
 
 ## 2. LibraryStore (browser-local persistence)
 
-- [ ] 2.1 `apps/runtime/src/platform/library/LibraryStore.ts` — `Map<id,{template,html}>` backed
+- [x] 2.1 `apps/runtime/src/platform/library/LibraryStore.ts` — `Map<id,{template,html}>` backed
       by a `Workspace`: `hydrate` / `list` / `get` / `entries` / `import` / `delete` /
       `remove(id, referencedCount)`. Percent-encode ids for the `library/<enc(id)>.{json,html}`
       paths.
-- [ ] 2.2 `apps/runtime/src/platform/library/workspace.ts` — `initRuntimeWorkspace()`: OPFS
+- [x] 2.2 `apps/runtime/src/platform/library/workspace.ts` — `initRuntimeWorkspace()`: OPFS
       (`openOpfsWorkspace('runtime')`) with `MemoryWorkspace` fallback; memory under `CG_E2E`.
 - [x] 2.3 Unit tests (MemoryWorkspace): import→list/get; persist→new store→hydrate→still listed;
       remove unreferenced ok / referenced refused / unknown refused; percent-encoded ids
@@ -98,5 +98,5 @@
       openspec 39/39 strict, incl. `change/runtime-local-library`). Runtime suite: 230 passed.
 - [x] 8.3 `pnpm gate:e2e` GREEN on WINDOWS (22/22 e2e tasks; runtime e2e passed). ⚠️ Windows-only
       is NOT authoritative per the CI rule — a Linux/WSL E2E pass is still needed before "done".
-- [ ] 8.4 PAUSE for product-owner visual confirmation (offline import works; library survives
-      reload) before commit. ← awaiting PO.
+- [x] 8.4 PAUSE for product-owner visual confirmation (offline import works; library survives
+      reload) before commit. ← confirmed by PO; shipped as PR #330 (merged to `main`).
