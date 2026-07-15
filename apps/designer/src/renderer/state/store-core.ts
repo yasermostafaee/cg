@@ -27,7 +27,6 @@ export type DesignerTool =
   | 'ellipse'
   | 'pen'
   | 'image'
-  | 'lottie'
   | 'hand';
 
 export type DesignerView = 'landing' | 'studio';
