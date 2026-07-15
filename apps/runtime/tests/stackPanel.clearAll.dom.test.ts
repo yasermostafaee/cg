@@ -31,11 +31,14 @@ function item(itemId: string, status: StackItemState['status']): StackItemState 
   return { itemId, templateId: 'tpl', fields: {}, status, pending: false };
 }
 
-function stubBridge(stack: StackItemState[]): { clearAll: Mock; removeAll: Mock } {
+function stubBridge(
+  stack: StackItemState[],
+  link: 'live' | 'disconnected' = 'live',
+): { clearAll: Mock; removeAll: Mock } {
   const clearAll = vi.fn(() => Promise.resolve({ ok: true, cleared: 0 }));
   const removeAll = vi.fn(() => Promise.resolve({ ok: true, removed: stack.length }));
   const stub = {
-    link: { status: () => 'live' as const, onStatusChanged: () => () => undefined },
+    link: { status: () => link, onStatusChanged: () => () => undefined },
     templates: { list: () => Promise.resolve([]) },
     stack: {
       snapshot: () => Promise.resolve(stack),
@@ -163,5 +166,46 @@ describe('StackPanel Clear-All', () => {
     // Same parent: the header is `space-between`, so loose siblings would strand Clear-All in
     // the middle of the header and push Remove-All to the far edge.
     expect(clearAllButton(el)?.parentElement).toBe(removeAllButton(el)?.parentElement);
+  });
+
+  it('both bulk actions are enabled while live and DISABLED while the link is down', async () => {
+    // Was-live-then-dropped: the on-air snapshot persists across the drop (useBridgeSnapshot
+    // keeps its last value while disconnected), so both stay SHOWN but disabled — the stack is
+    // bridge-owned, so a bulk action can no more reach CasparCG than a per-item one can.
+    const listeners = new Set<(s: 'live' | 'disconnected') => void>();
+    let status: 'live' | 'disconnected' = 'live';
+    const stub = {
+      link: {
+        status: () => status,
+        onStatusChanged: (h: (s: 'live' | 'disconnected') => void) => {
+          listeners.add(h);
+          return () => listeners.delete(h);
+        },
+      },
+      templates: { list: () => Promise.resolve([]) },
+      stack: {
+        snapshot: () => Promise.resolve([item('a', 'on-air')]),
+        onStateChanged: () => () => undefined,
+        clearAll: vi.fn(() => Promise.resolve({ ok: true, cleared: 0 })),
+        removeAll: vi.fn(() => Promise.resolve({ ok: true, removed: 1 })),
+        take: () => Promise.resolve({ accepted: true }),
+        update: () => Promise.resolve({ accepted: true }),
+        out: () => Promise.resolve({ accepted: true }),
+        remove: () => Promise.resolve({ accepted: true }),
+      },
+    };
+    (window as unknown as { cg: typeof stub }).cg = stub;
+    const el = await renderPanel();
+    expect(clearAllButton(el)?.disabled).toBe(false);
+    expect(removeAllButton(el)?.disabled).toBe(false);
+
+    await act(async () => {
+      status = 'disconnected';
+      for (const h of listeners) h('disconnected');
+      await Promise.resolve();
+    });
+
+    expect(clearAllButton(el)?.disabled).toBe(true);
+    expect(removeAllButton(el)?.disabled).toBe(true);
   });
 });

@@ -37,8 +37,11 @@ test('library shows display names, refuses removing a referenced template, and r
   await expect(confirmRemove).toBeVisible();
   await confirmRemove.getByRole('button', { name: 'Remove', exact: true }).click();
 
-  // The bridge's message, verbatim — the panel does not pre-judge the outcome.
-  await expect(library.getByRole('alert')).toContainText(/1 stack item\(s\) still use this/);
+  // The bridge's message, verbatim — surfaced as the command TOAST now (page-level), not
+  // pinned inline in the panel. The panel does not pre-judge the outcome.
+  await expect(page.getByRole('alert', { name: 'Command error' })).toContainText(
+    /1 stack item\(s\) still use this/,
+  );
   // Nothing was removed: the row is still there and still loadable.
   await expect(library.getByText(REFERENCED)).toBeVisible();
   await expect(library.getByRole('button', { name: `Load ${REFERENCED}` })).toBeVisible();
@@ -47,7 +50,10 @@ test('library shows display names, refuses removing a referenced template, and r
   await library.getByRole('button', { name: `Remove ${UNREFERENCED}` }).click();
   await confirmRemove.getByRole('button', { name: 'Remove', exact: true }).click();
 
-  await expect(library.getByText(`Removed “${UNREFERENCED}”`)).toBeVisible();
+  // The "Removed X" confirmation is a command SUCCESS toast now, not inline in the panel.
+  await expect(page.getByRole('alert', { name: 'Command success' })).toContainText(
+    `Removed “${UNREFERENCED}”`,
+  );
   await expect(library.getByRole('button', { name: `Load ${UNREFERENCED}` })).toHaveCount(0);
   // The referenced one is untouched by its neighbour's removal.
   await expect(library.getByText(REFERENCED)).toBeVisible();

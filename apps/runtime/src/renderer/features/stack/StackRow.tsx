@@ -4,6 +4,7 @@ import { AsyncButton } from '../../ui/AsyncButton.js';
 import { StatusBadge } from '../../ui/StatusBadge.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { useLink } from '../../hooks/useLink.js';
+import { reportCommandError } from '../status/commandFeedback.js';
 import { layerLabel } from './layerLabel.js';
 import { isOnAir } from './onAir.js';
 
@@ -127,10 +128,13 @@ export function StackRow({
       </div>
       {/* Stop button clicks from also selecting the row (prior behavior). */}
       <div style={styles.actions} onClick={(e) => e.stopPropagation()}>
+        {/* A refusal surfaces as the command TOAST, never pinned inline in the row (which
+            wrapped and bloated it). Same treatment as the Library's Load button. */}
         <AsyncButton
           variant="play"
           run={() => onPlay(item.itemId)}
           disabled={onAir || linkDown}
+          onError={reportCommandError}
           {...(offlineReason !== undefined ? { title: offlineReason } : {})}
         >
           PLAY
@@ -139,6 +143,11 @@ export function StackRow({
           variant="secondary"
           run={() => onUpdate(item.itemId)}
           disabled={!onAir || linkDown}
+          // `applyDraft` (the shared apply used by this button AND the Inspector's Update)
+          // already routes any failure to the command toast with its own B-070 wording; this
+          // no-op onError only SUPPRESSES the button's duplicate inline error — it does not
+          // re-report (which would double-toast) or change wording.
+          onError={() => undefined}
           {...(offlineReason !== undefined ? { title: offlineReason } : {})}
         >
           UPDATE
@@ -149,6 +158,7 @@ export function StackRow({
           // The same `isOnAir` predicate the header's Clear-All counts on, so the two can
           // never disagree about what "on air" means.
           disabled={!isOnAir(item) || linkDown}
+          onError={reportCommandError}
           {...(offlineReason !== undefined ? { title: offlineReason } : {})}
         >
           CLEAR
@@ -162,6 +172,7 @@ export function StackRow({
           variant="danger"
           run={() => onRemove(item.itemId)}
           disabled={linkDown}
+          onError={reportCommandError}
           {...(offlineReason !== undefined ? { title: offlineReason } : {})}
         >
           REMOVE

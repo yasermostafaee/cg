@@ -11,7 +11,7 @@ import { Inspector } from './features/inspector/Inspector.js';
 import { applyDraft } from './features/inspector/applyDraft.js';
 import { clearDraft } from './features/inspector/draftStore.js';
 import { LockOverlay } from './features/lock/LockOverlay.js';
-import { CommandErrorToast } from './features/status/CommandErrorToast.js';
+import { CommandToast } from './features/status/CommandToast.js';
 import { StatusBar } from './features/status/StatusBar.js';
 import { useConnections } from './hooks/useConnections.js';
 import { useLink } from './hooks/useLink.js';
@@ -99,7 +99,7 @@ export function App(): JSX.Element {
         onOpenAudit={() => setAuditOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
       />
-      <CommandErrorToast />
+      <CommandToast />
       <AuditPanel open={auditOpen} onClose={() => setAuditOpen(false)} />
       <ServerSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <LockOverlay
