@@ -70,6 +70,30 @@ pnpm lint
 pnpm typecheck
 ```
 
+### Local gate (while CI minutes are exhausted)
+
+GitHub Actions minutes are currently exhausted (billing quota; resets ~2026-08-01),
+so CI **cannot run**. Until it's back, the merge gate is enforced **locally**:
+
+```bash
+pnpm gate       # FAST full gate: typecheck + lint + test + build (uncached) + format:check + openspec validate
+pnpm gate:e2e   # SLOW: the Playwright E2E suite (~6 min) — run manually, see below
+```
+
+- **`pnpm gate` runs automatically on every `git push`** (husky `pre-push` hook) and
+  **blocks the push if it fails** — nothing that fails the fast gate gets pushed.
+  Emergency bypass: `git push --no-verify` (or `HUSKY=0 git push`). Use it only when
+  you know why.
+- **E2E is NOT in the pre-push hook** (too slow at ~6 min) and is **not** run by
+  `pnpm gate`. You MUST run `pnpm gate:e2e` yourself for **any UI / layout / rendering
+  change** — that's the "passes locally by 19px of luck, red on CI" class of bug the
+  E2E suite exists to catch. Ideally run it in a **Linux-like environment (WSL/Docker)**:
+  CI runs on Linux and local (Windows) font/geometry differs, so a Windows-only E2E pass
+  is not authoritative.
+- `--force` is deliberate: it defeats a stale turbo cache (which has produced a false
+  green before), so the gate genuinely re-runs every task rather than replaying a
+  cached log.
+
 ## Documentation
 
 - Contributing / backlog — [`CLAUDE.md`](./CLAUDE.md), [`docs/prd/`](./docs/prd) (write features/bugs here; Claude turns each into an OpenSpec change)
