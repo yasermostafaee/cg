@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
 import { useStack } from '../../hooks/useStack.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
+import { useLink } from '../../hooks/useLink.js';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { useConfirm } from '../../ui/useDialog.js';
@@ -76,6 +77,14 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
   const templates = useTemplateIndex(items.map((i) => i.templateId));
   const { confirm, confirmDialog } = useConfirm();
   const [selected, setSelected] = useState<string | null>(null);
+  // B-085 consistency — the STACK is bridge-owned, so the bulk actions can no more reach
+  // CasparCG while disconnected than the per-item PLAY/UPDATE/CLEAR/REMOVE can. Gate them on
+  // the SAME link status so an enabled button never invites a click that only rejects.
+  const link = useLink();
+  const linkDown = link === 'disconnected';
+  const offlineReason = linkDown
+    ? 'Not connected — this command cannot reach CasparCG. Reconnect and reissue it.'
+    : undefined;
   // Newest first. The item the operator just loaded is the one they are about to act on, so
   // it belongs at the top — not below everything they loaded an hour ago.
   //
@@ -117,7 +126,11 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
             <Button
               variant="caution"
               aria-label="Clear all on-air items"
-              title="Send CLEAR to every on-air item — takes them off air and leaves them on the stack, idle"
+              disabled={linkDown}
+              title={
+                offlineReason ??
+                'Send CLEAR to every on-air item — takes them off air and leaves them on the stack, idle'
+              }
               onClick={() => {
                 // "Get it off the screen" is not "throw it away". This clears air and KEEPS
                 // the rows, so recovering is a re-take — not a re-import and re-typing every
@@ -143,7 +156,11 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
               // Clear — which made the destructive action look like the reversible one.
               variant="danger"
               aria-label="Remove all items"
-              title="Out + remove every item — clears anything on air and empties the stack"
+              disabled={linkDown}
+              title={
+                offlineReason ??
+                'Out + remove every item — clears anything on air and empties the stack'
+              }
               onClick={() => {
                 // R-010 — the destructive on-air-clearing path (unblocks a server switch).
                 // The stack visibly empties via the state publish.

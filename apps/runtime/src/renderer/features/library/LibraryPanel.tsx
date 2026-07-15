@@ -9,7 +9,7 @@ import { useConfirm } from '../../ui/useDialog.js';
 import { importTemplateFromBytes } from './templateDelivery.js';
 import { templateDisplayName } from './templateName.js';
 import { recordDefaultPosition } from '../stack/defaultPositionStore.js';
-import { reportCommandError } from '../status/commandFeedback.js';
+import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 // B-038 Phase 3 — the bundled app @font-face CSS (Vazirmatn / Exo 2) as a raw
 // string. Passed to the single-file export so the bundled faces inline as base64
 // and the template HTML CasparCG loads renders Persian with the correct face.
@@ -77,13 +77,6 @@ const styles = {
   // at word boundaries and a pathological unbroken token still can't overflow the panel.
   itemName: { fontSize: '0.85rem', fontWeight: 600, overflowWrap: 'break-word' as const },
   itemMeta: { fontSize: '0.75rem', color: colors.textMuted, overflowWrap: 'break-word' as const },
-  error: {
-    color: '#fca5a5',
-    fontSize: '0.78rem',
-    margin: 0,
-    lineHeight: 1.4,
-  },
-  status: { color: colors.textMuted, fontSize: '0.78rem', margin: 0 },
 } as const;
 
 /**
@@ -97,8 +90,6 @@ const styles = {
  */
 export function LibraryPanel(): JSX.Element {
   const [templates, setTemplates] = useState<readonly TemplateInfo[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
   const { confirm, confirmDialog } = useConfirm();
   const fileRef = useRef<HTMLInputElement>(null);
   // Newest first — the template the operator just imported is at the top, where they are
@@ -116,13 +107,11 @@ export function LibraryPanel(): JSX.Element {
 
   const importFile = useCallback(
     async (file: File): Promise<void> => {
-      setError(null);
-      setStatus(null);
       let bytes: Uint8Array;
       try {
         bytes = new Uint8Array(await file.arrayBuffer());
       } catch (err) {
-        setError(
+        reportCommandError(
           `Could not read ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
         );
         return;
@@ -150,7 +139,7 @@ export function LibraryPanel(): JSX.Element {
           sourceFileName: file.name,
         });
       } catch (err) {
-        setError(`“${file.name}” ${err instanceof Error ? err.message : String(err)}`);
+        reportCommandError(`“${file.name}” ${err instanceof Error ? err.message : String(err)}`);
         return;
       }
 
@@ -160,7 +149,7 @@ export function LibraryPanel(): JSX.Element {
 
       await refresh();
       // R-004 — name the template the operator just imported, not its UUID.
-      setStatus(
+      reportCommandSuccess(
         imported.warnings.length > 0
           ? `Imported “${imported.displayName}” (${String(imported.warnings.length)} warning(s): ${imported.warnings.join('; ')}).`
           : `Imported “${imported.displayName}”.`,
@@ -190,8 +179,6 @@ export function LibraryPanel(): JSX.Element {
    */
   const removeTemplate = useCallback(
     async (template: TemplateInfo): Promise<void> => {
-      setError(null);
-      setStatus(null);
       const label = templateDisplayName(template);
       const ok = await confirm({
         title: 'Remove this template?',
@@ -202,11 +189,11 @@ export function LibraryPanel(): JSX.Element {
 
       const result = await window.cg.templates.remove({ templateId: template.templateId });
       if (!result.ok) {
-        setError(result.message ?? `Could not remove “${label}”.`);
+        reportCommandError(result.message ?? `Could not remove “${label}”.`);
         return;
       }
       await refresh();
-      setStatus(`Removed “${label}”.`);
+      reportCommandSuccess(`Removed “${label}”.`);
     },
     [confirm, refresh],
   );
@@ -250,12 +237,6 @@ export function LibraryPanel(): JSX.Element {
         style={{ display: 'none' }}
         aria-label="Import .vcg template file"
       />
-      {error !== null && (
-        <p style={styles.error} role="alert">
-          {error}
-        </p>
-      )}
-      {status !== null && <p style={styles.status}>{status}</p>}
       <div style={styles.list}>
         {templates.length === 0 ? (
           <p style={styles.hint}>No templates yet. Import a .vcg to get started.</p>

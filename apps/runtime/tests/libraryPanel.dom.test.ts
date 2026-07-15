@@ -2,9 +2,13 @@
 import { StrictMode, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
-import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { LibraryPanel } from '../src/renderer/features/library/LibraryPanel.js';
+import {
+  onCommandError,
+  onCommandSuccess,
+} from '../src/renderer/features/status/commandFeedback.js';
 import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
 
 /**
@@ -15,8 +19,23 @@ import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js
  */
 
 let container: HTMLDivElement | null = null;
+// Capture command-feedback (toast) messages — status/errors are toasts now, not inline.
+const successMessages: string[] = [];
+const errorMessages: string[] = [];
+let unsub: (() => void)[] = [];
+
+beforeEach(() => {
+  successMessages.length = 0;
+  errorMessages.length = 0;
+  unsub = [
+    onCommandSuccess((m) => successMessages.push(m)),
+    onCommandError((m) => errorMessages.push(m)),
+  ];
+});
 
 afterEach(() => {
+  for (const u of unsub) u();
+  unsub = [];
   container?.remove();
   container = null;
   clearPortals();
@@ -148,12 +167,12 @@ describe('LibraryPanel remove — R-005', () => {
     await clickDialogButton('Remove');
 
     expect(removeSpy).toHaveBeenCalledWith({ templateId: NAMED.templateId });
-    // The ROW is gone (the panel re-listed). The name still appears in the status line —
-    // that is the confirmation, not a leftover row — so assert on the row, not the text.
+    // The ROW is gone (the panel re-listed).
     expect(removeButton(el, 'Breaking News — Lower Third')).toBeNull();
     expect(el.querySelector('button[aria-label^="Load "]')).toBeNull();
     expect(el.textContent).toContain('No templates yet');
-    expect(el.textContent).toContain('Removed “Breaking News — Lower Third”');
+    // The confirmation is a command TOAST now — routed to the feedback channel, not inline.
+    expect(successMessages.join('\n')).toContain('Removed “Breaking News — Lower Third”');
   });
 
   it('does nothing when the operator cancels the modal', async () => {
@@ -180,8 +199,10 @@ describe('LibraryPanel remove — R-005', () => {
     });
     await clickDialogButton('Remove');
 
-    // The panel does not pre-judge — it says exactly what the bridge said…
-    expect(el.querySelector('[role="alert"]')?.textContent).toBe(message);
+    // The panel does not pre-judge — it says exactly what the bridge said, via the command
+    // TOAST now, never pinned inline in the panel…
+    expect(errorMessages).toContain(message);
+    expect(el.querySelector('[role="alert"]')).toBeNull();
     // …and the template is still there, still loadable.
     expect(el.textContent).toContain('Breaking News — Lower Third');
     expect(el.querySelector('button[aria-label^="Load "]')).not.toBeNull();

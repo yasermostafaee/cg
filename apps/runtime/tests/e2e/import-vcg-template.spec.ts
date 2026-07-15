@@ -15,6 +15,9 @@ test('a verified .vcg is registered, loads onto the stack, and shows its fields'
 
   await app.importVcg('valid.vcg', await buildValidVcg(templateId));
 
+  // The "Imported X" confirmation is a command SUCCESS toast now, not an inline panel message.
+  await expect(app.success).toContainText('Imported');
+
   // It appears in the Library as a new row, headed by the FILE the operator imported —
   // `valid.vcg` → "valid" — not the scene's internal name ('e2e-lower-third') and never the
   // raw id. The id remains the row's stable anchor (and its tooltip).

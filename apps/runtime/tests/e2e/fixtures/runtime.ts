@@ -42,16 +42,19 @@ export class RuntimeApp {
   get importButton(): Locator {
     return this.page.getByRole('button', { name: 'Import .vcg template' });
   }
-  /** The Library's verification-error message (role="alert"). */
   /**
-   * A command/import error surfaced in the app body.
-   *
-   * R-006 — scoped to the Library: `role="alert"` is no longer unique on the page. The
-   * connection banner (test mode / disconnected) is deliberately an alert too, because
-   * "nothing can reach air" IS an alert. A bare `getByRole('alert')` now matches several.
+   * A command / import ERROR, surfaced as the shared command TOAST (page-level, `role="alert"`
+   * named "Command error"). Import/library errors moved from an inline Library message to this
+   * toast, so it is addressed on the PAGE by name — not scoped to the Library nav, and never
+   * confused with the connection banner (also an alert, differently named).
    */
   get error(): Locator {
-    return this.library.getByRole('alert');
+    return this.page.getByRole('alert', { name: 'Command error' });
+  }
+
+  /** A command / import SUCCESS toast (page-level, `role="alert"` named "Command success"). */
+  get success(): Locator {
+    return this.page.getByRole('alert', { name: 'Command success' });
   }
 
   // ── actions ───────────────────────────────────────────────────────────────

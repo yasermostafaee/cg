@@ -34,11 +34,14 @@ function items(n: number): StackItemState[] {
   }));
 }
 
-function stubBridge(stack: StackItemState[]): { removeAll: Mock } {
+function stubBridge(
+  stack: StackItemState[],
+  link: 'live' | 'disconnected' = 'live',
+): { removeAll: Mock } {
   const removeAll = vi.fn(() => Promise.resolve({ ok: true, removed: stack.length }));
   const stub = {
-    // R-006 — StackRow mirrors the connection refusal, so it reads the link status.
-    link: { status: () => 'live' as const, onStatusChanged: () => () => undefined },
+    // R-006 — StackRow + the header bulk actions mirror the connection refusal.
+    link: { status: () => link, onStatusChanged: () => () => undefined },
     // R-004 — the panel joins each row against the registry to label its template.
     templates: { list: () => Promise.resolve([]) },
     stack: {
@@ -83,6 +86,7 @@ describe('StackPanel Remove-All — R-010', () => {
     const el = await renderPanel();
     const btn = removeAllButton(el);
     expect(btn).not.toBeNull();
+    expect(btn?.disabled).toBe(false); // enabled while the link is live
 
     await act(async () => {
       btn?.click();
@@ -121,5 +125,46 @@ describe('StackPanel Remove-All — R-010', () => {
     stubBridge([]);
     const el = await renderPanel();
     expect(removeAllButton(el)).toBeNull();
+  });
+
+  it('is DISABLED while the CasparCG link is down — the stack is bridge-owned', async () => {
+    // Was-live-then-dropped: the snapshot persists (useBridgeSnapshot keeps its last value while
+    // disconnected), so the button stays SHOWN but disabled — it can no more reach CasparCG
+    // than the per-item PLAY/UPDATE/CLEAR/REMOVE can.
+    const listeners = new Set<(s: 'live' | 'disconnected') => void>();
+    let status: 'live' | 'disconnected' = 'live';
+    const removeAll = vi.fn(() => Promise.resolve({ ok: true, removed: 2 }));
+    const stub = {
+      link: {
+        status: () => status,
+        onStatusChanged: (h: (s: 'live' | 'disconnected') => void) => {
+          listeners.add(h);
+          return () => listeners.delete(h);
+        },
+      },
+      templates: { list: () => Promise.resolve([]) },
+      stack: {
+        snapshot: () => Promise.resolve(items(2)),
+        onStateChanged: () => () => undefined,
+        removeAll,
+        take: () => Promise.resolve({ accepted: true }),
+        update: () => Promise.resolve({ accepted: true }),
+        out: () => Promise.resolve({ accepted: true }),
+        remove: () => Promise.resolve({ accepted: true }),
+      },
+    };
+    (window as unknown as { cg: typeof stub }).cg = stub;
+    const el = await renderPanel();
+    expect(removeAllButton(el)?.disabled).toBe(false); // enabled while live
+
+    await act(async () => {
+      status = 'disconnected';
+      for (const h of listeners) h('disconnected');
+      await Promise.resolve();
+    });
+
+    const btn = removeAllButton(el);
+    expect(btn).not.toBeNull(); // still shown — items persist across the drop
+    expect(btn?.disabled).toBe(true);
   });
 });
