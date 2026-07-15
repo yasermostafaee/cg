@@ -11,6 +11,7 @@ export function StatusBadge({
   status,
   pending,
   simulated = false,
+  bridgeDown = false,
 }: {
   status: StackItemStatus;
   pending: boolean;
@@ -22,6 +23,14 @@ export function StatusBadge({
    * same information, visibly not air.
    */
   simulated?: boolean;
+  /**
+   * B-087 — the SPA↔bridge link (not the CasparCG link) is what dropped. An `unverified`
+   * badge is reachable two ways now: a CasparCG link-loss on a live bridge (B-086,
+   * `bridgeDown === false`) or a dead bridge (B-087, `bridgeDown === true`). It only
+   * selects the tooltip wording so it names the link that actually dropped; the visible
+   * label and icon are identical either way.
+   */
+  bridgeDown?: boolean;
 }): JSX.Element {
   const visual = airStateVisual(status, pending);
   const tone = badgeTone(status, pending);
@@ -29,11 +38,15 @@ export function StatusBadge({
   const claimsAir = tone === 'onair';
   const label = simulated && claimsAir ? `SIM ${visual.label}` : visual.label;
   const shownTone = simulated && claimsAir ? 'attention' : tone;
-  // B-086 — the muted "WAS ON AIR" keeps the last-known reading in the tooltip, the way
-  // B-081's health pill keeps "Last known before the link dropped: HEALTHY".
+  // B-086 / B-087 — the muted "WAS ON AIR" keeps the last-known reading in the tooltip, the way
+  // B-081's health pill keeps "Last known before the link dropped: HEALTHY". The wording names the
+  // link that dropped: the SPA↔bridge connection (B-087) when the bridge is gone — CasparCG may be
+  // fine but is unreachable through the dead bridge — otherwise the CasparCG link (B-086).
   const title =
     status === 'unverified'
-      ? 'Last confirmed ON AIR before the CasparCG link dropped — reconnect to re-verify.'
+      ? bridgeDown
+        ? 'Last confirmed ON AIR before the bridge connection dropped — reconnect the bridge to re-verify.'
+        : 'Last confirmed ON AIR before the CasparCG link dropped — reconnect to re-verify.'
       : undefined;
 
   return (
