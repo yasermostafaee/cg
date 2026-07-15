@@ -7,7 +7,13 @@ import type {
 } from '@cg/shared-ipc';
 import { aggregateCompositionFields, type Manifest, type Position } from '@cg/shared-schema';
 import { unpack, verify } from '@cg/vcg-format';
-import { ExporterSingleFile, cgCss, cgJsIife, type ImageAssetSource } from '@cg/single-file-export';
+import {
+  ExporterSingleFile,
+  cgCss,
+  cgJsIife,
+  cgJsLottieIife,
+  type ImageAssetSource,
+} from '@cg/single-file-export';
 import { pickTemplateName, templateDisplayName } from './templateName.js';
 
 /**
@@ -167,6 +173,7 @@ export async function produceTemplateDelivery(
   try {
     const exporter = new ExporterSingleFile({
       cgJsIife,
+      cgJsLottieIife,
       cgCss,
       fontsCss: opts.fontsCss ?? '',
       assets: vcgImageAssetSource(manifest, files),

@@ -23,6 +23,7 @@
     "test": "vitest run --coverage"
   },
   "dependencies": {
+    "@cg/lottie-bridge": "workspace:*",
     "@cg/shared-schema": "workspace:*",
     "@cg/text-shaping": "workspace:*"
   },

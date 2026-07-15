@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CEF_BANNED_BUILTINS, CEF_CHROMIUM_BASELINE } from '@cg/eslint-config';
-import { cgJs, cgJsIife } from '../src/generated/cg-runtime-bundles.js';
+import { cgJs, cgJsIife, cgJsLottie, cgJsLottieIife } from '../src/generated/cg-runtime-bundles.js';
 
 /**
  * B-066 — the served bundle must run on CasparCG's CEF (baseline Chromium
@@ -30,6 +30,11 @@ describe(`CEF compat — no built-ins newer than Chromium ${String(CEF_CHROMIUM_
   for (const [label, bundle] of [
     ['cgJs (ESM — the .vcg page)', cgJs],
     ['cgJsIife (IIFE — the single-file/served page)', cgJsIife],
+    // D-125 §D5(c) — the separate `lottie_light` player bundles must ALSO run on the
+    // CEF baseline: lottie-web 5.13.0 is ES5-era and eval-free, and this scan proves
+    // the minified artifact carries no built-in newer than the baseline.
+    ['cgJsLottie (ESM — the Lottie player for the .vcg)', cgJsLottie],
+    ['cgJsLottieIife (IIFE — the Lottie player for the single-file page)', cgJsLottieIife],
   ] as const) {
     it(`${label} contains none of the banned built-ins`, () => {
       const hits: string[] = [];

@@ -247,6 +247,44 @@ describe('LottieElement', () => {
       loopMode: 'loop' as const,
       segment: [0, 120] as [number, number],
     };
+    // D-125 — `holdBehavior` carries a `.default('freeze')`, so the parsed element
+    // gains it even when the stored JSON omits it (input ⊂ output).
+    expect(LottieElementSchema.parse(l)).toEqual({ ...l, holdBehavior: 'freeze' });
+  });
+
+  it('a pre-D-125 Lottie (bare assetId, no phases/holdBehavior/drivesHold) parses unchanged', () => {
+    // The exact shape a scene authored before D-125 stores — no new fields.
+    const legacy = {
+      ...baseProps,
+      type: 'lottie' as const,
+      assetId: 'asset-old',
+      speed: 1,
+      loopMode: 'none' as const,
+    };
+    const parsed = LottieElementSchema.parse(legacy);
+    // Additive only: the sole injected field is the holdBehavior default; no phases,
+    // no drivesHold (so absent ⇒ does NOT drive — the inverse default).
+    expect(parsed).toEqual({ ...legacy, holdBehavior: 'freeze' });
+    expect(parsed.phases).toBeUndefined();
+    expect(parsed.drivesHold).toBeUndefined();
+  });
+
+  it('round-trips a full phase mapping (markers) + idle-loop hold + drivesHold', () => {
+    const l = {
+      ...baseProps,
+      type: 'lottie' as const,
+      assetId: 'asset-lower-third',
+      speed: 1.5,
+      loopMode: 'none' as const,
+      phases: {
+        introEnd: 20,
+        outroStart: 80,
+        idle: [30, 60] as [number, number],
+        source: 'markers' as const,
+      },
+      holdBehavior: 'idle-loop' as const,
+      drivesHold: true,
+    };
     expect(LottieElementSchema.parse(l)).toEqual(l);
   });
 });

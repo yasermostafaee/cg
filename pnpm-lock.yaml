@@ -480,6 +480,9 @@ importers:
 
   packages/template-runtime:
     dependencies:
+      '@cg/lottie-bridge':
+        specifier: workspace:*
+        version: link:../lottie-bridge
       '@cg/shared-schema':
         specifier: workspace:*
         version: link:../shared-schema

@@ -12,6 +12,7 @@ import type { ExportIssue, ExportProgress } from '@cg/shared-ipc';
 import type { AssetStore } from './AssetStore.js';
 import {
   collectImageElements,
+  collectLottieElements,
   compositeImageSource,
   resolveImageAsset,
   type ImageAssetLibrary,
@@ -29,6 +30,13 @@ export interface ExporterOptions {
   sharedImages?: ImageAssetLibrary;
   /** Bundled @cg/template-runtime JS injected as cg.js. */
   cgJs: string;
+  /**
+   * D-125 §D5(c) — the SEPARATE minified `lottie_light` player ESM bundle
+   * (`cgJsLottie`), packaged as `cg-lottie.js` and imported by the index.html BEFORE
+   * `cg.js` ONLY when the scene has a Lottie element (it installs `globalThis.__cgLottie`).
+   * Absent ⇒ a Lottie-bearing `.vcg` still packs the JSON but the player is omitted.
+   */
+  cgJsLottie?: string;
   /** Runtime baseline stylesheet injected as cg.css. */
   cgCss: string;
 }
@@ -44,12 +52,14 @@ export class Exporter {
   readonly #assets: AssetStore;
   readonly #sharedImages: ImageAssetLibrary | undefined;
   readonly #cgJs: string;
+  readonly #cgJsLottie: string | undefined;
   readonly #cgCss: string;
 
   constructor(options: ExporterOptions) {
     this.#assets = options.assets;
     this.#sharedImages = options.sharedImages;
     this.#cgJs = options.cgJs;
+    this.#cgJsLottie = options.cgJsLottie;
     this.#cgCss = options.cgCss;
   }
 
@@ -253,8 +263,17 @@ export class Exporter {
     // `fonts/` via the packer's dedicated `fonts` seam.
     const { fontsMap, fontIndex } = await this.#gatherFonts(scene);
 
+    // D-125 §D5(c) — pack the Lottie player as `cg-lottie.js` ONLY when the scene has
+    // a Lottie AND a player bundle was provided; the index.html imports it before
+    // `cg.js` to install `globalThis.__cgLottie`. No Lottie ⇒ the package is unchanged.
+    const hasLottie = assetIndex.some((e) => e.kind === 'lottie');
+    const includePlayer = hasLottie && this.#cgJsLottie !== undefined;
+    if (includePlayer) {
+      assetsMap.set('cg-lottie.js', new TextEncoder().encode(this.#cgJsLottie as string));
+    }
+
     this.progress.emit({ step: 'template', progress: 0.6 });
-    const indexHtml = buildIndexHtml(scene, assetIndex, fontIndex);
+    const indexHtml = buildIndexHtml(scene, assetIndex, fontIndex, includePlayer);
 
     const nowIso = new Date().toISOString();
     this.progress.emit({ step: 'pack', progress: 0.8 });
@@ -327,6 +346,29 @@ export class Exporter {
         id: meta.assetId,
         path: relativePath,
         kind: meta.kind,
+        bytes: bytes.byteLength,
+        sha256: meta.sha256,
+        mime: mimeFor(ext),
+      });
+    }
+    // D-125 — pack each Lottie element's JSON as `assets/lottie/<sha>.json` bytes +
+    // an index entry (kind 'lottie'), mirroring images. The index.html boot resolves
+    // these into the `lottieAssets` map (a same-origin fetch under the .vcg's 'self'
+    // CSP — not an external request). A missing asset is skipped (preflight covers it).
+    for (const { assetId } of collectLottieElements(scene)) {
+      if (seen.has(assetId)) continue;
+      seen.add(assetId);
+      const meta = await this.#assets.get(assetId);
+      if (meta === null) continue;
+      const bytes = await this.#assets.bytes(assetId);
+      if (bytes === null) continue;
+      const ext = meta.filename.slice(meta.filename.lastIndexOf('.')) || '.json';
+      const relativePath = `assets/lottie/${meta.sha256}${ext}`;
+      assetsMap.set(relativePath, bytes);
+      assetIndex.push({
+        id: meta.assetId,
+        path: relativePath,
+        kind: 'lottie',
         bytes: bytes.byteLength,
         sha256: meta.sha256,
         mime: mimeFor(ext),
@@ -437,13 +479,30 @@ function triggerDownload(bytes: Uint8Array, filename: string): void {
   }, 10_000);
 }
 
-function buildIndexHtml(scene: Scene, assetIndex: AssetEntry[], fontIndex: AssetEntry[]): string {
+function buildIndexHtml(
+  scene: Scene,
+  assetIndex: AssetEntry[],
+  fontIndex: AssetEntry[],
+  includePlayer: boolean,
+): string {
   // D-062 — bake the image assetId → packaged relative path map so the served
   // runtime sets each `<img>` src to its packaged bytes (no external/file:// ref;
   // the .vcg is http-served, so a relative path resolves to the bundled file).
   // Escape `<` for safety though sha-based paths never contain it.
-  const assetUrls = Object.fromEntries(assetIndex.map((e) => [e.id, e.path]));
+  // D-125 — the Lottie JSON assets are resolved separately (fetched + parsed into
+  // `lottieAssets`), so exclude them from the `<img>` src map.
+  const assetUrls = Object.fromEntries(
+    assetIndex.filter((e) => e.kind !== 'lottie').map((e) => [e.id, e.path]),
+  );
   const assetUrlsJson = JSON.stringify(assetUrls).replace(/</g, '\\u003c');
+  // D-125 — Lottie assetId → packaged JSON path; the boot fetches + parses each into
+  // the `lottieAssets` map (a SAME-ORIGIN fetch under the .vcg's strict 'self' CSP —
+  // not an external request). `includePlayer` gates the `cg-lottie.js` import.
+  const lottiePaths = Object.fromEntries(
+    assetIndex.filter((e) => e.kind === 'lottie').map((e) => [e.id, e.path]),
+  );
+  const lottiePathsJson = JSON.stringify(lottiePaths).replace(/</g, '\\u003c');
+  const playerImport = includePlayer ? "      import './cg-lottie.js';\n" : '';
   // D-121 — declare each packaged font PACKAGE-RELATIVE, so an unzipped-and-served
   // `.vcg` renders with the real face and issues no external / `file://` request
   // (it has to run under CasparCG's CEF). The family is the `asset-<id>` name the
@@ -465,11 +524,18 @@ function buildIndexHtml(scene: Scene, assetIndex: AssetEntry[], fontIndex: Asset
   </head>
   <body class="cg-pending">
     <script type="module">
-      import { createRuntime, installCasparGlobals } from './cg.js';
+${playerImport}      import { createRuntime, installCasparGlobals } from './cg.js';
       (async () => {
         const res = await fetch('./template.json');
         const scene = await res.json();
-        const runtime = createRuntime(scene, { assetUrls: ${assetUrlsJson} });
+        // D-125 — resolve the packaged Lottie JSON into animationData (same-origin
+        // fetch; the strict 'self' CSP allows it — no external request).
+        const lottiePaths = ${lottiePathsJson};
+        const lottieAssets = {};
+        for (const id of Object.keys(lottiePaths)) {
+          lottieAssets[id] = await (await fetch('./' + lottiePaths[id])).json();
+        }
+        const runtime = createRuntime(scene, { assetUrls: ${assetUrlsJson}, lottieAssets });
         installCasparGlobals(runtime);
         await runtime.ready;
       })();

@@ -4,6 +4,13 @@ export interface PreviewOptions {
   cgJs: string;
   cgCss: string;
   /**
+   * D-125 — the ESM Lottie PLAYER bundle (installs `globalThis.__cgLottie`). Imported
+   * for its side effect in the preview document BEFORE the runtime, so a Lottie element
+   * mounts its player. Optional so existing callers/tests still build (Lottie elements
+   * just won't render without it).
+   */
+  cgJsLottie?: string;
+  /**
    * The app's bundled @font-face CSS (Vazirmatn / Exo 2). Injected into the
    * preview document so built-in fonts render on the canvas — without it the
    * iframe only has the operator-imported (`asset-*`) faces and built-in fonts
@@ -26,6 +33,7 @@ export class Preview {
   readonly #cgCss: string;
   readonly #fontsCss: string;
   #cgJsUrl: string | null = null;
+  #cgJsLottieUrl: string | null = null;
   #docUrl: string | null = null;
 
   constructor(options: PreviewOptions) {
@@ -33,6 +41,13 @@ export class Preview {
     this.#fontsCss = options.fontsCss ?? '';
     // The runtime bundle never changes during a session — make one Blob URL.
     this.#cgJsUrl = URL.createObjectURL(new Blob([options.cgJs], { type: 'text/javascript' }));
+    // D-125 — the ESM Lottie player bundle (side-effecting: installs `globalThis.__cgLottie`).
+    // One stable Blob URL, imported first in the preview document. Absent ⇒ no import line.
+    if (options.cgJsLottie !== undefined) {
+      this.#cgJsLottieUrl = URL.createObjectURL(
+        new Blob([options.cgJsLottie], { type: 'text/javascript' }),
+      );
+    }
   }
 
   /**
@@ -95,6 +110,7 @@ export class Preview {
     frameOffset: { x: number; y: number },
   ): string {
     const cgJsUrl = this.#cgJsUrl ?? '';
+    const cgJsLottieUrl = this.#cgJsLottieUrl;
     // Escape `<` so scene text containing "</script>" can't break out.
     const sceneJson = JSON.stringify(scene).replace(/</g, '\\u003c');
     // D-087 — one flag drives both the CSS override and the boot-time reveal.
@@ -230,6 +246,13 @@ export class Preview {
       })();
     </script>
     <script type="module">
+      ${
+        cgJsLottieUrl !== null
+          ? `// D-125 — the Lottie player bundle installs globalThis.__cgLottie (side-effect
+      // import) BEFORE the runtime, so a Lottie element can mount its player.
+      import '${cgJsLottieUrl}';`
+          : ''
+      }
       import { createRuntime, installCasparGlobals } from '${cgJsUrl}';
       (async () => {
         // D-087 — false in a broadcast (Preview-modal) document: keep the
@@ -257,6 +280,10 @@ export class Preview {
         // every scene rebuild we walk the iframe DOM and assign src
         // for every <img data-cg-asset-id="…">.
         let assetUrls = {};
+        // D-125 — assetId → parsed Lottie animationData, posted by the host. Passed to
+        // createRuntime so each Lottie element resolves + mounts its player. Populated on
+        // scene-replace and via the dedicated 'lottie-assets' message (mirrors assetUrls).
+        let lottieAssets = {};
         let currentScene = null;
         let editingTextId = null;
         // D-020 — non-persistent playout override (mode / holdMs / repeat).
@@ -418,6 +445,9 @@ export class Preview {
               // resolve an image separator's src on the nodes it FEEDS during the live crawl
               // (the host DOM walk below still wires the static tree + late-arriving URLs).
               assetUrls: assetUrls,
+              // D-125 — parsed Lottie animationData (assetId → object); the runtime mounts a
+              // player per Lottie element from this map.
+              lottieAssets: lottieAssets,
             });
             installCasparGlobals(runtime);
             await runtime.ready;
@@ -673,6 +703,11 @@ export class Preview {
                 if (msg.assetUrls && typeof msg.assetUrls === 'object') {
                   assetUrls = msg.assetUrls;
                 }
+                // D-125 — the parsed Lottie map travels with the scene (same rAF channel),
+                // so the rebuilt runtime mounts each element's player.
+                if (msg.lottieAssets && typeof msg.lottieAssets === 'object') {
+                  lottieAssets = msg.lottieAssets;
+                }
                 if (typeof msg.editingTextId === 'string' || msg.editingTextId === null) {
                   editingTextId = msg.editingTextId;
                 }
@@ -692,6 +727,16 @@ export class Preview {
                 assetUrls = msg.assetUrls;
                 applyAssetUrls();
                 applyFontFaces().catch(() => {});
+              } else if (msg.action === 'lottie-assets' && msg.lottieAssets) {
+                // D-125 — a Lottie player is created at createRuntime time, so a map that
+                // arrives AFTER the initial (empty) build needs a scene re-apply to mount
+                // the players. lottieAssets is only ever non-empty when the scene has Lottie
+                // elements (the host builds it from the scene's Lottie ids), so this rebuilds
+                // only when there is something to mount.
+                lottieAssets = msg.lottieAssets;
+                if (currentScene && Object.keys(lottieAssets).length > 0) {
+                  await applyScene(currentScene);
+                }
               } else if (msg.action === 'editing-text') {
                 editingTextId = typeof msg.elementId === 'string' ? msg.elementId : null;
                 applyEditingHide();

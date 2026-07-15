@@ -6,6 +6,7 @@ import type {
   Element,
   Filter,
   ImageElement,
+  LottieElement,
   Padding,
   PathElement,
   RepeaterElement,
@@ -135,10 +136,18 @@ export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element 
         selectedKeyframe={selectedKeyframe}
       />
     );
-  // composition / container / lottie / video-placeholder have no kind-specific
-  // style section, but the universal CSS Filter is animatable on every kind — render
-  // it so the right inspector's keyframe-able set matches the timeline-left (D-051
-  // parity). Transform comes from InspectorPanel's TransformSection.
+  if (element.type === 'lottie')
+    return (
+      <LottieSections
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    );
+  // composition / container / video-placeholder have no kind-specific style section,
+  // but the universal CSS Filter is animatable on every kind — render it so the right
+  // inspector's keyframe-able set matches the timeline-left (D-051 parity). Transform
+  // comes from InspectorPanel's TransformSection.
   return (
     <FilterSection
       element={element}
@@ -508,6 +517,97 @@ function ImageSections({
           onCommit={(fit) => designerStore.updateElement(id, { fit } as Partial<Element>)}
         />
         <SharedImagePicker element={element} />
+      </CollapseSection>
+      <FilterSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    </>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────
+//                              LOTTIE (D-125)
+// ────────────────────────────────────────────────────────────────────────
+
+/**
+ * D-125 Phase 1 — the Lottie inspector: playback speed, hold behaviour, and a
+ * READ-ONLY view of the phase mapping (intro-end / outro-start). Marker-derived
+ * phases are shown as text; a manually-marked mapping exposes editable frame
+ * inputs; a clip with no phases shows the "plays once then freezes" hint. The
+ * internal keyframe stream is opaque — there is deliberately no keyframe editor.
+ * The universal CSS Filter follows (parity with ImageSections).
+ */
+function LottieSections({
+  element,
+  currentFrame,
+  selectedKeyframe,
+}: SectionProps<LottieElement>): JSX.Element {
+  const id = element.id;
+  const phases = element.phases;
+  return (
+    <>
+      <CollapseSection title="Lottie" defaultExpanded>
+        <NumberField
+          label="speed"
+          value={element.speed}
+          step={0.1}
+          min={0.1}
+          suffix="×"
+          onCommit={(speed) => {
+            if (speed > 0) designerStore.updateElement(id, { speed } as Partial<Element>);
+          }}
+        />
+        <SelectField
+          label="on hold"
+          value={element.holdBehavior}
+          options={['freeze', 'idle-loop'] as const}
+          labels={['Freeze', 'Loop idle segment']}
+          onCommit={(holdBehavior) =>
+            designerStore.updateElement(id, { holdBehavior } as Partial<Element>)
+          }
+        />
+        {phases === undefined ? (
+          <p className={dds.hint}>No phase markers — plays once then freezes.</p>
+        ) : phases.source === 'markers' ? (
+          <>
+            <div className={fieldCss.row}>
+              <span className={fieldCss.label}>phases</span>
+              <span>from markers</span>
+            </div>
+            <p className={dds.hint}>
+              intro-end {String(phases.introEnd)}, outro-start {String(phases.outroStart)}
+            </p>
+          </>
+        ) : (
+          <>
+            <NumberField
+              label="intro end"
+              value={phases.introEnd}
+              step={1}
+              min={0}
+              suffix="f"
+              onCommit={(v) =>
+                designerStore.updateElement(id, {
+                  phases: { ...phases, introEnd: Math.max(0, v) },
+                } as Partial<Element>)
+              }
+            />
+            <NumberField
+              label="outro start"
+              value={phases.outroStart}
+              step={1}
+              min={0}
+              suffix="f"
+              onCommit={(v) =>
+                designerStore.updateElement(id, {
+                  phases: { ...phases, outroStart: Math.max(0, v) },
+                } as Partial<Element>)
+              }
+            />
+          </>
+        )}
       </CollapseSection>
       <FilterSection
         element={element}

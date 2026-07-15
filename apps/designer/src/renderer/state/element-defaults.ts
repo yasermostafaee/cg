@@ -4,6 +4,8 @@ import type {
   DynamicField,
   ImageElement,
   ListItem,
+  LottieElement,
+  LottiePhases,
   PathElement,
   RepeaterElement,
   SequenceElement,
@@ -387,5 +389,40 @@ export function defaultImage(
     source: opts?.source ?? 'project',
     fit: 'contain',
     preserveAspect: true,
+  };
+}
+
+/**
+ * D-125 — a Lottie animation element. Like {@link defaultImage} it needs an
+ * asset id, so the factory is the "after-import" step (the drop-from-assets path
+ * derives `phases` from the animation's bodymovin markers before calling here).
+ *
+ * `opts.width`/`opts.height` size the element to the animation's native canvas
+ * (both default to a 480×270 box when unknown); `opts.phases` seeds the intro /
+ * outro mapping when markers were found (omitted ⇒ the whole clip is the intro,
+ * frozen at its last frame). `speed` defaults to 1×, `loopMode` to 'none', and
+ * `holdBehavior` to 'freeze' so a freshly-imported clip plays once and holds.
+ */
+export function defaultLottie(
+  id: string,
+  x: number,
+  y: number,
+  assetId: string,
+  opts?: { phases?: LottiePhases; width?: number; height?: number; speed?: number },
+): LottieElement {
+  return {
+    id,
+    name: 'Lottie',
+    type: 'lottie',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    zIndex: 0,
+    transform: baseTransform(x, y, opts?.width ?? 480, opts?.height ?? 270),
+    assetId,
+    speed: opts?.speed ?? 1,
+    loopMode: 'none',
+    holdBehavior: 'freeze',
+    ...(opts?.phases ? { phases: opts.phases } : {}),
   };
 }

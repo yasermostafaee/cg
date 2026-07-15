@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AnchorPoint, Element, Scene, TextElement } from '@cg/shared-schema';
+import type { AnchorPoint, Element, LottiePhases, Scene, TextElement } from '@cg/shared-schema';
 import type { AssetMeta } from '@cg/shared-ipc';
+import { importLottie, markersToSegments } from '@cg/lottie-bridge';
 import {
   designerStore,
   editSceneOf,
@@ -11,6 +12,7 @@ import {
   defaultClock,
   defaultEllipse,
   defaultImage,
+  defaultLottie,
   defaultRepeater,
   defaultSequence,
   defaultShape,
@@ -99,6 +101,65 @@ async function insertSharedLogo(scenePoint: { x: number; y: number }): Promise<v
   );
   designerStore.setSelection([id]);
   designerStore.setTool('cursor');
+}
+
+/** D-125 — initial size for a placed Lottie: its native canvas, longest side ≤ 480px. */
+function lottieSize(w: number, h: number): { width: number; height: number } {
+  if (!(w > 0) || !(h > 0)) return { width: 480, height: 270 };
+  const scale = Math.min(1, 480 / Math.max(w, h));
+  return { width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) };
+}
+
+/**
+ * D-125 — place a Lottie element from a dropped project asset. Reads + parses the
+ * asset JSON, re-runs the allowlist validator (a stored asset already passed at
+ * import, but an out-of-band / hand-edited file might not), derives the phase
+ * mapping from bodymovin markers (source 'markers' when present, else omitted so
+ * the clip plays once and freezes), and sizes the element to the animation's
+ * native canvas. A malformed / rejected file surfaces a notice and inserts nothing.
+ */
+async function insertLottieFromAsset(
+  assetId: string,
+  scenePoint: { x: number; y: number },
+): Promise<void> {
+  const url = await window.cg.assets.url(assetId);
+  if (url === null) {
+    designerStore.showNotice('That Lottie asset could not be read.');
+    return;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await (await fetch(url)).text());
+  } catch {
+    designerStore.showNotice('That Lottie file is not valid JSON.');
+    return;
+  }
+  const result = importLottie(parsed);
+  if (!result.ok) {
+    const reason = result.rejected[0]?.message ?? 'unsupported Lottie features';
+    designerStore.showNotice(`Can’t place this Lottie: ${reason}`);
+    return;
+  }
+  const seg = markersToSegments(result.animation);
+  const phases: LottiePhases | undefined =
+    seg === null
+      ? undefined
+      : {
+          introEnd: seg.introEnd,
+          outroStart: seg.outroStart,
+          idle: [seg.idleIn, seg.idleOut],
+          source: 'markers',
+        };
+  const { width, height } = lottieSize(result.animation.w, result.animation.h);
+  const id = `el-${String(Date.now())}`;
+  designerStore.addElement(
+    defaultLottie(id, scenePoint.x, scenePoint.y, assetId, {
+      ...(phases ? { phases } : {}),
+      width,
+      height,
+    }),
+  );
+  designerStore.setSelection([id]);
 }
 
 interface Props {
@@ -410,6 +471,16 @@ export function CanvasOverlay({
       void insertSharedLogo(scenePoint);
       return;
     }
+    if (tool === 'lottie') {
+      // D-125 — a Lottie needs an imported asset, so (like the D-040 logo tool's empty
+      // case) clicking the tool points the operator to the drag-drop path rather than
+      // inserting a placeholder with no animation.
+      designerStore.showNotice(
+        'Drag a Lottie (.json) from Project Assets onto the canvas to place it.',
+      );
+      designerStore.setTool('cursor');
+      return;
+    }
   }
 
   function onContextMenu(e: React.MouseEvent<HTMLDivElement>): void {
@@ -512,6 +583,12 @@ export function CanvasOverlay({
     if (assetId === '') return;
     e.preventDefault();
     const scenePoint = viewportToScene(e.clientX, e.clientY);
+    // D-125 — a Lottie asset drops as a lottie element (its phases/size come from the
+    // parsed animation); every other asset kind is an image (today's path, unchanged).
+    if (e.dataTransfer.getData('application/x-cg-asset-kind') === 'lottie') {
+      void insertLottieFromAsset(assetId, scenePoint);
+      return;
+    }
     const id = `el-${String(Date.now())}`;
     designerStore.addElement(defaultImage(id, scenePoint.x, scenePoint.y, assetId));
     designerStore.setSelection([id]);

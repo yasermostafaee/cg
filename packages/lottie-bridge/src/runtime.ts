@@ -1,4 +1,10 @@
-import lottie, { type AnimationItem } from 'lottie-web';
+// D-125 — the `lottie_light` build (not the full `lottie-web`): it drops the After
+// Effects expression evaluator and therefore all `eval(` / `new Function`, which is
+// the real on-hardware blocker under CasparCG's CEF loaded from `file://` (and the
+// single-file export's `script-src 'unsafe-inline'` CSP with no `'unsafe-eval'`
+// forbids it too). The importer already rejects expressions, so the evaluator is
+// dead weight. Same SVG renderer, same `AnimationItem` surface.
+import lottie, { type AnimationItem } from 'lottie-web/build/player/lottie_light';
 
 /**
  * Subset of the LottieElement.loopMode enum from `@cg/shared-schema`.
