@@ -1549,3 +1549,46 @@ The two-connection distinction the guard conflated: **SPA↔bridge WS** (`#statu
 `disconnected` = bridge process unreachable) vs **bridge↔CasparCG AMCP** (`#linkDown()`,
 `disconnected` = CasparCG unreachable, bridge still up). This class of bug lives entirely in the
 first; the frozen on-air safety lives entirely in the second.
+
+## [~] B-086 — the stack keeps showing red "● ON AIR" after the CasparCG link drops: a broadcast-safety lie (the UI asserts on-air the wire no longer backs) ⟨priority: high⟩ — in progress on `fix/B-086-onair-honest-linkloss`, change dir `openspec/changes/runtime-onair-honest-linkloss/`
+
+When the CasparCG connection drops (CasparCG died, or the link briefly dropped —
+**indistinguishable from our side**, confirmed by testing), on-air stack items keep rendering
+the confident red **● ON AIR** badge indefinitely. The UI is asserting a state the wire can no
+longer verify. This is the same species of lie [[B-081]] killed for the health pills, one
+surface over — the reassuring claim wins, and the operator trusts it.
+
+**Root cause (recon, verified against source):** the Reconciler merge ladder
+(`packages/caspar-client/src/reconciler/reconciler.ts` `reconcileStatus`) is
+`freshTruth → ackedStatus → intentStatus`. Sticky for two compounding reasons:
+
+1. The fallback floor `'playing'` renders **identically** to `'on-air'` (both red "● ON AIR",
+   `theme.ts` `airStateVisual`/`badgeTone`), so when `freshTruth` decays off stale OSC the badge
+   does not visibly change.
+2. The Reconciler is **event-driven** — `emitChange` fires only from `applyOsc`/`applyIntent`/
+   `applyAck`. When OSC goes silent nothing re-publishes, so the **last on-air freezes on
+   screen**, and nothing wires session-state → the Reconciler.
+
+**Fix (owner-locked direction — mirrors [[B-081]]'s HEALTHY→UNKNOWN idiom), bridge/reconciler-side:**
+
+- On CasparCG **link-loss** (a session leaving `'healthy'` — the same signal `#linkDown()` gates
+  on, AMCP TCP close or OSC silence): re-publish every on-air/played item as **UNVERIFIABLE** —
+  a NEW `'unverified'` `StackItemStatus`, label **"WAS ON AIR"**, tone **muted grey**
+  (`colors.textMuted` — the health-UNKNOWN tone, NEVER red, NEVER amber), last-known "ON AIR" in
+  the tooltip. Not ON AIR, not forced-IDLE.
+- On **reconnect**: reconcile against actual OSC. A still-occupied layer re-announces its
+  producer within ~1 tick → `freshTruth` re-derives `'on-air'` automatically. A silent layer
+  (producer gone, e.g. CasparCG restarted) is reset to **IDLE** — a one-shot post-`RESYNCING`
+  occupancy check (`session.osc.occupancy.occupied(OCCUPANCY_STALE_MS)`) against each item's
+  slot, mirroring the sweep's "absence of knowledge is not knowledge of absence". Reset is a
+  silence-inference (real CasparCG never reports `empty` — `occupancy-tap.ts`), so it lands after
+  the ~150ms drain; that latency is inherent and accepted.
+
+**FROZEN:** does NOT weaken `#linkDown()`'s on-air REFUSAL (take/update/out stay refused while
+the link is down — R-006), does NOT change command semantics, does NOT touch [[B-085]]'s library.
+This makes the ON AIR **display + reconcile-truth** honest across a link loss. Distinct from
+**B-030** (auto-out-stuck-on-air: OSC still flowing, link up, producer genuinely present — a
+template-runtime completion-signal problem, separate bug).
+
+Status name: a NEW `'unverified'` status (not the latent `'disconnected'` one, whose "OFFLINE"
+meaning would mislead; not amber `'unconfirmed'`, which is B-044's item-scoped ack-timeout).

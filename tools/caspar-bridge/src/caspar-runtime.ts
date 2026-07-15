@@ -313,6 +313,34 @@ export class CasparRuntime {
         if (this.#sessions[label] !== session) return; // torn-down era
         this.#loaded.clear();
       });
+      // B-086 — honest ON AIR across a CasparCG link-loss. The CURRENT PRIMARY's
+      // OSC is what verifies on-air claims, so its link state drives the
+      // reconciler's "unverifiable" display (the same session-state signal the
+      // health pill and `#linkDown()` use):
+      //   LEFT 'healthy'  → on-air/played items re-publish as UNVERIFIED
+      //                     ("WAS ON AIR", muted) — the wire can't back them.
+      //   INTO 'healthy'  → clear the flag AND reconcile against real occupancy
+      //                     (this fires AFTER the RESYNCING OSC drain, and on a
+      //                     degraded→healthy recovery — both have occupancy
+      //                     populated): a still-occupied layer restores ON AIR
+      //                     via resumed OSC; a silent layer (producer gone) resets
+      //                     to IDLE. The two calls coalesce into one publish, so an
+      //                     emptied item never flashes red.
+      session.on('state-change', ({ from, to }) => {
+        if (this.#sessions[label] !== session) return; // torn-down era
+        if (this.#adapter.currentPrimary !== label) return; // only the primary feeds the reconciler
+        if (to === 'healthy') {
+          this.#reconciler.setLinkDown(false);
+          const occupiedKeys = new Set(
+            session.osc.occupancy
+              .occupied(this.#occupancyStaleMs)
+              .map((o) => `${String(o.channel)}:${String(o.layer)}`),
+          );
+          this.#reconciler.reconcileOnReconnect(occupiedKeys);
+        } else if (from === 'healthy') {
+          this.#reconciler.setLinkDown(true);
+        }
+      });
     }
 
     // Real health + failover from the adapter — replaces the Phase-1/2 mock health.

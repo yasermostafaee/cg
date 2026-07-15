@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { airStateVisual, colors } from '../src/renderer/theme.js';
+import { airStateVisual, badgeTone, colors } from '../src/renderer/theme.js';
 
 /**
  * B-044 — pin the badge mapping for the states the pending-intent contract
@@ -21,5 +21,28 @@ describe('airStateVisual — B-044 badge states', () => {
     expect(airStateVisual('playing', true).label).toBe('TAKING');
     expect(airStateVisual('playing', false).label).toBe('ON AIR');
     expect(airStateVisual('idle', false).label).toBe('IDLE');
+  });
+});
+
+/**
+ * B-086 — the link-down "unverifiable" badge is muted "WAS ON AIR": NEVER the broadcast red of
+ * an ON AIR claim (the wire no longer backs it), NEVER the amber of B-044's `unconfirmed` (a
+ * different, item-scoped condition).
+ */
+describe('airStateVisual / badgeTone — B-086 unverified', () => {
+  it("renders 'unverified' as muted 'WAS ON AIR'", () => {
+    expect(airStateVisual('unverified', false)).toEqual({
+      color: colors.textMuted,
+      icon: '◌',
+      label: 'WAS ON AIR',
+    });
+  });
+
+  it('tones it muted grey — not the on-air red, not the unconfirmed amber', () => {
+    expect(badgeTone('unverified', false)).toBe('idle'); // the --r-text-muted grey role
+    expect(badgeTone('unverified', false)).not.toBe('onair');
+    expect(badgeTone('unverified', false)).not.toBe(badgeTone('unconfirmed', false)); // 'attention'
+    // pending never turns it into a spinner/red — it is a resting state.
+    expect(badgeTone('unverified', true)).toBe('idle');
   });
 });

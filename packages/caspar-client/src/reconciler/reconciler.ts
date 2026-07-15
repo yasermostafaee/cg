@@ -145,6 +145,13 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
   private readonly divergentAfterMs: number;
   private readonly now: () => number;
   private suspended = false;
+  /**
+   * B-086 — the CURRENT-PRIMARY CasparCG link state, driven by the bridge from
+   * the session FSM. While DOWN, an item whose reconciled status would be
+   * on-air/playing is published as the honest `unverified` ("WAS ON AIR")
+   * instead — the wire can no longer confirm the claim.
+   */
+  private linkDown = false;
   private readonly queuedIntents: { intent: Intent; seq: number; at: number }[] = [];
 
   constructor(options: ReconcilerOptions = {}) {
@@ -355,6 +362,71 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
     return this.queuedIntents.length;
   }
 
+  // ──────────────────────────────────────────────────────────────────────
+  // B-086 — honest ON AIR across a CasparCG link-loss
+  // ──────────────────────────────────────────────────────────────────────
+
+  /**
+   * Set the CURRENT-PRIMARY CasparCG link state (the bridge drives this from the
+   * session FSM — the same signal `#linkDown()` gates the on-air refusal on).
+   *
+   * While DOWN, an item whose reconciled status is on-air/`playing` publishes as
+   * the honest `unverified` ("WAS ON AIR") — the wire can no longer confirm it.
+   * The reconciler is event-driven and emits nothing on OSC silence, so this
+   * SUPPLIES the missing re-publish on the transition. Only items whose reconciled
+   * status actually changes are re-emitted (a bounded, deduped burst). Returns
+   * the changed states (for the caller / tests).
+   */
+  setLinkDown(down: boolean): readonly StackItemState[] {
+    if (this.linkDown === down) return [];
+    const before = new Map<string, StackItemStatus>();
+    for (const rec of this.items.values()) before.set(rec.itemId, this.reconcileStatus(rec));
+    this.linkDown = down;
+    const changed: StackItemState[] = [];
+    for (const rec of this.items.values()) {
+      if (this.reconcileStatus(rec) !== before.get(rec.itemId)) changed.push(this.emitChange(rec));
+    }
+    return changed;
+  }
+
+  /** True iff the reconciler currently treats the CasparCG link as down. */
+  get isLinkDown(): boolean {
+    return this.linkDown;
+  }
+
+  /**
+   * On reconnect (the link back to `healthy`, after the session's RESYNCING OSC
+   * drain), reconcile still-on-air items against what CasparCG actually reports on
+   * their layer. `occupiedSlotKeys` holds `channel:layer` for every layer observed
+   * occupied within the staleness bound (the bridge's OSC occupancy tap).
+   *
+   * A `played` item whose slot is occupied is LEFT ALONE — resumed continuous OSC
+   * re-derives `freshTruth = 'on-air'` on its own (the bridge clears the link-down
+   * flag first). A `played` item whose slot is SILENT (no fresh producer — it is
+   * gone, e.g. CasparCG restarted with empty layers) is RESET to `idle`: real
+   * CasparCG never reports `empty`, so silence IS the empty signal (mirrors the
+   * orphan sweep's "absence of knowledge is not knowledge of absence"). The
+   * coalesced publish reads the final state, so an emptied item never flashes red
+   * between the flag-clear and this reset.
+   */
+  reconcileOnReconnect(occupiedSlotKeys: ReadonlySet<string>): readonly StackItemState[] {
+    const changed: StackItemState[] = [];
+    for (const rec of this.items.values()) {
+      if (!rec.played) continue;
+      const key = rec.slot !== undefined ? slotKey(rec.slot) : undefined;
+      if (key !== undefined && occupiedSlotKeys.has(key)) continue; // still on air — OSC restores it
+      // Silent layer — the producer is gone. Reset to the honest idle.
+      rec.played = false;
+      rec.intentStatus = 'idle';
+      delete rec.ackedStatus;
+      delete rec.settle;
+      rec.lastProducer = 'empty';
+      rec.lastOscAt = this.now();
+      changed.push(this.emitChange(rec));
+    }
+    return changed;
+  }
+
   /** True iff `beginResync()` has been called and `endResync()` has not. */
   get isSuspended(): boolean {
     return this.suspended;
@@ -510,6 +582,20 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
   }
 
   private reconcileStatus(rec: ItemRecord): StackItemStatus {
+    const base = this.baseStatus(rec);
+    // B-086 — the CasparCG link is down, so an ON AIR claim can no longer be
+    // verified: `freshTruth`'s OSC has stopped, and the fallback floor `playing`
+    // renders IDENTICALLY to `on-air` (both red "● ON AIR"). Publish the honest
+    // UNVERIFIABLE state instead of a red badge the wire no longer backs. A base
+    // of `on-air`/`playing` already implies the item was taken (`played`), so no
+    // extra guard is needed. Only these two red-badge states are demoted;
+    // transient/`unconfirmed`/idle/loaded keep their own honest meaning.
+    if (this.linkDown && (base === 'on-air' || base === 'playing')) return 'unverified';
+    return base;
+  }
+
+  /** The pre-link-state merge ladder: OSC truth → ack → intent. */
+  private baseStatus(rec: ItemRecord): StackItemStatus {
     const fresh = this.freshTruth(rec);
     if (fresh !== null) return fresh;
     if (rec.ackedStatus !== undefined) return rec.ackedStatus;
