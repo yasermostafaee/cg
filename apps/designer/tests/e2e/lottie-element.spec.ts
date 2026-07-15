@@ -78,6 +78,95 @@ const BODYMOVIN = JSON.stringify({
 // visually EMPTY (scale 0) and the settled/hold frame (intro-end = 10) is full-size —
 // the shape a real AE "furniture" export has. The editor canvas must show the settled
 // frame, not the invisible intro-start.
+// A MARKER-LESS furniture clip — the real-world shape that broke the editor canvas.
+// The layer scales 0→100 over f0–10 (intro ON), HOLDS at 100 over f10–50, then scales
+// 100→0 over f50–60 (outro OFF). There is NO `markers` array, so the import derives no
+// phases and the runtime's `introEnd` falls back to `op` (the LAST frame = the outro-END,
+// scale 0 = INVISIBLE). Parking the static canvas there shows an EMPTY box (both ends of
+// the clip are blank); only the middle HOLD is visible. The canvas must poster the clip
+// MIDPOINT (f30 = held, full-size), not `op`.
+const MARKERLESS_FURNITURE = JSON.stringify({
+  v: '5.7.0',
+  fr: 30,
+  ip: 0,
+  op: 60,
+  w: 400,
+  h: 200,
+  nm: 'furniture-nomarkers',
+  ddd: 0,
+  assets: [],
+  layers: [
+    {
+      ddd: 0,
+      ind: 1,
+      ty: 4,
+      nm: 'bar',
+      sr: 1,
+      ks: {
+        o: { a: 0, k: 100 },
+        r: { a: 0, k: 0 },
+        p: { a: 0, k: [200, 100, 0] },
+        a: { a: 0, k: [0, 0, 0] },
+        // Intro ON (0→10), HOLD (10→50), outro OFF (50→60). Both ends are scale-0.
+        s: {
+          a: 1,
+          k: [
+            {
+              t: 0,
+              s: [0, 0, 100],
+              i: { x: [0.5, 0.5, 0.5], y: [1, 1, 1] },
+              o: { x: [0.5, 0.5, 0.5], y: [0, 0, 0] },
+            },
+            {
+              t: 10,
+              s: [100, 100, 100],
+              i: { x: [0.5, 0.5, 0.5], y: [1, 1, 1] },
+              o: { x: [0.5, 0.5, 0.5], y: [0, 0, 0] },
+            },
+            {
+              t: 50,
+              s: [100, 100, 100],
+              i: { x: [0.5, 0.5, 0.5], y: [1, 1, 1] },
+              o: { x: [0.5, 0.5, 0.5], y: [0, 0, 0] },
+            },
+            { t: 60, s: [0, 0, 100] },
+          ],
+        },
+      },
+      ao: 0,
+      shapes: [
+        {
+          ty: 'gr',
+          it: [
+            {
+              ty: 'rc',
+              d: 1,
+              s: { a: 0, k: [300, 80] },
+              p: { a: 0, k: [0, 0] },
+              r: { a: 0, k: 0 },
+            },
+            { ty: 'fl', c: { a: 0, k: [1, 0.2, 0.2, 1] }, o: { a: 0, k: 100 }, r: 1 },
+            {
+              ty: 'tr',
+              p: { a: 0, k: [0, 0] },
+              a: { a: 0, k: [0, 0] },
+              s: { a: 0, k: [100, 100] },
+              r: { a: 0, k: 0 },
+              o: { a: 0, k: 100 },
+            },
+          ],
+          nm: 'Group',
+        },
+      ],
+      ip: 0,
+      op: 60,
+      st: 0,
+      bm: 0,
+    },
+  ],
+  // NO `markers` key — a hand-exported furniture clip with no phase markers.
+});
+
 const ANIMATED_INTRO = JSON.stringify({
   v: '5.7.0',
   fr: 30,
@@ -238,6 +327,42 @@ test.describe('Lottie element (D-125 Phase 1)', () => {
     // Assert the RENDERED CONTENT has a non-zero painted size: getBBox() collapses to
     // ~0 at the scale-0 intro-start and is full-size at the settled frame. This bites
     // the pre-fix "empty box on the canvas" state.
+    await expect
+      .poll(
+        async () =>
+          svg.evaluate((el) => {
+            try {
+              const b = (el as unknown as SVGGraphicsElement).getBBox();
+              return Math.min(b.width, b.height);
+            } catch {
+              return 0;
+            }
+          }),
+        { timeout: 5000 },
+      )
+      .toBeGreaterThan(5);
+  });
+
+  test('a MARKER-LESS furniture clip renders a VISIBLE poster on the editor canvas (not the invisible outro-end)', async ({
+    app,
+  }) => {
+    await app.newProject('Lottie no-markers');
+    await importAndPlaceLottie(app, 'furniture-nomarkers.json', MARKERLESS_FURNITURE);
+
+    // The real furniture bug: with NO phase markers the runtime's `introEnd` fell back to
+    // `op` (the LAST frame = outro-END, scale 0 = invisible), and #338's poster parked
+    // there — so the canvas showed an EMPTY box while Preview (which the operator PLAYS)
+    // worked. The player DID mount; the poster FRAME was invisible.
+
+    // The lottie_light player is mounted on the EDITOR CANVAS (a real <svg>, in the
+    // canvas iframe — the parent-doc selection gizmo <polygon> is NOT in this frame).
+    const svg = app.canvasFrame.locator('[data-cg-element-id] svg').first();
+    await expect(svg).toBeAttached();
+    await expect(svg).toHaveAttribute('viewBox', /\d/); // a real lottie_light svg, not a stub
+
+    // And it posters a VISIBLE frame (the clip midpoint, in the held region): the rendered
+    // content has a non-zero painted size. On the pre-fix build the poster is `op` (the
+    // scale-0 outro-end) and this collapses to ~0 — the test bites.
     await expect
       .poll(
         async () =>
