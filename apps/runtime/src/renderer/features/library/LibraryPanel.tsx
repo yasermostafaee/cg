@@ -9,6 +9,7 @@ import { useConfirm } from '../../ui/useDialog.js';
 import { importTemplateFromBytes } from './templateDelivery.js';
 import { templateDisplayName } from './templateName.js';
 import { recordDefaultPosition } from '../stack/defaultPositionStore.js';
+import { reportCommandError } from '../status/commandFeedback.js';
 // B-038 Phase 3 — the bundled app @font-face CSS (Vazirmatn / Exo 2) as a raw
 // string. Passed to the single-file export so the bundled faces inline as base64
 // and the template HTML CasparCG loads renders Persian with the correct face.
@@ -286,6 +287,10 @@ export function LibraryPanel(): JSX.Element {
                     variant="secondary"
                     run={() => loadOntoStack(t)}
                     aria-label={`Load ${label}`}
+                    // A Load refusal (e.g. the bridge is down — Load stays bridge-owned and
+                    // refused, B-085) surfaces as the command TOAST, not pinned inline where
+                    // its wrapped text bloated this narrow row.
+                    onError={reportCommandError}
                   >
                     Load
                   </AsyncButton>

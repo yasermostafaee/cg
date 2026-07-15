@@ -29,9 +29,8 @@ import {
   StackStateChangedChannel,
   StackTakeChannel,
   StackUpdateChannel,
-  TemplatesGetChannel,
+  type TemplatesGetChannel,
   TemplatesImportChannel,
-  TemplatesListChannel,
   TemplatesRemoveChannel,
   UpdateCancelChannel,
   UpdateRequestChannel,
@@ -50,12 +49,14 @@ import {
   type PendingUpdate,
   type Settings,
 } from '@cg/shared-ipc';
+import { MemoryWorkspace } from '@cg/storage';
 import type {
   AppInfo,
   BridgeLinkStatus,
   RuntimeBridge,
   Unsubscribe,
 } from '../shared/runtime-bridge.js';
+import { LibraryStore } from './library/LibraryStore.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
 
@@ -85,6 +86,14 @@ export interface WebSocketRuntimeOptions {
    * renderer wires this to its command-error surface; default: console.error.
    */
   onResyncError?: (message: string) => void;
+  /**
+   * B-085 — the browser-local template library (source of truth). Injected by
+   * `createRuntimeBridge` backed by OPFS (persistent). Defaults to an in-memory
+   * store so transport/reconnect tests can construct the runtime with no library
+   * and still exercise delivery + reconcile. Must be `hydrate()`-ed before the
+   * renderer reads `templates.list()` (the boot path awaits it).
+   */
+  library?: LibraryStore;
 }
 
 /** Thrown (as a rejected promise) when a command is issued while the link is down. */
@@ -140,14 +149,23 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #pending = new Map<string, Pending>();
 
   /**
-   * Reconnect-reconciliation — the exact `{ template, html }` payload of every
-   * successful `templates.import`, keyed by templateId (a re-import replaces
-   * it). The bridge's registry is in-memory and empty after a bridge restart;
-   * `#resync()` re-delivers this set FIRST on every reconnect so a subsequent
-   * load resolves against a populated registry. Page-lifetime only — a page
-   * reload starts empty (the bridge-side registry covers that case).
+   * B-085 — the browser-local template library is the source of truth AND the
+   * reconnect-reconciliation retention set (it REPLACES the former page-lifetime
+   * `#retained` map, and is now persistent). `templates.*` are served from it
+   * with no bridge round-trip, so they work with the bridge down; `#resync()`
+   * re-delivers `#library.entries()` FIRST on every reconnect so a subsequent
+   * load resolves against a populated bridge registry (conflict policy:
+   * local-wins).
    */
-  readonly #retained = new Map<string, ChannelRequest<typeof TemplatesImportChannel>>();
+  readonly #library: LibraryStore;
+
+  /**
+   * B-085 — the last stack snapshot seen over the link. Drives the OFFLINE
+   * refuse-while-referenced check for `templates.remove`: while disconnected the
+   * bridge is the sole mutator of the stack and cannot change it, so the last
+   * value the SPA saw IS the current stack (empty before the first connect).
+   */
+  #lastStack: readonly StackItemState[] = [];
 
   readonly #stackSubs = new Subs<readonly StackItemState[]>();
   readonly #healthSubs = new Subs<ConnectionHealth>();
@@ -169,6 +187,10 @@ export class WebSocketRuntime implements RuntimeBridge {
       options.createWebSocket ?? ((u) => new WebSocket(u) as unknown as WebSocketLike);
     this.#onResyncError =
       options.onResyncError ?? ((message) => console.error(`[WebSocketRuntime] ${message}`));
+    // Default to an in-memory (unhydrated, empty) library so tests can construct
+    // the runtime with no store and still exercise delivery + reconcile. The boot
+    // path injects an OPFS-backed, hydrated store.
+    this.#library = options.library ?? new LibraryStore(new MemoryWorkspace());
     this.#connect();
   }
 
@@ -184,7 +206,6 @@ export class WebSocketRuntime implements RuntimeBridge {
   /** Stop reconnecting and close the socket. */
   dispose(): void {
     this.#disposed = true;
-    this.#retained.clear();
     if (this.#reconnectTimer !== null) clearTimeout(this.#reconnectTimer);
     this.#ws?.close();
   }
@@ -201,7 +222,13 @@ export class WebSocketRuntime implements RuntimeBridge {
         this.#readySettled = true;
         this.#readyResolve?.();
       }
-      if (reconnected) void this.#resync();
+      // B-085 — reconcile the browser-local library to the bridge on EVERY connect:
+      // deliver the retained templates so the bridge can serve them. On the FIRST
+      // connect this delivers a library imported while boot-disconnected (offline
+      // import); on a RECONNECT it additionally re-pulls the stack/health/lock
+      // snapshots (first-connect snapshots come from the renderer's
+      // `useBridgeSnapshot`). Delivery on an empty library is a no-op.
+      void this.#resync(reconnected);
     });
     ws.addEventListener('message', (ev) => {
       this.#onMessage(typeof ev.data === 'string' ? ev.data : String(ev.data));
@@ -242,17 +269,20 @@ export class WebSocketRuntime implements RuntimeBridge {
   }
 
   /**
-   * Post-reconnect resync: FIRST re-deliver every retained template — a bridge
-   * restart wiped its in-memory registry — THEN re-pull the full snapshot and
-   * push it to subscribers. All re-delivery frames are written before yielding,
-   * so single-socket FIFO plus the bridge's synchronous registration guarantee
-   * any operator load issued after the reconnect resolves against a populated
-   * registry. A failed re-delivery is surfaced and never aborts the rest.
+   * Reconcile on (re)connect: FIRST re-deliver every template in the browser-local
+   * library — a bridge restart wiped its in-memory registry, and an offline import
+   * never reached it — THEN (on a RECONNECT only) re-pull the full snapshot and
+   * push it to subscribers. All re-delivery frames are written before yielding, so
+   * single-socket FIFO plus the bridge's synchronous registration guarantee any
+   * operator load issued after the connect resolves against a populated registry.
+   * A failed re-delivery is surfaced and never aborts the rest.
    */
-  async #resync(): Promise<void> {
-    const redeliveries = [...this.#retained.values()].map(async (req) => {
+  async #resync(rePullSnapshots = true): Promise<void> {
+    // B-085 — reconcile the bridge to the browser-local library (local-wins):
+    // deliver every retained template FIRST, sourced from the persistent store.
+    const redeliveries = this.#library.entries().map(async (req) => {
       try {
-        await this.#invoke(TemplatesImportChannel, req);
+        await this.#invoke(TemplatesImportChannel, { template: req.template, html: req.html });
       } catch (err) {
         // A fresh drop mid-resync re-triggers the whole resync on the next
         // reconnect — stay quiet; only a real per-template rejection surfaces.
@@ -264,12 +294,16 @@ export class WebSocketRuntime implements RuntimeBridge {
       }
     });
     await Promise.all(redeliveries);
+    // First connect: the renderer's `useBridgeSnapshot` pulls the initial
+    // stack/health/lock, so only a RECONNECT re-pulls them here.
+    if (!rePullSnapshots) return;
     try {
       const [stack, health, lock] = await Promise.all([
         this.#invoke(StackSnapshotChannel, undefined),
         this.#invoke(ConnectionsHealthChannel, undefined),
         this.#invoke(LockStateChannel, undefined),
       ]);
+      this.#lastStack = stack;
       this.#stackSubs.emit(stack);
       this.#healthSubs.emit(health);
       this.#lockSubs.emit(lock);
@@ -299,7 +333,10 @@ export class WebSocketRuntime implements RuntimeBridge {
     switch (channel) {
       case StackStateChangedChannel.name: {
         const p = StackStateChangedChannel.payload.safeParse(payload);
-        if (p.success) this.#stackSubs.emit(p.data);
+        if (p.success) {
+          this.#lastStack = p.data;
+          this.#stackSubs.emit(p.data);
+        }
         break;
       }
       case ConnectionsHealthChangedChannel.name: {
@@ -392,10 +429,19 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(StackSetPositionChannel, req),
     removeAll: () => this.#invoke(StackRemoveAllChannel, undefined),
     clearAll: () => this.#invoke(StackClearAllChannel, undefined),
-    snapshot: () => this.#invoke(StackSnapshotChannel, undefined),
+    snapshot: async () => {
+      const stack = await this.#invoke(StackSnapshotChannel, undefined);
+      this.#lastStack = stack; // B-085 — keep the offline remove-reference check current
+      return stack;
+    },
     onStateChanged: (handler: (snapshot: readonly StackItemState[]) => void) =>
       this.#stackSubs.add(handler),
   };
+
+  /** B-085 — how many current stack items reference `templateId` (offline R-005 check). */
+  #referencedCount(templateId: string): number {
+    return this.#lastStack.filter((i) => i.templateId === templateId).length;
+  }
 
   readonly connections = {
     config: (): Promise<ConnectionConfig> => this.#invoke(ConnectionsConfigChannel, undefined),
@@ -426,28 +472,40 @@ export class WebSocketRuntime implements RuntimeBridge {
     onStateChanged: (handler: (state: LockState) => void) => this.#lockSubs.add(handler),
   };
 
+  // B-085 — the template library is browser-local: reads and writes are served
+  // from `#library` and do NOT round-trip `#invoke`, so they work with the bridge
+  // process unreachable (none of them commands CasparCG). The bridge is a
+  // delivery/serve target reconciled on (re)connect (`#resync`).
   readonly templates = {
     get: (req: ChannelRequest<typeof TemplatesGetChannel>) =>
-      this.#invoke(TemplatesGetChannel, req),
-    list: () => this.#invoke(TemplatesListChannel, undefined),
+      Promise.resolve(this.#library.get(req.templateId)),
+    list: () => Promise.resolve(this.#library.list()),
     import: async (req: ChannelRequest<typeof TemplatesImportChannel>) => {
-      const res = await this.#invoke(TemplatesImportChannel, req);
-      // Reconnect-reconciliation — retain the exact delivered payload (only
-      // after the bridge confirmed it) so a bridge restart is healed by
-      // re-delivery on reconnect. Keyed by id: a re-import replaces it.
-      this.#retained.set(req.template.templateId, req);
+      // Register LOCALLY first (the source of truth) — this is what makes import
+      // succeed offline. Then, when live, deliver to the bridge so it can serve
+      // the HTML to CasparCG. A non-disconnect delivery failure is swallowed: the
+      // template is retained in `#library` and re-delivered by the next `#resync`.
+      const res = await this.#library.import(req.template, req.html);
+      if (this.#status === 'live') {
+        try {
+          await this.#invoke(TemplatesImportChannel, req);
+        } catch {
+          /* retained locally; reconcile heals it on the next connect */
+        }
+      }
       return res;
     },
     remove: async (req: ChannelRequest<typeof TemplatesRemoveChannel>) => {
-      const res = await this.#invoke(TemplatesRemoveChannel, req);
-      // R-005 — prune the retention ONLY on a confirmed removal. `#resync()` re-delivers
-      // this set on every reconnect, so a registry-only delete would be undone by the very
-      // next bridge blip. Symmetrically, a REFUSED removal must keep the payload: the
-      // bridge still has the template registered, and dropping it here would make a
-      // reconnect silently de-register a template the operator was told they could not
-      // remove.
-      if (res.ok) this.#retained.delete(req.templateId);
-      return res;
+      // Live: the bridge is authoritative for refuse-while-referenced (it holds the
+      // true stack). On a confirmed removal, drop it from the local store too.
+      if (this.#status === 'live') {
+        const res = await this.#invoke(TemplatesRemoveChannel, req);
+        if (res.ok) await this.#library.delete(req.templateId);
+        return res;
+      }
+      // Disconnected: the removal is local. Enforce R-005 against the last-known
+      // stack (exact while disconnected — the bridge cannot mutate it).
+      return this.#library.remove(req.templateId, this.#referencedCount(req.templateId));
     },
   };
 

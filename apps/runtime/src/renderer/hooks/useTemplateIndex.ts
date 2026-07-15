@@ -14,10 +14,13 @@ import { useLink } from './useLink.js';
  * SET of referenced ids changes. That is exactly the moment a row could be showing a template
  * the index has never seen — a fresh import, then Load.
  *
- * B-080 — it also re-lists on every transition into a usable link. This hook has no publish
- * channel to fall back on, so a list refused at mount (the bridge was still down: R-006 mounts
- * DISCONNECTED and refuses reads) would otherwise leave every row printing its raw
- * `templateId` until the referenced SET happened to change.
+ * B-080 — it also re-lists on every transition into a usable link (kept as a cheap safety net
+ * for the mock, which re-seeds per load).
+ *
+ * B-085 — the registry is now browser-local: `templates.list()` reads local state and never
+ * rejects, so the former `if (link === 'disconnected') return` guard is GONE. Stack rows now
+ * resolve their template names even while disconnected, instead of falling back to the raw
+ * `templateId` / "Unnamed template".
  */
 export function useTemplateIndex(
   templateIds: readonly string[],
@@ -30,7 +33,6 @@ export function useTemplateIndex(
   const referenced = [...new Set(templateIds)].sort().join('|');
 
   useEffect(() => {
-    if (link === 'disconnected') return;
     let cancelled = false;
     const wanted = new Set(referenced.split('|').filter((id) => id !== ''));
     void window.cg.templates.list().then(

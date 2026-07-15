@@ -162,4 +162,59 @@ describe('AsyncButtonController', () => {
     ctrl.press(() => second.promise);
     expect(view()).toMatchObject({ phase: 'busy', errorMessage: null, inFlight: true });
   });
+
+  /**
+   * B-085 (UX) — with an `onError` sink (a toast), a failure is forwarded there instead of
+   * being pinned inline beside the control (which bloated a tight library row). The button
+   * returns to idle; the toast carries the message, unchanged.
+   */
+  function toastHarness(): {
+    ctrl: AsyncButtonController;
+    view: () => AsyncView;
+    errors: string[];
+  } {
+    const clock = new FakeClock();
+    const errors: string[] = [];
+    let last: AsyncView = {
+      phase: 'idle',
+      showSpinner: false,
+      errorMessage: null,
+      ariaBusy: false,
+      inFlight: false,
+    };
+    const ctrl = new AsyncButtonController({
+      onChange: (v) => {
+        last = v;
+      },
+      schedule: clock.schedule,
+      onError: (m) => errors.push(m),
+    });
+    return { ctrl, view: () => last, errors };
+  }
+
+  it('routes a thrown error to onError (toast) and returns to idle, not inline', async () => {
+    const { ctrl, view, errors } = toastHarness();
+    const d = deferred();
+    ctrl.press(() => d.promise);
+    d.reject(new Error('Bridge disconnected — command rejected. Not sent to CasparCG.'));
+    await tick();
+
+    expect(errors).toEqual(['Bridge disconnected — command rejected. Not sent to CasparCG.']);
+    expect(view().errorMessage).toBeNull(); // nothing pinned inline
+    expect(view().phase).toBe('idle');
+    expect(view().inFlight).toBe(false);
+  });
+
+  it('routes a not-accepted result to onError too (still no inline message)', async () => {
+    const { ctrl, view, errors } = toastHarness();
+    const d = deferred();
+    ctrl.press(() => d.promise);
+    d.resolve(false);
+    await tick();
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).not.toBe('');
+    expect(view().errorMessage).toBeNull();
+    expect(view().phase).toBe('idle');
+  });
 });

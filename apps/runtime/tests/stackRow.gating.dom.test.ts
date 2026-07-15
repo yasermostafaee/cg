@@ -95,8 +95,11 @@ describe('StackRow gating (B-053 contract)', () => {
     expect(loaded.get('PLAY')).toBe(true);
     expect(loaded.get('UPDATE')).toBe(true);
     expect(loaded.get('CLEAR')).toBe(true);
-    // REMOVE is local bookkeeping, not a wire command — it stays available.
-    expect(loaded.get('REMOVE')).toBe(false);
+    // B-085 — REMOVE is now disabled too. Only the LIBRARY moved browser-local; the STACK
+    // stays bridge-owned playout state, so removing a stack item genuinely needs the bridge.
+    // The prior "REMOVE stays available offline" was the recon-flagged inconsistency: an
+    // enabled button whose only offline outcome was a rejected round-trip.
+    expect(loaded.get('REMOVE')).toBe(true);
 
     const onAir = await renderRow('on-air', 'disconnected');
     expect(onAir.get('PLAY')).toBe(true);
