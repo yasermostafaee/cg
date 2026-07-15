@@ -1,0 +1,5 @@
+# Local pre-merge gate while GitHub Actions minutes are exhausted (see README
+# "Local gate"). Runs the FAST full gate before every push and blocks the push if it
+# fails. E2E is NOT here (too slow, ~6 min) — run it manually with `pnpm gate:e2e` for
+# any UI/layout/rendering change. Emergency bypass: `git push --no-verify`.
+pnpm gate

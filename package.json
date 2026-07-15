@@ -15,6 +15,8 @@
     "test": "turbo run test --continue=dependencies-successful",
     "test:integration": "turbo run test:integration --continue=dependencies-successful",
     "test:e2e": "turbo run test:e2e --continue=dependencies-successful",
+    "gate": "turbo run typecheck lint test build --force --continue=dependencies-successful && pnpm format:check && pnpm openspec validate --all --strict",
+    "gate:e2e": "turbo run test:e2e --force --continue=dependencies-successful",
     "package": "turbo run package",
     "dev": "turbo run dev --parallel",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
