@@ -1397,3 +1397,90 @@ does not change it) — `createRuntimeBridge`, `WebSocketRuntime` and the bridge
 diff**. The `strategy` pill stays as-is: it is CONFIG, not health, and does not go stale with
 the link. R-006's banners and test-mode honesty (`⚠ NO SERVER — SIMULATED`) are unchanged and
 still asserted by their own specs.
+
+---
+
+## [~] B-082 — offline, every **Load** lands the row in ✗ ERROR: a load is not an on-air action, but it still ATTEMPTED the pre-roll `CG ADD` and reported the dead link as a broken item ⟨priority: high⟩ — fixed on `fix/offline-load-and-title-wrap-v2`, no change dir
+
+With the bridge up but **PRIMARY A OFFLINE**, pressing **Load** on a library template puts
+the item on the stack and immediately paints it **✗ ERROR** / "Not accepted" — every row,
+every time. But a Load is **not** an on-air action: it adds the item to the operator's
+stack. Nothing reaches air. The only true statement was "the server isn't there"; the row
+said "this item is broken".
+
+**Root cause — NOT the R-006 guard over-reaching.** `#linkDown()` ([#312](https://github.com/yasermostafaee/cg/pull/312))
+was already narrow and still is: its only three call sites are `take`, `update` and `out`,
+the verbs that must reach the wire. It never touched `load`. The ERROR came from one step
+further down. `load()` ran to completion and issued its pre-roll `CG ADD`; on a dead AMCP
+link `#send` throws, the Reconciler honestly acks the failure — and a failed ack is
+`ackedStatus = 'error'` with `errorCode: 'amcp-send-failed'`. Reproduced exactly:
+
+```
+LOAD RESULT = {"accepted":false}
+SNAPSHOT    = [{ "itemId":"item1", "status":"error", "errorCode":"amcp-send-failed", … }]
+```
+
+**Fix — skip the pre-roll, do not defer it.** When no declared server is reachable there is
+nothing to pre-roll, so `load()` no longer attempts the `CG ADD`. The item keeps the
+`loaded` its intent already set, with no failing ack to knock it into ERROR. Nothing is on
+air to hide (no server is reachable), so the Reconciler's "never claim `idle`/`loaded` over
+a live graphic" doctrine is intact.
+
+Crucially this is **not** the deferral R-006 forbids — nothing is queued for later delivery.
+The item simply has no live producer, which is the **same condition every item is in after a
+reconnect** (`#loaded` is per-server and cleared on drop). B-039's lazy re-ADD already covers
+exactly that case: `take`/`update` re-issue the `CG ADD` before the `CG PLAY`, pulling the
+template and the **current** fields from the Reconciler at the moment of use rather than
+replaying a stored command. So an item loaded while the server was down **plays normally**
+once the link is back — and until then the on-air verbs stay **refused**.
+
+**Frozen, verified unchanged:** offline safety is NARROWED, never removed — PLAY/TAKE,
+UPDATE and OUT are still refused with `errorCode: 'disconnected'` while no server is
+reachable, R-006's four refusal tests pass untouched, and no command is queued. No AMCP verb
+is added, the `CG ADD` → `CG PLAY` order is preserved, and the quoter/verb sequence is not
+touched. `#linkDown()`'s "no declared server is reachable" predicate (B-056's mirror-pair
+case) is unchanged.
+
+---
+
+## [~] B-083 — Library names render ONE LETTER PER LINE: two rigid `nowrap` buttons take 63% of the row and the name's `overflow-wrap: anywhere` lets it collapse to a one-character min-content ⟨priority: high⟩ — fixed on `fix/offline-load-and-title-wrap-v2`, no change dir
+
+In the left **Library** panel the template names wrap **per character** — "پ / ن / ل" stacked
+vertically, 3–5 lines tall for a single name. The operator cannot read the list.
+
+**Root cause — measured, not guessed** (real browser, seeded starters):
+
+|                                   | width        |
+| --------------------------------- | ------------ |
+| Library row                       | 214px        |
+| `Load` + `Remove` (both `nowrap`) | **134.75px** |
+| what's left for the name          | **53.25px**  |
+
+The row was a `1fr auto` grid with the name in the `1fr`. The `auto` track is sized to the
+**max-content** of `itemActions`, and `.cg-btn` is `white-space: nowrap`, so the two buttons
+are **rigid** — they never shrink. `#306` added the second (`Remove`) button into that same
+track, roughly doubling it (~60px → ~135px) inside an unchanged **240px** column and
+squeezing the name's track to 53px. `overflow-wrap: anywhere` did the rest: unlike
+`break-word`, `anywhere` **lowers the element's intrinsic min-content size to a single
+glyph**, so nothing stopped the collapse and the name had no choice but to wrap one letter
+per line.
+
+Note the popular suspect is **not** the cause: `itemBody` already has `min-width: 0`, so this
+is not the classic missing-`min-width:0` flex/grid overflow trap. Nor is the disconnected
+banner squeezing the panel — it is a sibling **row above** the shell's column, so it can only
+consume height, never width.
+
+**Fix.** No rule _inside_ that structure could fix it — the buttons are rigid, so the `1fr`
+track can never exceed ~53px while they sit beside it. The row therefore **reflows**: the
+name takes the row's full width and the actions sit under it, right-aligned. That costs
+nothing elsewhere (the alternative, widening the 240px Library column, steals width from the
+canvas and the stack). `overflow-wrap` becomes **`break-word`**, deliberately not `anywhere`:
+both break a token too long for its line, but only `anywhere` lowers min-content to one glyph
+— `break-word` keeps it at the longest word, so a squeezed container can never again cascade
+into per-character wrapping, while a pathological unbroken token still cannot overflow.
+
+**Why it shipped:** nothing asserted **geometry**. Every library spec checked text and
+visibility, and a one-letter-per-line name is still perfectly "visible" with the right text
+content. The regression test is therefore a **measuring** one (`library-title-wrap.spec.ts`):
+it pins the name box's real width and its real line count, and it fails on the pre-fix build
+with exactly the measured `53.25px`.

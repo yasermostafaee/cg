@@ -42,20 +42,40 @@ const styles = {
     overflowY: 'auto' as const,
     minHeight: 0,
   },
+  // B-083 — the name gets the row's FULL width; the actions sit under it.
+  //
+  // This was a `1fr auto` grid with the name in the `1fr`. The `auto` track is sized to the
+  // max-content of two `white-space: nowrap` buttons (`.cg-btn`) — Load + Remove — which
+  // measured 134.75px of a 214px row. The name's track got the 53.25px that were left, and
+  // `overflow-wrap: anywhere` (below) let it shrink to a ONE-CHARACTER min-content, so a
+  // name wrapped one letter per line, 3–5 lines tall. The buttons are rigid, so the `1fr`
+  // could never win width back: no rule INSIDE that structure can fix it — the row has to
+  // reflow. Stacking is the fix that costs nothing elsewhere (the alternative, widening the
+  // 240px Library column, steals width from the canvas and stack).
   item: {
-    display: 'grid',
-    gridTemplateColumns: '1fr auto',
-    alignItems: 'center',
-    gap: '0.5rem',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'stretch',
+    gap: '0.4rem',
     padding: '0.4rem 0.5rem',
     background: colors.panelMuted,
     borderRadius: '0.2rem',
     border: `1px solid ${colors.border}`,
   },
   itemBody: { display: 'flex', flexDirection: 'column' as const, gap: '0.1rem', minWidth: 0 },
-  itemActions: { display: 'flex', gap: '0.3rem', alignItems: 'center' },
-  itemName: { fontSize: '0.85rem', fontWeight: 600, overflowWrap: 'anywhere' as const },
-  itemMeta: { fontSize: '0.75rem', color: colors.textMuted, overflowWrap: 'anywhere' as const },
+  itemActions: {
+    display: 'flex',
+    gap: '0.3rem',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  // `break-word`, deliberately NOT `anywhere`: both break a token too long for the line, but
+  // `anywhere` also lowers the element's intrinsic MIN-CONTENT to a single glyph — which is
+  // what let a squeezed container collapse the name to one letter per line instead of
+  // holding its width. `break-word` keeps min-content at the longest word, so the name wraps
+  // at word boundaries and a pathological unbroken token still can't overflow the panel.
+  itemName: { fontSize: '0.85rem', fontWeight: 600, overflowWrap: 'break-word' as const },
+  itemMeta: { fontSize: '0.75rem', color: colors.textMuted, overflowWrap: 'break-word' as const },
   error: {
     color: '#fca5a5',
     fontSize: '0.78rem',
