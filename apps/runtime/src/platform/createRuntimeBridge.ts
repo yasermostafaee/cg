@@ -2,6 +2,8 @@ import { DEFAULT_BRIDGE_WS_URL } from '@cg/shared-ipc';
 import type { AppInfo, BridgeLinkStatus, RuntimeBridge } from '../shared/runtime-bridge.js';
 import { MockRuntime } from './MockRuntime.js';
 import { WebSocketRuntime } from './WebSocketRuntime.js';
+import { LibraryStore } from './library/LibraryStore.js';
+import { initRuntimeWorkspace } from './library/workspace.js';
 import { isTestMode } from './testMode.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
@@ -45,10 +47,15 @@ export async function createRuntimeBridge(
   if (isTestMode()) return createMockBridge();
 
   const url = resolveBridgeUrl();
-  const ws = new WebSocketRuntime(
-    url,
-    options.onResyncError !== undefined ? { onResyncError: options.onResyncError } : {},
-  );
+  // B-085 — the browser-local template library (source of truth). Hydrated from
+  // persistent storage BEFORE the runtime is returned, so the renderer's first
+  // `templates.list()` sees the operator's library even with the bridge down.
+  const library = new LibraryStore(await initRuntimeWorkspace());
+  await library.hydrate();
+  const ws = new WebSocketRuntime(url, {
+    library,
+    ...(options.onResyncError !== undefined ? { onResyncError: options.onResyncError } : {}),
+  });
   try {
     await withTimeout(ws.whenReady(), PROBE_TIMEOUT_MS);
   } catch {

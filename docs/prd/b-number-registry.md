@@ -48,6 +48,13 @@ the collision merged because the audit was cache-hitting (see [B-084](bugs.md)).
 both, exactly as B-056 — B-080 is now allowlisted in the audit. **B-084** is taken by that
 cache-execution gap itself ([bugs.md](bugs.md)). **Next free: `B-085`.**
 
+**Re-audited 2026-07-15** against `main` (`605d765`, after #329). `B-085` has since been taken —
+the browser-local template-library class fix (import/list/remove/display/schema refused while
+the SPA↔bridge WS is down), [bugs-runtime.md](bugs-runtime.md), change dir
+`openspec/changes/runtime-local-library/`. Verified free before use (no heading claimed it in
+any of the three bug files; its only prior occurrence was this file's own "next free" pointer).
+The space stays contiguous: `B-001` … `B-085`, no gaps. **Next free: `B-086`.**
+
 **Exactly two numbers are ambiguous. Every other number names exactly one bug.**
 
 | Number     | Status                                | Who owns it                                                                                                                                                                                                                             |

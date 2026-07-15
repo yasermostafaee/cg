@@ -17,9 +17,13 @@ const INITIAL: AsyncView = {
 
 /** Build a controller wired to real timers. Module-scope so the effect can
  *  recreate one after a StrictMode dispose without re-declaring the config. */
-function createController(onChange: (view: AsyncView) => void): AsyncButtonController {
+function createController(
+  onChange: (view: AsyncView) => void,
+  onError?: (message: string) => void,
+): AsyncButtonController {
   return new AsyncButtonController({
     onChange,
+    ...(onError !== undefined ? { onError } : {}),
     schedule: (fn, ms) => {
       const id = setTimeout(fn, ms);
       return () => clearTimeout(id);
@@ -32,7 +36,13 @@ type Props = {
   run: () => Promise<AsyncResult>;
   variant?: ButtonVariant;
   children: ReactNode;
-} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'type'>;
+  /**
+   * When set, a failure is routed HERE (e.g. `reportCommandError` → the command toast)
+   * instead of rendered inline beside the button. Use for buttons in a tight row where an
+   * inline error would break the layout.
+   */
+  onError?: (message: string) => void;
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'type' | 'onError'>;
 
 /**
  * R-007 — a button for a BRIDGE ROUND-TRIP. It shows instant press (CSS),
@@ -47,20 +57,32 @@ export function AsyncButton({
   className,
   children,
   disabled,
+  onError,
   ...rest
 }: Props): JSX.Element {
   const [view, setView] = useState<AsyncView>(INITIAL);
   const reduced = usePrefersReducedMotion();
+  // Hold the latest onError so the long-lived controller always calls the current handler.
+  // Read via the ref (not the prop) inside the once-only effect so it stays a known-stable
+  // dependency, exactly like `setView` — the routing decision is stable per button.
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
   const ctrlRef = useRef<AsyncButtonController | null>(null);
   if (ctrlRef.current === null) {
-    ctrlRef.current = createController(setView);
+    ctrlRef.current = createController(
+      setView,
+      onError !== undefined ? (msg) => onErrorRef.current?.(msg) : undefined,
+    );
   }
   // StrictMode double-invokes effects in dev (setup → cleanup → setup); the
   // cleanup disposes the controller, so REVIVE it on re-setup — otherwise every
   // click no-ops against a disposed controller (the slice's severed-click bug).
   useEffect(() => {
     if (ctrlRef.current === null || ctrlRef.current.isDisposed) {
-      ctrlRef.current = createController(setView);
+      ctrlRef.current = createController(
+        setView,
+        onErrorRef.current !== undefined ? (msg) => onErrorRef.current?.(msg) : undefined,
+      );
     }
     return () => ctrlRef.current?.dispose();
   }, []);

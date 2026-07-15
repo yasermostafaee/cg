@@ -37,6 +37,13 @@ export interface AsyncButtonConfig {
   successMs?: number;
   /** Message for a resolved-but-not-accepted result. */
   notAcceptedMessage?: string;
+  /**
+   * When provided, a failure is routed HERE (e.g. to a toast) instead of being pinned
+   * inline beside the control, and the button returns to idle. Use for buttons that live
+   * in a tight row where an inline error would break the layout — the message is
+   * unchanged, only its placement.
+   */
+  onError?: (message: string) => void;
 }
 
 const IDLE: AsyncView = {
@@ -49,8 +56,8 @@ const IDLE: AsyncView = {
 
 export class AsyncButtonController {
   #view: AsyncView = { ...IDLE };
-  readonly #cfg: Required<Omit<AsyncButtonConfig, 'onChange' | 'schedule'>> &
-    Pick<AsyncButtonConfig, 'onChange' | 'schedule'>;
+  readonly #cfg: Required<Omit<AsyncButtonConfig, 'onChange' | 'schedule' | 'onError'>> &
+    Pick<AsyncButtonConfig, 'onChange' | 'schedule' | 'onError'>;
 
   #cancels: (() => void)[] = [];
   #spinnerShown = false;
@@ -138,6 +145,19 @@ export class AsyncButtonController {
     this.#settled = undefined;
 
     if (error !== null) {
+      if (this.#cfg.onError !== undefined) {
+        // Routed to a toast/overlay instead of pinned inline (keeps the message out of a
+        // tight row's flow). The button returns to idle; the toast carries the feedback.
+        this.#cfg.onError(error);
+        this.#set({
+          phase: 'idle',
+          showSpinner: false,
+          ariaBusy: false,
+          inFlight: false,
+          errorMessage: null,
+        });
+        return;
+      }
       // Error persists (until the next press) so the operator can read it.
       this.#set({
         phase: 'error',

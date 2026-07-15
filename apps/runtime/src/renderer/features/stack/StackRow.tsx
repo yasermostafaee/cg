@@ -153,7 +153,17 @@ export function StackRow({
         >
           CLEAR
         </AsyncButton>
-        <AsyncButton variant="danger" run={() => onRemove(item.itemId)}>
+        {/* B-085 — gated on `linkDown` like PLAY/UPDATE/CLEAR. The STACK is
+            bridge-owned playout state (only the LIBRARY moved browser-local), so
+            removing a stack item genuinely needs the bridge — an enabled REMOVE
+            that only rejects while disconnected was the recon-flagged
+            inconsistency. */}
+        <AsyncButton
+          variant="danger"
+          run={() => onRemove(item.itemId)}
+          disabled={linkDown}
+          {...(offlineReason !== undefined ? { title: offlineReason } : {})}
+        >
           REMOVE
         </AsyncButton>
       </div>

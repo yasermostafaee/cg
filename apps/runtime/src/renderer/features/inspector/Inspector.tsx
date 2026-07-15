@@ -112,9 +112,18 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
       return;
     }
     let cancelled = false;
-    void window.cg.templates.get({ templateId: item.templateId }).then((resolved) => {
-      if (!cancelled) setInfo(resolved);
-    });
+    // B-085 — `templates.get` is browser-local now, so this resolves offline. The
+    // rejection handler is kept as a guard so a failed lookup can NEVER become an
+    // unhandled promise rejection: on failure we keep `info` null and the
+    // Inspector falls back to type-inferred fields rather than throwing.
+    window.cg.templates.get({ templateId: item.templateId }).then(
+      (resolved) => {
+        if (!cancelled) setInfo(resolved);
+      },
+      () => {
+        if (!cancelled) setInfo(null);
+      },
+    );
     return () => {
       cancelled = true;
     };

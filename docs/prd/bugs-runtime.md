@@ -1484,3 +1484,68 @@ visibility, and a one-letter-per-line name is still perfectly "visible" with the
 content. The regression test is therefore a **measuring** one (`library-title-wrap.spec.ts`):
 it pins the name box's real width and its real line count, and it fails on the pre-fix build
 with exactly the measured `53.25px`.
+
+## [~] B-085 — the whole template-LIBRARY class (import / list / display / remove / field-schema) is refused when the SPA↔bridge WS is down, because `WebSocketRuntime.#invoke` blanket-rejects EVERY channel and the library has NO local ownership — even though none of these operations command CasparCG ⟨priority: high⟩ — in progress on `fix/B-085-browser-local-library`, change dir `openspec/changes/runtime-local-library/`
+
+Umbrella for the connection-state recon's Tier-B bug family. **None of these operations
+command CasparCG** — they read/verify/register template metadata + HTML — yet all fail when
+the local **bridge process** (not CasparCG) is unreachable.
+
+**Root cause — two coupled facts:**
+
+1. **The blanket transport guard.** `WebSocketRuntime.#invoke` (`apps/runtime/src/platform/WebSocketRuntime.ts`)
+   rejects **every** channel with `BridgeDisconnectedError` ("Bridge disconnected — command
+   rejected. Not sent to CasparCG.") when `#status !== 'live'`. `templates.import` /
+   `templates.list` / `templates.remove` / `templates.get` are Tier-B registry channels — the
+   bridge answers them from its in-memory `TemplateRegistry` with **no `#linkDown()` check and
+   no AMCP verb** (`tools/caspar-bridge/src/caspar-runtime.ts` `templateImport`/`templateList`/
+   `templateRemove`) — but the transport guard cannot tell a registry read from an on-air
+   command and refuses them identically. The error copy even says "Not sent to CasparCG" about
+   an import that was never going to CasparCG.
+2. **The library has no browser-local ownership.** The registry's source of truth lives in the
+   bridge process; the SPA only caches the last `templates.list()` in React state. So when the
+   WS is down there is nothing to read, register into, or serve from — and on a fresh
+   disconnected mount the Library shows empty ("No templates yet") and never re-pulls
+   (`LibraryPanel.refresh` isn't link-aware, unlike `useBridgeSnapshot`/`useTemplateIndex`).
+
+**Observed instances (all one class):**
+
+- **Import .vcg offline** → the local verify + unpack + single-file HTML export all SUCCEED,
+  then the one `bridge.templates.import({template,html})` round-trip rejects and the panel
+  shows `"file.vcg" Bridge disconnected — command rejected. Not sent to CasparCG.` — nothing is
+  registered, the library stays empty. (Primary.)
+- **Library empties on disconnect and never repopulates** — mounted-while-disconnected → empty,
+  no re-pull on reconnect, no persistence across reload.
+- **Remove-from-library refused offline** (`templates.remove` — a pure registry op).
+- **Stack rows lose their names offline** — `useTemplateIndex` early-returns
+  `if (link === 'disconnected')`, so the registry name-join is skipped (rows read "Unnamed
+  template").
+- **Inspector field-schema degraded offline** — `templates.get` rejects; its `.then` has no
+  `.catch` (unhandled rejection), so `info` stays null and the Inspector falls back to
+  type-inferred flat fields (loses labels / select options / nested groups).
+
+**Fix (deliberate architecture, per CLAUDE.md "No backend, file-based storage" / `@cg/storage`
+doctrine):** give the template **LIBRARY** browser-local ownership. Import = verify + unpack +
+HTML export + register **locally** (persisted via `@cg/storage`); list / display / remove /
+field-schema read local state — all work with the bridge fully down and survive page reload.
+The bridge becomes a **delivery/serve target reconciled on (re)connect** — generalizing the
+existing `WebSocketRuntime.#retained`/`#resync` re-delivery so CasparCG can still load a
+template when an on-air command eventually fires. Conflict policy: **local-wins** (the browser
+is the source of truth). The transport guard is narrowed **structurally** — `templates.*` no
+longer round-trip `#invoke` at all, so they can't be refused — while Tier-C on-air channels
+(`stack.take`/`update`/`out`/`setPosition`/`load`/`clearAll`/`removeAll`) STILL reject when the
+link is down. **Frozen:** every on-air refusal (R-006 `#linkDown`, StackRow on-air disables,
+Apply-position lock, B-070/B-072/B-056/B-079) is untouched — this narrows the SPA↔bridge guard
+off the registry channels and moves the library local; it does not weaken on-air safety.
+
+**Scope: LIBRARY only.** The **stack** stays bridge-owned (inherent playout state in the
+Reconciler). Load (add-to-stack) still needs the bridge — B-082 covers the common
+CasparCG-down/bridge-up case; when the bridge PROCESS is down, Load still refuses (acceptable,
+out of scope). Also folds in: the stack-row **Remove** inconsistency (gated consistently with
+PLAY/UPDATE/CLEAR — removal is bridge-owned stack state, so it genuinely needs the link) and the
+`useTemplateIndex` / Inspector offline degradations.
+
+The two-connection distinction the guard conflated: **SPA↔bridge WS** (`#status`,
+`disconnected` = bridge process unreachable) vs **bridge↔CasparCG AMCP** (`#linkDown()`,
+`disconnected` = CasparCG unreachable, bridge still up). This class of bug lives entirely in the
+first; the frozen on-air safety lives entirely in the second.
