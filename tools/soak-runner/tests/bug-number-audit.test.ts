@@ -12,10 +12,11 @@
 // bug ripples into archived change dirs, PR/commit text and code comments. This test runs
 // in the normal `turbo run test` gate, so a duplicate can no longer reach `main`.
 //
-// The single accepted exception is B-056 (dual-owned by a designer bug #272 and a runtime
-// bug #287, both merged + archived — owner call: disambiguate by file, do NOT rewrite
-// history). It is allowlisted explicitly so the accepted case cannot fail CI, and the
-// allowlist itself is asserted to still be real.
+// Two numbers are accepted as dual-owned: B-056 (designer #272 + runtime #287) and B-080
+// (designer #322 + runtime #324) — both owner calls to disambiguate by file rather than
+// rewrite history (renumbering a merged number ripples into archived change dirs and
+// PR/commit text). They are allowlisted explicitly so the accepted cases cannot fail CI,
+// and the allowlist itself is asserted to still be real.
 import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,8 +32,16 @@ const BUG_FILES = ['bugs.md', 'bugs-designer.md', 'bugs-runtime.md'] as const;
  * Adding to this list is a deliberate OWNER decision, not a way to silence a fresh
  * collision: a new duplicate must be renumbered before merge (merged `main` numbers
  * always win).
+ *
+ * - B-056 — dual-owned by a designer bug (#272) and a runtime bug (#287), both merged
+ *   + archived. The original accepted exception; see docs/prd/b-number-registry.md.
+ * - B-080 — dual-owned by a designer bug (#322) and a runtime bug (#324), both merged.
+ *   Owner decision: accept as dual-owned rather than renumber, exactly as for B-056.
+ *   This collision reached `main` because the task that runs this audit was cache-hitting
+ *   (docs/prd/** was not a declared turbo input, so a code PR that added the second B-080
+ *   heading replayed a stale "pass") — fixed in the same change that added this entry.
  */
-const ACCEPTED_DUPLICATES = new Set(['B-056']);
+const ACCEPTED_DUPLICATES = new Set(['B-056', 'B-080']);
 
 /**
  * The number that OPENS a bug heading — `## [x] B-067 — …`.

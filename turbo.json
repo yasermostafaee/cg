@@ -5,7 +5,14 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "build/**", "out/**", "*.tsbuildinfo", "!typecheck.tsbuildinfo"],
-      "inputs": ["src/**", "tsconfig.json", "package.json"]
+      "inputs": [
+        "src/**",
+        "tsconfig.json",
+        "package.json",
+        "vite.config.*",
+        "index.html",
+        "public/**"
+      ]
     },
     "typecheck": {
       "dependsOn": ["^build"],
@@ -38,7 +45,8 @@
         "$TURBO_ROOT$/pnpm-workspace.yaml",
         "$TURBO_ROOT$/apps/*/package.json",
         "$TURBO_ROOT$/packages/*/package.json",
-        "$TURBO_ROOT$/tools/*/package.json"
+        "$TURBO_ROOT$/tools/*/package.json",
+        "$TURBO_ROOT$/docs/prd/**"
       ]
     },
     "test:integration": {
@@ -49,7 +57,8 @@
     "test:e2e": {
       "dependsOn": ["build", "@cg/amcp-mock#build"],
       "outputs": ["playwright-report/**", "test-results/**"],
-      "inputs": ["src/**", "tests/e2e/**", "playwright.config.*"]
+      "inputs": ["src/**", "tests/e2e/**", "playwright.config.*"],
+      "cache": false
     },
     "package": {
       "dependsOn": ["build"],

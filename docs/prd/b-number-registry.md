@@ -14,8 +14,8 @@ Resolves the housekeeping half of [B-069](bugs.md).
 grep -rhoE "^## \[.\] B-[0-9]+" docs/prd/ | grep -oE "B-[0-9]+" | sort | uniq -d
 ```
 
-It must print **exactly one line: `B-056`** (the single known, accepted duplicate, below).
-Anything else is a NEW collision and must be renumbered **before merge**.
+It must print **exactly two lines: `B-056` and `B-080`** (the two known, accepted duplicates,
+below). Anything else is a NEW collision and must be renumbered **before merge**.
 
 Match only the number that **opens** a heading (`^## [.] B-NNN`). Trailing prose produces
 false hits — the `B-056` heading itself cites "renumbered from B-054".
@@ -38,20 +38,35 @@ files, and `B-080`'s only occurrence anywhere was this file's own "next free" po
 are now taken, by the two directions of the same footer defect
 ([bugs-runtime.md](bugs-runtime.md)): **B-080** (the health pill stuck on "Loading…" after the
 bridge connects) and **B-081** (the health pills still claiming a green HEALTHY after it
-disconnects). The space stays contiguous: `B-001` … `B-081`, no gaps. **Next free: `B-082`.**
+disconnects). The space stays contiguous: `B-001` … `B-081`, no gaps.
 
-**Exactly one number is ambiguous. Every other number names exactly one bug.**
+**Re-audited 2026-07-15** against `main` (`e44e5eb`, i.e. after #325 → #327). `B-082` and `B-083`
+have since been taken (the offline-Load ✗ ERROR fix and the per-character library-title wrap,
+both [bugs-runtime.md](bugs-runtime.md)). This re-audit also surfaced that **B-080 is DUAL-OWNED**:
+`bugs-designer.md` already claimed B-080 (#322) when `bugs-runtime.md` took it again (#324), and
+the collision merged because the audit was cache-hitting (see [B-084](bugs.md)). Owner call: keep
+both, exactly as B-056 — B-080 is now allowlisted in the audit. **B-084** is taken by that
+cache-execution gap itself ([bugs.md](bugs.md)). **Next free: `B-085`.**
+
+**Exactly two numbers are ambiguous. Every other number names exactly one bug.**
 
 | Number     | Status                                | Who owns it                                                                                                                                                                                                                             |
 | ---------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **B-056**  | **DUAL-OWNED — both entries keep it** | [bugs-designer.md](bugs-designer.md) — "can't add a SMOOTH point to a finished path" (#272, archived) **and** [bugs-runtime.md](bugs-runtime.md) — "`load()` proceeds when the adopt-CLEAR didn't land on the PRIMARY" (#287, archived) |
+| **B-080**  | **DUAL-OWNED — both entries keep it** | [bugs-designer.md](bugs-designer.md) — "preview timing durations in seconds" (#322, merged) **and** [bugs-runtime.md](bugs-runtime.md) — "footer health pills track the connection" (#324, merged)                                      |
 | all others | unambiguous                           | one bug each                                                                                                                                                                                                                            |
 
-**B-056 is deliberately NOT renumbered** (owner call, recorded in [B-069](bugs.md)): both
-entries are merged, archived and `[x]`, so nothing is blocked and no live work is ambiguous.
-Renumbering a closed bug would ripple into archived change dirs, commit/PR text, and code
-comments that cite the old number. **Disambiguate by file**, not by renumbering — cite
-"B-056 (designer)" or "B-056 (runtime)" when it matters.
+**Neither B-056 nor B-080 is renumbered** (owner call — B-056 recorded in [B-069](bugs.md),
+B-080 recorded in [B-084](bugs.md)): all four entries are merged, so nothing is blocked and no
+live work is ambiguous. Renumbering a closed bug would ripple into archived change dirs,
+commit/PR text, and code comments that cite the old number. **Disambiguate by file**, not by
+renumbering — cite "B-056 (designer)" / "B-080 (runtime)" when it matters.
+
+**How B-080 slipped through** (the reason a merged duplicate was even possible — see
+[B-084](bugs.md)): the audit runs inside `@cg/soak-runner#test`, but that task did not declare
+`docs/prd/**` as a turbo input, so a code PR that added the second B-080 heading replayed a
+cached "pass" instead of re-running the audit. Fixed by adding the input; B-080 is grandfathered
+in as accepted rather than renumbered.
 
 ### Why the number space on `main` is otherwise clean
 
@@ -83,7 +98,9 @@ considered:
 
 The guard is `tools/soak-runner/tests/bug-number-audit.test.ts` ([B-075](bugs.md)). It runs in
 the ordinary `turbo run test` gate, fails with the offending number and the two files that
-claim it, and allowlists exactly one accepted duplicate (`B-056`) — with a second assertion
-that the allowlist itself cannot go stale.
+claim it, and allowlists the accepted duplicates (`B-056`, `B-080`) — with a second assertion
+that the allowlist itself cannot go stale. For the audit to actually re-run when a bug file
+changes, its task must declare the bug files as inputs (see [B-084](bugs.md)); before that fix
+it cache-hit and let the B-080 duplicate merge.
 
 **If it fails on your branch: renumber YOUR bug.** Merged `main` numbers always win.
