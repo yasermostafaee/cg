@@ -532,6 +532,17 @@ Playwright configs (`expect` 7s → 15s, test 30s → 60s, `webServer` 120s → 
    the conservative move was to return the harness to the known-good configuration rather than
    ship an unvalidated change inside an unrelated PR.
 
+**Re-attributed 2026-07-15 (see [[B-084]]):** the "NEW designer reds" above (the shifting-set
+`fit-on-open` / `hidden-content-inert` failures, one at **730ms** — "far too fast to be a
+timeout") are now best explained NOT as budget/contention flakes but as turbo's default
+kill-on-first-failure: `turbo run test:e2e` cancels the Designer suite mid-run when the Runtime
+suite fails, so the Designer suite reports a partial "interrupted" whose test name shifts run to
+run. On that reading **#317 is exonerated** — those reds were kills, not Designer failures, and
+the one real failure was B-072 (fixed by #319). B-084 adds `--continue=dependencies-successful`,
+which removes this confound; the ORIGINAL 1-in-12 red here (a full `206 passed / 1 failed`, all
+207 accounted for — not a truncated kill) is a separate, still-open contention flake. Re-evaluate
+what remains of this bug once B-084 has landed and E2E runs to completion uncontaminated.
+
 The reverted diff is recoverable from #317's history if someone wants to pursue it deliberately.
 
 **Next lever (better than budgets):** bound the CONCURRENCY rather than inflate the budgets —
@@ -548,6 +559,68 @@ budgets. Files: `apps/designer/playwright.config.ts`, `apps/runtime/playwright.c
 **Residual risk:** budgets reduce the failure probability, they do not prove it to zero. If it
 recurs, the next lever is capping E2E worker count under turbo (bounding the concurrency itself)
 rather than raising budgets further.
+
+## [~] B-084 — a green CI tick can hide a failure: critical gate tasks CACHE-HIT (never execute) or get KILLED by a sibling, so the check passes without ever running to a real verdict ⟨priority: high⟩ — fixed on `fix/ci-cache-execution-gaps`
+
+Sibling of [[B-075]]/[[B-076]], same lesson one level deeper: a gate that _looks_ green is
+trusted as if it ran. Three independent holes let a task report success without producing a
+real verdict — two are turbo **cache replays** (the task never executed; its old log is shown),
+one is a turbo **sibling kill** (the task was executing but was cancelled before it finished).
+All three were observed on `main`.
+
+**Repro / evidence (each confirmed):**
+
+1. **Audit cache-hit.** `tools/soak-runner/tests/bug-number-audit.test.ts` reads
+   `docs/prd/{bugs,bugs-designer,bugs-runtime}.md`, but its task `@cg/soak-runner#test` did not
+   declare `docs/prd/**` as a turbo input. A code PR that adds a bug heading (but not
+   soak-runner's own `src`/`tests`) cache-HITS and replays the cached "pass". This is how the
+   **B-080 duplicate merged** (see [b-number-registry.md](b-number-registry.md)): the audit is
+   RED when actually run (`B-080 claimed by 2: bugs-designer.md + bugs-runtime.md`), yet it never
+   ran on the PRs that introduced it. Proof: `turbo run @cg/soak-runner#test --dry=json` hashed
+   **0** `docs/prd` files before the fix (hash `dc5a1b34ca62cd16`), **10** after
+   (`175eee1d2adc2bb5`).
+2. **E2E cache-hit.** The CI e2e job runs `pnpm test:e2e` (= `turbo run test:e2e`) with no
+   `--force`, and `test:e2e` was a cacheable task, so on most PRs it replayed a stale
+   `209 passed (5.5m)` log instead of executing — in one 12-run window it genuinely ran in only
+   ~5. A replayed E2E log cannot catch a regression it never exercised (the [[B-078]]/#317/#319
+   class). Proof: `resolvedTaskDefinition.cache` was `true` for `@cg/designer#test:e2e` and
+   `@cg/runtime#test:e2e`.
+3. **Sibling kill.** `turbo run <task>` defaults to `--continue=never`: the first suite to fail
+   CANCELS every sibling still running. For the E2E gate this destroys the killed suite's
+   verdict — turbo reports `Tasks: 0 successful` and names whichever test was in flight when it
+   was cancelled. This is the real source of the **"shifting-set Designer reds"** attributed to
+   [[B-078]] around #317: the Designer suite was being killed mid-run when the Runtime suite hit
+   its genuine B-072 failure (note the `730ms` "far too fast to be a timeout" tell), so it
+   reported a partial "interrupted" whose test name shifted run to run. **#317 is exonerated**
+   for those reds; the one real failure was B-072, fixed by #319. Proof: an isolated 2-package
+   turbo repo (fast-failing suite + slow suite) — `never` killed the slow suite mid-run
+   (`Tasks: 0 successful, 2 total`); `dependencies-successful` let it finish
+   (`Tasks: 1 successful, 2 total`) while still exiting non-zero and naming the real failure.
+
+**Expected:** a green required check MEANS the gate actually executed to a real pass/fail.
+**Actual:** a task can cache-hit (replay an old log) or be killed by a sibling, and the check is
+green anyway. **Env:** CI/tooling (`turbo.json`, root `package.json` scripts). Not app-specific.
+
+**Why it matters:** the required check is the only thing gating merge. A gate that can pass
+without running is worse than no gate — it manufactures false confidence. Two real defects
+already rode through it (the B-080 duplicate; the #317 misdiagnosis that reverted a sound PR).
+
+**Fix (this branch, four commits):**
+
+1. Add `B-080` to the audit's accepted-duplicates allowlist (owner call, mirrors `B-056`).
+2. Declare `$TURBO_ROOT$/docs/prd/**` as an input of `@cg/soak-runner#test` so a bug-file change
+   invalidates the cache and the audit re-runs.
+3. Mark `test:e2e` `"cache": false` so it always executes (its build deps still cache); the e2e
+   job keeps its `code == 'true'` guard, so this does not run on docs-only PRs.
+4. Run `test`/`test:e2e`/`test:integration` with `--continue=dependencies-successful` so
+   independent sibling suites each run to their own verdict; also declare `vite.config.*`,
+   `index.html`, `public/**` as `build` inputs (Vite consumes them, so a change to any must
+   rebuild the `dist/**` that E2E now always runs against).
+
+**Known remaining gap (owner judgment — see PR body):** a PURE docs-only PR still skips the whole
+`ci` job (P-008), so the audit does not run on a docs-only bug-file change; and `lint`/`typecheck`
+declare narrower inputs than the files they actually read. Listed for an owner decision rather
+than guessed.
 
 <!-- Add new open bugs above this line using the format. Example:
 

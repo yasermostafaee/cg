@@ -5,7 +5,14 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "build/**", "out/**", "*.tsbuildinfo", "!typecheck.tsbuildinfo"],
-      "inputs": ["src/**", "tsconfig.json", "package.json"]
+      "inputs": [
+        "src/**",
+        "tsconfig.json",
+        "package.json",
+        "vite.config.*",
+        "index.html",
+        "public/**"
+      ]
     },
     "typecheck": {
       "dependsOn": ["^build"],
