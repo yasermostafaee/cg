@@ -767,6 +767,26 @@ export function migratePathGeometry(el: PathElement): PathElement {
   };
 }
 
+/**
+ * D-125 — the element's phase mapping in the ANIMATION's own frame space (§D2.1).
+ * The intro plays `[ip, introEnd]`, the hold sits at `introEnd` (or loops the idle
+ * segment), and the outro plays `[outroStart, op]`. Read from bodymovin `markers`
+ * on import (`source: 'markers'`) or set by hand in the Inspector (`source:
+ * 'manual'`). Optional + additive: a Lottie authored before D-125 (no `phases`) has
+ * no distinct intro/outro — the whole clip is the intro, held at `op`, empty outro.
+ */
+export const LottiePhasesSchema = z.object({
+  /** Animation frame where the intro ends and the hold begins. */
+  introEnd: z.number().nonnegative(),
+  /** Animation frame where the outro begins. `introEnd ≤ outroStart`. */
+  outroStart: z.number().nonnegative(),
+  /** Optional `[in, out]` idle-loop range inside the hold window. */
+  idle: z.tuple([z.number().nonnegative(), z.number().nonnegative()]).optional(),
+  /** Whether the frames came from bodymovin markers or manual marking. */
+  source: z.enum(['markers', 'manual']),
+});
+export type LottiePhases = z.infer<typeof LottiePhasesSchema>;
+
 /** Lottie animation element. */
 export const LottieElementSchema = ElementBaseSchema.extend({
   type: z.literal('lottie'),
@@ -774,6 +794,24 @@ export const LottieElementSchema = ElementBaseSchema.extend({
   speed: z.number().positive(),
   loopMode: z.enum(['none', 'loop', 'bounce']),
   segment: z.tuple([z.number().nonnegative(), z.number().nonnegative()]).optional(),
+  /**
+   * D-125 §D1 — the intro-end / outro-start (+ optional idle) phase mapping in the
+   * animation's own frame space. Optional + additive (no schema-version bump).
+   */
+  phases: LottiePhasesSchema.optional(),
+  /**
+   * D-125 §D2.2 — HOLD behaviour: `freeze` at the hold frame (default) or `idle-loop`
+   * the mapped idle segment. Defaults to `freeze` so a pre-D-125 Lottie is unchanged.
+   */
+  holdBehavior: z.enum(['freeze', 'idle-loop']).default('freeze'),
+  /**
+   * D-125 §D2.1 — whether this Lottie DRIVES the composition's content-driven hold.
+   * The INVERSE default of the ticker/clock/sequence `drivesHold` (absent ⇒ drives):
+   * for the Lottie, absent/`false` ⇒ does NOT drive (a ticker on top drives the hold
+   * and the furniture holds beneath); `true` ⇒ opts in. The runtime reads it as
+   * `=== true`, never `!== false`. (Consumed in D-125 Phase 2.)
+   */
+  drivesHold: z.boolean().optional(),
   /**
    * Lottie field overrides — typed sub-grammar deferred (Phase 3 §10).
    * For M2, accept arbitrary keys; M8 tightens once lottie-bridge lands.
@@ -846,7 +884,7 @@ export type ElementInput =
   | z.input<typeof ImageElementSchema>
   | ShapeElement
   | PathElement
-  | LottieElement
+  | z.input<typeof LottieElementSchema>
   | VideoPlaceholderElement
   | CompositionElement
   | ContainerElementInput;

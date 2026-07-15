@@ -7,6 +7,11 @@ import {
   subscribe as assetUrlSubscribe,
 } from '../assets/assetUrlCache.js';
 import {
+  getAll as lottieAssetGetAll,
+  subscribe as lottieAssetSubscribe,
+  primeScene as primeSceneLottie,
+} from '../assets/lottieAssetCache.js';
+import {
   getAll as sharedUrlGetAll,
   subscribe as sharedUrlSubscribe,
   prime as primeSharedImage,
@@ -160,6 +165,21 @@ function collectSceneImageIds(scene: Scene): string[] {
   const walk = (children: readonly Element[]): void => {
     for (const el of children) {
       if (el.type === 'image') ids.add(el.assetId);
+      else if (el.type === 'container') walk(el.children);
+    }
+  };
+  for (const layer of scene.layers) walk(layer.children);
+  for (const comp of scene.compositions ?? [])
+    for (const layer of comp.layers) walk(layer.children);
+  return [...ids];
+}
+
+/** D-125 — every Lottie element's assetId in a scene (main + comps, recursing containers). */
+function collectSceneLottieIds(scene: Scene): string[] {
+  const ids = new Set<string>();
+  const walk = (children: readonly Element[]): void => {
+    for (const el of children) {
+      if (el.type === 'lottie') ids.add(el.assetId);
       else if (el.type === 'container') walk(el.children);
     }
   };
@@ -335,6 +355,9 @@ export function CanvasArea({
           action: 'scene-replace',
           scene: sceneToSend,
           assetUrls: mergedAssetUrls(),
+          // D-125 — parsed Lottie animationData (assetId → object) so the rebuilt runtime
+          // mounts each Lottie element's player.
+          lottieAssets: lottieAssetGetAll(),
           // D-071 — the content-grown frame inset travels with the scene so the iframe
           // re-insets `.cg-stage` (CSS var) without a reload.
           frameOffset: frameOffsetRef.current,
@@ -363,13 +386,37 @@ export function CanvasArea({
         '*',
       );
     }
+    // D-125 — separately push the parsed Lottie map when an animation resolves (a
+    // Lottie player is mounted at createRuntime time, so the iframe re-applies the
+    // scene when this arrives — see the 'lottie-assets' handler in preview.ts).
+    function repostLottie(): void {
+      iframeRef.current?.contentWindow?.postMessage(
+        { kind: 'cg-preview', action: 'lottie-assets', lottieAssets: lottieAssetGetAll() },
+        '*',
+      );
+    }
     const offAssets = assetUrlSubscribe(repost);
     const offShared = sharedUrlSubscribe(repost);
+    const offLottie = lottieAssetSubscribe(repostLottie);
     return () => {
       offAssets();
       offShared();
+      offLottie();
     };
   }, []);
+
+  // D-125 — parse + cache every Lottie asset the scene references (keyed on the set of
+  // Lottie ids, not the scene object, so a drag doesn't re-parse every frame). The
+  // subscribe above re-posts the map to the iframe once an animation resolves.
+  const lottieIdsKey = useMemo(
+    () => (scene === null ? '' : collectSceneLottieIds(scene).sort().join(',')),
+    [scene],
+  );
+  useEffect(() => {
+    const current = latestSceneRef.current;
+    if (current === null) return;
+    void primeSceneLottie(current);
+  }, [lottieIdsKey]);
 
   // D-040 — prime the shared library's blob URLs (project-independent, so once
   // on mount) and keep priming as images are added, so logos render in the
@@ -450,6 +497,12 @@ export function CanvasArea({
         // mutation. See the project-re-open regression.
         cw.postMessage(
           { kind: 'cg-preview', action: 'asset-urls', assetUrls: mergedAssetUrls() },
+          '*',
+        );
+        // D-125 — seed the parsed Lottie map too (the srcDoc boot has an empty one), so
+        // a Lottie mounts on the canvas without waiting for the next scene mutation.
+        cw.postMessage(
+          { kind: 'cg-preview', action: 'lottie-assets', lottieAssets: lottieAssetGetAll() },
           '*',
         );
         // D-060 — the preview is up: re-measure auto text now, and again once the

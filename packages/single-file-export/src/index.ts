@@ -14,4 +14,7 @@ export {
 } from './image-export.js';
 export type { ImageAssetSource, ImageAssetLibrary, ImageRef } from './image-export.js';
 
-export { cgJs, cgJsIife, cgCss } from './cg-runtime.js';
+export { collectLottieElements, resolveLottieAsset, parseLottieJson } from './lottie-export.js';
+export type { LottieRef, LottieAssetSource } from './lottie-export.js';
+
+export { cgJs, cgJsIife, cgJsLottie, cgJsLottieIife, cgCss } from './cg-runtime.js';

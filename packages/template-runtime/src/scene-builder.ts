@@ -9,6 +9,7 @@ import type {
   Filter,
   Layer,
   ListItem,
+  LottieElement,
   PathElement,
   RepeaterElement,
   Scene,
@@ -66,6 +67,7 @@ function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
     clocks: [],
     sequences: [],
     repeaters: [],
+    lotties: [],
     source,
   };
 }
@@ -152,15 +154,33 @@ function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null 
       return buildPath(element, ctx.doc);
     case 'composition':
       return buildComposition(element, ctx);
-    case 'container':
     case 'lottie':
+      return buildLottie(element, ctx);
+    case 'container':
     case 'video-placeholder':
       // M3.2-α: not yet supported. Render a placeholder div so layout
       // doesn't shift and the element id can still be bound. Animation
-      // (M3.2-β), Lottie (M3.3), and video routing (post-v1) will
-      // replace these.
+      // (M3.2-β) and video routing (post-v1) will replace these.
       return buildPlaceholder(element, ctx.doc);
   }
+}
+
+/**
+ * D-125 — render a Lottie element: a positioned/clipped mount container the
+ * runtime mounts a `lottie_light` player into and drives frame-by-frame
+ * ({@link LottieDriver}). The builder itself creates ONLY the container + registers
+ * it on `scope.lotties`; the player mount (which needs the resolved `animationData`)
+ * happens at wiring time in `createRuntime`, mirroring how the ticker band/track is
+ * built here but its driver is instantiated in the runtime. The animation clips to
+ * the box (`overflow: hidden`) so a rotated/scaled furniture piece stays in bounds.
+ */
+function buildLottie(element: LottieElement, ctx: BuildCtx): HTMLElement {
+  const el = ctx.doc.createElement('div');
+  el.dataset['cgElementId'] = element.id;
+  applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
+  el.style.overflow = 'hidden';
+  ctx.scope.lotties.push({ element, container: el });
+  return el;
 }
 
 /**

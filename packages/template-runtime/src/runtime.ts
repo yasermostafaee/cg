@@ -75,7 +75,9 @@ import {
   buildSequenceCompositionItem,
   repeaterItemValues,
 } from './scene-builder.js';
+import { createLottiePlayer } from '@cg/lottie-bridge';
 import { ClockDriver } from './clock-driver.js';
+import { LottieDriver } from './lottie-driver.js';
 import {
   RepeaterDriver,
   registerRepeaterDriver,
@@ -286,6 +288,8 @@ interface WiredSubtree {
   clocks: ClockDriver[];
   sequences: SequenceDriver[];
   repeaters: RepeaterDriver[];
+  /** D-125 — Lottie drivers of this subtree (driven-frame players). */
+  lotties: LottieDriver[];
   /** Stop + destroy every driver and controller of this subtree, deregister. */
   destroy(): void;
 }
@@ -313,6 +317,19 @@ function applyAssetUrls(
     const url = assetUrls[id];
     if (url !== undefined && url !== '') node.src = url;
   });
+}
+
+/**
+ * D-125 — read the bodymovin frame metadata (`ip` / `op` / `fr`) off a parsed
+ * `animationData` object, defensively. `fr` defaults to 30 (the common bodymovin
+ * rate) and the frame span defaults to `[0, 0]` (a degenerate clip that freezes at
+ * frame 0) when the JSON is malformed, so a bad asset never throws at wiring time.
+ */
+function lottieFrameMeta(data: unknown): { ip: number; op: number; fr: number } {
+  const d = (typeof data === 'object' && data !== null ? data : {}) as Record<string, unknown>;
+  const num = (v: unknown, fallback: number): number =>
+    typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+  return { ip: num(d['ip'], 0), op: num(d['op'], 0), fr: num(d['fr'], 30) };
 }
 
 /**
@@ -465,6 +482,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     const clocks: ClockDriver[] = [];
     const sequences: SequenceDriver[] = [];
     const repeaters: RepeaterDriver[] = [];
+    const lotties: LottieDriver[] = [];
     const controllers: PlayoutController[] = [];
 
     const wireScope = (
@@ -739,6 +757,47 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         return driver;
       });
 
+      // D-125 — Lottie drivers. The scene-builder registered the mount container; here
+      // we resolve the parsed `animationData` from `options.lottieAssets`, mount the
+      // `lottie_light` player (`autoplay: false` — the driver owns the playhead), and
+      // drive it frame-by-frame off the injected clock. An UNRESOLVED asset ⇒ no driver
+      // (the container renders empty, like an image whose bytes did not resolve).
+      // D-125 PHASE 1 — render + pause/resume/reset only: NO outro seam and NO
+      // content-driven-hold contribution (Phase 2 wires `playOutro()` / `whenComplete()`),
+      // so the Lottie is NOT registered in `contentDrivers` / the `hold*` arrays here.
+      const scopeLotties: LottieDriver[] = [];
+      for (const l of scope.lotties) {
+        const data = options.lottieAssets?.[l.element.assetId];
+        if (data === undefined) continue;
+        const meta = lottieFrameMeta(data);
+        const handle = createLottiePlayer(l.container, data, {
+          autoplay: false,
+          speed: l.element.speed,
+        });
+        // Resolve the phase frames onto the animation's frame space: absent `phases`
+        // ⇒ the whole clip is the intro, held (frozen) at `op`. The idle segment
+        // defaults to the hold window `[introEnd, outroStart]` (§D2.2).
+        const introEnd = l.element.phases?.introEnd ?? meta.op;
+        const idleIn = l.element.phases?.idle?.[0] ?? introEnd;
+        const idleOut = l.element.phases?.idle?.[1] ?? l.element.phases?.outroStart ?? meta.op;
+        const driver = new LottieDriver({
+          handle,
+          fr: meta.fr,
+          ip: meta.ip,
+          op: meta.op,
+          speed: l.element.speed,
+          introEnd,
+          idleIn,
+          idleOut,
+          holdBehavior: l.element.holdBehavior,
+          clock: options.clock,
+        });
+        // Paint the in-frame for the static (pre-play) preview.
+        driver.reset();
+        scopeLotties.push(driver);
+        lotties.push(driver);
+      }
+
       // D-028/D-027/D-029 — this scope's OWN content completion from its CONTENT
       // SOURCES that DRIVE the hold. D-107 — only content with `drivesHold !== false`
       // (absent ⇒ participates) gates the hold, so a permanent/looping/decorative
@@ -778,6 +837,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         for (const t of scopeTickers) t.stop();
         for (const c of scopeClocks) c.stop();
         for (const s of scopeSequences) s.stop();
+        // D-125 — halt the Lottie rAF on settle (Phase 2 adds the outro before this).
+        for (const l of scopeLotties) l.stop();
       };
       // B-031 — resolves when THIS scope settles (after its outro), so a content-driven
       // parent can hold until a nested content-driven (coordinator) child has played out.
@@ -1021,6 +1082,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       clocks,
       sequences,
       repeaters,
+      lotties,
       destroy(): void {
         // Symmetric teardown: rows first (each tears down its OWN subtree),
         // then controllers (stop timers/rAF before the drivers release their
@@ -1030,6 +1092,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         for (const t of tickers) t.destroy();
         for (const c of clocks) c.destroy();
         for (const s of sequences) s.destroy();
+        // D-125 — destroy the lottie-web instances (idempotent).
+        for (const l of lotties) l.destroy();
         subtrees.delete(sub);
       },
     };
@@ -1079,6 +1143,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       for (const c of sub.clocks) c.stop();
       for (const s of sub.sequences) s.stop();
       for (const r of sub.repeaters) r.stop();
+      // D-125 — halt the Lottie players on the root settle (Phase 1 has no outro).
+      for (const l of sub.lotties) l.stop();
     }
     rootOnSettle();
   };
@@ -1213,6 +1279,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // D-029 — sequences reset to item 1, displayed statically through the
       // intro; advancing begins at hold entry (which resets + starts them).
       for (const sub of subtrees) for (const s of sub.sequences) s.reset();
+      // D-125 §D1 — the Lottie intro starts at PLAY (not at hold entry like the
+      // time-driven content): the furniture plays its intro-once and then holds
+      // (freeze / idle-loop) while the background entrance runs concurrently.
+      for (const sub of subtrees)
+        for (const l of sub.lotties) {
+          l.reset();
+          l.start();
+        }
       // Play the IN once and hold (no full-range loop, no auto-outro by default);
       // the mode orchestration (auto-out / loop-cycle / content-driven) then runs.
       // Absent lifecycle: the whole timeline is the entrance and the hold is its
@@ -1287,6 +1361,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       for (const sub of subtrees) for (const t of sub.tickers) t.pause();
       for (const sub of subtrees) for (const c of sub.clocks) c.pause();
       for (const sub of subtrees) for (const s of sub.sequences) s.pause();
+      // D-125 §D3 — freeze the Lottie playhead in lockstep (no wall-clock drift).
+      for (const sub of subtrees) for (const l of sub.lotties) l.pause();
     },
 
     resume(): void {
@@ -1296,6 +1372,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       for (const sub of subtrees) for (const t of sub.tickers) t.resume();
       for (const sub of subtrees) for (const c of sub.clocks) c.resume();
       for (const sub of subtrees) for (const s of sub.sequences) s.resume();
+      // D-125 §D3 — continue the Lottie playhead from the frozen frame (a settled
+      // freeze-hold stays frozen; a still-running intro / idle-loop continues).
+      for (const sub of subtrees) for (const l of sub.lotties) l.resume();
       // D-105 — finish an out() exit that was deferred because pause arrived mid-fade.
       if (pendingExitOutro) {
         pendingExitOutro = false;

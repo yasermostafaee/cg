@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock lottie-web before importing the runtime. happy-dom doesn't implement
-// Canvas 2D, and the real lottie-web touches `canvas.getContext('2d')` at
-// module init. The mock lets us test the wrapper's logic without booting
-// the real player.
+// Mock the lottie_light player before importing the runtime. happy-dom doesn't
+// implement Canvas 2D, and lottie_light touches `canvas.getContext('2d')` at
+// module init (a transparent-canvas helper). The mock lets us test the wrapper's
+// logic without booting the real player. (D-125 switched the bridge from the full
+// `lottie-web` build to `lottie-web/build/player/lottie_light`, so the mock path
+// follows.)
 type Mock = ReturnType<typeof vi.fn>;
 
 interface MockAnim {
@@ -39,7 +41,7 @@ function makeAnim(): MockAnim {
   };
 }
 
-vi.mock('lottie-web', () => ({
+vi.mock('lottie-web/build/player/lottie_light', () => ({
   default: {
     loadAnimation: vi.fn((cfg: unknown) => {
       loadAnimationCalls.push([cfg]);

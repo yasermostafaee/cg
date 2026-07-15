@@ -8,6 +8,10 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    // D-125 — stub Canvas 2D so DOM-environment tests that transitively import
+    // `lottie_light` (via `@cg/lottie-bridge`) don't crash at module init. No-op under
+    // the default `node` environment (no HTMLCanvasElement). See the setup file.
+    setupFiles: ['./tests/setup-canvas.ts'],
     testTimeout: 10000,
     coverage: {
       provider: 'v8',

@@ -30,7 +30,11 @@ export function AssetThumb({
   const displayName = stripExt(asset.filename);
   const isImage = asset.kind === 'image';
   const isFont = asset.kind === 'font';
+  const isLottie = asset.kind === 'lottie';
   const isList = layout === 'list';
+  // D-125 — image AND lottie tiles drag onto the canvas (the canvas drop reads the
+  // asset kind from the payload to build the right element).
+  const isDraggable = isImage || isLottie;
   // For fonts we register a CSS font-family scoped by assetId so the
   // sample text in the thumbnail uses the actual face.
   const fontFamily = isFont ? `asset-${asset.assetId}` : undefined;
@@ -38,11 +42,14 @@ export function AssetThumb({
   return (
     <div
       className={cx(isList ? s.cellList : s.cell, isList && 'cg-asset-row')}
-      draggable={isImage}
+      draggable={isDraggable}
       onDragStart={
-        isImage
+        isDraggable
           ? (e) => {
               e.dataTransfer.setData('application/x-cg-asset-id', asset.assetId);
+              // D-125 — carry the kind so the canvas drop builds an image OR a lottie
+              // element without re-looking-up the asset list.
+              e.dataTransfer.setData('application/x-cg-asset-kind', asset.kind);
               e.dataTransfer.effectAllowed = 'copy';
               onDragStart?.(asset);
             }

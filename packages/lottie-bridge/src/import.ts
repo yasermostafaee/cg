@@ -54,6 +54,17 @@ export type ImportResult =
   | { ok: false; rejected: readonly RejectedFeature[] };
 
 /**
+ * One bodymovin timeline marker. `tm` = start frame, `cm` = comment/name,
+ * `dr` = duration frames. D-125 reads these to derive the element's phase
+ * mapping (see {@link markersToSegments}).
+ */
+export interface LottieMarker {
+  tm: number;
+  cm: string;
+  dr: number;
+}
+
+/**
  * Shape of the cleaned Lottie JSON exposed to consumers. We don't
  * type the full Bodymovin schema — `createLottiePlayer` accepts
  * `unknown` and lottie-web is the source of truth. This type just
@@ -67,6 +78,8 @@ export interface LottieAnimation {
   w: number;
   h: number;
   nm: string;
+  /** D-125 — the top-level bodymovin `markers` array (empty when absent). */
+  markers: readonly LottieMarker[];
   /** Full JSON for round-tripping to the runtime. */
   raw: unknown;
 }
@@ -159,9 +172,23 @@ export function importLottie(parsed: unknown): ImportResult {
       w: Number(obj['w']),
       h: Number(obj['h']),
       nm: typeof obj['nm'] === 'string' ? obj['nm'] : '',
+      markers: readMarkers(obj['markers']),
       raw: parsed,
     },
   };
+}
+
+/** Extract the well-formed `{ tm, cm, dr }` markers, skipping malformed entries. */
+function readMarkers(raw: unknown): LottieMarker[] {
+  if (!Array.isArray(raw)) return [];
+  const out: LottieMarker[] = [];
+  for (const m of raw) {
+    if (typeof m !== 'object' || m === null) continue;
+    const r = m as Record<string, unknown>;
+    if (typeof r['tm'] !== 'number' || typeof r['cm'] !== 'string') continue;
+    out.push({ tm: r['tm'], cm: r['cm'], dr: typeof r['dr'] === 'number' ? r['dr'] : 0 });
+  }
+  return out;
 }
 
 function walkLayers(layers: readonly unknown[], rejected: RejectedFeature[]): void {
@@ -232,4 +259,85 @@ function containsExpression(node: unknown): boolean {
     }
   }
   return false;
+}
+
+/**
+ * D-125 — the element's phase mapping in the animation's own frame space: the
+ * intro plays `[ip, introEnd]`, the hold sits at `introEnd` (or loops `[idleIn,
+ * idleOut]`), and the outro plays `[outroStart, op]`. Always `source: 'markers'`
+ * here (this is the marker-derived result); the ELEMENT stores `'manual'` when the
+ * operator marks by hand.
+ */
+export interface LottieSegments {
+  source: 'markers';
+  introEnd: number;
+  outroStart: number;
+  idleIn: number;
+  idleOut: number;
+}
+
+/**
+ * Recognised marker-comment aliases → phase boundary. Matched case-insensitively
+ * after stripping separators (`-`/`_`/space), so `intro-end`, `introEnd`, and
+ * `INTRO END` all resolve the same. `intro`/`in` and `outro`/`out` are the short
+ * forms; `hold-*` mirrors `idle-*`.
+ */
+const MARKER_ALIASES: Record<string, 'introEnd' | 'outroStart' | 'idleIn' | 'idleOut'> = {
+  introend: 'introEnd',
+  intro: 'introEnd',
+  in: 'introEnd',
+  outrostart: 'outroStart',
+  outro: 'outroStart',
+  out: 'outroStart',
+  idlestart: 'idleIn',
+  holdstart: 'idleIn',
+  idleend: 'idleOut',
+  holdend: 'idleOut',
+};
+
+/**
+ * D-125 — derive the phase mapping from a bodymovin `markers` array (§D1.2).
+ * Returns the segments when the marker set is VALID — both boundary markers
+ * (`intro-end` / `outro-start`) resolve and `ip ≤ introEnd ≤ outroStart ≤ op` — and
+ * `null` otherwise (no markers, a missing boundary, unknown names, or out-of-order /
+ * out-of-range frames), so the caller falls back to manual marking. An absent idle
+ * pair defaults to `[introEnd, outroStart]`; an out-of-range idle pair is ignored
+ * (defaulted) rather than rejecting the whole set.
+ */
+export function markersToSegments(animation: LottieAnimation): LottieSegments | null {
+  const { ip, op } = animation;
+  let introEnd: number | undefined;
+  let outroStart: number | undefined;
+  let idleIn: number | undefined;
+  let idleOut: number | undefined;
+  for (const marker of animation.markers) {
+    const key = marker.cm
+      .trim()
+      .toLowerCase()
+      .replace(/[-_\s]/g, '');
+    const slot = MARKER_ALIASES[key];
+    if (slot === undefined) continue;
+    // First occurrence wins (a later duplicate marker doesn't clobber it).
+    if (slot === 'introEnd' && introEnd === undefined) introEnd = marker.tm;
+    else if (slot === 'outroStart' && outroStart === undefined) outroStart = marker.tm;
+    else if (slot === 'idleIn' && idleIn === undefined) idleIn = marker.tm;
+    else if (slot === 'idleOut' && idleOut === undefined) idleOut = marker.tm;
+  }
+  if (introEnd === undefined || outroStart === undefined) return null;
+  if (!(ip <= introEnd && introEnd <= outroStart && outroStart <= op)) return null;
+  // Default / validate the idle segment: keep it only when it sits inside the hold
+  // window, else fall back to the whole hold window.
+  const idleValid =
+    idleIn !== undefined &&
+    idleOut !== undefined &&
+    introEnd <= idleIn &&
+    idleIn <= idleOut &&
+    idleOut <= outroStart;
+  return {
+    source: 'markers',
+    introEnd,
+    outroStart,
+    idleIn: idleValid ? (idleIn as number) : introEnd,
+    idleOut: idleValid ? (idleOut as number) : outroStart,
+  };
 }

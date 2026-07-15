@@ -8,5 +8,9 @@
   },
   "include": ["src/**/*"],
   "exclude": ["src/**/*.test.ts"],
-  "references": [{ "path": "../shared-schema" }, { "path": "../text-shaping" }]
+  "references": [
+    { "path": "../lottie-bridge" },
+    { "path": "../shared-schema" },
+    { "path": "../text-shaping" }
+  ]
 }

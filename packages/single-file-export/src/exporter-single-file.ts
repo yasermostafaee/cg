@@ -15,10 +15,19 @@ import {
   type ImageAssetSource,
   type ImageRef,
 } from './image-export.js';
+import { collectLottieElements, resolveLottieAsset, type LottieRef } from './lottie-export.js';
 
 export interface SingleFileExportOptions {
   /** IIFE runtime bundle (`var CG = …`) — see `cg-runtime.ts` `cgJsIife`. */
   cgJsIife: string;
+  /**
+   * D-125 §D5(c) — the SEPARATE minified `lottie_light` player IIFE bundle
+   * (`cgJsLottieIife`), installing `globalThis.__cgLottie`. APPENDED before the
+   * runtime script ONLY when the scene contains a Lottie element, so a no-Lottie
+   * export never carries the ~168 KB player. Absent ⇒ a Lottie element is reported
+   * as a preflight warning (it won't render) rather than throwing.
+   */
+  cgJsLottieIife?: string;
   /** Minimal broadcast baseline CSS (transparent stage, hide-until-play). */
   cgCss: string;
   /** App `@font-face` CSS (Vazirmatn / Exo 2) with `/fonts/…` URLs to inline. */
@@ -60,6 +69,7 @@ export interface SingleFileResult {
  */
 export class ExporterSingleFile {
   readonly #cgJsIife: string;
+  readonly #cgJsLottieIife: string | undefined;
   readonly #cgCss: string;
   readonly #fontsCss: string;
   readonly #assets: ImageAssetSource;
@@ -68,6 +78,7 @@ export class ExporterSingleFile {
 
   constructor(options: SingleFileExportOptions) {
     this.#cgJsIife = options.cgJsIife;
+    this.#cgJsLottieIife = options.cgJsLottieIife;
     this.#cgCss = options.cgCss;
     this.#fontsCss = options.fontsCss;
     this.#assets = options.assets;
@@ -92,6 +103,27 @@ export class ExporterSingleFile {
         elementId: ref.elementId,
       });
     }
+    // D-125 — resolve + inline each Lottie element's JSON (as parsed `animationData`
+    // in the `lottieAssets` map, baked into the boot script). An unresolved / corrupt
+    // asset, or a missing player bundle, is a warning — never a thrown export.
+    const { lottieAssets, missing: missingLottie } = await this.#inlineLottie(scene);
+    for (const ref of missingLottie) {
+      issues.push({
+        code: 'missing-asset',
+        severity: 'warning',
+        message: `Lottie element "${ref.elementId}" references an asset whose JSON could not be resolved; it will not render in the exported HTML.`,
+        elementId: ref.elementId,
+      });
+    }
+    const hasLottie = Object.keys(lottieAssets).length > 0;
+    if (hasLottie && this.#cgJsLottieIife === undefined) {
+      issues.push({
+        code: 'missing-asset',
+        severity: 'warning',
+        message:
+          'Scene contains a Lottie element but no player bundle was provided (cgJsLottieIife); Lottie elements will not render in the exported HTML.',
+      });
+    }
     const html = buildSingleFileHtml({
       scene,
       gdd,
@@ -99,7 +131,10 @@ export class ExporterSingleFile {
       cgCss: this.#cgCss,
       fontCss,
       cgJsIife: this.#cgJsIife,
+      // Only ship the player bundle when the scene actually uses a Lottie (§D5(c)).
+      cgJsLottieIife: hasLottie ? this.#cgJsLottieIife : undefined,
       assetUrls,
+      lottieAssets,
     });
     return { html, filename: downloadName(scene.name), issues };
   }
@@ -161,6 +196,37 @@ export class ExporterSingleFile {
       assetUrls[ref.assetId] = toDataUri(imageMimeOf(resolved.meta.filename), resolved.bytes);
     }
     return { assetUrls, missing };
+  }
+
+  /**
+   * D-125 — resolve each Lottie element's JSON into the `assetId → animationData`
+   * map baked into `createRuntime` (inlined as a JS literal in the boot script — no
+   * fetch, so it runs under CEF from `file://`). Mirrors `#inlineImages`. An
+   * unresolved / corrupt asset is reported (warning) via `missing`. Resolution goes
+   * through the project asset source (`#assets` satisfies `LottieAssetSource`).
+   */
+  async #inlineLottie(scene: Scene): Promise<{
+    lottieAssets: Record<string, unknown>;
+    missing: LottieRef[];
+  }> {
+    const lottieAssets: Record<string, unknown> = {};
+    const failed = new Set<string>();
+    const missing: LottieRef[] = [];
+    for (const ref of collectLottieElements(scene)) {
+      if (lottieAssets[ref.assetId] !== undefined) continue; // asset already inlined
+      if (failed.has(ref.assetId)) {
+        missing.push(ref);
+        continue;
+      }
+      const resolved = await resolveLottieAsset(this.#assets, ref.assetId);
+      if (resolved === null) {
+        failed.add(ref.assetId);
+        missing.push(ref);
+        continue;
+      }
+      lottieAssets[ref.assetId] = resolved.animationData;
+    }
+    return { lottieAssets, missing };
   }
 }
 
@@ -243,17 +309,30 @@ interface HtmlParts {
   cgCss: string;
   fontCss: string;
   cgJsIife: string;
+  /**
+   * D-125 §D5(c) — the minified player bundle, present ONLY when the scene uses a
+   * Lottie (and a player was provided). Emitted as a `<script>` BEFORE the runtime
+   * so `globalThis.__cgLottie` is installed before `createRuntime` mounts.
+   */
+  cgJsLottieIife: string | undefined;
   /** D-062 — image `assetId` → base64 `data:` URI, baked for `createRuntime`. */
   assetUrls: Record<string, string>;
+  /** D-125 — Lottie `assetId` → parsed `animationData`, baked for `createRuntime`. */
+  lottieAssets: Record<string, unknown>;
 }
 
 function buildSingleFileHtml(parts: HtmlParts): string {
-  const { scene, gdd, playout, cgCss, fontCss, cgJsIife, assetUrls } = parts;
+  const { scene, gdd, playout, cgCss, fontCss, cgJsIife, cgJsLottieIife, assetUrls, lottieAssets } =
+    parts;
   // Escape `</` so scene text / GDD strings can't close the <script>/<style>.
   const sceneLiteral = JSON.stringify(scene).replace(/</g, '\\u003c');
   const gddJson = JSON.stringify(gdd).replace(/</g, '\\u003c');
   const playoutJson = JSON.stringify(playout).replace(/</g, '\\u003c');
   const assetUrlsJson = JSON.stringify(assetUrls).replace(/</g, '\\u003c');
+  const lottieAssetsJson = JSON.stringify(lottieAssets).replace(/</g, '\\u003c');
+  // The player bundle (installs `__cgLottie`) — a leading `<script>` when present.
+  const lottieScript =
+    cgJsLottieIife !== undefined ? `<script>${cgJsLottieIife}</script>\n    ` : '';
   const w = String(scene.resolution.width);
   const h = String(scene.resolution.height);
   return `<!doctype html>
@@ -283,12 +362,12 @@ ${playoutJson}
     </script>
   </head>
   <body class="cg-pending">
-    <script>${cgJsIife}</script>
+    ${lottieScript}<script>${cgJsIife}</script>
     <script>
       (function () {
         var scene = ${sceneLiteral};
         try {
-          var runtime = CG.createRuntime(scene, { assetUrls: ${assetUrlsJson} });
+          var runtime = CG.createRuntime(scene, { assetUrls: ${assetUrlsJson}, lottieAssets: ${lottieAssetsJson} });
           CG.installCasparGlobals(runtime);
           // R-011 — output-only placement: operator query override (appended by
           // the bridge onto the served URL) ?? scene.defaultPosition ?? centered.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Scene } from '@cg/shared-schema';
+import type { AssetMeta } from '@cg/shared-ipc';
 import { ExporterSingleFile } from '../src/exporter-single-file.js';
 import type { ImageAssetSource } from '../src/image-export.js';
 
@@ -323,6 +324,125 @@ describe('ExporterSingleFile — D-029 sequence rides the existing list/GDD path
     expect(gdd.properties['rundown']?.items?.type).toBe('object');
     // The existing JSON-only/limited-clients warning covers the list field.
     expect(issues.some((i) => i.code === 'gdd-list-field-limited-clients')).toBe(true);
+  });
+});
+
+describe('ExporterSingleFile — D-125 Lottie inlining + conditional player bundle', () => {
+  const animationData = { v: '5.7', fr: 30, ip: 0, op: 60, w: 400, h: 200, layers: [] };
+  const lottieBytes = new TextEncoder().encode(JSON.stringify(animationData));
+  const lottieAssetSource = {
+    get: async (id: string): Promise<AssetMeta> =>
+      ({
+        assetId: id,
+        filename: 'furniture.json',
+        kind: 'lottie',
+        sha256: 'abc',
+        bytes: 1,
+      }) as AssetMeta,
+    bytes: async () => lottieBytes,
+  } as unknown as ImageAssetSource;
+
+  const PLAYER = 'globalThis.__cgLottie = { loadAnimation: function () {} };';
+
+  function lottieExporter(withPlayer = true): ExporterSingleFile {
+    return new ExporterSingleFile({
+      cgJsIife:
+        'var CG = { createRuntime: function () { return { ready: Promise.resolve() }; }, installCasparGlobals: function () {}, applyOutputPosition: function () {} };',
+      ...(withPlayer ? { cgJsLottieIife: PLAYER } : {}),
+      cgCss: 'html,body{background:transparent}',
+      fontsCss: '',
+      assets: lottieAssetSource,
+    });
+  }
+
+  function sceneWithLottie(): Scene {
+    return {
+      ...makeScene(),
+      fields: [],
+      layers: [
+        {
+          id: 'L1',
+          name: 'furniture',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [
+            {
+              id: 'lot-1',
+              name: 'lower-third',
+              type: 'lottie',
+              transform: {
+                position: { x: 0, y: 0 },
+                size: { w: 400, h: 200 },
+                scale: { x: 1, y: 1 },
+                rotation: 0,
+                anchor: { x: 0, y: 0 },
+              },
+              opacity: 1,
+              visible: true,
+              locked: false,
+              zIndex: 0,
+              assetId: 'lottie-asset',
+              speed: 1,
+              loopMode: 'none',
+              holdBehavior: 'freeze',
+              phases: { introEnd: 20, outroStart: 50, source: 'markers' },
+            },
+          ],
+        },
+      ],
+    } as unknown as Scene;
+  }
+
+  it('a NO-Lottie export omits the player bundle and inlines an empty lottieAssets map', async () => {
+    const { html } = await lottieExporter().produce(makeScene());
+    expect(html).not.toContain('__cgLottie'); // player NOT shipped
+    expect(html).toContain('lottieAssets: {}'); // empty map baked in
+  });
+
+  it('a WITH-Lottie export inlines the JSON + the player, with zero external requests', async () => {
+    const { html, issues } = await lottieExporter().produce(sceneWithLottie());
+    // The player bundle is appended (installs the global) BEFORE createRuntime.
+    expect(html).toContain('__cgLottie');
+    expect(html.indexOf('__cgLottie')).toBeLessThan(html.indexOf('createRuntime'));
+    // The JSON is inlined as a JS literal in the lottieAssets map (no fetch).
+    expect(html).toContain('lottieAssets: {');
+    expect(html).toContain('"lottie-asset"');
+    expect(html).toContain('"op":60');
+    expect(html).toContain('CG.createRuntime(scene, { assetUrls: {}, lottieAssets: {');
+    // Self-contained under CEF from file:// — zero external requests.
+    expect(html).not.toMatch(/\bfetch\(/);
+    expect(html).not.toMatch(/import\s/);
+    expect(html).not.toMatch(/src="https?:/);
+    expect(html).not.toMatch(/<link\b/);
+    // The asset resolved cleanly — no missing-asset warning.
+    expect(issues.some((i) => i.elementId === 'lot-1')).toBe(false);
+  });
+
+  it('warns (never throws) when a Lottie is present but no player bundle was provided', async () => {
+    const { html, issues } = await lottieExporter(false).produce(sceneWithLottie());
+    // JSON still inlined, but the player is absent (a warning, not a crash).
+    expect(html).toContain('"lottie-asset"');
+    expect(html).not.toContain('__cgLottie');
+    expect(issues.some((i) => i.severity === 'warning' && /player bundle/.test(i.message))).toBe(
+      true,
+    );
+  });
+
+  it('warns when the Lottie JSON cannot be resolved (missing asset)', async () => {
+    const nullSource = {
+      get: async () => null,
+      bytes: async () => null,
+    } as unknown as ImageAssetSource;
+    const exporter = new ExporterSingleFile({
+      cgJsIife: 'var CG = {};',
+      cgJsLottieIife: PLAYER,
+      cgCss: '',
+      fontsCss: '',
+      assets: nullSource,
+    });
+    const { issues } = await exporter.produce(sceneWithLottie());
+    expect(issues.some((i) => i.code === 'missing-asset' && i.elementId === 'lot-1')).toBe(true);
   });
 });
 

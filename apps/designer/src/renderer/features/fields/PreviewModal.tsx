@@ -9,6 +9,10 @@ import {
   type Scene,
 } from '@cg/shared-schema';
 import { getAll as assetUrlGetAll } from '../assets/assetUrlCache.js';
+import {
+  getAll as lottieAssetGetAll,
+  primeScene as primeSceneLottie,
+} from '../assets/lottieAssetCache.js';
 import { getAll as sharedUrlGetAll } from '../sharedLibrary/sharedImageUrlCache.js';
 import { Modal } from '../shell/Modal.js';
 import { PreviewFieldForm, type PreviewDispatch } from './PreviewFieldForm.js';
@@ -222,6 +226,10 @@ export function PreviewModal({
     let alive = true;
     setOverrides({});
     setPaused(false);
+    // D-125 — make sure this composition's Lottie animations are parsed + cached before
+    // the ready handler posts the map (the canvas usually primed them already; this is a
+    // safety net so a Lottie renders even if the modal is the first surface to need it).
+    void primeSceneLottie(scene);
     // D-087 — the modal mirrors broadcast: open loaded-but-unpainted (blank)
     // and paint only on Play. The editor canvas omits this flag (stays visible
     // for editing).
@@ -357,6 +365,8 @@ export function PreviewModal({
       // D-039ext / D-040 — merge project + shared caches so a shared image (logo element
       // OR ticker image separator) resolves in the preview, as it does on the canvas.
       assetUrls: { ...assetUrlGetAll(), ...sharedUrlGetAll() },
+      // D-125 — carry the parsed Lottie map so a rebuilt runtime keeps its players.
+      lottieAssets: lottieAssetGetAll(),
       playoutOverride: overrides[''],
       scopeOverrides: overrides,
     });
@@ -372,6 +382,9 @@ export function PreviewModal({
       // push, operator-imported (asset-*) fonts could never load here and the
       // play-path font await would be a no-op on the only surface that plays.
       post({ action: 'asset-urls', assetUrls: { ...assetUrlGetAll(), ...sharedUrlGetAll() } });
+      // D-125 — seed the parsed Lottie map too (the srcDoc boot has an empty one), so a
+      // Lottie mounts its player on this dedicated preview iframe.
+      post({ action: 'lottie-assets', lottieAssets: lottieAssetGetAll() });
       post({ action: 'scrub', frame: 0 });
       post({ action: 'update', fields: defaultNestedValues(aggregate) });
     }

@@ -1,5 +1,6 @@
 import type {
   ClockElement,
+  LottieElement,
   RepeaterElement,
   SequenceElement,
   Element,
@@ -139,6 +140,17 @@ export interface RuntimeBootOptions {
    * host-side) is unaffected.
    */
   assetUrls?: Readonly<Record<string, string>>;
+
+  /**
+   * D-125 — Lottie `assetId` → parsed bodymovin `animationData` (the JSON object,
+   * NOT a URL: the player is passed `animationData` inline, never a `path:`). The
+   * runtime mounts each `lottie` element's player from this map and drives it
+   * frame-by-frame. Both exporters bake it (single-file: inlined as a JS literal;
+   * `.vcg`: resolved from the packaged `assets/lottie/*.json`), and the Designer
+   * preview passes the imported JSON. Absent ⇒ the element renders as an empty box
+   * (mirrors an image whose bytes did not resolve).
+   */
+  lottieAssets?: Readonly<Record<string, unknown>>;
 
   /**
    * When `false`, the runtime does not install `window.cg` or the
@@ -326,8 +338,17 @@ export interface FieldScope {
   sequences: SequenceEntry[];
   /** D-030 — repeater elements rendered directly in this scope (host boxes). */
   repeaters: RepeaterEntry[];
+  /** D-125 — Lottie elements rendered directly in this scope (mount containers). */
+  lotties: LottieEntry[];
   /** D-026 — the comp/scene this scope renders, for its lifecycle/playout/active. */
   source: LifecycleSource;
+}
+
+/** D-125 — one built Lottie: its element config + the mount container. */
+export interface LottieEntry {
+  element: LottieElement;
+  /** The container div the `lottie_light` SVG mounts into (also in the elementMap). */
+  container: HTMLElement;
 }
 
 /** D-028 — one built ticker: its element config + the band/track DOM nodes. */

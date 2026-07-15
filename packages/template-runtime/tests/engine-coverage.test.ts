@@ -145,8 +145,8 @@ function buildWith(element: Element): HTMLElement | undefined {
 }
 
 describe('buildScene — element builders + style branches', () => {
-  it('renders container / lottie / video-placeholder as tagged placeholder divs', () => {
-    for (const type of ['container', 'lottie', 'video-placeholder'] as const) {
+  it('renders container / video-placeholder as tagged placeholder divs', () => {
+    for (const type of ['container', 'video-placeholder'] as const) {
       const node = buildWith({
         ...baseElProps,
         id: `e-${type}`,
@@ -157,6 +157,24 @@ describe('buildScene — element builders + style branches', () => {
       } as unknown as Element);
       expect(node?.dataset['cgPlaceholderFor']).toBe(type);
     }
+  });
+
+  it('D-125 — renders a lottie element as a mount container (not a placeholder)', () => {
+    const node = buildWith({
+      ...baseElProps,
+      id: 'e-lottie',
+      name: 'furniture',
+      type: 'lottie',
+      assetId: 'asset-x',
+      speed: 1,
+      loopMode: 'none',
+      holdBehavior: 'freeze',
+    } as unknown as Element);
+    // No placeholder marker — it's a real mount container the runtime drives.
+    expect(node?.dataset['cgPlaceholderFor']).toBeUndefined();
+    expect(node?.dataset['cgElementId']).toBe('e-lottie');
+    // Clips the animation to the box (a rotated/scaled furniture piece stays in bounds).
+    expect(node?.style.overflow).toBe('hidden');
   });
 
   it('renders a shape drop shadow as box-shadow', () => {

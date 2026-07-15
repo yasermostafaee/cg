@@ -7,5 +7,12 @@
 export { createLottiePlayer } from './runtime.js';
 export type { LottieLoopMode, LottiePlayerOptions, LottiePlayerHandle } from './runtime.js';
 
-export { importLottie } from './import.js';
-export type { ImportResult, LottieAnimation, RejectedFeature, RejectionCode } from './import.js';
+export { importLottie, markersToSegments } from './import.js';
+export type {
+  ImportResult,
+  LottieAnimation,
+  LottieMarker,
+  LottieSegments,
+  RejectedFeature,
+  RejectionCode,
+} from './import.js';

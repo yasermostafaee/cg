@@ -1,7 +1,14 @@
 import { SceneSchema, type Element, type Scene } from '@cg/shared-schema';
 import { getStarter } from '@cg/starter-templates';
 import type { AppInfo, DesignerBridge } from '../shared/designer-bridge.js';
-import { cgCss, cgJs, cgJsIife, ExporterSingleFile } from '@cg/single-file-export';
+import {
+  cgCss,
+  cgJs,
+  cgJsIife,
+  cgJsLottie,
+  cgJsLottieIife,
+  ExporterSingleFile,
+} from '@cg/single-file-export';
 // The app's bundled @font-face rules (Vazirmatn / Exo 2) as a raw CSS string,
 // injected into the preview iframe so built-in fonts render on the canvas — the
 // iframe is srcdoc (same origin), so its `/fonts/…` URLs resolve like the host.
@@ -36,15 +43,16 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
   // here and never re-scoped on project change. Both exporters take it so a
   // `source: 'shared'` logo resolves + inlines exactly like a per-project asset.
   const sharedImages = new SharedImageStore(ws);
-  const exporter = new Exporter({ assets, sharedImages, cgJs, cgCss });
+  const exporter = new Exporter({ assets, sharedImages, cgJs, cgJsLottie, cgCss });
   const singleFile = new ExporterSingleFile({
     cgJsIife,
+    cgJsLottieIife,
     cgCss,
     fontsCss: appFontsCss,
     assets,
     sharedImages,
   });
-  const preview = new Preview({ cgJs, cgCss, fontsCss: appFontsCss });
+  const preview = new Preview({ cgJs, cgJsLottie, cgCss, fontsCss: appFontsCss });
   const assetUrlCache = new Map<string, string>();
   // D-040 — shared-library blob URLs. Separate from `assetUrlCache` and NOT
   // revoked on project change (the library outlives any one project); revoked

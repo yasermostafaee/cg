@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutGrid, List, Plus } from 'lucide-react';
 import type { AssetMeta } from '@cg/shared-ipc';
 import type { Element } from '@cg/shared-schema';
+import { importLottie } from '@cg/lottie-bridge';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { AssetThumb } from './AssetThumb.js';
 import { ImportingThumb } from './ImportingThumb.js';
@@ -9,6 +10,7 @@ import { useImportPending } from './useImportPending.js';
 import { partitionSupported, skippedFilesMessage } from '../../../shared/asset-types.js';
 import { emitAssetRemoved, useAssets } from './useAssets.js';
 import { clearAll as clearAllAssetUrls, revoke as revokeAssetUrl } from './assetUrlCache.js';
+import { clearAll as clearAllLottieAssets } from './lottieAssetCache.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
@@ -48,6 +50,7 @@ export function ProjectAssetsPanel(): JSX.Element {
     asset: AssetMeta;
     fontUses: number;
     imageUses: number;
+    lottieUses: number;
   } | null>(null);
   const addBtnRef = useRef<HTMLButtonElement | null>(null);
   const [assetView, setAssetView] = useState<'grid' | 'list'>(() =>
@@ -119,6 +122,7 @@ export function ProjectAssetsPanel(): JSX.Element {
       for (const face of fontFaces.values()) docFonts.delete(face);
       fontFaces.clear();
       clearAllAssetUrls();
+      clearAllLottieAssets();
     });
     return off;
   }, []);
@@ -146,7 +150,7 @@ export function ProjectAssetsPanel(): JSX.Element {
     return assets.filter((a) => a.filename.toLowerCase().includes(q));
   }, [assets, query]);
 
-  async function importKind(kind: 'image' | 'font'): Promise<void> {
+  async function importKind(kind: 'image' | 'font' | 'lottie'): Promise<void> {
     setAddMenu(null);
     const files = await window.cg.assets.pick(kind);
     if (files.length === 0) return; // cancelled — no tiles shown
@@ -159,11 +163,16 @@ export function ProjectAssetsPanel(): JSX.Element {
       designerStore.showNotice(skippedFilesMessage(rejected.map((file) => file.name)));
     }
     if (valid.length === 0) return; // every pick was unsupported — only the notice
-    // One loading tile per VALID file (shown only after a real selection). Import
-    // in REVERSE selection order so the prepend (newest on top) lands the batch in
-    // selection order; each file is independent — a failure clears only its own tile
+    // D-125 — a Lottie must additionally pass the allowlist validator BEFORE it
+    // becomes an asset (3D / expressions / effects / audio are rejected, and
+    // malformed JSON is skipped with a notice). Image/font take no extra step.
+    const toStore = kind === 'lottie' ? await validateLottieFiles(valid) : valid;
+    if (toStore.length === 0) return;
+    // One loading tile per file we will store (shown only after a real selection).
+    // Import in REVERSE selection order so the prepend (newest on top) lands the batch
+    // in selection order; each file is independent — a failure clears only its own tile
     // and the rest still import.
-    const items = valid.map((file) => ({ file, end: begin() }));
+    const items = toStore.map((file) => ({ file, end: begin() }));
     for (const { file, end } of [...items].reverse()) {
       try {
         await window.cg.assets.store(file, kind);
@@ -175,6 +184,33 @@ export function ProjectAssetsPanel(): JSX.Element {
     }
   }
 
+  /**
+   * D-125 — validate each picked `.json` through the lottie-bridge allowlist before
+   * it is stored. A file that isn't valid JSON, or whose animation uses an
+   * unsupported feature (3D / expressions / effects / audio), is skipped with a
+   * readable notice built from the first rejection; only passing files are returned.
+   */
+  async function validateLottieFiles(files: readonly File[]): Promise<File[]> {
+    const ok: File[] = [];
+    for (const file of files) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(await file.text());
+      } catch {
+        designerStore.showNotice(`“${file.name}” is not valid JSON — skipped.`);
+        continue;
+      }
+      const result = importLottie(parsed);
+      if (!result.ok) {
+        const reason = result.rejected[0]?.message ?? 'unsupported Lottie features';
+        designerStore.showNotice(`“${file.name}” can’t be imported: ${reason}`);
+        continue;
+      }
+      ok.push(file);
+    }
+    return ok;
+  }
+
   function openContextMenu(asset: AssetMeta, x: number, y: number): void {
     setAddMenu(null);
     setCtxMenu({ asset, x, y });
@@ -182,8 +218,8 @@ export function ProjectAssetsPanel(): JSX.Element {
 
   function openDeleteConfirm(asset: AssetMeta): void {
     setCtxMenu(null);
-    const { fontUses, imageUses } = countUsages(asset, scene?.layers ?? []);
-    setConfirm({ asset, fontUses, imageUses });
+    const { fontUses, imageUses, lottieUses } = countUsages(asset, scene?.layers ?? []);
+    setConfirm({ asset, fontUses, imageUses, lottieUses });
   }
 
   async function runDelete(asset: AssetMeta): Promise<void> {
@@ -300,6 +336,14 @@ export function ProjectAssetsPanel(): JSX.Element {
           >
             Font…
           </Button>
+          <Button
+            variant="bare"
+            role="menuitem"
+            className={s.menuItem}
+            onClick={() => void importKind('lottie')}
+          >
+            Lottie…
+          </Button>
         </div>
       )}
       {ctxMenu !== null && (
@@ -324,6 +368,7 @@ export function ProjectAssetsPanel(): JSX.Element {
           asset={confirm.asset}
           fontUses={confirm.fontUses}
           imageUses={confirm.imageUses}
+          lottieUses={confirm.lottieUses}
           onCancel={() => setConfirm(null)}
           onConfirm={() => void runDelete(confirm.asset)}
         />
@@ -347,37 +392,41 @@ function stripExt(filename: string): string {
 function countUsages(
   asset: AssetMeta,
   layers: readonly { children: readonly Element[] }[],
-): { fontUses: number; imageUses: number } {
+): { fontUses: number; imageUses: number; lottieUses: number } {
   let fontUses = 0;
   let imageUses = 0;
+  let lottieUses = 0;
   const family = `asset-${asset.assetId}`;
 
   function walk(children: readonly Element[]): void {
     for (const el of children) {
       if (el.type === 'text' && el.font.family === family) fontUses += 1;
       else if (el.type === 'image' && el.assetId === asset.assetId) imageUses += 1;
+      else if (el.type === 'lottie' && el.assetId === asset.assetId) lottieUses += 1;
       else if (el.type === 'container') walk(el.children);
     }
   }
   for (const layer of layers) walk(layer.children);
-  return { fontUses, imageUses };
+  return { fontUses, imageUses, lottieUses };
 }
 
 function DeleteConfirmDialog({
   asset,
   fontUses,
   imageUses,
+  lottieUses,
   onCancel,
   onConfirm,
 }: {
   asset: AssetMeta;
   fontUses: number;
   imageUses: number;
+  lottieUses: number;
   onCancel: () => void;
   onConfirm: () => void;
 }): JSX.Element {
   const displayName = stripExt(asset.filename);
-  const message = buildWarningMessage(asset, fontUses, imageUses);
+  const message = buildWarningMessage(asset, fontUses, imageUses, lottieUses);
   return (
     <Modal
       title={`Delete “${displayName}”?`}
@@ -398,7 +447,12 @@ function DeleteConfirmDialog({
   );
 }
 
-function buildWarningMessage(asset: AssetMeta, fontUses: number, imageUses: number): string {
+function buildWarningMessage(
+  asset: AssetMeta,
+  fontUses: number,
+  imageUses: number,
+  lottieUses: number,
+): string {
   if (asset.kind === 'font') {
     if (fontUses === 0) {
       return 'This font is not used anywhere in the scene. It will be removed from the project assets and the Text inspector’s font list.';
@@ -412,6 +466,13 @@ function buildWarningMessage(asset: AssetMeta, fontUses: number, imageUses: numb
     }
     const noun = imageUses === 1 ? 'image element' : 'image elements';
     return `This image is used by ${String(imageUses)} ${noun}. Deleting it will remove ${imageUses === 1 ? 'that element' : 'those elements'} from the canvas and the timeline.`;
+  }
+  if (asset.kind === 'lottie') {
+    if (lottieUses === 0) {
+      return 'This animation is not used anywhere in the scene. It will be removed from the project assets.';
+    }
+    const noun = lottieUses === 1 ? 'Lottie element' : 'Lottie elements';
+    return `This animation is used by ${String(lottieUses)} ${noun}. Deleting it will remove ${lottieUses === 1 ? 'that element' : 'those elements'} from the canvas and the timeline.`;
   }
   return 'This asset will be removed from the project. Any references in the scene will be cleared.';
 }
