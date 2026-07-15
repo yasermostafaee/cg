@@ -50,7 +50,8 @@
     "test:e2e": {
       "dependsOn": ["build", "@cg/amcp-mock#build"],
       "outputs": ["playwright-report/**", "test-results/**"],
-      "inputs": ["src/**", "tests/e2e/**", "playwright.config.*"]
+      "inputs": ["src/**", "tests/e2e/**", "playwright.config.*"],
+      "cache": false
     },
     "package": {
       "dependsOn": ["build"],
