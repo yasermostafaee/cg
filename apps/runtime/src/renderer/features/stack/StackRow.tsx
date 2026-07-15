@@ -1,4 +1,4 @@
-import type { StackItemState } from '@cg/shared-schema';
+import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { StatusBadge } from '../../ui/StatusBadge.js';
@@ -99,6 +99,16 @@ export function StackRow({
     ? 'Not connected — this command cannot reach CasparCG. Reconnect and reissue it.'
     : undefined;
 
+  // B-087 — while the SPA↔bridge link is down, mask a frozen on-air claim to the muted
+  // `unverified` "WAS ON AIR" B-086 already defines. The demotion B-086 does in the bridge
+  // reconciler cannot fire here (it's delivered over `StackStateChanged`, and a dead bridge sends
+  // nothing), and `useBridgeSnapshot` freezes the last snapshot on `disconnected` — so without this
+  // the row would keep rendering the sacred red ● ON AIR the wire can no longer back. Purely a
+  // display mask over frozen data (the `onAir` predicate mirrors B-086's reconciler override);
+  // reconnect re-pulls the authoritative status and the mask lifts on its own. Mirrors the
+  // `useLink()` override the health pills / LinkIndicator / ConnectionBanner already apply.
+  const badgeStatus: StackItemStatus = linkDown && onAir ? 'unverified' : item.status;
+
   return (
     <div
       className={`cg-row${selected ? ' is-selected' : ''}`}
@@ -111,8 +121,15 @@ export function StackRow({
       data-item-id={item.itemId}
       onClick={() => onSelect(item.itemId)}
     >
-      {/* R-006 — in test mode an air-claim is badged SIM, never the broadcast red. */}
-      <StatusBadge status={item.status} pending={item.pending} simulated={simulated} />
+      {/* R-006 — in test mode an air-claim is badged SIM, never the broadcast red.
+          B-087 — on a dead SPA↔bridge link the on-air claim is masked to muted "WAS ON AIR"
+          (`badgeStatus`), and `bridgeDown` tells the badge to name the bridge (not CasparCG) link. */}
+      <StatusBadge
+        status={badgeStatus}
+        pending={item.pending}
+        simulated={simulated}
+        bridgeDown={linkDown}
+      />
       {/* The row's label area — and the one part of the row that is guaranteed NOT to be a
           control. Tests select a row by clicking THIS, never the row root: the root spans the
           action buttons too, and a click on the root's geometric centre lands wherever the

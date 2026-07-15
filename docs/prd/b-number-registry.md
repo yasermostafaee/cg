@@ -62,6 +62,13 @@ the link dropped), [bugs-runtime.md](bugs-runtime.md), change dir
 it in any of the three bug files; its only prior occurrence was this file's own "next free"
 pointer). The space stays contiguous: `B-001` … `B-086`, no gaps. **Next free: `B-087`.**
 
+**Re-audited 2026-07-15** against `main` (`224f153`). `B-087` has since been taken — the
+bridge-death ON-AIR badge freeze (the stack row kept a confident red ● ON AIR after the SPA↔bridge
+WebSocket dropped, the outer-link twin of B-086), [bugs-runtime.md](bugs-runtime.md), change dir
+`openspec/changes/runtime-onair-honest-bridge-loss/`. Verified free before use (no heading claimed
+it in any of the three bug files; its only prior occurrence was this file's own "next free"
+pointer). The space stays contiguous: `B-001` … `B-087`, no gaps. **Next free: `B-088`.**
+
 **Exactly two numbers are ambiguous. Every other number names exactly one bug.**
 
 | Number     | Status                                | Who owns it                                                                                                                                                                                                                             |

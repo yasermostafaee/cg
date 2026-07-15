@@ -1592,3 +1592,45 @@ template-runtime completion-signal problem, separate bug).
 
 Status name: a NEW `'unverified'` status (not the latent `'disconnected'` one, whose "OFFLINE"
 meaning would mislead; not amber `'unconfirmed'`, which is B-044's item-scoped ack-timeout).
+
+## [~] B-087 — the stack row badge freezes red "● ON AIR" when the BRIDGE process dies (SPA↔bridge WebSocket drops): the same broadcast-safety lie [[B-086]] closed, but for the OUTER link ⟨priority: high⟩ — in progress on `fix/B-087-bridge-death-onair-badge`, change dir `openspec/changes/runtime-onair-honest-bridge-loss/`
+
+[[B-086]] made the ON AIR badge honest when the **CasparCG** link drops (the bridge↔CasparCG AMCP
+link). But when the **BRIDGE** process itself dies — the SPA↔bridge WebSocket — the on-air row
+stays frozen on a confident red **● ON AIR**. Operator testing: killing CasparCG correctly flips
+the row to muted "WAS ON AIR" (B-086 works); stopping the bridge leaves it red for as long as the
+bridge is down. The UI asserts an on-air state the SPA can no longer verify — in fact _less_
+verifiable than the CasparCG-death case, because the bridge is the SPA's ONLY conduit to CasparCG,
+so on bridge death the SPA has no path to the wire at all.
+
+**Root cause (recon, verified against source):** B-086's `unverified` demotion is a **bridge-side**
+product — the reconciler re-publishes it and it reaches the SPA over `StackStateChanged`. A **dead**
+bridge cannot send it. Meanwhile the renderer **freezes** the last snapshot: `useBridgeSnapshot`
+(`apps/runtime/src/renderer/hooks/useBridgeSnapshot.ts:53`) early-returns on `link === 'disconnected'`
+without clearing or demoting, so `useStack()` keeps every row at `status: 'on-air'` and `StackRow`
+renders sacred-red **● ON AIR** at full confidence. Every OTHER air-claim surface already shows an
+honest disconnected/UNKNOWN state on bridge death via a direct `useLink()` display override over the
+frozen data — the health pills (`StatusBar.tsx`), the `LinkIndicator`, the `ConnectionBanner`. The
+stack row status badge is the **only** air-claim surface missing that override.
+
+**Fix (renderer-only display mask — reuses B-086's `'unverified'` status, NO bridge/schema change):**
+`StackRow` already reads `useLink()` (`linkDown`) and has the same on-air/`playing` predicate B-086's
+reconciler override uses. When `linkDown && onAir`, feed the badge an effective `'unverified'` status
+instead of the raw frozen `item.status`; the already-defined theme mapping renders it muted grey
+`◌ "WAS ON AIR"`. Purely a display mask over frozen snapshot data during the outage — it makes NO
+restore-vs-reset decision. On reconnect (`link → 'live'`) `useBridgeSnapshot` re-pulls and the
+authoritative status replaces the mask automatically. This mirrors how the health pills already
+demote via a `useLink()` read (`StatusBar.tsx`'s `stale` override), closing the last inconsistency.
+
+Also: the `'unverified'` tooltip (`StatusBadge.tsx`) is worded for the CasparCG-death case ("before
+the CasparCG link dropped"); make it link-aware so it reads accurately for both the CasparCG-death
+(B-086) and bridge-death (B-087) cases now that both use `'unverified'`.
+
+**FROZEN:** NO bridge change, NO schema/enum change (`'unverified'` already exists from B-086), NO
+change to on-air REFUSAL (R-006) or [[B-085]]'s browser-local library, and NO change to B-086's
+bridge-side reconciler path. This does NOT contradict B-086's "a renderer-only mute is wrong" note:
+that note was scoped to **CasparCG** death (bridge alive → only the bridge's occupancy tap can decide
+restore-vs-reset); on **bridge** death there is no live bridge or tap, so a renderer overlay is the
+only possible actor, and the two fixes trigger on disjoint conditions (`useLink()==='disconnected'`
+vs a live bridge's CasparCG session leaving `healthy`). Sibling of [[B-086]]; the display half of the
+bridge-death story (the recovery half — stack surviving a bridge restart — is tracked separately).
