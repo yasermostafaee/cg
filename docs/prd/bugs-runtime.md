@@ -1485,7 +1485,7 @@ content. The regression test is therefore a **measuring** one (`library-title-wr
 it pins the name box's real width and its real line count, and it fails on the pre-fix build
 with exactly the measured `53.25px`.
 
-## [~] B-085 — the whole template-LIBRARY class (import / list / display / remove / field-schema) is refused when the SPA↔bridge WS is down, because `WebSocketRuntime.#invoke` blanket-rejects EVERY channel and the library has NO local ownership — even though none of these operations command CasparCG ⟨priority: high⟩ — in progress on `fix/B-085-browser-local-library`, change dir `openspec/changes/runtime-local-library/`
+## [x] B-085 — the whole template-LIBRARY class (import / list / display / remove / field-schema) is refused when the SPA↔bridge WS is down, because `WebSocketRuntime.#invoke` blanket-rejects EVERY channel and the library has NO local ownership — even though none of these operations command CasparCG ⟨priority: high⟩ — merged (#330, `fix/B-085-browser-local-library`) + archived: `openspec/changes/archive/2026-07-15-runtime-local-library/`
 
 Umbrella for the connection-state recon's Tier-B bug family. **None of these operations
 command CasparCG** — they read/verify/register template metadata + HTML — yet all fail when
