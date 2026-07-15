@@ -72,6 +72,23 @@ export class LottieDriver {
     this.paint(this.o.ip);
   }
 
+  /**
+   * D-125 — paint a REPRESENTATIVE static frame — the settled HOLD frame
+   * (`introEnd`) — for a design surface that never plays (the editor canvas). Frame
+   * `ip` is the intro-START, where a typical AE "furniture" export has animated the
+   * graphic ON from nothing (scale / opacity 0), so parking at `ip` shows an empty
+   * box. `introEnd` is the on-air "settled" look — exactly what the operator wants
+   * while designing, and what Preview shows during the hold. The play() path calls
+   * {@link reset} (→ `ip`), so the intro still plays from the start when played.
+   */
+  poster(): void {
+    this.cancelFrame();
+    this.running = false;
+    this.settledHold = false;
+    this.pausedElapsed = 0;
+    this.paint(this.o.introEnd);
+  }
+
   /** Begin the intro from the in-frame. Idempotent while running or already frozen. */
   start(): void {
     if (this.destroyed || this.running || this.settledHold) return;

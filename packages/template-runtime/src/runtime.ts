@@ -792,8 +792,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           holdBehavior: l.element.holdBehavior,
           clock: options.clock,
         });
-        // Paint the in-frame for the static (pre-play) preview.
-        driver.reset();
+        // D-125 — paint a REPRESENTATIVE static frame (the settled hold frame), NOT
+        // frame `ip`: the editor canvas is a static design surface that never plays,
+        // and an AE intro that animates the graphic ON from nothing renders empty at
+        // `ip`. On play() the lotties reset()→`ip` and play the intro from the start,
+        // and the exported/on-air stage stays blank (cg-pending) until then, so this
+        // only affects the always-revealed editor canvas.
+        driver.poster();
         scopeLotties.push(driver);
         lotties.push(driver);
       }
