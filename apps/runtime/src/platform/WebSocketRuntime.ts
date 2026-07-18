@@ -24,6 +24,7 @@ import {
   StackClearAllChannel,
   StackRemoveAllChannel,
   StackRemoveChannel,
+  StackRestoreChannel,
   StackSetPositionChannel,
   StackSnapshotChannel,
   StackStateChangedChannel,
@@ -57,6 +58,7 @@ import type {
   Unsubscribe,
 } from '../shared/runtime-bridge.js';
 import { LibraryStore } from './library/LibraryStore.js';
+import { StackRetentionStore } from './stack/StackRetentionStore.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
 
@@ -94,6 +96,15 @@ export interface WebSocketRuntimeOptions {
    * renderer reads `templates.list()` (the boot path awaits it).
    */
   library?: LibraryStore;
+  /**
+   * B-092 — the browser-local retention of the operator's stack INTENT, so the
+   * stack survives a bridge-process restart. Injected by `createRuntimeBridge`
+   * backed by OPFS (persistent). Defaults to an in-memory store so transport
+   * tests can construct the runtime with no retention and still exercise
+   * delivery + reconcile. Must be `hydrate()`-ed before the first connect for
+   * the retention to be re-delivered (the boot path awaits it).
+   */
+  stackRetention?: StackRetentionStore;
 }
 
 /** Thrown (as a rejected promise) when a command is issued while the link is down. */
@@ -167,6 +178,28 @@ export class WebSocketRuntime implements RuntimeBridge {
    */
   #lastStack: readonly StackItemState[] = [];
 
+  /**
+   * B-092 — the browser-local stack INTENT, mirrored from every snapshot the
+   * SPA sees and re-delivered to the bridge on every (re)connect. This is what
+   * makes the stack survive a bridge restart: without it a restarted bridge
+   * boots empty, the re-pull below returns `[]`, and every row disappears.
+   */
+  readonly #stackRetention: StackRetentionStore;
+
+  /**
+   * B-092 — true while `#resync` is re-delivering retained stack intent and
+   * re-pulling the snapshot.
+   *
+   * Mirroring is SUPPRESSED for that window, and this is load-bearing: the
+   * snapshot a freshly-booted bridge publishes before (or instead of) a
+   * successful restore is EMPTY, and mirroring it would erase the very
+   * retention that fixes the bug — permanently, since the store is persistent.
+   * A restore that fails therefore leaves the retention untouched for the next
+   * connect. Outside this window an empty snapshot is a real one (Remove All)
+   * and is mirrored normally.
+   */
+  #resyncing = false;
+
   readonly #stackSubs = new Subs<readonly StackItemState[]>();
   readonly #healthSubs = new Subs<ConnectionHealth>();
   readonly #configSubs = new Subs<ConnectionConfig>();
@@ -191,6 +224,7 @@ export class WebSocketRuntime implements RuntimeBridge {
     // the runtime with no store and still exercise delivery + reconcile. The boot
     // path injects an OPFS-backed, hydrated store.
     this.#library = options.library ?? new LibraryStore(new MemoryWorkspace());
+    this.#stackRetention = options.stackRetention ?? new StackRetentionStore(new MemoryWorkspace());
     this.#connect();
   }
 
@@ -294,9 +328,41 @@ export class WebSocketRuntime implements RuntimeBridge {
       }
     });
     await Promise.all(redeliveries);
+
+    // B-092 — then re-deliver the retained STACK intent, so a bridge that
+    // restarted (and booted with an empty stack) is rebuilt BEFORE the re-pull
+    // below reads it. Order is the whole point: templates → stack → snapshot.
+    // Without this step the re-pull returns `[]` and blanks every row, which is
+    // the bug. The bridge decides adopt-vs-re-ADD against real OSC occupancy,
+    // so this can never clear a live layer.
+    //
+    // `#resyncing` suppresses retention mirroring across the whole window: a
+    // failed restore must leave the retention intact for the next connect
+    // rather than let an empty snapshot overwrite it.
+    this.#resyncing = true;
+    let restoreOk = true;
+    try {
+      const retained = this.#stackRetention.items();
+      if (retained.length > 0) {
+        await this.#invoke(StackRestoreChannel, { items: [...retained] });
+      }
+    } catch (err) {
+      restoreOk = false;
+      if (!(err instanceof BridgeDisconnectedError)) {
+        this.#onResyncError(
+          `Restoring the retained stack failed on reconnect: ` +
+            `${err instanceof Error ? err.message : String(err)}. ` +
+            `The stack is kept locally and will be retried on the next connect.`,
+        );
+      }
+    }
+
     // First connect: the renderer's `useBridgeSnapshot` pulls the initial
     // stack/health/lock, so only a RECONNECT re-pulls them here.
-    if (!rePullSnapshots) return;
+    if (!rePullSnapshots) {
+      this.#resyncing = false;
+      return;
+    }
     try {
       const [stack, health, lock] = await Promise.all([
         this.#invoke(StackSnapshotChannel, undefined),
@@ -307,9 +373,26 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#stackSubs.emit(stack);
       this.#healthSubs.emit(health);
       this.#lockSubs.emit(lock);
+      // Only a restore that actually succeeded may re-baseline the retention:
+      // after a failure this snapshot may be the empty one that erases it.
+      this.#resyncing = false;
+      if (restoreOk) this.#mirrorStack(stack);
     } catch {
       /* a fresh drop during resync will re-trigger reconnect */
+      this.#resyncing = false;
     }
+  }
+
+  /**
+   * B-092 — persist the stack INTENT behind a published snapshot (fire and
+   * forget: retention must never delay or fail a UI update). Suppressed while
+   * `#resyncing`, see that field.
+   */
+  #mirrorStack(snapshot: readonly StackItemState[]): void {
+    if (this.#resyncing) return;
+    void this.#stackRetention.mirror(snapshot).catch(() => {
+      /* retention is best-effort; a write failure must never break playout */
+    });
   }
 
   #onMessage(raw: string): void {
@@ -336,6 +419,7 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) {
           this.#lastStack = p.data;
           this.#stackSubs.emit(p.data);
+          this.#mirrorStack(p.data); // B-092 — keep the browser-local intent current
         }
         break;
       }
@@ -430,13 +514,64 @@ export class WebSocketRuntime implements RuntimeBridge {
     removeAll: () => this.#invoke(StackRemoveAllChannel, undefined),
     clearAll: () => this.#invoke(StackClearAllChannel, undefined),
     snapshot: async () => {
+      // B-092 — with the bridge unreachable, answer from the browser-local
+      // retention instead of REFUSING. A cold page load against a dead bridge
+      // otherwise shows an EMPTY stack (the pull is refused and nothing re-reads
+      // the retention until the bridge returns) — the operator's list vanishing
+      // on a refresh, which is the very failure this change exists to end. The
+      // library already works this way (B-085); the stack now does too.
+      //
+      // DISPLAY ONLY: this sends nothing, commands nothing, and makes no
+      // restore-vs-reset decision. The occupancy-aware restore still happens on
+      // the bridge, on reconnect; the re-pull then replaces this with
+      // authoritative truth.
+      if (this.#status !== 'live') return this.#retainedProjection();
       const stack = await this.#invoke(StackSnapshotChannel, undefined);
       this.#lastStack = stack; // B-085 — keep the offline remove-reference check current
+      this.#mirrorStack(stack); // B-092 — …and the browser-local stack intent
       return stack;
     },
     onStateChanged: (handler: (snapshot: readonly StackItemState[]) => void) =>
       this.#stackSubs.add(handler),
   };
+
+  /**
+   * B-092 — the retained stack intent projected into displayable state, for use
+   * while the bridge is unreachable. It is a VIEW of intent, not a claim about
+   * the wire, so its statuses are the honest ones for "nothing can be verified":
+   *
+   *   played  → `unverified` — B-086/B-087's muted "WAS ON AIR". NEVER the
+   *             broadcast-red `on-air`/`playing`: with no bridge the SPA has no
+   *             conduit to CasparCG at all, so a confident red badge would be
+   *             the exact lie those two changes exist to kill.
+   *   !played → `loaded` — not an air claim, and the same resting status the
+   *             bridge itself leaves an item at when no server is reachable
+   *             (B-082).
+   *
+   * `pending` is false throughout: nothing is in flight, so no row spins.
+   *
+   * The projection round-trips cleanly (`unverified`/`loaded` map back to the
+   * same `played`), so it can never corrupt the retention if re-mirrored.
+   */
+  #retainedProjection(): StackItemState[] {
+    const projected = this.#stackRetention.items().map(
+      (i): StackItemState => ({
+        itemId: i.itemId,
+        templateId: i.templateId,
+        fields: i.fields,
+        status: i.played ? 'unverified' : 'loaded',
+        pending: false,
+        ...(i.slot !== undefined && { slot: i.slot }),
+        ...(i.position !== undefined && { position: i.position }),
+      }),
+    );
+    // B-085 — this IS the stack the SPA currently knows about, so it is also the
+    // right basis for the OFFLINE refuse-while-referenced check. Without it a
+    // cold boot against a dead bridge counts ZERO references and would let the
+    // operator remove a template that the retained (and now visible) rows use.
+    this.#lastStack = projected;
+    return projected;
+  }
 
   /** B-085 — how many current stack items reference `templateId` (offline R-005 check). */
   #referencedCount(templateId: string): number {

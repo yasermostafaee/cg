@@ -3,6 +3,7 @@ import {
   FieldValuesSchema,
   IdSchema,
   PositionSchema,
+  RetainedStackItemSchema,
   StackItemStateSchema,
 } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
@@ -123,6 +124,29 @@ export const StackSnapshotChannel = defineChannel(
   'stack.snapshot',
   z.void(),
   z.array(StackItemStateSchema),
+);
+
+/**
+ * B-092 — re-deliver the browser's RETAINED stack intent to the bridge, so the
+ * stack survives a restart of the bridge process (it otherwise lives only in
+ * the bridge's in-memory Reconciler). Issued on every (re)connect, right after
+ * the retained templates and BEFORE the snapshot re-pull, so the snapshot the
+ * SPA adopts is the RESTORED stack instead of a fresh bridge's empty one.
+ *
+ * The bridge REBUILDS state from these intents and publishes immediately, but
+ * sends NOTHING to CasparCG at that moment: the adopt-vs-re-ADD decision waits
+ * until real OSC occupancy is knowable, so a restore can never CLEAR a live
+ * layer. `skipped` counts intents the bridge declined (an item it already
+ * holds, an unregistered template, no free layer) — a partial restore is
+ * normal, never an error.
+ */
+export const StackRestoreChannel = defineChannel(
+  'stack.restore',
+  z.object({ items: z.array(RetainedStackItemSchema) }),
+  z.object({
+    restored: z.number().int().nonnegative(),
+    skipped: z.number().int().nonnegative(),
+  }),
 );
 
 /**

@@ -31,6 +31,14 @@ export function useBridgeSnapshot<T>(
   fetchSnapshot: () => Promise<T>,
   subscribe: (handler: (next: T) => void) => Unsubscribe,
   initial: T,
+  /**
+   * B-092 — opt in to pulling while the link is DOWN, for the one snapshot the
+   * browser can answer locally: the stack, which is now backed by persistent
+   * browser-local intent (like B-085's library). Everything else must keep the
+   * default — health, lock and config live only on the bridge, so asking for
+   * them while disconnected is the refused round-trip this hook exists to avoid.
+   */
+  pullWhileDisconnected = false,
 ): T {
   const [value, setValue] = useState<T>(initial);
   const link = useLink();
@@ -49,8 +57,9 @@ export function useBridgeSnapshot<T>(
 
   useEffect(() => {
     // `disconnected` refuses every request by design (R-006) — don't ask. The transition
-    // back to a usable link re-runs this effect and pulls then.
-    if (link === 'disconnected') return;
+    // back to a usable link re-runs this effect and pulls then. B-092 — unless the caller
+    // opted in because this snapshot has a browser-local answer that needs no bridge.
+    if (link === 'disconnected' && !pullWhileDisconnected) return;
     let cancelled = false;
     const pulledAt = generation.current;
     void fetchSnapshot().then(
@@ -65,7 +74,7 @@ export function useBridgeSnapshot<T>(
     return () => {
       cancelled = true;
     };
-  }, [fetchSnapshot, link]);
+  }, [fetchSnapshot, link, pullWhileDisconnected]);
 
   return value;
 }

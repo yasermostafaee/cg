@@ -171,6 +171,52 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
   }
 
   /**
+   * B-092 — seed an item from RETAINED intent after a bridge restart, without
+   * an operator intent behind it. The browser owns the stack intent across the
+   * bridge's death; this rebuilds the record the dead process lost.
+   *
+   * Returns `null` when the item already exists — the caller must NEVER clobber
+   * a live bridge's own state with a retained copy (a page reload against a
+   * healthy bridge must change nothing).
+   *
+   * `played` is reconstructed play evidence, and it decides how the record is
+   * seeded:
+   *
+   *   played  → `playing` AND `ackedStatus: 'playing'`, i.e. exactly what a
+   *             settled, confirmed take left behind before the process died.
+   *             The ack matters: without it `pending` is true and the row spins
+   *             forever on a link that may never come back. The item is NOT
+   *             claimed `on-air` here — only OSC may promote it there, and it
+   *             will, as soon as the wire confirms a live producer.
+   *   !played → the terminal `loaded`, resting and unconfirmed by anything.
+   *
+   * No OSC observation and no slot are seeded — the caller assigns the slot
+   * (`assignSlot`) and real OSC supplies the truth. Until then the merge ladder
+   * falls through to these values, and while the CasparCG link is down B-086's
+   * `unverified` demotion applies to the played case exactly as it would to a
+   * record that never died.
+   */
+  restoreItem(input: {
+    itemId: string;
+    templateId: string;
+    fields: FieldValues;
+    played: boolean;
+  }): StackItemState | null {
+    if (this.items.has(input.itemId)) return null;
+    const rec: ItemRecord = {
+      itemId: input.itemId,
+      templateId: input.templateId,
+      fields: input.fields,
+      fieldsHash: hashFields(input.fields),
+      intentStatus: input.played ? 'playing' : 'loaded',
+      ...(input.played && { ackedStatus: 'playing' as StackItemStatus }),
+      played: input.played,
+    };
+    this.items.set(rec.itemId, rec);
+    return this.emitChange(rec);
+  }
+
+  /**
    * Correlate an AMCP ack to its originating intent (by seq). The merge
    * rule prefers OSC truth, so the ack's effect is to bump `ackedStatus`
    * — which only wins until OSC catches up.

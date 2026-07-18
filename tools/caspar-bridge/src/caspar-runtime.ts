@@ -7,7 +7,13 @@ import {
   type FailoverEvent,
   type ServerLabel,
 } from '@cg/caspar-client';
-import type { AuditEntry, FieldValues, Position, StackItemState } from '@cg/shared-schema';
+import type {
+  AuditEntry,
+  FieldValues,
+  Position,
+  RetainedStackItem,
+  StackItemState,
+} from '@cg/shared-schema';
 import type {
   ChannelResponse,
   ConnectionConfig,
@@ -179,6 +185,25 @@ export class CasparRuntime {
    * knows explicit operator overrides.
    */
   readonly #positions = new Map<string, Position>();
+  /**
+   * B-092 — restored items awaiting their adopt-vs-re-ADD decision.
+   *
+   * Retained stack intent arrives when the SPA reconnects, which on a bridge
+   * restart is BEFORE the fresh CasparCG session has handshaken — and the OSC
+   * occupancy tap (the only thing that can tell "the graphic is still on air"
+   * from "the layer is empty") is empty until the session drains its resync.
+   * So `restore()` seeds state and parks the item here; the decision is taken
+   * where occupancy is knowable — the transition INTO `healthy`, or inline when
+   * the session is already healthy and the tap is warm.
+   *
+   * Nothing is sent to CasparCG for an item while it sits here: the row is back
+   * on the operator's stack, and the wire is untouched until we can prove what
+   * is on the layer.
+   */
+  readonly #pendingRestore = new Map<
+    string,
+    { slot: CommandSlot; templateId: string; fields: FieldValues }
+  >();
   #seq = 0;
   #lastFailover: ConnectionHealth['lastFailover'] = undefined;
 
@@ -336,6 +361,18 @@ export class CasparRuntime {
               .occupied(this.#occupancyStaleMs)
               .map((o) => `${String(o.channel)}:${String(o.layer)}`),
           );
+          // B-092 — decide the pending RESTORES here, against this same drained
+          // occupancy sample, and BEFORE `reconcileOnReconnect`. This is the
+          // only point where the answer exists: the tap resets on resync and
+          // refills during the RESYNCING drain, so at the SPA's reconnect (when
+          // the intent arrived) it was empty. Ordering is load-bearing twice
+          // over: `transitionTo` emits this BEFORE `emit('healthy')`, so we run
+          // before that handler clears `#loaded`; and every record mutation
+          // inside is SYNCHRONOUS (only the CG ADD is awaited), so the
+          // `reconcileOnReconnect` on the next line iterates a settled
+          // reconciler — a re-ADDed item already reads `played: false` and is
+          // correctly left alone by it.
+          void this.#decidePendingRestores(occupiedKeys);
           this.#reconciler.reconcileOnReconnect(occupiedKeys);
         } else if (from === 'healthy') {
           this.#reconciler.setLinkDown(true);
@@ -564,6 +601,195 @@ export class CasparRuntime {
     // loaded, NOT playing. The operator's take issues the `CG PLAY`.
     const ok = await this.#sendAdd(itemId, slot, templateId, fields, seq);
     return { accepted: ok };
+  }
+
+  /**
+   * B-092 — rebuild the stack from the browser's RETAINED intent.
+   *
+   * The stack otherwise lives ONLY in this process's Reconciler and dies with
+   * it: a restarted bridge boots empty, the SPA re-pulls that empty snapshot,
+   * and every row the operator built disappears. The browser owns the intent
+   * across the death; this puts it back.
+   *
+   * This method deliberately does NOT go through `load()`. `load()` ADOPTS the
+   * layer first — a hard `CLEAR` before its first `CG ADD` there — and on a
+   * bridge-ONLY restart (CasparCG still rendering) that CLEAR lands on the LIVE
+   * layer: the graphic flashes OFF AIR and comes back merely loaded. That is
+   * the broadcast-safety lie this codebase forbids, so the restore is
+   * occupancy-aware instead, and it is split in two:
+   *
+   *   1. HERE: seed the Reconciler, take the retained layer, bind OSC interest,
+   *      restore the position override, publish. The rows are back immediately
+   *      — before CasparCG is even reachable — and NOTHING is sent to the wire.
+   *   2. `#decidePendingRestores`: once real occupancy is knowable, adopt the
+   *      layer without clearing it (a producer survived) or re-ADD onto it (the
+   *      layer is empty). Neither branch can ever clear a live layer.
+   *
+   * Skipped, never fatal: an item this bridge ALREADY holds (local intent must
+   * never clobber a live bridge's own state — a page reload against a healthy
+   * bridge changes nothing), an unregistered template (the SPA re-delivers its
+   * library first, so this means the template is genuinely gone), or an
+   * exhausted layer range.
+   */
+  async restore(items: readonly RetainedStackItem[]): Promise<{
+    restored: number;
+    skipped: number;
+  }> {
+    // B-086 honesty, applied to seeded records: the reconciler learns `linkDown`
+    // from session TRANSITIONS, and a bridge whose CasparCG session has never
+    // been healthy has fired none — so without this a restored on-air item
+    // would publish the broadcast-red `playing` on a link that reaches nothing.
+    // (No ordinary path can hit that: `take` is refused while the link is down,
+    // so only a restore can seed play evidence there.)
+    //
+    // DEMOTE-ONLY, and on the PRIMARY's state — the same signal B-086 demotes
+    // on, because only the current primary's OSC can verify an on-air claim.
+    // Never the reachability predicate `#linkDown()` (which is false whenever
+    // ANY server is reachable): in a mirror pair with the primary down and the
+    // backup up, clearing the flag here would UN-demote B-086's `unverified`
+    // rows back to a confident red ON AIR that nothing verifies. Lifting the
+    // flag stays where it belongs — the healthy transition.
+    if (this.#adapter.primarySession.state !== 'healthy') this.#reconciler.setLinkDown(true);
+
+    let restored = 0;
+    let skipped = 0;
+    for (const item of items) {
+      // The live bridge wins over the retained copy — never clobber.
+      if (this.#reconciler.get(item.itemId) !== null) {
+        skipped++;
+        continue;
+      }
+      if (!this.#templates.has(item.templateId)) {
+        skipped++;
+        continue;
+      }
+      const slot = this.#slotForRestore(item);
+      if (slot === null) {
+        skipped++;
+        continue;
+      }
+      if (
+        this.#reconciler.restoreItem({
+          itemId: item.itemId,
+          templateId: item.templateId,
+          fields: item.fields,
+          played: item.played,
+        }) === null
+      ) {
+        this.#layers.deallocate(slot);
+        skipped++;
+        continue;
+      }
+      this.#slots.set(item.itemId, slot);
+      this.#reconciler.assignSlot(item.itemId, { ...slot, server: 'primary' });
+      this.#addInterest(slot);
+      // R-011 — the operator's placement is intent too, and #sendAdd reads it
+      // off #positions, so it must be back BEFORE any re-ADD decision runs.
+      if (item.position !== undefined) this.#positions.set(item.itemId, item.position);
+      this.#pendingRestore.set(item.itemId, {
+        slot,
+        templateId: item.templateId,
+        fields: item.fields,
+      });
+      this.#markDirty(item.itemId);
+      restored++;
+    }
+
+    // If the primary session is ALREADY healthy the `to === 'healthy'`
+    // transition fired long ago and will not fire again (the late-page-reload
+    // case) — but the tap has been filling ever since, so the answer is
+    // available right now. Without this branch those items would sit pending
+    // forever, visible but never adopted or re-ADDed.
+    if (restored > 0 && this.#adapter.primarySession.state === 'healthy') {
+      const occupiedKeys = new Set(
+        this.#adapter.primarySession.osc.occupancy
+          .occupied(this.#occupancyStaleMs)
+          .map((o) => `${String(o.channel)}:${String(o.layer)}`),
+      );
+      await this.#decidePendingRestores(occupiedKeys);
+    }
+    return { restored, skipped };
+  }
+
+  /**
+   * B-092 — the layer a restored item takes. The RETAINED slot is preferred and
+   * reserved exactly: it is the layer the surviving producer is actually on, so
+   * it is the layer whose occupancy decides adopt-vs-re-ADD. Re-allocating some
+   * other free layer would consult the wrong layer's occupancy and could ADD a
+   * second producer beside a live one. Falls back to normal allocation when the
+   * intent carries no slot or the layer is already taken; `null` when the range
+   * is exhausted (the item is skipped, exactly as a load would fail).
+   */
+  #slotForRestore(item: RetainedStackItem): CommandSlot | null {
+    if (item.slot !== undefined) {
+      const slot = { channel: item.slot.channel, layer: item.slot.layer };
+      if (this.#layers.reserve(slot, item.templateId)) return slot;
+    }
+    try {
+      return this.#allocate(item.templateId);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * B-092 — resolve every pending restore against REAL occupancy. This is the
+   * broadcast-safety core of the change: `occupiedSlotKeys` comes from the OSC
+   * occupancy tap (the same sample B-086's reconnect reconcile uses), and
+   * silence means unoccupied — real CasparCG goes SILENT for a cleared layer
+   * rather than reporting `empty` (B-053), the same contract the orphan sweep
+   * relies on.
+   *
+   *   OCCUPIED → ADOPT WITHOUT CLEARING. A producer survived the bridge's
+   *     death: the item is genuinely still on air, so the correct action is to
+   *     touch NOTHING. Marking the layer adopted is what guarantees no later
+   *     adoption issues the CLEAR that would flash it off air; resumed OSC
+   *     re-derives `on-air` by itself from the record's play evidence.
+   *   SILENT → RE-ADD as loaded. The producer is gone (bridge AND CasparCG
+   *     restarted), so a fresh `CG ADD` puts the item back — still with NO
+   *     adopt-CLEAR in front of it.
+   *
+   * Note what is NOT here: no branch sends a CLEAR. A wrong "silent" verdict
+   * (OSC misconfigured, so every layer looks silent) costs a `CG ADD` onto a
+   * possibly-live layer — a stage replace, exactly what an ordinary load or a
+   * B-039 re-ADD already does. A wrong verdict the other way would have cost an
+   * explicit CLEAR. The asymmetry is the whole design.
+   *
+   * Record mutations are synchronous; only the ADD is awaited. The caller at
+   * the healthy transition relies on that (see `#wireAdapter`).
+   */
+  async #decidePendingRestores(occupiedSlotKeys: ReadonlySet<string>): Promise<void> {
+    if (this.#pendingRestore.size === 0) return;
+    const pending = [...this.#pendingRestore];
+    this.#pendingRestore.clear();
+
+    const adds: Promise<boolean>[] = [];
+    for (const [itemId, { slot, templateId, fields }] of pending) {
+      // A remove landed between the restore and this decision — the item is
+      // gone; its slot was already released by remove(). Nothing to do.
+      if (this.#reconciler.get(itemId) === null) continue;
+
+      if (occupiedSlotKeys.has(adoptionKey(slot))) {
+        // Adopted by OBSERVATION, not by a CLEAR — so this deliberately does
+        // NOT go through `#markAdoptedOnPrimary`, whose owned-occupancy
+        // resolution means "provably cleared". We proved the opposite: there IS
+        // a producer, and it is ours.
+        this.#adopted.add(adoptionKey(slot));
+        continue;
+      }
+
+      // Silent layer: no producer survived, so the honest state is `loaded`.
+      // Re-creating the record through the ordinary `load` intent is what makes
+      // it honest — it resets play evidence, so the item can no longer claim
+      // air, and `reconcileOnReconnect` (which runs right after us) correctly
+      // leaves it alone. The slot must be re-assigned: a fresh `load` record
+      // carries none.
+      const seq = this.#nextSeq();
+      this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields }, seq);
+      this.#reconciler.assignSlot(itemId, { ...slot, server: 'primary' });
+      adds.push(this.#sendAdd(itemId, slot, templateId, fields, seq));
+    }
+    await Promise.all(adds);
   }
 
   /**
@@ -864,6 +1090,10 @@ export class CasparRuntime {
     this.#loaded.delete(itemId);
     // R-011 — the override dies with the ITEM (a re-used itemId starts clean).
     this.#positions.delete(itemId);
+    // B-092 — a restore awaiting its occupancy decision dies with the item too:
+    // the operator removed it, so there is nothing left to adopt or re-ADD (the
+    // urgent CLEAR below is the removal's own, and it is unconditional).
+    this.#pendingRestore.delete(itemId);
     if (slot !== undefined) {
       this.#slots.delete(itemId);
       this.#removeInterest(slot);
