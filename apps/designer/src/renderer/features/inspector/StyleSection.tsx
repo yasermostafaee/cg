@@ -1,4 +1,7 @@
+import { useCallback, useSyncExternalStore } from 'react';
 import { Maximize, Square } from 'lucide-react';
+import { lottieTiming } from '@cg/lottie-bridge';
+import type { LottiePhaseSpan } from '@cg/lottie-bridge';
 import type {
   AnimatableProperty,
   ClockElement,
@@ -28,7 +31,8 @@ import { SharedImagePicker } from '../sharedLibrary/SharedImagePicker.js';
 import { TickerSeparatorControl } from './TickerSeparatorControl.js';
 import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
-import { activeFieldData } from '../../state/scene-doc.js';
+import { activeDocOf, activeFieldData } from '../../state/scene-doc.js';
+import * as lottieAssetCache from '../assets/lottieAssetCache.js';
 import {
   effectiveColorAt as evColor,
   effectiveNumberAt as evNum,
@@ -532,12 +536,56 @@ function ImageSections({
 // ────────────────────────────────────────────────────────────────────────
 
 /**
+ * D-125 Phase 3a — subscribe to the parsed-animation cache so the timing readout below
+ * appears (and live-updates) as soon as an asset resolves. `getSnapshot` returns the
+ * cached object identity, which only changes when that asset is (re)parsed.
+ */
+function useLottieAnimation(assetId: string): unknown {
+  const subscribe = useCallback((cb: () => void) => lottieAssetCache.subscribe(cb), []);
+  const snapshot = useCallback(() => lottieAssetCache.get(assetId), [assetId]);
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
+}
+
+/** `0.67s` / `1.33s` / `2s` — a compact seconds readout (no trailing zeros). */
+const secs = (s: number): string => `${s.toFixed(2).replace(/\.?0+$/, '')}s`;
+
+/**
+ * D-125 Phase 3a — ONE phase row, in BOTH frame spaces: the animation's own frames, the
+ * wall-clock duration at the authored speed, and where that lands in THIS composition's
+ * frames. This is the guidance whose absence forced the operator to compute frames by hand.
+ */
+function PhaseTimingRow({
+  label,
+  span,
+  compFrame,
+}: {
+  label: string;
+  span: LottiePhaseSpan;
+  compFrame?: number | undefined;
+}): JSX.Element {
+  return (
+    <p className={dds.hint}>
+      {label} {span.from}–{span.to} ({secs(span.seconds)})
+      {compFrame !== undefined
+        ? ` → frame ${String(compFrame)} of this comp`
+        : ` → ${String(span.compFrames)} comp frames`}
+    </p>
+  );
+}
+
+/**
  * D-125 Phase 1 — the Lottie inspector: playback speed, hold behaviour, and a
  * READ-ONLY view of the phase mapping (intro-end / outro-start). Marker-derived
  * phases are shown as text; a manually-marked mapping exposes editable frame
  * inputs; a clip with no phases shows the "plays once then freezes" hint. The
  * internal keyframe stream is opaque — there is deliberately no keyframe editor.
  * The universal CSS Filter follows (parity with ImageSections).
+ *
+ * D-125 Phase 3a — plus the TIMING readout: the clip's totals and every phase in the
+ * animation's frames, in seconds, AND in this composition's frames, with a warning when
+ * the derived entrance settle would land past the composition's out-point. The numbers
+ * come from `lottieTiming` — the SAME helper the runtime derives the settle from, so what
+ * is shown here is exactly what plays out.
  */
 function LottieSections({
   element,
@@ -546,6 +594,29 @@ function LottieSections({
 }: SectionProps<LottieElement>): JSX.Element {
   const id = element.id;
   const phases = element.phases;
+  // Live-updates on speed / phases (element), frame rate + out-point (scene), and on the
+  // animation resolving — so every input to the readout is reactive.
+  const frameRate = useDesignerSelector((s) => s.scene?.frameRate ?? 0);
+  const outPoint = useDesignerSelector((s) => {
+    const scene = s.scene;
+    if (scene === null) return null;
+    const doc = activeDocOf(scene);
+    return doc.lifecycle?.outPoint ?? doc.activeRange?.out ?? doc.frameRange.out ?? null;
+  });
+  const animation = useLottieAnimation(element.assetId);
+  const timing =
+    animation === undefined
+      ? null
+      : lottieTiming({
+          data: animation,
+          speed: element.speed,
+          phases: phases,
+          compositionFps: frameRate,
+        });
+  // The derived settle only exists for a phase-marked clip (see `lottieTiming`), and only
+  // overruns when it needs MORE composition frames than the out-point allows.
+  const settle = timing?.settleOffset ?? null;
+  const overruns = settle !== null && outPoint !== null && settle > outPoint;
   return (
     <>
       <CollapseSection title="Lottie" defaultExpanded>
@@ -607,6 +678,36 @@ function LottieSections({
               }
             />
           </>
+        )}
+        {timing === null ? null : (
+          <div data-testid="lottie-timing">
+            <div className={fieldCss.row}>
+              <span className={fieldCss.label}>clip</span>
+              <span>
+                {timing.meta.op} f @ {timing.meta.fr} fps · {secs(timing.clip.seconds)}
+              </span>
+            </div>
+            {timing.hasPhases ? (
+              <>
+                <PhaseTimingRow label="intro" span={timing.intro} compFrame={settle ?? undefined} />
+                <PhaseTimingRow label="hold" span={timing.hold} />
+                <PhaseTimingRow label="outro" span={timing.outro} />
+              </>
+            ) : (
+              // No authored phases ⇒ nothing is derived from this clip (the runtime treats
+              // the `introEnd = op` fallback as missing information, not an authored intro).
+              <p className={dds.hint}>
+                whole clip plays as the intro ({secs(timing.clip.seconds)}) — no phase markers, so
+                it does not set the content start.
+              </p>
+            )}
+            {overruns ? (
+              <p className={dds.warn} data-testid="lottie-settle-warning">
+                this Lottie&rsquo;s intro needs {String(settle)} frames; the out-point is at{' '}
+                {String(outPoint)} — extend the out-point or the intro will be cut.
+              </p>
+            ) : null}
+          </div>
         )}
       </CollapseSection>
       <FilterSection

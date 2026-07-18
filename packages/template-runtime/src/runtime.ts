@@ -75,7 +75,7 @@ import {
   buildSequenceCompositionItem,
   repeaterItemValues,
 } from './scene-builder.js';
-import { createLottiePlayer } from '@cg/lottie-bridge';
+import { createLottiePlayer, lottieClipMeta, lottieTiming } from '@cg/lottie-bridge';
 import { ClockDriver } from './clock-driver.js';
 import { LottieDriver } from './lottie-driver.js';
 import {
@@ -337,16 +337,27 @@ function applyAssetUrls(
 }
 
 /**
- * D-125 — read the bodymovin frame metadata (`ip` / `op` / `fr`) off a parsed
- * `animationData` object, defensively. `fr` defaults to 30 (the common bodymovin
- * rate) and the frame span defaults to `[0, 0]` (a degenerate clip that freezes at
- * frame 0) when the JSON is malformed, so a bad asset never throws at wiring time.
+ * B-088 + D-125 Phase 3a — compose the two independent reasons an intro/outro leg must be
+ * SWEPT frame-by-frame instead of collapsing to a single end-frame paint:
+ *
+ *  - a `lifespan` GATE boundary crossing the leg (B-088, ROOT scope only — the gates are
+ *    collected against the root `elementMap`);
+ *  - a LOTTIE-derived entrance settle (D-125 Phase 3a, ANY scope): the leg that ends at the
+ *    settle must consume its real duration so content starts when the furniture has settled,
+ *    not at play. The later legs (static settle, outro) end AFTER the settle and still
+ *    collapse.
+ *
+ * Returns `undefined` when neither applies, preserving the exact prior behaviour (and the
+ * `?? false` default) for every scene without lifespan gates or a phase-marked Lottie.
  */
-function lottieFrameMeta(data: unknown): { ip: number; op: number; fr: number } {
-  const d = (typeof data === 'object' && data !== null ? data : {}) as Record<string, unknown>;
-  const num = (v: unknown, fallback: number): number =>
-    typeof v === 'number' && Number.isFinite(v) ? v : fallback;
-  return { ip: num(d['ip'], 0), op: num(d['op'], 0), fr: num(d['fr'], 30) };
+function buildNeedsFrameSweep(
+  lifespanGateChangesInRange: ((inF: number, outF: number) => boolean) | undefined,
+  lottieSettle: number | null,
+): ((inF: number, outF: number) => boolean) | undefined {
+  if (lifespanGateChangesInRange === undefined && lottieSettle === null) return undefined;
+  return (inF: number, outF: number): boolean =>
+    (lifespanGateChangesInRange?.(inF, outF) ?? false) ||
+    (lottieSettle !== null && outF > inF && outF <= lottieSettle);
 }
 
 /**
@@ -793,10 +804,17 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       const scopeOutroLotties: LottieDriver[] = [];
       /** §D6.3 — only the Lotties that OPTED IN (`drivesHold === true`) gate this hold. */
       const holdLotties: LottieDriver[] = [];
+      /**
+       * D-125 Phase 3a — each VISIBLE, phase-marked Lottie's intro completion, in COMPOSITION
+       * frames OFFSET from `active.in` (the frame the Lottie's intro starts — `play()` resets +
+       * starts every Lottie, see the play path). Fed to `entranceSettleFrame` below so the
+       * furniture's intro derives the scope's entrance settle exactly like keyframe tracks do.
+       */
+      const lottieSettleOffsets: number[] = [];
       for (const l of scope.lotties) {
         const data = options.lottieAssets?.[l.element.assetId];
         if (data === undefined) continue;
-        const meta = lottieFrameMeta(data);
+        const meta = lottieClipMeta(data);
         const handle = createLottiePlayer(l.container, data, {
           autoplay: false,
           speed: l.element.speed,
@@ -863,6 +881,18 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           // one-liner; do not "normalize" it to match the other content kinds.
           const drivesHold = l.element.drivesHold === true;
           if (drivesHold) holdLotties.push(driver);
+          // D-125 Phase 3a — contribute this Lottie's intro to the scope's entrance settle.
+          // Inside the B-034 visible gate ON PURPOSE: a HIDDEN Lottie is fully inert and must
+          // not delay content for furniture nobody can see. A MARKER-LESS clip yields `null`
+          // (see `lottieTiming` — the `introEnd = op` fallback is missing information, not an
+          // authored intro), so it contributes nothing and pre-D-125 scenes are unchanged.
+          const timing = lottieTiming({
+            data,
+            speed: l.element.speed,
+            phases: l.element.phases,
+            compositionFps: scene.frameRate,
+          });
+          if (timing.settleOffset !== null) lottieSettleOffsets.push(timing.settleOffset);
           // D-112 — exposed UNFILTERED so a parent instance override can re-filter it.
           contentDrivers.push({
             id: l.element.id,
@@ -986,10 +1016,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // [active.in, outPoint] defensively (the schema already constrains it).
       const outPoint = scope.source.lifecycle?.outPoint ?? activeRange.out;
       const marker = scope.source.lifecycle?.contentStart;
+      // D-125 Phase 3a — the Lottie-derived settles in ABSOLUTE composition frames (the
+      // offsets above ride `active.in`, where their intros start).
+      const lottieSettles = lottieSettleOffsets.map((o) => activeRange.in + o);
       const holdEntry =
         marker !== undefined
           ? Math.max(activeRange.in, Math.min(outPoint, marker))
-          : entranceSettleFrame(scope.animated, activeRange.in, outPoint);
+          : entranceSettleFrame(scope.animated, activeRange.in, outPoint, lottieSettles);
       // D-104 follow-up (content-start VISIBILITY) — a content host must show its static
       // initial content (a clock's frozen time, a sequence's item 1, a ticker's band) only
       // FROM the content-start frame, matching the ticker's empty-until-crawl behaviour;
@@ -1035,9 +1068,28 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // the `isGlobalRoot` guard on `applyLifespanGatesAtFrame` below: the gates are
         // collected against the root `elementMap`, so a nested scope has none to cross and
         // must keep its existing collapse behaviour.
-        needsFrameSweep: isGlobalRoot
-          ? (inF: number, outF: number): boolean => lifespanGateChangesInRange(inF, outF)
-          : undefined,
+        //
+        // D-125 Phase 3a — a LOTTIE-derived settle is the second reason a leg cannot
+        // collapse, and it applies to EVERY scope (a nested comp has its own `lotties`), not
+        // just the root. With no keyframes `hasAnimation` is false, so the entrance leg
+        // `[active.in → settle]` collapsed to a single `applyFrame(settle)` and fired
+        // `onContentStart` at PLAY — content appeared instantly while the furniture was still
+        // animating on, making the derived settle inert. Sweeping the leg makes it consume its
+        // real duration (`(settle − active.in) / frameRate` seconds — by construction the
+        // Lottie's intro duration), so content starts exactly when the furniture settles.
+        // Only the leg ENDING at (or before) the settle needs it: the static settle leg
+        // `[settle → outPoint]` and the outro still collapse as before.
+        //
+        // The lifespan predicate MUST stay wrapped in an arrow: `lifespanGateChangesInRange`
+        // is a `let` still holding its `() => false` stub here and is REASSIGNED below, after
+        // the gates are collected. Passing the binding directly captures the stub and silently
+        // disables B-088.
+        needsFrameSweep: buildNeedsFrameSweep(
+          isGlobalRoot
+            ? (inF: number, outF: number): boolean => lifespanGateChangesInRange(inF, outF)
+            : undefined,
+          lottieSettles.length > 0 ? Math.min(Math.max(...lottieSettles), outPoint) : null,
+        ),
         applyFrame: (frame: number): void => {
           for (const entry of scope.animated) applyAnimationAtFrame(entry, frame);
           // B-029 — honor per-element lifespan during PLAYBACK, not only the scrubber, so a

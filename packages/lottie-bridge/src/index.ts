@@ -7,6 +7,9 @@
 export { createLottiePlayer } from './runtime.js';
 export type { LottieLoopMode, LottiePlayerOptions, LottiePlayerHandle } from './runtime.js';
 
+export { lottieClipMeta, lottieTiming } from './timing.js';
+export type { LottieClipMeta, LottiePhaseSpan, LottieTiming, LottieTimingInput } from './timing.js';
+
 export { importLottie, markersToSegments } from './import.js';
 export type {
   ImportResult,

@@ -608,13 +608,30 @@ function walk(
  * (ticker / clock / sequence) at this frame — the moment the intro visually completes —
  * instead of at the out-point, so the content runs through the whole hold rather than
  * only in the last instant before the outro.
+ *
+ * D-125 Phase 3a — `lottieSettles` extends the SAME derivation to Lottie furniture.
+ * A Lottie is deliberately OPAQUE and carries no keyframe tracks, so it contributes
+ * nothing to the scan above; without this a scene whose entrance IS a Lottie had no
+ * settle at all (`outPoint` verbatim) and every overlay had to be hand-trimmed. Each
+ * entry is one visible Lottie's intro completion, ALREADY converted to this
+ * composition's frame space (see `lottieTiming` in `@cg/lottie-bridge`). The scope
+ * settles when EVERYTHING has settled, so the result is the LATEST of the two sources
+ * — clamped to `outPoint`, which is the caller's cue to warn (an intro that needs more
+ * frames than the out-point allows is cut, never silently honoured past the out-point).
  */
 export function entranceSettleFrame(
   animated: AnimatedElement[],
   activeIn: number,
   outPoint: number,
+  lottieSettles: readonly number[] = [],
 ): number {
-  if (animated.length === 0 || outPoint <= activeIn) return outPoint;
+  if (outPoint <= activeIn) return outPoint;
+  const lottieSettle = lottieSettles.length > 0 ? Math.max(...lottieSettles) : null;
+  // No keyframes at all — the settle is whatever the Lotties derived, or (with none)
+  // today's `outPoint`. The early return is why a Lottie-only scene had no settle.
+  if (animated.length === 0) {
+    return lottieSettle === null ? outPoint : clampSettle(lottieSettle, activeIn, outPoint);
+  }
   // Every animated track paired with its value AT the out-point (the held state),
   // plus the candidate frames where the value could change: the keyframes strictly
   // inside (activeIn, outPoint), with activeIn as the floor.
@@ -629,7 +646,9 @@ export function entranceSettleFrame(
       }
     }
   }
-  if (tracks.length === 0) return outPoint;
+  if (tracks.length === 0) {
+    return lottieSettle === null ? outPoint : clampSettle(lottieSettle, activeIn, outPoint);
+  }
   // Walk candidate frames high→low; the constant tail extends as long as every track
   // still renders its held value. The first candidate that differs ends the tail —
   // everything from there to the out-point is the (changing) entrance.
@@ -642,7 +661,17 @@ export function entranceSettleFrame(
     if (!constant) break;
     settle = f;
   }
-  return settle;
+  // D-125 Phase 3a — the scope has settled only once BOTH sources have: the keyframe
+  // tail AND every visible Lottie intro. `settle` may legitimately be `outPoint` here
+  // (an entrance that animates right to the out-point), and taking the max preserves
+  // that — a still-moving background is not "settled" just because the furniture is.
+  if (lottieSettle === null) return settle;
+  return clampSettle(Math.max(settle, lottieSettle), activeIn, outPoint);
+}
+
+/** Keep a derived settle inside `[activeIn, outPoint]` — never past the out-point. */
+function clampSettle(frame: number, activeIn: number, outPoint: number): number {
+  return Math.max(activeIn, Math.min(outPoint, frame));
 }
 
 /**

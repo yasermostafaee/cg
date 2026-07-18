@@ -162,6 +162,32 @@
       element-outro seam.
 - [ ] 10.6 PRD `docs/prd/designer.md` D-125 → `[~]` with the change dir noted.
 
+## 12. Phase 3a — entrance settle derived from the Lottie + Inspector guidance (`⟦PR-5⟧`)
+
+- [x] 12.1 ONE shared helper: `lottieTiming` + `lottieClipMeta` in `@cg/lottie-bridge`
+      (`src/timing.ts`) — the single conversion between animation frames, seconds, and a
+      composition's frames. Consumed by BOTH the runtime settle derivation and the Inspector
+      readout, so the number shown is the number used. Replaces the runtime's private
+      `lottieFrameMeta`.
+- [x] 12.2 `entranceSettleFrame` (`animation-applier.ts`) takes an optional `lottieSettles` list and
+      returns the LATEST of the keyframe-derived and Lottie-derived frames, clamped to `outPoint`.
+      Behaviour-preserving byte for byte when the list is empty.
+- [x] 12.3 `runtime.ts` collects each VISIBLE, phase-marked Lottie's settle offset inside the
+      EXISTING B-034 visible gate (so hidden stays inert) and feeds it to `entranceSettleFrame`.
+- [x] 12.4 `needsFrameSweep` gains the Lottie-derived-settle reason, for EVERY scope (B-088's
+      lifespan reason stays root-only). Required by measurement, not assumption — see design §D6.5.
+- [x] 12.5 Inspector (`StyleSection.tsx` `LottieSections`): clip totals (`op` / `fr` / seconds) and
+      each phase in animation frames + seconds + this composition's frames, live-updating on speed /
+      phase / frame-rate changes, plus the out-point overrun warning naming both numbers. Adds
+      `lottieAssetCache.get(assetId)`.
+- [x] 12.6 Tests: `packages/lottie-bridge/tests/timing.test.ts` (the conversion, incl. the worked
+      example → frame 33), `packages/template-runtime/tests/lottie-entrance-settle.test.ts` (the
+      crux + multiple / mixed / manual-override / hidden / hidden-ancestor / absent-phases / clamp /
+      speed-2 / no-Lottie regression), `apps/designer/tests/lottie-inspector-timing.test.ts` (the
+      readout + warning), and the E2E `apps/designer/tests/e2e/lottie-entrance-settle.spec.ts`.
+- [ ] 12.7 NOT Phase 3a (deferred to Phase 3b): the auto-exit seam gap, Lottie field overrides, and
+      the preview mid-playback rebuild.
+
 ## 11. Pre-archive gate (NOT a code task — the B-066 hardware smoke)
 
 - [ ] 11.1 A real smoke test of an exported single-file Lottie template on **CasparCG 2.3.x CEF
