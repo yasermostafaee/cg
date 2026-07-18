@@ -1,30 +1,63 @@
 import { style, styleVariants } from '@vanilla-extract/css';
-import { colors } from '../theme.js';
+import { colors, hoverWash, pressWash } from '../theme.js';
 
 /**
  * App-local Button/Control recipe — THE way to make an interactive button in the
  * Designer, built on the existing `renderer/theme.ts` palette (no new colours, no
  * `@cg/ui` change).
  *
- * `base` carries ONLY the interactive states every control must have — cursor,
- * focus-visible ring, disabled, active — and deliberately sets no layout, colour,
- * background, border, or padding. That lets the `bare` variant wrap a bespoke
- * surface (a menu item, a list row, the keyframe diamond) and inherit the states
- * without fighting that surface's own class. The `box` skeleton + variants supply
- * the resting chrome for ordinary labelled/icon buttons.
+ * `base` carries the interactive states every control must have — cursor, focus-visible
+ * ring, disabled, hover, press — plus a user-agent chrome reset, and sets no LAYOUT or
+ * colour of its own. That lets the `bare` variant wrap a bespoke surface (a menu item, a
+ * list row, the keyframe diamond) and inherit the states without fighting that surface's
+ * own class. The `box` skeleton + variants supply the resting chrome for ordinary
+ * labelled/icon buttons.
+ *
+ * STATE RULE — every hover/press is a WASH layered over the control's own resting colour
+ * (`theme.state` + `theme.wash`), applied once in `base`. No variant defines its own
+ * hover background: a variant that did would either clobber a `bare` consumer's colour
+ * (the "+ New project" accent button turning grey) or drift out of hue. If you are adding
+ * a variant, give it a resting colour and nothing else.
  */
 export const base = style({
   appearance: 'none',
   cursor: 'pointer',
   userSelect: 'none',
+  // ── User-agent chrome reset (the app-wide "why does this button have a light border
+  // and a pale box?" bug) ────────────────────────────────────────────────────────────
+  // `box` already resets these, but `bare` is applied WITHOUT `box`, so every bare
+  // consumer whose className didn't happen to re-reset them inherited the UA button
+  // look: a 2px outset `buttonborder`, a `buttonface` fill, and the UA font. That is
+  // what made "Clear all recent" and the "animation details" disclosure read as boxed
+  // controls in a flat dark UI. Resetting HERE fixes every consumer at the root rather
+  // than per call-site. `box`/`variant`/`size` are defined after `base` in this file,
+  // so their background/padding/colour still win for the non-bare variants.
+  border: 'none',
+  background: 'none',
+  padding: 0,
+  margin: 0,
+  font: 'inherit',
+  color: 'inherit',
   transition:
     'background 90ms ease, border-color 90ms ease, color 90ms ease, filter 90ms ease, box-shadow 90ms ease',
   selectors: {
-    '&:focus-visible': { outline: 'none', boxShadow: `0 0 0 2px ${colors.accent}` },
+    // Focus ring: a background-coloured GAP then the accent ring, so it stays visible on
+    // an accent-filled button too (a bare accent ring on `primary` / "+ New project" was
+    // invisible — ring colour on ring colour).
+    '&:focus-visible': {
+      outline: 'none',
+      boxShadow: `0 0 0 2px ${colors.background}, 0 0 0 4px ${colors.accent}`,
+    },
     '&:disabled': { opacity: 0.4, cursor: 'not-allowed' },
-    // Universal press feedback: darken whatever colour the variant resolves to
-    // (tuned per-variant by construction). Variants may strengthen it.
-    '&:active:not(:disabled)': { filter: 'brightness(0.88)' },
+    // ── The ONLY hover/press feedback in the recipe ────────────────────────────────
+    // A wash LAYERED over whatever background the variant (or a `bare` consumer's own
+    // class) resolved to — never a replacement colour. So every variant keeps its
+    // identity across resting → hover → active automatically, and a new variant cannot
+    // regress into a hardcoded neutral hover: there is nothing per-variant to write.
+    // Default tone: `onDark` — the neutral chrome and the faint tints. A LIGHT,
+    // saturated variant re-declares the tone (see `primary`); it never invents a colour.
+    '&:hover:not(:disabled)': { backgroundImage: hoverWash('onDark') },
+    '&:active:not(:disabled)': { backgroundImage: pressWash('onDark') },
   },
 });
 
@@ -54,10 +87,6 @@ export const variant = styleVariants({
   /** Default action — a raised neutral surface (no outline); the fill IS the affordance. */
   secondary: {
     background: colors.border,
-    selectors: {
-      '&:hover:not(:disabled)': { background: '#3a3f59' },
-      '&:active:not(:disabled)': { background: colors.panelMuted },
-    },
   },
   /** Accent fill — the primary call-to-action. Momentary, never a pressed toggle. */
   primary: {
@@ -65,8 +94,13 @@ export const variant = styleVariants({
     color: colors.onAccent,
     fontWeight: 700,
     selectors: {
-      '&:hover:not(:disabled)': { filter: 'brightness(1.08)' },
-      '&:active:not(:disabled)': { filter: 'brightness(0.9)' },
+      // The accent is a LIGHT, saturated surface, so it takes the `onLight` tone: it
+      // DARKENS on hover instead of lightening. `base`'s `onDark` white wash barely
+      // moved it (the "primary hover is hard to see" report) and washed the blue toward
+      // pastel; this keeps the same blue and matches the modal Cancel's perceived step.
+      '&:hover:not(:disabled)': { backgroundImage: hoverWash('onLight') },
+      '&:active:not(:disabled)': { backgroundImage: pressWash('onLight') },
+      // Keep the accent when disabled (dimmed by `base`'s opacity).
       '&:disabled': { background: colors.accent },
     },
   },
@@ -74,44 +108,46 @@ export const variant = styleVariants({
   ghost: {
     background: 'transparent',
     color: colors.textMuted,
+    // The FILL comes from the shared wash (on the dark chrome it lands within a hair of
+    // the old `menuHover`). Only the label step is ghost-specific: a muted glyph must
+    // resolve to full text on hover, which is an in-family step, not a new colour.
     selectors: {
-      '&:hover:not(:disabled)': { background: colors.menuHover, color: colors.text },
-      '&:active:not(:disabled)': { background: colors.border, color: colors.text },
+      '&:hover:not(:disabled)': { color: colors.text },
+      '&:active:not(:disabled)': { color: colors.text },
     },
+  },
+  /**
+   * MARKER-TIED actions — an Inspector button that creates/controls a timeline marker
+   * wears that marker's own colour, so the button and the mark it drops read as one
+   * thing ("drag the cyan marker" now has a cyan button beside it). A faint tint + a
+   * marker-coloured label: recognizable, not loud. Colours come from the SAME tokens the
+   * timeline markers use (`theme.markerOut` / `markerIn`) — one source, no drift.
+   */
+  markerOut: {
+    background: colors.markerOutSurface,
+    color: colors.markerOut,
+  },
+  markerIn: {
+    background: colors.markerInSurface,
+    color: colors.markerIn,
   },
   /** Destructive — a faint rose fill + danger label (no outline), tinted up on hover. */
   danger: {
     background: 'rgba(248, 113, 113, 0.12)',
     color: colors.danger,
-    selectors: {
-      '&:hover:not(:disabled)': { background: 'rgba(248, 113, 113, 0.20)' },
-      '&:active:not(:disabled)': { background: 'rgba(248, 113, 113, 0.28)' },
-    },
   },
   /**
-   * No chrome of its own — for bespoke interactive surfaces (layer/comp/asset
-   * rows, menu items, the keyframe diamond). Applied WITHOUT the `box` skeleton, so
-   * it adds nothing but the `base` states + the hover below; pair with a
-   * `className` for the resting look. Because `bare` has no colour of its own, its
-   * hover is tuned to whatever the surface already is:
-   *   - a plain bare button (no `aria-pressed`) gets a neutral hover fill
-   *     (`menuHover`) + a slight lighten — visible even on a transparent chip;
-   *   - a pressed/active toggle (`aria-pressed="true"`, which sets its own active
-   *     background via its className) keeps that background and is LIGHTENED on
-   *     hover instead, so the neutral fill never clobbers the active colour;
-   *   - press darkens (from `base`).
-   * (A surface whose background is set INLINE — e.g. the keyframe diamond, an open
-   * list row — keeps that inline background; the `filter` still gives hover feedback.)
+   * No chrome of its own — for bespoke interactive surfaces (layer/comp/asset rows, menu
+   * items, the keyframe diamond, the accent "+ New project"). Applied WITHOUT the `box`
+   * skeleton; pair with a `className` for the resting look.
+   *
+   * Deliberately EMPTY. It used to hard-set a neutral `menuHover` fill on hover, which
+   * clobbered the resting colour of every bare consumer that brought its own — the
+   * accent "+ New project" button turned grey on hover. `base`'s wash layers over
+   * whatever the consumer's class resolved to (transparent, neutral, accent, or a marker
+   * tint) and needs no special-casing here, including for `aria-pressed` toggles.
    */
-  bare: {
-    selectors: {
-      '&:hover:not(:disabled):not([aria-pressed="true"])': {
-        background: colors.menuHover,
-        filter: 'brightness(1.06)',
-      },
-      '&[aria-pressed="true"]:hover:not(:disabled)': { filter: 'brightness(1.15)' },
-    },
-  },
+  bare: {},
 });
 
 /** Text-button padding/sizes (not applied to `bare`). */

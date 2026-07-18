@@ -32,6 +32,17 @@ export const variant = styleVariants({
     borderLeftColor: colors.accent,
     color: colors.text,
   },
+  /**
+   * CAUTION — a legitimate state worth noticing that is NOT an error (an infinite hold
+   * driver; a content-driven graphic that won't auto-close). Previously these borrowed
+   * `danger`, which cried wolf and left real errors nothing louder to escalate to.
+   * Amber tint from the `caution` tokens; the label stays readable rather than shouting.
+   */
+  caution: {
+    background: colors.cautionSurface,
+    borderLeftColor: colors.caution,
+    color: colors.text,
+  },
   danger: {
     background: 'rgba(248, 113, 113, 0.13)',
     borderLeftColor: colors.danger,
