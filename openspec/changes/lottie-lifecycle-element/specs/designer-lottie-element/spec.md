@@ -97,7 +97,14 @@ hold until `stop()`.
 
 - **WHEN** a `lottie` element sets `drivesHold: true` and freezes
 - **THEN** its intro completion gates the content-driven hold (a self-contained sting), and its outro
-  then plays on the resulting exit
+  plays when the composition is taken off air by `out()` or `stop()`
+
+#### Scenario: A composition that ends its own hold exits without the element outro
+
+- **WHEN** a composition ends its OWN content-driven hold (an `auto-out` exit driven by the playout
+  controller rather than an `out()` / `stop()` command)
+- **THEN** the background outro plays and the composition settles CLEARED with the Lottie parked on
+  its hold frame — the element outro is played only on the `out()` / `stop()` exit paths
 
 ### Requirement: Stop and Out play the Lottie outro before the background, settling CLEARED
 
@@ -124,6 +131,28 @@ driver halted, consistent with D-085 and D-105's content-first / background-last
   `stop()` is called
 - **THEN** the element outro resolves immediately, the background outro plays, and the composition
   settles CLEARED — never hanging on an unresolved outro
+
+### Requirement: A hidden Lottie is fully inert in the lifecycle
+
+A `lottie` element with `visible: false` SHALL be fully inert in the composition lifecycle, and so
+SHALL a visible Lottie that sits inside a hidden ancestor (a hidden composition instance's subtree) —
+extending B-034's established hidden/visible gate to the element-outro and hold-aggregation paths. A
+hidden Lottie SHALL NOT have its outro awaited on `out()` / `stop()` (it must never stall the exit for
+something nobody can see) and SHALL NOT contribute to the content-driven hold even when it sets
+`drivesHold: true` — the hidden gate wins over the opt-in.
+
+#### Scenario: A hidden Lottie is not awaited on exit
+
+- **WHEN** a `lottie` element with `visible: false` owns an outro segment and `out()` or `stop()` is
+  called
+- **THEN** its outro is neither played nor awaited, and the composition settles CLEARED without
+  stalling for the hidden element's outro duration
+
+#### Scenario: A Lottie under a hidden ancestor is inert
+
+- **WHEN** a VISIBLE `lottie` element sits inside a hidden composition instance's subtree
+- **THEN** it is inert: its outro is not awaited on `out()` / `stop()`, and it contributes nothing to
+  the content-driven hold even with `drivesHold: true`
 
 ### Requirement: Pause and resume freeze and continue the Lottie in lockstep
 

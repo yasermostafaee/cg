@@ -60,6 +60,9 @@ createRuntime (runtime.ts)  ─ the orchestrator
  ├─ SequenceDriver (sequence-driver.ts)   one per sequence element: now/next
  │      rotation (dwell + next()); a finite run joins the content completion
  │      └─ sequence-motion.ts             pure transition motion mapper
+ ├─ LottieDriver (lottie-driver.ts)       one per lottie element: drives a
+ │      lottie_light player frame-by-frame off the SAME clock (intro / hold /
+ │      outro); owns the element-outro seam (playOutro) — D-125
  ├─ RepeaterDriver (repeater-driver.ts)   one per repeater element: stamps a
  │      ROW SUBTREE per data item through wireScopeSubtree (count at play,
  │      values live); not a content source
@@ -72,12 +75,11 @@ transforms.ts · css.ts   value formatters · baseline stylesheet
 ### scene-builder — `Scene` → DOM + the scope tree
 
 `buildScene` walks layers (sorted by `zIndex`) and creates one node per element
-(`text` / `ticker` / `clock` / `sequence` / `image` / `shape` rendered;
-`container` / `lottie` / `video-placeholder` emit a tagged placeholder div so
-layout and ids survive). It returns a **`scopeTree`** (a `FieldScope`): each
-composition instance owns its **own** `elementMap`, `textOriginals`, container,
-`animated` list, `tickers` + `clocks` + `sequences` lists, and lifecycle
-`source`.
+(`text` / `ticker` / `clock` / `sequence` / `image` / `shape` / `lottie` rendered;
+`container` / `video-placeholder` emit a tagged placeholder div so layout and ids
+survive). It returns a **`scopeTree`** (a `FieldScope`): each composition instance
+owns its **own** `elementMap`, `textOriginals`, container, `animated` list,
+`tickers` + `clocks` + `sequences` + `lotties` lists, and lifecycle `source`.
 
 **Auto-size text (D-060).** A `text` element with `fitMode: 'autosize'` hugs its
 content in BOTH dimensions via CSS intrinsic sizing — `buildText` skips the
@@ -438,11 +440,64 @@ in-scope sequences in that change).
   zero-content parity). Transition edges are PHYSICAL — `direction` drives
   per-item bidi isolation only, never mirrors motion.
 
+### LottieDriver + the element-outro seam (D-125)
+
+A `lottie` element mounts a `lottie_light` player (`@cg/lottie-bridge`,
+`autoplay: false`) into the container the scene-builder registered on
+`scope.lotties`, and `LottieDriver` drives it with `goToAndStop(frame)` — the
+frame computed from **elapsed active time × `fr` × `speed`** off the SAME injected
+`RuntimeClock` as every other driver. It is a RENDERER, never an autonomous
+player: no second wall-clock means no drift, pause/resume freeze in lockstep, and
+the whole lifecycle is deterministic under a fake clock.
+
+The composition lifecycle maps onto the animation's own frame space **by phase**
+(never rescaled onto `outPoint`): `play()` → `reset()`+`start()` drives
+`[ip → introEnd]` once; the HOLD **freezes** at `introEnd` or **loops**
+`[idleIn, idleOut]` per `holdBehavior`; `out()`/`stop()` → `playOutro()` drives
+`[outroStart → op]` once.
+
+**The element-outro seam** is the one structural change to the D-105 split exit.
+`out()` / `stop()` collect every outro-owning driver (`collectElementOutros()`)
+and await `Promise.all` of their `playOutro()` **before**
+`playBackgroundOutroAndSettle()` — so the background never closes over an element
+that has not played out (content-first / background-last, extended from "fade the
+content" to "let the element animate ITSELF off"). A Lottie owning an outro is
+marked `data-cg-outro` and is excluded from the blanket `fadeContentOut` /
+`hideContentNow`, so an opacity transition never fights `goToAndStop`.
+
+Two signals are kept deliberately separate:
+
+- **`whenComplete()`** — the content-driven HOLD contribution, and only when the
+  element opts in with **`drivesHold === true`**. This is read as `=== true`, never
+  `!== false`: the **inverse** default of ticker / clock / sequence (where absent ⇒
+  participates). A freeze Lottie completes at `introEnd`; an idle-loop Lottie never
+  completes (it holds until `stop()`, like an infinite ticker).
+- **`playOutro()`** — the exit seam, on every `out()`/`stop()` regardless of
+  `drivesHold`.
+
+**Invariants.** `playOutro()` ALWAYS resolves — a degenerate/absent outro
+(`outroStart >= op`) resolves immediately, the final paint is clamped to `op`, and
+`reset()` / `stop()` / `destroy()` settle a still-pending outro — so a superseding
+`play()`, a second `out()`, or a hard kill can never strand the exit. `reset()`
+also re-mints `whenComplete()` (B-033), so a replay's hold waits again.
+`remove()` stays a SYNCHRONOUS hard kill that awaits no outro (the panic path).
+
+**B-034 hidden gate.** A `visible: false` Lottie is excluded where the collections
+are BUILT (no parent `holdOverrides` can resurrect it), and `collectElementOutros()`
+skips a hidden instance's whole subtree — so a Lottie under a hidden ANCESTOR is
+inert too, never stalling an exit for something nobody can see.
+
+**Boundary.** The seam lives in `out()` / `stop()`. A composition that ends its OWN
+content-driven / `auto-out` hold exits through `PlayoutController.startOutro()`,
+which does not route through the seam — the Lottie stays parked on its hold frame
+while the background closes (pinned by a characterization test; owner decision
+tracked as task 7.6).
+
 ### wireScopeSubtree + RepeaterDriver — dynamic scope wiring (D-030)
 
 `createRuntime` wires every scope subtree through ONE factory:
 `wireScopeSubtree(scope, path, isRootSubtree) → WiredSubtree { node,
-tickers, clocks, sequences, repeaters, destroy }` — driver instantiation +
+tickers, clocks, sequences, repeaters, lotties, destroy }` — driver instantiation +
 the controller tree for that subtree, with SYMMETRIC teardown (rows, then
 controllers, then drivers). A `subtrees` set is what every runtime cascade
 iterates (play resets, pause/resume, settle freeze, `next()` dispatch,
