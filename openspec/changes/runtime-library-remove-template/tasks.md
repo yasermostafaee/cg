@@ -42,9 +42,14 @@
 
 - [x] 5.1 `LibraryPanel`: confirm-gated per-row Remove control (the StackPanel Remove-All
       `window.confirm` precedent).
-- [ ] 5.2 DEFERRED — the context-menu entry. The Runtime has no context-menu primitive and
-      no `Icon` component, and the design system forbids ad-hoc control styling, so this
-      needs an owner decision (see proposal "Deferred"). NOT guessed at.
+- [x] 5.2 The context-menu entry. The blocker is gone: the Runtime's context-menu primitive
+      (`ui/ContextMenu`, `useContextMenu`, app-wide native-menu suppression) landed with #326.
+      A right-click on a library row now opens Load / Remove, each calling the SAME handler
+      its button calls (`loadOntoStack` / `removeTemplate` — so Remove keeps its confirm gate,
+      which lives inside the handler, and Load's refusal routes to the command toast exactly
+      as the button's does). Neither is link-gated, mirroring the buttons: B-085 made the
+      library browser-local, so Remove works offline. Delivered alongside [[R-013]] (the stack
+      row's half of the same menu work).
 - [x] 5.3 A refusal surfaces the bridge's message verbatim (bridge stays authoritative).
 - [x] 5.4 Refresh the list after a confirmed removal.
 

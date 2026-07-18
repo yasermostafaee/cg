@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { colors } from '../theme.js';
 
@@ -87,8 +87,12 @@ export function ContextMenu({ items, x, y, ariaLabel, onClose }: Props): JSX.Ele
   const [active, setActive] = useState<number | null>(null);
 
   // The indices an operator can actually land on. A disabled item is skipped by the arrow
-  // keys rather than focused-and-inert.
-  const enabled = items.flatMap((item, i) => (item.disabled === true ? [] : [i]));
+  // keys rather than focused-and-inert. Memoized because it is a keydown-effect dependency:
+  // a fresh array each render would tear down and re-add the listener on every render.
+  const enabled = useMemo(
+    () => items.flatMap((item, i) => (item.disabled === true ? [] : [i])),
+    [items],
+  );
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
@@ -111,6 +115,23 @@ export function ContextMenu({ items, x, y, ariaLabel, onClose }: Props): JSX.Ele
     document.addEventListener('keydown', onKeyDown, true);
     return () => document.removeEventListener('keydown', onKeyDown, true);
   }, [onClose, active, enabled]);
+
+  // The menu is positioned in VIEWPORT coordinates against the row it was opened on, so any
+  // scroll (the stack list, the library list, the page) slides that row out from under it and
+  // leaves the menu pointing at whatever moved into its place. Close instead of chasing:
+  // acting on the wrong row is the failure mode worth designing against here. Capture phase,
+  // because the scroll happens on an inner container, not on `window`.
+  useEffect(() => {
+    function onScroll(): void {
+      onClose();
+    }
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [onClose]);
 
   // Keep the arrow-key selection actually focused, so Enter/Space land on it.
   useEffect(() => {

@@ -32,6 +32,37 @@ declare global {
 const styles = appShell;
 
 /** Root Runtime layout — four regions per Phase 6 §2. */
+/**
+ * Is this event target a place the operator TYPES? Text inputs, textareas and any
+ * `contenteditable` host keep the browser's own context menu (see the suppressor below):
+ * cut/copy/paste and the BiDi/spelling services are real editing affordances, and the
+ * Runtime's field editing is Persian.
+ *
+ * A non-text input (checkbox, range) is NOT editable in this sense — there is nothing to
+ * copy out of it — so it falls under the suppression like the rest of the surface.
+ */
+const TEXTUAL_INPUT_TYPES = new Set([
+  'text',
+  'search',
+  'url',
+  'tel',
+  'email',
+  'password',
+  'number',
+]);
+
+export function isEditable(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target instanceof HTMLTextAreaElement) return true;
+  if (target instanceof HTMLInputElement) {
+    // An input with no `type` is a text input.
+    return TEXTUAL_INPUT_TYPES.has(target.type === '' ? 'text' : target.type);
+  }
+  // `=== true`, not a bare return: `isContentEditable` is not implemented everywhere (jsdom
+  // leaves it undefined), and a falsy-but-not-false result must still mean "suppress".
+  return target.isContentEditable === true;
+}
+
 export function App(): JSX.Element {
   const items = useStack();
   const lock = useLock();
@@ -55,8 +86,17 @@ export function App(): JSX.Element {
   // that call `preventDefault` themselves, so they are unaffected by this. Everywhere else,
   // right-click now does nothing at all — which is the intent: no browser chrome, and no
   // half-menu the app cannot stand behind.
+  //
+  // EDITABLE FIELDS ARE EXEMPT. The Inspector is where the operator types the Persian copy
+  // that goes to air, and right-click there is the ordinary way to reach cut/copy/paste and
+  // — load-bearing for this app — the browser's own spelling and RTL/BiDi text services.
+  // Suppressing it would take away a real editing affordance to prevent a hazard that does
+  // not exist inside a text box: none of the dangerous entries (Reload, Back) are what a
+  // right-click on a focused input offers. So the suppression covers the operator SURFACE,
+  // not text entry.
   useEffect(() => {
     function suppressNativeMenu(e: MouseEvent): void {
+      if (isEditable(e.target)) return;
       e.preventDefault();
     }
     window.addEventListener('contextmenu', suppressNativeMenu);

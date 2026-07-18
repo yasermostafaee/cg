@@ -1,6 +1,9 @@
 import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
+import { ContextMenu } from '../../ui/ContextMenu.js';
+import { useContextMenu } from '../../ui/useContextMenu.js';
+import { toMenuItems, type RowAction } from '../../ui/rowAction.js';
 import { StatusBadge } from '../../ui/StatusBadge.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { useLink } from '../../hooks/useLink.js';
@@ -92,6 +95,7 @@ export function StackRow({
   // stops the operator from believing a click did something. Test mode is deliberately NOT
   // gated — simulating the on-air verbs is the whole point of it, and the TEST MODE banner
   // makes it impossible to mistake for air.
+  const { menu, open, close } = useContextMenu<string>();
   const link = useLink();
   const linkDown = link === 'disconnected';
   const simulated = link === 'offline-mock';
@@ -109,6 +113,58 @@ export function StackRow({
   // `useLink()` override the health pills / LinkIndicator / ConnectionBanner already apply.
   const badgeStatus: StackItemStatus = linkDown && onAir ? 'unverified' : item.status;
 
+  // The row's four actions, declared ONCE. The buttons below render from this list and the
+  // right-click menu is projected from the SAME list, so a menu item is enabled exactly when
+  // its button is and runs exactly what its button runs — by construction, not by two code
+  // paths agreeing. Every gate here is the one that was already on the button; the menu adds
+  // no capability and no new door onto air (R-006).
+  const actions: RowAction[] = [
+    {
+      key: 'play',
+      label: 'PLAY',
+      variant: 'play',
+      disabled: onAir || linkDown,
+      title: offlineReason,
+      run: () => onPlay(item.itemId),
+      onError: reportCommandError,
+    },
+    {
+      key: 'update',
+      label: 'UPDATE',
+      variant: 'secondary',
+      disabled: !onAir || linkDown,
+      title: offlineReason,
+      run: () => onUpdate(item.itemId),
+      // `applyDraft` (the shared apply used by this action AND the Inspector's Update) already
+      // routes any failure to the command toast with its own B-070 wording; this no-op only
+      // SUPPRESSES a duplicate report — it does not swallow the feedback.
+      onError: () => undefined,
+    },
+    {
+      key: 'clear',
+      label: 'CLEAR',
+      variant: 'caution',
+      // The same `isOnAir` predicate the header's Clear-All counts on, so the two can never
+      // disagree about what "on air" means. Deliberately NOT the `onAir` above: they differ.
+      disabled: !isOnAir(item) || linkDown,
+      title: offlineReason,
+      run: () => onOut(item.itemId),
+      onError: reportCommandError,
+    },
+    {
+      key: 'remove',
+      label: 'REMOVE',
+      variant: 'danger',
+      // B-085 — gated on `linkDown` like PLAY/UPDATE/CLEAR. The STACK is bridge-owned playout
+      // state (only the LIBRARY moved browser-local), so removing a stack item genuinely
+      // needs the bridge.
+      disabled: linkDown,
+      title: offlineReason,
+      run: () => onRemove(item.itemId),
+      onError: reportCommandError,
+    },
+  ];
+
   return (
     <div
       className={`cg-row${selected ? ' is-selected' : ''}`}
@@ -120,6 +176,9 @@ export function StackRow({
       data-template-id={item.templateId}
       data-item-id={item.itemId}
       onClick={() => onSelect(item.itemId)}
+      // Right-click opens the same four actions as a menu. It deliberately does NOT select
+      // the row: right-click must not retarget the Inspector under the operator's edits.
+      onContextMenu={(e) => open(e, item.itemId)}
     >
       {/* R-006 — in test mode an air-claim is badged SIM, never the broadcast red.
           B-087 — on a dead SPA↔bridge link the on-air claim is masked to muted "WAS ON AIR"
@@ -147,54 +206,28 @@ export function StackRow({
       <div style={styles.actions} onClick={(e) => e.stopPropagation()}>
         {/* A refusal surfaces as the command TOAST, never pinned inline in the row (which
             wrapped and bloated it). Same treatment as the Library's Load button. */}
-        <AsyncButton
-          variant="play"
-          run={() => onPlay(item.itemId)}
-          disabled={onAir || linkDown}
-          onError={reportCommandError}
-          {...(offlineReason !== undefined ? { title: offlineReason } : {})}
-        >
-          PLAY
-        </AsyncButton>
-        <AsyncButton
-          variant="secondary"
-          run={() => onUpdate(item.itemId)}
-          disabled={!onAir || linkDown}
-          // `applyDraft` (the shared apply used by this button AND the Inspector's Update)
-          // already routes any failure to the command toast with its own B-070 wording; this
-          // no-op onError only SUPPRESSES the button's duplicate inline error — it does not
-          // re-report (which would double-toast) or change wording.
-          onError={() => undefined}
-          {...(offlineReason !== undefined ? { title: offlineReason } : {})}
-        >
-          UPDATE
-        </AsyncButton>
-        <AsyncButton
-          variant="caution"
-          run={() => onOut(item.itemId)}
-          // The same `isOnAir` predicate the header's Clear-All counts on, so the two can
-          // never disagree about what "on air" means.
-          disabled={!isOnAir(item) || linkDown}
-          onError={reportCommandError}
-          {...(offlineReason !== undefined ? { title: offlineReason } : {})}
-        >
-          CLEAR
-        </AsyncButton>
-        {/* B-085 — gated on `linkDown` like PLAY/UPDATE/CLEAR. The STACK is
-            bridge-owned playout state (only the LIBRARY moved browser-local), so
-            removing a stack item genuinely needs the bridge — an enabled REMOVE
-            that only rejects while disconnected was the recon-flagged
-            inconsistency. */}
-        <AsyncButton
-          variant="danger"
-          run={() => onRemove(item.itemId)}
-          disabled={linkDown}
-          onError={reportCommandError}
-          {...(offlineReason !== undefined ? { title: offlineReason } : {})}
-        >
-          REMOVE
-        </AsyncButton>
+        {actions.map((action) => (
+          <AsyncButton
+            key={action.key}
+            variant={action.variant}
+            run={action.run}
+            disabled={action.disabled}
+            onError={action.onError}
+            {...(action.title !== undefined ? { title: action.title } : {})}
+          >
+            {action.label}
+          </AsyncButton>
+        ))}
       </div>
+      {menu !== null && (
+        <ContextMenu
+          items={toMenuItems(actions)}
+          x={menu.x}
+          y={menu.y}
+          ariaLabel={`${label} actions`}
+          onClose={close}
+        />
+      )}
     </div>
   );
 }

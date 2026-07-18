@@ -553,3 +553,37 @@ on-air graphics means pressing Clear on five rows, one at a time, while they are
   the row's Clear gating, the header's count, and the bridge, so Clear-All means exactly
   "press Clear on every row where Clear is enabled". Implemented on both backends so the
   B-074 parity + route-coverage guards stay green.
+
+## [~] R-013 — right-click a stack row for its actions ⟨priority: medium⟩ — implemented on `feat/runtime-context-menu`, change: `runtime-stack-row-context-menu`
+
+<!-- change: openspec/changes/runtime-stack-row-context-menu/ -->
+
+**What:** Right-click on a stack row opens a menu of that row's own actions — PLAY, UPDATE,
+CLEAR, REMOVE — mirroring the row's buttons exactly. Completes the context-menu half of the
+in-app-menu work whose modal half merged as #325 and whose primitive (`ui/ContextMenu`,
+`useContextMenu`, app-wide native-menu suppression) merged as #326 but was wired to nothing.
+The Library's half of the same work is [[R-005]] task 5.2.
+**Why:** The primitive shipped unwired, so right-click across the whole operator surface does
+nothing at all: the native menu is suppressed and nothing replaces it. On a playout console
+the row actions are the things an operator reaches for under time pressure, and the buttons
+are small targets in a dense row.
+**Acceptance:**
+
+- WHEN the operator right-clicks a stack row THEN a menu opens with that row's four actions
+- WHEN a row's button is disabled THEN the matching menu item is disabled too — the same
+  gate, including the R-006 link-down refusal on PLAY/UPDATE/CLEAR and [[B-085]]'s on REMOVE
+- WHEN a menu item is chosen THEN it runs the SAME handler the button runs — never a second
+  command path
+- WHEN a menu action is refused THEN the reason reaches the operator through the command
+  TOAST, worded exactly as the button's refusal
+- WHEN the menu is open THEN outside-click, Escape, scroll and running an action all dismiss
+  it, and it never opens off-screen
+- WHEN the operator right-clicks a text field THEN the browser's own menu still appears, so
+  cut/copy/paste and the BiDi services stay available for Persian copy
+
+**Notes:** No new command path, no new gate, no new state — the menu is an ALTERNATE ENTRY
+POINT. The row declares its four actions ONCE (`ui/rowAction.ts`) and renders them twice, as
+buttons and as menu items, so "the menu mirrors the buttons" is structural rather than two
+code paths that have to keep agreeing. FROZEN: on-air refusal (R-006), the linkDown gates
+themselves, [[B-085]]'s browser-local library, [[B-086]]/[[B-087]]'s `unverified` badge, and
+[[B-092]]'s stack restore are all untouched.
