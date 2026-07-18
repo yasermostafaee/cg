@@ -1635,7 +1635,7 @@ only possible actor, and the two fixes trigger on disjoint conditions (`useLink(
 vs a live bridge's CasparCG session leaving `healthy`). Sibling of [[B-086]]; the display half of the
 bridge-death story (the recovery half — stack surviving a bridge restart — is tracked separately).
 
-## [~] B-092 — stack items VANISH when the bridge process restarts: the stack lives ONLY in the dead bridge's memory, so a restart re-delivers the library ([[B-085]]) but the SPA adopts an EMPTY stack and every row disappears ⟨priority: high⟩ — in progress on `fix/B-092-stack-survives-bridge-restart`, change dir `openspec/changes/runtime-stack-survives-bridge-restart/`
+## [x] B-092 — stack items VANISH when the bridge process restarts: the stack lives ONLY in the dead bridge's memory, so a restart re-delivers the library ([[B-085]]) but the SPA adopts an EMPTY stack and every row disappears ⟨priority: high⟩ — merged (#343, `fix/B-089-stack-survives-bridge-restart`) + archived: `openspec/changes/archive/2026-07-18-runtime-stack-survives-bridge-restart/`
 
 [[B-087]] made the ON AIR badge honest while the bridge is down (the DISPLAY half of the
 bridge-death story). This is the RECOVERY half: when the bridge comes BACK, the operator's whole
