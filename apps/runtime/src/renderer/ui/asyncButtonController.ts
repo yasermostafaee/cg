@@ -46,6 +46,24 @@ export interface AsyncButtonConfig {
   onError?: (message: string) => void;
 }
 
+/**
+ * The operator-facing message a settled action should surface, or `null` when it
+ * succeeded. B-070 — prefer the bridge's REASON over the generic fallback: a
+ * refusal that cannot explain itself is the bug the operator hit.
+ *
+ * Exported because the CONTEXT MENU triggers the same actions as the buttons and
+ * must report a refusal identically. Two spellings of "what went wrong" would
+ * mean the same refusal reads differently depending on how it was issued.
+ */
+export function asyncResultMessage(res: AsyncResult, notAccepted = 'Not accepted.'): string | null {
+  return res.accepted ? null : (errorCodeMessage(res.errorCode) ?? notAccepted);
+}
+
+/** The message for a REJECTED action (e.g. the link is down). Shared, see above. */
+export function asyncRejectionMessage(err: unknown): string {
+  return err instanceof Error ? err.message : 'Request failed.';
+}
+
 const IDLE: AsyncView = {
   phase: 'idle',
   showSpinner: false,
@@ -112,17 +130,11 @@ export class AsyncButtonController {
 
     run().then(
       (res) => {
-        // B-070 — prefer the bridge's REASON over the generic fallback: a
-        // refusal that cannot explain itself is the bug the operator hit.
-        this.#settled = {
-          error: res.accepted
-            ? null
-            : (errorCodeMessage(res.errorCode) ?? this.#cfg.notAcceptedMessage),
-        };
+        this.#settled = { error: asyncResultMessage(res, this.#cfg.notAcceptedMessage) };
         this.#tryFinish();
       },
       (err: unknown) => {
-        this.#settled = { error: err instanceof Error ? err.message : 'Request failed.' };
+        this.#settled = { error: asyncRejectionMessage(err) };
         this.#tryFinish();
       },
     );

@@ -5,6 +5,9 @@ import { colors } from '../../theme.js';
 import { uuid } from '../../lib/uuid.js';
 import { Button } from '../../ui/Button.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
+import { ContextMenu } from '../../ui/ContextMenu.js';
+import { useContextMenu } from '../../ui/useContextMenu.js';
+import { runRowAction } from '../../ui/rowAction.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { importTemplateFromBytes } from './templateDelivery.js';
 import { templateDisplayName } from './templateName.js';
@@ -91,6 +94,9 @@ const styles = {
 export function LibraryPanel(): JSX.Element {
   const [templates, setTemplates] = useState<readonly TemplateInfo[]>([]);
   const { confirm, confirmDialog } = useConfirm();
+  // One menu for the whole list, carrying the template it was opened on — the panel owns the
+  // state so a right-click on one row cannot leave another row's menu open.
+  const { menu, open: openMenu, close: closeMenu } = useContextMenu<TemplateInfo>();
   const fileRef = useRef<HTMLInputElement>(null);
   // Newest first — the template the operator just imported is at the top, where they are
   // already looking, rather than below every bundled starter. RENDER-SIDE ONLY: the registry
@@ -256,6 +262,10 @@ export function LibraryPanel(): JSX.Element {
                 // names are not unique (two templates may legitimately share one), so
                 // anything that must address ONE row keys on the id.
                 data-testid={`library-template-${t.templateId}`}
+                // Right-click mirrors this row's two buttons. B-085 — neither is link-gated:
+                // the library is browser-local, so Remove works offline, and Load stays
+                // bridge-owned and refuses with a toast rather than being pre-disabled.
+                onContextMenu={(e) => openMenu(e, t)}
               >
                 <div style={styles.itemBody}>
                   <span style={styles.itemName} title={t.templateId}>
@@ -289,6 +299,39 @@ export function LibraryPanel(): JSX.Element {
           })
         )}
       </div>
+      {/* The row's buttons, as a menu. Each item calls the SAME handler its button calls —
+          `loadOntoStack` and `removeTemplate` — so there is no second path to either action.
+          Load's refusal routes to the command toast exactly as the button's does; Remove
+          keeps its confirm gate, because the gate lives inside `removeTemplate`, not on the
+          button. Neither is disabled here, mirroring the buttons. */}
+      {menu !== null && (
+        <ContextMenu
+          items={[
+            {
+              label: 'Load',
+              onSelect: () =>
+                runRowAction({
+                  key: 'load',
+                  label: 'Load',
+                  variant: 'secondary',
+                  disabled: false,
+                  run: () => loadOntoStack(menu.target),
+                  onError: reportCommandError,
+                }),
+            },
+            {
+              label: 'Remove',
+              variant: 'danger',
+              title: 'Remove this template from the library',
+              onSelect: () => void removeTemplate(menu.target),
+            },
+          ]}
+          x={menu.x}
+          y={menu.y}
+          ariaLabel={`${templateDisplayName(menu.target)} actions`}
+          onClose={closeMenu}
+        />
+      )}
       {confirmDialog}
     </nav>
   );
