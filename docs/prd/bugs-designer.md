@@ -971,3 +971,62 @@ guards. Capability: `designer-playout-lifecycle`.
 **Env:** Browser / Designer preview modal; post-#320.
 **Notes:** Introduced by #320 (D-102 Phase 2 — per-element preview timing). UI display/input-conversion ONLY: the session override, the drivers and the schema keep milliseconds; only the two controls convert (ms ÷ 1000 to display, × 1000 on commit). Each preview row mirrors its inspector counterpart's rounding exactly — the countdown duration is INTEGER seconds (`step 1`), the sequence dwell allows FRACTIONAL seconds (`step 0.5`, `min 0.1`), as `StyleSection` does. The preview's per-scope HOLD control is deliberately NOT changed: the inspector's Playout section shows hold in milliseconds too, so it is already consistent — converting it would create the very mismatch this bug is about. No schema / session-shape / runtime / export / on-air change ⇒ no CasparCG hardware validation needed.
 **Regression test:** unit `preview-timing-rows.test.ts` (a 60000 ms countdown DISPLAYS `60`; a 5000 ms dwell DISPLAYS `5`; typing `6` writes `durationMs: 6000`; typing `0.8` writes `dwellMs: 800`); E2E `preview-timing-phase2.spec.ts` (drive the seconds inputs, assert the runtime's EFFECTIVE ms stamps `data-cg-countdown-ms` / `data-cg-sequence-dwell` are unchanged in ms).
+
+## [~] B-088 — a start-trimmed element ignores its in-point during play: the whole intro is ONE painted frame ⟨priority: high⟩ — branch: `fix/b088-collapsed-intro-lifespan`; focused fix, no change dir
+
+**Repro:**
+
+1. In a ROOT composition (1920×1080 @50fps) whose elements carry **no keyframe animation** — e.g. furniture supplied by a D-125 `lottie` element plus a plain text/subtitle — trim the subtitle on the timeline to `lifespan = [33, 60]`.
+2. Set the composition out-point past 33 (say 70).
+3. Preview → Play.
+4. Then extend the trim's END past the out-point (`[33, 90]`) and play again.
+
+**Expected:** the subtitle is hidden through frames 0–32 and appears at frame 33 (0.66 s in at 50fps), in both cases.
+**Actual:** step 3 — the subtitle is **never shown at all**. Step 4 — it is visible **from frame 0**, immediately at Play; the start trim never delays it. The two cases are the same defect seen from opposite sides.
+**Env:** Browser / Designer preview; reproduces on `main` with and without a Lottie present (byte-identical behaviour), and in the exported outputs.
+
+**Root cause:** `PlayoutController.playRange` (`packages/template-runtime/src/playout-controller.ts:305`) short-circuits an entire leg to a single paint when nothing is deemed frame-dependent — `if (!this.o.hasAnimation || outF <= inF) { this.o.applyFrame(outF); onEnd(); return; }`. `hasAnimation` is `scope.animated.length > 0` (`runtime.ts:963`), and `scope.animated` is populated ONLY by keyframe tracks (`scene-builder.ts:125`). Trimming writes only `lifespan`; `buildLottie` registers on `scope.lotties`, never `animated`. With `animated` empty, `entranceSettleFrame` returns `outPoint` verbatim (`animation-applier.ts:617`), so `holdEntry === outPoint`, the static settle leg is skipped (`playout-controller.ts:221`), and **the whole intro becomes one `applyFrame(outPoint)` call**. Since B-029 (#187) made the per-element lifespan gate frame-dependent (`runtime.ts:1139`), that gate is therefore evaluated **exactly once per leg** — at the out-point. If the out-point falls outside `[in, out]` the element is never shown; if inside, it is shown from the first paint. `hasAnimation` had come to conflate two different questions: "does anything need interpolating?" (a legitimate rAF optimisation) and "does anything care WHICH frame we're on?" — no longer answerable by keyframes alone.
+
+**PRE-EXISTING, not D-125.** `git diff 89c1163 HEAD -- playout-controller.ts frame-driver.ts animation-applier.ts` (89c1163 = the commit before D-125 Phase 1) is **empty**; `playout-controller.ts` was last touched by D-114. D-125 did **not** make this likelier, either: keyframe-less root scopes were always the norm — this repo's own `lowerThirdScene` fixture carries no `animation`, so B-029's own regression tests already ran the collapse path (and, see below, encoded its output as correct). What D-125 changed is **OBSERVABILITY**: `LottieDriver` runs on its own rAF clock started inside `play()`, so a multi-second animating intro is now on screen while the composition playhead has already teleported to the out-point. Before that, a keyframe-less composition snapped to the hold instantly and there was no perceptible intro during which a mis-gated element could be noticed. That is how this surfaced.
+
+**Fix:** separate the two questions. `playRange` sweeps when `hasAnimation || needsFrameSweep(inF, outF)`, where the new per-leg predicate is true only when a lifespan gate's boundary — it turns ON at `lifespan.in`, OFF at `lifespan.out + 1` — lands in `(inF, outF]`, i.e. when the gate's value would actually change during that leg. A leg that crosses no boundary still collapses to one paint, so the optimisation is preserved. Applied at `playRange` itself, so it covers all three legs (both intro legs and the outro) without touching `entranceSettleFrame`. Only the ROOT controller supplies the predicate, mirroring the existing `isGlobalRoot` guard on the gate.
+
+**Two existing tests encoded this bug as correct and were corrected** (`packages/template-runtime/tests/runtime.test.ts`): one asserted `display !== 'none'` synchronously after `play()` for `lifespan {in:5,out:50}` ("play must restore it — the played frame is within [5,50]"), the other asserted `'none'` for `{in:0,out:3}`. Both were artefacts of the single collapsed paint at the out-point.
+
+**Regression test:** `packages/template-runtime/tests/lifespan-frame-sweep.test.ts` — `[33,60]` and `[33,90]` with no keyframes (hidden at 0/10, visible at 40); a keyframed control (no regression); the collapse preserved for a no-lifespan and a leg-spanning lifespan, asserted by **rAF count** (no `FrameDriver` scheduled at all), not just visibility; and a boundary inside the OUTRO leg.
+
+**On-air impact:** this changes playout TIMING — a composition that previously snapped through its intro instantly now sweeps it in real time whenever a trim boundary is crossed (which is the point: the trim needs elapsed time to be honoured). Warrants a real-CasparCG check before it is considered done.
+
+## [ ] B-089 — nested-instance element lifespans are never gated at all ⟨priority: medium⟩
+
+**Repro:**
+
+1. Build a composition containing an element trimmed to `lifespan = [33, 60]`.
+2. Place that composition as a nested composition INSTANCE inside another composition.
+3. Preview → Play the parent.
+
+**Expected:** the nested element honours its trim, as it does when the same composition is previewed directly.
+**Actual:** the trim is ignored entirely — the element is visible for the whole lifespan of the instance.
+**Env:** Browser / Designer preview; also the exported outputs.
+**Notes:** `collectLifespanGates` (`packages/template-runtime/src/runtime.ts:1579`) walks only `scene.layers` and resolves ids against the ROOT `built.elementMap`; every composition instance owns its own `elementMap`, so nested elements are unreachable and never enter the gate list. The per-frame application is likewise root-only (`if (isGlobalRoot) applyLifespanGatesAtFrame(frame)`, `runtime.ts:969`). Its `el.type === 'container'` recursion branch is **effectively dead** as well: `container` is built by `buildPlaceholder`, which builds no children, so container children never enter any `elementMap` either. Distinct from B-088 (which is about how OFTEN the gate runs); this is about WHICH elements it covers. Do not fold the two — B-088's fix deliberately leaves nested scopes' collapse behaviour untouched.
+
+## [ ] B-090 — trimming a NESTED element silently does nothing ⟨priority: medium⟩
+
+**Repro:**
+
+1. Put an element inside a container.
+2. In the timeline, drag that element's trim gripper.
+
+**Expected:** the trim applies (or the gripper is not offered).
+**Actual:** nothing happens — no trim, no error, no visual feedback. The gripper is rendered and drags, then the value is discarded.
+**Env:** Browser / Designer timeline.
+**Notes:** The timeline renders rows for everything `flattenElements` returns, and it DOES recurse into containers — but `updateElementLifespan` resolves the target through `locate()` (`apps/designer/src/renderer/state/scene-doc.ts:182`), which searches only top-level `layer.children` via `findIndex` with no recursion, returns `null`, and the mutation early-returns (`slices/elements.ts`). So the UI offers an affordance the state layer cannot honour. Note this is a WRITE-path gap and is independent of B-089 (a READ/gating gap) — an element inside a container would still not be gated even if the trim did persist.
+
+## [ ] B-091 — the preview's `lottie-assets` handler rebuilds the scene mid-playback ⟨priority: low⟩
+
+**Repro:** with a composition containing a Lottie playing in the preview, have a `lottie-assets` message arrive (e.g. an asset import completing during playback).
+
+**Expected:** the live graphic is left alone while playing, as the `update` handler already guarantees.
+**Actual:** the runtime is torn down and rebuilt underneath the playing graphic.
+**Env:** Browser / Designer preview.
+**Notes:** `apps/designer/src/platform/preview.ts:730` — the `lottie-assets` branch does `lottieAssets = msg.lottieAssets; if (currentScene && …) { await applyScene(currentScene); }`, a full rebuild with **no `!playing` guard**, unlike the `update` handler ~13 lines below (`if (runtime && !playing) runtime.tick(currentFrame)`). Introduced by D-125 (Phase 1). **Not causal for B-088** — it cannot produce that symptom, and B-088 reproduces with no Lottie at all — but it is a real latent teardown. Candidate for D-125 Phase 3.

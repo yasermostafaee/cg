@@ -16,6 +16,22 @@ export interface PlayoutControllerOptions {
   playout: Playout;
   /** Whether the scene has any animated elements (skip the driver if not). */
   hasAnimation: boolean;
+  /**
+   * B-088 — does any per-frame GATE change value strictly inside the leg `[inF, outF]`?
+   *
+   * `hasAnimation` used to be the whole answer to "may we collapse this range to one
+   * paint?", because keyframes were the only frame-dependent thing. B-029 broke that
+   * assumption: the per-element `lifespan` gate is evaluated from the painted frame too,
+   * so a scene with NO keyframes but a start-trimmed element still needs a real sweep —
+   * otherwise the gate is evaluated exactly once and the element is either never shown or
+   * shown immediately, never at its in-point.
+   *
+   * This is deliberately a PREDICATE over the leg, not a second boolean: it must be true
+   * only when a gate boundary actually falls inside the range being played, so a genuinely
+   * static leg (no keyframes, no boundary crossed) still collapses to a single paint and
+   * keeps the rAF optimisation. Absent ⇒ never forces a sweep.
+   */
+  needsFrameSweep?: ((inF: number, outF: number) => boolean) | undefined;
   /** Paint every animated element at `frame`. */
   applyFrame: (frame: number) => void;
   /** The final outro is starting — the graphic is going off air. */
@@ -301,10 +317,24 @@ export class PlayoutController {
     return this.cyclesLeft <= 1;
   }
 
-  /** Play `[inF, outF]` once then call `onEnd`; instant when nothing animates. */
+  /**
+   * Play `[inF, outF]` once then call `onEnd`; instant when NOTHING in the leg is
+   * frame-dependent.
+   *
+   * B-088 — the collapse is an optimisation, not a semantic: it is only sound when every
+   * frame in the leg would paint identically to `outF`. Keyframes are one reason that can
+   * be false; a `lifespan` gate boundary crossing the leg is another (see
+   * {@link PlayoutControllerOptions.needsFrameSweep}). Collapsing a leg that crosses a
+   * boundary evaluates the gate exactly once, which is what made a start-trimmed element
+   * appear at play instead of at its in-point.
+   *
+   * Every leg routes through here — both intro legs (entrance + static settle) and the
+   * outro — so the predicate covers all three without each caller repeating it.
+   */
   private playRange(inF: number, outF: number, onEnd: () => void): void {
     this.stopDriver();
-    if (!this.o.hasAnimation || outF <= inF) {
+    const frameDependent = this.o.hasAnimation || (this.o.needsFrameSweep?.(inF, outF) ?? false);
+    if (!frameDependent || outF <= inF) {
       this.o.applyFrame(outF);
       onEnd();
       return;
