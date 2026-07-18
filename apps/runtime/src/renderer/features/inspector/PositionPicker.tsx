@@ -4,6 +4,7 @@ import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
+import { reportCommandError } from '../status/commandFeedback.js';
 
 /** Row-major 3×3 anchor grid (the 9-point Position model). */
 const ANCHOR_GRID: readonly (readonly PositionAnchor[])[] = [
@@ -146,6 +147,13 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
                 ...(r.reason !== undefined ? { errorCode: r.reason } : {}),
               }))
           }
+          // #334 — a refusal surfaces as the command TOAST, not pinned inline beside the
+          // control where its wrapped text bloated this narrow panel. `setPosition` does
+          // NOT self-report (unlike `applyDraft`), so this is the report, not a suppressor.
+          // The MESSAGE is unchanged: the button already mapped `r.reason` through
+          // `errorCodeMessage`, and the toast carries that same mapping — only its
+          // placement moves.
+          onError={reportCommandError}
         >
           Apply position
         </AsyncButton>

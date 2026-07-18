@@ -180,10 +180,17 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
       <div style={styles.actions}>
         {/* Apply stays enabled even with nothing staged — re-sending unchanged
             values is the operator's documented B-048 recovery path. */}
+        {/* #334 — feedback goes to the command TOAST, never pinned inline in the panel.
+            `applyDraft` (the shared apply behind this button AND the stack row's UPDATE)
+            already routes any failure to the toast with its own B-070 wording, so this
+            no-op only SUPPRESSES the button's duplicate INLINE error — it does not
+            re-report (which would double-toast) or change the wording. Exactly what
+            `StackRow`'s UPDATE does, for exactly this reason. */}
         <AsyncButton
           variant="secondary"
           aria-label="Apply staged edits"
           run={() => onApply(itemId)}
+          onError={() => undefined}
         >
           Update
         </AsyncButton>
