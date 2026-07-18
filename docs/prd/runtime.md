@@ -81,7 +81,7 @@ explicit apply step.
   value changes reconcile with in-progress local edits without a destructive
   remount.
 
-## [~] R-004 — every panel labels a template by the imported file name, never the raw id ⟨priority: medium⟩ — Library half merged via `runtime-library-display-name` (#306, archived); REOPENED and completed on `fix/runtime-ux-batch-2`, change: `runtime-item-label-from-file`
+## [x] R-004 — every panel labels a template by the imported file name, never the raw id ⟨priority: medium⟩ — Library half merged via `runtime-library-display-name` (#306, archived); REOPENED and completed on `fix/runtime-ux-batch-2` — merged (#317) + archived: `openspec/changes/archive/2026-07-18-runtime-item-label-from-file/`
 
 <!-- change: openspec/changes/archive/2026-07-14-runtime-library-display-name/ -->
 <!-- change: openspec/changes/runtime-item-label-from-file/ -->
@@ -167,7 +167,7 @@ AND a context-menu entry.
   through the injected `getHtml` per request, so dropping the registry entry 404s
   `GET /template/<id>` on its own.
 
-## [~] R-006 — the Runtime never pretends to be on air: no silent mock, refuse offline, explicit test mode ⟨priority: high⟩ — implemented on `fix/offline-mock-safety`, change: `runtime-offline-safety`
+## [x] R-006 — the Runtime never pretends to be on air: no silent mock, refuse offline, explicit test mode ⟨priority: high⟩ — merged (#312, `fix/offline-mock-safety`) + archived: `openspec/changes/archive/2026-07-18-runtime-offline-safety/`
 
 **What:** Four parts, all required — this is a **broadcast-safety** item, not a
 visibility nit:
@@ -520,7 +520,7 @@ small-comp export — depends on this change's schema field + runtime
 application). The reference output frame is 1920×1080; non-1080 channels
 are a documented follow-up.
 
-## [~] R-012 — Clear-All: take every on-air item off air, and keep it on the stack ⟨priority: medium⟩ — implemented on `fix/runtime-ux-batch-2`, change: `runtime-stack-clear-all`
+## [x] R-012 — Clear-All: take every on-air item off air, and keep it on the stack ⟨priority: medium⟩ — merged (#317, `fix/runtime-ux-batch-2`) + archived: `openspec/changes/archive/2026-07-18-runtime-stack-clear-all/`
 
 <!-- change: openspec/changes/runtime-stack-clear-all/ -->
 

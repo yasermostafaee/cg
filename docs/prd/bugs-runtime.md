@@ -1257,7 +1257,7 @@ no Designer change beyond (optionally) re-pointing it at the lifted helper.
 fields already work, the correctness check is missing. Implementation happens in the `cg-runtime`
 worktree in its own chat — this entry is the filing only.
 
-## [~] B-079 — a FAILED take is outranked by stale OSC: the row badges ON AIR for a `CG PLAY` that never reached CasparCG ⟨priority: high⟩ — fixed on `fix/offline-mock-safety`, change: `runtime-failed-take-truth`
+## [x] B-079 — a FAILED take is outranked by stale OSC: the row badges ON AIR for a `CG PLAY` that never reached CasparCG ⟨priority: high⟩ — merged (#312, `fix/offline-mock-safety`) + archived: `openspec/changes/archive/2026-07-18-runtime-failed-take-truth/`
 
 The second, independent path to a false ON AIR (found while tracing [R-006](runtime.md)'s
 live incident — this one needs no mock, and it is reachable on real hardware).
@@ -1550,7 +1550,7 @@ The two-connection distinction the guard conflated: **SPA↔bridge WS** (`#statu
 `disconnected` = CasparCG unreachable, bridge still up). This class of bug lives entirely in the
 first; the frozen on-air safety lives entirely in the second.
 
-## [~] B-086 — the stack keeps showing red "● ON AIR" after the CasparCG link drops: a broadcast-safety lie (the UI asserts on-air the wire no longer backs) ⟨priority: high⟩ — in progress on `fix/B-086-onair-honest-linkloss`, change dir `openspec/changes/runtime-onair-honest-linkloss/`
+## [x] B-086 — the stack keeps showing red "● ON AIR" after the CasparCG link drops: a broadcast-safety lie (the UI asserts on-air the wire no longer backs) ⟨priority: high⟩ — merged (#336, `fix/B-086-onair-honest-linkloss`) + archived: `openspec/changes/archive/2026-07-18-runtime-onair-honest-linkloss/`
 
 When the CasparCG connection drops (CasparCG died, or the link briefly dropped —
 **indistinguishable from our side**, confirmed by testing), on-air stack items keep rendering
@@ -1593,7 +1593,7 @@ template-runtime completion-signal problem, separate bug).
 Status name: a NEW `'unverified'` status (not the latent `'disconnected'` one, whose "OFFLINE"
 meaning would mislead; not amber `'unconfirmed'`, which is B-044's item-scoped ack-timeout).
 
-## [~] B-087 — the stack row badge freezes red "● ON AIR" when the BRIDGE process dies (SPA↔bridge WebSocket drops): the same broadcast-safety lie [[B-086]] closed, but for the OUTER link ⟨priority: high⟩ — in progress on `fix/B-087-bridge-death-onair-badge`, change dir `openspec/changes/runtime-onair-honest-bridge-loss/`
+## [x] B-087 — the stack row badge freezes red "● ON AIR" when the BRIDGE process dies (SPA↔bridge WebSocket drops): the same broadcast-safety lie [[B-086]] closed, but for the OUTER link ⟨priority: high⟩ — merged (#340, `fix/B-087-bridge-death-onair-badge`) + archived: `openspec/changes/archive/2026-07-18-runtime-onair-honest-bridge-loss/`
 
 [[B-086]] made the ON AIR badge honest when the **CasparCG** link drops (the bridge↔CasparCG AMCP
 link). But when the **BRIDGE** process itself dies — the SPA↔bridge WebSocket — the on-air row

@@ -129,6 +129,25 @@ re-reads as `on-air` (the pre-existing optimistic confirm), and the value
 published at observation time equals the value the merge ladder resolves to
 after the truth TTL decays — the badge never reverts-and-sticks.
 
+**Play evidence is a CLAIM, and a failed command SHALL retract its own claim (B-079).**
+OSC is bound independently of the AMCP link and keeps arriving across a dead AMCP
+connection, so producer-present evidence can outlive the ability to command the server.
+Because the truth derivation sits ABOVE the ack in the merge ladder, a take that set play
+evidence and then FAILED on the wire would otherwise read `on-air` off an unrelated
+producer — a solid ON AIR badge for a `CG PLAY` that never reached CasparCG. Therefore: a
+take intent SHALL record the item's PRIOR play evidence, and a **failed ack** (or an
+expiry) for that take SHALL RESTORE it, so the take's own unproven claim is withdrawn.
+
+The retraction SHALL be scoped to the claim the failed command made, and to nothing else:
+
+- A take on a never-played item that then fails SHALL leave the item reading `loaded` when
+  a producer is present — true, and never `on-air`.
+- A re-take of an item that is ALREADY on air and then fails SHALL leave it reading
+  `on-air` — it genuinely is. A failed command SHALL NOT demote a graphic that is really
+  on air, because a false `idle`/`loaded` would HIDE a live graphic, which is the more
+  dangerous error direction.
+- A failed `update` or `out` SHALL NOT alter play evidence at all.
+
 #### Scenario: Real OSC drives stack state
 
 - **WHEN** the server emits OSC (a layer's `foreground/producer` flips to
@@ -154,6 +173,20 @@ after the truth TTL decays — the badge never reverts-and-sticks.
   at once (the same fresh observation now carries play evidence), preserving
   the pre-existing optimistic confirm
 
+#### Scenario: A FAILED take does not read on-air off a stale producer
+
+- **WHEN** a take's command fails on the wire (the AMCP link is down, or the send is
+  rejected) while a producer observation for that layer is still fresh **THEN** the item
+  SHALL NOT read `on-air` — the failed take retracts the play evidence it claimed, and the
+  item reads `loaded` (the producer is there; it was never played), with the failure
+  surfaced
+
+#### Scenario: A failed re-take never demotes a genuinely on-air item
+
+- **WHEN** an item that is ALREADY confirmed on air is re-taken and that command fails
+  **THEN** the item still reads `on-air` — the retraction restores the item's PRIOR
+  evidence, so a real live graphic is never hidden by a failed command
+
 #### Scenario: Outbound deltas are coalesced, not unbounded-queued
 
 - **WHEN** OSC churns faster than the UI needs **THEN** the bridge coalesces
@@ -162,21 +195,36 @@ after the truth TTL decays — the badge never reverts-and-sticks.
 
 ### Requirement: Bridge selection at boot
 
-`createRuntimeBridge()` SHALL be async and decide the backend **once** at startup
-by probing the configured bridge WebSocket with a short timeout (default 1500ms).
-The Runtime SHALL present the same UI either way and SHALL NOT crash when the
-bridge is absent.
+`createRuntimeBridge()` SHALL be async and decide the backend **once** at startup. The
+Runtime SHALL present the same UI either way and SHALL NOT crash when the bridge is absent.
+
+An unreachable bridge SHALL NOT select the mock. When the probe (default 1500ms) is refused
+or times out, the app SHALL remain on the **live** backend in an explicit, visible
+**disconnected** state — reconnecting on its own, with every command rejected and never
+routed to a simulation. A silent fallback is forbidden: it pins the whole session to an
+in-memory simulation that reports success for commands that reach nothing, which is how an
+operator comes to believe a graphic is on air when none is.
+
+The in-memory mock SHALL be selected **only** on an explicit request (an operator-chosen
+test mode, or a test harness arming the flag) — never as an automatic consequence of the
+bridge being absent, and never mid-session.
 
 #### Scenario: Bridge reachable
 
-- **WHEN** the bridge WebSocket connects within the timeout **THEN** the app uses
-  the `WebSocketRuntime` and shows a "connected / live" indicator
+- **WHEN** the bridge WebSocket connects within the timeout **THEN** the app uses the
+  `WebSocketRuntime` and shows a "connected / live" indicator
 
-#### Scenario: Bridge absent
+#### Scenario: Bridge absent — disconnected, NOT the mock
 
-- **WHEN** the probe is refused or times out **THEN** the app falls back to
-  `MockRuntime` **AND** shows a persistent, unmistakable
-  "OFFLINE (mock) — not connected to CasparCG" indicator
+- **WHEN** the probe is refused or times out **THEN** the app stays on the live backend in
+  a visible DISCONNECTED state, keeps trying to reconnect, and refuses commands — it SHALL
+  NOT construct the mock, SHALL NOT report any server as healthy, and SHALL NOT show any
+  item as on air
+
+#### Scenario: The mock is only ever entered on purpose
+
+- **WHEN** the operator (or a test harness) explicitly requests test mode **THEN** — and
+  only then — the app runs the in-memory mock, and says so unmistakably
 
 ### Requirement: Live connection is never silently downgraded
 
@@ -669,24 +717,29 @@ existence is identical on each).
 
 ### Requirement: Transient stack intents complete on ack or expire
 
-The `updating` and `exiting` stack-item statuses SHALL be **transient**: they
+The `playing`, `updating` and `exiting` stack-item statuses SHALL be **transient**: they
 SHALL NEVER be a permanent resting state. The Reconciler SHALL settle a
 transient intent when the AMCP ack of the intent's own command arrives — the
-`CG UPDATE` line for an update; the single `CLEAR` the bridge emits for an out:
+`CG PLAY` line for a take; the `CG UPDATE` line for an update; the single `CLEAR` the
+bridge emits for an out:
 
 - An OK ack SHALL settle the item to its underlying state — the pre-update
   status (normally `playing`) for an update; `idle` for an out. The ack means
   **accepted by CasparCG**; it is not proof the template applied the value
   (B-041's `202`-plus-template-failure history) — deeper applied-verification
   is out of scope of this requirement.
-- A failure ack SHALL surface the existing `error` state with its `errorCode`.
+- A failure ack SHALL surface the existing `error` state with its `errorCode`, and for a
+  take SHALL additionally retract the play evidence that take claimed (see "Stack state
+  updates from real OSC confirmations").
 - An ack for a superseded intent (an older sequence than the item's latest)
   SHALL NOT mutate the item's state.
 
 If no ack arrives within a bounded time (5 s), the bridge SHALL expire the
 intent to an explicit **`unconfirmed`** status (with an `errorCode`), surfaced
 to the operator UI — never a silent revert to the prior status, never a fake
-success, never an indefinite `updating`/`exiting`. A late OK ack after expiry
+success, never an indefinite `playing`/`updating`/`exiting`. **A take SHALL arm the same
+bounded timer** — without it an unsettled take rests on its optimistic `playing`/`on-air`
+claim forever, with nothing to bound it. A late OK ack after expiry
 SHALL settle the item honestly. Any subsequent operator intent SHALL overwrite
 an `unconfirmed` state.
 
@@ -708,6 +761,12 @@ an `unconfirmed` state.
   (e.g. CasparCG stopped mid-update) **THEN** the item lands in the explicit
   `unconfirmed` (or `error`, for a detected send failure) state visible in the
   UI — the badge never sticks on "UPDATING"
+
+#### Scenario: A take whose ack never arrives expires, and gives back its claim
+
+- **WHEN** the bridge sends a `CG PLAY` and no ack arrives within the bound **THEN** the
+  item lands in the explicit `unconfirmed` state and the take's unproven play evidence is
+  retracted — the badge never rests on an unbounded optimistic `playing`/`on-air`
 
 #### Scenario: A subsequent intent clears unconfirmed
 
@@ -1402,3 +1461,119 @@ and only for a layer OBSERVED occupied.
 - **WHEN** retained intent is restored while no declared CasparCG server is reachable
 - **THEN** the items appear on the stack and no AMCP command is sent for them, and the on-air verbs
   stay refused (R-006)
+
+### Requirement: ON AIR is honest across a CasparCG link-loss
+
+The stack MUST NOT keep asserting a confident **ON AIR** for an item once the CasparCG link that
+would confirm it is down. When the CURRENT-PRIMARY CasparCG session leaves `healthy` (AMCP TCP
+close, or OSC silence demoting it to `degraded`/`disconnected` — the same condition `#linkDown()`
+gates the on-air refusal on), every stack item whose reconciled status is on-air (`on-air`, or the
+`playing` fallback floor that renders identically) SHALL be re-published in an **UNVERIFIABLE**
+state — a dedicated `unverified` status, distinct from both an ON AIR claim and a forced IDLE. It
+SHALL render muted (never the broadcast red, never the amber of `unconfirmed`) with an operator
+label conveying "was on air, cannot confirm now" and the last-known reading preserved in the
+tooltip.
+
+This re-publish SHALL be driven by the session-state transition, because the Reconciler is
+event-driven and OSC silence alone emits nothing: leaving `healthy` MUST cause the affected items
+to be re-published, not left frozen on their last on-air value.
+
+On **reconnect** (the session returning to `healthy`, after its mandatory RESYNCING OSC drain) the
+stack SHALL reconcile each still-unverifiable item against what CasparCG actually reports on its
+layer:
+
+- A layer whose producer is still present re-announces it over the resumed continuous OSC within
+  ~one tick; the Reconciler's fresh-OSC truth SHALL restore that item to **ON AIR** automatically.
+- A layer that stays silent past the occupancy staleness bound (the producer is gone — e.g.
+  CasparCG restarted with empty layers) SHALL reset that item to **IDLE**. Because real CasparCG
+  reports no explicit "empty", this reset is inferred from the absence of a fresh occupancy
+  observation for the item's slot, consistent with the orphan sweep's "absence of knowledge is not
+  knowledge of absence".
+
+The on-air **refusal** is unchanged: while the link is down, `take` / `update` / `out` remain
+refused (R-006). This requirement changes only the honesty of the reconciled on-air **display and
+truth**, never what a command does. Death-vs-blip is not guessed — an item stays unverifiable until
+OSC resolves it on reconnect.
+
+#### Scenario: An on-air item becomes unverifiable when the link drops
+
+- **WHEN** an item is ON AIR and its CURRENT-PRIMARY CasparCG session leaves `healthy`
+  **THEN** the item is re-published as `unverified` (muted "was on air"), not as a red ON AIR and
+  not as IDLE
+
+#### Scenario: A genuinely-on-air item restores on reconnect
+
+- **WHEN** the link returns to `healthy` and the item's layer is still occupied (CasparCG re-announces
+  the producer over resumed OSC) **THEN** the item is restored to ON AIR without operator action
+
+#### Scenario: A vanished producer resets to idle on reconnect
+
+- **WHEN** the link returns to `healthy` and the item's layer stays silent past the occupancy
+  staleness bound (the producer is gone, e.g. CasparCG restarted) **THEN** the item is reset to IDLE
+
+#### Scenario: The on-air refusal is unchanged while the link is down
+
+- **WHEN** the link is down and the operator issues `take` / `update` / `out` **THEN** the command is
+  still refused (R-006), exactly as before — the unverifiable display changes no command outcome
+
+#### Scenario: Distinct from the item-scoped ack-timeout
+
+- **WHEN** a single command's AMCP ack times out on an otherwise-live link **THEN** that item still
+  settles to the existing amber `unconfirmed` (B-044), NOT to `unverified` — the two are different
+  conditions (one item vs the whole link)
+
+### Requirement: On-air verbs are refused while the server is not connected
+
+The bridge SHALL refuse the playout verbs that must reach the wire — `take`, `update`,
+`out` — while **no declared server is reachable**, returning the machine-readable refusal
+`{ accepted: false, errorCode: 'disconnected' }` rather than attempting the send.
+
+The predicate SHALL be "no declared session is `healthy`", NOT "the current primary is not
+healthy". In a mirror pair whose PRIMARY's AMCP link is dead while the BACKUP is healthy
+(auto-failover off — B-056's human-in-the-loop scenario), every send still lands
+backup-only on a real, rendering CasparCG: a graphic genuinely IS on air there. Refusing in
+that window would break the redundancy contract AND lie in the opposite direction (denying
+air that exists). The gate closes only when the command can reach no server at all.
+
+The refusal SHALL happen **before any intent is applied to the Reconciler**. This is the
+load-bearing detail: an intent applied optimistically and only then failed is what produces
+a transient — and, joined with stale OSC, a persistent — false ON AIR. A command that
+cannot reach CasparCG SHALL leave the item's status exactly as it was.
+
+The refusal SHALL NOT be a deferral. A command issued while disconnected SHALL NOT be
+queued for later delivery: the operator's intent would be stranded (the reconnect path
+re-delivers retained template HTML only — never stack intents), which recreates the same
+false belief one step later. Refuse, and say so.
+
+This mirrors the existing on-air block (a counted, reasoned `{ ok, reason }` refusal that
+the UI surfaces verbatim) and the orphan sweep's `session.state !== 'healthy'` gate. It
+introduces no AMCP verb and sends nothing to the wire.
+
+#### Scenario: PLAY while no server is reachable is refused, not optimistically shown
+
+- **WHEN** the operator takes an item while no declared server is healthy **THEN** the
+  bridge refuses with `errorCode: 'disconnected'`, no `take` intent is recorded, the item's
+  status is unchanged, and the item is never shown as playing or on air
+
+#### Scenario: Update and out are refused the same way
+
+- **WHEN** the operator updates or outs an item while no declared server is healthy
+  **THEN** each is refused with `errorCode: 'disconnected'` and no intent is applied
+
+#### Scenario: A dead primary with a healthy backup is NOT refused (B-056)
+
+- **WHEN** the primary's AMCP link is down but a declared backup is healthy **THEN** the
+  verbs are still accepted and land backup-only, exactly as the redundancy strategy
+  specifies — the command reaches a real, rendering server, so refusing it would deny air
+  that genuinely exists
+
+#### Scenario: A refused command is not deferred
+
+- **WHEN** a command is refused because the server is disconnected **THEN** it is NOT
+  queued or replayed on reconnect — the operator is told it did not happen and must reissue
+  it deliberately
+
+#### Scenario: The gate lifts when the server is healthy again
+
+- **WHEN** the primary session reaches `healthy` **THEN** the verbs are accepted again and
+  behave exactly as before, with no change to the producer-state rules that choose them
