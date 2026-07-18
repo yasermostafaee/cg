@@ -288,6 +288,22 @@ async stop() {
 - `playBackgroundOutroAndSettle` is unchanged — the background cascade and the `onRootSettled`/
   CLEARED settle (D-085) run exactly as today, just **after** the element outros.
 
+> **BOUNDARY found during Phase-2 implementation — the AUTO-exit path does NOT play the element
+> outro.** This seam lives in `out()` / `stop()`. A composition that ends its OWN content-driven (or
+> timed `auto-out`) hold does **not** call either: `PlayoutController` resolves its hold and calls
+> `startOutro()` directly (`playout-controller.ts:253-255`, `261-270`), which plays the **background**
+> outro and settles. Verified empirically on the fake clock: a `drivesHold: true` freeze Lottie in a
+> `content-driven` composition settles CLEARED with **zero** outro frames painted, parked on
+> `introEnd`. So the "self-contained sting" (opt in → hold ends at intro-end → auto-out) closes with
+> the furniture frozen rather than animating off.
+>
+> This is **out of Phase-2 scope by design**: routing the auto-exit through the seam means awaiting an
+> async element outro inside `PlayoutController.startOutro()` — the B-030/B-031/B-033-hardened exit
+> machinery — and introduces a second supersede surface there (`startOutro` is also reached from the
+> controller's own `stop()` cascade, so a naive hook double-plays the outro). It is recorded as a
+> Phase-3 item (task 7.5) for an explicit owner decision, and pinned by a characterization test +
+> spec scenario so the current behaviour cannot regress silently.
+
 ### D6.3 `whenComplete()` (content-driven hold) vs. `playOutro()` (exit) — kept separate
 
 Two distinct signals, deliberately not conflated:

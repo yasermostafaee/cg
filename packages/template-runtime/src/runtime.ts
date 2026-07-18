@@ -139,6 +139,16 @@ interface ScopeNode {
   /** D-104 — composition-INSTANCE children only (NOT repeater rows), for content aggregation up the tree. */
   instanceChildren: ScopeNode[];
   /**
+   * D-125 §D7 — this scope's OWN element-outro drivers: the `LottieDriver`s that own a real
+   * outro segment and are VISIBLE. `out()`/`stop()` await these before the background outro
+   * (see `collectElementOutros`).
+   *
+   * B-034 — the `visible: false` HARD GATE is applied HERE, where the list is BUILT, so a
+   * hidden Lottie can never be resurrected by a parent override; hidden ANCESTORS are handled
+   * by the `visible` skip in the collection walk.
+   */
+  outroLotties: readonly LottieDriver[];
+  /**
    * B-031 — resolves when THIS scope's controller SETTLES (after its own outro). A
    * content-driven parent waits on a nested CONTENT-DRIVEN (coordinator) child's settle,
    * so a content-driven nested composition DRIVES the parent's hold while still
@@ -266,6 +276,13 @@ function scopeHasEffectiveHoldDrivers(
   for (const c of scope.clocks)
     if (c.element.mode === 'countdown' && drives(c.element)) return true;
   for (const sq of scope.sequences) if (drives(sq.element)) return true;
+  // D-125 §D2.1 — a Lottie is a driver ONLY when it OPTED IN (`=== true`, the INVERSE
+  // default), so it can't be folded into `drives()` above. Without this a composition
+  // whose only hold driver is an opted-in Lottie would fall back to `timed` (B-032) and
+  // never wait for its intro. B-034 — a hidden Lottie is never a driver.
+  for (const l of scope.lotties)
+    if (l.element.visible !== false && (overrides?.[l.element.id] ?? l.element.drivesHold === true))
+      return true;
   for (const child of scope.children)
     // B-034 — a HIDDEN instance's whole subtree is inert: don't descend (so a content-driven comp
     // whose only drivers live inside hidden instances resolves to timed, matching the runtime hold).
@@ -762,10 +779,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // `lottie_light` player (`autoplay: false` — the driver owns the playhead), and
       // drive it frame-by-frame off the injected clock. An UNRESOLVED asset ⇒ no driver
       // (the container renders empty, like an image whose bytes did not resolve).
-      // D-125 PHASE 1 — render + pause/resume/reset only: NO outro seam and NO
-      // content-driven-hold contribution (Phase 2 wires `playOutro()` / `whenComplete()`),
-      // so the Lottie is NOT registered in `contentDrivers` / the `hold*` arrays here.
+      // D-125 PHASE 2 — the full IN/HOLD/OUT lifecycle: the driver contributes
+      // `whenComplete()` to the content-driven hold when it OPTS IN (`drivesHold === true`)
+      // and registers in `scopeOutroLotties` for the element-outro seam (§D6.2).
       const scopeLotties: LottieDriver[] = [];
+      const scopeOutroLotties: LottieDriver[] = [];
+      /** §D6.3 — only the Lotties that OPTED IN (`drivesHold === true`) gate this hold. */
+      const holdLotties: LottieDriver[] = [];
       for (const l of scope.lotties) {
         const data = options.lottieAssets?.[l.element.assetId];
         if (data === undefined) continue;
@@ -780,6 +800,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         const introEnd = l.element.phases?.introEnd ?? meta.op;
         const idleIn = l.element.phases?.idle?.[0] ?? introEnd;
         const idleOut = l.element.phases?.idle?.[1] ?? l.element.phases?.outroStart ?? meta.op;
+        // §D1 — the OUT phase maps to `[outroStart → op]` in ANIMATION frames, BY PHASE
+        // (never rescaled onto the composition's `outPoint`): the element owns its own
+        // outro timing at the authored speed. Absent `phases` ⇒ `outroStart = op` ⇒ a
+        // DEGENERATE outro, which `playOutro()` resolves immediately (§D6.4.1).
+        const outroStart = l.element.phases?.outroStart ?? meta.op;
+        const hasOutro = outroStart < meta.op;
         // D-125 — the STATIC canvas poster frame. When phase markers define the hold
         // start (`introEnd`, fully ON) park there. ABSENT markers `introEnd` fell back to
         // `op` (the LAST frame): for a real AE furniture clip that animates OFF in its
@@ -795,6 +821,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           op: meta.op,
           speed: l.element.speed,
           introEnd,
+          outroStart,
           idleIn,
           idleOut,
           holdBehavior: l.element.holdBehavior,
@@ -810,6 +837,33 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         driver.poster();
         scopeLotties.push(driver);
         lotties.push(driver);
+        // D-105 — mark the content root so the coordinated exit can select it.
+        l.container.dataset['cgContent'] = 'lottie';
+        // §D6.2 — a Lottie that OWNS an outro animates ITSELF off; guard it from the
+        // blanket `fadeContentOut` / `hideContentNow` so an opacity transition doesn't
+        // fight the driver's `goToAndStop`. A DEGENERATE-outro Lottie has no self-exit,
+        // so it keeps the normal content fade/hide (nothing to fight).
+        if (hasOutro) l.container.dataset['cgOutro'] = '1';
+        // B-034 — a HIDDEN Lottie is FULLY INERT. The hard gate is applied HERE, where the
+        // collections are BUILT, so no parent `holdOverrides` can resurrect it: it never
+        // gates a hold, and `out()`/`stop()` never await its outro (a hidden element must
+        // not stall the exit by its outro duration for something nobody can see).
+        if (l.element.visible !== false) {
+          // D-125 §D2.1 — `drivesHold` is read as `=== true` (OPT-IN), and NEVER as
+          // `!== false`. This is the INVERSE of the ticker / clock / sequence default
+          // (absent ⇒ participates): an absent flag here means the Lottie does NOT gate the
+          // hold — a ticker on top drives it and the furniture holds beneath. Load-bearing
+          // one-liner; do not "normalize" it to match the other content kinds.
+          const drivesHold = l.element.drivesHold === true;
+          if (drivesHold) holdLotties.push(driver);
+          // D-112 — exposed UNFILTERED so a parent instance override can re-filter it.
+          contentDrivers.push({
+            id: l.element.id,
+            drivesHold,
+            whenComplete: () => driver.whenComplete(),
+          });
+          if (hasOutro) scopeOutroLotties.push(driver);
+        }
       }
 
       // D-028/D-027/D-029 — this scope's OWN content completion from its CONTENT
@@ -840,18 +894,27 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         }
       };
       const ownContentWait = (): Promise<void> | null =>
-        holdTickers.length > 0 || holdCountdowns.length > 0 || holdSequences.length > 0
+        holdTickers.length > 0 ||
+        holdCountdowns.length > 0 ||
+        holdSequences.length > 0 ||
+        holdLotties.length > 0
           ? Promise.all([
               ...holdTickers.map((t) => t.whenComplete()),
               ...holdCountdowns.map((c) => c.whenComplete()),
               ...holdSequences.map((s) => s.whenComplete()),
+              // D-125 §D6.3 — only OPTED-IN (`drivesHold === true`) Lotties are in this
+              // array: a freeze Lottie completes at `introEnd`, an idle-loop one never does.
+              ...holdLotties.map((l) => l.whenComplete()),
             ]).then(() => undefined)
           : null;
       const stopScopeContent = (): void => {
         for (const t of scopeTickers) t.stop();
         for (const c of scopeClocks) c.stop();
         for (const s of scopeSequences) s.stop();
-        // D-125 — halt the Lottie rAF on settle (Phase 2 adds the outro before this).
+        // D-125 §D6.4.5 — halt the Lottie rAF on settle, so no driver is left ticking after
+        // the background settles CLEARED. The element outro already ran (out()/stop() await
+        // it BEFORE the background cascade), so this only stops an idle-loop / a driver
+        // whose outro was superseded.
         for (const l of scopeLotties) l.stop();
       };
       // B-031 — resolves when THIS scope settles (after its outro), so a content-driven
@@ -1016,6 +1079,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         ownContentWait,
         contentDrivers,
         instanceChildren,
+        // D-125 §D7 — already B-034-gated at build (hidden Lotties never enter this list).
+        outroLotties: scopeOutroLotties,
         whenSettled: () => settled,
         resetSettled,
         // B-034 — default visible; the parent overrides each child from its FieldScopeChild (below),
@@ -1157,7 +1222,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       for (const c of sub.clocks) c.stop();
       for (const s of sub.sequences) s.stop();
       for (const r of sub.repeaters) r.stop();
-      // D-125 — halt the Lottie players on the root settle (Phase 1 has no outro).
+      // D-125 §D6.4.5 — halt every Lottie on the root settle: the CLEARED terminal state
+      // has no driver still ticking. The outro already played (awaited by out()/stop()).
       for (const l of sub.lotties) l.stop();
     }
     rootOnSettle();
@@ -1205,12 +1271,47 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     options.clock?.setTimeout ?? ((cb: () => void, ms: number): unknown => setTimeout(cb, ms));
   const contentRoots = (): HTMLElement[] =>
     Array.from(built.container.querySelectorAll<HTMLElement>('[data-cg-content]'));
+  /**
+   * D-125 §D6.2 — content roots the blanket fade/hide may touch: every `data-cg-content`
+   * EXCEPT the ones that animate themselves off (`data-cg-outro`, a Lottie owning an outro
+   * segment). Fading a Lottie's opacity while its driver drives `goToAndStop` would fight
+   * the authored outro; the driver owns that element's exit.
+   */
+  const fadeableContentRoots = (): HTMLElement[] =>
+    contentRoots().filter((n) => n.dataset['cgOutro'] === undefined);
+  /**
+   * D-125 §D6.2 — THE ELEMENT-OUTRO REGISTRY. Every `LottieDriver` that owns an outro and
+   * is reachable through VISIBLE scopes, walked over the wiring tree (root scope + nested
+   * composition instances + stamped repeater rows).
+   *
+   * B-034 — the walk SKIPS a hidden instance's whole subtree, so a Lottie inside a hidden
+   * ancestor is fully inert: its outro is never awaited (it would otherwise stall the exit
+   * by its outro duration for a subtree nobody can see). The per-element `visible` gate was
+   * already applied where `outroLotties` was BUILT, so both the leaf and the ancestor case
+   * are covered.
+   *
+   * BOUNDARY — a sequence composition ITEM's subtree is deliberately NOT walked: those items
+   * are shown/hidden by the sequence driver and own their D-116 item transitions, so a
+   * transient (possibly off-screen) item must not gate the composition's exit.
+   */
+  const collectElementOutros = (): LottieDriver[] => {
+    const out: LottieDriver[] = [];
+    const walk = (n: ScopeNode): void => {
+      out.push(...n.outroLotties);
+      for (const child of n.children) {
+        if (!child.visible) continue;
+        walk(child);
+      }
+    };
+    walk(rootNode); // the root scope is always visible (it has no instancing parent)
+    return out;
+  };
   const saveExitStyles = (n: HTMLElement): void => {
     if (n.dataset['cgExit'] !== undefined) return;
     n.dataset['cgExit'] = `${n.style.opacity}|${n.style.visibility}|${n.style.transition}`;
   };
   const fadeContentOut = (ms: number): Promise<void> => {
-    for (const n of contentRoots()) {
+    for (const n of fadeableContentRoots()) {
       saveExitStyles(n);
       n.style.transition = `opacity ${String(ms)}ms linear`;
       n.style.opacity = '0';
@@ -1220,7 +1321,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     });
   };
   const hideContentNow = (): void => {
-    for (const n of contentRoots()) {
+    for (const n of fadeableContentRoots()) {
       saveExitStyles(n);
       n.style.transition = '';
       n.style.opacity = '0';
@@ -1340,9 +1441,27 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // play the OUT [outPoint → active.out]; absent lifecycle settles instantly.
       // The controller drives onExitStart/onSettle (stop.start / stop.end + hide);
       // D-026 — each nested instance plays its OWN outro in cascade.
-      exitGen += 1;
+      const gen = ++exitGen;
       pendingExitOutro = false;
+      // D-125 §D6.2 — an ELEMENT that owns its outro still plays it on stop(): the
+      // acceptance is that BOTH stop() and out() play the Lottie outro. Everything else
+      // still hard-hides immediately (the quick exit is unchanged for non-owning content).
+      const outros = collectElementOutros();
       hideContentNow();
+      if (outros.length > 0) {
+        // Only await when something actually owns an outro, so a scene with no Lottie
+        // keeps stop()'s SYNCHRONOUS hide → background ordering exactly as before.
+        await Promise.all(outros.map((d) => d.playOutro()));
+        // Superseded mid-outro by a play()/stop()/out() — that command owns the scene now.
+        if (gen !== exitGen) return;
+        if (machine.state !== 'on-air' && machine.state !== 'playing') return;
+        if (paused) {
+          // D-105 — paused mid-outro: hold the half-played frame and defer the background
+          // outro to resume(), so the graphic does not close while paused.
+          pendingExitOutro = true;
+          return;
+        }
+      }
       playBackgroundOutroAndSettle();
     },
 
@@ -1354,7 +1473,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // play the background outro and settle cleared — the background never closes
       // over fully-visible content.
       const gen = ++exitGen;
-      await fadeContentOut(OUT_FADE_MS);
+      // D-125 §D6.2 — THE ELEMENT-OUTRO SEAM. The 400 ms content fade and every element
+      // outro run CONCURRENTLY, and the background waits for BOTH: a Lottie plays its own
+      // authored `[outroStart → op]` (it is excluded from the fade so the two don't fight),
+      // while ticker/clock/sequence roots fade as before. Background LAST — D-105's
+      // content-first ordering, now honoring element-owned exits.
+      await Promise.all([
+        fadeContentOut(OUT_FADE_MS),
+        ...collectElementOutros().map((d) => d.playOutro()),
+      ]);
       if (gen !== exitGen) return;
       if (machine.state !== 'on-air' && machine.state !== 'playing') return;
       if (paused) {
@@ -1407,6 +1534,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     remove(): void {
       if (machine.state === 'removed') return;
+      // D-125 §D6.4.4 — remove() is the PANIC path and stays a SYNCHRONOUS hard kill: it
+      // awaits NO element outro. `destroy()` tears the Lottie players down immediately
+      // (settling any in-flight `playOutro()` so a concurrent out()/stop() can't strand).
+      // stop()/out() are the graceful paths that play the outro.
       // Symmetric subtree teardown (controllers, then drivers — see
       // WiredSubtree.destroy). Copy first: destroy() deregisters itself.
       for (const sub of [...subtrees]) sub.destroy();

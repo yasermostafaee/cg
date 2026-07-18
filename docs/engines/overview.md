@@ -74,6 +74,13 @@ the editor UI and the runtime renderer (the "Where features go" map in
   drivers — the D-031 steps seam; the repeater's RepeaterDriver stamps one
   child-composition scope per data row through the `wireScopeSubtree`
   factory — count at play, values live),
+- lets an **element own its own exit** — the D-125 element-outro seam: `out()` /
+  `stop()` await every outro-owning driver's `playOutro()` (today the
+  `LottieDriver`'s authored `[outroStart → op]`) BEFORE the background outro, so
+  the background never closes over an element that has not played out. A Lottie
+  drives the content-driven hold only by explicit opt-in (`drivesHold === true` —
+  the inverse of the ticker/clock/sequence default), and a hidden Lottie (or one
+  under a hidden ancestor) is fully inert,
 - cascades all of the above through **nested composition instances**.
 
 The renderer talks to its "backend" only through the typed `window.cg` bridge; the
@@ -150,7 +157,7 @@ reference that resolves in neither store is reported by `Exporter.preflight`
 | [`@cg/template-runtime`](../../packages/template-runtime) | Build DOM from a scene, bind data, animate, drive lifecycle/playout. **The heart.**                    |
 | [`@cg/vcg-format`](../../packages/vcg-format)             | Isomorphic pack / unpack / verify of `.vcg` template packages.                                         |
 | [`@cg/text-shaping`](../../packages/text-shaping)         | Persian/RTL-aware transforms (digits, dates, truncation) used by bindings.                             |
-| [`@cg/lottie-bridge`](../../packages/lottie-bridge)       | Lottie integration (field overrides land with M3.3).                                                   |
+| [`@cg/lottie-bridge`](../../packages/lottie-bridge)       | Lottie import allowlist, marker→phase mapping, and the `lottie_light` player mount (D-125).            |
 | `apps/designer`                                           | Canvas editor, inspector, preview, exporters.                                                          |
 | `apps/runtime`                                            | Playout controller (CasparCG via the local bridge / mock).                                             |
 

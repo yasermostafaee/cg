@@ -382,6 +382,12 @@ export function hasEffectiveHoldDrivers(
     children.some((el) => {
       if (el.type === 'ticker' || el.type === 'sequence') return drives(el, overrides);
       if (el.type === 'clock' && el.mode === 'countdown') return drives(el, overrides);
+      // D-125 §D2.1 — a Lottie drives the hold ONLY when it OPTED IN (`drivesHold === true`),
+      // the INVERSE default of the kinds above (absent ⇒ drives), so it cannot reuse `drives()`.
+      // B-034 — a hidden Lottie is never an effective driver. Mirrors the runtime's
+      // `scopeHasEffectiveHoldDrivers`, so export metadata and on-air agree.
+      if (el.type === 'lottie')
+        return el.visible !== false && (overrides?.[el.id] ?? el.drivesHold === true);
       // B-034 — a HIDDEN container / composition instance makes its WHOLE subtree inert: SHORT-CIRCUIT
       // before descending, so a visible driver inside a hidden ancestor is not an effective driver
       // (mirrors render's display:none + the runtime's subtree-skip).
