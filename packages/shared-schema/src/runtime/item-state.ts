@@ -54,3 +54,36 @@ export const StackItemStateSchema = z.object({
   position: PositionSchema.optional(),
 });
 export type StackItemState = z.infer<typeof StackItemStateSchema>;
+
+/**
+ * B-092 — one stack item's INTENT as retained by the browser, so the stack
+ * survives a restart of the bridge process (the stack otherwise lives only in
+ * the bridge's in-memory Reconciler and dies with it).
+ *
+ * This is intent, NOT reconciled state: it carries what the operator asked for
+ * (template + fields + placement) plus the single bit the restore needs to
+ * reconstruct the record — whether the item had been TAKEN to air. The
+ * restored item's actual status is decided by the bridge against real OSC
+ * occupancy, never by this record: an occupied layer restores ON AIR, a silent
+ * one comes back `loaded`.
+ *
+ * `slot` is the layer the item occupied. It must be restored EXACTLY (not
+ * re-allocated) — it is the layer the surviving producer is actually on, so it
+ * is what the occupancy check has to consult.
+ */
+export const RetainedStackItemSchema = z.object({
+  itemId: IdSchema,
+  templateId: IdSchema,
+  fields: FieldValuesSchema,
+  /**
+   * Play evidence: the item had been taken to air when last observed. Derived
+   * from the last published status; ambiguous statuses (`unconfirmed`,
+   * `exiting`, `unverified`) resolve to TRUE deliberately — the occupancy check
+   * demotes an over-claim to `loaded` on a silent layer, whereas an
+   * under-claim would hide a genuinely live graphic.
+   */
+  played: z.boolean(),
+  slot: LayerSlotSchema.optional(),
+  position: PositionSchema.optional(),
+});
+export type RetainedStackItem = z.infer<typeof RetainedStackItemSchema>;

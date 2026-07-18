@@ -1634,3 +1634,63 @@ restore-vs-reset); on **bridge** death there is no live bridge or tap, so a rend
 only possible actor, and the two fixes trigger on disjoint conditions (`useLink()==='disconnected'`
 vs a live bridge's CasparCG session leaving `healthy`). Sibling of [[B-086]]; the display half of the
 bridge-death story (the recovery half — stack surviving a bridge restart — is tracked separately).
+
+## [~] B-092 — stack items VANISH when the bridge process restarts: the stack lives ONLY in the dead bridge's memory, so a restart re-delivers the library ([[B-085]]) but the SPA adopts an EMPTY stack and every row disappears ⟨priority: high⟩ — in progress on `fix/B-092-stack-survives-bridge-restart`, change dir `openspec/changes/runtime-stack-survives-bridge-restart/`
+
+[[B-087]] made the ON AIR badge honest while the bridge is down (the DISPLAY half of the
+bridge-death story). This is the RECOVERY half: when the bridge comes BACK, the operator's whole
+stack is gone. Owner mandate: **stack items must survive a bridge restart in ANY case.**
+
+**Root cause (recon, verified against source):** the stack lives ONLY in the bridge's in-memory
+`Reconciler` (`items` Map + `#slots`/`#loaded`/`#adopted` in `caspar-runtime.ts`) — nothing persists
+it. On a bridge restart the new process boots EMPTY; the SPA's `#resync`
+(`WebSocketRuntime.ts:280-296`) re-delivers the browser-local library (B-085 works) but then
+re-PULLS the now-empty stack snapshot and pushes `[]` to every subscriber (`:301-307`), so every row
+disappears. The SPA retains NO stack intent of its own: `stack.*` are bare pass-throughs and
+`#lastStack` exists only for B-085's offline remove-reference check. Pre-existing — B-085 made the
+LIBRARY browser-local but deliberately left the stack bridge-owned.
+
+**The broadcast-safety hazard that forbids the naive fix (adversarially verified):** simply
+re-issuing `stack.load` per retained item drives the CG ADD path, which **CLEARs BEFORE it ADDs** —
+`load()` → `#adoptLayer(slot)` (`:517`) → `#adopted` is empty on a fresh process → falls through to
+`#send(#builder.out(slot))` (`:1267`), a hard CLEAR that DESTROYS the producer. On a **bridge-only**
+restart (CasparCG still on air) that CLEAR lands on the **LIVE** layer: an OFF-AIR FLASH, then a
+re-add as merely loaded. That is exactly the broadcast-safety lie the frozen doctrine forbids (same
+adopt-CLEAR-vs-primary code family as [[B-056]]). "Must not disappear in any case" therefore CANNOT
+be met by the naive path — the restore MUST be occupancy-aware.
+
+**Fix — browser-local stack retention + an occupancy-aware restore that NEVER clears a live layer:**
+
+1. **Browser side.** A persistent (OPFS) `StackRetentionStore` mirroring B-085's `LibraryStore`,
+   holding stack INTENT (itemId, templateId, fields, play evidence, desired slot, position, order),
+   mirrored from every published snapshot. A stack reconcile-on-connect step alongside the library
+   one in `#resync`, re-delivering the retained intents FIRST (new `stack.restore` channel) so the
+   bridge rebuilds before the SPA re-pulls — the re-pull then returns the RESTORED stack instead of
+   `[]`. Conflict policy: local-wins, except an item the live bridge already holds is never
+   clobbered.
+2. **Bridge side.** `restore()` seeds the Reconciler (via a new `restoreItem`), reserves each
+   retained slot exactly (`LayerManager.reserve`), binds OSC interest and publishes IMMEDIATELY —
+   the rows come back at once — then defers the adopt-vs-re-ADD decision per item to the moment
+   occupancy is knowable. At the `to === 'healthy'` transition (the EXACT [[B-086]] hook,
+   `:334-339`, where the tap is drained) each pending item is decided by
+   `session.osc.occupancy.occupied(staleMs)`:
+   - **Occupied layer → ADOPT WITHOUT CLEAR.** Seed `#adopted`, send NOTHING; resumed OSC
+     re-derives ON AIR on its own (`reconciler.ts:610-615`). This is the bridge-only-restart case:
+     the live graphic is never touched, so it never flashes.
+   - **Silent layer → re-ADD as loaded.** A normal `#sendAdd` (still NO adopt-CLEAR). This is the
+     bridge+CasparCG-restart case: the layers really are empty, so the items return `loaded`.
+     Occupancy is the discriminator, and neither branch can ever clear a live layer.
+
+3. **Visible while the bridge is down (found in owner visual confirmation).** Retention alone does
+   not satisfy "in any case": a hard REFRESH during an outage still showed an empty stack, because
+   the retained intent was only ever the reconnect delivery set (`useBridgeSnapshot` skips the pull
+   while `disconnected`, and `stack.snapshot()` rejected). So the snapshot is now served from the
+   retention while the link is unusable — display only, sending nothing, deciding nothing, with the
+   authoritative snapshot replacing it on reconnect. Offline rows are honest: a was-on-air row
+   renders as [[B-086]]/[[B-087]]'s muted `unverified`, never a confident red, since with no bridge
+   the SPA has no conduit to CasparCG at all.
+
+**FROZEN:** no change to on-air REFUSAL (R-006), health-honesty, [[B-085]]'s library, or [[B-086]]'s
+CasparCG-death path, and NO weakening of the adopt-CLEAR on the normal (non-restore) `load()` path —
+only the RESTORE path gets adopt-without-clear. Additive recovery that STRENGTHENS broadcast safety.
+Sibling of [[B-087]]; the recovery half of the bridge-death story.

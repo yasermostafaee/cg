@@ -129,6 +129,27 @@ export class LayerManager extends EventEmitter<LayerManagerEvents> {
     throw new OutOfLayersError(templateType, channel);
   }
 
+  /**
+   * B-092 — reserve an EXACT slot (rather than the lowest free one) for
+   * `templateType`. Returns false when the slot is already taken.
+   *
+   * Restoring retained stack intent after a bridge restart cannot use
+   * `allocate()`: the retained slot is the layer the item's producer is
+   * actually ON, so it is the layer whose occupancy decides adopt-vs-re-ADD.
+   * Re-allocating "some free layer" would consult the wrong layer's occupancy
+   * and could ADD a second producer beside a live one. The range policy is
+   * deliberately NOT re-checked — the coordinate came from this allocator in a
+   * previous process, and honouring it is the whole point.
+   */
+  reserve(slot: LayerSlot, templateType: string): boolean {
+    const key = keyOf(slot);
+    const state = this.slots.get(key);
+    if (state !== undefined && state.status !== 'free') return false;
+    this.slots.set(key, { status: 'allocated', templateType });
+    this.emit('allocated', slot, templateType);
+    return true;
+  }
+
   /** Release a slot — caller should invoke this after the slot is observed empty. */
   deallocate(slot: LayerSlot): void {
     const key = keyOf(slot);

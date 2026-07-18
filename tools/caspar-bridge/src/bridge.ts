@@ -23,6 +23,7 @@ import {
   SettingsGetChannel,
   SettingsSetChannel,
   StackLoadChannel,
+  StackRestoreChannel,
   StackOutChannel,
   StackClearAllChannel,
   StackRemoveAllChannel,
@@ -320,6 +321,10 @@ export function buildRoutes(b: CasparRuntime, persistPath?: string): Map<string,
     route(StackRemoveAllChannel, () => b.removeAll()),
     route(StackClearAllChannel, () => b.clearAll()),
     route(StackSnapshotChannel, () => b.stackSnapshot()),
+    // B-092 — the browser re-delivers its RETAINED stack intent on every
+    // (re)connect, so the stack survives a restart of this process. Seeds state
+    // and publishes; sends nothing to CasparCG until occupancy is knowable.
+    route(StackRestoreChannel, (r: { items: never }) => b.restore(r.items)),
 
     route(ConnectionsConfigChannel, () => b.config()),
     // R-010 — runtime reconfiguration; persisted only after a successful apply.

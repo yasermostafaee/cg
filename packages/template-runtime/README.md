@@ -298,7 +298,7 @@ override) on its **own** timeline.
   genuinely static scenes is preserved. It sits on `playRange`, so it covers **every** leg —
   both intro legs and the outro. Only the ROOT controller supplies the predicate (the gates
   are collected against the root `elementMap`; nested-instance lifespans are not gated at
-  all — B-089).
+  all — B-092).
 
 ### TickerDriver — the crawler treadmill + content completion (D-028)
 

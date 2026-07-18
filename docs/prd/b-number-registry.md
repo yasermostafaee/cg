@@ -81,6 +81,32 @@ rebuilds mid-playback). All four verified free before use — the audit
 prior occurrence was this file's own "next free" pointer. The space stays contiguous: `B-001` …
 `B-091`, no gaps. **Next free: `B-092`.**
 
+**Re-audited 2026-07-18** against `main` (`62bbb44`, after #342). `B-092` has been taken — stack
+items vanishing on a bridge-process restart (the stack lived only in the dead bridge's memory, so
+the SPA adopted an empty stack; the RECOVERY half of the bridge-death story whose display half is
+B-087), [bugs-runtime.md](bugs-runtime.md), change dir
+`openspec/changes/runtime-stack-survives-bridge-restart/`. The space stays contiguous: `B-001` …
+`B-092`, no gaps. **Next free: `B-093`.**
+
+**This entry collided TWICE before landing, and the second time proves the rule above is not
+enough.** It first took `B-088` (the then-current "next free" pointer) while a parallel Designer
+workstream took the same number; it renumbered to `B-089` — and `B-089` turned out to be claimed by
+that SAME workstream, which filed **four** numbers (`B-088`…`B-091`) from one root-cause
+investigation and merged them first (#342). Both collisions have one cause: **reading the pointer
+is not claiming it, and a sibling session may claim a RANGE, not just the next number.**
+
+So "verified free before use" must mean, immediately BEFORE you commit (not when you start):
+
+1. `git fetch origin` and re-run the duplicate audit against **current `main`**, not the `main` you
+   branched from — a number can be claimed and merged while your branch is open;
+2. check sibling worktrees/branches (`git worktree list`, `git branch -a`) for uncommitted or
+   unmerged claims — those are invisible to a `main`-only audit;
+3. never assume a claim is one number wide.
+
+Precedence when it happens anyway: **the committed claim wins** and the uncommitted one moves,
+because a renumber the moving side can perform unilaterally cannot corrupt the other branch. That
+is why this entry moved twice rather than asking the Designer work to renumber.
+
 **Exactly two numbers are ambiguous. Every other number names exactly one bug.**
 
 | Number     | Status                                | Who owns it                                                                                                                                                                                                                             |

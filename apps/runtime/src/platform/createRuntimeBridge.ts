@@ -4,6 +4,7 @@ import { MockRuntime } from './MockRuntime.js';
 import { WebSocketRuntime } from './WebSocketRuntime.js';
 import { LibraryStore } from './library/LibraryStore.js';
 import { initRuntimeWorkspace } from './library/workspace.js';
+import { StackRetentionStore } from './stack/StackRetentionStore.js';
 import { isTestMode } from './testMode.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
@@ -50,10 +51,17 @@ export async function createRuntimeBridge(
   // B-085 — the browser-local template library (source of truth). Hydrated from
   // persistent storage BEFORE the runtime is returned, so the renderer's first
   // `templates.list()` sees the operator's library even with the bridge down.
-  const library = new LibraryStore(await initRuntimeWorkspace());
-  await library.hydrate();
+  const workspace = await initRuntimeWorkspace();
+  const library = new LibraryStore(workspace);
+  // B-092 — the browser-local stack INTENT, so the stack survives a restart of
+  // the bridge process. Hydrated BEFORE the first connect: the retention is
+  // re-delivered during `#resync`, and an unhydrated store would re-deliver
+  // nothing and let the empty snapshot stand.
+  const stackRetention = new StackRetentionStore(workspace);
+  await Promise.all([library.hydrate(), stackRetention.hydrate()]);
   const ws = new WebSocketRuntime(url, {
     library,
+    stackRetention,
     ...(options.onResyncError !== undefined ? { onResyncError: options.onResyncError } : {}),
   });
   try {
