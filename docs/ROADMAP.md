@@ -8,6 +8,26 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- Friendly validation presets for dynamic text fields
+  ([D-059](./prd/designer.md)) — merged (#308) & archived (2026-07-18,
+  `2026-07-18-add-field-validation-presets`): the Inspector's Dynamic / Data
+  section now authors a text/multiline field's `pattern` through a named-preset
+  select — None, Email, Phone, Digits only, Letters only, Uppercase code, Time
+  (HH:MM), URL, Custom (advanced) — instead of a raw regex box, which was
+  developer-facing and so unusable by the broadcast designers the Inspector is
+  for. Each preset writes its vetted regex source to the EXISTING `pattern`
+  through the existing field-meta update path, so this is a UI-only layer: no
+  field model, schema, runtime, or export change, and the preview data form
+  enforces a preset exactly as it enforced a hand-written regex. Every preset
+  regex is ANCHORED (`^…$`) and flagless because the consumers test with
+  `new RegExp(source).test(value)`, a SUBSTRING match — unanchored sources would
+  have accepted any value merely containing the shape. The digit and letter
+  shapes accept Persian and Arabic-Indic forms alongside Latin. Custom is a
+  DISPLAY state rather than a stored value: the select shows the preset a stored
+  pattern spells, None when there is no pattern, and Custom otherwise, so a
+  hand-written pattern authored before this change loads as Custom with its regex
+  intact and remains fully editable. Follows the established
+  preset-with-custom-escape idiom (EasingEditor / sequence-presets).
 - Rename the open project ([D-127](./prd/designer.md)) — merged (#311) & archived
   (2026-07-14, `2026-07-14-rename-open-project`): the centered TopToolbar project
   name is now editable in place — double-click swaps it for a focused text input
@@ -346,13 +366,14 @@ are not yet filed):
 > **Ordering note:** the icon-pack (D-092) is done — the shared `Icon` set now
 > exists, so new control-bearing items reuse it.
 
-Previously-listed designer items not in this order — D-059, D-061, D-064,
+Previously-listed designer items not in this order — D-061, D-064,
 D-065 (sequence AFTER D-066), D-066, and [D-096](./prd/designer.md) (perf — animate position via CSS
 transform; belongs to the hardening wave) — remain **queued** in the PRD but are deprioritized below
 the above. (D-097–D-101 shipped in Group A — see Done. **D-102 is NOT queued** — Phase 2 shipped and
 archived 2026-07-14 (#320), so BOTH phases are done; see Done. **D-060 and D-046 are NOT queued** —
 both shipped and archived 2026-06-29; this line used to list D-060 as queued and D-046 as parked,
-corrected by the 2026-07-13 `[~]` audit.)
+corrected by the 2026-07-13 `[~]` audit. **D-059 is NOT queued** — shipped 2026-07-14 (#308) and
+archived 2026-07-18; this line used to list it as queued, corrected when D-059 was closed out.)
 
 ### Designer — remaining, in order
 
@@ -364,13 +385,14 @@ item in the sequence and is done — merged #290, archived 2026-07-13 (see Done)
 next Designer item is an owner call from the queued list below.
 
 The queued / deprioritized items already in `designer.md`:
-[D-059](./prd/designer.md), [D-061](./prd/designer.md), [D-064](./prd/designer.md),
+[D-061](./prd/designer.md), [D-064](./prd/designer.md),
 [D-096](./prd/designer.md), and [D-126](./prd/designer.md) (shared FONT library — device-level fonts
 in every project's font picker; builds on D-040 + D-121).
 ([D-121](./prd/designer.md), bundle fonts in `.vcg` export, is done — merged #298, archived
 2026-07-13; see Done. [D-102](./prd/designer.md) **Phase 2** is done — merged #320, archived
-2026-07-14; see Done. [D-063](./prd/designer.md) is **DROPPED** — see the shared-image-library epic
-under Done.)
+2026-07-14; see Done. [D-059](./prd/designer.md), friendly validation presets, is done — merged #308,
+archived 2026-07-18; see Done. [D-063](./prd/designer.md) is **DROPPED** — see the
+shared-image-library epic under Done.)
 
 ### Runtime — next
 

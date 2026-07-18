@@ -1869,7 +1869,7 @@ capabilityِ مربوط به shadow/styling. Change: `openspec/changes/separate-
 D-056 دیگر border-radius ندارند). در `BorderRadiusSection` (`StyleSection.tsx`).
 مرجع برای مقایسه: `docs/designer-guide/sample-assets/D-042-radius-1.png` (چهارگوشه).
 
-## [~] D-059 — Friendly validation presets for dynamic text fields ⟨priority: low⟩ — branch: `feat/D-059-field-validation-presets`, change dir: `openspec/changes/add-field-validation-presets/`
+## [x] D-059 — Friendly validation presets for dynamic text fields ⟨priority: low⟩ — merged (#308, `59570d4`), archived (`openspec/changes/archive/2026-07-18-add-field-validation-presets/`): the Inspector's Dynamic / Data section authors a text/multiline field's `pattern` through a named-preset select — None, Email, Phone, Digits only, Letters only, Uppercase code, Time (HH:MM), URL, Custom (advanced) — writing each preset's vetted ANCHORED (`^…$`), flagless regex source to the existing `pattern` through the existing field-meta update path (`renderer/features/inspector/pattern-presets.ts` + `DynamicDataSection.tsx`); the digit / letter shapes accept Persian and Arabic-Indic forms alongside Latin. Custom is a DISPLAY state, not a stored value: a stored pattern shows the preset that spells it, None when absent, Custom otherwise — so a hand-written pattern from before the change loads as Custom with its regex intact and the raw regex box pre-filled. UI-only layer: no field model, schema, runtime, or export change
 
 **What:** Replace the raw-regex `pattern` input on text/multiline dynamic fields with a
 named-preset dropdown (e.g. Email, Phone, Digits only, Letters only, Uppercase code,
