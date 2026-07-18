@@ -2,6 +2,56 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRuntime } from '../src/runtime.js';
 import { lowerThirdScene } from './fixtures.js';
 
+/**
+ * B-088 — a clock WITH rAF, so a test can drive a frame SWEEP deterministically.
+ * (`makeTimerClock` further down carries timers only, which is enough for hold timing
+ * but cannot step a `FrameDriver`.) `advance` walks in 20 ms steps = one frame at the
+ * fixtures' 50 fps, flushing rAF each step so every intermediate frame is really painted.
+ */
+function makeSweepClock() {
+  let ms = 0;
+  const rafs = new Map<number, (ts: number) => void>();
+  const timers: { id: number; due: number; cb: () => void }[] = [];
+  let nextId = 1;
+  return {
+    now: (): number => ms,
+    raf: (cb: (ts: number) => void): number => {
+      const id = nextId++;
+      rafs.set(id, cb);
+      return id;
+    },
+    cancel: (h: number): void => {
+      rafs.delete(h);
+    },
+    setTimeout: (cb: () => void, delay: number): unknown => {
+      const id = nextId++;
+      timers.push({ id, due: ms + delay, cb });
+      return id;
+    },
+    clearTimeout: (h: unknown): void => {
+      const i = timers.findIndex((t) => t.id === h);
+      if (i >= 0) timers.splice(i, 1);
+    },
+    advance: (deltaMs: number): void => {
+      let left = deltaMs;
+      while (left > 0) {
+        const step = Math.min(20, left);
+        ms += step;
+        left -= step;
+        const due = timers.filter((t) => t.due <= ms).sort((a, b) => a.due - b.due);
+        for (const t of due) {
+          const i = timers.indexOf(t);
+          if (i >= 0) timers.splice(i, 1);
+          t.cb();
+        }
+        const round = [...rafs.entries()];
+        for (const [id] of round) rafs.delete(id);
+        for (const [, cb] of round) cb(ms);
+      }
+    },
+  };
+}
+
 describe('createRuntime — lifecycle', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
@@ -146,23 +196,55 @@ describe('createRuntime — lifecycle', () => {
     };
   }
 
-  it('B-029 — a start-trimmed element is RESTORED on play (not dropped)', async () => {
-    const runtime = createRuntime(withBgLifespan({ in: 5, out: 50 }), { skipFontLoad: true });
+  // B-088 CORRECTION — this test previously asserted `display !== 'none'` SYNCHRONOUSLY
+  // after `play()`, commented "play must restore it — the played frame is within [5,50]".
+  // That assertion encoded the bug: because `lowerThirdScene` has no keyframes the whole
+  // intro collapsed to ONE paint at the out-point (50), which happens to sit inside [5,50],
+  // so the element was revealed the instant play started instead of at frame 5. The correct
+  // expectation is that it stays hidden until the SWEEP reaches its in-point.
+  it('B-029/B-088 — a start-trimmed element appears at its IN-POINT during play (not at play)', async () => {
+    const clock = makeSweepClock();
+    const runtime = createRuntime(withBgLifespan({ in: 5, out: 50 }), {
+      skipFontLoad: true,
+      clock,
+    });
     const node = document.querySelector<HTMLElement>('[data-cg-element-id="bg"]');
     expect(node).toBeTruthy();
     if (node === null) return;
     runtime.tick(0); // the preview-modal open-scrub at frame 0 (< in) hides it
     expect(node.style.display).toBe('none');
-    await runtime.play({}); // play must restore it — the played frame is within [5,50]
+    await runtime.play({});
+    // The sweep OPENS at frame 0, still before the in-point — it must remain hidden.
+    expect(node.style.display).toBe('none');
+    clock.advance(80); // → frame 4, still before the in-point
+    expect(node.style.display).toBe('none');
+    clock.advance(20); // → frame 5, the in-point: it appears HERE
+    expect(node.style.display).not.toBe('none');
+    clock.advance(2000); // sweep on to the held out-point (50) — still inside [5,50]
     expect(node.style.display).not.toBe('none');
   });
 
-  it('B-029 — play HONORS lifespan (an element past its lifespan.out is hidden), not only tick', async () => {
-    const runtime = createRuntime(withBgLifespan({ in: 0, out: 3 }), { skipFontLoad: true });
+  // B-088 CORRECTION — this test previously asserted `display === 'none'` synchronously
+  // after `play()`, commented "the played out-frame is past [0,3]". Also a product of the
+  // collapse: the single paint landed at the out-point (50), past the lifespan, so the
+  // element was NEVER shown at all — it should be visible for frames 0–3 and hide at 4.
+  it('B-029/B-088 — play HONORS lifespan across the sweep (visible inside, hidden past out)', async () => {
+    const clock = makeSweepClock();
+    const runtime = createRuntime(withBgLifespan({ in: 0, out: 3 }), {
+      skipFontLoad: true,
+      clock,
+    });
     const node = document.querySelector<HTMLElement>('[data-cg-element-id="bg"]');
     expect(node).toBeTruthy();
     if (node === null) return;
-    await runtime.play({}); // the played out-frame is past [0,3] → hidden during play (lifespan respected)
+    await runtime.play({});
+    // Frame 0 IS inside [0,3], so the sweep opens with the element visible.
+    expect(node.style.display).not.toBe('none');
+    clock.advance(60); // → frame 3, the last frame inside the lifespan
+    expect(node.style.display).not.toBe('none');
+    clock.advance(20); // → frame 4, past lifespan.out
+    expect(node.style.display).toBe('none');
+    clock.advance(2000); // held at the out-point, still past it
     expect(node.style.display).toBe('none');
   });
 });

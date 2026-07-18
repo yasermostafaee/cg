@@ -417,6 +417,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // `lifespan.in > 0` is hidden by an open-time scrub and never restored on play (dropped),
   // and the export ignores lifespan entirely.
   let applyLifespanGatesAtFrame: (frame: number) => void = () => undefined;
+  // B-088 — does a lifespan gate CHANGE VALUE inside the leg `[inF, outF]`? Late-bound
+  // alongside `applyLifespanGatesAtFrame` (same reason: the gates exist only after the
+  // scene builds, but the controller is wired before that). The ROOT controller consults
+  // this so a leg that crosses a trim boundary is SWEPT frame-by-frame instead of collapsed
+  // to a single end-frame paint — see `PlayoutController.playRange`. Defaults to `false`,
+  // i.e. never forces a sweep, so a scene with no trims keeps the collapse optimisation.
+  let lifespanGateChangesInRange: (inF: number, outF: number) => boolean = () => false;
 
   const ready: Promise<void> = options.skipFontLoad ? Promise.resolve() : waitForFonts(doc);
   void ready.then(() => bus.emit('ready'));
@@ -1024,6 +1031,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         holdEntryFrame: holdEntry,
         playout: effPlayout,
         hasAnimation: scope.animated.length > 0,
+        // B-088 — only the ROOT scope's controller consults the lifespan gates, mirroring
+        // the `isGlobalRoot` guard on `applyLifespanGatesAtFrame` below: the gates are
+        // collected against the root `elementMap`, so a nested scope has none to cross and
+        // must keep its existing collapse behaviour.
+        needsFrameSweep: isGlobalRoot
+          ? (inF: number, outF: number): boolean => lifespanGateChangesInRange(inF, outF)
+          : undefined,
         applyFrame: (frame: number): void => {
           for (const entry of scope.animated) applyAnimationAtFrame(entry, frame);
           // B-029 — honor per-element lifespan during PLAYBACK, not only the scrubber, so a
@@ -1207,6 +1221,17 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       gate.node.style.display = inside ? gate.naturalDisplay : 'none';
     }
   };
+  // B-088 — a gate is a step function of the frame: it turns ON at `lifespan.in` and OFF
+  // again at `lifespan.out + 1`. A leg `[inF, outF]` only needs a real frame-by-frame sweep
+  // when one of those transitions lands INSIDE it — i.e. in `(inF, outF]`, since the
+  // collapsed path already paints `outF` correctly. A trim entirely outside the leg (or
+  // spanning it end to end) paints the same at every frame, so that leg still collapses.
+  lifespanGateChangesInRange = (inF: number, outF: number): boolean =>
+    lifespanGates.some((gate) => {
+      const turnsOnAt = gate.lifespan.in;
+      const turnsOffAt = gate.lifespan.out + 1;
+      return (turnsOnAt > inF && turnsOnAt <= outF) || (turnsOffAt > inF && turnsOffAt <= outF);
+    });
 
   // Apply an operation to every controller in the tree (parent first), so
   // play/stop/pause/remove cascade to every nested instance.

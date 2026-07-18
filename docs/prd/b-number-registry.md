@@ -69,6 +69,18 @@ WebSocket dropped, the outer-link twin of B-086), [bugs-runtime.md](bugs-runtime
 it in any of the three bug files; its only prior occurrence was this file's own "next free"
 pointer). The space stays contiguous: `B-001` … `B-087`, no gaps. **Next free: `B-088`.**
 
+**Re-audited 2026-07-18** against `main` (`ae95e9c`, after #340). `B-088` … `B-091` have since been
+taken, all four in [bugs-designer.md](bugs-designer.md), filed from one root-cause investigation
+into a start-trimmed element ignoring its in-point: **B-088** (the collapsed intro — a leg with no
+keyframes is painted as a single frame, so the B-029 lifespan gate is evaluated once; the one being
+fixed), **B-089** (nested-instance lifespans are never gated at all), **B-090** (trimming a nested
+element silently no-ops in the Designer), and **B-091** (the D-125 `lottie-assets` preview handler
+rebuilds mid-playback). All four verified free before use — the audit
+(`grep -rhoE "^## \[.\] B-[0-9]+" docs/prd/ | grep -oE "B-[0-9]+" | sort | uniq -d`) printed exactly
+`B-056` and `B-080`, and no heading claimed any of them in any of the three bug files; their only
+prior occurrence was this file's own "next free" pointer. The space stays contiguous: `B-001` …
+`B-091`, no gaps. **Next free: `B-092`.**
+
 **Exactly two numbers are ambiguous. Every other number names exactly one bug.**
 
 | Number     | Status                                | Who owns it                                                                                                                                                                                                                             |

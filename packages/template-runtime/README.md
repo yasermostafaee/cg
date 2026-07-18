@@ -281,9 +281,24 @@ override) on its **own** timeline.
 - **Per-element lifespan visibility** (a `lifespan {in,out}` from a timeline start/end
   trim) is evaluated by `applyLifespanGatesAtFrame(frame)`, called from BOTH `tick` (the
   scrubber) AND the root scope's per-frame `applyFrame` (on-air playback). So a
-  start-trimmed clock/ticker/sequence (`lifespan.in > 0`) appears at/after its in-point
-  and plays — it is **not** dropped just because it is absent at the open-time scrub frame
-  (B-029). The gate restores each node to the `display` it had when the scene was built.
+  start-trimmed element (`lifespan.in > 0`) appears at/after its in-point and plays — it is
+  **not** dropped just because it is absent at the open-time scrub frame (B-029). The gate
+  is **kind-agnostic**: any element carrying a `lifespan` is gated, plain text and shapes
+  included (it is `collectLifespanGates`, which has no type filter — not the separate
+  content-host gate, which is ticker/clock/sequence-only). The gate restores each node to
+  the `display` it had when the scene was built.
+- **A gate boundary forces a real frame sweep (B-088).** Because the gate above is
+  frame-dependent, `hasAnimation` alone is no longer a sound answer to "may this leg be
+  collapsed to one paint?" — a scene with no keyframes but a start-trimmed element must
+  still be swept, or the gate is evaluated exactly once and the element is either never
+  shown or shown from the first paint. `PlayoutController.playRange` therefore sweeps when
+  `hasAnimation || needsFrameSweep(inF, outF)`, where the runtime's predicate is true only
+  when a gate's transition (ON at `lifespan.in`, OFF at `lifespan.out + 1`) lands inside
+  `(inF, outF]`. A leg crossing no boundary still collapses, so the rAF optimisation for
+  genuinely static scenes is preserved. It sits on `playRange`, so it covers **every** leg —
+  both intro legs and the outro. Only the ROOT controller supplies the predicate (the gates
+  are collected against the root `elementMap`; nested-instance lifespans are not gated at
+  all — B-089).
 
 ### TickerDriver — the crawler treadmill + content completion (D-028)
 
