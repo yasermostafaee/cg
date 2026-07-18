@@ -567,11 +567,13 @@ function AnimationDetails({ timing }: { timing: LottieTiming }): JSX.Element {
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        {open ? (
-          <Icon icon={ChevronDown} size={12} />
-        ) : (
-          <Icon icon={ChevronRight} size={12} flipRtl />
-        )}
+        <span className={lt.disclosureChevron}>
+          {open ? (
+            <Icon icon={ChevronDown} size={14} />
+          ) : (
+            <Icon icon={ChevronRight} size={14} flipRtl />
+          )}
+        </span>
         animation details
       </Button>
       {open ? (

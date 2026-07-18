@@ -115,7 +115,8 @@ export function LandingView(): JSX.Element {
       </div>
 
       <Button
-        variant="bare"
+        variant="primary"
+        size="none"
         className={s.newButton}
         onClick={() => guardedSwitch('a new project', () => Promise.resolve(setModalOpen(true)))}
         aria-label="New project"

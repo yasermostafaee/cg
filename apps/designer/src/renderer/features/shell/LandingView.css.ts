@@ -36,15 +36,17 @@ export const brandSub = style({
   margin: 0,
 });
 
+/**
+ * LAYOUT ONLY. The colour (accent fill, on-accent label, weight) now comes from the
+ * shared `primary` Button variant. It used to re-declare the accent here on a `bare`
+ * button, which (a) duplicated — and drifted from — the token (`#000` vs
+ * `colors.onAccent`) and (b) meant `bare`'s neutral hover clobbered the accent, turning
+ * the button grey on hover. Paired with `size="none"` so these paddings still govern.
+ */
 export const newButton = style({
-  background: colors.accent,
-  color: '#000',
-  border: 'none',
   padding: '0.6rem 1.1rem',
   borderRadius: '0.3rem',
-  fontWeight: 700,
   fontSize: '0.85rem',
-  cursor: 'pointer',
   alignSelf: 'flex-start',
 });
 

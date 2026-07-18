@@ -255,6 +255,8 @@ export const groupChevron = style({
 
 // D-020 — the single draggable `outPoint` marker inside the scene lane (amber):
 // where the intro ends, the hold sits, and the exit begins (Loopic-style).
+// The colour is the `markerOut` TOKEN, shared with the Inspector's "Add out point"
+// button so the marker and the action that creates it can never drift apart.
 export const phaseMarkerOut = style({
   position: 'absolute',
   top: 0,
@@ -267,10 +269,11 @@ export const phaseMarkerOut = style({
   zIndex: 5,
   opacity: 0.9,
   borderRadius: '2px',
-  background: '#ffae57',
+  background: colors.markerOut,
 });
 
 // D-104 follow-up — the content-start ("in") marker; a distinct cyan vs the out-point's amber.
+// Colour from the `markerIn` TOKEN, shared with the Inspector's "Pin content start".
 export const phaseMarkerIn = style({
   position: 'absolute',
   top: 0,
@@ -283,5 +286,5 @@ export const phaseMarkerIn = style({
   zIndex: 5,
   opacity: 0.9,
   borderRadius: '2px',
-  background: '#57b6ff',
+  background: colors.markerIn,
 });

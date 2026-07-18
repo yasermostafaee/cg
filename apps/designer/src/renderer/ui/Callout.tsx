@@ -8,6 +8,9 @@ export type CalloutVariant = keyof typeof s.variant;
 
 const DEFAULT_ICON: Record<CalloutVariant, ReactNode> = {
   info: <Icon icon={Info} size={16} />,
+  // A caution shares the danger glyph but not its urgency — the amber tint carries
+  // the difference, and `role="status"` (below) keeps it out of the alert channel.
+  caution: <Icon icon={TriangleAlert} size={16} />,
   danger: <Icon icon={TriangleAlert} size={16} />,
 };
 

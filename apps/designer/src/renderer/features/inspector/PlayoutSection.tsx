@@ -369,7 +369,14 @@ const infiniteWarnStyle: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   gap: '0.18rem',
-  color: colors.danger,
+  // CAUTION, not danger. An infinite ticker is a DELIBERATE, legitimate authoring choice
+  // — the operator should notice it, but nothing is wrong. Painting it `danger` cried wolf
+  // and left a real error (the Lottie intro overrunning the out-point) nothing louder to
+  // escalate to. Amber tint + amber label, from the `caution` tokens.
+  background: colors.cautionSurface,
+  color: colors.caution,
+  borderRadius: '3px',
+  padding: '0.05rem 0.25rem',
   fontSize: '0.6rem',
   fontWeight: 600,
 };
@@ -417,7 +424,7 @@ function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
     <>
       {allInfinite && (
         <div className={s.row} style={{ display: 'block' }}>
-          <Callout variant="danger">
+          <Callout variant="caution">
             This graphic won’t auto-close — every content driver repeats forever, so the
             content-driven hold runs until stop. Give a driver a finite repeat, exclude one below,
             or switch to a timed hold.
@@ -681,7 +688,7 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
           <div className={cls.actionRow}>
             <span className={cls.actionLabel}>Out point</span>
             <span className={cls.actionValue}>frame {String(lifecycle.outPoint)}</span>
-            <Button variant="secondary" size="sm" onClick={() => designerStore.setLifecycle(null)}>
+            <Button variant="danger" size="sm" onClick={() => designerStore.setLifecycle(null)}>
               Clear out point
             </Button>
           </div>
@@ -695,7 +702,7 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
             <span className={cls.actionLabel}>Out point</span>
             <span className={cls.actionValue}>none — static</span>
             <Button
-              variant="secondary"
+              variant="markerOut"
               size="sm"
               onClick={() => designerStore.setLifecycle(defaultMarker())}
             >
@@ -717,7 +724,7 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
               <span className={cls.actionLabel}>Content start</span>
               <span className={cls.actionValue}>frame {String(lifecycle.contentStart)}</span>
               <Button
-                variant="secondary"
+                variant="danger"
                 size="sm"
                 // `title`, NOT `aria-label`: an aria-label would REPLACE the accessible
                 // name, leaving the visible text absent from it (WCAG 2.5.3 Label in Name)
@@ -736,11 +743,11 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
               <span className={cls.actionLabel}>Content start</span>
               <span className={cls.actionValue}>auto (entrance)</span>
               <Button
-                variant="secondary"
+                variant="markerIn"
                 size="sm"
                 onClick={() => designerStore.setContentStart(contentStartDefault())}
               >
-                Pin content start…
+                Pin content start
               </Button>
             </div>
             <p className={cls.caption}>

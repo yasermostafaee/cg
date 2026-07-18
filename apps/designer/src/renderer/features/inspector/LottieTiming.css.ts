@@ -76,15 +76,38 @@ export const warn = style({
   lineHeight: 1.4,
 });
 
-/** The "animation details" disclosure toggle — muted, never competing with the main level. */
+/**
+ * The "animation details" disclosure — a plain expandable ROW, not a button.
+ *
+ * It must read as "there is more section under here", so it mirrors the Inspector's own
+ * section-header idiom (`CollapseSection.css.ts` `header` + `chevron`): full-width flex,
+ * a fixed 16px chevron slot, muted, uppercase-ish letter-spacing, no box and no border.
+ * It stays one step quieter than a real section header (weight 600 vs 700, no top rule)
+ * because it is an ADVANCED affordance nested inside a panel, not a peer section.
+ */
 export const disclosure = style({
   display: 'flex',
   alignItems: 'center',
-  gap: '0.2rem',
-  marginTop: '0.1rem',
+  gap: '0.35rem',
+  width: '100%',
+  marginTop: '0.15rem',
+  padding: '0.3rem 0.1rem',
   color: colors.textMuted,
   fontSize: '0.66rem',
+  fontWeight: 600,
+  letterSpacing: '0.06em',
   textAlign: 'left',
+  background: 'transparent',
+  border: 'none',
+});
+
+/** Fixed chevron slot — same 16px gutter the section headers use, so the text aligns. */
+export const disclosureChevron = style({
+  width: '16px',
+  display: 'inline-flex',
+  justifyContent: 'center',
+  color: colors.textMuted,
+  lineHeight: 1,
 });
 
 /** Expanded advanced content — stays muted even when open. */
