@@ -18,11 +18,11 @@ test.describe('D-114 — clearing the out-point reverts an out-point-dependent m
     await expect(mode).toHaveValue('auto-out');
 
     // Clear the out-point → the mode reverts to static (atomic, in the same store action).
-    await app.page.getByRole('button', { name: 'Clear' }).click();
+    await app.page.getByRole('button', { name: 'Clear out point' }).click();
     await expect(mode).toHaveValue('static');
 
     // Re-adding an out-point does NOT auto-restore auto-out (one-directional) — it lands on manual.
-    await app.page.getByRole('button', { name: 'Add an out point' }).click();
+    await app.page.getByRole('button', { name: 'Add out point' }).click();
     await expect(mode).toHaveValue('manual');
   });
 
@@ -33,7 +33,7 @@ test.describe('D-114 — clearing the out-point reverts an out-point-dependent m
     const mode = app.page.getByRole('combobox', { name: 'Playout mode' });
     await expect(mode).toHaveValue('loop-cycle');
 
-    await app.page.getByRole('button', { name: 'Clear' }).click();
+    await app.page.getByRole('button', { name: 'Clear out point' }).click();
     await expect(mode).toHaveValue('static');
   });
 });
