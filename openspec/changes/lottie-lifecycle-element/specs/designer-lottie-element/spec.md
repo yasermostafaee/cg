@@ -196,3 +196,92 @@ The `.vcg` SHALL pack the Lottie JSON as asset bytes.
 - **WHEN** the single-file HTML export is loaded under CasparCG's CEF from `file://`
 - **THEN** the player JS and the Lottie JSON are inlined, the file issues zero external requests, and
   the graphic boots and plays its lifecycle
+
+### Requirement: The Lottie's intro derives the composition's entrance settle
+
+A VISIBLE Lottie element whose phases are authored SHALL contribute its INTRO completion to the
+composition's entrance-settle derivation — the same derivation that reads a designer's own keyframe
+tracks — so that native content (ticker / clock / sequence) starts when the Lottie furniture has
+visually settled, with NO manual trim on the content element.
+
+The contribution is computed by converting the intro from the ANIMATION's frame space into the
+composition's: `seconds = (introEnd − ip) / (fr × speed)`, then
+`compositionFrames = round(seconds × compositionFrameRate)`. The animation itself SHALL NOT be
+rescaled or resampled — it plays untouched at its authored speed; only the DERIVED settle moves.
+
+#### Scenario: Content starts at the Lottie's intro completion, not at play
+
+- **WHEN** a composition contains a visible Lottie with an authored intro (intro-end 20 at 30 fps,
+  speed 1) and a ticker, at a composition frame rate of 50 fps and an out-point beyond frame 33
+- **THEN** the entrance settle is composition frame 33 and the ticker begins there — not at play, and
+  without any trim applied to the ticker
+
+#### Scenario: The derived settle tracks the authored speed
+
+- **WHEN** the same Lottie's `speed` is 2
+- **THEN** the intro occupies half the wall-clock time and the derived settle halves accordingly
+
+#### Scenario: Multiple Lotties settle on the latest
+
+- **WHEN** a composition contains more than one visible Lottie with authored intros of different
+  durations
+- **THEN** the entrance settle is the LATEST of their derived frames — the scope has settled only once
+  every Lottie has
+
+#### Scenario: Mixed with keyframed elements, the settle is the later of the two
+
+- **WHEN** a composition contains BOTH keyframed elements and a visible Lottie
+- **THEN** the entrance settle is the later of the keyframe-derived settle and the Lottie-derived
+  settle, so a still-moving background is not treated as settled because the furniture is
+
+#### Scenario: A manual content-start marker still overrides the derived value
+
+- **WHEN** a content-start marker is placed on a composition that also derives a settle from a Lottie
+- **THEN** the marker frame governs the content start, exactly as it overrides the keyframe heuristic
+
+#### Scenario: A hidden Lottie contributes nothing to the settle
+
+- **WHEN** a Lottie has `visible: false`, or sits inside a hidden ancestor's subtree
+- **THEN** it contributes NOTHING to the entrance-settle derivation — the hidden-inert gate extends
+  here, so content is never delayed for furniture nobody can see
+
+#### Scenario: A marker-less clip contributes nothing
+
+- **WHEN** a Lottie carries no authored `phases` block
+- **THEN** it contributes nothing to the entrance settle: the "whole clip is the intro" fallback is
+  the ABSENCE of phase information, not an authored claim, so a long unmarked clip does not push the
+  settle out
+
+#### Scenario: A derived settle past the out-point is clamped and surfaced
+
+- **WHEN** a Lottie's derived settle would land beyond the composition's out-point (its intro needs
+  33 composition frames but the out-point is at 30)
+- **THEN** the settle is CLAMPED to the out-point — never beyond it — and the Inspector surfaces a
+  warning naming both numbers, so the overrun is never silently swallowed
+
+### Requirement: The Lottie Inspector shows the clip's timing in both frame spaces
+
+The Lottie Inspector SHALL show the timing an operator needs to author against, without hand
+conversion: the clip's total frames, its native frame rate, and its duration in seconds; and each
+phase (intro / hold / outro) in ANIMATION frames, in seconds, AND in THIS composition's frames. The
+readout SHALL live-update when the element's `speed` or phase values change, or when the composition's
+frame rate changes, and SHALL be computed from the SAME helper the runtime derives the settle from, so
+the number shown is the number used.
+
+#### Scenario: The phase breakdown is shown in both frame spaces
+
+- **WHEN** a Lottie with an intro of animation frames 0–20 at 30 fps is selected in a 50 fps
+  composition
+- **THEN** the Inspector shows the clip totals and the intro as `0–20`, its duration in seconds, and
+  the composition frame it lands on
+
+#### Scenario: The readout live-updates when speed changes
+
+- **WHEN** the operator changes the element's `speed`
+- **THEN** the seconds and composition-frame figures update immediately to match
+
+#### Scenario: The out-point overrun warning names both numbers
+
+- **WHEN** the derived settle exceeds the composition's out-point
+- **THEN** the Inspector shows a warning naming the frames the intro needs AND the out-point frame,
+  and advising that the out-point be extended or the intro will be cut

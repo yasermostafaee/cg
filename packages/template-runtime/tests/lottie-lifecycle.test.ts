@@ -1,4 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import type * as LottieBridge from '@cg/lottie-bridge';
 import type { Composition, Element, Playout, Scene } from '@cg/shared-schema';
 
 /**
@@ -16,7 +17,11 @@ const { handles } = vi.hoisted(() => ({
   handles: [] as { frames: number[]; destroyed: boolean; el: HTMLElement }[],
 }));
 
-vi.mock('@cg/lottie-bridge', () => ({
+// Only the PLAYER is stubbed; the module's pure helpers (`lottieClipMeta` /
+// `lottieTiming` — the frame-space conversion the runtime derives the entrance settle
+// from) are kept REAL, so this suite exercises the same arithmetic as production.
+vi.mock('@cg/lottie-bridge', async (importOriginal) => ({
+  ...(await importOriginal<typeof LottieBridge>()),
   createLottiePlayer: (container: HTMLElement) => {
     const h = {
       element: container,

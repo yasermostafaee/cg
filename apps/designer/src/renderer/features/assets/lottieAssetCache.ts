@@ -32,6 +32,15 @@ export function getAll(): Readonly<Record<string, unknown>> {
   return out;
 }
 
+/**
+ * D-125 Phase 3a — one asset's parsed animation, or `undefined` while it is still
+ * resolving. The Lottie Inspector reads `fr` / `ip` / `op` off this (via `lottieTiming`)
+ * to show the clip's timing in the composition's frame space.
+ */
+export function get(assetId: string): unknown {
+  return data.get(assetId);
+}
+
 export function subscribe(handler: Handler): () => void {
   handlers.add(handler);
   return () => handlers.delete(handler);

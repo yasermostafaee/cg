@@ -55,6 +55,41 @@ size it around a keyframed background entrance.
 > it requires rescaling the animation's frames (violates opacity) and couples the furniture's natural
 > motion to an unrelated marker. The recommended model keeps them independent and phase-aligned.
 
+### D1.2 Phase 3a — the settle is DERIVED FROM the Lottie (the reverse of the rejected option)
+
+§D1.1 left one asymmetry open, and it is the one that actually bit in practice. When a designer
+keyframes a background themselves, `entranceSettleFrame()` derives the settle from those tracks and a
+ticker/content element starts at the right moment automatically. A Lottie is deliberately OPAQUE and
+carries NO native keyframes, so `scope.animated` is empty, `entranceSettleFrame()` returns `outPoint`
+verbatim, and there is **no settle at all**. The element's own `phases.introEnd` was read ONLY by
+`LottieDriver` — nothing else consumed it. Net: with Lottie furniture the operator had to hand-trim
+every overlay element, and defining `intro-end` accomplished nothing outside the driver.
+
+**Decision — the Lottie's intro FEEDS the existing entrance-settle derivation.** Each visible,
+phase-marked Lottie converts its intro into composition frames
+(`seconds = (introEnd − ip) / (fr × speed)`, `compFrames = round(seconds × compositionFps)`) and that
+frame is fed into the SAME `entranceSettleFrame()` the keyframe path uses — one insertion point, not a
+parallel mechanism. The settle is the LATEST of the keyframe-derived and Lottie-derived frames, clamped
+to `outPoint`.
+
+**This is NOT the alternative rejected above — it is its REVERSE, and the distinction is the whole
+point.** The rejected option moved the ANIMATION to fit a composition marker (`introEnd` forced to land
+on `contentStart`), which requires rescaling/resampling the animation's frames and so violates opacity.
+Here the animation is untouched: it plays from `ip` at its authored `fr × speed`, exactly as §D1.1
+mandates, and the COMPOSITION's derived settle moves to match it. Nothing is rescaled; the dependency
+runs animation → settle, never settle → animation. A future reader should not mistake one for the other.
+
+`design.md` §D1.1 already anticipated the other half — "an authoring concern, surfaced as Inspector
+guidance" — which Phase 1 never built. Phase 3a builds it: the Lottie Inspector shows the clip totals
+and each phase in animation frames, seconds, AND composition frames, plus a warning when the derived
+settle would overrun the out-point. Part 1 and Part 2 share ONE helper (`lottieTiming` in
+`@cg/lottie-bridge`), so the number shown is provably the number used.
+
+**Ordering.** This only became useful after B-088 (#342). Before it, the intro collapsed to a single
+`applyFrame(outPoint)`, so a derived settle frame would have been inert. It stays partly true even now:
+with no keyframes `hasAnimation` is false, so the entrance leg still collapses unless the sweep
+predicate accounts for the derived settle — see §D6.5.
+
 ### D1.2 Markers → segments (owned by `@cg/lottie-bridge`)
 
 bodymovin writes an optional top-level `markers: [{ tm, cm, dr }]` array (`tm` = start frame, `cm` =
@@ -346,6 +381,41 @@ design's defence:
    ticking. The lifecycle test asserts the terminal state is CLEARED with the Lottie halted.
 
 ---
+
+### D6.5 Phase 3a — the B-088 interaction, VERIFIED EMPIRICALLY (not assumed)
+
+Deriving a settle from the Lottie splits the intro into two legs — `[active.in → settle]` and
+`[settle → outPoint]` — both routed through `PlayoutController.playRange`. That method collapses a leg
+to a single `applyFrame(outF)` unless something in it is frame-dependent:
+`hasAnimation || needsFrameSweep(inF, outF)`. With a Lottie and no keyframes `hasAnimation` is FALSE,
+and B-088's `needsFrameSweep` only reports lifespan-gate crossings.
+
+This was measured before changing anything, with a probe reproducing the exact post-change leg
+structure (a content-start marker at frame 33, no keyframes, one Lottie, composition 50 fps):
+
+```
+PROBE t=0   tickerStarted: true      ← content started AT PLAY
+PROBE t=100 tickerStarted: true
+PROBE t=700 tickerStarted: true
+```
+
+**Finding: the entrance leg COLLAPSES, and the derived settle would have been inert.** The controller
+does fire `onContentStart` at the leg boundary, but the boundary arrives immediately, so the ticker
+started at play while the Lottie was still animating on — the very bug being fixed. The evidence
+therefore REQUIRED extending the predicate.
+
+**Fix.** `needsFrameSweep` gains a second, independent reason: a leg that ENDS at (or before) the
+Lottie-derived settle must be swept. Swept, the leg consumes `(settle − active.in) / frameRate`
+seconds — by construction the Lottie's intro duration — so content starts exactly when the furniture
+settles. The later legs (static settle, outro) end AFTER the settle and still collapse, and a scene
+with no lifespan gates and no phase-marked Lottie still gets `undefined`, preserving prior behaviour
+byte for byte. Unlike B-088's lifespan predicate (root-scope only, because the gates are collected
+against the root `elementMap`), this reason applies to EVERY scope — a nested composition has its own
+`scope.lotties`.
+
+Both mechanisms were verified to be independently load-bearing by reverting each alone: reverting the
+derivation fails 4 tests, reverting the sweep predicate fails 5 (including the clamp and
+manual-marker cases).
 
 ## D7. Validation & gates
 

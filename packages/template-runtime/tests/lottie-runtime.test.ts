@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as LottieBridge from '@cg/lottie-bridge';
 import type { Scene } from '@cg/shared-schema';
 
 /**
@@ -13,7 +14,10 @@ const { handles } = vi.hoisted(() => ({
   handles: [] as { frames: number[]; destroyed: boolean; el: HTMLElement }[],
 }));
 
-vi.mock('@cg/lottie-bridge', () => ({
+// Only the PLAYER is stubbed; the module's pure helpers (`lottieClipMeta` /
+// `lottieTiming`) stay REAL so the wiring reads the same frame metadata as production.
+vi.mock('@cg/lottie-bridge', async (importOriginal) => ({
+  ...(await importOriginal<typeof LottieBridge>()),
   createLottiePlayer: (container: HTMLElement) => {
     const h = {
       element: container,
