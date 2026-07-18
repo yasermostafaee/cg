@@ -247,7 +247,7 @@ export class DesignerApp {
   /** D-020 — add the default out point via the COMPOSITION inspector link. */
   async addOutPoint(): Promise<void> {
     await this.deselect();
-    await this.page.getByRole('button', { name: 'Add an out point' }).click();
+    await this.page.getByRole('button', { name: 'Add out point' }).click();
   }
 
   /**
@@ -589,7 +589,7 @@ export class DesignerApp {
     // D-114 — manual / auto-out / loop-cycle require an out-point (they are disabled in the select
     // without one; a no-out-point composition is `static`). Seed one first when absent — the old
     // "select auto-out seeds an out-point" behavior, now explicit — then select the mode.
-    const addOut = this.page.getByRole('button', { name: 'Add an out point' });
+    const addOut = this.page.getByRole('button', { name: 'Add out point' });
     if (await addOut.isVisible().catch(() => false)) await addOut.click();
     await select.selectOption(mode);
   }

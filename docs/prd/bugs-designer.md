@@ -1022,7 +1022,7 @@ guards. Capability: `designer-playout-lifecycle`.
 **Env:** Browser / Designer timeline.
 **Notes:** The timeline renders rows for everything `flattenElements` returns, and it DOES recurse into containers — but `updateElementLifespan` resolves the target through `locate()` (`apps/designer/src/renderer/state/scene-doc.ts:182`), which searches only top-level `layer.children` via `findIndex` with no recursion, returns `null`, and the mutation early-returns (`slices/elements.ts`). So the UI offers an affordance the state layer cannot honour. Note this is a WRITE-path gap and is independent of B-089 (a READ/gating gap) — an element inside a container would still not be gated even if the trim did persist.
 
-## [ ] B-091 — the preview's `lottie-assets` handler rebuilds the scene mid-playback ⟨priority: low⟩
+## [~] B-091 — the preview's `lottie-assets` handler rebuilds the scene mid-playback ⟨priority: low⟩ — branch `feat/D-125-phase3b1-ui-polish` (D-125 Phase 3b-1)
 
 **Repro:** with a composition containing a Lottie playing in the preview, have a `lottie-assets` message arrive (e.g. an asset import completing during playback).
 

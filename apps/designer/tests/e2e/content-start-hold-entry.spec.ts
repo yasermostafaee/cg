@@ -77,8 +77,8 @@ test.describe('Content starts at the entrance completion (hold entry), not the o
     await authorEnteringGraphic(app, 'content-driven');
     // Pin a content-start marker (Playout panel), then drag it LATE — ~70% of the timeline,
     // far past the entrance settle (~frame 8) yet before the out-point (75%).
-    await app.page.getByRole('button', { name: 'Pin a content start' }).click();
-    await expect(app.page.getByText(/Content start @ frame/)).toBeVisible();
+    await app.page.getByRole('button', { name: /Pin content start/ }).click();
+    await expect(app.page.getByRole('button', { name: 'Reset to auto' })).toBeVisible();
     await app.dragContentStartMarkerToFraction(0.7);
 
     await app.openPreviewModal();
@@ -113,7 +113,7 @@ test.describe('Content starts at the entrance completion (hold entry), not the o
     await app.addOutPoint();
     await app.setPlayoutTiming('auto-out');
     // Pin a content-start marker and drag it LATE (~70% ≈ 7s).
-    await app.page.getByRole('button', { name: 'Pin a content start' }).click();
+    await app.page.getByRole('button', { name: /Pin content start/ }).click();
     await app.dragContentStartMarkerToFraction(0.7);
 
     await app.openPreviewModal();

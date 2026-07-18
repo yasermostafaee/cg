@@ -276,6 +276,12 @@ export class Preview {
         let playing = false;
         let busy = false;
         let pendingScene = null;
+        // B-091 — a 'lottie-assets' map that arrived DURING playback. Mounting a Lottie
+        // player requires a full scene rebuild (createRuntime owns the mount), which would
+        // tear the live graphic down under the operator — exactly what the 'update'
+        // handler's !playing guard exists to prevent. We DEFER rather than drop, and
+        // flush before the next play(), where a rebuild is free (nothing is on air yet).
+        let pendingLottieRebuild = false;
         // D-011 — assetId → blob URL map, posted by the host. After
         // every scene rebuild we walk the iframe DOM and assign src
         // for every <img data-cg-asset-id="…">.
@@ -466,6 +472,18 @@ export class Preview {
             pendingScene = null;
             await applyScene(next);
           }
+        }
+
+        // B-091 — apply a 'lottie-assets' map that arrived mid-playback. Called at the TOP
+        // of the play branch, before playing flips true: the previous run has ended, so the
+        // rebuild costs nothing visually, and the operator sees the newly-mounted players on
+        // the very next take. Deliberately NOT flushed from 'stop'/'out' — those start an
+        // async coordinated exit (the element outros), and rebuilding under it would cut the
+        // outro short, re-introducing the teardown this bug is about.
+        async function flushPendingLottieRebuild() {
+          if (!pendingLottieRebuild) return;
+          pendingLottieRebuild = false;
+          if (currentScene) await applyScene(currentScene);
         }
 
         // ── B-045 — stale-raster position pin (AUTHORING CANVAS ONLY) ─────────────
@@ -734,8 +752,14 @@ export class Preview {
                 // elements (the host builds it from the scene's Lottie ids), so this rebuilds
                 // only when there is something to mount.
                 lottieAssets = msg.lottieAssets;
+                // B-091 — record the map ALWAYS (cheap, no teardown), but never rebuild
+                // mid-playback: applyScene() calls runtime.remove() + createRuntime(), which
+                // would blank and restart the live graphic. Mirrors the 'update' handler's
+                // !playing guard 13 lines below. Deferred (not dropped) so the players still
+                // mount — flushed before the next play(), see flushPendingLottieRebuild().
                 if (currentScene && Object.keys(lottieAssets).length > 0) {
-                  await applyScene(currentScene);
+                  if (playing) pendingLottieRebuild = true;
+                  else await applyScene(currentScene);
                 }
               } else if (msg.action === 'editing-text') {
                 editingTextId = typeof msg.elementId === 'string' ? msg.elementId : null;
@@ -756,6 +780,9 @@ export class Preview {
                 if (runtime) runtime.tick(currentFrame);
               } else if (msg.action === 'play' && typeof window.play === 'function') {
                 currentFields = msg.fields ?? {};
+                // B-091 — mount any Lottie map deferred during the LAST run before this one
+                // starts (rebuilds while nothing is on air; no-op when nothing is pending).
+                await flushPendingLottieRebuild();
                 // D-028 — asset fonts may have arrived after the scene build;
                 // await them so the first pass a user ever sees measures with
                 // final glyphs (no-op when already loaded).

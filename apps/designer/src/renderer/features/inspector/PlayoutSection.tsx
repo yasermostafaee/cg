@@ -322,16 +322,6 @@ const selectStyle: CSSProperties = {
 
 const mutedStyle: CSSProperties = { color: colors.textMuted, fontSize: '0.66rem' };
 const hintStyle: CSSProperties = { ...mutedStyle, lineHeight: 1.4, margin: '0.35rem 0 0' };
-const linkBtnStyle: CSSProperties = {
-  background: 'none',
-  border: 'none',
-  color: colors.accent,
-  cursor: 'pointer',
-  fontSize: '0.66rem',
-  padding: 0,
-  textDecoration: 'underline',
-};
-
 const checklistStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
@@ -687,57 +677,77 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
       )}
 
       {lifecycle !== undefined ? (
-        <p style={hintStyle}>
-          Out point @ frame {String(lifecycle.outPoint)} — drag the marker on the timeline. Repeat
-          is tuned live in the preview.{' '}
-          <Button
-            variant="bare"
-            style={linkBtnStyle}
-            onClick={() => designerStore.setLifecycle(null)}
-          >
-            Clear
-          </Button>
-        </p>
+        <>
+          <div className={cls.actionRow}>
+            <span className={cls.actionLabel}>Out point</span>
+            <span className={cls.actionValue}>frame {String(lifecycle.outPoint)}</span>
+            <Button variant="secondary" size="sm" onClick={() => designerStore.setLifecycle(null)}>
+              Clear out point
+            </Button>
+          </div>
+          <p className={cls.caption}>
+            Drag the marker on the timeline. Repeat is tuned live in the preview.
+          </p>
+        </>
       ) : (
-        <p style={hintStyle}>
-          No out point — this composition is <strong>static</strong> (plays in, holds, cut on stop).{' '}
-          <Button
-            variant="bare"
-            style={linkBtnStyle}
-            onClick={() => designerStore.setLifecycle(defaultMarker())}
-          >
-            Add an out point
-          </Button>{' '}
-          to enable manual / auto-out / loop-cycle (in → hold → out), then drag it on the timeline.
-        </p>
+        <>
+          <div className={cls.actionRow}>
+            <span className={cls.actionLabel}>Out point</span>
+            <span className={cls.actionValue}>none — static</span>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => designerStore.setLifecycle(defaultMarker())}
+            >
+              Add out point
+            </Button>
+          </div>
+          <p className={cls.caption}>
+            Static plays in, holds, and cuts on stop. Adding an out point enables manual / auto-out
+            / loop-cycle (in → hold → out); drag it on the timeline.
+          </p>
+        </>
       )}
 
       {lifecycle !== undefined &&
         hasContent &&
         (lifecycle.contentStart !== undefined ? (
-          <p style={hintStyle}>
-            Content start @ frame {String(lifecycle.contentStart)} — drag the cyan marker on the
-            timeline.{' '}
-            <Button
-              variant="bare"
-              style={linkBtnStyle}
-              onClick={() => designerStore.setContentStart(null)}
-            >
-              Reset to auto
-            </Button>
-          </p>
+          <>
+            <div className={cls.actionRow}>
+              <span className={cls.actionLabel}>Content start</span>
+              <span className={cls.actionValue}>frame {String(lifecycle.contentStart)}</span>
+              <Button
+                variant="secondary"
+                size="sm"
+                // `title`, NOT `aria-label`: an aria-label would REPLACE the accessible
+                // name, leaving the visible text absent from it (WCAG 2.5.3 Label in Name)
+                // and breaking name-based locators. The tooltip supplements instead.
+                title="Reset the content start to automatic (entrance completion)"
+                onClick={() => designerStore.setContentStart(null)}
+              >
+                Reset to auto
+              </Button>
+            </div>
+            <p className={cls.caption}>Drag the cyan marker on the timeline.</p>
+          </>
         ) : (
-          <p style={hintStyle}>
-            Content starts automatically at the entrance completion.{' '}
-            <Button
-              variant="bare"
-              style={linkBtnStyle}
-              onClick={() => designerStore.setContentStart(contentStartDefault())}
-            >
-              Pin a content start
-            </Button>{' '}
-            to set the exact frame, then drag it on the timeline.
-          </p>
+          <>
+            <div className={cls.actionRow}>
+              <span className={cls.actionLabel}>Content start</span>
+              <span className={cls.actionValue}>auto (entrance)</span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => designerStore.setContentStart(contentStartDefault())}
+              >
+                Pin content start…
+              </Button>
+            </div>
+            <p className={cls.caption}>
+              Content starts automatically at the entrance completion. Pin it to set an exact frame,
+              then drag it on the timeline.
+            </p>
+          </>
         ))}
     </CollapseSection>
   );

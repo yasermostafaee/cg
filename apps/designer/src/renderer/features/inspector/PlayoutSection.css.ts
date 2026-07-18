@@ -32,3 +32,44 @@ export const nestedRow = style({
     '&:hover:not(:disabled):not([aria-pressed="true"])': { background: '#21618c' },
   },
 });
+
+/**
+ * D-125 Phase 3b-1 — a Playout ACTION row: `label · current value · [button]`.
+ *
+ * These four actions (clear/add out point, pin/reset content start) used to be
+ * underlined text links buried mid-sentence — visually weightless relative to what
+ * they do, and labelled by their prose ("Clear" alone does not say what it clears).
+ * The row makes the action a first-class control: the label names the setting, the
+ * value shows its current state, and the button carries a self-contained verb. Any
+ * genuinely instructional copy moves to a muted caption BELOW (see `caption`), so
+ * prose is no longer the container for actions.
+ */
+export const actionRow = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.4rem',
+  marginTop: '0.4rem',
+});
+
+/** The setting's name — matches the inspector's other row labels. */
+export const actionLabel = style({
+  color: colors.textMuted,
+  fontSize: '0.7rem',
+  flex: '0 0 74px',
+});
+
+/** The setting's CURRENT value, the thing the button acts on. */
+export const actionValue = style({
+  color: colors.text,
+  fontSize: '0.7rem',
+  fontVariantNumeric: 'tabular-nums',
+  flex: '1 1 auto',
+});
+
+/** Instructional prose, demoted out of the action itself. */
+export const caption = style({
+  color: colors.textMuted,
+  fontSize: '0.66rem',
+  lineHeight: 1.4,
+  margin: '0.2rem 0 0',
+});
