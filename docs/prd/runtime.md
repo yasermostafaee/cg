@@ -128,7 +128,7 @@ were never in scope at all and still labelled a row `fields['title'] ?? item.ite
   `templateId` against the registry (`useTemplateIndex`) because `StackItemState` carries no
   label and must not.
 
-## [~] R-005 — delete a template from the Library ⟨priority: medium⟩ — remove BUTTON + refuse-while-referenced MERGED (#306); the context-menu half is still OPEN, so the change `runtime-library-remove-template` is deliberately left ACTIVE (unarchived) and this item stays `[~]`
+## [x] R-005 — delete a template from the Library ⟨priority: medium⟩ — remove BUTTON + refuse-while-referenced merged (#306); the context-menu half merged (#346, `feat/runtime-context-menu`) once the Runtime gained a context-menu primitive (#326) + archived: `openspec/changes/archive/2026-07-18-runtime-library-remove-template/`
 
 **What:** Let the operator remove a registered template — a per-row delete button
 AND a context-menu entry.
@@ -554,7 +554,7 @@ on-air graphics means pressing Clear on five rows, one at a time, while they are
   "press Clear on every row where Clear is enabled". Implemented on both backends so the
   B-074 parity + route-coverage guards stay green.
 
-## [~] R-013 — right-click a stack row for its actions ⟨priority: medium⟩ — implemented on `feat/runtime-context-menu`, change: `runtime-stack-row-context-menu`
+## [x] R-013 — right-click a stack row for its actions ⟨priority: medium⟩ — merged (#346, `feat/runtime-context-menu`) + archived: `openspec/changes/archive/2026-07-18-runtime-stack-row-context-menu/`
 
 <!-- change: openspec/changes/runtime-stack-row-context-menu/ -->
 
