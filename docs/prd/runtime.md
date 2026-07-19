@@ -587,3 +587,73 @@ buttons and as menu items, so "the menu mirrors the buttons" is structural rathe
 code paths that have to keep agreeing. FROZEN: on-air refusal (R-006), the linkDown gates
 themselves, [[B-085]]'s browser-local library, [[B-086]]/[[B-087]]'s `unverified` badge, and
 [[B-092]]'s stack restore are all untouched.
+
+## [ ] R-014 — Persian / localised numerals: the operator types Persian digits, and numbers DISPLAY in Persian ⟨priority: medium⟩
+
+**What:** Numeric input and numeric display are both localised. The operator can type Persian
+digits (۰–۹) into numeric fields and they are accepted as the numbers they denote; numbers shown
+in the UI are also DISPLAYED in Persian digits. The UI already carries Persian text throughout —
+the numerals are the missing half.
+**Why:** An operator working in a Persian UI on a Persian keyboard should not have to switch
+layouts (or be silently rejected) to type a number, and mixed Latin digits inside Persian text
+read as a seam in what is otherwise a Persian-first product.
+**Acceptance:**
+
+- WHEN the operator types Persian digits into a numeric field THEN the input is accepted as the
+  number it denotes — never rejected as non-numeric
+- WHEN a number is displayed in the operator UI THEN it renders in Persian digits (scope: see the
+  open questions — recorded, not decided)
+- WHEN a numeric value reaches a machine consumer (AMCP on the wire, stored data, exported files)
+  THEN it is normalised to ASCII digits — localisation is presentation-layer and never leaks into
+  a protocol or format
+
+**Notes:** OPEN QUESTIONS recorded rather than decided: (a) which fields — ALL numeric fields, or
+only operator-facing ones? (b) the normalisation boundary — AMCP presumably still needs ASCII
+digits on the wire, so this is a presentation-layer concern with a conversion edge that has to be
+placed precisely; (c) is the numeral locale a setting, or fixed to Persian?
+
+## [ ] R-015 — protect layers this system does not own: clearing a foreign producer must be impossible, and a foreign layer must read as NORMAL ⟨priority: high⟩
+
+**What:** The rule is OWNERSHIP, not a layer-number threshold. The operator must not be able to
+clear/remove a layer carrying a producer we did not put there — a video played out by another
+system, a program feed — regardless of layer number. A layer where we placed our own graphic
+stays clearable exactly as today.
+**Why:** Observed symptom: adding a video on layer 1 currently WARNS that the operator can clear
+layer 1. Protection today is a warning; it must become a prohibition — a warning still leaves one
+click between the operator and taking a program feed off air.
+**Acceptance:**
+
+- WHEN a layer carries a producer this system did not put there THEN clear/remove on that layer is
+  UNAVAILABLE — a prohibition, not a warning — regardless of the layer number
+- WHEN a layer carries a graphic this system placed THEN it remains clearable, unchanged
+- WHEN an occupied-but-not-ours layer is shown THEN it reads as a NORMAL state in a neutral tone:
+  the operator can see the layer is occupied, and the clear action is simply not offered
+
+**Notes:** PRESENTATION REQUIREMENT from the owner, recorded explicitly: an occupied-but-not-ours
+layer must read as NORMAL, not as a problem. There is essentially always at least one video layer
+in play, so warning amber would permanently imply something is wrong when nothing is. —
+Implementation LEAD (a pointer, not a design decision): the bridge already tracks `#adopted`
+(layers it owns), has `#detectOwnedOccupancy`, and its occupancy sweep is deliberately
+orphan-only — it never demotes owned items; the occupancy tap already knows a layer is occupied.
+So the missing piece is plausibly a UI-side gate keyed on ownership, not new detection. — To
+reconcile at spec time: [[R-009]] deliberately gave orphaned/unknown on-air layers an explicit
+per-layer Clear; this item's ownership rule must say how "orphan we may adopt" and "foreign we
+must not touch" are distinguished, without deciding that here.
+
+## [ ] R-016 — reorder stack items, preferably by dragging ⟨priority: medium⟩
+
+**What:** The operator can reorder the rows of the stack — preferably by dragging a row to a new
+position — and the new order is a real, persistent order.
+**Why:** The stack's order is the operator's running order; today items sit wherever they were
+added, and the operator cannot arrange them to match the rundown.
+**Acceptance:**
+
+- WHEN the operator drags a stack row to a new position THEN the list immediately reflects the
+  new order
+- WHEN the stack is re-rendered, the page reloads, or the bridge reconnects THEN the chosen order
+  survives — it is a real ordering, not a render artifact
+
+**Notes:** CONSTRAINT recorded: today's ordering is render-only (`[...items].reverse()` in
+`StackPanel`) — no persistent reorder operation exists, so this introduces a real ordering
+concept that has to LIVE somewhere. Consider alongside where stack state now lives after
+[[B-092]] (browser-retained intent + occupancy-aware reconcile-on-connect).

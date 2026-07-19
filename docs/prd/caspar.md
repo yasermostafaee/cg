@@ -254,3 +254,44 @@ untouched. CLEAR's behaviour is unchanged — STOP is purely additive.
 **Related:** [[C-008]] (graceful/soft stop for content-driven holds) is a DIFFERENT thing — a
 content-timing policy that finishes the current pass before letting natural completion close the
 hold, on the existing override seam. Once this verb exists, C-008 has a command to end with.
+
+## [ ] C-013 — an item whose content has FINISHED should stop itself instead of staying ON AIR: the template signals completion to the bridge ⟨priority: medium⟩
+
+**What:** When a playing item's content finishes, the item ends itself gracefully — via the
+now-shipped STOP path ([[C-012]]): outro runs, the producer stays resident — instead of claiming
+ON AIR indefinitely. The completion signal comes FROM THE TEMPLATE, because the template is the
+only party that actually knows.
+**Why:** The operator's complaint, recorded precisely: after a while the list shows several items
+as ON AIR while only one thing is actually on output, so the operator cannot tell which row
+corresponds to what the viewer sees. ON AIR loses its information value when finished items keep
+claiming it.
+**Acceptance:**
+
+- WHEN a playing item's content finishes THEN the item comes off air via the graceful STOP path —
+  outro runs, the producer stays resident — rather than remaining ON AIR
+- WHEN an item has ended by content completion THEN its row no longer claims ON AIR, and a later
+  PLAY resumes it without a re-load (the [[C-012]] residency contract)
+- WHEN no completion signal arrives (older template, no channel) THEN behaviour degrades to
+  today's — nothing guesses at completion with a timer
+
+**Notes:** WHY IT HAPPENS (not a reporting bug): a finished graphic has hidden itself but its
+HTML producer remains RESIDENT on the layer, so OSC honestly reports `html`. Residency is
+deliberate — it is what lets a lower-third be UPDATEd for the next guest without a reload.
+Nothing tells the bridge the CONTENT finished. — RELATIONSHIP TO [[B-030]]
+(`bugs-designer.md`): likely the same root family — content done, item still on air. JUDGED: new
+number rather than a note on B-030, because B-030 is a Designer template-runtime STRAND bug
+(nested timed-auto-out halts a content-driven parent's wait) whose fix lives in the lifecycle
+coordinator, while THIS is a Runtime/bridge capability — a completion-signal transport out of
+CEF — and the session split keeps Runtime-side filing out of `bugs-designer.md`. — WHAT CHANGED
+since B-030 was filed: CG STOP is hardware-validated on 2.3.2 (probe #353; shipped as
+[[C-012]], #359) — the producer survives, the template's `stop()` runs the outro, a bare
+`CG PLAY` resumes with no re-ADD. For the first time there is a CORRECT VERB with which to end an
+item; the open problem is only knowing WHEN. — OWNER'S DIRECTION on the signal: the TEMPLATE
+signals completion back to the bridge. The alternative — deriving completion from authored timing
+metadata — is REJECTED: it is a guess that breaks on dynamic content, variable CEF render speed,
+or frame-dependent animation — the same "invented number pretending to be knowledge" that C-012
+deliberately avoided by going fire-and-forget. — KNOWN GAP (the real work): `runtime.stop()`
+already exists as the graceful path and the D-029 sequence drivers know when a sequence ends, but
+there is NO CHANNEL today for that knowledge to reach the bridge from inside CEF. That transport
+is the substance of this item. — Distinct from [[C-008]]: C-008 is an OPERATOR-initiated soft-out
+policy on the override seam; this is the item ending ITSELF when its content completes.
