@@ -94,12 +94,12 @@
       excluded where `outroLotties` / the hold contribution are BUILT (a hard gate no parent override
       can resurrect), and `collectElementOutros()` skips a hidden instance's whole subtree so a Lottie
       under a hidden ANCESTOR is inert too. Tests must BITE (reverting either gate fails them).
-- [ ] 7.6 **`⟦PR-3⟧` / OWNER DECISION — the AUTO-exit path.** A composition that ends its own
-      content-driven / `auto-out` hold exits via `PlayoutController.startOutro()`, which does NOT
-      route through the `out()`/`stop()` element-outro seam, so the Lottie stays parked on its hold
-      frame while the background closes (design §D6.2 BOUNDARY note; pinned by a characterization test
-      and a spec scenario). Decide whether to extend the seam into the controller's exit — it needs a
-      supersede-safe hook, since `startOutro()` is also reached from the controller's own `stop()`.
+- [x] 7.6 **`⟦PR-5⟧` (Phase 3b-2) — the AUTO-exit path, DONE.** Routed through the seam via the
+      one-shot outro ledger + `PlayoutController.beforeOutro` gate + `onCycleRestart` re-arm (design
+      §D6.2b): every exit path plays the element outro exactly once, with the B-030..B-034 defenses
+      intact (bite-verified by reverting each mechanism piece). The Phase-2 characterization test was
+      FLIPPED to the fixed behaviour and the narrowed spec scenario reworded — both had encoded the
+      defect as correct.
 
 ## 8. Exporters — `⟦PR-3⟧`
 

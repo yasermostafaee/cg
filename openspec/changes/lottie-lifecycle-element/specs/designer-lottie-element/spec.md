@@ -97,21 +97,37 @@ hold until `stop()`.
 
 - **WHEN** a `lottie` element sets `drivesHold: true` and freezes
 - **THEN** its intro completion gates the content-driven hold (a self-contained sting), and its outro
-  plays when the composition is taken off air by `out()` or `stop()`
+  plays when the composition exits — by `out()`, `stop()`, or its own auto-exit
 
-#### Scenario: A composition that ends its own hold exits without the element outro
+#### Scenario: A composition that ends its own hold plays the element outro (Phase 3b-2)
 
-- **WHEN** a composition ends its OWN content-driven hold (an `auto-out` exit driven by the playout
-  controller rather than an `out()` / `stop()` command)
-- **THEN** the background outro plays and the composition settles CLEARED with the Lottie parked on
-  its hold frame — the element outro is played only on the `out()` / `stop()` exit paths
+- **WHEN** a composition ends its OWN hold (an `auto-out` timer expiry or a content-driven completion,
+  driven by the playout controller rather than an `out()` / `stop()` command)
+- **THEN** the Lottie plays its outro segment to completion, THEN the background outro plays, and the
+  composition settles CLEARED — identical to the operator exits (until Phase 3b-2 this path bypassed
+  the element-outro seam and the furniture snapped off from its hold frame)
 
-### Requirement: Stop and Out play the Lottie outro before the background, settling CLEARED
+### Requirement: Every exit path plays the Lottie outro before the background, settling CLEARED
 
-WHEN the composition is stopped (`stop()`) or exited (`out()`), the Lottie SHALL play its OUTRO
-segment `[outroStart → op]`; the background outro SHALL NOT close over it — the background outro plays
-only AFTER every element outro has finished — and the composition SHALL settle to CLEARED with every
-driver halted, consistent with D-085 and D-105's content-first / background-last order.
+The Lottie SHALL play its OUTRO segment `[outroStart → op]` on EVERY exit path — `stop()`, `out()`,
+OR an exit the composition triggers itself (an `auto-out` hold expiry, a content-driven hold
+completion, a zero-length hold, or a `loop-cycle` boundary); the background outro SHALL NOT close
+over it — the background outro plays only AFTER every element outro has finished — and the
+composition SHALL settle to CLEARED with every driver halted, consistent with D-085 and D-105's
+content-first / background-last order.
+The element outro SHALL be DRIVEN at most once per exit episode, regardless of how many triggers
+reach the exit (an auto-exit followed by an operator `stop()`, or the runtime awaiting the outro
+registry and then cascading `stop()` into each scope's controller): a second trigger in the same
+episode SHALL await an in-flight outro — never re-drive it — and SHALL proceed synchronously when it
+already finished. On a `loop-cycle`, EACH cycle's exit SHALL play the outro again, and the cycle
+boundary SHALL re-arm the element (intro replays, completion re-mints — the B-033 re-arm) so cycle
+N+1 behaves like a fresh run; a NON-final cycle boundary SHALL play only the cycling scope's OWN
+element outros — a descendant scope is not exiting, so its furniture persists across the parent's
+cycles — while a FINAL exit plays the full visible subtree's. An operator `stop()`/`out()` SHALL
+finalize every cycle before awaiting in-flight outros, so a loop boundary caught mid-outro resolves
+as the final exit instead of re-arming (no double-drive, no intro replay mid-exit). A nested
+composition that auto-exits SHALL await its OWN scope subtree's element outros — not the root's, not
+its siblings'.
 
 #### Scenario: Out plays the Lottie outro then the background
 
@@ -127,19 +143,61 @@ driver halted, consistent with D-085 and D-105's content-first / background-last
 
 #### Scenario: A degenerate or absent outro settles without a strand
 
-- **WHEN** a `lottie` element has no outro segment (absent phases or `outroStart ≥ op`) and `out()` or
-  `stop()` is called
+- **WHEN** a `lottie` element has no outro segment (absent phases or `outroStart ≥ op`) and any exit
+  path runs — `out()`, `stop()`, or an auto-exit
 - **THEN** the element outro resolves immediately, the background outro plays, and the composition
   settles CLEARED — never hanging on an unresolved outro
+
+#### Scenario: An auto-out hold expiry plays the element outro (Phase 3b-2)
+
+- **WHEN** an `auto-out` composition's timed hold expires with a `lottie` element holding
+- **THEN** the element outro plays to completion, THEN the background outro, and the composition
+  settles CLEARED — the exit consumes the element outro's duration instead of snapping the furniture
+  off
+
+#### Scenario: The outro is driven exactly once per exit episode (Phase 3b-2)
+
+- **WHEN** a `stop()` (or `out()`) arrives while an auto-exit's element outro is already in flight
+- **THEN** the later trigger awaits the in-flight outro — the outro is never re-driven from
+  `outroStart` — and the composition settles CLEARED with the outro having played exactly once
+
+#### Scenario: A loop-cycle plays and re-arms the outro on every cycle (Phase 3b-2)
+
+- **WHEN** a `loop-cycle` composition with a `lottie` element runs multiple cycles
+- **THEN** every cycle's exit plays the element outro, and each cycle boundary re-arms the element —
+  the intro replays and the completion signal re-mints (B-033) — so no cycle closes without its outro
+  and no stale completion collapses a later hold
+
+#### Scenario: A cycle boundary leaves nested furniture alone (Phase 3b-2)
+
+- **WHEN** a `loop-cycle` composition contains a nested composition instance whose `lottie` element
+  owns an outro
+- **THEN** the parent's non-final cycle boundaries play only the parent scope's own element outros —
+  the nested furniture persists, visible, across every cycle — and the FINAL exit plays the nested
+  outro exactly once
+
+#### Scenario: A stop during a loop boundary's outro finalizes the cycle (Phase 3b-2)
+
+- **WHEN** `stop()` or `out()` arrives while a `loop-cycle` boundary's element outro is in flight
+- **THEN** the cycle is finalized before the outros are awaited: the in-flight outro completes as the
+  final exit — driven exactly once, no cycle restart, no intro replay — and the composition settles
+  CLEARED
+
+#### Scenario: A play() superseding an auto-exit outro re-arms cleanly (Phase 3b-2)
+
+- **WHEN** `play()` arrives while an auto-exit's element outro is in flight
+- **THEN** the new run owns the scene — the superseded exit can never fire a stale background outro —
+  and the new run's own exit later plays the outro afresh
 
 ### Requirement: A hidden Lottie is fully inert in the lifecycle
 
 A `lottie` element with `visible: false` SHALL be fully inert in the composition lifecycle, and so
 SHALL a visible Lottie that sits inside a hidden ancestor (a hidden composition instance's subtree) —
 extending B-034's established hidden/visible gate to the element-outro and hold-aggregation paths. A
-hidden Lottie SHALL NOT have its outro awaited on `out()` / `stop()` (it must never stall the exit for
-something nobody can see) and SHALL NOT contribute to the content-driven hold even when it sets
-`drivesHold: true` — the hidden gate wins over the opt-in.
+hidden Lottie SHALL NOT have its outro awaited on ANY exit path — `out()`, `stop()`, or an auto-exit
+(Phase 3b-2 extends the gate to the controller-triggered exits, including a scope whose OWN ancestor
+is hidden) — it must never stall the exit for something nobody can see, and SHALL NOT contribute to
+the content-driven hold even when it sets `drivesHold: true` — the hidden gate wins over the opt-in.
 
 #### Scenario: A hidden Lottie is not awaited on exit
 
@@ -151,7 +209,7 @@ something nobody can see) and SHALL NOT contribute to the content-driven hold ev
 #### Scenario: A Lottie under a hidden ancestor is inert
 
 - **WHEN** a VISIBLE `lottie` element sits inside a hidden composition instance's subtree
-- **THEN** it is inert: its outro is not awaited on `out()` / `stop()`, and it contributes nothing to
+- **THEN** it is inert: its outro is not awaited on any exit path, and it contributes nothing to
   the content-driven hold even with `drivesHold: true`
 
 ### Requirement: Pause and resume freeze and continue the Lottie in lockstep

@@ -62,6 +62,43 @@ export interface PlayoutControllerOptions {
    * (after stop / a later cycle) are ignored via a hold token.
    */
   waitForContent?: (() => Promise<void> | null) | undefined;
+  /**
+   * D-125 §D6.2b — THE ELEMENT-OUTRO GATE (closes the Phase-2 auto-exit hole, tasks 7.6).
+   * Called the moment an exit begins — `startOutro()` is where EVERY exit path converges:
+   * auto-out expiry, content-driven completion, a zero-length hold, each loop-cycle
+   * boundary, and the operator/cascaded `stop()`. The runtime plays this scope SUBTREE's
+   * element-owned outros (Lottie `[outroStart → op]`) and resolves when they finish; the
+   * background outro leg waits for it, so the background never closes over furniture
+   * still animating off — on ANY exit path, not just `out()`/`stop()`.
+   *
+   * Returns `null` when there is nothing to wait for — no outro owners in the subtree,
+   * or they already played for this exit episode (the runtime's `out()`/`stop()` await
+   * the full registry BEFORE cascading `stop()` into the controllers). The null path
+   * starts the background leg SYNCHRONOUSLY: the pre-D-125 exit, byte for byte, so
+   * Lottie-less scenes and the post-await cascade keep their exact ordering.
+   *
+   * Idempotence lives in the runtime's ONE-SHOT ledger, not here — a second caller in
+   * the same episode gets the in-flight promise (awaits, never re-drives) or `null`
+   * (already done). Double-play is structurally impossible rather than avoided by
+   * call-site discipline.
+   *
+   * `finalExit` distinguishes reach: a FINAL exit (the graphic is going off air) plays
+   * the scope SUBTREE's outros; a NON-final `loop-cycle` boundary plays only the cycling
+   * scope's OWN outros — a descendant scope is not exiting (its controller holds
+   * independently across the parent's cycles), so its furniture must persist, and the
+   * boundary re-arm (`onCycleRestart`) is own-scope for the same reason — the two reaches
+   * stay symmetric.
+   */
+  beforeOutro?: ((finalExit: boolean) => Promise<void> | null) | undefined;
+  /**
+   * D-125 §D6.2b — fired at each loop-cycle BOUNDARY (between one cycle's outro end and
+   * the next cycle's intro), NOT on the first `play()`. The runtime re-arms the scope's
+   * Lotties here: `reset()` re-paints `ip` and RE-MINTS `whenComplete` (B-033 — a stale
+   * resolved completion would close the next content-driven hold instantly), `start()`
+   * replays the intro alongside the background IN, and the outro ledger forgets this
+   * scope's drivers so the NEXT cycle's exit plays the outro again — exactly once.
+   */
+  onCycleRestart?: (() => void) | undefined;
   clock?: RuntimeClock | undefined;
 }
 
@@ -125,6 +162,14 @@ export class PlayoutController {
   // Reset by `play()` (via `reset()`); an infinite loop / manual hold / paused
   // scope is NOT settled, so it still exits on stop.
   private settled = false;
+  // D-125 §D6.2b — supersede token for the ASYNC element-outro gate: bumped by
+  // `reset()` (play() / destroy()), so a gate resolution belonging to a superseded
+  // exit can never start a stale background leg (B-031/B-033 territory).
+  private exitToken = 0;
+  // D-125 §D6.2b — the background outro leg deferred because pause() arrived while
+  // the element outro was in flight; resume() plays it (the controller-level mirror
+  // of the runtime's `pendingExitOutro` for out()/stop(), D-105 parity).
+  private pendingOutroLeg: (() => void) | null = null;
 
   constructor(options: PlayoutControllerOptions) {
     this.o = options;
@@ -170,6 +215,21 @@ export class PlayoutController {
     return this.settled;
   }
 
+  /**
+   * D-125 §D6.2b — make the CURRENT cycle the last WITHOUT starting an exit. The
+   * runtime cascades this synchronously BEFORE awaiting the outro registry in
+   * `stop()`/`out()`: a loop-cycle boundary whose element outro is in flight during
+   * that await would otherwise complete first (its gate subscribed to the same ledger
+   * promise earlier), re-arm via `onCycleRestart`, and let the cascaded `stop()`
+   * re-drive the whole outro — the double-play the ledger exists to forbid. With the
+   * cycle finalized, the in-flight boundary resolves as the FINAL exit (settles, no
+   * restart, no re-arm) and the operator exit degrades to a clean await.
+   */
+  markFinalCycle(): void {
+    if (this.settled) return;
+    this.cyclesLeft = 1;
+  }
+
   pause(): void {
     if (this.paused) return;
     this.paused = true;
@@ -192,6 +252,21 @@ export class PlayoutController {
       const cb = this.holdCb;
       this.scheduleHold(this.holdRemainingMs, cb);
       this.holdRemainingMs = null;
+    }
+    // D-125 §D6.2b — finish an exit whose background leg was deferred because pause()
+    // landed while the element outro was in flight (mirrors the runtime's resume()
+    // flushing `pendingExitOutro`). Deferred by a 0 ms timer — the zero-hold defer
+    // precedent (see onIntroEnd): a SYNCHRONOUS leg here could collapse and settle the
+    // root in the middle of the runtime's resume() cascade, whose later `l.resume()`
+    // loop would then restart a just-stopped Lottie rAF on the cleared stage.
+    if (this.pendingOutroLeg !== null) {
+      const leg = this.pendingOutroLeg;
+      this.pendingOutroLeg = null;
+      const token = this.exitToken;
+      this.clock.setTimeout(() => {
+        if (token !== this.exitToken || this.phase !== 'outro') return;
+        leg();
+      }, 0);
     }
   }
 
@@ -277,22 +352,56 @@ export class PlayoutController {
   private startOutro(): void {
     this.clearHold();
     this.phase = 'outro';
-    if (this.isFinalOutro()) this.announceExit();
+    const finalExit = this.isFinalOutro();
+    if (finalExit) this.announceExit();
     // D-114 — `static` has NO outro: cut cleanly (an empty range) regardless of any out-point, so a
     // stored `static` with a stray out-point still hard-cuts. Other modes play `[outPoint→end]`
     // (empty when there is no marker, today's behavior).
     const from = this.o.playout.mode === 'static' ? this.o.active.out : this.outPoint();
-    this.playRange(from, this.o.active.out, () => this.onOutroEnd());
+    const playLeg = (): void => {
+      this.playRange(from, this.o.active.out, () => this.onOutroEnd());
+    };
+    // D-125 §D6.2b — element outros BEFORE the background leg, on EVERY exit path (this
+    // is the single convergence point — see PlayoutControllerOptions.beforeOutro). A
+    // null gate (no owners / already played this episode) keeps the leg SYNCHRONOUS.
+    const gate = this.o.beforeOutro?.(finalExit) ?? null;
+    if (gate === null) {
+      playLeg();
+      return;
+    }
+    const token = this.exitToken;
+    void gate.then(() => {
+      // Superseded while the element outro played — play() reset this controller
+      // (B-031/B-033: the new run owns the scene) or the phase moved on. A stale
+      // resolution must NOT start a background leg.
+      if (token !== this.exitToken || this.phase !== 'outro') return;
+      if (this.paused) {
+        // D-105 parity — paused mid-element-outro: hold the half-played frame and
+        // defer the background leg to resume(), so the graphic never closes while
+        // paused. DEFENSIVE: the runtime's pause cascade freezes the Lottie rAF, so
+        // in practice the gate cannot resolve while paused — this guard exists so the
+        // invariant ("never close while paused") holds by construction, not by the
+        // pause cascade's ordering.
+        this.pendingOutroLeg = playLeg;
+        return;
+      }
+      playLeg();
+    });
   }
 
   private onOutroEnd(): void {
     if (this.cyclic()) {
+      // D-125 §D6.2b — each loop-cycle boundary re-arms per-cycle element state
+      // (Lottie intro + completion + outro ledger) BEFORE the next intro leg, so
+      // cycle N+1 replays the furniture's intro and its exit plays the outro again.
       if (this.cyclesLeft === 'infinite') {
+        this.o.onCycleRestart?.();
         this.startIntro();
         return;
       }
       this.cyclesLeft -= 1;
       if (this.cyclesLeft >= 1) {
+        this.o.onCycleRestart?.();
         this.startIntro();
         return;
       }
@@ -389,5 +498,10 @@ export class PlayoutController {
     this.paused = false;
     this.exitAnnounced = false;
     this.settled = false;
+    // D-125 §D6.2b — invalidate any in-flight element-outro gate and drop a deferred
+    // background leg: after a reset (play()/destroy()) the old exit no longer owns
+    // the scene, and its stale resolution must be inert.
+    this.exitToken += 1;
+    this.pendingOutroLeg = null;
   }
 }

@@ -323,21 +323,60 @@ async stop() {
 - `playBackgroundOutroAndSettle` is unchanged — the background cascade and the `onRootSettled`/
   CLEARED settle (D-085) run exactly as today, just **after** the element outros.
 
-> **BOUNDARY found during Phase-2 implementation — the AUTO-exit path does NOT play the element
-> outro.** This seam lives in `out()` / `stop()`. A composition that ends its OWN content-driven (or
-> timed `auto-out`) hold does **not** call either: `PlayoutController` resolves its hold and calls
-> `startOutro()` directly (`playout-controller.ts:253-255`, `261-270`), which plays the **background**
-> outro and settles. Verified empirically on the fake clock: a `drivesHold: true` freeze Lottie in a
-> `content-driven` composition settles CLEARED with **zero** outro frames painted, parked on
-> `introEnd`. So the "self-contained sting" (opt in → hold ends at intro-end → auto-out) closes with
-> the furniture frozen rather than animating off.
->
-> This is **out of Phase-2 scope by design**: routing the auto-exit through the seam means awaiting an
-> async element outro inside `PlayoutController.startOutro()` — the B-030/B-031/B-033-hardened exit
-> machinery — and introduces a second supersede surface there (`startOutro` is also reached from the
-> controller's own `stop()` cascade, so a naive hook double-plays the outro). It is recorded as a
-> Phase-3 item (task 7.5) for an explicit owner decision, and pinned by a characterization test +
-> spec scenario so the current behaviour cannot regress silently.
+> **BOUNDARY found during Phase-2 implementation — RESOLVED in Phase 3b-2 (§D6.2b below).** As
+> shipped in Phase 2 the seam lived only in `out()` / `stop()`: a composition that ended its OWN
+> content-driven (or timed `auto-out`) hold went through `PlayoutController.startOutro()` directly,
+> which played the **background** outro and settled — verified empirically at the time (settles
+> CLEARED, zero outro frames, Lottie parked on `introEnd`), deferred deliberately because
+> `startOutro()` is also reached from the controller's own `stop()` cascade (a naive hook
+> double-plays) and awaiting an async outro there is B-030/B-031/B-033-hardened territory. The
+> characterization test and spec scenario that pinned the gap were flipped/reworded when §D6.2b
+> closed it.
+
+### D6.2b Phase 3b-2 — the AUTO-exit routes through the seam, exactly once
+
+**Mechanism: a ONE-SHOT OUTRO LEDGER (runtime) + a `beforeOutro` gate (controller).** Of the three
+candidates — (a) a hook inside `startOutro()` guarded by call-site discipline, (b) per-episode
+idempotence so double-play is structurally impossible, (c) re-routing auto-exit through `out()` — we
+shipped (b) delivered through (a)'s placement:
+
+- `createRuntime` keeps `outroLedger: Map<LottieDriver, {promise, done}>`. `playElementOutrosOnce()`
+  drives each driver's `playOutro()` the FIRST time it is asked in an exit episode; a later caller
+  gets the in-flight promise (awaits, never re-drives) or `null` when everything it asked about is
+  done — and a `null` gate keeps the caller's background leg fully SYNCHRONOUS (the pre-Lottie
+  ordering, and the Lottie-less scene, byte for byte). `out()`/`stop()` now route through the same
+  ledger, so an operator exit landing during an auto-exit outro awaits it instead of restarting it.
+- `PlayoutController` gains `beforeOutro?: () => Promise<void> | null`, called at the top of
+  `startOutro()` — the single convergence point of EVERY exit path (auto-out expiry, content
+  completion, zero-length hold, loop-cycle boundary, operator/cascade stop). The wired implementation
+  walks the scope's OWN subtree (`collectSubtreeOutros(node)` — a nested comp awaits its own Lotties,
+  not the root's or its siblings') behind two B-034 gates: hidden leaves never entered `outroLotties`,
+  and `isEffectivelyVisible(node)` (reachability from the root through visible instances) keeps a
+  scope under a HIDDEN ANCESTOR from playing its own outros — the per-scope walk cannot see its
+  ancestors, so the visibility question is asked from above. A supersede token (`exitToken`, bumped by
+  `reset()`) makes a stale gate resolution inert (B-031/B-033), and a `pendingOutroLeg` defers the
+  background leg when pause() lands mid-element-outro (D-105 parity with the runtime's
+  `pendingExitOutro`).
+- `onCycleRestart` fires at each loop-cycle BOUNDARY: the ledger forgets that scope's OWN drivers
+  and its OWN Lotties `reset()` (re-paint `ip`, RE-MINT `whenComplete` — the B-033 re-arm) and
+  `start()`, so each cycle replays intro → hold → element outro → background, and no stale
+  completion collapses a later content-driven hold. `play()` clears the whole ledger (a new run owns
+  fresh outros); `remove()` stays a synchronous hard kill awaiting nothing (§D6.4.4).
+- **Reach symmetry (found in adversarial review, fixed before landing):** the gate's reach depends
+  on `isFinalOutro()`. A FINAL exit plays the scope SUBTREE's outros (out()/stop() parity); a
+  NON-final cycle boundary plays ONLY the cycling scope's OWN outros — a descendant scope is not
+  exiting (its controller holds independently across the parent's cycles), and an asymmetric
+  subtree-drive/own-scope-re-arm would strand nested furniture at `op` from cycle 2 on.
+- **Finalize-before-await (found in adversarial review, verified by repro, fixed before landing):**
+  `stop()`/`out()` cascade `markFinalCycle()` synchronously BEFORE awaiting the ledger. Without it,
+  a loop boundary whose element outro is in flight during the await resolves FIRST (its gate
+  subscribed to the same ledger promise earlier); with an empty background leg (no out-point) it
+  re-arms via `onCycleRestart` and the cascaded stop re-drives the entire outro on air — the
+  double-play the ledger exists to forbid. Finalized, the in-flight boundary settles as the final
+  exit and the operator command degrades to a clean await.
+  > **On-air consequence, intended:** every auto-closing composition with an outro-owning Lottie now
+  > spends that outro's duration on air before clearing (it previously snapped). The Inspector timing
+  > panel (Phase 3b-1) already shows the operator that number ("after OUT: N comp frames to clear").
 
 ### D6.3 `whenComplete()` (content-driven hold) vs. `playOutro()` (exit) — kept separate
 
