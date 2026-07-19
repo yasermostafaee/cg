@@ -424,7 +424,12 @@ function ContentHoldChecklist({ scene }: { scene: Scene }): JSX.Element {
     <>
       {allInfinite && (
         <div className={s.row} style={{ display: 'block' }}>
-          <Callout variant="caution">
+          {/* `role="alert"` restored: #352 recoloured this banner danger→caution and the
+              variant-derived role silently demoted it to `status`. The COLOUR changed
+              because an all-infinite hold is a legitimate state, not an error — but it is
+              still an assertive announcement ("this graphic will not auto-close"), so it
+              stays in the alert channel. Styling and semantics are independent. */}
+          <Callout variant="caution" role="alert">
             This graphic won’t auto-close — every content driver repeats forever, so the
             content-driven hold runs until stop. Give a driver a finite repeat, exclude one below,
             or switch to a timed hold.

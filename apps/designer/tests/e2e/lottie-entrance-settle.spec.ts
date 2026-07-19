@@ -84,7 +84,13 @@ const LONG_INTRO = JSON.stringify({
   ],
   markers: [
     { tm: 60, cm: 'intro-end', dr: 0 },
-    { tm: 100, cm: 'outro-start', dr: 0 },
+    // 90, NOT 100: the derived comp-space settle for this clip is frame 100 (60 anim
+    // frames @ 30 fps = 2 s × the 50 fps comp), and the timing-panel test below asserts
+    // numbers from BOTH frame spaces. Keeping the outro-start off 100 makes every
+    // asserted number space-unique — 60/90/120 are animation frames, 100 is comp — so a
+    // bug that leaked an animation-space number to the comp-space main level could
+    // never spuriously match.
+    { tm: 90, cm: 'outro-start', dr: 0 },
   ],
 });
 
@@ -153,10 +159,28 @@ test.describe('D-125 Phase 3a — the entrance settle derives from the Lottie in
     await app.newProject('LottieTiming');
     await importAndPlaceLottie(app, 'longintro.json', LONG_INTRO);
 
-    // The placed Lottie is selected — its inspector shows the clip totals and the phase
-    // breakdown in animation frames, seconds, AND this composition's frames.
-    await expect(app.inspector.getByText(/120 f @ 30 fps/)).toBeVisible();
-    await expect(app.inspector.getByText(/intro 0–60/)).toBeVisible();
-    await expect(app.inspector.getByText(/frame \d+ of this comp/)).toBeVisible();
+    // The placed Lottie is selected. #348 restructured the panel around COMP-SPACE
+    // answers: the main level carries ONLY this composition's frames, and the
+    // animation-space numbers live under a collapsed "animation details" disclosure.
+    // Both frame spaces must still be surfaced — that was Phase 3a Part 2's point —
+    // just at their designed levels.
+
+    // COMP SPACE, main level (no expansion needed): the clip's 60-frame intro @ 30 fps
+    // is 2 s, which at the default 50 fps composition is frame 100 — the derived settle,
+    // converted for the operator (no hand conversion).
+    await expect(app.inspector.getByText(/intro settles at frame 100/)).toBeVisible();
+    await expect(app.inspector.getByText(/put the out-point at 100 or later/)).toBeVisible();
+
+    // ANIMATION SPACE is collapsed by default — the mixed-frame-space misread #348
+    // fixed. Absent until the disclosure is expanded.
+    const details = app.inspector.getByTestId('lottie-animation-details');
+    await expect(details).toHaveCount(0);
+    await app.inspector.getByRole('button', { name: 'animation details' }).click();
+
+    // …and inside it, the clip totals + markers in ANIMATION frames, labelled as such.
+    await expect(details.getByText(/clip 120 frames @ 30 fps · 4s/)).toBeVisible();
+    await expect(
+      details.getByText(/intro-end 60, outro-start 90 — animation frames/),
+    ).toBeVisible();
   });
 });

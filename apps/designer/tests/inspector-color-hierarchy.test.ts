@@ -77,8 +77,12 @@ describe('caution is its own token, distinct from danger', () => {
     // The "loops forever" chip.
     expect(src).toMatch(/infiniteWarnStyle[\s\S]*?color:\s*colors\.caution/);
     expect(src).toMatch(/infiniteWarnStyle[\s\S]*?background:\s*colors\.cautionSurface/);
-    // The "won't auto-close" banner.
-    expect(src).toContain('<Callout variant="caution">');
+    // The "won't auto-close" banner: caution COLOUR, but still an assertive
+    // announcement — colour and role are independent axes. #352 derived the role from
+    // the variant, so recolouring the banner silently dropped it out of the alert
+    // channel (the guard-infinite-hold-driver E2E caught it); the explicit role pins
+    // that a future restyle can't do it again.
+    expect(src).toMatch(/<Callout variant="caution" role="alert">/);
     expect(src).not.toContain('<Callout variant="danger">');
     // The chip must NOT have kept the old danger colour.
     expect(src).not.toMatch(/infiniteWarnStyle[\s\S]*?color:\s*colors\.danger/);
