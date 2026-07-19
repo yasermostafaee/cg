@@ -121,6 +121,37 @@ Noted for whoever audits next: `cg-designer` was mid-merge at the time, with
 neither claims `B-097` — but a session resolving a conflict in a bug file is exactly the state this
 registry exists to catch, so re-read that file before taking `B-098`.
 
+**Re-audited 2026-07-19** against `main` (`5a8c34a`, after #371). `B-098` and `B-099` are now taken
+— the `@cg/caspar-bridge` suite reddening under full parallel `pnpm test`
+([bugs.md](bugs.md)) and the UNVERIFIED nested-scope content-start gate resolving through the root
+`elementMap` ([bugs-designer.md](bugs-designer.md)). **The previous entry's pointer was already
+stale when this session read it**: it said "Next free: `B-097`" in the working tree this session
+started from, while `B-097` had been merged by #371 — the exact "reading the pointer is not
+claiming it" failure this file documents, caught here by re-auditing against fetched `origin/main`
+rather than the checkout. Verified free immediately before commit, at the widened scope the last
+entry established: no `## [ ] B-098` / `B-099` heading on current `origin/main`, on either of the
+two non-`main` remote branches, on ANY local branch across all three worktrees (swept
+programmatically, most unpushed), or on disk in either sibling working tree. The highest heading
+found ANYWHERE — merged, unpushed or uncommitted — was `B-097`, so no range claim sits above it.
+The duplicate audit still prints exactly `B-056` and `B-080`. The space stays contiguous:
+`B-001` … `B-099`, no gaps. **Next free: `B-100`.**
+
+A THIRD number was considered and deliberately NOT claimed: #368's restart-misadoption hole (a
+foreign producer landing on a retained-intent layer while the bridge was dead is adopted as ours).
+It is already tracked in two PRD items, not merely in the PR body — R-015's `Notes` in
+[runtime.md](runtime.md) records it as a structural KNOWN LIMIT attributed to [[B-092]] ("recorded
+not fixed"), and C-014's `Notes` in [caspar.md](caspar.md) cross-references the same limit. Filing
+a fresh `B-` for it would have created a third description of one defect, so the range stopped at
+two.
+
+Discharging the note above: `cg-designer`'s merge has since resolved — `docs/prd/bugs-designer.md`
+is clean in that worktree with no uncommitted edits, and its highest heading is `B-096`. The
+conflict landed without claiming a number, so nothing was lost in it. Both stale sibling remotes
+were also checked rather than assumed: `fix/runtime-ux-batch-2` is 55 commits behind with its own
+pointer still reading `B-080`, and `fix/B-068-migrated-comp-lifecycle-playout` is 79 behind — a
+pointer read from either would have collided immediately, which is the standing argument for
+auditing against fetched `main` and never a branch-local copy of this file.
+
 **This entry collided TWICE before landing, and the second time proves the rule above is not
 enough.** It first took `B-088` (the then-current "next free" pointer) while a parallel Designer
 workstream took the same number; it renumbered to `B-089` — and `B-089` turned out to be claimed by

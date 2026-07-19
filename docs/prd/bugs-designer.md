@@ -1125,6 +1125,66 @@ real top-level trim path still persists and undoes.
 
 **On-air impact:** none — designer-authoring state only, no runtime or export behaviour changes.
 
+## [ ] B-099 — UNVERIFIED: `wireScope`'s content-start gate resolves a nested scope's hosts through the ROOT `elementMap`, so the D-104 visibility gate is likely inert for nested compositions ⟨priority: medium⟩
+
+**Status: UNVERIFIED — filed from a static reading, no runtime probe run.** The code path below is
+confirmed present on merged `main`; the _behaviour_ it implies is not. Do not treat the impact
+claim as established until the probe at the bottom runs.
+
+**Verified against merged `main` (`5a8c34a`, i.e. AFTER [[B-089]]/#369 reworked this exact
+function).** #369 did not change it.
+
+**Where:** `packages/template-runtime/src/runtime.ts:1044-1055`, inside `wireScope`.
+`collectContentHost` is invoked over **per-scope** lists —
+
+```ts
+for (const t of scope.tickers) collectContentHost(t.element);
+for (const c of scope.clocks) collectContentHost(c.element);
+for (const sq of scope.sequences) collectContentHost(sq.element);
+```
+
+— but resolves each node through the **root** map:
+`const node = built.elementMap.get(element.id)`.
+
+**Why those are not the same map.** `scene-builder.ts:103` sets the built scene's `elementMap` to
+`rootScope.elementMap` — an alias for the root scope's map alone — while `scene-builder.ts:123`
+registers every element into `ctx.scope.elementMap`, i.e. _its own_ scope's map, and each nested
+scope is created with a fresh `new Map` (`newScope`). No step merges a child's map into the root.
+A per-scope `elementMap` is already the established way to read these nodes — `bindings.ts:89`
+resolves through `scope.elementMap`.
+
+**Expected (if the probe confirms):** a nested composition's clock / ticker / sequence HOST is
+hidden until the content-start frame, then revealed — the D-104 follow-up rule that a host shows
+its static initial content (a clock's frozen time, a sequence's item 1, a ticker's band) only FROM
+`holdEntry`.
+**Suspected actual:** for any non-root scope the lookup misses, the `if (node !== undefined)` guard
+**silently skips**, `contentGates` stays empty, and `applyContentGateAtFrame` iterates nothing — so
+the gate never applies and the nested host presumably shows frozen content from frame 0. Note the
+failure is silent by construction: the guard turns a missed lookup into a no-op, not an error,
+which is why this would not surface as a crash.
+
+**Same bug class as [[B-089]], on the adjacent code path — and B-089's own comment names it.**
+`runtime.ts:1082` records that B-088 "wired this for the ROOT scope only, **because gates were
+collected against the root `elementMap`** and a nested scope had none to cross". B-089 fixed that
+for the **lifespan** gates by giving every scope its own gates and carrying the node on
+`scope.lifespanGates` — deliberately _not_ going through the root map. The **content** gate,
+ten lines above in the same function, still does. So the defect B-089 diagnosed was repaired on one
+of the two gate lists and left standing on the other.
+
+**Probe needed (do this before fixing anything):** build a nested composition instance containing a
+clock or ticker, with a `lifecycle.contentStart` marker on the nested scope; drive the playhead and
+assert the HOST node's `display` is `'none'` before the content-start frame and its natural value
+at/after it. If the host is visible from frame 0 — or `contentGates` is empty for that scope — the
+bug is confirmed. The root-scope case should pass either way, which is the control.
+
+**Candidate fix if confirmed:** resolve through `scope.elementMap` instead of `built.elementMap`,
+matching what `bindings.ts` already does and what B-089 did for the lifespan gates. Worth checking
+in the same pass whether any other consumer inside `wireScope` reaches for `built.elementMap`.
+
+**Impact if confirmed:** playout/preview visibility only for nested compositions — the driver's
+_run_ is gated separately (D-104 gated the driver; this follow-up gated the HOST), so the symptom
+would be premature static content rather than a mistimed crawl.
+
 ## [ ] B-096 — the Lottie Inspector's clip total counts `op` frames, ignoring a nonzero in-point ⟨priority: low⟩
 
 **Repro:** import a bodymovin clip whose `ip` is not 0 (e.g. `ip: 10`, `op: 120`) and select it; open

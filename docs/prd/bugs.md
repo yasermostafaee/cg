@@ -483,6 +483,77 @@ places (`docs/prd/*.md` vs `openspec/changes/`).
 **Regression test:** the guard is its own regression test (the B-075 precedent) — a `[~]` item
 whose cited fix is merged turns it red; flipping that item to `[x]` turns it green.
 
+## [ ] B-098 — the `@cg/caspar-bridge` suite reds under full parallel `pnpm test` while passing in isolation: `did not reach HEALTHY in time` at the 15 s bound [[B-073]] raised ⟨priority: medium⟩
+
+**Repro:** run the full parallel `pnpm test` (every workspace at once) on a local dev box.
+Observed **four times in one session** (2026-07-19). It does not reproduce when the workspace is
+run alone.
+
+**Expected:** the standing rule this suite is already held to — **both suites pass isolated AND
+under full parallel `pnpm test`, repeatably** ([[B-073]], the `Expected:` line of its cluster-1
+repro above).
+**Actual:** `Error: declared CasparCG server(s) did not reach HEALTHY in time`. Note the shape:
+this is a **timeout, not a failed assertion** — the 15 s `HEALTH_MS` liveness bound
+(`tools/caspar-bridge/tests/support/harness.ts:29`) expiring, so it carries no information about
+correctness. In isolation the same suite passes **36/36** (and **139/139** on an earlier run in
+the same session), and it passed on every re-run.
+**Env:** local Windows dev machine; `turbo run test` with vitest v8 coverage, `fileParallelism`
+forks unbounded.
+
+**Not the code under test.** Neither branch live in that session touched `tools/caspar-bridge` at
+all. The suite is red only as a function of what else is running beside it.
+
+**Why it matters — it now costs PUSHES, not just gate runs.** Since P-009 the gate is enforced by
+the pre-push hook, so a contention red is no longer a re-runnable annoyance: it blocks the push
+until someone re-runs it and guesses that the failure was environmental. That is the same
+"innocent suite named by a contention failure" tax [[B-097]] charges, arriving at a worse moment.
+
+**Family — and why this one is a RECURRENCE, not a new member.** [[B-073]] is the direct ancestor:
+same workspace, same `did not reach HEALTHY in time` signature, same parallel-load trigger. Its fix
+**raised** the bound (`HEALTH_MS = 15_000` replacing hardcoded 5–6 s budgets) and cleared 3/3 green
+under a 24-hog starvation — explicitly logging that "3/3 green is the agreed bar, not a proof of
+absence". This is that **raised bound now being blown in turn**, which is the useful signal:
+bound-raising is exhausted as a remedy, because there is no ceiling that both tolerates a starved
+box and still catches a genuine hang. Distinct from its siblings by lever — [[B-095]] is
+inter-suite Playwright starvation, [[B-097]] is two gate invocations sharing one filesystem path,
+[[B-078]] is port/process collision. This is CPU starvation of one vitest workspace by the rest of
+the parallel run.
+
+**Fix direction (NOT implemented here) — bound the concurrency, don't raise the timeout.** The
+precedent is [[B-095]]'s fix (#360, `5cb16c7`): it stopped `gate:e2e` starving itself by
+serialising at the gate level (`--concurrency=1`), rather than by tuning per-spec timeouts, which
+was rejected there for papering over contention and desensitising the specs — the same objection
+applies to raising `HEALTH_MS` again. The bridge's `vitest.config.ts` already carries B-073's note
+that "the suite runs `fileParallelism` forks that contend for the CPU", but bounds only
+`testTimeout`/`hookTimeout`, never the fork count. Candidates: `poolOptions.forks.maxForks` (or
+`fileParallelism: false`) in `tools/caspar-bridge/vitest.config.ts`, and/or bounding this workspace
+against the rest of the run the way `gate:e2e` now is. Prefer whichever fixes the CLASS — these are
+socket + timer integration tests whose setup cost is irreducible, so they need a CPU share, not a
+longer rope.
+
+**Contention, not a cleanup gap — the one line of evidence gathered so far.** The obvious
+alternative cause is a leaked port/socket/server from a prior test. Checked read-only and
+**ruled out as the likely cause**: this suite does not rely on `try/finally` (or on
+trailing-line) cleanup at all. `tools/caspar-bridge/tests/support/harness.ts:56-74` registers every
+release at **creation** time via `track()` and drains them LIFO from `afterEach`, so cleanup "runs
+from `afterEach` no matter how the test exits" (`:11-12`) — a discipline B-073 introduced precisely
+because a failing `expect` could skip a trailing-line release. A release that itself fails throws an
+`AggregateError` rather than passing silently. So the cleanup path is stronger than the repo's
+`try/finally` rule, not weaker, and a leak is unlikely to be what starves the handshake.
+
+**Evidence still OWED (not gathered — this session had no Linux/WSL box).** The measurements that
+would settle it: the suite run ISOLATED 5× vs under full parallel `pnpm test` 5×, pass/fail each;
+`ss -ltnp` before/after each failure; the failing test file + name; the elapsed time to the timeout
+against the `HEALTH_MS` value in force. Until those exist, "contention" is the leading hypothesis
+carried by the isolation asymmetry and the B-073 precedent — **not** a measured conclusion. The
+counts above (4 occurrences; 36/36 and 139/139 isolated) are as REPORTED from the session that hit
+it, not re-measured here.
+
+**Regression test:** run the full parallel `pnpm test` under deliberate load (B-073's 24-worker hog
+one-liner is the established harness) and assert `@cg/caspar-bridge` is green repeatably — with the
+bound in place it should not depend on what else is scheduled. As in B-073, treat N/N green as the
+agreed bar rather than a proof of absence; the causal fix is what carries the claim.
+
 ## [ ] B-097 — `pnpm gate` is not safe to run twice concurrently in one workspace: vitest's shared coverage tmp dir produces an ENOENT that reads as a code defect ⟨priority: medium⟩
 
 **Repro:** trigger two gates in the same workspace at once. Observed 2026-07-19: a backgrounded
