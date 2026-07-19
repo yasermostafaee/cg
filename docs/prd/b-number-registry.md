@@ -105,6 +105,22 @@ B-096` heading on current `origin/main`, on any remote branch (the only hits any
 file's own "next free" pointer — the documented false positive), or in either sibling worktree. The
 space stays contiguous: `B-001` … `B-096`, no gaps. **Next free: `B-097`.**
 
+**Re-audited 2026-07-19** against `main` (`7f9868f`, after #369). `B-097` is now taken — `pnpm gate`
+being unsafe to run twice concurrently in one workspace, where vitest's shared coverage tmp dir
+throws an `ENOENT` that names an innocent suite ([bugs.md](bugs.md)). Verified free immediately
+before commit, and this time the search was widened past "every remote branch" because a sibling
+session can claim a RANGE rather than a single number: no `## [ ] B-097` heading on current
+`origin/main`, on any of the three remote branches, on ANY of the ~70 local branches across all
+three worktrees (most unpushed), or on disk in either sibling working tree including uncommitted
+edits. The highest heading found ANYWHERE — merged, unpushed or uncommitted — was `B-096`, so no
+range claim sits above it either. The duplicate audit still prints exactly `B-056` and `B-080`. The
+space stays contiguous: `B-001` … `B-097`, no gaps. **Next free: `B-098`.**
+
+Noted for whoever audits next: `cg-designer` was mid-merge at the time, with
+`docs/prd/bugs-designer.md` unmerged (`UU`). Both sides of that conflict were read from disk and
+neither claims `B-097` — but a session resolving a conflict in a bug file is exactly the state this
+registry exists to catch, so re-read that file before taking `B-098`.
+
 **This entry collided TWICE before landing, and the second time proves the rule above is not
 enough.** It first took `B-088` (the then-current "next free" pointer) while a parallel Designer
 workstream took the same number; it renumbered to `B-089` — and `B-089` turned out to be claimed by
