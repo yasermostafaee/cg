@@ -1733,3 +1733,40 @@ demotion from the drop still stands.
 **FROZEN:** on-air refusal (R-006), [[B-085]]'s library, [[B-086]]/[[B-087]]'s `unverified` badge,
 and B-092's occupied-branch behaviour when OSC IS flowing (hardware-confirmed correct: nothing
 sent, live producer untouched) are all unchanged.
+
+## [~] B-094 — a CasparCG that answers AMCP but sends no OSC reads as a confident green "PRIMARY A HEALTHY", and when the session finally notices it reads "DEGRADED" — which points the operator at the opposite remedy from the truth ⟨priority: medium⟩ — in progress on `feat/no-osc-indicator`, change dir `openspec/changes/runtime-no-osc-indicator/`
+
+Hit live by the owner: `casparcg.config` had the OSC `predefined-client` on port 5253 instead of
+6250, plus a literal `false [true|false]` left inline in `<disable-send-to-amcp-clients>`. AMCP
+worked perfectly throughout — commands acked, graphics rendered — so nothing in the UI pointed at
+the real fault.
+
+**Why it is mis-warning, not un-warning.** The health pill's HEALTHY is derived from the AMCP axis
+alone (`amcpAxisOk: state === 'healthy'`), so a blind install reads confident green. When
+`ServerSession` does notice the silence it degrades and then force-disconnects, so the pill reads
+DEGRADED / OFFLINE — and every operator reads that as "CasparCG is down". The truth is the
+opposite: the server is up and rendering; its OSC configuration is wrong. Those demand opposite
+remedies, and the wrong one — restarting a working playout box — takes air down. The install also
+FLAPS (healthy → degraded → reconnect), so the bar is reassuringly green for part of every cycle
+and mis-attributed for the rest.
+
+What is silently degraded meanwhile: on-air confirmation, [[B-086]]'s reconnect reconcile, R-009's
+orphan detection, and [[B-092]]/[[B-093]]'s stack restore — which now correctly REFUSES to decide,
+but could not say why.
+
+**Fix (indicator only — no decision, gate or command path changes):** publish `oscFreshAt` on each
+server's health from the SAME source-filtered has-heard-OSC signal [[B-093]] added (not a second,
+divergent one), using the `ServerHealthSchema` slot that already existed unused — no schema change.
+The StatusBar renders `⚠ NO OSC` beside the health pill when the server is answering AMCP and
+nothing has ever been heard from it, with a tooltip naming it as a CasparCG-side **configuration**
+problem, stating the server is UP, listing what is degraded, and giving the remedy.
+
+**A separate indicator, deliberately NOT a pill state.** The pill's vocabulary mirrors the session
+state machine exactly; "answering AMCP but inaudible" is an orthogonal axis, not another state on
+it. Keeping them apart lets the bar say both at once — "PRIMARY A HEALTHY ⚠ NO OSC" reads as "it is
+up, but I am deaf to it" — and it survives the flap: as the pill oscillates HEALTHY↔DEGRADED the
+indicator stays put and explains both, where a pill state would be overwritten by DEGRADED at
+exactly the moment the operator most needs the explanation.
+
+**FROZEN:** on-air refusal (R-006), [[B-086]]/[[B-087]]'s `unverified` badge, [[B-092]]'s restore
+and [[B-093]]'s blind-tap guard are untouched. This is an indicator; it changes no decision.

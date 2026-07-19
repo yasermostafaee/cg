@@ -33,6 +33,11 @@ const styles = {
   ok: { color: '#10B981' },
   // B-081 — the look of health we CANNOT currently verify: muted, never a confident color.
   stale: { color: colors.textMuted },
+  // B-094 — a CONFIGURATION problem on a server that is otherwise fine. Amber, the
+  // repo's caution tone: deliberately NOT `error` red, which is reserved for air
+  // claims and for a server that is actually down. Getting that wrong would repeat
+  // the mis-attribution this indicator exists to end.
+  noOsc: { color: colors.pending, fontWeight: 700 },
   spacer: { flex: 1 },
   lock: {
     display: 'inline-flex',
@@ -78,6 +83,58 @@ function sessionLabel(state: string): SessionLabel {
   }
 }
 
+/**
+ * B-094 — is this server answering AMCP while we hear NO OSC from it?
+ *
+ * The two axes are orthogonal and the pill only carries one. A server can be
+ * perfectly healthy on AMCP — rendering graphics, acking every command — while
+ * its OSC never reaches us because `casparcg.config` points the predefined-client
+ * somewhere else, or the UDP port is closed. The operator's install had exactly
+ * that: the client on port 5253 instead of 6250, and a literal
+ * `false [true|false]` left in `<disable-send-to-amcp-clients>`.
+ *
+ * Nothing in the UI pointed at it. Worse, when the session eventually notices the
+ * silence it DEGRADES — and DEGRADED reads as "CasparCG is down", which sends an
+ * engineer to restart a playout box that is working, taking air down. That is
+ * mis-warning, not un-warning, and it is what this fixes.
+ *
+ * Gated on the session having got past its handshake (`healthy`/`degraded`), so a
+ * cold start does not flash the warning during the connect/resync drain when no
+ * OSC has legitimately arrived yet. `oscFreshAt` absent means "never heard from
+ * this server this session" — the same source-filtered signal B-093's restore
+ * guard reads, not a second one.
+ */
+function isDeafToServer(server: { state: string; oscFreshAt?: string | undefined }): boolean {
+  return (
+    (server.state === 'healthy' || server.state === 'degraded') && server.oscFreshAt === undefined
+  );
+}
+
+/**
+ * Names the fault and the remedy, in that order. Says what is DEGRADED by it, so
+ * the operator can judge urgency — and says the server is fine, so nobody
+ * restarts it.
+ */
+function noOscTitle(label: string): string {
+  return (
+    `No OSC has ever reached the bridge from server ${label}, but AMCP on ${label} is ` +
+    'answering normally. The server is UP — this is an OSC configuration problem on the ' +
+    'CasparCG side, not a connection failure, so restarting the playout machine will not fix ' +
+    'it and would take working output off air. ' +
+    `While this shows, on-air confirmation, orphan detection and restore-after-restart are ` +
+    `unverified — and this pill's DEGRADED/OFFLINE readings are caused by the OSC silence, ` +
+    'not by a failing server. ' +
+    'Fix in casparcg.config: point <osc><predefined-clients> at this machine on the ' +
+    "bridge's OSC port (or set <disable-send-to-amcp-clients> to exactly false — a pasted " +
+    '"false [true|false]" is invalid and silently disables OSC), then open that UDP port.'
+  );
+}
+
+/** Hung off a deaf server's pill: its reading covers the command path only. */
+const AMCP_ONLY_TITLE =
+  'AMCP only — no OSC is arriving from this server, so this reading covers the command ' +
+  'path, not what is actually on screen.';
+
 /** The tooltip that keeps the last-known reading available without asserting it. */
 function staleTitle(state: string): string {
   return (
@@ -110,12 +167,35 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
     );
   }
 
-  const primary = stale ? UNKNOWN : sessionLabel(health.primary.state);
+  // B-094 — per SERVER: A and B are independent sessions with independent taps and
+  // independent bound UDP ports, so a mirror pair can have one deaf and the other fine.
+  const primaryDeaf = !stale && !simulated && isDeafToServer(health.primary);
+  const backupDeaf =
+    !stale && !simulated && health.backup !== undefined && isDeafToServer(health.backup);
+
+  // …and while a server is deaf, its pill STOPS ASSERTING. Leaving a confident green
+  // HEALTHY beside the amber warning is the exact shape this repo has already
+  // diagnosed twice (B-081, R-006): two contradictory claims, same size, same row —
+  // and the reassuring one wins. So the pill mutes to B-081's `stale` tone, which
+  // already means "health we cannot currently verify", and the warning carries the
+  // attribution. The state WORD is unchanged (it is the FSM's, and still true on the
+  // AMCP axis); only its confidence is withdrawn.
+  const primary = stale
+    ? UNKNOWN
+    : primaryDeaf
+      ? { ...sessionLabel(health.primary.state), style: styles.stale }
+      : sessionLabel(health.primary.state);
   // B-046 — `backup` is absent under a declared single-server config: render
   // the honest "no backup" state instead of a phantom card, and disable the
   // manual failover (the bridge refuses it anyway — nothing to switch to).
   const backup =
-    health.backup === undefined ? null : stale ? UNKNOWN : sessionLabel(health.backup.state);
+    health.backup === undefined
+      ? null
+      : stale
+        ? UNKNOWN
+        : backupDeaf
+          ? { ...sessionLabel(health.backup.state), style: styles.stale }
+          : sessionLabel(health.backup.state);
 
   return (
     <footer style={styles.bar} aria-label="Status bar">
@@ -130,8 +210,15 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
       ) : (
         <>
           {/* B-081 — while `stale`, the whole pill mutes: the green ● dot is a claim too. */}
-          <span className="cg-pill" {...(stale ? { title: staleTitle(health.primary.state) } : {})}>
-            <span style={stale ? styles.stale : styles.primary}>
+          <span
+            className="cg-pill"
+            {...(stale
+              ? { title: staleTitle(health.primary.state) }
+              : primaryDeaf
+                ? { title: AMCP_ONLY_TITLE }
+                : {})}
+          >
+            <span style={stale || primaryDeaf ? styles.stale : styles.primary}>
               ● PRIMARY {health.primary.label}
             </span>{' '}
             <span style={primary.style}>{primary.text}</span>
@@ -139,7 +226,11 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
           {health.backup !== undefined && backup !== null ? (
             <span
               className="cg-pill"
-              {...(stale ? { title: staleTitle(health.backup.state) } : {})}
+              {...(stale
+                ? { title: staleTitle(health.backup.state) }
+                : backupDeaf
+                  ? { title: AMCP_ONLY_TITLE }
+                  : {})}
             >
               <span style={styles.backup}>○ BACKUP {health.backup.label}</span>{' '}
               <span style={backup.style}>{backup.text}</span>
@@ -147,6 +238,33 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
           ) : (
             <span className="cg-pill">
               <span style={styles.backup}>○ NO BACKUP</span>
+            </span>
+          )}
+          {/* B-094 — a SEPARATE indicator, deliberately not a pill STATE.
+              The pill's vocabulary mirrors the session state machine exactly, and
+              "answering AMCP but inaudible" is an orthogonal axis, not another
+              state on it. Keeping them apart lets the bar say both things at once —
+              "PRIMARY A HEALTHY  ⚠ NO OSC" reads as "it is up, but I am deaf to it",
+              which is the truth. It also survives the FLAP a blind install causes:
+              as the pill oscillates HEALTHY↔DEGRADED this stays put and explains
+              BOTH, where a pill state would be overwritten by DEGRADED at exactly
+              the moment the operator most needs the explanation. */}
+          {primaryDeaf && (
+            <span
+              className="cg-pill"
+              title={noOscTitle(health.primary.label)}
+              aria-label={`No OSC from server ${health.primary.label}`}
+            >
+              <span style={styles.noOsc}>⚠ NO OSC FROM {health.primary.label}</span>
+            </span>
+          )}
+          {backupDeaf && health.backup !== undefined && (
+            <span
+              className="cg-pill"
+              title={noOscTitle(health.backup.label)}
+              aria-label={`No OSC from server ${health.backup.label}`}
+            >
+              <span style={styles.noOsc}>⚠ NO OSC FROM {health.backup.label}</span>
             </span>
           )}
           {/* The strategy is CONFIG, not health — it does not go stale with the link. */}
