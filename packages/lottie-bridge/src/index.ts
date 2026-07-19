@@ -10,10 +10,11 @@ export type { LottieLoopMode, LottiePlayerOptions, LottiePlayerHandle } from './
 export { lottieClipMeta, lottieTiming } from './timing.js';
 export type { LottieClipMeta, LottiePhaseSpan, LottieTiming, LottieTimingInput } from './timing.js';
 
-export { importLottie, markersToSegments } from './import.js';
+export { importLottie, lottieLayerNames, markersToSegments } from './import.js';
 export type {
   ImportResult,
   LottieAnimation,
+  LottieLayerInfo,
   LottieMarker,
   LottieSegments,
   RejectedFeature,

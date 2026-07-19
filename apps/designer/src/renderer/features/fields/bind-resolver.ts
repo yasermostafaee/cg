@@ -1,4 +1,15 @@
+import type { LottieLayerInfo } from '@cg/lottie-bridge';
 import type { DynamicField, Element, FieldBinding, Scene } from '@cg/shared-schema';
+
+/**
+ * D-125 Phase 3c — context the caller supplies for targets the (field, element) pair
+ * alone cannot resolve. A `lottie-override` needs a LAYER name, which lives in the
+ * parsed animation (the renderer's lottieAssetCache), not on the element.
+ */
+export interface ResolveBindingContext {
+  /** Named top-level layers of the hit Lottie's animation (`lottieLayerNames`). */
+  lottieLayers?: readonly LottieLayerInfo[] | undefined;
+}
 
 /**
  * Best-effort default binding for a (field, element) pair.
@@ -17,10 +28,26 @@ import type { DynamicField, Element, FieldBinding, Scene } from '@cg/shared-sche
  *   - number          + any       → opacity (the most "universally useful" numeric prop)
  *   - image           + image     → swap image asset
  */
-export function resolveBinding(field: DynamicField, element: Element): FieldBinding | null {
+export function resolveBinding(
+  field: DynamicField,
+  element: Element,
+  context?: ResolveBindingContext,
+): FieldBinding | null {
   if (field.type === 'text' || field.type === 'multiline') {
     if (element.type === 'text') {
       return { fieldId: field.id, target: { kind: 'text', elementId: element.id } };
+    }
+    // D-125 Phase 3c — a text field on a Lottie targets the clip's FIRST text layer
+    // (the natural default; the binding row shows `lottie <layer>.text` so the pick is
+    // visible). A clip with no text layer can't take a text override — null, and the
+    // UI's existing "can't bind" feedback surfaces it.
+    if (element.type === 'lottie') {
+      const layer = context?.lottieLayers?.find((l) => l.kind === 'text');
+      if (layer === undefined) return null;
+      return {
+        fieldId: field.id,
+        target: { kind: 'lottie-override', elementId: element.id, layer: layer.name, prop: 'text' },
+      };
     }
     return null;
   }
@@ -31,6 +58,18 @@ export function resolveBinding(field: DynamicField, element: Element): FieldBind
     return null;
   }
   if (field.type === 'color') {
+    // D-125 Phase 3c — a colour field on a Lottie recolours the FIRST DRAWABLE
+    // (shape/solid) layer's static fill: the typical single-furniture-shape case.
+    // Deliberately NOT "first non-text" — AE rigs often lead with a null controller
+    // or a precomp, whose subtree carries no direct paint to hit.
+    if (element.type === 'lottie') {
+      const layer = context?.lottieLayers?.find((l) => l.kind === 'shape');
+      if (layer === undefined) return null;
+      return {
+        fieldId: field.id,
+        target: { kind: 'lottie-override', elementId: element.id, layer: layer.name, prop: 'fill' },
+      };
+    }
     if (element.type === 'shape') {
       return {
         fieldId: field.id,

@@ -11,7 +11,12 @@ import type { Scene } from '@cg/shared-schema';
  */
 
 const { handles } = vi.hoisted(() => ({
-  handles: [] as { frames: number[]; destroyed: boolean; el: HTMLElement }[],
+  handles: [] as {
+    frames: number[];
+    destroyed: boolean;
+    el: HTMLElement;
+    overrides: [string, string, string][];
+  }[],
 }));
 
 // Only the PLAYER is stubbed; the module's pure helpers (`lottieClipMeta` /
@@ -23,6 +28,7 @@ vi.mock('@cg/lottie-bridge', async (importOriginal) => ({
       element: container,
       el: container,
       frames: [] as number[],
+      overrides: [] as [string, string, string][],
       destroyed: false,
       play: () => undefined,
       pause: () => undefined,
@@ -32,6 +38,10 @@ vi.mock('@cg/lottie-bridge', async (importOriginal) => ({
       },
       goToFrame(f: number) {
         h.frames.push(f);
+      },
+      applyOverride(layer: string, prop: string, value: string) {
+        h.overrides.push([layer, prop, value]);
+        return true;
       },
       get isAlive() {
         return !h.destroyed;
@@ -196,5 +206,107 @@ describe('createRuntime — Lottie element wiring (D-125 Phase 1)', () => {
     await runtime.ready;
     runtime.remove();
     expect(handles[0]?.destroyed).toBe(true);
+  });
+});
+
+// — D-125 Phase 3c — lottie-override through the real wiring ————————————————
+
+describe('createRuntime — lottie-override field bindings (D-125 Phase 3c)', () => {
+  /** The lottie scene plus one text field bound to a lottie-override target. */
+  function boundScene(): Scene {
+    const scene = lottieScene();
+    return {
+      ...scene,
+      fields: [
+        { id: 'headline', label: 'Headline', required: false, type: 'text', default: 'AUTH' },
+      ],
+      bindings: [
+        {
+          fieldId: 'headline',
+          target: { kind: 'lottie-override', elementId: 'lot', layer: 'title', prop: 'text' },
+        },
+      ],
+    } as unknown as Scene;
+  }
+
+  it('applies the override on play AND on every update() — the same path as other bound fields', async () => {
+    const clock = makeClock();
+    const r = createRuntime(boundScene(), {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+      clock: clock as never,
+    });
+    await r.play({ headline: 'FIRST' });
+    expect(handles[0]?.overrides).toContainEqual(['title', 'text', 'FIRST']);
+    const afterPlay = handles[0]?.overrides.length ?? 0;
+    await r.update({ headline: 'SECOND' });
+    expect(handles[0]?.overrides.at(-1)).toEqual(['title', 'text', 'SECOND']);
+    expect(handles[0]?.overrides.length ?? 0).toBeGreaterThan(afterPlay);
+    r.remove();
+  });
+
+  it('the STORED template is unchanged — an override is a runtime value, not a template edit', async () => {
+    const scene = boundScene();
+    const before = JSON.stringify(scene);
+    const clock = makeClock();
+    const r = createRuntime(scene, {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+      clock: clock as never,
+    });
+    await r.play({ headline: 'LIVE VALUE' });
+    await r.update({ headline: 'ANOTHER' });
+    expect(JSON.stringify(scene)).toBe(before); // byte-identical scene document
+    r.remove();
+  });
+
+  it('LIFECYCLE SAFETY: an update mid-hold and mid-outro never touches the playhead or strands', async () => {
+    const clock = makeClock();
+    const r = createRuntime(boundScene(), {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+      clock: clock as never,
+    });
+    await r.play({ headline: 'A' });
+    // Intro [0→5]@fr100 = 50 ms → freeze hold.
+    clock.advance(80);
+    const framesAtHold = handles[0]?.frames.length ?? 0;
+    await r.update({ headline: 'MID-HOLD' }); // override lands during the hold
+    expect(handles[0]?.frames.length).toBe(framesAtHold); // playhead untouched
+    const stopP = r.stop(); // outro [80→100]@fr100 = 200 ms
+    clock.advance(60); // mid-outro
+    await r.update({ headline: 'MID-OUTRO' }); // …and during the outro
+    expect(handles[0]?.overrides.at(-1)).toEqual(['title', 'text', 'MID-OUTRO']);
+    clock.advance(200);
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    clock.advance(600); // background settles
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    await stopP; // resolves — the exit was never stranded by the overrides
+    r.remove();
+  });
+
+  it('B-034: a HIDDEN Lottie takes the value harmlessly and stays lifecycle-inert', async () => {
+    const scene = boundScene();
+    (scene.layers[0]!.children[0] as unknown as Record<string, unknown>)['visible'] = false;
+    const clock = makeClock();
+    const r = createRuntime(scene, {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+      clock: clock as never,
+    });
+    await r.play({ headline: 'X' });
+    // The override reaches the (invisible) mount — same as text bindings on hidden
+    // elements — but the hidden gate still keeps the element OUT of the lifecycle:
+    // stop() settles at background speed, no outro awaited (the Phase-2 contract).
+    const stopP = r.stop();
+    clock.advance(600);
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    await stopP;
+    expect(handles[0]?.frames.filter((f) => f > 80)).toHaveLength(0); // no outro driven
+    r.remove();
   });
 });

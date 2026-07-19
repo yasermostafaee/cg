@@ -217,3 +217,165 @@ describe('createLottiePlayer', () => {
     expect(lastAnim.play).toHaveBeenCalled();
   });
 });
+
+// — D-125 Phase 3c — applyOverride (text / fill / stroke on named layers) ————
+
+describe('applyOverride', () => {
+  /** Attach a fake SVG renderer with named layer elements to the last mock anim. */
+  function attachRenderer(
+    elements: (Record<string, unknown> | undefined)[],
+  ): (Record<string, unknown> | undefined)[] {
+    (lastAnim as unknown as Record<string, unknown>)['renderer'] = { elements };
+    return elements;
+  }
+
+  function textLayer(name: string): {
+    el: Record<string, unknown>;
+    calls: [Record<string, unknown>, number | undefined][];
+  } {
+    const calls: [Record<string, unknown>, number | undefined][] = [];
+    const el = {
+      data: { nm: name },
+      updateDocumentData: (d: Record<string, unknown>, i?: number) => {
+        calls.push([d, i]);
+      },
+    };
+    return { el, calls };
+  }
+
+  function shapeLayer(name: string): { el: Record<string, unknown>; group: HTMLElement } {
+    // A stand-in for the SVG <g>: attribute semantics are what the patch relies on.
+    const group = document.createElement('div');
+    group.innerHTML =
+      '<div data-p fill="rgb(1,2,3)"></div>' + // patched
+      '<div data-p fill="none"></div>' + // authored hole — kept
+      '<div data-p></div>'; // no attr — kept
+    return { el: { data: { nm: name }, layerElement: group }, group };
+  }
+
+  it('text override reaches the NAMED text layer via updateDocumentData (t only)', () => {
+    const h = createLottiePlayer(document.createElement('div'), minimalLottieData);
+    const title = textLayer('title');
+    const other = textLayer('subtitle');
+    attachRenderer([title.el, other.el]);
+    expect(h.applyOverride('title', 'text', 'BREAKING')).toBe(true);
+    expect(title.calls).toEqual([[{ t: 'BREAKING' }, 0]]);
+    expect(other.calls).toHaveLength(0); // addressing is by name — siblings untouched
+  });
+
+  it('fill override patches only nodes that CARRY a real fill (holes stay holes)', () => {
+    const h = createLottiePlayer(document.createElement('div'), minimalLottieData);
+    const { el, group } = shapeLayer('bar');
+    attachRenderer([el]);
+    expect(h.applyOverride('bar', 'fill', '#00ff00')).toBe(true);
+    const nodes = Array.from(group.querySelectorAll('[data-p]'));
+    expect(nodes[0]?.getAttribute('fill')).toBe('#00ff00'); // patched
+    expect(nodes[1]?.getAttribute('fill')).toBe('none'); // authored hole preserved
+    expect(nodes[2]?.hasAttribute('fill')).toBe(false); // untouched
+  });
+
+  it('unknown layer / unknown prop / lazy hole / destroyed player are graceful false', () => {
+    const h = createLottiePlayer(document.createElement('div'), minimalLottieData);
+    const { el } = shapeLayer('bar');
+    attachRenderer([undefined, el]); // a lazily-unbuilt hole in elements
+    expect(h.applyOverride('missing', 'fill', '#fff')).toBe(false);
+    expect(h.applyOverride('bar', 'phases', 'x')).toBe(false); // not an override surface
+    h.destroy();
+    expect(h.applyOverride('bar', 'fill', '#fff')).toBe(false);
+  });
+
+  it('a renderer without elements (shape mismatch) degrades to false, never throws', () => {
+    const h = createLottiePlayer(document.createElement('div'), minimalLottieData);
+    // No renderer attached at all — the internal access is fully defensive.
+    expect(h.applyOverride('any', 'text', 'x')).toBe(false);
+  });
+
+  it('fill override ALSO patches the built style data lottie re-stamps from on show() (0-255 c.v)', () => {
+    // The wipe bug: lottie re-runs static renderFill with isFirstFrame on a
+    // hidden->shown transition (fade-in entrance, replay, idle wrap), re-stamping
+    // the AUTHORED colour from itemData.c.v over any DOM-only patch. Patching c.v
+    // makes the re-stamp emit the OVERRIDE instead.
+    const h = createLottiePlayer(document.createElement('div'), minimalLottieData);
+    const { el, group } = shapeLayer('bar');
+    const fillData = { c: { v: [255, 0, 0] }, o: {}, style: {} }; // a fill: no `w`
+    const strokeData = { c: { v: [1, 2, 3] }, o: {}, w: {}, style: {} }; // a stroke: has `w`
+    (el as Record<string, unknown>)['itemsData'] = [{ it: [fillData, strokeData] }];
+    attachRenderer([el]);
+    expect(h.applyOverride('bar', 'fill', '#00ff00')).toBe(true);
+    expect(fillData.c.v).toEqual([0, 255, 0]); // the re-stamp source now holds the override
+    expect(strokeData.c.v).toEqual([1, 2, 3]); // prop-addressed: the stroke is untouched
+    expect(group.querySelector('[data-p]')?.getAttribute('fill')).toBe('#00ff00'); // DOM too
+    expect(h.applyOverride('bar', 'stroke', 'rgb(9, 8, 7)')).toBe(true);
+    expect(strokeData.c.v).toEqual([9, 8, 7]);
+    expect(fillData.c.v).toEqual([0, 255, 0]);
+  });
+
+  it('a text apply forces ONE repaint of the current frame (the frozen-hold case)', () => {
+    // updateDocumentData only marks the text dirty; the DOM rebuild happens inside a
+    // renderer pass. With the driver frozen there is no next pass — so applyOverride
+    // must invalidate the renderer's same-frame early-return and repaint in place.
+    const h = createLottiePlayer(document.createElement('div'), minimalLottieData);
+    const title = textLayer('title');
+    attachRenderer([title.el]);
+    const a = lastAnim as unknown as Record<string, unknown>;
+    (a['renderer'] as Record<string, unknown>)['renderedFrame'] = 12;
+    a['currentFrame'] = 12;
+    expect(h.applyOverride('title', 'text', 'LIVE')).toBe(true);
+    expect((a['renderer'] as Record<string, unknown>)['renderedFrame']).toBe(-1);
+    expect(lastAnim.goToAndStop).toHaveBeenCalledWith(12, true); // same frame — playhead unmoved
+  });
+
+  it('a colour apply does NOT force a repaint (the DOM patch is already visible)', () => {
+    const h = createLottiePlayer(document.createElement('div'), minimalLottieData);
+    const { el } = shapeLayer('bar');
+    attachRenderer([el]);
+    expect(h.applyOverride('bar', 'fill', '#123456')).toBe(true);
+    expect(lastAnim.goToAndStop).not.toHaveBeenCalled();
+  });
+
+  it('a matched layer with NO patchable paint reports false (applied is honest)', () => {
+    const h = createLottiePlayer(document.createElement('div'), minimalLottieData);
+    const group = document.createElement('div');
+    group.innerHTML = '<div data-p></div>'; // subtree carries no fill anywhere
+    attachRenderer([{ data: { nm: 'empty' }, layerElement: group }]);
+    expect(h.applyOverride('empty', 'fill', '#fff')).toBe(false);
+  });
+});
+
+describe('lottieLayerNames', () => {
+  it('lists named top-level layers in authored order with text/shape/other kinds', async () => {
+    const { lottieLayerNames } = await import('../src/import.js');
+    const data = {
+      layers: [
+        { ty: 4, nm: 'bar' },
+        { ty: 5, nm: 'title' },
+        { ty: 4 }, // unnamed — skipped
+        { ty: 5, nm: 'sub' },
+      ],
+    };
+    expect(lottieLayerNames(data)).toEqual([
+      { name: 'bar', kind: 'shape' },
+      { name: 'title', kind: 'text' },
+      { name: 'sub', kind: 'text' },
+    ]);
+  });
+
+  it('malformed data yields []', async () => {
+    const { lottieLayerNames } = await import('../src/import.js');
+    expect(lottieLayerNames(null)).toEqual([]);
+    expect(lottieLayerNames({ layers: 'nope' })).toEqual([]);
+  });
+
+  it('non-drawable layers (null / precomp / image / solid) classify for the auto-pick', async () => {
+    const { lottieLayerNames } = await import('../src/import.js');
+    const data = {
+      layers: [
+        { ty: 3, nm: 'controller' }, // null — 'other': never an automatic colour pick
+        { ty: 0, nm: 'group' }, // precomp — 'other'
+        { ty: 2, nm: 'logo' }, // image — 'other'
+        { ty: 1, nm: 'backdrop' }, // solid — 'shape' (carries a real paint)
+      ],
+    };
+    expect(lottieLayerNames(data).map((l) => l.kind)).toEqual(['other', 'other', 'other', 'shape']);
+  });
+});

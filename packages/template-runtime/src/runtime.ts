@@ -76,6 +76,7 @@ import {
   repeaterItemValues,
 } from './scene-builder.js';
 import { createLottiePlayer, lottieClipMeta, lottieTiming } from '@cg/lottie-bridge';
+import { registerLottiePlayer } from './lottie-registry.js';
 import { ClockDriver } from './clock-driver.js';
 import { LottieDriver } from './lottie-driver.js';
 import {
@@ -819,6 +820,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           autoplay: false,
           speed: l.element.speed,
         });
+        // D-125 Phase 3c — expose the mounted player to the binding path, so a
+        // `lottie-override` field routes to this animation (mirrors tickerDriverFor).
+        registerLottiePlayer(l.container, handle);
         // Resolve the phase frames onto the animation's frame space: absent `phases`
         // ⇒ the whole clip is the intro, held (frozen) at `op`. The idle segment
         // defaults to the hold window `[introEnd, outroStart]` (§D2.2).

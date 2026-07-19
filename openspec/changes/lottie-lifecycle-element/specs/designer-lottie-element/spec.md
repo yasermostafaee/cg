@@ -226,15 +226,62 @@ frame off the same injected runtime clock, not by an autonomous player.
 
 ### Requirement: Lottie field overrides resolve through the existing bindings model
 
-WHEN a Lottie field override (text / colour; image if cheap) is bound, it SHALL resolve through the
-EXISTING fields/bindings model and the `lottie-override` binding target SHALL stop being a no-op. This
-is a secondary path — the native overlay, not the Lottie, carries the dynamic content.
+The `lottie-override` binding target SHALL resolve through the EXISTING fields/bindings model — no
+longer a no-op (Phase 3c). The override surface is text and colour on NAMED top-level layers:
+`prop: 'text'` replaces a text layer's document text; `prop: 'fill' | 'stroke'` recolours a layer's
+STATIC authored fill/stroke. Image substitution is deferred (the design allows it only "if cheap",
+and it is not). An override SHALL apply on play and on every `update()`, live and in place (D-106) —
+it SHALL NOT touch the driver's playhead, retarget an in-flight lifecycle leg, or alter the
+Phase-3a-derived entrance settle (no phase-affecting property is overridable: not `phases`, not
+`speed`, not `holdBehavior`, not the asset). The STORED template SHALL be byte-unchanged — an
+override is a runtime value, not a template edit. The opacity principle holds: an override
+substitutes a static authored value; it SHALL NOT convert, re-time, or edit internal keyframes, and
+an ANIMATED property remains owned by the clip's own keyframes. This is a secondary path — the
+native overlay, not the Lottie, carries the dynamic content.
 
 #### Scenario: A bound text/colour override reaches the animation
 
 - **WHEN** a `text` or `color` field is bound to a `lottie-override` target naming a layer and property
 - **THEN** the value resolves through the bindings model and updates that layer's text/colour in the
   rendered Lottie, on play and on every `update()`
+
+#### Scenario: The stored template is unchanged (Phase 3c)
+
+- **WHEN** overrides are applied through play and repeated `update()` calls
+- **THEN** the stored scene document is byte-identical to before — the override lives only in the
+  mounted animation
+
+#### Scenario: A mid-lifecycle override never disturbs the lifecycle (Phase 3c)
+
+- **WHEN** an override value arrives during the intro, the hold, or mid-outro
+- **THEN** it applies in place without touching the playhead — the leg in flight continues, the exit
+  settles normally, and the entrance settle derivation is unaffected
+
+#### Scenario: Overrides degrade gracefully (Phase 3c)
+
+- **WHEN** the target layer is missing/mistyped, the player is unmounted (unresolved asset) or
+  destroyed, or the prop is outside the override surface
+- **THEN** the override is a silent no-op — never a throw, never a strand — and a later `update()`
+  re-applies once the target exists
+
+#### Scenario: A hidden Lottie stays lifecycle-inert under overrides (Phase 3c)
+
+- **WHEN** a hidden (`visible: false`) Lottie's element receives an override value
+- **THEN** the value lands on the invisible mount harmlessly (like any binding on a hidden element)
+  and the B-034 gates are unchanged — the element still contributes no hold, no outro, no settle
+
+#### Scenario: Bind-from-canvas targets the clip's layers (Phase 3c)
+
+- **WHEN** the operator binds a text (or colour) field from canvas onto a Lottie element
+- **THEN** the resolver targets the clip's first text (or first non-text) layer by name, the binding
+  row shows `lottie <layer>.<prop>`, and a clip with no matching layer refuses the bind with the
+  existing "can't bind" feedback
+
+#### Scenario: The GDD carries override fields to the operator (Phase 3c)
+
+- **WHEN** a field bound to a `lottie-override` target is exported
+- **THEN** it is emitted in the GDD/manifest exactly like any other field — the Runtime operator app
+  surfaces it with no special casing — and both exporters carry the binding with the scene
 
 ### Requirement: Preview, .vcg, and single-file HTML render identically and run offline under CEF
 

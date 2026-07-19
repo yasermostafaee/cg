@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Composition, Element, Scene, Track } from '@cg/shared-schema';
 import { applyFieldValues } from '../src/bindings.js';
+import { registerLottiePlayer } from '../src/lottie-registry.js';
 import { applyAnimationAtFrame, type AnimatedElement } from '../src/animation-applier.js';
 import { buildScene } from '../src/scene-builder.js';
 import { interpolateAtFrame } from '../src/keyframe-eval.js';
@@ -69,10 +70,71 @@ describe('applyFieldValues — transform + lottie-override targets', () => {
     ).toBe('1');
   });
 
-  it('lottie-override is a no-op (lands with M3.3) and does not throw', () => {
+  // D-125 Phase 3c — the old test here PINNED the placeholder: "lottie-override is a
+  // no-op (lands with M3.3) and does not throw". That assertion described scaffolding,
+  // not a contract — the target existed in the schema before the runtime could honour
+  // it. The handler is now real; these pin the actual routing.
+  it('lottie-override routes layer/prop/value to the mounted player (with the text transform)', () => {
+    const calls: [string, string, string][] = [];
+    const scene = structuredClone(lowerThirdScene);
+    scene.fields.push({ id: 'x', label: 'X', required: false, type: 'text', default: '' });
+    scene.bindings.push({
+      fieldId: 'x',
+      target: { kind: 'lottie-override', elementId: 'bg', layer: 'title', prop: 'text' },
+      transform: 'uppercase',
+    });
+    const { container, elementMap, textOriginals } = buildScene(scene);
+    const el = elementMap.get('bg');
+    expect(el).toBeDefined();
+    registerLottiePlayer(el as HTMLElement, {
+      element: el as HTMLElement,
+      play: () => undefined,
+      pause: () => undefined,
+      stop: () => undefined,
+      destroy: () => undefined,
+      goToFrame: () => undefined,
+      applyOverride: (layer, prop, value) => {
+        calls.push([layer, prop, value]);
+        return true;
+      },
+      isAlive: true,
+    });
+    applyFieldValues(scene, { x: 'breaking' }, elementMap, textOriginals, container);
+    // The text-transform pipeline applies exactly like the `text` binding target.
+    expect(calls).toEqual([['title', 'text', 'BREAKING']]);
+  });
+
+  it('lottie-override without a mounted player is a graceful no-op (unresolved asset)', () => {
     expect(() =>
       bindExtra({ kind: 'lottie-override', elementId: 'bg', layer: 'l', prop: 'p' }, 'x', 'text'),
     ).not.toThrow();
+  });
+
+  it('lottie-override skips a DESTROYED player (isAlive gate)', () => {
+    const calls: unknown[] = [];
+    const scene = structuredClone(lowerThirdScene);
+    scene.fields.push({ id: 'x', label: 'X', required: false, type: 'text', default: '' });
+    scene.bindings.push({
+      fieldId: 'x',
+      target: { kind: 'lottie-override', elementId: 'bg', layer: 'l', prop: 'fill' },
+    });
+    const { container, elementMap, textOriginals } = buildScene(scene);
+    const el = elementMap.get('bg') as HTMLElement;
+    registerLottiePlayer(el, {
+      element: el,
+      play: () => undefined,
+      pause: () => undefined,
+      stop: () => undefined,
+      destroy: () => undefined,
+      goToFrame: () => undefined,
+      applyOverride: (...args) => {
+        calls.push(args);
+        return true;
+      },
+      isAlive: false, // torn down — must not be reached
+    });
+    applyFieldValues(scene, { x: '#ff0000' }, elementMap, textOriginals, container);
+    expect(calls).toHaveLength(0);
   });
 
   it('writes colour to stroke (border) and to text colour', () => {

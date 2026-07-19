@@ -10,7 +10,7 @@ describe('FieldBinding target variants', () => {
     { kind: 'visible' as const, elementId: 'e1' },
     { kind: 'transform' as const, elementId: 'e1', property: 'opacity' as const },
     { kind: 'scene-background' as const },
-    { kind: 'lottie-override' as const, elementId: 'e1', layer: 'L1', prop: 'color' },
+    { kind: 'lottie-override' as const, elementId: 'e1', layer: 'L1', prop: 'fill' },
     { kind: 'ticker-items' as const, elementId: 'e1' },
   ])('accepts $kind target', (target) => {
     const b = { fieldId: 'headline', target };

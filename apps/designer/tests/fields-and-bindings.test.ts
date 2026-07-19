@@ -230,3 +230,40 @@ describe('resolveBinding — element/field type matrix', () => {
     expect(b).toBeNull();
   });
 });
+
+// — D-125 Phase 3c — lottie-override resolution ————————————————————————————
+
+describe('resolveBinding — lottie-override (D-125 Phase 3c)', () => {
+  const lottieEl = { id: 'lot', type: 'lottie', assetId: 'a' } as unknown as Parameters<
+    typeof resolveBinding
+  >[1];
+  const layers = [
+    { name: 'rig', kind: 'other' as const }, // a null/precomp controller leads, as AE rigs do
+    { name: 'bar', kind: 'shape' as const },
+    { name: 'title', kind: 'text' as const },
+  ];
+  const textField = defaultField('headline', 'text');
+  const colorField = defaultField('tint', 'color');
+
+  it('a text field on a Lottie targets the FIRST text layer with prop "text"', () => {
+    expect(resolveBinding(textField, lottieEl, { lottieLayers: layers })).toEqual({
+      fieldId: textField.id,
+      target: { kind: 'lottie-override', elementId: 'lot', layer: 'title', prop: 'text' },
+    });
+  });
+
+  it('a color field on a Lottie targets the FIRST DRAWABLE layer with prop "fill" (skipping the rig)', () => {
+    expect(resolveBinding(colorField, lottieEl, { lottieLayers: layers })).toEqual({
+      fieldId: colorField.id,
+      target: { kind: 'lottie-override', elementId: 'lot', layer: 'bar', prop: 'fill' },
+    });
+  });
+
+  it('no matching layer (or no context) resolves to null — the UI surfaces "can\'t bind"', () => {
+    expect(resolveBinding(textField, lottieEl, { lottieLayers: [layers[1]!] })).toBeNull();
+    expect(resolveBinding(colorField, lottieEl, { lottieLayers: [layers[2]!] })).toBeNull();
+    // Only non-drawable layers (null/precomp/image): a colour override has nothing to hit.
+    expect(resolveBinding(colorField, lottieEl, { lottieLayers: [layers[0]!] })).toBeNull();
+    expect(resolveBinding(textField, lottieEl)).toBeNull();
+  });
+});

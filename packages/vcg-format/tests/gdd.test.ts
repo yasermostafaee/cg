@@ -235,3 +235,34 @@ describe('buildGddSchema', () => {
     });
   });
 });
+
+// — D-125 Phase 3c — a lottie-override-bound field is an ordinary GDD field ———
+
+describe('lottie-override bound fields in the GDD (D-125 Phase 3c)', () => {
+  it('emits the field like any other — the Runtime operator app can surface it', () => {
+    const scene: Scene = {
+      ...fixtureScene,
+      fields: [
+        ...fixtureScene.fields,
+        { id: 'headline', label: 'Headline', required: false, type: 'text', default: 'HELLO' },
+      ],
+      bindings: [
+        ...fixtureScene.bindings,
+        {
+          fieldId: 'headline',
+          target: { kind: 'lottie-override', elementId: 'lot', layer: 'title', prop: 'text' },
+        },
+      ],
+    };
+    const gdd = buildGddSchema(scene);
+    // GDD emission is FIELD-driven: the binding's target kind is irrelevant to the
+    // schema, so a lottie-override field reaches the operator exactly like a text
+    // binding's — nothing special-cased, nothing dropped.
+    expect(gdd.properties['headline']).toMatchObject({
+      type: 'string',
+      gddType: 'single-line',
+      label: 'Headline',
+      default: 'HELLO',
+    });
+  });
+});

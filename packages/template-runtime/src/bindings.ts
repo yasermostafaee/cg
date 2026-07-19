@@ -10,6 +10,7 @@ import { coerceRepeaterItems, repeaterDriverFor } from './repeater-driver.js';
 import { coerceSequenceItems, sequenceDriverFor } from './sequence-driver.js';
 import { textRenderNode } from './text-render-node.js';
 import { coerceTickerItems, tickerDriverFor } from './ticker-driver.js';
+import { lottiePlayerFor } from './lottie-registry.js';
 import { applyTransform, stringifyValue } from './transforms.js';
 
 /**
@@ -208,7 +209,36 @@ function applyOne(
       return;
     }
     case 'lottie-override': {
-      // Lottie field overrides land with M3.3.
+      // D-125 Phase 3c — no longer a no-op. Route the value to the MOUNTED player's
+      // override seam: `prop: 'text'` replaces a named text layer's document text
+      // (lottie-web's own dynamic-text API), `prop: 'fill' | 'stroke'` recolours the
+      // named layer's static authored fill/stroke. Applied on play and on every
+      // update() like every other binding (this walk IS both paths), live and
+      // in place (D-106) — the playhead VALUE never moves, so an override landing
+      // mid-intro/hold/outro cannot retarget a leg or strand an exit (a text apply
+      // repaints the current frame once, which is what makes a mid-HOLD retitle
+      // visible while the driver is frozen). The text transform pipeline + the
+      // field's maxLength cap apply exactly like the `text` binding; colours skip
+      // both. A missing player (asset unresolved, destroyed) or a missing layer is
+      // a graceful no-op — the next update() re-applies.
+      const el = elementMap.get(target.elementId);
+      if (!el) return;
+      const player = lottiePlayerFor(el);
+      if (player === undefined) return;
+      if (target.prop === 'text') {
+        let text = applyTransform(stringifyValue(raw), binding.transform);
+        // Same code-point cap as the `text` target — the SAME field must behave the
+        // same whether it lands on a native text element or a Lottie text layer.
+        if (maxLength !== undefined && [...text].length > maxLength) {
+          text = [...text].slice(0, maxLength).join('');
+        }
+        player.applyOverride(target.layer, 'text', text);
+      } else {
+        // Colours deliberately SKIP the text-transform pipeline: a digits/date
+        // transform on a colour binding would corrupt the SVG paint value
+        // ('#ff0000' with persian-digits is not a colour).
+        player.applyOverride(target.layer, target.prop, stringifyValue(raw));
+      }
       return;
     }
     case 'ticker-items': {

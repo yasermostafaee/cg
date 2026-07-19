@@ -341,3 +341,37 @@ export function markersToSegments(animation: LottieAnimation): LottieSegments | 
     idleOut: idleValid ? (idleOut as number) : outroStart,
   };
 }
+
+/** One named top-level layer of a parsed bodymovin object, for binding pickers. */
+export interface LottieLayerInfo {
+  name: string;
+  /**
+   * `text` layers take a `prop: 'text'` override; `shape` covers the DRAWABLE types a
+   * fill/stroke override can actually hit (shape ty 4, solid ty 1); `other` is
+   * everything else (precomp / image / null) — addressable by hand but never a good
+   * automatic pick (an AE rig's first layer is often a null controller with no paint).
+   */
+  kind: 'text' | 'shape' | 'other';
+}
+
+/**
+ * D-125 Phase 3c — the NAMED top-level layers of a parsed bodymovin object, in
+ * authored order. The Designer's bind-resolver picks a `lottie-override` target from
+ * these (a text field wants the first `text` layer; a colour field the first shape).
+ * Top-level only, matching {@link LottiePlayerHandle.applyOverride}'s addressing —
+ * precomp internals are the clip's own business. Defensive: malformed data yields [].
+ */
+export function lottieLayerNames(data: unknown): LottieLayerInfo[] {
+  if (typeof data !== 'object' || data === null) return [];
+  const layers = (data as Record<string, unknown>)['layers'];
+  if (!Array.isArray(layers)) return [];
+  const out: LottieLayerInfo[] = [];
+  for (const layer of layers) {
+    if (typeof layer !== 'object' || layer === null) continue;
+    const l = layer as Record<string, unknown>;
+    if (typeof l['nm'] !== 'string' || l['nm'].length === 0) continue;
+    const ty = l['ty'];
+    out.push({ name: l['nm'], kind: ty === 5 ? 'text' : ty === 4 || ty === 1 ? 'shape' : 'other' });
+  }
+  return out;
+}
