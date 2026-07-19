@@ -813,8 +813,12 @@ export const LottieElementSchema = ElementBaseSchema.extend({
    */
   drivesHold: z.boolean().optional(),
   /**
-   * Lottie field overrides — typed sub-grammar deferred (Phase 3 §10).
-   * For M2, accept arbitrary keys; M8 tightens once lottie-bridge lands.
+   * RESERVED — unused. Runtime Lottie overrides shipped (D-125 Phase 3c) through the
+   * `lottie-override` FieldBinding target (`bindings.ts`), not through this record:
+   * an override is a runtime VALUE routed by a binding, not element state, so the
+   * stored template stays byte-unchanged. Kept (optional, additive) only so stored
+   * scenes that ever wrote it keep parsing; nothing reads it. Remove in a future
+   * schema-version bump.
    */
   fieldOverrides: z.record(z.string(), z.unknown()).optional(),
 });

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AnchorPoint, Element, LottiePhases, Scene, TextElement } from '@cg/shared-schema';
 import type { AssetMeta } from '@cg/shared-ipc';
-import { importLottie, markersToSegments } from '@cg/lottie-bridge';
+import { importLottie, lottieLayerNames, markersToSegments } from '@cg/lottie-bridge';
 import {
   designerStore,
   editSceneOf,
@@ -22,6 +22,7 @@ import {
 import { COMPOSITION_DND_TYPE } from '../compositions/CompositionsPanel.js';
 import { getActiveSharedImage } from '../sharedLibrary/activeSharedImage.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
+import * as lottieAssetCache from '../assets/lottieAssetCache.js';
 import { effectivePathBoxPoints, effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
 import {
@@ -354,7 +355,16 @@ export function CanvasOverlay({
       if (hit !== null) {
         const field = scene.fields.find((f) => f.id === bindModeFieldId);
         if (field !== undefined) {
-          const binding = resolveBinding(field, hit);
+          // D-125 Phase 3c — a Lottie target needs the clip's layer names (parsed
+          // animation from the cache); every other element type resolves from the
+          // (field, element) pair alone.
+          const binding = resolveBinding(
+            field,
+            hit,
+            hit.type === 'lottie'
+              ? { lottieLayers: lottieLayerNames(lottieAssetCache.get(hit.assetId)) }
+              : undefined,
+          );
           if (binding !== null) designerStore.addBinding(binding);
         }
       }

@@ -151,7 +151,13 @@ the field's `default`), run the optional `transform` (`transforms.ts`, e.g.
 the last three route a `list` value to the element's driver via the
 `tickerDriverFor` / `sequenceDriverFor` / `repeaterDriverFor` registries,
 which reconcile by
-stable item id).
+stable item id). `lottie-override` (D-125 Phase 3c) routes the same way through its
+own registry, `lottie-registry.ts` (container → `LottiePlayerHandle` WeakMap,
+`isAlive`-gated, registered at mount in `createRuntime`): `prop: 'text'` replaces a
+named text layer's document text — with the text transform + `maxLength` cap, exactly
+like the `text` target — and `prop: 'fill' | 'stroke'` recolours a named layer's
+static paints (colours skip the text-transform pipeline). The override surface and
+its opacity boundary live in `@cg/lottie-bridge`'s `applyOverride`.
 
 **Invariants**
 

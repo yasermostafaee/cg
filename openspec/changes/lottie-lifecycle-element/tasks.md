@@ -72,9 +72,12 @@
 
 ## 6. Field overrides — `lottie-override` no longer a no-op (`@cg/template-runtime`) — `⟦PR-4⟧`
 
-- [ ] 6.1 Implement the `lottie-override` case in `bindings.ts:210` through the bridge: resolve
-      `text`/`color` (image if cheap) overrides onto the named `layer`/`prop` in the mounted Lottie,
-      on play and every `update()`. A secondary path — the native overlay carries the dynamic content.
+- [x] 6.1 **(Phase 3c)** Implemented through the bridge: `LottiePlayerHandle.applyOverride` resolves
+      `text` (lottie-web's own `updateDocumentData`) and `fill`/`stroke` (static-attribute patch on
+      the named layer's rendered subtree) onto named TOP-LEVEL layers, routed from `bindings.ts` via
+      a container→handle registry, on play and every `update()`. Image substitution deferred — the
+      design allows it "if cheap" and it is not (asset reload machinery). No phase-affecting property
+      is overridable. The old no-op pin test was replaced with real routing coverage.
 
 ## 7. The element-outro seam (`@cg/template-runtime`) — `⟦PR-2⟧` (the crux — reviewed first)
 
@@ -136,9 +139,13 @@
       phase mapping (read-only chips when marker-sourced; number inputs + "Re-read markers" when
       manual). Keep `field-registry.ts:691` `lottie: UNIVERSAL_ONLY` (no internal-keyframe editor —
       opaque).
-- [ ] 9.4 Bindings: `bind-resolver.ts` — offer `lottie-override` as a selectable target (a layer/prop
-      picker over the animation's named layers) instead of returning null (`:74-77`); `describeBinding`
-      already renders it (`:118`).
+- [x] 9.4 **(Phase 3c, minimal form)** `resolveBinding` gains a lottie branch fed by the parsed
+      clip's layer names (`lottieLayerNames` via the asset cache, passed from CanvasOverlay): a text
+      field auto-targets the first TEXT layer (`prop: 'text'`), a colour field the first non-text
+      layer (`prop: 'fill'`); no matching layer → null (the existing "can't bind" feedback).
+      `describeBinding` renders the pick (`lottie <layer>.<prop>`). A full layer/prop PICKER (choose
+      among multiple layers / stroke vs fill) is deliberately deferred — the auto-pick covers the
+      typical one-text-one-shape furniture clip, and retargeting is unbind → rebind.
 - [ ] 9.5 Preview: `platform/preview.ts` — extend the iframe seam to deliver the Lottie JSON (a
       `lottieAssets` map) to `createRuntime` (`:414`), populated like `assetUrls` via the
       `asset-urls`/`scene-replace` postMessage handlers; the Canvas/PreviewModal hosts post the map.
