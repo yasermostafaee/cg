@@ -1,3 +1,4 @@
+import * as dgram from 'node:dgram';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { OscEvent } from '@cg/shared-schema';
@@ -234,5 +235,69 @@ describe('OscTransport — R-009 occupancy tap independence (the firehose-untouc
     expect(transport.occupancy.size).toBeGreaterThan(0);
     transport.resetState();
     expect(transport.occupancy.size).toBe(0);
+  });
+});
+
+describe('OscTransport — only the declared server counts as "heard"', () => {
+  /**
+   * The ingest binds a routable interface for a remote server (R-010), so ANY host
+   * on the LAN can deliver OSC to this port — including a second CasparCG whose
+   * config points here. Adversarial review reproduced the consequence: that foreign
+   * stream permanently satisfied the "am I hearing my server?" gate while the real
+   * primary's OSC was firewalled, re-arming the re-ADD-over-a-live-producer the gate
+   * exists to prevent. It is the blind install wearing a disguise.
+   *
+   * Trust signal only: parsed events still reach the tap and the pipeline unchanged,
+   * so `occupied()`, the R-009 sweep and B-086's reconcile are untouched.
+   */
+  const framerate = (): Buffer => {
+    // /channel/1/framerate ,ii 50 1 — a producer-less packet, the cheapest thing
+    // that would flip a naive "heard anything" flag.
+    const addr = Buffer.from('/channel/1/framerate\0\0\0\0', 'latin1');
+    const tags = Buffer.from(',ii\0', 'latin1');
+    const args = Buffer.alloc(8);
+    args.writeInt32BE(50, 0);
+    args.writeInt32BE(1, 4);
+    return Buffer.concat([addr, tags, args]);
+  };
+
+  it('OSC from a FOREIGN host does not make the tap claim it is hearing the server', async () => {
+    const transport = new OscTransport({ expectedSourceHost: '10.0.0.5' });
+    const port = await transport.listen('127.0.0.1', 0);
+    try {
+      // Arrives from loopback, not from 10.0.0.5.
+      const sender = dgram.createSocket('udp4');
+      try {
+        await new Promise<void>((resolve, reject) => {
+          sender.send(framerate(), port, '127.0.0.1', (err) => (err ? reject(err) : resolve()));
+        });
+        await new Promise((r) => setTimeout(r, 150));
+        expect(transport.occupancy.hasFreshOsc(2500)).toBe(false);
+        expect(transport.occupancy.lastOscTrafficAt).toBeNull();
+      } finally {
+        sender.close();
+      }
+    } finally {
+      await transport.close();
+    }
+  });
+
+  it('OSC from the DECLARED host does', async () => {
+    const transport = new OscTransport({ expectedSourceHost: '127.0.0.1' });
+    const port = await transport.listen('127.0.0.1', 0);
+    try {
+      const sender = dgram.createSocket('udp4');
+      try {
+        await new Promise<void>((resolve, reject) => {
+          sender.send(framerate(), port, '127.0.0.1', (err) => (err ? reject(err) : resolve()));
+        });
+        await new Promise((r) => setTimeout(r, 150));
+        expect(transport.occupancy.hasFreshOsc(2500)).toBe(true);
+      } finally {
+        sender.close();
+      }
+    } finally {
+      await transport.close();
+    }
   });
 });

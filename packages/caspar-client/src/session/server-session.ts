@@ -138,7 +138,11 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
     this.createAmcp = opts.createAmcp ?? ((): AmcpTransport => new AmcpTransport());
     this.createQueue =
       opts.createQueue ?? ((t: AmcpTransport): CommandQueue => new CommandQueue(t));
-    const createOsc = opts.createOsc ?? ((): OscTransport => new OscTransport());
+    // Only the declared server's OSC counts as evidence that we are hearing IT
+    // (the ingest binds a routable interface for a remote server, so anything on
+    // the LAN can reach this port). Trust signal only — see OscTransportOptions.
+    const createOsc =
+      opts.createOsc ?? ((): OscTransport => new OscTransport({ expectedSourceHost: opts.host }));
 
     this.currentOsc = createOsc();
     this.currentAmcp = this.createAmcp();

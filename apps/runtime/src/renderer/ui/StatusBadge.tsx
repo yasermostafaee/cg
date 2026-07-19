@@ -12,6 +12,7 @@ export function StatusBadge({
   pending,
   simulated = false,
   bridgeDown = false,
+  oscBlind = false,
 }: {
   status: StackItemStatus;
   pending: boolean;
@@ -31,12 +32,28 @@ export function StatusBadge({
    * label and icon are identical either way.
    */
   bridgeDown?: boolean;
+  /**
+   * B-093 — this `unverified` came from a BLIND OCCUPANCY TAP, not a dropped link: the item
+   * was restored after a bridge restart, but no OSC has ever arrived, so the bridge refused
+   * to decide what is on its layer and sent nothing.
+   *
+   * It needs its own wording because B-086/B-087's is actively wrong here, in two ways that
+   * both push the operator toward the unsafe reading. TENSE: "WAS ON AIR" implies the graphic
+   * is gone — in this failure the link is UP and the graphic is almost certainly still on air,
+   * untouched. REMEDY: "reconnect to re-verify" fixes nothing, and sends someone to restart a
+   * playout box that is working, which would take air down. So this reads as an open question
+   * and names the real fix.
+   */
+  oscBlind?: boolean;
 }): JSX.Element {
   const visual = airStateVisual(status, pending);
   const tone = badgeTone(status, pending);
 
   const claimsAir = tone === 'onair';
-  const label = simulated && claimsAir ? `SIM ${visual.label}` : visual.label;
+  // B-093 — the blind-tap `unverified` is an open QUESTION, not a past tense. The link is up
+  // and the graphic is probably still burning on PGM; "WAS ON AIR" would say the opposite.
+  const unverifiedLabel = status === 'unverified' && oscBlind ? 'ON AIR?' : visual.label;
+  const label = simulated && claimsAir ? `SIM ${unverifiedLabel}` : unverifiedLabel;
   const shownTone = simulated && claimsAir ? 'attention' : tone;
   // B-086 / B-087 — the muted "WAS ON AIR" keeps the last-known reading in the tooltip, the way
   // B-081's health pill keeps "Last known before the link dropped: HEALTHY". The wording names the
@@ -44,9 +61,15 @@ export function StatusBadge({
   // fine but is unreachable through the dead bridge — otherwise the CasparCG link (B-086).
   const title =
     status === 'unverified'
-      ? bridgeDown
-        ? 'Last confirmed ON AIR before the bridge connection dropped — reconnect the bridge to re-verify.'
-        : 'Last confirmed ON AIR before the CasparCG link dropped — reconnect to re-verify.'
+      ? oscBlind
+        ? // B-093 — name the real fault and the real fix. Reconnecting changes nothing here.
+          'This item was on air before the bridge restarted. No OSC is arriving from CasparCG, ' +
+          'so its layer cannot be verified — nothing was sent to it, and the graphic is most ' +
+          'likely still on air. Check the program output; CLEAR still works. Fix: enable OSC in ' +
+          'casparcg.config (predefined-client / UDP port).'
+        : bridgeDown
+          ? 'Last confirmed ON AIR before the bridge connection dropped — reconnect the bridge to re-verify.'
+          : 'Last confirmed ON AIR before the CasparCG link dropped — reconnect to re-verify.'
       : undefined;
 
   return (

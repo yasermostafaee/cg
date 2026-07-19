@@ -46,6 +46,7 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
    * bridge's periodic orphan sweep samples it.
    */
   readonly occupancy: OscOccupancyTap;
+  private readonly expectedSourceHost: string | undefined;
 
   constructor(options: OscTransportOptions = {}) {
     super();
@@ -53,6 +54,7 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
     this.rateLimiter = options.rateLimiter ?? new OscRateLimiter();
     this.changeTracker = options.changeTracker ?? new OscChangeTracker();
     this.occupancy = options.occupancy ?? new OscOccupancyTap();
+    this.expectedSourceHost = options.expectedSourceHost;
     this.on('error', noop);
   }
 
@@ -122,8 +124,23 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
     return this.parseFailures;
   }
 
+  /**
+   * Does this datagram come from the server we are supposed to be hearing?
+   *
+   * Unconfigured (or loopback-bound) transports accept anything, which keeps the
+   * unit tests and the local single-box case working exactly as before. The
+   * comparison tolerates IPv4-mapped IPv6 (`::ffff:a.b.c.d`), which is how a
+   * dual-stack bind reports an IPv4 sender.
+   */
+  private isExpectedSource(address: string): boolean {
+    const expected = this.expectedSourceHost;
+    if (expected === undefined || expected === '') return true;
+    const normalize = (a: string): string => a.replace(/^::ffff:/i, '');
+    return normalize(address) === normalize(expected);
+  }
+
   private attachHandlers(sock: dgram.Socket): void {
-    sock.on('message', (buf: Buffer) => {
+    sock.on('message', (buf: Buffer, rinfo: dgram.RemoteInfo) => {
       this.packetsReceived++;
       const recvAt = Date.now();
       const packet = parsePacket(buf);
@@ -131,6 +148,15 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
         this.parseFailures++;
         return;
       }
+      // The tap learns we are HEARING this server, separately from what any
+      // layer reports. Packet-level on purpose: an idle channel emits no
+      // per-layer producer messages at all, so producer events cannot tell a
+      // healthy-but-idle server from a tap that is receiving nothing.
+      //
+      // …but only from the RIGHT server: another box's OSC is not evidence about
+      // this one (see `expectedSourceHost`). Trust signal only — the parsed
+      // events below are untouched either way.
+      if (this.isExpectedSource(rinfo.address)) this.occupancy.noteTraffic(recvAt);
       const messages = flatten(packet);
       const events: OscEvent[] = [];
       for (const msg of messages) {
@@ -159,6 +185,23 @@ export interface OscTransportOptions {
   rateLimiter?: OscRateLimiter;
   changeTracker?: OscChangeTracker;
   occupancy?: OscOccupancyTap;
+  /**
+   * The server this transport is supposed to be hearing from. When set, only OSC
+   * arriving FROM that address counts as evidence that we are hearing THIS
+   * server (`OscOccupancyTap.hasFreshOsc`).
+   *
+   * The ingest binds a routable interface for a remote server (R-010), so any
+   * host on the LAN can deliver OSC to this port — including a second CasparCG
+   * whose config points at us. Without this, that foreign stream permanently
+   * satisfies the "am I hearing my server?" gate while the real primary's OSC is
+   * firewalled: precisely the blind install the gate exists to catch, wearing a
+   * disguise. Verified reproducible by adversarial review.
+   *
+   * It filters the TRUST signal ONLY. Parsed events still flow to `note()` and
+   * the pipeline unchanged, so `occupied()`, the R-009 orphan sweep and B-086's
+   * reconcile see exactly what they saw before.
+   */
+  expectedSourceHost?: string;
 }
 
 export interface OscTransportEvents {

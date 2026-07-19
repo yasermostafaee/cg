@@ -372,8 +372,36 @@ export class CasparRuntime {
           // `reconcileOnReconnect` on the next line iterates a settled
           // reconciler — a re-ADDed item already reads `played: false` and is
           // correctly left alone by it.
-          void this.#decidePendingRestores(occupiedKeys);
-          this.#reconciler.reconcileOnReconnect(occupiedKeys);
+          const heard = session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs);
+          void this.#decidePendingRestores(occupiedKeys, heard);
+          // The SAME blind-tap distinction applies here, and this path had the
+          // bug too: `reconcileOnReconnect` resets a `played` item to IDLE when
+          // its slot is not in `occupiedKeys`, treating silence as proof the
+          // producer is gone (B-053). From a tap that has never heard any OSC
+          // that is not proof of anything — it would report a genuinely LIVE
+          // graphic as idle, on a link that is UP. Skipping is the honest move:
+          // items keep their last known state (B-086's `unverified` demotion
+          // from the drop still stands) rather than being falsely reset, and the
+          // sweep reconciles for real once OSC arrives.
+          if (heard) {
+            this.#reconciler.reconcileOnReconnect(occupiedKeys);
+          } else {
+            // …and while blind, NO on-air claim is verifiable — not just the
+            // restored ones. Skipping the reconcile alone would leave a played
+            // item that is genuinely gone sitting on a confident red ON AIR
+            // (its ack floor), because `setLinkDown(false)` has just cleared the
+            // only demotion that was covering it. The link being UP is exactly
+            // what makes that insidious: a green health pill beside a red claim
+            // nothing can back. Mark every played item unverifiable instead —
+            // the same honest answer B-086 gives when the link drops, for the
+            // same reason: the verification channel is dead.
+            for (const item of this.#reconciler.snapshot()) {
+              if (item.status === 'on-air' || item.status === 'playing') {
+                this.#reconciler.setUnverifiable(item.itemId, true);
+                this.#markDirty(item.itemId);
+              }
+            }
+          }
         } else if (from === 'healthy') {
           this.#reconciler.setLinkDown(true);
         }
@@ -528,6 +556,8 @@ export class CasparRuntime {
     templateId: string,
     fields: FieldValues,
   ): Promise<{ accepted: boolean }> {
+    // B-093 — the operator is acting; any parked restore for this item is stale.
+    this.#retirePendingRestore(itemId);
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields }, seq);
 
@@ -706,7 +736,10 @@ export class CasparRuntime {
           .occupied(this.#occupancyStaleMs)
           .map((o) => `${String(o.channel)}:${String(o.layer)}`),
       );
-      await this.#decidePendingRestores(occupiedKeys);
+      await this.#decidePendingRestores(
+        occupiedKeys,
+        this.#adapter.primarySession.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs),
+      );
     }
     return { restored, skipped };
   }
@@ -749,17 +782,56 @@ export class CasparRuntime {
    *     restarted), so a fresh `CG ADD` puts the item back — still with NO
    *     adopt-CLEAR in front of it.
    *
-   * Note what is NOT here: no branch sends a CLEAR. A wrong "silent" verdict
-   * (OSC misconfigured, so every layer looks silent) costs a `CG ADD` onto a
-   * possibly-live layer — a stage replace, exactly what an ordinary load or a
-   * B-039 re-ADD already does. A wrong verdict the other way would have cost an
-   * explicit CLEAR. The asymmetry is the whole design.
+   *   TAP NEVER HEARD ANY OSC → REFUSE TO DECIDE. Send nothing at all and
+   *     publish the item as `unverified`. See below.
+   *
+   * No branch sends a CLEAR. But "no CLEAR" was never the property worth
+   * protecting on its own — KEEPING THE GRAPHIC ON AIR was, and the original
+   * design lost it in one case. This comment used to argue that a wrong
+   * "silent" verdict was acceptable because a `CG ADD` is only a stage replace.
+   * Hardware disproved that (PR #353's probe, captured on the wire): the re-ADD
+   * carries play-on-load `0`, so replacing a LIVE producer with a non-playing
+   * one takes the graphic OFF AIR. Silently, with no error and no operator
+   * signal — the safe path degrading into the unsafe one.
+   *
+   * The root cause was that an empty tap has two meanings — "this layer is
+   * empty" and "I have never heard from the server" — that demand OPPOSITE
+   * actions. `hasReceivedOsc` separates them: silence is evidence of emptiness
+   * ONLY from a tap that is actually hearing OSC. Otherwise it is evidence of
+   * no evidence, and the honest move is to do nothing and say so.
    *
    * Record mutations are synchronous; only the ADD is awaited. The caller at
    * the healthy transition relies on that (see `#wireAdapter`).
    */
-  async #decidePendingRestores(occupiedSlotKeys: ReadonlySet<string>): Promise<void> {
+  async #decidePendingRestores(
+    occupiedSlotKeys: ReadonlySet<string>,
+    tapHasReceivedOsc: boolean,
+  ): Promise<void> {
     if (this.#pendingRestore.size === 0) return;
+
+    // BLIND TAP — refuse to decide. The items stay pending (so the periodic
+    // sweep can decide them if OSC starts arriving), nothing is sent, and every
+    // affected row publishes the honest `unverified` instead of an on-air claim
+    // nothing can back.
+    if (!tapHasReceivedOsc) {
+      for (const [itemId, { slot }] of this.#pendingRestore) {
+        if (this.#reconciler.get(itemId) === null) continue;
+        this.#reconciler.setUnverifiable(itemId, true);
+        this.#markDirty(itemId);
+        // The one line whoever debugs a blind install will grep for. Says what was
+        // NOT done and why, and names the fix — an install in this state looks
+        // healthy on AMCP, so the cause is not otherwise discoverable.
+        process.stderr.write(
+          `[caspar-bridge] restore REFUSED for ${itemId} on ${adoptionKey(slot)}: ` +
+            `no OSC has ever arrived, so the layer cannot be verified. Nothing was sent ` +
+            `(a re-ADD here would take a live graphic off air). ` +
+            `Enable OSC in casparcg.config (predefined-client / UDP port).
+`,
+        );
+      }
+      return;
+    }
+
     const pending = [...this.#pendingRestore];
     this.#pendingRestore.clear();
 
@@ -768,6 +840,10 @@ export class CasparRuntime {
       // A remove landed between the restore and this decision — the item is
       // gone; its slot was already released by remove(). Nothing to do.
       if (this.#reconciler.get(itemId) === null) continue;
+      // We can decide now, so any earlier blind-tap doubt is resolved: drop the
+      // `unverified` marker before settling the item either way. (No-op unless a
+      // previous, blind pass had set it.)
+      this.#reconciler.setUnverifiable(itemId, false);
 
       if (occupiedSlotKeys.has(adoptionKey(slot))) {
         // Adopted by OBSERVATION, not by a CLEAR — so this deliberately does
@@ -864,7 +940,32 @@ export class CasparRuntime {
     return sessions.every((s) => s.state !== 'healthy');
   }
 
+  /**
+   * Retire a pending restore because the OPERATOR has acted on the item.
+   *
+   * Load-bearing since the blind-tap refusal (B-093) made a pending restore able
+   * to OUTLIVE the decision pass: before it, every pending entry was consumed on
+   * the first decision, so it could never be stale. Now an item can sit pending
+   * across reconnects while the operator takes it, edits its fields, or clears
+   * it — and the parked entry still holds the RESTORE-TIME template, fields and
+   * slot. Deciding it later would replay that stale snapshot over live state:
+   * re-ADDing (play-on-load 0) over a producer the operator has since taken to
+   * air, and reverting their field edits.
+   *
+   * The operator's action is newer evidence than anything the restore was
+   * waiting to infer, so it simply retires the restore.
+   */
+  #retirePendingRestore(itemId: string): void {
+    if (this.#pendingRestore.delete(itemId)) {
+      // The doubt is resolved by the operator's own command; drop the marker so
+      // the row stops reading `unverified` on the strength of it.
+      this.#reconciler.setUnverifiable(itemId, false);
+    }
+  }
+
   async take(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    // B-093 — the operator is acting; any parked restore for this item is stale.
+    this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
     if (this.#linkDown()) return { accepted: false, errorCode: 'disconnected' };
@@ -911,6 +1012,8 @@ export class CasparRuntime {
     fields: FieldValues,
     mergeMode: 'merge' | 'replace',
   ): Promise<{ accepted: boolean; errorCode?: string }> {
+    // B-093 — the operator is acting; any parked restore for this item is stale.
+    this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
     // R-006 — see #linkDown(): refuse before the intent exists.
@@ -943,6 +1046,8 @@ export class CasparRuntime {
   }
 
   async out(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    // B-093 — the operator is acting; any parked restore for this item is stale.
+    this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { accepted: false };
     // R-006 — see #linkDown(). An out cannot reach a dead server either; claiming it
@@ -992,6 +1097,24 @@ export class CasparRuntime {
   #sweepOccupancy(): void {
     const session = this.#adapter.primarySession;
     if (session.state !== 'healthy') return;
+
+    // A restore that refused to decide (blind tap) left its items pending. If
+    // OSC has started arriving since, decide them now — otherwise a tap that
+    // came up a moment after the healthy transition would strand those rows as
+    // `unverified` for the life of the process. Cheap: this tick already runs
+    // and already samples occupancy.
+    if (
+      this.#pendingRestore.size > 0 &&
+      session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs)
+    ) {
+      const occupiedKeys = new Set(
+        session.osc.occupancy
+          .occupied(this.#occupancyStaleMs)
+          .map((o) => `${String(o.channel)}:${String(o.layer)}`),
+      );
+      void this.#decidePendingRestores(occupiedKeys, true);
+    }
+
     const occupied = session.osc.occupancy.occupied(this.#occupancyStaleMs);
     const owned = new Set<string>();
     for (const slot of this.#slots.values()) {

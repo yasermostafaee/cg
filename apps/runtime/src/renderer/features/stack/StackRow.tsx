@@ -113,6 +113,12 @@ export function StackRow({
   // `useLink()` override the health pills / LinkIndicator / ConnectionBanner already apply.
   const badgeStatus: StackItemStatus = linkDown && onAir ? 'unverified' : item.status;
 
+  // B-093 — WHY is this row unverified? The two causes need opposite words. The bridge
+  // publishes the cause on the item itself (`errorCode`, a field that already rides
+  // `StackItemState`), so the row reads it directly — no extra subscription per row, and
+  // no new IPC.
+  const oscBlind = badgeStatus === 'unverified' && item.errorCode === 'osc-unverifiable';
+
   // The row's four actions, declared ONCE. The buttons below render from this list and the
   // right-click menu is projected from the SAME list, so a menu item is enabled exactly when
   // its button is and runs exactly what its button runs — by construction, not by two code
@@ -188,6 +194,7 @@ export function StackRow({
         pending={item.pending}
         simulated={simulated}
         bridgeDown={linkDown}
+        oscBlind={oscBlind}
       />
       {/* The row's label area — and the one part of the row that is guaranteed NOT to be a
           control. Tests select a row by clicking THIS, never the row root: the root spans the
