@@ -16,6 +16,13 @@ import { definePublishChannel } from '../publish.js';
  * below.
  */
 
+/**
+ * C-014 — `load` answers with an `errorCode` (the B-070 pattern), because its
+ * refusals now need distinguishing: `no-layer-foreign-occupied` (the range is
+ * eaten by other systems' output, which R-015 makes unclearable from this
+ * console) is a different operator situation from the plain `no-layer` (Remove
+ * something) or `unknown-template` (re-import).
+ */
 export const StackLoadChannel = defineChannel(
   'stack.load',
   z.object({
@@ -23,7 +30,7 @@ export const StackLoadChannel = defineChannel(
     templateId: IdSchema,
     fields: FieldValuesSchema,
   }),
-  z.object({ accepted: z.boolean() }),
+  z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
 );
 
 export const StackTakeChannel = defineChannel(
