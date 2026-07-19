@@ -141,6 +141,54 @@ behavior or a prior decision (outside the initial PRD flow above):
 - Never reuse a merged branch; after a merge, work continues from a fresh branch
   off pulled `main`.
 
+### Worktrees — `cg` is READ-ONLY
+
+Three worktrees share one repo: `cg`, `cg-designer`, `cg-runtime`.
+
+- **`cg` is READ-ONLY.** It stays on `main`, is never checked out to a branch, and
+  is never committed from. Its job is a clean current view of merged `main` — which
+  is exactly what the B-number audit and any "is this on main?" check need.
+- **Docs work happens in the OWNING TRACK's worktree**, on a docs-only branch —
+  Runtime docs in `cg-runtime`, Designer docs in `cg-designer`.
+- **The cost, stated so nobody reverts this without knowing it:** a track cannot
+  hold a feature branch and a docs branch at once, so docs work waits for a commit
+  or a stash. That serialization is WITHIN one track with one driver — manageable.
+  The scheme it replaces put the serialization ACROSS two independent sessions,
+  which is not.
+
+Why the old scheme could not hold: routing all docs/archive/housekeeping into `cg`
+made it the ONE worktree two independent sessions were forced to share —
+`cg-designer` and `cg-runtime` are naturally exclusive (different code, they never
+meet). On 2026-07-19 a parallel session checked out its own branch in `cg` while an
+archive sweep sat uncommitted there, and the checkout silently destroyed four
+archives, two spec folds and every PRD flip. That is structural, not a discipline
+lapse: "one worktree, one session" does not prevent it, because the scheme itself
+manufactured the contention.
+
+- **General form: uncommitted work is what a branch switch destroys silently.**
+  Commit early and often rather than building one large uncommitted change.
+
+### Merge status: ask the PR, never ancestry
+
+This repo **squash-merges**, so a merged branch's own commits never enter `main`'s
+history.
+
+- `git log origin/main..<branch>` lists every one of them as unmerged, and the
+  branch reads "N commits behind / M ahead" forever. **Ancestry is NOT a merge
+  signal here.**
+- Judge merge status by the PR (`gh pr list --head <branch> --state all`) or by the
+  deliverable's presence on `main` (archived change dir, PRD item flipped, the code
+  itself) — never by ancestry.
+- **DELETE the local ref once its PR merges.** A stale merged branch is
+  indistinguishable from in-flight work. `fix/runtime-ux-batch-2` — merged as #317
+  on 2026-07-14 — still read "53 commits behind, 11 ahead" days later and cost a
+  full session's planning for a rebase of already-shipped code. Worse, its tip
+  commit is titled `revert(e2e): back out the B-078 budget bump` but touches only
+  `docs/prd/bugs.md`: the branch still carries the RAISED Playwright budgets
+  (`expect` 15s, test 60s, `webServer` 240s) that `main` has at 7s/30s/120s, so
+  rebasing it would have resurrected work B-078 records as "tried and reverted, do
+  not simply retry it".
+
 ## Verify before claiming
 
 - Never report an external action (push, PR created, merged, archived, CI
