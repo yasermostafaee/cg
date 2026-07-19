@@ -207,7 +207,13 @@ C-010 + C-011 together. Placement note: filed as a single C- item (the bridge is
 the center of gravity); the renderer/Library face (persisted `.vcg` bytes for
 re-import-free page reloads) is part of THIS item, not a separate R- entry.
 
-## [~] C-012 — CG STOP as a distinct operator action: a graceful exit that runs the template's outro and leaves the producer resident ⟨priority: medium⟩ — in progress on `feat/runtime-stop-verb`, change dir `openspec/changes/runtime-stop-verb/`
+## [x] C-012 — CG STOP as a distinct operator action: a graceful exit that runs the template's outro and leaves the producer resident ⟨priority: medium⟩
+
+**Done:** merged as #359 and archived
+(`openspec/changes/archive/2026-07-19-runtime-stop-verb/`, folded into the
+`runtime-caspar-bridge` spec). STOP ships link-gated beside PLAY/UPDATE/CLEAR,
+fire-and-forget, with the stopped item resting at `loaded` via play-evidence
+retraction and resume via bare `CG PLAY` on the resident producer.
 
 **What:** A fifth AMCP verb, `CG <ch>-<layer> STOP`, offered beside PLAY / UPDATE / CLEAR. It tells
 the template to run its OWN outro and leaves the producer resident on the layer, so a later PLAY
