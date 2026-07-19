@@ -285,14 +285,26 @@ override) on its **own** timeline.
   representation in `tick()`** — scrubbing moves none of them (by design;
   D-028/D-027/D-029).
 - **Per-element lifespan visibility** (a `lifespan {in,out}` from a timeline start/end
-  trim) is evaluated by `applyLifespanGatesAtFrame(frame)`, called from BOTH `tick` (the
-  scrubber) AND the root scope's per-frame `applyFrame` (on-air playback). So a
-  start-trimmed element (`lifespan.in > 0`) appears at/after its in-point and plays — it is
-  **not** dropped just because it is absent at the open-time scrub frame (B-029). The gate
-  is **kind-agnostic**: any element carrying a `lifespan` is gated, plain text and shapes
-  included (it is `collectLifespanGates`, which has no type filter — not the separate
-  content-host gate, which is ticker/clock/sequence-only). The gate restores each node to
-  the `display` it had when the scene was built.
+  trim) is gated **per scope**. Each `FieldScope` owns a `lifespanGates` list, registered at
+  BUILD time in `buildLayer` beside `scope.animated`, and that scope's controller evaluates
+  its own gates in its own `applyFrame` — so a start-trimmed element (`lifespan.in > 0`)
+  appears at/after its in-point and plays, and is **not** dropped just because it is absent
+  at the open-time scrub frame (B-029). A child's trim lives in **its own scope's frame
+  space**, not the root's: the Designer clamps a trim to the frame range of the composition
+  being edited, which is the timeline that scope's controller runs (B-089). The gate is
+  **kind-agnostic** — any element carrying a `lifespan` is gated, plain text and shapes
+  included (unlike the separate content-host gate, which is ticker/clock/sequence-only).
+  The gate restores each node to the `display` its builder settled on, captured at build
+  time; `refreshLifespanGateDisplays` then re-reads it for the scopes the D-025 namespace
+  tree can reach, so a boot-time `visibility` binding (which writes `style.display`) still
+  wins. The build-time capture is the source of truth precisely because **stamped** scopes —
+  a repeater row, a sequence composition item — are deliberately absent from
+  `scope.children` and no walk of the namespace tree can see them.
+- `tick(frame)` (the scrubber) gates the whole tree at one shared frame by walking the LIVE
+  **wiring** tree (`subtrees`) plus each subtree's `scope.children`. That is the only
+  membership stamped scopes join — a repeater re-stamps fresh row scopes at each play and on
+  `setItems` — so a boot-time union would leave scrub ungating exactly the rows playback
+  gates, and the canvas would disagree with air.
 - **A gate boundary forces a real frame sweep (B-088).** Because the gate above is
   frame-dependent, `hasAnimation` alone is no longer a sound answer to "may this leg be
   collapsed to one paint?" — a scene with no keyframes but a start-trimmed element must
@@ -302,9 +314,9 @@ override) on its **own** timeline.
   when a gate's transition (ON at `lifespan.in`, OFF at `lifespan.out + 1`) lands inside
   `(inF, outF]`. A leg crossing no boundary still collapses, so the rAF optimisation for
   genuinely static scenes is preserved. It sits on `playRange`, so it covers **every** leg —
-  both intro legs and the outro. Only the ROOT controller supplies the predicate (the gates
-  are collected against the root `elementMap`; nested-instance lifespans are not gated at
-  all — B-092).
+  both intro legs and the outro. **Every** scope supplies the predicate over its OWN gates
+  (B-089 — B-088 originally wired it for the root only, when gates existed only there); a
+  scope with no trims passes `undefined` and keeps the collapse untouched.
 
 ### TickerDriver — the crawler treadmill + content completion (D-028)
 

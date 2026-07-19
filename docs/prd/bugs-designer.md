@@ -997,7 +997,7 @@ guards. Capability: `designer-playout-lifecycle`.
 
 **On-air impact:** this changes playout TIMING — a composition that previously snapped through its intro instantly now sweeps it in real time whenever a trim boundary is crossed (which is the point: the trim needs elapsed time to be honoured). Warrants a real-CasparCG check before it is considered done.
 
-## [ ] B-089 — nested-instance element lifespans are never gated at all ⟨priority: medium⟩
+## [~] B-089 — nested-instance element lifespans are never gated at all ⟨priority: medium⟩
 
 **Repro:**
 
@@ -1009,6 +1009,58 @@ guards. Capability: `designer-playout-lifecycle`.
 **Actual:** the trim is ignored entirely — the element is visible for the whole lifespan of the instance.
 **Env:** Browser / Designer preview; also the exported outputs.
 **Notes:** `collectLifespanGates` (`packages/template-runtime/src/runtime.ts:1579`) walks only `scene.layers` and resolves ids against the ROOT `built.elementMap`; every composition instance owns its own `elementMap`, so nested elements are unreachable and never enter the gate list. The per-frame application is likewise root-only (`if (isGlobalRoot) applyLifespanGatesAtFrame(frame)`, `runtime.ts:969`). Its `el.type === 'container'` recursion branch is **effectively dead** as well: `container` is built by `buildPlaceholder`, which builds no children, so container children never enter any `elementMap` either. Distinct from B-088 (which is about how OFTEN the gate runs); this is about WHICH elements it covers. Do not fold the two — B-088's fix deliberately leaves nested scopes' collapse behaviour untouched.
+
+**In progress** — branch `fix/b089-nested-lifespan-gates`.
+
+**Not the same root as B-090** (which is about `container` children). `flattenElements` recurses ONLY into
+`container`, never `composition`, so a nested comp's elements have no timeline row at all — their WRITE
+path was always fine (you author them inside their own comp, where they are top-level and `locate()`
+resolves). B-089 is purely a READ/gating gap, and the two were fixed on separate branches.
+
+**Fix:** gates are now collected PER SCOPE at BUILD time (`FieldScope.lifespanGates`, registered in
+`buildLayer` beside `scope.animated`), so every composition instance owns its own — reaching nested
+elements by construction instead of re-walking `scene.layers` against the root `elementMap`. Each scope's
+controller applies its OWN gates at ITS OWN frame.
+
+**Frame space:** a child's `lifespan` sits in its OWN scope's frames, not the root's — the Designer
+clamps a trim to `activeDocOf(scene).frameRange`, i.e. the frame range of the composition being edited,
+which is exactly the timeline that scope's controller runs. This follows the existing per-scope
+lifecycle model (D-026 controllers, D-125 Phase 3a's per-scope Lottie settle); no second convention was
+invented.
+
+**Sweep predicate — B-088 one scope down, confirmed EMPIRICALLY.** Per-scope gates were wired FIRST with
+`needsFrameSweep` left root-only, then the probe was run: a nested element trimmed to `[33,60]` in a
+keyframe-less comp never appeared (the single collapsed paint at the out-point sits outside the trim),
+and `[33,90]` was visible from frame zero (that paint sits inside it) — B-088's two failure modes exactly.
+So the predicate now applies to EVERY scope, each asking only about its own gates, and is passed
+`undefined` when a scope has no trims so trim-free scopes keep the collapse. Both rAF-count optimisation
+tests still assert zero `FrameDriver`s for a static nested scene.
+
+**STAMPED scopes — caught by adversarial review, would have been a live regression.** A repeater row and
+a sequence composition item each get a FRESH scope that is deliberately never in `scope.children` (only
+the wiring tree sees them). A first cut filled `naturalDisplay` by walking the namespace tree after the
+build, which cannot reach those scopes — so their gates kept a placeholder and, on re-entering the trim,
+wrote `display: ''` instead of the built value: a `visible: false` element became VISIBLE on air (a direct
+B-034 violation) and a `flex`/`grid` element (text `verticalAlign`, clock, sequence) collapsed to `block`.
+Newly introduced, because the old root-only collector never produced a gate for anything in a row at all.
+Fixed by capturing `naturalDisplay` at BUILD time in `buildLayer` (correct for every scope by
+construction), keeping the post-build walk only as a REFRESH so a boot-time `visibility` binding — which
+writes `style.display` (`bindings.ts`) — retains its established semantics for reachable scopes. `tick`
+likewise now walks the LIVE wiring tree plus each subtree's `scope.children`, instead of a boot-time
+union, so scrub and playback agree about rows (a repeater re-stamps scopes at each play and on
+`setItems`).
+
+**Regression test:** `packages/template-runtime/tests/nested-lifespan-gate.test.ts` — nested `[33,60]` and
+`[33,90]` during PLAY; nested trims under SCRUB; root + nested trims coexisting in one scene (no B-029
+regression); a HIDDEN nested element staying inert (B-034); the static-case collapse preserved one scope
+down, asserted by rAF count; a keyframed-sibling control; and three STAMPED-scope tests (a hidden row
+element staying hidden inside its trim, a row element restoring its built `flex` rather than `''`, and
+scrub gating a row) — each verified to FAIL against the placeholder version.
+
+**On-air impact:** this changes playout TIMING. A nested composition containing a trimmed element now
+sweeps its intro leg in real time where it previously snapped through it — same class as B-088, and for
+the same reason (the trim needs elapsed time to be honoured). Root-scope timing is unchanged. Warrants a
+real-CasparCG check before it is considered done.
 
 ## [ ] B-090 — trimming a NESTED element silently does nothing ⟨priority: medium⟩
 

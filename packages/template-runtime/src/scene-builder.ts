@@ -68,6 +68,7 @@ function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
     sequences: [],
     repeaters: [],
     lotties: [],
+    lifespanGates: [],
     source,
   };
 }
@@ -128,6 +129,27 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
         node: elementNode,
         source: element,
         animation: element.animation,
+      });
+    }
+    // B-089 — a trimmed element's gate belongs to THIS scope too, for the same reason:
+    // its `lifespan` is authored in this composition's frame space, so only this scope's
+    // controller (running that timeline) can evaluate it. Collecting here — rather than
+    // re-walking `scene.layers` against the root elementMap, as the root-only version did
+    // — reaches every nested instance by construction.
+    //
+    // `naturalDisplay` is captured HERE, from the display `buildElement` just settled, and
+    // NOT only by a later tree walk. Stamped scopes (a repeater row, a sequence composition
+    // item) are deliberately never in `scope.children`, so a post-build walk of the
+    // namespace tree cannot reach them; leaving their gates on a placeholder made the gate
+    // restore `''` instead of the built value — which un-hid a `visible:false` element
+    // (B-034) and flattened a `flex`/`grid` element to `block` on re-entering its trim.
+    // `snapshotLifespanGates` still REFRESHES the scopes it can reach, so a boot-time
+    // visibility binding (which writes `style.display`) keeps its established semantics.
+    if (element.lifespan !== undefined) {
+      ctx.scope.lifespanGates.push({
+        node: elementNode,
+        lifespan: element.lifespan,
+        naturalDisplay: elementNode.style.display,
       });
     }
   }

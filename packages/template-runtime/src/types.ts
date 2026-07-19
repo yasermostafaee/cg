@@ -340,8 +340,38 @@ export interface FieldScope {
   repeaters: RepeaterEntry[];
   /** D-125 — Lottie elements rendered directly in this scope (mount containers). */
   lotties: LottieEntry[];
+  /**
+   * B-089 — elements rendered directly in this scope that carry an explicit
+   * `lifespan` (a timeline trim). Registered at BUILD time, so every scope — not
+   * just the root — has its own gate list to evaluate along its OWN timeline. The
+   * trim is authored against the composition's frame range (the Designer clamps to
+   * `activeDocOf(scene).frameRange`), which is exactly the frame space this scope's
+   * controller runs in.
+   */
+  lifespanGates: LifespanGateEntry[];
   /** D-026 — the comp/scene this scope renders, for its lifecycle/playout/active. */
   source: LifecycleSource;
+}
+
+/**
+ * B-089 — one built lifespan gate: the node to toggle and the authored trim.
+ *
+ * `naturalDisplay` is the display the gate restores when the playhead re-enters range. It
+ * is captured at BUILD time (in `buildLayer`, from what the element builder just settled),
+ * so it is correct for EVERY scope — including the stamped ones (repeater rows, sequence
+ * composition items) that are deliberately absent from `scope.children` and therefore
+ * unreachable by any walk of the namespace tree. It is already `none` for a hidden element
+ * (B-034), which is what keeps such an element inert through the gate.
+ *
+ * `snapshotLifespanGates` then REFRESHES this for the scopes the namespace tree does reach,
+ * after `applyScopedFieldValues` — a `visibility` binding writes `style.display` directly
+ * (see `bindings.ts`), and the pre-B-089 gate restored that post-binding value.
+ */
+export interface LifespanGateEntry {
+  node: HTMLElement;
+  lifespan: FrameRange;
+  /** Display value the scene-builder settled on, restored when entering range. */
+  naturalDisplay: string;
 }
 
 /** D-125 — one built Lottie: its element config + the mount container. */
