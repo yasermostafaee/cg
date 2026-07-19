@@ -1694,3 +1694,42 @@ be met by the naive path — the restore MUST be occupancy-aware.
 CasparCG-death path, and NO weakening of the adopt-CLEAR on the normal (non-restore) `load()` path —
 only the RESTORE path gets adopt-without-clear. Additive recovery that STRENGTHENS broadcast safety.
 Sibling of [[B-087]]; the recovery half of the bridge-death story.
+
+## [~] B-093 — the occupancy tap cannot tell "this layer is empty" from "I have never heard any OSC", so a bridge restart against an OSC-blind install re-ADDs over a LIVE layer and takes the graphic OFF AIR ⟨priority: high⟩ — in progress on `fix/blind-occupancy-tap-restore`, change dir `openspec/changes/runtime-blind-occupancy-tap/`
+
+Found by the [[B-092]] hardware probe (#353) and captured on the wire, not inferred.
+
+`OscOccupancyTap.entries` is populated only by `note()`, called only from OSC events. If OSC never
+arrives — misconfigured `casparcg.config`, OSC pointed at the wrong port, a firewall — the map is
+empty and `occupied()` returns `[]`, so a genuinely **LIVE** layer reads as unoccupied. B-092's
+restore then takes the re-ADD branch and sends `CG <ch>-<layer> ADD 0 "<template>" 0 "{}"` over the
+live producer. Play-on-load is `0`, so the playing graphic is replaced by a **non-playing** one:
+**OFF AIR**, silently, with no error and no operator-visible signal.
+
+B-092's literal invariant survived — no CLEAR is ever sent — but the property it existed to protect
+did not. The safe path degraded into the unsafe one, which is the more dangerous shape of failure:
+the design looked intact.
+
+**Root cause:** silence has two meanings that demand OPPOSITE actions — "this layer is empty" and
+"I have never heard from the server". Silence from a tap that has never received a packet is not
+evidence of emptiness; it is evidence of no evidence.
+
+**Fix:** the tap learns whether it has EVER received OSC this session (`hasReceivedOsc`, driven by
+OSC **traffic** and reset with `reset()` on resync). Keyed on traffic rather than producer events
+on purpose: a healthy server whose layers are all empty emits only channel-level messages
+(verified on 2.3.2), so a producer-event flag would make healthy-but-idle indistinguishable from
+blind and would break the legitimate "layers really are empty" re-ADD path. Then, at the restore
+decision: heard + occupied → adopt (unchanged); heard + silent → re-ADD as loaded (unchanged);
+**never heard → REFUSE TO DECIDE** — send nothing, keep the row visible, and publish it as
+[[B-086]]/[[B-087]]'s `unverified` ("WAS ON AIR"), which already means exactly "was on air, cannot
+confirm". The periodic sweep decides the item for real if OSC starts arriving.
+
+**Same bug in a sibling path, fixed with it:** `reconcileOnReconnect` (B-086's reconnect reconcile)
+also reads silence as proof the producer is gone, and would reset a genuinely live item to `idle`
+on a blind tap — on a link that is UP. It is now skipped while the tap is blind. This
+STRENGTHENS B-086 rather than weakening it: it prevents a false `idle`, and the `unverified`
+demotion from the drop still stands.
+
+**FROZEN:** on-air refusal (R-006), [[B-085]]'s library, [[B-086]]/[[B-087]]'s `unverified` badge,
+and B-092's occupied-branch behaviour when OSC IS flowing (hardware-confirmed correct: nothing
+sent, live producer untouched) are all unchanged.

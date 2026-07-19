@@ -133,7 +133,25 @@ interface ItemRecord {
    * live graphic).
    */
   settle?: { to: StackItemStatus; evidenced: boolean };
+  /**
+   * The item was restored from retained intent, but the occupancy tap had never
+   * received any OSC, so the bridge REFUSED to decide whether its layer is live.
+   * Nothing was sent for it and nothing can confirm it — so an on-air-ish base
+   * publishes as the honest `unverified` rather than a red claim.
+   *
+   * Per-item, unlike `linkDown`: the link is UP in this state (that is what makes
+   * it insidious — a green health pill beside an unverifiable row), so demoting
+   * globally would misreport every other item.
+   */
+  unverifiable?: boolean;
 }
+
+/**
+ * The machine-readable cause published on an item the bridge REFUSED to decide
+ * because its occupancy tap has never heard any OSC. Distinguishes this from a
+ * link-loss `unverified`, which calls for different operator wording.
+ */
+export const OSC_UNVERIFIABLE = 'osc-unverifiable';
 
 export class Reconciler extends EventEmitter<ReconcilerEvents> {
   private readonly items = new Map<string, ItemRecord>();
@@ -167,6 +185,11 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
       this.queuedIntents.push({ intent, seq, at: this.now() });
       return null;
     }
+    // A fresh operator intent supersedes any restore-time doubt: whatever the
+    // tap could not tell us, the item is now being commanded and settles on its
+    // own evidence.
+    const targeted = this.items.get((intent as { itemId?: string }).itemId ?? '');
+    if (targeted !== undefined) delete targeted.unverifiable;
     return this.applyIntentInternal(intent, seq);
   }
 
@@ -213,6 +236,35 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
       played: input.played,
     };
     this.items.set(rec.itemId, rec);
+    return this.emitChange(rec);
+  }
+
+  /**
+   * Mark (or clear) a restored item as UNVERIFIABLE — the bridge could not
+   * decide what is on its layer because the occupancy tap has never received
+   * OSC. Returns the re-published state, or `null` if the item is unknown or
+   * the flag did not change.
+   *
+   * Set when a restore refuses to decide; cleared the moment the decision can
+   * finally be made (OSC arrived) or the operator issues a fresh intent, so the
+   * state can never outlive the doubt that caused it.
+   */
+  setUnverifiable(itemId: string, unverifiable: boolean): StackItemState | null {
+    const rec = this.items.get(itemId);
+    if (rec === undefined) return null;
+    if ((rec.unverifiable ?? false) === unverifiable) return null;
+    if (unverifiable) {
+      rec.unverifiable = true;
+      // Publish the CAUSE, not just the state. `errorCode` already rides
+      // `StackItemState`, so the renderer can tell this apart from a link-loss
+      // `unverified` — which needs opposite wording — with no new IPC and no
+      // extra subscription per row.
+      rec.errorCode = OSC_UNVERIFIABLE;
+    } else {
+      delete rec.unverifiable;
+      // Only ever clear OUR sentinel; a real refusal reason must survive.
+      if (rec.errorCode === OSC_UNVERIFIABLE) delete rec.errorCode;
+    }
     return this.emitChange(rec);
   }
 
@@ -637,6 +689,12 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
     // extra guard is needed. Only these two red-badge states are demoted;
     // transient/`unconfirmed`/idle/loaded keep their own honest meaning.
     if (this.linkDown && (base === 'on-air' || base === 'playing')) return 'unverified';
+    // The blind-tap case: this item was RESTORED from retained intent, but the
+    // occupancy tap has never heard any OSC, so nothing can confirm what is
+    // actually on its layer. Same honest answer as a link-loss, scoped to the
+    // one item rather than the whole link — the link here is UP, so demoting
+    // globally would lie about every other row.
+    if (rec.unverifiable === true && (base === 'on-air' || base === 'playing')) return 'unverified';
     return base;
   }
 

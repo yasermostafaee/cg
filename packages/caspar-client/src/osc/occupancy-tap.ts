@@ -38,6 +38,56 @@ const MAX_ENTRIES = 2048;
  */
 export class OscOccupancyTap {
   private readonly entries = new Map<string, { producer: string; at: number }>();
+  private lastTrafficAt: number | null = null;
+
+  /**
+   * Has parseable OSC reached this tap RECENTLY — within the same staleness window
+   * `occupied()` uses?
+   *
+   * Silence has two completely different meanings and the entry map cannot tell
+   * them apart: "this layer is empty" and "I have never heard from the server at
+   * all". They demand OPPOSITE actions, and conflating them cost a live graphic
+   * — a bridge restart against an OSC-blind install read a genuinely LIVE layer
+   * as unoccupied and re-ADDed a non-playing producer over it, taking the
+   * graphic off air (captured on the wire, PR #353's hardware probe).
+   *
+   * So consumers that act on emptiness MUST gate on this: an empty map is
+   * evidence of emptiness only when the tap has actually been hearing OSC.
+   * Silence from a tap that has never received a packet is not evidence of
+   * emptiness — it is evidence of NO EVIDENCE.
+   *
+   * FRESHNESS, not a sticky "ever" bit, and on the SAME window as `occupied()`.
+   * A one-shot flag would go permanently true on a single packet, while the entry
+   * map keeps ageing out — so a tap that heard OSC once and then went deaf would
+   * report "heard" forever while reporting every layer empty, re-arming exactly
+   * the re-ADD-over-a-live-producer this exists to prevent. Both signals must
+   * decay together or they can disagree.
+   *
+   * Deliberately driven by OSC TRAFFIC, not by producer events: real CasparCG
+   * emits per-layer producer messages only for layers that HAVE a producer (a
+   * channel with every layer empty sends only `/channel/N/framerate` and
+   * `/channel/N/mixer/...`, verified on 2.3.2). Keying this on producer events
+   * would make a healthy-but-idle server indistinguishable from a blind tap,
+   * and would break the legitimate "both restarted, layers really are empty"
+   * re-ADD path.
+   */
+  hasFreshOsc(staleMs: number, now: number = Date.now()): boolean {
+    return this.lastTrafficAt !== null && now - this.lastTrafficAt <= staleMs;
+  }
+
+  /** Wall-clock ms of the last parseable OSC packet, or null if never heard (diagnostic). */
+  get lastOscTrafficAt(): number | null {
+    return this.lastTrafficAt;
+  }
+
+  /**
+   * Record that a parseable OSC packet arrived, whatever it carried. Called by
+   * the transport once per packet, independently of `note()` — see
+   * `hasReceivedOsc` for why the distinction is load-bearing.
+   */
+  noteTraffic(at: number = Date.now()): void {
+    this.lastTrafficAt = at;
+  }
 
   /** Record a parsed OSC event. Ignores everything but `foreground.producer`. */
   note(event: OscEvent, at: number): void {
@@ -70,9 +120,17 @@ export class OscOccupancyTap {
     return out;
   }
 
-  /** Forget everything — called on session resync so ghosts die with the cycle. */
+  /**
+   * Forget everything — called on session resync so ghosts die with the cycle.
+   *
+   * `everReceived` resets WITH the entries, deliberately: the question it
+   * answers is "am I hearing this session's server?", and a stale `true`
+   * inherited across a reconnect would vouch for a server we have not heard
+   * from yet — exactly the false confidence this flag exists to prevent.
+   */
   reset(): void {
     this.entries.clear();
+    this.lastTrafficAt = null;
   }
 
   /** Number of retained entries (diagnostic). */
