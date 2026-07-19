@@ -1,14 +1,25 @@
 # Tasks — Lottie lifecycle element (D-125)
 
-> **STATUS.** The design checkpoint is approved and implementation is under way in phases.
-> **Phase 1** (#335 + the canvas fixes #337/#338/#339) shipped §1–§3 and §8–§9: schema, the
-> `@cg/lottie-bridge` (`lottie_light` + `markersToSegments`), the render mount + `lottieAssets` seam,
-> the exporters, and the Designer UI — with a RENDER-ONLY driver (no lifecycle).
-> **Phase 2** (this change) ships the lifecycle CRUX: §4 (the OUT phase mapping), §5 (`drivesHold`,
-> opt-in), §7 (the element-outro seam + the B-034 hidden-inert gate), and §10.2/§10.5.
-> **Phase 3** covers §6 (field overrides), §7.6 (the auto-exit boundary — owner decision), §10.4 (E2E)
-> and §11 (the CasparCG 2.3.x CEF hardware smoke, the pre-archive gate).
-> **PR boundaries** are flagged as `⟦PR-n⟧`.
+> **STATUS — RECONCILED against merged `main` (pre-archive housekeeping).** Every checkbox below
+> was re-verified from the CODE on merged main, not from prior claims — a repo-wide audit found
+> tasks.md an unreliable signal (whole sections shipped but unticked; §8/§9 here were exactly that).
+> The original `⟦PR-n⟧` plan was RE-CUT mid-flight; what actually shipped, in order:
+>
+> - **#335** `939d9cc` — Phase 1: schema, bridge (`lottie_light` + `markersToSegments`), render
+>   mount + `lottieAssets` seam, BOTH exporters (§D5(c) conditional player), Designer UI. Render-only.
+> - **#337** `3e23d31` / **#338** `6f56039` / **#339** `6f3def1` — Phase 1 canvas follow-ups (§13).
+> - **#341** `f1cbe16` — Phase 2: the lifecycle crux — OUT mapping, `drivesHold` opt-in, the
+>   element-outro seam on `out()`/`stop()`, the B-034 hidden-inert gate.
+> - **#345** `652dcc5` — Phase 3a (§12): entrance settle DERIVED from the Lottie intro + Inspector
+>   timing guidance (one shared `lottieTiming` helper).
+> - **#348** `df37de2` — Phase 3b-1 (§14): comp-space timing panel, real Playout action buttons,
+>   the B-091 preview `lottie-assets` guard.
+> - **#352** `ba7e456` + **#354** `233b92c` — style pass on the panels (+ the a11y/E2E repair the
+>   Windows-run shortcut shipped) (§14).
+> - **#357** `d4d8bbb` — Phase 3b-2 (task 7.6): the AUTO-exit path through the seam, exactly once.
+> - **#358** `f256c07` — Phase 3c (tasks 6.1/9.4): `lottie-override` field bindings.
+>
+> **Still open: §11 — the CasparCG 2.3.x CEF hardware smoke (the pre-archive gate).**
 
 ## 1. Schema (`@cg/shared-schema`) — `⟦PR-1⟧`
 
@@ -106,39 +117,39 @@
 
 ## 8. Exporters — `⟦PR-3⟧`
 
-- [ ] 8.1 New `packages/single-file-export/src/lottie-export.ts` — `collectLottieElements(scene)` +
-      `resolveLottieAsset(source, assetId)`, mirroring `image-export.ts` (walk scene + compositions +
-      containers, dedupe).
-- [ ] 8.2 `ExporterSingleFile` (`exporter-single-file.ts`) — inline each Lottie JSON as a JS literal
-      into a `lottieAssets` map baked into the boot script (like `scene`), passed to `createRuntime`;
-      include the player bundle. Zero external requests — the CSP (`default-src 'none'`,
-      `script-src 'unsafe-inline'`) forbids eval/wasm/fetch. Unresolved JSON → a preflight warning
-      (never blocks).
-- [ ] 8.3 `apps/designer/src/platform/Exporter.ts` `#gatherBinaries` — pack each Lottie JSON as
-      `assets/lottie/<sha>.json` bytes + an `AssetEntry { kind: 'lottie' }` (mirroring images); the
-      `.vcg` `buildIndexHtml`/boot builds `lottieAssets` from the packaged files (same-origin under the
-      `.vcg`'s strict `'self'` CSP — not an "external" request).
-- [ ] 8.4 `packages/single-file-export/scripts/bundle-runtime.mjs` — emit the player per the §D5
-      **owner-chosen** strategy. Default (recommendation): a conditional 3rd/4th const (e.g.
-      `cgJsLottieIife`) shipped only when a Lottie is present. Fallback (if owner picks unconditional):
-      the player rides the existing `cgJs`/`cgJsIife`. Optional lever: minify the player entry only.
-- [ ] 8.5 Extend `cef-compat.test.ts` to scan the player bundle artifact too (whichever const carries
-      it), against the same `CEF_BANNED_BUILTINS` list.
+- [x] 8.1 (#335) `packages/single-file-export/src/lottie-export.ts` — `collectLottieElements` +
+      `resolveLottieAsset`, mirroring `image-export.ts`. VERIFIED on merged main (this section sat
+      unticked while fully shipped — the audit's exact pattern).
+- [x] 8.2 (#335) `ExporterSingleFile` inlines the Lottie JSON as a `lottieAssets` map + ships the
+      player bundle conditionally; zero external requests under the CSP. VERIFIED
+      (`exporter-single-file.ts`, 13 `lottieAssets` sites; covered by
+      `packages/single-file-export/tests/exporter-single-file.test.ts`).
+- [x] 8.3 (#335) `.vcg` packs each Lottie JSON as `assets/lottie/<sha>.json` bytes plus a
+      lottie-kind `AssetEntry`; the boot builds `lottieAssets` from the packaged files. VERIFIED
+      (`Exporter.ts`; pinned by `apps/designer/tests/exporter-vcg-lottie.test.ts`).
+- [x] 8.4 (#335) Shipped as §D5 option **(c) + the minify lever**: the base runtime resolves the
+      bridge's `lottie_light` import to a stub delegating to a global, and a SEPARATE minified
+      `cgJsLottie`/`cgJsLottieIife` pair ships ONLY when a Lottie is present. Measured on current
+      main: **168.1 KB** per player const (vs 425.7 KB unminified at decision time) — see §D5's
+      shipped note.
+- [x] 8.5 (#335) `cef-compat.test.ts` scans the player consts against `CEF_BANNED_BUILTINS`
+      (5 lottie references in the test). VERIFIED.
 
 ## 9. Designer UI (`apps/designer/src/renderer`) — `⟦PR-4⟧`
 
-- [ ] 9.1 Import: `ProjectAssetsPanel.tsx` — add a `Lottie…` item (`:287-303`), widen `importKind`'s
-      union to include `'lottie'` (`:149`), and add the delete-warning copy branch (`:401-417`). (The
-      `lottie` asset kind, `AssetStore` `assets/lottie/<sha>.json` path, and `mimeOf` already exist.)
-- [ ] 9.2 Tool + placement: add a `'lottie'` member to `DesignerTool` (`store-core.ts:19`) and a tool
-      to `CanvasToolbar.tsx` (`:36`); a `defaultLottie` factory in `element-defaults.ts` (mirror
-      `defaultImage:370`, needs an `assetId`); a placement branch in `CanvasOverlay.tsx` `onPointerDown`
-      and the `onDrop` seam (`:516`, drag a lottie asset from the panel).
-- [ ] 9.3 Inspector: a `LottieSections` in `StyleSection.tsx` (replacing the Filter-only fall-through
-      at `:138` for `lottie`) — speed, hold-behaviour select (`Freeze` / `Loop idle segment`), and the
-      phase mapping (read-only chips when marker-sourced; number inputs + "Re-read markers" when
-      manual). Keep `field-registry.ts:691` `lottie: UNIVERSAL_ONLY` (no internal-keyframe editor —
-      opaque).
+- [x] 9.1 (#335) Import via Project Assets → `Lottie…` (allowlist-validated, readable rejection
+      reasons). VERIFIED (`ProjectAssetsPanel.tsx`, 10 Lottie sites; exercised by every lottie E2E's
+      import helper).
+- [x] 9.2 (#335, re-cut by #337) `defaultLottie` factory + the `CanvasOverlay` drag-from-panel
+      `onDrop` seam shipped and are THE placement path. The planned `DesignerTool` member +
+      `CanvasToolbar` tool shipped in #335 and were then **REMOVED by #337 as redundant** (a
+      Lottie needs an asset, so panel-drag is the only placement that makes sense — the toolbar
+      tool was a dead affordance; verified: no `lottie` in `store-core.ts` on main). Not re-adding.
+- [x] 9.3 (#335, evolved by #345/#348) `LottieSections` shipped: speed, hold-behaviour select,
+      phase mapping (marker-sourced read-only; manual number inputs — since #348 each with a live
+      comp-frame equivalent), `lottie: UNIVERSAL_ONLY` kept (opaque). The planned **"Re-read
+      markers" button never shipped** — superseded: re-import re-reads markers, and the 3a/3b-1
+      timing panel made the mapping visible enough that the affordance never came up again.
 - [x] 9.4 **(Phase 3c, minimal form)** `resolveBinding` gains a lottie branch fed by the parsed
       clip's layer names (`lottieLayerNames` via the asset cache, passed from CanvasOverlay): a text
       field auto-targets the first TEXT layer (`prop: 'text'`), a colour field the first non-text
@@ -146,9 +157,10 @@
       `describeBinding` renders the pick (`lottie <layer>.<prop>`). A full layer/prop PICKER (choose
       among multiple layers / stroke vs fill) is deliberately deferred — the auto-pick covers the
       typical one-text-one-shape furniture clip, and retargeting is unbind → rebind.
-- [ ] 9.5 Preview: `platform/preview.ts` — extend the iframe seam to deliver the Lottie JSON (a
-      `lottieAssets` map) to `createRuntime` (`:414`), populated like `assetUrls` via the
-      `asset-urls`/`scene-replace` postMessage handlers; the Canvas/PreviewModal hosts post the map.
+- [x] 9.5 (#335; hardened by #348) The preview iframe `lottieAssets` seam via
+      `scene-replace`/`lottie-assets` messages + `lottieAssetCache` on the host. #348 added the
+      B-091 guard: a map arriving MID-PLAYBACK defers its rebuild to the next play instead of
+      tearing down the live graphic.
 
 ## 10. Tests & docs
 
@@ -159,15 +171,18 @@
       Plus the §D6.4 risk cases (strand / supersede / pause mid-outro / synchronous `remove()`), the
       B-034 hidden + hidden-ancestor gates, and the freeze-vs-idle-loop hold distinction
       (`tests/lottie-lifecycle.test.ts`).
-- [ ] 10.3 Exporter tests (`⟦PR-3⟧`): `.vcg` packs the Lottie JSON bytes + `AssetEntry`; single-file
-      inlines JSON + player with **zero** external requests; the `cef-compat.test.ts` artifact scan
-      covers the player bundle.
-- [ ] 10.4 E2E (`apps/designer/tests/e2e`, `⟦PR-4⟧`): import → place → preview → export, mapping the
-      `designer-lottie-element` scenarios to Playwright steps (fixtures/page objects).
+- [x] 10.3 (#335) Exporter tests: `apps/designer/tests/exporter-vcg-lottie.test.ts` (`.vcg` bytes +
+      `AssetEntry`), `packages/single-file-export/tests/exporter-single-file.test.ts` (inline JSON +
+      conditional player, zero external requests), `cef-compat.test.ts` (player consts scanned).
+- [x] 10.4 Four E2E specs on merged main, accumulated per phase rather than as one `⟦PR-4⟧` batch:
+      `lottie-element.spec.ts` (#335/#337 — import → place → canvas + preview render, opaque
+      inspector), `lottie-entrance-settle.spec.ts` (#345, realigned by #354), `lottie-auto-exit.spec.ts`
+      (#357), `lottie-override.spec.ts` (#358 — bind from canvas → live preview override).
 - [x] 10.5 Engine doc-sync (in the runtime PR): `docs/engines/overview.md`,
       `packages/template-runtime/README.md`, and the canvas README for the new element + the
       element-outro seam.
-- [ ] 10.6 PRD `docs/prd/designer.md` D-125 → `[~]` with the change dir noted.
+- [x] 10.6 PRD D-125 is `[~]` with the change dir + per-phase history (kept current since #345).
+      The flip to `[x]` waits for §11 — NOT this housekeeping pass.
 
 ## 12. Phase 3a — entrance settle derived from the Lottie + Inspector guidance (`⟦PR-5⟧`)
 
@@ -192,8 +207,51 @@
       crux + multiple / mixed / manual-override / hidden / hidden-ancestor / absent-phases / clamp /
       speed-2 / no-Lottie regression), `apps/designer/tests/lottie-inspector-timing.test.ts` (the
       readout + warning), and the E2E `apps/designer/tests/e2e/lottie-entrance-settle.spec.ts`.
-- [ ] 12.7 NOT Phase 3a (deferred to Phase 3b): the auto-exit seam gap, Lottie field overrides, and
-      the preview mid-playback rebuild.
+- [x] 12.7 The Phase-3a deferral note, fully discharged since: the auto-exit seam gap (#357,
+      task 7.6), Lottie field overrides (#358, tasks 6.1/9.4), the preview mid-playback rebuild
+      (#348, B-091 — task 9.5 note).
+
+## 13. Phase 1 canvas follow-ups — ADDED mid-flight (not in the original plan)
+
+- [x] 13.1 (#337) Removed the redundant Lottie canvas-toolbar tool (see 9.2) and re-greened the
+      icon-pack E2E it broke.
+- [x] 13.2 (#338) Render the Lottie on the EDITOR CANVAS, not only in the preview iframe — the
+      canvas mounts real players from `lottieAssetCache`.
+- [x] 13.3 (#339) Poster a VISIBLE frame on the static canvas: marked clips park on `introEnd`,
+      marker-less clips on the clip MIDPOINT — never `op`, which for real AE furniture is the
+      invisible outro-end (the "empty box on the canvas" bug).
+
+## 14. Phase 3b-1 + the style/a11y passes — ADDED mid-flight
+
+- [x] 14.1 (#348) Lottie timing panel rebuilt around COMP-SPACE answers: the settle frame as THE
+      decision number, a mode-aware hold line (freeze shows NO duration — that segment never
+      plays), time-to-clear after OUT, animation-frame detail demoted to a collapsed disclosure.
+- [x] 14.2 (#348) Playout inline-link actions became real buttons with self-contained labels
+      (`Clear out point`, `Add out point`, `Pin content start`, `Reset to auto`).
+- [x] 14.3 (#348) B-091: the preview `lottie-assets` handler no longer rebuilds mid-playback —
+      deferred to the next play (mirrors the `update` handler's `!playing` guard).
+- [x] 14.4 (#352) Inspector colour hierarchy: marker-tied action buttons (out-point amber /
+      content-start cyan from the SHARED timeline-marker tokens), pale-red removals, pale-yellow
+      cautions (infinite-driver chips + the won't-auto-close banner de-escalated from red), strong
+      red reserved for real errors (the 3a out-point overrun warning); Button recipe UA-chrome
+      reset + derived hover washes.
+- [x] 14.5 (#354) The #352 pass shipped an a11y regression on a Windows-run shortcut — the caution
+      recolour silently dropped the hold banner's `role="alert"`. Restored via an explicit `role`
+      prop on `Callout` (colour and assertiveness are independent axes), and the timing E2E was
+      realigned to the redesigned panel. Kept here as the recorded lesson behind "a Windows E2E
+      pass is never authoritative".
+
+## 15. Known boundaries shipped AS DOCUMENTED (#358) — reported, deliberately not "fixed"
+
+- [x] 15.1 Image overrides DEFERRED with the stated reason (design allows them only "if cheap";
+      asset reload/re-render machinery is not). The override surface is text + fill/stroke on
+      named TOP-LEVEL layers only.
+- [x] 15.2 A colour override on a top-level PRECOMP recolours its whole rendered subtree, and an
+      ANIMATED property always wins over an override on the next rendered frame — both are the
+      documented opacity boundary (`applyOverride` docblock), not defects.
+- [x] 15.3 `LottieElementSchema.fieldOverrides` is a RESERVED, unused record (overrides route
+      through the `lottie-override` binding target so templates stay byte-stable); docblock says
+      so; removal waits for a schema-version bump.
 
 ## 11. Pre-archive gate (NOT a code task — the B-066 hardware smoke)
 
