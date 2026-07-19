@@ -480,6 +480,19 @@ unarchived change dir whose tasks are all `[x]`), or whether that stays a separa
 the same defect wearing two hats — the audit found both together — but they fail in different
 places (`docs/prd/*.md` vs `openspec/changes/`).
 
+**EVIDENCE (2026-07-19) — the open call is answered empirically: it SHOULD cover the OpenSpec
+half.** An archive sweep found FOUR changes simultaneously in the exact state the open call
+describes — merged into `main`, tasks complete, change dir never archived, PRD item still `[~]`:
+[[B-093]] (#355), [[B-094]] (#356), [[P-009]] (#363) and [[C-014]] (#368). Two of them had sat
+that way for days while later work merged straight past them. The two hats are not merely the
+same defect in theory; here they failed together, in one batch, four times over — and neither
+hat's absence was noticed by anything automated. A guard covering only `docs/prd/*.md` would have
+caught the same four, but only after someone thought to look; the unarchived dirs are the more
+visible symptom because `openspec/changes/` is a short list a human actually scans. Cheapest
+useful shape: assert that no `openspec/changes/<name>/` (excluding `archive/`) has all-`[x]`
+tasks AND a merged cited PR. (Recorded as evidence only — the guard is deliberately NOT
+implemented in that sweep's commit.)
+
 **Regression test:** the guard is its own regression test (the B-075 precedent) — a `[~]` item
 whose cited fix is merged turns it red; flipping that item to `[x]` turns it green.
 
