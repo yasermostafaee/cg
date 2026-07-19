@@ -115,6 +115,38 @@
   color: #fff;
   font-weight: var(--r-weight-bold);
 }
+/* C-012 — the ON-AIR family, subordinate to PLAY.
+   UPDATE changes what is on air RIGHT NOW, so it must not read like the neutral
+   staging controls (Load / Apply position / Add item) that touch nothing live. It
+   wears the on-air hue to say "this reaches air", as an OUTLINE so the SOLID red
+   stays what it has always been: PLAY, the one control that puts a graphic on air.
+   The sacred-red rule is intact — solid `--r-onair` remains PLAY + ON AIR only. */
+.cg-btn--air {
+  background: transparent;
+  border-color: var(--r-onair);
+  color: #fb7185;
+  font-weight: var(--r-weight-bold);
+}
+.cg-btn--air:hover:not(:disabled) {
+  background: rgba(225, 29, 72, 0.16);
+  color: #fff;
+}
+/* C-012 — the destructive half of the EXIT family.
+   STOP and CLEAR both take a graphic off air and must not look alike: STOP leaves
+   the producer resident (recoverable), CLEAR destroys it. Same amber hue so they
+   read as one family, opposite weights so the consequence is legible — outline for
+   the recoverable one, filled for the destructive one. */
+.cg-btn--caution-strong {
+  background: var(--r-caution);
+  border-color: var(--r-caution);
+  color: #1c1207;
+  font-weight: var(--r-weight-bold);
+}
+.cg-btn--caution-strong:hover:not(:disabled) {
+  background: #d97706;
+  border-color: #d97706;
+  color: #fff;
+}
 .cg-btn--primary {
   background: var(--r-accent-strong);
   border-color: var(--r-accent-strong);

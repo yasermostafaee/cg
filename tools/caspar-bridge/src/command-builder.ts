@@ -67,7 +67,28 @@ export class CommandBuilder {
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(serialize(fields))}`;
   }
 
-  /** Hard-out: clear the slot. */
+  /**
+   * C-012 — GRACEFUL stop: tell the template to run its own outro and leave the
+   * producer RESIDENT on the layer.
+   *
+   * The fifth verb, and the one that makes `out()` a genuine choice rather than
+   * the only way off air. Hardware-verified on CasparCG 2.3.2 (`4de6d18f`, PR
+   * #353's probe):
+   *
+   *   CG <ch>-<layer> STOP 0  -> 202 CG OK; OSC still reports `html`;
+   *                              the template's `window.stop` FIRED
+   *   CG <ch>-<layer> PLAY 0  -> 202 CG OK, resumed — with NO re-ADD
+   *   CLEAR <ch>-<layer>      -> OSC goes SILENT; the producer is DESTROYED
+   *
+   * So STOP and CLEAR reach genuinely different end states, and both are legible
+   * to the occupancy tap: stopped reads OCCUPIED (the producer is there),
+   * cleared reads silent.
+   */
+  stop(slot: CommandSlot): string {
+    return `CG ${target(slot)} STOP ${String(FLASH_LAYER)}`;
+  }
+
+  /** Hard-out: clear the slot. DESTROYS the producer — contrast `stop()`. */
   out(slot: CommandSlot): string {
     return `CLEAR ${target(slot)}`;
   }

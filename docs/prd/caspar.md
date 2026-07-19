@@ -206,3 +206,51 @@ reconciliation would finally use — one reconnect/startup design should cover
 C-010 + C-011 together. Placement note: filed as a single C- item (the bridge is
 the center of gravity); the renderer/Library face (persisted `.vcg` bytes for
 re-import-free page reloads) is part of THIS item, not a separate R- entry.
+
+## [~] C-012 — CG STOP as a distinct operator action: a graceful exit that runs the template's outro and leaves the producer resident ⟨priority: medium⟩ — in progress on `feat/runtime-stop-verb`, change dir `openspec/changes/runtime-stop-verb/`
+
+**What:** A fifth AMCP verb, `CG <ch>-<layer> STOP`, offered beside PLAY / UPDATE / CLEAR. It tells
+the template to run its OWN outro and leaves the producer resident on the layer, so a later PLAY
+resumes it with no re-load. CLEAR remains the hard path that destroys the producer.
+
+**Why now:** this was blocked on hardware evidence, and [[C-011]]'s probe (PR #353) produced it
+against CasparCG 2.3.2 `4de6d18f`:
+
+- `CG 1-45 STOP 0` → `202 CG OK`; OSC still reports `html`; the template's `window.stop` FIRED
+- `CG 1-45 PLAY 0` → `202 CG OK`, `window.play` fired, playback RESUMED — with **no re-ADD**
+- `CLEAR 1-45` → OSC goes **SILENT**; the producer is destroyed
+
+So STOP and CLEAR reach genuinely different end states, and both are legible to the occupancy tap
+(stopped reads OCCUPIED, cleared reads silent). `window.stop` is wired to `runtime.stop()` — the
+graceful outro path, distinct from `remove()`'s synchronous kill — so STOP plays the template's
+exit animation rather than yanking the graphic.
+
+**ADR-0006 is deliberately extended, not violated.** That ADR froze the command surface to
+ADD/PLAY/UPDATE/CLEAR _because the alternatives were unverified on hardware_ — the freeze was an
+evidence rule, not a taste. The evidence now exists, so the change records the extension and the
+measurements that justify it.
+
+**Design decisions (see the change for the full reasoning):**
+
+- **No new status.** A stopped item rests at `loaded` — which already means exactly "a producer is
+  resident on the layer and it is not playing", and is what the hardware shows. Twelve files switch
+  on `StackItemStatus`; a new member would be a new hole in each. The load-bearing part is
+  retracting the play evidence: OSC reports `html` FOREVER after a STOP, so leaving `played` set
+  would make a stopped graphic claim ON AIR indefinitely off real OSC.
+- **Nothing waits on the outro.** The ack means CasparCG accepted the command, not that the
+  animation finished. Outro completion is not observable from the bridge — [[B-030]] is precisely a
+  case where a template's own completion never resolves while OSC keeps reporting `html` — so no
+  timer chases it and no mechanism assumes it.
+- **`#loaded` is NOT cleared** (unlike `out()`), which is what makes the resume work: `take()` sees
+  the resident producer and issues a bare `CG PLAY` instead of the B-039 re-ADD.
+- **One button and one menu item, from one declaration.** [[R-013]]'s `ui/rowAction.ts` means the
+  row declares its actions once and renders them twice, so the context menu mirrors STOP for free.
+
+**FROZEN:** on-air refusal (R-006 — STOP is link-gated like every on-air verb, and its refusal goes
+to the toast), [[B-085]]'s library, [[B-086]]/[[B-087]]'s `unverified` badge, [[B-092]]'s restore,
+[[B-093]]'s blind-tap guard, [[B-094]]'s NO OSC indicator, and the adopt-CLEAR safety are all
+untouched. CLEAR's behaviour is unchanged — STOP is purely additive.
+
+**Related:** [[C-008]] (graceful/soft stop for content-driven holds) is a DIFFERENT thing — a
+content-timing policy that finishes the current pass before letting natural completion close the
+hold, on the existing override seam. Once this verb exists, C-008 has a command to end with.

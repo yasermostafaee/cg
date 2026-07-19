@@ -123,6 +123,7 @@ export function createMockBridge(): RuntimeBridge {
       load: (req) => Promise.resolve(mock.load(req.itemId, req.templateId, req.fields)),
       take: (req) => Promise.resolve(mock.take(req.itemId)),
       update: (req) => Promise.resolve(mock.update(req.itemId, req.fields, req.mergeMode)),
+      stop: (req) => Promise.resolve(mock.stop(req.itemId)),
       out: (req) => Promise.resolve(mock.out(req.itemId)),
       remove: (req) => Promise.resolve(mock.remove(req.itemId)),
       setPosition: (req) => Promise.resolve(mock.setPosition(req.itemId, req.position)),

@@ -152,3 +152,70 @@ describe('B-079 — a failed take does not read on-air off a stale producer', ()
     expect(r.get(ITEM)).toMatchObject({ status: 'on-air', pending: false });
   });
 });
+
+describe('C-012 — a FAILED graceful stop gives back the play evidence it retracted', () => {
+  /**
+   * The stop retracts `played` at INTENT time, because after a real STOP the
+   * producer stays resident and OSC reports `html` forever — so an item that kept
+   * its play evidence would claim ON AIR permanently off live observations.
+   *
+   * But if the STOP never lands, the graphic is STILL PLAYING, and a row reading
+   * `loaded` would hide a live graphic — the error direction this file calls the
+   * more dangerous one. So a failed stop restores exactly what it took, the same
+   * way B-079 does for a failed take.
+   */
+  function playing(): Reconciler {
+    const r = new Reconciler();
+    r.applyIntent({ kind: 'load', itemId: 'i1', templateId: 't1', fields: {} }, 1);
+    r.assignSlot('i1', { channel: 1, layer: 10, server: 'primary' });
+    r.applyIntent({ kind: 'take', itemId: 'i1' }, 2);
+    r.applyAck(2, true);
+    return r;
+  }
+
+  /** OSC keeps reporting a producer — exactly what happens after a real STOP. */
+  function observeProducer(r: Reconciler): void {
+    r.applyOsc({
+      kind: 'osc.layer.foreground.producer',
+      channel: 1,
+      layer: 10,
+      producer: 'html',
+    });
+  }
+
+  it('a SUCCESSFUL stop rests at loaded, even with the producer still reported', () => {
+    const r = playing();
+    r.applyIntent({ kind: 'stop', itemId: 'i1' }, 3);
+    r.applyAck(3, true);
+    observeProducer(r);
+    expect(r.get('i1')?.status).toBe('loaded');
+  });
+
+  it('a FAILED stop keeps the item ON AIR — the graphic never stopped', () => {
+    const r = playing();
+    r.applyIntent({ kind: 'stop', itemId: 'i1' }, 3);
+    r.applyAck(3, false, 'amcp-send-failed');
+    observeProducer(r);
+    // The producer is present and the item is still genuinely playing, so the row
+    // must keep saying so rather than quietly reading `loaded`.
+    expect(r.get('i1')?.status).toBe('on-air');
+  });
+
+  it('an EXPIRED stop keeps the item ON AIR too', () => {
+    const r = playing();
+    r.applyIntent({ kind: 'stop', itemId: 'i1' }, 3);
+    r.expireIntent(3);
+    observeProducer(r);
+    expect(r.get('i1')?.status).toBe('on-air');
+  });
+
+  it('a failed OUT is unaffected — it never retracted play evidence', () => {
+    // The guard keys on `playedBeforeIntent`, which only a stop (or take) records,
+    // so the existing out path keeps its behaviour exactly.
+    const r = playing();
+    r.applyIntent({ kind: 'out', itemId: 'i1' }, 3);
+    r.applyAck(3, false, 'amcp-send-failed');
+    observeProducer(r);
+    expect(r.get('i1')?.status).toBe('on-air');
+  });
+});

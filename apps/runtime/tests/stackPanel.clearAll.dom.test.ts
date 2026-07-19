@@ -154,7 +154,12 @@ describe('StackPanel Clear-All', () => {
     stubBridge([item('a', 'on-air')]);
     const el = await renderPanel();
 
-    expect(clearAllButton(el)?.className).toContain('cg-btn--caution'); // as the row's CLEAR
+    // C-012 — the row's CLEAR is the FILLED amber (STOP took the outlined one), so the
+    // bulk action follows it. Asserted as an exact class, not a substring: with both
+    // `cg-btn--caution` and `cg-btn--caution-strong` in the vocabulary, a `toContain`
+    // would pass for either and stop distinguishing STOP's treatment from CLEAR's.
+    expect(clearAllButton(el)?.classList.contains('cg-btn--caution-strong')).toBe(true);
+    expect(clearAllButton(el)?.classList.contains('cg-btn--caution')).toBe(false);
     expect(removeAllButton(el)?.className).toContain('cg-btn--danger'); // as the row's REMOVE
     expect(removeAllButton(el)?.className).not.toContain('cg-btn--caution');
   });

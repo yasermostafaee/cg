@@ -62,6 +62,7 @@ async function renderRow(
           onSelect: () => undefined,
           onPlay: noop,
           onUpdate: noop,
+          onStop: noop,
           onOut: noop,
           onRemove: noop,
         }),
@@ -79,6 +80,29 @@ async function renderRow(
 }
 
 describe('StackRow gating (B-053 contract)', () => {
+  it('C-012 — STOP is offered exactly when there is something on air to stop', async () => {
+    // Same `isOnAir` predicate CLEAR uses, so the two can never disagree about what
+    // "on air" means. The pairing matters: STOP and CLEAR are the two ways off air,
+    // and offering one without the other would read as a missing option.
+    const loaded = await renderRow('loaded');
+    expect(loaded.get('STOP')).toBe(true); // nothing playing yet
+    expect(loaded.get('CLEAR')).toBe(true);
+
+    const onAir = await renderRow('on-air');
+    expect(onAir.get('STOP')).toBe(false); // both offered
+    expect(onAir.get('CLEAR')).toBe(false);
+
+    const idle = await renderRow('idle');
+    expect(idle.get('STOP')).toBe(true);
+  });
+
+  it('C-012 — STOP is refused offline like every other on-air verb (R-006)', async () => {
+    const offline = await renderRow('on-air', 'disconnected');
+    expect(offline.get('STOP')).toBe(true);
+    expect(offline.get('PLAY')).toBe(true);
+    expect(offline.get('CLEAR')).toBe(true);
+  });
+
   it('a loaded (READY, never-taken) item: PLAY enabled, UPDATE and CLEAR disabled', async () => {
     const buttons = await renderRow('loaded');
     expect(buttons.get('PLAY')).toBe(false);

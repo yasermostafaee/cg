@@ -28,6 +28,11 @@ interface Props {
   onSelect: (itemId: string) => void;
   onPlay: (itemId: string) => ActionResult;
   onUpdate: (itemId: string) => ActionResult;
+  /**
+   * C-012 — the graceful stop (outro runs, producer stays resident). Distinct from
+   * `onOut`, whose CLEAR destroys the producer.
+   */
+  onStop: (itemId: string) => ActionResult;
   onOut: (itemId: string) => ActionResult;
   onRemove: (itemId: string) => ActionResult;
 }
@@ -74,6 +79,7 @@ export function StackRow({
   onSelect,
   onPlay,
   onUpdate,
+  onStop,
   onOut,
   onRemove,
 }: Props): JSX.Element {
@@ -137,7 +143,12 @@ export function StackRow({
     {
       key: 'update',
       label: 'UPDATE',
-      variant: 'secondary',
+      // The ON-AIR family. UPDATE changes what is on air RIGHT NOW, so it must not
+      // wear the cool accent the neutral staging controls use (Load, Apply position,
+      // Add item) — those touch nothing live. `air` is the on-air hue as an OUTLINE:
+      // it says "this reaches air" while leaving the SOLID red to PLAY, the one
+      // control that puts a graphic on air.
+      variant: 'air',
       disabled: !onAir || linkDown,
       title: offlineReason,
       run: () => onUpdate(item.itemId),
@@ -147,9 +158,28 @@ export function StackRow({
       onError: () => undefined,
     },
     {
+      key: 'stop',
+      label: 'STOP',
+      variant: 'caution',
+      // C-012 — the GRACEFUL exit: the template runs its own outro and the producer
+      // stays resident, so PLAY resumes it with no re-load. Gated on the same
+      // `isOnAir` predicate CLEAR uses — you can only stop something that may be
+      // showing — so the two never disagree about what "on air" means, and it is
+      // link-gated like every other on-air-affecting verb (R-006).
+      disabled: !isOnAir(item) || linkDown,
+      title: offlineReason,
+      run: () => onStop(item.itemId),
+      onError: reportCommandError,
+    },
+    {
       key: 'clear',
       label: 'CLEAR',
-      variant: 'caution',
+      // The destructive half of the EXIT family. STOP and CLEAR both take a graphic
+      // off air and must not look alike — STOP leaves the producer resident
+      // (recoverable), CLEAR destroys it. Same amber hue so they read as one family;
+      // FILLED against STOP's outline so the heavier consequence carries the heavier
+      // weight.
+      variant: 'caution-strong',
       // The same `isOnAir` predicate the header's Clear-All counts on, so the two can never
       // disagree about what "on air" means. Deliberately NOT the `onAir` above: they differ.
       disabled: !isOnAir(item) || linkDown,

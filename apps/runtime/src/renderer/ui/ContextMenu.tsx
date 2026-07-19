@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { colors } from '../theme.js';
+import { VARIANT_ACCENT, type ButtonVariant } from './Button.js';
 
 /**
  * The Runtime's right-click menu.
@@ -23,8 +24,12 @@ import { colors } from '../theme.js';
 export interface ContextMenuItem {
   label: string;
   onSelect: () => void;
-  /** Mirrors the source button's variant, so the menu is colored like the thing it triggers. */
-  variant?: 'default' | 'caution' | 'danger';
+  /**
+   * The source button's OWN variant. Colour is resolved from `VARIANT_ACCENT` — the
+   * same map the buttons use — so a menu item is painted exactly like the control it
+   * mirrors, and the two cannot drift into a third, half-matching palette.
+   */
+  variant?: ButtonVariant;
   /** Mirrors the source button's `disabled`. A disabled item is inert and not focusable. */
   disabled?: boolean;
   /** Why it is disabled, or what it does — the source button's tooltip. */
@@ -71,15 +76,9 @@ const styles = {
   hover: { background: 'rgba(56, 189, 248, 0.16)' },
 } as const;
 
+/** One shared source with the buttons — see `VARIANT_ACCENT`. */
 function variantColor(variant: ContextMenuItem['variant']): string | undefined {
-  switch (variant) {
-    case 'danger':
-      return colors.error;
-    case 'caution':
-      return colors.pending;
-    default:
-      return undefined;
-  }
+  return variant === undefined ? undefined : VARIANT_ACCENT[variant];
 }
 
 export function ContextMenu({ items, x, y, ariaLabel, onClose }: Props): JSX.Element {

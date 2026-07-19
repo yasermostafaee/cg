@@ -186,8 +186,13 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
             no-op only SUPPRESSES the button's duplicate INLINE error — it does not
             re-report (which would double-toast) or change the wording. Exactly what
             `StackRow`'s UPDATE does, for exactly this reason. */}
+        {/* C-012 — the AIR family, same as the stack row's UPDATE. This is the SAME
+            action (both call `applyDraft`), so it must not read as one of the neutral
+            staging controls beside it — Discard, Apply position, Add item — which
+            touch nothing live. It pushes new values to a graphic that is on air right
+            now; the outlined on-air hue says so, while the SOLID red stays PLAY's. */}
         <AsyncButton
-          variant="secondary"
+          variant="air"
           aria-label="Apply staged edits"
           run={() => onApply(itemId)}
           onError={() => undefined}

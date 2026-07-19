@@ -324,6 +324,12 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
       if (rec.intentStatus === 'playing') {
         rec.played = rec.playedBeforeIntent ?? false;
       }
+      // C-012 — and symmetrically for a failed graceful STOP, which retracted play
+      // evidence at intent time. An `out` never records `playedBeforeIntent`, so it is
+      // untouched here; only a stop reaches this with the field set.
+      if (rec.intentStatus === 'exiting' && rec.playedBeforeIntent !== undefined) {
+        rec.played = rec.playedBeforeIntent;
+      }
       delete rec.playedBeforeIntent;
 
       const settleTo = rec.settle?.to;
@@ -369,6 +375,11 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
     // failed ack does (restore the prior evidence, so a real on-air item is never demoted).
     if (rec.intentStatus === 'playing') {
       rec.played = rec.playedBeforeIntent ?? false;
+    }
+    // C-012 — an expired STOP never proved it landed either: give back the play
+    // evidence it retracted, so an item that is still on air keeps saying so.
+    if (rec.intentStatus === 'exiting' && rec.playedBeforeIntent !== undefined) {
+      rec.played = rec.playedBeforeIntent;
     }
     delete rec.playedBeforeIntent;
 
@@ -595,6 +606,40 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
           : { to: rec.intentStatus, evidenced: true };
         rec.intentStatus = 'updating';
         rec.lastIntentSeq = seq;
+        delete rec.ackedStatus;
+        this.seqIndex.set(seq, rec.itemId);
+        return this.emitChange(rec);
+      }
+      case 'stop': {
+        const rec = this.items.get(intent.itemId);
+        if (rec === undefined) return null;
+        // C-012 — the graceful stop. The template runs its own outro and the
+        // producer STAYS RESIDENT (hardware-verified on 2.3.2), so this settles
+        // at `loaded`, not `idle`: the layer still holds a live producer that a
+        // later take resumes with no re-load. That is exactly what `loaded`
+        // already means, which is why this needs no new status.
+        //
+        // Retracting the play evidence is the load-bearing part. `freshTruth`
+        // derives `on-air` from (producer present + played), and after a STOP the
+        // producer is present FOREVER — so leaving `played` set would make a
+        // stopped graphic claim ON AIR indefinitely, off real OSC. Clearing it
+        // makes the same observation derive `loaded`, which is the truth: there
+        // is a producer on the layer and it is not playing.
+        // B-079's pattern, mirrored: remember the evidence this retracts, so a stop
+        // that FAILS on the wire can give it back. Without this a failed stop would
+        // leave the row reading `loaded` while the graphic is still playing — the
+        // "hide a live graphic" direction this file calls the worse error.
+        rec.playedBeforeIntent = rec.played;
+        rec.played = false;
+        rec.intentStatus = 'exiting';
+        // B-044 — `exiting` is TRANSIENT and the STOP's OK ack settles it. The ack
+        // means "CasparCG accepted the stop", NOT "the outro has finished": outro
+        // completion is not observable from here (B-030 is precisely a case where
+        // a template's own completion never resolves while OSC keeps reporting
+        // `html`), so nothing waits on or chases it. Unevidenced, like the out's.
+        rec.settle = { to: 'loaded', evidenced: false };
+        rec.lastIntentSeq = seq;
+        rec.pendingSince = this.now();
         delete rec.ackedStatus;
         this.seqIndex.set(seq, rec.itemId);
         return this.emitChange(rec);

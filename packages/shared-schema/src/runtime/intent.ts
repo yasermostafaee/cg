@@ -22,6 +22,12 @@ export const IntentSchema = z.discriminatedUnion('kind', [
     fields: FieldValuesSchema,
     mergeMode: z.enum(['merge', 'replace']),
   }),
+  /**
+   * C-012 — the GRACEFUL stop: the template runs its own outro and the producer
+   * stays resident, so a later take resumes it with no re-load. Distinct from
+   * `out`, which CLEARs and destroys the producer.
+   */
+  z.object({ kind: z.literal('stop'), itemId: IdSchema }),
   z.object({
     kind: z.literal('out'),
     itemId: IdSchema,

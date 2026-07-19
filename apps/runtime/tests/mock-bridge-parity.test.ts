@@ -94,6 +94,8 @@ const BRIDGE_SURFACE: {
       'load',
       'take',
       'update',
+      // C-012 — the graceful stop, beside the destroying `out`.
+      'stop',
       'out',
       'remove',
       'setPosition',
