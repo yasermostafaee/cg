@@ -255,6 +255,8 @@
 
 ## 11. Pre-archive gate (NOT a code task — the B-066 hardware smoke)
 
-- [ ] 11.1 A real smoke test of an exported single-file Lottie template on **CasparCG 2.3.x CEF
+- [x] 11.1 A real smoke test of an exported single-file Lottie template on **CasparCG 2.3.x CEF
       hardware** from `file://`: the player boots, renders, plays intro → hold → outro, and issues
       zero external requests. Modern Chrome does not count. Archive only after this passes.
+      **PASSED — owner-verified on real CasparCG 2.3.x CEF hardware, 2026-07-19.** The archive gate
+      is met; every task in this change is now closed.

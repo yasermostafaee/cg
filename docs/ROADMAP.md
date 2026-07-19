@@ -8,6 +8,35 @@ the order changes. Strategic / non-engineering notes live in
 
 ## Done (recent)
 
+- After Effects → bodymovin (Lottie) furniture as a lifecycle-aware element
+  ([D-125](./prd/designer.md)) — merged across nine PRs (#335 + canvas fixes
+  #337/#338/#339, #341, #345, #348, #352, #354, #357, #358; pre-archive
+  reconciliation #364) & archived (2026-07-19,
+  `2026-07-19-lottie-lifecycle-element`): an AE/bodymovin export imports through
+  an allowlist validator and places as an OPAQUE element — no internal keyframe
+  is ever converted to a native one — that participates fully in the
+  composition's IN / HOLD / OUT. Its phases come from bodymovin markers (else
+  manual marking) and map onto the composition BY PHASE, never by rescaling the
+  animation: a `LottieDriver` drives the player frame-by-frame off the injected
+  `RuntimeClock`, so pause/resume is in lockstep with every other driver and the
+  whole lifecycle is deterministic under a fake clock. The crux is the
+  ELEMENT-OUTRO SEAM: `out()`/`stop()` — and, since Phase 3b-2, every
+  self-triggered exit (auto-out expiry, content completion, loop-cycle boundary)
+  — play the element's authored outro to completion BEFORE the background
+  closes, exactly once per exit episode via a one-shot ledger, with the
+  B-030..B-034 defenses (no strand, supersede-safe, re-armed per cycle) intact.
+  A native ticker on top still drives the content-driven hold; the Lottie opts in
+  (`drivesHold`, the inverse default). Phase 3a made the furniture's intro DERIVE
+  the composition's entrance settle — the reverse of the rejected "slave the
+  animation to a marker" option, so nothing is resampled — which is what lets
+  overlay content start on its own with no manual trim, and the Inspector shows
+  that number in both frame spaces. Field overrides route through the existing
+  bindings model (text + fill/stroke on named layers; image deferred). Exports
+  ship the player as a separate MINIFIED bundle (~168 KB) only when a scene
+  contains a Lottie, so Lottie-less exports pay nothing, and the whole thing runs
+  under CasparCG's CEF from `file://` with zero external requests — owner-verified
+  on real 2.3.x hardware before archiving.
+
 - Friendly validation presets for dynamic text fields
   ([D-059](./prd/designer.md)) — merged (#308) & archived (2026-07-18,
   `2026-07-18-add-field-validation-presets`): the Inspector's Dynamic / Data

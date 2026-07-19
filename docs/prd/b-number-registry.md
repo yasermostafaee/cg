@@ -98,6 +98,13 @@ in the same PR that files it). Verified free immediately before commit: absent f
 working trees (including unpushed branches). The space stays contiguous: `B-001` … `B-095`, no
 gaps. **Next free: `B-096`.**
 
+**Re-audited 2026-07-19** against `main` (`602f2d8`, after #364). `B-096` is now taken — the Lottie
+Inspector's clip total counting `op` instead of `op − ip` ([bugs-designer.md](bugs-designer.md)), a
+remainder carried forward as D-125 was archived. Verified free immediately before commit: no `## [ ]
+B-096` heading on current `origin/main`, on any remote branch (the only hits anywhere were this
+file's own "next free" pointer — the documented false positive), or in either sibling worktree. The
+space stays contiguous: `B-001` … `B-096`, no gaps. **Next free: `B-097`.**
+
 **This entry collided TWICE before landing, and the second time proves the rule above is not
 enough.** It first took `B-088` (the then-current "next free" pointer) while a parallel Designer
 workstream took the same number; it renumbered to `B-089` — and `B-089` turned out to be claimed by

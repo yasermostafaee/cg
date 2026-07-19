@@ -29,10 +29,11 @@ integrations to validate. They live here so the conversation isn't the only reco
   engine is time-based (FrameDriver) by design; this is the on-target confirmation that
   it holds at broadcast frame rates. Pairs with the single-file CEF/`file://` hardening
   item (`C-007`).
-- **After Effects → bodymovin (Lottie) furniture import.** Now scoped as `D-125` in
-  `docs/prd/designer.md` — import an AE/bodymovin export as an opaque, self-playing
-  element that participates in the composition's IN/HOLD/OUT lifecycle (native ticker on
-  top drives the hold). Gated on the CEF/`file://` player-compat call; RECON-FIRST.
+- ~~**After Effects → bodymovin (Lottie) furniture import.**~~ **DONE — no longer to
+  scope.** Shipped as `D-125` and archived 2026-07-19
+  (`openspec/changes/archive/2026-07-19-lottie-lifecycle-element/`); see ROADMAP.md's
+  "Done (recent)". The CEF/`file://` player-compat call that gated it was settled by an
+  owner-verified smoke on real CasparCG 2.3.x hardware.
 
 - **Multi-sport runtime architecture — one generic app, sports as data (NOT one app per sport).**
   Decision for the Runtime/sports wave: do **not** build a separate control app per sport
