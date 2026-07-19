@@ -665,3 +665,97 @@ added, and the operator cannot arrange them to match the rundown.
 `StackPanel`) — no persistent reorder operation exists, so this introduces a real ordering
 concept that has to LIVE somewhere. Consider alongside where stack state now lives after
 [[B-092]] (browser-retained intent + occupancy-aware reconcile-on-connect).
+
+## [ ] R-017 — an ON-AIR item cannot be REMOVEd — take it off air first (STOP or CLEAR) ⟨priority: high⟩
+
+**What:** REMOVE is refused while a stack item is on air; the operator takes it off air first via
+[[C-012]]'s STOP (graceful outro, producer stays resident) or CLEAR, and only then removes the
+row. Same rule in bulk: Remove-All is DISABLED while anything is on air. Affordances stay visible
+and disabled with a title naming the remedy; the bridge refuses independently.
+**Why:** REMOVE is the only row verb with no opinion about on-air state. PLAY and UPDATE gate on
+the narrow local `onAir` (`'on-air' || 'playing'`, `StackRow.tsx:97`); STOP and CLEAR gate on the
+shared `isOnAir`; REMOVE gates on `linkDown` ALONE ([[B-085]], `StackRow.tsx:197` —
+`disabled: linkDown,`). On a live graphic it is therefore enabled, unconfirmed, and does two
+irreversible things at once: destroys the producer and drops the row with its staged fields. Same
+shape [[R-015]] closed for video layers, minus even the warning. The remedy only became KIND this
+week — before [[C-012]] there was no non-destructive way off air, so "clear it first" meant
+"destroy it first".
+**Acceptance:**
+
+- WHEN an item is on air THEN its REMOVE affordance is disabled as a button AND as a menu item,
+  with a title naming the remedy
+- WHEN `stack.remove` is invoked for an on-air item by ANY caller THEN the bridge refuses with a
+  legible reason and NOTHING reaches the wire — a UI-only gate is not a prohibition
+- WHEN any item is on air THEN Remove-All is DISABLED (visible, titled) and `stack.remove-all` is
+  refused bridge-side with nothing on the wire
+- WHEN one item is on air and four are idle THEN those four are still individually removable —
+  only the BULK action is withheld
+- WHEN a refusal happens THEN it reaches the operator through the command toast, worded the same
+  however it was issued
+- WHEN the item has been STOPped (resting at `loaded`, producer resident) THEN REMOVE is available
+  again and still CLEARs before dropping the row, exactly as today
+- WHEN nothing is on air THEN Remove-All behaves exactly as today, confirm and all
+- WHEN an item is not on air THEN nothing changes — the ordinary path is untouched
+
+**Notes — OWNER'S DIRECTION (decided, not open):**
+
+- **ONE PREDICATE.** Read the EXISTING shared `isOnAir`
+  (`renderer/features/stack/onAir.ts:18-20` — `status !== 'idle' && status !== 'loaded'`) — never
+  a second definition of "on air"; a parallel definition is how [[B-086]]/[[B-087]]'s honesty work
+  gets quietly undermined. **The consequence, stated from the recon rather than assumed:**
+  `unverified` sits INSIDE that predicate (it is a two-item denylist, so `unverified` falls
+  through), so an unverified item is NOT directly removable. That is the opposite of the
+  "merciful" branch the direction anticipated, so the escape route is what carries the mercy, and
+  it exists: STOP and CLEAR gate on the same predicate and are therefore ENABLED on exactly those
+  rows, and a CLEAR settles the item to `idle`, where REMOVE returns. Note also that on a
+  genuinely dead link nothing is newly stranded — [[B-085]]'s `linkDown` gate already disables
+  REMOVE there. The case where this rule newly bites is [[B-093]]'s OSC-blind `unverified` (AMCP
+  alive, OSC dead), where the link is UP: two clicks instead of one, never a dead end. Changing
+  `isOnAir` itself is a different decision, out of scope.
+- **ONE AUTHORITY for both scopes** — with a conflict the implementation must resolve first.
+  [[R-010]]'s `#onAirCount` (`caspar-runtime.ts:1511-1523`) counts
+  `pending || playing | on-air | updating | exiting | unconfirmed`, which is **not the same set**
+  as the renderer's `isOnAir`: it EXCLUDES `unverified`, `error` and `disconnected`, which
+  `isOnAir` includes. Mirroring `#onAirCount` bridge-side while gating the UI on `isOnAir` would
+  therefore produce exactly the two-mechanisms-that-must-agree failure this note exists to
+  prevent — the UI would disable REMOVE on an `unverified` row that the bridge would happily
+  accept. Pick ONE set and use it on both sides, and say which in the change's design. Do not
+  invent a third vocabulary: the refusal shape stays [[R-010]]'s
+  `{ ok: false, reason, message }`.
+- **ONE DECLARATION:** the per-row gate goes in the row's single `RowAction[]` declaration
+  ([[R-013]]; `StackRow.tsx:133`, rendered as buttons at `:246` and projected through
+  `toMenuItems(actions)` at `:261`), so button and menu item inherit it structurally rather than
+  by two code paths agreeing.
+- **DISABLED, NOT ABSENT** — deliberately unlike Clear-All, which is genuinely not rendered when
+  nothing is on air (`StackPanel.tsx:128`). Recorded so nobody later "harmonises" them: Clear-All's
+  absence is honest because there is genuinely nothing to clear; a Remove-All that VANISHED
+  mid-show reads as a lost feature. A disabled control with a title teaches the rule; a missing one
+  teaches nothing.
+- **NOT "SKIP THE ON-AIR ONES"** (rejected): silently removing four of five rows breaks the
+  action's own name and leaves the operator believing the stack is empty while a graphic is live.
+- **THE PAIR BECOMES COMPLEMENTARY** — Clear-All offered only when something is on air, Remove-All
+  only when nothing is. The header always presents exactly one bulk action, and the remedy for the
+  disabled one is the enabled one.
+- **THE BRIDGE HALF IS NEW CAPABILITY, not a tightening.** Today neither channel can refuse:
+  `stack.remove` answers a bare `{ accepted: boolean }` and `stack.remove-all`
+  `{ ok, removed }` — no `errorCode`/`reason` on either (`shared-ipc/src/channels/stack.ts`) — and
+  neither implementation refuses anything. `remove` does not even carry the bridge-side
+  `#linkDown()` guard its button implies. So this adds the first refusal to both, across two
+  different response shapes; follow [[B-070]]'s `errorCode` precedent.
+- **RIPPLE THE IMPLEMENTATION OWES.** [[R-010]]'s blocked-Apply recovery runs through Remove-All
+  today, and under this rule that path changes — and gets SHORTER, since Apply gates on the on-air
+  COUNT (not stack emptiness), so CLEAR-ALL ALONE unblocks it. The copy currently naming Remove-All
+  as the remedy, all of which becomes self-contradictory (it would name a control that is disabled
+  precisely because of the condition being reported): `ServerSettingsPanel.tsx:308`,
+  `MockRuntime.ts:301`, the bridge's own message at `caspar-runtime.ts:1389`, and the assertion of
+  that literal string in `serverSettingsPanel.dom.test.ts`. The Playwright e2e to rewrite is
+  `apps/runtime/tests/e2e/server-settings.spec.ts` — its step 2 clicks Remove-All to unblock
+  Apply and then asserts "No items loaded"; after Clear-All the rows correctly REMAIN (idle), so
+  that assertion changes shape too. [[R-010]]'s own gate is FROZEN — only the remedy wording and
+  the recovery path move.
+- **FROZEN when implemented:** [[R-006]], [[B-085]]'s REMOVE link-gate (this ADDS a condition, it
+  does not replace it), [[R-015]]'s `foreign` prohibition, [[B-086]]/[[B-087]]'s `unverified`
+  badge, [[B-092]]'s restore, [[C-012]]'s STOP, Clear-All's behaviour.
+- **Tidy-up available while in here** (not required): the row's prose still says "four actions" in
+  three places (`StackRow.tsx:128`, `:216`, its docstring) and `rowAction.ts:16-17` still lists
+  PLAY/UPDATE/CLEAR/REMOVE — [[C-012]]'s STOP made it five.

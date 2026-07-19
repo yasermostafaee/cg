@@ -483,6 +483,38 @@ places (`docs/prd/*.md` vs `openspec/changes/`).
 **Regression test:** the guard is its own regression test (the B-075 precedent) — a `[~]` item
 whose cited fix is merged turns it red; flipping that item to `[x]` turns it green.
 
+## [ ] B-097 — `pnpm gate` is not safe to run twice concurrently in one workspace: vitest's shared coverage tmp dir produces an ENOENT that reads as a code defect ⟨priority: medium⟩
+
+**Repro:** trigger two gates in the same workspace at once. Observed 2026-07-19: a backgrounded
+`git push` ran the husky pre-push gate while a second full gate started in the same worktree —
+`$ vitest run --coverage` appears twice in one log.
+**Expected:** either the second gate waits, or both complete independently.
+**Actual:** a bare `ENOENT` on `coverage/.tmp/coverage-<n>.json` fails an unrelated suite
+(`single-file-export` observed):
+`Error: ENOENT: no such file or directory, open '…/packages/single-file-export/coverage/.tmp/coverage-1.json'`.
+Every implicated suite passes in isolation.
+**Env:** local Windows dev machine; `turbo run … test` with vitest v8 coverage enabled per package.
+
+**Why it matters:** the failure names an INNOCENT suite and looks exactly like a product
+regression, so it costs a full diagnostic cycle before contention is even suspected. The same run
+also starved a timing-sensitive bridge integration test, which compounds the misdirection — two
+unrelated-looking failures, one cause.
+
+**Family:** third member of the resource-contention family, and a DISTINCT root from the other
+two. [[B-078]] is port/process collision; [[B-095]] is inter-suite starvation inside `gate:e2e`
+(two Playwright suites × N workers). Neither is about **two gate invocations sharing one
+filesystem path** — that is this bug. Not a duplicate of either.
+
+**Fix direction (not implemented here):** scope vitest's coverage tmp directory per run (e.g. a
+run-unique `coverage.reportsDirectory` / tmp path), or take a lock in the `gate` script so a second
+invocation waits rather than interleaving. Prefer the former — it fixes the CLASS rather than one
+trigger, and leaves concurrent gates legitimately possible.
+**Note:** this is a REPO fragility, independent of what triggers it. "Don't background the push"
+is a mitigation (now recorded in `CLAUDE.md`), not the fix.
+
+**Regression test:** run two `pnpm gate` invocations concurrently in one worktree and assert both
+terminate on their own merits — neither dies on a missing coverage temp file.
+
 ## [~] B-095 — `pnpm gate:e2e` starves itself: both Playwright suites run concurrently and flake specs that pass alone ⟨priority: medium⟩ — branch `chore/gate-e2e-serialize` (files + fixes in one PR)
 
 **Repro:** `pnpm gate:e2e` on the local machine (the ONLY authoritative E2E signal while CI is

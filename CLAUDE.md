@@ -57,6 +57,11 @@ formatting to CI. Before claiming the gate green ahead of a push, run the test
 task **uncached at least once** (`turbo --force`) — a stale turbo cache has
 produced a false green before.
 
+**Never background a push.** The pre-push gate must run in the FOREGROUND, or a
+second gate can start alongside it — two gates in one workspace collide over
+vitest's shared coverage tmp dir and fail an innocent suite with a bare `ENOENT`
+that reads exactly like a product regression (see `B-097` in `docs/prd/bugs.md`).
+
 **Docs-only carve-out (archive).** An OpenSpec **archive** operation — folding a
 merged change into `openspec/specs/` + the PRD status flip to `[x]` — touches only
 `openspec/**` and `docs/**`, never source / tests / build. Its gate is therefore
