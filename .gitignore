@@ -27,7 +27,14 @@ test-results/
 !.vscode/extensions.json
 !.vscode/settings.shared.json
 .idea/
-.claude/
+# P-009 — `.claude/*` (not `.claude/`) so the two SHARED entries below can be
+# re-included: git cannot re-include a file whose parent DIRECTORY is excluded.
+# Everything else in .claude/ stays ignored — settings.local.json (personal) and
+# the generated OpenSpec slash commands (regenerate: `pnpm openspec init --tools claude`).
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+.gate-logs/
 .DS_Store
 Thumbs.db
 desktop.ini

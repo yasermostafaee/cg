@@ -67,6 +67,15 @@ meaningless for a markdown-only fold. This applies ONLY to a pure archive/docs c
 where NO source/test/build file changed; any commit that touches code keeps the full
 green gate above.
 
+**The gate is enforced at turn end (P-009).** A committed Stop hook
+(`.claude/hooks/gate-stop.mjs`) runs when your turn ends: docs-only diffs get the
+carve-out above, code diffs get `pnpm gate`, UI/render diffs also get `pnpm gate:e2e`.
+If it blocks you: the gate is RED — fix the CODE per the repair rules it prints (never
+delete/skip/loosen a test to go green; port-4321 Playwright failures are usually a
+stale process, see B-078). It blocks at most twice per session, then defers to the
+human. A green Windows `gate:e2e` is non-authoritative — a Linux/WSL run is still owed.
+Logic + tests: `tools/gate-hook/`.
+
 ## Feature workflow — PRD → OpenSpec → code
 
 Feature requests and bugs live in **`docs/prd/`** (one file per category).

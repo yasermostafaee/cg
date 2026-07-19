@@ -155,3 +155,37 @@ typecheck/lint/test/build/e2e) skip شوند و فقط یک چکِ سبکِ docs
 گیتهاب وابسته است — ممکن است تنظیمِ required check هم لازم باشد تا PR ِ docs بدونِ
 آن jobهای skip‌شده mergeable بماند (این لبهٔ معروفِ «required check که skip شده،
 PR را بلاک می‌کند» را موقعِ پیاده‌سازی بررسی کن). infra/CI — یک‌بار کار.
+
+## [~] P-009 — Self-enforcing local gate for Claude Code sessions (Stop hook) ⟨priority: medium⟩ — change dir: `openspec/changes/platform-gate-stop-hook/`
+
+**What:** A committed Claude Code Stop hook that refuses to let a session's turn end
+with a red local gate: it classifies the turn's changed files (working tree ∪ branch
+commits vs the `origin/main` merge-base), runs the matching gate — the docs-only
+carve-out (`openspec validate --all --strict` + `format:check`), the full `pnpm gate`,
+plus `pnpm gate:e2e` when UI/render paths changed — and on failure feeds the tail of
+the failing output back to the session with non-cheating repair rules, at most twice,
+before escalating to the human.
+**Why:** CI is billing-blocked (~Aug 1), so the local gate is the only merge gate — but
+it currently relies on the session REMEMBERING to run it. Turns have ended red; the
+E2E gate especially is skipped because it is slow and manual. Enforcement must not
+depend on model discipline.
+**Acceptance:**
+
+- WHEN a turn ends with no changed files (or the session is in plan mode, or the hook
+  re-fires after its own block) THEN the hook exits 0 without running anything
+- WHEN the changed set is docs-only (every path under `openspec/**`, `docs/**`, or
+  `**/*.md`) THEN only the docs-only carve-out runs (openspec validate strict +
+  format:check), mirroring CLAUDE.md — never the full gate
+- WHEN any non-docs path changed THEN `pnpm gate` runs; and WHEN any changed path is
+  in the UI/render set (renderer sources, template-runtime, ui, single-file-export,
+  lottie-bridge, `*.css.ts`, e2e specs, playwright configs) THEN `pnpm gate:e2e` runs
+  too
+- WHEN a gate is red THEN the turn is blocked (exit 2) with the failing tail + repair
+  rules that forbid deleting/skipping/loosening tests; after two consecutive red
+  attempts in one session THEN the hook stops blocking and surfaces a message telling
+  the human the gate needs eyes
+- WHEN `gate:e2e` passes on `win32` THEN the green message states the run is
+  NON-AUTHORITATIVE for pixel geometry and a Linux/WSL run is still owed
+- WHEN the hook's pure decision logic changes THEN unit tests in `tools/gate-hook`
+  cover path classification, docs-only detection, UI/render matching, and attempt
+  counting
