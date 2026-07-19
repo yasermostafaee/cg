@@ -37,19 +37,18 @@ function cloneElementWithNewIds(el: Element): Element {
 
 /**
  * D-047 — flatten the layers' children into one list in the SAME order the
- * timeline names column derives its rows from (walk each layer, recursing into
- * container children). The timeline shows `[...this].reverse()` (top row =
- * front-most), so the reorder maps a displayed top→bottom index back onto this.
+ * timeline names column derives its rows from (each layer's direct children). The
+ * timeline shows `[...this].reverse()` (top row = front-most), so the reorder maps a
+ * displayed top→bottom index back onto this.
+ *
+ * B-090 — neither this nor the timeline's `flattenElements` recurses into container
+ * children any more: nothing in the app can address one (see the note on
+ * `flattenElements`), so listing them offered rows whose every control was inert. The
+ * two MUST agree, or a displayed row index would resolve to the wrong element here.
  */
 function flattenLayerChildren(layers: readonly Layer[]): Element[] {
   const out: Element[] = [];
-  const walk = (children: readonly Element[]): void => {
-    for (const el of children) {
-      out.push(el);
-      if (el.type === 'container') walk(el.children);
-    }
-  };
-  for (const layer of layers) walk(layer.children);
+  for (const layer of layers) out.push(...layer.children);
   return out;
 }
 

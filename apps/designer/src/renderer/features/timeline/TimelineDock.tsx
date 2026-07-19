@@ -737,14 +737,27 @@ function BodyPlayhead({ frameIn, frameOut }: { frameIn: number; frameOut: number
   return <div className={s.bodyPlayhead} style={{ left: `${pct}%` }} />;
 }
 
+/**
+ * The timeline's rows: each layer's DIRECT children, containers included but NOT
+ * recursed into.
+ *
+ * B-090 — this used to recurse into `container.children`, and it was the only place in
+ * the app that did. Nothing else can address a container child: the runtime builds a
+ * container via `buildPlaceholder`, which never builds its children, so they have no DOM
+ * node in any scope's `elementMap` — invisible in preview AND export. `locate()` (every
+ * mutation), `reorderElement`, the canvas hit-test, and the Inspector's `findSelected`
+ * are all direct-children-only. So each affordance on such a row — trim gripper, reorder
+ * drag, selection, colour — silently did nothing. Containers are a dormant schema-only
+ * type today (no tool creates one, no action nests into one; a container only reaches a
+ * scene via a hand-authored `.vcg`), so the honest fix is to stop offering controls the
+ * rest of the app cannot honour. When containers are actually implemented (the
+ * `buildPlaceholder` TODO), this recursion returns together with the render.
+ *
+ * MUST stay in lockstep with `flattenLayerChildren` in the elements slice — `reorderElement`
+ * maps a displayed row index back through that list, so the two orders have to agree.
+ */
 function flattenElements(scene: Scene): readonly Element[] {
   const out: Element[] = [];
-  function walk(children: readonly Element[]): void {
-    for (const el of children) {
-      out.push(el);
-      if (el.type === 'container') walk(el.children);
-    }
-  }
-  for (const layer of scene.layers) walk(layer.children);
+  for (const layer of scene.layers) out.push(...layer.children);
   return out;
 }
