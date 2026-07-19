@@ -1022,6 +1022,27 @@ guards. Capability: `designer-playout-lifecycle`.
 **Env:** Browser / Designer timeline.
 **Notes:** The timeline renders rows for everything `flattenElements` returns, and it DOES recurse into containers — but `updateElementLifespan` resolves the target through `locate()` (`apps/designer/src/renderer/state/scene-doc.ts:182`), which searches only top-level `layer.children` via `findIndex` with no recursion, returns `null`, and the mutation early-returns (`slices/elements.ts`). So the UI offers an affordance the state layer cannot honour. Note this is a WRITE-path gap and is independent of B-089 (a READ/gating gap) — an element inside a container would still not be gated even if the trim did persist.
 
+## [ ] B-096 — the Lottie Inspector's clip total counts `op` frames, ignoring a nonzero in-point ⟨priority: low⟩
+
+**Repro:** import a bodymovin clip whose `ip` is not 0 (e.g. `ip: 10`, `op: 120`) and select it; open
+the Lottie section's "animation details" disclosure.
+
+**Expected:** the clip total is the clip's LENGTH — `op − ip` (110 frames here).
+**Actual:** it reads `clip 120 frames @ 30 fps`, i.e. `op` verbatim, overstating the clip by `ip`
+frames. The seconds figure beside it is correct (it comes from `lottieTiming`'s `clip` span, which
+already spans `[ip, op]`), so the two disagree.
+**Env:** Designer Inspector → Lottie → animation details.
+
+**Where:** `apps/designer/src/renderer/features/inspector/StyleSection.tsx` — the disclosure renders
+`clip {timing.meta.op} frames` (raw metadata) instead of the span already computed for it. The fix is
+to use the span's frame count (`timing.clip.frames`) so the frames and seconds come from ONE source,
+matching the D-125 Phase-3a rule that the number shown is the number the runtime uses.
+
+**Impact:** display-only and confined to the advanced disclosure — no runtime, export, or timing
+behaviour reads it. Filed as a carried-forward remainder when D-125 was archived (2026-07-19) so it
+would not be lost with the change dir; a real AE furniture clip usually has `ip: 0`, which is why it
+survived the phase.
+
 ## [~] B-091 — the preview's `lottie-assets` handler rebuilds the scene mid-playback ⟨priority: low⟩ — branch `feat/D-125-phase3b1-ui-polish` (D-125 Phase 3b-1)
 
 **Repro:** with a composition containing a Lottie playing in the preview, have a `lottie-assets` message arrive (e.g. an asset import completing during playback).
