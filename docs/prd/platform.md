@@ -156,7 +156,14 @@ typecheck/lint/test/build/e2e) skip شوند و فقط یک چکِ سبکِ docs
 آن jobهای skip‌شده mergeable بماند (این لبهٔ معروفِ «required check که skip شده،
 PR را بلاک می‌کند» را موقعِ پیاده‌سازی بررسی کن). infra/CI — یک‌بار کار.
 
-## [~] P-009 — Self-enforcing local gate for Claude Code sessions (Stop hook) ⟨priority: medium⟩ — change dir: `openspec/changes/platform-gate-stop-hook/`
+## [x] P-009 — Self-enforcing local gate for Claude Code sessions (Stop hook) ⟨priority: medium⟩ — merged (#363) + archived: `openspec/changes/archive/2026-07-19-platform-gate-stop-hook/`
+
+**Archived with 5 tasks still unchecked** (3.2 seven manual hook invocations with recorded exit
+codes, 3.3 the caspar-bridge suite green isolated AND under full parallel `pnpm test`, and the
+5.x gate/validate/PR trio). The hook is merged and demonstrably live — it has blocked turns and
+printed its repair rules repeatedly since. But the archiver had no evidence for those manual
+legs and deliberately did not tick boxes it could not stand behind: a false tick destroys the
+record's value, which is the whole point of ticking. Re-run them if the record matters.
 
 **What:** A committed Claude Code Stop hook that refuses to let a session's turn end
 with a red local gate: it classifies the turn's changed files (working tree ∪ branch

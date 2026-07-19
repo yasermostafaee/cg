@@ -302,7 +302,23 @@ there is NO CHANNEL today for that knowledge to reach the bridge from inside CEF
 is the substance of this item. — Distinct from [[C-008]]: C-008 is an OPERATOR-initiated soft-out
 policy on the override seam; this is the item ending ITSELF when its content completes.
 
-## [~] C-014 — occupancy-aware layer allocation: an ordinary Add must not adopt-CLEAR a foreign producer sitting inside a template-type range ⟨priority: high⟩ — in progress on `feat/C-014-occupancy-aware-allocation`, change dir `openspec/changes/occupancy-aware-allocation/`
+## [x] C-014 — occupancy-aware layer allocation: an ordinary Add must not adopt-CLEAR a foreign producer sitting inside a template-type range ⟨priority: high⟩ — merged (#368) + archived: `openspec/changes/archive/2026-07-19-occupancy-aware-allocation/`
+
+**OWNER ON-AIR VALIDATION IS STILL OWED — this `[x]` covers the merge and the local gate, NOT a
+hardware pass.** Unlike [[B-040]] (operator-validated on CasparCG 2.5.0 `69e8ad5`, 2026-07-07,
+recorded before its flip) and [[C-012]], no on-air check is recorded anywhere in this change's
+dir or its PR. It changes WHICH LAYER a live graphic lands on, so it earns one. The two decisive
+checks, carried as unchecked task 7.1 in the archived `tasks.md`:
+
+1. **The pool must not leak.** CLEAR a foreign layer, wait for the tap to age the observation
+   out, then re-Add — the layer must return to the allocatable pool. This is the only exercise
+   of the newly-wired `LayerManager.deallocate()` release path, and a leak stays invisible until
+   Adds start refusing with `no-layer-foreign-occupied` for no visible reason.
+2. **The restore narrowing.** With an item on a layer: kill the bridge, PLAY a foreign producer
+   onto that same layer, restart the bridge. The item must land ELSEWHERE and the foreign
+   producer must survive. This is the [[B-092]] interaction flagged in #368 — restore reaches
+   `reserve()` first, and a quarantined retained slot now falls through to the pre-existing
+   allocate-elsewhere path.
 
 **What:** `load()`'s first `CG ADD` onto a layer this process has never cleared is preceded by an
 adopt-CLEAR (`#adoptLayer`, `tools/caspar-bridge/src/caspar-runtime.ts`) — and the layer it lands

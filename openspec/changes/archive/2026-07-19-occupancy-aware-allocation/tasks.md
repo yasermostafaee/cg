@@ -44,10 +44,25 @@
 
 ## 6. Gate
 
-- [ ] 6.1 `pnpm openspec validate occupancy-aware-allocation --strict`.
-- [ ] 6.2 `pnpm gate` green (uncached).
-- [ ] 6.3 `pnpm gate:e2e` with no bridge/mock/dev server competing for CPU. (No new E2E:
-      the operator-visible delta is a toast string for a refusal the offline MockRuntime
-      cannot produce — it has no layer model; the AsyncButton→toast plumbing is already
-      covered by B-070's tests, and the bridge-side truth is integration-tested per the
-      R-009 precedent.)
+- [x] 6.1 `pnpm openspec validate occupancy-aware-allocation --strict` — green; re-run by the
+      pre-push gate as part of `validate --all --strict` (37 passed, 0 failed).
+- [x] 6.2 `pnpm gate` green (uncached) — `Tasks: 82 successful, 82 total`,
+      `Cached: 0 cached, 82 total`; green again on the foreground pre-push run.
+- [x] 6.3 `pnpm gate:e2e` with no bridge/mock/dev server competing for CPU — green: Runtime 36
+      passed, Designer 216 passed, 22/22 tasks, with ports 5280/5250/5174/4000/4321 verified
+      free of any bridge, mock or dev server immediately before the run. (Unrelated review
+      agents were running; that load can only produce a false RED, never a false green, so it
+      does not weaken this pass.) No new E2E: the operator-visible delta is a toast string for
+      a refusal the offline MockRuntime cannot produce — it has no layer model; the
+      AsyncButton→toast plumbing is already covered by B-070's tests, and the bridge-side truth
+      is integration-tested per the R-009 precedent.
+
+## 7. Outstanding — owner on-air validation (NOT done)
+
+- [ ] 7.1 On real CasparCG, the two checks this change's risk actually lives in: (a) CLEAR a
+      foreign layer, wait for the tap to age the observation out, then re-Add — the layer must
+      return to the allocatable pool (the only exercise of the newly-wired `deallocate()`; a
+      pool leak stays invisible until Adds start refusing); and (b) with an item on a layer,
+      kill the bridge, PLAY a foreign producer onto that same layer, restart the bridge — the
+      item must land elsewhere and the foreign producer must survive (the B-092 restore
+      narrowing flagged in #368).

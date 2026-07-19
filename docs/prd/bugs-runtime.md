@@ -1695,7 +1695,7 @@ CasparCG-death path, and NO weakening of the adopt-CLEAR on the normal (non-rest
 only the RESTORE path gets adopt-without-clear. Additive recovery that STRENGTHENS broadcast safety.
 Sibling of [[B-087]]; the recovery half of the bridge-death story.
 
-## [~] B-093 — the occupancy tap cannot tell "this layer is empty" from "I have never heard any OSC", so a bridge restart against an OSC-blind install re-ADDs over a LIVE layer and takes the graphic OFF AIR ⟨priority: high⟩ — in progress on `fix/blind-occupancy-tap-restore`, change dir `openspec/changes/runtime-blind-occupancy-tap/`
+## [x] B-093 — the occupancy tap cannot tell "this layer is empty" from "I have never heard any OSC", so a bridge restart against an OSC-blind install re-ADDs over a LIVE layer and takes the graphic OFF AIR ⟨priority: high⟩ — merged (#355) + archived: `openspec/changes/archive/2026-07-19-runtime-blind-occupancy-tap/`
 
 Found by the [[B-092]] hardware probe (#353) and captured on the wire, not inferred.
 
@@ -1734,7 +1734,7 @@ demotion from the drop still stands.
 and B-092's occupied-branch behaviour when OSC IS flowing (hardware-confirmed correct: nothing
 sent, live producer untouched) are all unchanged.
 
-## [~] B-094 — a CasparCG that answers AMCP but sends no OSC reads as a confident green "PRIMARY A HEALTHY", and when the session finally notices it reads "DEGRADED" — which points the operator at the opposite remedy from the truth ⟨priority: medium⟩ — in progress on `feat/no-osc-indicator`, change dir `openspec/changes/runtime-no-osc-indicator/`
+## [x] B-094 — a CasparCG that answers AMCP but sends no OSC reads as a confident green "PRIMARY A HEALTHY", and when the session finally notices it reads "DEGRADED" — which points the operator at the opposite remedy from the truth ⟨priority: medium⟩ — merged (#356) + archived: `openspec/changes/archive/2026-07-19-runtime-no-osc-indicator/`
 
 Hit live by the owner: `casparcg.config` had the OSC `predefined-client` on port 5253 instead of
 6250, plus a literal `false [true|false]` left inline in `<disable-send-to-amcp-clients>`. AMCP
