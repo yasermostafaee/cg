@@ -22,6 +22,22 @@ const styles = {
     fontSize: '0.85rem',
     color: '#FCD34D',
   },
+  // R-015 — the neutral strip: an occupied-but-not-ours VIDEO layer is a
+  // normal fact of the console, not a problem. Surface tones only (never
+  // amber, never the on-air red) — there is essentially always a video layer
+  // in play, and a warning colour here would permanently imply something is
+  // wrong when nothing is.
+  neutralStrip: {
+    border: `1px solid ${colors.border}`,
+    background: colors.panel,
+    borderRadius: '0.25rem',
+    padding: '0.5rem 0.75rem',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.4rem',
+    fontSize: '0.85rem',
+    color: colors.textMuted,
+  },
   row: {
     display: 'flex',
     alignItems: 'center',
@@ -34,14 +50,25 @@ const styles = {
 /**
  * R-009 — orphaned/unknown on-air layers. Fed by the bridge's periodic
  * occupancy sweep (a passive OSC tap compared against owned slots): each row
- * names a layer that has a producer but is NOT on the operator's stack —
- * e.g. a graphic ridden through a dead bridge session (B-048 deliberately
- * never blind-clears at startup; the decision belongs to the operator).
+ * names a layer that has a producer but is NOT on the operator's stack.
+ *
+ * R-015 — the set SPLITS by observed producer kind, because the two kinds
+ * mean opposite things to a graphics operator:
+ *
+ *   - `html` — plausibly OUR OWN graphic riding through a dead bridge
+ *     session (this system only ever places HTML producers). Keeps the
+ *     warning strip and the explicit, confirm-gated Clear — R-009's case,
+ *     unchanged.
+ *   - anything else (`ffmpeg`, `decklink`, … — "not html" fails safe) —
+ *     PROVABLY another system's output: a video, a program feed. Rendered as
+ *     NEUTRAL information with NO Clear control at all — the affordance does
+ *     not exist (and the bridge refuses `layers.clear` besides). A graphics
+ *     operator must never be able to clear a video layer.
  *
  * Renders NOTHING when there are no orphans (idle-quiet), persists while the
- * orphan persists (never auto-dismissed), and every Clear is an explicit,
- * confirm-gated operator act — the row disappears when the bridge observes
- * the layer empty on a later sweep (never optimistically).
+ * orphan persists (never auto-dismissed), and every html Clear is an
+ * explicit, confirm-gated operator act — the row disappears when the bridge
+ * observes the layer empty on a later sweep (never optimistically).
  *
  * B-056 — the same banner also renders the owned-slot occupancy warnings as
  * a DISTINCT strip: a load's adopt-CLEAR missed the primary over observed
@@ -56,11 +83,15 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
 
   if (orphans.length === 0 && ownedOccupancy.length === 0) return null;
 
+  // R-015 — the discriminator is the OBSERVED kind, never a layer number.
+  const htmlOrphans = orphans.filter((o) => o.producer === 'html');
+  const foreignLayers = orphans.filter((o) => o.producer !== 'html');
+
   return (
     <>
-      {orphans.length > 0 && (
+      {htmlOrphans.length > 0 && (
         <div style={styles.strip} role="alert" aria-label="Orphaned on-air layers">
-          {orphans.map((o) => {
+          {htmlOrphans.map((o) => {
             const name = `${String(o.channel)}-${String(o.layer)}`;
             return (
               <div key={name} style={styles.row}>
@@ -98,6 +129,21 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
                 >
                   CLEAR
                 </Button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {foreignLayers.length > 0 && (
+        <div style={styles.neutralStrip} role="status" aria-label="Layers in use by other systems">
+          {foreignLayers.map((o) => {
+            const name = `${String(o.channel)}-${String(o.layer)}`;
+            return (
+              <div key={name} style={styles.row}>
+                <span>
+                  Layer {name} is carrying video ({o.producer}) — placed by another system.{' '}
+                  <span style={styles.detail}>Not clearable from here.</span>
+                </span>
               </div>
             );
           })}

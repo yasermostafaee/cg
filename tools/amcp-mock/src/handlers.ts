@@ -54,11 +54,20 @@ function handleInfo(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
 }
 
 /**
- * `PLAY <channel>-<layer> "<url>" [HTML]`
- *
- * The mock only supports the HTML producer (M4 scope). Other producers
- * are accepted but recorded as `producer: 'html'` so the rest of the
- * pipeline can still test against them.
+ * R-015 — which producer real CasparCG would build for a `PLAY`/`LOAD`
+ * argument: the `[HTML]` keyword or an http(s) URL yields the html producer;
+ * anything else is the media path (`ffmpeg`). The kind is load-bearing — the
+ * video-layer protection discriminates on exactly this OSC signal — so the
+ * mock must not flatten media to `html` (the pre-R-015 M4 shortcut).
+ */
+function producerFor(args: readonly string[]): 'html' | 'ffmpeg' {
+  const url = args[1] ?? '';
+  const htmlKeyword = args.some((a) => a.toUpperCase() === 'HTML');
+  return htmlKeyword || /^https?:\/\//i.test(url) ? 'html' : 'ffmpeg';
+}
+
+/**
+ * `PLAY <channel>-<layer> "<url|file>" [HTML]`
  */
 function handlePlay(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   const slot = parseChannelLayer(req.args[0]);
@@ -67,7 +76,7 @@ function handlePlay(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   const url = req.args[1] ?? '';
   // Non-fetching media/producer path — the page state is inertly 'resolved'.
   ctx.setLayer(slot, {
-    producer: 'html',
+    producer: producerFor(req.args),
     filePath: url,
     paused: false,
     onAir: true,
@@ -83,7 +92,7 @@ function handleLoad(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   const url = req.args[1] ?? '';
   // LOAD primes the foreground but pauses immediately — PLAY is required to resume.
   ctx.setLayer(slot, {
-    producer: 'html',
+    producer: producerFor(req.args),
     filePath: url,
     paused: true,
     onAir: false,

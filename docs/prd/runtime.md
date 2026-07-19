@@ -612,33 +612,41 @@ only operator-facing ones? (b) the normalisation boundary — AMCP presumably st
 digits on the wire, so this is a presentation-layer concern with a conversion edge that has to be
 placed precisely; (c) is the numeral locale a setting, or fixed to Persian?
 
-## [ ] R-015 — protect layers this system does not own: clearing a foreign producer must be impossible, and a foreign layer must read as NORMAL ⟨priority: high⟩
+## [~] R-015 — protect VIDEO layers: a graphics operator can never clear one, and a video layer reads as NORMAL ⟨priority: high⟩ — in progress on `feat/R-015-protect-video-layers`, change dir `openspec/changes/runtime-protect-video-layers/`
 
-**What:** The rule is OWNERSHIP, not a layer-number threshold. The operator must not be able to
-clear/remove a layer carrying a producer we did not put there — a video played out by another
-system, a program feed — regardless of layer number. A layer where we placed our own graphic
-stays clearable exactly as today.
-**Why:** Observed symptom: adding a video on layer 1 currently WARNS that the operator can clear
-layer 1. Protection today is a warning; it must become a prohibition — a warning still leaves one
-click between the operator and taking a program feed off air.
+**What (the owner's settled rule):** a graphics operator must never be able to clear a VIDEO
+layer. Sharper than the originally-filed "not-ours", and it dissolves the [[R-009]] tension
+without guessing, because the discriminator is OBSERVABLE rather than inferred: OSC reports the
+producer KIND per layer, and this system only ever places `html` producers. So a non-`html`
+producer (`ffmpeg`, and any unrecognised kind — "not html" fails safe, video kinds are never
+enumerated) is PROVABLY not ours → clearing it is impossible: no confirm, no heavier gate — the
+affordance does not exist, and the bridge refuses `layers.clear` besides (a UI-only gate is not a
+prohibition). An orphaned `html` producer is plausibly our own graphic riding through a dead
+bridge session — exactly [[R-009]]'s case — so its confirm-gated Clear SURVIVES unchanged.
+**Why:** Observed symptom: adding a video on layer 1 warned that the operator could clear
+layer 1. Protection was a warning; a warning still leaves one click between the operator and
+taking a program feed off air.
 **Acceptance:**
 
-- WHEN a layer carries a producer this system did not put there THEN clear/remove on that layer is
-  UNAVAILABLE — a prohibition, not a warning — regardless of the layer number
-- WHEN a layer carries a graphic this system placed THEN it remains clearable, unchanged
-- WHEN an occupied-but-not-ours layer is shown THEN it reads as a NORMAL state in a neutral tone:
-  the operator can see the layer is occupied, and the clear action is simply not offered
+- WHEN a layer's fresh observation reports a non-`html` producer (a video, regardless of layer
+  number) THEN no Clear affordance exists for it anywhere, and `layers.clear` refuses it
+  (`reason: 'foreign'`) from ANY caller with nothing sent to the wire
+- WHEN a layer has NO fresh observation (blind tap, aged-out entry) THEN `layers.clear` refuses
+  it too — silence is evidence of nothing and cannot license a CLEAR
+- WHEN an orphaned layer's fresh observation reports `html` THEN its [[R-009]] confirm-gated
+  Clear works unchanged
+- WHEN a video layer is shown THEN it reads as a NORMAL state in a neutral tone (never amber,
+  never the on-air red): the operator sees the layer is occupied and by what kind, and the clear
+  action is simply absent
 
-**Notes:** PRESENTATION REQUIREMENT from the owner, recorded explicitly: an occupied-but-not-ours
-layer must read as NORMAL, not as a problem. There is essentially always at least one video layer
-in play, so warning amber would permanently imply something is wrong when nothing is. —
-Implementation LEAD (a pointer, not a design decision): the bridge already tracks `#adopted`
-(layers it owns), has `#detectOwnedOccupancy`, and its occupancy sweep is deliberately
-orphan-only — it never demotes owned items; the occupancy tap already knows a layer is occupied.
-So the missing piece is plausibly a UI-side gate keyed on ownership, not new detection. — To
-reconcile at spec time: [[R-009]] deliberately gave orphaned/unknown on-air layers an explicit
-per-layer Clear; this item's ownership rule must say how "orphan we may adopt" and "foreign we
-must not touch" are distinguished, without deciding that here.
+**Notes:** PRESENTATION REQUIREMENT from the owner: an occupied video layer is a normal fact of
+the console — there is essentially always one in play, so warning amber would permanently imply
+something is wrong when nothing is. — KNOWN LIMITS recorded in the change's `design.md`: the
+blind-tap install fails DARK (prohibition holds, occupancy display cannot — [[B-094]]'s NO OSC
+indicator explains why), and [[B-092]]'s restart misadoption (a foreign producer landing on a
+retained-intent layer while the bridge was dead is adopted as ours; the honest refusal needs a
+second `unverifiable` cause — structural, recorded not fixed). — The allocation-path hole (an
+ordinary Add can adopt-CLEAR an in-range foreign producer) is filed separately as [[C-014]].
 
 ## [ ] R-016 — reorder stack items, preferably by dragging ⟨priority: medium⟩
 

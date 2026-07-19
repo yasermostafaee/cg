@@ -38,8 +38,15 @@ export const LayersOrphansChangedChannel = definePublishChannel(
 /**
  * Explicit operator Clear of a surfaced layer: sends `CLEAR <ch>-<layer>`.
  * Refused with `reason: 'owned'` when the bridge owns the layer (clearing
- * owned layers is Out/Remove's job). The warning resolves on the next
- * sweep's observed empty — never optimistically.
+ * owned layers is Out/Remove's job). R-015 — refused with `reason: 'foreign'`
+ * unless the current primary's occupancy tap has a FRESH observation of the
+ * layer reporting an `html` producer: this system only ever places HTML
+ * producers, so a non-`html` kind (a video, or anything unrecognised — "not
+ * html" fails safe) is provably not ours, and NO fresh observation is
+ * evidence of nothing and cannot license a CLEAR. A graphics operator must
+ * never be able to clear a video layer, from any caller — this refusal is
+ * the prohibition, not the UI's missing button. The warning resolves on the
+ * next sweep's observed empty — never optimistically.
  */
 export const LayersClearChannel = defineChannel(
   'layers.clear',
@@ -49,7 +56,7 @@ export const LayersClearChannel = defineChannel(
   }),
   z.object({
     ok: z.boolean(),
-    reason: z.enum(['owned', 'amcp-error']).optional(),
+    reason: z.enum(['owned', 'foreign', 'amcp-error']).optional(),
   }),
 );
 

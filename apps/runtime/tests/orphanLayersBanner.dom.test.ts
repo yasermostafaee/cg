@@ -154,3 +154,52 @@ describe('OrphanLayersBanner — B-056 owned-slot occupancy variant', () => {
     ).toBeNull();
   });
 });
+
+describe('OrphanLayersBanner — R-015 video layers read as NORMAL and can never be cleared', () => {
+  function video(channel: number, layer: number, producer = 'ffmpeg'): OrphanLayer {
+    return { channel, layer, producer, since: '2026-07-19T12:00:00.000Z' };
+  }
+
+  it('a video layer renders in the NEUTRAL strip: no alert role, no Clear control, kind named', async () => {
+    stubBridge();
+    const el = await renderBanner([video(1, 1)]);
+    // Not a problem: no alert strip exists at all for a video-only set.
+    expect(el.querySelector('[role="alert"]')).toBeNull();
+    const neutral = el.querySelector('[aria-label="Layers in use by other systems"]');
+    expect(neutral).not.toBeNull();
+    expect(neutral?.getAttribute('role')).toBe('status');
+    expect(el.textContent).toContain('Layer 1-1 is carrying video (ffmpeg)');
+    expect(el.textContent).toContain('placed by another system');
+    // The affordance does not exist — not disabled, ABSENT.
+    expect(el.querySelector('button')).toBeNull();
+  });
+
+  it('an unrecognised producer kind is presented exactly as video — "not html" fails safe', async () => {
+    stubBridge();
+    const el = await renderBanner([video(1, 33, 'decklink')]);
+    expect(el.querySelector('[role="alert"]')).toBeNull();
+    expect(
+      el.querySelector('[aria-label="Layers in use by other systems"]')?.getAttribute('role'),
+    ).toBe('status');
+    expect(el.textContent).toContain('Layer 1-33 is carrying video (decklink)');
+    expect(el.querySelector('button')).toBeNull();
+  });
+
+  it('html and video coexist: the html orphan keeps its warning + Clear, the video row offers none', async () => {
+    stubBridge();
+    const el = await renderBanner([orphan(1, 60), video(1, 1)]);
+    // The html orphan's R-009 surface is byte-for-byte alive…
+    const alert = el.querySelector('[aria-label="Orphaned on-air layers"]');
+    expect(alert?.getAttribute('role')).toBe('alert');
+    expect(el.textContent).toContain('Layer 1-60 is on air but not on your stack');
+    expect(
+      el.querySelector<HTMLButtonElement>('button[aria-label="Clear layer 1-60"]'),
+    ).not.toBeNull();
+    // …the video row is neutral, and the ONLY button in the banner is the html Clear.
+    expect(el.textContent).toContain('Layer 1-1 is carrying video (ffmpeg)');
+    expect(el.querySelectorAll('button')).toHaveLength(1);
+    expect(
+      el.querySelector('[aria-label="Layers in use by other systems"]')?.querySelector('button'),
+    ).toBeNull();
+  });
+});
