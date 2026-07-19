@@ -88,6 +88,16 @@ B-087), [bugs-runtime.md](bugs-runtime.md), change dir
 `openspec/changes/runtime-stack-survives-bridge-restart/`. The space stays contiguous: `B-001` …
 `B-092`, no gaps. **Next free: `B-093`.**
 
+**Re-audited 2026-07-19** against `main` (`d4d8bbb`, after #357). Since the last audit `B-093`
+and `B-094` were taken by the runtime workstream (occupancy-tap honesty and answers-but-cannot-hear,
+both [bugs-runtime.md](bugs-runtime.md), merged #355/#356) without a registry note — recorded here
+so the pointer stays honest. `B-095` is now taken — `gate:e2e` starves itself by running both
+Playwright suites concurrently ([bugs.md](bugs.md), a sibling of B-078's contention family; fixed
+in the same PR that files it). Verified free immediately before commit: absent from current
+`origin/main` docs, from every remote branch (`git branch -r`), and from both sibling worktrees'
+working trees (including unpushed branches). The space stays contiguous: `B-001` … `B-095`, no
+gaps. **Next free: `B-096`.**
+
 **This entry collided TWICE before landing, and the second time proves the rule above is not
 enough.** It first took `B-088` (the then-current "next free" pointer) while a parallel Designer
 workstream took the same number; it renumbered to `B-089` — and `B-089` turned out to be claimed by
