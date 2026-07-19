@@ -42,13 +42,6 @@ export interface RowAction {
   onError: (message: string) => void;
 }
 
-/** Menu colouring follows the button's variant, so the two read as one control. */
-function menuVariant(variant: ButtonVariant): NonNullable<ContextMenuItem['variant']> {
-  if (variant === 'danger') return 'danger';
-  if (variant === 'caution') return 'caution';
-  return 'default';
-}
-
 /**
  * Run an action the way its BUTTON would.
  *
@@ -73,7 +66,13 @@ export function runRowAction(action: RowAction): void {
 export function toMenuItems(actions: readonly RowAction[]): ContextMenuItem[] {
   return actions.map((action) => ({
     label: action.label,
-    variant: menuVariant(action.variant),
+    // The button's OWN variant, passed through untouched. It used to be squashed
+    // through a menu-local `default | caution | danger` mapping with its own colour
+    // values, which made the menu a THIRD palette that half-matched the buttons —
+    // PLAY and UPDATE both fell to `default`, and danger used a different red. The
+    // menu now resolves colour from the same `VARIANT_ACCENT` the buttons do, so a
+    // menu item cannot be a different colour from the control it mirrors.
+    variant: action.variant,
     disabled: action.disabled,
     ...(action.title !== undefined ? { title: action.title } : {}),
     onSelect: () => runRowAction(action),

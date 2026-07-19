@@ -1055,6 +1055,52 @@ export class CasparRuntime {
     return ok ? { accepted: true } : { accepted: false, errorCode: errorCode ?? 'amcp-error' };
   }
 
+  /**
+   * C-012 — GRACEFUL stop: run the template's own outro and leave the producer
+   * RESIDENT on the layer.
+   *
+   * The distinction from `out()` is the whole point, and it is hardware-verified
+   * (PR #353's probe, CasparCG 2.3.2 `4de6d18f`):
+   *
+   *   out()  -> `CLEAR <ch>-<layer>`  — OSC goes SILENT, the producer is DESTROYED,
+   *             and a later take must re-ADD before it can play.
+   *   stop() -> `CG <ch>-<layer> STOP` — 202 CG OK, the template's `window.stop`
+   *             fires (its graceful outro, NOT `remove()`'s synchronous kill), OSC
+   *             still reports `html`, and a bare `CG PLAY` RESUMES it with no re-ADD.
+   *
+   * So `#loaded` is deliberately NOT cleared here — that set means "a live producer
+   * exists on this slot", which after a STOP is still true. Keeping it is what makes
+   * the resume work: `take()` sees the producer and issues a bare `CG PLAY` instead
+   * of the B-039 re-ADD. Deleting it would force a pointless re-load and throw away
+   * the very property that makes STOP worth having.
+   *
+   * `#adopted` is likewise untouched: a STOP proves nothing about the layer being
+   * clear — it leaves a producer there — so it must not count as adoption the way a
+   * landed CLEAR does.
+   *
+   * Nothing waits on the outro. The ack means CasparCG accepted the command, not
+   * that the animation finished, and outro completion is not observable from here
+   * (B-030). No timer chases it.
+   */
+  // NB `stop()` on this class is the PROCESS shutdown, so the item verb is
+  // `stopItem` — the AMCP verb it sends is still `CG … STOP`.
+  async stopItem(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    // B-093 — the operator is acting; any parked restore for this item is stale.
+    this.#retirePendingRestore(itemId);
+    const slot = this.#slots.get(itemId);
+    if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
+    // R-006 — STOP takes a graphic off air, so it is an on-air-affecting command and
+    // is refused with the link down exactly like take/update/out. Claiming a stop
+    // succeeded when nothing reached CasparCG is the same lie in the other direction.
+    if (this.#linkDown()) return { accepted: false, errorCode: 'disconnected' };
+    const seq = this.#nextSeq();
+    this.#reconciler.applyIntent({ kind: 'stop', itemId }, seq);
+    this.#armExpiry(seq);
+    // Urgent lane, like out(): an air-affecting verb does not queue behind loads.
+    const { ok } = await this.#send(this.#builder.stop(slot), seq, 'urgent');
+    return { accepted: ok };
+  }
+
   async out(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);

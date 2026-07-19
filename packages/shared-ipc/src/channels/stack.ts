@@ -52,6 +52,22 @@ export const StackUpdateChannel = defineChannel(
   z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
 );
 
+/**
+ * C-012 — the GRACEFUL stop: run the template's own outro and leave the producer
+ * RESIDENT, so a later take resumes it with no re-load. Distinct from
+ * `stack.out`, which CLEARs and destroys the producer.
+ *
+ * Hardware-verified on CasparCG 2.3.2 (`4de6d18f`): `CG <ch>-<layer> STOP` acks
+ * 202, the template's `window.stop` fires, OSC still reports `html`, and a bare
+ * `CG PLAY` resumes it. Refused while no server is reachable, like every other
+ * on-air-affecting verb (R-006).
+ */
+export const StackStopChannel = defineChannel(
+  'stack.stop',
+  z.object({ itemId: IdSchema }),
+  z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
+);
+
 export const StackOutChannel = defineChannel(
   'stack.out',
   z.object({ itemId: IdSchema, immediate: z.boolean().optional() }),

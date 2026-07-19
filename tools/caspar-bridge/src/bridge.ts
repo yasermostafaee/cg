@@ -24,6 +24,7 @@ import {
   SettingsSetChannel,
   StackLoadChannel,
   StackRestoreChannel,
+  StackStopChannel,
   StackOutChannel,
   StackClearAllChannel,
   StackRemoveAllChannel,
@@ -311,6 +312,8 @@ export function buildRoutes(b: CasparRuntime, persistPath?: string): Map<string,
       (r: { itemId: string; fields: never; mergeMode: 'merge' | 'replace' }) =>
         b.update(r.itemId, r.fields, r.mergeMode),
     ),
+    // C-012 — the graceful stop (outro runs, producer stays resident).
+    route(StackStopChannel, (r: { itemId: string }) => b.stopItem(r.itemId)),
     route(StackOutChannel, (r: { itemId: string }) => b.out(r.itemId)),
     route(StackRemoveChannel, (r: { itemId: string }) => b.remove(r.itemId)),
     // R-011 — the operator's per-item on-air position override.

@@ -116,15 +116,18 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
       <header style={styles.header}>
         <span>STACK</span>
         {/* One right-aligned group. The colour pairing is the point: CLEAR ALL carries the
-            same `caution` treatment as the row's own CLEAR, and REMOVE ALL the same `danger`
-            as the row's REMOVE — so the "clear" family reads as one thing and the "remove"
-            family as another, and the more destructive one (it drops the rows) is the red.
+            same `caution-strong` treatment as the row's own CLEAR, and REMOVE ALL the same
+            `danger` as the row's REMOVE — so the "clear" family reads as one thing and the
+            "remove" family as another, and the more destructive one (it drops the rows) is
+            the red. C-012 — the row's CLEAR moved to the FILLED amber when STOP took the
+            outlined amber, and this follows it: the bulk action and the per-row action are
+            the same operation, so they must stay the same colour.
             Each button's confirm modal carries the same variant, so the colour the operator
             pressed is the colour that asks them to press again. */}
         <div style={styles.headerActions}>
           {onAirCount > 0 && (
             <Button
-              variant="caution"
+              variant="caution-strong"
               aria-label="Clear all on-air items"
               disabled={linkDown}
               title={
@@ -141,7 +144,7 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
                     title: 'Clear all on-air items?',
                     body: `All ${String(onAirCount)} on-air item(s) come off air. They stay on the stack, idle, and can be taken again.`,
                     confirmLabel: 'Clear all',
-                    variant: 'caution',
+                    variant: 'caution-strong',
                   });
                   if (ok) await window.cg.stack.clearAll();
                 })();
@@ -205,6 +208,7 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
                     ? applyDraft(target)
                     : Promise.resolve({ accepted: false });
                 }}
+                onStop={(id) => window.cg.stack.stop({ itemId: id })}
                 onOut={(id) => window.cg.stack.out({ itemId: id })}
                 onRemove={(id) => window.cg.stack.remove({ itemId: id })}
               />

@@ -18,6 +18,8 @@ export const AuditEntrySchema = z.object({
     'reconnect',
     'import',
     'export',
+    // C-012 — the graceful stop, distinct from `out`'s destroying CLEAR.
+    'stop',
     'lock-engage',
     'lock-release',
     'update-deferred',

@@ -149,6 +149,22 @@ export class MockRuntime {
     return { accepted: true };
   }
 
+  /**
+   * C-012 parity — the GRACEFUL stop. Unlike `out`'s CLEAR this leaves the producer
+   * RESIDENT: `#loaded` keeps the item, so a later take resumes with no re-ADD, and
+   * the item settles at `loaded` rather than `idle`. Mirrors the bridge exactly so
+   * test mode cannot teach the operator a different mental model from air.
+   */
+  stop(itemId: string): { accepted: boolean } {
+    const item = this.#find(itemId);
+    if (item === null) return { accepted: false };
+    this.#transition(itemId, 'exiting', true);
+    this.#audit.unshift(auditEntry('stop', { itemId, templateId: item.templateId }));
+    // The producer survives, so `#loaded` is deliberately NOT cleared.
+    this.#settle(itemId, 'loaded');
+    return { accepted: true };
+  }
+
   out(itemId: string): { accepted: boolean } {
     const item = this.#find(itemId);
     if (item === null) return { accepted: false };

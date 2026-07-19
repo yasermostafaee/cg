@@ -25,6 +25,7 @@ import type {
   PendingUpdate,
   StackLoadChannel,
   StackOutChannel,
+  StackStopChannel,
   StackClearAllChannel,
   StackRemoveAllChannel,
   StackRemoveChannel,
@@ -86,6 +87,14 @@ export interface RuntimeBridge {
     update(
       req: ChannelRequest<typeof StackUpdateChannel>,
     ): Promise<ChannelResponse<typeof StackUpdateChannel>>;
+    /**
+     * C-012 — GRACEFUL stop: the template runs its own outro and the producer stays
+     * RESIDENT, so a later take resumes it with no re-load. `out` is the hard path —
+     * it CLEARs and destroys the producer.
+     */
+    stop(
+      req: ChannelRequest<typeof StackStopChannel>,
+    ): Promise<ChannelResponse<typeof StackStopChannel>>;
     out(
       req: ChannelRequest<typeof StackOutChannel>,
     ): Promise<ChannelResponse<typeof StackOutChannel>>;
