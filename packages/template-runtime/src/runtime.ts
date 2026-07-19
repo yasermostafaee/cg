@@ -949,9 +949,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         for (const c of scopeClocks) c.stop();
         for (const s of scopeSequences) s.stop();
         // D-125 §D6.4.5 — halt the Lottie rAF on settle, so no driver is left ticking after
-        // the background settles CLEARED. The element outro already ran (out()/stop() await
-        // it BEFORE the background cascade), so this only stops an idle-loop / a driver
-        // whose outro was superseded.
+        // the background settles CLEARED. The element outro already ran — EVERY exit path
+        // awaits it before its background leg (out()/stop() via the registry, auto-exit via
+        // §D6.2b's beforeOutro gate) — so this only stops an idle-loop / a driver whose
+        // outro was superseded.
         for (const l of scopeLotties) l.stop();
       };
       // B-031 — resolves when THIS scope settles (after its outro), so a content-driven
@@ -1131,6 +1132,41 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
               }
             }
           : undefined,
+        // D-125 §D6.2b — the AUTO-exit seam (closes tasks 7.6): every path into
+        // `startOutro()` plays this scope SUBTREE's element outros through the one-shot
+        // ledger before its background leg. `node` is declared a few lines below —
+        // safe: this closure runs only when an exit begins, long after wiring, and the
+        // late BINDING is deliberate (the Phase-3a lifespan lesson — never capture a
+        // to-be-initialised value eagerly), so the walk sees stamped repeater rows and
+        // each instance's CURRENT visibility at exit time (B-034: hidden subtrees are
+        // skipped by the walk; hidden leaves never entered `outroLotties`).
+        beforeOutro: (finalExit: boolean): Promise<void> | null => {
+          // B-034 — a scope under a HIDDEN ancestor is fully inert: its cascaded exit
+          // must not play (or await) outros for a subtree nobody can see. Checked at
+          // exit time from the root, because this node cannot see its own ancestors.
+          if (!isEffectivelyVisible(node)) return null;
+          // A FINAL exit takes the whole visible subtree off air, so it plays the
+          // subtree's outros; a NON-final loop-cycle boundary exits only THIS scope's
+          // furniture — a descendant scope's controller holds independently across the
+          // parent's cycles, so its Lottie must persist (own-scope reach, symmetric
+          // with onCycleRestart's own-scope re-arm below).
+          return playElementOutrosOnce(finalExit ? collectSubtreeOutros(node) : scopeOutroLotties);
+        },
+        onCycleRestart: (): void => {
+          // D-125 §D6.2b — loop-cycle boundary: the ledger forgets THIS scope's OWN
+          // drivers (the next cycle's exit owns a fresh outro — exactly once per
+          // cycle) and this scope's OWN Lotties re-arm: reset() re-paints `ip` and
+          // RE-MINTS `whenComplete` (B-033 — a stale resolved completion would close
+          // the next content-driven hold instantly), start() replays the intro
+          // alongside the background IN. Deliberately OWN-SCOPE, matching the
+          // non-final gate's reach above: descendants were not exited at the
+          // boundary, so there is nothing of theirs to re-arm.
+          for (const d of scopeOutroLotties) outroLedger.delete(d);
+          for (const l of scopeLotties) {
+            l.reset();
+            l.start();
+          }
+        },
         clock: options.clock,
       });
       controllers.push(controller);
@@ -1300,7 +1336,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       for (const s of sub.sequences) s.stop();
       for (const r of sub.repeaters) r.stop();
       // D-125 §D6.4.5 — halt every Lottie on the root settle: the CLEARED terminal state
-      // has no driver still ticking. The outro already played (awaited by out()/stop()).
+      // has no driver still ticking. The outro already played — every exit path (operator
+      // AND §D6.2b auto-exit) awaits it before its background leg reaches this settle.
       for (const l of sub.lotties) l.stop();
     }
     rootOnSettle();
@@ -1371,7 +1408,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
    * are shown/hidden by the sequence driver and own their D-116 item transitions, so a
    * transient (possibly off-screen) item must not gate the composition's exit.
    */
-  const collectElementOutros = (): LottieDriver[] => {
+  const collectSubtreeOutros = (from: ScopeNode): LottieDriver[] => {
     const out: LottieDriver[] = [];
     const walk = (n: ScopeNode): void => {
       out.push(...n.outroLotties);
@@ -1380,8 +1417,69 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         walk(child);
       }
     };
-    walk(rootNode); // the root scope is always visible (it has no instancing parent)
+    walk(from);
     return out;
+  };
+  /**
+   * B-034 (§D6.2b) — is `target` reachable from the root through VISIBLE instances only?
+   * The subtree walk above gates DESCENDANTS, but a scope's own controller does not know
+   * its ancestors: a visible-at-the-leaf Lottie inside a HIDDEN instance would otherwise
+   * have its outro played by its OWN scope's exit (the cascade still stops hidden
+   * children), stalling the exit for furniture nobody can see. The root registry walk
+   * never descends into a hidden instance; this is the same rule, asked from below.
+   */
+  const isEffectivelyVisible = (target: ScopeNode): boolean => {
+    const walk = (n: ScopeNode): boolean => {
+      if (n === target) return true;
+      for (const child of n.children) {
+        if (!child.visible) continue;
+        if (walk(child)) return true;
+      }
+      return false;
+    };
+    return walk(rootNode);
+  };
+  // The full registry (root walk) for the runtime-level exits; each controller's
+  // §D6.2b `beforeOutro` walks from ITS OWN node instead, so a nested scope that
+  // auto-exits awaits its own subtree's outros — not the root's, not its siblings'.
+  const collectElementOutros = (): LottieDriver[] => collectSubtreeOutros(rootNode);
+  /**
+   * D-125 §D6.2b — THE ONE-SHOT OUTRO LEDGER. An exit episode can be triggered more
+   * than once for the same drivers: an auto-exit (`startOutro()` from a hold expiry /
+   * content completion) followed by an operator `stop()`, or the runtime's
+   * `out()`/`stop()` awaiting the registry and THEN cascading `stop()` into every
+   * controller — whose `startOutro()` asks again. The ledger makes the outro
+   * exactly-once STRUCTURALLY: the first caller drives each driver's outro; a later
+   * caller gets the in-flight promise (awaits, never re-drives); when everything it
+   * asked about is already done it gets `null`, so that caller's background leg stays
+   * fully SYNCHRONOUS (the pre-Lottie ordering, and the no-Lottie scene, byte for byte).
+   *
+   * Re-armed by `play()` (clear all — the new run owns fresh outros) and per
+   * loop-cycle boundary by `onCycleRestart` (that scope's drivers only), so every
+   * cycle's exit plays the outro again — once. B-030 safety: `playOutro()` ALWAYS
+   * resolves (§D6.4.1 — degenerate/destroyed/superseded all settle), so a ledger
+   * entry can never strand an awaiting exit.
+   */
+  const outroLedger = new Map<LottieDriver, { promise: Promise<void>; done: boolean }>();
+  const playElementOutrosOnce = (drivers: LottieDriver[]): Promise<void> | null => {
+    const waits: Promise<void>[] = [];
+    for (const d of drivers) {
+      let entry = outroLedger.get(d);
+      if (entry === undefined) {
+        const rec: { promise: Promise<void>; done: boolean } = {
+          promise: Promise.resolve(),
+          done: false,
+        };
+        rec.promise = d.playOutro().then(() => {
+          rec.done = true;
+        });
+        outroLedger.set(d, rec);
+        entry = rec;
+      }
+      if (!entry.done) waits.push(entry.promise);
+    }
+    if (waits.length === 0) return null;
+    return Promise.all(waits).then(() => undefined);
   };
   const saveExitStyles = (n: HTMLElement): void => {
     if (n.dataset['cgExit'] !== undefined) return;
@@ -1445,6 +1543,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       exitGen += 1;
       pendingExitOutro = false;
       paused = false;
+      // D-125 §D6.2b — the new run owns fresh element outros: forget every one-shot
+      // mark, so this run's exit (auto or operator) plays them again — exactly once.
+      outroLedger.clear();
       restoreContent();
       machine.transition('on-air');
       // D-030 — repeaters re-stamp FIRST: the row COUNT comes from the
@@ -1523,12 +1624,20 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // D-125 §D6.2 — an ELEMENT that owns its outro still plays it on stop(): the
       // acceptance is that BOTH stop() and out() play the Lottie outro. Everything else
       // still hard-hides immediately (the quick exit is unchanged for non-owning content).
-      const outros = collectElementOutros();
       hideContentNow();
-      if (outros.length > 0) {
-        // Only await when something actually owns an outro, so a scene with no Lottie
-        // keeps stop()'s SYNCHRONOUS hide → background ordering exactly as before.
-        await Promise.all(outros.map((d) => d.playOutro()));
+      // §D6.2b — finalize every cycle SYNCHRONOUSLY before awaiting: a loop-cycle
+      // boundary whose element outro is in flight would otherwise resolve first
+      // (its gate subscribed to the same ledger promise earlier), re-arm, and let the
+      // cascade below re-drive the whole outro. Finalized, that boundary settles as
+      // the final exit instead — no restart, no re-arm, no double-play.
+      cascade(rootNode, (c) => c.markFinalCycle());
+      // §D6.2b — through the ONE-SHOT ledger: fresh outros start now; one already in
+      // flight from an AUTO-exit is awaited, never re-driven (no double-play); a null
+      // gate (no owners, or all done) keeps stop()'s SYNCHRONOUS hide → background
+      // ordering exactly as before.
+      const outroGate = playElementOutrosOnce(collectElementOutros());
+      if (outroGate !== null) {
+        await outroGate;
         // Superseded mid-outro by a play()/stop()/out() — that command owns the scene now.
         if (gen !== exitGen) return;
         if (machine.state !== 'on-air' && machine.state !== 'playing') return;
@@ -1555,10 +1664,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // authored `[outroStart → op]` (it is excluded from the fade so the two don't fight),
       // while ticker/clock/sequence roots fade as before. Background LAST — D-105's
       // content-first ordering, now honoring element-owned exits.
-      await Promise.all([
-        fadeContentOut(OUT_FADE_MS),
-        ...collectElementOutros().map((d) => d.playOutro()),
-      ]);
+      // §D6.2b — finalize every cycle synchronously first (see stop() — the same
+      // loop-cycle boundary race exists during this await), then route through the
+      // one-shot ledger, so an out() landing during an AUTO-exit outro awaits the
+      // in-flight one instead of re-driving it from `outroStart`.
+      cascade(rootNode, (c) => c.markFinalCycle());
+      const outroGate = playElementOutrosOnce(collectElementOutros());
+      await Promise.all([fadeContentOut(OUT_FADE_MS), outroGate ?? Promise.resolve()]);
       if (gen !== exitGen) return;
       if (machine.state !== 'on-air' && machine.state !== 'playing') return;
       if (paused) {

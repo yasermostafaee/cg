@@ -440,14 +440,16 @@ describe('D-125 §D6.3 — drivesHold is OPT-IN (the inverse default)', () => {
     r.remove();
   });
 
-  it('BOUNDARY: a content-driven AUTO-exit plays the background outro WITHOUT the element outro', async () => {
-    // Characterization of a real Phase-2 boundary, pinned so it cannot regress silently.
-    // The element-outro seam lives in `out()` / `stop()` (design §D6.2). A composition that
-    // ends its own content-driven hold exits through `PlayoutController.startOutro()`
-    // instead, which never routes through the seam — so the Lottie is left on its hold
-    // frame while the background closes. Extending the seam to the controller's auto-exit
-    // is deliberately NOT in Phase 2 (it touches the B-030..B-034-hardened exit machinery
-    // and was not in the signed-off design); tracked for Phase 3.
+  it('a content-driven AUTO-exit (the self-contained sting) PLAYS the element outro before the background', async () => {
+    // FLIPPED in Phase 3b-2. Until then this was a CHARACTERIZATION test pinning the
+    // Phase-2 boundary as shipped: `expect(lastFrame()).toBe(INTRO_END)` ("parked on the
+    // hold frame") and `expect(outroFrames()).toHaveLength(0)` ("the element outro NOT
+    // played") — the composition ended its own hold through
+    // `PlayoutController.startOutro()`, which bypassed the out()/stop() seam entirely,
+    // so the furniture snapped off. Those assertions described a DEFECT (tasks 7.6,
+    // design §D6.2 BOUNDARY note), deliberately deferred out of Phase 2. §D6.2b routes
+    // every path into `startOutro()` through the one-shot outro ledger, so the sting
+    // now closes exactly like an operator exit: element outro → background → CLEARED.
     const clock = makeClock();
     const r = createRuntime(
       scene([bgShape('bg'), lottie('lot', { drivesHold: true })], {
@@ -457,10 +459,20 @@ describe('D-125 §D6.3 — drivesHold is OPT-IN (the inverse default)', () => {
       { skipFontLoad: true, installGlobals: false, lottieAssets, clock, tickerMeasure },
     );
     await r.play({});
-    await run(clock, 3000);
-    expect(onAir()).toBe(false); // it DOES settle CLEARED — no strand, no hang
-    expect(lastFrame()).toBe(INTRO_END); // …but parked on the hold frame
-    expect(outroFrames()).toHaveLength(0); // …with the element outro NOT played
+    // The intro freezes at 100 ms; the (zero-length) content hold ends at the intro end
+    // (~500 ms) and the AUTO-exit begins: the 800 ms element outro must be driving.
+    await run(clock, 1000);
+    expect(onAir()).toBe(true); // background must NOT have closed over the outro
+    const mid = lastFrame() ?? 0;
+    expect(mid).toBeGreaterThan(OUTRO_START); // outro genuinely advancing…
+    expect(mid).toBeLessThan(OP); // …and not yet done
+    // Outro completes (~1300 ms), THEN the background outro (500 ms), then CLEARED.
+    await run(clock, 1500);
+    expect(lastFrame()).toBe(OP); // clamped to the last frame — the outro finished
+    expect(onAir()).toBe(false); // settled CLEARED
+    const after = frames().length;
+    await run(clock, 400);
+    expect(frames()).toHaveLength(after); // halted — no driver left ticking
     r.remove();
   });
 
@@ -704,6 +716,395 @@ describe('D-125 + B-034 — a HIDDEN Lottie is fully inert on the NEW collection
     await r.play({});
     await run(clock, 3000);
     expect(onAir()).toBe(false); // exited on its own — the hidden subtree contributed nothing
+    r.remove();
+  });
+});
+
+/**
+ * D-125 §D6.2b (Phase 3b-2) — the AUTO-exit seam. A composition that ends its OWN hold
+ * (auto-out expiry, content completion, a zero-length hold, each loop-cycle boundary)
+ * exits through `PlayoutController.startOutro()`; every such path now routes the scope
+ * subtree's element outros through the ONE-SHOT ledger before the background leg — the
+ * same contract out()/stop() have had since Phase 2, with double-play structurally
+ * impossible (a second trigger in the same episode awaits or no-ops, never re-drives).
+ *
+ * Timing map used throughout (comp 50 fps, outPoint 25, active out 50, clip fr 100):
+ *   background intro 500 ms · background outro [25→50] = 500 ms
+ *   element outro [20→100] = 800 ms (OUTRO_MS) · element intro [0→10] = 100 ms
+ */
+describe('D-125 §D6.2b — AUTO-exit routes through the element-outro seam', () => {
+  const opCount = (i = 0): number => frames(i).filter((f) => f === OP).length;
+  /** Frames strictly inside the outro span, in paint order — a re-drive would restart low. */
+  const outroSeq = (i = 0): number[] => frames(i).filter((f) => f > OUTRO_START);
+  const isMonotonic = (xs: number[]): boolean => xs.every((v, j) => j === 0 || v >= xs[j - 1]!);
+
+  function autoComp(id: string, children: Element[], playout: Playout): Composition {
+    return {
+      id,
+      name: id,
+      resolution: { width: 400, height: 200 },
+      frameRange: { in: 0, out: 50 },
+      activeRange: { in: 0, out: 50 },
+      lifecycle: { outPoint: 25 },
+      playout,
+      background: 'transparent',
+      layers: [
+        { id: `${id}-l`, name: 'l', visible: true, locked: false, blendMode: 'normal', children },
+      ],
+      fields: [],
+      bindings: [],
+    } as unknown as Composition;
+  }
+
+  it('AUTO-OUT (timed): the element outro plays to completion, THEN the background — CLEARED', async () => {
+    const clock = makeClock();
+    const r = createRuntime(
+      scene([bgShape('bg'), lottie('lot')], {
+        mode: 'auto-out',
+        holdSource: 'timed',
+        holdMs: 200,
+      } as unknown as Playout),
+      { skipFontLoad: true, installGlobals: false, lottieAssets, clock, tickerMeasure },
+    );
+    await r.play({});
+    // Hold expires at 700 ms; the 800 ms element outro runs [700 → 1500].
+    await run(clock, 1000);
+    expect(onAir()).toBe(true);
+    const mid = lastFrame() ?? 0;
+    expect(mid).toBeGreaterThan(OUTRO_START);
+    expect(mid).toBeLessThan(OP);
+    // Pre-fix the scene settled at ~1200 ms (background only). At 1700 ms the element
+    // outro has finished but the BACKGROUND outro [1500 → 2000] is still playing — the
+    // exit consumed the element outro's duration first.
+    await run(clock, 700);
+    expect(lastFrame()).toBe(OP);
+    expect(onAir()).toBe(true); // background still closing — not snapped
+    await run(clock, 700);
+    expect(onAir()).toBe(false); // CLEARED at ~2000 ms
+    expect(opCount()).toBe(1); // the outro was DRIVEN exactly once
+    expect(isMonotonic(outroSeq())).toBe(true); // single pass — never restarted
+    r.remove();
+  });
+
+  it('zero-length content hold (no content elements): the outro still plays — no snap, no strand', async () => {
+    const clock = makeClock();
+    const r = createRuntime(
+      // No ticker/clock/sequence and the Lottie does NOT drive the hold ⇒ waitForContent
+      // is null ⇒ a zero-length hold: the earliest possible auto-exit path.
+      scene([bgShape('bg'), lottie('lot')], {
+        mode: 'auto-out',
+        holdSource: 'content-driven',
+      } as unknown as Playout),
+      { skipFontLoad: true, installGlobals: false, lottieAssets, clock, tickerMeasure },
+    );
+    await r.play({});
+    await run(clock, 2400); // 500 intro + 0 hold + 800 outro + 500 background + slack
+    expect(onAir()).toBe(false);
+    expect(opCount()).toBe(1); // the outro played…
+    expect(outroFrames().length).toBeGreaterThan(1); // …and was genuinely driven
+    r.remove();
+  });
+
+  it('NO STRAND (B-030): a degenerate/absent outro settles at background speed — nothing awaited', async () => {
+    const clock = makeClock();
+    const r = createRuntime(
+      scene([bgShape('bg'), lottie('lot', { noPhases: true })], {
+        mode: 'auto-out',
+        holdSource: 'timed',
+        holdMs: 200,
+      } as unknown as Playout),
+      { skipFontLoad: true, installGlobals: false, lottieAssets, clock, tickerMeasure },
+    );
+    await r.play({});
+    // Exit at 700 ms + background 500 ms — CLEARED by ~1200 ms. A (buggy) await on the
+    // marker-less clip would push settle past 2000 ms, so the 1600 ms check bites.
+    // (No frame assertion here: a marker-less clip's WHOLE clip plays as the intro, so
+    // high frame numbers are legitimate intro paints — the timing is the strand proof.)
+    await run(clock, 1600);
+    expect(onAir()).toBe(false);
+    r.remove();
+  });
+
+  it('LOOP-CYCLE ×3: the outro plays and RE-ARMS on every cycle; the intro replays each cycle', async () => {
+    const clock = makeClock();
+    const r = createRuntime(
+      // Cycle = 500 intro + 100 hold + 800 element outro + 500 background = 1900 ms.
+      scene([bgShape('bg'), lottie('lot')], {
+        mode: 'loop-cycle',
+        holdSource: 'timed',
+        holdMs: 100,
+        repeat: 3,
+      } as unknown as Playout),
+      { skipFontLoad: true, installGlobals: false, lottieAssets, clock, tickerMeasure },
+    );
+    await r.play({});
+    await run(clock, 2100); // inside cycle 2's intro
+    expect(opCount()).toBe(1); // cycle 1's outro DROVE to op — once
+    // The cycle boundary re-armed the furniture: cycle 2 replays the INTRO (without the
+    // §D6.2b re-arm the driver would sit parked at `op`, invisible, for every later cycle).
+    // Cycle 2 spans 1900→3800: its Lottie intro (1900→2000) froze at the hold frame, and
+    // its exit begins at 2500 — so probe at 2400, safely inside the frozen hold.
+    await run(clock, 300); // ~2400 ms
+    expect(lastFrame()).toBe(INTRO_END);
+    await run(clock, 1600); // ~4000 ms: cycle 2's outro (2500→3300) finished
+    expect(opCount()).toBe(2);
+    await run(clock, 2000); // ~6000 ms: cycle 3 (3800→5700) fully done
+    expect(opCount()).toBe(3); // one outro drive per cycle — exactly three
+    expect(onAir()).toBe(false); // settled CLEARED after the final cycle
+    r.remove();
+  });
+
+  it('LOOP-CYCLE + content-driven + drivesHold (B-033): cycle 2 re-mints completion AND replays the outro', async () => {
+    const clock = makeClock();
+    const r = createRuntime(
+      // The sting, cycled: each cycle's hold gates on the Lottie's freeze. Without the
+      // boundary re-arm the ledger still holds cycle 1's mark AND whenComplete stays
+      // resolved — cycle 2 would close instantly WITH NO OUTRO (the exact B-033 shape).
+      scene([bgShape('bg'), lottie('lot', { drivesHold: true })], {
+        mode: 'loop-cycle',
+        holdSource: 'content-driven',
+        repeat: 2,
+      } as unknown as Playout),
+      { skipFontLoad: true, installGlobals: false, lottieAssets, clock, tickerMeasure },
+    );
+    await r.play({});
+    // Cycle ≈ 500 intro + ~0 hold (froze at 100 ms) + 800 outro + 500 background = 1800 ms.
+    await run(clock, 2000); // inside cycle 2
+    expect(opCount()).toBe(1);
+    await run(clock, 2200); // cycle 2 complete
+    expect(opCount()).toBe(2); // the outro DROVE again on cycle 2
+    expect(onAir()).toBe(false);
+    r.remove();
+  });
+
+  it('NESTED scope: an auto-exiting nested comp awaits ITS OWN Lottie — the root sibling is untouched', async () => {
+    const clock = makeClock();
+    const r = createRuntime(
+      scene(
+        [bgShape('bg'), lottie('rootLot'), instance('inst', 'n', 'c1')],
+        { mode: 'manual' } as unknown as Playout,
+        [
+          autoComp('c1', [lottie('inner')], {
+            mode: 'auto-out',
+            holdSource: 'timed',
+            holdMs: 200,
+          } as unknown as Playout),
+        ],
+      ),
+      { skipFontLoad: true, installGlobals: false, lottieAssets, clock, tickerMeasure },
+    );
+    await r.play({});
+    // Nested lifecycle: 500 + 200 + 800 (element outro) + 500 (background) ≈ 2000 ms.
+    await run(clock, 2300);
+    // Identify by behaviour, not wiring order: exactly ONE driver played an outro.
+    const nestedIdx = handles.findIndex((h) => h.frames.some((f) => f > OUTRO_START));
+    expect(nestedIdx).toBeGreaterThanOrEqual(0);
+    const rootIdx = nestedIdx === 0 ? 1 : 0;
+    expect(opCount(nestedIdx)).toBe(1); // the nested outro played, once
+    expect(outroFrames(rootIdx)).toHaveLength(0); // the ROOT sibling was NOT driven
+    expect(onAir()).toBe(true); // the manual root stays on air
+    // The later operator stop() plays the ROOT outro fresh but must NOT re-drive the
+    // nested one (its one-shot mark is spent for this run).
+    const stopP = r.stop();
+    await run(clock, 900); // root element outro (800 ms)
+    await run(clock, 700); // background outro
+    await stopP;
+    expect(onAir()).toBe(false);
+    expect(opCount(rootIdx)).toBe(1); // root outro driven exactly once
+    expect(opCount(nestedIdx)).toBe(1); // nested outro NOT re-driven
+    r.remove();
+  });
+
+  it('NO DOUBLE-PLAY: a stop() during a nested AUTO-exit outro awaits it — never re-drives it', async () => {
+    const clock = makeClock();
+    const r = createRuntime(
+      scene(
+        [bgShape('bg'), lottie('rootLot'), instance('inst', 'n', 'c1')],
+        { mode: 'manual' } as unknown as Playout,
+        [
+          autoComp('c1', [lottie('inner')], {
+            mode: 'auto-out',
+            holdSource: 'timed',
+            holdMs: 200,
+          } as unknown as Playout),
+        ],
+      ),
+      { skipFontLoad: true, installGlobals: false, lottieAssets, clock, tickerMeasure },
+    );
+    await r.play({});
+    await run(clock, 1100); // the nested outro is MID-FLIGHT (started at ~700 ms)
+    const nestedIdx = handles.findIndex((h) => h.frames.some((f) => f > OUTRO_START));
+    expect(nestedIdx).toBeGreaterThanOrEqual(0);
+    const rootIdx = nestedIdx === 0 ? 1 : 0;
+    const stopP = r.stop(); // arrives mid-auto-outro: must AWAIT it, not restart it
+    await run(clock, 1000); // nested finishes (~1500); root outro runs (~1100 → 1900)
+    await run(clock, 1100); // background
+    await stopP;
+    expect(onAir()).toBe(false);
+    // The DRIVE-exactly-once proof: op painted once per driver, and the nested outro
+    // sequence is a single monotonic pass — a re-drive would restart at outroStart.
+    expect(opCount(nestedIdx)).toBe(1);
+    expect(isMonotonic(outroSeq(nestedIdx))).toBe(true);
+    expect(opCount(rootIdx)).toBe(1);
+    r.remove();
+  });
+
+  it('SUPERSEDE (B-031/B-033): a play() during an auto-exit outro re-arms — no stale settle, next exit intact', async () => {
+    const clock = makeClock();
+    const r = createRuntime(
+      scene([bgShape('bg'), lottie('lot')], {
+        mode: 'auto-out',
+        holdSource: 'timed',
+        holdMs: 200,
+      } as unknown as Playout),
+      { skipFontLoad: true, installGlobals: false, lottieAssets, clock, tickerMeasure },
+    );
+    await r.play({});
+    await run(clock, 1000); // auto-exit outro mid-flight (700 → 1500)
+    await r.play({}); // supersede: the new run owns the scene (bumps gen, resets, re-arms)
+    await run(clock, 200);
+    expect(onAir()).toBe(true);
+    expect(lastFrame()).toBeLessThanOrEqual(INTRO_END); // the intro is REPLAYING from ip
+    // If the superseded exit's gate resolution leaked a stale background leg, the scene
+    // would settle near +1000 ms. It must still be on air deep into the second run.
+    await run(clock, 1300); // +1500 into run 2 (its own outro is running: 700 → 1500)
+    expect(onAir()).toBe(true);
+    await run(clock, 900); // run 2 completes: outro → background → CLEARED (~2000)
+    expect(onAir()).toBe(false);
+    expect(opCount()).toBe(1); // run 1's outro was superseded before op; run 2's drove once
+    r.remove();
+  });
+
+  it('PAUSE mid-auto-exit-outro freezes with the scene; resume finishes outro THEN background (D-105 parity)', async () => {
+    const clock = makeClock();
+    const r = createRuntime(
+      scene([bgShape('bg'), lottie('lot')], {
+        mode: 'auto-out',
+        holdSource: 'timed',
+        holdMs: 200,
+      } as unknown as Playout),
+      { skipFontLoad: true, installGlobals: false, lottieAssets, clock, tickerMeasure },
+    );
+    await r.play({});
+    await run(clock, 1000); // outro at ~300/800 ms
+    r.pause();
+    const frozenAt = frames().length;
+    await run(clock, 800); // would have completed the outro — must not move
+    expect(frames().length).toBe(frozenAt);
+    expect(onAir()).toBe(true);
+    r.resume();
+    await run(clock, 700); // remaining ~500 ms of the element outro
+    expect(lastFrame()).toBe(OP);
+    await run(clock, 700); // background outro
+    expect(onAir()).toBe(false);
+    expect(opCount()).toBe(1);
+    expect(isMonotonic(outroSeq())).toBe(true);
+    r.remove();
+  });
+
+  it('B-034 on the auto path: hidden Lotties (leaf AND under a hidden ancestor) are neither played nor awaited', async () => {
+    const clock = makeClock();
+    const r = createRuntime(
+      scene(
+        [bgShape('bg'), lottie('hid', { visible: false }), instance('inst', 'n', 'c1', false)],
+        { mode: 'auto-out', holdSource: 'timed', holdMs: 200 } as unknown as Playout,
+        [hiddenAncestorChild()],
+      ),
+      { skipFontLoad: true, installGlobals: false, lottieAssets, clock, tickerMeasure },
+    );
+    await r.play({});
+    // Exit at 700 ms + background 500 ms ⇒ CLEARED by ~1200 ms. If either hidden outro
+    // were awaited the settle would slip past 700 + 800 + 500 = 2000 ms — 1600 ms bites.
+    await run(clock, 1600);
+    expect(onAir()).toBe(false);
+    for (let i = 0; i < handles.length; i += 1) {
+      expect(outroFrames(i)).toHaveLength(0); // no hidden outro was ever DRIVEN
+    }
+    r.remove();
+  });
+  it('OPERATOR stop() during a LOOP-CYCLE boundary outro finalizes the cycle — no double-drive, no restart', async () => {
+    // The adversarially-found race (verified by repro pre-fix): the boundary's gate and
+    // stop() await the SAME ledger promise, and the boundary's continuation runs first.
+    // With NO out-point the background leg is an EMPTY range (synchronous), so pre-fix
+    // the boundary re-armed (onCycleRestart) before the cascade could force the last
+    // cycle — and the cascaded stop() re-drove the whole element outro on air. stop()
+    // now cascades markFinalCycle() BEFORE awaiting, so the in-flight boundary resolves
+    // as the FINAL exit: one drive, no intro replay, clean settle.
+    const noOutPointScene = {
+      ...scene([bgShape('bg'), lottie('lot')], {
+        mode: 'loop-cycle',
+        holdSource: 'timed',
+        holdMs: 100,
+        repeat: 'infinite',
+      } as unknown as Playout),
+      lifecycle: undefined,
+    } as unknown as Scene;
+    const clock = makeClock();
+    const r = createRuntime(noOutPointScene, {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+      clock,
+      tickerMeasure,
+    });
+    await r.play({});
+    // No out-point ⇒ intro spans the whole active range [0→50] = 1000 ms; hold 100 ms;
+    // the boundary's element outro runs [1100 → 1900] with an EMPTY background leg.
+    await run(clock, 1500); // boundary outro mid-flight
+    expect(lastFrame() ?? 0).toBeGreaterThan(OUTRO_START);
+    const stopP = r.stop(); // lands during the boundary outro — the exact race window
+    await run(clock, 600); // outro completes (~1900)
+    await run(clock, 400); // settle slack (empty background leg is instant)
+    await stopP;
+    expect(onAir()).toBe(false); // settled — the finalized boundary WAS the exit
+    expect(opCount()).toBe(1); // driven exactly once — the pre-fix repro drove it twice
+    expect(isMonotonic(outroSeq())).toBe(true); // never restarted from outroStart
+    // …and no cycle restart happened after stop(): no fresh intro paint post-stop.
+    const afterSettle = frames().length;
+    await run(clock, 400);
+    expect(frames()).toHaveLength(afterSettle); // halted, not looping again
+    r.remove();
+  });
+
+  it('LOOP-CYCLE boundary exits OWN-scope furniture only; a nested Lottie persists and plays on the FINAL exit', async () => {
+    // The adversarially-found asymmetry: pre-fix the boundary gate drove the whole
+    // SUBTREE's outros but re-armed only its own scope — a nested comp's furniture
+    // animated off at cycle 1's boundary and stayed blank (parked at `op`, ledger
+    // spent) for every later cycle AND the final exit. Boundaries are now own-scope;
+    // the final exit takes the subtree.
+    const clock = makeClock();
+    const r = createRuntime(
+      scene(
+        [bgShape('bg'), lottie('parentLot'), instance('inst', 'n', 'c1')],
+        {
+          mode: 'loop-cycle',
+          holdSource: 'timed',
+          holdMs: 100,
+          repeat: 2,
+        } as unknown as Playout,
+        [
+          // The nested comp just HOLDS (manual): its furniture must survive the
+          // parent's cycle boundaries untouched.
+          autoComp('c1', [lottie('inner')], { mode: 'manual' } as unknown as Playout),
+        ],
+      ),
+      { skipFontLoad: true, installGlobals: false, lottieAssets, clock, tickerMeasure },
+    );
+    await r.play({});
+    // Parent cycle 1: intro 500 + hold 100 + own outro 800 + background 500 = 1900 ms.
+    await run(clock, 2100); // inside cycle 2
+    const parentIdx = handles.findIndex((h) => h.frames.some((f) => f > OUTRO_START));
+    expect(parentIdx).toBeGreaterThanOrEqual(0);
+    const innerIdx = parentIdx === 0 ? 1 : 0;
+    expect(opCount(parentIdx)).toBe(1); // the parent's own outro played at the boundary
+    expect(outroFrames(innerIdx)).toHaveLength(0); // the NESTED furniture was untouched
+    await run(clock, 300); // ~2400 ms: mid-cycle-2 hold window
+    expect(lastFrame(innerIdx)).toBe(INTRO_END); // still holding, visible — not at op
+    // Cycle 2 is the FINAL cycle: its exit takes the whole subtree off air.
+    await run(clock, 1800); // cycle 2 completes (~3800)
+    expect(onAir()).toBe(false);
+    expect(opCount(parentIdx)).toBe(2); // own outro on both cycles
+    expect(opCount(innerIdx)).toBe(1); // nested outro played ONCE — on the final exit
     r.remove();
   });
 });
