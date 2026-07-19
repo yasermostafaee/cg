@@ -167,6 +167,18 @@ in/out of a container (a non-direct-child drag, or a drop at the origin, is a
 no-op) — and is wrapped in `runAsSingleHistoryEntry` (one undo). It's covered by
 [`tests/store-layer-reorder.test.ts`](../../../../tests/store-layer-reorder.test.ts).
 
+**Rows are each layer's DIRECT children — containers are listed, their children are
+not (B-090).** The dock's `flattenElements` used to recurse into `container.children`
+and was the only place in the app that did: `locate()` (every mutation),
+`reorderElement`, the canvas hit-test, and the Inspector's `findSelected` are all
+direct-children-only, and the runtime builds a container through `buildPlaceholder`,
+which never builds its children — so they have no node in any scope's `elementMap` and
+are invisible in preview and export alike. Every control on such a row (trim gripper,
+reorder drag, selection, colour) therefore did nothing at all. It must stay in lockstep
+with `flattenLayerChildren` in the elements slice, since `reorderElement` maps a
+displayed row index back through that list. When containers are genuinely implemented,
+the recursion returns alongside the render.
+
 All edits go through the **store** (`upsertKeyframe` / `moveKeyframe[ById]` /
 `removeKeyframe` / `commitAnimatable` / `reorderElement` / selection) — the
 components never mutate the scene. Those mutations (insert-sorted, move-with-collision, stacking, the

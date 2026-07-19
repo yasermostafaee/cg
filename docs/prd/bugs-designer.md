@@ -1062,17 +1062,68 @@ sweeps its intro leg in real time where it previously snapped through it — sam
 the same reason (the trim needs elapsed time to be honoured). Root-scope timing is unchanged. Warrants a
 real-CasparCG check before it is considered done.
 
-## [ ] B-090 — trimming a NESTED element silently does nothing ⟨priority: medium⟩
+## [~] B-090 — trimming a NESTED element silently does nothing ⟨priority: medium⟩
 
 **Repro:**
 
 1. Put an element inside a container.
 2. In the timeline, drag that element's trim gripper.
 
-**Expected:** the trim applies (or the gripper is not offered).
-**Actual:** nothing happens — no trim, no error, no visual feedback. The gripper is rendered and drags, then the value is discarded.
+**Expected (as filed):** either the trim applies, or the gripper is not offered.
+**RESOLVED AS:** the gripper is **not offered** — the affordance was removed, not made to write. See the Fix
+below for why the write-path branch was rejected on the evidence.
+**Actual (before the fix):** nothing happens — no trim, no error, no visual feedback. The gripper is rendered and drags, then the value is discarded.
 **Env:** Browser / Designer timeline.
 **Notes:** The timeline renders rows for everything `flattenElements` returns, and it DOES recurse into containers — but `updateElementLifespan` resolves the target through `locate()` (`apps/designer/src/renderer/state/scene-doc.ts:182`), which searches only top-level `layer.children` via `findIndex` with no recursion, returns `null`, and the mutation early-returns (`slices/elements.ts`). So the UI offers an affordance the state layer cannot honour. Note this is a WRITE-path gap and is independent of B-089 (a READ/gating gap) — an element inside a container would still not be gated even if the trim did persist.
+
+**In progress** — branch `fix/b090-container-child-rows`.
+
+**Not the same root as B-089.** B-090 is about `container` children; B-089 is about `composition`
+INSTANCE children. `flattenElements` recurses ONLY into `container`, never `composition`, so a nested
+comp's elements have no timeline row and no gripper at all — their write path was always fine (you
+author them inside their own comp, where they are top-level and `locate()` resolves). Fixed on separate
+branches.
+
+**Finding — the affordance is for a feature that does not exist yet.** `container` dispatches to
+`buildPlaceholder` (`scene-builder.ts:159`), which creates an empty div and builds NO children
+(`M3.2-α: not yet supported`), so a container child reaches no scope's `elementMap` and is invisible in
+preview AND export. Containers are also unauthorable: `DesignerTool` has no container member, the
+`TOOLS` rail has no Group button, there is no `defaultContainer` factory, and no group/ungroup/reparent
+action exists anywhere — a container only enters a scene via a hand-authored `.vcg`. Every other
+surface already refuses these elements: `locate()` is direct-children-only across its 17 call sites,
+`reorderElement` guards them out explicitly, the canvas hit-test skips them, and the Inspector's
+`findSelected` cannot find them (so selecting such a row shows no Inspector at all). The timeline's
+`flattenElements` was the ONLY place in the app that recursed into containers.
+
+**Fix — the affordance was REMOVED; the write path was deliberately NOT fixed.** `flattenElements`
+(`TimelineDock.tsx`) and `flattenLayerChildren` (`state/slices/elements.ts`) now list each layer's
+DIRECT children only, so no row — and therefore no trim gripper — is rendered for a container child.
+The two must stay in lockstep, because `reorderElement` maps a displayed row index back through the
+latter.
+
+**Why the write-path branch was rejected.** Making the trim persist would have produced a value that
+NOTHING can ever observe. A container child provably never gets a DOM node: `container` dispatches to
+`buildPlaceholder`, which builds no children, so the element enters no scope's `elementMap` and is
+absent from preview, export, and air alike. A `lifespan` gate needs a node to toggle; with no node there
+is nothing to gate. So the two candidate write-path fixes both fail on the evidence:
+
+- Making `locate()` recursive is a non-starter regardless — its 17 call sites all write back via
+  `layer.children[elIdx]`, an index a nested element does not have, so recursion would force a 17-site
+  signature refactor or silently overwrite the wrong element.
+- A local recursive patcher in the D-107 (`patchDrivesHold`) / D-112 (`patchHoldOverride`) style would
+  compile and would persist the value — but those patch FLAGS the runtime reads back off the scene doc,
+  whereas this needs a rendered node. It would have traded a VISIBLY-inert control for an
+  INVISIBLY-inert one: the gripper would move and the bar would persist while the element stayed
+  invisible everywhere. That is a worse bug than the one filed, so it was rejected.
+
+When containers are genuinely implemented (the `buildPlaceholder` TODO), the recursion returns alongside
+the render — noted at both call sites and in the timeline README.
+
+**Regression test:** `apps/designer/tests/nested-element-trim.test.ts` — the container gets a row and
+grippers but its child gets neither; a trim aimed at a container child writes nothing anywhere; and the
+real top-level trim path still persists and undoes.
+
+**On-air impact:** none — designer-authoring state only, no runtime or export behaviour changes.
 
 ## [ ] B-096 — the Lottie Inspector's clip total counts `op` frames, ignoring a nonzero in-point ⟨priority: low⟩
 
