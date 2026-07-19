@@ -18,6 +18,12 @@ const MESSAGES: Readonly<Record<string, string>> = {
   // nothing was queued: the operator must reissue it, or they will believe it is pending.
   disconnected:
     'Not connected to CasparCG — the command was refused, not queued. Reissue it once the server is back.',
+  // C-014 — the two ways a load can run out of layers, told apart because the
+  // remedies differ: a genuinely full range frees up by removing an item; a
+  // foreign-occupied range cannot be freed from this console at all (R-015).
+  'no-layer': 'No free layer left in this template’s range — Remove an item to free one.',
+  'no-layer-foreign-occupied':
+    'No free layer — the range is occupied by another system’s output (video), which cannot be cleared from here.',
 };
 
 /** A human message for a refusal, or `null` when there is no code to explain. */

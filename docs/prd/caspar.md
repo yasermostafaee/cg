@@ -302,7 +302,7 @@ there is NO CHANNEL today for that knowledge to reach the bridge from inside CEF
 is the substance of this item. — Distinct from [[C-008]]: C-008 is an OPERATOR-initiated soft-out
 policy on the override seam; this is the item ending ITSELF when its content completes.
 
-## [ ] C-014 — occupancy-aware layer allocation: an ordinary Add must not adopt-CLEAR a foreign producer sitting inside a template-type range ⟨priority: high⟩
+## [~] C-014 — occupancy-aware layer allocation: an ordinary Add must not adopt-CLEAR a foreign producer sitting inside a template-type range ⟨priority: high⟩ — in progress on `feat/C-014-occupancy-aware-allocation`, change dir `openspec/changes/occupancy-aware-allocation/`
 
 **What:** `load()`'s first `CG ADD` onto a layer this process has never cleared is preceded by an
 adopt-CLEAR (`#adoptLayer`, `tools/caspar-bridge/src/caspar-runtime.ts`) — and the layer it lands

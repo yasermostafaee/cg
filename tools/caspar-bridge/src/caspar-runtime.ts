@@ -1,5 +1,6 @@
 import {
   LayerManager,
+  OutOfLayersError,
   Reconciler,
   RedundancyAdapter,
   ServerSession,
@@ -565,7 +566,7 @@ export class CasparRuntime {
     itemId: string,
     templateId: string,
     fields: FieldValues,
-  ): Promise<{ accepted: boolean }> {
+  ): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const seq = this.#nextSeq();
@@ -577,15 +578,23 @@ export class CasparRuntime {
     // on air; the guard is what makes the failure loud.)
     if (!this.#templates.has(templateId)) {
       this.#reconciler.applyAck(seq, false, 'unknown-template');
-      return { accepted: false };
+      return { accepted: false, errorCode: 'unknown-template' };
     }
 
     let slot: CommandSlot;
     try {
       slot = this.#allocate(templateId);
-    } catch {
-      this.#reconciler.applyAck(seq, false, 'no-layer');
-      return { accepted: false };
+    } catch (err) {
+      // C-014 — say WHY the range is exhausted: a range eaten by QUARANTINED
+      // (foreign-occupied) layers is a different operator situation from a
+      // genuinely full range — the former cannot be freed from this console
+      // (R-015 forbids clearing foreign layers), the latter can (Remove
+      // something). The code rides the ack AND the response (B-070) so the
+      // Library's Load toast can say it.
+      const foreignBlocked = err instanceof OutOfLayersError && err.quarantinedInRange > 0;
+      const code = foreignBlocked ? 'no-layer-foreign-occupied' : 'no-layer';
+      this.#reconciler.applyAck(seq, false, code);
+      return { accepted: false, errorCode: code };
     }
 
     // Reconnect-reconciliation — adopt the layer BEFORE binding the slot/OSC
@@ -1180,6 +1189,11 @@ export class CasparRuntime {
       void this.#decidePendingRestores(occupiedKeys, true);
     }
 
+    // C-014 — keep the allocation quarantine in step with what the tap sees;
+    // the same tick that surfaces orphans withdraws foreign layers from the
+    // allocatable pool (and returns them when the foreign producer leaves).
+    this.#reconcileForeignQuarantine();
+
     const occupied = session.osc.occupancy.occupied(this.#occupancyStaleMs);
     const owned = new Set<string>();
     for (const slot of this.#slots.values()) {
@@ -1412,6 +1426,9 @@ export class CasparRuntime {
     // R-009 — surfaced orphans described the OLD server too; the new
     // sessions' taps re-accumulate and the sweep re-surfaces what's real.
     if (this.#orphanTracker.reset().changed) this.orphansChanged.emit([]);
+    // C-014 — the allocation quarantine described the OLD server's occupancy;
+    // release it wholesale and let the new taps re-quarantine what's real.
+    for (const slot of this.#layers.quarantined()) this.#layers.deallocate(slot);
     // B-056 — owned-slot warnings described the OLD primary; drop wholesale.
     if (this.#ownedOccupancy.size > 0) {
       this.#ownedOccupancy.clear();
@@ -1684,6 +1701,10 @@ export class CasparRuntime {
 
   /** Allocate a slot, falling back to the `custom` range for unknown types. */
   #allocate(templateId: string): CommandSlot {
+    // C-014 — point-in-time freshness: the sweep's cadence alone would leave a
+    // window where a just-arrived foreign producer gets allocated over. Same
+    // sample, same predicate, run synchronously before the scan.
+    this.#reconcileForeignQuarantine();
     try {
       return this.#layers.allocate(templateId, DEFAULT_CHANNEL);
     } catch (err) {
@@ -1761,6 +1782,70 @@ export class CasparRuntime {
   #resolveOwnedOccupancy(slot: CommandSlot): void {
     if (this.#ownedOccupancy.delete(adoptionKey(slot))) {
       this.ownedOccupancyChanged.emit(this.ownedOccupancy());
+    }
+  }
+
+  /**
+   * C-014 — reconcile the LayerManager's QUARANTINE set against the current
+   * primary's fresh non-`html` occupancy, so allocation can never land on —
+   * and adopt-CLEAR — another system's output.
+   *
+   * The discriminator is R-015's, verbatim: this system only places `html`
+   * producers, so a fresh non-`html` observation (video, or anything
+   * unrecognised — "not html" fails safe) is provably foreign. A layer with NO
+   * fresh observation stays allocatable: allocation fails OPEN on silence,
+   * deliberately opposite to `clearLayer`'s refusal — a blind (B-094) install
+   * must still be able to play out, and on a hearing tap silence genuinely
+   * means empty (B-053, aged-out entries ARE the empty signal).
+   *
+   * Runs at every sweep tick AND at allocation time (the sweep's cadence alone
+   * would leave a TOCTOU window). Frozen while the primary is not healthy —
+   * the same absence-of-knowledge discipline as the R-009 warnings — and
+   * dropped wholesale on setConfig (old-server knowledge). Owned (#slots) and
+   * pinned slots are never quarantined: a foreign producer under an OWNED
+   * layer is B-056's warning, not an allocation concern.
+   *
+   * Release goes through `deallocate()`, not `observe('empty')`: observe()'s
+   * explicit-empty release contract predates B-053 (real CasparCG goes SILENT
+   * for a cleared layer), so the bridge reconciles from aged-out occupancy
+   * instead of feeding it synthetic empties.
+   */
+  #reconcileForeignQuarantine(): void {
+    const session = this.#adapter.primarySession;
+    if (session.state !== 'healthy') return;
+
+    const foreign = new Map<string, { slot: CommandSlot; producer: string }>();
+    for (const occ of session.osc.occupancy.occupied(this.#occupancyStaleMs)) {
+      if (occ.producer === 'html') continue;
+      foreign.set(adoptionKey(occ), {
+        slot: { channel: occ.channel, layer: occ.layer },
+        producer: occ.producer,
+      });
+    }
+
+    const quarantinedNow = new Set(this.#layers.quarantined().map((s) => adoptionKey(s)));
+
+    for (const [key, { slot, producer }] of foreign) {
+      if (quarantinedNow.has(key)) continue;
+      // Allocated (ours or pinned) — not quarantine's to touch; B-056 owns it.
+      if (this.#layers.isAllocated(slot)) continue;
+      this.#layers.quarantine(slot);
+      // The one line whoever wonders why a layer is being skipped will grep for.
+      process.stderr.write(
+        `[caspar-bridge] layer ${String(slot.channel)}-${String(slot.layer)} quarantined from ` +
+          `allocation: a foreign producer (${producer}) is on it. It will not be allocated or ` +
+          `cleared; it returns to the pool when the producer leaves.
+`,
+      );
+    }
+
+    for (const key of quarantinedNow) {
+      if (foreign.has(key)) continue;
+      const sep = key.indexOf(':');
+      this.#layers.deallocate({
+        channel: Number(key.slice(0, sep)),
+        layer: Number(key.slice(sep + 1)),
+      });
     }
   }
 

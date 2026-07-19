@@ -71,6 +71,13 @@ export class OutOfLayersError extends Error {
   constructor(
     readonly templateType: string,
     readonly channel: number,
+    /**
+     * C-014 — how many in-range slots the failed scan skipped because they
+     * were QUARANTINED (foreign-occupied). Lets the load refusal say WHY the
+     * range is exhausted: "occupied by another system's output" is actionable
+     * in a way a bare "no free layer" is not.
+     */
+    readonly quarantinedInRange = 0,
   ) {
     super(`No free layer in range for templateType=${templateType} on channel ${String(channel)}`);
   }
@@ -116,6 +123,9 @@ export class LayerManager extends EventEmitter<LayerManagerEvents> {
       throw new UnknownTemplateTypeError(templateType);
     }
     const [low, high] = range;
+    // C-014 — count the quarantined (foreign-occupied) slots the scan walks
+    // past, so an exhausted range can say WHY it is exhausted.
+    let quarantinedInRange = 0;
     for (let layer = low; layer <= high; layer++) {
       const slot = { channel, layer };
       const state = this.slots.get(keyOf(slot));
@@ -124,9 +134,10 @@ export class LayerManager extends EventEmitter<LayerManagerEvents> {
         this.emit('allocated', slot, templateType);
         return slot;
       }
+      if (state.status === 'quarantined') quarantinedInRange++;
     }
     this.emit('out-of-layers', templateType, channel);
-    throw new OutOfLayersError(templateType, channel);
+    throw new OutOfLayersError(templateType, channel, quarantinedInRange);
   }
 
   /**
@@ -208,6 +219,22 @@ export class LayerManager extends EventEmitter<LayerManagerEvents> {
     }
     // We expected it allocated; OSC confirms. No collision.
     return true;
+  }
+
+  /**
+   * C-014 — the currently QUARANTINED slots (foreign-occupied; excluded from
+   * allocation). The bridge's quarantine reconciliation enumerates this to
+   * release layers whose foreign observation has gone.
+   */
+  quarantined(): readonly LayerSlot[] {
+    const out: LayerSlot[] = [];
+    for (const [key, state] of this.slots) {
+      if (state.status === 'quarantined') {
+        const slot = parseKey(key);
+        if (slot !== null) out.push(slot);
+      }
+    }
+    return out;
   }
 
   /** All currently-allocated slots (for diagnostics). */
