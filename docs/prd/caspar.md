@@ -301,3 +301,38 @@ already exists as the graceful path and the D-029 sequence drivers know when a s
 there is NO CHANNEL today for that knowledge to reach the bridge from inside CEF. That transport
 is the substance of this item. — Distinct from [[C-008]]: C-008 is an OPERATOR-initiated soft-out
 policy on the override seam; this is the item ending ITSELF when its content completes.
+
+## [ ] C-014 — occupancy-aware layer allocation: an ordinary Add must not adopt-CLEAR a foreign producer sitting inside a template-type range ⟨priority: high⟩
+
+**What:** `load()`'s first `CG ADD` onto a layer this process has never cleared is preceded by an
+adopt-CLEAR (`#adoptLayer`, `tools/caspar-bridge/src/caspar-runtime.ts`) — and the layer it lands
+on comes from `LayerManager.allocate`, which consults ONLY its own bookkeeping (lowest free layer
+in the template-type range), never the occupancy tap. So a foreign producer sitting inside a
+policy range (layers 10–99 on the default policy — e.g. a video another system parked on
+layer 15) is silently DESTROYED by an ordinary "Add item". Allocation must become
+occupancy-aware: skip (or refuse, or quarantine) a layer whose fresh observation reports a
+producer — at minimum any non-`html` producer, which [[R-015]] made unclearable by every
+OPERATOR path while this programmatic path still kills it.
+**Why:** This is the one remaining route by which this system can take another system's output
+off air, and it fires without a warning — [[B-056]] warns only when the adopt-CLEAR _fails_ over
+observed foreign content; when it succeeds the foreign producer is simply gone. It violates
+R-015's owner rule ("a graphics operator must never be able to clear a video layer") from inside
+the most ordinary operator action there is.
+**Acceptance:**
+
+- WHEN the operator adds an item while a foreign producer sits on the lowest free layer of the
+  template-type range THEN the allocation does not land on that layer (or the load refuses with
+  an explanation) — the foreign producer survives, no CLEAR reaches its layer
+- WHEN the foreign layer later empties THEN the layer returns to the allocatable pool
+- WHEN no foreign producer is observed in the range THEN allocation behaves exactly as today
+
+**Notes:** IMPLEMENTATION LEAD (a pointer, not a decision): `LayerManager` already has
+purpose-built `collision` / `quarantine` / `observe` wiring
+(`packages/caspar-client/src/layers/layer-manager.ts:176-211`) that is currently DEAD — nothing
+in the bridge calls it (the [[C-010]] dead-wiring family) — and it is the natural seam if
+allocation becomes occupancy-aware. — CAUTION: this touches the load hot path and the
+B-039/B-056 adoption semantics; the blind-tap rule ([[B-093]]) applies here too — an unobserved
+layer is NOT knowably free, and real CasparCG goes silent for empty layers (B-053), so
+"no fresh observation" must not read as "occupied forever" either. Relates to [[B-092]]'s
+restart-misadoption limit (recorded in `openspec/changes/runtime-protect-video-layers/design.md`):
+both need the bridge to reason about producer KINDS it did not place.

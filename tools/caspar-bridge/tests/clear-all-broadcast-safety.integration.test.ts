@@ -157,8 +157,10 @@ it('Clear-All CLEARs only our own layers — the program feed survives on air', 
   expect(clears).not.toContain('1-1');
 
   // 3. THE SIGNAL: the program feed is untouched. Still on air, same producer, same file.
+  //    (R-015 made the mock report media truthfully — the feed IS an ffmpeg producer,
+  //    which is exactly why nothing may ever clear it.)
   expect(mock.layerState(PROGRAM)?.onAir).toBe(true);
-  expect(mock.layerState(PROGRAM)?.producer).toBe('html');
+  expect(mock.layerState(PROGRAM)?.producer).toBe('ffmpeg');
   expect(mock.layerState(PROGRAM)?.filePath).toBe('program-feed.mov');
 
   // 4. …and our own graphics ARE off air.

@@ -35,8 +35,13 @@ export type CgAddResolution = 'pending' | 'resolved' | 'failed';
  */
 export interface LayerState {
   readonly slot: LayerSlot;
-  /** `'empty'` when the slot is idle; `'html'` when an HTML page is loaded. */
-  producer: 'empty' | 'html';
+  /**
+   * `'empty'` when the slot is idle; `'html'` when an HTML page is loaded;
+   * `'ffmpeg'` when a media file is playing (R-015 — real CasparCG reports the
+   * producer KIND per layer over OSC, and the video-layer protection keys on
+   * exactly this discriminator, so the mock must tell the truth about media).
+   */
+  producer: 'empty' | 'html' | 'ffmpeg';
   /** Loaded file path (URL string). Only meaningful when `producer !== 'empty'`. */
   filePath: string;
   /** Background "next-up" producer. CasparCG emits this on every framerate tick. */

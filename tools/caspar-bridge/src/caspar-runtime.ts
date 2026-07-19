@@ -1194,20 +1194,39 @@ export class CasparRuntime {
    * `CLEAR <ch>-<layer>` through the adapter (mirror-sync fans it out so a
    * real pair clears everywhere). REFUSED for a layer the bridge owns —
    * clearing owned layers is Out/Remove's job (guards a UI race where the
-   * operator clicks Clear just as a load claims the layer). Touches no
-   * slots and no OSC interest (it owns neither); a CLEAR executed on the
-   * current primary counts as adoption (consistent with out/remove). The
-   * warning resolves via the next sweep's observed empty — never
+   * operator clicks Clear just as a load claims the layer).
+   *
+   * R-015 — REFUSED (`foreign`) unless the current primary's occupancy tap
+   * has a FRESH observation of this exact layer reporting an `html`
+   * producer. This system only ever places HTML producers, so `html` is the
+   * one kind that can plausibly be our own orphaned graphic (R-009's case);
+   * a non-`html` kind — a video played by another system, a program feed,
+   * or anything unrecognised ("not html" fails safe, video kinds are never
+   * enumerated) — is PROVABLY not ours, and clearing it must be impossible
+   * from ANY caller, not merely unoffered by the UI. No fresh observation
+   * refuses too: silence is evidence of nothing (the B-093 lesson), so it
+   * cannot license a CLEAR — which also covers the B-094 AMCP-alive/OSC-dead
+   * install, where every layer would otherwise read clearable blind.
+   *
+   * Touches no slots and no OSC interest (it owns neither); a CLEAR executed
+   * on the current primary counts as adoption (consistent with out/remove).
+   * The warning resolves via the next sweep's observed empty — never
    * optimistically, and NEVER without this explicit operator request.
    */
   async clearLayer(
     channel: number,
     layer: number,
-  ): Promise<{ ok: boolean; reason?: 'owned' | 'amcp-error' }> {
+  ): Promise<{ ok: boolean; reason?: 'owned' | 'foreign' | 'amcp-error' }> {
     for (const slot of this.#slots.values()) {
       if (slot.channel === channel && slot.layer === layer) {
         return { ok: false, reason: 'owned' };
       }
+    }
+    const observed = this.#adapter.primarySession.osc.occupancy
+      .occupied(this.#occupancyStaleMs)
+      .find((o) => o.channel === channel && o.layer === layer);
+    if (observed === undefined || observed.producer !== 'html') {
+      return { ok: false, reason: 'foreign' };
     }
     const slot: CommandSlot = { channel, layer };
     const { ok, onPrimary } = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');

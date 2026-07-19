@@ -366,11 +366,22 @@ export class MockRuntime {
    * from the operator's point of view. Owned-layer refusal can't be
    * modeled (the mock has no layer slots); the bridge integration tests
    * carry that guard.
+   *
+   * R-015 parity — the bridge refuses `foreign` unless the layer's FRESH
+   * observation reports an `html` producer. The mock's "observation" is its
+   * orphan list: a non-`html` orphan refuses, and an unknown coordinate (no
+   * observation at all) refuses too — never a blind CLEAR.
    */
-  clearLayer(channel: number, layer: number): { ok: boolean; reason?: 'owned' | 'amcp-error' } {
-    const before = this.#orphans.length;
+  clearLayer(
+    channel: number,
+    layer: number,
+  ): { ok: boolean; reason?: 'owned' | 'foreign' | 'amcp-error' } {
+    const observed = this.#orphans.find((o) => o.channel === channel && o.layer === layer);
+    if (observed === undefined || observed.producer !== 'html') {
+      return { ok: false, reason: 'foreign' };
+    }
     this.#orphans = this.#orphans.filter((o) => !(o.channel === channel && o.layer === layer));
-    if (this.#orphans.length !== before) this.orphansChanged.emit(this.orphans());
+    this.orphansChanged.emit(this.orphans());
     return { ok: true };
   }
 
@@ -573,11 +584,18 @@ function auditEntry(action: AuditEntry['action'], extra: Partial<AuditEntry>): A
  * addInitScript, alongside the CG_E2E flag) the offline mock boots with one
  * surfaced orphan so Playwright can drive the banner + Clear flow. The
  * bridge-side truth (real OSC tap + sweep) is integration-tested.
+ *
+ * R-015 — the seed also carries one VIDEO layer (`ffmpeg`, the program feed
+ * on layer 1) so Playwright can assert the neutral, Clear-less presentation
+ * beside the html orphan's warning strip.
  */
 function seedOrphans(): OrphanLayer[] {
   const flagged = (globalThis as { CG_E2E_ORPHAN?: boolean }).CG_E2E_ORPHAN === true;
   return flagged
-    ? [{ channel: 1, layer: 60, producer: 'html', since: new Date().toISOString() }]
+    ? [
+        { channel: 1, layer: 60, producer: 'html', since: new Date().toISOString() },
+        { channel: 1, layer: 1, producer: 'ffmpeg', since: new Date().toISOString() },
+      ]
     : [];
 }
 
