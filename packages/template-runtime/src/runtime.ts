@@ -6,7 +6,6 @@ import {
   sequenceItemInstanceId,
   sequenceItemTextFieldIds,
   type ClockTarget,
-  type Element,
   type FrameRange,
   type ListItem,
   type NestedFieldValues,
@@ -94,6 +93,7 @@ import { TickerDriver, registerTickerDriver, type TickerSeparatorImage } from '.
 import type {
   ElementTimingOverrides,
   FieldScope,
+  LifespanGateEntry,
   PlayOptions,
   PlayoutOverride,
   RuntimeBootOptions,
@@ -302,6 +302,12 @@ function scopeHasEffectiveHoldDrivers(
  */
 interface WiredSubtree {
   node: ScopeNode;
+  /**
+   * B-089 — the scope this subtree wires. The wiring tree is the ONLY membership that
+   * includes stamped scopes (`scope.children` excludes them by design), so it is what the
+   * designer scrubber walks to gate every trimmed element — static or stamped.
+   */
+  scope: FieldScope;
   tickers: TickerDriver[];
   clocks: ClockDriver[];
   sequences: SequenceDriver[];
@@ -341,8 +347,8 @@ function applyAssetUrls(
  * B-088 + D-125 Phase 3a — compose the two independent reasons an intro/outro leg must be
  * SWEPT frame-by-frame instead of collapsing to a single end-frame paint:
  *
- *  - a `lifespan` GATE boundary crossing the leg (B-088, ROOT scope only — the gates are
- *    collected against the root `elementMap`);
+ *  - a `lifespan` GATE boundary crossing the leg (B-088; B-089 extended it from the root
+ *    scope to EVERY scope, once each scope gained its own gates);
  *  - a LOTTIE-derived entrance settle (D-125 Phase 3a, ANY scope): the leg that ends at the
  *    settle must consume its real duration so content starts when the furniture has settled,
  *    not at play. The later legs (static settle, outro) end AFTER the settle and still
@@ -422,20 +428,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     for (const [elId, m] of sequenceItemTextFieldIds(c)) seqItemTextFields.set(elId, m);
   }
 
-  // B-029 — per-element lifespan visibility, evaluated at a given frame. Late-bound: the
-  // gates are collected after the scene builds (below), but the ROOT controller's
-  // per-frame `applyFrame` (wired before that) calls this so lifespan is honored during
-  // PLAYBACK too (not only the designer scrubber's `tick`). Without it, a frame trimmed to
-  // `lifespan.in > 0` is hidden by an open-time scrub and never restored on play (dropped),
-  // and the export ignores lifespan entirely.
+  // B-029 — per-element lifespan visibility, evaluated at a given frame, for EVERY scope
+  // at once. Used by the designer scrubber's `tick`, which paints one shared frame across
+  // the whole tree (like `allAnimated`). Playback does NOT go through this: each scope's
+  // controller applies its OWN gates along its own timeline (B-089) — see
+  // `applyScopeLifespanGatesAtFrame`. Late-bound because the gates' natural display is
+  // snapshotted after the scene builds, while the controllers are wired before that.
   let applyLifespanGatesAtFrame: (frame: number) => void = () => undefined;
-  // B-088 — does a lifespan gate CHANGE VALUE inside the leg `[inF, outF]`? Late-bound
-  // alongside `applyLifespanGatesAtFrame` (same reason: the gates exist only after the
-  // scene builds, but the controller is wired before that). The ROOT controller consults
-  // this so a leg that crosses a trim boundary is SWEPT frame-by-frame instead of collapsed
-  // to a single end-frame paint — see `PlayoutController.playRange`. Defaults to `false`,
-  // i.e. never forces a sweep, so a scene with no trims keeps the collapse optimisation.
-  let lifespanGateChangesInRange: (inF: number, outF: number) => boolean = () => false;
 
   const ready: Promise<void> = options.skipFontLoad ? Promise.resolve() : waitForFonts(doc);
   void ready.then(() => bus.emit('ready'));
@@ -1062,6 +1061,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           g.node.style.display = started && inLifespan ? g.natural : 'none';
         }
       };
+      // B-089 — this scope's OWN trims, applied along ITS OWN timeline. The gate list is
+      // populated at BUILD time, but each entry's `naturalDisplay` is snapshotted only after
+      // the whole scene builds — hence the lazy read here, at call time.
+      const applyScopeLifespanGatesAtFrame = (frame: number): void => {
+        for (const gate of scope.lifespanGates) {
+          const inside = frame >= gate.lifespan.in && frame <= gate.lifespan.out;
+          gate.node.style.display = inside ? gate.naturalDisplay : 'none';
+        }
+      };
       const controller = new PlayoutController({
         frameRate: scene.frameRate,
         active: activeRange,
@@ -1069,10 +1077,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         holdEntryFrame: holdEntry,
         playout: effPlayout,
         hasAnimation: scope.animated.length > 0,
-        // B-088 — only the ROOT scope's controller consults the lifespan gates, mirroring
-        // the `isGlobalRoot` guard on `applyLifespanGatesAtFrame` below: the gates are
-        // collected against the root `elementMap`, so a nested scope has none to cross and
-        // must keep its existing collapse behaviour.
+        // B-088 + B-089 — a `lifespan` gate boundary crossing this leg means the leg cannot
+        // collapse to a single end-frame paint. B-088 wired this for the ROOT scope only,
+        // because gates were collected against the root `elementMap` and a nested scope had
+        // none to cross. B-089 gives every scope its own gates, so the reason applies to
+        // EVERY scope — verified empirically, not assumed: with per-scope gates but a
+        // root-only predicate, a nested element trimmed to [33,60] in a keyframe-less comp
+        // never appeared (the one collapsed paint at the out-point sits outside the trim),
+        // and one trimmed to [33,90] was visible from frame zero (that paint sits inside it)
+        // — B-088's two failure modes exactly, one scope down. Each scope asks only about
+        // its OWN trims, so a scope with no trims still collapses.
         //
         // D-125 Phase 3a — a LOTTIE-derived settle is the second reason a leg cannot
         // collapse, and it applies to EVERY scope (a nested comp has its own `lotties`), not
@@ -1085,22 +1099,24 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // Only the leg ENDING at (or before) the settle needs it: the static settle leg
         // `[settle → outPoint]` and the outro still collapse as before.
         //
-        // The lifespan predicate MUST stay wrapped in an arrow: `lifespanGateChangesInRange`
-        // is a `let` still holding its `() => false` stub here and is REASSIGNED below, after
-        // the gates are collected. Passing the binding directly captures the stub and silently
-        // disables B-088.
+        // A scope with NO trims passes `undefined`, so `buildNeedsFrameSweep` can still
+        // return `undefined` outright and the collapse path stays exactly as it was for
+        // every scene without trims (the static-case optimisation).
         needsFrameSweep: buildNeedsFrameSweep(
-          isGlobalRoot
-            ? (inF: number, outF: number): boolean => lifespanGateChangesInRange(inF, outF)
+          scope.lifespanGates.length > 0
+            ? (inF: number, outF: number): boolean =>
+                lifespanGateChangesInRange(scope.lifespanGates, inF, outF)
             : undefined,
           lottieSettles.length > 0 ? Math.min(Math.max(...lottieSettles), outPoint) : null,
         ),
         applyFrame: (frame: number): void => {
           for (const entry of scope.animated) applyAnimationAtFrame(entry, frame);
-          // B-029 — honor per-element lifespan during PLAYBACK, not only the scrubber, so a
-          // start-trimmed (lifespan.in > 0) element appears at its in-point + plays instead
-          // of staying hidden / being dropped. Root-scene gates ride the root playhead.
-          if (isGlobalRoot) applyLifespanGatesAtFrame(frame);
+          // B-029 + B-089 — honor per-element lifespan during PLAYBACK, not only the
+          // scrubber, so a start-trimmed (lifespan.in > 0) element appears at its in-point +
+          // plays instead of staying hidden / being dropped. Each scope gates its OWN
+          // elements at its OWN frame: a nested comp's trims are authored in that comp's
+          // frame space, and its controller is the one running that timeline.
+          applyScopeLifespanGatesAtFrame(frame);
           // D-104 follow-up — hide this scope's content hosts (clock / sequence / ticker)
           // until its content-start frame, so a clock/sequence no longer shows frozen content
           // during the intro. After the lifespan gate so it is the final word for content.
@@ -1263,6 +1279,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     const node = wireScope(subtreeScope, subtreePath, true, false);
     const sub: WiredSubtree = {
       node,
+      scope: subtreeScope,
       tickers,
       clocks,
       sequences,
@@ -1304,26 +1321,34 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // frame (the default behaviour the Designer ships with). We
   // remember the prior display value so the toggle restores the
   // element's own visibility instead of forcing `display: block`.
-  const lifespanGates = collectLifespanGates(scene, built.elementMap);
-  // B-029 — now the gates exist, bind the frame evaluator the scrubber (`tick`) AND the
-  // root controller's per-frame `applyFrame` (playback/export) both call.
-  applyLifespanGatesAtFrame = (frame: number): void => {
-    for (const gate of lifespanGates) {
+  // B-089 — every scope registered its own trimmed elements (with their built display) at
+  // build time; now that `applyScopedFieldValues` above has run, re-read the display for the
+  // scopes the namespace tree reaches, so a boot-time visibility binding still wins.
+  refreshLifespanGateDisplays(built.scopeTree);
+  // B-029 — the designer scrubber paints ONE shared frame across the whole tree, so its
+  // evaluator spans every scope's gates. Playback does not use this: each scope's controller
+  // applies its own gates at its own frame (see `applyScopeLifespanGatesAtFrame`).
+  //
+  // It iterates the LIVE wiring tree (`subtrees`) rather than a union captured at boot,
+  // because that is the only membership stamped scopes join — a repeater re-stamps fresh row
+  // scopes at each play and on `setItems`, long after any boot-time walk. Using a frozen union
+  // left scrub ungating exactly the rows that playback gates, so the canvas and the on-air
+  // render disagreed about a trimmed row element.
+  //
+  // Both dimensions are needed: `subtrees` supplies every STAMPED scope (each row / item is
+  // its own subtree), and the `scope.children` recursion supplies the nested composition
+  // instances INSIDE each of those, which are wired by `wireScope` and never become
+  // subtrees of their own. Together they cover exactly the scopes playback gates.
+  const applyGatesInScopeTree = (scope: FieldScope, frame: number): void => {
+    for (const gate of scope.lifespanGates) {
       const inside = frame >= gate.lifespan.in && frame <= gate.lifespan.out;
       gate.node.style.display = inside ? gate.naturalDisplay : 'none';
     }
+    for (const child of scope.children) applyGatesInScopeTree(child.scope, frame);
   };
-  // B-088 — a gate is a step function of the frame: it turns ON at `lifespan.in` and OFF
-  // again at `lifespan.out + 1`. A leg `[inF, outF]` only needs a real frame-by-frame sweep
-  // when one of those transitions lands INSIDE it — i.e. in `(inF, outF]`, since the
-  // collapsed path already paints `outF` correctly. A trim entirely outside the leg (or
-  // spanning it end to end) paints the same at every frame, so that leg still collapses.
-  lifespanGateChangesInRange = (inF: number, outF: number): boolean =>
-    lifespanGates.some((gate) => {
-      const turnsOnAt = gate.lifespan.in;
-      const turnsOffAt = gate.lifespan.out + 1;
-      return (turnsOnAt > inF && turnsOnAt <= outF) || (turnsOffAt > inF && turnsOffAt <= outF);
-    });
+  applyLifespanGatesAtFrame = (frame: number): void => {
+    for (const sub of subtrees) applyGatesInScopeTree(sub.scope, frame);
+  };
 
   // Apply an operation to every controller in the tree (parent first), so
   // play/stop/pause/remove cascade to every nested instance.
@@ -1762,28 +1787,43 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   return runtime;
 }
 
-interface LifespanGate {
-  node: HTMLElement;
-  lifespan: FrameRange;
-  /** display value the scene-builder set, restored when entering range. */
-  naturalDisplay: string;
+/**
+ * B-089 — REFRESH each reachable gate's `naturalDisplay` after the build and the initial
+ * `applyScopedFieldValues`. Every gate already carries the display its builder settled on
+ * (captured in `buildLayer`); this re-reads it for the scopes the D-025 NAMESPACE tree can
+ * reach, because a `visibility` binding writes `style.display` directly (`bindings.ts`) and
+ * the pre-B-089 gate restored that post-binding value.
+ *
+ * It deliberately does NOT define which gates exist: STAMPED scopes (repeater rows,
+ * sequence composition items) never join `scope.children`, so this walk cannot see them —
+ * which is exactly why the build-time capture is the source of truth and this is only a
+ * refresh. A walk-derived gate LIST would silently omit every stamped scope.
+ */
+function refreshLifespanGateDisplays(root: FieldScope): void {
+  for (const gate of root.lifespanGates) gate.naturalDisplay = gate.node.style.display;
+  for (const child of root.children) refreshLifespanGateDisplays(child.scope);
 }
 
-function collectLifespanGates(scene: Scene, elementMap: Map<string, HTMLElement>): LifespanGate[] {
-  const out: LifespanGate[] = [];
-  function walk(children: readonly Element[]): void {
-    for (const el of children) {
-      if (el.lifespan !== undefined) {
-        const node = elementMap.get(el.id);
-        if (node !== undefined) {
-          out.push({ node, lifespan: el.lifespan, naturalDisplay: node.style.display });
-        }
-      }
-      if (el.type === 'container') walk(el.children);
-    }
-  }
-  for (const layer of scene.layers) walk(layer.children);
-  return out;
+/**
+ * B-088 — a gate is a step function of the frame: it turns ON at `lifespan.in` and OFF
+ * again at `lifespan.out + 1`. A leg `[inF, outF]` only needs a real frame-by-frame sweep
+ * when one of those transitions lands INSIDE it — i.e. in `(inF, outF]`, since the
+ * collapsed path already paints `outF` correctly. A trim entirely outside the leg (or
+ * spanning it end to end) paints the same at every frame, so that leg still collapses.
+ *
+ * B-089 — takes the gate list as a parameter so each scope asks about ITS OWN trims,
+ * against its own timeline's leg bounds.
+ */
+function lifespanGateChangesInRange(
+  gates: readonly LifespanGateEntry[],
+  inF: number,
+  outF: number,
+): boolean {
+  return gates.some((gate) => {
+    const turnsOnAt = gate.lifespan.in;
+    const turnsOffAt = gate.lifespan.out + 1;
+    return (turnsOnAt > inF && turnsOnAt <= outF) || (turnsOffAt > inF && turnsOffAt <= outF);
+  });
 }
 
 function waitForFonts(doc: Document): Promise<void> {
