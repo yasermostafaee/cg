@@ -46,6 +46,6 @@
 
 ## 6. Gate
 
-- [ ] 6.1 `pnpm openspec validate runtime-protect-video-layers --strict`.
-- [ ] 6.2 `pnpm gate` green (uncached).
-- [ ] 6.3 `pnpm gate:e2e` with no bridge/mock/dev server competing for CPU.
+- [x] 6.1 `pnpm openspec validate runtime-protect-video-layers --strict`.
+- [x] 6.2 `pnpm gate` green (uncached).
+- [x] 6.3 `pnpm gate:e2e` with no bridge/mock/dev server competing for CPU.
