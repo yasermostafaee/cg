@@ -612,7 +612,7 @@ only operator-facing ones? (b) the normalisation boundary — AMCP presumably st
 digits on the wire, so this is a presentation-layer concern with a conversion edge that has to be
 placed precisely; (c) is the numeral locale a setting, or fixed to Persian?
 
-## [~] R-015 — protect VIDEO layers: a graphics operator can never clear one, and a video layer reads as NORMAL ⟨priority: high⟩ — in progress on `feat/R-015-protect-video-layers`, change dir `openspec/changes/runtime-protect-video-layers/`
+## [x] R-015 — protect VIDEO layers: a graphics operator can never clear one, and a video layer reads as NORMAL ⟨priority: high⟩ — merged (#365) + archived: `openspec/changes/archive/2026-07-19-runtime-protect-video-layers/`
 
 **What (the owner's settled rule):** a graphics operator must never be able to clear a VIDEO
 layer. Sharper than the originally-filed "not-ours", and it dissolves the [[R-009]] tension
