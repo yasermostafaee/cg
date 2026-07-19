@@ -1,0 +1,38 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/gate-stop.mjs\"",
+            "timeout": 1800
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(pnpm gate)",
+      "Bash(pnpm gate:e2e)",
+      "Bash(pnpm format:check)",
+      "Bash(pnpm format)",
+      "Bash(pnpm openspec validate *)",
+      "Bash(pnpm test)",
+      "Bash(pnpm test *)",
+      "Bash(pnpm test:e2e)",
+      "Bash(pnpm typecheck)",
+      "Bash(pnpm typecheck *)",
+      "Bash(pnpm lint)",
+      "Bash(pnpm lint *)",
+      "Bash(pnpm build)",
+      "Bash(pnpm build *)",
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff)",
+      "Bash(git diff *)"
+    ]
+  }
+}

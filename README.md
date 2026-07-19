@@ -94,6 +94,27 @@ pnpm gate:e2e   # SLOW: the Playwright E2E suite (~6 min) — run manually, see 
   green before), so the gate genuinely re-runs every task rather than replaying a
   cached log.
 
+### The gate is self-enforcing for Claude Code sessions (P-009)
+
+A committed **Stop hook** (`.claude/settings.json` → `.claude/hooks/gate-stop.mjs`)
+runs when a Claude Code turn ends and refuses to let it end red:
+
+- it classifies the turn's changed files (working tree ∪ branch commits vs the
+  `origin/main` merge-base): **docs-only** → openspec validate strict + format:check
+  (the CLAUDE.md carve-out); **any code** → `pnpm gate`; **UI/render paths**
+  (renderer sources, template-runtime, lottie-bridge, ui, single-file-export,
+  `*.css.ts`, the E2E suites/configs) → `pnpm gate:e2e` too;
+- a red gate **blocks the turn** and feeds the failing tail back to the session with
+  repair rules that forbid deleting/skipping/loosening tests — at most **twice per
+  session**, then it stands down and asks for human eyes (full logs in
+  `.gate-logs/`, gitignored);
+- a green `gate:e2e` on Windows is explicitly labelled **non-authoritative** (a
+  Linux/WSL run is still owed — see above).
+
+Escape hatch (yours, not the model's): `{"disableAllHooks": true}` in
+`.claude/settings.local.json`. The pure decision logic + its unit tests live in
+[`tools/gate-hook/`](./tools/gate-hook).
+
 ## Documentation
 
 - Contributing / backlog — [`CLAUDE.md`](./CLAUDE.md), [`docs/prd/`](./docs/prd) (write features/bugs here; Claude turns each into an OpenSpec change)
