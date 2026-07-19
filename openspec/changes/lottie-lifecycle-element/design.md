@@ -7,6 +7,10 @@
 
 ## Recon summary — what exists vs. what must be added
 
+> **HISTORICAL (pre-archive note).** This table is the pre-implementation snapshot that scoped the
+> change; every "This change" cell has since SHIPPED (#335–#358 — see tasks.md's reconciled STATUS
+> for the PR map). Kept as the original recon record, not as a description of current state.
+
 | Piece                                      | State today                                                                                                                      | This change                                                          |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `LottieElementSchema` (`elements.ts:770`)  | `assetId`/`speed`/`loopMode`/`segment?`/`fieldOverrides?`                                                                        | **add** `phases`, `holdBehavior`, `drivesHold`                       |
@@ -55,7 +59,7 @@ size it around a keyframed background entrance.
 > it requires rescaling the animation's frames (violates opacity) and couples the furniture's natural
 > motion to an unrelated marker. The recommended model keeps them independent and phase-aligned.
 
-### D1.2 Phase 3a — the settle is DERIVED FROM the Lottie (the reverse of the rejected option)
+### D1.1b Phase 3a — the settle is DERIVED FROM the Lottie (the reverse of the rejected option)
 
 §D1.1 left one asymmetry open, and it is the one that actually bit in practice. When a designer
 keyframes a background themselves, `entranceSettleFrame()` derives the settle from those tracks and a
@@ -218,7 +222,15 @@ hardware** (§D7). Recorded as a pre-archive gate.
 
 ---
 
-## D5. Bundle strategy — MEASURED both ways (OWNER DECISION)
+## D5. Bundle strategy — DECIDED and shipped as (c) + the minify lever
+
+> **SHIPPED (#335, verified on current main).** `bundle-runtime.mjs` emits the player as a SEPARATE,
+> MINIFIED `cgJsLottie`/`cgJsLottieIife` pair — **168.1 KB each, measured on current main** — included
+> in an export ONLY when the scene contains a Lottie. The BASE runtime (`cgJs`/`cgJsIife`) resolves
+> the bridge's `lottie_light` import to a tiny stub that delegates to the player bundle's global, so
+> Lottie-less exports pay nothing. `cef-compat.test.ts` scans the player consts against the same
+> banned-builtins list. The measurements below are the decision-time record (unminified 425.7 KB /
+> minified 168.3 KB) that produced this choice.
 
 `bundle-runtime.mjs` runs `minify: false` (`bundle-runtime.mjs:51`), so the export ships the
 **unminified** player. Measured on this repo (lottie-web **5.13.0**, esbuild iife / `target:chrome71`,
@@ -285,6 +297,11 @@ outro fires on the explicit `out()` / `stop()` command (the Lottie does not driv
 default, so it can't rely on the content-driven completion path).
 
 ### D6.2 The seam
+
+> **Scope note (post-#357):** as WRITTEN below, Phase 2 wired the seam into the operator exits
+> (`out()`/`stop()`) only. Since Phase 3b-2 (§D6.2b) EVERY exit path routes through it — auto-out
+> expiry, content-driven completion, zero-length holds, loop-cycle boundaries — via the one-shot
+> outro ledger; the pseudocode below is the Phase-2 form, kept as the design record.
 
 Add an **element-outro registry** in `createRuntime`: the set of content roots that own an outro (in
 v1, the `LottieDriver`s across every subtree). Each exposes `playOutro(): Promise<void>` — drives
