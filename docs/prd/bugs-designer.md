@@ -997,7 +997,7 @@ guards. Capability: `designer-playout-lifecycle`.
 
 **On-air impact:** this changes playout TIMING — a composition that previously snapped through its intro instantly now sweeps it in real time whenever a trim boundary is crossed (which is the point: the trim needs elapsed time to be honoured). Warrants a real-CasparCG check before it is considered done.
 
-## [~] B-089 — nested-instance element lifespans are never gated at all ⟨priority: medium⟩
+## [~] B-089 — nested-instance element lifespans are never gated at all ⟨priority: medium⟩ — code merged (#369, `7f9868f`) but DELIBERATELY still `[~]`: this fix changes playout TIMING, and neither verification gate it requires has been confirmed. See **Gates still OWED** below. Do not flip to `[x]` until both are discharged
 
 **Repro:**
 
@@ -1010,7 +1010,28 @@ guards. Capability: `designer-playout-lifecycle`.
 **Env:** Browser / Designer preview; also the exported outputs.
 **Notes:** `collectLifespanGates` (`packages/template-runtime/src/runtime.ts:1579`) walks only `scene.layers` and resolves ids against the ROOT `built.elementMap`; every composition instance owns its own `elementMap`, so nested elements are unreachable and never enter the gate list. The per-frame application is likewise root-only (`if (isGlobalRoot) applyLifespanGatesAtFrame(frame)`, `runtime.ts:969`). Its `el.type === 'container'` recursion branch is **effectively dead** as well: `container` is built by `buildPlaceholder`, which builds no children, so container children never enter any `elementMap` either. Distinct from B-088 (which is about how OFTEN the gate runs); this is about WHICH elements it covers. Do not fold the two — B-088's fix deliberately leaves nested scopes' collapse behaviour untouched.
 
-**In progress** — branch `fix/b089-nested-lifespan-gates`.
+**Gates still OWED — this is why the item is `[~]` and not `[x]` (as of 2026-07-19).** The code is
+merged; the VERIFICATION is not done. Both of the following must be discharged, and each must be
+independently confirmed rather than taken from a prompt or a hand-off note:
+
+1. **Linux `pnpm gate:e2e` — NOT RUN.** WSL is not installed on the development host, so the Linux
+   E2E signal has never been produced for this change. A Windows Playwright run does not substitute:
+   per P-009's spec (`docs/prd/platform.md`), a `win32` `gate:e2e` pass is explicitly
+   NON-AUTHORITATIVE and leaves a Linux/WSL run owed. GitHub Actions is billing-exhausted until
+   ~2026-08-01, so CI cannot supply it either — the Linux run must be done locally.
+2. **Real-CasparCG hardware check (PREVIEW + SINGLE-FILE EXPORT) — UNCONFIRMED.** Required because
+   the change alters on-air timing (see On-air impact below): a nested composition containing a
+   trimmed element now sweeps its intro leg in real time where it previously snapped through it.
+   A green unit/E2E suite cannot settle that — the elapsed-time behaviour has to be observed on air.
+   Both output paths are needed, because export renders through the same per-scope controllers but
+   WITHOUT the preview's driver, so one can hold while the other fails.
+
+**Provenance note (why this block is worded so defensively).** An earlier close-out attempt flipped
+this item to `[x]` carrying the text "`gate:e2e` green on WSL" and "the real-CasparCG check is
+DISCHARGED". Both came from a session hand-off assertion, neither was independently verified, and the
+first was demonstrably false — WSL is not installed on this host. The commit was reset before it
+reached `main`. **Standing rule adopted from that miss: a gate asserted in a prompt, hand-off, or
+CONTEXT block is NOT evidence. Verify it independently or leave the debt recorded here.**
 
 **Not the same root as B-090** (which is about `container` children). `flattenElements` recurses ONLY into
 `container`, never `composition`, so a nested comp's elements have no timeline row at all — their WRITE
@@ -1062,7 +1083,7 @@ sweeps its intro leg in real time where it previously snapped through it — sam
 the same reason (the trim needs elapsed time to be honoured). Root-scope timing is unchanged. Warrants a
 real-CasparCG check before it is considered done.
 
-## [~] B-090 — trimming a NESTED element silently does nothing ⟨priority: medium⟩
+## [x] B-090 — trimming a NESTED element silently does nothing ⟨priority: medium⟩ — merged (#370, `9d0ef16`): resolved by REMOVING the affordance, not by making it write — `flattenElements` (`TimelineDock.tsx`) and `flattenLayerChildren` (`state/slices/elements.ts`) now list each layer's DIRECT children only, so a container child gets no timeline row and therefore no trim gripper. The write-path branch was rejected on the evidence (a container child provably never gets a DOM node, so a persisted trim would be observable by nothing). Focused fix, no change dir
 
 **Repro:**
 
@@ -1075,8 +1096,6 @@ below for why the write-path branch was rejected on the evidence.
 **Actual (before the fix):** nothing happens — no trim, no error, no visual feedback. The gripper is rendered and drags, then the value is discarded.
 **Env:** Browser / Designer timeline.
 **Notes:** The timeline renders rows for everything `flattenElements` returns, and it DOES recurse into containers — but `updateElementLifespan` resolves the target through `locate()` (`apps/designer/src/renderer/state/scene-doc.ts:182`), which searches only top-level `layer.children` via `findIndex` with no recursion, returns `null`, and the mutation early-returns (`slices/elements.ts`). So the UI offers an affordance the state layer cannot honour. Note this is a WRITE-path gap and is independent of B-089 (a READ/gating gap) — an element inside a container would still not be gated even if the trim did persist.
-
-**In progress** — branch `fix/b090-container-child-rows`.
 
 **Not the same root as B-089.** B-090 is about `container` children; B-089 is about `composition`
 INSTANCE children. `flattenElements` recurses ONLY into `container`, never `composition`, so a nested
@@ -1124,6 +1143,20 @@ grippers but its child gets neither; a trim aimed at a container child writes no
 real top-level trim path still persists and undoes.
 
 **On-air impact:** none — designer-authoring state only, no runtime or export behaviour changes.
+
+**Verification — and why this one closes while [[B-089]] does not.** Merged #370; local `pnpm gate`
+green. That is the whole of the evidence, deliberately: this is a Designer authoring-surface fix that
+REMOVES a timeline row. It has no export path and no on-air surface, so unlike B-089 it owes **no
+real-CasparCG hardware check** — there is no playout behaviour for hardware to disagree with. Its
+load-bearing evidence is the regression test above plus the merged fix.
+
+**Linux `gate:e2e` — owed but NOT blocking.** It touches the timeline UI, so a Linux E2E run is owed
+on the same terms as every other UI merge in this window (#330, #334, #336, #337): WSL is not
+installed on this host and GitHub Actions is billing-exhausted until ~2026-08-01. It is recorded here
+rather than holding the item open, because the fix's correctness does not turn on pixel geometry —
+the assertion is that a row is ABSENT. Note there is no consolidated Linux-E2E backlog file in the
+repo; P-009's spec (`docs/prd/platform.md`) establishes the owed-run rule, and each entry carries its
+own debt, which is why it is written out here.
 
 ## [ ] B-099 — UNVERIFIED: `wireScope`'s content-start gate resolves a nested scope's hosts through the ROOT `elementMap`, so the D-104 visibility gate is likely inert for nested compositions ⟨priority: medium⟩
 
