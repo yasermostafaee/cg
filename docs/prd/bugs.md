@@ -483,6 +483,37 @@ places (`docs/prd/*.md` vs `openspec/changes/`).
 **Regression test:** the guard is its own regression test (the B-075 precedent) — a `[~]` item
 whose cited fix is merged turns it red; flipping that item to `[x]` turns it green.
 
+## [~] B-095 — `pnpm gate:e2e` starves itself: both Playwright suites run concurrently and flake specs that pass alone ⟨priority: medium⟩ — branch `chore/gate-e2e-serialize` (files + fixes in one PR)
+
+**Repro:** `pnpm gate:e2e` on the local machine (the ONLY authoritative E2E signal while CI is
+billing-blocked, until ~Aug 1). The script runs `turbo run test:e2e` with no concurrency bound, so
+the RUNTIME and DESIGNER suites execute at the same time — each with Playwright's local default of
+half the logical cores (`workers: process.env.CI ? 1 : undefined` in both configs ⇒ 6 workers each
+here) — 12 Chromium instances contending for one machine.
+
+**Expected:** the gate is deterministic — a spec that passes in isolation passes under the gate.
+**Actual:** three specs flake ONLY under the combined load, timing out at 30 s+ while passing in
+isolation in ~2–7 s: `pasteboard-extent` (region tones), `repeater` (growth), and
+`preview-blank-until-play`.
+**Env:** local Windows dev machine, 12 logical cores; either suite alone is stable at 6 workers.
+
+**Family:** sibling of [B-078](bugs.md) — same resource-contention family, but the OTHER lever:
+B-078 is port/process collision and its 18-leg soak DISPROVED an intra-suite concurrency bound;
+this is INTER-suite contention (two suites × 6 workers), which that soak never exercised (it ran
+one suite). Not a duplicate: B-078 reproduces on CI with one suite; this reproduces only under the
+local gate running both.
+
+**Fix (this PR):** serialize at the GATE level — `--concurrency=1` on the `gate:e2e` turbo run, so
+each suite runs alone at its full 6 workers. Per-spec timeout tuning was explicitly rejected: it
+papers over contention and desensitizes the specs. Wall-clock trade measured in the PR (before:
+both suites interleaved; after: sequential).
+
+**Watch item:** `preview-blank-until-play`'s failure mode (the locator resolves, `cg-pending`
+never clears) is consistent with the PLAY message being posted before the preview iframe's runtime
+is ready, with no retry — load would merely expose that ordering, not cause it. If this spec
+recurs after the concurrency fix, treat it as a REAL race to chase (the preview host's
+play-vs-ready handshake), not a flake.
+
 ## [ ] B-078 — flaky: a DESIGNER Playwright E2E assertion fails intermittently on CI, in shifting tests (the B-073 family's remaining half) ⟨priority: medium⟩ — TWO levers now tried and rejected: a budget bump (REVERTED, #317) and a concurrency bound (DISPROVEN by an 18-leg soak, 2026-07-14). Read "THE CONFOUND" below BEFORE attempting a third — the bug's evidence base is corrupted by turbo cache replay.
 
 **Repro:** (intermittent — 1 red in 12 observed full runs; not reproducible on demand)
