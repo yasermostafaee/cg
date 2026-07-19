@@ -39,16 +39,23 @@ interface Bridge {
   };
 }
 
+// B-094 — a genuinely healthy server reports WHEN it was last heard on OSC. Without
+// `oscFreshAt` these fixtures describe a server that answers AMCP but is inaudible, which
+// now (correctly) mutes the pill and raises NO OSC — so the fixture must say what a healthy
+// server actually says, or B-081's "green while connected" assertions are testing the wrong
+// server.
+const HEARD_AT = '2026-07-19T10:00:00.000Z';
+
 const HEALTHY: ConnectionHealth = {
-  primary: { label: 'A', state: 'healthy', amcpAxisOk: true },
-  backup: { label: 'B', state: 'healthy', amcpAxisOk: true },
+  primary: { label: 'A', state: 'healthy', amcpAxisOk: true, oscFreshAt: HEARD_AT },
+  backup: { label: 'B', state: 'healthy', amcpAxisOk: true, oscFreshAt: HEARD_AT },
   currentPrimary: 'A',
   strategy: 'mirror-sync',
 };
 
 const PRIMARY_DEGRADED: ConnectionHealth = {
   ...HEALTHY,
-  primary: { label: 'A', state: 'degraded', amcpAxisOk: false },
+  primary: { label: 'A', state: 'degraded', amcpAxisOk: false, oscFreshAt: HEARD_AT },
 };
 
 /** The refusal a disconnected `WebSocketRuntime` answers every read with (R-006). */

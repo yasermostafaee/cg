@@ -176,6 +176,16 @@ export class CasparRuntime {
    */
   readonly #ownedOccupancy = new Map<string, OwnedOccupancyWarning>();
   /**
+   * B-094 — the last PUBLISHED answer to "have we ever heard OSC from the current
+   * primary?", so the sweep can re-publish health when it flips.
+   *
+   * Health is otherwise emitted only on adapter health / failover / setConfig
+   * events, and OSC starting or stopping is none of those — so without this the
+   * NO OSC indicator would appear or clear only when something unrelated happened
+   * to change. `null` = nothing published yet.
+   */
+  #lastPublishedOscHeard: boolean | null = null;
+  /**
    * R-011 — itemId → the operator's on-air position override. Appended as a
    * query onto the RESOLVED served URL in #sendAdd (never a bare id — the
    * B-064 serve contract is untouched). Process-memory like #slots; survives
@@ -1098,6 +1108,15 @@ export class CasparRuntime {
     const session = this.#adapter.primarySession;
     if (session.state !== 'healthy') return;
 
+    // B-094 — re-publish health when the OSC-heard bit flips, so the operator's
+    // NO OSC indicator appears and clears on its own. Cheap: this tick already
+    // runs, and it publishes only on a CHANGE, never per tick.
+    const heard = session.osc.occupancy.lastOscTrafficAt !== null;
+    if (this.#lastPublishedOscHeard !== heard) {
+      this.#lastPublishedOscHeard = heard;
+      this.healthChanged.emit(this.health());
+    }
+
     // A restore that refused to decide (blind tap) left its items pending. If
     // OSC has started arriving since, decide them now — otherwise a tap that
     // came up a moment after the healthy transition would strand those rows as
@@ -1429,7 +1448,22 @@ export class CasparRuntime {
     const other: ServerLabel = cur === 'A' ? 'B' : 'A';
     const snapshot = (label: ServerLabel, session: ServerSession): ConnectionHealth['primary'] => {
       const state = session.state;
-      return { label, state, amcpAxisOk: state === 'healthy' };
+      // B-094 — publish WHEN we last heard OSC from this server, so the operator
+      // surface can tell "answering AMCP but silent on OSC" apart from "down".
+      // The two look identical on the AMCP axis (`amcpAxisOk`) yet call for
+      // opposite remedies: one is a CasparCG config fix, the other is a dead
+      // server. Absent means never heard from in this session.
+      //
+      // The SAME signal B-093's restore guard reads — source-filtered to this
+      // declared server, so another box's OSC cannot make this look healthy.
+      // Deliberately not a second, divergent source of truth.
+      const heardAt = session.osc.occupancy.lastOscTrafficAt;
+      return {
+        label,
+        state,
+        amcpAxisOk: state === 'healthy',
+        ...(heardAt !== null ? { oscFreshAt: new Date(heardAt).toISOString() } : {}),
+      };
     };
     const primarySession = this.#sessions[cur];
     const backupSession = this.#sessions[other];
