@@ -142,15 +142,28 @@
       window.update = function (s) {
         render(s, 'update-command');
       };
-      window.play = function () {};
-      window.stop = function () {};
+      // LIFECYCLE PROBE — every verb beacons so the harness can tell whether the
+      // HTML producer actually reaches template JS. These were bare no-ops, which is
+      // why no earlier run could answer "did CG STOP / CG NEXT invoke anything?".
+      // ES5 only: this page runs in CasparCG 2.3's CEF (~Chromium 71).
+      function lifecycle(name) {
+        return function () {
+          beacon({ type: 'lifecycle', verb: name, at: Date.now() });
+        };
+      }
+      window.play = lifecycle('play');
+      window.stop = lifecycle('stop');
+      window.next = lifecycle('next');
+      window.out = lifecycle('out');
       window.remove = function () {
+        beacon({ type: 'lifecycle', verb: 'remove', at: Date.now() });
         document.body.innerHTML = '';
       };
       window.cg = {
         update: window.update,
         play: window.play,
         stop: window.stop,
+        next: window.next,
         remove: window.remove,
       };
 
