@@ -152,6 +152,62 @@ pointer still reading `B-080`, and `fix/B-068-migrated-comp-lifecycle-playout` i
 pointer read from either would have collided immediately, which is the standing argument for
 auditing against fetched `main` and never a branch-local copy of this file.
 
+**A THIRD drift mode, recorded 2026-07-19 — and the only one so far that REACHED `main`.** The two
+modes above are both about READING: "two branches, two snapshots", and "a sibling claims a RANGE,
+not one number". This one is about WRITING. #371's entry audited correctly, claimed `B-097`
+correctly, and set the pointer to `B-098` correctly — and was **already false when it merged**,
+because the parallel Designer session claimed `B-098` AND `B-099` in the window between that entry
+being written and #371 landing. Nothing was mis-audited; the number space was simply overtaken
+mid-flight. So the lesson this file already states for readers has a mirror for writers: **reading
+the pointer is not claiming it, and writing the pointer is not reserving it.** A "next free" value
+is a snapshot with a shelf life, never an allocation.
+
+What makes this one worth a paragraph is that the earlier two were always caught IN FLIGHT and
+renumbered before merge, which is why `main` itself stayed clean. This one did not collide with a
+heading — no duplicate was ever created, and the audit stayed green throughout — so nothing failed
+and it merged with a stale pointer intact. For roughly one PR's width, `main` told the next
+session to take a number that was already gone. **The audit protects the HEADINGS; nothing
+protects the POINTER.** That is the standing reason the pointer is advice and the heading sweep is
+truth: when they disagree, re-derive from the headings and fix the pointer, exactly as the entry
+above did.
+
+It self-corrected without intervention: #373 re-audited against fetched `main` rather than trusting
+the checkout, found `B-097` already merged, took `B-098`/`B-099`, and reset the pointer to `B-100`.
+Re-verified from scratch here rather than assumed — current `origin/main` (`4cf8705`), every remote
+ref, all 77 local branches across the three worktrees including unpushed, and both sibling working
+trees on disk — the highest heading anywhere is `B-099`, nothing claims `B-100` or beyond, and the
+duplicate audit still prints exactly `B-056` and `B-080`. **The pointer is correct as it stands;
+this entry deliberately changes no number.**
+
+### RECOMMENDATION (recorded, not implemented): retire the "next free" pointer
+
+All three recorded drift modes are one disease, and the pointer is it. Look at what it actually
+is: a **cache** of a value the audit command at the top of this file computes exactly, in one
+command, on demand. A cache is worth its keep when recomputing is expensive or the source is
+unavailable. Here recomputing is one `grep` over three files, and the source — the headings — is
+always present in any checkout. So the pointer buys nothing, and its staleness window is the
+entire lifetime of every open PR.
+
+Weigh what it has actually done. It has misled **three times**: twice as a stale value someone
+READ (B-088→B-089 against the range claim, then B-097 read from a checkout), and once as a stale
+value someone WROTE that reached `main` (above). Set against that, it has saved nobody a `grep`.
+It is also, structurally, this file's **only contended line** — the single line every filing
+session must edit — which is precisely why concurrent sessions keep colliding here and nowhere
+else in the document. Every other line is append-only and has never conflicted.
+
+The recommendation, in this file's usual voice: **retire the pointer.** Let the audit command be
+the sole source of truth for "what is next", and let this file become what it has been drifting
+toward anyway — an append-only incident log explaining WHY the number space is the shape it is,
+with the accepted duplicates and the precedence rule. "Next free" then has exactly one answer,
+computed at the moment it is asked, by the thing that is already the authority when the two
+disagree. As a bonus the contended line disappears, and with it the merge conflicts that
+currently make two docs PRs touching this file a scheduling problem.
+
+Not done here, deliberately: removing it touches every historical entry's closing sentence, which
+is a rewrite of the file rather than an entry appended to it — and doing that inside a PR whose
+subject is an incident report would bury the report. Recorded as the standing recommendation with
+the three drift modes above as its evidence.
+
 **This entry collided TWICE before landing, and the second time proves the rule above is not
 enough.** It first took `B-088` (the then-current "next free" pointer) while a parallel Designer
 workstream took the same number; it renumbered to `B-089` — and `B-089` turned out to be claimed by

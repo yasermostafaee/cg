@@ -33,6 +33,14 @@
 
 ## 3. Tests
 
+> **Why boxes are still unchecked in an ARCHIVED change (3.2, 3.3, 5.1–5.3).** These are the
+> MANUAL legs — hand-run hook invocations, a suite run under two conditions, and the
+> gate/validate/PR trio. This change merged as #363 and its hook is demonstrably live (it has
+> blocked turns and printed its repair rules since), so the change was archived on that evidence.
+> But the archiver was a later session with no record of those manual runs, and ticking a box it
+> could not stand behind would have destroyed exactly what ticking is for. They are left open
+> deliberately: an honest gap, not an unfinished job. Re-run them if the record matters.
+
 - [x] 3.1 `tools/gate-hook/tests/gate-decision.test.ts` — porcelain/rename parsing,
       normalization, docs-only membership, UI/render membership (positive + negative),
       classification → command lists, dedup, attempt counting.
