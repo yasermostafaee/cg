@@ -302,7 +302,9 @@ there is NO CHANNEL today for that knowledge to reach the bridge from inside CEF
 is the substance of this item. — Distinct from [[C-008]]: C-008 is an OPERATOR-initiated soft-out
 policy on the override seam; this is the item ending ITSELF when its content completes.
 
-## [x] C-014 — occupancy-aware layer allocation: an ordinary Add must not adopt-CLEAR a foreign producer sitting inside a template-type range ⟨priority: high⟩ — merged (#368) + archived: `openspec/changes/archive/2026-07-19-occupancy-aware-allocation/`
+## [x] C-014 — occupancy-aware layer allocation: an ordinary Add must not adopt-CLEAR a foreign producer sitting inside a template-type range ⟨priority: high⟩ — merged (#368) + archived: `openspec/changes/archive/2026-07-19-occupancy-aware-allocation/` ⟨on-air validation owed⟩
+
+Code shipped, owner validation has NOT happened — see the **OWNER ON-AIR VALIDATION IS STILL OWED** block directly below, and unchecked task 7.1 in `openspec/changes/archive/2026-07-19-occupancy-aware-allocation/tasks.md`.
 
 **OWNER ON-AIR VALIDATION IS STILL OWED — this `[x]` covers the merge and the local gate, NOT a
 hardware pass.** Unlike [[B-040]] (operator-validated on CasparCG 2.5.0 `69e8ad5`, 2026-07-07,

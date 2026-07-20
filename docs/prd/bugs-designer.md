@@ -972,7 +972,7 @@ guards. Capability: `designer-playout-lifecycle`.
 **Notes:** Introduced by #320 (D-102 Phase 2 — per-element preview timing). UI display/input-conversion ONLY: the session override, the drivers and the schema keep milliseconds; only the two controls convert (ms ÷ 1000 to display, × 1000 on commit). Each preview row mirrors its inspector counterpart's rounding exactly — the countdown duration is INTEGER seconds (`step 1`), the sequence dwell allows FRACTIONAL seconds (`step 0.5`, `min 0.1`), as `StyleSection` does. The preview's per-scope HOLD control is deliberately NOT changed: the inspector's Playout section shows hold in milliseconds too, so it is already consistent — converting it would create the very mismatch this bug is about. No schema / session-shape / runtime / export / on-air change ⇒ no CasparCG hardware validation needed.
 **Regression test:** unit `preview-timing-rows.test.ts` (a 60000 ms countdown DISPLAYS `60`; a 5000 ms dwell DISPLAYS `5`; typing `6` writes `durationMs: 6000`; typing `0.8` writes `dwellMs: 800`); E2E `preview-timing-phase2.spec.ts` (drive the seconds inputs, assert the runtime's EFFECTIVE ms stamps `data-cg-countdown-ms` / `data-cg-sequence-dwell` are unchanged in ms).
 
-## [~] B-088 — a start-trimmed element ignores its in-point during play: the whole intro is ONE painted frame ⟨priority: high⟩ — branch: `fix/b088-collapsed-intro-lifespan`; focused fix, no change dir
+## [~] B-088 — a start-trimmed element ignores its in-point during play: the whole intro is ONE painted frame ⟨priority: high⟩ — code merged (#342, `62bbb44`) but DELIBERATELY still `[~]`: this fix changes playout TIMING and reaches the exported outputs, and NEITHER of its two verification gates has been discharged. See **Gates still OWED** below. Focused fix, no change dir
 
 **Repro:**
 
@@ -996,6 +996,33 @@ guards. Capability: `designer-playout-lifecycle`.
 **Regression test:** `packages/template-runtime/tests/lifespan-frame-sweep.test.ts` — `[33,60]` and `[33,90]` with no keyframes (hidden at 0/10, visible at 40); a keyframed control (no regression); the collapse preserved for a no-lifespan and a leg-spanning lifespan, asserted by **rAF count** (no `FrameDriver` scheduled at all), not just visibility; and a boundary inside the OUTRO leg.
 
 **On-air impact:** this changes playout TIMING — a composition that previously snapped through its intro instantly now sweeps it in real time whenever a trim boundary is crossed (which is the point: the trim needs elapsed time to be honoured). Warrants a real-CasparCG check before it is considered done.
+
+**Gates still OWED — this is why the item is `[~]` and not `[x]` (as of 2026-07-20).** The code is
+merged (#342, `62bbb44`); the VERIFICATION is not done. BOTH gates below are outstanding. Neither
+has been attempted, and neither may be inferred from the merge — a merged branch is not a discharged
+gate:
+
+1. **Real-CasparCG hardware check (PREVIEW + EXPORTED OUTPUT) — OWED, never performed.** Required by
+   this entry's own **On-air impact** line above: the fix changes playout TIMING, so an intro leg
+   that previously snapped through in one paint now consumes real elapsed time whenever a trim
+   boundary falls inside it. A green unit suite cannot settle that — the elapsed-time behaviour has
+   to be observed on air. BOTH output paths are in scope because the **Env** line above records that
+   this reproduces "in the exported outputs" as well as in preview, and the export path renders
+   through the same `PlayoutController` without the preview's driver, so one can hold while the
+   other fails.
+2. **Linux `pnpm gate:e2e` — OWED, and demonstrably NOT RUN.** The fix is in
+   `packages/template-runtime` (a render-path change), which is exactly the class P-009's spec
+   (`docs/prd/platform.md`) says owes an E2E run, and a `win32` pass is explicitly
+   NON-AUTHORITATIVE there. CI did not supply it either: #342's own **E2E (Playwright)** check is
+   recorded `SKIPPED`, because GitHub Actions is billing-exhausted until ~2026-08-01. WSL is not
+   installed on this host, so no Linux run has been produced locally. This is a positive finding
+   from the check record, not an assumption.
+
+**Same debt as [[B-089]], and for the same reason** — both change playout timing in the
+template-runtime render path. B-089's hardware gate has since been discharged by owner report
+(2026-07-20); **that report covered B-089 and says nothing about this item.** Do not carry it across:
+the two fixes touch different legs (B-088 is about how OFTEN the gate runs, B-089 about WHICH
+elements it covers) and were merged from different branches. B-088 needs its own observation.
 
 ## [~] B-089 — nested-instance element lifespans are never gated at all ⟨priority: medium⟩ — code merged (#369, `7f9868f`) but DELIBERATELY still `[~]`: this fix changes playout TIMING, and ONE of its two verification gates is still outstanding. The real-CasparCG hardware check is DISCHARGED (owner report, 2026-07-20); the Linux `pnpm gate:e2e` is NOT RUN. See **Gates still OWED** below. Do not flip to `[x]` until that remaining gate is discharged
 
@@ -1258,7 +1285,7 @@ behaviour reads it. Filed as a carried-forward remainder when D-125 was archived
 would not be lost with the change dir; a real AE furniture clip usually has `ip: 0`, which is why it
 survived the phase.
 
-## [~] B-091 — the preview's `lottie-assets` handler rebuilds the scene mid-playback ⟨priority: low⟩ — branch `feat/D-125-phase3b1-ui-polish` (D-125 Phase 3b-1)
+## [x] B-091 — the preview's `lottie-assets` handler rebuilds the scene mid-playback ⟨priority: low⟩ — merged (#348, `df37de2`) as part of D-125 Phase 3b-1
 
 **Repro:** with a composition containing a Lottie playing in the preview, have a `lottie-assets` message arrive (e.g. an asset import completing during playback).
 
