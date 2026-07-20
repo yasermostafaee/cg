@@ -1497,17 +1497,26 @@ the same as safe when what you subtract is the repair.
 is merged (#327, `e44e5eb`); the VERIFICATION is not done, and the trace above is a code reading,
 not an observation:
 
-1. **Real-CasparCG check of the OSC-silent load — OWED, never performed.** Drive a server to
-   `degraded` by stopping OSC while leaving AMCP up (B-094's condition), put a graphic on the
-   layer, then Load onto it. Observe whether the layer goes black. This cannot be settled by the
-   mock: `amcp-mock` is what the existing `disconnected-refusal.integration.test.ts` runs
-   against, and that test exercises the fully-disconnected case, not `degraded`.
-2. **The fix, once the above confirms it — UNDETERMINED, deliberately not prescribed here.**
-   Candidates are moving the `:647` check ABOVE `#adoptLayer` so the pair is skipped atomically,
-   or gating on an "AMCP axis up" predicate (`isLiveState`) rather than `state === 'healthy'`.
-   Choosing between them is design work that belongs in a change proposal, not a bug entry, and
-   the second would alter R-006's refusal semantics for `take`/`update`/`out`, which share
-   `#linkDown()`.
+1. **Real-CasparCG check of the OSC-silent load — OWED, never performed. SATISFIED BY [[B-100]]'s
+   verification — do NOT schedule it twice.** Drive a server to `degraded` by stopping OSC while
+   leaving AMCP up (B-094's condition), put a graphic on the layer, then Load onto it. Observe
+   whether the layer goes black. This cannot be settled by the mock: `amcp-mock` is what the
+   existing `disconnected-refusal.integration.test.ts` runs against, and that test exercises the
+   fully-disconnected case, not `degraded`. **It is the SAME code path and the same hardware
+   session as [[B-100]]** — one run discharges both, and B-082 should be re-read against that
+   run's result rather than given its own booking.
+2. **The fix — NOW OWNED BY [[B-100]], not by this entry.** The underlying defect has since been
+   filed properly as a predicate mismatch with its own blast radius, acceptance criterion and fix
+   options; it is not a B-082 remainder. This entry keeps only the record that B-082's shipped
+   change is what exposed it.
+
+**Why this stays `[~]` rather than being reopened as a defect of its own (2026-07-20).** The
+CLEAR-then-black window is a real on-air bug, but it is NOT rooted in B-082 — the adopt-CLEAR and
+the predicate both predate it. B-082's contribution was to remove the ADD that had been masking
+the window. That defect now lives at [[B-100]] (the predicate mismatch) with [[B-101]] (the
+OSC-silent reconnect loop that makes the state permanent). B-082 stays `[~]` for its own owed
+verification only, and must NOT be scheduled as separate fix work — fixing B-100 is what closes
+the black-layer path.
 
 **Scope of the reopening — what is NOT in doubt.** The operator-facing symptom this entry was
 filed for (every offline Load painting ✗ ERROR) is genuinely fixed, and the fully-disconnected
@@ -1844,3 +1853,186 @@ exactly the moment the operator most needs the explanation.
 
 **FROZEN:** on-air refusal (R-006), [[B-086]]/[[B-087]]'s `unverified` badge, [[B-092]]'s restore
 and [[B-093]]'s blind-tap guard are untouched. This is an indicator; it changes no decision.
+
+## [ ] B-100 — the bridge's link predicate calls an OSC-silent server UNREACHABLE: `#linkDown()` tests `state !== 'healthy'`, but the caspar-client's own predicate counts `degraded` (OSC-silent, AMCP UP) as live — so a working AMCP link is treated as dead, `load()` can leave a layer BLACK, and every on-air verb is refused ⟨priority: high⟩
+
+**Root cause — a PREDICATE MISMATCH. The black screen is a symptom, not the bug.** Two predicates
+in this codebase answer "is this server usable?" and they disagree:
+
+- `tools/caspar-bridge/src/caspar-runtime.ts:959` —
+  `return sessions.every((s) => s.state !== 'healthy');`
+- `packages/caspar-client/src/redundancy/redundancy-adapter.ts:505-507` —
+  `/** A session whose AMCP axis is believed up: healthy, or degraded (OSC-silent). */`
+  `function isLiveState(state) { return state === 'healthy' || state === 'degraded'; }`
+
+`degraded` is entered on **OSC silence alone, with the AMCP socket untouched**
+(`packages/caspar-client/src/session/server-session.ts:311`, default `oscDegradedAfterMs` 3000 ms
+at `:130`). So in `degraded` the client says "AMCP up" and the bridge says "unreachable". The
+bridge's is the stricter one, and it is the one that gates every operator verb.
+
+**`#linkDown()` contradicts its own documented intent.** Its doc block (`:951-953`) states the
+rule it means to implement: _"The predicate is **no declared server is reachable**, NOT 'the
+primary is down'… We refuse only when the command can reach no server at all."_ In `degraded` the
+command **can** reach the server. The implementation does not match the sentence above it — which
+is the whole defect in one line, and the reason this is a predicate bug rather than a `load()` bug.
+
+**Repro — the traced sequence (code reading, #378; NOT yet observed on hardware).** One declared
+server, OSC silent > 3 s, AMCP working:
+
+1. `#linkDown()` → **true** (the only session is `degraded`, not `healthy`).
+2. Operator presses **Load**. Allocation proceeds: [[C-014]]'s quarantine only skips layers with a
+   FRESH non-`html` observation, and `allocation fails OPEN on silence, deliberately opposite to clearLayer's refusal`
+   (`caspar-runtime.ts:1796`). Under OSC silence there are no fresh observations — the protection
+   is absent in exactly the state that triggers this. (`#reconcileForeignQuarantine` also returns
+   early on `state !== 'healthy'`, `:1815`.)
+3. `#adoptLayer` (`:603`) sends an **unguarded CLEAR**:
+   `await this.#send(this.#builder.out(slot), …)` (`:1740`). No link check there, nor in `#send`
+   (`:1893`), `RedundancyAdapter.send` (`redundancy-adapter.ts:162`), nor `sendJournalReplay`,
+   which goes straight to `primarySession.queue.enqueue` (`:314`). **The AMCP axis is up, so the
+   CLEAR lands and destroys the resident producer.**
+4. `:647` then returns early and **skips `#sendAdd`**.
+
+**Expected:** either the load completes (CLEAR then ADD), or nothing is sent at all.
+**Actual:** **CLEAR-then-nothing — the layer goes BLACK on air.** Pre-[[B-082]] the same path was
+CLEAR-then-ADD, which at least left the new template on the layer.
+**Env:** `@cg/caspar-bridge` + `@cg/caspar-client`. Any install where OSC is silent while AMCP is
+up. Not app-specific to the SPA.
+
+**Why this state is COMMON, not exotic — verified against the code, not assumed.** The two axes
+run over different transports: **OSC is UDP** (`packages/caspar-client/src/osc/transport.ts:66`,
+`dgram.createSocket('udp4')`) and **AMCP is TCP**
+(`packages/caspar-client/src/amcp/transport.ts:61`, `net.createConnection`). UDP has no
+retransmission, so ordinary packet loss, a busy NIC, a firewall/NAT rule that permits the AMCP
+port but not the OSC port, or CasparCG simply not configured to send OSC all produce precisely
+"OSC silent, AMCP fine" — while TCP quietly retransmits and keeps the command channel perfect.
+[[B-094]] exists because this state was ALREADY observed in production, and its own text records
+the oscillation: _"as the pill oscillates HEALTHY↔DEGRADED"_ (`bugs-runtime.md:1842`). This is a
+routine operating condition, and on a no-OSC install it is the PERMANENT condition — see
+[[B-101]].
+
+**Blast radius — every site testing `state` against `'healthy'` directly instead of via
+`isLiveState()`.** All line numbers `tools/caspar-bridge/src/caspar-runtime.ts` unless noted.
+
+| Site                                       | Gates                                     | Behaviour when OSC-silent / AMCP-up                                                      | Direction                   |
+| ------------------------------------------ | ----------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------- |
+| `:647` `load()`                            | skip of the pre-roll `CG ADD`             | CLEAR lands, ADD skipped → **layer BLACK**                                               | **FAIL-OPEN (destructive)** |
+| `:990` `take()`                            | R-006 on-air refusal                      | TAKE refused on a working link → **a missed take on air**                                | **FAIL-CLOSED**             |
+| `:1039` `update()`                         | R-006 on-air refusal                      | UPDATE refused; on-air graphic cannot be corrected                                       | **FAIL-CLOSED**             |
+| `:1104` `stopItem()`                       | R-006 on-air refusal (C-012 graceful)     | STOP refused                                                                             | **FAIL-CLOSED**             |
+| `:1120` `out()`                            | R-006 on-air refusal                      | CLEAR refused → **operator cannot take a graphic OFF air**                               | **FAIL-CLOSED (safety)**    |
+| `:1546` `health()`                         | the `amcpAxisOk` field shipped to the SPA | reports `false` while the AMCP axis is UP — wrong by the field's name                    | **mis-report (latent)**     |
+| `:1815` `reconcileForeignQuarantine()`     | C-014 quarantine refresh                  | returns early; quarantine not reconciled (contributes to step 2 above)                   | fail-open (by C-014 design) |
+| `:1164` `sweepOccupancy()`                 | R-009 orphan sweep                        | returns early — correct, the sweep is OSC-derived                                        | correct                     |
+| `:701` / `:417` → `Reconciler.setLinkDown` | [[B-086]]'s `unverified` demotion         | on-air items demote to "WAS ON AIR" — **honest**, OSC is the confirm channel ([[B-093]]) | correct                     |
+
+The `:1120` row is the sharpest operational one: with OSC silent the operator **cannot clear a
+graphic off air** through a link that would carry the command perfectly well.
+
+**`amcpAxisOk` is currently latent, not harmless.** It is a published contract field
+(`packages/shared-ipc/src/channels/connections.ts:15`) and reaches the SPA, but no renderer view
+reads it today — `StatusBar` derives its blind-server indicator from the raw state and gets it
+RIGHT (`apps/runtime/src/renderer/features/status/StatusBar.tsx:109` treats `healthy || degraded`
+as up). The moment any surface starts trusting `amcpAxisOk`, it inherits this bug.
+
+**ACCEPTANCE — the governing requirement, above either fix option.**
+
+> **`load()` must not be able to destroy without repairing.** Whatever guard is chosen must gate
+> the PAIR — the adopt-CLEAR and the ADD — **atomically: either both, or neither**.
+> **CLEAR-then-nothing must not be a constructible sequence, regardless of which predicate fires.**
+
+This is deliberately stronger than "fix the predicate", because a predicate fix alone does not
+satisfy it. `#adoptLayer` (`:603`) **awaits a real AMCP round-trip**, and the check at `:647` is
+re-evaluated after that await — so a session that transitions to `degraded`/`disconnected` DURING
+the adopt still yields CLEAR-then-nothing even with a perfectly correct predicate. The pairing has
+to be structural, not a second correct test.
+
+**Fix directions — owner-facing decision, NOT resolved here.**
+
+1. **Move the check above `#adoptLayer`.** Narrow and obvious; makes the pair atomic at that one
+   call site. Leaves the predicate lying at every other site in the table above — the four
+   FAIL-CLOSED refusals stay wrong.
+2. **Fix the predicate to use `isLiveState()`.** The root fix: one change corrects `load()` and
+   all four refusals at once. Cost: it changes refusal semantics everywhere `#linkDown()` is read,
+   so R-006's specs and tests must be re-read against it.
+
+**Owner's read (recorded 2026-07-20): (2) is correct and (1) is a band-aid** — conditional on
+R-006's refusals never having been DELIBERATELY keyed to OSC silence. **This item's audit finds
+they were not**, on the code's own evidence: `#linkDown()`'s doc block (`:951-953`) states the
+intended rule as reachability — _"We refuse only when the command can reach no server at all"_ —
+and says nothing about OSC. The OSC-derived behaviours are handled elsewhere and correctly
+(`sweepOccupancy` `:1164`, the [[B-086]]/[[B-093]] `unverified` demotion). So the coupling to
+`degraded` reads as an accident of `state !== 'healthy'` being a convenient shorthand, not a
+designed refusal-on-silence. **(2) is therefore not blocked by a prior intentional decision** —
+but note it does NOT satisfy the ACCEPTANCE on its own, so the chosen fix is (2) **plus** the
+atomic pairing.
+
+**Regression test:** drive a session to `degraded` (OSC silent, AMCP up) and assert (a) a `load()`
+onto an occupied layer either completes or sends nothing — never CLEAR-then-nothing; (b)
+`take`/`update`/`out`/`stopItem` are NOT refused. The offline `amcp-mock` can hold the AMCP side
+up while OSC is withheld; note the existing `disconnected-refusal.integration.test.ts` exercises
+the fully-DISCONNECTED case only, which is why this was never caught.
+
+**Not the same as [[B-094]]**, which reports the blind state honestly to the operator and changes
+no decision. This is about the bridge acting on it wrongly. **Cross-refs:** [[B-082]] (the entry
+that surfaced it — its owed hardware check is the same run as this item's, see there), [[B-101]]
+(the no-OSC reconnect loop that makes this the permanent state), [[C-014]] (allocation's
+deliberate fail-open on silence), [[B-093]], [[B-086]], [[B-087]], [[B-030]].
+
+## [ ] B-101 — an OSC-silent install cannot hold a connection: the watchdog tears down a WORKING AMCP socket every ~13 s and reconnects forever, so `#linkDown()` is true for most of every cycle ⟨priority: high⟩
+
+**Distinct from [[B-100]]** — different component, different fix. B-100 is the bridge reading the
+session state wrongly; this is the session state machine itself destroying a healthy AMCP link
+because a **different** transport went quiet. Filed together because this is what turns B-100 from
+an occasional window into the steady state on any install without OSC.
+
+**Repro:** run the bridge against a CasparCG that answers AMCP but sends no OSC — the [[B-094]]
+condition, and the install [[C-014]] explicitly designs for (`caspar-runtime.ts:1797`, _"a blind
+(B-094) install must still be able to play out"_).
+
+**Expected:** the AMCP link stays up. OSC silence degrades what can be CONFIRMED, not what can be
+COMMANDED.
+**Actual:** a permanent cycle, roughly every 13 s + backoff. Traced in
+`packages/caspar-client/src/session/server-session.ts`:
+
+1. `:219` `this.lastOscAt = this.now();` — connect seeds a synthetic OSC timestamp, then
+   `:224` `transitionTo('healthy', 'resync complete')` and `:227` `startWatcher()`.
+2. `:311-313` after `oscDegradedAfterMs` (**3000 ms**, `:130`) with no OSC → `degraded`.
+3. `:324-325` after a further `oscDownAfterMs` (**10000 ms**, `:131`) still silent →
+   `transitionTo('disconnected', …)` + `resolveHealthyExit()`.
+4. `:240-241` the loop then runs `this.currentQueue.dispose(); this.currentAmcp.destroy();` —
+   **a perfectly working TCP socket is destroyed**, pending queue items rejected.
+5. `:245-247` backoff, then reconnect at `:211`. Repeat forever.
+
+**So the answer to "is a no-OSC install permanently `degraded`?" is NO — it is worse.** The
+session does reach `healthy`, but only for ~3 s of each cycle; the rest is `degraded` (~10 s) plus
+the connect/handshake/resync climb, during ALL of which `#linkDown()` is true ([[B-100]]). And
+each cycle needlessly drops a live command channel. [[B-094]]'s own text already recorded the
+visible half of this — _"as the pill oscillates HEALTHY↔DEGRADED"_ (`bugs-runtime.md:1842`) — and
+attributed it to display flap rather than to a reconnect loop.
+
+**There is no opt-out.** `startWatcher()` is called unconditionally on every entry to `healthy`
+(`:227`); `oscDegradedAfterMs` / `oscDownAfterMs` are the only knobs (`:130-131`) and neither
+disables the teardown. The bridge passes **no** overrides — `#buildSessions`
+(`tools/caspar-bridge/src/caspar-runtime.ts:308-315`) supplies only `name`, `host`, `port`,
+`oscPort`, `oscBindHost` and `resyncDurationMs`, so the 3 s / 10 s defaults are what production
+runs.
+
+**Env:** `@cg/caspar-client` session FSM. Any install where OSC never arrives — no OSC configured
+in CasparCG, a firewall/NAT permitting the AMCP TCP port but not the OSC UDP port, or an OSC bind
+on an interface CasparCG does not send to.
+
+**Fix direction (NOT resolved):** OSC silence should degrade CONFIDENCE, not connectivity —
+`degraded` already expresses exactly that, so the `:324` escalation to `disconnected` is the
+questionable step. Options: drop that escalation and let AMCP liveness (the `close` handler at
+`:333`, or a `PING`) own the disconnect decision; or make OSC-expectation explicit per server so
+an install that never sends OSC does not arm an OSC watchdog at all. The second is the more
+honest model — it distinguishes "OSC was expected and stopped" from "OSC was never expected" —
+and it also gives [[B-094]]'s indicator a truthful basis.
+
+**Regression test:** a session with OSC never delivered must keep its AMCP transport for at least
+several multiples of `oscDownAfterMs`, with no `destroy()` on the AMCP socket and no reconnect
+attempt, while `degraded` is reported.
+
+**Cross-refs:** [[B-100]] (the predicate that turns this cycle into refused verbs and a black
+layer), [[B-094]] (the honest indicator for the same state), [[C-014]] (designs for the blind
+install this breaks), [[B-093]].

@@ -136,6 +136,28 @@ found ANYWHERE — merged, unpushed or uncommitted — was `B-097`, so no range 
 The duplicate audit still prints exactly `B-056` and `B-080`. The space stays contiguous:
 `B-001` … `B-099`, no gaps. **Next free: `B-100`.**
 
+**Re-audited 2026-07-20** against `main` (`9372517`, after #378). `B-100` and `B-101` are now
+taken, as a CONTIGUOUS RANGE claimed in ONE commit — the `#linkDown()` predicate mismatch (an
+OSC-silent but AMCP-up server read as unreachable) and the OSC-silence watchdog tearing down a
+working AMCP socket, both [bugs-runtime.md](bugs-runtime.md). They are filed as two numbers
+rather than one because they sit in different components with different fixes
+(`caspar-runtime.ts`'s predicate vs the `server-session.ts` FSM); the `load()` fail-open and the
+four R-006 fail-closed refusals are NOT split out, because they are one root cause — the single
+predicate — exactly as this file requires. Verified free immediately before commit, at the
+widened scope: no `## [.] B-100` / `B-101` heading on current `origin/main`, on ANY of the 13
+remote refs, on ANY of the 85 local branches across all three worktrees (swept programmatically,
+most unpushed), or on disk in either sibling working tree. The highest heading found ANYWHERE —
+merged, unpushed or uncommitted — was `B-099`, so no range claim sits above it. The duplicate
+audit still prints exactly `B-056` and `B-080`. The space stays contiguous: `B-001` … `B-101`, no
+gaps. **Next free: `B-102`.**
+
+Noted for whoever audits next: `cg-designer` moved during this session — it was detached onto
+`origin/main` (`9372517`) from `fix/b090-container-child-rows`, so its working tree now reads
+`B-099` where the 2026-07-20 snapshot of that branch reads `B-096`. Nothing was lost (`206f249`
+is still on its own branch and on `snapshot/2026-07-20-designer-head`, local and remote), and it
+claims no number above `B-099` — but a sibling worktree's max moving between audits is exactly
+the signal this file exists to catch, so it is recorded rather than passed over.
+
 A THIRD number was considered and deliberately NOT claimed: #368's restart-misadoption hole (a
 foreign producer landing on a retained-intent layer while the bridge was dead is adopted as ours).
 It is already tracked in two PRD items, not merely in the PR body — R-015's `Notes` in
