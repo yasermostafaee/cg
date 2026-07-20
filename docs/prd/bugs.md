@@ -470,6 +470,39 @@ Three candidate signals, in rough order of robustness:
    would therefore report "not merged" for work that shipped weeks ago and pass a stale item
    straight through. Any branch-based signal must resolve the squash, or be dropped.
 
+**Hard constraint — the guard must read ONLY current-state assertions (paid for three times,
+recorded 2026-07-20).** An entry BODY is not a set of live claims. It is a mixed document that
+routinely contains text deliberately written to state something that is no longer, or was never,
+true — and a naive scan over the body false-positives on all of it. Three real instances, each
+of which has already misled a reader or a session:
+
+- **Quoted rejected text.** [[B-089]]'s provenance block QUOTES the false verification claim it
+  exists to repudiate — the words "`gate:e2e` green on WSL" appear in the entry precisely
+  because they were wrong. A scan matching that string concludes the opposite of what the
+  paragraph says.
+- **Dated changelog status.** [[B-041]]'s "Progress / corrections" section records each attempt's
+  status AS OF ITS DATE. Its 2026-07-07 bullet says a 2.3.x hardware pass "remains the gate
+  before B-041 closes"; that gate was discharged on 2026-07-13 and the item is `[x]`. The
+  sentence is accurate history and a false live claim at the same time.
+- **Stale section headers.** That same section is headed "**Progress / corrections (stays
+  `[~]`):**" while the item's heading reads `[x]`. The header was true when written and was
+  never revisited, because it describes the log rather than the bug.
+
+So: **exclude quoted text (block quotes, and prose inside `"…"` that is being cited rather than
+asserted) and exclude dated changelog sections from any status signal. The heading's current
+marker is the authoritative status of the item — a body sentence never overrides it.** A guard
+that cannot make that distinction reliably should parse ONLY the heading line, which is the
+argument for putting the canonical machine-readable citation there (see below). This is also why
+the on-air-validation-owed marker introduced for [[C-014]] lives on the HEADING and not in the
+body: the heading is the one line whose contents are always a present-tense claim.
+
+**Corollary — anchor the marker grep to a heading.** That marker is deliberately NOT written out
+literally in this paragraph, because doing so would make a bare `git grep` for it return this
+prose alongside the real hit. The robust query is heading-anchored — `^## .*<the marker>` — and
+the same applies to any future token: a scan for a status marker must require the line to be a
+heading, or the documentation of the marker becomes a false positive for the marker itself. This
+paragraph was written, caught by its own rule, and reworded.
+
 Likely the check wants ONE canonical, machine-readable citation on a `[~]` heading (decide the
 shape when scheduling — a PR number is the most stable thing that survives squashing) rather than
 parsing all three shapes above. Whatever is chosen, the existing headings need a one-time
