@@ -599,7 +599,7 @@ is a mitigation (now recorded in `CLAUDE.md`), not the fix.
 **Regression test:** run two `pnpm gate` invocations concurrently in one worktree and assert both
 terminate on their own merits — neither dies on a missing coverage temp file.
 
-## [~] B-095 — `pnpm gate:e2e` starves itself: both Playwright suites run concurrently and flake specs that pass alone ⟨priority: medium⟩ — branch `chore/gate-e2e-serialize` (files + fixes in one PR)
+## [x] B-095 — `pnpm gate:e2e` starves itself: both Playwright suites run concurrently and flake specs that pass alone ⟨priority: medium⟩ — merged (#360, `5cb16c7`) (files + fixes in one PR)
 
 **Repro:** `pnpm gate:e2e` on the local machine (the ONLY authoritative E2E signal while CI is
 billing-blocked, until ~Aug 1). The script runs `turbo run test:e2e` with no concurrency bound, so
@@ -753,7 +753,7 @@ budgets. Files: `apps/designer/playwright.config.ts`, `apps/runtime/playwright.c
 recurs, the next lever is capping E2E worker count under turbo (bounding the concurrency itself)
 rather than raising budgets further.
 
-## [~] B-084 — a green CI tick can hide a failure: critical gate tasks CACHE-HIT (never execute) or get KILLED by a sibling, so the check passes without ever running to a real verdict ⟨priority: high⟩ — fixed on `fix/ci-cache-execution-gaps`
+## [x] B-084 — a green CI tick can hide a failure: critical gate tasks CACHE-HIT (never execute) or get KILLED by a sibling, so the check passes without ever running to a real verdict ⟨priority: high⟩ — merged (#328, `7826a88`)
 
 Sibling of [[B-075]]/[[B-076]], same lesson one level deeper: a gate that _looks_ green is
 trusted as if it ran. Three independent holes let a task report success without producing a

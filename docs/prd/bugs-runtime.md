@@ -1309,7 +1309,7 @@ taken still reads `loaded`), B-070's failed-ack settlement, B-072's position rea
 
 ---
 
-## [~] B-080 — the StatusBar sits on "Loading…" beside a green ● LIVE until the operator refreshes: every bridge snapshot is pulled ONCE at mount, and nothing re-pulls it when the link comes up ⟨priority: medium⟩ — fixed on `fix/footer-loading-stuck`, no change dir
+## [x] B-080 — the StatusBar sits on "Loading…" beside a green ● LIVE until the operator refreshes: every bridge snapshot is pulled ONCE at mount, and nothing re-pulls it when the link comes up ⟨priority: medium⟩ — merged (#321, `8b92d60`), no change dir
 
 A display-subscription regression from **R-006 ([#312](https://github.com/yasermostafaee/cg/pull/312))**,
 found live: start the Runtime before the bridge, then start the bridge. The link indicator
@@ -1359,7 +1359,7 @@ root (no remount).
 
 ---
 
-## [~] B-081 — the footer keeps a confident green "PRIMARY A HEALTHY" after the bridge DROPS, beside "NOT CONNECTED — NOTHING CAN REACH AIR" ⟨priority: high⟩ — fixed on `fix/footer-loading-stuck` (with [[B-080]]), no change dir
+## [x] B-081 — the footer keeps a confident green "PRIMARY A HEALTHY" after the bridge DROPS, beside "NOT CONNECTED — NOTHING CAN REACH AIR" ⟨priority: high⟩ — merged (#321, `8b92d60`) with [[B-080]], no change dir
 
 The mirror of [[B-080]], found in the same live session and fixed with it. B-080 is the
 footer failing to react to `disconnected → live`; this is the footer failing to **distrust**
@@ -1400,7 +1400,7 @@ still asserted by their own specs.
 
 ---
 
-## [~] B-082 — offline, every **Load** lands the row in ✗ ERROR: a load is not an on-air action, but it still ATTEMPTED the pre-roll `CG ADD` and reported the dead link as a broken item ⟨priority: high⟩ — fixed on `fix/offline-load-and-title-wrap-v2`, no change dir
+## [x] B-082 — offline, every **Load** lands the row in ✗ ERROR: a load is not an on-air action, but it still ATTEMPTED the pre-roll `CG ADD` and reported the dead link as a broken item ⟨priority: high⟩ — merged (#327, `e44e5eb`), no change dir
 
 With the bridge up but **PRIMARY A OFFLINE**, pressing **Load** on a library template puts
 the item on the stack and immediately paints it **✗ ERROR** / "Not accepted" — every row,
@@ -1443,7 +1443,7 @@ case) is unchanged.
 
 ---
 
-## [~] B-083 — Library names render ONE LETTER PER LINE: two rigid `nowrap` buttons take 63% of the row and the name's `overflow-wrap: anywhere` lets it collapse to a one-character min-content ⟨priority: high⟩ — fixed on `fix/offline-load-and-title-wrap-v2`, no change dir
+## [x] B-083 — Library names render ONE LETTER PER LINE: two rigid `nowrap` buttons take 63% of the row and the name's `overflow-wrap: anywhere` lets it collapse to a one-character min-content ⟨priority: high⟩ — merged (#327, `e44e5eb`), no change dir
 
 In the left **Library** panel the template names wrap **per character** — "پ / ن / ل" stacked
 vertically, 3–5 lines tall for a single name. The operator cannot read the list.
