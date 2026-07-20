@@ -528,7 +528,7 @@ quote/backslash/newline payload before B-041 closes.
   via an escape-matrix harness on real hardware, then implemented as the single
   canonical quoter, with the mock decoding by the real rule AND rejecting raw control
   chars / un-parseable payloads. See `openspec/changes/fix-amcp-escaping-v2/`.
-- Sweep pass 1 (2026-07-07, local CasparCG `2.5.0 69e8ad5 Stable`, probe `--sweep`):
+- Sweep pass 1 **(superseded 2026-07-13)** (2026-07-07, local CasparCG `2.5.0 69e8ad5 Stable`, probe `--sweep`):
   all 7 pre-existing candidates FAIL — the controls reproduce the DP1/DP2 signatures
   on this build — and both two-layer-model candidates PASS every class; winner
   **`js-escape+amcp-escape`** (byte-exact: net JSON backslash → 4 wire backslashes,
@@ -538,6 +538,12 @@ quote/backslash/newline payload before B-041 closes.
   hardware pass (sweep, or live special-char validation) remains the gate before
   B-041 closes. Details:
   `openspec/changes/fix-amcp-escaping-v2/design.md` → "Hardware sweep results".
+  **SUPERSEDED — that gate was DISCHARGED on 2026-07-13**: live-confirmed on real
+  CasparCG 2.3.2 (build `4de6d18f`), see the heading and the CLOSED block at the top
+  of this entry. The "remains the gate" sentence above is this bullet's status **as
+  of 2026-07-07** and is retained as history, not as a live claim. It has now twice
+  been read as outstanding by a keyword scan — hence this marker, and the
+  current-state-only rule recorded in [[B-076]].
 - **Fix implemented + live-validated on 2.5.0 (2026-07-07)** — `fix-amcp-escaping-v2`
   §2–4: canonical `@cg/caspar-client` `escape()` = the two-layer inverse (JSON `\` →
   4 wire backslashes, `"` → `\"`, raw LF/CR carried as `\\n`/`\\r`, never a raw
@@ -1400,7 +1406,7 @@ still asserted by their own specs.
 
 ---
 
-## [x] B-082 — offline, every **Load** lands the row in ✗ ERROR: a load is not an on-air action, but it still ATTEMPTED the pre-roll `CG ADD` and reported the dead link as a broken item ⟨priority: high⟩ — merged (#327, `e44e5eb`), no change dir
+## [~] B-082 — offline, every **Load** lands the row in ✗ ERROR: a load is not an on-air action, but it still ATTEMPTED the pre-roll `CG ADD` and reported the dead link as a broken item ⟨priority: high⟩ — code merged (#327, `e44e5eb`) but REOPENED 2026-07-20: a code trace found the fix can leave a layer BLACK when a session is `degraded` (OSC-silent, AMCP up). See **REOPENED** and **Gates still OWED** below. No change dir
 
 With the bridge up but **PRIMARY A OFFLINE**, pressing **Load** on a library template puts
 the item on the stack and immediately paints it **✗ ERROR** / "Not accepted" — every row,
@@ -1441,44 +1447,73 @@ is added, the `CG ADD` → `CG PLAY` order is preserved, and the quoter/verb seq
 touched. `#linkDown()`'s "no declared server is reachable" predicate (B-056's mirror-pair
 case) is unchanged.
 
-**Why this closes `[x]` despite touching the bridge — and why the code comment's own
-justification is NOT the reason (recorded 2026-07-20).** This entry reads as a UI fix, but the
-change also lands in `tools/caspar-bridge/src/caspar-runtime.ts` (+19). The gate on the skip is
-`if (this.#linkDown()) return { accepted: true };`
-(`tools/caspar-bridge/src/caspar-runtime.ts:647`), and `#linkDown()` is
-`sessions.every((s) => s.state !== 'healthy')` (`:955`).
+**REOPENED 2026-07-20 — a code trace found a CLEAR-then-nothing window this fix can open.** This
+entry reads as a UI fix, but the change also lands in
+`tools/caspar-bridge/src/caspar-runtime.ts` (+19), and the gate on the skip is
+`if (this.#linkDown()) return { accepted: true };` (`caspar-runtime.ts:647`), where `#linkDown()`
+is `sessions.every((s) => s.state !== 'healthy')` (`:959`).
 
-**That signal is a BELIEF about session health, not ground truth about what is rendering.** It
-can absolutely read "no server reachable" while a producer is in fact resident on a layer —
-CasparCG does not stop rendering because a control link dropped. That is [[B-087]]'s entire
-subject (a graphic still on air after the bridge process dies), [[B-086]]'s (an honest on-air
-claim across link loss) and [[B-030]]'s (a producer genuinely resident while the UI disagrees);
-[[C-014]] fails OPEN on OSC silence for the same reason. So the comment's stated premise at
-`:635` — "nothing is on air to hide (no server is reachable)" — **is not dependable, and the
-`[x]` does not rest on it.**
+**`#linkDown()` is NOT "the AMCP link is dead". It is "no session is `healthy`" — and `degraded`
+is not `healthy`.** A session enters `degraded` on **OSC silence alone**, with the AMCP socket
+untouched: `if (this.currentState === 'healthy' && sinceOsc > this.oscDegradedAfterMs) { … transitionTo('degraded', …) }`
+(`packages/caspar-client/src/session/server-session.ts:311`, default threshold 3000 ms). The
+caspar-client says so in as many words — `/** A session whose AMCP axis is believed up: healthy, or degraded (OSC-silent). */`
+above `isLiveState()` (`packages/caspar-client/src/redundancy/redundancy-adapter.ts:505`), which
+returns true for BOTH. **So the client's own "AMCP is up" predicate and the bridge's `#linkDown()`
+disagree, and `#linkDown()` is the stricter one.** OSC silence and AMCP health are different
+signals — [[B-094]] is exactly "a server answers commands but cannot be heard", and [[B-030]]
+records the converse.
 
-It rests on the SHAPE of the change instead, which does not depend on the belief being right:
+**The failure sequence.** With a single declared server that has gone OSC-silent for >3 s while
+its AMCP socket still works:
 
-1. **The skip is purely subtractive.** The early return omits exactly one thing — `#sendAdd`
-   (`:651`), the only AMCP send left in `load()`. It cannot cause a send that would not
-   otherwise happen; it can only withhold one. Withholding a command cannot destroy,
-   overwrite or disturb a producer already on a layer.
-2. **It sits AFTER every destructive step.** The adopt-CLEAR (`#adoptLayer`, `:603`) — the
-   operation that CAN destroy a foreign producer, and the whole subject of [[C-014]] — runs
-   before the check at `:647` and is untouched by this fix. B-082 neither adds nor removes a
-   CLEAR.
-3. **Where the belief IS wrong, the fix is strictly safer than the code it replaced.** If the
-   link is believed down but is actually up, the pre-fix path attempted the `CG ADD` and it
-   could land on a live layer; the post-fix path sends nothing at all.
+1. `#linkDown()` → **true** (the only session is `degraded`, not `healthy`).
+2. `load()` allocates a layer. Nothing stops it: C-014's quarantine only skips layers with a
+   FRESH non-`html` observation, and `allocation fails OPEN on silence, deliberately opposite to clearLayer's refusal`
+   (`caspar-runtime.ts:1796`). Under OSC silence there ARE no fresh observations, so the
+   protection is absent in precisely the state that triggers this.
+3. `#adoptLayer` (`:603`) runs and calls
+   `await this.#send(this.#builder.out(slot), …)` (`:1740`) — **an unguarded CLEAR**. It carries
+   no `#linkDown()` check, and neither does `#send` (`:1893`) nor
+   `RedundancyAdapter.send` (`redundancy-adapter.ts:162`) nor `sendJournalReplay`, which goes
+   straight to `primarySession.queue.enqueue` (`:314`). The AMCP axis is up, so **the CLEAR
+   reaches the wire and destroys the resident producer.**
+4. Line `:647` then returns early and **skips `#sendAdd`**.
 
-**What the mis-stated premise DOES cost — a status claim, not an on-air one.** With a producer
-resident and `#linkDown()` true, the row is left at `loaded` where it previously read ✗ ERROR.
-Neither reaches the wire, so air is identical either way; only the badge differs. Display
-honesty for exactly that state is already owned elsewhere and was not weakened here — while the
-link is down [[B-087]] masks an on-air claim to the muted `unverified` "WAS ON AIR".
+**Result: CLEAR-then-nothing — the layer goes BLACK.** Pre-fix the same path was
+CLEAR-then-ADD, which left the new template loaded on the layer. Black is not "safer" than the
+new template; on air it is worse. **R-015 does not cover this** — its clearing-refusal-on-silence
+guards the operator's `clearLayer` (`:1230`), and `:1797` records that the adopt path is
+_deliberately_ the opposite, failing open.
 
-**No hardware gate is owed** on this reasoning: the change cannot alter the AMCP byte stream in
-any state, so there is no on-air behaviour for hardware to disagree with.
+**What was wrong with the previous `[x]` (2026-07-20, superseded same day).** It rested on the
+change being "purely subtractive" — true of `#sendAdd` in isolation — plus the claim that the
+adopt-CLEAR "runs before the check and is untouched". Both halves are individually correct and
+the conclusion still does not follow: leaving a destructive step in place while removing the
+constructive step that FOLLOWED it changes the net on-air effect of the pair. Subtractive is not
+the same as safe when what you subtract is the repair.
+
+**Gates still OWED — this is why the item is `[~]` and not `[x]` (as of 2026-07-20).** The code
+is merged (#327, `e44e5eb`); the VERIFICATION is not done, and the trace above is a code reading,
+not an observation:
+
+1. **Real-CasparCG check of the OSC-silent load — OWED, never performed.** Drive a server to
+   `degraded` by stopping OSC while leaving AMCP up (B-094's condition), put a graphic on the
+   layer, then Load onto it. Observe whether the layer goes black. This cannot be settled by the
+   mock: `amcp-mock` is what the existing `disconnected-refusal.integration.test.ts` runs
+   against, and that test exercises the fully-disconnected case, not `degraded`.
+2. **The fix, once the above confirms it — UNDETERMINED, deliberately not prescribed here.**
+   Candidates are moving the `:647` check ABOVE `#adoptLayer` so the pair is skipped atomically,
+   or gating on an "AMCP axis up" predicate (`isLiveState`) rather than `state === 'healthy'`.
+   Choosing between them is design work that belongs in a change proposal, not a bug entry, and
+   the second would alter R-006's refusal semantics for `take`/`update`/`out`, which share
+   `#linkDown()`.
+
+**Scope of the reopening — what is NOT in doubt.** The operator-facing symptom this entry was
+filed for (every offline Load painting ✗ ERROR) is genuinely fixed, and the fully-disconnected
+case is sound: with no socket at all, the adopt-CLEAR cannot land either, so nothing is
+destroyed. The defect is confined to the `degraded`/OSC-silent window where AMCP still delivers.
+[[B-083]], merged in the same PR, is untouched by this and stays `[x]`.
 
 ---
 
