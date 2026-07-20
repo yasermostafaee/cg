@@ -997,7 +997,7 @@ guards. Capability: `designer-playout-lifecycle`.
 
 **On-air impact:** this changes playout TIMING — a composition that previously snapped through its intro instantly now sweeps it in real time whenever a trim boundary is crossed (which is the point: the trim needs elapsed time to be honoured). Warrants a real-CasparCG check before it is considered done.
 
-## [~] B-089 — nested-instance element lifespans are never gated at all ⟨priority: medium⟩ — code merged (#369, `7f9868f`) but DELIBERATELY still `[~]`: this fix changes playout TIMING, and neither verification gate it requires has been confirmed. See **Gates still OWED** below. Do not flip to `[x]` until both are discharged
+## [~] B-089 — nested-instance element lifespans are never gated at all ⟨priority: medium⟩ — code merged (#369, `7f9868f`) but DELIBERATELY still `[~]`: this fix changes playout TIMING, and ONE of its two verification gates is still outstanding. The real-CasparCG hardware check is DISCHARGED (owner report, 2026-07-20); the Linux `pnpm gate:e2e` is NOT RUN. See **Gates still OWED** below. Do not flip to `[x]` until that remaining gate is discharged
 
 **Repro:**
 
@@ -1010,21 +1010,31 @@ guards. Capability: `designer-playout-lifecycle`.
 **Env:** Browser / Designer preview; also the exported outputs.
 **Notes:** `collectLifespanGates` (`packages/template-runtime/src/runtime.ts:1579`) walks only `scene.layers` and resolves ids against the ROOT `built.elementMap`; every composition instance owns its own `elementMap`, so nested elements are unreachable and never enter the gate list. The per-frame application is likewise root-only (`if (isGlobalRoot) applyLifespanGatesAtFrame(frame)`, `runtime.ts:969`). Its `el.type === 'container'` recursion branch is **effectively dead** as well: `container` is built by `buildPlaceholder`, which builds no children, so container children never enter any `elementMap` either. Distinct from B-088 (which is about how OFTEN the gate runs); this is about WHICH elements it covers. Do not fold the two — B-088's fix deliberately leaves nested scopes' collapse behaviour untouched.
 
-**Gates still OWED — this is why the item is `[~]` and not `[x]` (as of 2026-07-19).** The code is
-merged; the VERIFICATION is not done. Both of the following must be discharged, and each must be
-independently confirmed rather than taken from a prompt or a hand-off note:
+**Gates still OWED — this is why the item is `[~]` and not `[x]` (updated 2026-07-20).** The code is
+merged. ONE of the two gates below is now discharged and ONE is still outstanding; the item stays
+`[~]` until both are. Each must be independently confirmed, or carry an explicit owner attestation —
+never taken from a prompt or a hand-off note as if it were a measurement this session made:
 
 1. **Linux `pnpm gate:e2e` — NOT RUN.** WSL is not installed on the development host, so the Linux
    E2E signal has never been produced for this change. A Windows Playwright run does not substitute:
    per P-009's spec (`docs/prd/platform.md`), a `win32` `gate:e2e` pass is explicitly
    NON-AUTHORITATIVE and leaves a Linux/WSL run owed. GitHub Actions is billing-exhausted until
    ~2026-08-01, so CI cannot supply it either — the Linux run must be done locally.
-2. **Real-CasparCG hardware check (PREVIEW + SINGLE-FILE EXPORT) — UNCONFIRMED.** Required because
-   the change alters on-air timing (see On-air impact below): a nested composition containing a
-   trimmed element now sweeps its intro leg in real time where it previously snapped through it.
-   A green unit/E2E suite cannot settle that — the elapsed-time behaviour has to be observed on air.
-   Both output paths are needed, because export renders through the same per-scope controllers but
-   WITHOUT the preview's driver, so one can hold while the other fails.
+2. **Real-CasparCG hardware check (PREVIEW + SINGLE-FILE EXPORT) — DISCHARGED by OWNER REPORT,
+   2026-07-20.** The owner ran the check on their own CasparCG hardware and reported it covering
+   BOTH output paths — PREVIEW and SINGLE-FILE EXPORT. This project's definition of done is
+   owner-verified on owner hardware, so that report discharges this gate.
+
+   **Attribution — this session did not measure this.** It is recorded here as the owner's report,
+   on the owner's authority. No hardware was available to this session and none was exercised by
+   it; nothing here claims the check was independently reproduced.
+
+   Why the gate existed: the change alters on-air timing (see On-air impact below) — a nested
+   composition containing a trimmed element now sweeps its intro leg in real time where it
+   previously snapped through it. A green unit/E2E suite could not settle that; the elapsed-time
+   behaviour had to be observed on air. Both output paths were needed because export renders
+   through the same per-scope controllers but WITHOUT the preview's driver, so one could hold
+   while the other failed.
 
 **Provenance note (why this block is worded so defensively).** An earlier close-out attempt flipped
 this item to `[x]` carrying the text "`gate:e2e` green on WSL" and "the real-CasparCG check is
@@ -1032,6 +1042,15 @@ DISCHARGED". Both came from a session hand-off assertion, neither was independen
 first was demonstrably false — WSL is not installed on this host. The commit was reset before it
 reached `main`. **Standing rule adopted from that miss: a gate asserted in a prompt, hand-off, or
 CONTEXT block is NOT evidence. Verify it independently or leave the debt recorded here.**
+
+**How the 2026-07-20 discharge above differs — the rule is intact.** What was rejected was a session
+asserting that a MEASUREMENT had been taken when it had not: a claim about evidence, made by a party
+who had gathered none, and false on its face for the WSL half. What gate 2 now records is the OWNER
+attesting to their own check on their own hardware, labelled as an owner report rather than dressed
+up as a session measurement. The first is hearsay about evidence; the second IS the evidence this
+project treats as authoritative. The test is not "where did the words arrive from" but "who is
+attesting, to what they personally did". Note what did NOT change: gate 1 is untouched, because
+nobody has attested to it.
 
 **Not the same root as B-090** (which is about `container` children). `flattenElements` recurses ONLY into
 `container`, never `composition`, so a nested comp's elements have no timeline row at all — their WRITE
