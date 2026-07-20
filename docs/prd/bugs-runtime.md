@@ -1441,6 +1441,45 @@ is added, the `CG ADD` → `CG PLAY` order is preserved, and the quoter/verb seq
 touched. `#linkDown()`'s "no declared server is reachable" predicate (B-056's mirror-pair
 case) is unchanged.
 
+**Why this closes `[x]` despite touching the bridge — and why the code comment's own
+justification is NOT the reason (recorded 2026-07-20).** This entry reads as a UI fix, but the
+change also lands in `tools/caspar-bridge/src/caspar-runtime.ts` (+19). The gate on the skip is
+`if (this.#linkDown()) return { accepted: true };`
+(`tools/caspar-bridge/src/caspar-runtime.ts:647`), and `#linkDown()` is
+`sessions.every((s) => s.state !== 'healthy')` (`:955`).
+
+**That signal is a BELIEF about session health, not ground truth about what is rendering.** It
+can absolutely read "no server reachable" while a producer is in fact resident on a layer —
+CasparCG does not stop rendering because a control link dropped. That is [[B-087]]'s entire
+subject (a graphic still on air after the bridge process dies), [[B-086]]'s (an honest on-air
+claim across link loss) and [[B-030]]'s (a producer genuinely resident while the UI disagrees);
+[[C-014]] fails OPEN on OSC silence for the same reason. So the comment's stated premise at
+`:635` — "nothing is on air to hide (no server is reachable)" — **is not dependable, and the
+`[x]` does not rest on it.**
+
+It rests on the SHAPE of the change instead, which does not depend on the belief being right:
+
+1. **The skip is purely subtractive.** The early return omits exactly one thing — `#sendAdd`
+   (`:651`), the only AMCP send left in `load()`. It cannot cause a send that would not
+   otherwise happen; it can only withhold one. Withholding a command cannot destroy,
+   overwrite or disturb a producer already on a layer.
+2. **It sits AFTER every destructive step.** The adopt-CLEAR (`#adoptLayer`, `:603`) — the
+   operation that CAN destroy a foreign producer, and the whole subject of [[C-014]] — runs
+   before the check at `:647` and is untouched by this fix. B-082 neither adds nor removes a
+   CLEAR.
+3. **Where the belief IS wrong, the fix is strictly safer than the code it replaced.** If the
+   link is believed down but is actually up, the pre-fix path attempted the `CG ADD` and it
+   could land on a live layer; the post-fix path sends nothing at all.
+
+**What the mis-stated premise DOES cost — a status claim, not an on-air one.** With a producer
+resident and `#linkDown()` true, the row is left at `loaded` where it previously read ✗ ERROR.
+Neither reaches the wire, so air is identical either way; only the badge differs. Display
+honesty for exactly that state is already owned elsewhere and was not weakened here — while the
+link is down [[B-087]] masks an on-air claim to the muted `unverified` "WAS ON AIR".
+
+**No hardware gate is owed** on this reasoning: the change cannot alter the AMCP byte stream in
+any state, so there is no on-air behaviour for hardware to disagree with.
+
 ---
 
 ## [x] B-083 — Library names render ONE LETTER PER LINE: two rigid `nowrap` buttons take 63% of the row and the name's `overflow-wrap: anywhere` lets it collapse to a one-character min-content ⟨priority: high⟩ — merged (#327, `e44e5eb`), no change dir

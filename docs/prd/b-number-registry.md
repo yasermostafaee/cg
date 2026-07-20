@@ -232,7 +232,7 @@ is why this entry moved twice rather than asking the Designer work to renumber.
 | Number     | Status                                | Who owns it                                                                                                                                                                                                                             |
 | ---------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **B-056**  | **DUAL-OWNED — both entries keep it** | [bugs-designer.md](bugs-designer.md) — "can't add a SMOOTH point to a finished path" (#272, archived) **and** [bugs-runtime.md](bugs-runtime.md) — "`load()` proceeds when the adopt-CLEAR didn't land on the PRIMARY" (#287, archived) |
-| **B-080**  | **DUAL-OWNED — both entries keep it** | [bugs-designer.md](bugs-designer.md) — "preview timing durations in seconds" (#322, merged) **and** [bugs-runtime.md](bugs-runtime.md) — "footer health pills track the connection" (#324, merged)                                      |
+| **B-080**  | **DUAL-OWNED — both entries keep it** | [bugs-designer.md](bugs-designer.md) — "preview timing durations in seconds" (#322, merged) **and** [bugs-runtime.md](bugs-runtime.md) — "footer health pills track the connection" (#321, merged — corrected from #324, see below)     |
 | all others | unambiguous                           | one bug each                                                                                                                                                                                                                            |
 
 **Neither B-056 nor B-080 is renumbered** (owner call — B-056 recorded in [B-069](bugs.md),
@@ -246,6 +246,21 @@ renumbering — cite "B-056 (designer)" / "B-080 (runtime)" when it matters.
 `docs/prd/**` as a turbo input, so a code PR that added the second B-080 heading replayed a
 cached "pass" instead of re-running the audit. Fixed by adding the input; B-080 is grandfathered
 in as accepted rather than renumbered.
+
+**Amended 2026-07-20 — B-080 (runtime) arrived via #321, not #324.** PR attribution only; the
+dual-owned status, the owner call not to renumber, and the audit allowlist are all unchanged. The
+branch `fix/footer-loading-stuck` has TWO merged PRs with identical titles, and the later one is
+empty: `git diff a0c5b76^ a0c5b76` is EMPTY, so #324 (`a0c5b76`) delivered no content at all.
+`git log -S'B-080' -- docs/prd/bugs-runtime.md` returns exactly one commit — `8b92d60` (#321) —
+so #321 is what introduced the runtime `B-080` heading and the duplicate it created. The
+**Re-audited 2026-07-14** entry above still reads "#324"; it is left as written because it
+records what that audit believed at the time, and this note is the correction. Cite **#321** for
+the runtime B-080 from here on.
+
+Why it matters beyond bookkeeping: the two PRs are indistinguishable by title, so an empty
+re-merge can absorb the credit for work it never carried — and a `git branch --merged` or
+ancestry check cannot tell them apart either, because this repo squash-merges. Compare the PR's
+`headRefOid` against the branch tip, or pickaxe the file, as was done here.
 
 ### Why the number space on `main` is otherwise clean
 
