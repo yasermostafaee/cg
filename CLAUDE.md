@@ -32,6 +32,13 @@ Persian / RTL is a core requirement.
    constructive step that repairs it (the pre-roll `CG ADD`), both must read the
    SAME evaluation. Two reads with an `await` between them is a CLEAR-then-nothing
    window — a black layer on air (see `B-100`).
+8. **Probe the axis you intend to judge.** A monitoring channel's silence may NEVER
+   be used as a liveness proxy for a channel it does not measure. OSC silence is
+   evidence that confirmation is unavailable — nothing more; it cannot speak for the
+   AMCP socket, so AMCP liveness is decided by sending an AMCP command and bounding
+   the wait (`probeAmcpLiveness`), never by a quiet OSC port. Reading silence on one
+   channel as death on another is what destroyed a working socket every ~13 s on
+   every OSC-less install (see `B-101`, and `B-100` one layer up).
 
 ## Where features go
 

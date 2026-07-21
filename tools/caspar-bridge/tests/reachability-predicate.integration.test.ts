@@ -22,11 +22,19 @@ import { HEALTH_MS, track } from './support/harness.js';
  *
  * The seam that makes `degraded` deterministic in a test: `sessionTuning` shrinks
  * `oscDegradedAfterMs` so a session demotes to `degraded` almost immediately on
- * OSC silence, and inflates `oscDownAfterMs` so it never force-disconnects out of
- * `degraded` for the test's lifetime (that force-disconnect is B-101's territory
- * and is out of scope here). OSC silence is produced the same way B-094's test
- * does it — the session binds a `deafPort` the mock never emits to, so the AMCP
- * axis stays perfectly healthy while OSC is never heard.
+ * OSC silence, and inflates `oscDownAfterMs` so nothing else acts on that silence
+ * for the test's lifetime. OSC silence is produced the same way B-094's test does
+ * it — the session binds a `deafPort` the mock never emits to, so the AMCP axis
+ * stays perfectly healthy while OSC is never heard.
+ *
+ * B-101 changed what the inflated `oscDownAfterMs` buys, so the tuning STAYS but
+ * for a new reason. It used to tune out a force-disconnect on continued silence;
+ * that escalation is gone — silence now only triggers an AMCP liveness probe, and
+ * this mock answers `VERSION`, so the session would hold `degraded` either way.
+ * What the inflation still buys is isolation: no probe traffic in the wire traces
+ * these tests parse, and no chance that a probe timing out on a loaded CI host
+ * disconnects a session mid-test and reds a suite that is about the bridge
+ * predicate, not about liveness.
  */
 
 const TEMPLATE: TemplateInfo = {
@@ -37,7 +45,7 @@ const TEMPLATE: TemplateInfo = {
 const HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body>سلام</body></html>';
 const SLOT = { channel: 1, layer: 10 };
 
-/** Demote to `degraded` within a tick of OSC silence; never force-disconnect out of it. */
+/** Demote to `degraded` within a tick of OSC silence; hold it there, unprobed. */
 const DEGRADED_TUNING = {
   oscDegradedAfterMs: 80,
   oscDownAfterMs: 10 * 60_000,

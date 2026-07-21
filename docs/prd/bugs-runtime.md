@@ -1497,8 +1497,11 @@ the same as safe when what you subtract is the repair.
 is merged (#327, `e44e5eb`); the VERIFICATION is not done, and the trace above is a code reading,
 not an observation:
 
-1. **Real-CasparCG check of the OSC-silent load — OWED, never performed. SATISFIED BY [[B-100]]'s
-   verification — do NOT schedule it twice.** Drive a server to `degraded` by stopping OSC while
+1. **Real-CasparCG check of the OSC-silent load — OWED, never performed. SATISFIED BY the ONE
+   consolidated hardware session — do NOT schedule it twice.** That session (checklist:
+   `openspec/changes/runtime-amcp-probed-liveness/tasks.md` §6) discharges this check together
+   with [[B-100]], [[B-101]] and both [[C-014]] on-air validations, in one visit. Drive a server
+   to `degraded` by stopping OSC while
    leaving AMCP up (B-094's condition), put a graphic on the layer, then Load onto it. Observe
    whether the layer goes black. This cannot be settled by the mock: `amcp-mock` is what the
    existing `disconnected-refusal.integration.test.ts` runs against, and that test exercises the
@@ -2066,15 +2069,21 @@ verb/order/quoting seam. Out of scope and untouched: [[B-101]]'s force-disconnec
   5. **out** (hard clear) → the layer **clears**.
 
   Every step must be performed while the server is still `degraded`; if it recovers to `healthy`
-  mid-run the run proves nothing and must be restarted. Note [[B-101]]: on a permanently
-  OSC-silent install the session force-disconnects roughly every 13 s, so expect a reconnect
-  window mid-protocol — steps issued during the disconnected window are correctly refused and
-  should be re-issued once the session is back to `degraded`, not recorded as a failure.
+  mid-run the run proves nothing and must be restarted.
+
+  **This run is now part of ONE consolidated hardware session** that also discharges [[B-082]]'s
+  check #1, [[B-101]] and both [[C-014]] on-air validations — full checklist in
+  `openspec/changes/runtime-amcp-probed-liveness/tasks.md` §6. **Do not book a second trip.**
+  Note the earlier warning here — that [[B-101]] force-disconnects the session roughly every 13 s
+  so a reconnect window mid-protocol is expected and steps should be re-issued rather than
+  recorded as failures — **no longer applies**: B-101 is fixed, OSC silence no longer disconnects
+  anything, and the link now HOLDS. A retry-free run is therefore the expectation, and needing a
+  retry is itself a finding to record.
 
 - **`pnpm gate:e2e` on Linux — NOT owed.** The diff is bridge-internal (`caspar-bridge` +
   `caspar-client`) + tests + docs; it touches no browser-visible surface.
 
-## [ ] B-101 — an OSC-silent install cannot hold a connection: the watchdog tears down a WORKING AMCP socket every ~13 s and reconnects forever, so after B-100 the operator gets INTERMITTENT command capability rather than restored capability ⟨priority: high⟩
+## [~] B-101 — an OSC-silent install cannot hold a connection: the watchdog tears down a WORKING AMCP socket every ~13 s and reconnects forever, so after B-100 the operator gets INTERMITTENT command capability rather than restored capability ⟨priority: high⟩ — code merged (change dir `runtime-amcp-probed-liveness`); real-CasparCG verification OWED before archive (see **Resolution**)
 
 **Distinct from [[B-100]]** — different component, different fix. B-100 is the bridge reading the
 session state wrongly; this is the session state machine itself destroying a healthy AMCP link
@@ -2135,17 +2144,56 @@ runs.
 in CasparCG, a firewall/NAT permitting the AMCP TCP port but not the OSC UDP port, or an OSC bind
 on an interface CasparCG does not send to.
 
-**Fix direction (NOT resolved):** OSC silence should degrade CONFIDENCE, not connectivity —
-`degraded` already expresses exactly that, so the `:324` escalation to `disconnected` is the
-questionable step. Options: drop that escalation and let AMCP liveness (the `close` handler at
-`:333`, or a `PING`) own the disconnect decision; or make OSC-expectation explicit per server so
-an install that never sends OSC does not arm an OSC watchdog at all. The second is the more
-honest model — it distinguishes "OSC was expected and stopped" from "OSC was never expected" —
-and it also gives [[B-094]]'s indicator a truthful basis.
+**RESOLVED 2026-07-21 — the escalation is re-pointed at AMCP evidence, not deleted** (change dir
+`runtime-amcp-probed-liveness`). OSC silence now degrades CONFIDENCE, never CONNECTIVITY. Past
+`oscDownAfterMs` the session stops concluding from the silence and **asks the command axis
+itself**: a bounded `VERSION` at `urgent` priority on the CURRENT queue, under the same
+`versionTimeoutMs` the handshake already trusts to judge a link.
 
-**Regression test:** a session with OSC never delivered must keep its AMCP transport for at least
-several multiples of `oscDownAfterMs`, with no `destroy()` on the AMCP socket and no reconnect
-attempt, while `degraded` is reported.
+- **Answered** → stay `degraded`, KEEP the transport, re-arm and re-probe on that cadence for as
+  long as OSC stays silent. The socket is never destroyed, so an OSC-silent install now holds ONE
+  stable connection with full command capability — what [[C-014]] and [[B-094]] already design
+  for, and what makes [[B-100]]'s fix continuously available rather than available only between
+  teardowns.
+- **Failed** (rejected, timed out, or a non-OK code) → `disconnected` with an `amcp probe failed:
+…` reason, and the existing teardown/backoff/reconnect loop runs — this time for a reason AMCP
+  actually reported. This also catches the HALF-OPEN link (peer holds the socket open, answers
+  nothing, emits no close) that the `close` handler structurally cannot see.
+
+The probe is the SAME function `HeartbeatService` pings with (`probeAmcpLiveness`) — one
+definition of "the command axis answered", not two, per the golden rule [[B-100]] produced. It
+does NOT revive `HeartbeatService` ([[C-010]] wiring stays dead): it fires only inside the
+degraded window, so a healthy link carries no extra traffic.
+
+**Frozen, verified unchanged:** `onAmcpClose` (a genuine peer close still disconnects at once,
+from `healthy` and from `degraded`), the `healthy → degraded` demote at `oscDegradedAfterMs`, the
+`degraded → healthy` recovery when OSC returns, the backoff/reconnect loop, and
+`HeartbeatService`'s observable behaviour including its miss-reason strings.
+
+**Notes — the per-server "OSC expected / not expected" flag is REJECTED for now, deliberately.**
+This entry called it the more honest model, and in the abstract it is: only an explicit
+declaration can distinguish "OSC was never expected" from "OSC was expected and stopped", which
+no timer can infer. It is rejected here because it needs new config and new UI surface — a
+PRODUCT decision, not a bug fix — and because the AMCP probe makes it **optional rather than
+required**: with liveness measured on AMCP, a blind install already behaves correctly with no
+configuration at all, and [[B-094]]'s `⚠ NO OSC` indicator is already truthful about the one
+thing that IS wrong. It stays available as a possible follow-up for that distinction and nothing
+here forecloses it. **Do not re-litigate it as part of this fix.**
+
+**Regression test (done, red-first):** `packages/caspar-client/tests/amcp-probed-liveness.test.ts`
+— OSC never delivered against a normally-answering AMCP mock: across 3+ probe windows the session
+stays `degraded`, the transport is never destroyed or rotated, the same TCP connection stays open
+and no reconnect is attempted. Shown RED pre-fix (`expected 'resyncing' to be 'degraded'` — caught
+mid-reconnect). Plus: the probe-failure safety net (RED pre-fix: `expected 'osc down > 120ms' to
+match /amcp probe/`), the half-open link, a non-OK `VERSION` code, no overlapping probes, recovery
+after a probe, and the two FROZEN peer-close guards.
+
+**GATE OWED — real-CasparCG verification, before archive.** Consolidated with [[B-100]],
+[[B-082]] and [[C-014]] into ONE hardware session; the full checklist lives in
+`openspec/changes/runtime-amcp-probed-liveness/tasks.md` §6. B-101's own item is §6.3: with OSC
+stopped, the AMCP link must HOLD for several minutes — no HEALTHY↔DEGRADED oscillation, no
+reconnect churn, and every step of the on-air walk must work **first time** rather than needing a
+retry inside a reconnect window. **Do not book a separate trip for any of these four items.**
 
 **Cross-refs:** [[B-100]] (the predicate that turns this cycle into refused verbs and a black
 layer), [[B-094]] (the honest indicator for the same state), [[C-014]] (designs for the blind
