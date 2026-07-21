@@ -2,4 +2,18 @@
 # "Local gate"). Runs the FAST full gate before every push and blocks the push if it
 # fails. E2E is NOT here (too slow, ~6 min) — run it manually with `pnpm gate:e2e` for
 # any UI/layout/rendering change. Emergency bypass: `git push --no-verify`.
+#
+# P-010: git feeds this hook one `<local ref> <local oid> <remote ref> <remote oid>`
+# line per ref on stdin. A ref DELETION pushes no content, so gating it proves nothing
+# (the gate inspects the WORKING TREE) while consuming this host's one exclusive gate
+# slot for ~2 minutes. Skip the gate only when EVERY ref is a deletion. This narrows
+# WHEN the gate runs, never WHAT it checks: a mixed push, an unparseable line, empty
+# stdin, or a missing/failing node all fall through to the full gate.
+decision=$(node tools/gate-hook/src/pre-push-cli.mjs 2>/dev/null) || decision=gate
+
+if [ "$decision" = "skip" ]; then
+  echo "pre-push: gate SKIPPED — every ref in this push is a DELETION, so there is no pushed content for it to check (P-010). Any push carrying a real ref update runs the full gate."
+  exit 0
+fi
+
 pnpm gate
