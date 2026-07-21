@@ -502,8 +502,13 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   }
 }
 
-/** A session whose AMCP axis is believed up: healthy, or degraded (OSC-silent). */
-function isLiveState(state: ServerSessionState): boolean {
+/**
+ * A session whose AMCP axis is believed up: `healthy`, or `degraded` (OSC-silent
+ * but its command socket still works). The canonical "is this server reachable?"
+ * predicate — divergence gating, corrective resend, and the bridge's on-air
+ * refusal (B-100) all read it, so the state list lives in exactly one place.
+ */
+export function isLiveState(state: ServerSessionState): boolean {
   return state === 'healthy' || state === 'degraded';
 }
 

@@ -21,6 +21,17 @@ Persian / RTL is a core requirement.
    mixed RTL/LTR.
 5. **Strict TypeScript, no `any`.** Lint tiers forbid Node/Electron imports in
    browser code. Conventional commits. Tests via vitest.
+6. **A predicate's NAME is part of its contract.** If the name states a condition
+   ("link down", "reachable"), the implementation must test THAT condition — and
+   REUSE the one canonical predicate (e.g. `@cg/caspar-client`'s `isLiveState`),
+   never re-derive the state list locally. A second local copy is how a name comes
+   to lie about what it tests. `degraded` is AMCP-up / OSC-silent — it is
+   REACHABLE (see `B-100`).
+7. **One boolean gating a destructive AND a constructive step is read ONCE.** When
+   a single condition guards both a destructive action (an adopt-`CLEAR`) and the
+   constructive step that repairs it (the pre-roll `CG ADD`), both must read the
+   SAME evaluation. Two reads with an `await` between them is a CLEAR-then-nothing
+   window — a black layer on air (see `B-100`).
 
 ## Where features go
 

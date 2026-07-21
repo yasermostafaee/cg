@@ -12,7 +12,7 @@ import { HEALTH_MS } from './support/harness.js';
  * re-publish as the muted `unverified` — never the red `on-air`/`playing` the wire no longer
  * backs. On reconnect it reconciles against real OSC: a still-occupied layer restores ON AIR
  * (a transient blip — the producer survived); a silent/empty layer resets to IDLE (a restart —
- * the producer is gone). The on-air REFUSAL (#linkDown on take/update/out) is unchanged.
+ * the producer is gone). The on-air REFUSAL (#noServerReachable on take/update/out) is unchanged.
  */
 
 let mock: MockHandle | null = null;
@@ -130,7 +130,7 @@ it('a transient blip: ON AIR → UNVERIFIED on the drop, → restored ON AIR on 
   expect(status(r, 'item1')).toBe('on-air');
 }, 25_000);
 
-it('FROZEN: while the link is down, take/update/out are still REFUSED (#linkDown, R-006)', async () => {
+it('FROZEN: while no server is reachable, take/update/out are still REFUSED (#noServerReachable, R-006)', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
   const r = await bootRuntime(singleServer(mock.amcpPort, oscPort));

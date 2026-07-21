@@ -201,6 +201,15 @@ trees on disk — the highest heading anywhere is `B-099`, nothing claims `B-100
 duplicate audit still prints exactly `B-056` and `B-080`. **The pointer is correct as it stands;
 this entry deliberately changes no number.**
 
+**2026-07-21 — B-100 IMPLEMENTED, no number claimed.** The `#linkDown()` predicate-mismatch fix
+(change dir `runtime-reachability-predicate`, branch `fix/b-100-reachability-predicate`) flips
+[[B-100]] `[ ] → [~]` in [bugs-runtime.md](bugs-runtime.md); it files NO new heading, so the number
+space is unchanged. Re-verified immediately before the commit against fetched `origin/main`
+(`057554f`), every remote ref, and both sibling worktrees' checked-out branches (`cg` on
+`docs/file-linkdown-predicate-bug`, `cg-designer` detached at `9372517`): the ONLY `B-100` heading
+anywhere is this exact bug (the predicate mismatch) — no divergent claim to renumber against — and
+the duplicate audit still prints exactly `B-056` and `B-080`. **Next free stays `B-102`.**
+
 ### RECOMMENDATION (recorded, not implemented): retire the "next free" pointer
 
 All three recorded drift modes are one disease, and the pointer is it. Look at what it actually

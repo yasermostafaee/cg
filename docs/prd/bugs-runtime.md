@@ -1518,6 +1518,13 @@ OSC-silent reconnect loop that makes the state permanent). B-082 stays `[~]` for
 verification only, and must NOT be scheduled as separate fix work — fixing B-100 is what closes
 the black-layer path.
 
+**Update 2026-07-21 — the CLEAR-then-nothing window is now FIXED under [[B-100]]** (change dir
+`runtime-reachability-predicate`): the predicate is corrected to reachability and `load()` gates
+the adopt-`CLEAR` and the pre-roll `CG ADD` on ONE evaluation, so the pair is atomic. B-082 STAYS
+`[~]`: its owed **real-CasparCG check #1** is unchanged and is the SAME physical session as
+[[B-100]]'s owed hardware verification — one run discharges both. Do NOT flip B-082 to `[x]` until
+that run happens.
+
 **Scope of the reopening — what is NOT in doubt.** The operator-facing symptom this entry was
 filed for (every offline Load painting ✗ ERROR) is genuinely fixed, and the fully-disconnected
 case is sound: with no socket at all, the adopt-CLEAR cannot land either, so nothing is
@@ -1854,7 +1861,7 @@ exactly the moment the operator most needs the explanation.
 **FROZEN:** on-air refusal (R-006), [[B-086]]/[[B-087]]'s `unverified` badge, [[B-092]]'s restore
 and [[B-093]]'s blind-tap guard are untouched. This is an indicator; it changes no decision.
 
-## [ ] B-100 — the bridge's link predicate calls an OSC-silent server UNREACHABLE: `#linkDown()` tests `state !== 'healthy'`, but the caspar-client's own predicate counts `degraded` (OSC-silent, AMCP UP) as live — so a working AMCP link is treated as dead, `load()` can leave a layer BLACK, and every on-air verb is refused ⟨priority: high⟩
+## [~] B-100 — the bridge's link predicate calls an OSC-silent server UNREACHABLE: `#linkDown()` tests `state !== 'healthy'`, but the caspar-client's own predicate counts `degraded` (OSC-silent, AMCP UP) as live — so a working AMCP link is treated as dead, `load()` can leave a layer BLACK, and every on-air verb is refused ⟨priority: high⟩ — code merged (change dir `runtime-reachability-predicate`); real-CasparCG verification OWED before archive (see **Resolution**)
 
 **Root cause — a PREDICATE MISMATCH. The black screen is a symptom, not the bug.** Two predicates
 in this codebase answer "is this server usable?" and they disagree:
@@ -1977,6 +1984,56 @@ no decision. This is about the bridge acting on it wrongly. **Cross-refs:** [[B-
 that surfaced it — its owed hardware check is the same run as this item's, see there), [[B-101]]
 (the no-OSC reconnect loop that makes this the permanent state), [[C-014]] (allocation's
 deliberate fail-open on silence), [[B-093]], [[B-086]], [[B-087]], [[B-030]].
+
+**RESOLUTION (2026-07-21, change dir `runtime-reachability-predicate`).** Owner's read taken:
+**fix option (2) — correct the predicate to reuse `isLiveState` — PLUS the atomic pairing** the
+ACCEPTANCE demands. Three parts, one commit:
+
+1. **Predicate corrected and renamed.** `#linkDown()` → `#noServerReachable()`
+   (`tools/caspar-bridge/src/caspar-runtime.ts:1002`), body now
+   `sessions.every((s) => !isLiveState(s.state))`. `isLiveState` is promoted to the
+   `@cg/caspar-client` public entry (`packages/caspar-client/src/index.ts`) and IMPORTED — one
+   canonical reachability notion, no second local copy (the copy is what let the name lie).
+   Renamed at all FIVE call sites — `load` (`:668`), `take`, `update`, `stopItem`, `out` — and in
+   the comments that reference it (the `restore()` contrast and the [[B-086]] demote comment,
+   which is corrected to note the demote-display and the refusal are now DIFFERENT conditions).
+2. **Pairing made structural.** `load()` evaluates reachability ONCE (`:627`) and threads that one
+   `reachable` value into both `#adoptLayer(slot, reachable)` (which now skips the adopt-`CLEAR`
+   when unreachable) and the pre-roll `CG ADD` gate. CLEAR-then-nothing is no longer constructible
+   at that site — either both reach the wire or neither, regardless of a state slip in the await
+   gap. The item still lands at `loaded` with slot bound and OSC interest registered ([[B-082]]
+   behaviour unchanged); only the CLEAR is gated.
+3. **On-air policy change (deliberate, owner-approved).** `take`/`update`/`out`/`stopItem` are NO
+   LONGER refused while the only declared server is `degraded` (OSC-silent, AMCP up) — the command
+   reaches CasparCG over AMCP, and refusing on OSC silence turns a monitoring fault into a total
+   playout outage ([[B-094]]'s incident would go off air entirely). Honesty under silence is
+   preserved by the surfaces that already exist ([[B-086]] `unverified` "WAS ON AIR", [[B-094]]
+   `⚠ NO OSC`), not by refusal — the operator is WARNED, not BLOCKED. With NO server reachable the
+   verbs are STILL refused `disconnected` (R-006 intact); offline safety is re-scoped to its true
+   condition, not removed.
+
+**Tests.** New `reachability-predicate.integration.test.ts` (a `degraded` hold via a TEST-ONLY
+`sessionTuning` seam + a `deafPort` the mock never emits to): the black-layer regression, the
+CLEAR⇒ADD pairing invariant across healthy/degraded/disconnected, `take` accepted on `degraded`
+with `CG PLAY` on the wire, and the FROZEN [[B-056]] mirror-pair send. Each new assertion was shown
+RED pre-fix. Spec: `runtime-caspar-bridge` requirement "On-air verbs are refused while the server
+is not connected" MODIFIED — predicate corrected to reachability with degraded-accepted and
+never-black scenarios.
+
+**Frozen, verified unchanged:** R-006 offline refusal + [[B-082]] offline load-rests-at-loaded
+(`disconnected-refusal.integration.test.ts`, untouched); [[B-086]] `onair-honest-linkloss` refusal
+(drives a full disconnect, not `degraded` — still refused); [[C-014]] quarantine; the AMCP
+verb/order/quoting seam. Out of scope and untouched: [[B-101]]'s force-disconnect watchdog,
+`clearLayer`'s R-015 refusal, [[B-086]]'s demote wiring.
+
+**GATES OWED.**
+
+- **Real-CasparCG verification — OWED, MANDATORY before archive** (this changes on-air behaviour).
+  Drive a server to `degraded` (stop OSC, leave AMCP up), put a graphic on the layer, Load onto it
+  and observe the layer is NOT black; then Take and confirm it plays. This is the SAME physical
+  session as [[B-082]]'s owed real-CasparCG check #1 — one run discharges both.
+- **`pnpm gate:e2e` on Linux — NOT owed.** The diff is bridge-internal (`caspar-bridge` +
+  `caspar-client`) + tests + docs; it touches no browser-visible surface.
 
 ## [ ] B-101 — an OSC-silent install cannot hold a connection: the watchdog tears down a WORKING AMCP socket every ~13 s and reconnects forever, so `#linkDown()` is true for most of every cycle ⟨priority: high⟩
 

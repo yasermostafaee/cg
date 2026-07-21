@@ -48,7 +48,7 @@ export type {
   PinnedSlot,
 } from './layers/layer-manager.js';
 
-export { RedundancyAdapter } from './redundancy/redundancy-adapter.js';
+export { RedundancyAdapter, isLiveState } from './redundancy/redundancy-adapter.js';
 export type {
   RedundancyAdapterEvents,
   RedundancyAdapterOptions,
