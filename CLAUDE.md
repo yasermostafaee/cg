@@ -203,11 +203,19 @@ history.
 - Judge merge status by the PR (`gh pr list --head <branch> --state all`) or by the
   deliverable's presence on `main` (archived change dir, PRD item flipped, the code
   itself) — never by ancestry.
-- **Ship in three explicit steps — never `gh pr merge --delete-branch` (see `P-011`).**
+- **Ship in four explicit steps — never `gh pr merge --delete-branch` (see `P-011`).**
   `gh pr merge <n> --admin --squash` (NO `--delete-branch`), then
-  `git push origin --delete <branch>`, then `git branch -D <branch>`. The deletion
-  push costs ~3 s, because an all-deletions push skips the gate (`P-010`), and `-D` is
-  required since a squash-merged branch never reads as merged to `-d`.
+  `git push origin --delete <branch>`, then `git branch -D <branch>`, then
+  `git -C ../cg pull --ff-only`. The deletion push costs ~3 s, because an
+  all-deletions push skips the gate (`P-010`), and `-D` is required since a
+  squash-merged branch never reads as merged to `-d`.
+- **The fourth step is what keeps `cg` honest.** Nothing else advances it, so `cg`
+  silently falls behind the `main` it is supposed to mirror — it was two commits
+  stale when the refs sweep found it — and a stale `cg` breaks its one job: being
+  the clean current view the B-number audit and every "is this on `main`?" check
+  read from. `--ff-only` is the point: in a squash-merge repo it refuses loudly
+  rather than manufacturing a merge commit, and a plain `pull` here has already
+  produced a spurious conflict once.
 - **Why `--delete-branch` cannot work in this layout:** gh deletes the LOCAL branch
   first and aborts before the remote deletion if that step fails — and here it always
   fails. On the branch, gh checks out the PR's base `main`, which `cg` holds
