@@ -196,3 +196,50 @@ depend on model discipline.
 - WHEN the hook's pure decision logic changes THEN unit tests in `tools/gate-hook`
   cover path classification, docs-only detection, UI/render matching, and attempt
   counting
+
+## [x] P-010 — the pre-push gate runs in full on ref DELETIONS, where it proves nothing ⟨priority: medium⟩
+
+**What:** `.husky/pre-push` reads git's stdin and skips `pnpm gate` when EVERY ref in
+the push is a deletion. Any other push — including a MIXED one — gates exactly as
+before.
+**Why:** `.husky/pre-push` was an unconditional `pnpm gate`; it never read stdin at
+all, so it could not tell a content push from a deletion. Observed 2026-07-21:
+
+```
+git push origin --delete docs/file-linkdown-predicate-bug
+```
+
+ran the complete gate — 82 turbo tasks, `format:check`, and `openspec validate --all
+--strict`, ~1m53s — and only then performed the deletion. Three costs, in priority
+order:
+
+1. **It gates the WORKING TREE, not the pushed content.** On a deletion there is no
+   pushed content, so the green result is an assertion about an unrelated thing.
+2. **It silently consumes this host's exclusive gate slot.** The standing rule is
+   never two gates concurrently on this host; a ref deletion must not take that slot.
+   Same contention class as [[B-098]]'s hypothesis A.
+3. **A pending refs sweep will delete dozens of branches.** At full-gate cost each,
+   that is hours of wall-clock and dozens of contention windows.
+
+**Acceptance:**
+
+- WHEN every ref line on the hook's stdin is a deletion (literal `(delete)` local ref
+  - all-zero local oid) THEN the gate is SKIPPED and the hook prints one line saying
+    so, so a skip is never silent
+- WHEN any ref in the push is a real update — including a MIXED push that also deletes
+  — THEN the full gate runs
+- WHEN stdin is empty, malformed, or unrecognized, or `node` is missing/failing THEN
+  the full gate runs (fail-closed: unknown means gate it)
+- WHEN the decision logic changes THEN unit tests in `tools/gate-hook` cover
+  all-deletions, single update, mixed, empty, and malformed stdin
+
+**Notes:** The fix NARROWS **when** the gate runs — it never changes **what** the gate
+checks. There is deliberately no env-var bypass and no `--no-verify` convenience
+wrapper: while Actions billing is out this hook is the only enforcement mechanism, and
+nothing here may weaken it. Decision logic is pure (stdin text in, boolean out, no git
+calls) in `tools/gate-hook/src/pre-push-decision.mjs` — the sibling of P-009's
+`gate-decision.mjs` — with `pre-push-cli.mjs` as the thin stdin plumbing the shell
+calls. Tooling only — no OpenSpec change, no source/runtime/export/schema change, so
+this closes on a green gate like [[B-071]] rather than via an archive. Verified
+end-to-end on a throwaway ref: creating `tmp/hook-check` ran the full gate, deleting it
+skipped and said so.
