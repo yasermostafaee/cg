@@ -350,7 +350,7 @@ it('FROZEN: restoring while NO server is reachable sends nothing, and the on-air
 }, 25_000);
 
 it('FROZEN: a restore never LIFTS B-086 — a mirror pair with the primary down keeps "WAS ON AIR"', async () => {
-  // The narrow case a review caught: `#linkDown()` (command reachability) is
+  // The narrow case a review caught: `#noServerReachable()` (command reachability) is
   // FALSE whenever ANY server is reachable, but B-086 demotes on the CURRENT
   // PRIMARY, because only the primary's OSC can verify an on-air claim. A
   // restore that cleared the flag from the reachability predicate would

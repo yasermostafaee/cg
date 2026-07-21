@@ -1,4 +1,5 @@
 import {
+  isLiveState,
   LayerManager,
   OutOfLayersError,
   Reconciler,
@@ -261,6 +262,17 @@ export class CasparRuntime {
 
   #started = false;
   readonly #intentTimeoutMs: number;
+  /**
+   * TEST-ONLY seam (B-100): per-`ServerSession` health-timer overrides. Empty in
+   * production, so the ServerSession defaults apply. A test uses it to drive and
+   * HOLD a session in `degraded` (OSC-silent, AMCP up) deterministically — the
+   * state the reachability predicate must count as reachable.
+   */
+  readonly #sessionTuning: {
+    oscDegradedAfterMs?: number;
+    oscDownAfterMs?: number;
+    watcherIntervalMs?: number;
+  };
 
   constructor(
     config: ConnectionConfig,
@@ -271,11 +283,18 @@ export class CasparRuntime {
       occupancyStaleMs?: number;
       /** TEST-ONLY seam: inject a template server (e.g. one whose start() fails). */
       templateServer?: TemplateHttpServer;
+      /** TEST-ONLY seam (B-100): override each session's OSC health timers. */
+      sessionTuning?: {
+        oscDegradedAfterMs?: number;
+        oscDownAfterMs?: number;
+        watcherIntervalMs?: number;
+      };
     } = {},
   ) {
     this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
+    this.#sessionTuning = options.sessionTuning ?? {};
     this.#templateServer =
       options.templateServer ?? new TemplateHttpServer((id) => this.#templates.html(id));
     this.#config = config;
@@ -312,6 +331,8 @@ export class CasparRuntime {
         oscPort: ep.oscPort,
         oscBindHost: deriveOscBindHost(ep.host),
         resyncDurationMs: RESYNC_MS,
+        // TEST-ONLY (B-100): empty in production, so ServerSession defaults hold.
+        ...this.#sessionTuning,
       });
     return {
       A: session('A', config.servers.A),
@@ -351,8 +372,12 @@ export class CasparRuntime {
       });
       // B-086 — honest ON AIR across a CasparCG link-loss. The CURRENT PRIMARY's
       // OSC is what verifies on-air claims, so its link state drives the
-      // reconciler's "unverifiable" display (the same session-state signal the
-      // health pill and `#linkDown()` use):
+      // reconciler's "unverifiable" display. B-100 note: this demote keys on the
+      // primary LEAVING `healthy` (OSC silence included), which since B-100 is a
+      // DIFFERENT condition from the on-air REFUSAL `#noServerReachable()` (which
+      // stays false while a `degraded` server is still reachable). They coincided
+      // under the old predicate; now honesty is the display's job and reachability
+      // is the refusal's — the operator is WARNED on silence, not BLOCKED:
       //   LEFT 'healthy'  → on-air/played items re-publish as UNVERIFIED
       //                     ("WAS ON AIR", muted) — the wire can't back them.
       //   INTO 'healthy'  → clear the flag AND reconcile against real occupancy
@@ -597,10 +622,20 @@ export class CasparRuntime {
       return { accepted: false, errorCode: code };
     }
 
+    // B-100 — evaluate reachability ONCE, here, and gate BOTH the destructive
+    // adopt-CLEAR and the constructive pre-roll ADD on this single value. The two
+    // used to be independent reads of the predicate with an await between them, so
+    // a session slipping state in the gap could land the CLEAR yet skip the ADD —
+    // CLEAR-then-nothing, a BLACK layer. One evaluation makes the pairing structural:
+    // if the CLEAR can reach the wire, the ADD is attempted; neither, or both.
+    const reachable = !this.#noServerReachable();
+
     // Reconnect-reconciliation — adopt the layer BEFORE binding the slot/OSC
     // interest: destroy any producer a previous bridge session orphaned there,
-    // so its OSC state can never route to this fresh item.
-    const { adopted } = await this.#adoptLayer(slot);
+    // so its OSC state can never route to this fresh item. The CLEAR is issued
+    // ONLY when a server is reachable (B-100): a CLEAR that lands with no following
+    // ADD is exactly the black-layer window this pairing exists to close.
+    const { adopted } = await this.#adoptLayer(slot, reachable);
 
     // The adopt-CLEAR awaited a real AMCP round-trip — a remove() may have
     // landed meanwhile and, finding no slot yet, cleaned up nothing. If the
@@ -642,9 +677,13 @@ export class CasparRuntime {
     // already recover from it by lazily re-issuing the `CG ADD` before the `CG PLAY`
     // (B-039, :606/:660), pulling template + current fields from the Reconciler at the
     // moment of use rather than replaying a stored command. So the item plays normally
-    // once the link is back, and until then the on-air verbs stay REFUSED by `#linkDown()`.
-    // No AMCP verb is added and the ADD→PLAY order is preserved.
-    if (this.#linkDown()) return { accepted: true };
+    // once the link is back, and until then the on-air verbs stay REFUSED by
+    // `#noServerReachable()`. No AMCP verb is added and the ADD→PLAY order is preserved.
+    //
+    // B-100 — this reads the SAME `reachable` captured above the adopt-CLEAR, so the two
+    // decisions can never split: with no server reachable the adopt-CLEAR was skipped too,
+    // so we can never leave a layer cleared-and-empty.
+    if (!reachable) return { accepted: true };
 
     // B-039 — `CG ADD` only (play-on-load OFF in the builder): the producer is
     // loaded, NOT playing. The operator's take issues the `CG PLAY`.
@@ -693,7 +732,7 @@ export class CasparRuntime {
     //
     // DEMOTE-ONLY, and on the PRIMARY's state — the same signal B-086 demotes
     // on, because only the current primary's OSC can verify an on-air claim.
-    // Never the reachability predicate `#linkDown()` (which is false whenever
+    // Never the reachability predicate `#noServerReachable()` (which is false whenever
     // ANY server is reachable): in a mirror pair with the primary down and the
     // backup up, clearing the flag here would UN-demote B-086's `unverified`
     // rows back to a confident red ON AIR that nothing verifies. Lifting the
@@ -944,19 +983,31 @@ export class CasparRuntime {
    * re-delivers template HTML, never stack intents), which is the same false belief one
    * step later.
    *
-   * The predicate is "**no declared server is reachable**", NOT "the primary is down".
-   * That distinction is load-bearing and B-056 owns it: in a mirror pair whose PRIMARY's
-   * AMCP link is dead while the BACKUP is healthy (auto-failover off — the human-in-the-loop
-   * scenario), every send still lands backup-only on a real, rendering CasparCG. Something
-   * genuinely IS on air there, so refusing would be both a regression of the redundancy
-   * contract and a lie in the opposite direction. We refuse only when the command can reach
-   * no server at all.
+   * The predicate is "**no declared server is reachable**", NOT "the primary is down"
+   * and NOT "no session is `healthy`". Two distinctions are load-bearing:
+   *
+   *   - B-056 — in a mirror pair whose PRIMARY's AMCP link is dead while the BACKUP is
+   *     healthy (auto-failover off — the human-in-the-loop scenario), every send still
+   *     lands backup-only on a real, rendering CasparCG. Something genuinely IS on air
+   *     there, so refusing would be both a regression of the redundancy contract and a
+   *     lie in the opposite direction. We refuse only when the command can reach NO
+   *     server at all.
+   *   - B-100 — a `degraded` server (OSC-silent past the threshold, AMCP socket still
+   *     up) is REACHABLE: OSC is the CONFIRMATION channel, AMCP is the COMMAND channel,
+   *     and a command reaches CasparCG over AMCP regardless of OSC. Refusing on OSC
+   *     silence would turn a monitoring fault into a total playout outage (B-094's
+   *     wrong-OSC-port install would go off air entirely). Reachability therefore reuses
+   *     the caspar-client's own `isLiveState` (`healthy` OR `degraded`) rather than
+   *     re-deriving the state list here — a second local copy is how the name came to
+   *     lie about the predicate in the first place. Honesty under silence is preserved by
+   *     the surfaces that already exist (B-086 demotes on-air rows to `unverified`,
+   *     B-094 renders `⚠ NO OSC`), not by refusal.
    */
-  #linkDown(): boolean {
+  #noServerReachable(): boolean {
     const sessions = [this.#sessions.A, this.#sessions.B].filter(
       (s): s is ServerSession => s !== undefined,
     );
-    return sessions.every((s) => s.state !== 'healthy');
+    return sessions.every((s) => !isLiveState(s.state));
   }
 
   /**
@@ -987,7 +1038,7 @@ export class CasparRuntime {
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
-    if (this.#linkDown()) return { accepted: false, errorCode: 'disconnected' };
+    if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'take', itemId }, seq);
 
@@ -1035,8 +1086,8 @@ export class CasparRuntime {
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
-    // R-006 — see #linkDown(): refuse before the intent exists.
-    if (this.#linkDown()) return { accepted: false, errorCode: 'disconnected' };
+    // R-006 — see #noServerReachable(): refuse before the intent exists.
+    if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'update', itemId, fields, mergeMode }, seq);
 
@@ -1101,7 +1152,7 @@ export class CasparRuntime {
     // R-006 — STOP takes a graphic off air, so it is an on-air-affecting command and
     // is refused with the link down exactly like take/update/out. Claiming a stop
     // succeeded when nothing reached CasparCG is the same lie in the other direction.
-    if (this.#linkDown()) return { accepted: false, errorCode: 'disconnected' };
+    if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'stop', itemId }, seq);
     this.#armExpiry(seq);
@@ -1115,9 +1166,9 @@ export class CasparRuntime {
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { accepted: false };
-    // R-006 — see #linkDown(). An out cannot reach a dead server either; claiming it
+    // R-006 — see #noServerReachable(). An out cannot reach a dead server either; claiming it
     // succeeded would be the mirror-image lie (an operator believing a graphic came OFF).
-    if (this.#linkDown()) return { accepted: false, errorCode: 'disconnected' };
+    if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'out', itemId }, seq);
     this.#armExpiry(seq);
@@ -1734,9 +1785,15 @@ export class CasparRuntime {
    * the `ok && onPrimary` gate, and the backup-only-stays-unadopted rule are
    * behaviorally unchanged.
    */
-  async #adoptLayer(slot: CommandSlot): Promise<{ adopted: boolean }> {
+  async #adoptLayer(slot: CommandSlot, reachable: boolean): Promise<{ adopted: boolean }> {
     const key = adoptionKey(slot);
     if (this.#adopted.has(key)) return { adopted: true };
+    // B-100 — never issue the adopt-CLEAR when no server is reachable. With a live
+    // AMCP link the CLEAR lands, and load()'s pre-roll ADD reads this SAME `reachable`,
+    // so a landed CLEAR is always paired with an attempted ADD — never black-then-nothing.
+    // With nothing reachable the CLEAR could not land anyway; skipping it keeps the
+    // pairing structural rather than relying on the transport to fail.
+    if (!reachable) return { adopted: this.#adopted.has(key) };
     const { ok, onPrimary } = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'normal');
     // A backup-only success (mirror-sync with the primary momentarily down)
     // did NOT clear the primary's layer — leave it unadopted so a later load

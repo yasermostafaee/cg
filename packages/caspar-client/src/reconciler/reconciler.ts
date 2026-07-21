@@ -477,7 +477,11 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
 
   /**
    * Set the CURRENT-PRIMARY CasparCG link state (the bridge drives this from the
-   * session FSM — the same signal `#linkDown()` gates the on-air refusal on).
+   * session FSM: the primary LEAVING `healthy`). Under B-100 this is a DIFFERENT
+   * condition from the on-air refusal, which gates on `#noServerReachable()`
+   * (`healthy` OR `degraded`) — a `degraded` primary demotes the DISPLAY here yet
+   * still accepts commands. The two coincided before B-100 separated honesty
+   * (the display's job) from reachability (the refusal's).
    *
    * While DOWN, an item whose reconciled status is on-air/`playing` publishes as
    * the honest `unverified` ("WAS ON AIR") — the wire can no longer confirm it.
