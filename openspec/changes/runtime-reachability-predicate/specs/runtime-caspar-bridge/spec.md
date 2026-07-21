@@ -33,6 +33,15 @@ Two distinctions are load-bearing:
   in the opposite direction (denying air that exists). The gate closes only when the command can
   reach NO server at all.
 
+This requirement's own verb list (`take`, `update`, `out`) is NOT the predicate's full reach. The
+SAME predicate SHALL govern every site that asks "can a command reach a server?" — five in all:
+these three, the graceful stop (whose own requirement already scopes its refusal to "no declared
+server is reachable, exactly as the other on-air-affecting commands are", and which therefore
+inherits the corrected meaning without restating it), and the load path below. A `degraded` server
+SHALL accept the graceful stop for the same reason it accepts a take: being unable to take a
+graphic OFF air through a working command link is the more dangerous failure, because the graphic
+stays on air.
+
 The SAME reachability predicate SHALL gate the load path's adopt-CLEAR / pre-roll-ADD pairing. A
 load SHALL evaluate reachability ONCE and issue the destructive adopt-`CLEAR` only on a path where
 the constructive pre-roll `CG ADD` will also be attempted — so a reachable server (`healthy` OR
@@ -72,6 +81,14 @@ surfaces verbatim). It introduces no AMCP verb and sends nothing to the wire.
   `CG PLAY` reaches the wire — refusing over a working command link would deny air that a real
   CasparCG can render, and honesty is already carried by the `unverified` display and the
   `⚠ NO OSC` health surface, not by refusal
+
+#### Scenario: A graceful stop on a degraded server is ACCEPTED — the operator can still get off air
+
+- **WHEN** an item is on air on a `degraded` server (OSC silent, AMCP socket working) and the
+  operator issues the graceful stop **THEN** it is ACCEPTED, the stop verb reaches the wire, and
+  the producer is left resident — refusing it would strand a live graphic on air with no way to
+  remove it through a link that carries the command perfectly well, which is a worse failure than
+  a refused take
 
 #### Scenario: A load onto a degraded server is never left black
 

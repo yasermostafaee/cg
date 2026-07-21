@@ -289,6 +289,111 @@ describe('B-100 — a degraded (OSC-silent, AMCP-up) server is REACHABLE', () =>
     expect(mock.layerState(SLOT)?.onAir).toBe(true);
   }, 30_000);
 
+  // §2.1 — the FIFTH call site. C-012's graceful stop changed behaviour with B-100
+  // and had no coverage in either direction.
+  it('stopItem on a degraded-but-reachable server is ACCEPTED and the CG STOP reaches the wire', async () => {
+    const oscPort = await freeUdpPort();
+    const tracePath = newTracePath();
+    const mock = await newMock({
+      amcpPort: 0,
+      oscPort,
+      oscHost: '127.0.0.1',
+      oscHz: 40,
+      tracePath,
+    });
+    const r = await bootDegraded(mock);
+
+    expect((await r.load('grace', 'lower-third', { headline: 'خروج' })).accepted).toBe(true);
+    await expect(mock.waitForCgAddResolution(SLOT)).resolves.toBe('resolved');
+    expect((await r.take('grace')).accepted).toBe(true);
+    expect(mock.layerState(SLOT)?.onAir).toBe(true);
+
+    // Being unable to take a graphic OFF air through a working command link was the
+    // more dangerous half of the old behaviour — worse than a refused take, because
+    // the graphic STAYS on air. Pre-B-100 this returned `disconnected`.
+    expect(await r.stopItem('grace')).toEqual({ accepted: true });
+
+    const seg = await recvLines(mock, tracePath);
+    expect(seg.some((l) => l.startsWith('CG 1-10 STOP'))).toBe(true);
+    // C-012 — a graceful stop leaves the producer RESIDENT (contrast out's CLEAR).
+    expect(mock.layerState(SLOT)?.producer).toBe('html');
+    expect(mock.layerState(SLOT)?.onAir).toBe(false);
+  }, 30_000);
+
+  // §2.2 — FROZEN (R-006, the fifth call site): offline safety is re-scoped to "no
+  // server reachable", NOT removed. Mirrors disconnected-refusal's take/update/out.
+  it('FROZEN: stopItem is still REFUSED with no server reachable, and queues nothing', async () => {
+    const oscPort = await freeUdpPort();
+    const tracePath = newTracePath();
+    // AMCP port 1 never answers — no session is ever reachable.
+    const r = newRuntime(singleServer(1, oscPort));
+    r.start();
+    await r.startServing();
+    r.templateImport(TEMPLATE, HTML);
+    await r.load('off', 'lower-third', {});
+
+    expect(await r.stopItem('off')).toEqual({ accepted: false, errorCode: 'disconnected' });
+
+    // The refusal happens BEFORE any intent is applied: nothing optimistic, nothing stuck.
+    const item = r.stackSnapshot().find((i) => i.itemId === 'off');
+    expect(item?.status).toBe('loaded');
+    expect(item?.pending).toBe(false);
+
+    // …and it is a REFUSAL, not a deferral. Bring a real server up and reconfigure onto
+    // it — the closest thing to "the server came back": no CG STOP is ever replayed.
+    const mock = await newMock({
+      amcpPort: 0,
+      oscPort,
+      oscHost: '127.0.0.1',
+      oscHz: 40,
+      tracePath,
+    });
+    await r.setConfig(singleServer(mock.amcpPort, oscPort));
+    await r.whenServerHealthy(HEALTH_MS);
+    const seg = await recvLines(mock, tracePath);
+    expect(seg.some((l) => l.startsWith('CG 1-10 STOP'))).toBe(false);
+  }, 30_000);
+
+  // The durable guard, completed: §4.2's pairing invariant is a LOAD-path property
+  // (CLEAR⇒ADD), so it has no verb axis. The verb axis is here — all FIVE predicate
+  // call sites exercised on one degraded server, in the same order as B-100's owed
+  // hardware protocol. Before this, only `take` was covered.
+  it('every predicate call site is ACCEPTED on a degraded server: load → take → update → stopItem → out', async () => {
+    const oscPort = await freeUdpPort();
+    const tracePath = newTracePath();
+    const mock = await newMock({
+      amcpPort: 0,
+      oscPort,
+      oscHost: '127.0.0.1',
+      oscHz: 40,
+      tracePath,
+    });
+    const r = await bootDegraded(mock);
+
+    // 1/5 load — the pre-roll ADD reaches the wire (paired with its adopt-CLEAR).
+    expect((await r.load('all', 'lower-third', { headline: 'یک' })).accepted).toBe(true);
+    await expect(mock.waitForCgAddResolution(SLOT)).resolves.toBe('resolved');
+    // 2/5 take
+    expect(await r.take('all')).toEqual({ accepted: true });
+    expect(mock.layerState(SLOT)?.onAir).toBe(true);
+    // 3/5 update — the on-air graphic can still be corrected while OSC is silent.
+    expect(await r.update('all', { headline: 'دو' }, 'merge')).toEqual({ accepted: true });
+    // 4/5 stopItem — graceful outro, producer stays resident.
+    expect(await r.stopItem('all')).toEqual({ accepted: true });
+    expect(mock.layerState(SLOT)?.producer).toBe('html');
+    // 5/5 out — the hard clear still destroys the producer.
+    expect(await r.out('all')).toEqual({ accepted: true });
+    expect(mock.layerState(SLOT)?.producer).toBe('empty');
+
+    // Every verb genuinely reached the wire — accepted acks are not enough.
+    const seg = await recvLines(mock, tracePath);
+    expect(seg.some((l) => l.startsWith('CG 1-10 ADD'))).toBe(true);
+    expect(seg.some((l) => l.startsWith('CG 1-10 PLAY'))).toBe(true);
+    expect(seg.some((l) => l.startsWith('CG 1-10 UPDATE'))).toBe(true);
+    expect(seg.some((l) => l.startsWith('CG 1-10 STOP'))).toBe(true);
+    expect(seg.some((l) => l.startsWith('CLEAR 1-10'))).toBe(true);
+  }, 30_000);
+
   // §4.6 — FROZEN (B-056): the predicate is still "no server reachable", not "the
   // primary is down". A dead primary with a HEALTHY backup still accepts sends.
   // Passes both pre- and post-fix; the guard is that B-100 does not regress it.
