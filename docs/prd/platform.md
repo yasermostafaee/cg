@@ -243,3 +243,58 @@ calls. Tooling only — no OpenSpec change, no source/runtime/export/schema chan
 this closes on a green gate like [[B-071]] rather than via an archive. Verified
 end-to-end on a throwaway ref: creating `tmp/hook-check` ran the full gate, deleting it
 skipped and said so.
+
+## [x] P-011 — `gh pr merge --delete-branch` can never work in this worktree layout, so merged branches accumulate silently ⟨priority: medium⟩
+
+**What:** CLAUDE.md now prescribes an explicit three-step ship sequence —
+`gh pr merge <n> --admin --squash` (NO `--delete-branch`), then
+`git push origin --delete <branch>`, then `git branch -D <branch>` — with the reason
+stated inline so it does not get "simplified" back later.
+**Why:** Observed 2026-07-21 merging [[P-010]] (#382) from `cg-runtime`: the merge
+SUCCEEDED, then gh's post-merge `git checkout main` failed with
+`'main' is already used by worktree at .../cg`, so the remote branch was NOT deleted.
+
+This is structural, not a one-off. Read from gh v2.71.0's
+`pkg/cmd/pr/merge/merge.go`, `deleteLocalBranch()` runs BEFORE `deleteRemoteBranch()`
+and any error aborts the remote half. In this layout the local half always fails, in
+**both** worktree states and for two different reasons:
+
+- **On the branch** (the normal case): `currentBranch == pr.HeadRefName`, so gh checks
+  out the PR's base `main` — which `cg` holds by the READ-ONLY worktree rule, and git
+  forbids one branch in two worktrees.
+- **Detached** (the resting state): `opts.Branch()` cannot resolve a current branch and
+  returns an error even earlier, before the checkout is ever attempted.
+
+Why it matters more than the inconvenience:
+
+1. **The failure is at the END.** The merge lands, the PR closes, the branch survives,
+   and nothing announces it. Silent accumulation.
+2. **It is a likely major contributor to the ref count** (88 local / 11 remote at the
+   [[P-010]] audit) — the very surface the B-number ritual must sweep every time.
+3. **Deleting a merged branch is now CHEAP** ([[P-010]]: an all-deletions push skips
+   the gate, ~3 s), so the corrected sequence costs almost nothing.
+
+**Acceptance:**
+
+- WHEN a PR is merged from a track worktree THEN the prescribed sequence deletes the
+  branch on BOTH sides, and the operator verifies both rather than trusting gh
+- WHEN the local branch is deleted THEN `-D` is used, never `-d` — this repo
+  squash-merges, so a merged branch's commits never enter `main`'s history and `-d`
+  refuses
+- WHEN CLAUDE.md states the sequence THEN the structural reason is inline, so the rule
+  is not re-simplified into the broken form
+
+**Notes:** `--repo` WAS investigated as option (b): gh sets
+`CanDeleteLocalBranch = !cmd.Flags().Changed("repo")`, so it genuinely skips the local
+half and the API deletes the remote branch. **Rejected** — it then leaks the LOCAL
+branch instead, which is precisely the stale-merged-branch hazard CLAUDE.md already
+documents at length (`fix/runtime-ux-batch-2`, #317, cost a full session), and it
+depends on undocumented flag coupling that `gh pr merge --help` never mentions. The
+explicit sequence works from both worktree states, deletes both sides verifiably, and
+survives a gh upgrade. Investigated by reading gh's source at the installed version
+tag, not by merging a real PR. Rides along: the `pnpm gate --force` correction (that
+flag lands on `openspec validate` and produces a bogus red — plain `pnpm gate` is
+already the uncached run), which the #382 session recorded only in a user-level memory
+file where the Designer session could never see it; it is now in CLAUDE.md. Docs and
+process only — no source, no spec, no behaviour change, so this closes on a green gate
+like [[P-010]] and [[B-071]] rather than via an archive.

@@ -53,7 +53,7 @@ pnpm install
 pnpm build                              # turbo: build all @cg/* packages
 pnpm --filter @cg/designer dev          # Designer SPA → http://127.0.0.1:4000
 pnpm --filter @cg/runtime  dev          # Runtime  SPA → http://127.0.0.1:5174
-pnpm turbo run typecheck lint test build && pnpm format:check   # full green gate (format:check is a ROOT prettier script, not a turbo task)
+pnpm gate                               # full green gate — turbo --force + format:check + openspec validate. NEVER append flags (see below)
 pnpm test:e2e                           # Playwright E2E via turbo (builds first — never run against a stale dist)
 pnpm --filter @cg/<pkg> typecheck|lint|test|build   # one workspace
 pnpm openspec <cmd>                     # OpenSpec CLI (new change / validate / archive)
@@ -64,9 +64,16 @@ pnpm openspec <cmd>                     # OpenSpec CLI (new change / validate / 
 `format:check` + `typecheck` + `lint` + `test` + `build` for every touched
 workspace. Formatting is part of the gate: if `format:check` fails, run the
 format/write script and include the result in the same commit — never leave
-formatting to CI. Before claiming the gate green ahead of a push, run the test
-task **uncached at least once** (`turbo --force`) — a stale turbo cache has
-produced a false green before.
+formatting to CI. Before claiming the gate green ahead of a push, the test task must
+have run **uncached at least once** — a stale turbo cache has produced a false green
+before.
+
+**Run it as plain `pnpm gate`; NEVER `pnpm gate --force`.** The `--force` is already
+inside the script (`turbo … --force`), so `pnpm gate` IS the uncached run — it reports
+`0 cached, 82 total`. `gate` is an `&&` chain and pnpm appends extra args to the LAST
+command, so the flag lands on `openspec validate --all --strict --force` →
+`error: unknown option '--force'`: a bogus red on an otherwise green gate. Same trap
+for any `pnpm <script> <flag>` where the script chains commands.
 
 **Never background a push.** The pre-push gate must run in the FOREGROUND, or a
 second gate can start alongside it — two gates in one workspace collide over
@@ -161,6 +168,12 @@ Three worktrees share one repo: `cg`, `cg-designer`, `cg-runtime`.
   is exactly what the B-number audit and any "is this on main?" check need.
 - **Docs work happens in the OWNING TRACK's worktree**, on a docs-only branch —
   Runtime docs in `cg-runtime`, Designer docs in `cg-designer`.
+- **A track worktree is NEVER on `main`; its resting state is DETACHED at merged
+  `main`.** git forbids one branch in two worktrees and `cg` holds `main`, so
+  `git checkout main` in a track worktree fails BY DESIGN. Finding `cg-runtime` or
+  `cg-designer` detached between tasks is CORRECT, not a fault to repair — the first
+  act of any task is to branch off up-to-date `main` anyway. Committing ON a detached
+  HEAD is what makes one dangerous; sitting on one is not.
 - **The cost, stated so nobody reverts this without knowing it:** a track cannot
   hold a feature branch and a docs branch at once, so docs work waits for a commit
   or a stash. That serialization is WITHIN one track with one driver — manageable.
@@ -190,6 +203,19 @@ history.
 - Judge merge status by the PR (`gh pr list --head <branch> --state all`) or by the
   deliverable's presence on `main` (archived change dir, PRD item flipped, the code
   itself) — never by ancestry.
+- **Ship in three explicit steps — never `gh pr merge --delete-branch` (see `P-011`).**
+  `gh pr merge <n> --admin --squash` (NO `--delete-branch`), then
+  `git push origin --delete <branch>`, then `git branch -D <branch>`. The deletion
+  push costs ~3 s, because an all-deletions push skips the gate (`P-010`), and `-D` is
+  required since a squash-merged branch never reads as merged to `-d`.
+- **Why `--delete-branch` cannot work in this layout:** gh deletes the LOCAL branch
+  first and aborts before the remote deletion if that step fails — and here it always
+  fails. On the branch, gh checks out the PR's base `main`, which `cg` holds
+  (`'main' is already used by worktree at .../cg`); detached, gh cannot resolve a
+  current branch and errors even earlier. Either way the merge LANDS and the PR
+  closes, so the remote branch survives with nothing announcing it — silent
+  accumulation (observed merging #382). `--repo` does skip gh's local half, but then
+  leaks the LOCAL branch instead: the exact hazard the next bullet exists to prevent.
 - **DELETE the local ref once its PR merges.** A stale merged branch is
   indistinguishable from in-flight work. `fix/runtime-ux-batch-2` — merged as #317
   on 2026-07-14 — still read "53 commits behind, 11 ahead" days later and cost a
