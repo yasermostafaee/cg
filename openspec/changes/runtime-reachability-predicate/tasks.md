@@ -26,6 +26,13 @@
 - [x] 3.3 FROZEN, verified unchanged: R-006 offline refusal + B-082 offline load in
       `disconnected-refusal.integration.test.ts`; B-086 `onair-honest-linkloss` refusal (drives a
       full disconnect, not degraded — still refused).
+- [x] 3.4 Fifth call site (follow-up): `stopItem` ACCEPTED on `degraded` with `CG STOP` on the wire
+      and the producer left resident (C-012); FROZEN `stopItem` still refused `disconnected` with no
+      server reachable, queueing nothing; and a walk of ALL FIVE call sites on one degraded server
+      (`load → take → update → stopItem → out`) asserting each verb reaches the wire. These pin
+      behaviour the fix above already changed — coverage, not red-first repros. The CLEAR⇒ADD
+      pairing invariant has no verb axis (it is a `load`-path property), so the verb axis lives in
+      that walk.
 
 ## 4. Docs
 

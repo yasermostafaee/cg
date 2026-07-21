@@ -2003,22 +2003,43 @@ ACCEPTANCE demands. Three parts, one commit:
    at that site — either both reach the wire or neither, regardless of a state slip in the await
    gap. The item still lands at `loaded` with slot bound and OSC interest registered ([[B-082]]
    behaviour unchanged); only the CLEAR is gated.
-3. **On-air policy change (deliberate, owner-approved).** `take`/`update`/`out`/`stopItem` are NO
-   LONGER refused while the only declared server is `degraded` (OSC-silent, AMCP up) — the command
-   reaches CasparCG over AMCP, and refusing on OSC silence turns a monitoring fault into a total
-   playout outage ([[B-094]]'s incident would go off air entirely). Honesty under silence is
-   preserved by the surfaces that already exist ([[B-086]] `unverified` "WAS ON AIR", [[B-094]]
-   `⚠ NO OSC`), not by refusal — the operator is WARNED, not BLOCKED. With NO server reachable the
-   verbs are STILL refused `disconnected` (R-006 intact); offline safety is re-scoped to its true
-   condition, not removed.
+3. **On-air policy change (deliberate, owner-approved).** All FIVE predicate call sites change
+   behaviour on a `degraded` (OSC-silent, AMCP-up) server. The four on-air verbs — **`take`,
+   `update`, `out` and `stopItem`** — are NO LONGER refused, and `load` now sends its pre-roll
+   `CG ADD` (paired with its adopt-`CLEAR`, part 2) instead of skipping it. The command reaches
+   CasparCG over AMCP, and refusing on OSC silence turns a monitoring fault into a total playout
+   outage ([[B-094]]'s incident would go off air entirely).
+
+   **`stopItem` and `out` are the ones that mattered most, and the entry should say so plainly:
+   the old behaviour left the operator unable to take a graphic OFF air through a link that would
+   have carried the command perfectly well.** That is strictly worse than a refused `take` — a
+   take that does not happen shows nothing, while a stop that does not happen leaves a live
+   graphic on air with no way to remove it. `stopItem` (C-012's graceful `CG STOP`) was also the
+   call site with NO test coverage in either direction until this was closed.
+
+   Honesty under silence is preserved by the surfaces that already exist ([[B-086]] `unverified`
+   "WAS ON AIR", [[B-094]] `⚠ NO OSC`), not by refusal — the operator is WARNED, not BLOCKED. With
+   NO server reachable all four on-air verbs are STILL refused `disconnected` (R-006 intact);
+   offline safety is re-scoped to its true condition, not removed.
 
 **Tests.** New `reachability-predicate.integration.test.ts` (a `degraded` hold via a TEST-ONLY
 `sessionTuning` seam + a `deafPort` the mock never emits to): the black-layer regression, the
 CLEAR⇒ADD pairing invariant across healthy/degraded/disconnected, `take` accepted on `degraded`
-with `CG PLAY` on the wire, and the FROZEN [[B-056]] mirror-pair send. Each new assertion was shown
-RED pre-fix. Spec: `runtime-caspar-bridge` requirement "On-air verbs are refused while the server
-is not connected" MODIFIED — predicate corrected to reachability with degraded-accepted and
-never-black scenarios.
+with `CG PLAY` on the wire, and the FROZEN [[B-056]] mirror-pair send. Each of those was shown RED
+pre-fix.
+
+**Coverage completed (2026-07-21, follow-up).** The fifth call site had none. Added, and passing on
+the already-fixed code (coverage, NOT red-first repros — the behaviour they pin was changed by the
+fix above): `stopItem` ACCEPTED on `degraded` with `CG STOP` on the wire and the producer left
+resident (C-012); FROZEN `stopItem` still refused `disconnected` with no server reachable, queueing
+nothing (a reconnect replays no `CG STOP`); and a walk of **all five call sites** on one degraded
+server — `load → take → update → stopItem → out` — asserting each verb's line genuinely reaches the
+wire. Note the CLEAR⇒ADD pairing invariant has no verb axis to widen: it is a property of the
+`load` path alone, so the verb axis lives in that new walk instead.
+
+Spec: `runtime-caspar-bridge` requirement "On-air verbs are refused while the server is not
+connected" MODIFIED — predicate corrected to reachability with degraded-accepted and never-black
+scenarios.
 
 **Frozen, verified unchanged:** R-006 offline refusal + [[B-082]] offline load-rests-at-loaded
 (`disconnected-refusal.integration.test.ts`, untouched); [[B-086]] `onair-honest-linkloss` refusal
@@ -2029,13 +2050,31 @@ verb/order/quoting seam. Out of scope and untouched: [[B-101]]'s force-disconnec
 **GATES OWED.**
 
 - **Real-CasparCG verification — OWED, MANDATORY before archive** (this changes on-air behaviour).
-  Drive a server to `degraded` (stop OSC, leave AMCP up), put a graphic on the layer, Load onto it
-  and observe the layer is NOT black; then Take and confirm it plays. This is the SAME physical
-  session as [[B-082]]'s owed real-CasparCG check #1 — one run discharges both.
+  This is the SAME physical session as [[B-082]]'s owed real-CasparCG check #1 — one run
+  discharges both. **The full protocol, in one list, so the person at the hardware needs nothing
+  else:** 0. Drive one declared server to `degraded`: stop OSC (or point it at a port nobody listens on)
+  while leaving the AMCP socket up. Confirm the health surface reads `⚠ NO OSC` / not-healthy
+  before starting. Put a graphic on the target layer first, so the adopt-`CLEAR` has a real
+  resident producer to destroy.
+  1. **Load** onto that occupied layer → the layer is **NOT black** (the adopt-CLEAR is paired
+     with the pre-roll ADD).
+  2. **Take** → the graphic **plays**.
+  3. **Update** → the on-air fields **change** on the rendered output.
+  4. **stopItem** (graceful) → the template runs its **outro** and the producer stays resident.
+     **This is the check that matters most** — it is the one whose refusal used to strand a
+     graphic on air.
+  5. **out** (hard clear) → the layer **clears**.
+
+  Every step must be performed while the server is still `degraded`; if it recovers to `healthy`
+  mid-run the run proves nothing and must be restarted. Note [[B-101]]: on a permanently
+  OSC-silent install the session force-disconnects roughly every 13 s, so expect a reconnect
+  window mid-protocol — steps issued during the disconnected window are correctly refused and
+  should be re-issued once the session is back to `degraded`, not recorded as a failure.
+
 - **`pnpm gate:e2e` on Linux — NOT owed.** The diff is bridge-internal (`caspar-bridge` +
   `caspar-client`) + tests + docs; it touches no browser-visible surface.
 
-## [ ] B-101 — an OSC-silent install cannot hold a connection: the watchdog tears down a WORKING AMCP socket every ~13 s and reconnects forever, so `#linkDown()` is true for most of every cycle ⟨priority: high⟩
+## [ ] B-101 — an OSC-silent install cannot hold a connection: the watchdog tears down a WORKING AMCP socket every ~13 s and reconnects forever, so after B-100 the operator gets INTERMITTENT command capability rather than restored capability ⟨priority: high⟩
 
 **Distinct from [[B-100]]** — different component, different fix. B-100 is the bridge reading the
 session state wrongly; this is the session state machine itself destroying a healthy AMCP link
@@ -2062,10 +2101,28 @@ COMMANDED.
 
 **So the answer to "is a no-OSC install permanently `degraded`?" is NO — it is worse.** The
 session does reach `healthy`, but only for ~3 s of each cycle; the rest is `degraded` (~10 s) plus
-the connect/handshake/resync climb, during ALL of which `#linkDown()` is true ([[B-100]]). And
-each cycle needlessly drops a live command channel. [[B-094]]'s own text already recorded the
-visible half of this — _"as the pill oscillates HEALTHY↔DEGRADED"_ (`bugs-runtime.md:1842`) — and
-attributed it to display flap rather than to a reconnect loop.
+the connect/handshake/resync climb. And each cycle needlessly drops a live command channel.
+[[B-094]]'s own text already recorded the visible half of this — _"as the pill oscillates
+HEALTHY↔DEGRADED"_ (`bugs-runtime.md:1842`) — and attributed it to display flap rather than to a
+reconnect loop.
+
+**Updated 2026-07-21, post-[[B-100]] — what this now costs, and why the entry as filed overstated
+it.** As FILED this said the bridge predicate was true "for most of every cycle", i.e. the on-air
+verbs were refused nearly always. [[B-100]] has since landed: the predicate is now
+`#noServerReachable()` and counts `degraded` as REACHABLE, so the ~10 s degraded window **accepts**
+commands. The residual cost is therefore **INTERMITTENT command capability, not restored
+capability** — commands land during the healthy (~3 s) + degraded (~10 s) stretch and are correctly
+refused `disconnected` during the connect/handshake/resync climb that follows each needless
+teardown. B-100's fix survives only BETWEEN teardowns, which is exactly why this item bounds how
+much of it an OSC-broken install actually receives, and why B-100's owed hardware protocol warns to
+re-issue any step that lands in a reconnect window rather than record it as a failure.
+
+**The category error, stated plainly — it is B-100's, one layer down.** B-100 was the bridge using
+OSC silence to decide REACHABILITY, a property OSC does not measure. This is the session FSM doing
+the same thing: using OSC silence as a liveness proxy for the AMCP socket, a channel it does not
+measure either. The correct liveness probe for the AMCP axis is **an AMCP command** — disconnect on
+a failed AMCP probe, never on a silent monitoring channel. OSC silence should be left to do only
+what it can honestly support: drive `degraded` and [[B-094]]'s `⚠ NO OSC` indicator.
 
 **There is no opt-out.** `startWatcher()` is called unconditionally on every entry to `healthy`
 (`:227`); `oscDegradedAfterMs` / `oscDownAfterMs` are the only knobs (`:130-131`) and neither
