@@ -610,7 +610,9 @@ read as a seam in what is otherwise a Persian-first product.
 **Notes:** OPEN QUESTIONS recorded rather than decided: (a) which fields — ALL numeric fields, or
 only operator-facing ones? (b) the normalisation boundary — AMCP presumably still needs ASCII
 digits on the wire, so this is a presentation-layer concern with a conversion edge that has to be
-placed precisely; (c) is the numeral locale a setting, or fixed to Persian?
+placed precisely; (c) is the numeral locale a setting, or fixed to Persian? — The INPUT half is
+now precisely filed as [[R-020]] (accept ۰–۹/٠–٩, normalize on input, canonical storage/wire);
+THIS item keeps the DISPLAY half and the open questions.
 
 ## [x] R-015 — protect VIDEO layers: a graphics operator can never clear one, and a video layer reads as NORMAL ⟨priority: high⟩ — merged (#365) + archived: `openspec/changes/archive/2026-07-19-runtime-protect-video-layers/`
 
@@ -804,3 +806,183 @@ an input method for field values. The ticker field model was verified at filing 
 worded against it (see the second Acceptance bullet). Cinegy parity is the NEED, not the UI.
 Pairs with the Designer-track authoring-load item (cross-reference by title). Bridge involvement
 (if the watch lands there) makes the watch half RECON-FIRST; the manual-reload half is small.
+
+## [ ] R-019 — modal editor for list-type field values: add / edit / delete / drag-reorder ⟨priority: medium⟩
+
+**What:** A button on list-type fields opens a modal editor: add items, edit them, delete them,
+reorder via drag & drop. Changes apply through the NORMAL field-update path, so a live item
+updates exactly as hand-edited fields do.
+**Why:** Ticker/sequence list fields currently render as stacked inputs that eat Inspector
+space; editing a long crawl in-place is cramped and reordering is impossible.
+**Acceptance:**
+
+- WHEN a `list`-type field is shown THEN a button opens a modal covering add / edit / delete /
+  drag-reorder of its items
+- WHEN changes are applied THEN they go through the existing field-update path — a live item
+  updates exactly as hand-edited fields do
+- WHEN item text is Persian/RTL THEN it survives verbatim
+- WHEN [[R-018]]'s from-file mode is ACTIVE on that field THEN the modal is read-only and
+  points at the file as the source
+- WHEN operated by keyboard THEN the modal is accessible per the design system's
+  interactive-control rules
+
+**Notes:** the list-field item shape was verified at [[R-018]]'s filing and this item is worded
+against it: a `list` field's items are ordered and extensible, `{ id, text }[]`, and the ticker
+reads `text` per item (`packages/shared-schema/src/elements.ts`, `fields.ts`). Cross-ref
+[[R-018]].
+
+## [ ] R-020 — Persian-keyboard digits accepted in numeric inputs, normalized to canonical digits ⟨priority: medium⟩
+
+**What:** With a Persian keyboard active, numeric inputs (offsets, counts, ports, numeric field
+values) reject Persian digits (۰–۹). They must be accepted and normalized to canonical digits
+for the stored value; text fields keep them verbatim (display text is display text).
+**Why:** An operator on a Persian keyboard should never have to switch layouts to type a
+number, and silent rejection reads as a broken input.
+**Acceptance:**
+
+- WHEN the operator types Persian digits (۰–۹) or Arabic-Indic digits (٠–٩) into ANY Runtime
+  numeric input THEN they are accepted, normalizing on input
+- WHEN the value is stored or transmitted THEN it is canonical digits
+- WHEN [[B-077]]'s pattern validation lands THEN a numeric pattern must not reject Persian
+  digits
+- WHEN the field is text-type THEN its content is untouched — verbatim
+
+**Notes:** Runtime half only — the Designer half is [[D-130]] ("Persian/Arabic-Indic digit
+input in numeric fields", filed on the Designer track in #387, merged while this batch was
+being written). Small, no recon. RELATIONSHIP TO [[R-014]] (judged at filing):
+R-014 already records the broader localisation item — input acceptance AND Persian DISPLAY,
+with its scope questions recorded, undecided. THIS item is the INPUT half made precise and
+independently shippable (both digit ranges, normalize-on-input, canonical storage/wire,
+text-verbatim, the B-077 interaction); implement the input half ONCE, under this number —
+R-014's input-side acceptance reads as satisfied by this item, and R-014 keeps the DISPLAY
+half and its open questions.
+
+## [ ] R-021 — fixed operator layers: aliased pre-defined slots with on-row import+load and layer-level control ⟨priority: high⟩
+
+**What:** A Cinegy-parity operating model IN PARALLEL with the dynamic stack: a fixed set of
+pre-defined CasparCG layers (default TEN at 70–79 — chosen because the default policy's dynamic
+ranges end at `custom` 60–69 and nothing uses 70–89; configurable per install, extendable ONLY
+at the end up to 89, never renumbered mid-session), each rendered as a permanent row. Each
+layer takes an optional ALIAS (config map layer→name) shown on the row. The row's import button
+does the FULL chain in one action: pick a `.vcg` → import into the library (it stays there for
+reuse) → create an item BOUND to that exact slot → Load.
+**Why:** With multiple Runtime stations on one CasparCG, a known layer is always manageable
+from any station — "layer 72 is the clock, whoever loaded it". The dynamic stack cannot promise
+that; fixed, aliased slots can.
+**Acceptance:**
+
+- WHEN the install config declares fixed slots (start/count/aliases) THEN they are implemented
+  as the LayerManager's pinned mechanism, so dynamic allocation NEVER lands on them
+- WHEN the operator uses a row's import button THEN one action performs import + create + Load
+  onto that exact slot (exact-slot binding via the existing `reserve()`-class path)
+- WHEN the resident item is THIS bridge's THEN the row exposes the full item verb set
+  (Take/Update/Stop/Clear) declared ONCE via the [[R-013]] rowAction pattern
+- WHEN the layer is occupied by anything else (another station's html graphic, or a non-html
+  producer) THEN the row shows occupancy honestly and offers LAYER verbs only — hard Clear and
+  graceful Stop — never Take/Update (no field schema for a foreign item)
+- WHEN the bridge restarts with an item on a fixed layer THEN the item survives ON THE SAME
+  layer — restore must adopt-in-place, never fall through to allocate-elsewhere
+- WHEN multiple stations drive one CasparCG THEN fixed rows and their verbs behave identically
+  whichever station issued the original load
+
+**Notes:** **THE structural risk, flagged loudly:** inside the fixed range, operator Clear
+works on ANY producer INCLUDING non-html — a deliberate, owner-approved carve-out of
+[[R-015]]'s foreign-refusal, justified because the fixed range is explicitly
+operator-designated territory ("always able to manage or clear a known layer"). Outside the
+range, R-015 is untouched. This is the THIRD ownership notion next to the producer-kind
+discriminator ([[R-015]]/[[C-014]]/[[R-009]]) and [[C-015]]'s plate-layer ledger — the three
+MUST be designed to compose, and this item's design.md owns that composition. Restore
+interaction with [[B-092]]/#368's narrowing needs its own tests: restore reaches `reserve()`
+first, and #368 made a quarantined retained slot fall through to allocate-elsewhere — exactly
+the fall-through this item's adopt-in-place FORBIDS on fixed slots. Needs design.md.
+
+## [ ] R-022 — in-app template preview via the shared renderer (no CasparCG involvement) ⟨priority: medium⟩
+
+**What:** See a graphic BEFORE take. The Runtime mounts the item's template with the CURRENT
+field values using `@cg/template-runtime` — the same renderer the Designer preview uses — in a
+preview pane. No CasparCG involvement, no second channel.
+**Why:** Today the first time an operator sees a filled-in graphic is on program output; a
+local preview catches wrong values and broken layouts before air.
+**Acceptance:**
+
+- WHEN an item is previewed THEN its template renders with its current field values and
+  re-renders on edits
+- WHEN previewing THEN the intro/lifecycle plays, so motion is assessable
+- WHEN the preview is shown THEN two honest caveats are stated IN the item: browser-vs-CEF-71
+  rendering may differ in detail ([[B-066]] class — "faithful, not pixel-identical"), and after
+  [[C-015]] a live-plate region renders as a labeled placeholder, not video
+- WHEN previewing THEN nothing is ever sent to CasparCG
+
+**Notes:** deliberately NOT a server-side PVW channel — that would require solving [[C-016]]'s
+return problem twice; a server-true preview can be a later item if ever needed. Implementation
+touches renderer surfaces → `gate:e2e` owed at implementation time.
+
+## [ ] R-023 — per-fixed-layer keyboard shortcuts (Play / Stop / Clear now; PAUSE and NEXT recon-first) ⟨priority: medium⟩
+
+**What:** Operator keys per FIXED layer (depends on [[R-021]]): e.g. F1 = Play layer 1,
+Shift+F1 = Stop layer 1. A management modal lists the fixed layers (with aliases), captures key
+combos per verb, prevents conflicts, and persists in the same install config as the fixed
+layers.
+**Why:** Under time pressure an operator fires known layers by muscle memory, not by mousing to
+a row — this is the Cinegy operating rhythm the fixed layers exist for.
+**Acceptance:**
+
+- WHEN the management modal is used THEN shortcuts are assignable per fixed layer for Play,
+  Stop (graceful), Clear — these three ride existing verbs; PAUSE and NEXT are RECON-FIRST
+  (see Notes) and ship only after recon
+- WHEN a combo is assigned THEN conflicts are prevented at assignment time — a combo can bind
+  once
+- WHEN focus is in any text input THEN shortcuts are inert
+- WHEN the app restarts THEN combos survive (config-persisted)
+- WHEN the modal lists layers THEN it shows aliases, not bare numbers
+
+**Notes:** RECON-FIRST for the two uncertain verbs — PAUSE: what AMCP `PAUSE` actually does to
+an html-producer layer on real 2.3.2 is UNVERIFIED (probe first, never assume); NEXT: requires
+template-side step support (`CG NEXT` → template `next()`), which is Designer-track work on the
+playout lifecycle — a cross-track dependency: file the finding rather than assuming. Combos
+match the PHYSICAL key (`e.code`) per the design-system keyboard rule, so a Persian layout
+never breaks them. Cross-ref [[R-021]].
+
+## [ ] R-024 — save/load operator rundowns as files (JSON export/import of the prepared stack) ⟨priority: medium⟩
+
+**What:** Each operator saves their prepared list and re-loads it on demand. Export/import as a
+FILE (JSON) so rundowns move between stations.
+**Why:** Cinegy parity, newsroom workflow: shows are prepared in advance and re-used; today the
+prepared stack lives only in one browser's retention.
+**Acceptance:**
+
+- WHEN the operator exports THEN the file captures the stack: items referencing library
+  templates by id, field values, position overrides, fixed-layer bindings, order
+- WHEN the operator imports THEN the stack is rebuilt from the file
+- WHEN a referenced template is missing from the library THEN a legible PER-ITEM error is shown
+  and the REST of the rundown still loads — never a silent drop and never a whole-file failure
+- WHEN the file carries Persian text THEN it round-trips verbatim
+- WHEN a rundown has loaded THEN its items behave as ordinary items afterwards — retention,
+  restore, verbs unchanged
+
+**Notes:** embed-template-content-vs-reference is a design.md decision (reference is the v1
+default; record the portability trade-off). Cross-refs [[B-092]] (retention is today's
+implicit persistence — this makes persistence explicit and named), [[R-021]] (fixed-layer
+bindings are part of the captured shape), [[C-002]] (the preset/rundown control-surface stub:
+THIS item is the file half over today's stack; the two must converge, not fork).
+
+## [ ] R-025 — named, device-level position presets in the PositionPicker ⟨priority: low⟩
+
+**What:** Save a position override (e.g. "top-right, dx=-200, dy=100") under a name and reuse
+it across projects. Device-level (the [[D-126]] shared-library class, `designer.md`), so
+presets survive projects and tabs.
+**Why:** Stations converge on a handful of house positions; re-nudging them per item per
+project is repeated work and drifts.
+**Acceptance:**
+
+- WHEN using the PositionPicker THEN the operator can create / apply / rename / delete named
+  presets
+- WHEN a preset is applied THEN it goes through the normal setPosition path ([[R-011]]), so
+  on-air behaviour is identical to a manual nudge
+- WHEN presets are stored THEN they persist device-level (bridge-side store, shared across
+  operator tabs) and survive restarts
+- WHEN a preset name is Persian THEN it renders fine
+
+**Notes:** storage shape/location is a design.md decision — alongside the existing bridge
+persistence class (the `connection-store` precedent). Cross-ref [[B-072]] (the picker must
+show preset-applied state truthfully — the same honesty bar).

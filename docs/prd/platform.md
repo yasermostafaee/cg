@@ -298,3 +298,31 @@ already the uncached run), which the #382 session recorded only in a user-level 
 file where the Designer session could never see it; it is now in CLAUDE.md. Docs and
 process only — no source, no spec, no behaviour change, so this closes on a green gate
 like [[P-010]] and [[B-071]] rather than via an archive.
+
+## [ ] P-012 — the pre-push hook should honor the docs-only carve-out via the shared classifier ⟨priority: low⟩
+
+**What:** The husky pre-push hook runs the FULL turbo gate on every content push, including
+docs-only pushes — observed on PR #388's push (the first attempt died to a 3-minute tool
+timeout mid-gate; the docs-only carve-out was then run by hand). The Stop hook already
+classifies via the tested `classifyChangedSet` (`tools/gate-hook/src/gate-decision.mjs`:
+docs-only → `openspec validate --all --strict` + `format:check`). The pre-push hook should
+reuse THAT classifier on the outgoing range, so docs-only pushes pay docs-only cost.
+**Why:** A docs-only push proves nothing extra by running 82 turbo tasks, and while the
+pre-push gate is the sole enforcement mechanism it also consumes this host's exclusive gate
+slot for minutes ([[P-010]]'s cost analysis, one notch milder — content exists, but it is
+markdown).
+**Acceptance:**
+
+- WHEN the pre-push hook runs on a content push THEN it classifies the outgoing range with the
+  SAME shared classifier as the Stop hook — no second implementation (the B-100 lesson: a
+  second local copy is how a name comes to lie)
+- WHEN the outgoing range is docs-only THEN the hook runs `openspec validate --all --strict` +
+  `format:check` instead of the full gate
+- WHEN the range is anything else THEN the full gate runs exactly as today
+
+**Notes:** misclassification risk noted and contained: the classifier is the single shared
+definition and already unit-tested (`tools/gate-hook`). While GitHub Actions billing is
+exhausted the pre-push gate is the sole authoritative proof — the carve-out must therefore be
+provably equivalent to the Stop hook's, never a THIRD rule set. Sits beside [[P-010]]'s
+all-deletions skip in the same hook (`pre-push-decision.mjs` is the natural home for the range
+classification plumbing); [[P-009]] is the Stop-hook sibling whose classifier this reuses.
