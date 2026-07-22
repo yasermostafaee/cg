@@ -64,7 +64,14 @@
       a probe failure shows the ffmpeg LOG TAIL; a failed poster downgrades to numeric-only
       crop; `Duration: N/A` sources measure the CONVERTED output (`measureDurationMs`).
       Tests: state machine, both sync directions, cancel-vs-error, provenance payload,
-      log-tail/poster-less/N-A-duration paths (`video-import-modal.test.ts`, 11 tests).
+      log-tail/poster-less/N-A-duration paths (`video-import-modal.test.ts`, 12 tests).
+      COMPLETION FIXES (owner-diagnosed in real use — see design.md "Phase-2 completion
+      fixes"): app CSP gained `media-src 'self' blob: data:` (stored WebMs were CSP-blocked
+      from decoding); converter reset-on-failure (`resetInstance()` on every failure path —
+      one bad import no longer poisons the session) with reason-discriminated modal messages
+      (`no-stream` vs `converter-crashed`); e2e decode guard
+      `tests/e2e/video-import.spec.ts` (real conversion → blob `<video>` decodes →
+      drag-from-assets creates the element).
 - [x] 2.4 Converter as REAL app code: `video-convert.ts` (lazy `import()`; core via `?url` +
       same-origin `toBlobURL`; WORKERFS mount; VP8+alpha `-an` `yuva420p` `-auto-alt-ref 0` + `-r` conform; cancel) + pure `video-convert-args.ts` (arg construction, probe-log
       parse, conform decision — 14 unit tests, no wasm in the gate). Vite:

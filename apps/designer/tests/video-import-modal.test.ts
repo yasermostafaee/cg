@@ -106,15 +106,33 @@ describe('VideoImportModal (D-128)', () => {
     expect(document.body.textContent).toContain('judder');
   });
 
-  it('probe failure shows the ffmpeg log tail (the WHY), convert stays disabled', async () => {
+  it('a genuine no-stream failure names the file AND shows the ffmpeg log tail', async () => {
     probeSource.mockResolvedValue({
       ok: false,
+      reason: 'no-stream',
       logTail: ['[avi @ 0x1] Format avi detected only with low score of 1', 'Invalid data found'],
     });
     await renderModal();
     expect(document.body.textContent).toContain('could not be read as a video');
     const log = document.querySelector('[data-testid="video-probe-log"]');
     expect(log?.textContent).toContain('Invalid data found');
+    expect(button('Convert & import').disabled).toBe(true);
+  });
+
+  it('a converter crash shows the reload message and NEVER blames the file', async () => {
+    probeSource.mockResolvedValue({
+      ok: false,
+      reason: 'converter-crashed',
+      logTail: ['ErrnoError: FS error'],
+    });
+    await renderModal();
+    // the poisoned-worker path must not read as "unsupported format"
+    expect(document.body.textContent).not.toContain('could not be read as a video');
+    expect(document.body.textContent).toContain('does NOT mean');
+    expect(document.body.textContent).toContain('try the import again');
+    expect(document.querySelector('[data-testid="video-probe-log"]')?.textContent).toContain(
+      'FS error',
+    );
     expect(button('Convert & import').disabled).toBe(true);
   });
 

@@ -36,7 +36,7 @@ type Converter = typeof VideoConvertModule;
 
 type Phase =
   | { kind: 'probing' }
-  | { kind: 'probe-failed'; logTail: string[] }
+  | { kind: 'probe-failed'; reason: 'no-stream' | 'converter-crashed'; logTail: string[] }
   | { kind: 'ready' }
   | { kind: 'converting'; progress: number }
   | { kind: 'error'; message: string };
@@ -77,7 +77,7 @@ export function VideoImportModal(props: {
         const result = await conv.probeSource(props.file);
         if (!alive) return;
         if (!result.ok) {
-          setPhase({ kind: 'probe-failed', logTail: result.logTail });
+          setPhase({ kind: 'probe-failed', reason: result.reason, logTail: result.logTail });
           return;
         }
         setProbe(result.probe);
@@ -85,7 +85,8 @@ export function VideoImportModal(props: {
         setCrop({ x: 0, y: 0, width: result.probe.width, height: result.probe.height });
         setPhase({ kind: 'ready' });
       } catch (err) {
-        if (alive) setPhase({ kind: 'probe-failed', logTail: [String(err)] });
+        if (alive)
+          setPhase({ kind: 'probe-failed', reason: 'converter-crashed', logTail: [String(err)] });
       }
     })();
     return () => {
@@ -237,9 +238,18 @@ export function VideoImportModal(props: {
 
         {phase.kind === 'probe-failed' && (
           <>
-            <Callout variant="danger">
-              {props.file.name} could not be read as a video (no decodable video stream found).
-            </Callout>
+            {phase.reason === 'no-stream' ? (
+              <Callout variant="danger">
+                {props.file.name} could not be read as a video — ffmpeg found no decodable video
+                stream in it. The log below names the reason (codec / container).
+              </Callout>
+            ) : (
+              // OUR worker crashed — the file may be fine; never blame it here.
+              <Callout variant="caution">
+                The converter hit an internal error and needs to reload — this does NOT mean{' '}
+                {props.file.name} is unsupported. Close this dialog and try the import again.
+              </Callout>
+            )}
             {phase.logTail.length > 0 && (
               <pre className={s.logTail} data-testid="video-probe-log">
                 {phase.logTail.join('\n')}

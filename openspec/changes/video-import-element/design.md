@@ -260,6 +260,34 @@ kind, provenance?)` is the ONE write path — `importFile` delegates to it — s
   Phase 3; Phase 2 registered the compile-forced union sites only (`field-registry`,
   `TYPE_COLORS`, `scene-builder`).
 
+## Phase-2 completion fixes (2026-07-22, same branch — owner-diagnosed in real use, approved)
+
+- **CSP `media-src` (the decode-block root cause):** the app CSP had no `media-src`, so
+  `default-src 'self'` blocked every `blob:` `<video>` — stored WebMs were byte-perfect but
+  undecodable ("Media load rejected by URL safety check"). `index.html` now carries
+  `media-src 'self' blob: data:`. The canvas preview iframe is `srcDoc`
+  (`CanvasArea.tsx:937`) and srcdoc documents INHERIT the embedding page's CSP — so Phase 3's
+  in-canvas `<video>` render is covered by this same line; no per-frame CSP needed.
+- **Converter reset-on-failure:** a hard ffmpeg abort taints the wasm worker; the cached
+  singleton then threw `ErrnoError: FS error` on the NEXT import — one bad file poisoned every
+  later import that session (which masqueraded as "many unsupported formats"). Every failure
+  path now `resetInstance()`s (terminate + drop), success paths unmount/delete on the way out,
+  and the probe failure carries a `reason` discriminator so the modal NEVER blames the file
+  for a converter crash (`no-stream` → file-level message + ffmpeg log tail;
+  `converter-crashed` → "reload and retry" message). Contract pinned by
+  `video-convert-reset.test.ts`; the end-to-end decode guard (the test that would have caught
+  the CSP hole) is `tests/e2e/video-import.spec.ts` — real in-app conversion of the committed
+  AVI fixture, blob-URL `<video>` metadata assertion, drag-from-assets element creation.
+- **The shipped core is the FULL GPL build — do not re-open "do we need a fuller core":** the
+  configure line embedded in the shipped `ffmpeg-core.wasm` (0.12.10) is
+  `--enable-gpl --enable-libx264 --enable-libx265 --enable-libvpx …` with NO
+  `--disable-decoders`/allowlist, and a live `-decoders` run through the bundled core confirms
+  h264/hevc/vp8/vp9/av1/mpeg4/rawvideo/prores/qtrle video decode + aac/mp3/opus/vorbis/pcm
+  audio decode, with QuickTime-MOV/MP4, Matroska/WebM, AVI and raw-video demuxers. Per-file
+  probes of H.264 MP4, H.264 MOV, VP9/VP8 WebM and the rawvideo AVI all identify their streams
+  cleanly on fresh instances. The client's AVI/MOV/MP4 set is fully covered as-is
+  (single-threaded, same-origin, 32 MB — unchanged).
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

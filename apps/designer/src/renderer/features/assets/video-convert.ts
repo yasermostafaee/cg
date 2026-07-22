@@ -36,6 +36,22 @@ let instance: FFmpeg | null = null;
 let logSink: ((line: string) => void) | null = null;
 let progressSink: ((ratio: number) => void) | null = null;
 
+/**
+ * Kill and forget the cached worker. Called on EVERY failure path: a hard
+ * ffmpeg abort taints the wasm runtime, and any later FS call on a tainted
+ * instance throws `ErrnoError: FS error` — which is exactly how a failed
+ * first import used to poison the second one. A fresh load costs ~150–350 ms;
+ * a poisoned singleton costs the operator their next import.
+ */
+function resetInstance(): void {
+  try {
+    instance?.terminate();
+  } catch {
+    /* already dead */
+  }
+  instance = null;
+}
+
 async function ensureLoaded(): Promise<FFmpeg> {
   if (instance !== null) return instance;
   const ff = new FFmpeg();
@@ -69,7 +85,19 @@ async function mountSource(ff: FFmpeg, file: File): Promise<string> {
 
 export type ProbeResult =
   | { ok: true; probe: SourceProbe; posterUrl: string | null }
-  | { ok: false; logTail: string[] };
+  | {
+      ok: false;
+      /**
+       * WHY the probe failed — the two paths must never share one message:
+       * `no-stream` = ffmpeg genuinely found no decodable video in THIS file
+       * (the log tail names the codec/container reason); `converter-crashed` =
+       * OUR worker died (FS error / abort) — the file may be perfectly fine,
+       * so the UI must not blame it (the pre-fix bug read every post-crash
+       * import as "unsupported format").
+       */
+      reason: 'no-stream' | 'converter-crashed';
+      logTail: string[];
+    };
 
 /**
  * Probe a picked source: fps / dimensions / duration from ffmpeg's banner log,
@@ -82,14 +110,19 @@ export type ProbeResult =
  * travels with the failure so the operator sees WHY, not a dead end.
  */
 export async function probeSource(file: File): Promise<ProbeResult> {
-  const ff = await ensureLoaded();
-  const input = await mountSource(ff, file);
   const lines: string[] = [];
-  logSink = (l) => lines.push(l);
   try {
+    const ff = await ensureLoaded();
+    const input = await mountSource(ff, file);
+    logSink = (l) => lines.push(l);
     await ff.exec(['-i', input]).catch(() => 1);
     const probe = parseProbeLog(lines);
-    if (probe === null) return { ok: false, logTail: lines.slice(-8) };
+    if (probe === null) {
+      // No parseable video stream — and quite possibly a hard ffmpeg abort that
+      // tainted the wasm runtime. Never cache a maybe-dead worker.
+      resetInstance();
+      return { ok: false, reason: 'no-stream', logTail: lines.slice(-8) };
+    }
     let posterUrl: string | null = null;
     try {
       const posterPath = '/poster.png';
@@ -103,9 +136,25 @@ export async function probeSource(file: File): Promise<ProbeResult> {
         posterUrl = URL.createObjectURL(new Blob([ab], { type: 'image/png' }));
       }
     } catch {
-      posterUrl = null; // preview-less import beats no import
+      // Preview-less import beats no import — but a THROW here means the
+      // runtime is suspect; drop it so the actual conversion starts fresh.
+      resetInstance();
+      posterUrl = null;
+    }
+    // Success-path FS hygiene: leave nothing mounted between calls (the
+    // conversion re-mounts via mountSource; a later import starts clean).
+    if (instance !== null) {
+      try {
+        await instance.unmount(MOUNT_DIR);
+      } catch {
+        /* nothing mounted / already gone */
+      }
     }
     return { ok: true, probe, posterUrl };
+  } catch (err) {
+    // Any FS/exec throw (ErrnoError etc.) — the worker is dead or dying.
+    resetInstance();
+    return { ok: false, reason: 'converter-crashed', logTail: [...lines.slice(-6), String(err)] };
   } finally {
     logSink = null;
   }
@@ -149,11 +198,11 @@ export async function convertToWebm(opts: {
   crop?: CropRect | undefined;
   onProgress?: ((ratio: number) => void) | undefined;
 }): Promise<Uint8Array<ArrayBuffer> | null> {
-  const ff = await ensureLoaded();
-  const input = await mountSource(ff, opts.file);
   const output = '/out.webm';
   progressSink = opts.onProgress ?? null;
   try {
+    const ff = await ensureLoaded();
+    const input = await mountSource(ff, opts.file);
     const code = await ff.exec(
       buildConvertArgs({
         inputPath: input,
@@ -162,18 +211,30 @@ export async function convertToWebm(opts: {
         crop: opts.crop,
       }),
     );
-    if (code !== 0) return null; // failed or cancelled (terminate() rejects/exits non-zero)
+    if (code !== 0) {
+      // Failed or cancelled. A non-zero exit can follow a hard abort that
+      // tainted the runtime — never keep a maybe-dead worker cached.
+      resetInstance();
+      return null;
+    }
     const data = await ff.readFile(output);
-    await ff.deleteFile(output).catch(() => undefined);
     const raw = typeof data === 'string' ? new TextEncoder().encode(data) : data;
     // Copy onto a plain ArrayBuffer so the bytes own their backing store (and
     // satisfy the channel's `Uint8Array<ArrayBuffer>` shape).
     const out = new Uint8Array(raw.byteLength);
     out.set(raw);
+    // Success-path FS hygiene: drop the output and the input mount so no FS
+    // state leaks into the next import.
+    await ff.deleteFile(output).catch(() => undefined);
+    try {
+      await ff.unmount(MOUNT_DIR);
+    } catch {
+      /* nothing mounted / already gone */
+    }
     return out;
   } catch {
     // terminate() (cancel) or a worker crash surfaces here — the instance is dead.
-    instance = null;
+    resetInstance();
     return null;
   } finally {
     progressSink = null;
@@ -182,7 +243,10 @@ export async function convertToWebm(opts: {
 
 /** Hard-cancel an in-flight conversion. The wasm worker dies; state resets. */
 export function cancelConversion(): void {
-  if (instance === null) return;
-  instance.terminate();
-  instance = null;
+  resetInstance();
+}
+
+/** TEST-ONLY — whether a worker instance is currently cached (the reset contract). */
+export function hasCachedInstanceForTest(): boolean {
+  return instance !== null;
 }
