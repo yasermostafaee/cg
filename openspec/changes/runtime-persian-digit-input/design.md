@@ -30,8 +30,12 @@ to the end on a mid-string edit).
 
 Consequences, judged acceptable:
 
-- The number control's ARIA role changes spinbutton → textbox (the existing E2E selector
-  was updated — a ripple, not new coverage).
+- **Conscious decision — the ARIA role changes.** `type="number"` (role `spinbutton`) →
+  `type="text"` + `inputMode="numeric"` (role `textbox`) is the standard pattern for
+  accepting non-ASCII digits, but it changes the numeric input's assistive-technology
+  semantics. The existing E2E selector was updated to assert the NEW role (a ripple, not
+  new coverage) — and that edited assertion must be confirmed on the eventual
+  authoritative Linux `gate:e2e` run (see D7).
 - The Inspector number field no longer renders `step`/`min`/`max`: on `type="number"`
   they only drove the native spinner and `:invalid` styling — the staged value was never
   clamped by them, so no commit behavior changed.
@@ -63,8 +67,12 @@ acceptance's intent (match the Designer's `pattern-presets.ts` DIGIT-class inclu
 whenever B-077 pattern validation lands Runtime-side, patterns validate the canonical
 value.
 
-## D7 — No new E2E
+## D7 — No new E2E, but ONE Linux `gate:e2e` is owed
 
 The behavior is fully exercised in jsdom unit tests (primitive + every routed site +
-both PIN ends). The one E2E touch is the ripple in D3's selector. No new E2E spec is
-added, so this item closes on the local gate without owing a Linux `gate:e2e` run.
+both PIN ends), and no new E2E spec is added. The one E2E touch is D3's edited role
+assertion (spinbutton → textbox) — and edited-but-unexecuted is unverified: WSL is not
+installed on the implementing host, so `gate:e2e` did not run, and it is not part of the
+82-task `pnpm gate`. Because this is an accessibility-role change — exactly the class the
+Linux-authoritative rule protects — this change OWES one Linux `gate:e2e` run (once WSL
+is installed, per the #369/#370 Linux-gate debt), recorded in R-020's `[~]` status note.

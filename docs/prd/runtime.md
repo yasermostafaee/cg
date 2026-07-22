@@ -827,7 +827,7 @@ against it: a `list` field's items are ordered and extensible, `{ id, text }[]`,
 reads `text` per item (`packages/shared-schema/src/elements.ts`, `fields.ts`). Cross-ref
 [[R-018]].
 
-## [~] R-020 — Persian-keyboard digits accepted in numeric inputs, normalized to canonical digits ⟨priority: medium⟩ — `openspec/changes/runtime-persian-digit-input/`; local gate green; no on-air behavior change (wire values unchanged) so no CasparCG hardware pass is owed; remaining to reach [x] + archive: owner runs it on the owner machine
+## [~] R-020 — Persian-keyboard digits accepted in numeric inputs, normalized to canonical digits ⟨priority: medium⟩ — `openspec/changes/runtime-persian-digit-input/`; local gate green; no on-air behavior change (wire values unchanged) so no CasparCG hardware pass is owed; OWES one Linux `gate:e2e` (the edited spinbutton→textbox role assertion in `stage-inspector-edits.spec.ts` has not executed anywhere — WSL not installed; run once WSL lands, per the #369/#370 Linux-gate debt); remaining to reach [x] + archive: the Linux run + owner runs it on the owner machine
 
 **What:** With a Persian keyboard active, numeric inputs (offsets, counts, ports, numeric field
 values) reject Persian digits (۰–۹). They must be accepted and normalized to canonical digits

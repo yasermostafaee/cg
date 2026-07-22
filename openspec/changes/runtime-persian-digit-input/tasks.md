@@ -33,8 +33,10 @@
       field keeps Persian digits verbatim; PositionPicker applies canonical offsets on
       the wire; a Persian-typed port passes validation and submits canonical; LockOverlay
       release and StatusBar engage both deliver the normalized PIN.
-- [x] 3.3 E2E ripple only (no new spec — closes on the local gate): the number control's
-      role is textbox now, `stage-inspector-edits.spec.ts` selector updated.
+- [x] 3.3 E2E ripple only (no new spec): the number control's role is textbox now,
+      `stage-inspector-edits.spec.ts` selector updated. The edited assertion has NOT
+      executed (WSL absent) — ONE Linux `gate:e2e` run is owed (design.md D7; recorded in
+      R-020's status note).
 
 ## 4. Docs
 
