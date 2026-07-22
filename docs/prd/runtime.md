@@ -759,3 +759,48 @@ week — before [[C-012]] there was no non-destructive way off air, so "clear it
 - **Tidy-up available while in here** (not required): the row's prose still says "four actions" in
   three places (`StackRow.tsx:128`, `:216`, its docstring) and `rowAction.ts:16-17` still lists
   PLAY/UPDATE/CLEAR/REMOVE — [[C-012]]'s STOP made it five.
+
+## [ ] R-018 — feed field values from a text file (whole-text default, OPTIONAL split; manual reload + optional watch) ⟨priority: medium⟩
+
+**What:** At playout, a text-carrying field takes its value from a chosen text file: whole-file
+verbatim by default, an OPTIONAL delimiter split into list items, a manual RELOAD as the v1
+baseline, and optional watching as an enhancement. The Designer track covers the one-shot
+authoring load separately; THIS item is the RUNTIME half.
+**Why:** The client's newsroom workflow keeps the crawl/subtitle copy in a text file that other
+staff update. The INCUMBENT Cinegy workflow — honor it as the default — is that the TYPIST embeds
+the separators inside the text and the whole file IS the content, fed verbatim; splitting into
+discrete items is OUR optional convenience.
+**Acceptance:**
+
+- WHEN the operator chooses "from file" on a text-type field with split OFF (the DEFAULT) THEN
+  the ENTIRE file content becomes the field value verbatim — applied through the normal
+  field-update path, so a live item updates exactly as a hand-edited field would
+- WHEN the target is a ticker's content with split OFF THEN the entire file becomes ONE list
+  item's text, so the crawl renders the author's own embedded separators exactly as typed —
+  VERIFIED model at filing (2026-07-22): a ticker's content is fielded as a `list`, never a
+  single text value — the element's authored `items: { id, text }[]` are replaced at playout by
+  a bound `list` field (`packages/shared-schema/src/elements.ts`, `fields.ts`; "the ticker reads
+  `text`" per item)
+- WHEN the operator enables SPLIT THEN they define a delimiter (free text; sensible suggestions
+  offered) and the content splits into a list value for list-type fields (ticker / sequence
+  items); entries empty after trimming are skipped
+- WHEN the target is a SEQUENCE's list field THEN split defaults ON (a sequence shows discrete
+  items); WHEN split is OFF there THEN the whole text becomes ONE item and the UI says so
+  explicitly — the split default is per-TARGET (crawl parity keeps the ticker whole-text), not
+  per-field-type, since ticker and sequence content are BOTH `list` fields under the real model
+- WHEN the operator triggers RELOAD THEN the file is re-read and the field re-applies — manual
+  reload is the v1 baseline and must work everywhere
+- WHEN watching is available and enabled THEN file changes re-apply automatically with a
+  debounce; the ARCHITECTURE decision — browser File System Access re-read vs the BRIDGE (Node)
+  watching a path and pushing values — is design.md's call, with the trade-offs recorded (a
+  bridge watch survives operator-tab reloads; FSA needs no bridge but dies with the tab).
+  Watching is an ENHANCEMENT gated on that decision, never a v1 blocker
+- WHEN the file is UTF-8 Persian/RTL THEN content survives verbatim through shaping/bidi
+- WHEN the file is missing/unreadable at reload THEN the CURRENT on-air value is KEPT and the
+  operator sees a legible error — never a blank crawl on air because a share went away
+
+**Notes:** this feeds the EXISTING field-update path — no new content pipeline; the file is just
+an input method for field values. The ticker field model was verified at filing and the item is
+worded against it (see the second Acceptance bullet). Cinegy parity is the NEED, not the UI.
+Pairs with the Designer-track authoring-load item (cross-reference by title). Bridge involvement
+(if the watch lands there) makes the watch half RECON-FIRST; the manual-reload half is small.
