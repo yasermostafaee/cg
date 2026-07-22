@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { AmcpTransport, type ParsedAmcpResponse } from '../amcp/transport.js';
 import { OscTransport } from '../osc/transport.js';
 import { CommandQueue } from '../queue/command-queue.js';
+import { probeAmcpLiveness } from './amcp-probe.js';
 import { Backoff } from './backoff.js';
 
 /**
@@ -31,8 +32,14 @@ export interface ServerSessionOptions {
   initialBackoffMs?: number;
   maxBackoffMs?: number;
 
-  /** OSC silence thresholds (Phase 5 §4.4 / §9). */
+  /** OSC silence threshold for the HEALTHY → DEGRADED demote (Phase 5 §4.4 / §9). */
   oscDegradedAfterMs?: number;
+  /**
+   * How long OSC may stay silent before the session stops trusting the silence
+   * and ASKS AMCP whether it is alive — and the cadence of every re-ask after an
+   * answer. It does NOT disconnect on its own: only a failed AMCP probe does
+   * (B-101).
+   */
   oscDownAfterMs?: number;
   /** Cadence of the OSC freshness watcher. */
   watcherIntervalMs?: number;
@@ -40,7 +47,11 @@ export interface ServerSessionOptions {
   /** OSC drain window during RESYNCING (Phase 5 §2). */
   resyncDurationMs?: number;
 
-  /** Handshake-class command timeouts (Phase 5 §5.4). */
+  /**
+   * Handshake-class command timeouts (Phase 5 §5.4). `versionTimeoutMs` also
+   * bounds the degraded-window liveness probe — it is the same `VERSION` against
+   * the same peer, so a second knob would be two names for one latency budget.
+   */
   versionTimeoutMs?: number;
   infoTimeoutMs?: number;
 
@@ -73,16 +84,20 @@ export interface ServerSessionEvents {
  *   - Handshake: `VERSION` → `INFO`.
  *   - Mandatory RESYNCING after every reconnect (OSC drain window).
  *   - Auto-reconnect with exponential backoff on disconnect.
- *   - Watch OSC freshness; transition HEALTHY → DEGRADED → DISCONNECTED
- *     per Phase 5 §4.4 thresholds.
+ *   - Watch OSC freshness; demote HEALTHY → DEGRADED per Phase 5 §4.4. Past
+ *     the harder threshold, probe AMCP itself rather than reading OSC silence
+ *     as proof the socket is dead (B-101).
  *   - Expose `amcp` / `osc` / `queue` getters returning the **current**
  *     cycle's instances; references rotate after each reconnect.
  *
  * Out of scope (lands in later sub-milestones):
- *   - AMCP heartbeat ping (M4.5, HeartbeatService).
- *   - DEGRADED → RESYNCING-on-recovery path (deferred — current code
- *     treats prolonged OSC silence as DISCONNECTED and goes through a
- *     full reconnect cycle, which is more conservative).
+ *   - Continuous AMCP heartbeat ping (M4.5, HeartbeatService — still dead
+ *     wiring per C-010). The degraded-window probe below is not that: it
+ *     fires only while OSC is silent, never on a healthy link.
+ *   - DEGRADED → RESYNCING on recovery (still deferred): when OSC returns the
+ *     session goes straight back to HEALTHY with no drain window. Note the old
+ *     justification for the deferral — that prolonged silence went through a
+ *     full reconnect anyway — no longer holds; silence alone never disconnects.
  *   - Redundancy / failover across two sessions (M4.6).
  */
 export class ServerSession extends EventEmitter<ServerSessionEvents> {
@@ -109,7 +124,10 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
   private readonly createQueue: (t: AmcpTransport) => CommandQueue;
 
   private lastOscAt = 0;
-  private degradedSince = 0;
+  /** When the next AMCP liveness probe falls due, while `degraded` (B-101). */
+  private nextProbeAt = 0;
+  /** One probe at a time — `tick` is a setInterval, the probe is async. */
+  private probeInFlight = false;
   private oscBound = false;
   private watcher: NodeJS.Timeout | null = null;
   private stopping = false;
@@ -309,7 +327,7 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
     const sinceOsc = this.now() - this.lastOscAt;
 
     if (this.currentState === 'healthy' && sinceOsc > this.oscDegradedAfterMs) {
-      this.degradedSince = this.now();
+      this.nextProbeAt = this.now() + this.oscDownAfterMs;
       this.transitionTo('degraded', `osc silence ${String(sinceOsc)}ms`);
       return;
     }
@@ -320,13 +338,60 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
         this.transitionTo('healthy', 'osc recovered');
         return;
       }
-      // Down: stayed silent past the harder threshold → force reconnect.
-      if (this.now() - this.degradedSince > this.oscDownAfterMs) {
-        this.transitionTo('disconnected', `osc down > ${String(this.oscDownAfterMs)}ms`);
-        this.resolveHealthyExit();
+      // Silent past the harder threshold. That is a CONFIRMATION-axis fact and
+      // says nothing about the COMMAND axis — so ask the command axis itself,
+      // instead of tearing down a socket OSC cannot speak for (B-101).
+      if (this.now() >= this.nextProbeAt) {
+        void this.probeAmcpAxis();
       }
     }
   };
+
+  /**
+   * B-101 — the degraded-window AMCP liveness probe.
+   *
+   * Answered → the link is fine and only its confirmation is missing: hold
+   * `degraded`, keep the transport, re-arm for the next window. An install that
+   * never sends OSC therefore holds ONE stable connection with full command
+   * capability, which is what C-014 and B-094 already design for.
+   *
+   * Failed → the command axis really is dead, including the half-open case
+   * (socket up, peer mute) that `onAmcpClose` structurally cannot see: disconnect
+   * so the existing teardown/backoff/reconnect loop runs — this time for a reason
+   * AMCP reported rather than one OSC was blamed for.
+   */
+  private async probeAmcpAxis(): Promise<void> {
+    if (this.probeInFlight) return;
+    this.probeInFlight = true;
+    // Bind the verdict to THIS cycle's queue: a teardown rotates `currentQueue`,
+    // and a probe that outlives its cycle must never act on the next one.
+    const probedQueue = this.currentQueue;
+    try {
+      const verdict = await probeAmcpLiveness(probedQueue, this.versionTimeoutMs, this.now);
+      // The probe is async and `tick` is a setInterval, so by now OSC may have
+      // recovered, the peer may have closed, or stop() may have run. A verdict
+      // only applies to the session state it was asked about.
+      if (!this.probeApplies(probedQueue)) return;
+      if (verdict.ok) {
+        this.nextProbeAt = this.now() + this.oscDownAfterMs;
+        return;
+      }
+      this.transitionTo('disconnected', `amcp probe failed: ${verdict.reason}`);
+      this.resolveHealthyExit();
+    } finally {
+      this.probeInFlight = false;
+    }
+  }
+
+  /** Whether a settled probe still describes the session that asked for it. */
+  private probeApplies(probedQueue: CommandQueue): boolean {
+    return (
+      this.running &&
+      !this.stopping &&
+      this.currentState === 'degraded' &&
+      this.currentQueue === probedQueue
+    );
+  }
 
   private onAmcpClose = (): void => {
     if (this.currentState === 'disconnected') return;

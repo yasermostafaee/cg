@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { CommandQueue } from '../queue/command-queue.js';
-import { AmcpTimeoutError } from '../queue/errors.js';
+import { probeAmcpLiveness } from './amcp-probe.js';
 
 /**
  * Heartbeat service per Phase 5 §9. Issues `VERSION` at urgent priority
@@ -102,22 +102,14 @@ export class HeartbeatService extends EventEmitter<HeartbeatEvents> {
       return;
     }
     this.inFlight = true;
-    const startedAt = this.now();
     try {
-      const result = await this.queue.enqueue('VERSION', {
-        priority: 'urgent',
-        timeoutMs: this.timeoutMs,
-      });
-      if (result.response.kind === 'err') {
-        this.recordMiss(`code=${String(result.response.code)}`);
-        return;
-      }
-      this.recordOk(this.now() - startedAt);
-    } catch (err) {
-      if (err instanceof AmcpTimeoutError) {
-        this.recordMiss('timeout');
+      // Shared with ServerSession's degraded-window probe — one definition of
+      // "the AMCP command axis answered" (B-101).
+      const verdict = await probeAmcpLiveness(this.queue, this.timeoutMs, this.now);
+      if (verdict.ok) {
+        this.recordOk(verdict.roundtripMs);
       } else {
-        this.recordMiss(err instanceof Error ? err.message : 'unknown');
+        this.recordMiss(verdict.reason);
       }
     } finally {
       this.inFlight = false;

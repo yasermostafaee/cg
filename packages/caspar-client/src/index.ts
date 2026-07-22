@@ -31,6 +31,8 @@ export type {
   ServerSessionState,
 } from './session/server-session.js';
 export { Backoff } from './session/backoff.js';
+export { probeAmcpLiveness } from './session/amcp-probe.js';
+export type { AmcpProbeVerdict } from './session/amcp-probe.js';
 export { HeartbeatService } from './session/heartbeat.js';
 export type { HeartbeatEvents, HeartbeatOptions, HeartbeatStatus } from './session/heartbeat.js';
 
