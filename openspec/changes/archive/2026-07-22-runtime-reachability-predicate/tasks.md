@@ -46,6 +46,6 @@
 
 - [x] 5.1 `pnpm openspec validate runtime-reachability-predicate --strict`.
 - [x] 5.2 `pnpm gate` green (uncached), caspar-bridge green isolated AND under full parallel run.
-- [ ] 5.3 Real-CasparCG verification (OWED, mandatory before archive): drive a server to
+- [x] 5.3 Real-CasparCG verification (owner-verified on hardware 2026-07-22): drive a server to
       `degraded` (stop OSC, leave AMCP up), put a graphic on the layer, Load onto it → not black;
       then Take → it plays. Discharges B-082's owed real-CasparCG check #1 in the same session.

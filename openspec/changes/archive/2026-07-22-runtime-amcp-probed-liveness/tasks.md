@@ -76,36 +76,37 @@ match /amcp probe/`.
 - [x] 5.2 The consolidated hardware session below cross-linked from B-101, B-100 and B-082.
 - [x] 5.3 `CLAUDE.md`: one standing rule — probe the axis you intend to judge.
 
-## 6. ONE consolidated hardware session (OWED — discharges every currently-owed on-air check)
+## 6. ONE consolidated hardware session (DISCHARGED 2026-07-22 — every check PASSED)
 
-Schedule this ONCE. It discharges B-101, B-100, B-082 check #1, and both C-014 on-air
-validations. Do NOT book a second trip for any of them.
+Owner-verified on real CasparCG hardware on 2026-07-22, in ONE session as designed. It
+discharged B-101, B-100, B-082 check #1, and both C-014 on-air validations; every box below
+passed. Do NOT book a second trip for any of them.
 
 Steps 6.2.1–6.2.5 are B-100's and B-082's on-air walk. Every one of them must be performed
 while the server is still `degraded`; if it recovers to `healthy` mid-walk the run proves
 nothing and must be restarted from 6.1.
 
-- [ ] 6.1 **Setup.** Drive one declared server to `degraded`: stop OSC (or point it at a port
+- [x] 6.1 **Setup.** Drive one declared server to `degraded`: stop OSC (or point it at a port
       nobody listens on) while leaving the AMCP socket up. Confirm the health surface reads
       `⚠ NO OSC` / not-healthy before starting. Put a graphic on the target layer first, so the
       adopt-`CLEAR` has a real resident producer to destroy.
-- [ ] 6.2.1 **Load** onto that occupied layer → the layer is **NOT black** (the adopt-CLEAR is
+- [x] 6.2.1 **Load** onto that occupied layer → the layer is **NOT black** (the adopt-CLEAR is
       paired with the pre-roll ADD).
-- [ ] 6.2.2 **Take** → the graphic **plays**.
-- [ ] 6.2.3 **Update** → the on-air fields **change** on the rendered output.
-- [ ] 6.2.4 **stopItem** (graceful) → the template runs its **outro** and the producer stays
+- [x] 6.2.2 **Take** → the graphic **plays**.
+- [x] 6.2.3 **Update** → the on-air fields **change** on the rendered output.
+- [x] 6.2.4 **stopItem** (graceful) → the template runs its **outro** and the producer stays
       resident. **This is the check that matters most** — it is the one whose refusal used to
       strand a graphic on air.
-- [ ] 6.2.5 **out** (hard clear) → the layer **clears**.
-- [ ] 6.3 **B-101 — the link must HOLD.** With OSC still stopped, watch the same server for
+- [x] 6.2.5 **out** (hard clear) → the layer **clears**.
+- [x] 6.3 **B-101 — the link must HOLD.** With OSC still stopped, watch the same server for
       several minutes: no HEALTHY↔DEGRADED oscillation, no reconnect churn, and every step in
       6.2 must work **first time** rather than needing a retry inside a reconnect window. Before
       this change the session force-disconnected roughly every 13 s, so a retry-free 6.2 IS the
       observable.
-- [ ] 6.4 **C-014 #1 — the deallocate release path.** CLEAR a foreign layer, let the tap age the
+- [x] 6.4 **C-014 #1 — the deallocate release path.** CLEAR a foreign layer, let the tap age the
       observation out, then re-Add → the layer must return to the allocatable pool
       (`LayerManager.deallocate()`).
-- [ ] 6.5 **C-014 #2 — foreign-producer survival.** With an item on a layer, kill the bridge,
+- [x] 6.5 **C-014 #2 — foreign-producer survival.** With an item on a layer, kill the bridge,
       PLAY a foreign producer onto that layer, restart the bridge → the item must land ELSEWHERE
       and the foreign producer must survive.
 

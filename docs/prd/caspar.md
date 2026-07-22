@@ -302,15 +302,22 @@ there is NO CHANNEL today for that knowledge to reach the bridge from inside CEF
 is the substance of this item. — Distinct from [[C-008]]: C-008 is an OPERATOR-initiated soft-out
 policy on the override seam; this is the item ending ITSELF when its content completes.
 
-## [x] C-014 — occupancy-aware layer allocation: an ordinary Add must not adopt-CLEAR a foreign producer sitting inside a template-type range ⟨priority: high⟩ — merged (#368) + archived: `openspec/changes/archive/2026-07-19-occupancy-aware-allocation/` ⟨on-air validation owed⟩
+## [x] C-014 — occupancy-aware layer allocation: an ordinary Add must not adopt-CLEAR a foreign producer sitting inside a template-type range ⟨priority: high⟩ — merged (#368) + archived: `openspec/changes/archive/2026-07-19-occupancy-aware-allocation/` — on-air validation owner-verified on real CasparCG hardware, 2026-07-22
 
-Code shipped, owner validation has NOT happened — see the **OWNER ON-AIR VALIDATION IS STILL OWED** block directly below, and unchecked task 7.1 in `openspec/changes/archive/2026-07-19-occupancy-aware-allocation/tasks.md`.
+Code shipped AND owner-validated on hardware — see the **OWNER ON-AIR VALIDATION — DISCHARGED 2026-07-22** block directly below, and task 7.1 (now checked) in `openspec/changes/archive/2026-07-19-occupancy-aware-allocation/tasks.md`.
 
-**OWNER ON-AIR VALIDATION IS STILL OWED — this `[x]` covers the merge and the local gate, NOT a
-hardware pass.** Unlike [[B-040]] (operator-validated on CasparCG 2.5.0 `69e8ad5`, 2026-07-07,
-recorded before its flip) and [[C-012]], no on-air check is recorded anywhere in this change's
-dir or its PR. It changes WHICH LAYER a live graphic lands on, so it earns one. The two decisive
-checks, carried as unchecked task 7.1 in the archived `tasks.md`:
+**OWNER ON-AIR VALIDATION — DISCHARGED 2026-07-22. This `[x]` now covers the hardware pass, not
+only the merge and the local gate.** Both decisive checks below were performed on real CasparCG
+hardware and **PASSED**, as part of the ONE consolidated session that also discharged [[B-100]],
+[[B-101]] and [[B-082]]'s check #1 — recorded here and as the now-checked task 7.1 in the archived
+`tasks.md`.
+
+The history this block was filed for, kept for the record: when this item was first flipped `[x]`
+it covered the merge and the local gate only. Unlike [[B-040]] (operator-validated on CasparCG
+2.5.0 `69e8ad5`, 2026-07-07, recorded before its flip) and [[C-012]], no on-air check was recorded
+anywhere in this change's dir or its PR. It changes WHICH LAYER a live graphic lands on, so it
+earned one. The two decisive checks, then carried as unchecked task 7.1 in the archived
+`tasks.md`, both now verified:
 
 1. **The pool must not leak.** CLEAR a foreign layer, wait for the tap to age the observation
    out, then re-Add — the layer must return to the allocatable pool. This is the only exercise

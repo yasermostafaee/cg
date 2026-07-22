@@ -1406,7 +1406,7 @@ still asserted by their own specs.
 
 ---
 
-## [~] B-082 — offline, every **Load** lands the row in ✗ ERROR: a load is not an on-air action, but it still ATTEMPTED the pre-roll `CG ADD` and reported the dead link as a broken item ⟨priority: high⟩ — code merged (#327, `e44e5eb`) but REOPENED 2026-07-20: a code trace found the fix can leave a layer BLACK when a session is `degraded` (OSC-silent, AMCP up). See **REOPENED** and **Gates still OWED** below. No change dir
+## [x] B-082 — offline, every **Load** lands the row in ✗ ERROR: a load is not an on-air action, but it still ATTEMPTED the pre-roll `CG ADD` and reported the dead link as a broken item ⟨priority: high⟩ — code merged (#327, `e44e5eb`); the REOPENED black-layer window was fixed under [[B-100]], and this entry's ONLY owed gate — real-CasparCG check #1 — was discharged in the ONE consolidated hardware session, owner-verified 2026-07-22. No change dir
 
 With the bridge up but **PRIMARY A OFFLINE**, pressing **Load** on a library template puts
 the item on the stack and immediately paints it **✗ ERROR** / "Not accepted" — every row,
@@ -1493,14 +1493,16 @@ the conclusion still does not follow: leaving a destructive step in place while 
 constructive step that FOLLOWED it changes the net on-air effect of the pair. Subtractive is not
 the same as safe when what you subtract is the repair.
 
-**Gates still OWED — this is why the item is `[~]` and not `[x]` (as of 2026-07-20).** The code
-is merged (#327, `e44e5eb`); the VERIFICATION is not done, and the trace above is a code reading,
-not an observation:
+**Gates — ALL DISCHARGED as of 2026-07-22; this is why the item is now `[x]`.** The code was
+merged (#327, `e44e5eb`); the verification below was the last thing outstanding, and the trace
+above — a code reading, not an observation when written — has since been confirmed on hardware:
 
-1. **Real-CasparCG check of the OSC-silent load — OWED, never performed. SATISFIED BY the ONE
-   consolidated hardware session — do NOT schedule it twice.** That session (checklist:
-   `openspec/changes/runtime-amcp-probed-liveness/tasks.md` §6) discharges this check together
-   with [[B-100]], [[B-101]] and both [[C-014]] on-air validations, in one visit. Drive a server
+1. **Real-CasparCG check of the OSC-silent load — DONE, owner-verified 2026-07-22 in the ONE
+   consolidated hardware session; do NOT schedule it again.** That session (checklist, now all
+   ticked: `openspec/changes/archive/2026-07-22-runtime-amcp-probed-liveness/tasks.md` §6)
+   discharged this check together
+   with [[B-100]], [[B-101]] and both [[C-014]] on-air validations, in one visit. The check as
+   specified: drive a server
    to `degraded` by stopping OSC while
    leaving AMCP up (B-094's condition), put a graphic on the layer, then Load onto it. Observe
    whether the layer goes black. This cannot be settled by the mock: `amcp-mock` is what the
@@ -1513,7 +1515,8 @@ not an observation:
    options; it is not a B-082 remainder. This entry keeps only the record that B-082's shipped
    change is what exposed it.
 
-**Why this stays `[~]` rather than being reopened as a defect of its own (2026-07-20).** The
+**Why this stayed `[~]` rather than being reopened as a defect of its own (2026-07-20; the
+`[x]` verdict in the heading supersedes the "stays `[~]`" status below).** The
 CLEAR-then-black window is a real on-air bug, but it is NOT rooted in B-082 — the adopt-CLEAR and
 the predicate both predate it. B-082's contribution was to remove the ADD that had been masking
 the window. That defect now lives at [[B-100]] (the predicate mismatch) with [[B-101]] (the
@@ -1523,10 +1526,15 @@ the black-layer path.
 
 **Update 2026-07-21 — the CLEAR-then-nothing window is now FIXED under [[B-100]]** (change dir
 `runtime-reachability-predicate`): the predicate is corrected to reachability and `load()` gates
-the adopt-`CLEAR` and the pre-roll `CG ADD` on ONE evaluation, so the pair is atomic. B-082 STAYS
-`[~]`: its owed **real-CasparCG check #1** is unchanged and is the SAME physical session as
-[[B-100]]'s owed hardware verification — one run discharges both. Do NOT flip B-082 to `[x]` until
-that run happens.
+the adopt-`CLEAR` and the pre-roll `CG ADD` on ONE evaluation, so the pair is atomic. B-082 STAYED
+`[~]` at that point: its owed **real-CasparCG check #1** was the SAME physical session as
+[[B-100]]'s owed hardware verification — one run discharges both — and this entry said not to flip
+it until that run happened.
+
+**Update 2026-07-22 — that run happened, and B-082 is now `[x]`.** The ONE consolidated hardware
+session was performed and every check passed, discharging this entry's check #1 alongside
+[[B-100]], [[B-101]] and both [[C-014]] validations. The condition the 2026-07-21 note set is met,
+so the flip above is the one it authorised, not an override of it.
 
 **Scope of the reopening — what is NOT in doubt.** The operator-facing symptom this entry was
 filed for (every offline Load painting ✗ ERROR) is genuinely fixed, and the fully-disconnected
@@ -1864,7 +1872,7 @@ exactly the moment the operator most needs the explanation.
 **FROZEN:** on-air refusal (R-006), [[B-086]]/[[B-087]]'s `unverified` badge, [[B-092]]'s restore
 and [[B-093]]'s blind-tap guard are untouched. This is an indicator; it changes no decision.
 
-## [~] B-100 — the bridge's link predicate calls an OSC-silent server UNREACHABLE: `#linkDown()` tests `state !== 'healthy'`, but the caspar-client's own predicate counts `degraded` (OSC-silent, AMCP UP) as live — so a working AMCP link is treated as dead, `load()` can leave a layer BLACK, and every on-air verb is refused ⟨priority: high⟩ — code merged (change dir `runtime-reachability-predicate`); real-CasparCG verification OWED before archive (see **Resolution**)
+## [x] B-100 — the bridge's link predicate calls an OSC-silent server UNREACHABLE: `#linkDown()` tests `state !== 'healthy'`, but the caspar-client's own predicate counts `degraded` (OSC-silent, AMCP UP) as live — so a working AMCP link is treated as dead, `load()` can leave a layer BLACK, and every on-air verb is refused ⟨priority: high⟩ — merged + archived: `openspec/changes/archive/2026-07-22-runtime-reachability-predicate/` — owner-verified on real CasparCG hardware, 2026-07-22
 
 **Root cause — a PREDICATE MISMATCH. The black screen is a symptom, not the bug.** Two predicates
 in this codebase answer "is this server usable?" and they disagree:
@@ -2050,12 +2058,14 @@ scenarios.
 verb/order/quoting seam. Out of scope and untouched: [[B-101]]'s force-disconnect watchdog,
 `clearLayer`'s R-015 refusal, [[B-086]]'s demote wiring.
 
-**GATES OWED.**
+**GATES — ALL DISCHARGED.**
 
-- **Real-CasparCG verification — OWED, MANDATORY before archive** (this changes on-air behaviour).
-  This is the SAME physical session as [[B-082]]'s owed real-CasparCG check #1 — one run
-  discharges both. **The full protocol, in one list, so the person at the hardware needs nothing
-  else:** 0. Drive one declared server to `degraded`: stop OSC (or point it at a port nobody listens on)
+- **Real-CasparCG verification — DONE, owner-verified 2026-07-22** (this changed on-air
+  behaviour, so it was mandatory before archive). Every step of the protocol below PASSED on real
+  CasparCG hardware: the load onto an occupied `degraded` layer did NOT go black, and take,
+  update, the graceful stop (outro, producer resident) and out all behaved as specified.
+  This was the SAME physical session as [[B-082]]'s owed real-CasparCG check #1 — one run
+  discharged both. **The protocol as run, kept for the record:** 0. Drive one declared server to `degraded`: stop OSC (or point it at a port nobody listens on)
   while leaving the AMCP socket up. Confirm the health surface reads `⚠ NO OSC` / not-healthy
   before starting. Put a graphic on the target layer first, so the adopt-`CLEAR` has a real
   resident producer to destroy.
@@ -2071,9 +2081,10 @@ verb/order/quoting seam. Out of scope and untouched: [[B-101]]'s force-disconnec
   Every step must be performed while the server is still `degraded`; if it recovers to `healthy`
   mid-run the run proves nothing and must be restarted.
 
-  **This run is now part of ONE consolidated hardware session** that also discharges [[B-082]]'s
-  check #1, [[B-101]] and both [[C-014]] on-air validations — full checklist in
-  `openspec/changes/runtime-amcp-probed-liveness/tasks.md` §6. **Do not book a second trip.**
+  **This run was part of ONE consolidated hardware session** that also discharged [[B-082]]'s
+  check #1, [[B-101]] and both [[C-014]] on-air validations — full checklist, now all ticked, in
+  `openspec/changes/archive/2026-07-22-runtime-amcp-probed-liveness/tasks.md` §6. **Nothing here
+  needs booking again.**
   Note the earlier warning here — that [[B-101]] force-disconnects the session roughly every 13 s
   so a reconnect window mid-protocol is expected and steps should be re-issued rather than
   recorded as failures — **no longer applies**: B-101 is fixed, OSC silence no longer disconnects
@@ -2083,7 +2094,7 @@ verb/order/quoting seam. Out of scope and untouched: [[B-101]]'s force-disconnec
 - **`pnpm gate:e2e` on Linux — NOT owed.** The diff is bridge-internal (`caspar-bridge` +
   `caspar-client`) + tests + docs; it touches no browser-visible surface.
 
-## [~] B-101 — an OSC-silent install cannot hold a connection: the watchdog tears down a WORKING AMCP socket every ~13 s and reconnects forever, so after B-100 the operator gets INTERMITTENT command capability rather than restored capability ⟨priority: high⟩ — code merged (change dir `runtime-amcp-probed-liveness`); real-CasparCG verification OWED before archive (see **Resolution**)
+## [x] B-101 — an OSC-silent install cannot hold a connection: the watchdog tears down a WORKING AMCP socket every ~13 s and reconnects forever, so after B-100 the operator gets INTERMITTENT command capability rather than restored capability ⟨priority: high⟩ — merged (#385) + archived: `openspec/changes/archive/2026-07-22-runtime-amcp-probed-liveness/` — owner-verified on real CasparCG hardware, 2026-07-22
 
 **Distinct from [[B-100]]** — different component, different fix. B-100 is the bridge reading the
 session state wrongly; this is the session state machine itself destroying a healthy AMCP link
@@ -2188,12 +2199,14 @@ mid-reconnect). Plus: the probe-failure safety net (RED pre-fix: `expected 'osc 
 match /amcp probe/`), the half-open link, a non-OK `VERSION` code, no overlapping probes, recovery
 after a probe, and the two FROZEN peer-close guards.
 
-**GATE OWED — real-CasparCG verification, before archive.** Consolidated with [[B-100]],
-[[B-082]] and [[C-014]] into ONE hardware session; the full checklist lives in
-`openspec/changes/runtime-amcp-probed-liveness/tasks.md` §6. B-101's own item is §6.3: with OSC
-stopped, the AMCP link must HOLD for several minutes — no HEALTHY↔DEGRADED oscillation, no
-reconnect churn, and every step of the on-air walk must work **first time** rather than needing a
-retry inside a reconnect window. **Do not book a separate trip for any of these four items.**
+**GATE DISCHARGED — real-CasparCG verification, owner-verified 2026-07-22.** Consolidated with
+[[B-100]], [[B-082]] and [[C-014]] into ONE hardware session; the full checklist, now all ticked,
+lives in `openspec/changes/archive/2026-07-22-runtime-amcp-probed-liveness/tasks.md` §6. B-101's
+own item was §6.3, and it PASSED: with OSC stopped, the AMCP link HELD for several minutes — no
+HEALTHY↔DEGRADED oscillation, no reconnect churn, and every step of the on-air walk worked **first
+time**, with no retry inside a reconnect window. That retry-free walk is the direct observable of
+this fix: before it, the session force-disconnected roughly every 13 s. **All four items are
+closed; nothing here needs booking again.**
 
 **Cross-refs:** [[B-100]] (the predicate that turns this cycle into refused verbs and a black
 layer), [[B-094]] (the honest indicator for the same state), [[C-014]] (designs for the blind
