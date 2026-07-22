@@ -7,19 +7,35 @@
 
 ## Phase 1 — SPIKE (`tools/spikes/`): converter feasibility + the hardware question
 
-- [ ] 1.1 Vendor the single-threaded ffmpeg.wasm core into the workspace (no CDN, no COOP/COEP —
-      design D5 / decision (k)); record the binary's location decision as OPEN for the owner
-      (git / LFS / `.gitattributes`).
-- [ ] 1.2 Spike page: convert a REAL legacy `rawvideo`/BGRA AVI from the client archive to
-      WebM/VP9 with alpha (`yuva420p`, `-an`), in the browser, source mounted via WORKERFS (lazy
-      — never whole-file in memory), with progress + cancel.
-- [ ] 1.3 Measure and record: conversion time, output size, peak memory — plus seek accuracy and
-      drift-correction visibility on the converted clip (design D3's residual).
-- [ ] 1.4 Export a single-file HTML artifact embedding the converted clip (inline base64,
-      autoplay muted loop) for the owner to drop on real CasparCG 2.3.2 — THE VP9+alpha answer.
-      No schema change, no product surface.
-- [ ] 1.5 Record the hardware verdict + measurements in this change dir; flip the design to the
-      VP8 fallback here FIRST if the verdict demands it.
+> Built as `tools/spikes/video-convert/` (branch `feat/d128-p1-convert-spike`). Key finding:
+> **in-browser VP9 ENCODE crashes the single-thread `@ffmpeg/core` 0.12.10** (wasm OOB, first
+> frame, alpha or not); **VP8+alpha converts flawlessly** through the identical pipeline. The
+> two hardware artifacts carry VP8 (in-browser-converted) and VP9 (system-ffmpeg-encoded,
+> provenance stamped) so ONE hardware session still answers the codec question.
+
+- [x] 1.1 ~~Vendor~~ Deliver the single-threaded ffmpeg.wasm core (no CDN, no COOP/COEP —
+      design D5 / decision (k)) — RESOLVED as npm delivery: `@ffmpeg/ffmpeg`+`@ffmpeg/core`+
+      `@ffmpeg/util` as ROOT devDependencies, served same-origin from `node_modules` by the
+      spike's `serve.mjs`; no binary in git, no LFS, no runtime network (decision recorded in
+      design.md — the former OPEN item is closed).
+- [x] 1.2 Spike page: converts rawvideo/BGRA AVI in the browser via WORKERFS lazy mount
+      (proven: 1.93 GB input, 3.00 MB peak JS heap), with progress + cancel. Delivered as
+      VP8+alpha (`libvpx`, `-auto-alt-ref 0`, `yuva420p`, `-an`) — VP9+alpha is BLOCKED by the
+      upstream core bug above; the REAL client-archive AVI run is owner-owed (see 1.5).
+- [x] 1.3 Measured and recorded (`results/*.json` + README table): fixture VP8 178 ms /
+      4.6 KB; big-file 1.93 GB → 40.7 s, 659 KB out, 3.00 MB peak JS heap; seek ×20 max |Δ|
+      0 frames, latency mean 2.2 ms / max 4.6 ms; 60 s hold-loop drift: 49 wraps, |drift| mean
+      12.8 ms / max 26.6 ms, wrap seek ~1 ms, ZERO corrections at the 80 ms threshold —
+      resume/wrap-only correction cadence suffices at this clip size (design D3's residual).
+- [x] 1.4 Both single-file HTML artifacts exported (`artifacts/vp9-alpha-test.html` +
+      `vp8-alpha-test.html`): inline base64, autoplay muted loop, transparent page, zero
+      external requests, ES5 script; both pass the repo's `CEF_BANNED_BUILTINS` scan
+      (`check-cef.mjs`, Chromium-71 baseline).
+- [ ] 1.5 OWNER-OWED to close Phase 1: (a) convert the REAL archive AVI with the spike page
+      and attach its `metrics.json`; (b) drop BOTH artifacts on real CasparCG 2.3.2 and record
+      the per-codec verdict (alpha punch-through / edge fringing / frame pacing — runbook in
+      the spike README). Then record the verdict here and flip the design to the VP8 fallback
+      FIRST if the verdict (or the in-browser encode reality) demands it.
 
 ## Phase 2 — schema + asset ingest + import UI (incl. the crop modal) + converter wiring
 

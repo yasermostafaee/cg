@@ -175,19 +175,48 @@ exporters render identical bytes; nothing ever re-touches the source AVI after i
   filter), declared in the D-056 registry.
 - Canvas renders the poster frame (static); scrub-driven frames are D-135's item, not this one.
 
+## Phase-1 spike results (2026-07-22, `tools/spikes/video-convert/`)
+
+**DECIDED — wasm delivery is npm, closing the former "vendored wasm binary vs git" OPEN
+item:** `@ffmpeg/ffmpeg` 0.12.15 + `@ffmpeg/core` 0.12.10 (single-thread) + `@ffmpeg/util`
+as ROOT devDependencies; the core JS/wasm are served to the page from `node_modules` as
+same-origin URLs (the product build copies them as build assets the same way). No binary in
+git, no LFS, no runtime network — P-001 and decision (k) hold as written; C4 confirmed
+empirically (zero `SharedArrayBuffer` references, no COOP/COEP anywhere).
+
+**FINDING — in-browser VP9 ENCODE is broken in the current core:** `libvpx-vp9` crashes the
+0.12.10 single-thread worker (`RuntimeError: memory access out of bounds`, first frame,
+alpha or no alpha, any deadline). **VP8+alpha (`libvpx`, `-auto-alt-ref 0`) converts
+flawlessly** through the identical pipeline. Until an upstream core fix lands, the pipeline
+can only PRODUCE VP8+alpha — so the codec question is two-sided: CEF playability (hardware,
+below) AND in-app producibility. The hardware artifacts carry both codecs anyway (VP8 from
+the real in-browser pipeline; VP9 encoded by system ffmpeg, provenance stamped) so one
+hardware session still answers the playback half.
+
+**Measured (Windows 11, Chrome 150 headless, ST wasm):** fixture (64×64/1.6 s/647 KiB
+rawvideo-BGRA AVI): VP8 in-browser 178 ms → 4.6 KB. Big file (1920×1080/10 s/**1.93 GB**):
+VP8 in-browser **40.7 s** → 659 KB, **peak JS heap 3.00 MB** — WORKERFS lazy mount proven
+bounded. Seek harness (×20): max |Δ| **0 frames**, latency mean 2.2 ms / max 4.6 ms. 60 s
+hold-loop drift harness (driver-commanded rAF wrap): 49 wraps, |drift| mean 12.8 ms / max
+26.6 ms, wrap seek ~1 ms, **zero corrections** at an 80 ms threshold — D3's
+"resume/wrap-only" correction cadence suffices at this clip size; re-measure on the real
+archive clip. Raw data: the spike's `results/*.json`; runbook + caveats in its README.
+
 ## OPEN — owner decision
 
 - **CEF ~71 VP9+alpha:** whether CasparCG 2.3.x's CEF renders VP9 + alpha (`yuva420p`)
   correctly. VP8 + alpha (`-auto-alt-ref 0`) is the documented fallback if it does not. Per
   B-066, modern Chrome proves NOTHING here — only the Phase-1 spike artifact on real hardware
-  answers this, and Phase 1 gates everything after it.
+  answers this, and Phase 1 gates everything after it. NOTE post-spike: VP9 is currently
+  unproducible IN-APP regardless (finding above), so a pro-VP9 hardware verdict alone does
+  not unblock VP9 — it would additionally need an upstream `@ffmpeg/core` fix.
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide
   after the spike produces a real converted-archive artifact with measured sizes.
-- **Vendored wasm binary vs git:** where the ffmpeg.wasm payload lives w.r.t. the repo (plain
-  file, LFS, `.gitattributes`) given its size. Needs an owner call on repo-size tolerance.
 - **Seek-correction UX bar:** if the spike measures visible stutter on drift correction inside a
   hold loop, the acceptable correction cadence (resume/wrap-only vs per-tick bounded) is an
-  on-air quality judgment for the owner, informed by the measured numbers.
+  on-air quality judgment for the owner, informed by the measured numbers. Post-spike status:
+  zero corrections were needed on the fixture clip; the owner's real-archive run re-measures
+  this before the bar is set.
 
 ## Related
 

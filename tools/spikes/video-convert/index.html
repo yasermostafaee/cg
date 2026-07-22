@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>D-128 P1 spike — in-browser ffmpeg.wasm video conversion</title>
+    <style>
+      body { font: 13px/1.5 system-ui, sans-serif; margin: 1.5rem; max-width: 980px; }
+      h1 { font-size: 1.1rem; }
+      section { margin: 1rem 0; padding: 0.75rem; border: 1px solid #ccc; border-radius: 6px; }
+      button { margin-right: 0.5rem; }
+      #log { background: #111; color: #9e9; padding: 0.5rem; white-space: pre-wrap; font-family: monospace; font-size: 11px; min-height: 3em; }
+      #checker { display: inline-block; padding: 8px; background: repeating-conic-gradient(#bbb 0% 25%, #fff 0% 50%) 0 0 / 24px 24px; }
+      #player { width: 256px; height: 256px; display: block; }
+      table { border-collapse: collapse; font-size: 11px; }
+      td, th { border: 1px solid #ccc; padding: 2px 6px; text-align: right; }
+      label { margin-right: 0.75rem; }
+      input[type='number'] { width: 4.5em; }
+    </style>
+  </head>
+  <body>
+    <h1>D-128 Phase 1 — rawvideo/BGRA AVI → WebM+alpha, in-browser (single-threaded ffmpeg.wasm)</h1>
+
+    <section>
+      <strong>1 · Input</strong> — pick / drop any ffmpeg-decodable video, or load the committed fixture.<br />
+      <input id="pick" type="file" accept="video/*,.avi" />
+      <button id="load-fixture">Load committed fixture (64×64 BGRA AVI)</button>
+      <div id="input-info">(nothing mounted)</div>
+    </section>
+
+    <section>
+      <strong>2 · Convert</strong> — both codecs from the same source; audio stripped; yuva420p.<br />
+      <button id="convert-vp9">VP9 + alpha</button>
+      <button id="convert-vp8">VP8 + alpha (-auto-alt-ref 0)</button>
+      <button id="cancel">Cancel (terminate)</button>
+      <div id="progress"></div>
+      <div id="out-vp9"></div>
+      <div id="out-vp8"></div>
+    </section>
+
+    <section>
+      <strong>3 · Alpha eyeball</strong> — the latest output over a checkerboard.<br />
+      <span id="checker"><video id="player" autoplay muted loop playsinline></video></span>
+    </section>
+
+    <section>
+      <strong>4 · Harnesses</strong>
+      <label>fps <input id="fps" type="number" value="25" /></label>
+      <label>loop t1 <input id="loop-t1" type="number" step="0.1" value="0.2" /></label>
+      <label>loop t2 <input id="loop-t2" type="number" step="0.1" value="1.4" /></label><br />
+      <button id="seek">Seek harness (×20)</button>
+      <button id="drift">Hold-loop drift harness (60 s)</button>
+      <div id="seek-out"></div>
+      <div id="drift-out"></div>
+      <table id="seek-table"></table>
+    </section>
+
+    <section>
+      <strong>5 · Outputs</strong><br />
+      <button id="artifact-vp9">Build vp9-alpha-test.html</button>
+      <button id="artifact-vp8">Build vp8-alpha-test.html</button>
+      <button id="metrics">Download metrics.json</button>
+    </section>
+
+    <pre id="log"></pre>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

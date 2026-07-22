@@ -1,0 +1,28 @@
+{
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36",
+  "wasmDelivery": "npm @ffmpeg/ffmpeg 0.12.15 + @ffmpeg/core 0.12.10 (single-thread), same-origin /vendor/*",
+  "flags": {
+    "vp9": "-c:v libvpx-vp9 -pix_fmt yuva420p -crf 32 -b:v 0 -deadline good -cpu-used 5 -an",
+    "vp8": "-c:v libvpx -pix_fmt yuva420p -auto-alt-ref 0 -crf 12 -b:v 2M -deadline good -cpu-used 5 -an"
+  },
+  "input": {
+    "name": "big-1080p-bgra-10s.avi",
+    "size": 2073730218,
+    "sizeMB": "1977.66 MB"
+  },
+  "conversions": [
+    {
+      "codec": "vp8",
+      "ms": 40656,
+      "inputSize": 2073730218,
+      "outputSize": 659464,
+      "outputSizeMB": "0.63 MB",
+      "peakJsHeap": 3145377,
+      "peakJsHeapMB": "3.00 MB",
+      "heapNote": "performance.memory.usedJSHeapSize — Chrome-only, approximate; wasm linear memory not fully included"
+    }
+  ],
+  "seek": null,
+  "drift": null,
+  "wasmLoadMs": 163
+}
