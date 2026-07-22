@@ -35,9 +35,11 @@ tools/spikes/
 ├── amcp-poke/                      ← All spikes: TCP CLI for AMCP
 │   ├── amcp-poke.mjs
 │   └── README.md
-└── frame-counter/                  ← Spike C: rAF cadence measurement
-    ├── index.html
-    └── README.md
+├── frame-counter/                  ← Spike C: rAF cadence measurement
+│   ├── index.html
+│   └── README.md
+└── video-convert/                  ← D-128 Phase 1: in-browser ffmpeg.wasm conversion
+    └── README.md                     (post-M1 spike; same throwaway convention)
 ```
 
 ## Prerequisites
