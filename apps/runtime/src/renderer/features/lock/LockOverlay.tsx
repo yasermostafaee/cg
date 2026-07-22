@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { normalizeDigits } from '../../ui/NumericInput.js';
 
 interface Props {
   engaged: boolean;
@@ -97,7 +98,11 @@ export function LockOverlay({ engaged, engagedAt, reason, onRelease }: Props): J
   if (!engaged) return null;
 
   const submit = async (): Promise<void> => {
-    const result = await onRelease(pin);
+    // R-020 — digits in the PIN normalize to Latin, and StatusBar normalizes
+    // the SAME way before `lock.engage`, so a PIN typed ۱۲۳۴ on a Persian
+    // layout matches one stored as 1234 (and vice versa). Non-digit
+    // characters pass through verbatim.
+    const result = await onRelease(normalizeDigits(pin));
     if (!result.ok) {
       if (result.reason === 'pin-mismatch') {
         setWrongAttempts((n) => n + 1);

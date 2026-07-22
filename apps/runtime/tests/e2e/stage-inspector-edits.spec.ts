@@ -149,7 +149,9 @@ test('a number field accepts continuous multi-digit typing without losing focus 
   await app.loadTemplate(templateId);
   await app.selectStackRow(templateId);
 
-  const num = app.inspector.getByRole('spinbutton', { name: 'fontSize' });
+  // R-020 — the number control is the shared NumericInput (type="text" +
+  // inputMode, so Persian digits are not silently dropped): role is textbox.
+  const num = app.inspector.getByRole('textbox', { name: 'fontSize' });
   await expect(num).toHaveValue('5');
   await num.fill(''); // clear the seeded default
   // Type digit-by-digit: a remount on the first keystroke (the old frozen-key
@@ -161,7 +163,7 @@ test('a number field accepts continuous multi-digit typing without losing focus 
   await expect(app.inspector.getByText('● draft')).toBeVisible();
   await app.applyEdits();
   await expect(app.inspector.getByText('● draft')).toHaveCount(0);
-  await expect(app.inspector.getByRole('spinbutton', { name: 'fontSize' })).toHaveValue('128');
+  await expect(app.inspector.getByRole('textbox', { name: 'fontSize' })).toHaveValue('128');
 });
 
 test('Update with nothing staged still sends (the B-048 recovery workaround)', async ({ app }) => {

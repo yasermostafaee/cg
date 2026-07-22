@@ -6,6 +6,7 @@ import { useStack } from '../../hooks/useStack.js';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
+import { NumericInput } from '../../ui/NumericInput.js';
 
 interface Props {
   open: boolean;
@@ -217,18 +218,20 @@ export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | nul
       </div>
       <div style={styles.row}>
         <span style={styles.label}>AMCP port</span>
-        <input
+        {/* R-020 — ports are integer-only NumericInputs: Persian/Arabic-Indic
+            digits normalize to Latin BEFORE parsePort's /^\d+$/ sees them. */}
+        <NumericInput
           style={styles.port}
           aria-label={`${prefix} AMCP port`}
           value={draft.amcpPort}
-          onChange={(e) => set({ ...draft, amcpPort: e.target.value })}
+          onValueChange={(v) => set({ ...draft, amcpPort: v })}
         />
         <span style={styles.label}>OSC port</span>
-        <input
+        <NumericInput
           style={styles.port}
           aria-label={`${prefix} OSC port`}
           value={draft.oscPort}
-          onChange={(e) => set({ ...draft, oscPort: e.target.value })}
+          onValueChange={(v) => set({ ...draft, oscPort: v })}
         />
       </div>
     </>

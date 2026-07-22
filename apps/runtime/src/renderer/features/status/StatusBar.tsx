@@ -4,6 +4,7 @@ import { useLock } from '../../hooks/useLock.js';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
+import { normalizeDigits } from '../../ui/NumericInput.js';
 import { usePrompt } from '../../ui/useDialog.js';
 import { LinkIndicator } from './LinkIndicator.js';
 
@@ -315,7 +316,10 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
                 type: 'password',
                 minLength: 4,
               });
-              if (pin !== null) await window.cg.lock.engage({ pin });
+              // R-020 — digits normalize to Latin BEFORE the PIN is stored, and
+              // LockOverlay normalizes the release PIN the same way, so the two
+              // ends of the comparison can never disagree about ۱۲۳۴ vs 1234.
+              if (pin !== null) await window.cg.lock.engage({ pin: normalizeDigits(pin) });
             })();
           }}
         >

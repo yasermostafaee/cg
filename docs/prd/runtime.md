@@ -588,19 +588,15 @@ code paths that have to keep agreeing. FROZEN: on-air refusal (R-006), the linkD
 themselves, [[B-085]]'s browser-local library, [[B-086]]/[[B-087]]'s `unverified` badge, and
 [[B-092]]'s stack restore are all untouched.
 
-## [ ] R-014 — Persian / localised numerals: the operator types Persian digits, and numbers DISPLAY in Persian ⟨priority: medium⟩
+## [ ] R-014 — Persian / localised numerals: numbers DISPLAY in Persian digits ⟨priority: medium⟩
 
-**What:** Numeric input and numeric display are both localised. The operator can type Persian
-digits (۰–۹) into numeric fields and they are accepted as the numbers they denote; numbers shown
-in the UI are also DISPLAYED in Persian digits. The UI already carries Persian text throughout —
-the numerals are the missing half.
-**Why:** An operator working in a Persian UI on a Persian keyboard should not have to switch
-layouts (or be silently rejected) to type a number, and mixed Latin digits inside Persian text
-read as a seam in what is otherwise a Persian-first product.
+**What:** Numeric display is localised: numbers shown in the operator UI are DISPLAYED in
+Persian digits. The UI already carries Persian text throughout — the displayed numerals are the
+missing half. (The INPUT half — accepting Persian-typed digits — is owned by [[R-020]].)
+**Why:** Mixed Latin digits inside Persian text read as a seam in what is otherwise a
+Persian-first product.
 **Acceptance:**
 
-- WHEN the operator types Persian digits into a numeric field THEN the input is accepted as the
-  number it denotes — never rejected as non-numeric
 - WHEN a number is displayed in the operator UI THEN it renders in Persian digits (scope: see the
   open questions — recorded, not decided)
 - WHEN a numeric value reaches a machine consumer (AMCP on the wire, stored data, exported files)
@@ -611,8 +607,8 @@ read as a seam in what is otherwise a Persian-first product.
 only operator-facing ones? (b) the normalisation boundary — AMCP presumably still needs ASCII
 digits on the wire, so this is a presentation-layer concern with a conversion edge that has to be
 placed precisely; (c) is the numeral locale a setting, or fixed to Persian? — The INPUT half is
-now precisely filed as [[R-020]] (accept ۰–۹/٠–٩, normalize on input, canonical storage/wire);
-THIS item keeps the DISPLAY half and the open questions.
+precisely filed AND implemented as [[R-020]] (accept ۰–۹/٠–٩, normalize on input, canonical
+storage/wire); THIS item keeps the DISPLAY half and the open questions.
 
 ## [x] R-015 — protect VIDEO layers: a graphics operator can never clear one, and a video layer reads as NORMAL ⟨priority: high⟩ — merged (#365) + archived: `openspec/changes/archive/2026-07-19-runtime-protect-video-layers/`
 
@@ -831,7 +827,7 @@ against it: a `list` field's items are ordered and extensible, `{ id, text }[]`,
 reads `text` per item (`packages/shared-schema/src/elements.ts`, `fields.ts`). Cross-ref
 [[R-018]].
 
-## [ ] R-020 — Persian-keyboard digits accepted in numeric inputs, normalized to canonical digits ⟨priority: medium⟩
+## [~] R-020 — Persian-keyboard digits accepted in numeric inputs, normalized to canonical digits ⟨priority: medium⟩ — `openspec/changes/runtime-persian-digit-input/`; local gate green; no on-air behavior change (wire values unchanged) so no CasparCG hardware pass is owed; remaining to reach [x] + archive: owner runs it on the owner machine
 
 **What:** With a Persian keyboard active, numeric inputs (offsets, counts, ports, numeric field
 values) reject Persian digits (۰–۹). They must be accepted and normalized to canonical digits
