@@ -3,6 +3,7 @@ import type { PositionAnchor, StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
+import { NumericInput } from '../../ui/NumericInput.js';
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 
@@ -111,23 +112,23 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
       </div>
       <div style={styles.offsets}>
         <span style={styles.offsetLabel}>dx</span>
-        <input
+        <NumericInput
           className="cg-field"
           style={styles.offsetInput}
-          type="number"
+          decimal
           value={dx}
           disabled={locked}
-          onChange={(e) => setDx(e.target.value)}
+          onValueChange={setDx}
           aria-label="Position offset X"
         />
         <span style={styles.offsetLabel}>dy</span>
-        <input
+        <NumericInput
           className="cg-field"
           style={styles.offsetInput}
-          type="number"
+          decimal
           value={dy}
           disabled={locked}
-          onChange={(e) => setDy(e.target.value)}
+          onValueChange={setDy}
           aria-label="Position offset Y"
         />
       </div>

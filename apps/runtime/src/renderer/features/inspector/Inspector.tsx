@@ -12,6 +12,7 @@ import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { DraftChip } from '../../ui/DraftChip.js';
+import { NumericInput } from '../../ui/NumericInput.js';
 import { templateDisplayName } from '../library/templateName.js';
 import { layerDetail } from '../stack/layerLabel.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
@@ -363,9 +364,7 @@ function FieldControl({
     );
   }
   if (kind === 'number') {
-    return (
-      <NumberField field={field} value={value} fieldId={fieldId} dirty={dirty} onStage={onStage} />
-    );
+    return <NumberField value={value} fieldId={fieldId} dirty={dirty} onStage={onStage} />;
   }
   if (kind === 'color') {
     const v = typeof value === 'string' ? value : '#FFFFFF';
@@ -452,13 +451,11 @@ function FieldControl({
  * digit and could diverge across same-id fields.
  */
 function NumberField({
-  field,
   value,
   fieldId,
   dirty,
   onStage,
 }: {
-  field: DynamicField | null;
   value: FieldValue | undefined;
   fieldId: string;
   dirty: boolean;
@@ -475,16 +472,16 @@ function NumberField({
     const represents = text.trim() !== '' && Number.isFinite(parsed) && parsed === value;
     if (!represents) setText(external);
   }
+  // R-020 — the shared NumericInput (type="text" under the hood) so Persian /
+  // Arabic-Indic digits are accepted and commit as Latin. `step`/`min`/`max`
+  // are not rendered any more: on the old `type="number"` they only drove the
+  // spinner and the :invalid style — the staged value was never clamped.
   return (
-    <input
+    <NumericInput
       className={fieldClass(dirty)}
-      type="number"
+      decimal
       value={text}
-      step={field?.type === 'number' ? field.step : undefined}
-      min={field?.type === 'number' ? field.min : undefined}
-      max={field?.type === 'number' ? field.max : undefined}
-      onChange={(e) => {
-        const raw = e.target.value;
+      onValueChange={(raw) => {
         setText(raw);
         const n = Number(raw);
         if (raw.trim() !== '' && Number.isFinite(n)) {
