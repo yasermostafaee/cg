@@ -127,7 +127,8 @@ export const menuItem = style({
 export const menuItemDanger = style({ color: '#f87171' });
 
 export const modalBody = style({
-  fontSize: '0.78rem',
+  // Message-surface size — 0.9rem app-wide (owner call, 2026-07-22).
+  fontSize: '0.9rem',
   color: colors.textMuted,
   lineHeight: 1.5,
   whiteSpace: 'pre-wrap',

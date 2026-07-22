@@ -154,7 +154,8 @@ export const toast = style({
   border: '1px solid #f87171',
   borderRadius: '0.4rem',
   padding: '0.6rem 0.7rem 0.6rem 0.9rem',
-  fontSize: '0.78rem',
+  // Message-surface size — 0.9rem app-wide (owner call, 2026-07-22).
+  fontSize: '0.9rem',
   lineHeight: 1.4,
   boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
   zIndex: 5000,

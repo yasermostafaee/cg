@@ -12,6 +12,8 @@ import { emitAssetRemoved, useAssets } from './useAssets.js';
 import { clearAll as clearAllAssetUrls, revoke as revokeAssetUrl } from './assetUrlCache.js';
 import { clearAll as clearAllLottieAssets } from './lottieAssetCache.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
+import { VideoImportModal } from './VideoImportModal.js';
+import { defaultVideo } from '../../state/element-defaults.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
@@ -51,7 +53,10 @@ export function ProjectAssetsPanel(): JSX.Element {
     fontUses: number;
     imageUses: number;
     lottieUses: number;
+    videoUses: number;
   } | null>(null);
+  // D-128 — a picked video file awaiting the crop/convert modal.
+  const [videoImport, setVideoImport] = useState<File | null>(null);
   const addBtnRef = useRef<HTMLButtonElement | null>(null);
   const [assetView, setAssetView] = useState<'grid' | 'list'>(() =>
     typeof localStorage !== 'undefined' && localStorage.getItem(ASSET_VIEW_KEY) === 'list'
@@ -185,6 +190,30 @@ export function ProjectAssetsPanel(): JSX.Element {
   }
 
   /**
+   * D-128 — video import: pick → the crop/convert modal (VideoImportModal) →
+   * `storeBytes` of the converted WebM. One clip at a time — the modal is a
+   * per-clip surface (crop + progress), unlike the batch image/font path. Video
+   * is a per-PROJECT asset ONLY, never a device-level library entry (the
+   * converted WebM is conformed to THIS project's frame rate, so it is not
+   * portable the way a library resource must be).
+   */
+  async function importVideo(): Promise<void> {
+    setAddMenu(null);
+    const files = await window.cg.assets.pick('video');
+    if (files.length === 0) return; // cancelled
+    const { valid, rejected } = partitionSupported('video', files);
+    if (rejected.length > 0) {
+      designerStore.showNotice(skippedFilesMessage(rejected.map((file) => file.name)));
+    }
+    const first = valid[0];
+    if (first === undefined) return;
+    if (valid.length > 1) {
+      designerStore.showNotice('Video clips import one at a time — taking the first selection.');
+    }
+    setVideoImport(first);
+  }
+
+  /**
    * D-125 — validate each picked `.json` through the lottie-bridge allowlist before
    * it is stored. A file that isn't valid JSON, or whose animation uses an
    * unsupported feature (3D / expressions / effects / audio), is skipped with a
@@ -218,8 +247,8 @@ export function ProjectAssetsPanel(): JSX.Element {
 
   function openDeleteConfirm(asset: AssetMeta): void {
     setCtxMenu(null);
-    const { fontUses, imageUses, lottieUses } = countUsages(asset, scene?.layers ?? []);
-    setConfirm({ asset, fontUses, imageUses, lottieUses });
+    const { fontUses, imageUses, lottieUses, videoUses } = countUsages(asset, scene?.layers ?? []);
+    setConfirm({ asset, fontUses, imageUses, lottieUses, videoUses });
   }
 
   async function runDelete(asset: AssetMeta): Promise<void> {
@@ -344,7 +373,25 @@ export function ProjectAssetsPanel(): JSX.Element {
           >
             Lottie…
           </Button>
+          <Button
+            variant="bare"
+            role="menuitem"
+            className={s.menuItem}
+            onClick={() => void importVideo()}
+          >
+            Video…
+          </Button>
         </div>
+      )}
+      {videoImport !== null && (
+        <VideoImportModal
+          file={videoImport}
+          onClose={() => setVideoImport(null)}
+          onDone={(result) => {
+            setVideoImport(null);
+            placeVideoElement(result, scene);
+          }}
+        />
       )}
       {ctxMenu !== null && (
         <div
@@ -369,6 +416,7 @@ export function ProjectAssetsPanel(): JSX.Element {
           fontUses={confirm.fontUses}
           imageUses={confirm.imageUses}
           lottieUses={confirm.lottieUses}
+          videoUses={confirm.videoUses}
           onCancel={() => setConfirm(null)}
           onConfirm={() => void runDelete(confirm.asset)}
         />
@@ -392,10 +440,11 @@ function stripExt(filename: string): string {
 function countUsages(
   asset: AssetMeta,
   layers: readonly { children: readonly Element[] }[],
-): { fontUses: number; imageUses: number; lottieUses: number } {
+): { fontUses: number; imageUses: number; lottieUses: number; videoUses: number } {
   let fontUses = 0;
   let imageUses = 0;
   let lottieUses = 0;
+  let videoUses = 0;
   const family = `asset-${asset.assetId}`;
 
   function walk(children: readonly Element[]): void {
@@ -403,11 +452,34 @@ function countUsages(
       if (el.type === 'text' && el.font.family === family) fontUses += 1;
       else if (el.type === 'image' && el.assetId === asset.assetId) imageUses += 1;
       else if (el.type === 'lottie' && el.assetId === asset.assetId) lottieUses += 1;
+      else if (el.type === 'video' && el.assetId === asset.assetId) videoUses += 1;
       else if (el.type === 'container') walk(el.children);
     }
   }
   for (const layer of layers) walk(layer.children);
-  return { fontUses, imageUses, lottieUses };
+  return { fontUses, imageUses, lottieUses, videoUses };
+}
+
+/**
+ * D-128 — place a freshly-imported clip as a `video` element at the scene
+ * centre, sized to the stored clip (post-crop), scaled down to fit when larger
+ * than the frame. The drag-from-assets drop is the other entry point to the
+ * same element (CanvasOverlay).
+ */
+function placeVideoElement(
+  result: { asset: AssetMeta; durationMs: number; width: number; height: number },
+  scene: { resolution: { width: number; height: number } } | null,
+): void {
+  const res = scene?.resolution ?? { width: 1920, height: 1080 };
+  const fit = Math.min(res.width / result.width, res.height / result.height, 1);
+  const id = `el-${String(Date.now())}`;
+  designerStore.addElement(
+    defaultVideo(id, res.width / 2, res.height / 2, result.asset.assetId, result.durationMs, {
+      width: Math.round(result.width * fit),
+      height: Math.round(result.height * fit),
+    }),
+  );
+  designerStore.setSelection([id]);
 }
 
 function DeleteConfirmDialog({
@@ -415,6 +487,7 @@ function DeleteConfirmDialog({
   fontUses,
   imageUses,
   lottieUses,
+  videoUses,
   onCancel,
   onConfirm,
 }: {
@@ -422,11 +495,12 @@ function DeleteConfirmDialog({
   fontUses: number;
   imageUses: number;
   lottieUses: number;
+  videoUses: number;
   onCancel: () => void;
   onConfirm: () => void;
 }): JSX.Element {
   const displayName = stripExt(asset.filename);
-  const message = buildWarningMessage(asset, fontUses, imageUses, lottieUses);
+  const message = buildWarningMessage(asset, fontUses, imageUses, lottieUses, videoUses);
   return (
     <Modal
       title={`Delete “${displayName}”?`}
@@ -452,6 +526,7 @@ function buildWarningMessage(
   fontUses: number,
   imageUses: number,
   lottieUses: number,
+  videoUses: number,
 ): string {
   if (asset.kind === 'font') {
     if (fontUses === 0) {
@@ -473,6 +548,13 @@ function buildWarningMessage(
     }
     const noun = lottieUses === 1 ? 'Lottie element' : 'Lottie elements';
     return `This animation is used by ${String(lottieUses)} ${noun}. Deleting it will remove ${lottieUses === 1 ? 'that element' : 'those elements'} from the canvas and the timeline.`;
+  }
+  if (asset.kind === 'video') {
+    if (videoUses === 0) {
+      return 'This clip is not used anywhere in the scene. It will be removed from the project assets.';
+    }
+    const noun = videoUses === 1 ? 'video element' : 'video elements';
+    return `This clip is used by ${String(videoUses)} ${noun}. Deleting it will remove ${videoUses === 1 ? 'that element' : 'those elements'} from the canvas and the timeline.`;
   }
   return 'This asset will be removed from the project. Any references in the scene will be cleared.';
 }

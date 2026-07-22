@@ -12,6 +12,7 @@ import type {
   AssetsImportChannel,
   AssetsListChannel,
   AssetsRemoveChannel,
+  AssetsStoreBytesChannel,
   SharedImagesImportChannel,
   SharedImagesListChannel,
   SharedImagesRemoveChannel,
@@ -122,6 +123,15 @@ export interface DesignerBridge {
       file: File,
       kind?: AssetMeta['kind'],
     ): Promise<ChannelResponse<typeof AssetsImportChannel>>;
+    /**
+     * D-128 — store already-converted bytes (the canonical WebM the in-app video
+     * converter produced) as an asset, with optional source provenance. Same
+     * dedupe/index path as `store()` — the raw-bytes sibling for callers that
+     * have bytes, not a picked File.
+     */
+    storeBytes(
+      req: ChannelRequest<typeof AssetsStoreBytesChannel>,
+    ): Promise<ChannelResponse<typeof AssetsStoreBytesChannel>>;
     list(): Promise<ChannelResponse<typeof AssetsListChannel>>;
     remove(
       req: ChannelRequest<typeof AssetsRemoveChannel>,

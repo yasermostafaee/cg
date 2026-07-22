@@ -13,6 +13,7 @@ import {
   defaultEllipse,
   defaultImage,
   defaultLottie,
+  defaultVideo,
   defaultRepeater,
   defaultSequence,
   defaultShape,
@@ -159,6 +160,43 @@ async function insertLottieFromAsset(
       width,
       height,
     }),
+  );
+  designerStore.setSelection([id]);
+}
+
+/**
+ * D-128 — place a `video` element from a dropped project asset (the second entry
+ * point beside the import modal's place-on-confirm). The STORED asset is the
+ * canonical WebM the importer produced, so a `<video>` metadata probe yields its
+ * duration/dimensions directly; sizing mirrors {@link lottieSize}. An unreadable
+ * asset surfaces a notice and inserts nothing.
+ */
+async function insertVideoFromAsset(
+  assetId: string,
+  scenePoint: { x: number; y: number },
+): Promise<void> {
+  const url = await window.cg.assets.url(assetId);
+  if (url === null) {
+    designerStore.showNotice('That video asset could not be read.');
+    return;
+  }
+  const meta = await new Promise<{ durationMs: number; w: number; h: number } | null>((resolve) => {
+    const v = document.createElement('video');
+    v.preload = 'metadata';
+    v.muted = true;
+    v.onloadedmetadata = () =>
+      resolve({ durationMs: Math.round(v.duration * 1000), w: v.videoWidth, h: v.videoHeight });
+    v.onerror = () => resolve(null);
+    v.src = url;
+  });
+  if (meta === null || !(meta.durationMs > 0)) {
+    designerStore.showNotice('That video asset could not be decoded.');
+    return;
+  }
+  const { width, height } = lottieSize(meta.w, meta.h);
+  const id = `el-${String(Date.now())}`;
+  designerStore.addElement(
+    defaultVideo(id, scenePoint.x, scenePoint.y, assetId, meta.durationMs, { width, height }),
   );
   designerStore.setSelection([id]);
 }
@@ -589,6 +627,11 @@ export function CanvasOverlay({
     // parsed animation); every other asset kind is an image (today's path, unchanged).
     if (e.dataTransfer.getData('application/x-cg-asset-kind') === 'lottie') {
       void insertLottieFromAsset(assetId, scenePoint);
+      return;
+    }
+    // D-128 — a dropped video asset places a `video` element (async metadata probe).
+    if (e.dataTransfer.getData('application/x-cg-asset-kind') === 'video') {
+      void insertVideoFromAsset(assetId, scenePoint);
       return;
     }
     const id = `el-${String(Date.now())}`;

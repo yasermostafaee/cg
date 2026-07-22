@@ -1,0 +1,173 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildConvertArgs,
+  buildPosterArgs,
+  buildProvenance,
+  clampCrop,
+  fpsConformNotice,
+  parseProbeLog,
+} from '../src/renderer/features/assets/video-convert-args.js';
+
+describe('D-128 — buildConvertArgs (the DECIDED VP8+alpha recipe)', () => {
+  it('always strips audio, encodes VP8+alpha, and conforms to the target fps', () => {
+    const args = buildConvertArgs({
+      inputPath: '/mnt/clip.avi',
+      outputPath: '/out.webm',
+      targetFps: 50,
+    });
+    expect(args).toContain('-an');
+    expect(args).toContain('libvpx');
+    expect(args).not.toContain('libvpx-vp9'); // VP9 is OUT (unproducible in-app — design.md)
+    expect(args).toContain('yuva420p');
+    const altRef = args.indexOf('-auto-alt-ref');
+    expect(args[altRef + 1]).toBe('0');
+    const r = args.indexOf('-r');
+    expect(args[r + 1]).toBe('50');
+    // `-r` is an OUTPUT option — it must come after `-i <input>`
+    expect(r).toBeGreaterThan(args.indexOf('/mnt/clip.avi'));
+    expect(args.at(-1)).toBe('/out.webm');
+  });
+
+  it('bakes an opt-in crop as an ffmpeg crop filter (w:h:x:y), after the input', () => {
+    const args = buildConvertArgs({
+      inputPath: '/mnt/clip.avi',
+      outputPath: '/out.webm',
+      targetFps: 25,
+      crop: { x: 10, y: 20, width: 640, height: 360 },
+    });
+    const vf = args.indexOf('-vf');
+    expect(vf).toBeGreaterThan(args.indexOf('/mnt/clip.avi'));
+    expect(args[vf + 1]).toBe('crop=640:360:10:20');
+  });
+
+  it('no crop marked ⇒ no crop filter (full frame converts as before)', () => {
+    const args = buildConvertArgs({
+      inputPath: '/mnt/clip.avi',
+      outputPath: '/out.webm',
+      targetFps: 25,
+    });
+    expect(args).not.toContain('-vf');
+  });
+
+  it('poster extraction pulls exactly one frame as image2', () => {
+    expect(buildPosterArgs('/mnt/a.avi', '/poster.png')).toEqual([
+      '-y',
+      '-i',
+      '/mnt/a.avi',
+      '-frames:v',
+      '1',
+      '-f',
+      'image2',
+      '/poster.png',
+    ]);
+  });
+});
+
+describe('D-128 — parseProbeLog', () => {
+  // Real lines from the Phase-1 spike's ffmpeg 5.1.4 banner for the BGRA fixture.
+  const SPIKE_LOG = [
+    "Input #0, avi, from '/mnt/box-64x64-bgra.avi':",
+    '  Duration: 00:00:01.60, start: 0.000000, bitrate: 3310 kb/s',
+    '  Stream #0:0: Video: rawvideo, bgra, 64x64, 3360 kb/s, SAR 1:1 DAR 1:1, 25 fps, 25 tbr, 25 tbn',
+  ];
+
+  it('extracts fps / dimensions / duration from the banner', () => {
+    expect(parseProbeLog(SPIKE_LOG)).toEqual({
+      fps: 25,
+      width: 64,
+      height: 64,
+      durationMs: 1600,
+    });
+  });
+
+  it('parses an NTSC fractional rate', () => {
+    const probe = parseProbeLog([
+      '  Duration: 00:01:30.50, start: 0.000000, bitrate: 1658984 kb/s',
+      '  Stream #0:0: Video: rawvideo, bgra, 1920x1080, 1658984 kb/s, 29.97 fps, 29.97 tbr',
+    ]);
+    expect(probe?.fps).toBeCloseTo(29.97);
+    expect(probe?.width).toBe(1920);
+    expect(probe?.durationMs).toBe(90_500);
+  });
+
+  it('returns null when no video stream is present', () => {
+    expect(parseProbeLog(['  Duration: 00:00:05.00', '  Stream #0:0: Audio: mp3'])).toBeNull();
+  });
+
+  it('an fps-less video line still probes (fps 0 = unknown ⇒ conform silently)', () => {
+    const probe = parseProbeLog([
+      '  Duration: 00:00:02.00, start: 0.000000',
+      '  Stream #0:0: Video: vp8, yuv420p, 320x240, SAR 1:1 DAR 4:3',
+    ]);
+    expect(probe).not.toBeNull();
+    expect(probe?.fps).toBe(0);
+  });
+
+  it('Duration: N/A still probes (durationMs 0 — the modal measures the OUTPUT instead)', () => {
+    const probe = parseProbeLog([
+      '  Duration: N/A, start: 0.000000, bitrate: N/A',
+      '  Stream #0:0: Video: rawvideo (BGRA / 0x41524742), bgra, 720x576, 25 fps, 25 tbr, 25 tbn',
+    ]);
+    expect(probe).toEqual({ fps: 25, width: 720, height: 576, durationMs: 0 });
+  });
+});
+
+describe('D-128 decision (d) — fps conform + warn (never block, never silently keep)', () => {
+  it('warns with the consequence text when source ≠ channel rate', () => {
+    const notice = fpsConformNotice(29.97, 50);
+    expect(notice).toMatch(/29\.97 fps/);
+    expect(notice).toMatch(/conforming to the project channel's 50 fps/);
+    expect(notice).toMatch(/judder/);
+  });
+
+  it('no warning when the rates match', () => {
+    expect(fpsConformNotice(50, 50)).toBeNull();
+    expect(fpsConformNotice(29.970001, 29.97)).toBeNull();
+  });
+
+  it('no warning when the source rate is unknown (still conforms)', () => {
+    expect(fpsConformNotice(0, 50)).toBeNull();
+  });
+});
+
+describe('D-128 — provenance assembly + crop clamping', () => {
+  const probe = { fps: 29.97, width: 1920, height: 1080, durationMs: 10_000 };
+
+  it('captures source lineage incl. the baked crop', () => {
+    expect(
+      buildProvenance({
+        sourceFilename: 'archive.avi',
+        probe,
+        targetFps: 50,
+        crop: { x: 0, y: 0, width: 640, height: 480 },
+      }),
+    ).toEqual({
+      sourceFilename: 'archive.avi',
+      sourceFps: 29.97,
+      targetFps: 50,
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      crop: { x: 0, y: 0, width: 640, height: 480 },
+    });
+  });
+
+  it('omits crop when none was marked (full frame)', () => {
+    const p = buildProvenance({ sourceFilename: 'a.avi', probe, targetFps: 50 });
+    expect('crop' in p).toBe(false);
+  });
+
+  it('clampCrop keeps the rect inside the source bounds and integral', () => {
+    expect(clampCrop({ x: -5, y: 2000, width: 99999, height: 10.6 }, 1920, 1080)).toEqual({
+      x: 0,
+      y: 1069,
+      width: 1920,
+      height: 11,
+    });
+    expect(clampCrop({ x: 1900, y: 0, width: 100, height: 100 }, 1920, 1080)).toEqual({
+      x: 1820,
+      y: 0,
+      width: 100,
+      height: 100,
+    });
+  });
+});

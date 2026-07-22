@@ -10,6 +10,17 @@ import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
  */
 export default defineConfig({
   plugins: [vanillaExtractPlugin(), react()],
+  // D-128 — the ffmpeg.wasm wrapper spawns its class worker via
+  // `new Worker(new URL('./worker.js', import.meta.url), { type: 'module' })`.
+  // esbuild dep pre-bundling would relocate the module into `.vite/deps/` and
+  // break that relative URL (the classic ffmpeg+Vite worker 404), so both
+  // wrapper packages are excluded; in `vite build` Rollup's worker transform
+  // emits the worker as a same-origin chunk instead. The 32 MB core js+wasm are
+  // delivered as `?url` build assets (see renderer/features/assets/video-convert.ts) —
+  // same-origin, lazy, never a CDN (P-001 / D-128 note (k)).
+  optimizeDeps: {
+    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

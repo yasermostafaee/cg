@@ -1,4 +1,4 @@
-import { style } from '@vanilla-extract/css';
+﻿import { style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
 
 export const backdrop = style({
@@ -22,7 +22,8 @@ export const modal = style({
   borderRadius: '0.5rem',
   boxShadow: '0 16px 48px rgba(0,0,0,0.55)',
   color: colors.text,
-  fontSize: '0.84rem',
+  // Message-surface size — 0.9rem app-wide (owner call, 2026-07-22).
+  fontSize: '0.9rem',
 });
 
 export const header = style({

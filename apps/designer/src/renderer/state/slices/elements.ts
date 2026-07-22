@@ -330,6 +330,9 @@ export const elementsSlice = {
       const out: Element[] = [];
       for (const child of children) {
         if (child.type === 'image' && child.assetId === assetId) continue;
+        // D-128 — a video element without its clip is unrenderable; remove it
+        // exactly like an image (the delete dialog warned about the usage count).
+        if (child.type === 'video' && child.assetId === assetId) continue;
         if (child.type === 'text' && child.font.family === family) {
           out.push({ ...child, font: { ...child.font, family: 'Inter' } });
           continue;
@@ -343,10 +346,11 @@ export const elementsSlice = {
       return out;
     }
 
+    // Removed element ids (images AND videos) — drops them from the selection below.
     const removedImageIds = new Set<string>();
     function collectRemoved(children: readonly Element[]): void {
       for (const child of children) {
-        if (child.type === 'image' && child.assetId === assetId) {
+        if ((child.type === 'image' || child.type === 'video') && child.assetId === assetId) {
           removedImageIds.add(child.id);
         } else if (child.type === 'container') {
           collectRemoved(child.children);

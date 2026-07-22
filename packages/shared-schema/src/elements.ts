@@ -834,6 +834,68 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
 export type VideoPlaceholderElement = z.infer<typeof VideoPlaceholderElementSchema>;
 
 /**
+ * D-128 — the video element's phase marks, in the CLIP'S OWN TIME SPACE (ms from
+ * clip start). OPTIONAL and MANUAL — video has no bodymovin `markers` equivalent
+ * to read them from. Absent ⇒ the whole clip is the intro, the hold loops the
+ * whole clip, and there is no outro. Time-based (ms), NOT frame-based: unlike
+ * bodymovin (which declares `fr`/`ip`/`op`), a WebM clip's authoritative axis is
+ * time — its frame rate is an encoding detail the browser does not expose
+ * reliably.
+ */
+export const VideoPhasesSchema = z
+  .object({
+    /** End of the IN phase (ms from clip start). The hold point. */
+    introEnd: z.number().nonnegative(),
+    /** Start of the OUT phase (ms); the outro is `[outroStart → clip end]`. */
+    outroStart: z.number().nonnegative(),
+    /** Optional hold segment looped instead of `[introEnd → outroStart]`. */
+    idle: z
+      .object({ start: z.number().nonnegative(), end: z.number().nonnegative() })
+      .refine((r) => r.start <= r.end, { message: 'idle.start must not exceed idle.end' })
+      .optional(),
+  })
+  .refine((p) => p.introEnd <= p.outroStart, {
+    message: 'introEnd must not exceed outroStart',
+  });
+export type VideoPhases = z.infer<typeof VideoPhasesSchema>;
+
+/**
+ * D-128 — an imported video clip as a lifecycle-aware element. DISTINCT from
+ * `video-placeholder` (the live-source plate reserved for D-137) — the two are
+ * never merged. The referenced asset is the ONE canonical stored form produced
+ * at import: VP8+alpha WebM (`libvpx`, `-auto-alt-ref 0`, `yuva420p`, audio
+ * stripped `-an`, conformed to the project frame rate; crop, when marked, is
+ * BAKED into these bytes — so the element carries no crop field, and preview
+ * and both exporters read identical bytes). Opaque by design: positioned /
+ * scaled / rotated / opacity-animated and timed like any element, never edited
+ * frame-by-frame. Lifecycle wiring (hold/outro/drivesHold consumption) lands in
+ * Phase 4 — this schema only makes the shape valid and round-trippable.
+ */
+export const VideoElementSchema = ElementBaseSchema.extend({
+  type: z.literal('video'),
+  /** The converted canonical WebM asset (`kind: 'video'`; the ONLY stored form). */
+  assetId: IdSchema,
+  /** Clip duration in ms, captured at conversion (validation + timeline span). */
+  durationMs: z.number().positive(),
+  /**
+   * HOLD behaviour — the INVERSE of the Lottie's `freeze` default (D-128 note
+   * (d)): video furniture is authored as a loop, so on reaching the hold point
+   * the clip LOOPS by default; `freeze` is the opt-in alternative.
+   */
+  holdBehavior: z.enum(['loop', 'freeze']).default('loop'),
+  /**
+   * Whether this video DRIVES the composition's content-driven hold — the
+   * Lottie's inverse default (D-128 note (j)): absent/`false` ⇒ does NOT drive
+   * (a ticker on top drives the hold and the clip holds beneath); `true` ⇒ opts
+   * in. Read as `=== true`, never `!== false`. (Consumed in Phase 4.)
+   */
+  drivesHold: z.boolean().optional(),
+  /** Manual phase marks; absent ⇒ whole-clip intro, loop-all hold, no outro. */
+  phases: VideoPhasesSchema.optional(),
+});
+export type VideoElement = z.infer<typeof VideoElementSchema>;
+
+/**
  * Composition instance — a reference to another composition (by id) placed as
  * a layer. The referenced composition's own layers are NOT copied in; the
  * runtime resolves and renders them nested at playout (a pre-comp instance).
@@ -870,6 +932,7 @@ export type Element =
   | PathElement
   | LottieElement
   | VideoPlaceholderElement
+  | VideoElement
   | CompositionElement
   | ContainerElement;
 
@@ -890,6 +953,7 @@ export type ElementInput =
   | PathElement
   | z.input<typeof LottieElementSchema>
   | VideoPlaceholderElement
+  | z.input<typeof VideoElementSchema>
   | CompositionElement
   | ContainerElementInput;
 
@@ -935,6 +999,7 @@ export const ElementSchema: z.ZodType<Element, z.ZodTypeDef, ElementInput> = z.l
     PathElementSchema,
     LottieElementSchema,
     VideoPlaceholderElementSchema,
+    VideoElementSchema,
     CompositionElementSchema,
     ContainerElementSchema,
   ]),

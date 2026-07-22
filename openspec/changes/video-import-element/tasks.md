@@ -31,28 +31,56 @@
       `vp8-alpha-test.html`): inline base64, autoplay muted loop, transparent page, zero
       external requests, ES5 script; both pass the repo's `CEF_BANNED_BUILTINS` scan
       (`check-cef.mjs`, Chromium-71 baseline).
-- [ ] 1.5 OWNER-OWED to close Phase 1: (a) convert the REAL archive AVI with the spike page
-      and attach its `metrics.json`; (b) drop BOTH artifacts on real CasparCG 2.3.2 and record
-      the per-codec verdict (alpha punch-through / edge fringing / frame pacing — runbook in
-      the spike README). Then record the verdict here and flip the design to the VP8 fallback
-      FIRST if the verdict (or the in-browser encode reality) demands it.
+- [x] 1.5 HARDWARE VERDICT (owner, real CasparCG 2.3.2, 2026-07-22): **VP8+alpha renders with
+      correct alpha punch-through and clean edges; VP9 is REJECTED** (its in-app encode is
+      broken — @ffmpeg/core 0.12.10 OOB — so its playback is moot). **Codec DECIDED: VP8+alpha**
+      (`libvpx`, `-auto-alt-ref 0`, `yuva420p`, `-an`); recorded as a dated DECIDED entry in
+      design.md. The real multi-GB `rawvideo`/BGRA ARCHIVE clip has NOT yet been through the
+      pipeline (only the 64×64 fixture has) — carried forward as the Phase-6 owner-verification
+      item 6.3, NOT a Phase-2 blocker.
 
 ## Phase 2 — schema + asset ingest + import UI (incl. the crop modal) + converter wiring
 
-- [ ] 2.1 `@cg/shared-schema`: add `VideoElementSchema` + `VideoPhasesSchema` (design D1;
-      additive, no schema-version bump); `VideoPlaceholderElementSchema` untouched (FROZEN —
-      decision (f)). Schema unit tests: defaults (`holdBehavior: 'loop'`), phases ordering
-      refinement, a bare pre-D-128 scene parses unchanged.
-- [ ] 2.2 Widen the `video` `PickKind`'s import-side extensions (`asset-types.ts`) to the
-      ffmpeg-decodable container list; stored canonical kind stays WebM.
-- [ ] 2.3 Import modal: source preview, OPTIONAL crop region marking (position + width/height),
-      conversion progress, cancellation. Crop bakes via ffmpeg `crop` at conversion; no crop ⇒
-      full frame (PRD acceptance bullet 2).
-- [ ] 2.4 Converter wiring behind the bridge (`designer-bridge.ts` → `src/platform/`): lazy wasm
-      load on first import (never at startup, never from the network — PRD bullet 12), WORKERFS
-      mount, `-an`, `yuva420p` (or the Phase-1 fallback), store as a `video` asset.
-- [ ] 2.5 ProjectAssetsPanel video entry + tests (import lands, cancel cleans up, progress
-      surfaces, wasm not loaded pre-import).
+> Landed on `feat/d128-p2-video-schema-ingest` (2026-07-22). Owner decisions applied during
+> the phase: raw-bytes ingest seam with PROVENANCE (`AssetStore.importBytes` +
+> `assets.storeBytes` + `VideoProvenanceSchema` on `AssetMeta` — `@cg/shared-ipc`); frame-rate
+> CONFORM + WARN (`-r <Scene.frameRate>`, warning on mismatch, never a block); video is a
+> per-PROJECT asset only (never the device-level library); the plate stays file-source-free.
+
+- [x] 2.1 `VideoElementSchema` + `VideoPhasesSchema` added per design D1 (ms-based phases,
+      `holdBehavior` default `'loop'`, `drivesHold` inverse default) and registered in the
+      three union sites; `VideoPlaceholderElementSchema` byte-untouched (FROZEN). Additive —
+      no schema-version bump (the Lottie-addition precedent, verified: `CURRENT_SCHEMA_VERSION`
+      stays 1, `migrations: []`). Tests: defaults, phase-ordering + idle-range rejection,
+      union dispatch, placeholder-frozen, JSON round-trip (`elements.test.ts`,
+      `video-element-defaults.test.ts`).
+- [x] 2.2 `video` PickKind widened to the common ffmpeg-decodable containers (avi/mov/mkv/…,
+      `asset-types.ts`); the STORED kind is always the converted WebM.
+- [x] 2.3 `VideoImportModal`: probe (fps/dims/duration via ffmpeg banner parse + first-frame
+      poster), OPT-IN crop — draggable rect (move + 4 corner handles) AND numeric x/y/w/h in
+      two-way sync, clamped to source bounds — decision-(d) fps warning, determinate progress,
+      working cancel (worker terminate; clean return to ready), store-then-place ordering.
+      Probe RESILIENCE (added after the owner's first real-archive attempt failed opaquely):
+      a probe failure shows the ffmpeg LOG TAIL; a failed poster downgrades to numeric-only
+      crop; `Duration: N/A` sources measure the CONVERTED output (`measureDurationMs`).
+      Tests: state machine, both sync directions, cancel-vs-error, provenance payload,
+      log-tail/poster-less/N-A-duration paths (`video-import-modal.test.ts`, 11 tests).
+- [x] 2.4 Converter as REAL app code: `video-convert.ts` (lazy `import()`; core via `?url` +
+      same-origin `toBlobURL`; WORKERFS mount; VP8+alpha `-an` `yuva420p` `-auto-alt-ref 0` + `-r` conform; cancel) + pure `video-convert-args.ts` (arg construction, probe-log
+      parse, conform decision — 14 unit tests, no wasm in the gate). Vite:
+      `optimizeDeps.exclude` for the wrapper; build verified emitting
+      `dist/assets/worker-*.js` + `ffmpeg-core-*.js` + `ffmpeg-core-*.wasm` (32 MB)
+      same-origin. `@ffmpeg/*` moved to `apps/designer` dependencies. NOTE: placed in the
+      renderer per the LOTTIE precedent (validation-before-store runs renderer-side;
+      `@cg/lottie-bridge` is imported by the panel) — the bridge seam still owns persistence
+      via `assets.storeBytes`; recorded in design.md.
+- [x] 2.5 ProjectAssetsPanel "Video…" entry (one clip at a time → the modal); place-on-confirm
+      at scene centre + drag-from-assets drop (`insertVideoFromAsset`, `<video>` metadata
+      probe of the STORED WebM) — both entry points, per the assets-only addendum; AssetThumb
+      video drag; delete-warning + `removeAssetFromScene` video cascade;
+      `AssetStore.importBytes` (dedupe shared with `importFile` via delegation) with the
+      B-104-shape reload round-trip test (`asset-store-video-ingest.test.ts`, 6 tests).
+      Canvas render remains a `buildPlaceholder` stub BY DESIGN (Phase 3).
 
 ## Phase 3 — canvas render + Inspector
 
@@ -105,3 +133,8 @@
       zero external requests.
 - [ ] 6.2 Owner verifies on the affected machine; record the verdict here. Do NOT archive before
       this gate (the D-125 precedent).
+- [ ] 6.3 REAL-ARCHIVE verification (carried from Phase 1's close-out, 2026-07-22): the client's
+      actual multi-GB `rawvideo`/BGRA archive clip goes through the SHIPPED import pipeline
+      end-to-end (import → crop → convert → place → export → hardware) — only the 64×64 spike
+      fixture has been through it so far. Owner-executed; record conversion time / size /
+      memory alongside the verdict.

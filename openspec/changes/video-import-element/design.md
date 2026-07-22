@@ -202,14 +202,66 @@ hold-loop drift harness (driver-commanded rAF wrap): 49 wraps, |drift| mean 12.8
 "resume/wrap-only" correction cadence suffices at this clip size; re-measure on the real
 archive clip. Raw data: the spike's `results/*.json`; runbook + caveats in its README.
 
+**DECIDED (owner, real CasparCG 2.3.2 hardware, 2026-07-22) — the codec is VP8+alpha.** The
+owner ran both Phase-1 artifacts on real 2.3.2: **VP8+alpha renders with correct alpha
+punch-through and clean edges**; **VP9 is REJECTED** — its in-app encode is broken (the
+0.12.10 core OOB above), so its playback verdict is moot. The conversion command is
+`libvpx` + `-auto-alt-ref 0` + `yuva420p` + `-an` (+ the Decision-(d) `-r` conform). VP9
+stays out until a future `@ffmpeg/core` fixes the encode OOB — revisit only then, as a NEW
+decision. This closes the former "CEF ~71 VP9+alpha" OPEN item.
+
+## Phase-2 implementation record (2026-07-22, `feat/d128-p2-video-schema-ingest`)
+
+**Claims re-verified for this phase (C1–C5, all TRUE):** (C1) `VideoPlaceholderElementSchema`
+untouched at `elements.ts` — the new `VideoElementSchema` sits beside it; (C2) the asset layer
+already accepted video (`AssetKindSchema`, `KIND_BY_EXT` mp4/webm, the bridge MIME branch) but
+had NO raw-bytes ingest — added as `AssetStore.importBytes` (below); (C3) the Lottie pattern
+mirrored end-to-end: panel `importKind` → validation → `assets.store`, asset-only creation
+(no toolbar tool), drag-from-panel via `application/x-cg-asset-kind`, `defaultLottie` factory,
+`addElement`; (C4) the spike's WORKERFS + VP8 invocation lifted into
+`renderer/features/assets/video-convert.ts` with the REAL Vite wiring: `optimizeDeps.exclude`
+for `@ffmpeg/ffmpeg`+`@ffmpeg/util` (keeps the wrapper's `new Worker(new URL('./worker.js',
+import.meta.url))` resolvable), core js+wasm as `?url` build assets fetched same-origin via
+`toBlobURL` — build verified emitting `dist/assets/worker-*.js` + `ffmpeg-core-*.{js,wasm}`;
+(C5) the Designer shipped NO wasm/worker before this — ffmpeg is the first; `index.html`'s CSP
+already admits it (`worker-src 'self' blob:`, `script-src … 'unsafe-eval' blob:`) — the no-CDN
+rule is enforced by CODE (only same-origin URLs are ever passed), not by CSP.
+
+**Layer decisions taken (with owner sign-off where noted):**
+
+- **Raw-bytes ingest + provenance (OWNER-DECIDED):** `AssetStore.importBytes(bytes, filename,
+kind, provenance?)` is the ONE write path — `importFile` delegates to it — same
+  dedupe-by-sha / path scheme / index+persist+emit, so both ingests inherit any B-104 fix
+  together. Bridge: `assets.storeBytes` (`AssetsStoreBytesChannel`). `AssetMetaSchema` gains an
+  optional `provenance?: VideoProvenanceSchema` (`sourceFilename`, `sourceFps`, `targetFps`,
+  `sourceWidth/Height`, optional `crop` in source px) — the re-edit lineage; the crop is BOTH
+  baked into the bytes (what plays) AND recorded here (what a future re-crop starts from).
+  Playout facts stay on the ELEMENT per D1 (`durationMs`, `phases`, `holdBehavior`,
+  `drivesHold`).
+- **The element carries NO crop field** (decided per D1's intent): the stored WebM is the
+  single truth; crop lives only in provenance.
+- **Frame-rate CONFORM + WARN (OWNER-DECIDED, decision (d)):** every conversion writes `-r
+<Scene.frameRate>` (the single project-level rate, read synchronously from the store);
+  a source-rate mismatch shows a consequence-stating warning and NEVER blocks; an unknown
+  source rate conforms silently.
+- **Per-project asset ONLY (OWNER-DECIDED):** video never enters the device-level library —
+  the conformed WebM is project-rate-specific, hence non-portable. Two entry points to the
+  same element: the modal's place-on-confirm (scene centre) and drag-from-assets
+  (`insertVideoFromAsset`, `<video>` metadata probe of the stored WebM).
+- **Converter placement:** `renderer/features/assets/` (not `src/platform/`) — the LOTTIE
+  precedent: pre-store validation/processing runs renderer-side (`@cg/lottie-bridge` is
+  imported by the panel); persistence still crosses the bridge seam via `assets.storeBytes`.
+- **Probe resilience (from the owner's first real-archive attempt):** a probe failure carries
+  the ffmpeg LOG TAIL into the modal (never a dead-end message); a failed poster extraction
+  downgrades to a preview-less (numeric-only) crop instead of aborting; `Duration: N/A`
+  sources convert anyway and the DURATION IS MEASURED FROM THE CONVERTED OUTPUT
+  (`measureDurationMs`), which is the authoritative clock regardless.
+- **Canvas render is a `buildPlaceholder` stub BY DESIGN** — the poster/canvas render is
+  Phase 3; Phase 2 registered the compile-forced union sites only (`field-registry`,
+  `TYPE_COLORS`, `scene-builder`).
+
 ## OPEN — owner decision
 
-- **CEF ~71 VP9+alpha:** whether CasparCG 2.3.x's CEF renders VP9 + alpha (`yuva420p`)
-  correctly. VP8 + alpha (`-auto-alt-ref 0`) is the documented fallback if it does not. Per
-  B-066, modern Chrome proves NOTHING here — only the Phase-1 spike artifact on real hardware
-  answers this, and Phase 1 gates everything after it. NOTE post-spike: VP9 is currently
-  unproducible IN-APP regardless (finding above), so a pro-VP9 hardware verdict alone does
-  not unblock VP9 — it would additionally need an upstream `@ffmpeg/core` fix.
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide
   after the spike produces a real converted-archive artifact with measured sizes.
 - **Seek-correction UX bar:** if the spike measures visible stutter on drift correction inside a

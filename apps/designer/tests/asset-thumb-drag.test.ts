@@ -80,3 +80,38 @@ describe('AssetThumb — thumbnail drag (B-019)', () => {
     expect(setData).toHaveBeenCalledWith('application/x-cg-asset-id', 'asset-img-1');
   });
 });
+
+describe('AssetThumb — video tiles drag onto the canvas (D-128)', () => {
+  const videoAsset: AssetMeta = {
+    assetId: 'asset-vid-1',
+    kind: 'video',
+    filename: 'clip.webm',
+    sha256: 'b'.repeat(64),
+    byteSize: 4096,
+    workingPath: 'projects/p/assets/video/y.webm',
+  };
+
+  function renderVideo(): HTMLDivElement {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => root!.render(createElement(AssetThumb, { asset: videoAsset, layout: 'grid' })));
+    return container;
+  }
+
+  it('a video cell is draggable and carries the video kind in the payload', () => {
+    const c = renderVideo();
+    const cell = c.firstElementChild as HTMLElement;
+    expect(cell.draggable).toBe(true);
+
+    const setData = vi.fn();
+    const evt = new Event('dragstart', { bubbles: true });
+    Object.defineProperty(evt, 'dataTransfer', { value: { setData, effectAllowed: 'none' } });
+    act(() => {
+      cell.dispatchEvent(evt);
+    });
+    // The canvas drop branches on this kind to build a `video` element.
+    expect(setData).toHaveBeenCalledWith('application/x-cg-asset-id', 'asset-vid-1');
+    expect(setData).toHaveBeenCalledWith('application/x-cg-asset-kind', 'video');
+  });
+});

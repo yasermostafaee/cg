@@ -13,6 +13,7 @@ import {
   ShapeElementSchema,
   TextElementSchema,
   TickerElementSchema,
+  VideoElementSchema,
   VideoPlaceholderElementSchema,
 } from '../src/elements.js';
 
@@ -298,6 +299,93 @@ describe('VideoPlaceholderElement', () => {
       routeKey: 'ndi-source-1',
     };
     expect(VideoPlaceholderElementSchema.parse(v)).toEqual(v);
+  });
+
+  it('D-128 — the placeholder is FROZEN: it still parses exactly as before the video element landed', () => {
+    // D-137's live-plate placeholder must be untouched by the D-128 `video` type.
+    const v = {
+      ...baseProps,
+      type: 'video-placeholder' as const,
+      posterAssetId: 'asset-poster',
+      expectedAspect: 4 / 3,
+      routeKey: 'guest-1',
+    };
+    expect(VideoPlaceholderElementSchema.parse(v)).toEqual(v);
+  });
+});
+
+describe('VideoElement (D-128)', () => {
+  it('a minimal video element parses and gains the loop default', () => {
+    const v = {
+      ...baseProps,
+      type: 'video' as const,
+      assetId: 'asset-clip',
+      durationMs: 4000,
+    };
+    // `holdBehavior` carries `.default('loop')` — the INVERSE of the Lottie's freeze
+    // (video furniture is authored as a loop), injected when the stored JSON omits it.
+    expect(VideoElementSchema.parse(v)).toEqual({ ...v, holdBehavior: 'loop' });
+  });
+
+  it('defaults: no phases, no drivesHold (absent ⇒ does NOT drive), hold loops', () => {
+    const parsed = VideoElementSchema.parse({
+      ...baseProps,
+      type: 'video' as const,
+      assetId: 'asset-clip',
+      durationMs: 1600,
+    });
+    expect(parsed.holdBehavior).toBe('loop');
+    expect(parsed.phases).toBeUndefined();
+    expect(parsed.drivesHold).toBeUndefined();
+  });
+
+  it('round-trips full phases (ms) + freeze hold + drivesHold opt-in', () => {
+    const v = {
+      ...baseProps,
+      type: 'video' as const,
+      assetId: 'asset-furniture',
+      durationMs: 8000,
+      holdBehavior: 'freeze' as const,
+      drivesHold: true,
+      phases: {
+        introEnd: 1200,
+        outroStart: 6500,
+        idle: { start: 2000, end: 5000 },
+      },
+    };
+    expect(VideoElementSchema.parse(v)).toEqual(v);
+  });
+
+  it('rejects an invalid phase ordering (introEnd > outroStart)', () => {
+    const bad = {
+      ...baseProps,
+      type: 'video' as const,
+      assetId: 'asset-clip',
+      durationMs: 4000,
+      phases: { introEnd: 3000, outroStart: 1000 },
+    };
+    expect(() => VideoElementSchema.parse(bad)).toThrow(/introEnd must not exceed outroStart/);
+  });
+
+  it('rejects an inverted idle range', () => {
+    const bad = {
+      ...baseProps,
+      type: 'video' as const,
+      assetId: 'asset-clip',
+      durationMs: 4000,
+      phases: { introEnd: 500, outroStart: 3500, idle: { start: 3000, end: 1000 } },
+    };
+    expect(() => VideoElementSchema.parse(bad)).toThrow(/idle.start must not exceed idle.end/);
+  });
+
+  it('dispatches through the Element union', () => {
+    const v = {
+      ...baseProps,
+      type: 'video' as const,
+      assetId: 'asset-clip',
+      durationMs: 2500,
+    };
+    expect(ElementSchema.parse(v)).toEqual({ ...v, holdBehavior: 'loop' });
   });
 });
 

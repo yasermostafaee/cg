@@ -690,6 +690,9 @@ export const FIELD_REGISTRY: Record<Element['type'], readonly PropertyDescriptor
   composition: UNIVERSAL_ONLY,
   lottie: UNIVERSAL_ONLY,
   'video-placeholder': UNIVERSAL_ONLY,
+  // D-128 — opaque clip: transform/opacity/filter only (mirrors lottie); the
+  // lifecycle surface (phases/hold) is Inspector-section work, not keyframe rows.
+  video: UNIVERSAL_ONLY,
   container: UNIVERSAL_ONLY,
 };
 
