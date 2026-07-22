@@ -59,7 +59,9 @@
 
 ## 7. Outstanding — owner on-air validation (NOT done)
 
-- [ ] 7.1 On real CasparCG, the two checks this change's risk actually lives in: (a) CLEAR a
+- [x] 7.1 On real CasparCG (owner-verified on hardware 2026-07-22, in the ONE consolidated
+      session that also discharged B-100, B-101 and B-082 — both checks PASSED), the two checks
+      this change's risk actually lives in: (a) CLEAR a
       foreign layer, wait for the tap to age the observation out, then re-Add — the layer must
       return to the allocatable pool (the only exercise of the newly-wired `deallocate()`; a
       pool leak stays invisible until Adds start refusing); and (b) with an item on a layer,
