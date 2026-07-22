@@ -529,7 +529,46 @@ implemented in that sweep's commit.)
 **Regression test:** the guard is its own regression test (the B-075 precedent) — a `[~]` item
 whose cited fix is merged turns it red; flipping that item to `[x]` turns it green.
 
-## [ ] B-098 — the `@cg/caspar-bridge` suite reds under full parallel `pnpm test` while passing in isolation: `did not reach HEALTHY in time` at the 15 s bound [[B-073]] raised ⟨priority: medium⟩
+## [~] B-098 — the `@cg/caspar-bridge` suite reds under full parallel `pnpm test` while passing in isolation: `did not reach HEALTHY in time` at the 15 s bound [[B-073]] raised ⟨priority: medium⟩
+
+**Fix applied 2026-07-23** (`platform-gate-test-bound`, PR #TBD) — bound the fan-out to the
+host, do not raise a timeout. Root cause finally MEASURED, not inferred: `pnpm gate` / `pnpm
+test` fan out through turbo (~10 concurrent `test` tasks under `--force`) and every task's
+`vitest run` defaults to `pool: 'forks'`, `maxForks = availableParallelism - 1` = **7** on
+this 8-core box, because not one of the 19 `vitest.config.ts` sets a pool option (resolved
+each config via vitest's Node API to confirm: all `pool: 'forks'`, `poolOptions.forks: {}`).
+Sampling `turbo run test --force` measured a **peak of 64 concurrent node processes on 8
+cores — 8× oversubscription**, sustained across the middle of the run. That is the
+starvation this entry's isolation-asymmetry always implied.
+
+The fix caps BOTH multipliers so their product fits the machine — the invariant
+`taskConcurrency × forksPerTask = maxTestWorkers ≤ cores`, which on 8 cores resolves to
+**3 tasks × 2 forks = 6 workers** (75% utilisation, 2 cores of headroom for the vitest
+parents / pm shims / turbo / coverage merge). A new pure module
+`tools/gate-hook/src/test-concurrency.mjs` computes it (unit tests assert the invariant
+across 1–128 cores — the invariant, not a green streak, is the proof, since the unbounded
+gate also passes on an idle box); a thin launcher `bounded-turbo-cli.mjs` runs turbo with
+the computed `--concurrency` and vitest's own `VITEST_{MIN,MAX}_{FORKS,THREADS}` caps in the
+child env; `turbo.json` `passThroughEnv` lets those survive strict env mode; `gate`, `test`
+and `test:integration` route through it. No test, timeout or product source was touched. Same
+mechanism as [[B-095]]/#360 (`gate:e2e --concurrency=1`), adapted to the larger main-gate
+graph with a tuned cap rather than full serialisation. **Result: peak node 64 → 19, gate
+green across 5 back-to-back uncached runs (222/213/171/171/171 s vs a 203 s unbounded
+baseline — no wall-clock cost; the 64 processes were thrashing, not doing more work).**
+`gate:e2e` untouched (its `--concurrency=1` is explicitly preserved) — no Linux e2e run owed. Remaining to reach `[x]`: owner confirms the
+flake stays gone across subsequent real-use runs.
+
+**Evidence gathered 2026-07-23 (the fix session).** Five afternoon occurrences under the
+unbounded gate, spanning THREE workspaces: `@cg/caspar-client` (amcp-probed-liveness),
+`@cg/caspar-bridge` (stop-verb, update-producer-state, reconnect-reconciliation), and
+`@cg/single-file-export`. The last is the clincher for CPU-starvation over any resource
+collision: it uses **no amcp-mock, no HEALTHY bound, no fixed ports**, so a port/socket
+theory cannot explain it, yet it starved like the rest. Temporal signature matched a load
+margin, not a defect: green back-to-back in the morning, ~5 of 7 red in the afternoon with
+the machine idle between runs and no code change between. Structural bound now measured:
+64 concurrent workers wanted → capped to 6, verified 19 peak node processes (3 the editor's)
+under the fix. Hypothesis A (CPU starvation) CONFIRMED; hypothesis B (fixed-port collision)
+RULED OUT.
 
 **Repro:** run the full parallel `pnpm test` (every workspace at once) on a local dev box.
 Observed **four times in one session** (2026-07-19). It does not reproduce when the workspace is

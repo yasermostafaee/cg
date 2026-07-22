@@ -82,6 +82,19 @@ command, so the flag lands on `openspec validate --all --strict --force` →
 `error: unknown option '--force'`: a bogus red on an otherwise green gate. Same trap
 for any `pnpm <script> <flag>` where the script chains commands.
 
+**The gate's test fan-out is BOUNDED to the host — leave it bounded (B-098).** `gate`,
+`test` and `test:integration` no longer call `turbo` directly; they route through
+`tools/gate-hook/src/bounded-turbo-cli.mjs`, which caps BOTH multipliers that used to
+compound — turbo's task concurrency AND each `vitest run`'s fork count — so the worst case
+`taskConcurrency × forksPerTask` stays ≤ cores (8 cores → 3 × 2 = 6 workers; the run prints
+its own bound). Unbounded, those two defaults wanted ~64 workers on 8 cores and starved
+whichever timing-sensitive suite was co-scheduled — the same `did not reach HEALTHY`
+contention red B-073 first met. Do NOT "simplify" a script back to a bare `turbo run test`
+(it removes the cap), do NOT drop the `VITEST_*` `passThroughEnv` keys in `turbo.json` (strict
+env mode then filters the caps out and the bound is a silent no-op), and do NOT answer a
+contention red by raising a timeout — B-073 already did that and B-098 is that bound blown in
+turn. The fix is the bound; a longer rope is not.
+
 **Never background a push.** The pre-push gate must run in the FOREGROUND, or a
 second gate can start alongside it — two gates in one workspace collide over
 vitest's shared coverage tmp dir and fail an innocent suite with a bare `ENOENT`

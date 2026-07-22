@@ -27,7 +27,13 @@
     "test": {
       "dependsOn": ["^build", "build"],
       "outputs": ["coverage/**"],
-      "inputs": ["src/**", "tests/**", "scripts/**", "vitest.config.*", "package.json"]
+      "inputs": ["src/**", "tests/**", "scripts/**", "vitest.config.*", "package.json"],
+      "passThroughEnv": [
+        "VITEST_MAX_FORKS",
+        "VITEST_MIN_FORKS",
+        "VITEST_MAX_THREADS",
+        "VITEST_MIN_THREADS"
+      ]
     },
     "@cg/template-fixtures#build": {
       "dependsOn": ["^build"],
@@ -47,12 +53,24 @@
         "$TURBO_ROOT$/packages/*/package.json",
         "$TURBO_ROOT$/tools/*/package.json",
         "$TURBO_ROOT$/docs/prd/**"
+      ],
+      "passThroughEnv": [
+        "VITEST_MAX_FORKS",
+        "VITEST_MIN_FORKS",
+        "VITEST_MAX_THREADS",
+        "VITEST_MIN_THREADS"
       ]
     },
     "test:integration": {
       "dependsOn": ["^build", "@cg/amcp-mock#build"],
       "outputs": ["coverage/**"],
-      "inputs": ["src/**", "tests/integration/**"]
+      "inputs": ["src/**", "tests/integration/**"],
+      "passThroughEnv": [
+        "VITEST_MAX_FORKS",
+        "VITEST_MIN_FORKS",
+        "VITEST_MAX_THREADS",
+        "VITEST_MIN_THREADS"
+      ]
     },
     "test:e2e": {
       "dependsOn": ["build", "@cg/amcp-mock#build"],
