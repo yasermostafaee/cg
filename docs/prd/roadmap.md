@@ -68,6 +68,14 @@ integrations to validate. They live here so the conversation isn't the only reco
     [`caspar.md`](./caspar.md) when the runtime wave starts; until then this is the design intent
     C-004/C-005 must follow.
 
+## Parked — awaiting client details
+
+- **Masking (client request, details pending — noted 2026-07-22):** the client wants some form of
+  masking — possibly Designer-side element masks (clip an element by a shape → CSS
+  clip-path/mask in exports), possibly CasparCG channel compositing (ROUTE + MIXER CROP/CLIP),
+  possibly both. Do NOT allocate a D-/C- number or design anything until the client specifies;
+  revisit when details arrive.
+
 ## Already tracked elsewhere (do not duplicate)
 
 - **End-user product documentation site (Loopic-style).** Tracked as **P-006** in

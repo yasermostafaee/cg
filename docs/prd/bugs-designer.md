@@ -1293,3 +1293,125 @@ survived the phase.
 **Actual:** the runtime is torn down and rebuilt underneath the playing graphic.
 **Env:** Browser / Designer preview.
 **Notes:** `apps/designer/src/platform/preview.ts:730` — the `lottie-assets` branch does `lottieAssets = msg.lottieAssets; if (currentScene && …) { await applyScene(currentScene); }`, a full rebuild with **no `!playing` guard**, unlike the `update` handler ~13 lines below (`if (runtime && !playing) runtime.tick(currentFrame)`). Introduced by D-125 (Phase 1). **Not causal for B-088** — it cannot produce that symptom, and B-088 reproduces with no Lottie at all — but it is a real latent teardown. Candidate for D-125 Phase 3.
+
+## [ ] B-102 — images inside a sequence-item composition render in preview but NOT on CasparCG hardware ⟨priority: high⟩
+
+**Repro:**
+
+1. Create a composition containing an `image` element.
+2. Add it as a `composition`-kind item of a `sequence`.
+3. Preview — the image shows.
+4. Export single-file HTML; play on real CasparCG 2.3.x.
+
+**Expected:** the image renders on air exactly as in preview.
+**Actual:** the image is absent on hardware.
+**Env:** Designer preview vs real CasparCG 2.3.x (CEF, `file://`). HARDWARE-AFFECTING — a
+preview/on-air parity break, the class the export pipeline exists to prevent.
+**Notes:** the initial suspicion — that the exporter's asset collection may not walk compositions
+referenced via sequence ITEMS, the same root-`elementMap`-only traversal class as B-089/B-099 — is
+**PARTIALLY CONTRADICTED by filing-time recon**: `collectImageElements`
+(`packages/single-file-export/src/image-export.ts:26`) walks the main scene AND **all**
+`scene.compositions` (a sequence-item composition lives there too, however it is referenced), and
+both exporters collect through it — so the naive "bytes never collected" theory does not hold for
+the image-bytes path as read. The defect more likely sits elsewhere on the parity chain: how a
+sequence's `composition` items mount/resolve image sources at play time under CEF, an
+image-`source` variant (project vs D-040 shared) resolving differently at export than in preview,
+or preview masking a failure by reading the LIVE AssetStore. Verify the real path at fix time —
+the repro is the truth, the suspicion is not.
+**Regression test:** exporter test asserting a sequence-item composition's image bytes land in
+both `.vcg` and single-file output, PLUS the preview/hardware parity scenario (the render path,
+not just collection).
+
+## [ ] B-103 — first sequence item enters WITHOUT its transition when `repeat: 'infinite'` ⟨priority: medium⟩
+
+**Repro:**
+
+1. Create a sequence with ≥2 items, `transitionIn` at its default (`bottom`).
+2. Set `repeat` to a finite count → play: the first item animates in.
+3. Set `repeat: 'infinite'` — the SCHEMA DEFAULT (`SequenceElementSchema.repeat` defaults to
+   `'infinite'`, `packages/shared-schema/src/elements.ts:461`) → play.
+
+**Expected:** the first item enters with the same `transitionIn` motion in both repeat modes.
+**Actual:** with `'infinite'` it appears instantly.
+**Env:** Designer preview / template-runtime playback. Because `'infinite'` is the schema default,
+this IS the out-of-box behavior — every freshly created sequence shows the defect.
+**Regression test:** template-runtime sequence test on the injected clock covering first-item
+entry under BOTH repeat modes.
+
+## [ ] B-104 — project assets (images, fonts) are GONE after save → Designer restart → load ⟨priority: high⟩
+
+**Repro:**
+
+1. Import an image + a font; use both in the scene.
+2. Save the project.
+3. Fully restart the Designer (close the tab/browser).
+4. Load the same project.
+
+**Expected:** assets present, scene renders as saved.
+**Actual:** the assets are missing from the assets panel and the scene shows a broken image /
+fallback font.
+**Env:** Designer, across a full browser restart. **DATA LOSS class.**
+**Notes:** recon pointers (verify, don't assume): asset bytes live in the WORKSPACE under
+`projects/<projectId>/assets/<kind>/<sha>.<ext>` keyed by `projectId = scene.id`
+(`apps/designer/src/platform/AssetStore.ts` — `setActiveProject` / `#bytesPath`;
+`workspace.ts`), while the project file itself may be an EXTERNAL File System Access file
+(`ProjectStore.ts` — `handleKey` → IndexedDB-persisted `FileSystemFileHandle`). TWO candidate
+break points: (a) the projectId↔workspace linkage on reload (does loading an external file
+re-activate the same `projects/<projectId>/` namespace?), and (b) the workspace ROOT itself —
+`initWorkspace()` prefers a previously-connected on-disk directory and silently falls back to OPFS
+when the remembered handle/permission is gone, so the same projectId can resolve against a
+DIFFERENT root across sessions, orphaning the bytes. The exact repro conditions (external file vs
+OPFS project; same/different browser session; whether the remembered-directory permission
+survived) MUST be pinned during the fix — the fix is not credible without them.
+**Regression test:** persistence round-trip covering save → reload → asset resolution (bytes AND
+panel listing), including the restart boundary.
+
+## [ ] B-105 — the sequence "Hide-show" transition produces no perceptible change ⟨priority: medium⟩
+
+**Repro:**
+
+1. Create a sequence with ≥2 items.
+2. In the Inspector's transition preset select, pick **Hide-show** (the shipped preset key
+   `hide-show` — `transitionIn: 'none'`, `transitionOut: 'none'` —
+   `apps/designer/src/renderer/features/inspector/sequence-presets.ts`).
+3. Play.
+
+**Expected:** items visibly swap (out-then-in, or at minimum a clean cut between DIFFERENT items).
+**Actual:** no change is perceived by the operator.
+**Env:** Designer preview / playback.
+**Notes:** filing-time recon sharpens what must be pinned at fix time: the preset is DOCUMENTED as
+an instant hard swap — `none` = "instant cut" (`SequenceEdgeSchema`,
+`packages/shared-schema/src/elements.ts:389-390`) and the preset comment reads "both sides cut
+instantly (timing is moot with two `none`s)". So distinguish: (a) items fail to ADVANCE at all
+under `none`/`none` — a real defect; or (b) items advance as the designed instant cut and the
+operator reads it as "nothing happened" — working-as-designed, in which case the fix may be a
+`fade` edge (a perceptible minimal transition) rather than a behavior repair. Decide there; the
+observed behavior is filed as reported either way.
+**Regression test:** sequence transition test asserting item advance is OBSERVABLE under the
+Hide-show values (the item content actually changes at the boundary).
+
+## [ ] B-106 — repeater `maxItems` is not enforced end-to-end ⟨priority: medium⟩
+
+**Repro:**
+
+1. Create a repeater with `maxItems: 3`.
+2. Author (or bind a list of) 5 items.
+3. Open preview / play at runtime.
+
+**Expected:** at most 3 rows stamp anywhere — and the Designer's authored-items editor
+refuses/flags adding past the clamp.
+**Actual:** more than `maxItems` rows appear (client report).
+**Env:** Designer / preview / runtime.
+**Notes:** the schema documents the contract — `RepeaterElementSchema.maxItems`: "Optional stamp
+clamp — at most this many rows per fresh play" (`packages/shared-schema/src/elements.ts:497-498`).
+Filing-time recon shows the runtime DOES clamp at both known sites: the static authored stamp
+(`clampRowCount`, `packages/template-runtime/src/scene-builder.ts:904/912`) and the driver restamp
+(`packages/template-runtime/src/repeater-driver.ts:164` slices to `maxItems`) — so this is NOT a
+blanket "never enforced"; some path leaks past the clamp and must be LOCATED at fix time
+(candidates: a render path that bypasses `clampRowCount`, a stale build, or a bound-list update
+route). What recon DID confirm as missing: the Designer side has NO guard — `StyleSection.tsx`
+only edits the `maxItems` number; the authored-items editor neither refuses nor flags adding past
+the clamp, so the authored count and the clamp drift apart silently.
+**Regression test:** template-runtime stamp clamp (both authored items AND a bound list, covering
+the leaking path once located) + a Designer-side guard test (adding past `maxItems` is
+refused/flagged).

@@ -210,6 +210,23 @@ space is unchanged. Re-verified immediately before the commit against fetched `o
 anywhere is this exact bug (the predicate mismatch) — no divergent claim to renumber against — and
 the duplicate audit still prints exactly `B-056` and `B-080`. **Next free stays `B-102`.**
 
+**Re-audited 2026-07-22** against `main` (`8fa7664`, after #386). `B-102` … `B-106` are now taken,
+as a CONTIGUOUS RANGE claimed in ONE commit — the five client-feedback Designer bugs, all
+[bugs-designer.md](bugs-designer.md): **B-102** (sequence-item composition images render in preview
+but not on CasparCG hardware), **B-103** (the first sequence item enters without its transition
+under the `repeat: 'infinite'` schema default), **B-104** (project assets gone after save → restart
+→ load — DATA LOSS class), **B-105** (the Hide-show transition produces no perceptible change), and
+**B-106** (repeater `maxItems` not enforced end-to-end). Verified free immediately before commit, at
+the widened scope: no `## [.] B-102` … `B-106` heading on fetched `origin/main`, on ANY of the
+remote refs, on ANY local branch across all three worktrees (swept programmatically, including
+unpushed), or on disk in either sibling working tree including uncommitted edits. The highest
+heading found ANYWHERE was `B-101`, so no range claim sits above it. Noted for whoever audits next:
+`origin/main` MOVED between this session's start and this entry (`79e208f` → `8fa7664`, #386 — a
+runtime archive PR that flips statuses only and claims no number); the sweep above ran against the
+FETCHED head, not the checkout this branch was cut from — the exact re-derive-before-commit
+discipline this file prescribes. The duplicate audit still prints exactly `B-056` and `B-080`. The
+space stays contiguous: `B-001` … `B-106`, no gaps. **Next free: `B-107`.**
+
 ### RECOMMENDATION (recorded, not implemented): retire the "next free" pointer
 
 All three recorded drift modes are one disease, and the pointer is it. Look at what it actually
