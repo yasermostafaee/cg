@@ -156,13 +156,40 @@ describe('video-convert — reset-on-failure contract (D-128)', () => {
     expect(hasCachedInstanceForTest()).toBe(false);
   });
 
-  it('a successful convert returns the bytes, deletes the output, unmounts, and keeps the cache', async () => {
+  it('a SUCCESSFUL convert returns the bytes and ALSO drops the worker (fresh per import)', async () => {
+    // Field evidence: back-to-back imports of known-good files alternated
+    // good → FS error → good on a reused instance despite unmount hygiene —
+    // every import must start with a virgin worker, success included.
     behavior.execImpl = () => Promise.resolve(0);
     const bytes = await convertToWebm({ file: FILE, targetFps: 50 });
     expect(bytes).toEqual(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]));
-    expect(hasCachedInstanceForTest()).toBe(true);
-    const calls = constructed[0]?.calls ?? [];
-    expect(calls).toContain('deleteFile');
-    expect(calls.at(-1)).toBe('unmount');
+    expect(hasCachedInstanceForTest()).toBe(false);
+    expect(constructed[0]?.terminated).toBe(true);
+
+    // the NEXT import constructs a fresh worker and succeeds
+    behavior.execImpl = () => Promise.resolve(0);
+    const again = await convertToWebm({ file: FILE, targetFps: 50 });
+    expect(again).toEqual(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]));
+    expect(constructed).toHaveLength(2);
+  });
+
+  it('back-to-back probe→convert cycles never share a worker across imports', async () => {
+    // import 1: probe (keeps the instance for its own convert) then convert (drops it)
+    behavior.probeLines = GOOD_BANNER;
+    const p1 = await probeSource(FILE);
+    expect(p1.ok).toBe(true);
+    expect(hasCachedInstanceForTest()).toBe(true); // probe→convert same import reuses
+    behavior.execImpl = () => Promise.resolve(0);
+    expect(await convertToWebm({ file: FILE, targetFps: 50 })).not.toBeNull();
+    expect(hasCachedInstanceForTest()).toBe(false);
+
+    // import 2: a brand-new worker, full cycle green — the exact field gap
+    behavior.execImpl = null;
+    behavior.probeLines = GOOD_BANNER;
+    const p2 = await probeSource(FILE);
+    expect(p2.ok).toBe(true);
+    behavior.execImpl = () => Promise.resolve(0);
+    expect(await convertToWebm({ file: FILE, targetFps: 50 })).not.toBeNull();
+    expect(constructed).toHaveLength(2); // one worker per import, never shared across
   });
 });

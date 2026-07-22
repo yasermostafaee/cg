@@ -268,16 +268,23 @@ kind, provenance?)` is the ONE write path — `importFile` delegates to it — s
   `media-src 'self' blob: data:`. The canvas preview iframe is `srcDoc`
   (`CanvasArea.tsx:937`) and srcdoc documents INHERIT the embedding page's CSP — so Phase 3's
   in-canvas `<video>` render is covered by this same line; no per-frame CSP needed.
-- **Converter reset-on-failure:** a hard ffmpeg abort taints the wasm worker; the cached
-  singleton then threw `ErrnoError: FS error` on the NEXT import — one bad file poisoned every
-  later import that session (which masqueraded as "many unsupported formats"). Every failure
-  path now `resetInstance()`s (terminate + drop), success paths unmount/delete on the way out,
-  and the probe failure carries a `reason` discriminator so the modal NEVER blames the file
-  for a converter crash (`no-stream` → file-level message + ffmpeg log tail;
-  `converter-crashed` → "reload and retry" message). Contract pinned by
-  `video-convert-reset.test.ts`; the end-to-end decode guard (the test that would have caught
-  the CSP hole) is `tests/e2e/video-import.spec.ts` — real in-app conversion of the committed
-  AVI fixture, blob-URL `<video>` metadata assertion, drag-from-assets element creation.
+- **Converter worker lifecycle — FRESH WORKER PER IMPORT (the final form):** a hard ffmpeg
+  abort taints the wasm worker; the cached singleton then threw `ErrnoError: FS error` on the
+  NEXT import. The first fix reset on FAILURE paths only — but the owner's real-file smoke
+  then showed back-to-back imports of KNOWN-GOOD files alternating good → FS error → good:
+  some wasm FS/runtime state survives even a fully SUCCESSFUL convert-with-hygiene, in ways
+  clean-room probes could not reproduce (same file ×3, 103 MB disk-backed, ASCII/U+2026/
+  Persian filenames, 1920×282 odd dimensions — all green). Rather than gamble on path tricks,
+  the state-carryover CLASS is eliminated by construction: `convertToWebm`'s `finally` drops
+  the worker on EVERY outcome (success, failure, cancel), so each import starts virgin; the
+  probe still shares its instance with its own convert (one core load per import, ~150–350 ms,
+  invisible next to the conversion). Failure paths additionally reset immediately, and the
+  probe failure carries a `reason` discriminator so the modal NEVER blames the file for a
+  converter crash (`no-stream` → file-level message + ffmpeg log tail; `converter-crashed` →
+  "reload and retry"). Contract pinned by `video-convert-reset.test.ts` (7 tests, incl.
+  never-share-across-imports); end-to-end by `tests/e2e/video-import.spec.ts` — the decode
+  guard (would have caught the CSP hole) AND the back-to-back same-good-file test (the exact
+  field gap the first suite missed).
 - **The shipped core is the FULL GPL build — do not re-open "do we need a fuller core":** the
   configure line embedded in the shipped `ffmpeg-core.wasm` (0.12.10) is
   `--enable-gpl --enable-libx264 --enable-libx265 --enable-libvpx …` with NO

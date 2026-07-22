@@ -100,3 +100,43 @@ test('a video imports, its stored WebM decodes (CSP media-src), and drag places 
   await expect(page.getByText('could not be decoded')).not.toBeAttached();
   await expect(page.getByText('could not be read')).not.toBeAttached();
 });
+
+test('back-to-back imports of a known-good file BOTH succeed (fresh worker per import)', async ({
+  app,
+  page,
+}) => {
+  // The field gap the original suite missed: on a reused wasm instance the
+  // SECOND import of a perfectly good file crashed with `ErrnoError: FS error`
+  // (alternating good → crash → good). Every import now gets a fresh worker;
+  // this pins that both back-to-back cycles complete with no crash message.
+  await app.newProject('VideoTwice');
+  await page.getByRole('button', { name: 'Project assets' }).click();
+  const buffer = readFileSync(FIXTURE);
+
+  for (const attempt of [1, 2]) {
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
+    await page.getByRole('menuitem', { name: 'Video…' }).click();
+    await (
+      await chooser
+    ).setFiles({
+      name: `clip-${String(attempt)}.avi`,
+      mimeType: 'video/x-msvideo',
+      buffer,
+    });
+    // the probe must land on READY — never on either failure message
+    await expect(
+      page.locator('[data-testid="video-probe-meta"]'),
+      `import ${String(attempt)} probe`,
+    ).toContainText('64×64');
+    await expect(page.getByText('internal error')).not.toBeAttached();
+    await expect(page.getByText('could not be read as a video')).not.toBeAttached();
+    await page.getByRole('button', { name: 'Convert & import' }).click();
+    await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached({
+      timeout: 25_000,
+    });
+  }
+  // both stored (different names → different shas? same bytes dedupe to ONE asset —
+  // the point is neither import errored; the panel shows at least one video tile)
+  await expect(page.getByText('clip-1', { exact: false }).first()).toBeVisible();
+});

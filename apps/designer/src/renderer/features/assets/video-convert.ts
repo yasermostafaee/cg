@@ -212,9 +212,7 @@ export async function convertToWebm(opts: {
       }),
     );
     if (code !== 0) {
-      // Failed or cancelled. A non-zero exit can follow a hard abort that
-      // tainted the runtime — never keep a maybe-dead worker cached.
-      resetInstance();
+      // Failed or cancelled — the finally below drops the worker either way.
       return null;
     }
     const data = await ff.readFile(output);
@@ -223,21 +221,24 @@ export async function convertToWebm(opts: {
     // satisfy the channel's `Uint8Array<ArrayBuffer>` shape).
     const out = new Uint8Array(raw.byteLength);
     out.set(raw);
-    // Success-path FS hygiene: drop the output and the input mount so no FS
-    // state leaks into the next import.
-    await ff.deleteFile(output).catch(() => undefined);
-    try {
-      await ff.unmount(MOUNT_DIR);
-    } catch {
-      /* nothing mounted / already gone */
-    }
     return out;
   } catch {
     // terminate() (cancel) or a worker crash surfaces here — the instance is dead.
-    resetInstance();
     return null;
   } finally {
     progressSink = null;
+    // EVERY import ends with a FRESH-WORKER guarantee. Field evidence (owner
+    // smoke, real archive files): back-to-back imports of KNOWN-GOOD files
+    // alternated good → `ErrnoError: FS error` → good on a REUSED instance,
+    // even though unmount+delete hygiene ran — some wasm FS/runtime state
+    // survives a successful convert in ways we could not reproduce in clean
+    // probes (same-file ×3, 103 MB disk-backed, Unicode names: all green).
+    // Rather than gamble on path tricks, the state-carryover CLASS is
+    // eliminated by construction: the worker is dropped when a convert ends
+    // (success, failure, or cancel). Within ONE import, probe + poster +
+    // convert still share a single load; the ~150–350 ms reload is paid once
+    // per import, invisible next to a multi-second conversion.
+    resetInstance();
   }
 }
 
