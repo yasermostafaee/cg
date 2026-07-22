@@ -188,3 +188,10 @@ exporters render identical bytes; nothing ever re-touches the source AVI after i
 - **Seek-correction UX bar:** if the spike measures visible stutter on drift correction inside a
   hold loop, the acceptable correction cadence (resume/wrap-only vs per-tick bounded) is an
   on-air quality judgment for the owner, informed by the measured numbers.
+
+## Related
+
+- **D-140 (unified Plate source selector)** adds a second CREATION entry point for the `video`
+  element: Source=Video file runs THIS change's import flow (crop modal + in-app conversion)
+  unchanged — never a direct-play of the picked file. UI-level only; no schema interaction with
+  this change.

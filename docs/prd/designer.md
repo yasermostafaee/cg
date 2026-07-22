@@ -3401,7 +3401,9 @@ one-time import-side cost, so single-threaded slowness is acceptable. OPEN — t
 spike and by hardware, NOT now: whether CEF ~71 renders VP9 + alpha (`yuva420p`) correctly —
 VP8 + alpha (`-auto-alt-ref 0`) is the documented fallback if it does not; per B-066, modern
 Chrome proves NOTHING here. The single-file size threshold value and whether it warns or blocks.
-Where the vendored wasm binary lives w.r.t. git (size / LFS / `.gitattributes`). **RECON-FIRST,
+Where the vendored wasm binary lives w.r.t. git (size / LFS / `.gitattributes`). Creation entry
+point: also reachable through the unified Plate Source selector (D-140); the import/conversion
+flow is identical from either entry. **RECON-FIRST,
 needs its own `design.md`** — schema + Designer UI + `@cg/template-runtime` + BOTH exporters.
 
 ## [ ] D-129 — crop an imported Lottie (render-time viewport crop) ⟨priority: medium⟩
@@ -3591,7 +3593,9 @@ runtime track: "live plate source routing").
 fill mode on a shape. Cinegy parity is the NEED, not the UI — design the affordance our way.
 Default placeholder is SMPTE bars (owner decision — do not re-open). Rotation / non-rect plates
 out of scope v1 (MIXER FILL is axis-aligned). Pairs with the Caspar-track "live plate source
-routing" item (cross-reference by title now; numbers when both are merged). **RECON-FIRST, needs
+routing" item (cross-reference by title now; numbers when both are merged). Creation entry point:
+the unified Plate Source selector (D-140) creates this element for Source=Live; standalone
+creation unchanged. **RECON-FIRST, needs
 its own design.md** — schema (additive), Designer UI, both exporters' metadata, fields model.
 
 ## [ ] D-138 — load ticker / sequence / text content from a text file (whole-text default, OPTIONAL split) ⟨priority: medium⟩
@@ -3658,3 +3662,37 @@ composition items carrying differently-colored images — note this in the item 
 answer. Rules are schema-level (additive) and evaluated in `@cg/template-runtime` so all three
 render paths agree. **RECON-FIRST, needs its own design.md** — schema + Inspector UI + runtime +
 both exporters (asset collection!).
+
+## [ ] D-140 — unified "Plate" insertion with a Source selector (Live / Video file / Image / Lottie) ⟨priority: medium⟩
+
+**What:** One **Plate** tool whose Source selector — Live / Video file / Image / Lottie — creates
+(or converts to) the right underlying element type at the drawn geometry. UI unification ONLY:
+the data model keeps `image` / `lottie` / `video` (D-128) / `video-placeholder` (D-137) as
+DISTINCT element types.
+**Why:** in Cinegy there is no separate tool per media kind — the operator inserts a PLATE and
+picks its Source: Live (id / key-id) or a File (video, image, even Lottie). The client expects
+that flow. Ours keeps the DATA MODEL as-is — the discriminated union, every renderer/exporter
+branch, and the additive-schema discipline depend on the types staying distinct — and unifies
+only the insertion + Inspector affordance.
+**Acceptance:**
+
+- WHEN the operator inserts a Plate THEN a single affordance offers Source: Live / Video file /
+  Image / Lottie, and picking one creates the corresponding EXISTING element type
+  (`video-placeholder` / `video` / `image` / `lottie`) at the drawn geometry
+- WHEN Source = Video file THEN the D-128 import flow runs (crop modal + in-app conversion) —
+  NEVER a direct-play of the picked file; the stored canonical WebM stays the single truth
+- WHEN Source = Image or Lottie THEN the existing import/validation paths run; the assets panel
+  and library imports stay available and unchanged — the selector is an ADDITIONAL entry point,
+  not a replacement
+- WHEN the operator switches an existing plate's Source in the Inspector THEN the element
+  CONVERTS in place, preserving transform, timeline span, and name where fields correspond;
+  incompatible fields are dropped behind a visible confirm, as ONE undo entry
+- WHEN Source = Live THEN behavior is exactly D-137's (source id / key id, dynamic binding,
+  SMPTE-bars placeholder)
+
+**Notes:** schemas do NOT merge — UI unification only; record the rejected alternative (a single
+mega-plate schema) and why in design.md. Cinegy's "On-Air" source needs no new Designer concept:
+it is Source=Live whose runtime mapping is a ROUTE of the program channel (D-137 / C-015
+territory). Depends on D-128 and D-137 existing; filed now, implement after both. Cinegy parity
+is the NEED, not the UI. **RECON-FIRST for the type-conversion semantics; needs its own
+design.md.**
