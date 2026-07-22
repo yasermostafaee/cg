@@ -416,3 +416,73 @@ is axis-aligned — matches the Designer half's v1. Cinegy parity is the NEED, n
 Designer-side counterpart: the "Live plate element" item in `docs/prd/designer.md`
 (cross-reference by title now; numbers when both are merged). On-air behavior throughout ⇒
 real-hardware verification is part of done. RECON-FIRST, needs its own design.md.
+
+## [ ] C-016 — operator PGM confidence view: periodic program-channel grabs served over the bridge's HTTP server ⟨priority: medium⟩
+
+**What:** Operators need to SEE the on-air output inside the Runtime (Cinegy parity). CasparCG
+has no browser-native video return, so v1 is a CONFIDENCE MONITOR: the bridge periodically
+captures the program channel via a CasparCG grab/print-class command, serves the latest frame
+over its existing HTTP server, and the Runtime shows it in a PGM panel refreshing ~1 s. OWNER
+DECISION recorded: stills-at-~1 s IS the v1 bar; full-motion return (STREAM consumer + relay
+transcode) is RECORDED IN THIS ITEM as an explicit later phase, not a v1 requirement.
+**Why:** The operator currently confirms what the viewer sees by looking at a separate monitor
+(or guessing from row badges). A confidence view inside the console closes that loop — and a
+plate-heavy composite ([[C-015]]) makes PGM confidence MORE valuable, because the browser
+preview can never show the live video the template composites over.
+**Acceptance:**
+
+- WHEN the PGM panel is on THEN it shows the program channel refreshing at ~1 s with a visible
+  "last updated" age
+- WHEN a capture fails THEN the panel shows a legible stale/error state — never a frozen frame
+  masquerading as live
+- WHEN the capture mechanism is chosen THEN its cost on the playout machine has been measured
+  on real 2.3.2 BEFORE the mechanism is fixed (RECON-FIRST — verify the exact grab command this
+  build supports and whether grabbing hitches channel output)
+- WHEN the panel is hidden or off THEN its polling stops; the panel is OFF by default and
+  toggleable
+
+**Notes:** RECON-FIRST, needs its own design.md (command choice, frame transport, cadence).
+Later-phase full-motion options recorded here so they are not re-derived: STREAM consumer →
+local relay transcode → browser — latency and encode load on the playout box are the recorded
+trade-offs. Cross-ref [[C-015]] (a plate-heavy composite raises the value of a PGM view).
+
+## [ ] C-017 — auto-clear a layer when a finite template run completes: the served template pings its own origin, the bridge CLEARs ⟨priority: medium⟩
+
+**What:** A finite graphic (e.g. a ticker with a set repeat count) should leave air by itself:
+after content completes AND the outro has played, the layer should CLEAR without operator
+action (Cinegy parity). The template already knows this moment — the playout lifecycle defines
+full settle for auto-out / content-driven holds — but nothing tells the bridge: OSC reports
+only that an `html` producer exists, which is exactly [[B-030]]'s (`bugs-designer.md`)
+observability gap. DIRECTION: the SERVED template signals completion to its OWN origin — the
+bridge's template HTTP server (`tools/caspar-bridge/src/template-http-server.ts`), same-origin
+— via a lightweight ping; the bridge then CLEARs the layer. Hard clear is correct here: the
+outro already played, the layer is visually empty.
+**Why:** Finished graphics that stay resident keep their rows claiming ON AIR and leave dead
+producers on layers an operator must clean up by hand; the one party that knows the run is
+over (the template) has no channel to say so.
+**Acceptance:**
+
+- WHEN a template whose lifecycle is finite/auto-out reaches full settle THEN the bridge clears
+  the layer and the item reconciles to idle through the normal path
+- WHEN a template's lifecycle is `manual` THEN it NEVER auto-clears — this applies ONLY to
+  finite/auto-out lifecycles
+- WHEN a completion arrives STALE (after an operator stop / re-take / update, or after the item
+  left the layer) THEN it is IGNORED — mirroring the lifecycle spec's stale-completion rule
+- WHEN a ping is lost THEN the graphic stays, exactly today's behaviour — auto-clear fails SAFE
+  and is best-effort, never a new way to blank a live layer
+- WHEN a single-file exported template is dropped manually into CasparCG THEN it is OUT OF
+  SCOPE — there is no origin to ping
+
+**Notes:** RECON items: `fetch` availability/behaviour in CEF ~71 for the served-template
+origin ([[B-066]] class: verify, never assume), and the ping's URL/shape. LOUD cross-track
+warning: the emission half lives in `packages/template-runtime`, which is in
+`UI_RENDER_PATTERNS` — implementing it owes `gate:e2e` (Linux) and MUST NOT run concurrently
+with a Designer session touching that package. RELATIONSHIP TO [[C-013]] (judged at filing,
+not in the original direction): the completion-signal transport out of CEF is exactly what
+C-013 names as its substance, and this item's same-origin ping is a concrete proposal for that
+channel — but the terminal verbs differ (C-013: graceful STOP on content completion, producer
+stays RESIDENT and resumable; THIS item: hard CLEAR at full settle of a finite lifecycle,
+outro already played). One ping transport should serve both; which terminal verb applies to
+which lifecycle is the shared design.md's call — never two competing transports. Cross-refs
+[[B-030]] (this signal is also the missing observable for its diagnosis), [[C-012]] (verb
+semantics unchanged — this adds a TRIGGER, not a verb).

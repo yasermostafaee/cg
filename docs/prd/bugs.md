@@ -595,6 +595,15 @@ carried by the isolation asymmetry and the B-073 precedent — **not** a measure
 counts above (4 occurrences; 36/36 and 139/139 isolated) are as REPORTED from the session that hit
 it, not re-measured here.
 
+**Evidence gathered 2026-07-22 (the B-101 session) — part of the owed list, now on record.** The
+failing test: `stack-survives-bridge-restart.integration.test.ts` → "FROZEN: the ORDINARY load
+path still adopt-CLEARs, and a live bridge is never clobbered". Shape: timeout from
+`whenServerHealthy` (`caspar-runtime.ts:536`), file elapsed ~16.9 s against `HEALTH_MS = 15_000`
+— a healthy-climb timeout, not an assertion. Rates that session: isolated 5/5 green (154/154
+each); full parallel gate 5 green, 2 red. Consistent with the CPU-starvation hypothesis;
+bound-raising remains rejected per this entry's own text. Still owed from the list above:
+`ss -ltnp` before/after each failure (no Linux/WSL box that session either).
+
 **Regression test:** run the full parallel `pnpm test` under deliberate load (B-073's 24-worker hog
 one-liner is the established harness) and assert `@cg/caspar-bridge` is green repeatably — with the
 bound in place it should not depend on what else is scheduled. As in B-073, treat N/N green as the
