@@ -3331,3 +3331,330 @@ root-vs-composition routing + single undo entry; **E2E** for both entry points (
 Rename Project…), Enter/blur commit, Escape restore, empty-name rejection, and the dirty marker.
 Verification is the **Designer preview** (no CasparCG). Sequence: independent of the Shared-Library
 relocation (**D-066**) and of the big features (**D-125** / **D-126**).
+
+## [ ] D-128 — import a video clip as a lifecycle-aware element (in-app WebM/VP9 conversion, import-time crop) ⟨priority: high⟩ — change dir `openspec/changes/video-import-element/` (filed with the change authored; implementation not started)
+
+**What:** Import a video clip — including the client's legacy `rawvideo`/BGRA AVI archive —
+optionally CROP it in the import modal, convert it IN-APP to WebM/VP9 with alpha preserved, and
+expose it as an OPAQUE, self-playing `video` element the Designer positions / scales / rotates /
+times but never edits frame-by-frame.
+**Why:** the client's broadcast furniture archive is video (legacy AVI, `rawvideo` + BGRA — REAL
+alpha, not baked-black). Today it cannot enter a template at all. Like the D-125 Lottie, the point
+is not "play a video" — it is LIFECYCLE: the clip must plug into IN / HOLD / OUT so a native ticker
+on top can hold the graphic on air over it and the outro still fires on stop.
+**Acceptance:**
+
+- WHEN the operator imports a video file (any ffmpeg-decodable container/codec, including the
+  legacy `rawvideo`/BGRA AVI archive) THEN it is converted IN-APP to WebM/VP9 with its alpha
+  channel preserved, stored as a `video` asset, and a `video` element can be created from it and
+  placed on the canvas
+- WHEN importing, the operator can mark a crop region (position + width/height) on a source
+  preview in the import modal THEN the conversion bakes exactly that region (ffmpeg `crop`) into
+  the stored WebM, so preview and both exports carry the cropped clip; WHEN no crop is marked THEN
+  the full frame converts as before
+- WHEN the source is multi-GB THEN the conversion does not load it whole into memory (WORKERFS
+  lazy mount), the operator sees progress, and the conversion can be cancelled
+- WHEN the source carries an audio track THEN it is DROPPED at conversion (v1 is muted-only), so
+  the element is silent under every path — preview, `.vcg`, single-file HTML
+- WHEN a `video` element is selected THEN it can be positioned / scaled / rotated /
+  opacity-animated and timed on the timeline like any other element, and the Inspector exposes
+  hold behavior, the phase marks and hold-driving — but NOT the clip's internal content (opaque by
+  design)
+- WHEN the composition plays THEN the clip plays from its start and, on reaching the hold point,
+  HOLDS by LOOPING (the default) rather than ending on a frozen last frame; `freeze` is the opt-in
+  alternative
+- WHEN a native ticker/sequence sits ON TOP of a video in a `content-driven` composition THEN the
+  ticker drives the hold and the video holds beneath it; the video does NOT drive the hold by
+  default and can be opted IN
+- WHEN the composition is stopped (`stop()`) or exited (`out()`) THEN a video with a marked outro
+  plays that outro through the EXISTING D-125 element-outro seam and the composition settles to
+  CLEARED, content-first / background-last; a video with no marked outro is carried by the
+  existing content exit unchanged
+- WHEN the scene is paused and resumed THEN video playback freezes and continues in lockstep with
+  the rest of the scene, with no drift against the `FrameDriver` playhead
+- WHEN the same template is viewed in Designer preview, exported to `.vcg`, and exported to
+  single-file HTML THEN all three render identically, and the single-file HTML runs under
+  CasparCG's CEF from `file://` with the video bytes carried inline and ZERO external requests
+- WHEN an export would exceed the single-file size threshold THEN the EXISTING preflight / issues
+  path reports it before export, rather than producing a file CEF cannot boot
+- WHEN the Designer starts THEN the converter's wasm payload is NOT loaded (lazy on first import)
+  and NO network request is ever made for it — offline / air-gapped, consistent with P-001
+
+**Notes:** Decisions already taken by the owner (do not re-open): (a) Designer track first. (b)
+the ffmpeg.wasm converter ships IN-APP from day one — importing a pre-converted WebM is not the
+product. (c) v1 is muted-only. (d) HOLD defaults to `loop` — the INVERSE of the Lottie's `freeze`
+default, because video furniture is authored as a loop. (e) cropping is OPT-IN, marked in the
+import modal, and BAKED at conversion — never a playback-time crop — so the stored canonical form
+stays the single truth; the Lottie counterpart is render-time and filed separately (D-129).
+Decisions taken in this filing: (f) a NEW `video` element type / `VideoElementSchema`.
+`VideoPlaceholderElementSchema` is FROZEN for this feature and must NOT be repurposed — it is the
+live-source plate placeholder, a different feature (see D-137 in this same batch). (g) conversion
+happens at IMPORT, producing ONE canonical stored form, so preview and both exporters render
+identical bytes. (h) audio is STRIPPED at conversion (`-an`), not merely muted at playback. (i)
+`phases` (`introEnd` / `outroStart` / optional `idle`) is OPTIONAL and MANUAL — video has no
+bodymovin `markers` equivalent. Absent `phases` ⇒ the whole clip is the intro, the hold loops the
+whole clip, and there is no outro. (j) `drivesHold` carries the Lottie's inverse default:
+absent/`false` ⇒ does NOT drive. (k) the ffmpeg.wasm core is SINGLE-THREADED and VENDORED into the
+workspace — no CDN fetch, no COOP/COEP requirement (the Designer is a static-file SPA with no
+control over response headers, and P-001 forbids the network fetch anyway); conversion is a
+one-time import-side cost, so single-threaded slowness is acceptable. OPEN — to be settled by the
+spike and by hardware, NOT now: whether CEF ~71 renders VP9 + alpha (`yuva420p`) correctly —
+VP8 + alpha (`-auto-alt-ref 0`) is the documented fallback if it does not; per B-066, modern
+Chrome proves NOTHING here. The single-file size threshold value and whether it warns or blocks.
+Where the vendored wasm binary lives w.r.t. git (size / LFS / `.gitattributes`). **RECON-FIRST,
+needs its own `design.md`** — schema + Designer UI + `@cg/template-runtime` + BOTH exporters.
+
+## [ ] D-129 — crop an imported Lottie (render-time viewport crop) ⟨priority: medium⟩
+
+**What:** A crop rect stored on the `lottie` element, rendered as a clipped viewport with the
+animation offset inside it — settable at import or later from the Inspector.
+**Why:** an AE author sometimes exports uncropped (a logo in the corner of a full frame). Video
+gets a baked crop at conversion (baked at conversion per D-128's import-crop acceptance); a Lottie
+cannot be re-encoded, so its crop is RENDER-TIME.
+**Acceptance:**
+
+- WHEN importing (or later, from the Inspector) the operator sets a crop rect on a Lottie THEN the
+  canvas, preview, `.vcg`, and single-file HTML all render only that region, identically
+- WHEN no crop is set THEN behavior is byte-identical to today (optional + additive, no
+  schema-version bump)
+- WHEN the element is transformed (scale/rotate) THEN the crop tracks the element
+
+**Notes:** pair with D-128's import-crop modal so the two crop UIs feel like ONE feature; the
+mechanism differs (D-128 BAKES at conversion, this is RENDER-TIME clipping) — say so in the UI
+copy where it matters. Additive `LottieElementSchema` field; render in `@cg/template-runtime` so
+all three paths agree.
+
+## [ ] D-130 — Persian/Arabic-Indic digit input in numeric fields ⟨priority: medium⟩
+
+**What:** Normalize Persian (۰–۹) and Arabic-Indic (٠–٩) digits — and the Persian decimal
+separator (٫) — to Latin on input in every numeric field, so a Persian keyboard layout can type
+values directly.
+**Why:** with a Persian keyboard layout, typing digits into the Inspector's/timeline's numeric
+fields produces ۰–۹ / ٠–٩ and ٫, which the fields reject.
+**Acceptance:**
+
+- WHEN Persian or Arabic-Indic digits (or ٫) are typed or pasted into any numeric input THEN they
+  are normalized to Latin on input and the value commits normally
+- WHEN a text field receives them THEN it stores them verbatim (text is untouched — this is
+  numeric-field normalization only)
+- WHEN normalization applies THEN the field DISPLAYS Latin digits
+
+**Notes:** one shared normalization helper at the numeric-input primitive level, not per-field
+patches; respect the design-system input primitives (`apps/designer/src/renderer/ui/`).
+
+## [ ] D-131 — sequence transitions: easing + inter-item delay ⟨priority: medium⟩
+
+**What:** Add transition easing (at least linear / ease-in / ease-out / ease-in-out) and a
+configurable inter-item delay to the sequence element's decomposed transition model.
+**Why:** the decomposed transition (edges/timing/duration — `transitionIn` / `transitionOut` /
+`transitionTiming` / `transitionMs`) has no easing and no gap control; the client needs
+easeIn/easeOut-style motion and a configurable pause between items.
+**Acceptance:**
+
+- WHEN the operator picks a transition easing (at least linear / ease-in / ease-out / ease-in-out)
+  THEN both the in and out motions use it in preview and on air identically
+- WHEN an inter-item delay is set THEN after item N's exit completes, item N+1's entry begins
+  after that delay, under both `simultaneous` and `sequential` timing (define the interaction with
+  `simultaneous` in design — likely delay forces sequential; record the decision)
+- WHEN neither is set THEN behavior is exactly today's (defaults preserve current motion;
+  additive, no schema-version bump)
+
+**Notes:** schema fields on `SequenceElementSchema` (e.g. `transitionEasing`, `interItemDelayMs`)
+— exact names at implementation.
+
+## [ ] D-132 — composition start delay (global animation delay) ⟨priority: low-medium⟩
+
+**What:** A per-composition start delay: on play, the whole timeline (all element in-animations)
+begins after the delay.
+**Why:** delaying the whole animation currently means dragging every layer right — tedious and
+error-prone.
+**Acceptance:**
+
+- WHEN a per-composition start delay is set THEN on play the whole timeline (all element
+  in-animations) begins after that delay, identically in preview and both exports
+- WHEN the delay is 0/absent THEN nothing changes
+- WHEN lifecycle timings exist (auto-out, content-driven, outPoint) THEN the delay's interaction
+  with them is defined in design.md and covered by tests, never implicit
+
+**Notes:** additive schema field, default absent.
+
+## [ ] D-133 — loop range visualization ON the timeline (Cinegy-style) ⟨priority: medium⟩
+
+**What:** Show a composition's loop/hold range directly on the timeline — start/end markers
+present by default when the composition repeats/holds — with the playhead wrapping at the loop
+end.
+**Why:** today the loop/hold behavior is only observable in the preview; Cinegy shows a loop range
+directly on the timeline, which is friendlier.
+**Acceptance** (from the owner's description — map to our lifecycle model in design):
+
+- WHEN a composition repeats/holds (e.g. content-driven with a repeating driver) THEN the timeline
+  shows the loop range with start/end markers, present BY DEFAULT rather than hand-added
+- WHEN timeline playback reaches the loop end THEN the playhead wraps back to the loop start
+- WHEN the repeat is finite (e.g. 2) THEN it wraps that many times and then proceeds to the true
+  end; WHEN infinite THEN it wraps indefinitely
+- WHEN markers render THEN the start/end indicator lines extend the FULL timeline height
+
+**Notes:** the mapping of "loop" onto our shipped lifecycle (`outPoint` + optional `contentStart`,
+content-driven repeat) is the core design decision — record it in the change's design.md when
+implemented, do not invent a new lifecycle mode casually. **RECON-FIRST.**
+
+## [ ] D-134 — clock: custom UTC offset ⟨priority: low⟩
+
+**What:** A "Custom offset" mode on the wall clock: the operator enters a UTC offset (±HH:MM) and
+the clock renders that offset's time.
+**Why:** D-084's IANA `timezone` list doesn't cover "designer just wants +03:30".
+**Acceptance:**
+
+- WHEN the operator picks "Custom offset" and enters a UTC offset (±HH:MM) THEN the wall clock
+  renders that offset's time in preview and on air
+- WHEN an IANA zone is already set THEN it keeps working unchanged (presets stay — removing them
+  would break D-084 scenes)
+- WHEN both could apply THEN the Inspector makes the choice explicit (one mode at a time)
+
+**Notes:** additive field alongside `timezone` (`ClockElementSchema`); countdown/countup ignore it
+like they ignore `timezone`.
+
+## [ ] D-135 — scrubbing the timeline drives Lottie AND video frames on the canvas ⟨priority: medium⟩
+
+**What:** While scrubbing, each Lottie element on the canvas shows the exact frame under the
+playhead (through its phase mapping where set); post-D-128, the same for video elements.
+**Why:** the canvas currently shows lifecycle-driven playback only in preview; Cinegy shows the
+animation while scrubbing. Both Lottie and (post-D-128) video have a deterministic frame↔time
+mapping, so the canvas can render the exact frame under the playhead.
+**Acceptance:**
+
+- WHEN the operator scrubs THEN each Lottie element on canvas shows the frame corresponding to the
+  playhead (through its phase mapping where set)
+- WHEN a video element exists (after D-128 lands) THEN the same holds for it
+- WHEN the playhead is outside the element's timeline span THEN the canvas shows the element's
+  resting state consistently with today's rules
+
+**Notes:** ticker/sequence/clock remain DELIBERATELY time-driven ("scrubbing never moves it" — the
+schema's own comment, verified on `SequenceElementSchema` and the clock element); this item must
+not change that. Sequencing: the Lottie half is implementable now; the video half depends on D-128
+Phase 3+.
+
+## [ ] D-136 — alpha-matte view toggle for video elements ⟨priority: low-medium⟩
+
+**What:** A canvas-only toggle that renders a selected video element's ALPHA as a matte, so the
+operator sees instantly whether a clip actually carries alpha.
+**Why:** the operator needs to see instantly whether a clip actually carries alpha (Cinegy has
+this).
+**Acceptance:**
+
+- WHEN the alpha-view toggle is on for a selected video element THEN the canvas renders that
+  element's ALPHA as a matte — fully opaque regions read white, transparent regions read
+  not-white — so a no-alpha clip shows an entirely white rectangle
+- WHEN toggled off THEN normal rendering returns
+- WHEN exporting THEN the toggle has ZERO effect on any export (a pure canvas diagnostic)
+
+**Notes:** implementation (canvas readback vs filter) is design-time; depends on D-128's video
+element existing. A Lottie variant may follow as its own item — out of scope here.
+
+## [ ] D-137 — Live plate element (multi-box live windows; implements the reserved video-placeholder) ⟨priority: high⟩
+
+**What:** A **Live plate** element: an axis-aligned frame with a FULLY TRANSPARENT HOLE in export,
+carrying a source id (and optionally a key source id) the runtime uses to composite a live input
+on a LOWER CasparCG layer behind the template. Finally implements
+`VideoPlaceholderElementSchema` for its ORIGINAL documented purpose — the D-128 freeze forbids
+REPURPOSING it for file-video, not implementing it; extend it additively where fields are missing
+(axis-aligned v1).
+**Why:** the client authors multi-frame shows (e.g. two guest boxes) where each frame carries its
+OWN live input, Cinegy-plate style. Cinegy's model, confirmed from its docs: a plate's Live source
+is just a "Live ID" resolved by the playout configurator, optionally paired with a "Key ID" for
+Key&Fill input, and the id can be bound to a variable (dynamic). Our architecture matches: an HTML
+template under CEF cannot render SDI/live, so the template renders a frame with a transparent hole
+and the runtime composites the mapped live source behind it (Caspar-side counterpart filed on the
+runtime track: "live plate source routing").
+**Acceptance:**
+
+- WHEN the operator creates a Live plate THEN it can be placed and sized (axis-aligned, no
+  rotation in v1) and carries a source id (the routeKey, e.g. "guest-1"), an OPTIONAL key source
+  id (fill+key input pairs), an `expectedAspect`, and an optional poster image
+- WHEN the operator marks the plate's source id as DYNAMIC THEN it is exposed through the EXISTING
+  fields/bindings model like any bound field, so the Runtime operator can set or change which
+  source feeds the plate per take — Cinegy's variable-bound id, in our model
+- WHEN shown on the canvas or in Designer preview THEN the plate renders SMPTE-style color bars as
+  its DEFAULT placeholder — the client's Cinegy convention for "a live source goes here" — with
+  the source-id label overlaid so multiple plates stay distinguishable; WHEN a poster image is set
+  THEN it replaces the bars; never an unmarked black box. Bars are drawn PROCEDURALLY (CSS
+  gradient / inline SVG), not a bundled bitmap asset
+- WHEN exported (`.vcg` AND single-file HTML) THEN the plate's region renders NOTHING — fully
+  transparent, zero painted pixels; bars and poster are canvas/preview-only — while the plate's
+  geometry + source id (+ key id) + expectedAspect + whether the id is dynamic are carried in
+  export METADATA the runtime reads WITHOUT parsing the whole scene (the metadata surface — likely
+  a manifest `plates` section — is a design.md decision)
+- WHEN plates overlap each other or exceed the frame THEN the existing issues/preflight path warns
+- WHEN a scene has multiple plates THEN each is independent (own ids, own geometry)
+
+**Notes:** shapes stay as they are — a plate is a compositing CONTRACT with the runtime, not a
+fill mode on a shape. Cinegy parity is the NEED, not the UI — design the affordance our way.
+Default placeholder is SMPTE bars (owner decision — do not re-open). Rotation / non-rect plates
+out of scope v1 (MIXER FILL is axis-aligned). Pairs with the Caspar-track "live plate source
+routing" item (cross-reference by title now; numbers when both are merged). **RECON-FIRST, needs
+its own design.md** — schema (additive), Designer UI, both exporters' metadata, fields model.
+
+## [ ] D-138 — load ticker / sequence / text content from a text file (whole-text default, OPTIONAL split) ⟨priority: medium⟩
+
+**What:** A one-shot "load from file" for ticker / sequence / text content: by DEFAULT the entire
+file becomes the content verbatim; an OPTIONAL split mode cuts it into the element's items list on
+a user-defined delimiter.
+**Why:** the client's crawl copy arrives as a text file. The INCUMBENT Cinegy workflow — honor it
+as the default — is that the TYPIST embeds the separators inside the text and the whole file IS
+the content, verbatim; splitting into discrete items is OUR optional convenience on top. This is
+the AUTHORING half only — the live runtime file feed (content follows a file the newsroom keeps
+updating) is its own runtime-track item ("field values from a text file") because it changes WHO
+reads the file and WHEN.
+**Acceptance:**
+
+- WHEN the operator chooses "load from file" with split OFF (the DEFAULT) THEN the ENTIRE file
+  content becomes the content verbatim — for a ticker, the whole text lands as ONE item (the
+  ticker's content model is an items list, `items: z.array(TickerItemSchema)`; a single item
+  crawls as one run and the schema `separator` — a BETWEEN-items node — never fires, so the
+  author's own embedded separators render exactly as typed); a text element takes it verbatim
+- WHEN the operator enables SPLIT THEN they define a delimiter (free text; sensible suggestions
+  offered, e.g. `|`, `؛`, newline) and the content splits into the element's items list, replacing
+  or appending per an explicit choice; entries empty after trimming are skipped and the operator
+  sees the imported count
+- WHEN the target is a SEQUENCE THEN split defaults ON (a sequence shows discrete items); WHEN
+  split is turned OFF for a sequence THEN the whole text becomes ONE item and the UI says so
+  explicitly — never a silent surprise
+- WHEN the file is UTF-8 Persian/RTL text THEN content survives verbatim (shaping/bidi handled by
+  the existing pipeline; no mojibake)
+
+**Notes:** one-shot load INTO the existing authored content — no schema change, no live linkage,
+no watching. Content-model recon done at filing time: ticker and sequence both carry
+`items` arrays (`TickerElementSchema.items`, `SequenceElementSchema.items` —
+`packages/shared-schema/src/elements.ts`), so "whole text" maps to a single item, never to a new
+content field. Cinegy parity is the NEED, not the UI.
+
+## [ ] D-139 — data-driven conditional styling rules (value ranges → color / image / visibility) ⟨priority: medium⟩
+
+**What:** An ORDERED LIST of declarative rules on an element, FIRST MATCH WINS — not an expression
+language. v1 scope: rule INPUT is a bound field's value (number or string) OR a countdown clock's
+remaining time; rule CONDITION is a comparator/range (=, ≠, <, ≤, >, ≥, between); rule EFFECT
+overrides exactly ONE property of ONE target element — color/fill, image assetId, or visibility —
+with an explicit default (no rule matched ⇒ authored value).
+**Why:** the client needs properties to follow data: weather temperature in a range → a specific
+color or icon; azan countdown → green far out, orange at −1h, red under −10min (today they fake
+this OUTSIDE the designer with a PNG sequence an operator clicks through). The industry pattern is
+uniform (Singular.live scripting/logic, Vizrt conditions, BI-style rule lists).
+**Acceptance:**
+
+- WHEN rules are authored on an element THEN they form an ordered list evaluated first-match-wins
+  against the bound input, and the Inspector shows which rule currently applies in preview
+- WHEN the bound value changes at playout (field update) THEN the effect re-evaluates and applies
+  live, identically in preview, `.vcg`, and single-file HTML under CEF
+- WHEN the input is a countdown clock's remaining time THEN threshold rules (e.g. ≤ 60min,
+  ≤ 10min) drive the effect as time passes, with no operator action
+- WHEN no rule matches THEN the element renders its authored (default) state
+- WHEN a rule references an image THEN that asset is included by BOTH exporters even if no static
+  element references it (the conditional branch must not 404 on air)
+
+**Notes:** NO expressions, NO scripting, NO cross-element cascades in v1 — the rule list is the
+whole surface; record the rejected alternative (an expression engine) in design.md. The client's
+current manual flow is ALREADY reproducible today with a `sequence` (`advance: manual`) of
+composition items carrying differently-colored images — note this in the item as the interim
+answer. Rules are schema-level (additive) and evaluated in `@cg/template-runtime` so all three
+render paths agree. **RECON-FIRST, needs its own design.md** — schema + Inspector UI + runtime +
+both exporters (asset collection!).
