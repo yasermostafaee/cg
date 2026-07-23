@@ -109,6 +109,19 @@ describe('pickFiles cancel-detection (B-020)', () => {
     restore();
   });
 
+  it('D-128 Bug 2 — the VIDEO picker is single-select; other kinds stay multi-select', () => {
+    const { inputs, restore } = captureInputs();
+    void pickFiles('video');
+    void pickFiles('image');
+    void pickFiles('font');
+    void pickFiles(); // no kind
+    expect(inputs[0]!.multiple).toBe(false); // video — one clip at a time (the modal is per-clip)
+    expect(inputs[1]!.multiple).toBe(true); // image — batch
+    expect(inputs[2]!.multiple).toBe(true); // font — batch
+    expect(inputs[3]!.multiple).toBe(true); // default — batch
+    restore();
+  });
+
   it('selecting succeeds on every open across repeated picks (no intermittent drop)', async () => {
     vi.useFakeTimers();
     const { inputs, restore } = captureInputs();

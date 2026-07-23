@@ -9,6 +9,7 @@ import {
   findDuplicateVideoAsset,
   fpsConformNotice,
   parseProbeLog,
+  posterTimeMs,
 } from '../src/renderer/features/assets/video-convert-args.js';
 
 describe('D-128 — buildConvertArgs (the DECIDED VP8+alpha recipe)', () => {
@@ -52,7 +53,7 @@ describe('D-128 — buildConvertArgs (the DECIDED VP8+alpha recipe)', () => {
     expect(args).not.toContain('-vf');
   });
 
-  it('poster extraction pulls exactly one frame as image2', () => {
+  it('poster extraction pulls exactly one frame as image2 (frame 0 when no seek)', () => {
     expect(buildPosterArgs('/mnt/a.avi', '/poster.png')).toEqual([
       '-y',
       '-i',
@@ -63,6 +64,40 @@ describe('D-128 — buildConvertArgs (the DECIDED VP8+alpha recipe)', () => {
       'image2',
       '/poster.png',
     ]);
+  });
+
+  it('poster seeks MID-CLIP with a fast keyframe seek (-ss BEFORE -i) when a time is given', () => {
+    expect(buildPosterArgs('/mnt/a.avi', '/poster.png', 20)).toEqual([
+      '-y',
+      '-ss',
+      '20.000',
+      '-i',
+      '/mnt/a.avi',
+      '-frames:v',
+      '1',
+      '-f',
+      'image2',
+      '/poster.png',
+    ]);
+    // a zero / negative time keeps the frame-0 form (no -ss)
+    expect(buildPosterArgs('/mnt/a.avi', '/poster.png', 0)).not.toContain('-ss');
+  });
+});
+
+describe('D-128 (a) — posterTimeMs (mid-clip poster rule)', () => {
+  it('uses the clip midpoint when no In-point is marked', () => {
+    expect(posterTimeMs(40_000)).toBe(20_000);
+    expect(posterTimeMs(0)).toBe(0); // unknown duration → frame 0
+  });
+
+  it('uses the In-point (introEnd) when it is a valid mark inside the clip', () => {
+    expect(posterTimeMs(40_000, 12_000)).toBe(12_000);
+  });
+
+  it('falls back to the midpoint when the In-point is 0, negative, or past the clip end', () => {
+    expect(posterTimeMs(40_000, 0)).toBe(20_000);
+    expect(posterTimeMs(40_000, 40_000)).toBe(20_000); // not strictly inside
+    expect(posterTimeMs(40_000, 99_000)).toBe(20_000);
   });
 });
 

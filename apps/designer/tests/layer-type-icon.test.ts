@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ArrowDownUp,
   Circle,
+  Clapperboard,
   Clock,
   Component,
   Group,
@@ -51,5 +52,12 @@ describe('layerTypeIcon (B-052)', () => {
       layerTypeIcon({ type: 'image', assetId: 'x', source: 'shared' } as unknown as Element),
     ).toBe(Stamp);
     expect(layerTypeIcon({ type: 'repeater' } as unknown as Element)).toBe(Rows3);
+  });
+
+  it('D-128 — an imported video FILE maps to the clapperboard (distinct from image, not a camera)', () => {
+    const video = { type: 'video', assetId: 'x', durationMs: 1000 } as unknown as Element;
+    expect(layerTypeIcon(video)).toBe(Clapperboard);
+    expect(layerTypeIcon(video)).not.toBe(Square);
+    expect(layerTypeIcon(video)).not.toBe(Image); // distinct from the image element
   });
 });

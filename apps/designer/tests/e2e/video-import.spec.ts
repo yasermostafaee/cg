@@ -146,6 +146,109 @@ test('back-to-back conversions of a known-good file BOTH succeed (fresh worker p
   await expect(page.getByText('clip-1', { exact: false }).first()).toBeVisible();
 });
 
+test('an imported video RENDERS in the canvas frame at a NON-BLANK mid-clip poster (D-128 Phase 3)', async ({
+  app,
+  page,
+}) => {
+  await app.newProject('VideoRender');
+  await page.getByRole('button', { name: 'Project assets' }).click();
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
+  await page.getByRole('menuitem', { name: 'Video…' }).click();
+  await (
+    await chooser
+  ).setFiles({
+    name: 'render-clip.avi',
+    mimeType: 'video/x-msvideo',
+    buffer: readFileSync(FIXTURE),
+  });
+  await expect(page.locator('[data-testid="video-probe-meta"]')).toContainText('64×64');
+  // place-on-confirm creates a video element on the canvas
+  await page.getByRole('button', { name: 'Convert & import' }).click();
+  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached({
+    timeout: 25_000,
+  });
+
+  // The canvas iframe renders a REAL <video> (not the Phase-2 placeholder box).
+  const frame = page.frameLocator('iframe[title="cgpreview"]');
+  const videoLoc = frame.locator('video[data-cg-asset-id]');
+  await expect(videoLoc).toBeAttached({ timeout: 15_000 });
+
+  // The host seeks it OFF frame 0 to the mid-clip poster (decision (a)): once the
+  // blob src is wired + decoded, currentTime advances to ~midpoint of the clip.
+  const render = await videoLoc.evaluate(async (v: HTMLVideoElement) => {
+    const deadline = Date.now() + 12_000;
+    while (Date.now() < deadline) {
+      const src = v.getAttribute('src') || '';
+      if (src.indexOf('blob:') === 0 && v.readyState >= 1 && v.currentTime > 0) {
+        return { ok: true, currentTime: v.currentTime, posterMs: Number(v.dataset.cgPosterMs) };
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return { ok: false, rs: v.readyState, t: v.currentTime, src: v.getAttribute('src') };
+  });
+  expect(render, JSON.stringify(render)).toMatchObject({ ok: true });
+  if (render.ok) {
+    // poster time is the clip midpoint (~0.8s of the 1.6s fixture), NOT frame 0
+    expect(render.currentTime).toBeGreaterThan(0.4);
+    expect(render.posterMs).toBeGreaterThan(400);
+  }
+});
+
+test('a video element is NOT remounted across transform changes — it stays visible on its poster (D-128 Bug 1)', async ({
+  app,
+  page,
+}) => {
+  await app.newProject('VideoDrag');
+  await page.getByRole('button', { name: 'Project assets' }).click();
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
+  await page.getByRole('menuitem', { name: 'Video…' }).click();
+  await (
+    await chooser
+  ).setFiles({
+    name: 'drag-clip.avi',
+    mimeType: 'video/x-msvideo',
+    buffer: readFileSync(FIXTURE),
+  });
+  await expect(page.locator('[data-testid="video-probe-meta"]')).toContainText('64×64');
+  await page.getByRole('button', { name: 'Convert & import' }).click();
+  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached({
+    timeout: 25_000,
+  });
+
+  const frame = page.frameLocator('iframe[title="cgpreview"]');
+  const videoLoc = frame.locator('video[data-cg-asset-id]');
+  await expect(videoLoc).toBeAttached({ timeout: 15_000 });
+
+  // Wait for the poster to seek off 0, then MARK the live node so we can prove it
+  // is the SAME element (not a remounted one) after transforms.
+  const before = await videoLoc.evaluate(async (v: HTMLVideoElement & { __cgMark?: string }) => {
+    const deadline = Date.now() + 12_000;
+    while (Date.now() < deadline && !(v.readyState >= 1 && v.currentTime > 0)) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    v.__cgMark = 'keep-me';
+    return { t: v.currentTime, rs: v.readyState };
+  });
+  expect(before.t).toBeGreaterThan(0); // showing a real (non-blank) poster frame
+
+  // Several transform changes → several full scene-replaces (the drag simulacrum).
+  // BEFORE the fix each of these tore down + reloaded the <video> (blank for a beat).
+  for (const rot of [10, 25, 40, 15]) await app.setInspectorNumber('Rotation', rot);
+
+  const after = await videoLoc.evaluate((v: HTMLVideoElement & { __cgMark?: string }) => ({
+    mark: v.__cgMark,
+    t: v.currentTime,
+    rs: v.readyState,
+    hasSrc: (v.getAttribute('src') || '').indexOf('blob:') === 0,
+  }));
+  expect(after.mark).toBe('keep-me'); // SAME node → never remounted
+  expect(after.hasSrc).toBe(true); // media still wired
+  expect(after.rs).toBeGreaterThanOrEqual(1); // still decoded (not reset to a blank load)
+  expect(after.t).toBeGreaterThan(0); // never fell back to the transparent frame 0
+});
+
 test('re-importing the same source is deduped: "Use existing" places an element with NO second conversion', async ({
   app,
   page,

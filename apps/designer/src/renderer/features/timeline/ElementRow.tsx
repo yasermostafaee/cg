@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
+  Clapperboard,
   Clock,
   Component,
   Film,
@@ -225,6 +226,13 @@ export function layerTypeIcon(element: Element): LucideIcon {
     case 'lottie':
     case 'video-placeholder':
       return Film;
+    case 'video':
+      // D-128 — an imported video FILE. The clapperboard is the conventional
+      // "video file" glyph in editing tools; it reads distinctly from the image
+      // element's icon AND is deliberately NOT a camera — camera-style imagery is
+      // reserved for the live-source element (`video-placeholder`, the film strip
+      // below). The cyan lifespan colour (TYPE_COLORS) reinforces the distinction.
+      return Clapperboard;
     case 'container':
       return Group;
     case 'composition':

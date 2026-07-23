@@ -20,6 +20,7 @@ import type {
   ImageElement,
   ShapeElement,
   Transform,
+  VideoElement,
 } from '@cg/shared-schema';
 import type { BuildSceneResult, FieldScope, LifecycleSource } from './types.js';
 import { clockInitialText } from './clock-driver.js';
@@ -185,10 +186,10 @@ function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null 
       // (M3.2-β) and video routing (post-v1) will replace these.
       return buildPlaceholder(element, ctx.doc);
     case 'video':
-      // D-128 Phase 2 — the element exists but its moving-picture render is
-      // Phase 3 (canvas/poster) + Phase 4 (VideoDriver lifecycle). Until then a
-      // positioned placeholder box keeps layout/binding stable.
-      return buildPlaceholder(element, ctx.doc);
+      // D-128 Phase 3 — render a real <video> at its mid-clip poster frame.
+      // Phase 4 adds the VideoDriver (playback lifecycle); until then the clip
+      // sits statically on its poster frame.
+      return buildVideo(element, ctx.doc);
   }
 }
 
@@ -1033,6 +1034,41 @@ function buildImage(element: ImageElement, doc: Document): HTMLElement {
     el.style.filter = `drop-shadow(0 0 0 ${element.tint})`;
   }
   return el;
+}
+
+/**
+ * D-128 Phase 3 — the video element's canvas render: a REAL `<video>` (VP8+alpha
+ * decodes with transparency), sitting at its MID-CLIP poster frame at rest. Like
+ * `<img>`, the `src` is left unset here — the host resolves `data-cg-asset-id`
+ * to a blob URL (designer: preview.ts `applyAssetUrls`; exports: runtime.ts's
+ * `img[data-cg-asset-id]` walk, widened to video in Phase 5) — and the host
+ * seeks the paused element to `data-cg-poster-ms` so a transparent frame 0 is
+ * never shown (decision (a): `phases.introEnd ?? clip midpoint`). Muted + inert;
+ * the playback lifecycle (VideoDriver) is Phase 4.
+ */
+function buildVideo(element: VideoElement, doc: Document): HTMLElement {
+  const el = doc.createElement('video');
+  el.dataset['cgElementId'] = element.id;
+  applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
+  el.style.objectFit = 'contain';
+  el.dataset['cgAssetId'] = element.assetId;
+  el.dataset['cgPosterMs'] = String(videoPosterMs(element));
+  el.muted = true;
+  el.setAttribute('playsinline', '');
+  el.setAttribute('preload', 'metadata');
+  return el;
+}
+
+/**
+ * The poster/at-rest frame time (ms) — the IN-point when marked (that authored
+ * hold frame is meaningful), else the clip midpoint. Inlined here (the designer
+ * has its own `posterTimeMs`) exactly as the D-125 Lottie poster rule is inlined
+ * at `runtime.ts` — the runtime package cannot import from the designer app.
+ */
+function videoPosterMs(element: VideoElement): number {
+  const introEnd = element.phases?.introEnd;
+  if (introEnd !== undefined && introEnd > 0 && introEnd < element.durationMs) return introEnd;
+  return Math.round(element.durationMs / 2);
 }
 
 /**

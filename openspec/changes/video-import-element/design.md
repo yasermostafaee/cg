@@ -20,7 +20,8 @@ plumbing; what must be ADDED is the product.
   `VideoPlaceholderElementSchema` (`type: 'video-placeholder'`, `posterAssetId?`,
   `expectedAspect`, `routeKey`); `packages/template-runtime/src/scene-builder.ts:182-186` renders
   it through `buildPlaceholder`. It is FROZEN for this change (see Decisions) — D-137 implements
-  it for its original live-plate purpose.
+  it for its original Live Source purpose (user-facing name "Live Source"; the schema type stays
+  `video-placeholder`).
 - **C5 — TRUE.** No `video` element type exists (`z.literal('video')` / `VideoElementSchema`
   absent from `elements.ts`); `ProjectAssetsPanel.tsx` has no video import entry (zero `video`
   tokens); `apps/designer/src/platform/Exporter.ts` has no video branch (its only `video` tokens
@@ -424,6 +425,95 @@ kind, provenance?)` is the ONE write path — `importFile` delegates to it — s
   (the match rules), and `video-import-modal.test.ts` (same-file duplicate → no convert +
   Use-existing places; different-crop → converts; Convert-again forces an encode).
 
+## Phase-3 canvas render + Inspector (2026-07-23, `feat/d128-p3-video-canvas-inspector`)
+
+- **The canvas renders a REAL `<video>`, at rest on a MID-CLIP poster (decision (a)).** The
+  scene-builder's `case 'video'` (was a Phase-2 placeholder box) now calls `buildVideo`, which
+  mirrors `buildImage`: a `<video data-cg-asset-id data-cg-poster-ms>` positioned by the shared
+  `applyBaseStyles` (transform / opacity / filter / visibility — identical to every other
+  kind), `objectFit: contain`, muted + `playsinline`, **no `src`**. The host wires the src from
+  the assetId → blob URL exactly like an `<img>`: `assetUrlCache.prime` now accepts `video`
+  (the C5 one-liner) so the URL rides `mergedAssetUrls()` into the iframe, and the designer
+  canvas's `preview.ts#applyAssetUrls` — previously IMG-only — now also handles `VIDEO`,
+  setting `.src` and seeking the PAUSED element to `data-cg-poster-ms`. VP8+alpha (`yuva420p`)
+  decodes with real transparency in `<video>`.
+- **Why mid-clip, not frame 0 (decision (a), owner field call).** Furniture clips frequently
+  open on an empty/transparent frame, so a frame-0 poster reads as a blank box. The poster
+  frame is DERIVED (never a stored field — the schema has none): `phases.introEnd ?? clip
+midpoint`, the exact ms-space analogue of the D-125 Lottie poster rule at `runtime.ts:844`.
+  The rule lives in `posterTimeMs` (designer) and is inlined in `scene-builder#videoPosterMs`
+  (the runtime package cannot import the app — same split as the Lottie rule). It is applied in
+  FOUR places from ONE rule: the import-modal SOURCE preview (ffmpeg `buildPosterArgs` gains a
+  fast `-ss` keyframe seek), and — via the shared `VideoPoster` React component (a paused,
+  seeked `<video>`, real pixels + alpha, no PNG capture) — the canvas at-rest, the Inspector
+  preview, and the assets-panel thumbnail. HONEST scope: it is one frame-SELECTION rule shared,
+  not one function — the modal preview must stay ffmpeg (the source isn't a browser-decodable
+  WebM at crop time), the three stored-asset surfaces share `VideoPoster`.
+- **"Pick a different poster time" == the In point.** Decision (d) asks the Inspector to expose
+  the poster "with a way to pick a different time", but the schema stores no poster field (the
+  change docs say it is derived). Reconciled per decision (a): the poster follows `introEnd`, so
+  the In-point input IS the poster-time control — no schema field added. The Inspector shows the
+  resulting poster time read-only ("Poster frame: N.NN s (the In point)").
+- **Inspector `VideoSections` (decision (d)/(e)).** Hold behavior (`loop` default / `freeze`),
+  the manual `phases` marks in the clip's own ms time space (In/Out, clamped to `[0, duration]`,
+  invariant `introEnd ≤ outroStart`, with Add/Clear since `phases` is optional), `drivesHold`
+  opt-in (default off), the mid-clip poster preview, and the stored provenance surfaced
+  READ-ONLY (source name, dims, `N→M fps` conform, baked crop). It never exposes the clip's
+  inner content (opaque by design). Transform/opacity/filter keyframe rows come from the shared
+  Transform + Filter sections (the D-056 registry already declared `video: UNIVERSAL_ONLY` in
+  Phase 2).
+- **Scrub does NOT drive video frames (C4).** The playhead reaches the canvas via a `scrub`
+  postMessage → `runtime.tick(frame)`, which only re-evaluates keyframed transform/opacity and
+  lifespan gates. The Lottie is likewise static-at-poster on scrub (it plays on its own clock
+  during playback). The video sits statically on its poster frame; scrub-driven video frames
+  are D-135's separate item — Phase 3 neither implements nor precludes it. Playback lifecycle
+  (the `VideoDriver`) is Phase 4.
+- **Display refinements (owner add-on, same phase):** the assets-panel tile renders the video's
+  mid-clip poster (replacing the "VID" text stub) and the timeline layer row uses a distinct
+  lucide `Clapperboard` glyph — the conventional "video file" icon, distinct from the image
+  element and deliberately NOT a camera (camera imagery is reserved for the Live Source element);
+  the cyan `TYPE_COLORS` entry already existed — both wired
+  through the same `VideoPoster` / `assetUrlCache` seams as the canvas, not a second path.
+
+## Phase-3 field fixes (2026-07-23, owner smoke — 4 bugs, same branch/PR #398)
+
+- **Bug 1 (serious) — video vanished while dragging anything on the canvas.** Root cause: a
+  transform-only change (drag/resize/rotate/opacity) posts a full `scene-replace`, and the
+  iframe's `applyScene` tears the whole runtime DOM down (`runtime.remove()`) and rebuilds it
+  (`createRuntime`). Cheap elements rebuild invisibly; a `<video>` re-loads its blob + re-seeks
+  the poster each time — and a 60 Hz drag issues a burst of rebuilds, so the clip stays blank
+  the whole drag and the LAST reload finishing is the "returns a few seconds after." The
+  permanent-hide was the same reload being aborted mid-flight by the next rebuild and never
+  completing. Fix (in the iframe script, `preview.ts`): HARVEST the live `<video>` nodes just
+  before the teardown (a referenced detached node keeps its media + `currentTime` alive) and
+  TRANSPLANT them back over the freshly-built src-less placeholders — same element id AND asset
+  — copying only the new transform/style (`reconcileVideos`). The media never reloads; only the
+  box moves. A genuinely new element (or a changed asset) still gets a normal src+seek; pooled
+  entries no longer in the scene are dropped. A media `error` listener now logs honestly rather
+  than leaving a silent blank box. Guarded by an e2e that marks the live node and asserts it
+  survives repeated transform changes still showing a non-blank poster.
+- **Bug 2 — the video picker was multi-select but imports one.** `pickFiles` sets
+  `input.multiple = kind !== 'video'`: the video picker is single-select (the modal is
+  inherently one clip — crop/fps/progress/duplicate), every other kind stays a batch.
+- **Bug 3 — the dedupe hashed the source even when no duplicate was possible.** A cheap
+  `File.size` pre-filter runs FIRST: a duplicate is only possible against an existing video
+  asset with an identical `sourceBytes`. No size match ⇒ NO up-front hash — straight to import.
+  (Size, not filename: a renamed file is still caught; two unrelated same-name files don't
+  trigger a pointless hash.) The source hash still reaches provenance for FUTURE dedupe, but off
+  the blocking path: when there was no size match it is computed DURING the encode (which takes
+  far longer) and `await`ed only just before `storeBytes`, so the operator never waits on it.
+  Measured up-front wait: empty project **0 s**, different-size-only **0 s**, size-matching **the
+  hash time** (~16 s for ~2 GB to confirm; instant for the field clips). The post-convert sha
+  dedupe remains the backstop, so an identical output still dedupes even if the source hash was
+  best-effort.
+- **Bug 4 — the crop control was disabled once a duplicate was detected**, contradicting the
+  rule that a DIFFERENT crop is not a duplicate. The crop control (toggle + rectangle + numeric
+  fields) now stays ENABLED in the duplicate step, and the match is re-evaluated LIVE from the
+  current crop + fps against the size-matched candidates: when the parameters no longer match,
+  the banner and "Use existing" disappear and the modal returns to the normal convert flow
+  (`useEffect` → `ready`). "Use existing" only ever places the asset matching the on-screen
+  parameters (`duplicateMatch`, recomputed each render), never a stale one.
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide
@@ -436,7 +526,7 @@ kind, provenance?)` is the ONE write path — `importFile` delegates to it — s
 
 ## Related
 
-- **D-140 (unified Plate source selector)** adds a second CREATION entry point for the `video`
+- **D-140 (unified Source selector)** adds a second CREATION entry point for the `video`
   element: Source=Video file runs THIS change's import flow (crop modal + in-app conversion)
   unchanged — never a direct-play of the picked file. UI-level only; no schema interaction with
   this change.

@@ -19,6 +19,7 @@ import type {
   Stroke,
   TextElement,
   TickerElement,
+  VideoElement,
 } from '@cg/shared-schema';
 import { columnsForFields } from '../fields/repeater-columns.js';
 import {
@@ -33,6 +34,9 @@ import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { activeDocOf, activeFieldData } from '../../state/scene-doc.js';
 import * as lottieAssetCache from '../assets/lottieAssetCache.js';
+import { useAssetUrl, useAssets } from '../assets/useAssets.js';
+import { VideoPoster } from '../assets/VideoPoster.js';
+import { posterTimeMs } from '../assets/video-convert-args.js';
 import * as lt from './LottieTiming.css.js';
 import {
   effectiveColorAt as evColor,
@@ -145,6 +149,14 @@ export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element 
   if (element.type === 'lottie')
     return (
       <LottieSections
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    );
+  if (element.type === 'video')
+    return (
+      <VideoSections
         element={element}
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
@@ -773,6 +785,162 @@ function LottieSections({
             holdBehavior={element.holdBehavior}
             outPoint={outPoint}
           />
+        )}
+      </CollapseSection>
+      <FilterSection
+        element={element}
+        currentFrame={currentFrame}
+        selectedKeyframe={selectedKeyframe}
+      />
+    </>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────
+//                              VIDEO (D-128 Phase 3)
+// ────────────────────────────────────────────────────────────────────────
+
+/**
+ * D-128 Phase 3 — the imported-clip inspector (decision (d)). Exposes the poster
+ * frame (mid-clip, following the In point), the MANUAL phase marks in the clip's
+ * OWN time space (ms), hold behaviour (default loop), and `drivesHold` (default
+ * off). It surfaces the stored provenance READ-ONLY (decision (e)) and never
+ * exposes the clip's inner content (opaque by design). Transform/opacity/filter
+ * keyframe rows come from the shared Transform + Filter sections (field-registry
+ * `video: UNIVERSAL_ONLY`). Playback lifecycle is Phase 4.
+ */
+function VideoSections({
+  element,
+  currentFrame,
+  selectedKeyframe,
+}: SectionProps<VideoElement>): JSX.Element {
+  const id = element.id;
+  const url = useAssetUrl(element.assetId);
+  const provenance = useAssets().find((a) => a.assetId === element.assetId)?.provenance;
+  const phases = element.phases;
+  const duration = element.durationMs;
+  const posterMs = posterTimeMs(duration, phases?.introEnd);
+
+  /** Commit a phase-mark edit, clamped to [0, duration] and keeping introEnd ≤ outroStart. */
+  function commitPhase(next: { introEnd?: number; outroStart?: number }): void {
+    if (phases === undefined) return;
+    const clamp = (v: number): number => Math.min(Math.max(0, Math.round(v)), duration);
+    let introEnd = clamp(next.introEnd ?? phases.introEnd);
+    let outroStart = clamp(next.outroStart ?? phases.outroStart);
+    // keep the invariant: whichever mark the operator moved wins, the other yields.
+    if (introEnd > outroStart) {
+      if (next.introEnd !== undefined) outroStart = introEnd;
+      else introEnd = outroStart;
+    }
+    designerStore.updateElement(id, {
+      phases: { ...phases, introEnd, outroStart },
+    } as Partial<Element>);
+  }
+
+  return (
+    <>
+      <CollapseSection title="Video" defaultExpanded>
+        {url !== null && (
+          <VideoPoster
+            url={url}
+            atMs={posterMs}
+            ariaLabel={`Poster frame of ${element.name}`}
+            style={{
+              display: 'block',
+              width: '100%',
+              maxHeight: 140,
+              objectFit: 'contain',
+              borderRadius: 4,
+              // a checkerboard so alpha reads as transparency (mirrors the modal)
+              background:
+                'repeating-conic-gradient(#3a3e55 0% 25%, #2a2d42 0% 50%) 0 0 / 16px 16px',
+            }}
+          />
+        )}
+        <div className={fieldCss.row}>
+          <span className={fieldCss.label}>duration</span>
+          <span>{(duration / 1000).toFixed(2)} s</span>
+        </div>
+        <SelectField
+          label="on hold"
+          value={element.holdBehavior}
+          options={['loop', 'freeze'] as const}
+          labels={['Loop', 'Freeze']}
+          onCommit={(holdBehavior) =>
+            designerStore.updateElement(id, { holdBehavior } as Partial<Element>)
+          }
+        />
+        <SelectField
+          label="drives hold"
+          value={element.drivesHold === true ? 'on' : 'off'}
+          options={['off', 'on'] as const}
+          labels={['No', 'Yes']}
+          onCommit={(v) =>
+            designerStore.updateElement(id, { drivesHold: v === 'on' } as Partial<Element>)
+          }
+        />
+        {phases === undefined ? (
+          <>
+            <p className={dds.hint}>
+              No phase marks — the whole clip is the intro, the hold loops the whole clip, and there
+              is no outro. The poster uses the clip midpoint.
+            </p>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                designerStore.updateElement(id, {
+                  phases: { introEnd: Math.round(duration / 2), outroStart: duration },
+                } as Partial<Element>)
+              }
+            >
+              Add phase marks
+            </Button>
+          </>
+        ) : (
+          <>
+            <NumberField
+              label="in point"
+              value={phases.introEnd}
+              step={100}
+              min={0}
+              max={duration}
+              suffix="ms"
+              onCommit={(v) => commitPhase({ introEnd: v })}
+            />
+            <NumberField
+              label="out point"
+              value={phases.outroStart}
+              step={100}
+              min={0}
+              max={duration}
+              suffix="ms"
+              onCommit={(v) => commitPhase({ outroStart: v })}
+            />
+            <span className={lt.compEquiv}>
+              Poster frame: {(posterMs / 1000).toFixed(2)} s (the In point)
+            </span>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                designerStore.updateElement(id, { phases: undefined } as Partial<Element>)
+              }
+            >
+              Clear phase marks
+            </Button>
+          </>
+        )}
+        {provenance !== undefined && (
+          <p className={dds.hint} data-testid="video-provenance">
+            From “{provenance.sourceFilename}” ({String(provenance.sourceWidth)}×
+            {String(provenance.sourceHeight)}
+            {provenance.sourceFps !== provenance.targetFps
+              ? `, conformed ${String(provenance.sourceFps)}→${String(provenance.targetFps)} fps`
+              : ''}
+            {provenance.crop !== undefined
+              ? `, cropped to ${String(provenance.crop.width)}×${String(provenance.crop.height)}`
+              : ''}
+            ).
+          </p>
         )}
       </CollapseSection>
       <FilterSection

@@ -44,8 +44,9 @@ a second element kind join that seam.
   single-file export carries the video bytes inline with ZERO external requests and must pass the
   existing `cef-compat` scan. An export exceeding the single-file size threshold is reported by
   the EXISTING preflight/issues path before export.
-- **`VideoPlaceholderElementSchema` is FROZEN**, not repurposed — it is the live-source plate
-  placeholder (D-137), a different feature. This change adds a NEW `VideoElementSchema`.
+- **`VideoPlaceholderElementSchema` is FROZEN**, not repurposed — it is the Live Source element
+  (D-137; user-facing name "Live Source", schema type stays `video-placeholder`), a different
+  feature. This change adds a NEW `VideoElementSchema`.
 
 ## Capabilities
 

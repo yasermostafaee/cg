@@ -58,6 +58,7 @@ import {
   buildConvertArgs,
   buildPosterArgs,
   parseProbeLog,
+  posterTimeMs,
   type CropRect,
   type SourceProbe,
 } from './video-convert-args.js';
@@ -270,7 +271,9 @@ export async function probeSource(
       let posterUrl: string | null = null;
       try {
         const posterPath = '/poster.png';
-        const code = await ff.exec(buildPosterArgs(input, posterPath));
+        // Mid-clip poster (decision (a)); frame 0 only when the duration is unknown.
+        const posterSec = probe.durationMs > 0 ? posterTimeMs(probe.durationMs) / 1000 : undefined;
+        const code = await ff.exec(buildPosterArgs(input, posterPath, posterSec));
         if (code === 0) {
           const png = await ff.readFile(posterPath);
           await ff.deleteFile(posterPath).catch(() => undefined);

@@ -76,9 +76,31 @@ export function buildConvertArgs(opts: {
   ];
 }
 
-/** Extract the first source frame as a PNG — the modal's crop-preview image. */
-export function buildPosterArgs(inputPath: string, outputPath: string): string[] {
-  return ['-y', '-i', inputPath, '-frames:v', '1', '-f', 'image2', outputPath];
+/**
+ * Extract ONE source frame as a PNG — the modal's crop-preview image. When
+ * `atSec` is given, seek there first with a FAST keyframe seek (`-ss` BEFORE
+ * `-i`; poster accuracy is irrelevant) so the preview is a MID-CLIP frame, not
+ * frame 0 — D-128 decision (a): furniture clips often open on a transparent
+ * frame, so a frame-0 poster reads as a blank box. Omit `atSec` (or ≤ 0) to
+ * keep the frame-0 behaviour (e.g. a source whose duration is unknown).
+ */
+export function buildPosterArgs(inputPath: string, outputPath: string, atSec?: number): string[] {
+  const seek = atSec !== undefined && atSec > 0 ? ['-ss', atSec.toFixed(3)] : [];
+  return ['-y', ...seek, '-i', inputPath, '-frames:v', '1', '-f', 'image2', outputPath];
+}
+
+/**
+ * D-128 decision (a) — the poster / at-rest frame TIME (ms) for a video, shared
+ * by the import-modal source preview, the canvas at-rest render, the Inspector,
+ * and the assets-panel thumbnail. Mirrors the D-125 Lottie poster rule
+ * (`runtime.ts` — `phases.introEnd ?? midpoint`): use the IN-point when the
+ * element carries one (that authored hold frame is meaningful), else the clip
+ * midpoint (~50%). A clip's opening frame is frequently transparent, so neither
+ * frame 0 nor a stored poster is used — the frame is DERIVED from these facts.
+ */
+export function posterTimeMs(durationMs: number, introEndMs?: number): number {
+  if (introEndMs !== undefined && introEndMs > 0 && introEndMs < durationMs) return introEndMs;
+  return durationMs > 0 ? Math.round(durationMs / 2) : 0;
 }
 
 /**

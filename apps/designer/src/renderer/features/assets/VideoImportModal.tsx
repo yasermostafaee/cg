@@ -63,9 +63,11 @@ type Phase =
   | { kind: 'ready' }
   // D-128 — hashing the source + looking up a prior import BEFORE any encode.
   | { kind: 'checking'; progress: number }
-  // D-128 — this exact clip (source + crop + fps) was already imported. Carries
-  // what "Convert again" needs so it never re-hashes.
-  | { kind: 'duplicate'; asset: AssetMeta; sourceSha256: string; crop: CropRect | undefined }
+  // D-128 — a prior import with this source hash exists. The MATCHING asset is
+  // recomputed LIVE from the current crop/fps against `candidates` (the
+  // size-matched video assets), so changing the crop re-evaluates the duplicate
+  // (Bug 4). `sourceSha256` lets "Convert again" reuse the hash.
+  | { kind: 'duplicate'; sourceSha256: string; candidates: readonly AssetMeta[] }
   | { kind: 'converting'; progress: number }
   | { kind: 'error'; message: string };
 
@@ -137,6 +139,28 @@ export function VideoImportModal(props: {
   const scale =
     probe !== null ? Math.min(PREVIEW_MAX_W / probe.width, PREVIEW_MAX_H / probe.height, 1) : 1;
 
+  // The crop that WOULD be baked at these settings — used for the conversion AND
+  // (Bug 4) to re-evaluate the duplicate match live as the operator edits it.
+  const effectiveCrop =
+    cropOn && probe !== null ? clampCrop(crop, probe.width, probe.height) : undefined;
+  // Bug 4 — in the duplicate step the match is recomputed from the CURRENT crop +
+  // fps, so a crop change that no longer matches clears the banner (effect below)
+  // and "Use existing" only ever offers the asset matching what's on screen.
+  const duplicateMatch =
+    phase.kind === 'duplicate'
+      ? findDuplicateVideoAsset(phase.candidates, {
+          sourceSha256: phase.sourceSha256,
+          targetFps: projectFps,
+          crop: effectiveCrop,
+        })
+      : null;
+  useEffect(() => {
+    if (phase.kind === 'duplicate' && duplicateMatch === null) {
+      // params no longer match any prior import → back to the normal convert flow
+      setPhase({ kind: 'ready' });
+    }
+  }, [phase.kind, duplicateMatch]);
+
   function commitCrop(next: Partial<CropRect>): void {
     if (probe === null) return;
     setCrop((c) => clampCrop({ ...c, ...next }, probe.width, probe.height));
@@ -179,17 +203,27 @@ export function VideoImportModal(props: {
   }
 
   /**
-   * D-128 — the "Convert & import" entry. BEFORE any (minutes-long) encode, hash
-   * the source and look for a prior import with the SAME source + crop + target
-   * fps. On a match, offer the existing asset instead of re-converting; otherwise
-   * convert, carrying the hash into the new asset's provenance so the NEXT import
-   * of this clip can dedupe against it. The hash is needed for provenance either
-   * way, so this adds no wasted work — only a bounded, cancellable read.
+   * D-128 — the "Convert & import" entry. Bug 3: a duplicate is only POSSIBLE if
+   * an existing video asset was made from a source of the SAME byte size, so a
+   * cheap `File.size` pre-filter runs FIRST (instant). No size match ⇒ skip the
+   * up-front hash entirely and import normally — the source hash is computed
+   * DURING the encode (below) so provenance still carries it for future dedupe
+   * without making the operator wait. Only when a size matches do we hash up
+   * front to CONFIRM, then either offer the existing asset or convert.
    */
   async function startImport(): Promise<void> {
     if (probe === null) return;
     cancelled.current = false;
-    const effectiveCrop = cropOn ? clampCrop(crop, probe.width, probe.height) : undefined;
+    const list = await window.cg.assets.list();
+    const sizeMatches = list.filter(
+      (a) => a.kind === 'video' && a.provenance?.sourceBytes === props.file.size,
+    );
+    if (sizeMatches.length === 0) {
+      // No prior import could possibly match — no up-front hash; import straight.
+      await runConversion(effectiveCrop, undefined);
+      return;
+    }
+    // A duplicate is possible — hash up front (cancellable) to confirm.
     const controller = new AbortController();
     hashAbort.current = controller;
     setPhase({ kind: 'checking', progress: 0 });
@@ -211,34 +245,48 @@ export function VideoImportModal(props: {
       setPhase({ kind: 'ready' });
       return;
     }
-    const existing = findDuplicateVideoAsset(await window.cg.assets.list(), {
+    const existing = findDuplicateVideoAsset(sizeMatches, {
       sourceSha256,
       targetFps: projectFps,
       crop: effectiveCrop,
     });
     if (existing !== null) {
-      setPhase({ kind: 'duplicate', asset: existing, sourceSha256, crop: effectiveCrop });
+      // The specific matching asset is recomputed LIVE in render (Bug 4) — carry
+      // the candidates + hash so a crop change can re-evaluate without re-hashing.
+      setPhase({ kind: 'duplicate', sourceSha256, candidates: sizeMatches });
       return;
     }
     await runConversion(effectiveCrop, sourceSha256);
   }
 
   async function runConversion(
-    effectiveCrop: CropRect | undefined,
-    sourceSha256: string,
+    crop: CropRect | undefined,
+    precomputedHash: string | undefined,
   ): Promise<void> {
     const conv = converter.current;
     if (conv === null || probe === null) return;
     cancelled.current = false;
     setPhase({ kind: 'converting', progress: 0 });
+    // Bug 3 — the source hash goes into provenance for FUTURE dedupe, but the
+    // operator must never WAIT on it. When we didn't hash up front (no size
+    // match), compute it DURING the encode (which takes far longer) — best-effort,
+    // cancellable, never blocking the import if it fails.
+    const hashCtrl = new AbortController();
+    hashAbort.current = hashCtrl;
+    const hashPromise: Promise<string | undefined> =
+      precomputedHash !== undefined
+        ? Promise.resolve(precomputedHash)
+        : hashSourceFile(props.file, { signal: hashCtrl.signal }).catch(() => undefined);
     const bytes = await conv.convertToWebm({
       file: props.file,
       targetFps: projectFps,
-      crop: effectiveCrop,
+      crop,
       onProgress: (ratio) =>
         setPhase({ kind: 'converting', progress: Math.max(0, Math.min(1, ratio)) }),
     });
     if (bytes === null) {
+      hashCtrl.abort();
+      hashAbort.current = null;
       if (cancelled.current) {
         setPhase({ kind: 'ready' }); // a clean cancel returns to the crop step
       } else {
@@ -253,6 +301,8 @@ export function VideoImportModal(props: {
       // The cancel landed AFTER the encode finished but BEFORE the commit —
       // an acknowledged cancel must never import anyway. Nothing is stored;
       // the crop step returns.
+      hashCtrl.abort();
+      hashAbort.current = null;
       setPhase({ kind: 'ready' });
       return;
     }
@@ -272,9 +322,14 @@ export function VideoImportModal(props: {
         // Last exit before the point of no return — storeBytes commits the
         // asset; from there the import completes (reverting a stored asset is
         // not this seam's job).
+        hashCtrl.abort();
         setPhase({ kind: 'ready' });
         return;
       }
+      // The deferred hash ran DURING the multi-second encode, so it is ready now
+      // (or resolves in a blink for a small clip); undefined only if hashing
+      // failed — provenance omits it and the post-convert sha dedupe still holds.
+      const sourceSha256 = await hashPromise;
       const webmName = props.file.name.replace(/\.[^.]*$/, '') + '.webm';
       const { asset } = await window.cg.assets.storeBytes({
         bytes,
@@ -284,7 +339,7 @@ export function VideoImportModal(props: {
           sourceFilename: props.file.name,
           probe,
           targetFps: projectFps,
-          crop: effectiveCrop,
+          crop,
           sourceSha256,
           sourceBytes: props.file.size,
         }),
@@ -292,11 +347,13 @@ export function VideoImportModal(props: {
       props.onDone({
         asset,
         durationMs: measured,
-        width: effectiveCrop?.width ?? probe.width,
-        height: effectiveCrop?.height ?? probe.height,
+        width: crop?.width ?? probe.width,
+        height: crop?.height ?? probe.height,
       });
     } catch (err) {
       setPhase({ kind: 'error', message: `Storing the converted clip failed: ${String(err)}` });
+    } finally {
+      hashAbort.current = null;
     }
   }
 
@@ -334,6 +391,10 @@ export function VideoImportModal(props: {
   const converting = phase.kind === 'converting';
   const checking = phase.kind === 'checking';
   const busy = converting || checking; // a cancellable progress phase
+  // Bug 4 — only show the duplicate actions while a match for the CURRENT params
+  // actually exists; the effect above flips a no-longer-matching duplicate back
+  // to 'ready', but guard the render for the in-between frame too.
+  const showDuplicate = phase.kind === 'duplicate' && duplicateMatch !== null;
   const progressPct =
     phase.kind === 'converting' || phase.kind === 'checking' ? Math.round(phase.progress * 100) : 0;
   // The footer is the Modal shell's STICKY region (the body above scrolls). The
@@ -366,15 +427,15 @@ export function VideoImportModal(props: {
         </div>
       )}
       <div className={s.footerActions}>
-        {phase.kind === 'duplicate' ? (
+        {showDuplicate && duplicateMatch !== null && phase.kind === 'duplicate' ? (
           <>
             <ModalButton
               variant="secondary"
-              onClick={() => void runConversion(phase.crop, phase.sourceSha256)}
+              onClick={() => void runConversion(effectiveCrop, phase.sourceSha256)}
             >
               Convert again
             </ModalButton>
-            <ModalButton variant="primary" onClick={() => void useExisting(phase.asset)}>
+            <ModalButton variant="primary" onClick={() => void useExisting(duplicateMatch)}>
               Use existing
             </ModalButton>
           </>
@@ -444,11 +505,11 @@ export function VideoImportModal(props: {
 
             {notice !== null && <Callout variant="caution">{notice}</Callout>}
 
-            {phase.kind === 'duplicate' && (
+            {showDuplicate && duplicateMatch !== null && (
               <Callout variant="caution">
-                “{phase.asset.provenance?.sourceFilename ?? props.file.name}” was already imported
-                with the same crop and target frame rate. Use the existing clip, or convert a second
-                copy.
+                “{duplicateMatch.provenance?.sourceFilename ?? props.file.name}” was already
+                imported with these settings (same crop and target frame rate). Use the existing
+                clip, or convert a second copy. Changing the crop imports it as a new clip.
               </Callout>
             )}
 
@@ -498,7 +559,7 @@ export function VideoImportModal(props: {
                 <input
                   type="checkbox"
                   checked={cropOn}
-                  disabled={busy || phase.kind === 'duplicate'}
+                  disabled={busy}
                   data-testid="video-crop-toggle"
                   onChange={(e) => setCropOn(e.target.checked)}
                 />{' '}
