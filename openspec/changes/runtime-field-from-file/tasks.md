@@ -44,7 +44,7 @@
 - [x] 4.3 `Inspector.tsx`: thread the `StackItemState` down to `FieldEditor`/`FieldGroup`
       and mount the control (nested-namespace fields included).
 
-## 5. Tests (unit — no E2E spec added, no Linux gate debt)
+## 5. Tests (unit; no E2E spec added — the UI change itself still owes a Linux `gate:e2e`, see 7.3)
 
 - [x] 5.1 `fromFileContent.test.ts`: whole-file verbatim; split + trim + skip-empty;
       `\n` escape; deterministic ids; Persian digits + mixed-bidi byte-for-byte (NOT
@@ -61,7 +61,7 @@
 
 - [x] 6.1 `docs/prd/runtime.md`: R-018 narrowed to the manual-reload half and → `[~]` with
       the honest status note (no hardware pass owed — same wire and value shapes as hand
-      edits; no E2E edit → no Linux `gate:e2e` owed); watch bullet moved out.
+      edits; OWES one Linux `gate:e2e`, see 7.3); watch bullet moved out.
 - [x] 6.2 New R-026 filed (number verified free against origin/main, ALL refs, and both
       sibling worktrees' working trees immediately before commit): watch half, RECON-FIRST,
       browser re-read vs bridge watch, debounce, dead-watch visibility, the handle≠path
@@ -72,4 +72,11 @@
 ## 7. Gate
 
 - [x] 7.1 `pnpm openspec validate runtime-field-from-file --strict`.
-- [ ] 7.2 `pnpm gate` green (uncached, via the P-013 host gate lock).
+- [x] 7.2 `pnpm gate` green (uncached, via the P-013 host gate lock) — direct run + again
+      in the pre-push hook.
+- [ ] 7.3 ONE Linux `pnpm gate:e2e` (FULL suite), owed because this change alters UI
+      (FromFileControl mounts inside the Inspector and changes its content height; nine
+      existing specs interact with the Inspector, `panel-scroll.spec.ts` is content-height
+      sensitive) — a Linux run is owed for ANY UI/layout/rendering change, not only spec
+      edits. Run once WSL lands, alongside the #369/#370 Linux-gate debt. The Windows
+      `gate:e2e` 22/22 (0 cached) pass is non-authoritative evidence, NOT discharge.

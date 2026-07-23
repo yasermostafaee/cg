@@ -19,8 +19,11 @@ here would build the very coupling the recon exists to judge.
 by `fsaTextFileSource`. Two load-bearing reasons, both required:
 
 1. **Testability.** All split/trim/apply/error logic tests against a fake source in vitest —
-   no FSA, no picker, no E2E spec needed (WSL is not installed; an E2E edit would become owed
-   Linux gate debt — the R-020 lesson).
+   no FSA, no picker, no new E2E spec needed for the LOGIC. NB this does not discharge the
+   Linux gate: a Linux `gate:e2e` is owed for any UI/layout/rendering change regardless of
+   whether a spec was edited — mounting FromFileControl in the Inspector changes its content
+   height, so this change OWES one full Linux `gate:e2e` run (once WSL lands); the Windows
+   22/22 pass is non-authoritative evidence only (~19px render-geometry delta).
 2. **The watch half drops in.** An FSA handle CANNOT be converted to a filesystem path, so a
    bridge-based watch (if R-026 lands there) means the operator re-specifies the file by path
    and values arrive from the bridge — a second `TextFileSource` implementation, not a
