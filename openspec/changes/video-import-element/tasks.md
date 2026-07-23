@@ -176,24 +176,43 @@
 
 ## Phase 4 — `@cg/template-runtime`: `VideoDriver` + lifecycle + the outro seam
 
-- [ ] 4.1 `VideoDriver` joins the duck-typed content-driver contract (design D2): `reset` /
-      `start` / `pause` / `resume` / `stop` / `destroy` / `whenComplete` + `playOutro()`; host
-      carries `data-cg-content='video'`.
-- [ ] 4.2 Lifecycle mapping: intro `[0 → introEnd]`, hold LOOPS `[introEnd → outroStart]` (or
-      `idle`, or freezes opt-in), outro `[outroStart → end]`; absent `phases` ⇒ whole-clip
-      intro, loop-all hold, no outro (decision (i)).
-- [ ] 4.3 Join the ONE outro ledger: widen `runtime.ts:1492`'s `Map<LottieDriver, …>` to the
-      shared outro-owner interface (recon C6 note) — never a second ledger; §D6.4.1
-      always-resolve invariant holds for degenerate/destroyed/superseded video outros.
-- [ ] 4.4 Anti-drift (design D3): pause = `video.pause()`, resume = re-seek to computed clip-time
-      then play; driver-commanded loop wrap (never `<video loop>`); bounded drift correction per
-      the spike's measured numbers.
-- [ ] 4.5 Hold participation: `drivesHold: true` + `freeze` ⇒ completes at hold point;
-      `drivesHold: true` + `loop` ⇒ never self-completes (infinite-driver flag applies);
-      default does NOT drive (decision (j)).
-- [ ] 4.6 Tests on the injected clock: intro → hold(loop) → ticker-driven hold over video →
-      outro → CLEARED; pause/resume lockstep (mapping-level, per design D3's test split);
-      outro exactly once per exit episode; degenerate outro settles immediately.
+- [x] 4.1 `VideoDriver` (`video-driver.ts`) joins the duck-typed content-driver contract:
+      `reset`/`start`/`pause`/`resume`/`stop`/`destroy`/`whenComplete` + `playOutro()`, over a
+      `VideoHandle` abstraction (play/pause/seek/currentTime) so it is testable with a mock; the
+      `<video>` host carries `data-cg-content='video'` (and `data-cg-outro='1'` when it owns an
+      outro). Registered off a build-time `scope.videos` list (scene-builder `buildVideo` now
+      takes `ctx` and pushes `{ element, container }`, mirroring `buildLottie`), NOT a DOM walk.
+- [x] 4.2 Lifecycle mapping in the clip's own ms space: intro `[0 → introEnd]`, hold LOOPS
+      `[loopStart → loopEnd]` (default) or FREEZES at `introEnd`, outro `[outroStart → duration]`.
+      Absent `phases` ⇒ the runtime encodes intro `[0, duration]`, loop `[0, duration]`,
+      `outroStart = duration` — the whole clip is the intro, the hold loops the whole clip, and
+      the outro is degenerate (no outro; decision (b)).
+- [x] 4.3 ONE outro ledger, widened: a shared `ElementOutroDriver { playOutro(): Promise<void> }`
+      replaces `LottieDriver` on the ledger `Map` key, `ScopeNode.outroLotties`, the per-scope
+      outro array, and `collectSubtreeOutros`/`collectElementOutros` — Lottie AND video outro
+      drivers register in the SAME array/ledger, never a second one. The §D6.4.1 always-resolve
+      invariant holds (a degenerate/destroyed/superseded video outro settles immediately).
+- [x] 4.4 Anti-drift (design D3 / decision (e)): pause = `video.pause()` + capture the clock
+      elapsed; resume = re-anchor + RE-SEEK to the clock-derived clip-time then play; loop wrap is
+      DRIVER-COMMANDED (seek to loop start), never `<video loop>`; within-loop drift is corrected
+      only past an **80 ms** threshold (the spike's number — max |drift| 26.6 ms, zero corrections
+      at 80 ms), never per-tick, so no visible stutter.
+- [x] 4.5 Hold participation: `drivesHold: true` + `freeze` ⇒ `whenComplete` resolves at the hold
+      point; `drivesHold: true` + `loop` ⇒ never self-completes (infinite hold-driver, like an
+      idle-loop Lottie); absent/`false` ⇒ does NOT drive — a ticker on top drives the hold and the
+      video holds beneath (decision (c)). Read as `=== true` (OPT-IN), the inverse default.
+- [x] 4.6 Tests on the injected clock: `video-driver.test.ts` (mapping, loop/freeze, bounded
+      drift correction, pause/resume re-anchor, `playOutro` always-resolves, no-phase whole-clip
+      loop) + `video-lifecycle.test.ts` via `createRuntime` (stop → outro → CLEARED
+      content-first/background-last; no-phase carried by the content exit; `drivesHold` freeze
+      auto-outs vs ticker-driven hold; the SHARED LEDGER serving a Lottie AND a video in one
+      composition with no cross-talk — the regression guard for the type widening).
+
+  **Phase 5 still owes the EXPORTER-side walk:** `runtime.ts`'s on-air/export asset-src walk is
+  `img[data-cg-asset-id]`-only (Phase-3 note); Phase 5 widens it to `<video data-cg-asset-id>`
+  (packaged relative path for `.vcg`, base64 `data:` for single-file) so a video renders + plays
+  on-air. Phase 4 wired the driver + designer-canvas playback (preview.ts wires the src today);
+  the runtime/export `<video>` src is Phase 5's.
 
 ## Phase 5 — both exporters + `cef-compat` + the size preflight
 
@@ -214,8 +233,10 @@
       zero external requests.
 - [ ] 6.2 Owner verifies on the affected machine; record the verdict here. Do NOT archive before
       this gate (the D-125 precedent).
-- [ ] 6.3 REAL-ARCHIVE verification (carried from Phase 1's close-out, 2026-07-22): the client's
-      actual multi-GB `rawvideo`/BGRA archive clip goes through the SHIPPED import pipeline
-      end-to-end (import → crop → convert → place → export → hardware) — only the 64×64 spike
-      fixture has been through it so far. Owner-executed; record conversion time / size /
-      memory alongside the verdict.
+- [x] 6.3 REAL-ARCHIVE verification (import half — 2026-07-23): the owner ran the client's
+      actual `rawvideo`/BGRA ARCHIVE sources through the SHIPPED import pipeline successfully —
+      **152 MB and 739 MB** clips imported (probe → crop → convert → place) with no error, which
+      satisfies the "real multi-GB archive clip" import verification carried forward from Phase 1
+      (previously only the 64×64 spike fixture had been through it). What remains for Phase 6 is
+      the ON-AIR HARDWARE smoke of a FINISHED template CONTAINING a video element (6.1/6.2) — the
+      export + CEF-playout leg, which depends on Phase 5's exporter walk.

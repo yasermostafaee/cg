@@ -78,6 +78,7 @@ import { createLottiePlayer, lottieClipMeta, lottieTiming } from '@cg/lottie-bri
 import { registerLottiePlayer } from './lottie-registry.js';
 import { ClockDriver } from './clock-driver.js';
 import { LottieDriver } from './lottie-driver.js';
+import { VideoDriver, type VideoHandle, type ElementOutroDriver } from './video-driver.js';
 import {
   RepeaterDriver,
   registerRepeaterDriver,
@@ -148,7 +149,9 @@ interface ScopeNode {
    * hidden Lottie can never be resurrected by a parent override; hidden ANCESTORS are handled
    * by the `visible` skip in the collection walk.
    */
-  outroLotties: readonly LottieDriver[];
+  // D-128 — holds BOTH Lottie and Video outro drivers (the shared element-outro
+  // seam); typed to the common `ElementOutroDriver` so ONE ledger serves both.
+  outroLotties: readonly ElementOutroDriver[];
   /**
    * B-031 — resolves when THIS scope's controller SETTLES (after its own outro). A
    * content-driven parent waits on a nested CONTENT-DRIVEN (coordinator) child's settle,
@@ -284,6 +287,11 @@ function scopeHasEffectiveHoldDrivers(
   for (const l of scope.lotties)
     if (l.element.visible !== false && (overrides?.[l.element.id] ?? l.element.drivesHold === true))
       return true;
+  // D-128 — a video is an effective hold driver only when it OPTED IN (`=== true`),
+  // same inverse default as the Lottie; a hidden video is never a driver (B-034).
+  for (const v of scope.videos)
+    if (v.element.visible !== false && (overrides?.[v.element.id] ?? v.element.drivesHold === true))
+      return true;
   for (const child of scope.children)
     // B-034 — a HIDDEN instance's whole subtree is inert: don't descend (so a content-driven comp
     // whose only drivers live inside hidden instances resolves to timed, matching the runtime hold).
@@ -314,6 +322,8 @@ interface WiredSubtree {
   repeaters: RepeaterDriver[];
   /** D-125 — Lottie drivers of this subtree (driven-frame players). */
   lotties: LottieDriver[];
+  /** D-128 — Video drivers of this subtree (self-clocked media players). */
+  videos: VideoDriver[];
   /** Stop + destroy every driver and controller of this subtree, deregister. */
   destroy(): void;
 }
@@ -518,6 +528,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     const sequences: SequenceDriver[] = [];
     const repeaters: RepeaterDriver[] = [];
     const lotties: LottieDriver[] = [];
+    const videos: VideoDriver[] = [];
     const controllers: PlayoutController[] = [];
 
     const wireScope = (
@@ -801,9 +812,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // `whenComplete()` to the content-driven hold when it OPTS IN (`drivesHold === true`)
       // and registers in `scopeOutroLotties` for the element-outro seam (§D6.2).
       const scopeLotties: LottieDriver[] = [];
-      const scopeOutroLotties: LottieDriver[] = [];
+      // D-128 — the shared element-outro array for THIS scope: Lottie AND Video
+      // outro drivers both register here (§D6.2), keyed identically in the one ledger.
+      const scopeOutroLotties: ElementOutroDriver[] = [];
       /** §D6.3 — only the Lotties that OPTED IN (`drivesHold === true`) gate this hold. */
       const holdLotties: LottieDriver[] = [];
+      // D-128 — this scope's Video drivers (all, for the cascades) + the opted-in
+      // subset that gates the hold (mirrors scopeLotties / holdLotties).
+      const scopeVideos: VideoDriver[] = [];
+      const holdVideos: VideoDriver[] = [];
       /**
        * D-125 Phase 3a — each VISIBLE, phase-marked Lottie's intro completion, in COMPOSITION
        * frames OFFSET from `active.in` (the frame the Lottie's intro starts — `play()` resets +
@@ -906,6 +923,71 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         }
       }
 
+      // D-128 Phase 4 — the video lifecycle, mirroring the Lottie block above but
+      // INVERTING who owns the playhead (§D3 / decision (e)): the <video> advances
+      // itself and the driver keeps it in lockstep with the injected clock.
+      for (const v of scope.videos) {
+        const el = v.element;
+        const durationMs = el.durationMs;
+        const hasPhases = el.phases !== undefined;
+        // Absent phases (decision (b)): the whole clip is the intro, the hold loops
+        // the whole clip, and there is NO outro (outroStart = duration ⇒ degenerate).
+        const introEndMs = el.phases?.introEnd ?? durationMs;
+        const outroStartMs = el.phases?.outroStart ?? durationMs;
+        const idle = el.phases?.idle;
+        const loopStartMs = idle ? idle.start : hasPhases ? introEndMs : 0;
+        const loopEndMs = idle ? idle.end : hasPhases ? outroStartMs : durationMs;
+        const hasOutro = outroStartMs < durationMs;
+        const media = v.container;
+        const handle: VideoHandle = {
+          play: () => {
+            try {
+              const p = media.play();
+              if (p !== undefined && typeof p.catch === 'function') void p.catch(() => undefined);
+            } catch {
+              /* no src (Phase-5 export wiring) / autoplay policy / jsdom — non-fatal */
+            }
+          },
+          pause: () => media.pause(),
+          seek: (sec) => {
+            media.currentTime = sec;
+          },
+          currentTime: () => media.currentTime,
+        };
+        const driver = new VideoDriver({
+          handle,
+          durationMs,
+          introEndMs,
+          outroStartMs,
+          loopStartMs,
+          loopEndMs,
+          holdBehavior: el.holdBehavior,
+          clock: options.clock,
+        });
+        scopeVideos.push(driver);
+        videos.push(driver);
+        // D-105 — content root so the coordinated exit can select it (data-cg-content='video').
+        media.dataset['cgContent'] = 'video';
+        // §D6.2 — a video that OWNS an outro animates itself off; guard it from the
+        // blanket fade/hide (design.md decision (d)). A no-outro video keeps the
+        // normal content fade — nothing to fight.
+        if (hasOutro) media.dataset['cgOutro'] = '1';
+        // B-034 — a HIDDEN video is FULLY INERT (never gates a hold, never awaited on exit).
+        if (el.visible !== false) {
+          // D-128 (c) — `drivesHold` is OPT-IN (`=== true`), the INVERSE of ticker/clock/
+          // sequence: absent ⇒ the video does NOT drive the hold; a ticker on top drives it
+          // and the video holds beneath. Do not normalize to the opt-out kinds.
+          const drivesHold = el.drivesHold === true;
+          if (drivesHold) holdVideos.push(driver);
+          contentDrivers.push({
+            id: el.id,
+            drivesHold,
+            whenComplete: () => driver.whenComplete(),
+          });
+          if (hasOutro) scopeOutroLotties.push(driver);
+        }
+      }
+
       // D-028/D-027/D-029 — this scope's OWN content completion from its CONTENT
       // SOURCES that DRIVE the hold. D-107 — only content with `drivesHold !== false`
       // (absent ⇒ participates) gates the hold, so a permanent/looping/decorative
@@ -937,7 +1019,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         holdTickers.length > 0 ||
         holdCountdowns.length > 0 ||
         holdSequences.length > 0 ||
-        holdLotties.length > 0
+        holdLotties.length > 0 ||
+        holdVideos.length > 0
           ? Promise.all([
               ...holdTickers.map((t) => t.whenComplete()),
               ...holdCountdowns.map((c) => c.whenComplete()),
@@ -945,6 +1028,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
               // D-125 §D6.3 — only OPTED-IN (`drivesHold === true`) Lotties are in this
               // array: a freeze Lottie completes at `introEnd`, an idle-loop one never does.
               ...holdLotties.map((l) => l.whenComplete()),
+              // D-128 — an opted-in `freeze` video completes at the hold point; a `loop`
+              // video never does (an infinite hold-driver, like an idle-loop Lottie).
+              ...holdVideos.map((v) => v.whenComplete()),
             ]).then(() => undefined)
           : null;
       const stopScopeContent = (): void => {
@@ -957,6 +1043,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // §D6.2b's beforeOutro gate) — so this only stops an idle-loop / a driver whose
         // outro was superseded.
         for (const l of scopeLotties) l.stop();
+        // D-128 — halt the video rAF on settle (mirror the Lottie halt): a loop hold or
+        // a superseded outro must not keep ticking after the background settles CLEARED.
+        for (const v of scopeVideos) v.stop();
       };
       // B-031 — resolves when THIS scope settles (after its outro), so a content-driven
       // parent can hold until a nested content-driven (coordinator) child has played out.
@@ -1186,6 +1275,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             l.reset();
             l.start();
           }
+          // D-128 — this scope's OWN videos re-arm at the loop-cycle boundary too
+          // (reset re-mints whenComplete + parks at intro start; start replays it).
+          for (const v of scopeVideos) {
+            v.reset();
+            v.start();
+          }
         },
         clock: options.clock,
       });
@@ -1285,6 +1380,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       sequences,
       repeaters,
       lotties,
+      videos,
       destroy(): void {
         // Symmetric teardown: rows first (each tears down its OWN subtree),
         // then controllers (stop timers/rAF before the drivers release their
@@ -1296,6 +1392,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         for (const s of sequences) s.destroy();
         // D-125 — destroy the lottie-web instances (idempotent).
         for (const l of lotties) l.destroy();
+        // D-128 — tear down the video drivers (stops ticking + pauses; DOM removed above).
+        for (const v of videos) v.destroy();
         subtrees.delete(sub);
       },
     };
@@ -1368,6 +1466,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // has no driver still ticking. The outro already played — every exit path (operator
       // AND §D6.2b auto-exit) awaits it before its background leg reaches this settle.
       for (const l of sub.lotties) l.stop();
+      // D-128 — halt every video on the root settle (the CLEARED terminal state has no
+      // driver still ticking; the outro already played on every exit path).
+      for (const v of sub.videos) v.stop();
     }
     rootOnSettle();
   };
@@ -1437,8 +1538,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
    * are shown/hidden by the sequence driver and own their D-116 item transitions, so a
    * transient (possibly off-screen) item must not gate the composition's exit.
    */
-  const collectSubtreeOutros = (from: ScopeNode): LottieDriver[] => {
-    const out: LottieDriver[] = [];
+  const collectSubtreeOutros = (from: ScopeNode): ElementOutroDriver[] => {
+    const out: ElementOutroDriver[] = [];
     const walk = (n: ScopeNode): void => {
       out.push(...n.outroLotties);
       for (const child of n.children) {
@@ -1471,7 +1572,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // The full registry (root walk) for the runtime-level exits; each controller's
   // §D6.2b `beforeOutro` walks from ITS OWN node instead, so a nested scope that
   // auto-exits awaits its own subtree's outros — not the root's, not its siblings'.
-  const collectElementOutros = (): LottieDriver[] => collectSubtreeOutros(rootNode);
+  const collectElementOutros = (): ElementOutroDriver[] => collectSubtreeOutros(rootNode);
   /**
    * D-125 §D6.2b — THE ONE-SHOT OUTRO LEDGER. An exit episode can be triggered more
    * than once for the same drivers: an auto-exit (`startOutro()` from a hold expiry /
@@ -1489,8 +1590,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
    * resolves (§D6.4.1 — degenerate/destroyed/superseded all settle), so a ledger
    * entry can never strand an awaiting exit.
    */
-  const outroLedger = new Map<LottieDriver, { promise: Promise<void>; done: boolean }>();
-  const playElementOutrosOnce = (drivers: LottieDriver[]): Promise<void> | null => {
+  const outroLedger = new Map<ElementOutroDriver, { promise: Promise<void>; done: boolean }>();
+  const playElementOutrosOnce = (drivers: readonly ElementOutroDriver[]): Promise<void> | null => {
     const waits: Promise<void>[] = [];
     for (const d of drivers) {
       let entry = outroLedger.get(d);
@@ -1609,6 +1710,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           l.reset();
           l.start();
         }
+      // D-128 §D1 — like the Lottie, a video's intro starts at PLAY (not at hold
+      // entry): it plays [0 → introEnd] once, then holds (loop / freeze) beneath the
+      // background entrance.
+      for (const sub of subtrees)
+        for (const v of sub.videos) {
+          v.reset();
+          v.start();
+        }
       // Play the IN once and hold (no full-range loop, no auto-outro by default);
       // the mode orchestration (auto-out / loop-cycle / content-driven) then runs.
       // Absent lifecycle: the whole timeline is the entrance and the hold is its
@@ -1722,6 +1831,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       for (const sub of subtrees) for (const s of sub.sequences) s.pause();
       // D-125 §D3 — freeze the Lottie playhead in lockstep (no wall-clock drift).
       for (const sub of subtrees) for (const l of sub.lotties) l.pause();
+      // D-128 §D3 — pause the <video> AND capture its clock elapsed, so resume re-seeks.
+      for (const sub of subtrees) for (const v of sub.videos) v.pause();
     },
 
     resume(): void {
@@ -1734,6 +1845,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // D-125 §D3 — continue the Lottie playhead from the frozen frame (a settled
       // freeze-hold stays frozen; a still-running intro / idle-loop continues).
       for (const sub of subtrees) for (const l of sub.lotties) l.resume();
+      // D-128 §D3 — resume each video by RE-SEEKING to the clock-derived clip-time then
+      // playing (the anti-drift re-anchor); a settled freeze-hold stays frozen.
+      for (const sub of subtrees) for (const v of sub.videos) v.resume();
       // D-105 — finish an out() exit that was deferred because pause arrived mid-fade.
       if (pendingExitOutro) {
         pendingExitOutro = false;

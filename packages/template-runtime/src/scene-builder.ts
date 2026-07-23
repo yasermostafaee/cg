@@ -69,6 +69,7 @@ function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
     sequences: [],
     repeaters: [],
     lotties: [],
+    videos: [],
     lifespanGates: [],
     source,
   };
@@ -186,10 +187,9 @@ function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null 
       // (M3.2-β) and video routing (post-v1) will replace these.
       return buildPlaceholder(element, ctx.doc);
     case 'video':
-      // D-128 Phase 3 — render a real <video> at its mid-clip poster frame.
-      // Phase 4 adds the VideoDriver (playback lifecycle); until then the clip
-      // sits statically on its poster frame.
-      return buildVideo(element, ctx.doc);
+      // D-128 Phase 3 — render a real <video> at its mid-clip poster frame; Phase
+      // 4 registers it on the scope so createRuntime attaches a VideoDriver.
+      return buildVideo(element, ctx);
   }
 }
 
@@ -1046,8 +1046,8 @@ function buildImage(element: ImageElement, doc: Document): HTMLElement {
  * never shown (decision (a): `phases.introEnd ?? clip midpoint`). Muted + inert;
  * the playback lifecycle (VideoDriver) is Phase 4.
  */
-function buildVideo(element: VideoElement, doc: Document): HTMLElement {
-  const el = doc.createElement('video');
+function buildVideo(element: VideoElement, ctx: BuildCtx): HTMLElement {
+  const el = ctx.doc.createElement('video');
   el.dataset['cgElementId'] = element.id;
   applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
   el.style.objectFit = 'contain';
@@ -1056,6 +1056,10 @@ function buildVideo(element: VideoElement, doc: Document): HTMLElement {
   el.muted = true;
   el.setAttribute('playsinline', '');
   el.setAttribute('preload', 'metadata');
+  // D-128 Phase 4 — register on the scope so createRuntime attaches a VideoDriver
+  // (mirrors buildLottie's ctx.scope.lotties.push). The <video> IS an
+  // HTMLVideoElement — the driver commands play/pause/seek on it.
+  ctx.scope.videos.push({ element, container: el });
   return el;
 }
 

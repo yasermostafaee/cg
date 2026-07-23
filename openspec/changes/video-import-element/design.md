@@ -514,6 +514,66 @@ midpoint`, the exact ms-space analogue of the D-125 Lottie poster rule at `runti
   (`useEffect` → `ready`). "Use existing" only ever places the asset matching the on-screen
   parameters (`duplicateMatch`, recomputed each render), never a stale one.
 
+## Phase-4 implementation record (2026-07-23, `feat/d128-p4-video-lifecycle`)
+
+- **`VideoDriver` (`video-driver.ts`) — same contract, INVERTED playhead ownership.** It joins
+  the duck-typed content-driver contract (`reset`/`start`/`pause`/`resume`/`stop`/`destroy`/
+  `whenComplete` + `playOutro()`) exactly as the D-125 `LottieDriver`, but where the Lottie is a
+  driven-frame RENDERER (the driver computes each frame and pushes `goToAndStop`), a `<video>`
+  ADVANCES ITSELF on its own `currentTime`. So the driver does not paint per rAF; it commands
+  play/pause/seek over a `VideoHandle` (`{ play, pause, seek, currentTime }`) and keeps the
+  element in lockstep off the SAME injected clock. The `VideoHandle` abstraction is what makes it
+  deterministically testable (a mock handle + fake clock covers the MAPPING — elapsed active
+  time → expected clip-time → seek/play/pause — never the real decode, the ticker's test split).
+- **The one outro ledger, widened (C1/C6, task 4.3).** A shared interface
+  `ElementOutroDriver { playOutro(): Promise<void> }` (the ONLY member the seam touches) now
+  types the ledger `Map` key, `ScopeNode.outroLotties`, the per-scope outro array
+  (`scopeOutroLotties`, now holding both kinds), and `collectSubtreeOutros`/`collectElementOutros`.
+  Both `LottieDriver` and `VideoDriver` structurally satisfy it, so an outro-owning video pushes
+  into the SAME array as a Lottie and drains through the SAME `playElementOutrosOnce` ledger —
+  ONE ledger, two driver kinds, exactly-once per exit episode. No cross-talk (the ledger keys by
+  driver IDENTITY): a Lottie and a video in one composition each play their outro once, proven by
+  `video-lifecycle.test.ts`. `whenComplete` (hold) stays a SEPARATE seam (`contentDrivers` /
+  `holdVideos`) — a video plays its outro on every exit regardless of `drivesHold`.
+- **Phase mapping (task 4.2), in the clip's own ms space.** intro `[0 → introEnd]`; hold LOOPS
+  `[loopStart → loopEnd]` (default) or FREEZES at `introEnd`; outro `[outroStart → duration]`.
+  The runtime computes the spans from `element.phases` + `durationMs`: with phases,
+  `introEnd/outroStart` as authored and `loop = [introEnd, outroStart]` (or the optional `idle`
+  window); ABSENT phases (decision (b)) ⇒ `introEnd = duration`, `loop = [0, duration]`,
+  `outroStart = duration` — the whole clip is the intro, the hold loops the whole clip, and the
+  outro is degenerate (resolves immediately ⇒ no outro; the composition's existing content exit
+  carries it). The intro starts at PLAY (like the Lottie), not at hold entry.
+- **Anti-drift threshold — 80 ms, justified by the Phase-1 spike (decision (e)).** A `<video>`
+  owns its clock, so it can drift from the injected clock during free playback. Correction is
+  BOUNDED: each tick compares `video.currentTime` against the clock-derived expected clip-time
+  and re-seeks ONLY when the error exceeds **80 ms** — never per-tick, so there is no visible
+  stutter. 80 ms is the spike's measured figure: over a 60 s hold loop it recorded 49 wraps,
+  |drift| mean 12.8 ms / **max 26.6 ms**, wrap seek ~1 ms, and **ZERO corrections** at 80 ms;
+  seek accuracy was 0 frames off across 20 targets. So 80 ms sits comfortably above the observed
+  max drift (26.6 ms) — it fires only on a genuine hiccup, never on normal jitter. Loop WRAP is
+  always driver-commanded (seek to loop start when the head reaches loop end), never
+  `<video loop>` (whose wrap timing the driver cannot observe). Every corrective/wrap seek
+  RE-ISSUES `play()` (idempotent when already playing): because the loop is driver-commanded, a
+  real `<video>` that reaches the media's natural end — the ABSENT-PHASES default, where
+  `loopEnd === duration` — fires `ended` and PAUSES, and a plain seek clears `ended` but leaves it
+  paused. Without the re-play the default whole-clip loop would run once then freeze at frame 0
+  (caught by the Phase-4 adversarial review; the driver test's mock now models the end-of-media
+  auto-pause so the regression is guarded). Pause captures the clock elapsed;
+  resume re-anchors and RE-SEEKS to the clock-derived clip-time before playing (never trusting a
+  stalled head). `playOutro()` ALWAYS resolves (degenerate/destroyed/superseded settle
+  immediately — the B-030 defense).
+- **Binding is registry-based, not a DOM walk (C3).** `scene-builder#buildVideo` registers each
+  `<video>` on `scope.videos` (a new `FieldScope.videos: VideoEntry[]`), and `createRuntime` runs
+  a `for (const v of scope.videos)` loop mirroring the Lottie loop — constructing the driver,
+  marking `data-cg-content`/`data-cg-outro`, and joining the hold aggregation + cascades
+  (play/pause/resume/stop/destroy, `onCycleRestart` re-arm, `scopeHasEffectiveHoldDrivers`). The
+  `img[data-cg-asset-id]` asset-src walk is a SEPARATE, export-side concern — left for Phase 5.
+- **What Phase 5 owes:** widen `runtime.ts`'s on-air/export asset-src walk from
+  `img[data-cg-asset-id]` to also wire `<video data-cg-asset-id>` (packaged relative path for
+  `.vcg`, base64 `data:` for single-file), so a video renders + plays on-air. Phase 4 covers the
+  DRIVER + the designer-canvas playback (`preview.ts` already wires the `<video>` src there);
+  the runtime/exported `<video>` src is Phase 5's.
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide
