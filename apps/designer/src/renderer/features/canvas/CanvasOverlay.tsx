@@ -13,6 +13,7 @@ import {
   defaultEllipse,
   defaultImage,
   defaultLottie,
+  fitVideoElement,
   defaultRepeater,
   defaultSequence,
   defaultShape,
@@ -23,6 +24,7 @@ import { COMPOSITION_DND_TYPE } from '../compositions/CompositionsPanel.js';
 import { getActiveSharedImage } from '../sharedLibrary/activeSharedImage.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
 import * as lottieAssetCache from '../assets/lottieAssetCache.js';
+import { probeStoredVideo } from '../assets/video-asset-probe.js';
 import { effectivePathBoxPoints, effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
 import {
@@ -158,6 +160,48 @@ async function insertLottieFromAsset(
       ...(phases ? { phases } : {}),
       width,
       height,
+    }),
+  );
+  designerStore.setSelection([id]);
+}
+
+/**
+ * D-128 — place a `video` element from a dropped project asset (the second entry
+ * point beside the import modal's place-on-confirm). The STORED asset is the
+ * canonical WebM the importer produced, so a `<video>` metadata probe yields its
+ * duration/dimensions directly. Sizing + construction go through the SHARED
+ * {@link fitVideoElement} (fit the clip's INTRINSIC size to the project frame),
+ * so a dropped clip is identical to the same clip placed from the import modal —
+ * the drag path used to size via {@link lottieSize}'s 480px cap and landed a
+ * 1920-wide clip at 1/4 size. An unreadable asset surfaces a notice and inserts
+ * nothing.
+ */
+async function insertVideoFromAsset(
+  assetId: string,
+  scenePoint: { x: number; y: number },
+  resolution: { width: number; height: number },
+): Promise<void> {
+  const url = await window.cg.assets.url(assetId);
+  if (url === null) {
+    designerStore.showNotice('That video asset could not be read.');
+    return;
+  }
+  const meta = await probeStoredVideo(url);
+  if (meta === null || !(meta.durationMs > 0)) {
+    designerStore.showNotice('That video asset could not be decoded.');
+    return;
+  }
+  const id = `el-${String(Date.now())}`;
+  designerStore.addElement(
+    fitVideoElement({
+      id,
+      x: scenePoint.x,
+      y: scenePoint.y,
+      assetId,
+      durationMs: meta.durationMs,
+      sourceWidth: meta.width,
+      sourceHeight: meta.height,
+      resolution,
     }),
   );
   designerStore.setSelection([id]);
@@ -589,6 +633,11 @@ export function CanvasOverlay({
     // parsed animation); every other asset kind is an image (today's path, unchanged).
     if (e.dataTransfer.getData('application/x-cg-asset-kind') === 'lottie') {
       void insertLottieFromAsset(assetId, scenePoint);
+      return;
+    }
+    // D-128 — a dropped video asset places a `video` element (async metadata probe).
+    if (e.dataTransfer.getData('application/x-cg-asset-kind') === 'video') {
+      void insertVideoFromAsset(assetId, scenePoint, scene.resolution);
       return;
     }
     const id = `el-${String(Date.now())}`;

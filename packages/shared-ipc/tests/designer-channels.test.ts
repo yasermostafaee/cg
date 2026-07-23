@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AssetMetaSchema,
   AssetsImportChannel,
   AssetsImportedChannel,
   AssetsListChannel,
   AssetsRemoveChannel,
+  AssetsStoreBytesChannel,
   ExportPreflightChannel,
   ExportProgressChannel,
   ExportRunChannel,
@@ -116,6 +118,42 @@ describe('assets.* channel schemas', () => {
     expect(() =>
       AssetsImportedChannel.payload.parse({ ...sampleAsset, sha256: 'not-a-hash' }),
     ).toThrow();
+  });
+
+  it('D-128 — an asset WITHOUT provenance still parses (back-compat with every stored asset)', () => {
+    const parsed = AssetMetaSchema.parse(sampleAsset);
+    expect(parsed.provenance).toBeUndefined();
+  });
+
+  it('D-128 — a video asset with full provenance parses and round-trips', () => {
+    const video = {
+      ...sampleAsset,
+      kind: 'video' as const,
+      filename: 'archive-clip.webm',
+      workingPath: 'projects/p1/assets/video/abc.webm',
+      provenance: {
+        sourceFilename: 'archive-clip.avi',
+        sourceFps: 29.97,
+        targetFps: 50,
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+        crop: { x: 100, y: 50, width: 640, height: 480 },
+      },
+    };
+    expect(AssetMetaSchema.parse(video)).toEqual(video);
+    // crop is optional — a full-frame conversion carries provenance without it
+    const noCrop = { ...video, provenance: { ...video.provenance, crop: undefined } };
+    expect(AssetMetaSchema.parse(noCrop).provenance?.crop).toBeUndefined();
+  });
+
+  it('D-128 — assets.storeBytes takes raw bytes + filename + kind (+ provenance)', () => {
+    const req = AssetsStoreBytesChannel.request.parse({
+      bytes: new Uint8Array([1, 2, 3]),
+      filename: 'clip.webm',
+      kind: 'video' as const,
+    });
+    expect(req.bytes).toBeInstanceOf(Uint8Array);
+    expect(AssetsStoreBytesChannel.response.parse({ asset: sampleAsset })).toBeTruthy();
   });
 });
 

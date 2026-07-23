@@ -184,6 +184,11 @@ function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null 
       // doesn't shift and the element id can still be bound. Animation
       // (M3.2-β) and video routing (post-v1) will replace these.
       return buildPlaceholder(element, ctx.doc);
+    case 'video':
+      // D-128 Phase 2 — the element exists but its moving-picture render is
+      // Phase 3 (canvas/poster) + Phase 4 (VideoDriver lifecycle). Until then a
+      // positioned placeholder box keeps layout/binding stable.
+      return buildPlaceholder(element, ctx.doc);
   }
 }
 

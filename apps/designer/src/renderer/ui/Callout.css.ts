@@ -16,7 +16,9 @@ export const base = style({
   padding: '0.4rem 0.55rem',
   borderRadius: '0.25rem',
   borderLeft: '3px solid transparent',
-  fontSize: '0.7rem',
+  // Message text is READ, not scanned — 0.9rem app-wide for message surfaces
+  // (owner call, 2026-07-22: modal/callout copy at 0.7rem was too small).
+  fontSize: '0.9rem',
   lineHeight: 1.4,
 });
 

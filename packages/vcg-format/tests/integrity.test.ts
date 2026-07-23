@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { computeIntegrity, computeIntegrityRoot, sha256Hex } from '../src/integrity.js';
+import {
+  computeIntegrity,
+  computeIntegrityRoot,
+  sha256Hex,
+  sha256HexOfChunks,
+} from '../src/integrity.js';
 
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
+
+async function* toChunks(parts: readonly Uint8Array[]): AsyncGenerator<Uint8Array> {
+  for (const p of parts) {
+    await Promise.resolve();
+    yield p;
+  }
+}
 
 describe('sha256Hex', () => {
   it('matches a known empty-string digest', () => {
@@ -16,6 +28,35 @@ describe('sha256Hex', () => {
     expect(sha256Hex(enc('abc'))).toBe(
       'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
     );
+  });
+});
+
+describe('sha256HexOfChunks', () => {
+  it('equals the one-shot digest over the concatenation, regardless of chunk boundaries', async () => {
+    const whole = enc('the quick brown fox jumps over the lazy dog');
+    const oneShot = sha256Hex(whole);
+    // split at an arbitrary, uneven boundary
+    const streamed = await sha256HexOfChunks(
+      toChunks([whole.subarray(0, 7), whole.subarray(7, 8), whole.subarray(8)]),
+    );
+    expect(streamed).toBe(oneShot);
+  });
+
+  it('matches the known "abc" digest across three single-byte chunks', async () => {
+    const streamed = await sha256HexOfChunks(toChunks([enc('a'), enc('b'), enc('c')]));
+    expect(streamed).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  });
+
+  it('handles an empty stream (empty-string digest)', async () => {
+    expect(await sha256HexOfChunks(toChunks([]))).toBe(
+      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    );
+  });
+
+  it('reports cumulative bytes hashed through onProgress', async () => {
+    const seen: number[] = [];
+    await sha256HexOfChunks(toChunks([enc('ab'), enc('cde'), enc('f')]), (n) => seen.push(n));
+    expect(seen).toEqual([2, 5, 6]); // running totals, one per chunk
   });
 });
 

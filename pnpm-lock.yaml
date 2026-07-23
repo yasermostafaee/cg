@@ -80,6 +80,15 @@ importers:
       '@cg/vcg-format':
         specifier: workspace:*
         version: link:../../packages/vcg-format
+      '@ffmpeg/core':
+        specifier: 0.12.10
+        version: 0.12.10
+      '@ffmpeg/ffmpeg':
+        specifier: 0.12.15
+        version: 0.12.15
+      '@ffmpeg/util':
+        specifier: 0.12.2
+        version: 0.12.2
       '@vanilla-extract/css':
         specifier: ^1.20.1
         version: 1.20.1

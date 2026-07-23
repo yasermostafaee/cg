@@ -31,10 +31,11 @@ export function AssetThumb({
   const isImage = asset.kind === 'image';
   const isFont = asset.kind === 'font';
   const isLottie = asset.kind === 'lottie';
+  const isVideo = asset.kind === 'video';
   const isList = layout === 'list';
   // D-125 — image AND lottie tiles drag onto the canvas (the canvas drop reads the
-  // asset kind from the payload to build the right element).
-  const isDraggable = isImage || isLottie;
+  // asset kind from the payload to build the right element). D-128 adds video.
+  const isDraggable = isImage || isLottie || isVideo;
   // For fonts we register a CSS font-family scoped by assetId so the
   // sample text in the thumbnail uses the actual face.
   const fontFamily = isFont ? `asset-${asset.assetId}` : undefined;

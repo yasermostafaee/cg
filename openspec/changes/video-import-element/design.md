@@ -202,14 +202,230 @@ hold-loop drift harness (driver-commanded rAF wrap): 49 wraps, |drift| mean 12.8
 "resume/wrap-only" correction cadence suffices at this clip size; re-measure on the real
 archive clip. Raw data: the spike's `results/*.json`; runbook + caveats in its README.
 
+**DECIDED (owner, real CasparCG 2.3.2 hardware, 2026-07-22) — the codec is VP8+alpha.** The
+owner ran both Phase-1 artifacts on real 2.3.2: **VP8+alpha renders with correct alpha
+punch-through and clean edges**; **VP9 is REJECTED** — its in-app encode is broken (the
+0.12.10 core OOB above), so its playback verdict is moot. The conversion command is
+`libvpx` + `-auto-alt-ref 0` + `yuva420p` + `-an` (+ the Decision-(d) `-r` conform). VP9
+stays out until a future `@ffmpeg/core` fixes the encode OOB — revisit only then, as a NEW
+decision. This closes the former "CEF ~71 VP9+alpha" OPEN item.
+
+## Phase-2 implementation record (2026-07-22, `feat/d128-p2-video-schema-ingest`)
+
+**Claims re-verified for this phase (C1–C5, all TRUE):** (C1) `VideoPlaceholderElementSchema`
+untouched at `elements.ts` — the new `VideoElementSchema` sits beside it; (C2) the asset layer
+already accepted video (`AssetKindSchema`, `KIND_BY_EXT` mp4/webm, the bridge MIME branch) but
+had NO raw-bytes ingest — added as `AssetStore.importBytes` (below); (C3) the Lottie pattern
+mirrored end-to-end: panel `importKind` → validation → `assets.store`, asset-only creation
+(no toolbar tool), drag-from-panel via `application/x-cg-asset-kind`, `defaultLottie` factory,
+`addElement`; (C4) the spike's WORKERFS + VP8 invocation lifted into
+`renderer/features/assets/video-convert.ts` with the REAL Vite wiring: `optimizeDeps.exclude`
+for `@ffmpeg/ffmpeg`+`@ffmpeg/util` (keeps the wrapper's `new Worker(new URL('./worker.js',
+import.meta.url))` resolvable), core js+wasm as `?url` build assets fetched same-origin via
+`toBlobURL` — build verified emitting `dist/assets/worker-*.js` + `ffmpeg-core-*.{js,wasm}`;
+(C5) the Designer shipped NO wasm/worker before this — ffmpeg is the first; `index.html`'s CSP
+already admits it (`worker-src 'self' blob:`, `script-src … 'unsafe-eval' blob:`) — the no-CDN
+rule is enforced by CODE (only same-origin URLs are ever passed), not by CSP.
+
+**Layer decisions taken (with owner sign-off where noted):**
+
+- **Raw-bytes ingest + provenance (OWNER-DECIDED):** `AssetStore.importBytes(bytes, filename,
+kind, provenance?)` is the ONE write path — `importFile` delegates to it — same
+  dedupe-by-sha / path scheme / index+persist+emit, so both ingests inherit any B-104 fix
+  together. Bridge: `assets.storeBytes` (`AssetsStoreBytesChannel`). `AssetMetaSchema` gains an
+  optional `provenance?: VideoProvenanceSchema` (`sourceFilename`, `sourceFps`, `targetFps`,
+  `sourceWidth/Height`, optional `crop` in source px) — the re-edit lineage; the crop is BOTH
+  baked into the bytes (what plays) AND recorded here (what a future re-crop starts from).
+  Playout facts stay on the ELEMENT per D1 (`durationMs`, `phases`, `holdBehavior`,
+  `drivesHold`).
+- **The element carries NO crop field** (decided per D1's intent): the stored WebM is the
+  single truth; crop lives only in provenance.
+- **Frame-rate CONFORM + WARN (OWNER-DECIDED, decision (d)):** every conversion writes `-r
+<Scene.frameRate>` (the single project-level rate, read synchronously from the store);
+  a source-rate mismatch shows a consequence-stating warning and NEVER blocks; an unknown
+  source rate conforms silently.
+- **Per-project asset ONLY (OWNER-DECIDED):** video never enters the device-level library —
+  the conformed WebM is project-rate-specific, hence non-portable. Two entry points to the
+  same element: the modal's place-on-confirm (scene centre) and drag-from-assets
+  (`insertVideoFromAsset`, `<video>` metadata probe of the stored WebM).
+- **Converter placement:** `renderer/features/assets/` (not `src/platform/`) — the LOTTIE
+  precedent: pre-store validation/processing runs renderer-side (`@cg/lottie-bridge` is
+  imported by the panel); persistence still crosses the bridge seam via `assets.storeBytes`.
+- **Probe resilience (from the owner's first real-archive attempt):** a probe failure carries
+  the ffmpeg LOG TAIL into the modal (never a dead-end message); a failed poster extraction
+  downgrades to a preview-less (numeric-only) crop instead of aborting; `Duration: N/A`
+  sources convert anyway and the DURATION IS MEASURED FROM THE CONVERTED OUTPUT
+  (`measureDurationMs`), which is the authoritative clock regardless.
+- **Canvas render is a `buildPlaceholder` stub BY DESIGN** — the poster/canvas render is
+  Phase 3; Phase 2 registered the compile-forced union sites only (`field-registry`,
+  `TYPE_COLORS`, `scene-builder`).
+
+## Phase-2 completion fixes (2026-07-22, same branch — owner-diagnosed in real use, approved)
+
+- **CSP `media-src` (the decode-block root cause):** the app CSP had no `media-src`, so
+  `default-src 'self'` blocked every `blob:` `<video>` — stored WebMs were byte-perfect but
+  undecodable ("Media load rejected by URL safety check"). `index.html` now carries
+  `media-src 'self' blob: data:`. The canvas preview iframe is `srcDoc`
+  (`CanvasArea.tsx:937`) and srcdoc documents INHERIT the embedding page's CSP — so Phase 3's
+  in-canvas `<video>` render is covered by this same line; no per-frame CSP needed.
+- **Converter worker lifecycle — FRESH WORKER PER IMPORT (the final form):** a hard ffmpeg
+  abort taints the wasm worker; the cached singleton then threw `ErrnoError: FS error` on the
+  NEXT import. The first fix reset on FAILURE paths only — but the owner's real-file smoke
+  then showed back-to-back imports of KNOWN-GOOD files alternating good → FS error → good:
+  some wasm FS/runtime state survives even a fully SUCCESSFUL convert-with-hygiene, in ways
+  clean-room probes could not reproduce (same file ×3, 103 MB disk-backed, ASCII/U+2026/
+  Persian filenames, 1920×282 odd dimensions — all green). Rather than gamble on path tricks,
+  the state-carryover CLASS is eliminated by construction: `convertToWebm`'s `finally` drops
+  the worker on EVERY outcome (success, failure, cancel), so each import starts virgin; the
+  probe still shares its instance with its own convert (one core load per import, ~150–350 ms,
+  invisible next to the conversion). Failure paths additionally reset immediately, and the
+  probe failure carries a `reason` discriminator so the modal NEVER blames the file for a
+  converter crash (`no-stream` → file-level message + ffmpeg log tail; `converter-crashed` →
+  "reload and retry"). Contract pinned by `video-convert-reset.test.ts` (7 tests, incl.
+  never-share-across-imports); end-to-end by `tests/e2e/video-import.spec.ts` — the decode
+  guard (would have caught the CSP hole) AND the back-to-back same-good-file test (the exact
+  field gap the first suite missed).
+- **The shipped core is the FULL GPL build — do not re-open "do we need a fuller core":** the
+  configure line embedded in the shipped `ffmpeg-core.wasm` (0.12.10) is
+  `--enable-gpl --enable-libx264 --enable-libx265 --enable-libvpx …` with NO
+  `--disable-decoders`/allowlist, and a live `-decoders` run through the bundled core confirms
+  h264/hevc/vp8/vp9/av1/mpeg4/rawvideo/prores/qtrle video decode + aac/mp3/opus/vorbis/pcm
+  audio decode, with QuickTime-MOV/MP4, Matroska/WebM, AVI and raw-video demuxers. Per-file
+  probes of H.264 MP4, H.264 MOV, VP9/VP8 WebM and the rawvideo AVI all identify their streams
+  cleanly on fresh instances. The client's AVI/MOV/MP4 set is fully covered as-is
+  (single-threaded, same-origin, 32 MB — unchanged).
+
+## Phase-2 converter reentrancy (2026-07-23, same branch — StrictMode-exposed race, root-caused from the owner's non-deterministic smoke)
+
+- **The symptom that named the class:** the owner's real-machine smoke imported the SAME
+  known-good file (`Logo_HazratKhadije_1.avi`) repeatedly and got THREE different outcomes —
+  probe "no decodable video stream", probe OK with correct alpha preview, and
+  "ErrnoError: FS error". Non-determinism on one input is a RACE signature, not lifecycle;
+  fresh-worker-per-import (above) was necessary but could not have fixed this.
+- **Root cause — two concurrent `probeSource` calls stomping module globals:** React
+  `<StrictMode>` (`main.tsx`) double-invokes the modal's probe effect in dev — mount →
+  cleanup → mount — and the old cleanup only flipped `alive = false` without cancelling the
+  in-flight probe, so TWO probes raced `video-convert.ts`'s shared state. (A fast modal
+  close/reopen manufactures the same race in prod, so silencing StrictMode would only have
+  hidden a real bug.) The three field outcomes map one-to-one onto the three collisions:
+  non-mutex `ensureLoaded` built TWO workers and orphaned one alive; the module-global
+  `logSink` was overwritten by the second call, so the first probe's banner landed in the
+  wrong `lines[]` → empty log → `parseProbeLog` null → bogus "no-stream" (blaming a good
+  file); and `resetInstance()` from one call terminated whatever `instance` pointed at — the
+  OTHER call's live worker → its next FS op threw "ErrnoError: FS error". The unit suite
+  missed it because no test ever raced two calls; the clean probe environment missed it
+  because slower timing never overlapped the two probes.
+- **The fix — reentrancy-safe by construction, at BOTH layers:**
+  1. _Single-flight load:_ `ensureLoaded` shares ONE in-flight load promise; concurrent
+     callers can never construct two workers (the old check-then-act race).
+  2. _Per-call sinks:_ log/progress listeners are attached around each exec and detached in
+     `finally` — a verdict is computed only from the caller's OWN exec lines; no module-global
+     sink exists to steal. (Worker messages are ordered, so every log line of an exec arrives
+     before that exec's promise resolves — the "truncated log" was sink theft, never late
+     flushing.)
+  3. _Caller-scoped reset:_ failure paths call `dropWorker(held)` — they drop only the worker
+     THAT call was using, never a replacement a later call owns. `cancelConversion` remains an
+     intentional hard interrupt (`hardReset` + a generation counter so a load in flight during
+     a cancel discards itself).
+  4. _Operation mutex:_ probe/convert bodies run one-at-a-time (`withExclusive`), because they
+     share wasm FS paths (`/mnt`, `/poster.png`, `/out.webm`) on a single-threaded core —
+     without it, two interleaved calls could still unmount each other's input mid-exec.
+  5. _Abort-aware effect (the leak fixed at its source):_ `probeSource` takes an AbortSignal
+     and REJECTS on abort (checked between ops — an abort never terminates a healthy shared
+     worker); the modal's probe-effect cleanup now ABORTS its in-flight probe instead of
+     merely ignoring the result, and the modal's dynamic module import is single-flight too
+     (`loadConverter()` — racing mounts share one import, and a REJECTED import clears the
+     cache so a failed chunk fetch is retryable, mirroring `ensureLoaded`).
+  6. _Abort ≠ crash (adversarial-review catch):_ the reset-skip discriminates on the ERROR,
+     not the signal flag (`isAbortRejection`) — a real exec crash that merely coincides with
+     an aborted signal (the flag can flip mid-exec) still drops the worker; only the abort
+     thrown between ops leaves it cached. And the modal honors a cancel that lands AFTER the
+     encode resolves: `cancelled.current` is re-checked before the measure and before
+     `storeBytes` — an acknowledged cancel can never commit the asset anyway (once
+     `storeBytes` begins, the import commits; reverting a stored asset is not this seam's
+     job).
+- **Honest error reporting (kept from the diagnostic pass):** the previously-swallowed throws
+  now reach the console before the friendly modal message — `probeSource`/`convertToWebm`
+  `console.error` the real underlying error, a failed encode logs the ffmpeg log tail (making
+  the modal's "see the console log" message true), and a rejected probe exec is no longer
+  masked into "code 1 + empty log" (which used to misread a converter crash as "no-stream"
+  and blame a good file).
+- **Contract pinned by:** `video-convert-race.test.ts` (7 tests — two ALWAYS-CONCURRENT
+  probes both succeed on one shared worker with listeners detached after; a no-stream probe
+  racing a good one never kills the good one's worker AND carries the file's own log tail;
+  abort rejects `AbortError` without touching the cached worker, both pre-queued and
+  mid-queue; cancel mid-convert still yields a fresh next import; cancel DURING the worker
+  load discards the loading worker via the generation guard; a crashing probe surfaces the
+  real error) and, in `video-import-modal.test.ts`, the StrictMode double-mount test (first
+  probe REJECTED by cleanup's abort — silently, never a "converter crashed" callout — while
+  the survivor drives the modal to a working import) plus the cancel-after-encode test
+  (a cancel landing after `convertToWebm` resolves still stores nothing). The pre-existing
+  suites missed the bug precisely because they never raced two calls — the race tests exist
+  to keep it that way.
+
+## Phase-2 placement + progress-visibility fixes (2026-07-23, same branch — owner's field smoke)
+
+- **Drag-from-assets sized a clip at 1/4 the modal's size — ONE sizing seam now:** the two
+  entry points to a `video` element had diverged. The import modal's place-on-confirm fit the
+  clip's INTRINSIC dimensions to the project frame (`min(res/​src, 1)`); the drag-from-assets
+  drop instead reused `lottieSize`'s **480px-longest-side cap**, so a 1920×282 source dropped
+  at 480×71 — exactly 1/4 (1920→480) while the modal gave 1920×282. The divergence was the
+  defect, so both paths now call ONE shared `element-defaults.ts#fitVideoElement` (source
+  dims → frame-fit, never upscales, falls back to 480×270 only when the source size is
+  unknown). It reads the clip's real dimensions (the modal's probe figures; the drop's
+  `<video>` `videoWidth`/`videoHeight`) — canvas ZOOM never enters either path (drop points
+  are scene px, not screen px), so the created element is zoom-independent. IMAGE drag-drop
+  did NOT share the bug and is untouched: it uses `defaultImage`'s fixed 320×320 placeholder
+  (a different, long-standing default — not the 1/4 factor and not intrinsic-sized), so the
+  two paths differed for a different reason and converging them is out of scope here. Pinned
+  by `video-element-defaults.test.ts` (the 1920×282 case, drag/modal size parity, downscale,
+  no-upscale, unknown-dims fallback).
+- **Convert progress could scroll out of view — moved to the STICKY footer:** with the fps
+  warning + preview + crop fields present the modal body grew past a short viewport and
+  scrolled, dropping the "Converting… NN%" bar below the fold exactly when it matters most
+  (single-threaded encode = minutes). The Modal shell already bounds height (`maxHeight:82vh`)
+  with a `min-height:0; overflow:auto` body and a non-scrolling footer sibling; the fix simply
+  relocates the progress bar + % + status from the scrollable body INTO the footer, stacked
+  above the action row (`footerStack`). Progress and both buttons are now always visible at
+  every modal height; the warning + preview + crop fields stay in the scroll region and can no
+  longer push them off-screen (the preview stays capped at 300px tall, so a tall 900×900 or
+  wide 1920×282 source shrinks to fit rather than overflowing). Pinned structurally by
+  `video-import-modal.test.ts` (progress + both buttons are in the footer, the warning + crop
+  fields are not — a geometry-free assertion that survives jsdom's lack of layout).
+
+## Phase-2 pre-convert dedupe (2026-07-23, same branch — owner's field smoke: re-importing re-encodes)
+
+- **The gap:** AssetStore dedupes by the sha256 of the CONVERTED output, which only helps
+  AFTER the (minutes-long) encode. Re-picking the same source re-ran the whole conversion.
+- **The key:** the SOURCE file's sha256, computed BEFORE converting and stored in provenance
+  (`sourceSha256`, additive + optional so older assets parse unchanged). Bounded memory: the
+  file is read through `File.stream()` one chunk at a time and folded into an incremental
+  sha256 (`@cg/vcg-format#sha256HexOfChunks`) — never the whole file in JS heap, the same
+  principle as the WORKERFS mount. `hashSourceFile` reports 0..1 progress and honours abort.
+- **Measured cost:** ~1.93 GB hashes in **~16 s at ~130 MB/s** (pure-JS `@noble/hashes`),
+  peak working set one 1 MiB chunk. Proportional — those same multi-GB sources take MINUTES to
+  convert, so a pre-convert hash is <10% overhead, and it is instant for the small clips in the
+  field (the 200×200/40 s and 1920×282 archives). The hash is needed for provenance regardless,
+  so it is not wasted work; it doubles as the dedupe probe. (If multi-GB hashing ever proves
+  too costly, `sourceBytes` is stored alongside as the cheap partner to `sourceFilename` for a
+  future size+name pre-filter — noted, not built.)
+- **The match:** `findDuplicateVideoAsset` requires the SAME source hash AND target fps AND
+  crop (`cropsEqual` — both absent ⇒ full frame). A matching source with a DIFFERENT crop or
+  fps is NOT a duplicate (its output genuinely differs) and still converts.
+- **The UX (never silent):** on a match the modal shows a 'duplicate' step naming the clip with
+  two actions — **Use existing** (places an element from the prior asset via the shared
+  `probeStoredVideo`, ending in a placed element exactly like a normal import — no re-encode)
+  and **Convert again** (forces a second copy). No match ⇒ convert as before, now carrying
+  `sourceSha256` so the NEXT import dedupes. The pre-convert hash runs in a 'checking' step
+  whose progress uses the same sticky-footer affordance as the encode, and Cancel aborts it.
+- **The post-convert sha dedupe remains the backstop** (unchanged — `asset-store-video-ingest`).
+  Contract pinned by: `integrity.test.ts` (streamed digest == one-shot), `source-hash.test.ts`
+  (streamed, progress, abort, no `arrayBuffer()` slurp), `video-convert-args.test.ts`
+  (the match rules), and `video-import-modal.test.ts` (same-file duplicate → no convert +
+  Use-existing places; different-crop → converts; Convert-again forces an encode).
+
 ## OPEN — owner decision
 
-- **CEF ~71 VP9+alpha:** whether CasparCG 2.3.x's CEF renders VP9 + alpha (`yuva420p`)
-  correctly. VP8 + alpha (`-auto-alt-ref 0`) is the documented fallback if it does not. Per
-  B-066, modern Chrome proves NOTHING here — only the Phase-1 spike artifact on real hardware
-  answers this, and Phase 1 gates everything after it. NOTE post-spike: VP9 is currently
-  unproducible IN-APP regardless (finding above), so a pro-VP9 hardware verdict alone does
-  not unblock VP9 — it would additionally need an upstream `@ffmpeg/core` fix.
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide
   after the spike produces a real converted-archive artifact with measured sizes.
 - **Seek-correction UX bar:** if the spike measures visible stutter on drift correction inside a

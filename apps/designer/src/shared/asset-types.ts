@@ -37,9 +37,29 @@ const SPEC: Record<PickKind, KindSpec> = {
     mimes: ['application/json'],
   },
   video: {
-    accept: 'video/*',
-    extensions: ['mp4', 'webm'],
-    mimes: ['video/mp4', 'video/webm'],
+    // D-128 — the IMPORT side accepts any common ffmpeg-decodable container
+    // (including the client archive's rawvideo/BGRA .avi); the in-app converter
+    // produces the ONE canonical stored form (VP8+alpha WebM), so the STORED
+    // kind stays webm regardless of what was picked.
+    accept: 'video/*,.avi,.mov,.mkv,.mpg,.mpeg,.wmv,.flv,.m4v,.ts,.mts,.m2ts,.3gp,.ogv',
+    extensions: [
+      'mp4',
+      'webm',
+      'avi',
+      'mov',
+      'mkv',
+      'mpg',
+      'mpeg',
+      'wmv',
+      'flv',
+      'm4v',
+      'ts',
+      'mts',
+      'm2ts',
+      '3gp',
+      'ogv',
+    ],
+    mimes: ['video/mp4', 'video/webm', 'video/x-msvideo', 'video/quicktime', 'video/x-matroska'],
   },
 };
 

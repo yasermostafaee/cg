@@ -305,6 +305,11 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
       // returns the chosen files (one tile each), store imports one independently.
       pick: (kind) => pickFiles(kind),
       store: async (file, kind) => ({ asset: await assets.importFile(file, kind) }),
+      // D-128 — raw-bytes ingest for the in-app video converter's canonical WebM
+      // (+ optional source provenance). Same dedupe/index path as store().
+      storeBytes: async (req) => ({
+        asset: await assets.importBytes(req.bytes, req.filename, req.kind, req.provenance),
+      }),
       list: () => assets.list(),
       remove: async (req) => ({ ok: await assets.remove(req.assetId) }),
       onImported: (handler) => assets.imported.subscribe(handler),

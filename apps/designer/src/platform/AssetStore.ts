@@ -1,4 +1,4 @@
-import type { AssetMeta } from '@cg/shared-ipc';
+import type { AssetMeta, VideoProvenance } from '@cg/shared-ipc';
 import { sha256Hex } from '@cg/vcg-format';
 import type { Workspace } from '@cg/storage';
 import { Emitter } from './emitter.js';
@@ -95,17 +95,37 @@ export class AssetStore {
 
   /** Import a picked File. Dedupes identical bytes by sha256. */
   async importFile(file: File, kindHint?: AssetMeta['kind']): Promise<AssetMeta> {
+    // Delegates to the ONE byte-writing path so File- and bytes-ingest can never
+    // drift (dedupe, path scheme, index persistence — and any B-104 fix — are shared).
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const ext = extOf(file.name);
+    const kind = kindHint ?? KIND_BY_EXT[ext] ?? 'image';
+    return this.importBytes(bytes, file.name, kind);
+  }
+
+  /**
+   * D-128 — the real byte-writing ingest: store already-produced bytes (e.g. the
+   * canonical WebM the in-app converter emitted) as an asset. Same dedupe-by-sha,
+   * same `projects/<projectId>/assets/<kind>/<sha>.<ext>` scheme, same
+   * index+persist+emit as `importFile` (which delegates here). Optional
+   * `provenance` records the source lineage for converted video (crop rect,
+   * source/target fps, source dimensions) — see `VideoProvenanceSchema`.
+   */
+  async importBytes(
+    bytes: Uint8Array,
+    filename: string,
+    kind: AssetMeta['kind'],
+    provenance?: VideoProvenance,
+  ): Promise<AssetMeta> {
     if (this.#projectId === null) {
       throw new Error('Cannot import an asset before a project is active');
     }
     await this.#ensureLoaded();
-    const bytes = new Uint8Array(await file.arrayBuffer());
     const sha256 = sha256Hex(bytes);
     const existing = [...this.#index.values()].find((m) => m.sha256 === sha256);
     if (existing !== undefined) return existing;
 
-    const ext = extOf(file.name);
-    const kind = kindHint ?? KIND_BY_EXT[ext] ?? 'image';
+    const ext = extOf(filename);
     const workingPath = this.#bytesPath(kind, sha256, ext);
     if (workingPath === null) {
       throw new Error('Cannot import an asset before a project is active');
@@ -115,10 +135,11 @@ export class AssetStore {
     const meta: AssetMeta = {
       assetId: uuid(),
       kind,
-      filename: file.name,
+      filename,
       sha256,
       byteSize: bytes.byteLength,
       workingPath,
+      ...(provenance !== undefined ? { provenance } : {}),
     };
     this.#index.set(meta.assetId, meta);
     await this.#persistIndex();
