@@ -672,6 +672,61 @@ hold as a finite closer. (The precise "ends at N s" per-driver time is left for 
 timeline-derived model — see the phases-follow-timeline correction — which owns the
 close time; today the finite/infinite distinction is what the operator sees.)
 
+## Video sync robustness — background-throttle & large-gap policy (2026-07-23)
+
+**Symptoms (owner, Preview):** (1) pause→resume restarted several seconds AHEAD; (2)
+a background-tab round-trip found the `<video>` paused, then continued further ahead;
+(3) after several cycles it FROZE permanently (Stop/Out/Play inert until Preview was
+reopened); (4) a dark fringe reappeared after cycles, gone on the first clean play and
+independent of the un-premultiply toggle.
+
+**Root cause (proven, cross-verified).** The Designer Preview builds the runtime with
+NO injected clock (`preview.ts` — `createRuntime(scene, {…})`), so `VideoDriver.now()`
+is `performance.now()`, a WALL clock, and `raf` is the real `requestAnimationFrame`.
+The driver slaved the `<video>` to the wall clock ONE-DIRECTIONALLY: on drift it always
+seeked the element FORWARD to the wall-derived position, never re-anchoring its clock to
+the media's actual `currentTime`. Any interval where wall time advanced but the media
+did not — resume/seek decode latency, a decode stall, or a background tab that starves
+rAF and pauses media while `performance.now()` runs on — accrued **phantom time** that
+the next tick paid off as a forward jump (for a loop, `wall % span` — an arbitrary
+position). The per-tick, un-guarded corrective seeks became a **seek-storm** that both
+wedged the `<video>` decoder (recoverable only by a fresh element — the pooled node is
+reused across rebuilds, hence "only reopening Preview fixes it") and painted the
+half-decoded frames the owner read as a fringe (symptom 4 is a displayed-frame artifact,
+NOT alpha — consistent with its persistence with the toggle off and its absence on the
+first clean play; the specific paint is inferential, so the owner should confirm it is
+gone after this fix). Independently, `pause()` mid-outro left `playOutro()`'s promise
+pending (no `settleOutro`), and the controller's `stop()` no-ops at `phase==='outro'`,
+so the shared outro-ledger `await` could wedge the whole exit.
+
+**THE POLICY (the design decision, not an implementation detail): on a large gap the
+CLOCK RE-BASES TO THE MEDIA — the video does NOT catch up to the clock.** A per-tick
+WALL delta beyond `resyncThresholdMs` (default **400 ms** — far above any foreground
+jitter; the 80 ms drift threshold was measured on a foreground tab and says nothing
+about a multi-second gap) is treated as a throttle/stall, and the driver re-anchors
+`startedAt` so its expected clip-time equals the element's ACTUAL playhead
+(`rebaseToMedia`/`elapsedForActual`). The element **continues from where it is**; the
+driver never seeks it forward to a wall position it never reached, and never folds a
+multi-second gap into the loop modulo. Rationale: seeking a broadcast graphic forward
+loses content and shows a desynced frame; continuing smoothly is correct, and after a
+background round-trip the exact phase of a hold-loop is cosmetic. Small drift
+(80 ms–`resyncThreshold`) is still corrected by a tiny seek (imperceptible). Because the
+driver self-heals on the first post-throttle tick, NO page-visibility handler is required
+(the fix works in the exported single-file runtime too, not just Preview).
+
+**The other two defences.** (a) A **seek-in-flight guard** — a corrective/wrap seek is
+never stacked while `handle.seeking()` is true — kills the seek-storm (so the decoder is
+never thrashed into a wedge, and the resume-decode overshoot stops) and removes the
+frequent forced re-decodes behind the fringe. (b) `playOutro()` arms a **wall-clock
+backstop** (`clock.setTimeout`, outro length + 2 s) so it ALWAYS resolves even if the rAF
+is throttled or the driver is paused mid-outro — the exit can never wedge. `reset()` /
+`stop()` remain a FULL reset from any state (settle the pending outro, clear the backstop,
+clear every flag), so Stop/Out/Play always recover the driver.
+
+**Not regressed:** the Phase-3 no-remount-on-drag guard (unchanged — this is driver-only),
+the absent-phases whole-clip loop with the re-issue-`play()` fix, and the shared outro
+ledger (its `playOutro()` ALWAYS-resolves invariant is now strengthened, not weakened).
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

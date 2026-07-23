@@ -24,10 +24,25 @@ import type { RuntimeClock } from './types.js';
  *    (bounded correction, never per-tick — no visible stutter); loop wrap is
  *    driver-commanded (seek to the loop start), never `<video loop>`.
  *
- * The deterministic-test story (fake clock + a {@link VideoHandle} mock) covers
- * this MAPPING — elapsed active time → expected clip-time → seek/play/pause
- * commands — not the media element's real decode (the same split the ticker uses
- * for real text measurement).
+ * ROBUSTNESS (the sync-lifecycle fix, 2026-07-23) — the injected clock in the
+ * Designer Preview is `performance.now()` (a WALL clock), while the `<video>`
+ * advances on its own media clock and the browser can throttle/pause both it and
+ * `requestAnimationFrame` in a background tab. Three defences keep the two from
+ * decoupling into a permanent jump/freeze:
+ *
+ *  1. LARGE-GAP RE-BASE (§ policy in design.md). A per-tick WALL delta far larger
+ *     than a frame means rAF was starved (backgrounded tab) or the element stalled
+ *     while `now()` ran on. That interval is NOT accrued as clip-time (which the old
+ *     one-directional slave paid off by seeking the video FORWARD to a wall position
+ *     it never reached — the jump-ahead). Instead the driver RE-BASES its clock to
+ *     the media's ACTUAL position: the element continues from where it is.
+ *  2. SEEK-IN-FLIGHT GUARD. A corrective/wrap seek is NEVER stacked on top of a seek
+ *     the element is still settling (`handle.seeking()`). This kills the per-frame
+ *     seek-storm that used to hammer the decoder into a wedge (and painted the
+ *     half-decoded frames that read as a fringe), and the resume-decode overshoot.
+ *  3. BOUNDED OUTRO. `playOutro()` also arms a wall-clock BACKSTOP timer, so it
+ *     ALWAYS resolves even if the rAF is throttled or the driver is paused mid-outro
+ *     — else the shared outro ledger's `await` would wedge the whole exit forever.
  *
  * PHASE MAPPING (clip's own ms time space; decisions (a)–(d)):
  *
@@ -44,8 +59,8 @@ import type { RuntimeClock } from './types.js';
  * (a degenerate outro that resolves immediately).
  *
  * INVARIANT (§D6.4.1) — `playOutro()` ALWAYS resolves: a degenerate/absent outro,
- * a destroyed driver, or a superseding `reset()`/`stop()` all settle it, so an
- * exit can never strand on a video (the B-030 failure mode).
+ * a destroyed driver, a superseding `reset()`/`stop()`, OR the wall-clock backstop
+ * all settle it, so an exit can never strand on a video (the B-030 failure mode).
  */
 export interface VideoHandle {
   /** Begin (or continue) playback. Errors (no src / autoplay policy) are swallowed. */
@@ -56,6 +71,12 @@ export interface VideoHandle {
   seek(seconds: number): void;
   /** The element's current playhead, in seconds. */
   currentTime(): number;
+  /**
+   * True while a seek is in flight (`media.seeking`). A corrective seek must NEVER
+   * be stacked on top of one the element is still resolving — that is the seek-storm
+   * that wedges the decoder and paints half-decoded frames.
+   */
+  seeking(): boolean;
 }
 
 export interface VideoDriverOptions {
@@ -80,7 +101,17 @@ export interface VideoDriverOptions {
    * per-tick — no visible stutter. The runtime passes this; default 80.
    */
   driftThresholdMs?: number | undefined;
-  /** Injected clock for deterministic tests; defaults to the platform rAF/now. */
+  /**
+   * A per-tick WALL gap (ms) beyond this marks a THROTTLE/STALL, not jitter (a
+   * backgrounded tab starves rAF while `performance.now()` runs on; a heavy decode
+   * stalls the element). Past it the driver RE-BASES its clock to the media's actual
+   * position — the element continues from where it is — instead of seeking it forward
+   * to a wall-clock position it never reached. The 80 ms drift threshold was measured
+   * on a FOREGROUND tab and says nothing about a multi-second gap; this is the
+   * separate large-gap knob. Default 400.
+   */
+  resyncThresholdMs?: number | undefined;
+  /** Injected clock for deterministic tests; defaults to the platform rAF/now/timer. */
   clock?: RuntimeClock | undefined;
 }
 
@@ -88,6 +119,9 @@ export interface VideoDriverOptions {
 export interface ElementOutroDriver {
   playOutro(): Promise<void>;
 }
+
+/** Backstop margin past the outro's own duration before the wall-clock timer force-settles it. */
+const OUTRO_BACKSTOP_MARGIN_MS = 2000;
 
 export class VideoDriver implements ElementOutroDriver {
   private readonly o: {
@@ -98,15 +132,20 @@ export class VideoDriver implements ElementOutroDriver {
     loopEndMs: number;
     holdBehavior: 'loop' | 'freeze';
     driftThresholdMs: number;
+    resyncThresholdMs: number;
   };
   private readonly handle: VideoHandle;
   private readonly raf: (cb: (t: number) => void) => number;
   private readonly cancel: (h: number) => void;
   private readonly now: () => number;
+  private readonly setTimer: (cb: () => void, ms: number) => unknown;
+  private readonly clearTimer: (h: unknown) => void;
 
   private frame: number | null = null;
   private running = false;
   private startedAt = 0;
+  /** `now()` at the previous tick — a large delta signals an rAF-throttle / stall gap. */
+  private lastTickNow = 0;
   /** Elapsed active ms captured at `pause()`, replayed by `resume()`. */
   private pausedElapsed = 0;
   /** True once a FREEZE hold is reached — `resume()` must NOT reopen it. */
@@ -114,6 +153,8 @@ export class VideoDriver implements ElementOutroDriver {
   private destroyed = false;
   private mode: 'intro' | 'outro' = 'intro';
   private outroResolve: (() => void) | null = null;
+  /** The wall-clock backstop timer that force-settles a stalled/paused outro. */
+  private outroBackstop: unknown = null;
   private completeResolve: () => void = () => undefined;
   private complete: Promise<void>;
 
@@ -127,10 +168,15 @@ export class VideoDriver implements ElementOutroDriver {
       loopEndMs: options.loopEndMs,
       holdBehavior: options.holdBehavior,
       driftThresholdMs: options.driftThresholdMs ?? 80,
+      resyncThresholdMs: options.resyncThresholdMs ?? 400,
     };
     this.raf = options.clock?.raf ?? ((cb) => requestAnimationFrame(cb));
     this.cancel = options.clock?.cancel ?? ((h) => cancelAnimationFrame(h));
     this.now = options.clock?.now ?? ((): number => performance.now());
+    this.setTimer = options.clock?.setTimeout ?? ((cb, ms): unknown => setTimeout(cb, ms));
+    this.clearTimer =
+      options.clock?.clearTimeout ??
+      ((h): void => clearTimeout(h as ReturnType<typeof setTimeout>));
     this.complete = this.armComplete();
   }
 
@@ -138,7 +184,8 @@ export class VideoDriver implements ElementOutroDriver {
    * Re-arm for a fresh open/close cycle and park at the intro start, paused.
    * Re-mints {@link whenComplete} (B-033) so a REPLAY's hold waits on this run's
    * completion, and settles any in-flight outro so a `reset()` that supersedes an
-   * `out()` never leaves it awaiting forever (§D6.4.1).
+   * `out()` never leaves it awaiting forever (§D6.4.1). A FULL reset from ANY
+   * state — the always-recoverable guarantee Stop/Out/Play rely on.
    */
   reset(): void {
     this.cancelFrame();
@@ -158,6 +205,7 @@ export class VideoDriver implements ElementOutroDriver {
     this.mode = 'intro';
     this.running = true;
     this.startedAt = this.now();
+    this.lastTickNow = this.now();
     this.handle.seek(0);
     this.handle.play();
     this.tick();
@@ -176,12 +224,15 @@ export class VideoDriver implements ElementOutroDriver {
   /**
    * Continue from where `pause()` froze. RE-SEEK to the clock-derived clip-time
    * (the anti-drift step — a real element can drift or stall while paused) then
-   * play. A settled freeze hold stays frozen.
+   * play. A settled freeze hold stays frozen. `lastTickNow` is reset so the paused
+   * interval is NOT counted as a throttle gap on the first resumed tick, and the
+   * seek-in-flight guard keeps the resume-decode latency from overshooting forward.
    */
   resume(): void {
     if (this.destroyed || this.running || this.settledHold) return;
     this.running = true;
     this.startedAt = this.now() - this.pausedElapsed;
+    this.lastTickNow = this.now();
     this.seekMs(this.expectedClipMs(this.pausedElapsed));
     this.handle.play();
     this.tick();
@@ -217,7 +268,9 @@ export class VideoDriver implements ElementOutroDriver {
    * THE ELEMENT-OUTRO SEAM. Play `[outroStart → duration]` ONCE and resolve at the
    * end. ALWAYS resolves (§D6.4.1): a destroyed driver or a degenerate/absent
    * outro (`outroStart >= duration`) resolves immediately; `reset()`/`stop()`
-   * settle a still-pending outro. Independent of `drivesHold`.
+   * settle a still-pending outro; and a wall-clock BACKSTOP settles it even if the
+   * rAF is throttled or the driver is paused mid-outro (never wedges the exit).
+   * Independent of `drivesHold`.
    */
   playOutro(): Promise<void> {
     if (this.destroyed) return Promise.resolve();
@@ -228,11 +281,22 @@ export class VideoDriver implements ElementOutroDriver {
     this.settledHold = false;
     this.running = true;
     this.startedAt = this.now();
+    this.lastTickNow = this.now();
     this.handle.seek(this.o.outroStartMs / 1000);
     this.handle.play();
     const done = new Promise<void>((res) => {
       this.outroResolve = res;
     });
+    // BOUND (never-strand): the shared outro ledger `await`s this promise, and the
+    // controller's stop() no-ops once it is exiting — so a `playOutro()` that never
+    // resolves wedges the whole exit permanently (the freeze). The wall-clock backstop
+    // guarantees resolution even if the rAF is throttled/paused mid-outro. Generous
+    // (the outro's own length + a margin), so a normal outro finishes on its own first.
+    const outroMs = Math.max(0, this.o.durationMs - this.o.outroStartMs);
+    this.outroBackstop = this.setTimer(
+      () => this.settleOutro(),
+      outroMs + OUTRO_BACKSTOP_MARGIN_MS,
+    );
     this.tick();
     if (this.running) this.schedule();
     return done;
@@ -263,6 +327,16 @@ export class VideoDriver implements ElementOutroDriver {
   }
 
   private tick(): void {
+    // GAP DETECTION → large-gap re-base. A per-tick WALL delta far larger than a frame
+    // means rAF was starved (backgrounded tab) or the element stalled while `now()` ran
+    // on. Do NOT let that interval become phantom clip-time (a forward seek): re-anchor
+    // the driver clock to the media's ACTUAL position so playback continues from where
+    // the element is — never a jump forward to a wall position it never reached.
+    const nowMs = this.now();
+    const gap = nowMs - this.lastTickNow;
+    this.lastTickNow = nowMs;
+    if (gap > this.o.resyncThresholdMs) this.rebaseToMedia();
+
     const elapsedMs = this.now() - this.startedAt;
     if (this.mode === 'outro') {
       if (this.o.outroStartMs + elapsedMs >= this.o.durationMs) {
@@ -291,6 +365,7 @@ export class VideoDriver implements ElementOutroDriver {
       return;
     }
     // Loop hold: driver-commanded wrap + bounded within-loop drift correction.
+    if (this.handle.seeking()) return; // a seek is settling — never stack another on top
     const expected = this.expectedClipMs(elapsedMs);
     const actualMs = this.handle.currentTime() * 1000;
     if (actualMs >= this.o.loopEndMs || Math.abs(actualMs - expected) > this.o.driftThresholdMs) {
@@ -298,10 +373,38 @@ export class VideoDriver implements ElementOutroDriver {
     }
   }
 
-  /** Bounded drift correction — re-seek only past the threshold (never per-tick). */
+  /** Bounded drift correction — re-seek only past the threshold, never while a seek is in flight. */
   private reconcile(expectedMs: number): void {
+    if (this.handle.seeking()) return; // a seek is settling — don't stack another (the seek-storm)
     const actualMs = this.handle.currentTime() * 1000;
     if (Math.abs(actualMs - expectedMs) > this.o.driftThresholdMs) this.seekAndPlay(expectedMs);
+  }
+
+  /**
+   * THE LARGE-GAP POLICY (design.md): after a throttle/stall the MEDIA is authoritative.
+   * Re-anchor the driver clock so `expectedClipMs(now − startedAt)` equals the element's
+   * ACTUAL playhead — the video CONTINUES from where it is; we never seek it forward to a
+   * wall-clock position it never reached (the jump-ahead), and never fold a multi-second
+   * gap into the loop modulo (the "further ahead than where it stopped" wrap). Playback is
+   * (re-)started from that position, never seeked while a seek is still settling.
+   */
+  private rebaseToMedia(): void {
+    if (this.destroyed) return;
+    const actualMs = this.handle.currentTime() * 1000;
+    this.startedAt = this.now() - this.elapsedForActual(actualMs);
+    if (!this.handle.seeking()) this.handle.play();
+  }
+
+  /** The active-elapsed that maps (via {@link expectedClipMs}) back to the media's actual clip-ms. */
+  private elapsedForActual(actualMs: number): number {
+    if (this.mode === 'outro') return Math.max(0, actualMs - this.o.outroStartMs);
+    if (actualMs < this.o.introEndMs) return Math.max(0, actualMs);
+    if (this.o.holdBehavior === 'freeze') return this.o.introEndMs;
+    const span = this.o.loopEndMs - this.o.loopStartMs;
+    if (span <= 0) return this.o.introEndMs;
+    // First-cycle phase that matches the media; the loop simply continues from there.
+    const within = Math.min(Math.max(0, actualMs - this.o.loopStartMs), span);
+    return this.o.introEndMs + within;
   }
 
   private armComplete(): Promise<void> {
@@ -311,6 +414,10 @@ export class VideoDriver implements ElementOutroDriver {
   }
 
   private settleOutro(): void {
+    if (this.outroBackstop !== null) {
+      this.clearTimer(this.outroBackstop);
+      this.outroBackstop = null;
+    }
     const res = this.outroResolve;
     if (res === null) return;
     this.outroResolve = null;

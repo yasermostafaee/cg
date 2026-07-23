@@ -953,6 +953,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             media.currentTime = sec;
           },
           currentTime: () => media.currentTime,
+          // D-128 sync fix — a corrective seek must never stack on one still settling
+          // (`media.seeking`): that seek-storm wedged the decoder and painted half-decoded
+          // frames. jsdom has no real seek, so `seeking` is simply false there.
+          seeking: () => media.seeking,
         };
         const driver = new VideoDriver({
           handle,
