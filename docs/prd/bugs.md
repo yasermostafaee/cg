@@ -648,7 +648,7 @@ one-liner is the established harness) and assert `@cg/caspar-bridge` is green re
 bound in place it should not depend on what else is scheduled. As in B-073, treat N/N green as the
 agreed bar rather than a proof of absence; the causal fix is what carries the claim.
 
-## [~] B-097 — `pnpm gate` is not safe to run twice concurrently in one workspace: vitest's shared coverage tmp dir produces an ENOENT that reads as a code defect ⟨priority: medium⟩
+## [x] B-097 — `pnpm gate` is not safe to run twice concurrently in one workspace: vitest's shared coverage tmp dir produces an ENOENT that reads as a code defect ⟨priority: medium⟩ — fixed by [[P-013]]'s host gate lock (#395); owner confirmed no recurrence in real use, 2026-07-23
 
 **Repro:** trigger two gates in the same workspace at once. Observed 2026-07-19: a backgrounded
 `git push` ran the husky pre-push gate while a second full gate started in the same worktree —
@@ -685,8 +685,9 @@ second WAITS rather than interleaving. This is a deliberate trade against the "p
 note: the lock serializes gates instead of making concurrent gates safe, which is aligned with the
 standing "one gate per host" rule ([[P-013]], [[P-010]]) — concurrent gates were never wanted here.
 The regression test below is therefore obsolete as written (it asserts two gates run at once); the
-serialization itself is proved by P-013's two-process check. Owner to confirm no recurrence in real
-use → then `[x]`.
+serialization itself is proved by P-013's two-process check. **Owner confirmed no recurrence in
+real use (2026-07-23)** — alongside P-013's cross-worktree confirmation (a second gate WAITED for
+the host slot) — hence the flip to `[x]`.
 **Note:** this is a REPO fragility, independent of what triggers it. "Don't background the push"
 is a mitigation (now recorded in `CLAUDE.md`), not the fix.
 

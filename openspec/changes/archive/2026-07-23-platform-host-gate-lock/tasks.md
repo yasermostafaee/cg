@@ -64,6 +64,9 @@
 
 ## 7. To reach [x] + archive
 
-- [ ] 7.1 Owner confirms cross-worktree serialization in real use — run `pnpm gate` in one
+- [x] 7.1 Owner confirms cross-worktree serialization in real use — run `pnpm gate` in one
       worktree, start it in another, observe the second print "waiting for host gate slot…"
       and proceed only when the first releases.
+      **EVIDENCE (owner, 2026-07-23): confirmed in real use — with a gate running in one
+      worktree, a gate started in another worktree WAITED for the host slot ("waiting for
+      host gate slot…") instead of racing it, and proceeded only after the first released.**

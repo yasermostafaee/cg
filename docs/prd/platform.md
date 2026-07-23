@@ -327,7 +327,7 @@ provably equivalent to the Stop hook's, never a THIRD rule set. Sits beside [[P-
 all-deletions skip in the same hook (`pre-push-decision.mjs` is the natural home for the range
 classification plumbing); [[P-009]] is the Stop-hook sibling whose classifier this reuses.
 
-## [~] P-013 — enforce "one gate per host" with a lock, not discipline ⟨priority: medium⟩
+## [x] P-013 — enforce "one gate per host" with a lock, not discipline ⟨priority: medium⟩ — merged (#395, `72487af`) + archived: `openspec/changes/archive/2026-07-23-platform-host-gate-lock/`; owner-confirmed in real use 2026-07-23 (cross-worktree serialization: a gate in one worktree made a gate started in another WAIT for the host slot instead of racing it)
 
 **What:** A host-wide advisory lock (`tools/gate-hook/src/gate-lock.mjs` +
 `gate-lock-cli.mjs`, backed by `proper-lockfile`) wraps gate execution: `pnpm gate` and
@@ -368,9 +368,11 @@ slot cleanly with no manual cleanup — release-on-exit / stale-reclaim behaved 
 an abnormal termination. Only the DECISION modules stay zero-dependency
 (they run pre-install); this one runs the gate itself, which needs `node_modules` anyway, so
 it may use `proper-lockfile` (loaded via dynamic import so a bad install degrades, not
-crashes). **`[~]` → `[x]` + archive when the owner confirms cross-worktree serialization in
-real use** (run `pnpm gate` in one worktree, start it in another, see the second wait). No
-hardware / Linux-e2e owed — no path matches `UI_RENDER_PATTERNS`.
+crashes). **Owner confirmation DISCHARGED (2026-07-23):** cross-worktree serialization
+confirmed in real use — with a gate running in one worktree, a gate started in another
+worktree printed "waiting for host gate slot…" and proceeded only after the first released
+(the archived change's task 7.1 records the evidence). No hardware / Linux-e2e owed — no
+path matches `UI_RENDER_PATTERNS`.
 
 ## [x] P-014 — PR/merge policy: CC opens, owner merges ⟨priority: medium⟩
 
