@@ -326,3 +326,77 @@ exhausted the pre-push gate is the sole authoritative proof — the carve-out mu
 provably equivalent to the Stop hook's, never a THIRD rule set. Sits beside [[P-010]]'s
 all-deletions skip in the same hook (`pre-push-decision.mjs` is the natural home for the range
 classification plumbing); [[P-009]] is the Stop-hook sibling whose classifier this reuses.
+
+## [~] P-013 — enforce "one gate per host" with a lock, not discipline ⟨priority: medium⟩
+
+**What:** A host-wide advisory lock (`tools/gate-hook/src/gate-lock.mjs` +
+`gate-lock-cli.mjs`, backed by `proper-lockfile`) wraps gate execution: `pnpm gate` and
+`pnpm gate:e2e` acquire this host's exclusive slot at a stable path under `os.tmpdir()`
+before running and hold it for the whole gate. A concurrent gate WAITS for the slot
+("waiting for host gate slot…") instead of racing it. The lock lives at the single
+`gate`/`gate:e2e` script chokepoint every entry point (direct, `.husky/pre-push`, the
+[[P-009]] Stop hook) funnels through — one implementation, not a copy per caller.
+**Why:** [[P-010]] already names "this host's exclusive gate slot" but nothing enforced
+it. Two failure modes ran on discipline alone: (1) the **pre-push / Stop-hook double-fire**
+— a push fires `.husky/pre-push` → `pnpm gate` at the same moment a turn end fires the Stop
+hook → `pnpm gate`, two gates land in one worktree and race on vitest's shared coverage
+`.tmp/` (the bare `ENOENT` of [[B-097]]); and (2) **cross-worktree contention** — two of the
+three worktrees gating at once, the same CPU starvation [[B-098]] bounded WITHIN a gate, now
+BETWEEN gates where its cap cannot see it. The lock is the OUTER layer over [[B-098]]'s
+`bounded-turbo-cli`, never a replacement.
+**Acceptance:**
+
+- WHEN a gate is invoked while another holds the slot THEN it announces the wait, blocks
+  until release, and only then runs — never concurrently
+- WHEN a gate that holds the slot exits (pass, fail, or throw) THEN the slot is released
+- WHEN the holder crashes without releasing THEN the slot is reclaimable after a staleness
+  window shorter than the wait timeout, so no deadlock
+- WHEN a gate waits the full timeout without acquiring THEN it errors clearly rather than
+  hanging forever
+- WHEN the lock mechanism is unavailable or errors on acquisition THEN the gate still runs
+  WITHOUT serialization (it is the sole landing gate) and says so
+- WHEN the pre-push or Stop hook runs the gate THEN it takes the SAME host slot as a direct
+  `pnpm gate`, because the lock is at the shared script boundary, not duplicated per hook
+
+**Notes:** change `openspec/changes/platform-host-gate-lock/` (spec `platform-local-gate`,
+one ADDED requirement). Evidence: 31 unit tests (acquire / wait-when-held / timeout /
+release / fail-open) + one real-`proper-lockfile` on-disk round-trip, plus
+`scripts/two-process-lock-check.mjs` (**PASS**: worker B started while A held, printed the
+wait, and acquired 77 ms AFTER A released). Only the DECISION modules stay zero-dependency
+(they run pre-install); this one runs the gate itself, which needs `node_modules` anyway, so
+it may use `proper-lockfile` (loaded via dynamic import so a bad install degrades, not
+crashes). **`[~]` → `[x]` + archive when the owner confirms cross-worktree serialization in
+real use** (run `pnpm gate` in one worktree, start it in another, see the second wait). No
+hardware / Linux-e2e owed — no path matches `UI_RENDER_PATTERNS`.
+
+## [x] P-014 — PR/merge policy: CC opens, owner merges ⟨priority: medium⟩
+
+**What:** A CLAUDE.md rule (under Branching → "PR & merge policy") codifying that every task
+ends with `gh pr create`, that CC does NOT merge by default (opens the PR and stops), that
+CC merges ONLY on explicit owner authorization for that task via [[P-011]]'s ship sequence
+(verifying BOTH deletions), and that CC NEVER auto-merges — pausing and flagging even if
+told — when the change touches on-air/export/product source, owes a hardware or Linux
+`gate:e2e`, or is shared config another worktree must rebase onto. Docs-only PRs are not
+auto-merge-eligible either.
+**Why:** While GitHub Actions billing is out (~Aug) the local gate is the ONLY landing gate,
+and it has known gaps — the [[B-098]] load-flake class, a non-authoritative Windows
+`gate:e2e` for pixel/a11y geometry, and reliance on owner-eyes. One local-gate pass is not an
+INDEPENDENT check; a second human read at merge is the only independent gate there is. The
+structural [[P-011]] reason `--delete-branch` cannot be used here is stated inline so the
+sequence is not re-simplified into the broken form.
+**Acceptance:**
+
+- WHEN a task completes THEN CC opens a PR and STOPS; it does not merge unless the owner
+  authorizes that specific task
+- WHEN the owner authorizes a merge THEN CC uses [[P-011]]'s sequence exactly and verifies
+  both the remote and local branch deletions plus the `cg` fast-forward
+- WHEN a change touches on-air/export/product source, owes hardware/Linux e2e, or is shared
+  config THEN CC never auto-merges even if told — it pauses and flags for owner sequencing
+- WHEN remote CI returns (~Aug) THEN the auto-merge-eligible class is revisited (an
+  independent check will exist)
+
+**Notes:** docs/process only — no source, spec, or behavior change — so this closes on a
+green gate like [[P-010]] and [[P-011]] rather than via an archive. Rides in the same PR as
+[[P-013]] (the mechanism the "owner merges shared config" clause protects: this very PR
+touches root `package.json` + `pnpm-lock.yaml` + CLAUDE.md, so the owner sequences its
+merge and tells the other worktrees to pull).

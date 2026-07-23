@@ -100,6 +100,20 @@ second gate can start alongside it — two gates in one workspace collide over
 vitest's shared coverage tmp dir and fail an innocent suite with a bare `ENOENT`
 that reads exactly like a product regression (see `B-097` in `docs/prd/bugs.md`).
 
+**One gate per host — enforced by a lock, not by discipline (P-013).** `pnpm gate`
+and `pnpm gate:e2e` each acquire this host's exclusive gate slot (a host-wide advisory
+lock under `os.tmpdir()`, via `tools/gate-hook/src/gate-lock-cli.mjs` → `proper-lockfile`)
+before running, and hold it for the whole gate. A concurrent gate — the pre-push /
+Stop-hook double-fire above, or a gate in another worktree — WAITS for the slot
+(printing "waiting for host gate slot…") instead of racing it. The lock is a clean OUTER
+layer over B-098's `bounded-turbo-cli` (host serialization vs. intra-gate fan-out — keep
+both). It lives at the SINGLE `gate`/`gate:e2e` script chokepoint every entry point
+(direct, pre-push, Stop hook) funnels through — do NOT re-implement it per caller (a
+second copy is how the rule drifts, B-100/P-012), and do NOT "simplify" `gate` back to the
+inline chain: `gate` = lock → `gate:run` (the real chain, still `0 cached, 82 total`),
+`gate:e2e` = lock → `gate:e2e:run`. A broken lock DEGRADES to an unserialized run rather
+than blocking the gate (it is the sole landing gate); only a 15-min-stuck slot errors out.
+
 **Docs-only carve-out (archive).** An OpenSpec **archive** operation — folding a
 merged change into `openspec/specs/` + the PRD status flip to `[x]` — touches only
 `openspec/**` and `docs/**`, never source / tests / build. Its gate is therefore
@@ -253,6 +267,34 @@ history.
   (`expect` 15s, test 60s, `webServer` 240s) that `main` has at 7s/30s/120s, so
   rebasing it would have resurrected work B-078 records as "tried and reverted, do
   not simply retry it".
+
+### PR & merge policy — CC opens, owner merges (P-014)
+
+- **Every task ends with a PR.** After the green gate + push, CC opens a PR with
+  `gh pr create` (title + a body summarizing what changed and the evidence). If `gh`
+  is unavailable, CC prints the manual compare URL and says the PR was not opened —
+  it never claims a PR it did not create (see "Verify before claiming").
+- **CC does NOT merge by default — it opens the PR and stops; the owner merges.**
+  While GitHub Actions billing is out (~Aug) the local gate is the ONLY landing gate,
+  and it has known gaps: the B-098 load-flake class, a Windows `gate:e2e` that is
+  non-authoritative for pixel/a11y geometry, and reliance on owner-eyes for judgment.
+  One local-gate pass is therefore not an INDEPENDENT check — a second human read at
+  merge is the only independent gate there is, so the owner performs it.
+- **CC merges ONLY when the owner authorizes it for that specific task**, and then via
+  P-011's ship sequence exactly — `gh pr merge <n> --admin --squash` (NO
+  `--delete-branch`; it always fails in this worktree layout and leaks a live remote
+  branch — the structural reason is in "Merge status" above), then
+  `git push origin --delete <branch>`, then `git branch -D <branch>`, then
+  `git -C ../cg pull --ff-only` — **verifying BOTH deletions** and the `cg` fast-forward.
+- **CC NEVER auto-merges — it pauses and flags even if told to merge — when the change:**
+  touches on-air / export / product source (a bad merge reaches broadcast output); owes a
+  hardware or a Linux `gate:e2e` run (Windows is non-authoritative); or is shared config
+  another worktree must rebase onto (root `package.json`, `turbo.json`, `pnpm-lock.yaml`,
+  CLAUDE.md, the gate-hook). The owner sequences shared-config merges so the other session
+  is told to pull.
+- **Docs-only PRs: auto-merge is NOT permitted either** (the owner may enable it later).
+- **After remote CI returns (~Aug), the auto-merge-eligible class widens** — an independent
+  check will exist, so this policy is revisited then.
 
 ## Verify before claiming
 
