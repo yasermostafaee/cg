@@ -373,4 +373,26 @@ describe('VideoDriver — sync robustness (background throttle / freeze / resume
     run(clock, 500);
     expect(video.at()).toBeGreaterThan(0); // playing normally again
   });
+
+  it('RESUME GRACE: drift correction is suppressed while the decoder ramps, then resumes', () => {
+    const { driver, video, clock } = makeDriver({
+      holdBehavior: 'freeze',
+      introEndMs: 100_000,
+      resumeGraceMs: 600,
+    });
+    driver.start();
+    run(clock, 400);
+    driver.pause();
+    clock.advance(1000);
+    driver.resume();
+    const afterResume = video.seeks.length; // includes resume's own re-anchor seek
+    // A slow decoder ramp: the media stalls while wall time advances, so drift builds — the
+    // exact condition that used to trigger a self-amplifying corrective-seek storm (each seek
+    // a ~5s keyframe-decode burst). During the grace those corrections must NOT fire.
+    video.stalled = true;
+    run(clock, 400); // within the 600ms grace ⇒ NO corrective seek despite the drift
+    expect(video.seeks.length).toBe(afterResume);
+    run(clock, 400); // past the grace ⇒ a single correction resumes (decoder assumed ramped)
+    expect(video.seeks.length).toBeGreaterThan(afterResume);
+  });
 });

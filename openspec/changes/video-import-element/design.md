@@ -727,6 +727,48 @@ clear every flag), so Stop/Out/Play always recover the driver.
 the absent-phases whole-clip loop with the re-issue-`play()` fix, and the shared outro
 ledger (its `playOutro()` ALWAYS-resolves invariant is now strengthened, not weakened).
 
+### Resume-window cost — the keyframe/GOP finding + the RESUME GRACE (2026-07-24)
+
+**Refined symptom:** with TWO videos on a scene, both play smoothly at steady state; only
+AFTER pause/resume do both go very slow for a few seconds, then self-heal. So there is no
+sustained throughput problem — the cost is concentrated in the RESUME window.
+
+**Measured root cause: expensive seeks against a SPARSE keyframe grid.** Our encode passes
+NO `-g`, so libvpx uses its default `kf_max_dist` ≈ 128 frames → a keyframe only every
+**~5.12 s** (measured on a 12 s @ 25 fps VP8+alpha encode with the shipped args; keyframes
+at 0, 5.12, 10.24 s). A seek to an arbitrary resume position forces the decoder to restart
+from the preceding keyframe and decode forward — **up to ~5 s of video in one burst**. The
+classification is **(b) the decoder ramp after `resume()`'s `play()`, compounding into (a)**:
+once the re-anchor seek settles, the decoder ramps up below realtime, drift accrues, and at
+
+> 80 ms a corrective seek fires — which, at a 5 s keyframe interval, is itself a multi-second
+> decode burst that stalls the decoder further, accruing more drift and more seeks. Two videos
+> compete for decode, so each ramp is slower and the burst larger — exactly "very slow for a
+> few seconds, then recovers." (Steady-state playback issues no seeks, which is why it is fine.)
+
+**Fix shipped — RESUME GRACE (self-contained, no re-import).** For `resumeGraceMs` (default
+**750 ms**) after a resume or a large-gap re-base, drift correction is SUPPRESSED so the
+decoder ramps up unmolested; the self-amplifying seek cascade never starts. A real `<video>`
+keeps playing on its own during the grace (the media clock advances) — the grace only holds
+back corrective SEEKS, so resume playback is immediate and smooth, not delayed. The loop WRAP
+and the always-recoverable paths are never suppressed. The seek-in-flight guard and the outro
+backstop are untouched (they fixed real wedges).
+
+**Not shipped — DENSER KEYFRAMES (an encode-args change → a re-import decision, the owner's
+to make).** Adding `-g` shortens the GOP so every seek is cheap. Measured cost vs today
+(same clip): `-g 25` (1 s GOP) = **+3.5 %** size, `-g 12` (~0.5 s GOP) = **+6.5 %** size, both
+with negligible encode-time change. This is complementary to the grace (it makes the _one_
+post-grace correction cheap too), but it changes conversion output, so **already-imported
+clips keep the old ~5 s GOP and would need re-import**. Provenance already records
+`converterRevision`, so a future item can flag pre-`-g` assets — no new plumbing needed to
+adopt it later. Recommendation: ship the grace now (it removes the cascade at zero conversion
+cost); adopt `-g 25` at the next converter-revision bump IF the owner wants cheaper seeks and
+accepts the ~3.5 % size + a re-import — a call left explicitly to the owner.
+
+**Note on the black band during resume:** if it recurs only in the resume window, that is
+further evidence it is a decode artifact (a frame presented mid-decode during a seek burst),
+NOT an alpha/premultiply problem — the un-premultiply expression was not touched in this pass.
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

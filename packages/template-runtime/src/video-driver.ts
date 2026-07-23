@@ -43,6 +43,12 @@ import type { RuntimeClock } from './types.js';
  *  3. BOUNDED OUTRO. `playOutro()` also arms a wall-clock BACKSTOP timer, so it
  *     ALWAYS resolves even if the rAF is throttled or the driver is paused mid-outro
  *     — else the shared outro ledger's `await` would wedge the whole exit forever.
+ *  4. RESUME GRACE. For a short window after a resume / re-base, drift correction is
+ *     SUPPRESSED so the `<video>` decoder can RAMP UP without being hammered. A seek at
+ *     our ~5 s keyframe interval decodes seconds of video in one burst; firing
+ *     corrections mid-ramp is self-amplifying (burst → more stall → more drift → more
+ *     bursts) and, with two videos, is the "very slow for a few seconds then recovers"
+ *     the owner saw. The WRAP and the always-recoverable paths are never suppressed.
  *
  * PHASE MAPPING (clip's own ms time space; decisions (a)–(d)):
  *
@@ -111,6 +117,17 @@ export interface VideoDriverOptions {
    * separate large-gap knob. Default 400.
    */
   resyncThresholdMs?: number | undefined;
+  /**
+   * After a resume (or a large-gap re-base) the `<video>` decoder must RAMP UP — and a
+   * seek at our current ~5 s keyframe interval means decoding seconds of video in one
+   * burst. Firing drift corrections during that ramp is self-amplifying: each corrective
+   * seek is another keyframe burst that stalls the decoder more, accruing more drift and
+   * more seeks (very slow for a few seconds, then it self-heals — the owner's report,
+   * doubled with two videos). For this window (ms) drift correction is SUPPRESSED so the
+   * decoder ramps unmolested; the loop WRAP and the always-recoverable paths are NOT
+   * suppressed. Default 750.
+   */
+  resumeGraceMs?: number | undefined;
   /** Injected clock for deterministic tests; defaults to the platform rAF/now/timer. */
   clock?: RuntimeClock | undefined;
 }
@@ -133,6 +150,7 @@ export class VideoDriver implements ElementOutroDriver {
     holdBehavior: 'loop' | 'freeze';
     driftThresholdMs: number;
     resyncThresholdMs: number;
+    resumeGraceMs: number;
   };
   private readonly handle: VideoHandle;
   private readonly raf: (cb: (t: number) => void) => number;
@@ -146,6 +164,8 @@ export class VideoDriver implements ElementOutroDriver {
   private startedAt = 0;
   /** `now()` at the previous tick — a large delta signals an rAF-throttle / stall gap. */
   private lastTickNow = 0;
+  /** Until this `now()`, drift correction is suppressed so a resuming decoder can ramp up. */
+  private correctionGraceUntil = 0;
   /** Elapsed active ms captured at `pause()`, replayed by `resume()`. */
   private pausedElapsed = 0;
   /** True once a FREEZE hold is reached — `resume()` must NOT reopen it. */
@@ -169,6 +189,7 @@ export class VideoDriver implements ElementOutroDriver {
       holdBehavior: options.holdBehavior,
       driftThresholdMs: options.driftThresholdMs ?? 80,
       resyncThresholdMs: options.resyncThresholdMs ?? 400,
+      resumeGraceMs: options.resumeGraceMs ?? 750,
     };
     this.raf = options.clock?.raf ?? ((cb) => requestAnimationFrame(cb));
     this.cancel = options.clock?.cancel ?? ((h) => cancelAnimationFrame(h));
@@ -233,6 +254,7 @@ export class VideoDriver implements ElementOutroDriver {
     this.running = true;
     this.startedAt = this.now() - this.pausedElapsed;
     this.lastTickNow = this.now();
+    this.correctionGraceUntil = this.now() + this.o.resumeGraceMs;
     this.seekMs(this.expectedClipMs(this.pausedElapsed));
     this.handle.play();
     this.tick();
@@ -368,14 +390,23 @@ export class VideoDriver implements ElementOutroDriver {
     if (this.handle.seeking()) return; // a seek is settling — never stack another on top
     const expected = this.expectedClipMs(elapsedMs);
     const actualMs = this.handle.currentTime() * 1000;
-    if (actualMs >= this.o.loopEndMs || Math.abs(actualMs - expected) > this.o.driftThresholdMs) {
-      this.seekAndPlay(expected);
+    if (actualMs >= this.o.loopEndMs) {
+      this.seekAndPlay(expected); // the WRAP is always issued (never run off the end), even in grace
+    } else if (
+      this.now() >= this.correctionGraceUntil &&
+      Math.abs(actualMs - expected) > this.o.driftThresholdMs
+    ) {
+      this.seekAndPlay(expected); // drift correction — suppressed during the resume grace
     }
   }
 
-  /** Bounded drift correction — re-seek only past the threshold, never while a seek is in flight. */
+  /**
+   * Bounded drift correction — re-seek only past the threshold, never while a seek is in
+   * flight, and never during the post-resume grace (let the decoder ramp up unmolested).
+   */
   private reconcile(expectedMs: number): void {
     if (this.handle.seeking()) return; // a seek is settling — don't stack another (the seek-storm)
+    if (this.now() < this.correctionGraceUntil) return; // resume grace — let the decoder ramp
     const actualMs = this.handle.currentTime() * 1000;
     if (Math.abs(actualMs - expectedMs) > this.o.driftThresholdMs) this.seekAndPlay(expectedMs);
   }
@@ -392,6 +423,9 @@ export class VideoDriver implements ElementOutroDriver {
     if (this.destroyed) return;
     const actualMs = this.handle.currentTime() * 1000;
     this.startedAt = this.now() - this.elapsedForActual(actualMs);
+    // A re-base is a resume-like event — the element (re-)starts playing and its decoder
+    // ramps, so extend the grace so we don't hammer it with corrections during that ramp.
+    this.correctionGraceUntil = this.now() + this.o.resumeGraceMs;
     if (!this.handle.seeking()) this.handle.play();
   }
 

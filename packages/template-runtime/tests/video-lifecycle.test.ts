@@ -361,7 +361,10 @@ describe('D-128 Phase 4 — the video composition lifecycle', () => {
     // left ticking would have kept seeking the head forward off the clock).
     expect(times.get('v')!()).toBe(atPause);
     r.resume();
-    await run(clock, 300);
+    // Resume GRACE (D-128 sync-cost fix): drift correction is suppressed for ~750ms so a real
+    // decoder can ramp up unmolested. In jsdom the spied currentTime only moves on a driver
+    // SEEK, so it stays put until the grace ends; PAST the grace a correction re-engages it.
+    await run(clock, 900);
     expect(times.get('v')!()).toBeGreaterThan(atPause); // re-engaged — the head moved again
     r.remove();
   });
