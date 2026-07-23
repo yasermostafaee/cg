@@ -648,7 +648,7 @@ one-liner is the established harness) and assert `@cg/caspar-bridge` is green re
 bound in place it should not depend on what else is scheduled. As in B-073, treat N/N green as the
 agreed bar rather than a proof of absence; the causal fix is what carries the claim.
 
-## [ ] B-097 — `pnpm gate` is not safe to run twice concurrently in one workspace: vitest's shared coverage tmp dir produces an ENOENT that reads as a code defect ⟨priority: medium⟩
+## [~] B-097 — `pnpm gate` is not safe to run twice concurrently in one workspace: vitest's shared coverage tmp dir produces an ENOENT that reads as a code defect ⟨priority: medium⟩
 
 **Repro:** trigger two gates in the same workspace at once. Observed 2026-07-19: a backgrounded
 `git push` ran the husky pre-push gate while a second full gate started in the same worktree —
@@ -674,6 +674,19 @@ filesystem path** — that is this bug. Not a duplicate of either.
 run-unique `coverage.reportsDirectory` / tmp path), or take a lock in the `gate` script so a second
 invocation waits rather than interleaving. Prefer the former — it fixes the CLASS rather than one
 trigger, and leaves concurrent gates legitimately possible.
+
+**Fixed by [[P-013]] (#395, `72487af`):** the host-wide gate lock took the SECOND option above —
+a lock in the `gate` script so a second invocation waits — rather than per-run coverage-tmp
+scoping. `pnpm gate` and `pnpm gate:e2e` now acquire this host's exclusive slot before running and
+hold it for the whole gate, so the pre-push / Stop-hook double-fire (the exact 2026-07-19 repro:
+one gate's `vitest run --coverage` appearing while another's does) can no longer write
+`coverage/.tmp` concurrently — both gate entry points serialize through the one slot, and the
+second WAITS rather than interleaving. This is a deliberate trade against the "prefer the former"
+note: the lock serializes gates instead of making concurrent gates safe, which is aligned with the
+standing "one gate per host" rule ([[P-013]], [[P-010]]) — concurrent gates were never wanted here.
+The regression test below is therefore obsolete as written (it asserts two gates run at once); the
+serialization itself is proved by P-013's two-process check. Owner to confirm no recurrence in real
+use → then `[x]`.
 **Note:** this is a REPO fragility, independent of what triggers it. "Don't background the push"
 is a mitigation (now recorded in `CLAUDE.md`), not the fix.
 
