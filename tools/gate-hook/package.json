@@ -9,6 +9,9 @@
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run"
   },
+  "dependencies": {
+    "proper-lockfile": "^4.1.2"
+  },
   "devDependencies": {
     "@cg/eslint-config": "workspace:*",
     "@types/node": "^22.10.0",

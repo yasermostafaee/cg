@@ -16,4 +16,8 @@ if [ "$decision" = "skip" ]; then
   exit 0
 fi
 
+# P-013: `pnpm gate` now acquires this host's exclusive gate slot (a host-wide advisory
+# lock inside the `gate` script). So if this push fires while a Stop-hook gate — or a
+# gate in another worktree — is already running, THIS one WAITS for the slot instead of
+# racing it over vitest's shared coverage tmp dir (the false-ENOENT double-fire, B-097).
 pnpm gate

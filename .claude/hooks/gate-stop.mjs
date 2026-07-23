@@ -21,6 +21,14 @@
  *
  * Full command output lands in `.gate-logs/<session_id>.log` (gitignored); stderr
  * carries only the tail (hook output is capped ~10k chars).
+ *
+ * P-013: this hook does NOT lock anything itself. The `pnpm gate` / `pnpm gate:e2e` it
+ * runs each acquire this host's exclusive gate slot inside their own scripts (a host-wide
+ * advisory lock), so if a turn end fires this hook at the same moment a push fires
+ * `.husky/pre-push` → `pnpm gate`, the second gate WAITS for the slot rather than racing
+ * the first over vitest's shared coverage tmp dir (the false-ENOENT double-fire, B-097).
+ * The lock lives at the single `gate`/`gate:e2e` chokepoint every entry point funnels
+ * through — never re-implemented per caller.
  */
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
