@@ -1,16 +1,18 @@
 # Design — fixed operator layers (R-021): ownership composition + restore semantics
 
-Everything here is decided against the code as it exists on `main` (cited inline). Where a
-question is a genuine product/on-air call, the recommendation is stated and marked
-**OWNER DECISION** — those are collected in the final section so the owner can answer them in
-one pass. The specs/ delta encodes ONLY the settled parts.
+Everything here is decided against the code as it exists on `main` (cited inline). The four
+product/on-air calls this design flagged (a1/b1/d1/e1) were ANSWERED by the owner on
+2026-07-23 and are encoded in place below — the final section records the answers. The specs/
+delta encodes what is settled. (Terminology: our concept is **Live Source** per the C-015
+rename; the schema type remains `video-placeholder` / `VideoPlaceholderElementSchema` —
+renaming the type is a scene migration and out of scope, per that item's Naming note.)
 
 ## a) Ownership composition — ONE resolution order over three notions
 
 The three notions, and the order a layer's treatment is resolved in:
 
 1. **C-015 Live Source ledger membership** — a layer the bridge's own ledger records as a
-   Live Source (plate) layer is BRIDGE-OWNED regardless of its (non-html) producer kind.
+   Live Source layer is BRIDGE-OWNED regardless of its (non-html) producer kind.
 2. **Fixed-range membership** — a layer inside the configured fixed range is
    OPERATOR-DESIGNATED territory: the R-021 carve-out of R-015's foreign-refusal applies
    (observed-producer hard Clear allowed on ANY kind — see (b) for the silence rule).
@@ -37,10 +39,14 @@ producer that some OTHER system parks INSIDE the fixed range is exactly the carv
 the fixed row shows it honestly and observed hard Clear is available (owner-approved; the fixed
 range is the operator's territory).
 
-**OWNER DECISION (a1):** confirm the disjointness prohibition (recommended) over an explicit
-precedence rule. Everything downstream assumes prohibition.
+**RESOLVED (a1, owner 2026-07-23): config-load disjointness prohibition.** The fixed bank and
+any C-015 Live Source layers must not overlap; a violation is a HARD, legible startup failure
+naming BOTH ranges — never a warning. Because the bank is extendable to 89, the check runs
+BOTH at config load AND on any extension — an extension that would collide with Live Source
+layers is refused the same way, otherwise a later extension silently recreates the overlap
+the load-time check exists to prevent.
 
-## b) OSC silence on a fixed row — unknown is shown; blind Clear does not fire
+## b) OSC silence on a fixed row — unknown is shown; hard Clear IS permitted, confirm-gated
 
 C-014 fails OPEN for allocation on a blind tap (an unobserved layer is allocatable — real
 CasparCG goes silent for empty layers, B-053); R-015 REFUSES clearing on silence (silence
@@ -48,19 +54,41 @@ licenses nothing). A fixed row inherits neither automatically, so it is decided 
 
 - **Display:** with no fresh observation, the row shows occupancy as explicitly UNKNOWN
   ("no signal — occupancy unknown", the B-094 honesty class). It never shows "empty".
-- **Hard Clear:** does NOT fire blind. On silence the layer verb refuses exactly as
-  R-015's silence rule does, with the reason on the row. **Failure direction, stated
-  plainly: this fails toward LEAVING unknown content on air.** The cost of that failure is
-  an operator walking to another station or the server console; the cost of the opposite
-  failure (blind CLEAR on a shared CasparCG) is killing another station's LIVE graphic that
-  the silent tap could not see. The two are not symmetric; we choose the recoverable one.
-  The carve-out is about OBSERVED foreign producers, not about firing into the dark.
+- **Hard Clear: PERMITTED under OSC silence, confirm-gated.** **RESOLVED (b1, owner
+  2026-07-23)** — and deliberately NOT this design's original recommendation. Rationale,
+  recorded: an absolute refusal would make R-021 NON-FUNCTIONAL on no-OSC installs, and
+  C-014 already settled the precedent that silence must not cause total lockout (its
+  blind-tap fails OPEN for allocation precisely so no-OSC installs aren't locked out). Being
+  unable to REMOVE a wrong graphic from air is worse than being unable to place one — on-air
+  RECOVERY must never be locked out. The confirmation dialog MUST state honestly that
+  occupancy is unknown and MUST name the layer number explicitly (e.g. "Occupancy of layer
+  72 is unknown — no OSC signal. CLEAR will destroy whatever is on it."). R-015's
+  foreign-refusal is untouched OUTSIDE the fixed range; this permission exists only inside
+  the operator-designated bank, and only because of the deployment invariant below.
 
-**OWNER DECISION (b1):** one narrow exception is plausible and deliberately NOT assumed: when
-the silent fixed slot holds THIS bridge's own retained intent (we placed it; our own ledger
-substitutes for observation), a confirm-gated "Clear anyway" could be offered. Recommendation:
-ship v1 WITHOUT the exception (absolute refusal on silence), add it only if operators hit the
-wall in practice.
+## b′) Deployment invariant — every station declares the SAME fixed bank
+
+b1's blind Clear is legitimate ONLY because the fixed range is territory every station has
+AGREED is operator-managed: whatever is on layer 72, all stations placed it (or accept it may
+be cleared) under that agreement. **All stations sharing one CasparCG MUST declare the SAME
+fixed bank.** Divergent banks are the (a) overlap problem in another form: station A's
+"fixed layer 75" being station B's dynamic-range or Live Source layer re-creates exactly the
+cross-subsystem destruction the disjointness prohibition exists to prevent — with a blind
+Clear now permitted on it.
+
+**Runtime detectability — stated honestly: not directly detectable today.** Stations share
+only the CasparCG wire (AMCP/OSC carry no config), and bridges do not talk to each other, so
+a bridge cannot SEE another bridge's bank. What the implementation can and should do:
+
+- validate the invariant WITHIN everything one bridge can see (its own config vs its own
+  policy ranges and Live Source plan — the (a) checks);
+- document the invariant as an INSTALLATION requirement beside the config (the same class of
+  operator contract as "point `<predefined-client>` at the bridge's OSC port", C-009);
+- treat repeated foreign HTML occupancy inside the fixed bank as a soft diagnostic (a hint
+  the banks diverge), surfaced as information, never enforcement.
+
+C-011's persisted/shared registry is the natural future seam if cross-station config exchange
+ever exists; nothing here blocks it.
 
 ## c) Pinned mechanism — the exact code seam
 
@@ -103,8 +131,9 @@ layer"): an item bound to layer 72 restoring onto layer 61 silently breaks the w
   occupancy — occupied-by-html adopts WITHOUT CLEAR; observed-empty re-ADDs. Unchanged B-092
   machinery, same slot.
 - **Fixed slot not reservable** (quarantined — a foreign producer was observed there): the
-  item PARKS on its fixed row as retained-pending. The row shows both facts honestly: "retained
-  item waiting" + the observed occupancy. NOTHING is sent to the wire.
+  item enters the named **`restore-blocked`** state on its fixed row (see the d1 resolution
+  below). The row shows both facts honestly: the retained item waiting + the observed
+  occupancy. NOTHING is sent to the wire.
 
 **The hard case — at restore the fixed slot holds a FOREIGN (non-html) producer:**
 
@@ -114,29 +143,43 @@ layer"): an item bound to layer 72 restoring onto layer 61 silently breaks the w
 - **Clear automatically: NO.** An automatic CLEAR of a live non-html producer at restore time
   is the blind-destruction class R-015 exists to prevent; the carve-out is an OPERATOR power,
   and restore is not an operator action. Automatic paths never destroy.
-- **Refuse/park: YES (decided).** The item parks as retained-pending; the row offers the
-  normal (b)-governed layer verbs. Service restores via the operator's explicit, observed,
-  confirm-gated hard Clear followed by take — deliberate, two facts on screen, zero surprise.
+- **Refuse/park: YES (decided).** The item parks on its fixed row; the row offers the normal
+  (b)-governed layer verbs. Service restores via the operator's explicit, confirm-gated hard
+  Clear followed by take — deliberate, two facts on screen, zero surprise.
 
-**OWNER DECISION (d1):** whether the row may offer "Clear and load retained item" as ONE
-confirm-gated compound action (convenience) or the two steps stay separate (recommended for
-v1: separate — the compound verb hides a destructive step behind a constructive label).
+**RESOLVED (d1, owner 2026-07-23): separate Clear-then-load steps — never one compound
+action** (a compound verb would hide a destructive step behind a constructive label; the
+B-100 lesson about one condition gating a destructive AND a constructive step applies to the
+UI surface too). **Consequence, encoded:** when restore finds a fixed slot foreign-occupied,
+the retained item lands in a NAMED, VISIBLE blocked state on that row —
+**`restore-blocked` ("BLOCKED — layer occupied")**: the row shows the retained item's
+identity, the observed occupancy, and that the item is waiting; it is a first-class row
+state, not a silent absence. It must NOT fall through to allocate-elsewhere (forbidden on
+fixed slots per R-021 and the #368 narrowing) and must NOT auto-clear. Leaving
+`restore-blocked` takes an explicit operator Clear (then take), or the foreign producer
+vacating (next sweep observes empty → the normal deferred re-ADD proceeds). Tests for the
+state are enumerated in tasks.md (unimplemented).
 
 **Tests this needs (planned in tasks.md, all unimplemented):**
 
 1. Restore, fixed slot free → adopt-in-place on the SAME layer; never re-allocated elsewhere.
-2. Restore, fixed slot quarantined (foreign observed) → NO allocate-elsewhere, item parked,
-   foreign producer survives, ZERO CLEAR on the wire.
+2. Restore, fixed slot quarantined (foreign observed) → NO allocate-elsewhere, item enters
+   the named `restore-blocked` state, foreign producer survives, ZERO CLEAR on the wire.
 3. Restore, fixed slot occupied by our own surviving html producer (bridge-only restart) →
    adopt WITHOUT CLEAR on the fixed slot (B-092 rule, same layer).
 4. Restore, OSC silent on the fixed slot → decision defers to the healthy transition; no
-   blind CLEAR ever sent.
+   automatic CLEAR is ever sent by restore.
 5. REGRESSION: dynamic (non-fixed) retained slots keep #368's fall-through to
    allocate-elsewhere unchanged.
-6. Fixed-row hard Clear: observed foreign → CLEAR sent on confirm; silent → refused with the
-   (b) reason; C-012 semantics distinguish Stop (producer resident) from Clear (destroyed).
-7. Config validation: fixed∩LiveSource-plan refused at load; fixed∩policy-range refused;
-   grow-at-end accepted live; shrink with residents refused naming the slots.
+6. Fixed-row hard Clear: observed foreign → CLEAR sent on confirm; OSC-silent → CLEAR
+   available (b1), confirm dialog states occupancy is unknown AND names the layer number;
+   C-012 semantics distinguish Stop (producer resident) from Clear (destroyed).
+7. Config validation: fixed∩LiveSource-plan refused at LOAD and at EXTENSION, error naming
+   both ranges; fixed∩policy-range refused; grow-at-end accepted live; shrink with residents
+   refused, error naming the occupied slot numbers.
+8. `restore-blocked` lifecycle: entered on foreign-occupied restore; exits via explicit
+   operator Clear + take, AND via the foreign producer vacating (observed empty → normal
+   deferred re-ADD); never exits via allocate-elsewhere or auto-clear.
 
 ## e) Config shape — and what a live change does
 
@@ -159,11 +202,12 @@ bridge restart with an empty fixed bank (validated).
   existing bindings unmoved.
 - **Alias change:** applies live; display-only.
 - **Shrink / renumber while ANY affected slot has a resident item or retained intent:**
-  REFUSED with a legible error naming the occupied slots. Truncating a row out from under a
-  live binding either orphans the item or invites an implicit clear — both wrong.
-  **OWNER DECISION (e1):** refuse (recommended) vs "defer until empty" (the shrink applies
-  automatically once the affected slots empty). Recommendation: refuse — deferred config is
-  invisible state.
+  **RESOLVED (e1, owner 2026-07-23): REFUSED**, with an error that NAMES the occupied slot
+  numbers. Truncating a row out from under a live binding either orphans the item or invites
+  an implicit clear — both wrong. **Defer-until-empty was rejected because** it lets the
+  declared config and the actual state diverge silently for an UNBOUNDED time — a pending
+  shrink is invisible state that fires whenever a slot happens to empty, which is exactly the
+  config-vs-reality ambiguity this design resolves loudly at config time everywhere else.
 
 Storage: the bridge-side install-config class (the `connection-store.ts` precedent — same
 persistence family R-025 names); R-023 extends the SAME config with per-slot shortcuts.
@@ -179,7 +223,8 @@ context-menu items so gating/handler/wording cannot diverge; `toMenuItems` `rowA
   still reports `html`), **Clear = `CLEAR`** (producer destroyed, OSC goes silent). Same
   handlers as the stack row's — shared declarations, not copies.
 - **Occupied by anything else** (another station's html graphic, or a non-html producer) →
-  LAYER verbs only: hard **Clear** (per (b): observed only, confirm-gated) and graceful
+  LAYER verbs only: hard **Clear** (per (b): confirm-gated; under OSC silence the dialog
+  states occupancy is unknown and names the layer — b1) and graceful
   **Stop** — with one refinement: `CG STOP` is a template verb, so Stop is offered only when
   the observed producer is `html` (another station's graphic runs its outro; the verb is
   layer-addressed so no field schema is needed). What `CG STOP` does to a non-html layer on
@@ -219,13 +264,26 @@ persisted registry could later widen "local" toward "shared"; nothing here block
   only. Presets (C-002) reference slots the same way — the binding shape is defined once here
   so neither item invents its own.
 
-## OWNER DECISIONS — collected for one pass
+## The principle these four share
 
-- **(a1)** Fixed range and C-015 Live Source layer plan: config-level DISJOINTNESS prohibition
-  (recommended) vs precedence rule.
-- **(b1)** Blind hard Clear on a silent fixed slot: absolute refusal in v1 (recommended) vs a
-  confirm-gated own-retained-intent exception.
-- **(d1)** Foreign-occupied fixed slot at restore: separate Clear-then-load steps
-  (recommended) vs one compound confirm-gated action.
-- **(e1)** Shrinking the fixed bank while slots are resident: refuse (recommended) vs
-  defer-until-empty.
+**Conflicts are resolved at CONFIG/STARTUP time, loudly — never at on-air action time.**
+a1 refuses overlap at load and at extension rather than adjudicating precedence at Clear
+time; d1 makes a restore conflict a named, visible state awaiting an explicit operator step
+rather than an automatic resolution; e1 refuses a shrink at config time rather than letting
+config and reality diverge silently. **b1 is the one deliberate exception, and it points the
+other way for a reason: on-air RECOVERY must never be locked out** — the ability to REMOVE
+wrong content from air outranks the ability to place it, so inside the operator-designated
+bank a confirm-gated Clear works even blind. Future decisions in this area follow this spine
+rather than being re-litigated case by case.
+
+## OWNER DECISIONS — all RESOLVED (owner, 2026-07-23), encoded in place above
+
+- **(a1)** Disjointness prohibition — hard legible startup failure naming both ranges;
+  checked at load AND on every extension. (§a)
+- **(b1)** Hard Clear permitted under OSC silence, confirm-gated, dialog names the layer and
+  states occupancy is unknown — NOT the original recommendation; rationale recorded. Depends
+  on the same-bank deployment invariant. (§b, §b′)
+- **(d1)** Separate Clear-then-load steps; foreign-occupied restore lands in the named
+  `restore-blocked` row state — never allocate-elsewhere, never auto-clear. (§d)
+- **(e1)** Shrink-with-residents refused, error names the occupied slots; defer-until-empty
+  rejected as silent config/state divergence. (§e)

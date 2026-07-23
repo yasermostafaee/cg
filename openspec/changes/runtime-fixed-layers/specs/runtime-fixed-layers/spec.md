@@ -1,56 +1,73 @@
-# runtime-fixed-layers — delta (R-021 design phase; settled requirements only)
+# runtime-fixed-layers — delta (R-021 design phase; settled by the owner's a1/b1/d1/e1 answers, 2026-07-23)
 
-Encodes ONLY what is settled by R-021's acceptance and the repo's existing rules. The open
-owner decisions (a1/b1/d1/e1) live in this change's `design.md` and are deliberately NOT
-encoded here.
+Encodes what is settled by R-021's acceptance, the repo's existing rules, and the four owner
+decisions recorded in this change's `design.md`. Implementation is a later PR.
 
 ## ADDED Requirements
 
-### Requirement: Fixed slots are fenced out of dynamic allocation
+### Requirement: Fixed slots are fenced out of dynamic allocation, and conflicts are refused at config time
 
 The install config SHALL declare fixed operator slots as `start`/`count`/`aliases` on one
 channel (default TEN at 70–79), implemented via the LayerManager's pinned-class mechanism so
 dynamic allocation can NEVER land on a fixed slot and normal deallocation never releases one.
-The fixed range SHALL be validated at CONFIG LOAD against every dynamic template-type range —
-overlap is refused with a legible error before anything runs, never adjudicated later. The
-range is extendable ONLY at the end (max layer 89) and never renumbered mid-session.
+The fixed bank SHALL be validated for disjointness against every dynamic template-type range
+AND against any C-015 Live Source layers — a violation is a HARD, legible startup failure
+naming both ranges, never a warning. Because the bank is extendable (at the end only, max
+layer 89), the disjointness check SHALL run BOTH at config load AND on any extension. The
+bank is never renumbered mid-session. A shrink while any affected slot holds a resident item
+or retained intent SHALL be refused with an error naming the occupied slot numbers —
+defer-until-empty does not exist (declared config never silently diverges from actual state).
 
 #### Scenario: Dynamic allocation never lands on a fixed slot
 
 - **WHEN** items are added to the dynamic stack until a template-type range is exhausted
   **THEN** no allocation ever returns a layer inside the fixed range
 
-#### Scenario: Overlapping config is refused at load
+#### Scenario: Overlapping config is refused at load AND at extension
 
-- **WHEN** a config declares a fixed range intersecting a dynamic template-type range
-  **THEN** the config is refused at load with an error naming the overlap — the bridge never
-  runs with an ambiguous layer ownership map
+- **WHEN** a config declares a fixed bank intersecting a dynamic template-type range or a
+  Live Source layer **THEN** startup fails with an error naming both ranges
+- **WHEN** a bank extension would collide with a Live Source layer **THEN** the extension is
+  refused the same way — a later extension can never silently recreate the overlap
 
-#### Scenario: Growth at the end applies live; renumbering does not exist
+#### Scenario: Growth applies live; shrink-with-residents is refused by name
 
 - **WHEN** the fixed count grows (within the 89 ceiling) **THEN** new empty rows appear
   without disturbing existing bindings
+- **WHEN** a shrink would remove slots that hold resident items or retained intent **THEN**
+  it is refused with an error naming those slot numbers
 - **WHEN** a config attempts to renumber (move `start`) mid-session **THEN** it is refused
 
-### Requirement: Restore adopts a fixed slot in place and never falls through
+### Requirement: Restore adopts a fixed slot in place; a foreign-occupied slot becomes restore-blocked
 
 A retained item bound to a fixed slot SHALL restore ON THE SAME layer: the restore path's
 allocate-elsewhere fall-through (the #368 behavior for dynamic slots) is FORBIDDEN for fixed
 slots. When the fixed slot is unavailable because a foreign producer was observed there, the
-item SHALL park on its fixed row as retained-pending with the occupancy shown honestly, and
-NOTHING is sent to the wire — restore never clears automatically. Dynamic (non-fixed) retained
-slots keep the existing fall-through unchanged.
+item SHALL enter a NAMED, visible **`restore-blocked`** state on its fixed row — showing the
+retained item's identity and the observed occupancy — and NOTHING is sent to the wire:
+restore never clears automatically, and recovery is the operator's separate, explicit Clear
+followed by take (never one compound action). `restore-blocked` also exits when the foreign
+producer vacates (observed empty → the normal deferred re-ADD proceeds). Dynamic (non-fixed)
+retained slots keep the existing fall-through unchanged.
 
 #### Scenario: Bridge-only restart keeps the item on its fixed layer
 
 - **WHEN** the bridge restarts while the item's producer survives on its fixed layer **THEN**
   the item is adopted in place on that same layer without any CLEAR reaching the wire
 
-#### Scenario: Foreign-occupied fixed slot parks the retained item
+#### Scenario: Foreign-occupied fixed slot enters restore-blocked
 
 - **WHEN** restore finds the fixed slot occupied by a foreign producer **THEN** the item is
-  NOT loaded elsewhere and NOT adopted; the row shows the retained item waiting and the
-  observed occupancy; the foreign producer survives untouched
+  NOT loaded elsewhere, NOT adopted, and NOT auto-cleared; the row shows the
+  `restore-blocked` state naming the retained item and the observed occupancy; the foreign
+  producer survives untouched
+
+#### Scenario: restore-blocked exits only by explicit Clear or the layer vacating
+
+- **WHEN** the operator explicitly Clears the layer (confirm-gated) and takes the item
+  **THEN** the item loads onto its own fixed slot — two separate actions, never one
+- **WHEN** the foreign producer vacates and the layer is observed empty **THEN** the normal
+  deferred re-ADD proceeds on the same slot
 
 #### Scenario: Dynamic slots are unchanged
 
@@ -66,7 +83,10 @@ bridge's, the row exposes the full item verb set with C-012 semantics (Stop = `C
 graceful, producer stays resident; Clear = `CLEAR`, producer destroyed). When the layer is
 occupied by anything else, the row exposes LAYER verbs only — never Take/Update for a foreign
 item. When occupancy has NO fresh observation, the row shows occupancy as explicitly UNKNOWN
-(never "empty"), and the hard Clear refuses — silence licenses nothing.
+(never "empty") — and hard Clear REMAINS available, confirm-gated, with a dialog that states
+honestly that occupancy is unknown and names the layer number explicitly (on-air recovery is
+never locked out on a no-OSC install). Outside the fixed range, R-015's foreign-refusal is
+untouched.
 
 #### Scenario: Own item exposes item verbs
 
@@ -79,10 +99,15 @@ item. When occupancy has NO fresh observation, the row shows occupancy as explic
   **THEN** the row shows the occupancy honestly and offers layer verbs only — Take/Update are
   absent
 
-#### Scenario: Silence shows unknown and refuses hard Clear
+#### Scenario: Silence shows unknown; Clear stays available with an honest confirmation
 
 - **WHEN** the fixed layer has no fresh observation **THEN** the row reads "occupancy
-  unknown" (never "empty") and a hard Clear refuses with that reason
+  unknown" (never "empty")
+- **WHEN** the operator invokes hard Clear on that silent fixed layer **THEN** the
+  confirmation dialog states that occupancy is unknown and names the layer number; on
+  confirm the CLEAR is sent
+- **WHEN** a layer OUTSIDE the fixed range has no fresh observation **THEN** `layers.clear`
+  refuses it exactly as R-015 requires — the permission exists only inside the fixed bank
 
 ### Requirement: One-action import binds to the exact slot
 

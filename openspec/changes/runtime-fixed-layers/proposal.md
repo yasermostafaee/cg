@@ -17,10 +17,13 @@ is exactly what fixed slots must forbid.
 - `design.md` — the deliverable: the ownership-composition resolution order, the OSC-silence
   decision for fixed rows, the pinned mechanism's exact code seam, the restore/adopt-in-place
   branch vs #368, the config shape and live-change rules, the row verb surface, multi-station
-  behavior, and forward-compatibility with R-023 / R-024 / C-002 — each either DECIDED with the
-  code cited, or stated as a recommendation flagged **OWNER DECISION**.
-- `specs/runtime-fixed-layers/spec.md` — a delta encoding ONLY what is settled; nothing that
-  hangs on an open owner decision.
+  behavior (incl. the same-fixed-bank deployment invariant), and forward-compatibility with
+  R-023 / R-024 / C-002 — each decided with the code cited. The four product/on-air calls
+  this design originally flagged (a1/b1/d1/e1) were ANSWERED by the owner on 2026-07-23 and
+  are encoded in place, under one named principle (conflicts resolve loudly at config/startup
+  time; b1 is the deliberate on-air-recovery exception).
+- `specs/runtime-fixed-layers/spec.md` — a delta encoding what is settled, including the
+  four resolutions.
 - `tasks.md` — the full implementation plan, ALL tasks unchecked; implementation is a later PR.
 
 R-021 stays `[ ]` in `docs/prd/runtime.md`, with a Notes pointer at this change dir.
