@@ -769,6 +769,62 @@ accepts the ~3.5 % size + a re-import — a call left explicitly to the owner.
 further evidence it is a decode artifact (a frame presented mid-decode during a seek burst),
 NOT an alpha/premultiply problem — the un-premultiply expression was not touched in this pass.
 
+## LOSSY ALPHA COMPRESSION — the real black-artifact root cause (2026-07-24)
+
+**Owner's decisive observation:** on freshly re-imported clips (fringe fix + sync fix +
+resume grace all in place) the black artifacts appear **during MOTION** — both the
+whole-rectangle darkening and the edge/particle haloing. Supporting signal: a 739 MB source
+converts to ~1.4 MB (~500×) with no quality args passed.
+
+**Mechanism PROVEN by measurement** (harness committed:
+`tools/spikes/video-convert/measure-alpha-leak.mjs` — a 720p premultiplied particle-burst,
+15 static + 45 moving frames, encoded with the exact production args, decoded, and every
+SOURCE-transparent pixel's OUTPUT alpha measured):
+
+| encode                        | moving-frame leak (α>0 / ≥4 / ≥8) | max α  | black share of visible leak | size           |
+| ----------------------------- | --------------------------------- | ------ | --------------------------- | -------------- |
+| OLD `crf 12 -b:v 2M`          | **56.7 % / 0.877 % / 0.090 %**    | **30** | **77 %**                    | 1.2 MiB        |
+| `crf 10 -b:v 8M`              | 4.0 % / 0.086 % / 0               | 9      | 91 %                        | 3.5 MiB (2.9×) |
+| **`crf 4 -qmax 16 -b:v 20M`** | 2.6 % / **0.008 % / 0**           | **6**  | (invisible)                 | 6.9 MiB (5.8×) |
+| `qmax 8 -b:v 50M`             | ≈ same                            | 6      | —                           | 8.9 MiB (7.5×) |
+| **+ ALPHA BLEED**             | unchanged α distribution          | —      | **0 %**                     | +~2 %          |
+
+In WebM the alpha plane is a SECOND VP8 stream encoded with the SAME quantiser as colour —
+**no independent alpha-quality control exists** (`ffmpeg -h encoder=libvpx` exposes no alpha
+option; empirically the leak scales monotonically with the shared quality settings, which is
+the proof it rides the same quantiser). Under the old `crf 12 + 2 Mbps cap`, motion drove the
+quantiser high enough that fully-transparent pixels decoded at α up to 30 over the BLACK
+matte RGB — 12 % opacity black smudges exactly where the motion is, and a subtle whole-rect
+veil in static frames (26 % of transparent pixels at α ≤ 7). Static frames quantise cleanly —
+why first frames always looked fine, and why a static single-frame fixture let this class
+survive three rounds of fixes.
+
+**Fix shipped (converterRevision `2026-07-24.3` — re-import required, as expected):**
+
+1. **(A) Broadcast quality:** `-crf 4 -qmax 16 -b:v 20M` — the quantiser is BOUNDED so alpha
+   can never crumble (leak: max α 6, 0.008 % ≥ 4, zero ≥ 8 on the torture clip); the 20M
+   ceiling never binds in practice. Plus **`-g 25`** (1 s keyframes — the resume-window
+   finding, +3.5 %). Measured size cost **~5.8×** on the torture clip — inside the owner's
+   pre-approved 5–10× band ("broadcast cleanliness wins"); real furniture clips (mostly
+   static) grow less. Encode-time delta ≈ none (native); the bleed below ≈ 2× total.
+2. **(B) ALPHA BLEED** (both alpha paths, never alters alpha): transparent-region RGB is
+   filled with colour extended from the nearest opaque pixels —
+   `bled = blur(premult)/blur(α)` (an opacity-weighted average of TRUE colour, so it runs
+   off the premult image: the archive input directly, or `straight·α` recomputed for a
+   straight source), composited under the straight image by `overlay`, ORIGINAL alpha
+   re-attached bit-exact via `alphaextract`+`alphamerge`. Any residual leak now shows
+   plausible local colour, never black (measured: black share 77 % → 0 %), and chroma
+   subsampling can no longer drag black into edges. All filters verified present in the
+   shipped wasm core.
+
+**Test split (stated honestly):** the committed 64×64 MOTION fixture
+(`motion-64x64-premult-bgra.avi`, orbiting particle, corners permanently transparent) guards
+the pipeline END-TO-END through the real wasm encode — transparent stays transparent across
+motion frames, nothing visible in source-transparent regions. At 64×64 even the OLD args pass
+(the cap never binds at that size), so the QUALITY args themselves are pinned by unit test
+(`crf 4 / qmax 16 / b:v 20M / -g 25`), and the resolution-scale leak is reproducible on demand
+with the committed measurement harness. A committed 720p raw fixture (100+ MB) was rejected.
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

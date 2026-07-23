@@ -21,6 +21,11 @@ const FIXTURE = join(HERE, 'fixtures', 'box-64x64-bgra.avi');
 // gold, right half half-alpha gold with RGB already darkened — the legacy-archive
 // convention that produced the black fringe (D-128).
 const PREMULT_FIXTURE = join(HERE, 'fixtures', 'gradient-64x64-premult-bgra.avi');
+// A MOTION fixture (the guard the static one lacked): a soft-edged textured particle
+// ORBITING the centre, premultiplied, with the four 10×10 corner regions permanently
+// transparent in every source frame. Guards the lossy-alpha-leak class end-to-end:
+// source-transparent pixels must STAY transparent across motion frames.
+const MOTION_FIXTURE = join(HERE, 'fixtures', 'motion-64x64-premult-bgra.avi');
 
 test('a video imports, its stored WebM decodes (CSP media-src), and drag places a video element', async ({
   app,
@@ -333,6 +338,103 @@ test('a premultiplied-alpha source imports WITHOUT the black fringe (D-128 un-pr
     // and it is genuinely semi-transparent (partial alpha carried through)
     expect(px.right[3]).toBeGreaterThan(60);
     expect(px.right[3]).toBeLessThan(210);
+  }
+});
+
+test('MOTION keeps transparency: source-transparent pixels stay transparent across moving frames (lossy-alpha guard)', async ({
+  app,
+  page,
+}) => {
+  await app.newProject('VideoMotionAlpha');
+  await page.getByRole('button', { name: 'Project assets' }).click();
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
+  await page.getByRole('menuitem', { name: 'Video…' }).click();
+  await (
+    await chooser
+  ).setFiles({
+    name: 'motion-64x64-premult-bgra.avi',
+    mimeType: 'video/x-msvideo',
+    buffer: readFileSync(MOTION_FIXTURE),
+  });
+  await expect(page.locator('[data-testid="video-probe-meta"]')).toContainText('64×64');
+  await page.getByRole('button', { name: 'Convert & import' }).click();
+  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached({
+    timeout: 25_000,
+  });
+
+  // Decode the stored WebM and sample the four 10×10 CORNER regions — transparent in
+  // EVERY source frame — at several timestamps across the orbit (motion on every frame).
+  // The lossy-alpha bug decoded such pixels at α up to 30 over BLACK during motion; the
+  // bounded-quantiser encode + alpha bleed must keep them fully transparent, and nothing
+  // in those regions may read as visible black.
+  const scan = await page.evaluate(async () => {
+    const assets = await window.cg.assets.list();
+    const vid = assets.find((a) => a.kind === 'video');
+    if (vid === undefined) return { ok: false as const, why: 'no stored video asset' };
+    const url = await window.cg.assets.url(vid.assetId);
+    if (url === null) return { ok: false as const, why: 'url() returned null' };
+    const v = document.createElement('video');
+    v.muted = true;
+    v.preload = 'auto';
+    v.src = url;
+    const loaded = await new Promise<boolean>((res) => {
+      const t = setTimeout(() => res(false), 12_000);
+      v.onloadeddata = () => {
+        clearTimeout(t);
+        res(true);
+      };
+      v.onerror = () => {
+        clearTimeout(t);
+        res(false);
+      };
+    });
+    if (!loaded || v.videoWidth === 0) return { ok: false as const, why: 'decode failed' };
+    const c = document.createElement('canvas');
+    c.width = v.videoWidth;
+    c.height = v.videoHeight;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    if (ctx === null) return { ok: false as const, why: 'no 2d context' };
+    const corners = [
+      [0, 0],
+      [c.width - 10, 0],
+      [0, c.height - 10],
+      [c.width - 10, c.height - 10],
+    ] as const;
+    let maxAlpha = 0;
+    let visibleLeak = 0; // α ≥ 8 — would read as a smudge on air
+    let sampled = 0;
+    for (const t of [0.06, 0.3, 0.55, 0.8, 1.05]) {
+      const sought = await new Promise<boolean>((res) => {
+        const tm = setTimeout(() => res(false), 5_000);
+        v.onseeked = () => {
+          clearTimeout(tm);
+          res(true);
+        };
+        v.currentTime = t;
+      });
+      if (!sought) return { ok: false as const, why: `seek to ${String(t)} never fired` };
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.drawImage(v, 0, 0);
+      for (const [cx, cy] of corners) {
+        const d = ctx.getImageData(cx, cy, 10, 10).data;
+        for (let i = 0; i < d.length; i += 4) {
+          sampled++;
+          const a = d[i + 3]!;
+          if (a > maxAlpha) maxAlpha = a;
+          if (a >= 8) visibleLeak++;
+        }
+      }
+    }
+    return { ok: true as const, sampled, maxAlpha, visibleLeak };
+  });
+  expect(scan, JSON.stringify(scan)).toMatchObject({ ok: true });
+  if (scan.ok) {
+    expect(scan.sampled).toBe(5 * 4 * 100); // 5 timestamps × 4 corners × 100 px
+    // fully transparent must STAY fully transparent (≤2 tolerates canvas rounding only)
+    expect(scan.maxAlpha).toBeLessThanOrEqual(2);
+    // and NOTHING in a source-transparent region may be visible (the black-smudge class)
+    expect(scan.visibleLeak).toBe(0);
   }
 });
 
