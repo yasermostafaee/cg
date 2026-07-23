@@ -5,6 +5,7 @@ import {
   buildPosterArgs,
   buildProvenance,
   clampCrop,
+  CONVERTER_REVISION,
   cropsEqual,
   findDuplicateVideoAsset,
   fpsConformNotice,
@@ -51,6 +52,56 @@ describe('D-128 — buildConvertArgs (the DECIDED VP8+alpha recipe)', () => {
       targetFps: 25,
     });
     expect(args).not.toContain('-vf');
+  });
+});
+
+describe('D-128 — premultiplied-alpha un-premultiply (the black-fringe fix)', () => {
+  const vf = (args: string[]): string => args[args.indexOf('-vf') + 1] ?? '';
+
+  it('premultipliedAlpha ⇒ un-premultiplies via geq (straight = 255·c/α, α-guarded)', () => {
+    const args = buildConvertArgs({
+      inputPath: '/mnt/clip.avi',
+      outputPath: '/out.webm',
+      targetFps: 50,
+      premultipliedAlpha: true,
+    });
+    const filter = vf(args);
+    // the correction is a geq unpremultiply, NOT ffmpeg's no-op `unpremultiply` filter
+    expect(filter).toContain('geq=');
+    expect(filter).not.toContain('unpremultiply');
+    // divide each colour channel by alpha, guarded at α=0
+    expect(filter).toContain('255*r(X,Y)/alpha(X,Y)');
+    expect(filter).toContain('gt(alpha(X,Y),0)');
+    // runs BEFORE the encoder (it is an -vf, ahead of the VP8 output flags)
+    expect(args.indexOf('-vf')).toBeGreaterThan(args.indexOf('/mnt/clip.avi'));
+    expect(args.indexOf('-vf')).toBeLessThan(args.indexOf('libvpx'));
+  });
+
+  it('absent / false ⇒ NO un-premultiply (a straight-alpha source is untouched)', () => {
+    for (const opt of [{}, { premultipliedAlpha: false }]) {
+      const args = buildConvertArgs({
+        inputPath: '/mnt/clip.avi',
+        outputPath: '/out.webm',
+        targetFps: 50,
+        ...opt,
+      });
+      expect(args).not.toContain('-vf'); // no crop, no unpremult ⇒ no filter at all
+    }
+  });
+
+  it('crop + premultipliedAlpha ⇒ ONE -vf: crop FIRST, then un-premultiply', () => {
+    const args = buildConvertArgs({
+      inputPath: '/mnt/clip.avi',
+      outputPath: '/out.webm',
+      targetFps: 25,
+      crop: { x: 10, y: 20, width: 640, height: 360 },
+      premultipliedAlpha: true,
+    });
+    // exactly one -vf, the two stages comma-joined in crop→unpremult order
+    expect(args.filter((a) => a === '-vf')).toHaveLength(1);
+    const filter = vf(args);
+    expect(filter.indexOf('crop=640:360:10:20')).toBe(0);
+    expect(filter.indexOf('geq=')).toBeGreaterThan(filter.indexOf('crop='));
   });
 
   it('poster extraction pulls exactly one frame as image2 (frame 0 when no seek)', () => {
@@ -171,13 +222,14 @@ describe('D-128 decision (d) — fps conform + warn (never block, never silently
 describe('D-128 — provenance assembly + crop clamping', () => {
   const probe = { fps: 29.97, width: 1920, height: 1080, durationMs: 10_000 };
 
-  it('captures source lineage incl. the baked crop', () => {
+  it('captures source lineage incl. the baked crop + converter revision + alpha mode', () => {
     expect(
       buildProvenance({
         sourceFilename: 'archive.avi',
         probe,
         targetFps: 50,
         crop: { x: 0, y: 0, width: 640, height: 480 },
+        premultipliedAlpha: true,
       }),
     ).toEqual({
       sourceFilename: 'archive.avi',
@@ -185,13 +237,22 @@ describe('D-128 — provenance assembly + crop clamping', () => {
       targetFps: 50,
       sourceWidth: 1920,
       sourceHeight: 1080,
+      converterRevision: CONVERTER_REVISION,
       crop: { x: 0, y: 0, width: 640, height: 480 },
+      premultipliedAlpha: true,
     });
   });
 
-  it('omits crop when none was marked (full frame)', () => {
+  it('always records the converter revision (so a future item can flag stale assets)', () => {
+    const p = buildProvenance({ sourceFilename: 'a.avi', probe, targetFps: 50 });
+    expect(p.converterRevision).toBe(CONVERTER_REVISION);
+    expect(CONVERTER_REVISION).toMatch(/^\d{4}-\d{2}-\d{2}\.\d+$/); // dated, monotonic counter
+  });
+
+  it('omits crop and alpha mode when not provided (full frame, unspecified)', () => {
     const p = buildProvenance({ sourceFilename: 'a.avi', probe, targetFps: 50 });
     expect('crop' in p).toBe(false);
+    expect('premultipliedAlpha' in p).toBe(false);
   });
 
   it('clampCrop keeps the rect inside the source bounds and integral', () => {

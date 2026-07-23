@@ -366,6 +366,8 @@ export async function convertToWebm(opts: {
   file: File;
   targetFps: number;
   crop?: CropRect | undefined;
+  /** D-128 — un-premultiply a matted-against-black source (fringe fix). */
+  premultipliedAlpha?: boolean | undefined;
   onProgress?: ((ratio: number) => void) | undefined;
 }): Promise<Uint8Array<ArrayBuffer> | null> {
   return withExclusive(async () => {
@@ -391,6 +393,7 @@ export async function convertToWebm(opts: {
               outputPath: output,
               targetFps: opts.targetFps,
               crop: opts.crop,
+              premultipliedAlpha: opts.premultipliedAlpha,
             }),
           ),
         );

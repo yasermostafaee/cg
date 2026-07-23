@@ -574,6 +574,72 @@ midpoint`, the exact ms-space analogue of the D-125 Lottie poster rule at `runti
   DRIVER + the designer-canvas playback (`preview.ts` already wires the `<video>` src there);
   the runtime/exported `<video>` src is Phase 5's.
 
+## Black-fringe fix — premultiplied alpha (2026-07-23, `feat/d128-p4-video-lifecycle`)
+
+**Symptom (owner):** a converted clip's dissolve/close showed BLACK EDGES around
+semi-transparent pixels (soft edges, dissolving particles); fully-opaque and
+fully-transparent areas were correct. Sources are the legacy archive AVIs
+(rawvideo/BGRA, e.g. `Logo_HazratKhadije_1.avi`).
+
+**Root cause PROVEN — (A) premultiplied alpha (dominant).** Legacy After Effects /
+BGRA archives store alpha PREMULTIPLIED (matted against black): the RGB of a
+semi-transparent pixel is already `straight · alpha`. The browser and CasparCG
+composite assuming STRAIGHT (unassociated) alpha, so those pixels are darkened a
+SECOND time → a black halo exactly where alpha is partial. The pre-fix converter
+did ZERO alpha handling (`crop?` → `-c:v libvpx -pix_fmt yuva420p …`), so the
+premultiplied RGB went straight to air. Proven numerically on a synthetic
+premultiplied source through the FULL pipeline (encode → libvpx VP8+alpha →
+libvpx decode → straight rgba): a straight-gold `(255,215,0)` pixel at α 128
+decoded back **darkened to `(124,107,0)`** under the current pipeline and
+**restored to `(254,214,0)`** with the fix. rawvideo/BGRA carries NO
+premultiplied flag; the invariant `RGB ≤ α` is necessary-but-not-sufficient (a
+dark straight source satisfies it too), so premultiplied-ness **cannot be
+auto-detected** — see the toggle below.
+
+**(B) chroma-subsample bleed — measured MINOR, not corrected.** VP8 forces
+`yuv420p` chroma; black under transparent regions can bleed into edge chroma.
+Measured by comparing the fix at 4:2:0 vs 4:4:4 (no subsample): they differ by
+**≤4/255 at the extreme low-α edge**. So (B) is real but negligible once (A) is
+fixed; a 4:4:4 / colour-fill pass would inflate output for no visible gain and is
+deliberately NOT applied.
+
+**Filter chain — before → after.**
+
+- Before: `[-vf crop=W:H:X:Y]? -c:v libvpx -pix_fmt yuva420p -auto-alt-ref 0 -crf 12 -b:v 2M -deadline good -cpu-used 5 -an -r <fps>`
+- After (premultiplied ON): the same, with the `-vf` now
+  `crop=W:H:X:Y,format=rgba,geq=r='if(gt(alpha(X,Y),0),255*r(X,Y)/alpha(X,Y),0)':g=…:b=…:a='alpha(X,Y)'`
+  (crop FIRST, then un-premultiply; crop omitted when none marked). Everything else
+  is untouched (VP8+alpha, `-an`, fps conform, crop bake, WORKERFS, single-thread).
+
+**Why `geq`, not the `unpremultiply` filter.** ffmpeg's `unpremultiply` divides the
+selected planes by the **first plane** (green in `gbrap`, the packed word in
+`rgba`) — never the actual alpha — so single-input `inplace=1` is a proven **no-op**
+here, and the 2-input `alphaextract` form scrambles planes (grayscale output). `geq`
+computes `straight = 255·c/α` exactly, guarded at α 0, and IS present in the shipped
+`@ffmpeg/core` 0.12.10 wasm (verified in the binary alongside `crop`/`libvpx`).
+
+**Correct for BOTH alpha conventions — an operator toggle, not a blind default.**
+Un-premultiplying a STRAIGHT source is the INVERSE error (it over-brightens
+semi-transparent pixels), so the fix is gated on a `Premultiplied alpha` checkbox in
+the import modal, **defaulting ON** to match the client's all-premultiplied archive.
+A straight-alpha source (a normal WebM/MOV) is imported with it OFF and is byte-for-
+byte untouched. Since BGRA can't be auto-classified, this explicit choice is the
+honest path on a broadcast pipeline (never a silent guess).
+
+**Cost.** The `geq` pass adds per-pixel expression evaluation: measured ~+6× the
+FILTER time on a 640×360×60 synthetic (libvpx encode was trivial there), and
+**+60–84 % output size** — the size growth is INHERENT to correctness (restoring
+colour into previously-darkened partial-α regions adds real detail the premultiplied
+clip had crushed toward black). It is a one-time import cost, paid only for
+premultiplied sources.
+
+**Consequence — stale assets.** The fix changes conversion output, so clips already
+imported carry the old fringe. Nothing is silently re-converted. Each asset's
+provenance now records `converterRevision` (`2026-07-23.2` = this fix) and
+`premultipliedAlpha`; a future item can flag assets with an older/absent revision and
+prompt re-import. **The owner must RE-IMPORT the affected archive clips** to clear the
+fringe on already-imported assets.
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

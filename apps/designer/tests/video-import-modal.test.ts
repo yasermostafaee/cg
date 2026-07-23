@@ -482,6 +482,7 @@ describe('VideoImportModal (D-128)', () => {
         file: FILE,
         targetFps: 50,
         crop: { x: 100, y: 0, width: 320, height: 360 },
+        premultipliedAlpha: true, // the toggle defaults ON (the client's archive)
       }),
     );
     expect(storeBytes).toHaveBeenCalledWith({
@@ -494,9 +495,11 @@ describe('VideoImportModal (D-128)', () => {
         targetFps: 50,
         sourceWidth: 640,
         sourceHeight: 360,
+        converterRevision: expect.stringMatching(/^\d{4}-\d{2}-\d{2}\.\d+$/),
         sourceSha256: 'a'.repeat(64), // the dedupe key (computed during the encode) travels along
         sourceBytes: FILE_SIZE,
         crop: { x: 100, y: 0, width: 320, height: 360 },
+        premultipliedAlpha: true,
       },
     });
     expect(onDone).toHaveBeenCalledWith({

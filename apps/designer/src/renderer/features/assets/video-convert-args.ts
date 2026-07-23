@@ -49,21 +49,65 @@ const VP8_ALPHA_ARGS = [
 ] as const;
 
 /**
+ * D-128 — the converter revision recorded in each asset's provenance. BUMP this
+ * (bump the date, keep the counter monotonic) whenever the conversion OUTPUT
+ * changes, so a future item can identify assets produced by an older converter
+ * and prompt a re-import. `2026-07-23.2` = the premultiplied-alpha fringe fix.
+ */
+export const CONVERTER_REVISION = '2026-07-23.2';
+
+/**
+ * D-128 — UN-PREMULTIPLY straight-out the darkened RGB of a premultiplied
+ * (matted-against-black) source, so semi-transparent pixels composite without the
+ * black fringe (root cause A, proven: legacy AE/BGRA archives store RGB already
+ * multiplied by alpha, and the browser/CasparCG composite assuming STRAIGHT alpha
+ * — darkening those pixels a second time). straight = premult · 255 / alpha,
+ * guarded at alpha 0 (fully transparent ⇒ 0, no divide-by-zero).
+ *
+ * Why `geq` and not the `unpremultiply` filter: ffmpeg's `unpremultiply` divides
+ * by the FIRST plane (green in gbrap, the packed word in rgba) — never the actual
+ * alpha — so single-input `inplace` is a proven no-op here; the 2-input alpha form
+ * scrambles planes. `geq` is exact, and IS present in the shipped `@ffmpeg/core`
+ * 0.12.10 wasm. The single quotes protect the commas inside `if()`/`alpha(X,Y)`
+ * from the filtergraph's own comma separator — they are literal graph syntax (this
+ * is one argv element to `ffmpeg.exec`, never shell-parsed). Chroma-subsample bleed
+ * (cause B) measured negligible once A is fixed (≤4/255 at the extreme edge), so no
+ * 4:4:4 / colour-fill is applied — it would inflate size for no visible gain.
+ */
+const UNPREMULTIPLY_FILTER =
+  'format=rgba,geq=' +
+  "r='if(gt(alpha(X,Y),0),255*r(X,Y)/alpha(X,Y),0)':" +
+  "g='if(gt(alpha(X,Y),0),255*g(X,Y)/alpha(X,Y),0)':" +
+  "b='if(gt(alpha(X,Y),0),255*b(X,Y)/alpha(X,Y),0)':" +
+  "a='alpha(X,Y)'";
+
+/**
  * Build the conversion command. The optional crop is BAKED via ffmpeg's `crop`
  * filter (decision (c) — never a playback-time crop) and the output is ALWAYS
  * CONFORMED to the project channel's frame rate via `-r` (decision (d) — a
  * non-matching rate judders on air; conforming once at import fixes it cleanly).
+ *
+ * `premultipliedAlpha` (D-128 fringe fix) prepends an UN-PREMULTIPLY pass so a
+ * matted-against-black legacy archive composites without a black halo. It runs
+ * AFTER the crop (crop selects the region; un-premultiply corrects its pixels) and
+ * BEFORE the encode. Omit / false for a STRAIGHT-alpha source — un-premultiplying
+ * one would over-brighten its semi-transparent pixels (the inverse error), so this
+ * is never applied blindly; the import modal exposes it as an operator toggle
+ * defaulting to the client's premultiplied archive.
  */
 export function buildConvertArgs(opts: {
   inputPath: string;
   outputPath: string;
   targetFps: number;
   crop?: CropRect | undefined;
+  premultipliedAlpha?: boolean | undefined;
 }): string[] {
-  const filter =
-    opts.crop !== undefined
-      ? ['-vf', `crop=${opts.crop.width}:${opts.crop.height}:${opts.crop.x}:${opts.crop.y}`]
-      : [];
+  const stages: string[] = [];
+  if (opts.crop !== undefined) {
+    stages.push(`crop=${opts.crop.width}:${opts.crop.height}:${opts.crop.x}:${opts.crop.y}`);
+  }
+  if (opts.premultipliedAlpha === true) stages.push(UNPREMULTIPLY_FILTER);
+  const filter = stages.length > 0 ? ['-vf', stages.join(',')] : [];
   return [
     '-y',
     '-i',
@@ -167,6 +211,8 @@ export function buildProvenance(opts: {
   sourceSha256?: string | undefined;
   /** Source file size in bytes. */
   sourceBytes?: number | undefined;
+  /** Whether the source was treated as premultiplied (un-premultiplied at conversion). */
+  premultipliedAlpha?: boolean | undefined;
 }): VideoProvenance {
   return {
     sourceFilename: opts.sourceFilename,
@@ -174,9 +220,15 @@ export function buildProvenance(opts: {
     targetFps: opts.targetFps,
     sourceWidth: opts.probe.width,
     sourceHeight: opts.probe.height,
+    // The CURRENT converter revision — always recorded so a future item can spot
+    // assets produced by an older converter (e.g. those carrying the pre-fix fringe).
+    converterRevision: CONVERTER_REVISION,
     ...(opts.sourceSha256 !== undefined ? { sourceSha256: opts.sourceSha256 } : {}),
     ...(opts.sourceBytes !== undefined ? { sourceBytes: opts.sourceBytes } : {}),
     ...(opts.crop !== undefined ? { crop: opts.crop } : {}),
+    ...(opts.premultipliedAlpha !== undefined
+      ? { premultipliedAlpha: opts.premultipliedAlpha }
+      : {}),
   };
 }
 

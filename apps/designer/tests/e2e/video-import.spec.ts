@@ -17,6 +17,10 @@ import { expect, test } from './fixtures/designer.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(HERE, 'fixtures', 'box-64x64-bgra.avi');
+// A PREMULTIPLIED (matted-against-black) partial-alpha source: left half opaque
+// gold, right half half-alpha gold with RGB already darkened — the legacy-archive
+// convention that produced the black fringe (D-128).
+const PREMULT_FIXTURE = join(HERE, 'fixtures', 'gradient-64x64-premult-bgra.avi');
 
 test('a video imports, its stored WebM decodes (CSP media-src), and drag places a video element', async ({
   app,
@@ -247,6 +251,89 @@ test('a video element is NOT remounted across transform changes — it stays vis
   expect(after.hasSrc).toBe(true); // media still wired
   expect(after.rs).toBeGreaterThanOrEqual(1); // still decoded (not reset to a blank load)
   expect(after.t).toBeGreaterThan(0); // never fell back to the transparent frame 0
+});
+
+test('a premultiplied-alpha source imports WITHOUT the black fringe (D-128 un-premultiply)', async ({
+  app,
+  page,
+}) => {
+  await app.newProject('VideoFringe');
+  await page.getByRole('button', { name: 'Project assets' }).click();
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
+  await page.getByRole('menuitem', { name: 'Video…' }).click();
+  await (
+    await chooser
+  ).setFiles({
+    name: 'gradient-64x64-premult-bgra.avi',
+    mimeType: 'video/x-msvideo',
+    buffer: readFileSync(PREMULT_FIXTURE),
+  });
+  await expect(page.locator('[data-testid="video-probe-meta"]')).toContainText('64×64');
+  // the premultiplied-alpha toggle is present and defaults ON (the client's archive)
+  await expect(page.getByTestId('video-premultiplied-toggle')).toBeChecked();
+
+  // convert with the default (un-premultiply ON), then decode the stored WebM
+  await page.getByRole('button', { name: 'Convert & import' }).click();
+  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached({
+    timeout: 25_000,
+  });
+
+  // Sample the DECODED pixels: draw the stored <video> to a canvas and read a pixel
+  // deep in the HALF-ALPHA right region. Straight-alpha source colour is gold
+  // (255,215,0); WITHOUT the fix the stored RGB is premultiplied (~126,106,0) and
+  // composites to a black-edged halo. getImageData returns STRAIGHT rgba, so a
+  // correct un-premultiply reads the right region back at ~gold, matching the
+  // opaque LEFT half — proving the semi-transparent pixels are NOT darkened.
+  const px = await page.evaluate(async () => {
+    const assets = await window.cg.assets.list();
+    const vid = assets.find((a) => a.kind === 'video');
+    if (vid === undefined) return { ok: false as const, why: 'no stored video asset' };
+    const url = await window.cg.assets.url(vid.assetId);
+    if (url === null) return { ok: false as const, why: 'url() returned null' };
+    return await new Promise<
+      { ok: true; left: number[]; right: number[]; w: number } | { ok: false; why: string }
+    >((resolve) => {
+      const v = document.createElement('video');
+      v.muted = true;
+      v.preload = 'auto';
+      const deadline = Date.now() + 12_000;
+      v.onerror = () => resolve({ ok: false, why: `decode error: ${v.error?.message ?? '?'}` });
+      const sample = (): void => {
+        const c = document.createElement('canvas');
+        c.width = v.videoWidth;
+        c.height = v.videoHeight;
+        const ctx = c.getContext('2d');
+        if (ctx === null) return resolve({ ok: false, why: 'no 2d context' });
+        ctx.clearRect(0, 0, c.width, c.height);
+        ctx.drawImage(v, 0, 0);
+        const at = (fx: number): number[] => [
+          ...ctx.getImageData(Math.round(v.videoWidth * fx), Math.round(v.videoHeight / 2), 1, 1)
+            .data,
+        ];
+        resolve({ ok: true, left: at(0.25), right: at(0.78), w: v.videoWidth });
+      };
+      const tryDraw = (): void => {
+        if (v.readyState >= 2 && v.videoWidth > 0) sample();
+        else if (Date.now() < deadline) setTimeout(tryDraw, 100);
+        else resolve({ ok: false, why: `never decoded rs=${String(v.readyState)}` });
+      };
+      v.onloadeddata = tryDraw;
+      v.src = url;
+    });
+  });
+  expect(px, JSON.stringify(px)).toMatchObject({ ok: true });
+  if (px.ok) {
+    // opaque LEFT half is gold (control)
+    expect(px.left[0]).toBeGreaterThan(200); // R
+    expect(px.left[1]).toBeGreaterThan(160); // G
+    // half-alpha RIGHT half is RESTORED to ~gold — NOT the darkened premult (~126)
+    expect(px.right[0]).toBeGreaterThan(200); // R (would be <150 with the fringe bug)
+    expect(px.right[1]).toBeGreaterThan(160); // G
+    // and it is genuinely semi-transparent (partial alpha carried through)
+    expect(px.right[3]).toBeGreaterThan(60);
+    expect(px.right[3]).toBeLessThan(210);
+  }
 });
 
 test('re-importing the same source is deduped: "Use existing" places an element with NO second conversion', async ({

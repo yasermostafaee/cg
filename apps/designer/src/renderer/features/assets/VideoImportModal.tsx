@@ -93,6 +93,13 @@ export function VideoImportModal(props: {
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
   const [cropOn, setCropOn] = useState(false);
   const [crop, setCrop] = useState<CropRect>({ x: 0, y: 0, width: 1, height: 1 });
+  // D-128 — un-premultiply the source's alpha (fringe fix). Defaults ON: the
+  // client's archive is legacy AE / rawvideo-BGRA, which stores premultiplied
+  // (matted-against-black) alpha. A STRAIGHT-alpha source (already-correct WebM/
+  // MOV) must be imported with this OFF, or its semi-transparent pixels over-
+  // brighten. rawvideo/BGRA carries no premultiplied flag, so this cannot be
+  // auto-detected — it is an explicit operator choice (design.md).
+  const [premultipliedAlpha, setPremultipliedAlpha] = useState(true);
   const converter = useRef<Converter | null>(null);
   const cancelled = useRef(false);
   const hashAbort = useRef<AbortController | null>(null);
@@ -281,6 +288,7 @@ export function VideoImportModal(props: {
       file: props.file,
       targetFps: projectFps,
       crop,
+      premultipliedAlpha,
       onProgress: (ratio) =>
         setPhase({ kind: 'converting', progress: Math.max(0, Math.min(1, ratio)) }),
     });
@@ -342,6 +350,7 @@ export function VideoImportModal(props: {
           crop,
           sourceSha256,
           sourceBytes: props.file.size,
+          premultipliedAlpha,
         }),
       });
       props.onDone({
@@ -590,6 +599,24 @@ export function VideoImportModal(props: {
                   ))}
                 </>
               )}
+            </div>
+
+            <div className={s.fieldsRow}>
+              <label className={s.fieldLabel}>
+                <input
+                  type="checkbox"
+                  checked={premultipliedAlpha}
+                  disabled={busy}
+                  data-testid="video-premultiplied-toggle"
+                  onChange={(e) => setPremultipliedAlpha(e.target.checked)}
+                />{' '}
+                Premultiplied alpha (legacy After Effects / archive)
+              </label>
+              <span className={s.meta}>
+                {premultipliedAlpha
+                  ? 'Removes the black fringe on semi-transparent edges. Turn OFF for a straight-alpha source (a normal WebM/MOV), or its soft edges will over-brighten.'
+                  : 'Straight alpha — the source is used as-is. Turn ON for a matted-against-black AE / rawvideo-BGRA archive to remove black edges.'}
+              </span>
             </div>
 
             {phase.kind === 'error' && <Callout variant="danger">{phase.message}</Callout>}
