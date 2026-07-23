@@ -330,13 +330,24 @@ export async function probeSource(
   });
 }
 
+export type ConvertedClipVerdict =
+  | { ok: true; durationMs: number; width: number; height: number }
+  | { ok: false; reason: string };
+
 /**
- * Measure a converted WebM's duration from the bytes themselves (`<video>`
- * metadata) — authoritative when the SOURCE banner said `Duration: N/A`.
- * Returns 0 when the clip can't be decoded (callers must reject a 0 duration
- * before committing an element).
+ * D-128 — VERIFY the converted bytes actually DECODE in THIS browser before anything
+ * is stored: a real `<video>` must reach metadata, report a finite positive duration,
+ * and match the EXPECTED post-crop dimensions. ffmpeg exiting 0 is NOT proof the file
+ * plays (the 1920×282 field regression stored a 6.5 MB WebM no surface could decode —
+ * silently). A conversion that yields an unplayable file must FAIL LOUDLY here, never
+ * become a stored asset. Also the duration measurement for a `Duration: N/A` source
+ * (the converted output is the authoritative clock either way).
  */
-export function measureDurationMs(bytes: Uint8Array): Promise<number> {
+export function verifyConvertedClip(
+  bytes: Uint8Array,
+  expectedWidth: number,
+  expectedHeight: number,
+): Promise<ConvertedClipVerdict> {
   const ab = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(ab).set(bytes);
   const url = URL.createObjectURL(new Blob([ab], { type: 'video/webm' }));
@@ -344,17 +355,59 @@ export function measureDurationMs(bytes: Uint8Array): Promise<number> {
     const v = document.createElement('video');
     v.preload = 'metadata';
     v.muted = true;
+    const done = (verdict: ConvertedClipVerdict): void => {
+      URL.revokeObjectURL(url);
+      resolve(verdict);
+    };
     v.onloadedmetadata = () => {
-      URL.revokeObjectURL(url);
-      resolve(Number.isFinite(v.duration) ? Math.round(v.duration * 1000) : 0);
+      const durationMs = Number.isFinite(v.duration) ? Math.round(v.duration * 1000) : 0;
+      if (durationMs <= 0) {
+        done({ ok: false, reason: 'the converted clip reports no duration' });
+      } else if (v.videoWidth !== expectedWidth || v.videoHeight !== expectedHeight) {
+        done({
+          ok: false,
+          reason:
+            `the converted clip decodes at ${String(v.videoWidth)}×${String(v.videoHeight)}, ` +
+            `expected ${String(expectedWidth)}×${String(expectedHeight)}`,
+        });
+      } else {
+        done({ ok: true, durationMs, width: v.videoWidth, height: v.videoHeight });
+      }
     };
-    v.onerror = () => {
-      URL.revokeObjectURL(url);
-      resolve(0);
-    };
+    v.onerror = () =>
+      done({
+        ok: false,
+        reason: `the converted clip does not decode (${v.error?.message ?? 'media error'})`,
+      });
     v.src = url;
   });
 }
+
+/**
+ * D-128 — READBACK check after `storeBytes`: the stored asset must serve back the SAME
+ * byte count that was verified. A silently truncated/corrupted store would otherwise
+ * present exactly like the field failure (every surface blank, no error anywhere).
+ * Returns null when the readback matches, else a human-readable mismatch description.
+ */
+export async function verifyStoredReadback(
+  url: string,
+  expectedByteLength: number,
+): Promise<string | null> {
+  try {
+    const got = (await (await fetch(url)).arrayBuffer()).byteLength;
+    return got === expectedByteLength
+      ? null
+      : `stored asset reads back ${String(got)} bytes, expected ${String(expectedByteLength)}`;
+  } catch (err) {
+    return `stored asset could not be read back (${String(err)})`;
+  }
+}
+
+/** The ffmpeg log tail of the most recent convert — surfaced when verification fails. */
+export function lastConvertLogTail(): readonly string[] {
+  return lastConvertLog;
+}
+let lastConvertLog: string[] = [];
 
 /**
  * Convert the mounted source to the ONE canonical stored form — VP8+alpha WebM,
@@ -400,6 +453,10 @@ export async function convertToWebm(opts: {
       } finally {
         ff.off('progress', onProgress);
       }
+      // Keep the tail around even on SUCCESS: a conversion that exits 0 can still
+      // produce an undecodable file (the 1920×282 field case), and the post-convert
+      // verification needs this log to make that failure diagnosable.
+      lastConvertLog = lines.slice(-40);
       if (code !== 0) {
         // Encode failure — surface the ffmpeg tail so the modal's "see the
         // console log" message is actually true.

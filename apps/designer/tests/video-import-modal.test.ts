@@ -17,12 +17,16 @@ import type { AssetMeta } from '@cg/shared-ipc';
 const probeSource = vi.fn();
 const convertToWebm = vi.fn();
 const cancelConversion = vi.fn();
-const measureDurationMs = vi.fn();
+const verifyConvertedClip = vi.fn();
+const verifyStoredReadback = vi.fn();
+const lastConvertLogTail = vi.fn();
 vi.mock('../src/renderer/features/assets/video-convert.js', () => ({
   probeSource,
   convertToWebm,
   cancelConversion,
-  measureDurationMs,
+  verifyConvertedClip,
+  verifyStoredReadback,
+  lastConvertLogTail,
 }));
 
 // D-128 dedupe seam: the source hash + the stored-WebM metadata probe are mocked
@@ -63,7 +67,10 @@ const onDone = vi.fn();
 beforeEach(() => {
   vi.clearAllMocks();
   probeSource.mockResolvedValue({ ok: true, probe: PROBE, posterUrl: 'blob:poster' });
-  measureDurationMs.mockResolvedValue(4000);
+  // D-128 verification guards default to PASSING; individual tests flip them to failing.
+  verifyConvertedClip.mockResolvedValue({ ok: true, durationMs: 4000, width: 640, height: 360 });
+  verifyStoredReadback.mockResolvedValue(null);
+  lastConvertLogTail.mockReturnValue([]);
   hashSourceFile.mockResolvedValue('a'.repeat(64));
   probeStoredVideo.mockResolvedValue({ durationMs: 4000, width: 640, height: 360 });
   assetsList.mockResolvedValue([]); // no prior imports ⇒ never a duplicate by default
@@ -256,20 +263,72 @@ describe('VideoImportModal (D-128)', () => {
     expect(storeBytes).toHaveBeenCalled();
   });
 
-  it('a source with Duration: N/A measures the CONVERTED clip instead', async () => {
+  it('a source with Duration: N/A takes the duration from the CONVERTED clip verification', async () => {
     probeSource.mockResolvedValue({
       ok: true,
       probe: { ...PROBE, durationMs: 0 },
       posterUrl: 'blob:poster',
     });
     convertToWebm.mockResolvedValue(new Uint8Array([7]));
-    measureDurationMs.mockResolvedValue(3210);
+    verifyConvertedClip.mockResolvedValue({ ok: true, durationMs: 3210, width: 640, height: 360 });
     await renderModal();
     await act(async () => {
       button('Convert & import').click();
     });
-    expect(measureDurationMs).toHaveBeenCalled();
+    expect(verifyConvertedClip).toHaveBeenCalled();
     expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ durationMs: 3210 }));
+  });
+
+  it('VERIFY-BEFORE-STORE: an undecodable converted clip fails LOUDLY and stores NOTHING', async () => {
+    // The 1920×282 field regression: ffmpeg exits 0, the file is 6.5MB — and no surface
+    // can decode it. The guard must catch it BEFORE storeBytes, with the reason visible.
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    verifyConvertedClip.mockResolvedValue({
+      ok: false,
+      reason: 'the converted clip does not decode (DEMUXER_ERROR)',
+    });
+    lastConvertLogTail.mockReturnValue(['[libvpx] some warning line']);
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(verifyConvertedClip).toHaveBeenCalledWith(expect.any(Uint8Array), 640, 360);
+    expect(storeBytes).not.toHaveBeenCalled(); // NEVER a silent broken asset
+    expect(onDone).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('failed verification');
+    expect(document.body.textContent).toContain('does not decode');
+  });
+
+  it('VERIFY-BEFORE-STORE: wrong decoded dimensions fail too (expected = post-crop dims)', async () => {
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    verifyConvertedClip.mockResolvedValue({
+      ok: false,
+      reason: 'the converted clip decodes at 640×358, expected 640×360',
+    });
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    expect(storeBytes).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('expected 640×360');
+  });
+
+  it('READBACK-AFTER-STORE: a truncated stored asset surfaces an error, never a dead element', async () => {
+    convertToWebm.mockResolvedValue(new Uint8Array([7, 8, 9]));
+    verifyStoredReadback.mockResolvedValue('stored asset reads back 2 bytes, expected 3');
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(storeBytes).toHaveBeenCalled(); // the store happened…
+    expect(onDone).not.toHaveBeenCalled(); // …but no element is placed on a corrupt asset
+    expect(document.body.textContent).toContain('readback verification');
   });
 
   it('crop numeric fields drive the rect (numbers → rectangle sync)', async () => {

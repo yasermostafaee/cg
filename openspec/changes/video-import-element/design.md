@@ -825,6 +825,57 @@ motion frames, nothing visible in source-transparent regions. At 64×64 even the
 (`crf 4 / qmax 16 / b:v 20M / -g 25`), and the resolution-scale leak is reproducible on demand
 with the committed measurement harness. A committed 720p raw fixture (100+ MB) was rejected.
 
+## 1920×282 undecodable-WebM report — sweep results + the VERIFY guard (2026-07-24)
+
+**Field report:** after re-importing at rev `2026-07-24.3`, `Lower_Default` (1920×282,
+6.5 MB output) decodes NOWHERE (thumbnail/canvas/Preview all blank — so the stored WebM
+itself), while 200×200 (2.1 MB) and 300×90 (4.3 MB) work.
+
+**Sweep — no tested variable reproduces it.** All results browser-verified (a real
+Chromium `<video>` + drawImage, not just ffprobe):
+
+| axis                                  | test                                                             | result                                              |
+| ------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------- |
+| dimensions (native, exact args+graph) | 1920×282 / 284 / 280 / **141 (odd)** / 1080, 1 s                 | ALL decode clean (ffprobe + full decode + Chromium) |
+| dimensions (REAL wasm, full app path) | 1920×282, 8 frames                                               | decodes OK in-browser                               |
+| duration (REAL wasm)                  | 1920×282, 150 frames / 6 s                                       | decodes OK                                          |
+| output size / complexity (REAL wasm)  | 1920×282, 6 s heavy detail → **16.4 MB** (2.5× the failing clip) | decodes OK                                          |
+
+**Which variable predicts failure: NONE of dimension / duration / size.** The
+odd-half-height theory is also directly disconfirmed twice over (300×90 works for the
+owner — 45 is odd; 1920×141 — height itself odd — decodes everywhere natively).
+
+**Chain audit — no dimension-dependent intermediates exist.** The bleed graph has NO
+downscale pyramid: `boxblur=12:2` is single-scale with a fixed radius (no size coupling),
+`geq` is per-pixel, `overlay`/`alphamerge` join same-sized branches, and everything up to
+the encoder runs in packed `rgba` (no chroma subsampling to violate). The only
+even-dimension-sensitive step is the final `yuva420p` conversion — and 282 is even, and
+even the fully odd 141 decodes (libvpx pads internally).
+
+**Conclusion + the fix that ships:** the failure is driven by something specific to the
+owner's source file or their local run (source-codec variant, a mid-convert hiccup, or a
+store-side truncation) — and the pipeline previously STORED whatever came out with no
+check (ffmpeg exit 0 was trusted; for a source with a known duration the produced bytes
+were never decoded at all). That silent path is the defect we can fix without the file:
+
+1. **VERIFY-BEFORE-STORE** (`verifyConvertedClip`): the produced bytes must decode in a
+   real `<video>` at the EXACT post-crop dimensions with a finite positive duration —
+   or the conversion fails LOUDLY (nothing stored) with the reason AND the ffmpeg log
+   tail (now captured on success too — the silent-warning defect) in the console.
+2. **READBACK-AFTER-STORE** (`verifyStoredReadback`): the stored asset must serve back
+   the verified byte count, or the operator sees an error instead of a dead asset (a
+   silently truncating store presents exactly like this field failure).
+
+On the owner's next re-import of `Lower_Default`, the import either works or fails with
+a visible reason + log — which pins the true cause. **Dimension matrix committed**
+(`video-dimensions.spec.ts`): 1920×282 and 300×90 (odd half-height) synthesized in pure
+node (a minimal rawvideo/BGRA AVI writer, no native-ffmpeg dependency) and pushed through
+the REAL wasm converter, asserting decode at exactly the expected dimensions.
+
+**Output size at 1920×282 (for the Phase-5 export threshold):** simple lower-third
+content 6 s → ~294 KB (~0.4 Mbps); heavy-detail torture 6 s → 16.4 MB (~22 Mbps). Real
+lower-thirds sit near the low end; the owner's 6.5 MB is consistent with mixed content.
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

@@ -315,17 +315,28 @@ export function VideoImportModal(props: {
       return;
     }
     try {
-      // The SOURCE banner may have said `Duration: N/A` — the CONVERTED output
-      // is the authoritative clock either way; fall back to the probe's figure.
-      const measured =
-        probe.durationMs > 0 ? probe.durationMs : await conv.measureDurationMs(bytes);
-      if (!(measured > 0)) {
+      // D-128 VERIFY-BEFORE-STORE — ffmpeg exiting 0 is NOT proof the output plays
+      // (the 1920×282 field case stored a 6.5 MB WebM no surface could decode,
+      // silently). The produced bytes must decode IN THIS BROWSER, at the expected
+      // post-crop dimensions, with a real duration — or the conversion FAILS LOUDLY
+      // and nothing is stored. Also the duration measurement (`Duration: N/A` sources).
+      const expectedW = crop?.width ?? probe.width;
+      const expectedH = crop?.height ?? probe.height;
+      const verdict = await conv.verifyConvertedClip(bytes, expectedW, expectedH);
+      if (!verdict.ok) {
+        console.error(
+          `[video-import] converted clip FAILED verification (${verdict.reason}) — ffmpeg log tail:\n` +
+            conv.lastConvertLogTail().join('\n'),
+        );
         setPhase({
           kind: 'error',
-          message: 'The converted clip reports no duration — nothing was imported.',
+          message: `The converted clip failed verification: ${verdict.reason}. Nothing was imported — see the console log for the ffmpeg output.`,
         });
         return;
       }
+      // The SOURCE banner may have said `Duration: N/A` — the CONVERTED output
+      // is the authoritative clock either way; fall back to the probe's figure.
+      const measured = probe.durationMs > 0 ? probe.durationMs : verdict.durationMs;
       if (cancelled.current) {
         // Last exit before the point of no return — storeBytes commits the
         // asset; from there the import completes (reverting a stored asset is
@@ -353,11 +364,27 @@ export function VideoImportModal(props: {
           premultipliedAlpha,
         }),
       });
+      // D-128 READBACK — a store that silently truncates presents exactly like the
+      // field failure (every surface blank). The stored asset must serve back the
+      // verified byte count, or the operator sees an error instead of a dead asset.
+      const url = await window.cg.assets.url(asset.assetId);
+      const mismatch =
+        url === null
+          ? 'stored asset has no readable URL'
+          : await conv.verifyStoredReadback(url, bytes.byteLength);
+      if (mismatch !== null) {
+        console.error(`[video-import] stored clip FAILED readback verification: ${mismatch}`);
+        setPhase({
+          kind: 'error',
+          message: `The stored clip failed readback verification (${mismatch}). Remove the asset and re-import.`,
+        });
+        return;
+      }
       props.onDone({
         asset,
         durationMs: measured,
-        width: crop?.width ?? probe.width,
-        height: crop?.height ?? probe.height,
+        width: expectedW,
+        height: expectedH,
       });
     } catch (err) {
       setPhase({ kind: 'error', message: `Storing the converted clip failed: ${String(err)}` });
