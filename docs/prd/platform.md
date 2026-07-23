@@ -403,3 +403,38 @@ green gate like [[P-010]] and [[P-011]] rather than via an archive. Rides in the
 [[P-013]] (the mechanism the "owner merges shared config" clause protects: this very PR
 touches root `package.json` + `pnpm-lock.yaml` + CLAUDE.md, so the owner sequences its
 merge and tells the other worktrees to pull).
+
+## [ ] P-015 — the gate lock's silent wait outlives a Claude Code tool call and reads as a gate FAILURE ⟨priority: medium⟩
+
+**What:** [[P-013]]'s host gate lock waits up to ~15 min for the host slot, announcing itself
+ONCE ("waiting for host gate slot…"). A Claude Code tool call is capped at 10 min, so a gate
+queued behind another worktree's gate can be KILLED mid-wait (or mid-run after a long wait):
+the log then ends with a bare `[ELIFECYCLE] Command failed with exit code 1` and NO
+turbo/vitest summary — output indistinguishable from a real gate failure even though ZERO
+tests ran and nothing was actually red. Fix direction: (1) a periodic HEARTBEAT while waiting
+(elapsed time, re-emitted — not announce-once) so a killed log shows it died QUEUED, not
+failed; (2) a distinct terminal message on acquisition and on wait-timeout so "queued behind
+the host slot" can never be misread as "the gate failed"; (3) consider whether the lock's wait
+timeout should sit BELOW the CC tool cap (fail fast with a legible "host slot busy — re-run
+when quiet" instead of being killed silently mid-wait).
+**Why:** Observed TWICE on 2026-07-23 while cg-designer gated concurrently: two pushes from
+cg-runtime were killed at the 10-min tool cap and the session's Stop-hook log showed exactly
+the misleading signature — a full sweep of PASSING tests, then bare double `ELIFECYCLE exit 1`
+with no failing test and no summary. Triage burned real time proving no test had failed; the
+gate-red hook feedback demanded repair rules for a "failure" that was a queue kill. A gate
+that was never allowed to finish must not be able to masquerade as a gate that ran red.
+**Acceptance:**
+
+- WHEN a gate waits for the host slot THEN the wait emits a periodic heartbeat with elapsed
+  time, so a log killed mid-wait shows QUEUED as its last state
+- WHEN the wait ends THEN a distinct message says which way — acquired (gate starting) or
+  timed out (gate NOT run; re-run when the slot is quiet) — never a bare exit
+- WHEN the process is killed mid-wait THEN the last log line is the heartbeat, so the kill is
+  never mistaken for a red gate
+- WHEN the wait-timeout policy is set THEN its relation to the CC tool cap is a recorded
+  decision (below the cap, or explicitly accepted above it with the heartbeat as mitigation)
+
+**Notes:** Cross-ref [[P-013]] (the lock this instruments; its fail-open degradation is
+untouched). The kill-mid-wait evidence also validated P-013's stale-reclaim: the next gate
+acquired the orphaned slot cleanly. Scope is the lock CLI's logging/timeout surface
+(`tools/gate-hook/src/gate-lock-cli.mjs` + `gate-lock.mjs`) — no gate semantics change.

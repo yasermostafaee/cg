@@ -889,6 +889,10 @@ three MUST be designed to compose, and this item's design.md owns that compositi
 interaction with [[B-092]]/#368's narrowing needs its own tests: restore reaches `reserve()`
 first, and #368 made a quarantined retained slot fall through to allocate-elsewhere — exactly
 the fall-through this item's adopt-in-place FORBIDS on fixed slots. Needs design.md.
+**Design phase done (2026-07-23):** `openspec/changes/runtime-fixed-layers/` — design-only
+change dir (proposal + design.md resolving the composition/restore questions + settled-only
+specs delta + fully-unchecked tasks.md); implementation is a later PR, gated on the owner
+answering design.md's four flagged decisions (a1/b1/d1/e1).
 
 ## [ ] R-022 — in-app template preview via the shared renderer (no CasparCG involvement) ⟨priority: medium⟩
 
