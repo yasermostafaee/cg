@@ -101,14 +101,16 @@ test('a video imports, its stored WebM decodes (CSP media-src), and drag places 
   await expect(page.getByText('could not be read')).not.toBeAttached();
 });
 
-test('back-to-back imports of a known-good file BOTH succeed (fresh worker per import)', async ({
+test('back-to-back conversions of a known-good file BOTH succeed (fresh worker per import) — and the re-import is deduped', async ({
   app,
   page,
 }) => {
   // The field gap the original suite missed: on a reused wasm instance the
   // SECOND import of a perfectly good file crashed with `ErrnoError: FS error`
-  // (alternating good → crash → good). Every import now gets a fresh worker;
-  // this pins that both back-to-back cycles complete with no crash message.
+  // (alternating good → crash → good). Every import now gets a fresh worker.
+  // The re-import of the SAME bytes is now DETECTED as a duplicate (dedupe by
+  // source hash, not filename), so this drives "Convert again" to still force a
+  // second real encode — pinning both the dedupe detection AND the fresh worker.
   await app.newProject('VideoTwice');
   await page.getByRole('button', { name: 'Project assets' }).click();
   const buffer = readFileSync(FIXTURE);
@@ -132,11 +134,61 @@ test('back-to-back imports of a known-good file BOTH succeed (fresh worker per i
     await expect(page.getByText('internal error')).not.toBeAttached();
     await expect(page.getByText('could not be read as a video')).not.toBeAttached();
     await page.getByRole('button', { name: 'Convert & import' }).click();
+    if (attempt === 2) {
+      // same bytes as attempt 1 → deduped BEFORE any encode; force a second copy
+      await expect(page.getByText('already imported')).toBeVisible({ timeout: 25_000 });
+      await page.getByRole('button', { name: 'Convert again' }).click();
+    }
     await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached({
       timeout: 25_000,
     });
   }
-  // both stored (different names → different shas? same bytes dedupe to ONE asset —
-  // the point is neither import errored; the panel shows at least one video tile)
   await expect(page.getByText('clip-1', { exact: false }).first()).toBeVisible();
+});
+
+test('re-importing the same source is deduped: "Use existing" places an element with NO second conversion', async ({
+  app,
+  page,
+}) => {
+  await app.newProject('VideoDedupe');
+  await page.getByRole('button', { name: 'Project assets' }).click();
+  const buffer = readFileSync(FIXTURE);
+
+  const importOnce = async (): Promise<void> => {
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
+    await page.getByRole('menuitem', { name: 'Video…' }).click();
+    await (
+      await chooser
+    ).setFiles({
+      name: 'dedupe-clip.avi',
+      mimeType: 'video/x-msvideo',
+      buffer,
+    });
+    await expect(page.locator('[data-testid="video-probe-meta"]')).toContainText('64×64');
+  };
+
+  // first import converts and stores one video asset
+  await importOnce();
+  await page.getByRole('button', { name: 'Convert & import' }).click();
+  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached({
+    timeout: 25_000,
+  });
+  const videosAfterFirst = await page.evaluate(
+    async () => (await window.cg.assets.list()).filter((a) => a.kind === 'video').length,
+  );
+  expect(videosAfterFirst).toBe(1);
+
+  // re-import the same source → duplicate detected → Use existing places an
+  // element without creating a second asset
+  await importOnce();
+  await page.getByRole('button', { name: 'Convert & import' }).click();
+  await expect(page.getByText('already imported')).toBeVisible({ timeout: 25_000 });
+  await page.getByRole('button', { name: 'Use existing' }).click();
+  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached();
+  // still exactly ONE stored video asset (no re-encode, no new asset)
+  const videosAfterSecond = await page.evaluate(
+    async () => (await window.cg.assets.list()).filter((a) => a.kind === 'video').length,
+  );
+  expect(videosAfterSecond).toBe(1);
 });
