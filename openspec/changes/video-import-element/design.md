@@ -640,6 +640,38 @@ provenance now records `converterRevision` (`2026-07-23.2` = this fix) and
 prompt re-import. **The owner must RE-IMPORT the affected archive clips** to clear the
 fringe on already-imported assets.
 
+## Content-driven hold — media as a closer (drivesHold, 2026-07-23)
+
+**Bug (owner):** a composition with `hold: content-driven`, `mode: auto-out`, an
+infinite Ticker, and a Video with `drivesHold: Yes` (freeze, phase marks) NEVER
+closed, and the Playout panel's "Which content closes the graphic?" list showed ONLY
+the Ticker — the Video was absent even though its `drivesHold` was on.
+
+**Which of (runtime, designer) was broken: the DESIGNER only.** The runtime already
+registers a `drivesHold` video/lottie as a content driver and aggregates it into the
+content-driven hold (Phase 4 — `holdVideos`, `scopeHasEffectiveHoldDrivers`,
+`ownContentWait`; the passing lifecycle tests confirm it). The gap was entirely in the
+Playout panel: `hasContentElement` / `contentHoldElementsOf` / `nestedHoldGroupsOf`
+walked only `ticker` / `sequence` / countdown-`clock`, so a `video`/`lottie` was never
+listed, never toggleable, and never counted in the "every content driver repeats
+forever" warning — which was therefore computed from a driver set that excluded the
+video (and wrongly fired "all infinite" when the finite video was a real closer).
+
+**Multi-driver close rule (confirmed, unchanged): ALL-COMPLETE.** A content-driven
+hold is `Promise.all` over its effective drivers (D-111/D-112), so the hold ends only
+when EVERY driver has completed. An infinite ticker never completes, so the owner's
+graphic correctly held until stop — the fix makes the panel show WHY (both drivers
+listed; the ticker flagged "loops forever", the freeze video a finite closer), so the
+operator can exclude the ticker and leave the video as the sole closer that ends the
+hold at its own completion.
+
+**Media `drivesHold` is OPT-IN in the panel too.** The closer list reads media
+`drivesHold` as `=== true` (the inverse of ticker/sequence's `!== false`), matching the
+runtime, and marks a `loop` hold as the infinite (never-completes) case, a `freeze`
+hold as a finite closer. (The precise "ends at N s" per-driver time is left for the
+timeline-derived model — see the phases-follow-timeline correction — which owns the
+close time; today the finite/infinite distinction is what the operator sees.)
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

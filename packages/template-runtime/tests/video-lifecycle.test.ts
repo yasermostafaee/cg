@@ -133,7 +133,7 @@ function video(id: string, o: VideoOpts = {}): Element {
 }
 
 const lottieAssets = { a: { ip: 0, op: 100, fr: 100, w: 400, h: 200, layers: [] } };
-function lottie(id: string): Element {
+function lottie(id: string, o: { drivesHold?: boolean } = {}): Element {
   return {
     id,
     name: id,
@@ -148,6 +148,7 @@ function lottie(id: string): Element {
     loopMode: 'none',
     holdBehavior: 'freeze',
     phases: { introEnd: 10, outroStart: 20, source: 'markers' },
+    ...(o.drivesHold !== undefined ? { drivesHold: o.drivesHold } : {}),
   } as unknown as Element;
 }
 
@@ -412,6 +413,60 @@ describe('D-128 Phase 4 — the video composition lifecycle', () => {
     expect(handles[0]?.frames.at(-1)).toBe(100); // …clamped to op
     expect(vidEl('v').currentTime).toBeCloseTo(1.0, 2); // the video outro played to the clip end
     expect(onAir()).toBe(false); // and the composition settled CLEARED
+    r.remove();
+  });
+
+  it("drivesHold video + INFINITE ticker: the content hold runs until stop (all-complete, the owner's case)", async () => {
+    const clock = makeClock();
+    // the owner's setup: a drivesHold FREEZE video AND an infinite ticker both drive a
+    // content-driven auto-out. The hold is ALL-COMPLETE, so the never-completing ticker
+    // keeps the graphic on air even though the video finished — it does NOT auto-close.
+    const r = createRuntime(
+      scene(
+        [
+          bgShape('bg'),
+          video('v', { holdBehavior: 'freeze', drivesHold: true }),
+          infiniteTicker('crawl'),
+        ],
+        {
+          mode: 'auto-out',
+          holdSource: 'content-driven',
+        } as unknown as Playout,
+      ),
+      { skipFontLoad: true, installGlobals: false, clock, tickerMeasure },
+    );
+    spyVideoTimes();
+    await r.play({});
+    await run(clock, 3000); // long past the video's freeze-complete (intro 200ms)
+    expect(onAir()).toBe(true); // the infinite ticker holds it — the video being a driver too didn't change that
+    r.remove();
+  });
+
+  it('a Lottie AND a video BOTH driving the hold (freeze) auto-out consistently — CLEARED, no cross-talk', async () => {
+    const clock = makeClock();
+    const r = createRuntime(
+      scene(
+        [
+          bgShape('bg'),
+          lottie('lot', { drivesHold: true }),
+          video('v', { holdBehavior: 'freeze', drivesHold: true }),
+        ],
+        {
+          mode: 'auto-out',
+          holdSource: 'content-driven',
+        } as unknown as Playout,
+      ),
+      { skipFontLoad: true, installGlobals: false, lottieAssets, clock, tickerMeasure },
+    );
+    spyVideoTimes();
+    await r.play({});
+    // both freeze-holds complete (lottie at its intro, video at 200ms) ⇒ the content
+    // hold completes ⇒ both outros play through the ONE ledger ⇒ CLEARED, no stop().
+    await run(clock, 2500);
+    expect(onAir()).toBe(false);
+    const lottieOutroFrames = (handles[0]?.frames ?? []).filter((f) => f > 20);
+    expect(lottieOutroFrames.length).toBeGreaterThan(0); // the Lottie outro ran
+    expect(vidEl('v').currentTime).toBeCloseTo(1.0, 2); // the video outro ran to the clip end
     r.remove();
   });
 });
