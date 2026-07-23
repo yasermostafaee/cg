@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import type { AssetMeta } from '@cg/shared-ipc';
 import {
   buildConvertArgs,
   buildPosterArgs,
   buildProvenance,
   clampCrop,
+  cropsEqual,
+  findDuplicateVideoAsset,
   fpsConformNotice,
   parseProbeLog,
 } from '../src/renderer/features/assets/video-convert-args.js';
@@ -169,5 +172,60 @@ describe('D-128 — provenance assembly + crop clamping', () => {
       width: 100,
       height: 100,
     });
+  });
+});
+
+describe('D-128 — pre-convert dedupe matching', () => {
+  const crop = { x: 1, y: 2, width: 3, height: 4 };
+
+  it('cropsEqual: both absent equal; one absent differs; exact match required', () => {
+    expect(cropsEqual(undefined, undefined)).toBe(true);
+    expect(cropsEqual(crop, undefined)).toBe(false);
+    expect(cropsEqual(undefined, crop)).toBe(false);
+    expect(cropsEqual(crop, { ...crop })).toBe(true);
+    expect(cropsEqual(crop, { ...crop, x: 9 })).toBe(false);
+  });
+
+  const asset = (p: Partial<NonNullable<AssetMeta['provenance']>>): AssetMeta => ({
+    assetId: 'a',
+    kind: 'video',
+    filename: 'a.webm',
+    sha256: 'f'.repeat(64),
+    byteSize: 1,
+    workingPath: 'p',
+    provenance: {
+      sourceFilename: 's.avi',
+      sourceFps: 25,
+      targetFps: 50,
+      sourceWidth: 640,
+      sourceHeight: 360,
+      sourceSha256: 'a'.repeat(64),
+      ...p,
+    },
+  });
+  const key = { sourceSha256: 'a'.repeat(64), targetFps: 50, crop: undefined };
+
+  it('matches on source hash + target fps + crop', () => {
+    expect(findDuplicateVideoAsset([asset({})], key)?.assetId).toBe('a');
+  });
+
+  it('does NOT match a different source hash', () => {
+    expect(findDuplicateVideoAsset([asset({ sourceSha256: 'b'.repeat(64) })], key)).toBeNull();
+  });
+
+  it('does NOT match a different target fps (a re-conform genuinely differs)', () => {
+    expect(findDuplicateVideoAsset([asset({ targetFps: 25 })], key)).toBeNull();
+  });
+
+  it('does NOT match a different crop (different output)', () => {
+    expect(findDuplicateVideoAsset([asset({ crop })], key)).toBeNull();
+    expect(findDuplicateVideoAsset([asset({})], { ...key, crop })).toBeNull();
+  });
+
+  it('ignores non-video assets and assets without provenance / source hash', () => {
+    const img = { ...asset({}), kind: 'image' as const };
+    const noProv = { ...asset({}), provenance: undefined };
+    const noHash = asset({ sourceSha256: undefined });
+    expect(findDuplicateVideoAsset([img, noProv, noHash], key)).toBeNull();
   });
 });

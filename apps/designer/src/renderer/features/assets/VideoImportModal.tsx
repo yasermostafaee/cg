@@ -27,10 +27,13 @@ import { useDesignerSelector } from '../../state/store.js';
 import {
   buildProvenance,
   clampCrop,
+  findDuplicateVideoAsset,
   fpsConformNotice,
   type CropRect,
   type SourceProbe,
 } from './video-convert-args.js';
+import { hashSourceFile } from './source-hash.js';
+import { probeStoredVideo } from './video-asset-probe.js';
 import * as s from './VideoImportModal.css.js';
 
 type Converter = typeof VideoConvertModule;
@@ -58,6 +61,11 @@ type Phase =
   | { kind: 'probing' }
   | { kind: 'probe-failed'; reason: 'no-stream' | 'converter-crashed'; logTail: string[] }
   | { kind: 'ready' }
+  // D-128 — hashing the source + looking up a prior import BEFORE any encode.
+  | { kind: 'checking'; progress: number }
+  // D-128 — this exact clip (source + crop + fps) was already imported. Carries
+  // what "Convert again" needs so it never re-hashes.
+  | { kind: 'duplicate'; asset: AssetMeta; sourceSha256: string; crop: CropRect | undefined }
   | { kind: 'converting'; progress: number }
   | { kind: 'error'; message: string };
 
@@ -85,6 +93,7 @@ export function VideoImportModal(props: {
   const [crop, setCrop] = useState<CropRect>({ x: 0, y: 0, width: 1, height: 1 });
   const converter = useRef<Converter | null>(null);
   const cancelled = useRef(false);
+  const hashAbort = useRef<AbortController | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
   // Probe on mount (lazy-loads the converter module; the core loads inside it).
@@ -169,12 +178,59 @@ export function VideoImportModal(props: {
     window.addEventListener('pointerup', onUp);
   }
 
-  async function convert(): Promise<void> {
+  /**
+   * D-128 — the "Convert & import" entry. BEFORE any (minutes-long) encode, hash
+   * the source and look for a prior import with the SAME source + crop + target
+   * fps. On a match, offer the existing asset instead of re-converting; otherwise
+   * convert, carrying the hash into the new asset's provenance so the NEXT import
+   * of this clip can dedupe against it. The hash is needed for provenance either
+   * way, so this adds no wasted work — only a bounded, cancellable read.
+   */
+  async function startImport(): Promise<void> {
+    if (probe === null) return;
+    cancelled.current = false;
+    const effectiveCrop = cropOn ? clampCrop(crop, probe.width, probe.height) : undefined;
+    const controller = new AbortController();
+    hashAbort.current = controller;
+    setPhase({ kind: 'checking', progress: 0 });
+    let sourceSha256: string;
+    try {
+      sourceSha256 = await hashSourceFile(props.file, {
+        signal: controller.signal,
+        onProgress: (ratio) =>
+          setPhase({ kind: 'checking', progress: Math.max(0, Math.min(1, ratio)) }),
+      });
+    } catch {
+      // aborted (Cancel during the hash) — back to the crop step, nothing done.
+      if (cancelled.current) setPhase({ kind: 'ready' });
+      return;
+    } finally {
+      hashAbort.current = null;
+    }
+    if (cancelled.current) {
+      setPhase({ kind: 'ready' });
+      return;
+    }
+    const existing = findDuplicateVideoAsset(await window.cg.assets.list(), {
+      sourceSha256,
+      targetFps: projectFps,
+      crop: effectiveCrop,
+    });
+    if (existing !== null) {
+      setPhase({ kind: 'duplicate', asset: existing, sourceSha256, crop: effectiveCrop });
+      return;
+    }
+    await runConversion(effectiveCrop, sourceSha256);
+  }
+
+  async function runConversion(
+    effectiveCrop: CropRect | undefined,
+    sourceSha256: string,
+  ): Promise<void> {
     const conv = converter.current;
     if (conv === null || probe === null) return;
     cancelled.current = false;
     setPhase({ kind: 'converting', progress: 0 });
-    const effectiveCrop = cropOn ? clampCrop(crop, probe.width, probe.height) : undefined;
     const bytes = await conv.convertToWebm({
       file: props.file,
       targetFps: projectFps,
@@ -229,6 +285,8 @@ export function VideoImportModal(props: {
           probe,
           targetFps: projectFps,
           crop: effectiveCrop,
+          sourceSha256,
+          sourceBytes: props.file.size,
         }),
       });
       props.onDone({
@@ -242,25 +300,54 @@ export function VideoImportModal(props: {
     }
   }
 
+  /**
+   * D-128 — "Use existing" on a duplicate: place an element from the already
+   * imported asset instead of re-encoding. Dimensions come from the stored WebM
+   * (post-crop = its intrinsic size); duration from the same metadata probe the
+   * drag-from-assets path uses. Ends with an element placed, like every import.
+   */
+  async function useExisting(asset: AssetMeta): Promise<void> {
+    const url = await window.cg.assets.url(asset.assetId);
+    if (url === null) {
+      setPhase({ kind: 'error', message: 'The already-imported clip could not be read.' });
+      return;
+    }
+    const meta = await probeStoredVideo(url);
+    if (meta === null || !(meta.durationMs > 0)) {
+      setPhase({ kind: 'error', message: 'The already-imported clip could not be decoded.' });
+      return;
+    }
+    props.onDone({
+      asset,
+      durationMs: meta.durationMs,
+      width: meta.width,
+      height: meta.height,
+    });
+  }
+
   function cancel(): void {
     cancelled.current = true;
+    hashAbort.current?.abort(); // a Cancel during the pre-convert hash stops the read
     converter.current?.cancelConversion();
   }
 
   const converting = phase.kind === 'converting';
-  const progressPct = phase.kind === 'converting' ? Math.round(phase.progress * 100) : 0;
+  const checking = phase.kind === 'checking';
+  const busy = converting || checking; // a cancellable progress phase
+  const progressPct =
+    phase.kind === 'converting' || phase.kind === 'checking' ? Math.round(phase.progress * 100) : 0;
   // The footer is the Modal shell's STICKY region (the body above scrolls). The
-  // conversion progress lives HERE, above the action row, so it — and the
-  // buttons — stay visible at every modal height even when the fps-warning
-  // banner + crop fields push the body taller than the viewport.
+  // progress (hashing OR converting) lives HERE, above the action row, so it —
+  // and the buttons — stay visible at every modal height even when the
+  // fps-warning banner + crop fields push the body taller than the viewport.
   const footer = (
     <div className={s.footerStack}>
-      {converting && (
+      {busy && (
         <div className={s.progressArea} data-testid="video-progress">
           <div
             className={s.progressTrack}
             role="progressbar"
-            aria-label="Conversion progress"
+            aria-label={checking ? 'Checking for a previous import' : 'Conversion progress'}
             aria-valuenow={progressPct}
             aria-valuemin={0}
             aria-valuemax={100}
@@ -272,21 +359,39 @@ export function VideoImportModal(props: {
             />
           </div>
           <div className={s.meta}>
-            Converting… {progressPct}% (single-threaded — large sources take a while)
+            {checking
+              ? `Checking for a previous import… ${String(progressPct)}%`
+              : `Converting… ${String(progressPct)}% (single-threaded — large sources take a while)`}
           </div>
         </div>
       )}
       <div className={s.footerActions}>
-        <ModalButton variant="secondary" onClick={converting ? cancel : props.onClose}>
-          {converting ? 'Cancel conversion' : 'Cancel'}
-        </ModalButton>
-        <ModalButton
-          variant="primary"
-          onClick={() => void convert()}
-          disabled={phase.kind !== 'ready'}
-        >
-          {converting ? 'Converting…' : 'Convert & import'}
-        </ModalButton>
+        {phase.kind === 'duplicate' ? (
+          <>
+            <ModalButton
+              variant="secondary"
+              onClick={() => void runConversion(phase.crop, phase.sourceSha256)}
+            >
+              Convert again
+            </ModalButton>
+            <ModalButton variant="primary" onClick={() => void useExisting(phase.asset)}>
+              Use existing
+            </ModalButton>
+          </>
+        ) : (
+          <>
+            <ModalButton variant="secondary" onClick={busy ? cancel : props.onClose}>
+              {converting ? 'Cancel conversion' : 'Cancel'}
+            </ModalButton>
+            <ModalButton
+              variant="primary"
+              onClick={() => void startImport()}
+              disabled={phase.kind !== 'ready'}
+            >
+              {checking ? 'Checking…' : converting ? 'Converting…' : 'Convert & import'}
+            </ModalButton>
+          </>
+        )}
       </div>
     </div>
   );
@@ -294,10 +399,10 @@ export function VideoImportModal(props: {
   return (
     <Modal
       title="Import video"
-      onClose={converting ? cancel : props.onClose}
+      onClose={busy ? cancel : props.onClose}
       footer={footer}
       width="min(560px, 94vw)"
-      closeOnBackdrop={!converting}
+      closeOnBackdrop={!busy}
     >
       <div className={s.body}>
         {phase.kind === 'probing' && (
@@ -338,6 +443,14 @@ export function VideoImportModal(props: {
             </div>
 
             {notice !== null && <Callout variant="caution">{notice}</Callout>}
+
+            {phase.kind === 'duplicate' && (
+              <Callout variant="caution">
+                “{phase.asset.provenance?.sourceFilename ?? props.file.name}” was already imported
+                with the same crop and target frame rate. Use the existing clip, or convert a second
+                copy.
+              </Callout>
+            )}
 
             {posterUrl !== null && (
               <div ref={previewRef} className={s.previewBox}>
@@ -385,7 +498,7 @@ export function VideoImportModal(props: {
                 <input
                   type="checkbox"
                   checked={cropOn}
-                  disabled={converting}
+                  disabled={busy || phase.kind === 'duplicate'}
                   data-testid="video-crop-toggle"
                   onChange={(e) => setCropOn(e.target.checked)}
                 />{' '}

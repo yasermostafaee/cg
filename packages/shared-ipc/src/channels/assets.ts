@@ -29,6 +29,18 @@ export const VideoProvenanceSchema = z.object({
   /** Source dimensions in pixels (pre-crop). */
   sourceWidth: z.number().int().positive(),
   sourceHeight: z.number().int().positive(),
+  /**
+   * D-128 — sha256 of the SOURCE file's bytes: the PRE-convert dedupe key. Re-picking
+   * the same source with the same crop + target fps matches an existing asset and
+   * skips the (minutes-long) re-encode. Optional + additive so assets stored before
+   * this field parse unchanged (they simply re-convert once, then carry the hash).
+   */
+  sourceSha256: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/i)
+    .optional(),
+  /** Source file size in bytes — the cheap partner to `sourceFilename` for display / future pre-filtering. */
+  sourceBytes: z.number().int().nonnegative().optional(),
   /** The crop rect baked at conversion, in SOURCE pixels. Absent ⇒ full frame. */
   crop: z
     .object({

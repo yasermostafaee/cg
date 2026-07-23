@@ -393,6 +393,37 @@ kind, provenance?)` is the ONE write path — `importFile` delegates to it — s
   `video-import-modal.test.ts` (progress + both buttons are in the footer, the warning + crop
   fields are not — a geometry-free assertion that survives jsdom's lack of layout).
 
+## Phase-2 pre-convert dedupe (2026-07-23, same branch — owner's field smoke: re-importing re-encodes)
+
+- **The gap:** AssetStore dedupes by the sha256 of the CONVERTED output, which only helps
+  AFTER the (minutes-long) encode. Re-picking the same source re-ran the whole conversion.
+- **The key:** the SOURCE file's sha256, computed BEFORE converting and stored in provenance
+  (`sourceSha256`, additive + optional so older assets parse unchanged). Bounded memory: the
+  file is read through `File.stream()` one chunk at a time and folded into an incremental
+  sha256 (`@cg/vcg-format#sha256HexOfChunks`) — never the whole file in JS heap, the same
+  principle as the WORKERFS mount. `hashSourceFile` reports 0..1 progress and honours abort.
+- **Measured cost:** ~1.93 GB hashes in **~16 s at ~130 MB/s** (pure-JS `@noble/hashes`),
+  peak working set one 1 MiB chunk. Proportional — those same multi-GB sources take MINUTES to
+  convert, so a pre-convert hash is <10% overhead, and it is instant for the small clips in the
+  field (the 200×200/40 s and 1920×282 archives). The hash is needed for provenance regardless,
+  so it is not wasted work; it doubles as the dedupe probe. (If multi-GB hashing ever proves
+  too costly, `sourceBytes` is stored alongside as the cheap partner to `sourceFilename` for a
+  future size+name pre-filter — noted, not built.)
+- **The match:** `findDuplicateVideoAsset` requires the SAME source hash AND target fps AND
+  crop (`cropsEqual` — both absent ⇒ full frame). A matching source with a DIFFERENT crop or
+  fps is NOT a duplicate (its output genuinely differs) and still converts.
+- **The UX (never silent):** on a match the modal shows a 'duplicate' step naming the clip with
+  two actions — **Use existing** (places an element from the prior asset via the shared
+  `probeStoredVideo`, ending in a placed element exactly like a normal import — no re-encode)
+  and **Convert again** (forces a second copy). No match ⇒ convert as before, now carrying
+  `sourceSha256` so the NEXT import dedupes. The pre-convert hash runs in a 'checking' step
+  whose progress uses the same sticky-footer affordance as the encode, and Cancel aborts it.
+- **The post-convert sha dedupe remains the backstop** (unchanged — `asset-store-video-ingest`).
+  Contract pinned by: `integrity.test.ts` (streamed digest == one-shot), `source-hash.test.ts`
+  (streamed, progress, abort, no `arrayBuffer()` slurp), `video-convert-args.test.ts`
+  (the match rules), and `video-import-modal.test.ts` (same-file duplicate → no convert +
+  Use-existing places; different-crop → converts; Convert-again forces an encode).
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

@@ -141,6 +141,10 @@ export function buildProvenance(opts: {
   probe: SourceProbe;
   targetFps: number;
   crop?: CropRect | undefined;
+  /** sha256 of the source bytes — the pre-convert dedupe key (D-128). */
+  sourceSha256?: string | undefined;
+  /** Source file size in bytes. */
+  sourceBytes?: number | undefined;
 }): VideoProvenance {
   return {
     sourceFilename: opts.sourceFilename,
@@ -148,8 +152,47 @@ export function buildProvenance(opts: {
     targetFps: opts.targetFps,
     sourceWidth: opts.probe.width,
     sourceHeight: opts.probe.height,
+    ...(opts.sourceSha256 !== undefined ? { sourceSha256: opts.sourceSha256 } : {}),
+    ...(opts.sourceBytes !== undefined ? { sourceBytes: opts.sourceBytes } : {}),
     ...(opts.crop !== undefined ? { crop: opts.crop } : {}),
   };
+}
+
+/**
+ * Are two crop rects the same for dedupe purposes? Both absent ⇒ equal (full
+ * frame); one absent ⇒ different; else an exact x/y/w/h match. (D-128 dedupe:
+ * the same source with a DIFFERENT crop is genuinely a different output.)
+ */
+export function cropsEqual(a: CropRect | undefined, b: CropRect | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+
+/**
+ * Find a video asset already imported from the SAME source with the SAME
+ * conversion parameters (source hash + target fps + crop) — the pre-convert
+ * duplicate. A matching source with a DIFFERENT crop or fps is NOT a duplicate:
+ * its output genuinely differs, so it must still convert. Returns the first
+ * match, or null.
+ */
+export function findDuplicateVideoAsset<
+  A extends { kind: string; provenance?: VideoProvenance | undefined },
+>(
+  assets: readonly A[],
+  match: { sourceSha256: string; targetFps: number; crop: CropRect | undefined },
+): A | null {
+  for (const a of assets) {
+    const p = a.provenance;
+    if (a.kind !== 'video' || p === undefined) continue;
+    if (
+      p.sourceSha256 === match.sourceSha256 &&
+      p.targetFps === match.targetFps &&
+      cropsEqual(p.crop, match.crop)
+    ) {
+      return a;
+    }
+  }
+  return null;
 }
 
 /** Clamp a crop rect inside the source bounds (the modal's single clamp rule). */

@@ -25,6 +25,16 @@ vi.mock('../src/renderer/features/assets/video-convert.js', () => ({
   measureDurationMs,
 }));
 
+// D-128 dedupe seam: the source hash + the stored-WebM metadata probe are mocked
+// so these DOM tests never touch File.stream() / a real <video>. vi.hoisted so
+// the fns exist before the hoisted vi.mock factories run.
+const { hashSourceFile, probeStoredVideo } = vi.hoisted(() => ({
+  hashSourceFile: vi.fn(),
+  probeStoredVideo: vi.fn(),
+}));
+vi.mock('../src/renderer/features/assets/source-hash.js', () => ({ hashSourceFile }));
+vi.mock('../src/renderer/features/assets/video-asset-probe.js', () => ({ probeStoredVideo }));
+
 import { VideoImportModal } from '../src/renderer/features/assets/VideoImportModal.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -41,6 +51,8 @@ const STORED_ASSET: AssetMeta = {
 };
 
 const storeBytes = vi.fn();
+const assetsList = vi.fn();
+const assetUrl = vi.fn();
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
@@ -51,8 +63,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   probeSource.mockResolvedValue({ ok: true, probe: PROBE, posterUrl: 'blob:poster' });
   measureDurationMs.mockResolvedValue(4000);
+  hashSourceFile.mockResolvedValue('a'.repeat(64));
+  probeStoredVideo.mockResolvedValue({ durationMs: 4000, width: 640, height: 360 });
+  assetsList.mockResolvedValue([]); // no prior imports ⇒ never a duplicate by default
+  assetUrl.mockResolvedValue('blob:existing');
   storeBytes.mockResolvedValue({ asset: STORED_ASSET });
-  (window as unknown as { cg: unknown }).cg = { assets: { storeBytes } };
+  (window as unknown as { cg: unknown }).cg = {
+    assets: { storeBytes, list: assetsList, url: assetUrl },
+  };
 });
 
 afterEach(() => {
@@ -92,6 +110,20 @@ function numericInput(label: string): HTMLInputElement {
   const el = document.querySelector(`input[aria-label="Crop ${label}"]`);
   if (el === null) throw new Error(`no numeric Crop ${label}`);
   return el as HTMLInputElement;
+}
+
+/**
+ * Click "Convert & import" and flush the pre-convert hash → dedupe-lookup →
+ * convert transition so the modal reaches the 'converting' phase (with the
+ * default no-duplicate mocks). Needed because those steps are async now.
+ */
+async function reachConverting(): Promise<void> {
+  await act(async () => {
+    button('Convert & import').click();
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
 }
 
 describe('VideoImportModal (D-128)', () => {
@@ -312,9 +344,7 @@ describe('VideoImportModal (D-128)', () => {
         }),
     );
     await renderModal();
-    act(() => {
-      button('Convert & import').click();
-    });
+    await reachConverting();
     act(() => {
       progressCb?.(0.5);
     });
@@ -355,9 +385,7 @@ describe('VideoImportModal (D-128)', () => {
     act(() => {
       cropToggle().click(); // add the extra crop fields row too
     });
-    act(() => {
-      button('Convert & import').click();
-    });
+    await reachConverting();
     act(() => {
       progressCb?.(0.42);
     });
@@ -400,9 +428,7 @@ describe('VideoImportModal (D-128)', () => {
         }),
     );
     await renderModal();
-    act(() => {
-      button('Convert & import').click();
-    });
+    await reachConverting();
     act(() => {
       button('Cancel conversion').click(); // cancel FIRST…
     });
@@ -447,6 +473,9 @@ describe('VideoImportModal (D-128)', () => {
     await act(async () => {
       button('Convert & import').click();
     });
+    await act(async () => {
+      await Promise.resolve(); // flush hash → dedupe-lookup → convert → store
+    });
     expect(convertToWebm).toHaveBeenCalledWith(
       expect.objectContaining({
         file: FILE,
@@ -464,6 +493,7 @@ describe('VideoImportModal (D-128)', () => {
         targetFps: 50,
         sourceWidth: 640,
         sourceHeight: 360,
+        sourceSha256: 'a'.repeat(64), // the pre-convert dedupe key travels with the asset
         crop: { x: 100, y: 0, width: 320, height: 360 },
       },
     });
@@ -481,11 +511,114 @@ describe('VideoImportModal (D-128)', () => {
     await act(async () => {
       button('Convert & import').click();
     });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(convertToWebm).toHaveBeenCalledWith(expect.objectContaining({ crop: undefined }));
     const prov = (storeBytes.mock.calls[0]?.[0] as { provenance: object }).provenance;
     expect('crop' in prov).toBe(false);
     expect(onDone).toHaveBeenCalledWith(
       expect.objectContaining({ width: 640, height: 360 }), // full source frame
     );
+  });
+});
+
+describe('VideoImportModal — pre-convert dedupe (D-128)', () => {
+  const existingAsset = (over?: Partial<AssetMeta['provenance']>): AssetMeta => ({
+    assetId: 'asset-existing',
+    kind: 'video',
+    filename: 'archive-clip.webm',
+    sha256: 'e'.repeat(64),
+    byteSize: 99,
+    workingPath: 'projects/p/assets/video/e.webm',
+    provenance: {
+      sourceFilename: 'archive-clip.avi',
+      sourceFps: 29.97,
+      targetFps: 50,
+      sourceWidth: 640,
+      sourceHeight: 360,
+      sourceSha256: 'a'.repeat(64),
+      ...over,
+    },
+  });
+
+  it('the SAME source with the SAME crop + fps is a duplicate: no re-convert, and "Use existing" places the prior asset', async () => {
+    assetsList.mockResolvedValue([existingAsset()]);
+    hashSourceFile.mockResolvedValue('a'.repeat(64)); // hashes to the stored source key
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve(); // hash → dedupe-lookup
+    });
+
+    // no conversion happened; the duplicate is surfaced with both actions
+    expect(convertToWebm).not.toHaveBeenCalled();
+    expect(storeBytes).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('already imported');
+    expect(button('Use existing')).toBeTruthy();
+    expect(button('Convert again')).toBeTruthy();
+
+    // "Use existing" ends with an element placed from the PRIOR asset (still no encode)
+    await act(async () => {
+      button('Use existing').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(convertToWebm).not.toHaveBeenCalled();
+    expect(probeStoredVideo).toHaveBeenCalled();
+    expect(onDone).toHaveBeenCalledWith({
+      asset: existingAsset(),
+      durationMs: 4000,
+      width: 640,
+      height: 360,
+    });
+  });
+
+  it('the SAME source with a DIFFERENT crop is NOT a duplicate — it converts and yields a distinct asset', async () => {
+    // the prior asset was cropped; this import is full-frame ⇒ different output
+    assetsList.mockResolvedValue([
+      existingAsset({ crop: { x: 0, y: 0, width: 320, height: 360 } }),
+    ]);
+    hashSourceFile.mockResolvedValue('a'.repeat(64)); // same source…
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click(); // no crop toggled ⇒ effectiveCrop undefined
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // …but a different crop, so it must convert, and stores the NEW (distinct) asset
+    expect(convertToWebm).toHaveBeenCalledTimes(1);
+    expect(storeBytes).toHaveBeenCalledTimes(1);
+    expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ asset: STORED_ASSET }));
+  });
+
+  it('"Convert again" on a duplicate forces a fresh encode', async () => {
+    assetsList.mockResolvedValue([existingAsset()]);
+    hashSourceFile.mockResolvedValue('a'.repeat(64));
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(convertToWebm).not.toHaveBeenCalled(); // duplicate detected first
+    await act(async () => {
+      button('Convert again').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(convertToWebm).toHaveBeenCalledTimes(1); // the operator chose a second copy
+    expect(storeBytes).toHaveBeenCalledTimes(1);
   });
 });

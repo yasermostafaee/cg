@@ -24,6 +24,7 @@ import { COMPOSITION_DND_TYPE } from '../compositions/CompositionsPanel.js';
 import { getActiveSharedImage } from '../sharedLibrary/activeSharedImage.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
 import * as lottieAssetCache from '../assets/lottieAssetCache.js';
+import { probeStoredVideo } from '../assets/video-asset-probe.js';
 import { effectivePathBoxPoints, effectiveTransformAt } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
 import {
@@ -185,15 +186,7 @@ async function insertVideoFromAsset(
     designerStore.showNotice('That video asset could not be read.');
     return;
   }
-  const meta = await new Promise<{ durationMs: number; w: number; h: number } | null>((resolve) => {
-    const v = document.createElement('video');
-    v.preload = 'metadata';
-    v.muted = true;
-    v.onloadedmetadata = () =>
-      resolve({ durationMs: Math.round(v.duration * 1000), w: v.videoWidth, h: v.videoHeight });
-    v.onerror = () => resolve(null);
-    v.src = url;
-  });
+  const meta = await probeStoredVideo(url);
   if (meta === null || !(meta.durationMs > 0)) {
     designerStore.showNotice('That video asset could not be decoded.');
     return;
@@ -206,8 +199,8 @@ async function insertVideoFromAsset(
       y: scenePoint.y,
       assetId,
       durationMs: meta.durationMs,
-      sourceWidth: meta.w,
-      sourceHeight: meta.h,
+      sourceWidth: meta.width,
+      sourceHeight: meta.height,
       resolution,
     }),
   );

@@ -116,6 +116,15 @@
       when the fps warning + crop fields push the body past a short viewport. Tests:
       `video-element-defaults.test.ts` (sizing parity + the 1920×282 case) and a structural
       footer-placement guard in `video-import-modal.test.ts`.
+- [x] 2.8 Pre-convert dedupe (owner field smoke: re-import re-encoded): the SOURCE sha256 is
+      hashed BEFORE converting (streamed via `File.stream()` + `@cg/vcg-format#sha256HexOfChunks`,
+      bounded memory; ~16 s for 1.93 GB, instant for the field clips) and stored in provenance
+      (`sourceSha256`, additive/optional). `findDuplicateVideoAsset` matches source hash + target
+      fps + crop; a match shows a 'duplicate' step with Use existing (places from the prior asset
+      via shared `probeStoredVideo` — no re-encode) / Convert again; a different crop or fps still
+      converts. Cancel aborts the hash. The post-convert sha dedupe stays as the backstop. Tests:
+      `integrity.test.ts`, `source-hash.test.ts`, `video-convert-args.test.ts`,
+      `video-import-modal.test.ts`.
 
 ## Phase 3 — canvas render + Inspector
 

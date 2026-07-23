@@ -12,6 +12,30 @@ export function sha256Hex(input: Uint8Array | string): string {
   return bytesToHex(sha256(bytes));
 }
 
+/**
+ * Streamed sha256 hex over an async sequence of byte chunks — the SAME digest as
+ * `sha256Hex` over the concatenation, but computed incrementally so a huge input
+ * (a multi-GB video source, D-128 pre-convert dedupe) is never held in memory
+ * all at once: only one chunk plus the ~200-byte hasher state live at a time.
+ *
+ * `onProgress` reports cumulative bytes hashed after each chunk (for a UI
+ * affordance on a slow hash). Isomorphic: an async iterable of `Uint8Array`
+ * works over a browser `File.stream()` reader and a Node stream alike.
+ */
+export async function sha256HexOfChunks(
+  chunks: AsyncIterable<Uint8Array>,
+  onProgress?: (bytesHashed: number) => void,
+): Promise<string> {
+  const hasher = sha256.create();
+  let total = 0;
+  for await (const chunk of chunks) {
+    hasher.update(chunk);
+    total += chunk.byteLength;
+    onProgress?.(total);
+  }
+  return bytesToHex(hasher.digest());
+}
+
 export interface IntegrityFile {
   path: string;
   sha256: string;
