@@ -248,19 +248,47 @@ export function VideoImportModal(props: {
   }
 
   const converting = phase.kind === 'converting';
+  const progressPct = phase.kind === 'converting' ? Math.round(phase.progress * 100) : 0;
+  // The footer is the Modal shell's STICKY region (the body above scrolls). The
+  // conversion progress lives HERE, above the action row, so it — and the
+  // buttons — stay visible at every modal height even when the fps-warning
+  // banner + crop fields push the body taller than the viewport.
   const footer = (
-    <>
-      <ModalButton variant="secondary" onClick={converting ? cancel : props.onClose}>
-        {converting ? 'Cancel conversion' : 'Cancel'}
-      </ModalButton>
-      <ModalButton
-        variant="primary"
-        onClick={() => void convert()}
-        disabled={phase.kind !== 'ready'}
-      >
-        {converting ? 'Converting…' : 'Convert & import'}
-      </ModalButton>
-    </>
+    <div className={s.footerStack}>
+      {converting && (
+        <div className={s.progressArea} data-testid="video-progress">
+          <div
+            className={s.progressTrack}
+            role="progressbar"
+            aria-label="Conversion progress"
+            aria-valuenow={progressPct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div
+              className={s.progressFill}
+              data-testid="video-progress-fill"
+              style={{ width: `${String(progressPct)}%` }}
+            />
+          </div>
+          <div className={s.meta}>
+            Converting… {progressPct}% (single-threaded — large sources take a while)
+          </div>
+        </div>
+      )}
+      <div className={s.footerActions}>
+        <ModalButton variant="secondary" onClick={converting ? cancel : props.onClose}>
+          {converting ? 'Cancel conversion' : 'Cancel'}
+        </ModalButton>
+        <ModalButton
+          variant="primary"
+          onClick={() => void convert()}
+          disabled={phase.kind !== 'ready'}
+        >
+          {converting ? 'Converting…' : 'Convert & import'}
+        </ModalButton>
+      </div>
+    </div>
   );
 
   return (
@@ -389,22 +417,6 @@ export function VideoImportModal(props: {
                 </>
               )}
             </div>
-
-            {converting && (
-              <div>
-                <div className={s.progressTrack} role="progressbar">
-                  <div
-                    className={s.progressFill}
-                    data-testid="video-progress-fill"
-                    style={{ width: `${String(Math.round(phase.progress * 100))}%` }}
-                  />
-                </div>
-                <div className={s.meta}>
-                  Converting… {Math.round(phase.progress * 100)}% (single-threaded — large sources
-                  take a while)
-                </div>
-              </div>
-            )}
 
             {phase.kind === 'error' && <Callout variant="danger">{phase.message}</Callout>}
           </>

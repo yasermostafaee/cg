@@ -460,3 +460,39 @@ export function defaultVideo(
     holdBehavior: 'loop',
   };
 }
+
+/**
+ * D-128 — the ONE sizing + construction for a placed `video` element, shared by
+ * BOTH entry points (the import modal's place-on-confirm AND the
+ * drag-from-assets drop) so the two can never diverge again. The element takes
+ * the clip's INTRINSIC dimensions, scaled DOWN only to fit inside the project
+ * frame (never up), and is independent of canvas zoom.
+ *
+ * This exists because the drag path used to size via a 480px-longest-side cap
+ * (`lottieSize`), which produced a clip at exactly 1/4 the modal's size for a
+ * 1920-wide source (1920→480) — the modal fits to the frame, the drag path did
+ * not. Callers pass the clip's SOURCE dimensions (the modal's probe figures, or
+ * the dropped asset's `<video>` `videoWidth`/`videoHeight`); when those are
+ * unknown (a decode with no video track) the element falls back to
+ * {@link defaultVideo}'s 480×270 box.
+ */
+export function fitVideoElement(opts: {
+  id: string;
+  x: number;
+  y: number;
+  assetId: string;
+  durationMs: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  resolution: { width: number; height: number };
+}): VideoElement {
+  const { id, x, y, assetId, durationMs, sourceWidth: w, sourceHeight: h, resolution } = opts;
+  if (!(w > 0) || !(h > 0)) {
+    return defaultVideo(id, x, y, assetId, durationMs); // unknown source size → default box
+  }
+  const fit = Math.min(resolution.width / w, resolution.height / h, 1);
+  return defaultVideo(id, x, y, assetId, durationMs, {
+    width: Math.max(1, Math.round(w * fit)),
+    height: Math.max(1, Math.round(h * fit)),
+  });
+}

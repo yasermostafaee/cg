@@ -105,6 +105,17 @@
       `video-convert-race.test.ts` (7 always-concurrent race tests incl. the generation
       guard and listener detach) + StrictMode double-mount (reject-on-abort, silent) and
       cancel-after-encode guards in `video-import-modal.test.ts`.
+- [x] 2.7 Placement + progress-visibility fixes (owner field smoke): (a) drag-from-assets
+      sized a clip at 1/4 the modal's size (it reused `lottieSize`'s 480px cap; a 1920×282
+      source → 480×71). BOTH entry points now build the element through ONE shared
+      `element-defaults.ts#fitVideoElement` (intrinsic size fit to the frame, zoom-independent,
+      never upscales) — the drag path threads `scene.resolution` through `insertVideoFromAsset`.
+      Image drag-drop did not share the bug (fixed 320² placeholder) and is untouched. (b) the
+      convert progress bar moved from the scrollable modal body into the Modal shell's STICKY
+      footer (`footerStack`, above the action row), so progress + % + buttons stay visible even
+      when the fps warning + crop fields push the body past a short viewport. Tests:
+      `video-element-defaults.test.ts` (sizing parity + the 1920×282 case) and a structural
+      footer-placement guard in `video-import-modal.test.ts`.
 
 ## Phase 3 — canvas render + Inspector
 

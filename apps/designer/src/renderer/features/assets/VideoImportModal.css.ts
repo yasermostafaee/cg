@@ -75,6 +75,32 @@ export const meta = style({
   fontSize: '0.9rem',
 });
 
+/**
+ * The modal footer is the Modal shell's STICKY region (it never scrolls — the
+ * body above it does). Stacking the conversion progress ON TOP of the action
+ * row here keeps progress + % + buttons visible at every modal height, with or
+ * without the fps-warning banner pushing the body taller (D-128 field fix: the
+ * progress used to sit in the scrollable body and fell below the fold).
+ */
+export const footerStack = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.55rem',
+  width: '100%',
+});
+
+export const progressArea = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.3rem',
+});
+
+export const footerActions = style({
+  display: 'flex',
+  justifyContent: 'flex-end',
+  gap: '0.4rem',
+});
+
 export const progressTrack = style({
   height: 8,
   borderRadius: 4,

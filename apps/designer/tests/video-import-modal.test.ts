@@ -335,6 +335,59 @@ describe('VideoImportModal (D-128)', () => {
     expect(button('Convert & import').disabled).toBe(false);
   });
 
+  it('during conversion the progress + buttons sit in the STICKY footer, never the scrollable body — even with the fps warning AND crop fields present (D-128)', async () => {
+    // The growable content (fps-warning banner + preview + crop fields) can push
+    // the body taller than the viewport; it must NOT be able to scroll the
+    // conversion progress or the action buttons out of view. The Modal shell's
+    // footer is the sticky region (a sibling AFTER the overflow:auto body), so
+    // the guarantee is structural: progress + both buttons live in the footer,
+    // while the warning + crop fields live in the separate scroll region.
+    let progressCb: ((r: number) => void) | undefined;
+    let resolveConvert!: (v: Uint8Array | null) => void;
+    convertToWebm.mockImplementation(
+      (opts: { onProgress?: (r: number) => void }) =>
+        new Promise((res) => {
+          progressCb = opts.onProgress;
+          resolveConvert = res;
+        }),
+    );
+    await renderModal(); // PROBE.fps 29.97 vs project 50 → the fps warning shows
+    act(() => {
+      cropToggle().click(); // add the extra crop fields row too
+    });
+    act(() => {
+      button('Convert & import').click();
+    });
+    act(() => {
+      progressCb?.(0.42);
+    });
+
+    // the growable content IS present (the very thing that used to hide progress)
+    expect(document.body.textContent).toContain('judder'); // fps warning banner
+    expect(numericInput('W')).not.toBeNull(); // crop fields row
+
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog).not.toBeNull();
+    // Modal renders the footer LAST — it is the sticky, non-scrolling region.
+    const footer = dialog!.lastElementChild as HTMLElement;
+    const progress = document.querySelector('[data-testid="video-progress"]');
+    const fill = document.querySelector('[data-testid="video-progress-fill"]') as HTMLElement;
+
+    // progress + BOTH action buttons are in the sticky footer…
+    expect(progress).not.toBeNull();
+    expect(footer.contains(progress)).toBe(true);
+    expect(footer.contains(button('Converting…'))).toBe(true);
+    expect(footer.contains(button('Cancel conversion'))).toBe(true);
+    expect(fill.style.width).toBe('42%');
+    // …and the growable parts are NOT in the footer (they scroll independently)
+    expect(footer.contains(cropToggle())).toBe(false);
+    expect(footer.contains(document.querySelector('[data-testid="video-probe-meta"]'))).toBe(false);
+
+    await act(async () => {
+      resolveConvert(null); // settle the pending convert
+    });
+  });
+
   it('a cancel that lands AFTER the encode finishes still cancels — nothing stored, back to ready', async () => {
     // The window the converter cannot cover: convertToWebm has already
     // resolved WITH bytes when the operator's cancel arrives. The modal must

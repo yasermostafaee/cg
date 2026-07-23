@@ -13,7 +13,7 @@ import {
   defaultEllipse,
   defaultImage,
   defaultLottie,
-  defaultVideo,
+  fitVideoElement,
   defaultRepeater,
   defaultSequence,
   defaultShape,
@@ -168,12 +168,17 @@ async function insertLottieFromAsset(
  * D-128 — place a `video` element from a dropped project asset (the second entry
  * point beside the import modal's place-on-confirm). The STORED asset is the
  * canonical WebM the importer produced, so a `<video>` metadata probe yields its
- * duration/dimensions directly; sizing mirrors {@link lottieSize}. An unreadable
- * asset surfaces a notice and inserts nothing.
+ * duration/dimensions directly. Sizing + construction go through the SHARED
+ * {@link fitVideoElement} (fit the clip's INTRINSIC size to the project frame),
+ * so a dropped clip is identical to the same clip placed from the import modal —
+ * the drag path used to size via {@link lottieSize}'s 480px cap and landed a
+ * 1920-wide clip at 1/4 size. An unreadable asset surfaces a notice and inserts
+ * nothing.
  */
 async function insertVideoFromAsset(
   assetId: string,
   scenePoint: { x: number; y: number },
+  resolution: { width: number; height: number },
 ): Promise<void> {
   const url = await window.cg.assets.url(assetId);
   if (url === null) {
@@ -193,10 +198,18 @@ async function insertVideoFromAsset(
     designerStore.showNotice('That video asset could not be decoded.');
     return;
   }
-  const { width, height } = lottieSize(meta.w, meta.h);
   const id = `el-${String(Date.now())}`;
   designerStore.addElement(
-    defaultVideo(id, scenePoint.x, scenePoint.y, assetId, meta.durationMs, { width, height }),
+    fitVideoElement({
+      id,
+      x: scenePoint.x,
+      y: scenePoint.y,
+      assetId,
+      durationMs: meta.durationMs,
+      sourceWidth: meta.w,
+      sourceHeight: meta.h,
+      resolution,
+    }),
   );
   designerStore.setSelection([id]);
 }
@@ -631,7 +644,7 @@ export function CanvasOverlay({
     }
     // D-128 — a dropped video asset places a `video` element (async metadata probe).
     if (e.dataTransfer.getData('application/x-cg-asset-kind') === 'video') {
-      void insertVideoFromAsset(assetId, scenePoint);
+      void insertVideoFromAsset(assetId, scenePoint, scene.resolution);
       return;
     }
     const id = `el-${String(Date.now())}`;

@@ -13,7 +13,7 @@ import { clearAll as clearAllAssetUrls, revoke as revokeAssetUrl } from './asset
 import { clearAll as clearAllLottieAssets } from './lottieAssetCache.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
 import { VideoImportModal } from './VideoImportModal.js';
-import { defaultVideo } from '../../state/element-defaults.js';
+import { fitVideoElement } from '../../state/element-defaults.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
@@ -464,19 +464,25 @@ function countUsages(
  * D-128 — place a freshly-imported clip as a `video` element at the scene
  * centre, sized to the stored clip (post-crop), scaled down to fit when larger
  * than the frame. The drag-from-assets drop is the other entry point to the
- * same element (CanvasOverlay).
+ * same element (CanvasOverlay) — BOTH go through {@link fitVideoElement} so the
+ * two paths produce an identical element for the same asset.
  */
 function placeVideoElement(
   result: { asset: AssetMeta; durationMs: number; width: number; height: number },
   scene: { resolution: { width: number; height: number } } | null,
 ): void {
   const res = scene?.resolution ?? { width: 1920, height: 1080 };
-  const fit = Math.min(res.width / result.width, res.height / result.height, 1);
   const id = `el-${String(Date.now())}`;
   designerStore.addElement(
-    defaultVideo(id, res.width / 2, res.height / 2, result.asset.assetId, result.durationMs, {
-      width: Math.round(result.width * fit),
-      height: Math.round(result.height * fit),
+    fitVideoElement({
+      id,
+      x: res.width / 2,
+      y: res.height / 2,
+      assetId: result.asset.assetId,
+      durationMs: result.durationMs,
+      sourceWidth: result.width,
+      sourceHeight: result.height,
+      resolution: res,
     }),
   );
   designerStore.setSelection([id]);

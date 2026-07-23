@@ -363,6 +363,36 @@ kind, provenance?)` is the ONE write path — `importFile` delegates to it — s
   suites missed the bug precisely because they never raced two calls — the race tests exist
   to keep it that way.
 
+## Phase-2 placement + progress-visibility fixes (2026-07-23, same branch — owner's field smoke)
+
+- **Drag-from-assets sized a clip at 1/4 the modal's size — ONE sizing seam now:** the two
+  entry points to a `video` element had diverged. The import modal's place-on-confirm fit the
+  clip's INTRINSIC dimensions to the project frame (`min(res/​src, 1)`); the drag-from-assets
+  drop instead reused `lottieSize`'s **480px-longest-side cap**, so a 1920×282 source dropped
+  at 480×71 — exactly 1/4 (1920→480) while the modal gave 1920×282. The divergence was the
+  defect, so both paths now call ONE shared `element-defaults.ts#fitVideoElement` (source
+  dims → frame-fit, never upscales, falls back to 480×270 only when the source size is
+  unknown). It reads the clip's real dimensions (the modal's probe figures; the drop's
+  `<video>` `videoWidth`/`videoHeight`) — canvas ZOOM never enters either path (drop points
+  are scene px, not screen px), so the created element is zoom-independent. IMAGE drag-drop
+  did NOT share the bug and is untouched: it uses `defaultImage`'s fixed 320×320 placeholder
+  (a different, long-standing default — not the 1/4 factor and not intrinsic-sized), so the
+  two paths differed for a different reason and converging them is out of scope here. Pinned
+  by `video-element-defaults.test.ts` (the 1920×282 case, drag/modal size parity, downscale,
+  no-upscale, unknown-dims fallback).
+- **Convert progress could scroll out of view — moved to the STICKY footer:** with the fps
+  warning + preview + crop fields present the modal body grew past a short viewport and
+  scrolled, dropping the "Converting… NN%" bar below the fold exactly when it matters most
+  (single-threaded encode = minutes). The Modal shell already bounds height (`maxHeight:82vh`)
+  with a `min-height:0; overflow:auto` body and a non-scrolling footer sibling; the fix simply
+  relocates the progress bar + % + status from the scrollable body INTO the footer, stacked
+  above the action row (`footerStack`). Progress and both buttons are now always visible at
+  every modal height; the warning + preview + crop fields stay in the scroll region and can no
+  longer push them off-screen (the preview stays capped at 300px tall, so a tall 900×900 or
+  wide 1920×282 source shrinks to fit rather than overflowing). Pinned structurally by
+  `video-import-modal.test.ts` (progress + both buttons are in the footer, the warning + crop
+  fields are not — a geometry-free assertion that survives jsdom's lack of layout).
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide
