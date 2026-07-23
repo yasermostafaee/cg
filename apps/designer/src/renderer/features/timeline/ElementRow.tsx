@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
+  Clapperboard,
   Clock,
   Component,
   Film,
@@ -18,7 +19,6 @@ import {
   Stamp,
   Triangle,
   Type,
-  Video,
   type LucideIcon,
 } from 'lucide-react';
 import type { Element, FrameRange, ShapeElement } from '@cg/shared-schema';
@@ -227,10 +227,12 @@ export function layerTypeIcon(element: Element): LucideIcon {
     case 'video-placeholder':
       return Film;
     case 'video':
-      // D-128 — an imported video clip. The camcorder glyph reads distinctly
-      // from the `video-placeholder` film strip (they are different types); the
-      // cyan lifespan colour (TYPE_COLORS) reinforces it.
-      return Video;
+      // D-128 — an imported video FILE. The clapperboard is the conventional
+      // "video file" glyph in editing tools; it reads distinctly from the image
+      // element's icon AND is deliberately NOT a camera — camera-style imagery is
+      // reserved for the live-source element (`video-placeholder`, the film strip
+      // below). The cyan lifespan colour (TYPE_COLORS) reinforces the distinction.
+      return Clapperboard;
     case 'container':
       return Group;
     case 'composition':

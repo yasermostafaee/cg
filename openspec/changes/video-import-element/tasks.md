@@ -45,7 +45,8 @@
 > the phase: raw-bytes ingest seam with PROVENANCE (`AssetStore.importBytes` +
 > `assets.storeBytes` + `VideoProvenanceSchema` on `AssetMeta` — `@cg/shared-ipc`); frame-rate
 > CONFORM + WARN (`-r <Scene.frameRate>`, warning on mismatch, never a block); video is a
-> per-PROJECT asset only (never the device-level library); the plate stays file-source-free.
+> per-PROJECT asset only (never the device-level library); the Live Source element
+> (`video-placeholder`, D-137) stays file-source-free.
 
 - [x] 2.1 `VideoElementSchema` + `VideoPhasesSchema` added per design D1 (ms-based phases,
       `holdBehavior` default `'loop'`, `drivesHold` inverse default) and registered in the
@@ -150,8 +151,9 @@
       `video-inspector.test.ts`.
 - [x] 3.3 Display refinements (owner add-on): the assets-panel tile shows the video's mid-clip
       poster (`AssetThumb` → shared `VideoPoster`, replacing the "VID" text stub) and the
-      timeline layer row uses a distinct camcorder icon (`layerTypeIcon` `case 'video'` → lucide
-      `Video`; the cyan `TYPE_COLORS` entry already existed). Tests: `asset-thumb-drag.test.ts`,
+      timeline layer row uses a distinct clapperboard icon (`layerTypeIcon` `case 'video'` →
+      lucide `Clapperboard`, the "video file" glyph — not a camera; the cyan `TYPE_COLORS` entry
+      already existed). Tests: `asset-thumb-drag.test.ts`,
       `layer-type-icon.test.ts`.
 - [x] 3.4 Timeline: the element is timed like any other; `durationMs` informs the span UI
       (unchanged from Phase 2 — the schema/timeline already handle it).

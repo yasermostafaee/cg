@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ArrowDownUp,
   Circle,
+  Clapperboard,
   Clock,
   Component,
   Group,
@@ -12,7 +13,6 @@ import {
   Square,
   Stamp,
   Type,
-  Video,
 } from 'lucide-react';
 import type { Element } from '@cg/shared-schema';
 import { layerTypeIcon } from '../src/renderer/features/timeline/ElementRow.js';
@@ -54,9 +54,10 @@ describe('layerTypeIcon (B-052)', () => {
     expect(layerTypeIcon({ type: 'repeater' } as unknown as Element)).toBe(Rows3);
   });
 
-  it('D-128 — an imported video clip maps to the camcorder icon, not the rectangle', () => {
+  it('D-128 — an imported video FILE maps to the clapperboard (distinct from image, not a camera)', () => {
     const video = { type: 'video', assetId: 'x', durationMs: 1000 } as unknown as Element;
-    expect(layerTypeIcon(video)).toBe(Video);
+    expect(layerTypeIcon(video)).toBe(Clapperboard);
     expect(layerTypeIcon(video)).not.toBe(Square);
+    expect(layerTypeIcon(video)).not.toBe(Image); // distinct from the image element
   });
 });

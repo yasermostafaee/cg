@@ -3388,7 +3388,8 @@ import modal, and BAKED at conversion — never a playback-time crop — so the 
 stays the single truth; the Lottie counterpart is render-time and filed separately (D-129).
 Decisions taken in this filing: (f) a NEW `video` element type / `VideoElementSchema`.
 `VideoPlaceholderElementSchema` is FROZEN for this feature and must NOT be repurposed — it is the
-live-source plate placeholder, a different feature (see D-137 in this same batch). (g) conversion
+Live Source element (a live/on-air feed; user-facing name "Live Source", schema type stays
+`video-placeholder`), a different feature (see D-137 in this same batch). (g) conversion
 happens at IMPORT, producing ONE canonical stored form, so preview and both exporters render
 identical bytes. (h) audio is STRIPPED at conversion (`-an`), not merely muted at playback. (i)
 `phases` (`introEnd` / `outroStart` / optional `idle`) is OPTIONAL and MANUAL — video has no
@@ -3402,7 +3403,7 @@ spike and by hardware, NOT now: whether CEF ~71 renders VP9 + alpha (`yuva420p`)
 VP8 + alpha (`-auto-alt-ref 0`) is the documented fallback if it does not; per B-066, modern
 Chrome proves NOTHING here. The single-file size threshold value and whether it warns or blocks.
 Where the vendored wasm binary lives w.r.t. git (size / LFS / `.gitattributes`). Creation entry
-point: also reachable through the unified Plate Source selector (D-140); the import/conversion
+point: also reachable through the unified Source selector (D-140); the import/conversion
 flow is identical from either entry. **RECON-FIRST,
 needs its own `design.md`** — schema + Designer UI + `@cg/template-runtime` + BOTH exporters.
 
@@ -3553,50 +3554,55 @@ this).
 **Notes:** implementation (canvas readback vs filter) is design-time; depends on D-128's video
 element existing. A Lottie variant may follow as its own item — out of scope here.
 
-## [ ] D-137 — Live plate element (multi-box live windows; implements the reserved video-placeholder) ⟨priority: high⟩
+## [ ] D-137 — Live Source element (multi-box live windows; implements the reserved video-placeholder) ⟨priority: high⟩
 
-**What:** A **Live plate** element: an axis-aligned frame with a FULLY TRANSPARENT HOLE in export,
+**What:** A **Live Source** element: an axis-aligned frame with a FULLY TRANSPARENT HOLE in export,
 carrying a source id (and optionally a key source id) the runtime uses to composite a live input
 on a LOWER CasparCG layer behind the template. Finally implements
 `VideoPlaceholderElementSchema` for its ORIGINAL documented purpose — the D-128 freeze forbids
 REPURPOSING it for file-video, not implementing it; extend it additively where fields are missing
 (axis-aligned v1).
 **Why:** the client authors multi-frame shows (e.g. two guest boxes) where each frame carries its
-OWN live input, Cinegy-plate style. Cinegy's model, confirmed from its docs: a plate's Live source
-is just a "Live ID" resolved by the playout configurator, optionally paired with a "Key ID" for
-Key&Fill input, and the id can be bound to a variable (dynamic). Our architecture matches: an HTML
-template under CEF cannot render SDI/live, so the template renders a frame with a transparent hole
-and the runtime composites the mapped live source behind it (Caspar-side counterpart filed on the
-runtime track: "live plate source routing").
+OWN live input, Cinegy plate-style. Cinegy's model, confirmed from its docs: such a live window's
+source is just a "Live ID" resolved by the playout configurator, optionally paired with a "Key ID"
+for Key&Fill input, and the id can be bound to a variable (dynamic). Our architecture matches: an
+HTML template under CEF cannot render SDI/live, so the template renders a frame with a transparent
+hole and the runtime composites the mapped live source behind it (Caspar-side counterpart filed on
+the runtime track: "live plate source routing").
 **Acceptance:**
 
-- WHEN the operator creates a Live plate THEN it can be placed and sized (axis-aligned, no
+- WHEN the operator creates a Live Source THEN it can be placed and sized (axis-aligned, no
   rotation in v1) and carries a source id (the routeKey, e.g. "guest-1"), an OPTIONAL key source
   id (fill+key input pairs), an `expectedAspect`, and an optional poster image
-- WHEN the operator marks the plate's source id as DYNAMIC THEN it is exposed through the EXISTING
-  fields/bindings model like any bound field, so the Runtime operator can set or change which
-  source feeds the plate per take — Cinegy's variable-bound id, in our model
-- WHEN shown on the canvas or in Designer preview THEN the plate renders SMPTE-style color bars as
-  its DEFAULT placeholder — the client's Cinegy convention for "a live source goes here" — with
-  the source-id label overlaid so multiple plates stay distinguishable; WHEN a poster image is set
-  THEN it replaces the bars; never an unmarked black box. Bars are drawn PROCEDURALLY (CSS
-  gradient / inline SVG), not a bundled bitmap asset
-- WHEN exported (`.vcg` AND single-file HTML) THEN the plate's region renders NOTHING — fully
-  transparent, zero painted pixels; bars and poster are canvas/preview-only — while the plate's
-  geometry + source id (+ key id) + expectedAspect + whether the id is dynamic are carried in
-  export METADATA the runtime reads WITHOUT parsing the whole scene (the metadata surface — likely
-  a manifest `plates` section — is a design.md decision)
-- WHEN plates overlap each other or exceed the frame THEN the existing issues/preflight path warns
-- WHEN a scene has multiple plates THEN each is independent (own ids, own geometry)
+- WHEN the operator marks the Live Source's source id as DYNAMIC THEN it is exposed through the
+  EXISTING fields/bindings model like any bound field, so the Runtime operator can set or change
+  which source feeds the Live Source per take — Cinegy's variable-bound id, in our model
+- WHEN shown on the canvas or in Designer preview THEN the Live Source renders SMPTE-style color
+  bars as its DEFAULT placeholder — the client's Cinegy convention for "a live source goes here" —
+  with the source-id label overlaid so multiple Live Sources stay distinguishable; WHEN a poster
+  image is set THEN it replaces the bars; never an unmarked black box. Bars are drawn PROCEDURALLY
+  (CSS gradient / inline SVG), not a bundled bitmap asset
+- WHEN exported (`.vcg` AND single-file HTML) THEN the Live Source's region renders NOTHING — fully
+  transparent, zero painted pixels; bars and poster are canvas/preview-only — while the Live
+  Source's geometry + source id (+ key id) + expectedAspect + whether the id is dynamic are carried
+  in export METADATA the runtime reads WITHOUT parsing the whole scene (the metadata surface — the
+  manifest section name — is a design.md decision)
+- WHEN Live Sources overlap each other or exceed the frame THEN the existing issues/preflight path
+  warns
+- WHEN a scene has multiple Live Sources THEN each is independent (own ids, own geometry)
 
-**Notes:** shapes stay as they are — a plate is a compositing CONTRACT with the runtime, not a
-fill mode on a shape. Cinegy parity is the NEED, not the UI — design the affordance our way.
-Default placeholder is SMPTE bars (owner decision — do not re-open). Rotation / non-rect plates
-out of scope v1 (MIXER FILL is axis-aligned). Pairs with the Caspar-track "live plate source
-routing" item (cross-reference by title now; numbers when both are merged). Creation entry point:
-the unified Plate Source selector (D-140) creates this element for Source=Live; standalone
-creation unchanged. **RECON-FIRST, needs
-its own design.md** — schema (additive), Designer UI, both exporters' metadata, fields model.
+**Notes:** shapes stay as they are — a Live Source is a compositing CONTRACT with the runtime, not
+a fill mode on a shape. Cinegy parity is the NEED, not the UI — design the affordance our way.
+Default placeholder is SMPTE bars (owner decision — do not re-open). Rotation / non-rect Live
+Sources out of scope v1 (MIXER FILL is axis-aligned). Pairs with the Caspar-track "live plate
+source routing" item (cross-reference by title now; numbers when both are merged — that runtime
+item keeps its own wording, which this rename does not touch). Creation entry point: the unified
+Source selector (D-140) creates this element for Source=Live Source; standalone creation
+unchanged. **Naming (owner, 2026-07-23):** the user-facing name is **Live Source** — the plate is
+live/on-air ONLY (file video is the separate `video` element, D-128), so "Plate" was misleading.
+The schema type remains `video-placeholder` — renaming the type would require a scene migration
+and is deliberately out of scope. **RECON-FIRST, needs its own design.md** — schema (additive),
+Designer UI, both exporters' metadata, fields model.
 
 ## [ ] D-138 — load ticker / sequence / text content from a text file (whole-text default, OPTIONAL split) ⟨priority: medium⟩
 
@@ -3663,36 +3669,37 @@ answer. Rules are schema-level (additive) and evaluated in `@cg/template-runtime
 render paths agree. **RECON-FIRST, needs its own design.md** — schema + Inspector UI + runtime +
 both exporters (asset collection!).
 
-## [ ] D-140 — unified "Plate" insertion with a Source selector (Live / Video file / Image / Lottie) ⟨priority: medium⟩
+## [ ] D-140 — unified media insertion with a Source selector (Live Source / Video file / Image / Lottie) ⟨priority: medium⟩
 
-**What:** One **Plate** tool whose Source selector — Live / Video file / Image / Lottie — creates
-(or converts to) the right underlying element type at the drawn geometry. UI unification ONLY:
-the data model keeps `image` / `lottie` / `video` (D-128) / `video-placeholder` (D-137) as
-DISTINCT element types.
-**Why:** in Cinegy there is no separate tool per media kind — the operator inserts a PLATE and
-picks its Source: Live (id / key-id) or a File (video, image, even Lottie). The client expects
-that flow. Ours keeps the DATA MODEL as-is — the discriminated union, every renderer/exporter
-branch, and the additive-schema discipline depend on the types staying distinct — and unifies
-only the insertion + Inspector affordance.
+**What:** One **media insertion** tool whose Source selector — Live Source / Video file / Image /
+Lottie — creates (or converts to) the right underlying element type at the drawn geometry. UI
+unification ONLY: the data model keeps `image` / `lottie` / `video` (D-128) / `video-placeholder`
+(D-137) as DISTINCT element types.
+**Why:** in Cinegy there is no separate tool per media kind — the operator inserts one media
+element and picks its Source: Live Source (id / key-id) or a File (video, image, even Lottie). The
+client expects that flow. Ours keeps the DATA MODEL as-is — the discriminated union, every
+renderer/exporter branch, and the additive-schema discipline depend on the types staying distinct —
+and unifies only the insertion + Inspector affordance.
 **Acceptance:**
 
-- WHEN the operator inserts a Plate THEN a single affordance offers Source: Live / Video file /
-  Image / Lottie, and picking one creates the corresponding EXISTING element type
+- WHEN the operator inserts a media element THEN a single affordance offers Source: Live Source /
+  Video file / Image / Lottie, and picking one creates the corresponding EXISTING element type
   (`video-placeholder` / `video` / `image` / `lottie`) at the drawn geometry
 - WHEN Source = Video file THEN the D-128 import flow runs (crop modal + in-app conversion) —
   NEVER a direct-play of the picked file; the stored canonical WebM stays the single truth
 - WHEN Source = Image or Lottie THEN the existing import/validation paths run; the assets panel
   and library imports stay available and unchanged — the selector is an ADDITIONAL entry point,
   not a replacement
-- WHEN the operator switches an existing plate's Source in the Inspector THEN the element
+- WHEN the operator switches an existing element's Source in the Inspector THEN the element
   CONVERTS in place, preserving transform, timeline span, and name where fields correspond;
   incompatible fields are dropped behind a visible confirm, as ONE undo entry
-- WHEN Source = Live THEN behavior is exactly D-137's (source id / key id, dynamic binding,
+- WHEN Source = Live Source THEN behavior is exactly D-137's (source id / key id, dynamic binding,
   SMPTE-bars placeholder)
 
 **Notes:** schemas do NOT merge — UI unification only; record the rejected alternative (a single
-mega-plate schema) and why in design.md. Cinegy's "On-Air" source needs no new Designer concept:
-it is Source=Live whose runtime mapping is a ROUTE of the program channel (D-137 / C-015
+merged media schema) and why in design.md. Cinegy's "On-Air" source needs no new Designer concept:
+it is Source=Live Source whose runtime mapping is a ROUTE of the program channel (D-137 / C-015
 territory). Depends on D-128 and D-137 existing; filed now, implement after both. Cinegy parity
-is the NEED, not the UI. **RECON-FIRST for the type-conversion semantics; needs its own
-design.md.**
+is the NEED, not the UI. **Naming:** the live element is user-facing "Live Source" (D-137); the
+schema type stays `video-placeholder`. **RECON-FIRST for the type-conversion semantics; needs its
+own design.md.**

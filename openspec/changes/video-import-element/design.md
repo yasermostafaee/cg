@@ -20,7 +20,8 @@ plumbing; what must be ADDED is the product.
   `VideoPlaceholderElementSchema` (`type: 'video-placeholder'`, `posterAssetId?`,
   `expectedAspect`, `routeKey`); `packages/template-runtime/src/scene-builder.ts:182-186` renders
   it through `buildPlaceholder`. It is FROZEN for this change (see Decisions) — D-137 implements
-  it for its original live-plate purpose.
+  it for its original Live Source purpose (user-facing name "Live Source"; the schema type stays
+  `video-placeholder`).
 - **C5 — TRUE.** No `video` element type exists (`z.literal('video')` / `VideoElementSchema`
   absent from `elements.ts`); `ProjectAssetsPanel.tsx` has no video import entry (zero `video`
   tokens); `apps/designer/src/platform/Exporter.ts` has no video branch (its only `video` tokens
@@ -469,7 +470,9 @@ midpoint`, the exact ms-space analogue of the D-125 Lottie poster rule at `runti
   (the `VideoDriver`) is Phase 4.
 - **Display refinements (owner add-on, same phase):** the assets-panel tile renders the video's
   mid-clip poster (replacing the "VID" text stub) and the timeline layer row uses a distinct
-  lucide `Video` camcorder glyph (the cyan `TYPE_COLORS` entry already existed) — both wired
+  lucide `Clapperboard` glyph — the conventional "video file" icon, distinct from the image
+  element and deliberately NOT a camera (camera imagery is reserved for the Live Source element);
+  the cyan `TYPE_COLORS` entry already existed — both wired
   through the same `VideoPoster` / `assetUrlCache` seams as the canvas, not a second path.
 
 ## Phase-3 field fixes (2026-07-23, owner smoke — 4 bugs, same branch/PR #398)
@@ -523,7 +526,7 @@ midpoint`, the exact ms-space analogue of the D-125 Lottie poster rule at `runti
 
 ## Related
 
-- **D-140 (unified Plate source selector)** adds a second CREATION entry point for the `video`
+- **D-140 (unified Source selector)** adds a second CREATION entry point for the `video`
   element: Source=Video file runs THIS change's import flow (crop modal + in-app conversion)
   unchanged — never a direct-play of the picked file. UI-level only; no schema interaction with
   this change.
