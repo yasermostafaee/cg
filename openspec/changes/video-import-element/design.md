@@ -295,6 +295,74 @@ kind, provenance?)` is the ONE write path — `importFile` delegates to it — s
   cleanly on fresh instances. The client's AVI/MOV/MP4 set is fully covered as-is
   (single-threaded, same-origin, 32 MB — unchanged).
 
+## Phase-2 converter reentrancy (2026-07-23, same branch — StrictMode-exposed race, root-caused from the owner's non-deterministic smoke)
+
+- **The symptom that named the class:** the owner's real-machine smoke imported the SAME
+  known-good file (`Logo_HazratKhadije_1.avi`) repeatedly and got THREE different outcomes —
+  probe "no decodable video stream", probe OK with correct alpha preview, and
+  "ErrnoError: FS error". Non-determinism on one input is a RACE signature, not lifecycle;
+  fresh-worker-per-import (above) was necessary but could not have fixed this.
+- **Root cause — two concurrent `probeSource` calls stomping module globals:** React
+  `<StrictMode>` (`main.tsx`) double-invokes the modal's probe effect in dev — mount →
+  cleanup → mount — and the old cleanup only flipped `alive = false` without cancelling the
+  in-flight probe, so TWO probes raced `video-convert.ts`'s shared state. (A fast modal
+  close/reopen manufactures the same race in prod, so silencing StrictMode would only have
+  hidden a real bug.) The three field outcomes map one-to-one onto the three collisions:
+  non-mutex `ensureLoaded` built TWO workers and orphaned one alive; the module-global
+  `logSink` was overwritten by the second call, so the first probe's banner landed in the
+  wrong `lines[]` → empty log → `parseProbeLog` null → bogus "no-stream" (blaming a good
+  file); and `resetInstance()` from one call terminated whatever `instance` pointed at — the
+  OTHER call's live worker → its next FS op threw "ErrnoError: FS error". The unit suite
+  missed it because no test ever raced two calls; the clean probe environment missed it
+  because slower timing never overlapped the two probes.
+- **The fix — reentrancy-safe by construction, at BOTH layers:**
+  1. _Single-flight load:_ `ensureLoaded` shares ONE in-flight load promise; concurrent
+     callers can never construct two workers (the old check-then-act race).
+  2. _Per-call sinks:_ log/progress listeners are attached around each exec and detached in
+     `finally` — a verdict is computed only from the caller's OWN exec lines; no module-global
+     sink exists to steal. (Worker messages are ordered, so every log line of an exec arrives
+     before that exec's promise resolves — the "truncated log" was sink theft, never late
+     flushing.)
+  3. _Caller-scoped reset:_ failure paths call `dropWorker(held)` — they drop only the worker
+     THAT call was using, never a replacement a later call owns. `cancelConversion` remains an
+     intentional hard interrupt (`hardReset` + a generation counter so a load in flight during
+     a cancel discards itself).
+  4. _Operation mutex:_ probe/convert bodies run one-at-a-time (`withExclusive`), because they
+     share wasm FS paths (`/mnt`, `/poster.png`, `/out.webm`) on a single-threaded core —
+     without it, two interleaved calls could still unmount each other's input mid-exec.
+  5. _Abort-aware effect (the leak fixed at its source):_ `probeSource` takes an AbortSignal
+     and REJECTS on abort (checked between ops — an abort never terminates a healthy shared
+     worker); the modal's probe-effect cleanup now ABORTS its in-flight probe instead of
+     merely ignoring the result, and the modal's dynamic module import is single-flight too
+     (`loadConverter()` — racing mounts share one import, and a REJECTED import clears the
+     cache so a failed chunk fetch is retryable, mirroring `ensureLoaded`).
+  6. _Abort ≠ crash (adversarial-review catch):_ the reset-skip discriminates on the ERROR,
+     not the signal flag (`isAbortRejection`) — a real exec crash that merely coincides with
+     an aborted signal (the flag can flip mid-exec) still drops the worker; only the abort
+     thrown between ops leaves it cached. And the modal honors a cancel that lands AFTER the
+     encode resolves: `cancelled.current` is re-checked before the measure and before
+     `storeBytes` — an acknowledged cancel can never commit the asset anyway (once
+     `storeBytes` begins, the import commits; reverting a stored asset is not this seam's
+     job).
+- **Honest error reporting (kept from the diagnostic pass):** the previously-swallowed throws
+  now reach the console before the friendly modal message — `probeSource`/`convertToWebm`
+  `console.error` the real underlying error, a failed encode logs the ffmpeg log tail (making
+  the modal's "see the console log" message true), and a rejected probe exec is no longer
+  masked into "code 1 + empty log" (which used to misread a converter crash as "no-stream"
+  and blame a good file).
+- **Contract pinned by:** `video-convert-race.test.ts` (7 tests — two ALWAYS-CONCURRENT
+  probes both succeed on one shared worker with listeners detached after; a no-stream probe
+  racing a good one never kills the good one's worker AND carries the file's own log tail;
+  abort rejects `AbortError` without touching the cached worker, both pre-queued and
+  mid-queue; cancel mid-convert still yields a fresh next import; cancel DURING the worker
+  load discards the loading worker via the generation guard; a crashing probe surfaces the
+  real error) and, in `video-import-modal.test.ts`, the StrictMode double-mount test (first
+  probe REJECTED by cleanup's abort — silently, never a "converter crashed" callout — while
+  the survivor drives the modal to a working import) plus the cancel-after-encode test
+  (a cancel landing after `convertToWebm` resolves still stores nothing). The pre-existing
+  suites missed the bug precisely because they never raced two calls — the race tests exist
+  to keep it that way.
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

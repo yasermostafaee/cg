@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, createElement } from 'react';
+import { StrictMode, act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { AssetMeta } from '@cg/shared-ipc';
 
@@ -97,13 +97,84 @@ function numericInput(label: string): HTMLInputElement {
 describe('VideoImportModal (D-128)', () => {
   it('probes on open, shows the source metadata and the decision-(d) fps warning', async () => {
     await renderModal();
-    expect(probeSource).toHaveBeenCalledWith(FILE);
+    // the probe is abort-aware: the effect threads its AbortSignal through
+    expect(probeSource).toHaveBeenCalledWith(FILE, { signal: expect.any(AbortSignal) });
     const meta = document.querySelector('[data-testid="video-probe-meta"]');
     expect(meta?.textContent).toContain('640×360');
     expect(meta?.textContent).toContain('29.97 fps');
     // scene is null in this harness → project fps falls back to 50 ≠ 29.97 → warn
     expect(document.body.textContent).toContain("conforming to the project channel's 50 fps");
     expect(document.body.textContent).toContain('judder');
+  });
+
+  it('StrictMode double-mount ABORTS the first probe via cleanup; the survivor drives the modal to a working import (D-128 race guard)', async () => {
+    // StrictMode double-invokes the mount effect (mount → cleanup → mount) —
+    // the exact mechanism that manufactured the field race. The cleanup must
+    // CANCEL its in-flight probe (abort the signal), not merely ignore it, so
+    // no orphaned probe races the survivor inside the converter.
+    const signals: (AbortSignal | undefined)[] = [];
+    // The REAL probeSource contract: an aborted probe REJECTS (AbortError);
+    // only a live one resolves. The first StrictMode probe therefore takes the
+    // modal's catch path — which must stay SILENT (alive=false), never surface
+    // as "converter crashed".
+    probeSource.mockImplementation((_file: File, o?: { signal?: AbortSignal }) => {
+      const signal = o?.signal;
+      signals.push(signal);
+      return new Promise((resolve, reject) => {
+        const rejectAbort = (): void => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        };
+        if (signal?.aborted === true) {
+          rejectAbort();
+          return;
+        }
+        signal?.addEventListener('abort', rejectAbort, { once: true });
+        setTimeout(() => {
+          signal?.removeEventListener('abort', rejectAbort);
+          resolve({ ok: true, probe: PROBE, posterUrl: 'blob:poster' });
+        }, 0);
+      });
+    });
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root!.render(
+        createElement(
+          StrictMode,
+          null,
+          createElement(VideoImportModal, { file: FILE, onClose, onDone }),
+        ),
+      );
+    });
+    await act(async () => {
+      // let the lazy imports + probe promises settle — the SECOND dynamic
+      // import of an already-loaded module resolves on a macrotask in vitest,
+      // so a bare Promise.resolve() flush is not enough here
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    // Both StrictMode mounts probed, each with its OWN signal…
+    expect(probeSource).toHaveBeenCalledTimes(2);
+    expect(signals).toHaveLength(2);
+    // …the FIRST was aborted by its cleanup (no live orphan left behind)…
+    expect(signals[0]?.aborted).toBe(true);
+    // …and the SURVIVOR was not.
+    expect(signals[1]?.aborted).toBe(false);
+
+    // The aborted probe's REJECTION was swallowed silently — the modal never
+    // shows either failure callout for a cancelled mount's probe.
+    expect(document.body.textContent).not.toContain('does NOT mean');
+    expect(document.body.textContent).not.toContain('could not be read as a video');
+
+    // The modal reached ready on the survivor and a full import still works.
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    expect(storeBytes).toHaveBeenCalledTimes(1);
+    expect(onDone).toHaveBeenCalledTimes(1);
   });
 
   it('a genuine no-stream failure names the file AND shows the ffmpeg log tail', async () => {
@@ -262,6 +333,32 @@ describe('VideoImportModal (D-128)', () => {
     expect(document.body.textContent).not.toContain('Conversion failed');
     expect(storeBytes).not.toHaveBeenCalled();
     expect(button('Convert & import').disabled).toBe(false);
+  });
+
+  it('a cancel that lands AFTER the encode finishes still cancels — nothing stored, back to ready', async () => {
+    // The window the converter cannot cover: convertToWebm has already
+    // resolved WITH bytes when the operator's cancel arrives. The modal must
+    // honor the acknowledged cancel — never commit the asset anyway.
+    let resolveConvert!: (v: Uint8Array | null) => void;
+    convertToWebm.mockImplementation(
+      () =>
+        new Promise<Uint8Array | null>((res) => {
+          resolveConvert = res;
+        }),
+    );
+    await renderModal();
+    act(() => {
+      button('Convert & import').click();
+    });
+    act(() => {
+      button('Cancel conversion').click(); // cancel FIRST…
+    });
+    await act(async () => {
+      resolveConvert(new Uint8Array([7])); // …then the encode finishes WITH bytes
+    });
+    expect(storeBytes).not.toHaveBeenCalled();
+    expect(onDone).not.toHaveBeenCalled();
+    expect(button('Convert & import').disabled).toBe(false); // back to ready
   });
 
   it('a failed (uncancelled) convert surfaces an error and commits nothing', async () => {

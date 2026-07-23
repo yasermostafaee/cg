@@ -11,8 +11,9 @@
  * (with provenance) BEFORE the element is created, and only from the 'done'
  * transition of a successful convert.
  *
- * The wasm module is lazy — `import('./video-convert.js')` happens on mount,
- * the core itself loads on first use; the Designer boots without either.
+ * The wasm module is lazy — `loadConverter()` dynamic-imports it on the first
+ * mount (single-flight: racing mounts share one import), the core itself loads
+ * on first use; the Designer boots without either.
  */
 import { useEffect, useRef, useState } from 'react';
 import type { AssetMeta } from '@cg/shared-ipc';
@@ -33,6 +34,25 @@ import {
 import * as s from './VideoImportModal.css.js';
 
 type Converter = typeof VideoConvertModule;
+
+/**
+ * Single-flight lazy load of the wasm-touching module — however many mounts
+ * race (StrictMode double-invokes the probe effect in dev; a fast close/reopen
+ * does it in prod), they all await the SAME import. Mirrors the converter's
+ * own single-flight worker load (D-128 reentrancy fix).
+ */
+let converterModule: Promise<Converter> | null = null;
+function loadConverter(): Promise<Converter> {
+  converterModule ??= import('./video-convert.js').catch((err: unknown) => {
+    // A failed chunk fetch (e.g. a redeploy swapped the hashed assets) must be
+    // RETRYABLE on the next attempt — mirror ensureLoaded's reset-on-failure.
+    // Caching the rejection would break video import until a full page reload,
+    // while the failure callout tells the operator to "try the import again".
+    converterModule = null;
+    throw err;
+  });
+  return converterModule;
+}
 
 type Phase =
   | { kind: 'probing' }
@@ -69,12 +89,19 @@ export function VideoImportModal(props: {
 
   // Probe on mount (lazy-loads the converter module; the core loads inside it).
   useEffect(() => {
+    // Cleanup must CANCEL the in-flight probe, not merely ignore its result:
+    // StrictMode's dev double-invoke (and a fast close/reopen in prod) runs
+    // this effect twice, and two live probes racing the converter is exactly
+    // the D-128 field bug (bogus "no-stream" / "ErrnoError: FS error" on a
+    // good file). The converter is reentrancy-safe on its own; aborting here
+    // stops this layer from manufacturing the race in the first place.
     let alive = true;
+    const controller = new AbortController();
     void (async () => {
       try {
-        const conv = await import('./video-convert.js');
+        const conv = await loadConverter();
         converter.current = conv;
-        const result = await conv.probeSource(props.file);
+        const result = await conv.probeSource(props.file, { signal: controller.signal });
         if (!alive) return;
         if (!result.ok) {
           setPhase({ kind: 'probe-failed', reason: result.reason, logTail: result.logTail });
@@ -85,12 +112,14 @@ export function VideoImportModal(props: {
         setCrop({ x: 0, y: 0, width: result.probe.width, height: result.probe.height });
         setPhase({ kind: 'ready' });
       } catch (err) {
+        // An aborted probe REJECTS and lands here with alive=false — ignored.
         if (alive)
           setPhase({ kind: 'probe-failed', reason: 'converter-crashed', logTail: [String(err)] });
       }
     })();
     return () => {
       alive = false;
+      controller.abort();
     };
     // mount-only: exactly one probe of the one picked file this modal instance owns
   }, []);
@@ -164,6 +193,13 @@ export function VideoImportModal(props: {
       }
       return;
     }
+    if (cancelled.current) {
+      // The cancel landed AFTER the encode finished but BEFORE the commit —
+      // an acknowledged cancel must never import anyway. Nothing is stored;
+      // the crop step returns.
+      setPhase({ kind: 'ready' });
+      return;
+    }
     try {
       // The SOURCE banner may have said `Duration: N/A` — the CONVERTED output
       // is the authoritative clock either way; fall back to the probe's figure.
@@ -174,6 +210,13 @@ export function VideoImportModal(props: {
           kind: 'error',
           message: 'The converted clip reports no duration — nothing was imported.',
         });
+        return;
+      }
+      if (cancelled.current) {
+        // Last exit before the point of no return — storeBytes commits the
+        // asset; from there the import completes (reverting a stored asset is
+        // not this seam's job).
+        setPhase({ kind: 'ready' });
         return;
       }
       const webmName = props.file.name.replace(/\.[^.]*$/, '') + '.webm';

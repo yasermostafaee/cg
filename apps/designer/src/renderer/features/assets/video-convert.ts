@@ -13,9 +13,41 @@
  * MEMORY (C2/spike-proven): the picked source File is WORKERFS-mounted — read
  * lazily inside the worker, never copied whole into JS/wasm memory (1.93 GB
  * source → 3.00 MB peak JS heap in the Phase-1 measurement).
+ *
+ * REENTRANCY (D-128 field bug, root-caused 2026-07-23): two probeSource calls
+ * CAN run concurrently — React <StrictMode> double-invokes the modal's probe
+ * effect in dev, and a fast close/reopen of the modal does the same in prod.
+ * Racing on this module's old shared globals produced all three field symptoms
+ * on the SAME good file (bogus "no-stream" from a stolen log sink; "ErrnoError:
+ * FS error" from a cross-call terminate; success when the timing missed).
+ * The module is now safe by construction, regardless of how many callers race:
+ *
+ *  1. ONE worker, single-flight: `ensureLoaded` shares one in-flight load
+ *     promise, so concurrent callers can never construct two workers (the old
+ *     check-then-act race orphaned a live worker).
+ *  2. Per-call sinks: log/progress listeners are attached around each exec and
+ *     detached in a `finally` — a verdict is computed ONLY from the caller's
+ *     own exec's lines, never through a module-global sink another call can
+ *     overwrite. (Worker messages are ordered, so every log line of an exec is
+ *     delivered before that exec's promise resolves — the "truncated log" came
+ *     from sink theft, not late flushing.)
+ *  3. Caller-scoped reset: a failure path drops ONLY the worker that call was
+ *     using (`dropWorker(held)`); it can never terminate a replacement worker a
+ *     later call owns. `cancelConversion` stays an intentional hard interrupt.
+ *  4. One operation at a time: probe/convert bodies run under a module mutex
+ *     (`withExclusive`), because they share wasm FS paths (`/mnt`, /poster.png,
+ *     /out.webm) on a single-threaded core — interleaved FS ops from two calls
+ *     could still unmount each other's input mid-exec. Queued callers simply
+ *     wait their turn.
+ *
+ * ABORT: `probeSource` takes an optional AbortSignal and REJECTS with the
+ * signal's reason when aborted (checked between ops — a single-threaded wasm
+ * exec cannot be interrupted mid-flight without terminating the worker, and an
+ * abort must never kill a healthy shared worker). The modal's probe-effect
+ * cleanup aborts, so a StrictMode unmount leaves no live probe behind.
  */
 
-import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { FFmpeg, type LogEvent, type ProgressEvent } from '@ffmpeg/ffmpeg';
 import { toBlobURL } from '@ffmpeg/util';
 // The package's exports map exposes exactly these two subpaths (`.` → the ESM
 // core js, `./wasm` → the 32 MB wasm); `?url` turns each into a same-origin
@@ -32,147 +64,145 @@ import {
 
 const MOUNT_DIR = '/mnt';
 
+/** The one cached worker (kept across probe→convert WITHIN an import). */
 let instance: FFmpeg | null = null;
-let logSink: ((line: string) => void) | null = null;
-let progressSink: ((ratio: number) => void) | null = null;
-
-// ─── TEMP D-128 race diagnostics — remove before merge ───────────────────────
-// WHY: the owner's real-machine smoke imports the SAME known-good file and gets
-// DIFFERENT outcomes across repeated imports (probe "no-stream" | probe ok | FS
-// error). Non-determinism on one input is the signature of a RACE on this
-// module's shared mutable state (`instance`, `logSink`), NOT a lifecycle bug —
-// which is why the single-call unit tests never reproduced it.
-//
-// PRIME SUSPECT: React <StrictMode> (apps/designer/src/renderer/main.tsx) makes
-// the modal's probe effect (VideoImportModal.tsx) run TWICE in dev — mount →
-// cleanup → mount — and the cleanup only flips `alive=false`; it does NOT abort
-// the in-flight probe. So TWO probeSource() calls run CONCURRENTLY against these
-// module globals and stomp each other:
-//   • ensureLoaded() isn't mutually exclusive → both build a worker, one is
-//     orphaned yet its on('log') still fires into the shared `logSink`.
-//   • `logSink` is overwritten by the 2nd call → the 1st exec's log lines land
-//     in the wrong lines[] → empty/partial log → parseProbeLog null → "no-stream".
-//   • resetInstance() from one call terminates whatever `instance` currently is
-//     — the OTHER call's live worker → its next FS op throws "ErrnoError: FS error".
-//
-// These traces make the interleaving visible. All go to console.error (so they
-// survive the modal's friendly-message swallow), high-res timestamped, and tag
-// each op with its call# and the worker identity (FFmpeg#N) it ran on — so
-// cross-talk between two workers and cross-resets are unmistakable in the paste.
-const dbgClock = (): number => (typeof performance !== 'undefined' ? performance.now() : 0);
-const dbgT0 = dbgClock();
-let dbgOp = 0;
-let dbgCall = 0;
-let dbgInFlight = 0;
-let dbgInstanceSeq = 0;
-const dbgInstanceId = new WeakMap<object, number>();
-function dbg(msg: string): void {
-  console.error(`[D-128 race diag +${(dbgClock() - dbgT0).toFixed(1)}ms] ${msg}`);
-}
-function dbgId(inst: FFmpeg | null): string {
-  if (inst === null) return 'none';
-  let id = dbgInstanceId.get(inst);
-  if (id === undefined) {
-    id = ++dbgInstanceSeq;
-    dbgInstanceId.set(inst, id);
-  }
-  return `FFmpeg#${String(id)}`;
-}
-function dbgErr(e: unknown): string {
-  if (e instanceof Error) {
-    const withErrno = e as Error & { errno?: number };
-    const errno = withErrno.errno !== undefined ? ` (errno ${String(withErrno.errno)})` : '';
-    return `${e.name}: ${e.message}${errno}\n${e.stack ?? '(no stack)'}`;
-  }
-  return String(e);
-}
-/** Numbered START/OK/THROW trace with duration for a single awaited FS/exec op. */
-async function dbgTrace<T>(call: number, tag: string, fn: () => Promise<T>): Promise<T> {
-  const n = ++dbgOp;
-  const t0 = dbgClock();
-  dbg(`call#${String(call)} op#${String(n)} ${tag} START`);
-  try {
-    const r = await fn();
-    dbg(`call#${String(call)} op#${String(n)} ${tag} OK (${(dbgClock() - t0).toFixed(0)}ms)`);
-    return r;
-  } catch (e) {
-    dbg(
-      `call#${String(call)} op#${String(n)} ${tag} THROW (${(dbgClock() - t0).toFixed(0)}ms):\n${dbgErr(e)}`,
-    );
-    throw e;
-  }
-}
-// ─────────────────────────────────────────────────────────────────────────────
+/** Single-flight guard: the one in-flight load all concurrent callers share. */
+let loading: Promise<FFmpeg> | null = null;
+/** Bumped by hardReset so a load that was in flight when a cancel struck knows to discard itself. */
+let generation = 0;
+/** The operation mutex — probe/convert bodies chain here, one at a time. */
+let opChain: Promise<unknown> = Promise.resolve();
 
 /**
- * Kill and forget the cached worker. Called on EVERY failure path: a hard
- * ffmpeg abort taints the wasm runtime, and any later FS call on a tainted
- * instance throws `ErrnoError: FS error` — which is exactly how a failed
- * first import used to poison the second one. A fresh load costs ~150–350 ms;
- * a poisoned singleton costs the operator their next import.
+ * Run `fn` after every previously queued operation has settled. The stored
+ * chain swallows outcomes (`.then(u, u)`) so one rejected operation can never
+ * poison the queue; the caller still receives `fn`'s own result/rejection.
  */
-function resetInstance(call?: number): void {
-  // TEMP D-128 race diagnostics — remove before merge. Under the StrictMode
-  // double-probe, resetInstance() from one call terminates whatever `instance`
-  // is RIGHT NOW — which may be the OTHER call's live worker. The tag names both
-  // the triggering call# and the worker it kills, so a cross-reset is obvious.
-  dbg(
-    `call#${call === undefined ? '?' : String(call)} resetInstance → terminating ${dbgId(instance)}`,
+function withExclusive<T>(fn: () => Promise<T>): Promise<T> {
+  const run = opChain.then(fn);
+  opChain = run.then(
+    () => undefined,
+    () => undefined,
   );
+  return run;
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted === true) {
+    const reason: unknown = signal.reason;
+    throw reason instanceof Error
+      ? reason
+      : new DOMException('The operation was aborted.', 'AbortError');
+  }
+}
+
+/**
+ * TRUE only when `err` IS the abort rejection itself (thrown by
+ * `throwIfAborted` between ops) — NEVER for a real crash that merely
+ * coincides with an aborted signal. The flag can flip while an exec is in
+ * flight (aborts are only CHECKED between ops), and that exec's own rejection
+ * must still be treated as a crash: skipping the reset on the flag alone
+ * would cache a tainted worker — the poisoned-singleton class this module
+ * exists to eliminate. (A real worker crash rejects with the worker's string
+ * or an Error — never the signal's own reason / an AbortError DOMException.)
+ */
+function isAbortRejection(err: unknown, signal: AbortSignal | undefined): boolean {
+  if (signal === undefined || !signal.aborted) return false;
+  return err === signal.reason || (err instanceof DOMException && err.name === 'AbortError');
+}
+
+/**
+ * Caller-scoped reset: drop the worker THIS call was using. If a later call
+ * already replaced `instance`, only the caller's own (already dead or dying)
+ * worker is terminated — never the replacement. A hard ffmpeg abort taints the
+ * wasm runtime, and any later FS call on a tainted instance throws
+ * `ErrnoError: FS error` — which is exactly how a failed first import used to
+ * poison the second one. A fresh load costs ~150–350 ms; a poisoned singleton
+ * costs the operator their next import.
+ */
+function dropWorker(ff: FFmpeg): void {
+  if (instance === ff) instance = null;
   try {
-    instance?.terminate();
+    ff.terminate();
   } catch {
     /* already dead */
   }
-  instance = null;
 }
 
-async function ensureLoaded(call: number): Promise<FFmpeg> {
-  if (instance !== null) {
-    dbg(`call#${String(call)} ensureLoaded REUSE ${dbgId(instance)}`); // TEMP D-128 diag
-    return instance;
+/** Unconditional reset — cancelConversion's hard interrupt of whatever runs. */
+function hardReset(): void {
+  generation++;
+  const ff = instance;
+  instance = null;
+  try {
+    ff?.terminate();
+  } catch {
+    /* already dead */
   }
-  // TEMP D-128 diag: two concurrent calls both reach here with instance===null
-  // and each construct a worker — the classic check-then-act race.
-  dbg(`call#${String(call)} ensureLoaded CONSTRUCT (instance was null)`);
+}
+
+async function loadFresh(): Promise<FFmpeg> {
+  const gen = generation;
   const ff = new FFmpeg();
-  dbg(`call#${String(call)} constructed ${dbgId(ff)}`); // TEMP D-128 diag
-  ff.on('log', ({ message }) => logSink?.(message));
-  ff.on('progress', ({ progress }) => progressSink?.(progress));
   // Same-origin fetches of the Vite-emitted assets, wrapped as blob URLs (the
   // worker `import()`s the core, and a blob works because the Emscripten core
   // is self-contained). No request ever leaves this origin.
   const coreURL = await toBlobURL(coreJsUrl, 'text/javascript');
   const wasmURL = await toBlobURL(coreWasmUrl, 'application/wasm');
-  await dbgTrace(call, `${dbgId(ff)} load`, () => ff.load({ coreURL, wasmURL }));
-  // TEMP D-128 diag: if another ensureLoaded() body finished loading while we
-  // awaited, `instance` is already a DIFFERENT worker — we are about to orphan a
-  // live worker whose log handler still points at the shared `logSink`. Smoking
-  // gun for the two-worker interleaving.
-  if (instance !== null && instance !== ff) {
-    dbg(
-      `call#${String(call)} ⚠️ INSTANCE RACE — ${dbgId(instance)} was cached while ${dbgId(ff)} loaded; overwriting & ORPHANING a live worker`,
-    );
+  await ff.load({ coreURL, wasmURL });
+  if (generation !== gen) {
+    // cancelConversion struck while this worker was loading — it is already
+    // unwanted; never cache it over the reset.
+    try {
+      ff.terminate();
+    } catch {
+      /* already dead */
+    }
+    throw new Error('converter was reset while its worker loaded');
   }
   instance = ff;
-  dbg(`call#${String(call)} ensureLoaded DONE — instance = ${dbgId(ff)}`); // TEMP D-128 diag
   return ff;
 }
 
-async function mountSource(ff: FFmpeg, file: File, call: number): Promise<string> {
-  await dbgTrace(call, `${dbgId(ff)} createDir ${MOUNT_DIR}`, () => ff.createDir(MOUNT_DIR)).catch(
-    () => {
-      /* already exists from a prior run */
-    },
-  );
-  await dbgTrace(call, `${dbgId(ff)} unmount(pre) ${MOUNT_DIR}`, () => ff.unmount(MOUNT_DIR)).catch(
-    () => {
-      /* nothing mounted yet */
-    },
-  );
-  await dbgTrace(call, `${dbgId(ff)} mount WORKERFS "${file.name}"`, () =>
-    ff.mount('WORKERFS' as Parameters<FFmpeg['mount']>[0], { files: [file] }, MOUNT_DIR),
-  );
+async function ensureLoaded(): Promise<FFmpeg> {
+  if (instance !== null) return instance;
+  // Single-flight: concurrent callers await the SAME load. The old
+  // check-then-act (`if (instance === null) construct`) let two callers build
+  // two workers and orphan one alive — the root of the D-128 field race.
+  loading ??= loadFresh().finally(() => {
+    loading = null;
+  });
+  return loading;
+}
+
+/**
+ * Capture the log lines of ONE exec for ONE caller: listener attached before,
+ * detached in finally. No module-global sink — nothing another call can steal.
+ */
+async function withLogCapture<T>(ff: FFmpeg, lines: string[], fn: () => Promise<T>): Promise<T> {
+  const onLog = (e: LogEvent): void => {
+    lines.push(e.message);
+  };
+  ff.on('log', onLog);
+  try {
+    return await fn();
+  } finally {
+    ff.off('log', onLog);
+  }
+}
+
+async function mountSource(ff: FFmpeg, file: File): Promise<string> {
+  try {
+    await ff.createDir(MOUNT_DIR);
+  } catch {
+    /* already exists from a prior run */
+  }
+  try {
+    await ff.unmount(MOUNT_DIR);
+  } catch {
+    /* nothing mounted yet */
+  }
+  await ff.mount('WORKERFS' as Parameters<FFmpeg['mount']>[0], { files: [file] }, MOUNT_DIR);
   return `${MOUNT_DIR}/${file.name}`;
 }
 
@@ -201,108 +231,100 @@ export type ProbeResult =
  * extraction downgrades to `posterUrl: null` (numeric crop still works); only a
  * source with NO parseable video stream fails — and then the ffmpeg log tail
  * travels with the failure so the operator sees WHY, not a dead end.
+ *
+ * Rejects (does not resolve) when `opts.signal` aborts — the caller that
+ * aborted is gone, so no ProbeResult shape exists for it; the shared worker is
+ * deliberately left alive for the next probe.
  */
-export async function probeSource(file: File): Promise<ProbeResult> {
-  // TEMP D-128 race diagnostics — remove before merge.
-  const call = ++dbgCall;
-  const inFlight = ++dbgInFlight;
-  dbg(`call#${String(call)} probeSource ENTER "${file.name}" — in-flight now ${String(inFlight)}`);
-  if (inFlight > 1) {
-    dbg(
-      `call#${String(call)} ⚠️ CONCURRENT ENTRY — ${String(inFlight)} converter calls in flight at once. StrictMode double-invoke or double import. THIS interleaving is the race.`,
-    );
-  }
-  const lines: string[] = [];
-  try {
-    const ff = await ensureLoaded(call);
-    const input = await mountSource(ff, file, call);
-    logSink = (l) => lines.push(l);
-    dbg(
-      `call#${String(call)} logSink NOW → call#${String(call)} lines[] (probe ran on ${dbgId(ff)})`,
-    ); // TEMP D-128 diag
-    const probeCode = await dbgTrace(call, `${dbgId(ff)} exec[-i] (probe)`, () =>
-      ff.exec(['-i', input]),
-    ).catch((e: unknown) => {
-      // TEMP D-128 diag: the original `.catch(() => 1)` silently masked a real
-      // worker ERROR here and let parseProbeLog run on a partial/empty log →
-      // "no-stream". Surface it so we can tell a genuine no-stream from a swallow.
-      dbg(`call#${String(call)} probe exec REJECTED (swallowed to code 1): ${dbgErr(e)}`);
-      return 1;
-    });
-    // TEMP D-128 diag: the FULL log the probe verdict is computed from. If this
-    // is empty/short for a file that otherwise probes fine, the log went to the
-    // OTHER concurrent call's lines[] (shared-logSink cross-talk).
-    dbg(
-      `call#${String(call)} probe exec code=${String(probeCode)}; captured ${String(lines.length)} log line(s):\n----- BEGIN probe log (call#${String(call)}) -----\n${lines.join('\n')}\n----- END probe log (call#${String(call)}) -----`,
-    );
-    const probe = parseProbeLog(lines);
-    if (probe === null) {
-      // No parseable video stream — and quite possibly a hard ffmpeg abort that
-      // tainted the wasm runtime. Never cache a maybe-dead worker.
-      dbg(
-        `call#${String(call)} BRANCH = probe-no-stream (parseProbeLog found no video in the ${String(lines.length)} line(s) above)`,
-      ); // TEMP D-128 diag
-      resetInstance(call);
-      return { ok: false, reason: 'no-stream', logTail: lines.slice(-8) };
-    }
-    dbg(
-      `call#${String(call)} parseProbeLog OK: ${String(probe.width)}x${String(probe.height)} ${String(probe.fps)}fps ${String(probe.durationMs)}ms`,
-    ); // TEMP D-128 diag
-    let posterUrl: string | null = null;
+export async function probeSource(
+  file: File,
+  opts: { signal?: AbortSignal | undefined } = {},
+): Promise<ProbeResult> {
+  const { signal } = opts;
+  return withExclusive(async () => {
+    throwIfAborted(signal); // aborted while queued — never touch the worker
+    const lines: string[] = [];
+    let held: FFmpeg | null = null;
     try {
-      const posterPath = '/poster.png';
-      const code = await dbgTrace(call, `${dbgId(ff)} exec (poster)`, () =>
-        ff.exec(buildPosterArgs(input, posterPath)),
-      );
-      if (code === 0) {
-        const png = await dbgTrace(call, `${dbgId(ff)} readFile poster`, () =>
-          ff.readFile(posterPath),
-        );
-        await dbgTrace(call, `${dbgId(ff)} deleteFile poster`, () =>
-          ff.deleteFile(posterPath),
-        ).catch(() => undefined);
-        const bytes = typeof png === 'string' ? new TextEncoder().encode(png) : png;
-        const ab = new ArrayBuffer(bytes.byteLength);
-        new Uint8Array(ab).set(bytes);
-        posterUrl = URL.createObjectURL(new Blob([ab], { type: 'image/png' }));
+      held = await ensureLoaded();
+      const ff = held;
+      throwIfAborted(signal);
+      const input = await mountSource(ff, file);
+      // Abort between ops only: a single-threaded exec can't be interrupted
+      // without terminating the shared worker, which an abort must never do.
+      // (An abandoned mount is fine — the next mountSource unmounts it first.)
+      throwIfAborted(signal);
+      // NOTE: a REJECTED exec (worker error) now propagates to the catch below
+      // → `converter-crashed`. The old `.catch(() => 1)` swallowed real crashes
+      // into "code 1 + empty log", which parseProbeLog then misread as
+      // "no-stream" — blaming a perfectly good file for our own crash.
+      await withLogCapture(ff, lines, () => ff.exec(['-i', input]));
+      throwIfAborted(signal);
+      const probe = parseProbeLog(lines);
+      if (probe === null) {
+        // No parseable video stream — and quite possibly a hard ffmpeg abort
+        // that tainted the wasm runtime. Never cache a maybe-dead worker.
+        dropWorker(ff);
+        return { ok: false as const, reason: 'no-stream' as const, logTail: lines.slice(-8) };
       }
-    } catch (posterErr) {
-      // Preview-less import beats no import — but a THROW here means the
-      // runtime is suspect; drop it so the actual conversion starts fresh.
-      dbg(`call#${String(call)} poster path THREW — dropping worker: ${dbgErr(posterErr)}`); // TEMP D-128 diag
-      resetInstance(call);
-      posterUrl = null;
-    }
-    // Success-path FS hygiene: leave nothing mounted between calls (the
-    // conversion re-mounts via mountSource; a later import starts clean).
-    if (instance !== null) {
-      const held = instance; // TEMP D-128 diag: keep narrowing inside the traced closure
+      let posterUrl: string | null = null;
       try {
-        await dbgTrace(call, `${dbgId(held)} unmount(success) ${MOUNT_DIR}`, () =>
-          held.unmount(MOUNT_DIR),
+        const posterPath = '/poster.png';
+        const code = await ff.exec(buildPosterArgs(input, posterPath));
+        if (code === 0) {
+          const png = await ff.readFile(posterPath);
+          await ff.deleteFile(posterPath).catch(() => undefined);
+          const bytes = typeof png === 'string' ? new TextEncoder().encode(png) : png;
+          const ab = new ArrayBuffer(bytes.byteLength);
+          new Uint8Array(ab).set(bytes);
+          posterUrl = URL.createObjectURL(new Blob([ab], { type: 'image/png' }));
+        }
+      } catch (posterErr) {
+        // Preview-less import beats no import — but a THROW here means the
+        // runtime is suspect; drop it so the actual conversion starts fresh.
+        console.error(
+          '[video-convert] poster extraction threw — continuing without a preview:',
+          posterErr,
         );
-      } catch {
-        /* nothing mounted / already gone */
+        dropWorker(ff);
+        posterUrl = null;
       }
+      // Success-path FS hygiene: leave nothing mounted between calls (the
+      // conversion re-mounts via mountSource; a later import starts clean).
+      // Skipped when the poster path already dropped the worker.
+      if (instance === ff) {
+        try {
+          await ff.unmount(MOUNT_DIR);
+        } catch {
+          /* nothing mounted / already gone */
+        }
+      }
+      return { ok: true as const, probe, posterUrl };
+    } catch (err) {
+      if (isAbortRejection(err, signal)) {
+        // The abort ITSELF (thrown between ops) — the caller is gone and the
+        // worker is healthy. Reject without resetting; the next probe reuses
+        // it. Only the abort may skip the reset — see isAbortRejection.
+        throw err;
+      }
+      // Any FS/exec throw (ErrnoError etc.) — the worker is dead or dying. The
+      // modal shows a friendly message; the REAL error must reach the console
+      // (the pre-fix code swallowed it entirely).
+      console.error('[video-convert] probe crashed — the underlying error:', err);
+      if (held !== null) dropWorker(held);
+      if (signal?.aborted === true) {
+        // A real crash that RACED the caller's abort: the worker is dropped
+        // (above) exactly like any crash, but there is no one to show a
+        // result to — reject like any aborted call.
+        throw err;
+      }
+      return {
+        ok: false as const,
+        reason: 'converter-crashed' as const,
+        logTail: [...lines.slice(-6), String(err)],
+      };
     }
-    dbg(`call#${String(call)} BRANCH = probe-ok (posterUrl=${String(posterUrl !== null)})`); // TEMP D-128 diag
-    return { ok: true, probe, posterUrl };
-  } catch (err) {
-    // Any FS/exec throw (ErrnoError etc.) — the worker is dead or dying.
-    // TEMP D-128 diag: the modal turns this into a friendly "FS error" WITHOUT
-    // any console output — so the real throw was invisible. Surface it verbatim.
-    dbg(`call#${String(call)} BRANCH = FS-error (converter-crashed) — RAW throw follows:`);
-    console.error(err);
-    resetInstance(call);
-    return { ok: false, reason: 'converter-crashed', logTail: [...lines.slice(-6), String(err)] };
-  } finally {
-    // TEMP D-128 diag: under concurrency this clears the OTHER call's sink too.
-    dbg(
-      `call#${String(call)} probeSource finally: clearing logSink, in-flight → ${String(dbgInFlight - 1)}`,
-    );
-    logSink = null;
-    dbgInFlight--;
-  }
+  });
 }
 
 /**
@@ -343,77 +365,77 @@ export async function convertToWebm(opts: {
   crop?: CropRect | undefined;
   onProgress?: ((ratio: number) => void) | undefined;
 }): Promise<Uint8Array<ArrayBuffer> | null> {
-  // TEMP D-128 race diagnostics — remove before merge.
-  const call = ++dbgCall;
-  const inFlight = ++dbgInFlight;
-  dbg(
-    `call#${String(call)} convertToWebm ENTER "${opts.file.name}" fps=${String(opts.targetFps)} crop=${String(opts.crop !== undefined)} — in-flight now ${String(inFlight)}`,
-  );
-  if (inFlight > 1) {
-    dbg(
-      `call#${String(call)} ⚠️ CONCURRENT ENTRY — ${String(inFlight)} converter calls in flight at once. THIS interleaving is the race.`,
-    );
-  }
-  const output = '/out.webm';
-  progressSink = opts.onProgress ?? null;
-  try {
-    const ff = await ensureLoaded(call);
-    const input = await mountSource(ff, opts.file, call);
-    const code = await dbgTrace(call, `${dbgId(ff)} exec (convert)`, () =>
-      ff.exec(
-        buildConvertArgs({
-          inputPath: input,
-          outputPath: output,
-          targetFps: opts.targetFps,
-          crop: opts.crop,
-        }),
-      ),
-    );
-    if (code !== 0) {
-      // Failed or cancelled — the finally below drops the worker either way.
-      dbg(`call#${String(call)} convert exec exited non-zero (code=${String(code)}) → null`); // TEMP D-128 diag
+  return withExclusive(async () => {
+    const output = '/out.webm';
+    const lines: string[] = [];
+    let held: FFmpeg | null = null;
+    try {
+      held = await ensureLoaded();
+      const ff = held;
+      const input = await mountSource(ff, opts.file);
+      // Per-call progress listener — attached around the exec, detached in
+      // finally; no module-global sink (same rule as the log capture).
+      const onProgress = (e: ProgressEvent): void => {
+        opts.onProgress?.(e.progress);
+      };
+      ff.on('progress', onProgress);
+      let code: number;
+      try {
+        code = await withLogCapture(ff, lines, () =>
+          ff.exec(
+            buildConvertArgs({
+              inputPath: input,
+              outputPath: output,
+              targetFps: opts.targetFps,
+              crop: opts.crop,
+            }),
+          ),
+        );
+      } finally {
+        ff.off('progress', onProgress);
+      }
+      if (code !== 0) {
+        // Encode failure — surface the ffmpeg tail so the modal's "see the
+        // console log" message is actually true.
+        console.error(
+          `[video-convert] conversion exited ${String(code)} — ffmpeg log tail:\n${lines.slice(-40).join('\n')}`,
+        );
+        return null;
+      }
+      const data = await ff.readFile(output);
+      const raw = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+      // Copy onto a plain ArrayBuffer so the bytes own their backing store (and
+      // satisfy the channel's `Uint8Array<ArrayBuffer>` shape).
+      const out = new Uint8Array(raw.byteLength);
+      out.set(raw);
+      return out;
+    } catch (err) {
+      // A cancel (terminate()) or a worker crash surfaces here. The modal shows
+      // a friendly message either way — the real error still reaches the
+      // console (a cancel logs the library's "called FFmpeg.terminate()").
+      console.error('[video-convert] conversion threw — the underlying error:', err);
       return null;
+    } finally {
+      // EVERY import ends with a FRESH-WORKER guarantee. Field evidence (owner
+      // smoke, real archive files): back-to-back imports of KNOWN-GOOD files
+      // alternated good → `ErrnoError: FS error` → good on a REUSED instance,
+      // even though unmount+delete hygiene ran — some wasm FS/runtime state
+      // survives a successful convert in ways we could not reproduce in clean
+      // probes (same-file ×3, 103 MB disk-backed, Unicode names: all green).
+      // Rather than gamble on path tricks, the state-carryover CLASS is
+      // eliminated by construction: the worker is dropped when a convert ends
+      // (success, failure, or cancel). Within ONE import, probe + poster +
+      // convert still share a single load; the ~150–350 ms reload is paid once
+      // per import, invisible next to a multi-second conversion.
+      // Caller-scoped: drops only the worker THIS convert used.
+      if (held !== null) dropWorker(held);
     }
-    const data = await dbgTrace(call, `${dbgId(ff)} readFile ${output}`, () => ff.readFile(output));
-    const raw = typeof data === 'string' ? new TextEncoder().encode(data) : data;
-    // Copy onto a plain ArrayBuffer so the bytes own their backing store (and
-    // satisfy the channel's `Uint8Array<ArrayBuffer>` shape).
-    const out = new Uint8Array(raw.byteLength);
-    out.set(raw);
-    dbg(`call#${String(call)} BRANCH = convert-ok (${String(out.byteLength)} bytes)`); // TEMP D-128 diag
-    return out;
-  } catch (err) {
-    // terminate() (cancel) or a worker crash surfaces here — the instance is dead.
-    // TEMP D-128 diag: this catch was SILENT — a real worker crash during convert
-    // produced only the modal's generic "Conversion failed". Surface it verbatim.
-    dbg(`call#${String(call)} BRANCH = convert-threw — RAW throw follows:`);
-    console.error(err);
-    return null;
-  } finally {
-    progressSink = null;
-    // EVERY import ends with a FRESH-WORKER guarantee. Field evidence (owner
-    // smoke, real archive files): back-to-back imports of KNOWN-GOOD files
-    // alternated good → `ErrnoError: FS error` → good on a REUSED instance,
-    // even though unmount+delete hygiene ran — some wasm FS/runtime state
-    // survives a successful convert in ways we could not reproduce in clean
-    // probes (same-file ×3, 103 MB disk-backed, Unicode names: all green).
-    // Rather than gamble on path tricks, the state-carryover CLASS is
-    // eliminated by construction: the worker is dropped when a convert ends
-    // (success, failure, or cancel). Within ONE import, probe + poster +
-    // convert still share a single load; the ~150–350 ms reload is paid once
-    // per import, invisible next to a multi-second conversion.
-    dbg(
-      `call#${String(call)} convertToWebm finally: reset + clear, in-flight → ${String(dbgInFlight - 1)}`,
-    ); // TEMP D-128 diag
-    resetInstance(call);
-    dbgInFlight--; // TEMP D-128 diag
-  }
+  });
 }
 
 /** Hard-cancel an in-flight conversion. The wasm worker dies; state resets. */
 export function cancelConversion(): void {
-  dbg('cancelConversion → resetInstance'); // TEMP D-128 diag
-  resetInstance();
+  hardReset();
 }
 
 /** TEST-ONLY — whether a worker instance is currently cached (the reset contract). */

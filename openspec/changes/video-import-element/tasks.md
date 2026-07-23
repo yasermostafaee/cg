@@ -90,6 +90,21 @@
       `AssetStore.importBytes` (dedupe shared with `importFile` via delegation) with the
       B-104-shape reload round-trip test (`asset-store-video-ingest.test.ts`, 6 tests).
       Canvas render remains a `buildPlaceholder` stub BY DESIGN (Phase 3).
+- [x] 2.6 Converter REENTRANCY (owner's non-deterministic smoke root-caused — see design.md
+      "Phase-2 converter reentrancy"): StrictMode's double probe effect raced the module's
+      shared globals (two workers + stolen log sink + cross-call terminate → the field trio
+      of bogus no-stream / FS error / success on ONE good file). Fixed at both layers:
+      converter — single-flight `ensureLoaded`, per-call log/progress listeners (attach/
+      detach around each exec), caller-scoped `dropWorker`, operation mutex (`withExclusive`,
+      shared FS paths), abort-aware `probeSource(file, { signal })` with crash-vs-abort
+      discrimination (`isAbortRejection` — a crash coinciding with an abort still drops the
+      worker); modal — probe-effect cleanup ABORTS its in-flight probe, single-flight
+      `loadConverter()` with reset-on-rejection, cancel honored even after the encode
+      resolves (re-checked before measure and before `storeBytes`). Swallowed throws now
+      `console.error` the real error (incl. encode-failure ffmpeg log tail). Tests:
+      `video-convert-race.test.ts` (7 always-concurrent race tests incl. the generation
+      guard and listener detach) + StrictMode double-mount (reject-on-abort, silent) and
+      cancel-after-encode guards in `video-import-modal.test.ts`.
 
 ## Phase 3 — canvas render + Inspector
 

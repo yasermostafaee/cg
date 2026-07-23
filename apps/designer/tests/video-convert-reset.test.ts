@@ -21,14 +21,29 @@ const { behavior, constructed, FakeFFmpeg } = vi.hoisted(() => {
   };
 
   class FakeFFmpeg {
-    logCb: LogCb | null = null;
+    // The real module attaches/detaches a listener PER CALL (the D-128
+    // reentrancy fix) — the fake must support multiple listeners and off().
+    logCbs: LogCb[] = [];
+    progressCbs: ((e: { progress: number }) => void)[] = [];
     terminated = false;
     calls: string[] = [];
     constructor() {
       constructed.push(this);
     }
     on(event: string, cb: LogCb): void {
-      if (event === 'log') this.logCb = cb;
+      if (event === 'log') this.logCbs.push(cb);
+      else if (event === 'progress')
+        this.progressCbs.push(cb as unknown as (e: { progress: number }) => void);
+    }
+    off(event: string, cb: LogCb): void {
+      if (event === 'log') this.logCbs = this.logCbs.filter((f) => f !== cb);
+      else if (event === 'progress')
+        this.progressCbs = this.progressCbs.filter(
+          (f) => f !== (cb as unknown as (e: { progress: number }) => void),
+        );
+    }
+    emitLog(line: string): void {
+      for (const cb of [...this.logCbs]) cb({ message: line });
     }
     load(): Promise<void> {
       this.calls.push('load');
@@ -53,7 +68,7 @@ const { behavior, constructed, FakeFFmpeg } = vi.hoisted(() => {
       this.calls.push(`exec:${args.join(' ').slice(0, 40)}`);
       if (behavior.execImpl !== null) return behavior.execImpl(args);
       // default probe behaviour: emit the configured banner lines, exit 1 (no output)
-      for (const l of behavior.probeLines) this.logCb?.({ message: l });
+      for (const l of behavior.probeLines) this.emitLog(l);
       return Promise.resolve(1);
     }
     readFile(): Promise<Uint8Array> {
@@ -104,7 +119,12 @@ describe('video-convert — reset-on-failure contract (D-128)', () => {
     behavior.probeLines = ['[avi] Invalid data found when processing input'];
     const r1 = await probeSource(FILE);
     expect(r1.ok).toBe(false);
-    if (!r1.ok) expect(r1.reason).toBe('no-stream'); // genuine file problem — blame the file
+    if (!r1.ok) {
+      expect(r1.reason).toBe('no-stream'); // genuine file problem — blame the file
+      // …and the verdict carries the FILE'S OWN ffmpeg lines, never an empty
+      // tail (the field bug's signature was no-stream with a stolen log)
+      expect(r1.logTail.join('\n')).toContain('Invalid data found');
+    }
     expect(hasCachedInstanceForTest()).toBe(false);
     expect(constructed[0]?.terminated).toBe(true);
 
@@ -131,7 +151,7 @@ describe('video-convert — reset-on-failure contract (D-128)', () => {
     // poster exec fails cleanly (code 1 → posterless probe, NOT a throw)
     behavior.execImpl = (args) => {
       if (args.includes('-frames:v')) return Promise.resolve(1);
-      for (const l of GOOD_BANNER) constructed[0]?.logCb?.({ message: l });
+      for (const l of GOOD_BANNER) constructed[0]?.emitLog(l);
       return Promise.resolve(1);
     };
     const r = await probeSource(FILE);
