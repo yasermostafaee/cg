@@ -1,4 +1,13 @@
-# Tasks — fixed operator layers (R-021). ALL UNCHECKED — this PR is design-only.
+# Tasks — fixed operator layers (R-021)
+
+## STAGE MAP (implementation lands in four PRs)
+
+- **Stage 1** = 1.1–1.3, 2.1–2.2, 4.2a — install config + LayerManager fixed mechanism
+  (pure logic; no UI, no channels, no on-air change). **Landed.**
+- **Stage 2** = 4.1, 5.1, 5.1b, 5.2 — channels + the fixed-bank panel.
+- **Stage 3** = 5.3 — the one-action import+create+load chain.
+- **Stage 4** = 3.1–3.3, 4.3, 4.4, 5.4, 5.5 — restore branch + `restore-blocked` + the
+  fixed-row Clear carve-out + DOM/E2E tests.
 
 ## 0. Owner decisions — ANSWERED (owner, 2026-07-23; encoded in design.md + specs delta)
 
@@ -9,23 +18,36 @@ naming slots. No open decisions block implementation.
 
 ## 1. Config + validation
 
-- [ ] 1.1 Install config: `fixedLayers` with channel, immutable `start: 70`, `count` (≤ 20,
-      so max layer 89) and `aliases` — in the bridge's install-config class
-      (`connection-store` persistence family).
-- [ ] 1.2 Config validation (a1/e1): refuse fixed∩policy-range overlap AND fixed∩C-015
-      Live Source layers — hard startup failure naming BOTH ranges, checked at load AND on
-      any bank extension; refuse mid-session renumber; grow-at-end applies live; shrink
-      refused while affected slots hold residents/retained intent, error naming the occupied
-      slot numbers. Alias changes live.
-- [ ] 1.3 Validation unit tests (design.md test 7).
+- [x] 1.1 Install config: `fixedLayers` with channel, immutable `start: 70`, `count` (≤ 20,
+      so max layer 89) and `aliases` — schema in `@cg/shared-ipc`
+      (`channels/fixedLayers.ts`, shape only — no channel yet); persistence in
+      `tools/caspar-bridge/src/fixed-layers-store.ts` (`connection-store` pattern, atomic
+      tmp+rename), loaded at boot via `fixedLayersPath` / `--fixed-layers-path`
+      (precedence: explicit option > persisted file > no bank). A PRESENT-but-unusable
+      file is a HARD boot failure (deliberate divergence from connection-store's
+      warn-and-ignore — module header records why).
+- [x] 1.2 Config validation (a1/e1): `validateFixedBank` / `validateFixedBankChange` refuse
+      fixed∩policy-range overlap AND fixed∩reserved (C-015 Live Source seam —
+      `reservedLayers`, `[]` until that item lands) — errors naming BOTH ranges, checked at
+      load AND on any change; refuse mid-session renumber/channel change; grow-at-end
+      accepted; shrink refused while affected slots are busy, error naming the occupied
+      slot numbers; alias keys validated in-bank.
+- [x] 1.3 Validation unit tests (T8–T15, `tests/fixed-layers-store.test.ts`) — message
+      CONTENT asserted (both ranges named; occupied slot numbers named).
 
 ## 2. LayerManager fixed mechanism (@cg/caspar-client)
 
-- [ ] 2.1 `LayerManagerOptions.fixed: readonly LayerSlot[]` beside `pinned`; born-allocated
-      fencing; `isFixed()`; exact-slot bind path for fixed slots (reserve-class, consults the
-      fixed set — never `allocate()`); no auto-start semantics leak from template-pinned.
-- [ ] 2.2 Tests: `allocate()` can never return a fixed slot even under range exhaustion;
-      `deallocate()` never frees one; exact-slot bind/unbind round-trip.
+- [x] 2.1 `LayerManagerOptions.fixed?: readonly LayerSlot[]` beside `pinned`; born-allocated
+      fencing (no templateType until bound — a fenced-but-unbound slot is not an
+      allocation); `isFixed()` / `fixedSlots()` / `bindFixed()` / `unbindFixed()` /
+      `fixedBinding()` as the exact-slot path (`reserve()` refuses fixed slots); no
+      auto-start semantics leak from template-pinned; pinned∩fixed throws
+      `FixedPinnedConflictError` naming the slot; `quarantine()`/`observe()` no-op on fixed
+      (stage 4 derives `restore-blocked` from the occupancy TAP, not the quarantine set).
+- [x] 2.2 Tests T1–T7 (`packages/caspar-client/tests/layer-manager.test.ts`): fencing under
+      range exhaustion, deallocate no-op, bind/unbind round-trip + fence-after-unbind,
+      reserve refusal, allocations() visibility, quarantine/observe no-ops, pinned∩fixed
+      throw.
 
 ## 3. Restore branch (tools/caspar-bridge)
 
@@ -45,9 +67,15 @@ naming slots. No open decisions block implementation.
 
 - [ ] 4.1 `@cg/shared-ipc`: fixed-bank channels (config read/update, per-slot state publish,
       exact-slot load, layer verbs) with contracts documented; `MockRuntime` parity.
-- [ ] 4.2 Orphan-sweep exclusion: fixed layers excluded from R-009 orphan candidates
-      (single fixed-config source — no second local copy); occupancy per fixed slot published
-      from the same tap sample.
+- [x] 4.2a Orphan-sweep exclusion (pulled into stage 1): fixed layers excluded from R-009
+      orphan candidates by unioning `LayerManager.fixedSlots()` into the sweep's `owned`
+      set — the LayerManager is the single source of the bank, never a second local copy.
+      Pulled forward because a bank fenced from allocation but still shouted about in the
+      orphan banner is an incoherent intermediate state. Integration-tested (T16: foreign
+      on a fixed layer never surfaces; a non-fixed control layer does; T18: no bank → today's
+      behaviour, byte-identical).
+- [ ] 4.2b Per-slot occupancy publish from the same tap sample (stage 4, with the
+      channels).
 - [ ] 4.3 Fixed-row hard Clear per (b)/b1: confirm-gated always; under OSC silence the
       confirmation dialog states occupancy is unknown AND names the layer number; outside
       the fixed range R-015's silence-refusal is untouched (regression-test the boundary).

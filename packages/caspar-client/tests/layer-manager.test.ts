@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_LAYER_POLICY,
+  FixedPinnedConflictError,
   LayerManager,
   OutOfLayersError,
   UnknownTemplateTypeError,
@@ -140,5 +141,112 @@ describe('LayerManager', () => {
     expect(lm.isAllocated({ channel: 1, layer: 95 })).toBe(true);
     expect(lm.isAllocated(slot)).toBe(true);
     expect(lm.isAllocated({ channel: 1, layer: 12 })).toBe(false);
+  });
+});
+
+/**
+ * R-021 stage 1 — the FIXED operator slot mechanism. Fixed slots are fenced
+ * from birth (never allocated, never deallocated, never quarantined) and bind
+ * items only through bindFixed/unbindFixed — the exact-slot path; reserve()
+ * refuses them. NOT template-pinned: no templateId, no autoStart.
+ */
+describe('LayerManager — fixed operator slots (R-021)', () => {
+  const FIXED = [
+    { channel: 1, layer: 12 },
+    { channel: 1, layer: 13 },
+  ] as const;
+
+  it('T1 — allocate() never returns a fixed slot, even with the range otherwise exhausted', () => {
+    // Deliberately places the fixed slots INSIDE the lower-third policy range
+    // (10–19), to prove the FENCING mechanism independently of the
+    // config-level disjointness prohibition (which forbids this arrangement
+    // for a real install — the validator's tests cover that layer).
+    const lm = new LayerManager({ fixed: [...FIXED] });
+    const got: number[] = [];
+    for (let i = 0; i < 8; i++) got.push(lm.allocate('lower-third', 1).layer);
+    expect(got).toEqual([10, 11, 14, 15, 16, 17, 18, 19]); // 12/13 skipped
+    expect(() => lm.allocate('lower-third', 1)).toThrow(OutOfLayersError);
+  });
+
+  it('T2 — deallocate() never frees a fixed slot', () => {
+    const lm = new LayerManager({ fixed: [...FIXED] });
+    lm.deallocate({ channel: 1, layer: 12 });
+    expect(lm.isAllocated({ channel: 1, layer: 12 })).toBe(true);
+    expect(lm.isFixed({ channel: 1, layer: 12 })).toBe(true);
+  });
+
+  it('T3 — bindFixed/unbindFixed round-trip; double-bind and non-fixed bind refuse; fence survives unbind', () => {
+    const lm = new LayerManager({ fixed: [...FIXED] });
+    const slot = { channel: 1, layer: 12 };
+
+    expect(lm.bindFixed(slot, 'clock')).toBe(true);
+    expect(lm.fixedBinding(slot)).toBe('clock');
+    expect(lm.bindFixed(slot, 'other')).toBe(false); // already bound
+    expect(lm.bindFixed({ channel: 1, layer: 40 }, 'clock')).toBe(false); // not fixed
+
+    lm.unbindFixed(slot);
+    expect(lm.fixedBinding(slot)).toBeUndefined();
+    // Still fenced: dynamic allocation cannot land on it after unbind.
+    expect(lm.allocate('lower-third', 1)).toEqual({ channel: 1, layer: 10 });
+    expect(lm.allocate('lower-third', 1)).toEqual({ channel: 1, layer: 11 });
+    expect(lm.allocate('lower-third', 1)).toEqual({ channel: 1, layer: 14 });
+  });
+
+  it('T3b — bindFixed emits allocated; unbindFixed emits released', () => {
+    const lm = new LayerManager({ fixed: [...FIXED] });
+    const events: string[] = [];
+    lm.on('allocated', (s, t) => events.push(`alloc:${String(s.layer)}:${t}`));
+    lm.on('released', (s) => events.push(`rel:${String(s.layer)}`));
+    lm.bindFixed({ channel: 1, layer: 12 }, 'clock');
+    lm.unbindFixed({ channel: 1, layer: 12 });
+    expect(events).toEqual(['alloc:12:clock', 'rel:12']);
+  });
+
+  it('T4 — reserve() on a fixed slot returns false (bindFixed is the exact-slot path)', () => {
+    const lm = new LayerManager({ fixed: [...FIXED] });
+    expect(lm.reserve({ channel: 1, layer: 12 }, 'clock')).toBe(false);
+  });
+
+  it('T5 — unbound fixed slots are absent from allocations(); bound ones present with their type', () => {
+    const lm = new LayerManager({ fixed: [...FIXED] });
+    expect(lm.allocations()).toEqual([]); // fenced-but-unbound is not an allocation
+    lm.bindFixed({ channel: 1, layer: 13 }, 'clock');
+    expect(lm.allocations()).toEqual([{ slot: { channel: 1, layer: 13 }, templateType: 'clock' }]);
+    expect(lm.fixedSlots()).toEqual([...FIXED]);
+  });
+
+  it('T6 — quarantine() on a fixed slot is a no-op; observe(fixed, non-html) emits no collision', () => {
+    const lm = new LayerManager({ fixed: [...FIXED] });
+    let collided = false;
+    lm.on('collision', () => (collided = true));
+
+    lm.quarantine({ channel: 1, layer: 12 });
+    expect(lm.quarantined()).toEqual([]);
+
+    expect(lm.observe({ channel: 1, layer: 12 }, 'decklink')).toBe(true);
+    expect(collided).toBe(false);
+    expect(lm.quarantined()).toEqual([]);
+    // bindFixed still works after the foreign observation — the reason the
+    // quarantine no-op exists.
+    expect(lm.bindFixed({ channel: 1, layer: 12 }, 'clock')).toBe(true);
+  });
+
+  it('T7 — a slot declared both pinned and fixed throws, naming the slot', () => {
+    expect(
+      () =>
+        new LayerManager({
+          pinned: [{ channel: 1, layer: 12, templateId: 'logo', autoStart: true }],
+          fixed: [{ channel: 1, layer: 12 }],
+        }),
+    ).toThrow(FixedPinnedConflictError);
+    try {
+      new LayerManager({
+        pinned: [{ channel: 1, layer: 12, templateId: 'logo', autoStart: true }],
+        fixed: [{ channel: 1, layer: 12 }],
+      });
+      expect.unreachable('constructor must throw');
+    } catch (err) {
+      expect((err as Error).message).toContain('1-12');
+    }
   });
 });

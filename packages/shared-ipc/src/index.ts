@@ -45,3 +45,4 @@ export * from './channels/templates.js';
 export * from './channels/audit.js';
 export * from './channels/updates.js';
 export * from './channels/settings.js';
+export * from './channels/fixedLayers.js';

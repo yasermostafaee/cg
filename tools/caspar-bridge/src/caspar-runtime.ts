@@ -7,6 +7,8 @@ import {
   ServerSession,
   UnknownTemplateTypeError,
   type FailoverEvent,
+  type LayerPolicy,
+  type LayerSlot,
   type ServerLabel,
 } from '@cg/caspar-client';
 import type {
@@ -138,7 +140,9 @@ export class CasparRuntime {
   #sessions: { A: ServerSession; B?: ServerSession };
   #adapter: RedundancyAdapter;
   readonly #reconciler = new Reconciler();
-  readonly #layers = new LayerManager();
+  // R-021 stage 1 — constructed in the constructor so the resolved fixed bank
+  // (and the ONE policy object the validator saw) reach the allocator.
+  readonly #layers: LayerManager;
   readonly #builder = new CommandBuilder();
 
   /**
@@ -289,8 +293,20 @@ export class CasparRuntime {
         oscDownAfterMs?: number;
         watcherIntervalMs?: number;
       };
+      /**
+       * R-021 stage 1 — the VALIDATED fixed operator slots (from
+       * `fixed-layers-store`'s validator) and the layer policy in force. The
+       * policy MUST be the same object the validator saw — resolved once in
+       * `createBridge`, never two copies.
+       */
+      fixedSlots?: readonly LayerSlot[];
+      layerPolicy?: LayerPolicy;
     } = {},
   ) {
+    this.#layers = new LayerManager({
+      ...(options.layerPolicy !== undefined ? { policy: options.layerPolicy } : {}),
+      ...(options.fixedSlots !== undefined ? { fixed: options.fixedSlots } : {}),
+    });
     this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
@@ -1193,6 +1209,14 @@ export class CasparRuntime {
     return this.#orphanTracker.orphans();
   }
 
+  /**
+   * R-021 stage 1 — the configured fixed operator slots (empty when no bank is
+   * declared). Read from the LayerManager, the single source of the bank.
+   */
+  fixedSlots(): readonly LayerSlot[] {
+    return this.#layers.fixedSlots();
+  }
+
   /** B-056 — the currently surfaced owned-slot warnings (stable-sorted). */
   ownedOccupancy(): OwnedOccupancyWarning[] {
     return [...this.#ownedOccupancy.values()].sort(
@@ -1248,6 +1272,14 @@ export class CasparRuntime {
     const occupied = session.osc.occupancy.occupied(this.#occupancyStaleMs);
     const owned = new Set<string>();
     for (const slot of this.#slots.values()) {
+      owned.add(`${String(slot.channel)}:${String(slot.layer)}`);
+    }
+    // R-021 stage 1 (task 4.2a) — fixed slots are excluded from the orphan
+    // surface: the fixed bank's PERMANENT row (stage 2) is its occupancy
+    // surface, and a bank fenced from allocation but still shouted about in the
+    // R-009 banner would be an incoherent intermediate state. The LayerManager
+    // is the single source of the bank — never a second local copy of the config.
+    for (const slot of this.#layers.fixedSlots()) {
       owned.add(`${String(slot.channel)}:${String(slot.layer)}`);
     }
     const { changed } = this.#orphanTracker.update(occupied, owned);

@@ -47,11 +47,14 @@ import {
   type AnyChannel,
   type AnyPublishChannel,
   type ConnectionConfig,
+  type FixedLayerBank,
   type WsPublishFrame,
   type WsResponseFrame,
 } from '@cg/shared-ipc';
+import { DEFAULT_LAYER_POLICY } from '@cg/caspar-client';
 import { CasparRuntime } from './caspar-runtime.js';
 import { loadPersistedConnection, savePersistedConnection } from './connection-store.js';
+import { loadFixedLayerBank, validateFixedBank } from './fixed-layers-store.js';
 import type { TemplateServeOverride } from './template-http-server.js';
 
 export interface BridgeOptions {
@@ -75,6 +78,25 @@ export interface BridgeOptions {
    * `connections.set-config` apply is saved back. Omitted → no persistence.
    */
   persistPath?: string;
+  /**
+   * R-021 stage 1 — the fixed operator layer bank, explicit. Precedence
+   * mirrors R-010: explicit option > persisted file > no bank. The bank is
+   * VALIDATED at boot (`validateFixedBank`) and a violation throws BEFORE the
+   * WebSocket binds — conflicts resolve loudly at startup.
+   */
+  fixedLayers?: FixedLayerBank;
+  /**
+   * R-021 stage 1 — where the fixed bank persists (JSON). An ABSENT file means
+   * no bank; a PRESENT-but-unusable file is a HARD boot failure (see
+   * `fixed-layers-store.ts` for why this diverges from connection-store's
+   * warn-and-ignore).
+   */
+  fixedLayersPath?: string;
+  /**
+   * TEST-ONLY seam — pass-through to `CasparRuntime`'s sweep/staleness tuning
+   * so integration tests can run fast sweeps. Empty in production.
+   */
+  runtimeTuning?: { sweepMs?: number; occupancyStaleMs?: number };
 }
 
 export interface BridgeHandle {
@@ -150,7 +172,26 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     options.connection ??
     (options.persistPath !== undefined ? loadPersistedConnection(options.persistPath) : null) ??
     defaultConnection();
-  const runtime = new CasparRuntime(connection, options.templateServe ?? {});
+  // R-021 stage 1 — resolve the fixed bank (explicit > persisted file > none)
+  // and VALIDATE it before anything binds: a bad bank is a hard boot failure,
+  // never a warning (fixed-layers-store.ts header). The policy is resolved
+  // ONCE and the SAME object goes to both the validator and the LayerManager —
+  // never two copies of the policy.
+  const layerPolicy = DEFAULT_LAYER_POLICY;
+  const fixedBank =
+    options.fixedLayers ??
+    (options.fixedLayersPath !== undefined ? loadFixedLayerBank(options.fixedLayersPath) : null);
+  const fixedSlots =
+    fixedBank !== null && fixedBank !== undefined
+      ? // reservedLayers is the C-015 Live Source seam: empty until that item
+        // lands its layer plan, which will be threaded through here.
+        validateFixedBank(fixedBank, { policy: layerPolicy, reservedLayers: [] })
+      : [];
+  const runtime = new CasparRuntime(connection, options.templateServe ?? {}, {
+    fixedSlots,
+    layerPolicy,
+    ...(options.runtimeTuning ?? {}),
+  });
   const routes = buildRoutes(runtime, options.persistPath);
 
   const wss = new WebSocketServer({

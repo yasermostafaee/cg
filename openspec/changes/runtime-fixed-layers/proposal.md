@@ -12,7 +12,12 @@ is exactly what fixed slots must forbid.
 
 ## What Changes
 
-**Nothing in this PR beyond documents.** This change dir is the DESIGN PHASE of R-021:
+**The design phase is closed** (all four owner decisions answered and encoded);
+**implementation lands in four stages** — see the STAGE MAP at the top of `tasks.md`:
+stage 1 = install config + the LayerManager fixed mechanism (pure logic, no UI/channels,
+no on-air change); stage 2 = channels + the fixed-bank panel; stage 3 = the one-action
+import+create+load chain; stage 4 = the restore branch, `restore-blocked`, and the
+fixed-row Clear carve-out. The design documents in this change dir:
 
 - `design.md` — the deliverable: the ownership-composition resolution order, the OSC-silence
   decision for fixed rows, the pinned mechanism's exact code seam, the restore/adopt-in-place
