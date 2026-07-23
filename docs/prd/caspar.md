@@ -362,15 +362,15 @@ layer is NOT knowably free, and real CasparCG goes silent for empty layers (B-05
 restart-misadoption limit (recorded in `openspec/changes/runtime-protect-video-layers/design.md`):
 both need the bridge to reason about producer KINDS it did not place.
 
-## [ ] C-015 — Live plate source routing: map plate source ids to DECKLINK / ROUTE / media / NDI (fill+key capable) and composite them behind the template ⟨priority: high⟩
+## [ ] C-015 — Live Source routing: map Live Source ids to DECKLINK / ROUTE / media / NDI (fill+key capable) and composite them behind the template ⟨priority: high⟩
 
-**What:** The Designer track is adding a "Live plate" element — a template region exported as a
+**What:** The Designer track is adding a "Live Source" element — a template region exported as a
 FULLY TRANSPARENT hole plus metadata (geometry in scene px, a source id, an optional key source
 id, expectedAspect, and whether the id is DYNAMIC/field-bound). When an item whose template
-declares plates is taken, the BRIDGE places each plate's mapped source on its own CasparCG layer
-BELOW the template's layer, geometrically behind the hole. The Runtime settings expose the
-installation's source-id → concrete source mapping: a DECKLINK input, another channel/layer via
-the ROUTE producer, a media file, or an NDI source.
+declares Live Sources is taken, the BRIDGE places each Live Source's mapped source on its own
+CasparCG layer BELOW the template's layer, geometrically behind the hole. The Runtime settings
+expose the installation's source-id → concrete source mapping: a DECKLINK input, another
+channel/layer via the ROUTE producer, a media file, or an NDI source.
 **Why:** An HTML template cannot render live video; CasparCG composites layers. The template
 stays portable — it names sources by id only (Cinegy's Live ID model); mapping id → concrete
 source is an INSTALLATION concern configured in the Runtime.
@@ -379,43 +379,50 @@ source is an INSTALLATION concern configured in the Runtime.
 - WHEN the Runtime settings expose a source-id → source mapping THEN a source can be any of: a
   DECKLINK input device, another channel/layer via the ROUTE producer, a media file from the
   CasparCG media folder, or an NDI source (subject to the NDI note below)
-- WHEN an item whose template declares plates is taken THEN for each plate the bridge allocates a
-  dedicated layer below the template's layer, plays the mapped producer there, and applies MIXER
-  FILL derived from the plate's scene-px geometry (normalized), so the source sits exactly behind
-  the hole — sources are up BEFORE the template's intro reveals them (exact ordering is a
-  design.md decision: pre-roll plate producers, then CG PLAY)
-- WHEN a plate declares a KEY source id THEN the fill and key sources are composited as a
+- WHEN an item whose template declares Live Sources is taken THEN for each Live Source the bridge
+  allocates a dedicated layer below the template's layer, plays the mapped producer there, and
+  applies MIXER FILL derived from the Live Source's scene-px geometry (normalized), so the source
+  sits exactly behind the hole — sources are up BEFORE the template's intro reveals them (exact
+  ordering is a design.md decision: pre-roll Live Source producers, then CG PLAY)
+- WHEN a Live Source declares a KEY source id THEN the fill and key sources are composited as a
   fill+key pair — likely the key on the layer beneath the fill with `MIXER KEYER` — the exact
   CasparCG mechanism is VERIFIED at recon on real 2.3.2 via `tools/caspar-amcp-probe`, never
   assumed
-- WHEN a plate's source id is DYNAMIC and the operator updates its field value THEN the bridge
-  retargets that plate's layer to the newly mapped source (swap the producer on the SAME layer)
-  without disturbing the template's layer or other plates
-- WHEN the item is stopped or cleared THEN the plate layers are cleared alongside it, and the
-  template's own STOP/CLEAR verb semantics ([[C-012]]) are unchanged
+- WHEN a Live Source's source id is DYNAMIC and the operator updates its field value THEN the
+  bridge retargets that Live Source's layer to the newly mapped source (swap the producer on the
+  SAME layer) without disturbing the template's layer or other Live Sources
+- WHEN the item is stopped or cleared THEN the Live Source layers are cleared alongside it, and
+  the template's own STOP/CLEAR verb semantics ([[C-012]]) are unchanged
 - WHEN a declared source id has no mapping THEN the take refuses legibly with a distinct
   errorCode (never a silent empty hole on air)
-- WHEN the bridge restarts while plates are on air THEN plate layers are re-adopted or
-  re-established consistently with the [[B-092]] occupancy-aware adopt (design.md decision —
+- WHEN the bridge restarts while Live Sources are on air THEN Live Source layers are re-adopted
+  or re-established consistently with the [[B-092]] occupancy-aware adopt (design.md decision —
   never a blind CLEAR of a live source)
-- WHEN plate layers exist THEN the occupancy model treats them as BRIDGE-OWNED non-html layers:
-  exempt from [[R-015]]'s foreign-refusal (the bridge may CLEAR what it owns), never quarantined
-  or counted as foreign by [[C-014]] allocation, and never an [[R-009]] reclaim target
+- WHEN Live Source layers exist THEN the occupancy model treats them as BRIDGE-OWNED non-html
+  layers: exempt from [[R-015]]'s foreign-refusal (the bridge may CLEAR what it owns), never
+  quarantined or counted as foreign by [[C-014]] allocation, and never an [[R-009]] reclaim
+  target
 - WHEN DECKLINK / ROUTE / media sources are used THEN behavior is verified on real CasparCG 2.3.2
   hardware before archive; WHEN NDI is used THEN the FIRST step is verifying the NDI producer
   exists on the client's 2.3.2 build at all — record the finding either way
 
 **Notes:** **THE structural risk, flag it loudly:** today "non-html OSC producer kind" is the
 SOLE foreign/owned discriminator ([[R-015]], [[C-014]]). This feature deliberately creates
-bridge-OWNED non-html layers, so ownership must become explicit (the bridge's own ledger of plate
-layers) rather than inferred from producer kind — that interaction needs its own tests and
-careful design against the R-015/C-014/R-009/B-092 suite. Layer plan (reserved sub-range below
-the template's layer vs adjacent layers) is a design.md decision. Exact AMCP producer forms
-(DECKLINK DEVICE syntax, route:// addressing, NDI) verified at recon, never assumed. MIXER FILL
-is axis-aligned — matches the Designer half's v1. Cinegy parity is the NEED, not the UI.
-Designer-side counterpart: the "Live plate element" item in `docs/prd/designer.md`
-(cross-reference by title now; numbers when both are merged). On-air behavior throughout ⇒
-real-hardware verification is part of done. RECON-FIRST, needs its own design.md.
+bridge-OWNED non-html layers, so ownership must become explicit (the bridge's own ledger of
+Live Source layers) rather than inferred from producer kind — that interaction needs its own
+tests and careful design against the R-015/C-014/R-009/B-092 suite. Layer plan (reserved
+sub-range below the template's layer vs adjacent layers) is a design.md decision. Exact AMCP
+producer forms (DECKLINK DEVICE syntax, route:// addressing, NDI) verified at recon, never
+assumed. MIXER FILL is axis-aligned — matches the Designer half's v1. Cinegy parity is the
+NEED, not the UI. Designer-side counterpart: the "Live Source element" item in
+`docs/prd/designer.md` (cross-reference by title now; numbers when both are merged). On-air
+behavior throughout ⇒ real-hardware verification is part of done. RECON-FIRST, needs its own
+design.md. **Naming (owner, 2026-07-23):** the user-facing name is **Live Source** — the plate
+is live/on-air ONLY (file video is the separate `video` element, D-128 on the designer track),
+so "plate" was misleading; this item's title/prose were renamed to match the designer track's
+D-137. The schema type remains `video-placeholder` (`VideoPlaceholderElementSchema`) — it is
+referenced by scene-builder, saved scenes on disk, and specs, so renaming the TYPE is a scene
+MIGRATION, not a label change, and is deliberately out of scope.
 
 ## [ ] C-016 — operator PGM confidence view: periodic program-channel grabs served over the bridge's HTTP server ⟨priority: medium⟩
 
@@ -427,7 +434,7 @@ DECISION recorded: stills-at-~1 s IS the v1 bar; full-motion return (STREAM cons
 transcode) is RECORDED IN THIS ITEM as an explicit later phase, not a v1 requirement.
 **Why:** The operator currently confirms what the viewer sees by looking at a separate monitor
 (or guessing from row badges). A confidence view inside the console closes that loop — and a
-plate-heavy composite ([[C-015]]) makes PGM confidence MORE valuable, because the browser
+Live-Source-heavy composite ([[C-015]]) makes PGM confidence MORE valuable, because the browser
 preview can never show the live video the template composites over.
 **Acceptance:**
 
@@ -444,7 +451,7 @@ preview can never show the live video the template composites over.
 **Notes:** RECON-FIRST, needs its own design.md (command choice, frame transport, cadence).
 Later-phase full-motion options recorded here so they are not re-derived: STREAM consumer →
 local relay transcode → browser — latency and encode load on the playout box are the recorded
-trade-offs. Cross-ref [[C-015]] (a plate-heavy composite raises the value of a PGM view).
+trade-offs. Cross-ref [[C-015]] (a Live-Source-heavy composite raises the value of a PGM view).
 
 ## [ ] C-017 — auto-clear a layer when a finite template run completes: the served template pings its own origin, the bridge CLEARs ⟨priority: medium⟩
 

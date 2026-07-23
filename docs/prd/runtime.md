@@ -884,8 +884,8 @@ works on ANY producer INCLUDING non-html — a deliberate, owner-approved carve-
 [[R-015]]'s foreign-refusal, justified because the fixed range is explicitly
 operator-designated territory ("always able to manage or clear a known layer"). Outside the
 range, R-015 is untouched. This is the THIRD ownership notion next to the producer-kind
-discriminator ([[R-015]]/[[C-014]]/[[R-009]]) and [[C-015]]'s plate-layer ledger — the three
-MUST be designed to compose, and this item's design.md owns that composition. Restore
+discriminator ([[R-015]]/[[C-014]]/[[R-009]]) and [[C-015]]'s Live Source layer ledger — the
+three MUST be designed to compose, and this item's design.md owns that composition. Restore
 interaction with [[B-092]]/#368's narrowing needs its own tests: restore reaches `reserve()`
 first, and #368 made a quarantined retained slot fall through to allocate-elsewhere — exactly
 the fall-through this item's adopt-in-place FORBIDS on fixed slots. Needs design.md.
@@ -904,7 +904,7 @@ local preview catches wrong values and broken layouts before air.
 - WHEN previewing THEN the intro/lifecycle plays, so motion is assessable
 - WHEN the preview is shown THEN two honest caveats are stated IN the item: browser-vs-CEF-71
   rendering may differ in detail ([[B-066]] class — "faithful, not pixel-identical"), and after
-  [[C-015]] a live-plate region renders as a labeled placeholder, not video
+  [[C-015]] a Live Source region renders as a labeled placeholder, not video
 - WHEN previewing THEN nothing is ever sent to CasparCG
 
 **Notes:** deliberately NOT a server-side PVW channel — that would require solving [[C-016]]'s
