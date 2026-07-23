@@ -14,6 +14,11 @@ import type {
   ConnectionHealth,
   ConnectionsFailoverChannel,
   ConnectionsSetConfigChannel,
+  FixedLayerBank,
+  FixedLayersConfigChannel,
+  FixedLayersSetConfigChannel,
+  FixedLayersStateChannel,
+  FixedSlotState,
   LayersClearChannel,
   LayersOrphansChannel,
   LayersOwnedOccupancyChannel,
@@ -140,6 +145,28 @@ export interface RuntimeBridge {
     onHealthChanged(handler: (health: ConnectionHealth) => void): Unsubscribe;
     /** R-010 — fired when any client applies a new config. */
     onConfigChanged(handler: (config: ConnectionConfig) => void): Unsubscribe;
+  };
+
+  /**
+   * R-021 stage 2a — the fixed operator layer bank: config read/update +
+   * per-slot state (facts only — occupancy observation + binding; verb
+   * derivation happens renderer-side, once, per design (f)/(g)).
+   */
+  fixedLayers: {
+    /** The declared bank, or null when none is configured. */
+    config(): Promise<ChannelResponse<typeof FixedLayersConfigChannel>>;
+    /**
+     * Apply a bank change LIVE (design (e)): grow-at-end and alias changes
+     * apply immediately; renumber/channel-change and shrink-with-residents
+     * refuse with the validator's code in `reason`.
+     */
+    setConfig(
+      req: ChannelRequest<typeof FixedLayersSetConfigChannel>,
+    ): Promise<ChannelResponse<typeof FixedLayersSetConfigChannel>>;
+    /** The current per-slot state ([] when no bank is declared). */
+    state(): Promise<ChannelResponse<typeof FixedLayersStateChannel>>;
+    onConfigChanged(handler: (bank: FixedLayerBank | null) => void): Unsubscribe;
+    onStateChanged(handler: (state: FixedSlotState[]) => void): Unsubscribe;
   };
 
   /** R-009 — orphaned/unknown on-air layers (the bridge's occupancy sweep). */

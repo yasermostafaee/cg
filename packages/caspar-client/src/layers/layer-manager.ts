@@ -111,10 +111,14 @@ export class UnknownTemplateTypeError extends Error {
  */
 export class FixedPinnedConflictError extends Error {
   override readonly name = 'FixedPinnedConflictError';
-  constructor(readonly slot: LayerSlot) {
+  constructor(
+    readonly slot: LayerSlot,
+    message?: string,
+  ) {
     super(
-      `Layer ${String(slot.channel)}-${String(slot.layer)} is declared both PINNED and FIXED — ` +
-        `remove it from one of the two sets`,
+      message ??
+        `Layer ${String(slot.channel)}-${String(slot.layer)} is declared both PINNED and FIXED — ` +
+          `remove it from one of the two sets`,
     );
   }
 }
@@ -127,8 +131,12 @@ interface SlotState {
 export class LayerManager extends EventEmitter<LayerManagerEvents> {
   private readonly policy: LayerPolicy;
   private readonly pinned: ReadonlyMap<string, PinnedSlot>;
-  /** R-021 — the fixed operator slots, fenced from birth (see {@link LayerManagerOptions.fixed}). */
-  private readonly fixed: ReadonlyMap<string, LayerSlot>;
+  /**
+   * R-021 — the fixed operator slots, fenced from birth (see
+   * {@link LayerManagerOptions.fixed}). Mutable ONLY via {@link applyFixed}
+   * (live bank changes, stage 2a).
+   */
+  private readonly fixed: Map<string, LayerSlot>;
   private readonly slots = new Map<string, SlotState>();
 
   constructor(options: LayerManagerOptions = {}) {
@@ -278,6 +286,45 @@ export class LayerManager extends EventEmitter<LayerManagerEvents> {
   fixedBinding(slot: LayerSlot): string | undefined {
     if (!this.fixed.has(keyOf(slot))) return undefined;
     return this.slots.get(keyOf(slot))?.templateType;
+  }
+
+  /**
+   * R-021 stage 2a — apply a LIVE bank change (the VALIDATED next bank's
+   * slots). New slots are added fenced-and-unbound; slots no longer in the
+   * bank return to 'free' (emitting `released`); bound slots may NEVER be
+   * removed — that throws {@link FixedPinnedConflictError} as defence in depth
+   * BEHIND the store's `shrink-occupied` validator, not a substitute for it.
+   * Bound slots that remain in the bank, and pinned slots, are untouched.
+   */
+  applyFixed(next: readonly LayerSlot[]): void {
+    const nextByKey = new Map(next.map((s) => [keyOf(s), s] as const));
+    // Pre-flight every check — mutate nothing until all pass.
+    for (const [key, slot] of nextByKey) {
+      if (this.pinned.has(key)) throw new FixedPinnedConflictError(slot);
+    }
+    for (const [key, slot] of this.fixed) {
+      if (nextByKey.has(key)) continue;
+      if (this.slots.get(key)?.templateType !== undefined) {
+        throw new FixedPinnedConflictError(
+          slot,
+          `Layer ${String(slot.channel)}-${String(slot.layer)} is still BOUND and cannot be ` +
+            `removed from the fixed bank — unbind it first`,
+        );
+      }
+    }
+    // All checks passed — mutate.
+    for (const [key, slot] of [...this.fixed]) {
+      if (!nextByKey.has(key)) {
+        this.fixed.delete(key);
+        this.slots.set(key, { status: 'free' });
+        this.emit('released', slot);
+      }
+    }
+    for (const [key, slot] of nextByKey) {
+      if (this.fixed.has(key)) continue;
+      this.fixed.set(key, { channel: slot.channel, layer: slot.layer });
+      this.slots.set(key, { status: 'allocated' });
+    }
   }
 
   /**

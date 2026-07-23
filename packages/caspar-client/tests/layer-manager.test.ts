@@ -231,6 +231,50 @@ describe('LayerManager — fixed operator slots (R-021)', () => {
     expect(lm.bindFixed({ channel: 1, layer: 12 }, 'clock')).toBe(true);
   });
 
+  it('S3 — applyFixed: adds fenced, releases removed, refuses removing a BOUND slot, pinned untouched', () => {
+    const lm = new LayerManager({
+      pinned: [{ channel: 1, layer: 95, templateId: 'logo', autoStart: true }],
+      fixed: [
+        { channel: 1, layer: 12 },
+        { channel: 1, layer: 13 },
+      ],
+    });
+
+    // Grow: 14 joins the bank, immediately fenced from allocation.
+    lm.applyFixed([
+      { channel: 1, layer: 12 },
+      { channel: 1, layer: 13 },
+      { channel: 1, layer: 14 },
+    ]);
+    expect(lm.isFixed({ channel: 1, layer: 14 })).toBe(true);
+    const got: number[] = [];
+    for (let i = 0; i < 7; i++) got.push(lm.allocate('lower-third', 1).layer);
+    expect(got).toEqual([10, 11, 15, 16, 17, 18, 19]); // 12/13/14 all skipped
+
+    // Shrink: 14 leaves the bank and returns to the free pool.
+    lm.applyFixed([
+      { channel: 1, layer: 12 },
+      { channel: 1, layer: 13 },
+    ]);
+    expect(lm.isFixed({ channel: 1, layer: 14 })).toBe(false);
+    expect(lm.allocate('lower-third', 1)).toEqual({ channel: 1, layer: 14 });
+
+    // A BOUND slot may never be removed — defence in depth behind the validator.
+    lm.bindFixed({ channel: 1, layer: 12 }, 'clock');
+    expect(() => lm.applyFixed([{ channel: 1, layer: 13 }])).toThrow(FixedPinnedConflictError);
+    expect(lm.isFixed({ channel: 1, layer: 12 })).toBe(true); // nothing mutated
+    expect(lm.fixedBinding({ channel: 1, layer: 12 })).toBe('clock');
+
+    // Pinned stays pinned throughout; declaring a pinned slot fixed still throws.
+    expect(lm.isPinned({ channel: 1, layer: 95 })).toBe(true);
+    expect(() =>
+      lm.applyFixed([
+        { channel: 1, layer: 12 },
+        { channel: 1, layer: 95 },
+      ]),
+    ).toThrow(FixedPinnedConflictError);
+  });
+
   it('T7 — a slot declared both pinned and fixed throws, naming the slot', () => {
     expect(
       () =>

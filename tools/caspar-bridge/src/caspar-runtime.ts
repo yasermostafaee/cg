@@ -1,4 +1,5 @@
 import {
+  DEFAULT_LAYER_POLICY,
   isLiveState,
   LayerManager,
   OutOfLayersError,
@@ -23,6 +24,8 @@ import type {
   ConnectionConfig,
   ConnectionHealth,
   ConnectionsSetConfigChannel,
+  FixedLayerBank,
+  FixedSlotState,
   LockState,
   OrphanLayer,
   OwnedOccupancyWarning,
@@ -30,6 +33,12 @@ import type {
   Settings,
   TemplateInfo,
 } from '@cg/shared-ipc';
+import {
+  validateFixedBank,
+  validateFixedBankChange,
+  FixedLayersConfigError,
+  type FixedLayersErrorCode,
+} from './fixed-layers-store.js';
 import { CommandBuilder, type CommandSlot } from './command-builder.js';
 import { OrphanTracker } from './orphan-tracker.js';
 import { TemplateRegistry } from './template-registry.js';
@@ -84,6 +93,27 @@ const SWEEP_MS = 5000;
  */
 const OCCUPANCY_STALE_MS = 2500;
 
+/**
+ * R-021 stage 2a (D7) — is a FIXED slot busy (a resident item or retained
+ * intent)? Reads the two REAL sources: the LayerManager's fixed binding for
+ * the slot, and the slot keys of the retained-intent map the restore path
+ * uses. Both are empty until stage 3 lands the exact-slot load chain, so this
+ * answers false today and becomes correct automatically when bindings exist.
+ * Exported + pure so it unit-tests directly.
+ */
+export function isFixedSlotBusy(
+  slot: LayerSlot,
+  sources: {
+    fixedBinding: (slot: LayerSlot) => string | undefined;
+    retainedSlotKeys: ReadonlySet<string>;
+  },
+): boolean {
+  return (
+    sources.fixedBinding(slot) !== undefined ||
+    sources.retainedSlotKeys.has(`${String(slot.channel)}:${String(slot.layer)}`)
+  );
+}
+
 /** Minimal typed pub-sub backing the bridge's `on*` publish channels. */
 class Emitter<T> {
   readonly #handlers = new Set<(value: T) => void>();
@@ -133,6 +163,10 @@ export class CasparRuntime {
   readonly orphansChanged = new Emitter<OrphanLayer[]>();
   /** B-056 — emitted ONLY when the owned-slot warning set changes. */
   readonly ownedOccupancyChanged = new Emitter<OwnedOccupancyWarning[]>();
+  /** R-021 stage 2a — emitted after every applied fixed-bank change. */
+  readonly fixedConfigChanged = new Emitter<FixedLayerBank | null>();
+  /** R-021 stage 2a — emitted ONLY when the per-slot fixed state changes. */
+  readonly fixedStateChanged = new Emitter<FixedSlotState[]>();
 
   // R-010 — mutable: `setConfig` swaps the whole connection layer at runtime.
   #config: ConnectionConfig;
@@ -143,6 +177,11 @@ export class CasparRuntime {
   // R-021 stage 1 — constructed in the constructor so the resolved fixed bank
   // (and the ONE policy object the validator saw) reach the allocator.
   readonly #layers: LayerManager;
+  // R-021 stage 2a — the declared bank (null = none), the policy in force, and
+  // the last PUBLISHED per-slot state (JSON, for the publish-on-change compare).
+  #fixedBank: FixedLayerBank | null;
+  readonly #layerPolicy: LayerPolicy;
+  #lastFixedStateJson: string | null = null;
   readonly #builder = new CommandBuilder();
 
   /**
@@ -301,12 +340,19 @@ export class CasparRuntime {
        */
       fixedSlots?: readonly LayerSlot[];
       layerPolicy?: LayerPolicy;
+      /**
+       * R-021 stage 2a — the bank the slots came from (aliases + the CURRENT
+       * side of live change validation). Absent = no bank declared.
+       */
+      fixedBank?: FixedLayerBank;
     } = {},
   ) {
     this.#layers = new LayerManager({
       ...(options.layerPolicy !== undefined ? { policy: options.layerPolicy } : {}),
       ...(options.fixedSlots !== undefined ? { fixed: options.fixedSlots } : {}),
     });
+    this.#layerPolicy = options.layerPolicy ?? DEFAULT_LAYER_POLICY;
+    this.#fixedBank = options.fixedBank ?? null;
     this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
@@ -1217,6 +1263,131 @@ export class CasparRuntime {
     return this.#layers.fixedSlots();
   }
 
+  // ── R-021 stage 2a: fixed-bank wire contract (config + per-slot state) ──
+
+  /** The declared fixed bank, or null when none is configured. */
+  fixedLayersConfig(): FixedLayerBank | null {
+    return this.#fixedBank;
+  }
+
+  /**
+   * Apply a LIVE bank change (design (e)): validate → apply → publish. The
+   * validators are `fixed-layers-store`'s — never re-derived here — called
+   * with the SAME policy object the LayerManager was built with. There is NO
+   * on-air block (growth and alias changes are live by design; the refusals
+   * are renumber/channel-change and shrink-with-residents). On refusal
+   * NOTHING is applied or published; persistence is the caller's step
+   * (`bridge.ts` persists on ok, non-fatally, after this returns).
+   */
+  setFixedLayers(next: FixedLayerBank): {
+    ok: boolean;
+    reason?: FixedLayersErrorCode;
+    message?: string;
+  } {
+    let slots: readonly LayerSlot[];
+    try {
+      slots =
+        this.#fixedBank === null
+          ? // No current bank: installing one live is a pure grow-at-end case.
+            validateFixedBank(next, { policy: this.#layerPolicy, reservedLayers: [] })
+          : validateFixedBankChange(this.#fixedBank, next, {
+              policy: this.#layerPolicy,
+              reservedLayers: [],
+              isSlotBusy: (slot) =>
+                isFixedSlotBusy(slot, {
+                  fixedBinding: (s) => this.#layers.fixedBinding(s),
+                  retainedSlotKeys: this.#retainedFixedSlotKeys(),
+                }),
+            });
+    } catch (err) {
+      if (err instanceof FixedLayersConfigError) {
+        return { ok: false, reason: err.code, message: err.message };
+      }
+      throw err;
+    }
+    this.#layers.applyFixed(slots);
+    this.#fixedBank = next;
+    this.fixedConfigChanged.emit(next);
+    // The bank changed, so the per-slot state did too — publish through the
+    // same change-compare the sweep uses (never a second derivation).
+    this.#publishFixedStateIfChanged();
+    return { ok: true };
+  }
+
+  /** The current per-slot state, computed on demand ([] when no bank). */
+  fixedLayersState(): FixedSlotState[] {
+    return this.#computeFixedState();
+  }
+
+  /**
+   * The slot keys retained restore intent points at (empty until stage 3/4
+   * populate real retained bindings on fixed slots — see `isFixedSlotBusy`).
+   */
+  #retainedFixedSlotKeys(): ReadonlySet<string> {
+    const keys = new Set<string>();
+    for (const { slot } of this.#pendingRestore.values()) {
+      keys.add(`${String(slot.channel)}:${String(slot.layer)}`);
+    }
+    return keys;
+  }
+
+  /**
+   * Per-slot state per D3's honesty rules, reusing the sweep's OWN predicates
+   * (`state !== 'healthy'`, `hasFreshOsc(#occupancyStaleMs)`,
+   * `occupied(#occupancyStaleMs)`) — never a second staleness constant:
+   * unhealthy primary or a silent tap ⇒ every slot `unknown` (never 'empty');
+   * a hearing tap ⇒ present layers are `producer`, absent ones `empty`
+   * (B-053: on a hearing tap, silence IS empty). `binding` is null until
+   * stage 3 (the wire ships the field so stage 2b never amends the contract).
+   */
+  #computeFixedState(): FixedSlotState[] {
+    const slots = this.#layers.fixedSlots();
+    if (slots.length === 0) return [];
+    const aliases = this.#fixedBank?.aliases ?? {};
+    const session = this.#adapter.primarySession;
+    const hearing =
+      session.state === 'healthy' && session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs);
+    const occupiedBy = new Map<string, string>();
+    if (hearing) {
+      for (const o of session.osc.occupancy.occupied(this.#occupancyStaleMs)) {
+        occupiedBy.set(`${String(o.channel)}:${String(o.layer)}`, o.producer);
+      }
+    }
+    return [...slots]
+      .sort((a, b) => a.channel - b.channel || a.layer - b.layer)
+      .map((slot) => {
+        const alias = aliases[String(slot.layer)];
+        const producer = occupiedBy.get(`${String(slot.channel)}:${String(slot.layer)}`);
+        const observed: FixedSlotState['observed'] = !hearing
+          ? { kind: 'unknown' }
+          : producer !== undefined
+            ? { kind: 'producer', producer }
+            : { kind: 'empty' };
+        return {
+          channel: slot.channel,
+          layer: slot.layer,
+          ...(alias !== undefined ? { alias } : {}),
+          observed,
+          binding: null,
+        };
+      });
+  }
+
+  /**
+   * Publish the per-slot state ONLY when it differs from the last published
+   * array (deep compare — the orphan-tracker precedent). Runs from the sweep
+   * tick that already samples occupancy (no second timer) and from an applied
+   * bank change. With no bank declared it never publishes anything.
+   */
+  #publishFixedStateIfChanged(): void {
+    if (this.#layers.fixedSlots().length === 0 && this.#fixedBank === null) return;
+    const state = this.#computeFixedState();
+    const json = JSON.stringify(state);
+    if (json === this.#lastFixedStateJson) return;
+    this.#lastFixedStateJson = json;
+    this.fixedStateChanged.emit(state);
+  }
+
   /** B-056 — the currently surfaced owned-slot warnings (stable-sorted). */
   ownedOccupancy(): OwnedOccupancyWarning[] {
     return [...this.#ownedOccupancy.values()].sort(
@@ -1235,6 +1406,12 @@ export class CasparRuntime {
    * no per-tick logging.
    */
   #sweepOccupancy(): void {
+    // R-021 stage 2a — the per-slot fixed state publishes from THIS tick
+    // (same occupancy sample, no second timer), and deliberately BEFORE the
+    // healthy guard: on a disconnect the next tick honestly re-publishes every
+    // slot as `unknown` instead of freezing a stale 'empty'/'producer'.
+    this.#publishFixedStateIfChanged();
+
     const session = this.#adapter.primarySession;
     if (session.state !== 'healthy') return;
 

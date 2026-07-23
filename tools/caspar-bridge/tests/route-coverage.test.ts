@@ -78,7 +78,18 @@ describe('bridge route coverage (B-074)', () => {
     expect(unrouted).toEqual([]);
     // Sanity: the guard is actually looking at something.
     expect(runtimeChannels).toContain('stack.set-position'); // the R-011 channel
+    // R-021 stage 2a (S11) — the fixed-bank request channels are covered.
+    expect(runtimeChannels).toContain('fixedLayers.config');
+    expect(runtimeChannels).toContain('fixedLayers.set-config');
+    expect(runtimeChannels).toContain('fixedLayers.state');
     expect(runtimeChannels.length).toBeGreaterThan(20);
+  });
+
+  it('R-021 stage 2a (S11) — the fixed-bank publish channels are exported for wirePublishes', () => {
+    // Publish channels are not request routes; pin their existence + names so a
+    // rename cannot silently orphan the wirePublishes() subscriptions.
+    expect(ipc.FixedLayersConfigChangedChannel.name).toBe('fixedLayers.config-changed');
+    expect(ipc.FixedLayersStateChangedChannel.name).toBe('fixedLayers.state-changed');
   });
 
   it('every route the bridge declares corresponds to a real exported channel', () => {

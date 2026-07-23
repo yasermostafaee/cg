@@ -114,6 +114,12 @@ surface; surfacing it in the orphan banner too would double-report the same fact
 and an R-009 "reclaim" Clear there would bypass (b)'s rules. The filter consults the same fixed
 config (single source; never a second local copy — the B-100/P-012 lesson).
 
+**Stage-4 note (stage 1's quarantine rule, restated here where the mechanism lives):** fixed
+slots are NEVER quarantined and always read `allocated`, so nothing in the LayerManager records
+a foreign producer on a fixed slot. Stage 4 must therefore derive `restore-blocked` from the
+OCCUPANCY TAP (the same sample the sweep and the stage-2a per-slot state read), never from the
+quarantine set — a fixed slot never enters it.
+
 ## d) Restore / adopt-in-place vs #368 — where the branch goes, and the hard case
 
 **The branch point is `#slotForRestore`
@@ -232,6 +238,15 @@ context-menu items so gating/handler/wording cannot diverge; `toMenuItems` `rowA
   only. **Never Take/Update for a foreign item** — there is no field schema to update with.
 - **Empty** → the import+load chain (pick `.vcg` → library import → item bound to THIS slot →
   Load via the exact-slot path), plus Load-from-library.
+
+**Stage-2a note — the wire carries FACTS, never a computed row state.** The per-slot state
+channel ships exactly `{channel, layer, alias?, observed, binding}`: the occupancy observation
+(`unknown` / `empty` / `producer`) and the binding (null until stage 3), nothing more. A
+bridge-computed row state or verb list would be a SECOND derivation of "what may the operator
+do here" that can drift from the renderer's — the exact two-copies failure mode the repo's
+one-canonical-predicate rule exists to prevent. Verb derivation stays THIS section's ONE
+function of `(localItem, observation)`, renderer-side; stage 4 extends `binding` additively
+(`restore-blocked` rides there), never as a new top-level row state.
 
 ## g) Multi-station — which state is local, which is derived
 

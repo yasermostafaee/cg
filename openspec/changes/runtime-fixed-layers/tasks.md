@@ -1,13 +1,20 @@
 # Tasks — fixed operator layers (R-021)
 
-## STAGE MAP (implementation lands in four PRs)
+## STAGE MAP (implementation lands in staged PRs)
 
-- **Stage 1** = 1.1–1.3, 2.1–2.2, 4.2a — install config + LayerManager fixed mechanism
-  (pure logic; no UI, no channels, no on-air change). **Landed.**
-- **Stage 2** = 4.1, 5.1, 5.1b, 5.2 — channels + the fixed-bank panel.
-- **Stage 3** = 5.3 — the one-action import+create+load chain.
-- **Stage 4** = 3.1–3.3, 4.3, 4.4, 5.4, 5.5 — restore branch + `restore-blocked` + the
-  fixed-row Clear carve-out + DOM/E2E tests.
+- **Stage 1** = 1.1–1.3, 2.1, 2.2, 4.2a — install config + LayerManager fixed mechanism
+  (pure logic; no UI, no channels, no on-air change). **Shipped.**
+- **Stage 2a** = 4.1, 4.2b — the WIRE CONTRACT: channels, bridge routes, live bank
+  changes, per-slot state publish, platform seam + mock parity. No renderer. **Shipped
+  (this PR).** Honest note (D7): the busy predicate reads the LayerManager's fixed
+  binding + the retained-intent slot keys — both empty until stage 3, so the END-TO-END
+  shrink-with-resident refusal becomes testable only in stage 3 (the predicate itself is
+  unit-tested directly, and the validator's refusal is pinned by stage 1's T13).
+- **Stage 2b** = 5.1, 5.1b, 5.2, 5.4, 5.5 — the renderer (fixed-bank panel, rows,
+  rowAction, DOM/E2E tests); owes Linux `gate:e2e`.
+- **Stage 3** = 5.3 — the one-action import+create+load chain; owes e2e + hardware.
+- **Stage 4** = 3.1–3.3, 4.3, 4.4 — restore branch + `restore-blocked` + the fixed-row
+  Clear carve-out; owes hardware.
 
 ## 0. Owner decisions — ANSWERED (owner, 2026-07-23; encoded in design.md + specs delta)
 
@@ -65,8 +72,17 @@ naming slots. No open decisions block implementation.
 
 ## 4. Bridge surface + channels
 
-- [ ] 4.1 `@cg/shared-ipc`: fixed-bank channels (config read/update, per-slot state publish,
-      exact-slot load, layer verbs) with contracts documented; `MockRuntime` parity.
+- [x] 4.1 (stage 2a) `@cg/shared-ipc`: the fixed-bank channels — `fixedLayers.config` /
+      `.set-config` (reason = the validator's code union, single-sourced via
+      `FIXED_LAYERS_SET_CONFIG_REASONS`) / `.config-changed` / `.state` /
+      `.state-changed` — all in `channels/fixedLayers.ts` beside the stage-1 schema, with
+      contracts documented; bridge routes + `wirePublishes`; `set-config` order
+      validate → apply → persist (non-fatal) → publish, with NO on-air block (design (e));
+      `LayerManager.applyFixed` for live bank changes (bound slots may never be removed —
+      defence in depth behind the validator); the typed `RuntimeBridge.fixedLayers` seam +
+      `WebSocketRuntime` impl + `MockRuntime` parity (applies + publishes, offline
+      occupancy honestly UNKNOWN, never re-implementing the validators). Exact-slot load
+      and layer-verb channels are stages 3/4.
 - [x] 4.2a Orphan-sweep exclusion (pulled into stage 1): fixed layers excluded from R-009
       orphan candidates by unioning `LayerManager.fixedSlots()` into the sweep's `owned`
       set — the LayerManager is the single source of the bank, never a second local copy.
@@ -74,8 +90,14 @@ naming slots. No open decisions block implementation.
       orphan banner is an incoherent intermediate state. Integration-tested (T16: foreign
       on a fixed layer never surfaces; a non-fixed control layer does; T18: no bank → today's
       behaviour, byte-identical).
-- [ ] 4.2b Per-slot occupancy publish from the same tap sample (stage 4, with the
-      channels).
+- [x] 4.2b (stage 2a) Per-slot occupancy publish from the SAME sweep tick that already
+      samples the tap (no second timer, no second staleness constant): D3 honesty
+      (unhealthy primary or silent tap ⇒ every slot `unknown`, never 'empty'; hearing tap
+      ⇒ `producer`/`empty` per B-053), published only on deep-compare change (two
+      identical sweeps ⇒ zero publishes), computed BEFORE the tick's healthy guard so a
+      disconnect honestly re-publishes `unknown` instead of freezing stale state. The
+      wire carries FACTS only — `{observed, binding}` — never a computed row state
+      (design (f) note); `binding` ships now, null until stage 3.
 - [ ] 4.3 Fixed-row hard Clear per (b)/b1: confirm-gated always; under OSC silence the
       confirmation dialog states occupancy is unknown AND names the layer number; outside
       the fixed range R-015's silence-refusal is untouched (regression-test the boundary).

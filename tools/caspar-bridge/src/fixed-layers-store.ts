@@ -1,6 +1,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { FixedLayerBankSchema, type FixedLayerBank } from '@cg/shared-ipc';
+import {
+  type FIXED_LAYERS_SET_CONFIG_REASONS,
+  FixedLayerBankSchema,
+  type FixedLayerBank,
+} from '@cg/shared-ipc';
 import type { LayerPolicy, LayerSlot } from '@cg/caspar-client';
 
 /**
@@ -25,14 +29,12 @@ import type { LayerPolicy, LayerSlot } from '@cg/caspar-client';
 /** The highest layer a bank may reach (design.md (e): 70–89 is the free space). */
 export const MAX_FIXED_LAYER = 89;
 
-export type FixedLayersErrorCode =
-  | 'exceeds-ceiling'
-  | 'overlaps-policy'
-  | 'overlaps-reserved'
-  | 'alias-out-of-bank'
-  | 'renumber-refused'
-  | 'channel-change-refused'
-  | 'shrink-occupied';
+/**
+ * R-021 stage 2a — DERIVED from the wire contract's shared const, so the
+ * `fixedLayers.set-config` response's `reason` union and the validator's codes
+ * are one definition and cannot drift.
+ */
+export type FixedLayersErrorCode = (typeof FIXED_LAYERS_SET_CONFIG_REASONS)[number];
 
 /** A refused bank (or bank change). `code` is stable; the message names specifics. */
 export class FixedLayersConfigError extends Error {
