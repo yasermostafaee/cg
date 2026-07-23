@@ -3,6 +3,7 @@ import { colors } from '../../theme.js';
 import { cx } from '../../cx.js';
 import * as s from './AssetThumb.css.js';
 import { useAssetUrl } from './useAssets.js';
+import { VideoPoster } from './VideoPoster.js';
 
 interface Props {
   asset: AssetMeta;
@@ -75,6 +76,18 @@ export function AssetThumb({
           // drag → the payload is set and the default ghost is the whole cell.
           <img src={url} alt={asset.filename} className={s.thumbImg} draggable={false} />
         )}
+        {isVideo && url !== null && (
+          // D-128 Phase 3 — the video tile shows its MID-CLIP poster frame (a
+          // paused, seeked <video>) instead of the "VID" text stub. draggable
+          // false for the same reason as the image (the cell <div> is the drag
+          // source). No `atMs` → the component uses the clip midpoint.
+          <VideoPoster
+            url={url}
+            className={s.thumbImg}
+            ariaLabel={asset.filename}
+            draggable={false}
+          />
+        )}
         {isFont && (
           <span
             style={{
@@ -86,7 +99,7 @@ export function AssetThumb({
             Abc
           </span>
         )}
-        {!isImage && !isFont && asset.kind.toUpperCase().slice(0, 3)}
+        {!isImage && !isFont && !isVideo && asset.kind.toUpperCase().slice(0, 3)}
       </div>
       <span className={isList ? s.captionList : s.caption}>{displayName}</span>
       {isList && (

@@ -146,6 +146,55 @@ test('back-to-back conversions of a known-good file BOTH succeed (fresh worker p
   await expect(page.getByText('clip-1', { exact: false }).first()).toBeVisible();
 });
 
+test('an imported video RENDERS in the canvas frame at a NON-BLANK mid-clip poster (D-128 Phase 3)', async ({
+  app,
+  page,
+}) => {
+  await app.newProject('VideoRender');
+  await page.getByRole('button', { name: 'Project assets' }).click();
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
+  await page.getByRole('menuitem', { name: 'Video…' }).click();
+  await (
+    await chooser
+  ).setFiles({
+    name: 'render-clip.avi',
+    mimeType: 'video/x-msvideo',
+    buffer: readFileSync(FIXTURE),
+  });
+  await expect(page.locator('[data-testid="video-probe-meta"]')).toContainText('64×64');
+  // place-on-confirm creates a video element on the canvas
+  await page.getByRole('button', { name: 'Convert & import' }).click();
+  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached({
+    timeout: 25_000,
+  });
+
+  // The canvas iframe renders a REAL <video> (not the Phase-2 placeholder box).
+  const frame = page.frameLocator('iframe[title="cgpreview"]');
+  const videoLoc = frame.locator('video[data-cg-asset-id]');
+  await expect(videoLoc).toBeAttached({ timeout: 15_000 });
+
+  // The host seeks it OFF frame 0 to the mid-clip poster (decision (a)): once the
+  // blob src is wired + decoded, currentTime advances to ~midpoint of the clip.
+  const render = await videoLoc.evaluate(async (v: HTMLVideoElement) => {
+    const deadline = Date.now() + 12_000;
+    while (Date.now() < deadline) {
+      const src = v.getAttribute('src') || '';
+      if (src.indexOf('blob:') === 0 && v.readyState >= 1 && v.currentTime > 0) {
+        return { ok: true, currentTime: v.currentTime, posterMs: Number(v.dataset.cgPosterMs) };
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return { ok: false, rs: v.readyState, t: v.currentTime, src: v.getAttribute('src') };
+  });
+  expect(render, JSON.stringify(render)).toMatchObject({ ok: true });
+  if (render.ok) {
+    // poster time is the clip midpoint (~0.8s of the 1.6s fixture), NOT frame 0
+    expect(render.currentTime).toBeGreaterThan(0.4);
+    expect(render.posterMs).toBeGreaterThan(400);
+  }
+});
+
 test('re-importing the same source is deduped: "Use existing" places an element with NO second conversion', async ({
   app,
   page,

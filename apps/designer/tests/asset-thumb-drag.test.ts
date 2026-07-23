@@ -114,4 +114,13 @@ describe('AssetThumb — video tiles drag onto the canvas (D-128)', () => {
     expect(setData).toHaveBeenCalledWith('application/x-cg-asset-id', 'asset-vid-1');
     expect(setData).toHaveBeenCalledWith('application/x-cg-asset-kind', 'video');
   });
+
+  it('a video cell renders its poster frame as a <video>, not the "VID" text stub (D-128 Phase 3)', () => {
+    const c = renderVideo();
+    const vid = c.querySelector('video');
+    expect(vid).not.toBeNull();
+    expect(vid!.getAttribute('src')).toBe('blob:fake-thumb-url');
+    expect(vid!.draggable).toBe(false); // the cell <div> stays the sole drag source
+    expect(c.textContent).not.toContain('VID'); // the text stub is gone for video
+  });
 });

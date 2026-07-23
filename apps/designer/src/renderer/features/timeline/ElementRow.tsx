@@ -18,6 +18,7 @@ import {
   Stamp,
   Triangle,
   Type,
+  Video,
   type LucideIcon,
 } from 'lucide-react';
 import type { Element, FrameRange, ShapeElement } from '@cg/shared-schema';
@@ -225,6 +226,11 @@ export function layerTypeIcon(element: Element): LucideIcon {
     case 'lottie':
     case 'video-placeholder':
       return Film;
+    case 'video':
+      // D-128 — an imported video clip. The camcorder glyph reads distinctly
+      // from the `video-placeholder` film strip (they are different types); the
+      // cyan lifespan colour (TYPE_COLORS) reinforces it.
+      return Video;
     case 'container':
       return Group;
     case 'composition':

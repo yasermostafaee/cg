@@ -424,6 +424,54 @@ kind, provenance?)` is the ONE write path — `importFile` delegates to it — s
   (the match rules), and `video-import-modal.test.ts` (same-file duplicate → no convert +
   Use-existing places; different-crop → converts; Convert-again forces an encode).
 
+## Phase-3 canvas render + Inspector (2026-07-23, `feat/d128-p3-video-canvas-inspector`)
+
+- **The canvas renders a REAL `<video>`, at rest on a MID-CLIP poster (decision (a)).** The
+  scene-builder's `case 'video'` (was a Phase-2 placeholder box) now calls `buildVideo`, which
+  mirrors `buildImage`: a `<video data-cg-asset-id data-cg-poster-ms>` positioned by the shared
+  `applyBaseStyles` (transform / opacity / filter / visibility — identical to every other
+  kind), `objectFit: contain`, muted + `playsinline`, **no `src`**. The host wires the src from
+  the assetId → blob URL exactly like an `<img>`: `assetUrlCache.prime` now accepts `video`
+  (the C5 one-liner) so the URL rides `mergedAssetUrls()` into the iframe, and the designer
+  canvas's `preview.ts#applyAssetUrls` — previously IMG-only — now also handles `VIDEO`,
+  setting `.src` and seeking the PAUSED element to `data-cg-poster-ms`. VP8+alpha (`yuva420p`)
+  decodes with real transparency in `<video>`.
+- **Why mid-clip, not frame 0 (decision (a), owner field call).** Furniture clips frequently
+  open on an empty/transparent frame, so a frame-0 poster reads as a blank box. The poster
+  frame is DERIVED (never a stored field — the schema has none): `phases.introEnd ?? clip
+midpoint`, the exact ms-space analogue of the D-125 Lottie poster rule at `runtime.ts:844`.
+  The rule lives in `posterTimeMs` (designer) and is inlined in `scene-builder#videoPosterMs`
+  (the runtime package cannot import the app — same split as the Lottie rule). It is applied in
+  FOUR places from ONE rule: the import-modal SOURCE preview (ffmpeg `buildPosterArgs` gains a
+  fast `-ss` keyframe seek), and — via the shared `VideoPoster` React component (a paused,
+  seeked `<video>`, real pixels + alpha, no PNG capture) — the canvas at-rest, the Inspector
+  preview, and the assets-panel thumbnail. HONEST scope: it is one frame-SELECTION rule shared,
+  not one function — the modal preview must stay ffmpeg (the source isn't a browser-decodable
+  WebM at crop time), the three stored-asset surfaces share `VideoPoster`.
+- **"Pick a different poster time" == the In point.** Decision (d) asks the Inspector to expose
+  the poster "with a way to pick a different time", but the schema stores no poster field (the
+  change docs say it is derived). Reconciled per decision (a): the poster follows `introEnd`, so
+  the In-point input IS the poster-time control — no schema field added. The Inspector shows the
+  resulting poster time read-only ("Poster frame: N.NN s (the In point)").
+- **Inspector `VideoSections` (decision (d)/(e)).** Hold behavior (`loop` default / `freeze`),
+  the manual `phases` marks in the clip's own ms time space (In/Out, clamped to `[0, duration]`,
+  invariant `introEnd ≤ outroStart`, with Add/Clear since `phases` is optional), `drivesHold`
+  opt-in (default off), the mid-clip poster preview, and the stored provenance surfaced
+  READ-ONLY (source name, dims, `N→M fps` conform, baked crop). It never exposes the clip's
+  inner content (opaque by design). Transform/opacity/filter keyframe rows come from the shared
+  Transform + Filter sections (the D-056 registry already declared `video: UNIVERSAL_ONLY` in
+  Phase 2).
+- **Scrub does NOT drive video frames (C4).** The playhead reaches the canvas via a `scrub`
+  postMessage → `runtime.tick(frame)`, which only re-evaluates keyframed transform/opacity and
+  lifespan gates. The Lottie is likewise static-at-poster on scrub (it plays on its own clock
+  during playback). The video sits statically on its poster frame; scrub-driven video frames
+  are D-135's separate item — Phase 3 neither implements nor precludes it. Playback lifecycle
+  (the `VideoDriver`) is Phase 4.
+- **Display refinements (owner add-on, same phase):** the assets-panel tile renders the video's
+  mid-clip poster (replacing the "VID" text stub) and the timeline layer row uses a distinct
+  lucide `Video` camcorder glyph (the cyan `TYPE_COLORS` entry already existed) — both wired
+  through the same `VideoPoster` / `assetUrlCache` seams as the canvas, not a second path.
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

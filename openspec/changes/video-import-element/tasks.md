@@ -128,14 +128,39 @@
 
 ## Phase 3 — canvas render + Inspector
 
-- [ ] 3.1 Scene-builder mounts the `video` element (poster frame, static) — distinct from
-      `video-placeholder`'s `buildPlaceholder` path, which is untouched.
-- [ ] 3.2 Inspector sections: hold behavior (`loop` default / `freeze`), `phases` marks
-      (manual, ms), `drivesHold` opt-IN; registry declares the keyframe-able set
-      (transform / opacity / filter). Never inner-content editing (opaque).
-- [ ] 3.3 Timeline: the element is timed like any other; `durationMs` informs the span UI.
-- [ ] 3.4 Tests: Inspector fields commit to schema; registry set; opaque boundary (no
-      frame-level editing surface exists).
+- [x] 3.1 Scene-builder mounts the `video` element as a REAL `<video>` at its MID-CLIP poster
+      frame (`scene-builder.ts#buildVideo`, mirroring `buildImage` + shared `applyBaseStyles`;
+      distinct from `video-placeholder`'s untouched `buildPlaceholder`). The `src` is wired by
+      the host from `data-cg-asset-id` → blob URL exactly like `<img>`: `assetUrlCache.prime`
+      now accepts `video` (C5), and the designer canvas's `preview.ts#applyAssetUrls` handles
+      `VIDEO` nodes and seeks the paused element to `data-cg-poster-ms` so frame 0 (often
+      transparent) is never shown — decision (a): `phases.introEnd ?? clip midpoint`, mirroring
+      the D-125 Lottie poster rule. Alpha (VP8 yuva420p) decodes with transparency; the element
+      transform/opacity/filter apply via `applyBaseStyles`. (Runtime/export `<video>` src
+      wiring — widening `runtime.ts`'s `img[data-cg-asset-id]` walk — is Phase 4/5.) CSP: the
+      srcDoc canvas iframe inherits the page's Phase-2 `media-src 'self' blob:` (C1) — no CSP
+      change. Tests: `template-runtime/video-render.test.ts` + the render e2e.
+- [x] 3.2 Inspector `VideoSections` (`StyleSection.tsx`, decision (d)): hold behavior (`loop`
+      default / `freeze`), `phases` marks as MANUAL ms inputs (In/Out, clamped, invariant
+      introEnd ≤ outroStart; Add/Clear), `drivesHold` opt-IN (default off), a mid-clip poster
+      preview (shared `VideoPoster`), and the READ-ONLY provenance note (decision (e) — source
+      name, dims, conform, baked crop). Never inner-content editing (opaque). The keyframe-able
+      set (transform / opacity / filter) was already declared `video: UNIVERSAL_ONLY` in the
+      D-056 registry (Phase 2); the shared Filter section renders for parity. Tests:
+      `video-inspector.test.ts`.
+- [x] 3.3 Display refinements (owner add-on): the assets-panel tile shows the video's mid-clip
+      poster (`AssetThumb` → shared `VideoPoster`, replacing the "VID" text stub) and the
+      timeline layer row uses a distinct camcorder icon (`layerTypeIcon` `case 'video'` → lucide
+      `Video`; the cyan `TYPE_COLORS` entry already existed). Tests: `asset-thumb-drag.test.ts`,
+      `layer-type-icon.test.ts`.
+- [x] 3.4 Timeline: the element is timed like any other; `durationMs` informs the span UI
+      (unchanged from Phase 2 — the schema/timeline already handle it).
+- [x] 3.5 Poster helper shared across surfaces: `posterTimeMs` (rule) drives the import-modal
+      SOURCE preview (ffmpeg `buildPosterArgs` gains a `-ss` mid-clip seek) and, via
+      `VideoPoster` (a paused, seeked `<video>`), the canvas at-rest / Inspector / panel
+      thumbnail. Honest note: one FRAME-SELECTION rule is shared, not one function — the modal
+      preview must stay ffmpeg (the SOURCE isn't a browser-decodable WebM yet), the three
+      stored-asset surfaces share `VideoPoster`. Tests: `video-convert-args.test.ts`.
 
 ## Phase 4 — `@cg/template-runtime`: `VideoDriver` + lifecycle + the outro seam
 

@@ -12,6 +12,7 @@ import {
   Square,
   Stamp,
   Type,
+  Video,
 } from 'lucide-react';
 import type { Element } from '@cg/shared-schema';
 import { layerTypeIcon } from '../src/renderer/features/timeline/ElementRow.js';
@@ -51,5 +52,11 @@ describe('layerTypeIcon (B-052)', () => {
       layerTypeIcon({ type: 'image', assetId: 'x', source: 'shared' } as unknown as Element),
     ).toBe(Stamp);
     expect(layerTypeIcon({ type: 'repeater' } as unknown as Element)).toBe(Rows3);
+  });
+
+  it('D-128 — an imported video clip maps to the camcorder icon, not the rectangle', () => {
+    const video = { type: 'video', assetId: 'x', durationMs: 1000 } as unknown as Element;
+    expect(layerTypeIcon(video)).toBe(Video);
+    expect(layerTypeIcon(video)).not.toBe(Square);
   });
 });

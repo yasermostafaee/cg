@@ -321,17 +321,44 @@ export class Preview {
               '</svg>',
           );
 
+        // D-128 Phase 3 — show a video's MID-CLIP poster frame at rest (frame 0
+        // is often transparent). Once metadata is available, seek the paused
+        // <video> to data-cg-poster-ms (else its midpoint); it then displays
+        // that frame. Playback lifecycle (VideoDriver) is Phase 4.
+        function seekVideoPoster(video) {
+          const ms = Number(video.dataset && video.dataset.cgPosterMs);
+          const seek = () => {
+            const t =
+              isFinite(ms) && ms > 0
+                ? ms / 1000
+                : isFinite(video.duration)
+                  ? video.duration / 2
+                  : 0;
+            try {
+              video.currentTime = t;
+            } catch (e) {
+              /* not seekable yet — the loadedmetadata path will retry */
+            }
+          };
+          if (video.readyState >= 1) seek();
+          else video.addEventListener('loadedmetadata', seek, { once: true });
+        }
+
         function applyAssetUrls() {
           const nodes = document.querySelectorAll('[data-cg-asset-id]');
           nodes.forEach((node) => {
-            if (node.tagName !== 'IMG') return;
+            const tag = node.tagName;
+            if (tag !== 'IMG' && tag !== 'VIDEO') return;
             const id = node.dataset && node.dataset.cgAssetId;
             if (!id) return;
             const url = assetUrls[id];
             if (url) {
-              if (node.src !== url) node.src = url;
+              if (node.src !== url) {
+                node.src = url;
+                if (tag === 'VIDEO') seekVideoPoster(node);
+              }
               node.removeAttribute('data-cg-missing');
-            } else if (node.getAttribute('data-cg-missing') !== '1') {
+            } else if (tag === 'IMG' && node.getAttribute('data-cg-missing') !== '1') {
               // Unresolved (missing OR not-yet-primed). The host re-posts the map
               // as URLs resolve, which overwrites this with the real image.
               node.src = MISSING_IMG;
