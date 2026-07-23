@@ -758,12 +758,14 @@ week — before [[C-012]] there was no non-destructive way off air, so "clear it
   three places (`StackRow.tsx:128`, `:216`, its docstring) and `rowAction.ts:16-17` still lists
   PLAY/UPDATE/CLEAR/REMOVE — [[C-012]]'s STOP made it five.
 
-## [ ] R-018 — feed field values from a text file (whole-text default, OPTIONAL split; manual reload + optional watch) ⟨priority: medium⟩
+## [~] R-018 — feed field values from a text file (whole-text default, OPTIONAL split; manual reload) ⟨priority: medium⟩ — manual-reload half implemented: `openspec/changes/runtime-field-from-file/`; local gate green; no CasparCG hardware pass owed (renderer-only over the EXISTING field-update path — same `stack.update` wire and value shapes as hand edits, no new AMCP verbs, `@cg/template-runtime` untouched); no E2E spec added or edited, so this change owes no Linux `gate:e2e`; the WATCH half moved out to [[R-026]] (recon-first); remaining to reach [x] + archive: owner runs it
 
 **What:** At playout, a text-carrying field takes its value from a chosen text file: whole-file
-verbatim by default, an OPTIONAL delimiter split into list items, a manual RELOAD as the v1
-baseline, and optional watching as an enhancement. The Designer track covers the one-shot
-authoring load separately; THIS item is the RUNTIME half.
+verbatim by default, an OPTIONAL delimiter split into list items, and a manual RELOAD. The
+Designer track covers the one-shot authoring load separately ([[D-138]] by title: "load ticker /
+sequence / text content from a text file"); THIS item is the RUNTIME half. Automatic WATCHING is
+deliberately NOT in this item — it is [[R-026]], recon-first, because its architecture (browser
+FSA re-read vs the bridge watching a path) is an open decision this item must not block on.
 **Why:** The client's newsroom workflow keeps the crawl/subtitle copy in a text file that other
 staff update. The INCUMBENT Cinegy workflow — honor it as the default — is that the TYPIST embeds
 the separators inside the text and the whole file IS the content, fed verbatim; splitting into
@@ -788,11 +790,6 @@ discrete items is OUR optional convenience.
   per-field-type, since ticker and sequence content are BOTH `list` fields under the real model
 - WHEN the operator triggers RELOAD THEN the file is re-read and the field re-applies — manual
   reload is the v1 baseline and must work everywhere
-- WHEN watching is available and enabled THEN file changes re-apply automatically with a
-  debounce; the ARCHITECTURE decision — browser File System Access re-read vs the BRIDGE (Node)
-  watching a path and pushing values — is design.md's call, with the trade-offs recorded (a
-  bridge watch survives operator-tab reloads; FSA needs no bridge but dies with the tab).
-  Watching is an ENHANCEMENT gated on that decision, never a v1 blocker
 - WHEN the file is UTF-8 Persian/RTL THEN content survives verbatim through shaping/bidi
 - WHEN the file is missing/unreadable at reload THEN the CURRENT on-air value is KEPT and the
   operator sees a legible error — never a blank crawl on air because a share went away
@@ -800,8 +797,9 @@ discrete items is OUR optional convenience.
 **Notes:** this feeds the EXISTING field-update path — no new content pipeline; the file is just
 an input method for field values. The ticker field model was verified at filing and the item is
 worded against it (see the second Acceptance bullet). Cinegy parity is the NEED, not the UI.
-Pairs with the Designer-track authoring-load item (cross-reference by title). Bridge involvement
-(if the watch lands there) makes the watch half RECON-FIRST; the manual-reload half is small.
+Pairs with the Designer-track authoring-load item ([[D-138]], cross-referenced by title). The
+WATCH half is [[R-026]] — recon-first because bridge involvement is an open architecture call;
+the `TextFileSource` abstraction this half ships is what keeps that follow-up cheap.
 
 ## [ ] R-019 — modal editor for list-type field values: add / edit / delete / drag-reorder ⟨priority: medium⟩
 
@@ -982,3 +980,40 @@ project is repeated work and drifts.
 **Notes:** storage shape/location is a design.md decision — alongside the existing bridge
 persistence class (the `connection-store` precedent). Cross-ref [[B-072]] (the picker must
 show preset-applied state truthfully — the same honesty bar).
+
+## [ ] R-026 — WATCH a field's source text file: auto re-apply on change (RECON-FIRST) ⟨priority: medium⟩
+
+**What:** The automatic half split out of [[R-018]]: when a field has a file source attached,
+file CHANGES re-apply the field automatically with a debounce — no operator Reload click. The
+ARCHITECTURE is the open decision this item exists to settle, and it is RECON-FIRST: no
+implementation before the recon verdict is recorded in design.md.
+**Why:** [[R-018]]'s manual reload covers the newsroom loop but still needs an operator
+keypress per update; the incumbent workflow expects the crawl to follow the file. Split from
+R-018 so the settled manual half could ship without blocking on this architecture call.
+**Acceptance:**
+
+- WHEN recon completes THEN design.md records the architecture decision with trade-offs:
+  (a) BROWSER re-read — poll/re-read the retained FSA handle (or use FSA change observers
+  where available): no bridge involvement, but the watch DIES WITH THE TAB and FSA is
+  Chromium-only; vs (b) BRIDGE (Node) watching a PATH and pushing values: survives
+  operator-tab reloads, works in any browser — but requires bridge involvement and requires
+  the operator to RE-SPECIFY the file BY PATH, because an FSA handle cannot be converted to a
+  filesystem path (the handle≠path consequence, recorded at [[R-018]]'s split)
+- WHEN watching is enabled on a field THEN file changes re-apply it automatically, debounced
+  (rapid successive writes coalesce; no partial-write flicker on air)
+- WHEN the file becomes missing/unreadable while watched THEN the current on-air value is KEPT
+  and a legible error is shown — [[R-018]]'s missing-file safety, unchanged
+- WHEN watching stops (tab reload under a browser watch; bridge restart under a bridge watch)
+  THEN the operator can SEE that the field is no longer following the file — a silently dead
+  watch is the failure mode this item must not ship with
+- WHEN content is Persian/RTL THEN it survives verbatim — never digit-normalized (the
+  [[R-018]] rule)
+
+**Notes:** [[R-018]]'s `TextFileSource` abstraction
+(`apps/runtime/src/renderer/features/inspector/textFileSource.ts` — a `read(): Promise<string>`
+
+- display name behind the FSA handle) is the seam that keeps EITHER outcome cheap: a
+  bridge-fed or observer-fed source drops in as a second implementation without touching the
+  split/apply/error logic or its tests. Bridge involvement (option b) is what made the original
+  combined item recon-first. Cross-refs [[R-018]] (the manual half + verbatim rules), the
+  Designer-track [[D-138]] (authoring-time load, one-shot — no watch there).

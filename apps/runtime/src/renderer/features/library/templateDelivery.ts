@@ -15,6 +15,7 @@ import {
   type ImageAssetSource,
 } from '@cg/single-file-export';
 import { pickTemplateName, templateDisplayName } from './templateName.js';
+import { collectListFieldTargets, type ListFieldTargets } from '../inspector/listFieldTargets.js';
 
 /**
  * B-038 Phase 2 — produce the rendered template HTML in the browser and deliver
@@ -44,6 +45,13 @@ export interface TemplateDelivery {
    * default from the scene inside the served HTML regardless).
    */
   defaultPosition?: Position;
+  /**
+   * R-018 — which element kind consumes each `list` field (from the scene's
+   * bindings), surfaced at the same one moment. The Library records it so the
+   * Inspector's from-file control can default SPLIT per target (sequence → on,
+   * ticker/unknown → off); `TemplateInfo` deliberately does not carry it.
+   */
+  listFieldTargets: ListFieldTargets;
 }
 
 /** Inputs that vary by caller/environment (kept out of this React-free module). */
@@ -189,6 +197,9 @@ export async function produceTemplateDelivery(
       html: produced.html,
       warnings: produced.issues.map((i) => i.message),
       ...(scene.defaultPosition !== undefined ? { defaultPosition: scene.defaultPosition } : {}),
+      // R-018 — same walk shape as the field aggregation above, so the recorded
+      // paths and the Inspector's field paths can never disagree.
+      listFieldTargets: collectListFieldTargets(scene, scene),
     };
   } catch (err) {
     throw new Error(`could not be rendered: ${err instanceof Error ? err.message : String(err)}`);
@@ -210,13 +221,16 @@ export async function importTemplateFromBytes(
   displayName: string;
   warnings: string[];
   defaultPosition?: Position;
+  listFieldTargets: ListFieldTargets;
 }> {
-  const { template, html, warnings, defaultPosition } = await produceTemplateDelivery(bytes, opts);
+  const { template, html, warnings, defaultPosition, listFieldTargets } =
+    await produceTemplateDelivery(bytes, opts);
   await bridge.templates.import({ template, html });
   return {
     templateId: template.templateId,
     displayName: templateDisplayName(template),
     warnings,
     ...(defaultPosition !== undefined ? { defaultPosition } : {}),
+    listFieldTargets,
   };
 }

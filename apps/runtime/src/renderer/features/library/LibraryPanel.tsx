@@ -12,6 +12,8 @@ import { useConfirm } from '../../ui/useDialog.js';
 import { importTemplateFromBytes } from './templateDelivery.js';
 import { templateDisplayName } from './templateName.js';
 import { recordDefaultPosition } from '../stack/defaultPositionStore.js';
+import { recordListFieldTargets } from '../inspector/fieldTargetStore.js';
+import type { ListFieldTargets } from '../inspector/listFieldTargets.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 // B-038 Phase 3 — the bundled app @font-face CSS (Vazirmatn / Exo 2) as a raw
 // string. Passed to the single-file export so the bundled faces inline as base64
@@ -128,6 +130,7 @@ export function LibraryPanel(): JSX.Element {
         displayName: string;
         warnings: string[];
         defaultPosition?: Position;
+        listFieldTargets: ListFieldTargets;
       };
       try {
         // B-038 Phase 2 — produce the self-contained standalone HTML from the
@@ -152,6 +155,9 @@ export function LibraryPanel(): JSX.Element {
       // R-011 — record the manifest default position (the one moment the app
       // holds the unpacked scene) so the Inspector's picker seeds from it.
       recordDefaultPosition(imported.templateId, imported.defaultPosition);
+      // R-018 — record each list field's consuming element kind (same one
+      // moment) so the from-file control can default SPLIT per target.
+      recordListFieldTargets(imported.templateId, imported.listFieldTargets);
 
       await refresh();
       // R-004 — name the template the operator just imported, not its UUID.

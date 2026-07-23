@@ -174,6 +174,27 @@ export function buildApplyPayload(itemId: string, applied: FieldValues): FieldVa
   return deepMerge(applied, item);
 }
 
+/**
+ * R-018 — a `FieldValues` overlay holding just `value` at `path` (namespaces
+ * created as needed). Used as BOTH the single-field apply payload's overlay and
+ * the `clearStagedMatching` snapshot, so "what was sent" and "what to clear" can
+ * never disagree.
+ */
+export function singleFieldOverlay(path: FieldPath, value: FieldValue): FieldValues {
+  const out: FieldValues = {};
+  setAt(out, path, value);
+  return out;
+}
+
+/**
+ * R-018 — the complete field-set for applying ONE overlay onto the applied
+ * values (same wire shape as {@link buildApplyPayload}, but ONLY the overlay's
+ * fields change — other staged drafts are deliberately NOT included).
+ */
+export function buildOverlayPayload(applied: FieldValues, overlay: FieldValues): FieldValues {
+  return deepMerge(applied, overlay);
+}
+
 /** Drop an item's entire draft (on Discard). */
 export function clearDraft(itemId: string): void {
   if (drafts.delete(itemId)) bump();

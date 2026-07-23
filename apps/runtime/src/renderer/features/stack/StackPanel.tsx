@@ -15,6 +15,7 @@ import {
   pruneDrafts,
   subscribeDrafts,
 } from '../inspector/draftStore.js';
+import { pruneFromFile } from '../inspector/fromFileStore.js';
 import { StackRow } from './StackRow.js';
 
 interface Props {
@@ -100,9 +101,10 @@ export function StackPanel({ onSelectionChange }: Props): JSX.Element {
   // Re-render on draft changes so the row draft chip stays live.
   useSyncExternalStore(subscribeDrafts, draftsVersion);
 
-  // Drop drafts for items no longer on the stack (removed / cleared).
+  // Drop drafts (and R-018 from-file sources) for items no longer on the stack.
   useEffect(() => {
     pruneDrafts(items.map((i) => i.itemId));
+    pruneFromFile(items.map((i) => i.itemId));
   }, [items]);
 
   const select = (itemId: string): void => {
