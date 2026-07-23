@@ -362,7 +362,10 @@ BETWEEN gates where its cap cannot see it. The lock is the OUTER layer over [[B-
 one ADDED requirement). Evidence: 31 unit tests (acquire / wait-when-held / timeout /
 release / fail-open) + one real-`proper-lockfile` on-disk round-trip, plus
 `scripts/two-process-lock-check.mjs` (**PASS**: worker B started while A held, printed the
-wait, and acquired 77 ms AFTER A released). Only the DECISION modules stay zero-dependency
+wait, and acquired 77 ms AFTER A released). Real-use evidence (2026-07-23, R-018 session): a
+pre-push gate was KILLED mid-run (10-minute tool cap, SIGTERM) and the next gate acquired the
+slot cleanly with no manual cleanup — release-on-exit / stale-reclaim behaved correctly under
+an abnormal termination. Only the DECISION modules stay zero-dependency
 (they run pre-install); this one runs the gate itself, which needs `node_modules` anyway, so
 it may use `proper-lockfile` (loaded via dynamic import so a bad install degrades, not
 crashes). **`[~]` → `[x]` + archive when the owner confirms cross-worktree serialization in

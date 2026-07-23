@@ -15,6 +15,7 @@ import { DraftChip } from '../../ui/DraftChip.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { templateDisplayName } from '../library/templateName.js';
 import { layerDetail } from '../stack/layerLabel.js';
+import { FromFileControl } from './FromFileControl.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
 import { PositionPicker } from './PositionPicker.js';
 import {
@@ -232,7 +233,7 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
                 key={`${itemId}-${row.key}`}
                 field={row.field}
                 path={[row.key]}
-                itemId={itemId}
+                item={item}
                 applied={valueAt(item.fields, [row.key])}
               />
             ))}
@@ -241,7 +242,7 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
                 key={`${itemId}-${group.name}`}
                 group={group}
                 path={[group.name]}
-                itemId={itemId}
+                item={item}
                 applied={item.fields}
               />
             ))}
@@ -263,14 +264,15 @@ export function Inspector({ item, onApply, onDiscard }: Props): JSX.Element {
 function FieldGroup({
   group,
   path,
-  itemId,
+  item,
   applied,
 }: {
   group: CompositionFieldGroup;
   path: FieldPath;
-  itemId: string;
+  item: StackItemState;
   applied: FieldValues;
 }): JSX.Element {
+  const itemId = item.itemId;
   return (
     <section style={styles.group} aria-label={`${group.label ?? group.name} fields`}>
       <h3 style={styles.groupHeading}>{group.label ?? group.name}</h3>
@@ -279,7 +281,7 @@ function FieldGroup({
           key={`${itemId}-${[...path, f.id].join('/')}`}
           field={f}
           path={[...path, f.id]}
-          itemId={itemId}
+          item={item}
           applied={valueAt(applied, [...path, f.id])}
         />
       ))}
@@ -288,7 +290,7 @@ function FieldGroup({
           key={`${itemId}-${[...path, child.name].join('/')}`}
           group={child}
           path={[...path, child.name]}
-          itemId={itemId}
+          item={item}
           applied={applied}
         />
       ))}
@@ -299,14 +301,15 @@ function FieldGroup({
 function FieldEditor({
   field,
   path,
-  itemId,
+  item,
   applied,
 }: {
   field: DynamicField | null;
   path: FieldPath;
-  itemId: string;
+  item: StackItemState;
   applied: FieldValue | undefined;
 }): JSX.Element {
+  const itemId = item.itemId;
   // The control's accessible name stays the FIELD id (not the full path): the operator
   // sees it inside its group, and the group's own label carries the namespace.
   const fieldId = path[path.length - 1] ?? '';
@@ -315,6 +318,9 @@ function FieldEditor({
   const kind = field?.type ?? inferKind(value);
   const dirty = isFieldDirty(itemId, path, applied);
   const stage = (next: FieldValue): void => stageField(itemId, path, next);
+  // R-018 — text-carrying fields can source their value from a text file.
+  const fromFileKind =
+    kind === 'text' || kind === 'multiline' || kind === 'list' ? kind : undefined;
   return (
     <div style={styles.fieldRow}>
       <span style={styles.fieldLabel}>
@@ -325,14 +331,19 @@ function FieldEditor({
           </span>
         )}
       </span>
-      <FieldControl
-        kind={kind}
-        field={field}
-        value={value}
-        fieldId={fieldId}
-        dirty={dirty}
-        onStage={stage}
-      />
+      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <FieldControl
+          kind={kind}
+          field={field}
+          value={value}
+          fieldId={fieldId}
+          dirty={dirty}
+          onStage={stage}
+        />
+        {fromFileKind !== undefined && (
+          <FromFileControl item={item} path={path} kind={fromFileKind} fieldId={fieldId} />
+        )}
+      </div>
     </div>
   );
 }

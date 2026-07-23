@@ -318,6 +318,9 @@ history.
 - Browsers: CI uses the pinned bundled Chromium. Locally the Playwright CDN is
   geo-blocked (HTTP 403), so the config auto-falls-back to system Chrome when
   the bundled browser is absent — no `PW_CHANNEL` needed.
+- **A Linux `gate:e2e` is owed whenever a change alters UI, layout, or rendering — not
+  only when an E2E spec is edited. A green Windows `gate:e2e` is a useful signal but
+  never discharges the debt.**
 
 ## Engine doc-sync
 
