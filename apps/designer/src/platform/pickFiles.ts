@@ -24,7 +24,11 @@ export function pickFiles(kind?: PickKind): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.multiple = true;
+    // D-128 — the video import modal is inherently ONE clip at a time (crop, fps
+    // warning, progress, duplicate step), so the video picker is single-select so
+    // the UI can't promise a batch it won't import. Every other kind stays
+    // multi-select (image/font/lottie import as a batch).
+    input.multiple = kind !== 'video';
     // `accept` is only a hint — bypassable via "All files". The selection is enforced
     // after the fact against the SAME source of truth (see partitionSupported, B-021).
     if (kind !== undefined) input.accept = acceptAttr(kind);

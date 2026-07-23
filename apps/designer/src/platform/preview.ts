@@ -286,6 +286,15 @@ export class Preview {
         // every scene rebuild we walk the iframe DOM and assign src
         // for every <img data-cg-asset-id="…">.
         let assetUrls = {};
+        // D-128 Phase 3 — LIVE <video> nodes kept ACROSS scene rebuilds, keyed by
+        // element id. A transform-only change (drag/resize/rotate/opacity) posts a
+        // full 'scene-replace' → the runtime DOM is torn down + rebuilt, which for
+        // a <video> would mean re-loading its blob + re-seeking the poster (blank
+        // for a beat, and a burst of rebuilds during a 60 Hz drag keeps it blank
+        // the whole time). Instead we HARVEST the live media nodes before the
+        // teardown and TRANSPLANT them into the freshly-built tree, copying only
+        // the new transform/style — the media (src + currentTime) never resets.
+        let videoPool = {};
         // D-125 — assetId → parsed Lottie animationData, posted by the host. Passed to
         // createRuntime so each Lottie element resolves + mounts its player. Populated on
         // scene-replace and via the dedicated 'lottie-assets' message (mirrors assetUrls).
@@ -340,11 +349,69 @@ export class Preview {
               /* not seekable yet — the loadedmetadata path will retry */
             }
           };
+          // Honest surfacing (Phase-2 error principle): a media load/decode
+          // failure reaches the console rather than leaving a silently blank box.
+          video.addEventListener(
+            'error',
+            () => {
+              const err = video.error;
+              // eslint-disable-next-line no-console
+              console.error(
+                '[cg-preview] video failed to load its poster:',
+                (err && err.message) || 'unknown media error',
+                video.getAttribute('src'),
+              );
+            },
+            { once: true },
+          );
           if (video.readyState >= 1) seek();
           else video.addEventListener('loadedmetadata', seek, { once: true });
         }
 
+        // D-128 Phase 3 — collect the live <video> nodes just BEFORE a rebuild so
+        // their references survive the teardown (a detached node keeps its media
+        // state alive as long as it is referenced).
+        function harvestVideos() {
+          const nodes = document.querySelectorAll('video[data-cg-element-id]');
+          for (let i = 0; i < nodes.length; i++) {
+            const id = nodes[i].dataset && nodes[i].dataset.cgElementId;
+            if (id) videoPool[id] = nodes[i];
+          }
+        }
+
+        // After a rebuild, put the harvested LIVE media nodes back where the
+        // freshly-built (src-less) placeholders are — same element id AND same
+        // asset — copying only the new transform/style. The media never reloads.
+        // A genuinely new element (or one whose asset changed) keeps its fresh
+        // node and gets a normal src+seek from applyAssetUrls. Pooled entries no
+        // longer in the scene are dropped.
+        function reconcileVideos() {
+          const seen = {};
+          const nodes = document.querySelectorAll('video[data-cg-element-id]');
+          for (let i = 0; i < nodes.length; i++) {
+            const fresh = nodes[i];
+            const id = fresh.dataset.cgElementId;
+            const assetId = fresh.dataset.cgAssetId;
+            if (!id) continue;
+            seen[id] = true;
+            const pooled = videoPool[id];
+            if (pooled && pooled !== fresh && pooled.dataset.cgAssetId === assetId) {
+              pooled.style.cssText = fresh.style.cssText; // the new transform/geometry
+              pooled.className = fresh.className;
+              pooled.dataset.cgPosterMs = fresh.dataset.cgPosterMs || '';
+              fresh.replaceWith(pooled);
+              videoPool[id] = pooled;
+            } else {
+              videoPool[id] = fresh;
+            }
+          }
+          for (const id in videoPool) if (!seen[id]) delete videoPool[id];
+        }
+
         function applyAssetUrls() {
+          // Transplant preserved media nodes first, so the walk below sees the
+          // pooled <video> already carrying its (unchanged) blob src and skips it.
+          reconcileVideos();
           const nodes = document.querySelectorAll('[data-cg-asset-id]');
           nodes.forEach((node) => {
             const tag = node.tagName;
@@ -466,6 +533,9 @@ export class Preview {
             // (applyFontFaces posts cg-preview-error itself) — a broken font
             // must not brick the preview.
             await applyFontFaces().catch(() => {});
+            // D-128 Phase 3 — keep live <video> media across the teardown so a
+            // transform-only change never reloads it (see reconcileVideos).
+            harvestVideos();
             if (runtime) runtime.remove();
             // remove() leaves body.cg-removed / pending state; clear
             // both so the next createRuntime starts clean.

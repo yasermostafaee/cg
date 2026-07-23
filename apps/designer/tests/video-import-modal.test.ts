@@ -40,7 +40,8 @@ import { VideoImportModal } from '../src/renderer/features/assets/VideoImportMod
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const PROBE = { fps: 29.97, width: 640, height: 360, durationMs: 4000 };
-const FILE = { name: 'archive-clip.avi' } as unknown as File;
+const FILE_SIZE = 4096;
+const FILE = { name: 'archive-clip.avi', size: FILE_SIZE } as unknown as File;
 const STORED_ASSET: AssetMeta = {
   assetId: 'asset-new',
   kind: 'video',
@@ -493,7 +494,8 @@ describe('VideoImportModal (D-128)', () => {
         targetFps: 50,
         sourceWidth: 640,
         sourceHeight: 360,
-        sourceSha256: 'a'.repeat(64), // the pre-convert dedupe key travels with the asset
+        sourceSha256: 'a'.repeat(64), // the dedupe key (computed during the encode) travels along
+        sourceBytes: FILE_SIZE,
         crop: { x: 100, y: 0, width: 320, height: 360 },
       },
     });
@@ -538,6 +540,7 @@ describe('VideoImportModal — pre-convert dedupe (D-128)', () => {
       sourceWidth: 640,
       sourceHeight: 360,
       sourceSha256: 'a'.repeat(64),
+      sourceBytes: FILE_SIZE, // matches FILE so the Bug-3 size pre-filter lets the hash run
       ...over,
     },
   });
@@ -620,5 +623,74 @@ describe('VideoImportModal — pre-convert dedupe (D-128)', () => {
     });
     expect(convertToWebm).toHaveBeenCalledTimes(1); // the operator chose a second copy
     expect(storeBytes).toHaveBeenCalledTimes(1);
+  });
+
+  it('Bug 3: an EMPTY project (no video assets) does NOT hash up front — straight to converting', async () => {
+    assetsList.mockResolvedValue([]); // nothing to dedupe against
+    let convertReached = false;
+    // the source hash NEVER resolves — if the modal blocked on an up-front hash,
+    // convertToWebm would never be reached
+    hashSourceFile.mockImplementation(() => new Promise(() => undefined));
+    convertToWebm.mockImplementation(() => {
+      convertReached = true;
+      return new Promise(() => undefined);
+    });
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // no 'checking' step, and the encode started despite the (deferred) hash pending
+    expect(document.body.textContent).not.toContain('Checking for a previous import');
+    expect(convertReached).toBe(true);
+  });
+
+  it('Bug 3: a SIZE-MATCHING project DOES hash up front before converting', async () => {
+    assetsList.mockResolvedValue([existingAsset({ sourceSha256: 'z'.repeat(64) })]); // same size, diff hash
+    let convertReached = false;
+    hashSourceFile.mockImplementation(() => new Promise(() => undefined)); // up-front hash pends
+    convertToWebm.mockImplementation(() => {
+      convertReached = true;
+      return new Promise(() => undefined);
+    });
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // stuck confirming the possible duplicate → 'checking' shown, encode NOT started
+    expect(document.body.textContent).toContain('Checking for a previous import');
+    expect(convertReached).toBe(false);
+  });
+
+  it('Bug 4: the crop control stays ENABLED in the duplicate step, and changing it clears the duplicate', async () => {
+    assetsList.mockResolvedValue([existingAsset()]); // full-frame prior import, same size + hash
+    hashSourceFile.mockResolvedValue('a'.repeat(64));
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // duplicate detected — and the crop control is NOT disabled (Bug 4)
+    expect(document.body.textContent).toContain('already imported');
+    expect(cropToggle().disabled).toBe(false);
+
+    // enabling crop makes the params no longer match the uncropped prior import →
+    // the banner clears and the normal convert flow returns
+    act(() => {
+      cropToggle().click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(document.body.textContent).not.toContain('already imported');
+    expect(button('Convert & import').disabled).toBe(false); // ready to convert the new crop
   });
 });

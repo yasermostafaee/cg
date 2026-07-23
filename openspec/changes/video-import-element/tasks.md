@@ -155,6 +155,16 @@
       `layer-type-icon.test.ts`.
 - [x] 3.4 Timeline: the element is timed like any other; `durationMs` informs the span UI
       (unchanged from Phase 2 — the schema/timeline already handle it).
+- [x] 3.6 Phase-3 field fixes (owner smoke, 4 bugs): (1) a transform-only change no longer
+      remounts a `<video>` — the iframe harvests + transplants live media nodes across the
+      scene rebuild (`preview.ts#reconcileVideos`), so a drag never blanks the clip, plus honest
+      media-error logging; (2) the video picker is single-select (`pickFiles`); (3) a cheap
+      `File.size` pre-filter skips the up-front hash when no duplicate is possible, and the
+      source hash for provenance is computed DURING the encode (0 s up-front wait for an empty /
+      different-size project); (4) the crop control stays enabled in the duplicate step and the
+      match re-evaluates live, so changing the crop returns to the normal convert flow. Tests:
+      the drag-visible e2e, `pick-files.test.ts`, and `video-import-modal.test.ts` (Bug-3 empty
+      vs size-match, Bug-4 crop-clears-duplicate).
 - [x] 3.5 Poster helper shared across surfaces: `posterTimeMs` (rule) drives the import-modal
       SOURCE preview (ffmpeg `buildPosterArgs` gains a `-ss` mid-clip seek) and, via
       `VideoPoster` (a paused, seeked `<video>`), the canvas at-rest / Inspector / panel

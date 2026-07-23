@@ -472,6 +472,45 @@ midpoint`, the exact ms-space analogue of the D-125 Lottie poster rule at `runti
   lucide `Video` camcorder glyph (the cyan `TYPE_COLORS` entry already existed) — both wired
   through the same `VideoPoster` / `assetUrlCache` seams as the canvas, not a second path.
 
+## Phase-3 field fixes (2026-07-23, owner smoke — 4 bugs, same branch/PR #398)
+
+- **Bug 1 (serious) — video vanished while dragging anything on the canvas.** Root cause: a
+  transform-only change (drag/resize/rotate/opacity) posts a full `scene-replace`, and the
+  iframe's `applyScene` tears the whole runtime DOM down (`runtime.remove()`) and rebuilds it
+  (`createRuntime`). Cheap elements rebuild invisibly; a `<video>` re-loads its blob + re-seeks
+  the poster each time — and a 60 Hz drag issues a burst of rebuilds, so the clip stays blank
+  the whole drag and the LAST reload finishing is the "returns a few seconds after." The
+  permanent-hide was the same reload being aborted mid-flight by the next rebuild and never
+  completing. Fix (in the iframe script, `preview.ts`): HARVEST the live `<video>` nodes just
+  before the teardown (a referenced detached node keeps its media + `currentTime` alive) and
+  TRANSPLANT them back over the freshly-built src-less placeholders — same element id AND asset
+  — copying only the new transform/style (`reconcileVideos`). The media never reloads; only the
+  box moves. A genuinely new element (or a changed asset) still gets a normal src+seek; pooled
+  entries no longer in the scene are dropped. A media `error` listener now logs honestly rather
+  than leaving a silent blank box. Guarded by an e2e that marks the live node and asserts it
+  survives repeated transform changes still showing a non-blank poster.
+- **Bug 2 — the video picker was multi-select but imports one.** `pickFiles` sets
+  `input.multiple = kind !== 'video'`: the video picker is single-select (the modal is
+  inherently one clip — crop/fps/progress/duplicate), every other kind stays a batch.
+- **Bug 3 — the dedupe hashed the source even when no duplicate was possible.** A cheap
+  `File.size` pre-filter runs FIRST: a duplicate is only possible against an existing video
+  asset with an identical `sourceBytes`. No size match ⇒ NO up-front hash — straight to import.
+  (Size, not filename: a renamed file is still caught; two unrelated same-name files don't
+  trigger a pointless hash.) The source hash still reaches provenance for FUTURE dedupe, but off
+  the blocking path: when there was no size match it is computed DURING the encode (which takes
+  far longer) and `await`ed only just before `storeBytes`, so the operator never waits on it.
+  Measured up-front wait: empty project **0 s**, different-size-only **0 s**, size-matching **the
+  hash time** (~16 s for ~2 GB to confirm; instant for the field clips). The post-convert sha
+  dedupe remains the backstop, so an identical output still dedupes even if the source hash was
+  best-effort.
+- **Bug 4 — the crop control was disabled once a duplicate was detected**, contradicting the
+  rule that a DIFFERENT crop is not a duplicate. The crop control (toggle + rectangle + numeric
+  fields) now stays ENABLED in the duplicate step, and the match is re-evaluated LIVE from the
+  current crop + fps against the size-matched candidates: when the parameters no longer match,
+  the banner and "Use existing" disappear and the modal returns to the normal convert flow
+  (`useEffect` → `ready`). "Use existing" only ever places the asset matching the on-screen
+  parameters (`duplicateMatch`, recomputed each render), never a stale one.
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide
