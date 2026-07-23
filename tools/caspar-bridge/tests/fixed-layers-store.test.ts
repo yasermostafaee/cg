@@ -2,8 +2,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DEFAULT_LAYER_POLICY, type LayerSlot } from '@cg/caspar-client';
-import type { FixedLayerBank } from '@cg/shared-ipc';
+import { DEFAULT_LAYER_POLICY, LayerManager, type LayerSlot } from '@cg/caspar-client';
+import { FIXED_LAYERS_SET_CONFIG_REASONS, type FixedLayerBank } from '@cg/shared-ipc';
 import {
   FixedLayersConfigError,
   FixedLayersFileError,
@@ -11,7 +11,18 @@ import {
   saveFixedLayerBank,
   validateFixedBank,
   validateFixedBankChange,
+  type FixedLayersErrorCode,
 } from '../src/fixed-layers-store.js';
+import { isFixedSlotBusy } from '../src/caspar-runtime.js';
+
+// S2 (compile-time half) — the validator's code union and the wire's reason
+// union are ONE definition; these two assignments break the BUILD on any drift,
+// in both directions.
+const _wireCoversValidator: readonly FixedLayersErrorCode[] = FIXED_LAYERS_SET_CONFIG_REASONS;
+const _validatorCoversWire: readonly (typeof FIXED_LAYERS_SET_CONFIG_REASONS)[number][] =
+  [] as FixedLayersErrorCode[];
+void _wireCoversValidator;
+void _validatorCoversWire;
 
 /**
  * R-021 stage 1 — the bank validators + persistence. Every refusal carries a
@@ -137,6 +148,41 @@ describe('validateFixedBankChange', () => {
         }),
       ).code,
     ).toBe('channel-change-refused');
+  });
+});
+
+describe('isFixedSlotBusy (S10) — the REAL busy predicate, driven directly', () => {
+  const SLOT = { channel: 1, layer: 72 };
+
+  it('answers false with no binding and no retained intent', () => {
+    const lm = new LayerManager({ fixed: [SLOT] });
+    expect(
+      isFixedSlotBusy(SLOT, {
+        fixedBinding: (s) => lm.fixedBinding(s),
+        retainedSlotKeys: new Set(),
+      }),
+    ).toBe(false);
+  });
+
+  it('answers true when the LayerManager holds a fixed binding for the slot', () => {
+    const lm = new LayerManager({ fixed: [SLOT] });
+    lm.bindFixed(SLOT, 'clock');
+    expect(
+      isFixedSlotBusy(SLOT, {
+        fixedBinding: (s) => lm.fixedBinding(s),
+        retainedSlotKeys: new Set(),
+      }),
+    ).toBe(true);
+  });
+
+  it('answers true when retained intent points at the slot', () => {
+    const lm = new LayerManager({ fixed: [SLOT] });
+    expect(
+      isFixedSlotBusy(SLOT, {
+        fixedBinding: (s) => lm.fixedBinding(s),
+        retainedSlotKeys: new Set(['1:72']),
+      }),
+    ).toBe(true);
   });
 });
 

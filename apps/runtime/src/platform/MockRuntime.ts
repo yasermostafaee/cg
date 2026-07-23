@@ -2,6 +2,8 @@ import type { AuditEntry, Position, StackItemState, StackItemStatus } from '@cg/
 import type {
   ConnectionConfig,
   ConnectionHealth,
+  FixedLayerBank,
+  FixedSlotState,
   LockState,
   OrphanLayer,
   OwnedOccupancyWarning,
@@ -38,6 +40,9 @@ export class MockRuntime {
   readonly lockChanged = new Emitter<LockState>();
   readonly settingsChanged = new Emitter<Settings>();
   readonly updateChanged = new Emitter<PendingUpdate | null>();
+  // R-021 stage 2a — fixed-bank parity.
+  readonly fixedConfigChanged = new Emitter<FixedLayerBank | null>();
+  readonly fixedStateChanged = new Emitter<FixedSlotState[]>();
 
   #stack: StackItemState[] = seedStack();
   #templates = new Map<string, TemplateInfo>(seedTemplates().map((t) => [t.templateId, t]));
@@ -264,6 +269,45 @@ export class MockRuntime {
       this.out(item.itemId);
     }
     return { ok: true, cleared: onAir.length };
+  }
+
+  // ── R-021 stage 2a: fixed-bank parity ───────────────────────────────
+  // Mirrors the bridge's fidelity level for `connections.set-config`: the
+  // mock APPLIES and publishes; it does NOT re-implement the store's
+  // validators (the bridge is the authority; this is explicit test mode).
+  #fixedBank: FixedLayerBank | null = null;
+
+  fixedLayersConfig(): FixedLayerBank | null {
+    return this.#fixedBank;
+  }
+
+  setFixedLayers(next: FixedLayerBank): { ok: boolean; message?: string } {
+    this.#fixedBank = next;
+    this.fixedConfigChanged.emit(next);
+    this.fixedStateChanged.emit(this.fixedLayersState());
+    return { ok: true };
+  }
+
+  /**
+   * Per-slot state, offline: there is no OSC and no server, so occupancy is
+   * honestly UNKNOWN for every slot (never 'empty' — the B-094 honesty rule);
+   * `binding` is null until stage 3, exactly like the bridge.
+   */
+  fixedLayersState(): FixedSlotState[] {
+    if (this.#fixedBank === null) return [];
+    const { channel, start, count, aliases } = this.#fixedBank;
+    const out: FixedSlotState[] = [];
+    for (let layer = start; layer <= start + count - 1; layer++) {
+      const alias = aliases?.[String(layer)];
+      out.push({
+        channel,
+        layer,
+        ...(alias !== undefined ? { alias } : {}),
+        observed: { kind: 'unknown' },
+        binding: null,
+      });
+    }
+    return out;
   }
 
   // ── connections ─────────────────────────────────────────────────────

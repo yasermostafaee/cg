@@ -10,6 +10,11 @@ import {
   ConnectionsSetConfigChannel,
   DEFAULT_BRIDGE_HOST,
   DEFAULT_BRIDGE_PORT,
+  FixedLayersConfigChangedChannel,
+  FixedLayersConfigChannel,
+  FixedLayersSetConfigChannel,
+  FixedLayersStateChangedChannel,
+  FixedLayersStateChannel,
   LayersClearChannel,
   LayersOrphansChangedChannel,
   LayersOrphansChannel,
@@ -54,7 +59,7 @@ import {
 import { DEFAULT_LAYER_POLICY } from '@cg/caspar-client';
 import { CasparRuntime } from './caspar-runtime.js';
 import { loadPersistedConnection, savePersistedConnection } from './connection-store.js';
-import { loadFixedLayerBank, validateFixedBank } from './fixed-layers-store.js';
+import { loadFixedLayerBank, saveFixedLayerBank, validateFixedBank } from './fixed-layers-store.js';
 import type { TemplateServeOverride } from './template-http-server.js';
 
 export interface BridgeOptions {
@@ -190,9 +195,10 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   const runtime = new CasparRuntime(connection, options.templateServe ?? {}, {
     fixedSlots,
     layerPolicy,
+    ...(fixedBank !== null && fixedBank !== undefined ? { fixedBank } : {}),
     ...(options.runtimeTuning ?? {}),
   });
-  const routes = buildRoutes(runtime, options.persistPath);
+  const routes = buildRoutes(runtime, options.persistPath, options.fixedLayersPath);
 
   const wss = new WebSocketServer({
     host,
@@ -324,6 +330,9 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
     backing.lockChanged.subscribe((l) => push(LockStateChangedChannel, l)),
     backing.updateChanged.subscribe((u) => push(UpdateStateChangedChannel, u)),
     backing.settingsChanged.subscribe((s) => push(SettingsChangedChannel, s)),
+    // R-021 stage 2a — fixed-bank config + per-slot state.
+    backing.fixedConfigChanged.subscribe((c) => push(FixedLayersConfigChangedChannel, c)),
+    backing.fixedStateChanged.subscribe((s) => push(FixedLayersStateChangedChannel, s)),
   ];
 }
 
@@ -335,7 +344,11 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
  * suite goes red (this is how R-011's `stack.set-position` could silently break). The
  * guard enumerates `@cg/shared-ipc` and asserts this map covers every runtime channel.
  */
-export function buildRoutes(b: CasparRuntime, persistPath?: string): Map<string, Route> {
+export function buildRoutes(
+  b: CasparRuntime,
+  persistPath?: string,
+  fixedLayersPath?: string,
+): Map<string, Route> {
   const route = (channel: AnyChannel, handle: (req: never) => unknown): Route => ({
     channel,
     handle: handle as (req: unknown) => unknown,
@@ -387,6 +400,27 @@ export function buildRoutes(b: CasparRuntime, persistPath?: string): Map<string,
     ),
     // B-056 — owned-slot occupancy warnings (no Clear: the remedy is Out/Remove).
     route(LayersOwnedOccupancyChannel, () => b.ownedOccupancy()),
+
+    // R-021 stage 2a — the fixed-bank wire contract: config read/update +
+    // per-slot state. Order on an applied change: validate → apply → persist
+    // (non-fatal, the R-010 savePersistedConnection stance) → publish (the
+    // runtime publishes from setFixedLayers itself, after apply).
+    route(FixedLayersConfigChannel, () => b.fixedLayersConfig()),
+    route(FixedLayersSetConfigChannel, (r: FixedLayerBank) => {
+      const result = b.setFixedLayers(r);
+      if (result.ok && fixedLayersPath !== undefined) {
+        try {
+          saveFixedLayerBank(fixedLayersPath, r);
+        } catch (err) {
+          process.stderr.write(
+            `[caspar-bridge] ⚠ failed to persist fixed layers to ${fixedLayersPath}: ` +
+              `${err instanceof Error ? err.message : String(err)}\n`,
+          );
+        }
+      }
+      return result;
+    }),
+    route(FixedLayersStateChannel, () => b.fixedLayersState()),
 
     route(LockEngageChannel, (r: { pin: string }) => b.engage(r.pin)),
     route(LockReleaseChannel, (r: { pin: string }) => b.release(r.pin)),

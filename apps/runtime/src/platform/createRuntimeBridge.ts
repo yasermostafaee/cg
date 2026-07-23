@@ -150,6 +150,15 @@ export function createMockBridge(): RuntimeBridge {
       onOwnedOccupancyChanged: (handler) => mock.ownedOccupancyChanged.subscribe(handler),
     },
 
+    // R-021 stage 2a — fixed-bank parity (offline: occupancy honestly unknown).
+    fixedLayers: {
+      config: () => Promise.resolve(mock.fixedLayersConfig()),
+      setConfig: (req) => Promise.resolve(mock.setFixedLayers(req)),
+      state: () => Promise.resolve(mock.fixedLayersState()),
+      onConfigChanged: (handler) => mock.fixedConfigChanged.subscribe(handler),
+      onStateChanged: (handler) => mock.fixedStateChanged.subscribe(handler),
+    },
+
     lock: {
       engage: (req) => mock.engage(req.pin),
       release: (req) => mock.release(req.pin),

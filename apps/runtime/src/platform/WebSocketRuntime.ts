@@ -38,6 +38,11 @@ import {
   UpdateRequestChannel,
   UpdateStateChangedChannel,
   UpdateStateChannel,
+  FixedLayersConfigChangedChannel,
+  FixedLayersConfigChannel,
+  FixedLayersSetConfigChannel,
+  FixedLayersStateChangedChannel,
+  FixedLayersStateChannel,
   parseWsFrame,
   serializeWsFrame,
   type AnyChannel,
@@ -45,6 +50,8 @@ import {
   type ChannelResponse,
   type ConnectionConfig,
   type ConnectionHealth,
+  type FixedLayerBank,
+  type FixedSlotState,
   type LockState,
   type OrphanLayer,
   type OwnedOccupancyWarning,
@@ -206,6 +213,9 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #configSubs = new Subs<ConnectionConfig>();
   readonly #orphanSubs = new Subs<OrphanLayer[]>();
   readonly #ownedOccupancySubs = new Subs<OwnedOccupancyWarning[]>();
+  // R-021 stage 2a — fixed-bank config + per-slot state pushes.
+  readonly #fixedConfigSubs = new Subs<FixedLayerBank | null>();
+  readonly #fixedStateSubs = new Subs<FixedSlotState[]>();
   readonly #lockSubs = new Subs<LockState>();
   readonly #updateSubs = new Subs<PendingUpdate | null>();
   readonly #settingsSubs = new Subs<Settings>();
@@ -439,6 +449,16 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#orphanSubs.emit(p.data);
         break;
       }
+      case FixedLayersConfigChangedChannel.name: {
+        const p = FixedLayersConfigChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#fixedConfigSubs.emit(p.data);
+        break;
+      }
+      case FixedLayersStateChangedChannel.name: {
+        const p = FixedLayersStateChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#fixedStateSubs.emit(p.data);
+        break;
+      }
       case LayersOwnedOccupancyChangedChannel.name: {
         const p = LayersOwnedOccupancyChangedChannel.payload.safeParse(payload);
         if (p.success) this.#ownedOccupancySubs.emit(p.data);
@@ -600,6 +620,19 @@ export class WebSocketRuntime implements RuntimeBridge {
     ownedOccupancy: () => this.#invoke(LayersOwnedOccupancyChannel, undefined),
     onOwnedOccupancyChanged: (handler: (warnings: OwnedOccupancyWarning[]) => void) =>
       this.#ownedOccupancySubs.add(handler),
+  };
+
+  // R-021 stage 2a — the fixed-bank wire contract (facts only; verb
+  // derivation is the renderer's ONE function, design (f)/(g)).
+  readonly fixedLayers = {
+    config: () => this.#invoke(FixedLayersConfigChannel, undefined),
+    setConfig: (req: ChannelRequest<typeof FixedLayersSetConfigChannel>) =>
+      this.#invoke(FixedLayersSetConfigChannel, req),
+    state: () => this.#invoke(FixedLayersStateChannel, undefined),
+    onConfigChanged: (handler: (bank: FixedLayerBank | null) => void) =>
+      this.#fixedConfigSubs.add(handler),
+    onStateChanged: (handler: (state: FixedSlotState[]) => void) =>
+      this.#fixedStateSubs.add(handler),
   };
 
   readonly lock = {
