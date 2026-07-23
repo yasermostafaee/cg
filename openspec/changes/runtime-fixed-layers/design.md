@@ -276,6 +276,27 @@ wrong content from air outranks the ability to place it, so inside the operator-
 bank a confirm-gated Clear works even blind. Future decisions in this area follow this spine
 rather than being re-litigated case by case.
 
+## Resolved in implementation (stage 1) — what the design left open
+
+- **Placement (D1):** the bank SHAPE (`FixedLayerBankSchema`) lives in `@cg/shared-ipc`
+  (`channels/fixedLayers.ts`, schema/types only — channels come with stage 2); the
+  LayerManager mechanism in `@cg/caspar-client` takes a plain `readonly LayerSlot[]` and
+  never learns the bank shape (no dependency on `@cg/shared-ipc`); validation + persistence
+  in `tools/caspar-bridge/src/fixed-layers-store.ts` (the `connection-store` pattern).
+- **The exact-slot path (D3):** `bindFixed(slot, templateType)` / `unbindFixed(slot)` on the
+  LayerManager — NOT `reserve()`, which refuses fixed slots. A fenced-but-unbound slot
+  carries no templateType, so it is absent from `allocations()` until bound.
+- **Quarantine/observe (D5):** a fixed slot is never quarantined and never emits
+  `collision` — a fenced slot is not an allocation candidate, and a quarantined fixed slot
+  would break `bindFixed`. **Stage 4 note:** `restore-blocked` must be derived from the
+  OCCUPANCY TAP, never from the quarantine set (fixed slots never enter it).
+- **Present-but-unusable file (D8):** a declared fixed-layers file that cannot be used
+  (unreadable / bad JSON / schema-invalid / failing validation) is a HARD boot failure
+  before the WebSocket binds — deliberately diverging from connection-store's
+  warn-and-ignore, because silently ignoring a declared bank leaves the operator believing
+  a layer is fenced when it is not (the (e) silent-divergence refusal). An absent file means
+  no bank and byte-identical behaviour to today.
+
 ## OWNER DECISIONS — all RESOLVED (owner, 2026-07-23), encoded in place above
 
 - **(a1)** Disjointness prohibition — hard legible startup failure naming both ranges;

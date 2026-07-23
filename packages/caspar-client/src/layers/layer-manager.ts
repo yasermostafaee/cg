@@ -52,6 +52,17 @@ export interface PinnedSlot extends LayerSlot {
 export interface LayerManagerOptions {
   policy?: LayerPolicy;
   pinned?: readonly PinnedSlot[];
+  /**
+   * R-021 — FIXED operator slots. Like `pinned`, a fixed slot is fenced from
+   * birth: `allocate()` can never return one and `deallocate()` never frees
+   * one. UNLIKE `pinned`, a fixed slot is NOT template-pinned — it carries no
+   * `templateId`, no `autoStart`, and no auto-start semantics may leak from
+   * the pinned path (design.md (c)): it sits EMPTY until the operator binds an
+   * item via {@link LayerManager.bindFixed}. A slot declared both pinned and
+   * fixed is a config conflict and the constructor THROWS
+   * ({@link FixedPinnedConflictError}) — conflicts resolve loudly at startup.
+   */
+  fixed?: readonly LayerSlot[];
 }
 
 export interface LayerManagerEvents {
@@ -91,6 +102,23 @@ export class UnknownTemplateTypeError extends Error {
   }
 }
 
+/**
+ * R-021 — thrown by the constructor when one slot is declared BOTH pinned and
+ * fixed. The two mechanisms have contradictory semantics (auto-started
+ * template vs empty operator slot), so the conflict is refused loudly at
+ * startup — the design's governing principle — rather than one silently
+ * winning.
+ */
+export class FixedPinnedConflictError extends Error {
+  override readonly name = 'FixedPinnedConflictError';
+  constructor(readonly slot: LayerSlot) {
+    super(
+      `Layer ${String(slot.channel)}-${String(slot.layer)} is declared both PINNED and FIXED — ` +
+        `remove it from one of the two sets`,
+    );
+  }
+}
+
 interface SlotState {
   status: 'free' | 'allocated' | 'quarantined';
   templateType?: string;
@@ -99,6 +127,8 @@ interface SlotState {
 export class LayerManager extends EventEmitter<LayerManagerEvents> {
   private readonly policy: LayerPolicy;
   private readonly pinned: ReadonlyMap<string, PinnedSlot>;
+  /** R-021 — the fixed operator slots, fenced from birth (see {@link LayerManagerOptions.fixed}). */
+  private readonly fixed: ReadonlyMap<string, LayerSlot>;
   private readonly slots = new Map<string, SlotState>();
 
   constructor(options: LayerManagerOptions = {}) {
@@ -110,6 +140,17 @@ export class LayerManager extends EventEmitter<LayerManagerEvents> {
       this.slots.set(keyOf(p), { status: 'allocated', templateType: 'pinned' });
     }
     this.pinned = new Map(pinnedEntries);
+    const fixedEntries: [string, LayerSlot][] = [];
+    for (const f of options.fixed ?? []) {
+      const key = keyOf(f);
+      if (this.pinned.has(key)) throw new FixedPinnedConflictError(f);
+      fixedEntries.push([key, { channel: f.channel, layer: f.layer }]);
+      // Allocated-from-birth so allocate() can never return it — but with NO
+      // templateType: a fenced-but-unbound slot is not an allocation, so the
+      // allocations() filter skips it until bindFixed() records a binding.
+      this.slots.set(key, { status: 'allocated' });
+    }
+    this.fixed = new Map(fixedEntries);
   }
 
   /**
@@ -151,9 +192,14 @@ export class LayerManager extends EventEmitter<LayerManagerEvents> {
    * and could ADD a second producer beside a live one. The range policy is
    * deliberately NOT re-checked — the coordinate came from this allocator in a
    * previous process, and honouring it is the whole point.
+   *
+   * R-021 — a FIXED slot always returns false here: exact-slot binding to a
+   * fixed slot goes through {@link bindFixed}, never `reserve()` (a fixed slot
+   * is born allocated, so it is never "free" to reserve).
    */
   reserve(slot: LayerSlot, templateType: string): boolean {
     const key = keyOf(slot);
+    if (this.fixed.has(key)) return false;
     const state = this.slots.get(key);
     if (state !== undefined && state.status !== 'free') return false;
     this.slots.set(key, { status: 'allocated', templateType });
@@ -166,6 +212,11 @@ export class LayerManager extends EventEmitter<LayerManagerEvents> {
     const key = keyOf(slot);
     if (this.pinned.has(key)) {
       // Pinned slots don't get released by normal deallocation.
+      return;
+    }
+    if (this.fixed.has(key)) {
+      // R-021 — fixed slots stay fenced for the life of the process; unbinding
+      // an item goes through unbindFixed(), which keeps the fence.
       return;
     }
     if (!this.slots.has(key)) return;
@@ -184,9 +235,63 @@ export class LayerManager extends EventEmitter<LayerManagerEvents> {
     return this.pinned.has(keyOf(slot));
   }
 
-  /** Used by the collision detector to mark a slot as quarantined until resolved. */
+  /** R-021 — true iff the slot is a fixed operator slot. */
+  isFixed(slot: LayerSlot): boolean {
+    return this.fixed.has(keyOf(slot));
+  }
+
+  /** R-021 — the fixed operator slots (config-defined; empty until items bind). */
+  fixedSlots(): readonly LayerSlot[] {
+    return [...this.fixed.values()];
+  }
+
+  /**
+   * R-021 — bind an item's template type to a FIXED slot (the exact-slot path
+   * for fixed slots — `reserve()` refuses them). Returns false when the slot
+   * is not fixed or is already bound; on success records the binding and emits
+   * `allocated`.
+   */
+  bindFixed(slot: LayerSlot, templateType: string): boolean {
+    const key = keyOf(slot);
+    if (!this.fixed.has(key)) return false;
+    const state = this.slots.get(key);
+    if (state?.templateType !== undefined) return false;
+    this.slots.set(key, { status: 'allocated', templateType });
+    this.emit('allocated', slot, templateType);
+    return true;
+  }
+
+  /**
+   * R-021 — clear a fixed slot's binding. Emits `released`, but the slot STAYS
+   * fenced: it never returns to the dynamic pool.
+   */
+  unbindFixed(slot: LayerSlot): void {
+    const key = keyOf(slot);
+    if (!this.fixed.has(key)) return;
+    const state = this.slots.get(key);
+    if (state?.templateType === undefined) return;
+    this.slots.set(key, { status: 'allocated' });
+    this.emit('released', slot);
+  }
+
+  /** R-021 — the template type bound to a fixed slot, or undefined when unbound. */
+  fixedBinding(slot: LayerSlot): string | undefined {
+    if (!this.fixed.has(keyOf(slot))) return undefined;
+    return this.slots.get(keyOf(slot))?.templateType;
+  }
+
+  /**
+   * Used by the collision detector to mark a slot as quarantined until resolved.
+   *
+   * R-021 — a FIXED slot is never quarantined (no-op): a fenced slot is not an
+   * allocation candidate (quarantine exists to withdraw layers from the
+   * allocatable pool), and a quarantined fixed slot would break bindFixed.
+   * Stage 4 derives `restore-blocked` from the OCCUPANCY TAP, not from the
+   * quarantine set.
+   */
   quarantine(slot: LayerSlot): void {
     const key = keyOf(slot);
+    if (this.fixed.has(key)) return;
     const state = this.slots.get(key);
     if (state === undefined) {
       this.slots.set(key, { status: 'quarantined' });
@@ -199,6 +304,12 @@ export class LayerManager extends EventEmitter<LayerManagerEvents> {
   observe(slot: LayerSlot, producer: 'empty' | 'html' | string): boolean {
     const key = keyOf(slot);
     const state = this.slots.get(key);
+
+    // R-021 — a fixed slot never participates in collision detection: it is not
+    // an allocation candidate, so foreign content there is not a "collision
+    // with an allocation" (and must not quarantine — see quarantine()). The
+    // occupancy itself is stage 4's concern, read from the tap.
+    if (this.fixed.has(key)) return true;
 
     if (producer === 'empty') {
       // Slot is empty on the wire. If we thought it was allocated, that's

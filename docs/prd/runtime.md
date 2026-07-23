@@ -851,7 +851,7 @@ text-verbatim, the B-077 interaction); implement the input half ONCE, under this
 R-014's input-side acceptance reads as satisfied by this item, and R-014 keeps the DISPLAY
 half and its open questions.
 
-## [ ] R-021 — fixed operator layers: aliased pre-defined slots with on-row import+load and layer-level control ⟨priority: high⟩
+## [~] R-021 — fixed operator layers: aliased pre-defined slots with on-row import+load and layer-level control ⟨priority: high⟩ — STAGE 1 of 4 landed (`openspec/changes/runtime-fixed-layers/`, see its STAGE MAP): install config (`FixedLayerBankSchema` + `fixed-layers-store` validation/persistence, hard-fail on an unusable declared file) + the LayerManager fixed mechanism (born-fenced slots, `bindFixed`/`unbindFixed` exact-slot path, quarantine/observe no-ops) + the R-009 orphan-sweep exclusion (task 4.2a). Pure logic: no UI, no IPC channels, no on-air behaviour change (no bank declared ⇒ byte-identical to before, integration-tested). No CasparCG hardware pass owed for THIS slice (nothing reaches the wire differently) and no Linux `gate:e2e` owed for THIS slice — every touched path was checked against `UI_RENDER_PATTERNS` in `tools/gate-hook/src/gate-decision.mjs` and none matches (packages/shared-ipc, packages/caspar-client, tools/caspar-bridge, docs, openspec). Stages 2–4 owe both. Remaining: stages 2–4 per the STAGE MAP
 
 **What:** A Cinegy-parity operating model IN PARALLEL with the dynamic stack: a fixed set of
 pre-defined CasparCG layers (default TEN at 70–79 — chosen because the default policy's dynamic
