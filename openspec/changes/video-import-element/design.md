@@ -876,6 +876,49 @@ the REAL wasm converter, asserting decode at exactly the expected dimensions.
 content 6 s → ~294 KB (~0.4 Mbps); heavy-detail torture 6 s → 16.4 MB (~22 Mbps). Real
 lower-thirds sit near the low end; the owner's 6.5 MB is consistent with mixed content.
 
+## The ALPHA axis — invisible-clip diagnostics + collapse guard (2026-07-24)
+
+**Hypothesis (owner, after `Lower_Default` STORED on the verify-guard build yet rendered
+nowhere):** the output is DECODABLE but FULLY TRANSPARENT — it passes every decode check
+(dimensions ✓ duration ✓ 6.5 MB of colour data ✓) and paints nothing because its alpha is
+(near) zero everywhere. The dimension sweep was clean because the synthetic sources always
+carried real alpha; the variable is THIS clip's alpha.
+
+**What ships:**
+
+1. **Alpha diagnostics, always on.** At probe time the SOURCE's alpha profile is sampled
+   (a few spread frames decoded to raw RGBA in the wasm); after conversion the OUTPUT's
+   profile is sampled (real `<video>` → canvas). Both are logged to the console on every
+   import — `[video-import] alpha profile — source: … | output: …` with max/mean alpha,
+   %visible (α≥8), %opaque (α≥250) — the one reading that confirms or kills the
+   hypothesis on the owner's machine.
+2. **Fully-transparent SOURCE ⇒ a prominent modal warning at probe time** (danger
+   callout): "this source appears FULLY TRANSPARENT … likely exported without an alpha
+   channel (RGB-only in a 32-bit container)". The leading suspect for `Lower_Default`: a
+   32-bit BGRA export whose alpha byte is 0 — real RGB content (hence 6.5 MB), invisible
+   on air, and the modal's own poster preview blank. Conversion stays allowed (informed
+   operator), but never again silent.
+3. **ALPHA-COLLAPSE GUARD** (source-relative, per the owner's spec — never an absolute
+   threshold, so a legitimately sparse graphic passes): if the SOURCE had visible pixels
+   (>1 % of the frame) and the OUTPUT has essentially none (<0.1 %), the conversion FAILS
+   LOUDLY with the ffmpeg log tail and stores nothing.
+4. **The fixture this class needed** (E2E, real wasm): a lower-third-shaped source — wide
+   thin strip, large transparent regions, a solid opaque bar with soft edges, animating
+   in — asserting the stored output KEEPS the bar at α≥250 and the empty regions at α≤2;
+   plus an RGB-only (alpha-byte-0) source asserting the FULLY TRANSPARENT warning appears
+   before conversion.
+
+**Trace results (own reproduction attempts):** the full chain PRESERVES alpha for the
+lower-third shape (bar survives opaque end-to-end through quality+bleed in the real
+wasm). The unpremultiply `geq` writes `a='alpha(X,Y)'` (identity); the bleed re-attaches
+the original alpha via `alphaextract`+`alphamerge` (verified on this shape, not assumed);
+toggle-ON over a straight-alpha source over-brightens colour but leaves alpha intact —
+none of these zero alpha. **A source whose alpha is already empty is the one case that
+reproduces every observation**, and it is now legible at probe time. If the owner's
+paste-back instead shows source-visible/output-empty, the collapse guard will already
+have blocked the store and named the conversion — that reading pins the true cause
+either way.
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

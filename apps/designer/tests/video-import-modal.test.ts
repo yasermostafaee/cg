@@ -20,6 +20,9 @@ const cancelConversion = vi.fn();
 const verifyConvertedClip = vi.fn();
 const verifyStoredReadback = vi.fn();
 const lastConvertLogTail = vi.fn();
+const sampleSourceAlpha = vi.fn();
+const sampleOutputAlphaStats = vi.fn();
+const formatAlphaStats = vi.fn(() => 'stats');
 vi.mock('../src/renderer/features/assets/video-convert.js', () => ({
   probeSource,
   convertToWebm,
@@ -27,7 +30,27 @@ vi.mock('../src/renderer/features/assets/video-convert.js', () => ({
   verifyConvertedClip,
   verifyStoredReadback,
   lastConvertLogTail,
+  sampleSourceAlpha,
+  sampleOutputAlphaStats,
+  formatAlphaStats,
 }));
+
+/** A healthy alpha profile (plenty of visible + opaque pixels). */
+const HEALTHY_ALPHA = {
+  maxA: 255,
+  meanA: 90,
+  nonTransparentFrac: 0.4,
+  opaqueFrac: 0.25,
+  sampled: 10_000,
+};
+/** A fully-transparent profile (the invisible-clip class). */
+const TRANSPARENT_ALPHA = {
+  maxA: 0,
+  meanA: 0,
+  nonTransparentFrac: 0,
+  opaqueFrac: 0,
+  sampled: 10_000,
+};
 
 // D-128 dedupe seam: the source hash + the stored-WebM metadata probe are mocked
 // so these DOM tests never touch File.stream() / a real <video>. vi.hoisted so
@@ -71,6 +94,8 @@ beforeEach(() => {
   verifyConvertedClip.mockResolvedValue({ ok: true, durationMs: 4000, width: 640, height: 360 });
   verifyStoredReadback.mockResolvedValue(null);
   lastConvertLogTail.mockReturnValue([]);
+  sampleSourceAlpha.mockResolvedValue(HEALTHY_ALPHA);
+  sampleOutputAlphaStats.mockResolvedValue(HEALTHY_ALPHA);
   hashSourceFile.mockResolvedValue('a'.repeat(64));
   probeStoredVideo.mockResolvedValue({ durationMs: 4000, width: 640, height: 360 });
   assetsList.mockResolvedValue([]); // no prior imports ⇒ never a duplicate by default
@@ -314,6 +339,63 @@ describe('VideoImportModal (D-128)', () => {
     });
     expect(storeBytes).not.toHaveBeenCalled();
     expect(document.body.textContent).toContain('expected 640×360');
+  });
+
+  it('ALPHA-COLLAPSE GUARD: source has visible pixels, output fully transparent ⇒ fail, store NOTHING', async () => {
+    // The invisible-clip class: decodes ✓ dimensions ✓ duration ✓ megabytes of colour ✓ —
+    // and paints nothing anywhere. The guard compares against the SOURCE's own profile.
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    sampleSourceAlpha.mockResolvedValue(HEALTHY_ALPHA);
+    sampleOutputAlphaStats.mockResolvedValue(TRANSPARENT_ALPHA);
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(storeBytes).not.toHaveBeenCalled(); // never store an invisible asset
+    expect(onDone).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('LOST the alpha channel');
+  });
+
+  it('a FULLY-TRANSPARENT SOURCE is warned about legibly (not a conversion failure)', async () => {
+    // A source exported without alpha (32-bit container, alpha byte 0): the output
+    // faithfully matches the source, so the collapse guard must NOT fire — the operator
+    // sees a prominent warning BEFORE converting instead.
+    sampleSourceAlpha.mockResolvedValue(TRANSPARENT_ALPHA);
+    await renderModal();
+    await act(async () => {
+      await Promise.resolve(); // let the async sampling land
+    });
+    expect(document.body.textContent).toContain('FULLY TRANSPARENT');
+    expect(document.body.textContent).toContain('exported without an alpha channel');
+    // conversion is still allowed (informed operator) — and does NOT trip the collapse guard
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    sampleOutputAlphaStats.mockResolvedValue(TRANSPARENT_ALPHA);
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(storeBytes).toHaveBeenCalled(); // proceeded with eyes open
+  });
+
+  it('a legitimately MOSTLY-transparent graphic passes (comparison is source-relative)', async () => {
+    // 2% visible in the source, 1.5% visible out — normal sparse lower-third, no guard.
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    sampleSourceAlpha.mockResolvedValue({ ...HEALTHY_ALPHA, nonTransparentFrac: 0.02 });
+    sampleOutputAlphaStats.mockResolvedValue({ ...HEALTHY_ALPHA, nonTransparentFrac: 0.015 });
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(storeBytes).toHaveBeenCalled();
+    expect(onDone).toHaveBeenCalled();
   });
 
   it('READBACK-AFTER-STORE: a truncated stored asset surfaces an error, never a dead element', async () => {

@@ -335,6 +335,183 @@ export type ConvertedClipVerdict =
   | { ok: false; reason: string };
 
 /**
+ * D-128 — an ALPHA PROFILE: the reading that distinguishes "renders invisible because
+ * the ALPHA is (near) zero everywhere" from every other failure mode. A clip can pass
+ * every decode check (dimensions ✓ duration ✓ megabytes of colour data ✓) and still
+ * paint NOTHING if its alpha plane is empty — e.g. a source exported as 32-bit BGRA
+ * whose alpha byte is 0 (RGB content present, invisible on air).
+ */
+export interface AlphaStats {
+  /** Max alpha seen across the sampled pixels (0-255). */
+  maxA: number;
+  /** Mean alpha across the sampled pixels. */
+  meanA: number;
+  /** Fraction of sampled pixels with alpha ≥ 8 (visible at all). */
+  nonTransparentFrac: number;
+  /** Fraction of sampled pixels with alpha ≥ 250 (fully opaque). */
+  opaqueFrac: number;
+  /** Total pixels sampled (across frames). */
+  sampled: number;
+}
+
+function statsOfRgba(buffers: readonly Uint8Array[]): AlphaStats {
+  let maxA = 0;
+  let sum = 0;
+  let nonTransparent = 0;
+  let opaque = 0;
+  let n = 0;
+  for (const buf of buffers) {
+    for (let i = 3; i < buf.length; i += 4) {
+      const a = buf[i] as number;
+      n++;
+      sum += a;
+      if (a > maxA) maxA = a;
+      if (a >= 8) nonTransparent++;
+      if (a >= 250) opaque++;
+    }
+  }
+  return {
+    maxA,
+    meanA: n > 0 ? sum / n : 0,
+    nonTransparentFrac: n > 0 ? nonTransparent / n : 0,
+    opaqueFrac: n > 0 ? opaque / n : 0,
+    sampled: n,
+  };
+}
+
+/** Render an AlphaStats as the one-line reading the operator can paste back. */
+export function formatAlphaStats(s: AlphaStats): string {
+  return (
+    `maxα=${String(s.maxA)} meanα=${s.meanA.toFixed(1)} ` +
+    `visible(α≥8)=${(s.nonTransparentFrac * 100).toFixed(2)}% ` +
+    `opaque(α≥250)=${(s.opaqueFrac * 100).toFixed(2)}% (n=${String(s.sampled)})`
+  );
+}
+
+/**
+ * D-128 — sample the SOURCE's alpha profile: decode a few spread frames to raw RGBA in
+ * the wasm and measure. Null on any failure — a diagnostics miss must never block an
+ * import. Runs under the module mutex like every wasm op.
+ */
+export async function sampleSourceAlpha(
+  file: File,
+  durationMs: number,
+  samples = 3,
+): Promise<AlphaStats | null> {
+  return withExclusive(async () => {
+    let held: FFmpeg | null = null;
+    try {
+      held = await ensureLoaded();
+      const ff = held;
+      const input = await mountSource(ff, file);
+      const buffers: Uint8Array[] = [];
+      const times =
+        durationMs > 0
+          ? Array.from({ length: samples }, (_, i) => ((i + 0.5) / samples) * (durationMs / 1000))
+          : [0];
+      for (const t of times) {
+        const out = `/alpha-probe-${String(Math.round(t * 1000))}.raw`;
+        const seek = t > 0 ? ['-ss', t.toFixed(3)] : [];
+        const code = await ff.exec([
+          '-y',
+          ...seek,
+          '-i',
+          input,
+          '-frames:v',
+          '1',
+          '-f',
+          'rawvideo',
+          '-pix_fmt',
+          'rgba',
+          out,
+        ]);
+        if (code === 0) {
+          const data = await ff.readFile(out);
+          await ff.deleteFile(out).catch(() => undefined);
+          if (typeof data !== 'string') buffers.push(data);
+        }
+      }
+      try {
+        await ff.unmount(MOUNT_DIR);
+      } catch {
+        /* nothing mounted */
+      }
+      return buffers.length > 0 ? statsOfRgba(buffers) : null;
+    } catch (err) {
+      console.warn('[video-convert] source alpha sampling failed (non-fatal):', err);
+      if (held !== null) dropWorker(held);
+      return null;
+    }
+  });
+}
+
+/**
+ * D-128 — sample the CONVERTED OUTPUT's alpha profile: decode the produced WebM in a
+ * real `<video>`, draw several spread frames to a (downscaled) canvas, and measure the
+ * unpremultiplied alpha. Null on any failure (diagnostics never block).
+ */
+export function sampleOutputAlphaStats(bytes: Uint8Array): Promise<AlphaStats | null> {
+  const ab = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(ab).set(bytes);
+  const url = URL.createObjectURL(new Blob([ab], { type: 'video/webm' }));
+  return new Promise((resolve) => {
+    const v = document.createElement('video');
+    v.preload = 'auto';
+    v.muted = true;
+    const finish = (r: AlphaStats | null): void => {
+      URL.revokeObjectURL(url);
+      resolve(r);
+    };
+    const timer = setTimeout(() => finish(null), 10_000);
+    v.onerror = () => {
+      clearTimeout(timer);
+      finish(null);
+    };
+    v.onloadeddata = () => {
+      void (async () => {
+        try {
+          const scale = Math.min(1, 320 / Math.max(1, v.videoWidth));
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(v.videoWidth * scale));
+          c.height = Math.max(1, Math.round(v.videoHeight * scale));
+          const ctx = c.getContext('2d', { willReadFrequently: true });
+          if (ctx === null) {
+            clearTimeout(timer);
+            finish(null);
+            return;
+          }
+          const dur = Number.isFinite(v.duration) ? v.duration : 0;
+          const buffers: Uint8Array[] = [];
+          for (const frac of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+            if (dur > 0) {
+              const sought = await new Promise<boolean>((res) => {
+                const st = setTimeout(() => res(false), 3000);
+                v.onseeked = () => {
+                  clearTimeout(st);
+                  res(true);
+                };
+                v.currentTime = frac * dur;
+              });
+              if (!sought) continue;
+            }
+            ctx.clearRect(0, 0, c.width, c.height);
+            ctx.drawImage(v, 0, 0, c.width, c.height);
+            buffers.push(new Uint8Array(ctx.getImageData(0, 0, c.width, c.height).data.buffer));
+            if (dur <= 0) break;
+          }
+          clearTimeout(timer);
+          finish(buffers.length > 0 ? statsOfRgba(buffers) : null);
+        } catch {
+          clearTimeout(timer);
+          finish(null);
+        }
+      })();
+    };
+    v.src = url;
+  });
+}
+
+/**
  * D-128 — VERIFY the converted bytes actually DECODE in THIS browser before anything
  * is stored: a real `<video>` must reach metadata, report a finite positive duration,
  * and match the EXPECTED post-crop dimensions. ffmpeg exiting 0 is NOT proof the file

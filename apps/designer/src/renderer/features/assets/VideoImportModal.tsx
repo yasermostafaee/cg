@@ -90,6 +90,11 @@ export function VideoImportModal(props: {
   const projectFps = useDesignerSelector((st) => st.scene?.frameRate) ?? 50;
   const [phase, setPhase] = useState<Phase>({ kind: 'probing' });
   const [probe, setProbe] = useState<SourceProbe | null>(null);
+  // D-128 — the SOURCE's alpha profile (sampled after the probe, non-blocking). A source
+  // whose alpha is (near) zero everywhere decodes fine, converts fine, stores fine — and
+  // paints NOTHING anywhere (e.g. a 32-bit export whose alpha byte is 0). The reading
+  // makes that legible BEFORE a long conversion instead of an invisible stored asset.
+  const [sourceAlpha, setSourceAlpha] = useState<VideoConvertModule.AlphaStats | null>(null);
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
   const [cropOn, setCropOn] = useState(false);
   const [crop, setCrop] = useState<CropRect>({ x: 0, y: 0, width: 1, height: 1 });
@@ -129,6 +134,20 @@ export function VideoImportModal(props: {
         setPosterUrl(result.posterUrl);
         setCrop({ x: 0, y: 0, width: result.probe.width, height: result.probe.height });
         setPhase({ kind: 'ready' });
+        // Alpha diagnostics — non-blocking, never gates the READY state; a sampling
+        // failure yields null and the import proceeds without the warning/guard.
+        void conv
+          .sampleSourceAlpha(props.file, result.probe.durationMs)
+          .then((stats) => {
+            if (!alive) return;
+            setSourceAlpha(stats);
+            if (stats !== null) {
+              // console.warn (not info): the allowed channel, and this reading is the
+              // one an operator pastes back when a clip renders invisible.
+              console.warn(`[video-import] SOURCE alpha: ${conv.formatAlphaStats(stats)}`);
+            }
+          })
+          .catch(() => undefined);
       } catch (err) {
         // An aborted probe REJECTS and lands here with alive=false — ignored.
         if (alive)
@@ -331,6 +350,38 @@ export function VideoImportModal(props: {
         setPhase({
           kind: 'error',
           message: `The converted clip failed verification: ${verdict.reason}. Nothing was imported — see the console log for the ffmpeg output.`,
+        });
+        return;
+      }
+      // D-128 ALPHA DIAGNOSTIC + COLLAPSE GUARD — a clip can pass every decode check and
+      // still paint NOTHING if its alpha is (near) zero everywhere. ALWAYS log both
+      // profiles (the reading the operator can paste back); FAIL only on a genuine
+      // COLLAPSE — the SOURCE had visible pixels and the OUTPUT lost them. A source that
+      // is itself fully transparent is legibly WARNED about in the modal instead (a
+      // legitimately mostly-transparent graphic is normal; the comparison is always
+      // against the source's own profile, never an absolute threshold).
+      const outputAlpha = await conv.sampleOutputAlphaStats(bytes);
+      console.warn(
+        `[video-import] alpha profile — source: ${
+          sourceAlpha !== null ? conv.formatAlphaStats(sourceAlpha) : 'unavailable'
+        } | output: ${outputAlpha !== null ? conv.formatAlphaStats(outputAlpha) : 'unavailable'}`,
+      );
+      if (
+        sourceAlpha !== null &&
+        outputAlpha !== null &&
+        sourceAlpha.nonTransparentFrac > 0.01 &&
+        outputAlpha.nonTransparentFrac < 0.001
+      ) {
+        console.error(
+          `[video-import] ALPHA COLLAPSED in conversion — source had visible pixels, the output has none. ffmpeg log tail:\n` +
+            conv.lastConvertLogTail().join('\n'),
+        );
+        setPhase({
+          kind: 'error',
+          message:
+            `The conversion LOST the alpha channel: the source has visible pixels ` +
+            `(${(sourceAlpha.nonTransparentFrac * 100).toFixed(1)}% of the frame) but the converted ` +
+            `clip is fully transparent. Nothing was imported — see the console log.`,
         });
         return;
       }
@@ -540,6 +591,18 @@ export function VideoImportModal(props: {
             </div>
 
             {notice !== null && <Callout variant="caution">{notice}</Callout>}
+
+            {sourceAlpha !== null && sourceAlpha.nonTransparentFrac < 0.001 && (
+              // D-128 — the invisible-clip trap: a 32-bit source whose alpha byte is zero
+              // everywhere decodes and converts "successfully" and then paints NOTHING on
+              // any surface. Say so BEFORE the operator waits through a conversion.
+              <Callout variant="danger">
+                This source appears FULLY TRANSPARENT — its alpha channel has no visible pixels (max
+                α {sourceAlpha.maxA} of 255). It will render invisible on air. It was likely
+                exported without an alpha channel (RGB-only in a 32-bit container). Re-export the
+                source with alpha, or proceed only if this is intentional.
+              </Callout>
+            )}
 
             {showDuplicate && duplicateMatch !== null && (
               <Callout variant="caution">
