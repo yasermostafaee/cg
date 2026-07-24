@@ -62,6 +62,30 @@ export function runRowAction(action: RowAction): void {
   );
 }
 
+/**
+ * Attach a CONFIRM gate to an action at DECLARATION time — the single place a
+ * confirmation is wired, so it cannot exist on one surface and not the other.
+ *
+ * The returned action's `run` awaits `confirm` first and short-circuits on a
+ * cancel with `{ accepted: false, cancelled: true }`: not a success (nothing
+ * ran, so no success flash) and not an error (the operator's own "no" is not a
+ * refusal to report — `asyncResultMessage` returns null for it). Because the
+ * row maps its action list through this ONCE and hands the SAME wrapped list to
+ * its buttons and to `toMenuItems`, the button and the menu item share the gate
+ * by construction — a confirm bolted onto the button's onClick instead would be
+ * exactly the second-unguarded-door drift this module exists to prevent.
+ */
+export function withConfirm(action: RowAction, confirm: () => Promise<boolean>): RowAction {
+  return {
+    ...action,
+    run: async () => {
+      const ok = await confirm();
+      if (!ok) return { accepted: false, cancelled: true };
+      return action.run();
+    },
+  };
+}
+
 /** Project the row's actions into menu items, preserving gate, handler and wording. */
 export function toMenuItems(actions: readonly RowAction[]): ContextMenuItem[] {
   return actions.map((action) => ({

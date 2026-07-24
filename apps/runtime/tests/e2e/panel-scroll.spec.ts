@@ -48,6 +48,49 @@ test('a long stack scrolls its own panel, never the page', async ({ app }) => {
 });
 
 /**
+ * R-021 — the centre column now holds TWO panels (fixed bank above the stack).
+ * The layout contract must survive both at once: the fixed panel is capped
+ * (`appShell.fixedPanel`), the stack keeps the remainder, and overflowing the
+ * stack still scrolls the STACK's own list — never the document.
+ */
+test('the two-panel centre column stays bounded: fixed bank + long stack never scroll the page', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.addInitScript(() => {
+    (window as unknown as { CG_E2E_FIXED_BANK: boolean }).CG_E2E_FIXED_BANK = true;
+  });
+  await page.reload();
+  await expect(app.fixedPanel).toBeVisible();
+
+  // Overflow the stack with both panels up.
+  const rows = page.getByRole('region', { name: 'Stack' }).locator('.cg-row');
+  const seeded = await rows.count();
+  const loadButtons = app.loadButtons();
+  const count = await loadButtons.count();
+  expect(count).toBeGreaterThan(0);
+  for (let i = 0; i < 12; i++) {
+    await loadButtons.nth(i % count).click();
+  }
+  await expect(rows).toHaveCount(seeded + 12);
+
+  // The DOCUMENT still does not scroll…
+  const doc = await page.evaluate(() => ({
+    scrollHeight: document.documentElement.scrollHeight,
+    clientHeight: document.documentElement.clientHeight,
+  }));
+  expect(doc.scrollHeight).toBe(doc.clientHeight);
+
+  // …the fixed panel stays a bounded strip (capped at 40% of its column, so
+  // well under half the viewport), and the stack survives beside it.
+  const viewport = page.viewportSize();
+  const fixedBox = await app.fixedPanel.boundingBox();
+  expect(fixedBox).not.toBeNull();
+  expect(fixedBox?.height ?? 0).toBeLessThan((viewport?.height ?? 0) * 0.5);
+  await expect(page.getByRole('region', { name: 'Stack' })).toBeVisible();
+});
+
+/**
  * The #312 banners are compact strips, not half the viewport.
  *
  * The banner used to land in the shell's `1fr` grid track and stretch to fill it. This pins

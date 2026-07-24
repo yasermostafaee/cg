@@ -73,4 +73,24 @@ export const appShell = {
     fontSize: '0.9rem',
     flexShrink: 0,
   },
+
+  /**
+   * R-021 — the fixed-bank panel, ABOVE the stack in the centre column. The
+   * column now holds TWO scrollable panels, and both must stay bounded or the
+   * page-never-scrolls invariant breaks: this one is content-sized up to a CAP
+   * (`flex: '0 1 auto'` + `maxHeight` — a bank is at most 20 rows and must not
+   * starve the stack, which keeps `flex: 1` and takes the rest), and it CLIPS
+   * so the row list inside is what scrolls (the StackPanel pattern). `0 1
+   * auto`, not `flexShrink: 0` like the monitor strip: a panel that refuses to
+   * shrink under a small viewport would push the stack out of its bound and
+   * hand the overflow to the page.
+   */
+  fixedPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    flex: '0 1 auto',
+    minHeight: 0,
+    maxHeight: '40%',
+    overflow: 'hidden',
+  },
 } as const satisfies Record<string, CSSProperties>;

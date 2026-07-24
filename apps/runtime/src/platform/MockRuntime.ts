@@ -3,6 +3,7 @@ import type {
   ConnectionConfig,
   ConnectionHealth,
   FixedLayerBank,
+  FixedSlotObservation,
   FixedSlotState,
   LockState,
   OrphanLayer,
@@ -275,7 +276,11 @@ export class MockRuntime {
   // Mirrors the bridge's fidelity level for `connections.set-config`: the
   // mock APPLIES and publishes; it does NOT re-implement the store's
   // validators (the bridge is the authority; this is explicit test mode).
-  #fixedBank: FixedLayerBank | null = null;
+  #fixedBank: FixedLayerBank | null = seedFixedBank();
+  // R-021 stage 2b — per-layer observations, test-seed only (see seedFixedObservations):
+  // the offline mock has no OSC, so outside the seed this map stays EMPTY and
+  // every slot honestly reads `unknown`.
+  readonly #fixedObservations = seedFixedObservations();
 
   fixedLayersConfig(): FixedLayerBank | null {
     return this.#fixedBank;
@@ -291,7 +296,9 @@ export class MockRuntime {
   /**
    * Per-slot state, offline: there is no OSC and no server, so occupancy is
    * honestly UNKNOWN for every slot (never 'empty' — the B-094 honesty rule);
-   * `binding` is null until stage 3, exactly like the bridge.
+   * `binding` is null until stage 3, exactly like the bridge. The ONE exception
+   * is the e2e observation seed (`seedFixedObservations`) — explicit test mode,
+   * empty on a normal boot.
    */
   fixedLayersState(): FixedSlotState[] {
     if (this.#fixedBank === null) return [];
@@ -303,7 +310,7 @@ export class MockRuntime {
         channel,
         layer,
         ...(alias !== undefined ? { alias } : {}),
-        observed: { kind: 'unknown' },
+        observed: this.#fixedObservations.get(layer) ?? { kind: 'unknown' },
         binding: null,
       });
     }
@@ -415,11 +422,32 @@ export class MockRuntime {
    * observation reports an `html` producer. The mock's "observation" is its
    * orphan list: a non-`html` orphan refuses, and an unknown coordinate (no
    * observation at all) refuses too — never a blind CLEAR.
+   *
+   * R-021 stage 2b parity — a FIXED-bank layer's observation lives in
+   * `#fixedObservations` instead (fixed layers never surface as orphans, 4.2a).
+   * Same predicate, same refusal: only an observed `html` producer clears; the
+   * cleared slot settles to observed-empty and republishes, which is the mock's
+   * stand-in for the bridge's next-sweep resolve.
    */
   clearLayer(
     channel: number,
     layer: number,
   ): { ok: boolean; reason?: 'owned' | 'foreign' | 'amcp-error' } {
+    const bank = this.#fixedBank;
+    if (
+      bank !== null &&
+      channel === bank.channel &&
+      layer >= bank.start &&
+      layer < bank.start + bank.count
+    ) {
+      const observed = this.#fixedObservations.get(layer);
+      if (observed?.kind !== 'producer' || observed.producer !== 'html') {
+        return { ok: false, reason: 'foreign' };
+      }
+      this.#fixedObservations.set(layer, { kind: 'empty' });
+      this.fixedStateChanged.emit(this.fixedLayersState());
+      return { ok: true };
+    }
     const observed = this.#orphans.find((o) => o.channel === channel && o.layer === layer);
     if (observed === undefined || observed.producer !== 'html') {
       return { ok: false, reason: 'foreign' };
@@ -666,4 +694,46 @@ function seedOwnedOccupancy(): OwnedOccupancyWarning[] {
         },
       ]
     : [];
+}
+
+/** Is the R-021 e2e fixed-bank seed armed (via addInitScript, like CG_E2E_ORPHAN)? */
+function fixedBankSeedArmed(): boolean {
+  return (globalThis as { CG_E2E_FIXED_BANK?: boolean }).CG_E2E_FIXED_BANK === true;
+}
+
+/**
+ * R-021 stage 2b — e2e-only fixed-bank seed: with `window.CG_E2E_FIXED_BANK`
+ * armed the offline mock boots with a declared bank so Playwright can drive
+ * the visible flow (permanent rows, aliases, the verb split, the confirm-gated
+ * Clear). UNSEEDED, the mock has no bank — the panel renders nothing, exactly
+ * like today.
+ */
+function seedFixedBank(): FixedLayerBank | null {
+  return fixedBankSeedArmed()
+    ? {
+        channel: 1,
+        start: 70,
+        count: 4,
+        aliases: { '70': 'CLOCK', '71': 'LOWER THIRD' },
+      }
+    : null;
+}
+
+/**
+ * R-021 stage 2b — the seed's per-layer observations, covering all four
+ * display cases (html / non-html producer / empty / unknown) so Playwright can
+ * assert the verb split and the honest wording. The offline mock has no OSC,
+ * so WITHOUT the seed this map is empty and every slot reads `unknown` — the
+ * bridge-side truth (real tap + sweep) is integration-tested in
+ * tools/caspar-bridge.
+ */
+function seedFixedObservations(): Map<number, FixedSlotObservation> {
+  return fixedBankSeedArmed()
+    ? new Map<number, FixedSlotObservation>([
+        [70, { kind: 'producer', producer: 'html' }],
+        [71, { kind: 'producer', producer: 'ffmpeg' }],
+        [72, { kind: 'empty' }],
+        [73, { kind: 'unknown' }],
+      ])
+    : new Map();
 }

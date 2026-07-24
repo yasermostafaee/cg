@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { AsyncButtonController, type AsyncView } from '../src/renderer/ui/asyncButtonController.js';
+import {
+  AsyncButtonController,
+  asyncResultMessage,
+  type AsyncView,
+} from '../src/renderer/ui/asyncButtonController.js';
 
 /**
  * R-007 — the async-feedback state machine. A manual scheduler stands in for
@@ -216,5 +220,44 @@ describe('AsyncButtonController', () => {
     expect(errors[0]).not.toBe('');
     expect(view().errorMessage).toBeNull();
     expect(view().phase).toBe('idle');
+  });
+
+  /**
+   * R-021 stage 2b (D3) — a CANCELLED confirm gate (see `withConfirm`) must not
+   * read as anything: no success flash (nothing ran), no error state and no
+   * message (the operator's own "no" is not a refusal). Straight back to idle.
+   */
+  it('a cancelled result settles straight to idle — no success flash, no message', async () => {
+    const { clock, ctrl, view } = harness();
+    ctrl.press(() => Promise.resolve({ accepted: false, cancelled: true }));
+    await tick();
+    expect(view()).toMatchObject({
+      phase: 'idle',
+      errorMessage: null,
+      ariaBusy: false,
+      inFlight: false,
+    });
+    // No pending success timer flips the phase later, either.
+    clock.advance(600);
+    expect(view().phase).toBe('idle');
+  });
+
+  it('a cancelled result with an onError sink (toast) reports NOTHING', async () => {
+    const { ctrl, view, errors } = toastHarness();
+    ctrl.press(() => Promise.resolve({ accepted: false, cancelled: true }));
+    await tick();
+    expect(errors).toEqual([]);
+    expect(view().phase).toBe('idle');
+    expect(view().errorMessage).toBeNull();
+  });
+});
+
+describe('asyncResultMessage — the shared button/menu wording', () => {
+  it('returns null for a cancelled confirm gate (never the not-accepted fallback)', () => {
+    expect(asyncResultMessage({ accepted: false, cancelled: true })).toBeNull();
+  });
+
+  it('still explains a genuine refusal', () => {
+    expect(asyncResultMessage({ accepted: false })).toBe('Not accepted.');
   });
 });
