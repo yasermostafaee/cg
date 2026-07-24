@@ -69,6 +69,17 @@ type Phase =
   // (Bug 4). `sourceSha256` lets "Convert again" reuse the hash.
   | { kind: 'duplicate'; sourceSha256: string; candidates: readonly AssetMeta[] }
   | { kind: 'converting'; progress: number }
+  // D-128 — THE CONVERSION RESULT, shown ALWAYS (not only on failure): the asset stored
+  // and every check green (or with warnings), awaiting the operator's "Place element".
+  // The whole multi-round field hunt happened because a broken output was stored silently
+  // and the only symptom was "it doesn't render" — the modal now says what it produced.
+  | {
+      kind: 'result';
+      result: VideoImportResult;
+      outputAlpha: VideoConvertModule.AlphaStats | null;
+      /** Fully-opaque coverage dropped sharply vs the source (solid regions going semi-transparent). */
+      opaqueDrop: boolean;
+    }
   | { kind: 'error'; message: string };
 
 const PREVIEW_MAX_W = 480;
@@ -431,11 +442,19 @@ export function VideoImportModal(props: {
         });
         return;
       }
-      props.onDone({
-        asset,
-        durationMs: measured,
-        width: expectedW,
-        height: expectedH,
+      // A SIGNIFICANT drop in fully-opaque coverage is a broadcast defect even when the
+      // file plays (solid regions compositing semi-transparent) — flagged as a WARNING
+      // in the result panel, source-relative (a sparse graphic stays quiet).
+      const opaqueDrop =
+        sourceAlpha !== null &&
+        outputAlpha !== null &&
+        sourceAlpha.opaqueFrac > 0.02 &&
+        outputAlpha.opaqueFrac < sourceAlpha.opaqueFrac * 0.6;
+      setPhase({
+        kind: 'result',
+        result: { asset, durationMs: measured, width: expectedW, height: expectedH },
+        outputAlpha,
+        opaqueDrop,
       });
     } catch (err) {
       setPhase({ kind: 'error', message: `Storing the converted clip failed: ${String(err)}` });
@@ -514,7 +533,16 @@ export function VideoImportModal(props: {
         </div>
       )}
       <div className={s.footerActions}>
-        {showDuplicate && duplicateMatch !== null && phase.kind === 'duplicate' ? (
+        {phase.kind === 'result' ? (
+          <>
+            <ModalButton variant="secondary" onClick={props.onClose}>
+              Close without placing
+            </ModalButton>
+            <ModalButton variant="primary" onClick={() => props.onDone(phase.result)}>
+              Place element
+            </ModalButton>
+          </>
+        ) : showDuplicate && duplicateMatch !== null && phase.kind === 'duplicate' ? (
           <>
             <ModalButton
               variant="secondary"
@@ -710,6 +738,50 @@ export function VideoImportModal(props: {
             </div>
 
             {phase.kind === 'error' && <Callout variant="danger">{phase.message}</Callout>}
+
+            {phase.kind === 'result' && (
+              // D-128 — the CONVERSION RESULT panel, shown ALWAYS (never console-only):
+              // a clear PASS for playability, alpha preservation at a glance, warnings
+              // where they matter, raw numbers behind an expander.
+              <div data-testid="video-conversion-result">
+                <Callout variant={phase.opaqueDrop ? 'caution' : 'info'}>
+                  <div>✓ Output plays (verified: metadata, 5-point seek sweep, playback span)</div>
+                  <div>
+                    {sourceAlpha === null || phase.outputAlpha === null
+                      ? '• Alpha: profile unavailable (sampling failed — see console)'
+                      : sourceAlpha.nonTransparentFrac < 0.001
+                        ? '• Alpha: the SOURCE carries no visible pixels (see the warning above)'
+                        : phase.opaqueDrop
+                          ? `⚠ Alpha preserved, but fully-opaque coverage DROPPED sharply ` +
+                            `(${(sourceAlpha.opaqueFrac * 100).toFixed(1)}% → ` +
+                            `${(phase.outputAlpha.opaqueFrac * 100).toFixed(1)}%) — solid regions may ` +
+                            `composite semi-transparent on air.`
+                          : `✓ Alpha preserved (source ${(sourceAlpha.opaqueFrac * 100).toFixed(1)}% opaque → ` +
+                            `output ${(phase.outputAlpha.opaqueFrac * 100).toFixed(1)}%)`}
+                  </div>
+                  <details>
+                    <summary>Raw numbers</summary>
+                    <div className={s.meta}>
+                      source:{' '}
+                      {sourceAlpha !== null
+                        ? (converter.current?.formatAlphaStats(sourceAlpha) ?? '—')
+                        : 'unavailable'}
+                    </div>
+                    <div className={s.meta}>
+                      output:{' '}
+                      {phase.outputAlpha !== null
+                        ? (converter.current?.formatAlphaStats(phase.outputAlpha) ?? '—')
+                        : 'unavailable'}
+                    </div>
+                    <div className={s.meta}>
+                      stored: {phase.result.width}×{phase.result.height} ·{' '}
+                      {(phase.result.durationMs / 1000).toFixed(2)} s ·{' '}
+                      {(phase.result.asset.byteSize / 1024 / 1024).toFixed(2)} MB
+                    </div>
+                  </details>
+                </Callout>
+              </div>
+            )}
           </>
         )}
       </div>

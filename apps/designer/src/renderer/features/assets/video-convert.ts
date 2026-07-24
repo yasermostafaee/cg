@@ -332,7 +332,12 @@ export async function probeSource(
 
 export type ConvertedClipVerdict =
   | { ok: true; durationMs: number; width: number; height: number }
-  | { ok: false; reason: string };
+  | {
+      ok: false;
+      /** WHICH check failed — the message must be specific, never "conversion failed". */
+      check: 'decode' | 'duration' | 'dimensions' | 'seek' | 'playback';
+      reason: string;
+    };
 
 /**
  * D-128 — an ALPHA PROFILE: the reading that distinguishes "renders invisible because
@@ -470,10 +475,13 @@ export function sampleOutputAlphaStats(bytes: Uint8Array): Promise<AlphaStats | 
     v.onloadeddata = () => {
       void (async () => {
         try {
-          const scale = Math.min(1, 320 / Math.max(1, v.videoWidth));
+          // FULL resolution — a downscale averages alpha at edges and skews the profile
+          // (the field reading showed opaque 10.7%→3.8% that was mostly this sampler's
+          // 320px downscale eating small elements' opaque cores). Source sampling is
+          // full-res raw RGBA, so the comparison must be too; 1920×282×5 frames is cheap.
           const c = document.createElement('canvas');
-          c.width = Math.max(1, Math.round(v.videoWidth * scale));
-          c.height = Math.max(1, Math.round(v.videoHeight * scale));
+          c.width = Math.max(1, v.videoWidth);
+          c.height = Math.max(1, v.videoHeight);
           const ctx = c.getContext('2d', { willReadFrequently: true });
           if (ctx === null) {
             clearTimeout(timer);
@@ -512,13 +520,22 @@ export function sampleOutputAlphaStats(bytes: Uint8Array): Promise<AlphaStats | 
 }
 
 /**
- * D-128 — VERIFY the converted bytes actually DECODE in THIS browser before anything
- * is stored: a real `<video>` must reach metadata, report a finite positive duration,
- * and match the EXPECTED post-crop dimensions. ffmpeg exiting 0 is NOT proof the file
- * plays (the 1920×282 field regression stored a 6.5 MB WebM no surface could decode —
- * silently). A conversion that yields an unplayable file must FAIL LOUDLY here, never
- * become a stored asset. Also the duration measurement for a `Duration: N/A` source
- * (the converted output is the authoritative clock either way).
+ * D-128 — VERIFY the converted bytes ACTUALLY PLAY before anything is stored. The field
+ * lesson (`Lower_Default`): loading metadata and decoding a sample frame is NOT proof of
+ * playability — Chromium seek-decoded five frames of a file whose full playback throws
+ * `PIPELINE_ERROR_DECODE`. So this exercises the real thing, in order:
+ *
+ *  1. metadata reachable + finite positive duration + EXACT post-crop dimensions;
+ *  2. a SEEK SWEEP across the clip (15/35/55/75/92%) — each must fire `seeked` with a
+ *     decodable frame (`readyState ≥ HAVE_CURRENT_DATA`), catching mid-file corruption;
+ *  3. a REAL PLAYBACK SPAN — plays ~2s of media time (rate 4; the whole clip when
+ *     shorter) with the `error` listener armed the ENTIRE time: any `MediaError`
+ *     (the `PIPELINE_ERROR_*` class) fails the check with the position it died at.
+ *
+ * TIME BOUND (a long clip must not hang the modal): metadata ≤ 8 s, each of the 5 seeks
+ * ≤ 3 s, playback span ≤ 8 s wall — worst case ~31 s, typical clip ~2–4 s. Muted, 4×,
+ * on a detached element. Failures name WHICH check failed (`check`), never a generic
+ * "conversion failed".
  */
 export function verifyConvertedClip(
   bytes: Uint8Array,
@@ -528,34 +545,111 @@ export function verifyConvertedClip(
   const ab = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(ab).set(bytes);
   const url = URL.createObjectURL(new Blob([ab], { type: 'video/webm' }));
-  return new Promise((resolve) => {
-    const v = document.createElement('video');
-    v.preload = 'metadata';
-    v.muted = true;
+  const v = document.createElement('video');
+  v.preload = 'auto';
+  v.muted = true;
+  const mediaError = (): string => v.error?.message ?? `media error code ${String(v.error?.code)}`;
+  const fail = (
+    check: 'decode' | 'duration' | 'dimensions' | 'seek' | 'playback',
+    reason: string,
+  ): ConvertedClipVerdict => ({ ok: false, check, reason });
+
+  return new Promise<ConvertedClipVerdict>((resolve) => {
+    let settled = false;
     const done = (verdict: ConvertedClipVerdict): void => {
+      if (settled) return;
+      settled = true;
+      try {
+        v.pause();
+        v.removeAttribute('src');
+      } catch {
+        /* detached */
+      }
       URL.revokeObjectURL(url);
       resolve(verdict);
     };
+
+    // Armed for the WHOLE verification — a decode error at any stage (metadata, a seek,
+    // mid-playback) resolves with the specific position it died at.
+    v.onerror = () =>
+      done(
+        fail(
+          'playback',
+          `the output does not play (${mediaError()}) at t=${v.currentTime.toFixed(2)}s`,
+        ),
+      );
+
+    const metaTimer = setTimeout(
+      () =>
+        done(fail('decode', 'the output never reached metadata (undecodable container/stream)')),
+      8000,
+    );
+
     v.onloadedmetadata = () => {
+      clearTimeout(metaTimer);
       const durationMs = Number.isFinite(v.duration) ? Math.round(v.duration * 1000) : 0;
       if (durationMs <= 0) {
-        done({ ok: false, reason: 'the converted clip reports no duration' });
-      } else if (v.videoWidth !== expectedWidth || v.videoHeight !== expectedHeight) {
-        done({
-          ok: false,
-          reason:
-            `the converted clip decodes at ${String(v.videoWidth)}×${String(v.videoHeight)}, ` +
-            `expected ${String(expectedWidth)}×${String(expectedHeight)}`,
-        });
-      } else {
-        done({ ok: true, durationMs, width: v.videoWidth, height: v.videoHeight });
+        done(fail('duration', 'the converted clip reports no duration'));
+        return;
       }
+      if (v.videoWidth !== expectedWidth || v.videoHeight !== expectedHeight) {
+        done(
+          fail(
+            'dimensions',
+            `the converted clip decodes at ${String(v.videoWidth)}×${String(v.videoHeight)}, ` +
+              `expected ${String(expectedWidth)}×${String(expectedHeight)}`,
+          ),
+        );
+        return;
+      }
+      void (async () => {
+        // 2 — the seek sweep across the clip (not just the start)
+        const dur = v.duration;
+        for (const frac of [0.15, 0.35, 0.55, 0.75, 0.92]) {
+          const target = frac * dur;
+          const okSeek = await new Promise<boolean>((res) => {
+            const st = setTimeout(() => res(false), 3000);
+            v.onseeked = () => {
+              clearTimeout(st);
+              res(v.readyState >= 2); // HAVE_CURRENT_DATA — a frame is really there
+            };
+            v.currentTime = target;
+          });
+          if (settled) return; // the error listener already resolved (the real verdict)
+          if (!okSeek) {
+            done(
+              fail('seek', `no decodable frame at ${target.toFixed(2)}s (seek never completed)`),
+            );
+            return;
+          }
+        }
+        // 3 — a real playback span, error listener still armed
+        v.currentTime = 0;
+        v.playbackRate = 4;
+        const spanEndMedia = Math.min(dur, 2.0);
+        const playOk = await new Promise<boolean>((res) => {
+          const pt = setTimeout(() => res(v.currentTime > 0), 8000); // bound: 8s wall
+          const tick = (): void => {
+            if (settled || v.currentTime >= spanEndMedia || v.ended) {
+              clearTimeout(pt);
+              res(true);
+              return;
+            }
+            setTimeout(tick, 100);
+          };
+          v.play().then(tick, () => {
+            clearTimeout(pt);
+            res(false);
+          });
+        });
+        if (settled) return;
+        if (!playOk) {
+          done(fail('playback', 'the output does not play (playback never started)'));
+          return;
+        }
+        done({ ok: true, durationMs, width: expectedWidth, height: expectedHeight });
+      })();
     };
-    v.onerror = () =>
-      done({
-        ok: false,
-        reason: `the converted clip does not decode (${v.error?.message ?? 'media error'})`,
-      });
     v.src = url;
   });
 }

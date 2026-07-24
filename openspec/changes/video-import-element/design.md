@@ -919,6 +919,53 @@ paste-back instead shows source-visible/output-empty, the collapse guard will al
 have blocked the store and named the conversion — that reading pins the true cause
 either way.
 
+## PIPELINE_ERROR_DECODE — bisect results + the strengthened guard & result panel (2026-07-24)
+
+**The owner's reading killed the collapse hypothesis:** output alpha SURVIVES (maxα 255,
+21% visible) — the real failure is Chromium's `PIPELINE_ERROR_DECODE`: the produced WebM
+does not PLAY, though metadata loads and sample frames seek-decode (which is why the old
+verify guard passed it — and why "loads metadata + decodes a frame" is NOT playability).
+
+**Bisect matrix (profile-matched fixture: 1920×282 premult, meanα 29.0 / visible 12.9% /
+opaque 10.2% vs the owner's 28.8 / 11.86 / 10.73):**
+
+| variant                         | Chromium FULL playthrough | leak(≥8)        | opaque retention | size           |
+| ------------------------------- | ------------------------- | --------------- | ---------------- | -------------- |
+| OLD crf12-2M, no bleed          | ✓ played through          | 0.001%          | 100.0%           | 0.92 MB        |
+| OLD + bleed                     | ✓                         | 0.001%          | 100.0%           | 0.99 MB        |
+| MID crf10-8M-g25 + bleed        | ✓                         | 0.000%          | 100.0%           | 2.79 MB        |
+| CUR crf4-qmax16-20M-g25 + bleed | ✓                         | 0.000% (maxα 6) | 100.0%           | 4.31 MB        |
+| CUR no bleed / CUR no -g        | ✓ / ✓                     | 0.000%          | 100.0%           | 2.02 / 4.18 MB |
+| CUR yuv420p NO-ALPHA control    | ✓                         | —               | —                | 1.68 MB        |
+| **CUR through the REAL WASM**   | **✓ played through**      | —               | —                | 4.26 MB        |
+
+**No variant reproduces the failure** — natively or through the real wasm converter, on
+content matched to the owner's alpha profile. The settings/bleed are NOT the boundary on
+this fixture; the failure needs the OWNER'S ACTUAL CLIP (a short cut of `Lower_Default.avi`
+is requested for the next round). **The opaque "regression" (10.73%→3.80%) was primarily a
+MEASUREMENT ARTIFACT:** the output sampler downscaled to 320px, averaging away small
+elements' opaque cores (also why "visible" rose 11.86→21.14%); the full-res compare shows
+100% opaque retention at every setting. The sampler now samples at FULL resolution.
+
+**Shipped regardless of root cause (the owner's robustness requirement):**
+
+1. **`verifyConvertedClip` now proves PLAYABILITY**, not metadata: (a) metadata + exact
+   post-crop dims + finite duration; (b) a 5-point SEEK SWEEP across the clip
+   (15/35/55/75/92%), each requiring a decodable frame; (c) a REAL PLAYBACK SPAN (~2s of
+   media at 4×) with the `error` listener armed throughout — any `MediaError`
+   (`PIPELINE_ERROR_*`) fails with the position it died at. TIME BOUND: metadata ≤8s,
+   seeks ≤3s each, span ≤8s wall (worst ~31s; typical 2–4s). Failures name WHICH check
+   failed (`decode`/`duration`/`dimensions`/`seek`/`playback`).
+2. **THE RESULT PANEL — shown ALWAYS, never console-only** (`video-conversion-result`):
+   a clear "✓ Output plays" PASS, alpha preservation at a glance, and a WARNING when
+   fully-opaque coverage drops sharply vs the source (>40% relative loss with source
+   opaque >2%) — solid regions compositing semi-transparent is a broadcast defect even
+   when the file plays. Raw numbers behind an expander. The element is placed by an
+   explicit **"Place element"**; "Close without placing" keeps the asset only.
+3. **Never a silent broken asset:** unplayable output / alpha collapse / readback
+   mismatch each fail with their OWN message (distinct from "source has no alpha" and
+   "converter crashed") and store nothing (readback: store nothing FURTHER — no element).
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide

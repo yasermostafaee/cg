@@ -207,9 +207,13 @@ test('a lower-third-shaped clip KEEPS its opaque pixels through the full chain (
   // a real lower-third must NOT trip the fully-transparent warning
   await expect(page.getByText('FULLY TRANSPARENT')).not.toBeAttached();
   await page.getByRole('button', { name: 'Convert & import' }).click();
-  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached({
-    timeout: 25_000,
-  });
+  // the RESULT panel must report PASS + preserved alpha for a real lower-third
+  const panel = page.getByTestId('video-conversion-result');
+  await expect(panel).toBeVisible({ timeout: 25_000 });
+  await expect(panel).toContainText('Output plays');
+  await expect(panel).not.toContainText('DROPPED');
+  await page.getByRole('button', { name: 'Place element' }).click();
+  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached();
   // The stored output must RETAIN opaque pixels where the source bar is, and stay
   // transparent in the source's empty regions — the invisible-clip class would fail here.
   const scan = await page.evaluate(async () => {
@@ -332,12 +336,11 @@ for (const [W, H] of [
       `${String(W)}×${String(H)}`,
     );
     await page.getByRole('button', { name: 'Convert & import' }).click();
-    // The modal now VERIFIES decode + dimensions before storing — reaching 'closed'
-    // already proves the produced WebM decodes; the explicit check below re-proves it
-    // from the STORED bytes (guarding the store path too).
-    await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached({
-      timeout: 25_000,
-    });
+    // The modal VERIFIES playability (seek sweep + playback span) before storing —
+    // reaching the RESULT panel already proves the produced WebM plays; the explicit
+    // check below re-proves it from the STORED bytes (guarding the store path too).
+    await page.getByRole('button', { name: 'Place element' }).click({ timeout: 25_000 });
+    await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached();
     const decode = await page.evaluate(async () => {
       const assets = await window.cg.assets.list();
       const vid = assets.find((a) => a.kind === 'video');

@@ -133,6 +133,17 @@ function button(label: string): HTMLButtonElement {
   return hit;
 }
 
+/**
+ * D-128 — a successful conversion now lands on the RESULT panel (shown always, never
+ * console-only); the element is placed by the operator's explicit "Place element".
+ */
+async function placeElement(): Promise<void> {
+  await act(async () => {
+    button('Place element').click();
+    await Promise.resolve();
+  });
+}
+
 function cropToggle(): HTMLInputElement {
   const el = document.querySelector('[data-testid="video-crop-toggle"]');
   if (el === null) throw new Error('no crop toggle');
@@ -239,6 +250,7 @@ describe('VideoImportModal (D-128)', () => {
       button('Convert & import').click();
     });
     expect(storeBytes).toHaveBeenCalledTimes(1);
+    await placeElement();
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
@@ -301,6 +313,7 @@ describe('VideoImportModal (D-128)', () => {
       button('Convert & import').click();
     });
     expect(verifyConvertedClip).toHaveBeenCalled();
+    await placeElement();
     expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ durationMs: 3210 }));
   });
 
@@ -310,6 +323,7 @@ describe('VideoImportModal (D-128)', () => {
     convertToWebm.mockResolvedValue(new Uint8Array([7]));
     verifyConvertedClip.mockResolvedValue({
       ok: false,
+      check: 'playback',
       reason: 'the converted clip does not decode (DEMUXER_ERROR)',
     });
     lastConvertLogTail.mockReturnValue(['[libvpx] some warning line']);
@@ -331,6 +345,7 @@ describe('VideoImportModal (D-128)', () => {
     convertToWebm.mockResolvedValue(new Uint8Array([7]));
     verifyConvertedClip.mockResolvedValue({
       ok: false,
+      check: 'dimensions',
       reason: 'the converted clip decodes at 640×358, expected 640×360',
     });
     await renderModal();
@@ -395,6 +410,46 @@ describe('VideoImportModal (D-128)', () => {
       await Promise.resolve();
     });
     expect(storeBytes).toHaveBeenCalled();
+    await placeElement();
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it('the RESULT PANEL shows a PASS state on a clean conversion, and a WARNING on an opaque drop', async () => {
+    // clean: pass panel visible, alpha-preserved line, no warning
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const panel = document.querySelector('[data-testid="video-conversion-result"]');
+    expect(panel).not.toBeNull();
+    expect(panel?.textContent).toContain('Output plays');
+    expect(panel?.textContent).toContain('Alpha preserved');
+    expect(panel?.textContent).not.toContain('DROPPED');
+  });
+
+  it("the RESULT PANEL flags a sharp fully-opaque drop as a WARNING (the owner's 10.7%→3.8% class)", async () => {
+    convertToWebm.mockResolvedValue(new Uint8Array([7]));
+    sampleSourceAlpha.mockResolvedValue({ ...HEALTHY_ALPHA, opaqueFrac: 0.107 });
+    sampleOutputAlphaStats.mockResolvedValue({ ...HEALTHY_ALPHA, opaqueFrac: 0.038 });
+    await renderModal();
+    await act(async () => {
+      button('Convert & import').click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const panel = document.querySelector('[data-testid="video-conversion-result"]');
+    expect(panel?.textContent).toContain('DROPPED sharply');
+    expect(panel?.textContent).toContain('10.7%');
+    expect(panel?.textContent).toContain('3.8%');
+    // the asset IS stored (a warning, not a failure) and placement stays the operator's call
+    expect(storeBytes).toHaveBeenCalled();
+    expect(onDone).not.toHaveBeenCalled();
+    await placeElement();
     expect(onDone).toHaveBeenCalled();
   });
 
@@ -643,6 +698,7 @@ describe('VideoImportModal (D-128)', () => {
         premultipliedAlpha: true,
       },
     });
+    await placeElement();
     expect(onDone).toHaveBeenCalledWith({
       asset: STORED_ASSET,
       durationMs: 4000,
@@ -663,6 +719,7 @@ describe('VideoImportModal (D-128)', () => {
     expect(convertToWebm).toHaveBeenCalledWith(expect.objectContaining({ crop: undefined }));
     const prov = (storeBytes.mock.calls[0]?.[0] as { provenance: object }).provenance;
     expect('crop' in prov).toBe(false);
+    await placeElement();
     expect(onDone).toHaveBeenCalledWith(
       expect.objectContaining({ width: 640, height: 360 }), // full source frame
     );
@@ -744,6 +801,7 @@ describe('VideoImportModal — pre-convert dedupe (D-128)', () => {
     // …but a different crop, so it must convert, and stores the NEW (distinct) asset
     expect(convertToWebm).toHaveBeenCalledTimes(1);
     expect(storeBytes).toHaveBeenCalledTimes(1);
+    await placeElement();
     expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ asset: STORED_ASSET }));
   });
 

@@ -53,9 +53,9 @@ test('a video imports, its stored WebM decodes (CSP media-src), and drag places 
 
   // convert; the modal closes on success (store-then-place)
   await page.getByRole('button', { name: 'Convert & import' }).click();
-  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached({
-    timeout: 25_000,
-  });
+  // the RESULT panel (D-128 — conversion verdict shown always); place the element from it
+  await page.getByRole('button', { name: 'Place element' }).click({ timeout: 25_000 });
+  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached();
 
   // the stored asset is listed as the converted WebM
   await expect(page.getByText('box-64x64-bgra', { exact: false }).first()).toBeVisible();
@@ -148,9 +148,9 @@ test('back-to-back conversions of a known-good file BOTH succeed (fresh worker p
       await expect(page.getByText('already imported')).toBeVisible({ timeout: 25_000 });
       await page.getByRole('button', { name: 'Convert again' }).click();
     }
-    await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached({
-      timeout: 25_000,
-    });
+    // both attempts end at the RESULT panel; place the element from it
+    await page.getByRole('button', { name: 'Place element' }).click({ timeout: 25_000 });
+    await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached();
   }
   await expect(page.getByText('clip-1', { exact: false }).first()).toBeVisible();
 });
@@ -174,9 +174,9 @@ test('an imported video RENDERS in the canvas frame at a NON-BLANK mid-clip post
   await expect(page.locator('[data-testid="video-probe-meta"]')).toContainText('64×64');
   // place-on-confirm creates a video element on the canvas
   await page.getByRole('button', { name: 'Convert & import' }).click();
-  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached({
-    timeout: 25_000,
-  });
+  // the RESULT panel (D-128 — conversion verdict shown always); place the element from it
+  await page.getByRole('button', { name: 'Place element' }).click({ timeout: 25_000 });
+  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached();
 
   // The canvas iframe renders a REAL <video> (not the Phase-2 placeholder box).
   const frame = page.frameLocator('iframe[title="cgpreview"]');
@@ -222,9 +222,9 @@ test('a video element is NOT remounted across transform changes — it stays vis
   });
   await expect(page.locator('[data-testid="video-probe-meta"]')).toContainText('64×64');
   await page.getByRole('button', { name: 'Convert & import' }).click();
-  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached({
-    timeout: 25_000,
-  });
+  // the RESULT panel (D-128 — conversion verdict shown always); place the element from it
+  await page.getByRole('button', { name: 'Place element' }).click({ timeout: 25_000 });
+  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached();
 
   const frame = page.frameLocator('iframe[title="cgpreview"]');
   const videoLoc = frame.locator('video[data-cg-asset-id]');
@@ -280,9 +280,9 @@ test('a premultiplied-alpha source imports WITHOUT the black fringe (D-128 un-pr
 
   // convert with the default (un-premultiply ON), then decode the stored WebM
   await page.getByRole('button', { name: 'Convert & import' }).click();
-  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached({
-    timeout: 25_000,
-  });
+  // the RESULT panel (D-128 — conversion verdict shown always); place the element from it
+  await page.getByRole('button', { name: 'Place element' }).click({ timeout: 25_000 });
+  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached();
 
   // Sample the DECODED pixels: draw the stored <video> to a canvas and read a pixel
   // deep in the HALF-ALPHA right region. Straight-alpha source colour is gold
@@ -359,9 +359,9 @@ test('MOTION keeps transparency: source-transparent pixels stay transparent acro
   });
   await expect(page.locator('[data-testid="video-probe-meta"]')).toContainText('64×64');
   await page.getByRole('button', { name: 'Convert & import' }).click();
-  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached({
-    timeout: 25_000,
-  });
+  // the RESULT panel (D-128 — conversion verdict shown always); place the element from it
+  await page.getByRole('button', { name: 'Place element' }).click({ timeout: 25_000 });
+  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached();
 
   // Decode the stored WebM and sample the four 10×10 CORNER regions — transparent in
   // EVERY source frame — at several timestamps across the orbit (motion on every frame).
@@ -463,9 +463,9 @@ test('re-importing the same source is deduped: "Use existing" places an element 
   // first import converts and stores one video asset
   await importOnce();
   await page.getByRole('button', { name: 'Convert & import' }).click();
-  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached({
-    timeout: 25_000,
-  });
+  // the RESULT panel (D-128 — conversion verdict shown always); place the element from it
+  await page.getByRole('button', { name: 'Place element' }).click({ timeout: 25_000 });
+  await expect(page.getByRole('dialog', { name: 'Import video' })).not.toBeAttached();
   const videosAfterFirst = await page.evaluate(
     async () => (await window.cg.assets.list()).filter((a) => a.kind === 'video').length,
   );
