@@ -966,6 +966,50 @@ elements' opaque cores (also why "visible" rose 11.86→21.14%); the full-res co
    mismatch each fail with their OWN message (distinct from "source has no alpha" and
    "converter crashed") and store nothing (readback: store nothing FURTHER — no element).
 
+## Two-path bisect on the REAL clip (2026-07-24) — time structure + the settings decision
+
+**Controlled comparison (owner's machine):** the spike converts `Lower_Default.avi` in
+~13 s and the result plays; the app's modal takes minutes and (on the owner's machine)
+produced the `PIPELINE_ERROR_DECODE` file. **The complete path diff:** the spike execs
+`-y -i /mnt/<f> [VP8 crf12 -b:v 2M …] out` — NO filters (not even un-premultiply), no
+`-r` conform, no `-g`, no `qmax`, one exec total. The modal path adds: a probe exec, a
+poster exec, THREE source-alpha sample execs, the un-premultiply geq, the alpha-bleed
+graph (a second geq + boxblur + overlay + alphamerge), `-r <projectFps>` conform,
+`-crf 4 -qmax 16 -b:v 20M -g 25`, a fresh worker per import, and the post-convert
+playability verification. Same WORKERFS mount, same core (0.12.10), same wrapper.
+
+**Ladder bisect on the REAL 5 s cut (`rawvideo/bgra 1920×282@25`, AE CS6), through the
+REAL wasm core, Chromium playthrough per rung (this machine):**
+
+| rung                                             | wall      | size    | plays? |
+| ------------------------------------------------ | --------- | ------- | ------ |
+| L1 SPIKE (no filter, crf12-2M)                   | **5.4 s** | 0.84 MB | ✓      |
+| L2 + un-premultiply geq, `-r 50` (rev .2 shape)  | 17.1 s    | 1.01 MB | ✓      |
+| L3 + bleed graph (crf12-2M)                      | 31.2 s    | 1.30 MB | ✓      |
+| L4 bleed + MID `crf10 -8M -g25`                  | 31.9 s    | 3.10 MB | ✓      |
+| L5 bleed + CUR `crf4 -qmax16 -20M -g25` (rev .3) | 32.0 s    | 4.15 MB | ✓      |
+| L6 = L5 at `-r 25` (no frame doubling)           | 32.4 s    | 4.15 MB | ✓      |
+
+**Findings.** (1) TIME is dominated by the geq FILTER stages, not the encoder settings:
+no-filter 5.4 s → +1 geq 17.1 s → +bleed (2nd geq + blur) 31.2 s, while quality steps are
+free (31.2→32.0 s) and even frame-doubling is free (encode is cheap next to geq). The
+owner's "minutes" on the 14.3 s clip ≈ 3× this cut's filter time plus the modal's extra
+probe/poster/sampling execs. (2) DECODE: every rung — including exact rev .3 on the real
+bytes — plays through on THIS machine; the native encode of the same cut also plays, and
+the app's own import of the cut passed the strengthened playability verify. The
+`PIPELINE_ERROR_DECODE` therefore did not reproduce here and is consistent with an
+OWNER-MACHINE decode path (e.g. a platform/HW VP8 decoder rejecting the very high-rate
+frames `-qmax 16` produces, where software libvpx accepts them) and/or the full-length
+clip; the produced ladder files can be played on the owner's machine to settle it.
+
+**Settings recommendation (decision the owner holds, with numbers):** step quality from
+`crf 4 -qmax 16 -b:v 20M` to **`crf 10 -b:v 8M -g 25`, keeping the bleed** — measured
+leak 0.086 % ≥4 (max α 9) vs 0.008 % (max α 6), a difference that is INVISIBLE once the
+bleed makes residual leak non-black; 25 % smaller output (3.10 vs 4.15 MB on the cut);
+identical conversion time; and it removes the extreme-quantiser regime that is the most
+plausible irritant for a stricter platform decoder. Time optimisation of the geq stages
+(the real minutes-per-import lever) is a separate follow-up item.
+
 ## OPEN — owner decision
 
 - **Single-file size threshold:** the value, and whether crossing it WARNS or BLOCKS. Decide
