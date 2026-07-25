@@ -44,4 +44,21 @@ describe('the app shell bounds the page', () => {
     expect(appShell.workspace.minHeight).toBe(0);
     expect(appShell.workspace.overflow).toBe('hidden');
   });
+
+  /**
+   * R-021 — the centre column now holds TWO scrollable panels. The fixed-bank
+   * panel must be BOUNDED (capped and clipped, and willing to shrink) or a
+   * 20-row bank pushes the stack out of its bound and hands the overflow to
+   * the page — the exact defect the shell contract exists to prevent. The
+   * stack keeps `flex: 1` (asserted via StackPanel's own styles at render).
+   */
+  it('caps and clips the fixed-bank panel so two panels still cannot scroll the page', () => {
+    expect(appShell.fixedPanel.flex).toBe('0 1 auto');
+    expect(appShell.fixedPanel.minHeight).toBe(0);
+    expect(appShell.fixedPanel.maxHeight).toBe('40%');
+    expect(appShell.fixedPanel.overflow).toBe('hidden');
+    // A refuse-to-shrink panel (flexShrink 0, like the monitor strip) would
+    // break the bound under a small viewport — it must never become one.
+    expect(appShell.fixedPanel).not.toHaveProperty('flexShrink');
+  });
 });

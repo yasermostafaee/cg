@@ -26,6 +26,16 @@ export interface AsyncView {
 export interface AsyncResult {
   accepted: boolean;
   errorCode?: string | undefined;
+  /**
+   * True when the action's own confirm gate was CANCELLED (see `withConfirm` in
+   * `rowAction.ts`). A cancel is neither a success nor an error: the operator
+   * said "no" before anything ran, so the button settles straight back to idle
+   * with no success flash and no message. Without this flag a cancelled confirm
+   * would have to pick between the two lies — `accepted: true` (a success flash
+   * for a command that was never sent) or `accepted: false` (an error toast for
+   * the operator's own choice).
+   */
+  cancelled?: boolean | undefined;
 }
 
 export interface AsyncButtonConfig {
@@ -56,6 +66,11 @@ export interface AsyncButtonConfig {
  * mean the same refusal reads differently depending on how it was issued.
  */
 export function asyncResultMessage(res: AsyncResult, notAccepted = 'Not accepted.'): string | null {
+  // A cancelled confirm gate is the operator's own "no" — nothing happened, so
+  // there is nothing to report (checked before `accepted`: a cancelled result
+  // carries `accepted: false`, and the fallback message would turn it into a
+  // phantom refusal toast).
+  if (res.cancelled === true) return null;
   return res.accepted ? null : (errorCodeMessage(res.errorCode) ?? notAccepted);
 }
 
@@ -80,7 +95,7 @@ export class AsyncButtonController {
   #cancels: (() => void)[] = [];
   #spinnerShown = false;
   #floorElapsed = false;
-  #settled: { error: string | null } | undefined;
+  #settled: { error: string | null; cancelled: boolean } | undefined;
   #disposed = false;
 
   constructor(cfg: AsyncButtonConfig) {
@@ -130,11 +145,14 @@ export class AsyncButtonController {
 
     run().then(
       (res) => {
-        this.#settled = { error: asyncResultMessage(res, this.#cfg.notAcceptedMessage) };
+        this.#settled = {
+          error: asyncResultMessage(res, this.#cfg.notAcceptedMessage),
+          cancelled: res.cancelled === true,
+        };
         this.#tryFinish();
       },
       (err: unknown) => {
-        this.#settled = { error: asyncRejectionMessage(err) };
+        this.#settled = { error: asyncRejectionMessage(err), cancelled: false };
         this.#tryFinish();
       },
     );
@@ -150,11 +168,20 @@ export class AsyncButtonController {
     // If the spinner is showing, wait out the minimum-visible floor first.
     if (this.#spinnerShown && !this.#floorElapsed) return;
 
-    const { error } = this.#settled;
+    const { error, cancelled } = this.#settled;
     this.#clearTimers();
     this.#spinnerShown = false;
     this.#floorElapsed = false;
     this.#settled = undefined;
+
+    // Cancelled confirm gate: straight back to idle — no success flash (nothing
+    // succeeded), no message (nothing failed). `error` is already null here
+    // (`asyncResultMessage` returns null for a cancel); the explicit flag is what
+    // keeps the cancel out of the success branch below.
+    if (cancelled) {
+      this.#set({ phase: 'idle', showSpinner: false, ariaBusy: false, inFlight: false });
+      return;
+    }
 
     if (error !== null) {
       if (this.#cfg.onError !== undefined) {

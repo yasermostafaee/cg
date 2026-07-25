@@ -5,13 +5,24 @@
 - **Stage 1** = 1.1–1.3, 2.1, 2.2, 4.2a — install config + LayerManager fixed mechanism
   (pure logic; no UI, no channels, no on-air change). **Shipped.**
 - **Stage 2a** = 4.1, 4.2b — the WIRE CONTRACT: channels, bridge routes, live bank
-  changes, per-slot state publish, platform seam + mock parity. No renderer. **Shipped
-  (this PR).** Honest note (D7): the busy predicate reads the LayerManager's fixed
+  changes, per-slot state publish, platform seam + mock parity. No renderer. **Shipped.**
+  Honest note (D7): the busy predicate reads the LayerManager's fixed
   binding + the retained-intent slot keys — both empty until stage 3, so the END-TO-END
   shrink-with-resident refusal becomes testable only in stage 3 (the predicate itself is
   unit-tested directly, and the validator's refusal is pinned by stage 1's T13).
-- **Stage 2b** = 5.1, 5.1b, 5.2, 5.4, 5.5 — the renderer (fixed-bank panel, rows,
-  rowAction, DOM/E2E tests); owes Linux `gate:e2e`.
+- **Stage 2b** = 5.1, 5.1b (doc half), 5.2, 5.4, 5.5 (renderer half), 5.6 — the renderer:
+  fixed-bank panel + permanent rows, the ONE verb-derivation point, the declaration-time
+  confirm gate (`withConfirm` + the `cancelled` async path), the bank config modal, mock
+  seed + DOM/unit/E2E tests. **Shipped (this PR).** Honest notes: **(D1)** the ONLY verb
+  stage 2b sends is `layers.clear`, on an OBSERVED `html` producer — for unknown / empty /
+  non-html the row shows honest occupancy and NO control, because today's bridge refuses
+  those Clears (R-015) and an enabled button must never invite a click that only rejects;
+  the b1 blind-Clear and the non-html carve-out are task 4.3 (stage 4), so the spec
+  scenario _"Silence shows unknown; Clear stays available with an honest confirmation"_ is
+  satisfied only at stage 4. **(D6)** 5.1b's divergence hint is deferred to stage 3 (see
+  5.1b). **(D7)** 5.5's "import+load lands on the exact slot" E2E moves to stage 3 beside
+  5.3. Owes a Linux `gate:e2e` (the Windows run is a signal, non-authoritative for render
+  geometry) and the stage-2b hardware pass (7.3).
 - **Stage 3** = 5.3 — the one-action import+create+load chain; owes e2e + hardware.
 - **Stage 4** = 3.1–3.3, 4.3, 4.4 — restore branch + `restore-blocked` + the fixed-row
   Clear carve-out; owes hardware.
@@ -108,20 +119,51 @@ naming slots. No open decisions block implementation.
 
 ## 5. Runtime UI
 
-- [ ] 5.1 Fixed-bank panel: permanent rows (alias + layer number), occupancy honest incl.
-      explicit UNKNOWN and the `restore-blocked` state (retained item + observed occupancy
-      both named); verb derivation as ONE function of `(localItem, observation)`.
-- [ ] 5.1b Install doc: the b′ deployment invariant — all stations sharing one CasparCG
-      declare the SAME fixed bank — documented beside the config (the C-009 operator-contract
-      class); repeated foreign html inside the bank surfaced as a soft divergence hint,
-      information only.
-- [ ] 5.2 One `fixedRowActions(state): RowAction[]` declaration point (R-013 pattern); buttons + context menu from the same list.
+- [x] 5.1 (stage 2b) Fixed-bank panel: permanent rows (alias + layer number), occupancy
+      honest incl. explicit UNKNOWN ("no signal — occupancy unknown", never 'empty') and the
+      D8 dead-link mask (link `disconnected` ⇒ every row displays unknown over the frozen
+      snapshot, the B-087 class); panel above the stack, bounded (`appShell.fixedPanel` —
+      the page never scrolls), renders NOTHING with no bank. Honest note: the
+      `restore-blocked` row state is STAGE 4 — it rides the `binding` field (4.2b), which
+      the wire cannot populate until stage 3, so no row can display it yet.
+- [x] 5.1b (stage 2b, doc half) Install doc: the b′ deployment invariant — all stations
+      sharing one CasparCG declare the SAME fixed bank — documented in
+      `docs/operator-guide/README.md` ("Fixed layers") and cross-referenced from the
+      `fixed-layers-store.ts` module header, beside the config it constrains (the C-009
+      operator-contract class). **DEFERRED to stage 3 (D6):** the "repeated foreign html ⇒
+      soft divergence hint" half — until `binding` can distinguish our own item from
+      another station's, every html producer in the bank is indistinguishably "foreign",
+      so the hint would fire on every occupied row and carry no information.
+- [x] 5.2 (stage 2b) One `fixedRowActions(slot, deps): RowAction[]` declaration point
+      (R-013 pattern); buttons + context menu from the same list, confirm gate attached at
+      declaration time (`withConfirm`, with the `cancelled` AsyncResult path so a cancel is
+      neither a success flash nor an error toast). Stage 2b's ONLY verb is the confirm-gated
+      layer CLEAR on an OBSERVED html producer (D1 — see the STAGE MAP note); the
+      `binding !== null` branch returns [] naming task 5.3.
 - [ ] 5.3 Row import+load chain: pick `.vcg` → library import (stays for reuse) → item bound
       to the exact slot → Load; Load-from-library variant.
-- [ ] 5.4 DOM tests: verb split by residency; unknown-occupancy display; menu/button parity.
-- [ ] 5.5 E2E: fixed rows render with aliases; import+load lands on the exact slot; foreign
-      occupancy shows layer verbs only. (Owed Linux `gate:e2e` recorded per the standing rule
-      when this lands.)
+- [x] 5.4 (stage 2b) DOM tests: verb split across the four observation cases; menu/button
+      parity asserted by COMPARING the two surfaces; unknown-occupancy display; the D8
+      dead-link mask; confirm-accept sends exactly one `layers.clear`, cancel sends none
+      (no toast, no success flash); panel renders nothing with no bank; config modal
+      (read-only channel/start, refusal shows mapped reason + bridge message).
+- [x] 5.5 (stage 2b, renderer half) E2E (`fixed-layers.spec.ts`, + the two-panel column in
+      `panel-scroll.spec.ts`): fixed rows render with aliases and layer numbers; unknown
+      reads as unknown and never as empty; only the observed-html row offers a verb (per
+      D1 the non-html and unknown cases offer NONE until 4.3); the html row's Clear is
+      confirm-gated and mirrored in the context menu. **MOVED to stage 3 (D7):**
+      "import+load lands on the exact slot" — beside task 5.3, which builds the chain it
+      tests. (Linux `gate:e2e` owed — recorded in 7.2 and the PRD note.)
+- [x] 5.6 (stage 2b) Bank config modal, opened from the panel header — its OWN modal, NOT a
+      `ServerSettingsPanel` section (connections `set-config` is on-air blocked and
+      `fixedLayers.set-config` deliberately is not, design (e); co-locating them invites
+      the operator to assume one rule governs both). Scope: `count` + `aliases`;
+      `channel`/`start` read-only (validator refuses changing them mid-session). Refusals
+      surface the mapped reason (ONE map keyed off `FIXED_LAYERS_SET_CONFIG_REASONS`,
+      beside — not inside — `errorCodeMessage.ts`) plus the bridge's `message` naming the
+      specifics. Verified before building: `set-config` DOES accept creating a bank from
+      null (a pure install), but the modal is only reachable with a bank declared — the
+      panel renders nothing without one.
 
 ## 6. Docs + PRD
 

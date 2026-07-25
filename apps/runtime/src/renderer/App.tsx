@@ -5,6 +5,7 @@ import { FailoverBanner } from './features/connections/FailoverBanner.js';
 import { ConnectionBanner } from './features/status/ConnectionBanner.js';
 import { ServerSettingsPanel } from './features/connections/ServerSettingsPanel.js';
 import { LibraryPanel } from './features/library/LibraryPanel.js';
+import { FixedLayersPanel } from './features/fixedLayers/FixedLayersPanel.js';
 import { OrphanLayersBanner } from './features/layers/OrphanLayersBanner.js';
 import { StackPanel } from './features/stack/StackPanel.js';
 import { Inspector } from './features/inspector/Inspector.js';
@@ -124,6 +125,9 @@ export function App(): JSX.Element {
           <div style={styles.chrome}>
             <OrphanLayersBanner orphans={orphans} ownedOccupancy={ownedOccupancy} />
           </div>
+          {/* R-021 — the fixed bank, above the stack. Renders NOTHING with no
+              bank declared, so the column is byte-identical to today then. */}
+          <FixedLayersPanel />
           <StackPanel onSelectionChange={setSelectedId} />
         </section>
         <Inspector

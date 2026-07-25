@@ -24,6 +24,16 @@ import type { LayerPolicy, LayerSlot } from '@cg/caspar-client';
  * leave the operator believing a layer is protected/fenced when it is not —
  * exactly the silent config/state divergence design.md (e) refuses. An ABSENT
  * file is the normal no-bank case and changes nothing.
+ *
+ * DEPLOYMENT INVARIANT (b′, R-021 design): every station sharing one CasparCG
+ * MUST declare the SAME fixed bank as this file. b1's confirm-gated Clear is
+ * legitimate only under that agreement — a divergent bank makes one station's
+ * "fixed layer" another station's dynamic/Live Source layer, recreating the
+ * cross-subsystem destruction the disjointness checks below exist to prevent.
+ * NOT validatable here: one bridge cannot see another's config (stations share
+ * only the CasparCG wire, which carries none), so it is an INSTALLATION
+ * requirement — documented for operators in `docs/operator-guide/README.md`
+ * ("Fixed layers"), the C-009 operator-contract class.
  */
 
 /** The highest layer a bank may reach (design.md (e): 70–89 is the free space). */

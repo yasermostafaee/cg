@@ -39,6 +39,21 @@ export class RuntimeApp {
   get inspector(): Locator {
     return this.page.getByRole('complementary', { name: 'Inspector' });
   }
+  /**
+   * R-021 — the fixed-layers panel. Exists only when a bank is declared (the
+   * `CG_E2E_FIXED_BANK` seed, armed via addInitScript, declares one offline).
+   */
+  get fixedPanel(): Locator {
+    return this.page.getByRole('region', { name: 'Fixed layers' });
+  }
+  /**
+   * R-021 — the fixed row for `layer`, anchored on its stable `data-layer`
+   * attribute (the layer NUMBER is the bank's identity — aliases are display
+   * text and not unique), the way stack rows anchor on `data-template-id`.
+   */
+  fixedRow(layer: number): Locator {
+    return this.fixedPanel.locator(`[data-layer="${String(layer)}"]`);
+  }
   get importButton(): Locator {
     return this.page.getByRole('button', { name: 'Import .vcg template' });
   }
