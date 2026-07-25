@@ -2372,3 +2372,78 @@ this.#invoke(StackRestoreChannel, …)` and drops the `{ restored, skipped }` re
 - **Reproduction is MANUAL** (owner, 2026-07-25): load past the pool size, kill the bridge, restart
   it — only the layer-holding rows come back; the rest are gone with no message. No automated
   reproduction exists.
+
+## [ ] B-109 — a bridge restart RE-ADDs a deliberately CLEARed graphic onto its layer: retention stores `played:false` for both `idle` and `loaded`, so `restore()` cannot tell "cleared, leave empty" from "loaded, re-seat" and re-loads the producer UNASKED ⟨priority: high⟩
+
+**What:** an operator CLEARs a graphic (the stack's `out` verb) to take it off air but keeps the
+row to re-take later — an `out` is NOT a `remove`, so the row stays on the stack, reconciled
+`idle`, with its layer slot still RESERVED (`caspar-runtime.ts` `out()` sends `CG CLEAR` and
+deletes `#loaded`, but NOT `#slots` / `rec.slot`; its comment: "the slot stays RESERVED (the item
+is still on the stack, idle) until remove"). When the bridge PROCESS restarts, the browser
+re-delivers its retained stack intent and the cleared row is not only re-seated — its producer is
+RE-LOADED onto the layer by a `CG ADD` the operator never issued. This is the ON-AIR/wire twin of
+[[B-107]]; both grow from the same root — retention does not model status.
+
+Traced on merged `main`: `StackRetentionStore` reduces reconciled state to `played` + slot and
+DROPS status (`isPlayed('idle')` is `false`, exactly like `loaded`), so a cleared `idle` row and a
+pre-rolled `loaded` row are IDENTICAL in retained intent — `{ played:false, slot }`. On restart
+`restore()` → `#slotForRestore` reserves the retained slot (the item is NOT skipped: it has a slot
+and a registered template, so this is NOT [[B-108]]'s drop path), `restoreItem` seeds it at
+`loaded`, and `#decidePendingRestores` finds the layer SILENT (the operator's CLEAR emptied it) and
+takes its "silent → the producer is gone, so re-ADD as loaded" branch: `applyIntent({kind:'load'})`
+
+- `#sendAdd` = `CG ADD`. That branch exists to recover a LOADED item whose producer a CasparCG
+  restart destroyed; it cannot tell that apart from a producer the OPERATOR destroyed with a CLEAR,
+  because retention dropped the one bit that distinguished them.
+
+**Why:** this is an ON-AIR/wire behaviour defect, not a display one. A graphic the operator
+deliberately removed is put back onto its layer by a `CG ADD` nobody asked for; the producer is
+resident again and the row returns as `loaded`/READY — one `CG PLAY` from air. The operator's model
+("I cleared that; the layer is empty") is silently falsified against the wire after a restart. It
+directly UNDERMINES the [[B-092]] restart-survival design (`#343`), whose whole safety property is
+"a restore can never change what is on a layer" — it is occupancy-aware precisely so it never CLEARs
+a LIVE layer, yet the same path RE-ADDs onto a layer the operator EMPTIED: the mirror-image
+violation. It protects a surviving producer but resurrects a cleared one.
+
+**Acceptance:**
+
+- WHEN an item is reconciled `idle` because the operator CLEARed it (out, not remove) and the bridge
+  restarts THEN `restore()` must NOT re-ADD its producer onto the layer — a cleared graphic stays
+  cleared until the operator re-takes it
+- WHEN retained intent is re-seated after a restart THEN a cleared (`idle`) row is DISTINGUISHABLE
+  from a pre-rolled (`loaded`) row, so the re-ADD decision can honour "the operator emptied this
+  layer on purpose"
+- WHEN the layer is silent at restore because the operator CLEARed it THEN silence is NOT read as "a
+  loaded producer was lost, re-ADD it" — the `#decidePendingRestores` silent branch must not
+  resurrect a deliberately cleared item
+
+**Notes:**
+
+- **Root cause SHARED with [[B-107]]:** `StackRetentionStore` reduces reconciled state to `played` +
+  slot and drops `status`, so `idle` (cleared) and `loaded` (pre-rolled) become the same retained
+  record. B-107 is the DISPLAY face (`#retainedProjection` shows both as READY); this is the WIRE
+  face (`restore()` re-ADDs both). A fix that teaches retention to carry the cleared/`idle`
+  distinction addresses both faces.
+- **NOT [[B-108]]'s territory** — this is the exact prediction that gated the filing, and it came
+  back FALSE. B-108 is items restore SKIPS (no slot / unregistered template / no free layer). The
+  cleared item is NOT skipped, because `out` RETAINS its slot: verified `out()` never calls
+  `#slots.delete` or `#layers.deallocate` (only `remove()` does, `caspar-runtime.ts:1579`), so
+  `#slotForRestore` reserves the retained slot and restore RE-SEATS the item. The slot survives the
+  CLEAR, which is exactly why the chain is reachable.
+- **Reachable in NORMAL operation, not an edge case:** clearing a graphic but keeping its row IS the
+  ordinary out-vs-remove workflow, and [[B-092]] restore runs on every bridge restart against a
+  healthy primary with a warm OSC tap. (On an OSC-blind install `#decidePendingRestores` REFUSES to
+  decide and sends nothing — so the re-ADD fires on OSC-working installs, the intended config.)
+- **Precise on the wire:** the re-ADD is `CG ADD` with play-on-load OFF, so the producer is re-loaded
+  HIDDEN (B-053: the html page stays hidden until the template's own play()), not re-played. The
+  defect is the UNREQUESTED wire mutation restoring a cleared producer to `loaded`/READY, not an
+  instantly-visible graphic — but it is one operator take from air, and the wire no longer matches
+  what the operator did.
+- **Verification level:** filed from a VERIFIED code trace on merged `main` (every step read:
+  `out()` retains the slot; `toRetained`/`isPlayed` drop status; `#slotForRestore` reserves;
+  `#decidePendingRestores` silent → `#sendAdd`), NOT from an owner sighting of this specific chain
+  and NOT from a runtime/hardware run. Fix direction (do NOT implement): model the cleared/`idle`
+  distinction in `RetainedStackItem` so restore leaves a cleared layer empty. Not resolved here.
+- **Reproduction is MANUAL** (no automated reproduction exists): load a graphic, take it, CLEAR it
+  (leaving the idle row on the stack), then kill and restart the bridge — the producer is re-ADDed
+  onto its layer and the row returns READY.
